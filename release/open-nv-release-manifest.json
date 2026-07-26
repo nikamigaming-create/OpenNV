@@ -1,0 +1,25 @@
+{
+  "schema": "opennv-release-manifest/v1",
+  "product": "OpenNV",
+  "platform": "windows-x64",
+  "engine": {
+    "repository": "nikamigaming-create/nikami-openmw-lab",
+    "ref": "codex/opennv-ttw-compat"
+  },
+  "launcher": {
+    "repository": "nikamigaming-create/nikami-bworlds",
+    "ref": "codex/archive-worlds-wip-20260724"
+  },
+  "assetPolicy": {
+    "shipBethesdaAssets": false,
+    "shipThirdPartyMods": false,
+    "shipUserProfilesOrSaves": false,
+    "requiresLicensedAssets": true
+  },
+  "qualityGate": [
+    "package-layout",
+    "campaign-chooser",
+    "module-catalog-schema",
+    "telemetry-scenarios"
+  ]
+}

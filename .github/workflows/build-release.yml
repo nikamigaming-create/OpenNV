@@ -1,0 +1,128 @@
+name: Build OpenNV release
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * *'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: opennv-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  ENGINE_REPOSITORY: nikamigaming-create/nikami-openmw-lab
+  ENGINE_REF: codex/opennv-ttw-compat
+  LAUNCHER_REPOSITORY: nikamigaming-create/nikami-bworlds
+  LAUNCHER_REF: codex/archive-worlds-wip-20260724
+  BUILD_TYPE: RelWithDebInfo
+
+jobs:
+  windows:
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out release hub
+        uses: actions/checkout@v4
+
+      - name: Check out OpenNV engine source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ENGINE_REPOSITORY }}
+          ref: ${{ env.ENGINE_REF }}
+          path: engine
+
+      - name: Check out launcher source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LAUNCHER_REPOSITORY }}
+          ref: ${{ env.LAUNCHER_REF }}
+          path: launcher
+
+      - name: Read engine dependency revision
+        shell: pwsh
+        run: Get-Content engine/CI/github.env | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Download prebuilt dependencies
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path deps, deps/Qt -Force | Out-Null
+          $manifest = "vcpkg-x64-2022-$env:VCPKG_DEPS_TAG.txt"
+          Invoke-WebRequest -Uri "https://gitlab.com/madsbuvi/openmw-deps/-/raw/openmw-vr/windows/$manifest" -OutFile "deps/$manifest"
+          $lines = Get-Content "deps/$manifest"
+          Invoke-WebRequest -Uri $lines[0] -OutFile "deps/$($lines[1].Split()[1])"
+          $expected = $lines[1].Split()[0]
+          $archive = "deps/$($lines[1].Split()[1])"
+          if ((Get-FileHash $archive -Algorithm SHA512).Hash -ne $expected) { throw 'Dependency archive hash mismatch.' }
+          7z x -y "-odeps/vcpkg-x64-2022-$env:VCPKG_DEPS_TAG" $archive
+
+      - name: Restore Qt cache
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: deps/Qt/6.6.3/msvc2019_64
+          key: opennv-qt-6.6.3-msvc2019_64-v1
+
+      - name: Install Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://github.com/miurahr/aqtinstall/releases/download/v3.1.15/aqt_x64.exe -OutFile deps/Qt/aqt_x64.exe
+          & deps/Qt/aqt_x64.exe install-qt windows desktop 6.6.3 win64_msvc2019_64
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Configure OpenNV runtime
+        shell: pwsh
+        run: >
+          cmake -S engine -B engine-build -G Ninja
+          -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -D CMAKE_TOOLCHAIN_FILE='${{ github.workspace }}/deps/vcpkg-x64-2022-${{ env.VCPKG_DEPS_TAG }}/scripts/buildsystems/vcpkg.cmake'
+          -D CMAKE_PREFIX_PATH='${{ github.workspace }}/deps/Qt/6.6.3/msvc2019_64'
+          -D LuaJit_INCLUDE_DIR='${{ github.workspace }}/deps/vcpkg-x64-2022-${{ env.VCPKG_DEPS_TAG }}/installed/x64-windows/include/luajit'
+          -D LuaJit_LIBRARY='${{ github.workspace }}/deps/vcpkg-x64-2022-${{ env.VCPKG_DEPS_TAG }}/installed/x64-windows/lib/lua51.lib'
+          -D BUILD_OPENMW=ON -D BUILD_OPENMW_VR=OFF -D BUILD_OPENCS=OFF
+          -D BUILD_BENCHMARKS=OFF -D BUILD_COMPONENTS_TESTS=OFF -D BUILD_OPENMW_TESTS=OFF -D BUILD_OPENCS_TESTS=OFF
+          -D OPENMW_USE_SYSTEM_SQLITE3=OFF -D OPENMW_USE_SYSTEM_YAML_CPP=OFF
+
+      - name: Build and stage runtime
+        shell: pwsh
+        run: |
+          cmake --build engine-build --target openmw --parallel
+          $vcpkgBin = "${{ github.workspace }}/deps/vcpkg-x64-2022-$env:VCPKG_DEPS_TAG/installed/x64-windows/bin"
+          Copy-Item "$vcpkgBin/MyGUIEngine.dll" engine-build -Force
+          Get-ChildItem "$vcpkgBin/osgPlugins-3.6.5" -Recurse -Filter *.dll | Copy-Item -Destination engine-build -Force
+          Get-ChildItem $vcpkgBin -Filter *.dll | Copy-Item -Destination engine-build -Force
+          cmake --install engine-build --prefix engine-install
+
+      - name: Package asset-free launcher bundle
+        id: package
+        shell: pwsh
+        run: |
+          $engineRevision = (git -C engine rev-parse HEAD)
+          $launcherRevision = (git -C launcher rev-parse HEAD)
+          $version = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}' } else { 'nightly' }
+          $result = & .\scripts\New-OpenNVBundle.ps1 -EngineInstallRoot engine-install -LauncherRoot launcher -OutputRoot "$env:RUNNER_TEMP\opennv" -Version $version -EngineRevision $engineRevision -LauncherRevision $launcherRevision | ConvertFrom-Json
+          "archive=$($result.archive)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenNV-${{ github.ref_name }}-windows-x64
+          path: ${{ steps.package.outputs.archive }}
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'nightly' }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || 'OpenNV Nightly' }}
+          prerelease: ${{ github.ref_type != 'tag' }}
+          generate_release_notes: true
+          files: ${{ steps.package.outputs.archive }}
