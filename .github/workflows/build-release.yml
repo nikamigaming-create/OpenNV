@@ -156,17 +156,17 @@ jobs:
         include:
           - label: windows-x64
             os: windows-2022
-            command: npm run package --prefix desktop -- --win zip --x64
+            command: npm run package --prefix desktop -- --win zip --x64 --publish never
             artifact: opennv-launcher-windows-x64
             output: desktop/release/*.zip
           - label: macos-arm64
             os: macos-14
-            command: npm run package --prefix desktop -- --mac zip --arm64
+            command: npm run package --prefix desktop -- --mac zip --arm64 --publish never
             artifact: opennv-launcher-macos-arm64
             output: desktop/release/*.zip
           - label: linux-x64
             os: ubuntu-22.04
-            command: npm run package --prefix desktop -- --linux AppImage --x64
+            command: npm run package --prefix desktop -- --linux AppImage --x64 --publish never
             artifact: opennv-launcher-linux-x64
             output: desktop/release/*.AppImage
 

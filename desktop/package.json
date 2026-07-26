@@ -4,6 +4,7 @@
   "private": true,
   "description": "Open Nevada's first-party cross-platform desktop launcher.",
   "author": "Open Nevada contributors",
+  "desktopName": "open-nevada-launcher",
   "homepage": "https://opennevada.com",
   "repository": {
     "type": "git",
@@ -24,6 +25,7 @@
   "build": {
     "appId": "com.openevada.launcher",
     "productName": "Open Nevada",
+    "executableName": "open-nevada-launcher",
     "artifactName": "OpenNevada-Launcher-${version}-${os}-${arch}.${ext}",
     "icon": "assets/open-nevada-launcher-icon.png",
     "asar": true,
@@ -46,6 +48,8 @@
       ]
     },
     "linux": {
+      "category": "Game",
+      "syncDesktopName": true,
       "target": [
         "AppImage"
       ]
