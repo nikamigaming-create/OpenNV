@@ -13,3 +13,6 @@ The selected production mark is **ONV Compass**.
 
 Use the mark at square sizes and the banner without stretching. The source art
 has no game assets, screenshots, or third-party logos.
+
+Community copy for the Reddit description, sidebar, rules, and pinned welcome
+post lives in [reddit.md](reddit.md).
