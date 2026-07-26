@@ -69,18 +69,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: deps/Qt/6.6.3/msvc2019_64
-          key: opennv-qt-6.6.3-msvc2019_64-v2
+          key: opennv-qt-6.6.3-msvc2019_64-v3
 
       - name: Install Qt
         shell: pwsh
+        working-directory: deps/Qt
         run: |
-          $qtConfig = 'deps/Qt/6.6.3/msvc2019_64/lib/cmake/Qt6/Qt6Config.cmake'
+          $qtConfig = '6.6.3/msvc2019_64/lib/cmake/Qt6/Qt6Config.cmake'
           if (Test-Path -LiteralPath $qtConfig -PathType Leaf) {
             Write-Host "Qt cache is valid: $qtConfig"
             exit 0
           }
-          curl.exe --fail --retry 3 -L -o deps/Qt/aqt_x64.exe https://github.com/miurahr/aqtinstall/releases/download/v3.1.15/aqt_x64.exe
-          & deps/Qt/aqt_x64.exe install-qt windows desktop 6.6.3 win64_msvc2019_64
+          curl.exe --fail --retry 3 -L -o aqt_x64.exe https://github.com/miurahr/aqtinstall/releases/download/v3.1.15/aqt_x64.exe
+          & .\aqt_x64.exe install-qt windows desktop 6.6.3 win64_msvc2019_64
           if (-not (Test-Path -LiteralPath $qtConfig -PathType Leaf)) { throw "Qt installation did not create $qtConfig" }
 
       - uses: ilammy/msvc-dev-cmd@v1
