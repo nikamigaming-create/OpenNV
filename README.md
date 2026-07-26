@@ -52,4 +52,5 @@ and source-revision metadata. It does **not** contain:
 - a user's saves, configuration, credentials, or mod-manager state.
 
 The runtime is an OpenMW-derived build; release metadata records the exact
-source revisions and upstream licensing obligations.
+source revisions and every archive retains its engine license and contributor
+notices. See [NOTICE.md](NOTICE.md).

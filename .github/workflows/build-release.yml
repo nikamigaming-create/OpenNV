@@ -53,11 +53,14 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path deps, deps/Qt -Force | Out-Null
           $manifest = "vcpkg-x64-2022-$env:VCPKG_DEPS_TAG.txt"
-          Invoke-WebRequest -Uri "https://gitlab.com/madsbuvi/openmw-deps/-/raw/openmw-vr/windows/$manifest" -OutFile "deps/$manifest"
+          curl.exe --fail --retry 3 -L -o "deps/$manifest" "https://gitlab.com/madsbuvi/openmw-deps/-/raw/openmw-vr/windows/$manifest"
           $lines = Get-Content "deps/$manifest"
-          Invoke-WebRequest -Uri $lines[0] -OutFile "deps/$($lines[1].Split()[1])"
-          $expected = $lines[1].Split()[0]
-          $archive = "deps/$($lines[1].Split()[1])"
+          if ($lines.Count -lt 2) { throw "Dependency manifest is incomplete: deps/$manifest" }
+          $parts = @($lines[1] -split '\s+' | Where-Object { $_ })
+          if ($parts.Count -lt 2) { throw "Dependency manifest has no checksum and archive name: deps/$manifest" }
+          $expected = $parts[0]
+          $archive = "deps/$($parts[1])"
+          curl.exe --fail --retry 3 -L -o $archive $lines[0]
           if ((Get-FileHash $archive -Algorithm SHA512).Hash -ne $expected) { throw 'Dependency archive hash mismatch.' }
           7z x -y "-odeps/vcpkg-x64-2022-$env:VCPKG_DEPS_TAG" $archive
 
@@ -95,11 +98,31 @@ jobs:
         shell: pwsh
         run: |
           cmake --build engine-build --target openmw --parallel
-          $vcpkgBin = "${{ github.workspace }}/deps/vcpkg-x64-2022-$env:VCPKG_DEPS_TAG/installed/x64-windows/bin"
-          Copy-Item "$vcpkgBin/MyGUIEngine.dll" engine-build -Force
-          Get-ChildItem "$vcpkgBin/osgPlugins-3.6.5" -Recurse -Filter *.dll | Copy-Item -Destination engine-build -Force
+          $vcpkgRoot = "${{ github.workspace }}/deps/vcpkg-x64-2022-$env:VCPKG_DEPS_TAG/installed/x64-windows"
+          $vcpkgBin = Join-Path $vcpkgRoot 'bin'
+          $vcpkgReleaseBin = Join-Path $vcpkgBin 'Release'
+          Copy-Item (Join-Path $vcpkgReleaseBin 'MyGUIEngine.dll') engine-build -Force
+          Get-ChildItem (Join-Path $vcpkgBin 'osgPlugins-3.6.5') -Recurse -Filter *.dll | Copy-Item -Destination engine-build -Force
           Get-ChildItem $vcpkgBin -Filter *.dll | Copy-Item -Destination engine-build -Force
+          $qtRoot = "${{ github.workspace }}/deps/Qt/6.6.3/msvc2019_64"
+          @('Qt6Core.dll','Qt6Gui.dll','Qt6Network.dll','Qt6OpenGL.dll','Qt6OpenGLWidgets.dll','Qt6Widgets.dll','Qt6Svg.dll') |
+            ForEach-Object { Copy-Item (Join-Path $qtRoot "bin/$_") engine-build -Force }
+          foreach ($plugin in @('styles/qwindowsvistastyle.dll','platforms/qwindows.dll','imageformats/qsvg.dll','iconengines/qsvgicon.dll')) {
+            $destination = Join-Path 'engine-build' (Split-Path -Parent $plugin)
+            New-Item -ItemType Directory -Path $destination -Force | Out-Null
+            Copy-Item (Join-Path $qtRoot "plugins/$plugin") $destination -Force
+          }
           cmake --install engine-build --prefix engine-install
+          foreach ($pluginDirectory in @('styles','platforms','imageformats','iconengines')) {
+            Copy-Item (Join-Path 'engine-build' $pluginDirectory) (Join-Path 'engine-install' $pluginDirectory) -Recurse -Force
+          }
+
+      - name: Verify staged runtime
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath 'engine-install/openmw.exe')) { throw 'The staged OpenNV runtime has no openmw.exe.' }
+          if (-not (Test-Path -LiteralPath 'engine-install/resources/vfs' -PathType Container)) { throw 'The staged OpenNV runtime has no VFS resources.' }
+          & .\engine-install\openmw.exe --version
 
       - name: Package asset-free launcher bundle
         id: package

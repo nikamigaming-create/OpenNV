@@ -49,6 +49,9 @@ $resource = @(Get-ChildItem -LiteralPath $EngineInstallRoot -Recurse -Directory 
 if ($resource.Count -ne 1) {
     throw "Expected exactly one runtime resources directory below $EngineInstallRoot; found $($resource.Count)."
 }
+if (-not (Test-Path -LiteralPath (Join-Path $EngineInstallRoot "LICENSE.txt") -PathType Leaf)) {
+    throw "The staged runtime is missing LICENSE.txt. A distributable OpenNV build must retain its engine license."
+}
 
 $runtime = Join-Path $stage "local/openmw-ttw-compat"
 New-Item -ItemType Directory -Path $runtime -Force | Out-Null
@@ -79,6 +82,7 @@ foreach ($item in $launcherItems) {
     Copy-ReleaseItem -SourceRoot $LauncherRoot -RelativePath $item -DestinationRoot $stage
 }
 Copy-Item -LiteralPath (Join-Path $productRoot "README.md") -Destination (Join-Path $stage "README.md") -Force
+Copy-Item -LiteralPath (Join-Path $productRoot "NOTICE.md") -Destination (Join-Path $stage "NOTICE.md") -Force
 Get-ChildItem -LiteralPath (Join-Path $productRoot "docs") -Force | Copy-Item -Destination (Join-Path $stage "docs") -Recurse -Force
 
 $buildInfo = [ordered]@{
