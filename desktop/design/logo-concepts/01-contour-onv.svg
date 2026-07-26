@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ONV contour logo concept">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#baf8ff"/><stop offset="1" stop-color="#4be5ff"/></linearGradient><filter id="x"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+  <rect width="512" height="512" rx="106" fill="#06131c"/>
+  <path d="M56 182c75-72 173-91 265-53 48 20 90 54 127 101M54 264c73-69 170-94 264-64 53 17 99 50 136 95M94 352c62 39 133 52 205 37 66-14 121-51 158-101" fill="none" stroke="#265b70" stroke-width="5"/>
+  <ellipse cx="123" cy="263" rx="57" ry="93" fill="none" stroke="url(#g)" stroke-width="25" filter="url(#x)"/>
+  <path d="M206 356V170l108 186V170" fill="none" stroke="#effdff" stroke-width="23"/>
+  <path d="M351 170 409 356 469 170" fill="none" stroke="#f2b565" stroke-width="23"/>
+  <circle cx="409" cy="356" r="9" fill="#fff7df"/>
+</svg>

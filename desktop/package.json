@@ -1,0 +1,54 @@
+{
+  "name": "@open-nevada/launcher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open Nevada's first-party cross-platform desktop launcher.",
+  "author": "Open Nevada contributors",
+  "homepage": "https://opennevada.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nikamigaming-create/OpenNV.git"
+  },
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "dev": "electron .",
+    "check": "node --check src/contract.mjs && node --check src/main.mjs && node --check src/preload.mjs && node --check src/renderer/app.mjs",
+    "test": "node --test",
+    "package": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^37.2.1",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.openevada.launcher",
+    "productName": "Open Nevada",
+    "artifactName": "OpenNevada-Launcher-${version}-${os}-${arch}.${ext}",
+    "icon": "assets/open-nevada-launcher-icon.png",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "zip"
+      ]
+    },
+    "mac": {
+      "target": [
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}

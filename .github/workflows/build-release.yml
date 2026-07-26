@@ -143,15 +143,76 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenNV-${{ github.ref_name }}-windows-x64
+          name: opennv-runtime-windows-x64
           path: ${{ steps.package.outputs.archive }}
+          if-no-files-found: error
+
+  desktop-launcher:
+    name: Build desktop launcher (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: windows-x64
+            os: windows-2022
+            command: npm run package --prefix desktop -- --win zip --x64
+            artifact: opennv-launcher-windows-x64
+            output: desktop/release/*.zip
+          - label: macos-arm64
+            os: macos-14
+            command: npm run package --prefix desktop -- --mac zip --arm64
+            artifact: opennv-launcher-macos-arm64
+            output: desktop/release/*.zip
+          - label: linux-x64
+            os: ubuntu-22.04
+            command: npm run package --prefix desktop -- --linux AppImage --x64
+            artifact: opennv-launcher-linux-x64
+            output: desktop/release/*.AppImage
+
+    steps:
+      - name: Check out release hub
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install and verify launcher
+        run: |
+          npm ci --prefix desktop
+          npm run check --prefix desktop
+          npm test --prefix desktop
+
+      - name: Package desktop launcher
+        run: ${{ matrix.command }}
+
+      - name: Upload desktop launcher
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.output }}
+          if-no-files-found: error
+
+  publish:
+    needs: [windows, desktop-launcher]
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'nightly' }}
           target_commitish: ${{ github.sha }}
-          name: ${{ github.ref_type == 'tag' && github.ref_name || 'OpenNV Nightly' }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || 'Open Nevada Nightly' }}
           prerelease: ${{ github.ref_type != 'tag' }}
           generate_release_notes: true
-          files: ${{ steps.package.outputs.archive }}
+          files: release-artifacts/**/*

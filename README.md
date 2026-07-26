@@ -1,28 +1,62 @@
-# OpenNV
+# Open Nevada
 
-OpenNV is a Windows compatibility runtime and headless launcher for legally
-installed **Fallout 3**, **Fallout: New Vegas**, and **Tale of Two Wastelands**
-content. It ships no Bethesda game assets, DLC, TTW output, or third-party
-mods.
+**Open Nevada** (OpenNV) is an independent, cross-platform launcher and
+compatibility project for worlds built from game assets that a player legally
+owns. Its interface, product identity, and launcher contract are Open Nevada's
+own; it is not a front end branded as or affiliated with another engine or
+game series.
 
-The project has three campaign choices at character creation:
+The public home is **[opennevada.com](https://opennevada.com)**. The shorter
+**[opennv.org](https://opennv.org)** is reserved for technical and community
+use; until DNS hosting is deployed, GitHub remains the release source.
 
-| Campaign | Character | JAM |
+![Open Nevada atlas visual](desktop/assets/open-nevada-atlas-hero-v1.png)
+
+The first-party desktop launcher has a portable Electron shell for Windows,
+macOS, and Linux. Runtime builds are promoted per platform only after the same
+campaign and compatibility tests pass; the current downloadable runtime
+preview is Windows x64. See [the launcher architecture](docs/desktop-launcher.md).
+See [the domain deployment plan](docs/domains.md) before publishing a site or
+redirect.
+
+Open Nevada ships no commercial game assets, DLC, conversion output, or
+third-party mod archives. Players provide those from lawful sources.
+
+## Character path is a real choice
+
+Choose the path **before creating a character**. Each choice has its own
+profile and save boundary.
+
+| Path | Character | JAM rule |
 | --- | --- | --- |
-| New Vegas | Standalone Mojave character | Optional, can be added later |
-| Fallout 3 | Standalone Capital Wasteland character | Vanilla only |
-| TTW | One Capital Wasteland-to-Mojave character | Optional, can be added later |
+| New Vegas | Separate standalone Mojave character | Start base and add JAM later, or begin with JAM. Keep JAM enabled after a save uses it. |
+| Fallout 3 | Separate standalone Capital Wasteland character | Vanilla standalone route. Choose TTW at character creation if the character should continue into the combined world. |
+| TTW | One Capital Wasteland-to-Mojave character | A separate combined-world path, base or JAM. It cannot be retrofitted onto an existing standalone save. |
 
-Download the current Windows preview from the repository's
-[Releases](../../releases). Nightlies are deliberately labelled as previews:
-every promoted game feature or mod module must have a recorded compatibility
-test rather than merely load an `.esp`.
+This makes the important distinction visible rather than hiding it in mod
+files: JAM is modular; TTW is a character-path decision.
 
-## Quick start
+## Mod support without a Windows-only ceiling
+
+Open Nevada accepts content and mod sources through isolated profiles rather
+than touching a game installation. A Windows-only native plugin is not a
+product-level exclusion. It enters a compatibility pipeline:
+
+1. record the extension behavior and its needed events/commands;
+2. implement a portable OpenNV semantic contract in the runtime;
+3. run the real mod through a recorded launch validation;
+4. promote it to *supported* only when that behavior is reproducible.
+
+That is how major extender-dependent mods can work across platforms without
+pretending that an arbitrary Windows DLL is safe to load into a different
+runtime. The current catalog distinguishes validated modules from ones still
+waiting on an extender bridge. See [the mod policy](docs/mods.md).
+
+## Quick start: current Windows runtime preview
 
 1. Download and extract `OpenNV-nightly-windows-x64.zip` outside `Program Files`.
-2. Install Fallout 3 and/or Fallout: New Vegas from a legal store and point
-   OpenNV at each game's `Data` folder:
+2. Install the games you own from a legal store and point OpenNV at their `Data`
+   folders:
 
    ```powershell
    .\scripts\Configure-OpenNV.ps1 `
@@ -30,27 +64,27 @@ test rather than merely load an `.esp`.
      -FalloutNewVegasData 'D:\SteamLibrary\steamapps\common\Fallout New Vegas\Data'
    ```
 
-3. Review the character-creation choices, then launch one:
+3. Review the character choices, then launch one:
 
    ```powershell
    .\scripts\Start-OpenNV.ps1 -ShowChoices
    .\scripts\Start-OpenNV.ps1 -Campaign NewVegas
    ```
 
-For TTW, run the official TTW installer first and register its **separate
-output directory**. OpenNV never writes to a game directory or the TTW output.
-See [installation](docs/installation.md), [nightly policy](docs/nightlies.md),
-and [mod policy](docs/mods.md).
+For TTW, run its official installer into a dedicated output directory and
+register that directory. OpenNV never writes to a game directory or to the
+official conversion output. See [installation](docs/installation.md) and
+[nightlies](docs/nightlies.md).
 
 ## Release contents
 
-Every release contains the OpenNV runtime, launcher scripts, a module catalog,
-and source-revision metadata. It does **not** contain:
+Every runtime release contains the OpenNV runtime, launcher bridge, module
+catalog, and source-revision metadata. It does **not** contain:
 
-- Fallout 3, Fallout: New Vegas, DLC, or TTW assets;
-- Nexus/Mod Organizer downloads or third-party mod archives;
-- a user's saves, configuration, credentials, or mod-manager state.
+- commercial game files, DLC, or conversion output;
+- third-party mod archives or downloader credentials;
+- a player's saves, profiles, or mod-manager state.
 
-The runtime is an OpenMW-derived build; release metadata records the exact
-source revisions and every archive retains its engine license and contributor
-notices. See [NOTICE.md](NOTICE.md).
+The runtime includes code subject to its upstream free-software license.
+Required notices, source information, and contributor attribution are retained
+in every archive; see [NOTICE.md](NOTICE.md).

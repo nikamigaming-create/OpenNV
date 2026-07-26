@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ONV stencil logo concept">
+  <rect width="512" height="512" rx="72" fill="#071018"/>
+  <path d="M49 107h414M49 405h414" stroke="#28596b" stroke-width="5"/>
+  <path d="M74 258c0-73 38-115 91-115s91 42 91 115-38 115-91 115-91-42-91-115Zm30 0c0 56 26 86 61 86s61-30 61-86-26-86-61-86-61 30-61 86Z" fill="#71eaff"/>
+  <path d="M270 371V143h25l84 151V143h30v228h-25l-84-151v151Z" fill="#effdff"/>
+  <path d="M418 143h34l29 181 29-181h34l-46 228h-34Z" fill="#f1b566" transform="translate(-25)"/>
+  <path d="M52 258h408" stroke="#153b4a" stroke-width="3"/>
+  <circle cx="413" cy="371" r="7" fill="#fff8e3"/>
+</svg>

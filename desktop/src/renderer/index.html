@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none';">
+    <title>Open Nevada</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand" aria-label="Open Nevada">
+          <img class="brand-mark" src="../../assets/open-nevada-onv-mark.svg" alt="">
+          <span class="brand-name">OPEN <em>NEVADA</em></span>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <span class="brand-type">Launcher</span>
+        </div>
+        <div class="topbar-actions">
+          <span id="runtime-status" class="runtime-status">Checking local runtime</span>
+          <button id="choose-runtime" class="quiet-button" type="button">Connect runtime</button>
+          <button id="mod-guide" class="quiet-button map-button" type="button">Compatibility map</button>
+        </div>
+      </header>
+
+      <section class="atlas-stage" aria-label="Open Nevada atlas">
+        <div class="stage-wash" aria-hidden="true"></div>
+        <div class="stage-corner stage-corner-a" aria-hidden="true"></div>
+        <div class="stage-corner stage-corner-b" aria-hidden="true"></div>
+        <div class="stage-brand">
+          <img src="../../assets/open-nevada-onv-mark.svg" alt="">
+          <span>OPENNV / LAUNCHER</span>
+        </div>
+        <div class="stage-ledger">
+          <span>USER-SUPPLIED WORLD ASSETS</span>
+          <span>NO SOURCE FOLDER WRITES</span>
+        </div>
+      </section>
+
+      <section class="route-console" aria-labelledby="selector-title">
+        <div class="console-rail" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="console-heading">
+          <div>
+            <p class="kicker">01 / WORLD SELECTOR</p>
+            <h1 id="selector-title">Choose the route.<br><em>Make it yours.</em></h1>
+          </div>
+          <div class="rules-copy">
+            <p id="campaign-rule"></p>
+            <p id="jam-rule" class="jam-rule"></p>
+          </div>
+        </div>
+        <div id="campaigns" class="campaign-grid"></div>
+      </section>
+
+      <section class="launch-deck" aria-label="Launch controls">
+        <div class="selection-signal">
+          <span class="signal-dot"></span>
+          <div>
+            <p class="kicker">ACTIVE ROUTE</p>
+            <h2 id="selection-title">New Vegas</h2>
+          </div>
+        </div>
+        <p id="selection-detail" class="selection-detail"></p>
+        <label id="jam-toggle-row" class="jam-toggle">
+          <input id="jam-toggle" type="checkbox">
+          <span class="switch" aria-hidden="true"></span>
+          <span><strong>JAM layer</strong><small>add now or later · save-safe once retained</small></span>
+        </label>
+        <button id="launch" class="launch-button" type="button">Enter route <span>↗</span></button>
+      </section>
+
+      <section id="mod-support" class="lab-deck" aria-label="Compatibility support">
+        <article class="lab-intro">
+          <p class="kicker">02 / COMPATIBILITY LAB</p>
+          <h2>Every mod has a route in.</h2>
+          <p>Windows-native origins are not a ceiling. We map a mod’s behavior, rebuild the contract in Open Nevada, then promote it only after the live path is proved.</p>
+          <button id="open-mod-docs" class="quiet-button inline" type="button">Read the method ↗</button>
+        </article>
+        <div class="lab-readouts">
+          <div id="extender-layers" class="layer-list"></div>
+          <div id="mods" class="module-list"></div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span>OPEN NEVADA / USE ONLY ASSETS YOU OWN</span>
+        <span id="platform-label"></span>
+      </footer>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="app.mjs"></script>
+  </body>
+</html>

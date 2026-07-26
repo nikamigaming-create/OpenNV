@@ -5,3 +5,5 @@
 /engine-build/
 /engine-install/
 *.zip
+/desktop/node_modules/
+/desktop/release/

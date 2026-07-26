@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Open Nevada social art source</title>
+    <style>
+      :root { background: #040c13; color: #edfaff; font-family: "Segoe UI", Arial, sans-serif; }
+      * { box-sizing: border-box; }
+      html, body, .art { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+      .art { position: relative; isolation: isolate; background: #040c13 url("../desktop/assets/open-nevada-atlas-hero-v1.png") center / cover no-repeat; }
+      .art::before { position: absolute; z-index: -1; inset: 0; content: ""; background: linear-gradient(90deg, rgb(2 10 17 / 96%) 0%, rgb(3 14 22 / 79%) 35%, rgb(3 13 21 / 17%) 76%); }
+      .art::after { position: absolute; z-index: -1; inset: 0; content: ""; background: linear-gradient(180deg, rgb(1 7 12 / 30%), transparent 45%, rgb(1 7 12 / 47%)); }
+      .wordmark { position: absolute; display: flex; align-items: center; gap: 3.5vw; }
+      .mark { width: 16vw; height: 16vw; max-width: 300px; max-height: 300px; min-width: 100px; min-height: 100px; }
+      .title { margin: 0; color: #f1fcff; font-size: clamp(30px, 6vw, 120px); font-weight: 700; letter-spacing: .18em; line-height: .86; white-space: nowrap; }
+      .title em { color: #6be9ff; font-style: normal; }
+      .sub { margin: 1.25em 0 0; color: #f2ba6b; font-size: clamp(10px, 1.1vw, 23px); font-weight: 700; letter-spacing: .36em; white-space: nowrap; }
+      .rule { width: min(48vw, 780px); height: 2px; margin-top: 3.2vw; background: linear-gradient(90deg, #64e9ff, transparent); }
+      .icon-art { display: grid; place-items: center; background: #050e15; }
+      .icon-art img { width: 100%; height: 100%; }
+      body[data-variant="social"] .wordmark { top: 21%; left: 8%; }
+      body[data-variant="reddit-desktop"] .wordmark { top: 50%; left: 4.5%; transform: translateY(-50%); gap: 28px; }
+      body[data-variant="reddit-desktop"] .mark { width: 124px; height: 124px; min-width: 124px; min-height: 124px; }
+      body[data-variant="reddit-desktop"] .title { font-size: 48px; letter-spacing: .15em; }
+      body[data-variant="reddit-desktop"] .sub { margin-top: 9px; font-size: 12px; letter-spacing: .26em; }
+      body[data-variant="reddit-desktop"] .rule { width: 520px; margin-top: 16px; }
+      body[data-variant="reddit-mobile"] .wordmark { top: 50%; left: 8%; transform: translateY(-50%); gap: 30px; }
+      body[data-variant="reddit-mobile"] .mark { width: 200px; height: 200px; min-width: 200px; min-height: 200px; }
+      body[data-variant="reddit-mobile"] .title { font-size: 62px; letter-spacing: .12em; }
+      body[data-variant="reddit-mobile"] .sub { margin-top: 17px; font-size: 15px; letter-spacing: .25em; }
+      body[data-variant="reddit-mobile"] .rule { width: 610px; margin-top: 20px; }
+    </style>
+  </head>
+  <body data-variant="social">
+    <main class="art" aria-label="Open Nevada social art">
+      <div class="wordmark">
+        <img class="mark" src="../desktop/assets/open-nevada-onv-mark.svg" alt="">
+        <div>
+          <p class="title">OPEN<br><em>NEVADA</em></p>
+          <p class="sub">Portable world launcher</p>
+          <div class="rule"></div>
+        </div>
+      </div>
+    </main>
+    <script>
+      const variant = new URLSearchParams(window.location.search).get("variant");
+      if (variant) document.body.dataset.variant = variant;
+      if (variant === "icon") {
+        document.querySelector(".art").classList.add("icon-art");
+        document.querySelector(".art").innerHTML = '<img src="../desktop/assets/open-nevada-onv-mark.svg" alt="Open Nevada ONV Compass mark">';
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ONV compass logo concept">
+  <defs><radialGradient id="c"><stop stop-color="#143949"/><stop offset="1" stop-color="#050e15"/></radialGradient></defs>
+  <rect width="512" height="512" rx="256" fill="url(#c)"/>
+  <circle cx="256" cy="256" r="189" fill="none" stroke="#285a6c" stroke-width="5"/>
+  <circle cx="256" cy="256" r="157" fill="none" stroke="#1a4151" stroke-width="3" stroke-dasharray="5 14"/>
+  <path d="M256 55v39M256 418v39M55 256h39M418 256h39" stroke="#5ce7ff" stroke-width="8"/>
+  <ellipse cx="154" cy="256" rx="54" ry="87" fill="none" stroke="#74edff" stroke-width="24"/>
+  <path d="M230 342V169l101 173V169" fill="none" stroke="#f2fdff" stroke-width="22"/>
+  <path d="M350 169 406 342 462 169" fill="none" stroke="#f2b766" stroke-width="22"/>
+  <circle cx="406" cy="342" r="10" fill="#fff5df"/>
+</svg>

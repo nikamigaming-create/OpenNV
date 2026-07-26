@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1380" height="300" viewBox="0 0 1380 300" role="img" aria-labelledby="title">
+  <title id="title">Open Nevada ONV compass wordmark</title>
+  <rect width="1380" height="300" fill="#050d14"/>
+  <image href="open-nevada-onv-mark.svg" x="58" y="36" width="228" height="228"/>
+  <text x="330" y="150" fill="#eaf8fb" font-family="Segoe UI, Arial, sans-serif" font-size="83" font-weight="700" letter-spacing="14">OPEN</text>
+  <text x="330" y="236" fill="#60e7ff" font-family="Segoe UI, Arial, sans-serif" font-size="83" font-weight="700" letter-spacing="14">NEVADA</text>
+  <path d="M330 174h828" stroke="#367c91" stroke-width="3"/>
+  <text x="1172" y="236" fill="#f4b766" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" letter-spacing="5">ONV</text>
+</svg>

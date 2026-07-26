@@ -1,7 +1,15 @@
 {
   "schema": "opennv-release-manifest/v1",
-  "product": "OpenNV",
-  "platform": "windows-x64",
+  "product": {
+    "name": "Open Nevada",
+    "code": "OpenNV",
+    "publicDomain": "opennevada.com",
+    "technicalDomain": "opennv.org"
+  },
+  "platforms": {
+    "desktopShell": ["windows-x64", "macos-arm64", "linux-x64"],
+    "publishedRuntime": ["windows-x64"]
+  },
   "engine": {
     "repository": "nikamigaming-create/nikami-openmw-lab",
     "ref": "codex/opennv-ttw-compat"
@@ -18,6 +26,7 @@
   },
   "qualityGate": [
     "package-layout",
+    "desktop-launcher-contract",
     "campaign-chooser",
     "module-catalog-schema",
     "telemetry-scenarios"
