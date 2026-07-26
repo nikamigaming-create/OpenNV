@@ -16,7 +16,8 @@ The first-party desktop launcher has a portable Electron shell for Windows,
 macOS, and Linux. Runtime builds are promoted per platform only after the same
 campaign and compatibility tests pass; the current downloadable runtime
 preview is Windows x64. See [the launcher architecture](docs/desktop-launcher.md).
-See [the domain deployment plan](docs/domains.md) before publishing a site or
+See [the domain deployment plan](docs/domains.md) and [Cloudflare Pages
+handoff](docs/cloudflare-pages.md) before publishing the public site or a
 redirect.
 
 Open Nevada ships no commercial game assets, DLC, conversion output, or

@@ -3,9 +3,16 @@
 Suggested community name: `r/OpenNevada`  
 Short name: **OpenNV**
 
+## Banner uploads
+
+Use `../desktop/assets/open-nevada-reddit-banner-hd-v3.png` for both desktop
+and mobile. It is a 4320 × 512 master at the exact 1080 × 128 Reddit banner
+ratio, with the ONV identity centered in the visible area. Do not use the
+original left-aligned desktop strip for Reddit.
+
 ## Community description
 
-**Open Nevada (OpenNV)** is an open-source, cross-platform engine and launcher project for playing your legally owned Fallout: New Vegas, Fallout 3, and Tale of Two Wastelands installs with a modern, modular compatibility layer.
+**Open Nevada (OpenNV)** is an open-source, cross-platform launcher and compatibility project for your legally owned Fallout: New Vegas, Fallout 3, and Tale of Two Wastelands installs.
 
 Choose a standalone New Vegas or Fallout 3 character path, or choose TTW at character creation when your owned installs and DLC support it. JAM and supported mods are optional profile layers: add them when you want them, not when a save demands them.
 

@@ -7,3 +7,4 @@
 *.zip
 /desktop/node_modules/
 /desktop/release/
+/site-preview*.png

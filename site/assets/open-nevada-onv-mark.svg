@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Open Nevada ONV compass monogram</title>
+  <desc id="desc">The Open Nevada ONV letters set inside an original cyan compass field.</desc>
+  <defs>
+    <radialGradient id="field" cx="50%" cy="42%" r="68%">
+      <stop stop-color="#143949"/>
+      <stop offset="1" stop-color="#050e15"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#050e15"/>
+  <circle cx="256" cy="256" r="221" fill="url(#field)"/>
+  <circle cx="256" cy="256" r="189" fill="none" stroke="#285a6c" stroke-width="5"/>
+  <circle cx="256" cy="256" r="157" fill="none" stroke="#1a4151" stroke-width="3" stroke-dasharray="5 14"/>
+  <path d="M256 55v39M256 418v39M55 256h39M418 256h39" stroke="#5ce7ff" stroke-width="8" filter="url(#glow)"/>
+  <ellipse cx="154" cy="256" rx="54" ry="87" fill="none" stroke="#74edff" stroke-width="24" filter="url(#glow)"/>
+  <path d="M230 342V169l101 173V169" fill="none" stroke="#f2fdff" stroke-width="22"/>
+  <path d="M350 169 406 342 462 169" fill="none" stroke="#f2b766" stroke-width="22"/>
+  <circle cx="406" cy="342" r="10" fill="#fff5df"/>
+</svg>

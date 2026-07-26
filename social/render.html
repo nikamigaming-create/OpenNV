@@ -25,11 +25,39 @@
       body[data-variant="reddit-desktop"] .title { font-size: 48px; letter-spacing: .15em; }
       body[data-variant="reddit-desktop"] .sub { margin-top: 9px; font-size: 12px; letter-spacing: .26em; }
       body[data-variant="reddit-desktop"] .rule { width: 520px; margin-top: 16px; }
+      /* Reddit's desktop banner is rendered with a center-crop on many wide
+         displays. Keep the public identity in that center-safe strip rather
+         than placing it in an edge that Reddit can discard. */
+      body[data-variant="reddit-desktop-safe"] .art::before { background: linear-gradient(90deg, rgb(2 10 17 / 48%), rgb(3 14 22 / 34%) 50%, rgb(3 13 21 / 46%)); }
+      body[data-variant="reddit-desktop-safe"] .wordmark { top: 46%; left: 50%; transform: translate(-50%, -50%); gap: 24px; }
+      body[data-variant="reddit-desktop-safe"] .mark { width: 108px; height: 108px; min-width: 108px; min-height: 108px; }
+      body[data-variant="reddit-desktop-safe"] .title { font-size: 42px; letter-spacing: .13em; line-height: 1; }
+      body[data-variant="reddit-desktop-safe"] .title br { display: none; }
+      body[data-variant="reddit-desktop-safe"] .title em::before { content: " "; }
+      body[data-variant="reddit-desktop-safe"] .sub { margin-top: 8px; font-size: 10px; letter-spacing: .24em; }
+      body[data-variant="reddit-desktop-safe"] .rule { display: none; }
+      /* Reddit recommends a roughly 1080 x 128 canvas. This is its 4x,
+         same-ratio master so desktop and mobile downsample instead of upsample. */
+      body[data-variant="reddit-banner-hd"] .art::before { background: linear-gradient(90deg, rgb(2 10 17 / 46%), rgb(3 14 22 / 31%) 50%, rgb(3 13 21 / 44%)); }
+      body[data-variant="reddit-banner-hd"] .wordmark { top: 46%; left: 50%; transform: translate(-50%, -50%); gap: 58px; }
+      body[data-variant="reddit-banner-hd"] .mark { width: 270px; height: 270px; min-width: 270px; min-height: 270px; }
+      body[data-variant="reddit-banner-hd"] .title { font-size: 108px; letter-spacing: .13em; line-height: 1; }
+      body[data-variant="reddit-banner-hd"] .title br { display: none; }
+      body[data-variant="reddit-banner-hd"] .title em::before { content: " "; }
+      body[data-variant="reddit-banner-hd"] .sub { margin-top: 20px; font-size: 27px; letter-spacing: .24em; }
+      body[data-variant="reddit-banner-hd"] .rule { display: none; }
       body[data-variant="reddit-mobile"] .wordmark { top: 50%; left: 8%; transform: translateY(-50%); gap: 30px; }
       body[data-variant="reddit-mobile"] .mark { width: 200px; height: 200px; min-width: 200px; min-height: 200px; }
       body[data-variant="reddit-mobile"] .title { font-size: 62px; letter-spacing: .12em; }
       body[data-variant="reddit-mobile"] .sub { margin-top: 17px; font-size: 15px; letter-spacing: .25em; }
       body[data-variant="reddit-mobile"] .rule { width: 610px; margin-top: 20px; }
+      body[data-variant="reddit-mobile-safe"] .wordmark { top: 45%; left: 50%; transform: translate(-50%, -50%); gap: 24px; }
+      body[data-variant="reddit-mobile-safe"] .mark { width: 180px; height: 180px; min-width: 180px; min-height: 180px; }
+      body[data-variant="reddit-mobile-safe"] .title { font-size: 54px; letter-spacing: .1em; }
+      body[data-variant="reddit-mobile-safe"] .title br { display: none; }
+      body[data-variant="reddit-mobile-safe"] .title em::before { content: " "; }
+      body[data-variant="reddit-mobile-safe"] .sub { margin-top: 12px; font-size: 14px; letter-spacing: .2em; }
+      body[data-variant="reddit-mobile-safe"] .rule { display: none; }
     </style>
   </head>
   <body data-variant="social">
