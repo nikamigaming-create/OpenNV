@@ -43,6 +43,7 @@ h1, h2, h3, p { margin-top: 0; }
 h1, h2 { letter-spacing: -.055em; font-weight: 600; line-height: .9; }
 h1 { margin: .8rem 0 1.5rem; font-size: clamp(4.25rem, 9.2vw, 8.7rem); }
 h1 em, h2 em { color: var(--cyan); font-family: var(--serif); font-weight: 400; }
+.hero-nevada { color: var(--cyan); letter-spacing: -.075em; }
 .hero-copy { max-width: 590px; color: #b4c8cf; line-height: 1.7; font-size: clamp(1rem, 1.25vw, 1.13rem); }
 .hero-copy strong { color: var(--ink); font-weight: 600; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 2rem; }

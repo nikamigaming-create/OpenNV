@@ -4,17 +4,25 @@ Open Nevada owns two complementary domains:
 
 | Domain | Role | Intended behavior |
 | --- | --- | --- |
-| `opennevada.com` | Canonical public home | Product site, release links, and documentation entry point. |
-| `opennv.org` | Short technical/community address | Permanent redirect to the canonical public home until a distinct technical portal is useful. |
+| `opennevada.com` | Canonical public home | **Live.** Product site, release links, and documentation entry point. |
+| `opennv.org` | Short technical/community address | **Live.** HTTPS 301 redirect to the canonical public home. |
 
-## Safe first deployment
+## Production status
 
-Do not point either name at a host until that host has a valid TLS certificate
-and a minimal public page. Once a host is chosen, configure:
+The canonical host serves the Open Nevada static site over HTTPS. The short
+domain is proxied through Cloudflare and redirects to the canonical hostname
+before an origin is contacted.
 
-1. `opennevada.com` at the selected web host;
-2. `www.opennevada.com` as a redirect to `https://opennevada.com`;
-3. `opennv.org` and `www.opennv.org` as HTTPS 301 redirects to
+`www.opennevada.com` and `www.opennv.org` are not configured yet. If they are
+added later, make both permanent redirects to `https://opennevada.com`.
+
+## Deployment guardrails
+
+For future host or redirect changes, retain these constraints:
+
+1. `opennevada.com` remains the selected public web host;
+2. `www.opennevada.com` redirects to `https://opennevada.com`;
+3. `opennv.org` and `www.opennv.org` remain HTTPS 301 redirects to
    `https://opennevada.com`.
 
 Keep GitHub Releases as the download authority until the site has an automated

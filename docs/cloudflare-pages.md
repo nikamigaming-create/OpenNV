@@ -3,6 +3,13 @@
 The repository contains a dependency-free static site in [`site/`](../site/).
 Cloudflare Pages should publish that one directory without a build framework.
 
+## Current production state
+
+- `https://opennevada.com` is live and serves the Open Nevada landing page.
+- `https://opennv.org` is live and permanently redirects to the canonical URL.
+- The `www` hostnames are intentionally unassigned for now; add them only as
+  permanent redirects to the apex hostname.
+
 ## Project settings
 
 In Cloudflare, create a **Pages** project from

@@ -6,9 +6,12 @@ owns. Its interface, product identity, and launcher contract are Open Nevada's
 own; it is not a front end branded as or affiliated with another engine or
 game series.
 
-The public home is **[opennevada.com](https://opennevada.com)**. The shorter
-**[opennv.org](https://opennv.org)** is reserved for technical and community
-use; until DNS hosting is deployed, GitHub remains the release source.
+> **Live:** **[opennevada.com](https://opennevada.com)** is the public Open
+> Nevada home. **[opennv.org](https://opennv.org)** is the short technical and
+> community address, permanently forwarding to the canonical site.
+
+GitHub Releases remains the download authority while the site links to verified
+nightly artifacts and their source information.
 
 ![Open Nevada atlas visual](desktop/assets/open-nevada-atlas-hero-v1.png)
 
