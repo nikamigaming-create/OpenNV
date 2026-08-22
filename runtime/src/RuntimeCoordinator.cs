@@ -30,10 +30,16 @@ public partial class RuntimeCoordinator : Node3D
             var hasDataRoot = _options.TryGetValue("data-root", out var dataRoot);
             var hasModel = _options.ContainsKey("model");
             var hasCellScene = _options.ContainsKey("cell-scene");
-            if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) > 1)
-                throw new ArgumentException("Use only one of --data-root, --model/--sidecar, or --cell-scene.");
+            var hasActorModel = _options.ContainsKey("actor-model");
+            if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) + (hasActorModel ? 1 : 0) > 1)
+                throw new ArgumentException(
+                    "Use only one of --data-root, --model/--sidecar, --cell-scene, or --actor-model/--actor-sidecar.");
             if (!hasModel && _options.ContainsKey("sidecar"))
                 throw new ArgumentException("--sidecar requires --model.");
+            if (!hasActorModel && _options.ContainsKey("actor-sidecar"))
+                throw new ArgumentException("--actor-sidecar requires --actor-model.");
+            if (hasActorModel && _options.ContainsKey("capture-root"))
+                throw new ArgumentException("Actor captures require --cell-scene plus --actor-scene.");
 
             if (hasDataRoot)
             {
@@ -51,6 +57,15 @@ public partial class RuntimeCoordinator : Node3D
             if (hasCellScene)
             {
                 LoadCellScene(RequireOption(_options, "cell-scene"), _options);
+                return;
+            }
+
+            if (hasActorModel)
+            {
+                LoadActorModel(
+                    RequireOption(_options, "actor-model"),
+                    RequireOption(_options, "actor-sidecar"),
+                    _options);
                 return;
             }
 
@@ -98,7 +113,10 @@ public partial class RuntimeCoordinator : Node3D
             !runTraversalProof && options.ContainsKey("open-proof-door"),
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
-            options.ContainsKey("vr"));
+            options.ContainsKey("vr"),
+            options.TryGetValue("actor-scene", out var actorScene) ? actorScene : null,
+            options.ContainsKey("proof-enable-actor"),
+            !options.ContainsKey("capture-root"));
         if (options.TryGetValue("capture-root", out var captureRoot))
         {
             _ = EnvironmentCapture.Run(
@@ -338,6 +356,7 @@ public partial class RuntimeCoordinator : Node3D
             references = loaded.References,
             doors = loaded.Doors,
             authoredLights = loaded.AuthoredLights,
+            actors = loaded.Actors.Count,
             collisionMeshes = loaded.CollisionMeshes,
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,
@@ -395,6 +414,40 @@ public partial class RuntimeCoordinator : Node3D
         GD.Print(
             $"OPENNV_GODOT_STATIC_MODEL_PASS source={loaded.SourceSha256} " +
             $"meshes={loaded.Meshes} surfaces={loaded.Surfaces} vertices={loaded.Vertices}");
+        if (options.ContainsKey("quit-after-load"))
+            GetTree().Quit(0);
+    }
+
+    private void LoadActorModel(
+        string modelPath,
+        string sidecarPath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var loaded = ActorModelSlice.Load(modelPath, sidecarPath, this);
+        var report = new
+        {
+            schema = "opennv-godot-actor/v1",
+            status = "pass",
+            renderer = "forward_plus",
+            model = modelPath,
+            sidecar = sidecarPath,
+            actorFormId = loaded.FormId,
+            actorName = loaded.Name,
+            meshes = loaded.Meshes,
+            skeletons = loaded.Skeletons,
+            animations = loaded.Animations,
+            playingAnimation = loaded.PlayingAnimation,
+            boundsMinimum = new[] { loaded.Bounds.Position.X, loaded.Bounds.Position.Y, loaded.Bounds.Position.Z },
+            boundsSize = new[] { loaded.Bounds.Size.X, loaded.Bounds.Size.Y, loaded.Bounds.Size.Z },
+            heightMeters = loaded.Bounds.Size.Y,
+            authoredSurfaces = loaded.AuthoredSurfaces,
+            authoredTextures = loaded.AuthoredTextures,
+        };
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, report);
+        GD.Print(
+            $"OPENNV_GODOT_ACTOR_PASS form={loaded.FormId} meshes={loaded.Meshes} " +
+            $"skeletons={loaded.Skeletons} animations={loaded.Animations} playing={loaded.PlayingAnimation}");
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
     }

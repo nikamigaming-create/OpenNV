@@ -46,6 +46,9 @@ flowchart TD
     Door --> Session
     Session --> Hud[Objective / inventory / ammo HUD]
     Session --> Save[Atomic sandbox save]
+    CellRoot -->|0:N actor manifests| ActorPlacement[ACHR placement]
+    ActorPlacement -->|exactly 1| ActorModel[Verified skinned glTF actor]
+    ActorModel --> ActorSkeleton[Skeleton3D + authored idle]
 ```
 
 The actor data boundary is separate from model assembly and rendering:
@@ -163,7 +166,10 @@ input translation and presentation differ.
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
 | `CellSceneLoader.cs` | Manifest-to-node graph, placement, collision, proof queries | Binary parsing |
 | `RuntimeMaterialLoader.cs` | PNG hash validation and surface material construction | DDS/BSA parsing |
-| `EnvironmentCapture.cs` | Actor-free native frames, hashes, and visual-quality gates | Gameplay or desktop control |
+| `ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
+| `CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
+| `EnvironmentCapture.cs` | Native cell/actor frames, normalized camera telemetry, hashes, and visual-quality gates | Gameplay or desktop control |
+| `actor_parity.py` | Retail/Godot identity, camera, pixel metrics, and labelled differential sheets | Rendering or automatic human approval |
 | `DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
 | `PickupInstance.cs` | One authored pickup's identity and weapon profile | Inventory ownership |
 | `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
@@ -201,8 +207,12 @@ HUD, and explicit launcher routing.
 
 Implemented but not yet promoted to rendering: direct humanoid/creature record
 relationships, deterministic FaceGen geometry/texture primitives, and a
-recipe-pinned skinned/animated actor cache. The current Trudy differential still
-fails; cache generation is not a fidelity claim.
+recipe-pinned skinned/animated actor cache. Godot can load that cache at the
+authored ACHR placement only through an explicit proof-enable override, retain
+native actor/cell frames, and emit a normalized retail differential. The current
+Trudy differential still fails; cache generation and import are not fidelity
+claims. Production still needs quest/enable-parent/package state before an
+initially disabled actor can appear naturally.
 
 Not implemented: full Bethesda environment/mask material semantics, authored
 bhk collision, non-item arbitrary rotation promotion, visible first-person
