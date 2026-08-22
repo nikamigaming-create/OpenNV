@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 from bsa_archive import extract_member
@@ -101,12 +102,16 @@ def main() -> int:
     )
     parser.add_argument("--expected-meshes-bsa-sha256", default="")
     args = parser.parse_args()
-    result = prepare(
-        args.data_root.resolve(),
-        args.cache_root.resolve(),
-        args.logical_model,
-        args.expected_meshes_bsa_sha256,
-    )
+    try:
+        result = prepare(
+            args.data_root.resolve(),
+            args.cache_root.resolve(),
+            args.logical_model,
+            args.expected_meshes_bsa_sha256,
+        )
+    except Exception as error:
+        print(f"OPENNV_LEGAL_ASSET_ERROR {error}", file=sys.stderr)
+        return 2
     actual_archive_hash = str(result["install"]["meshesArchive"]["sha256"])
     print("OPENNV_LEGAL_ASSET_CACHE " + json.dumps({
         "archive": actual_archive_hash,

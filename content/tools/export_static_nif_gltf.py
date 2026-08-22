@@ -9,6 +9,7 @@ import json
 import math
 import os
 import struct
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -144,6 +145,13 @@ def atomic_write(path: Path, data: bytes) -> None:
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_bytes(data)
     os.replace(temporary, path)
+
+
+def compiler_provenance() -> dict[str, str]:
+    if getattr(sys, "frozen", False):
+        executable = Path(sys.executable)
+        return {"name": "OpenNV.Content packaged direct exporter v1", "sha256": sha256_bytes(executable.read_bytes())}
+    return {"name": GENERATOR, "sha256": sha256_bytes(Path(__file__).read_bytes())}
 
 
 def export_static_nif(
@@ -305,10 +313,7 @@ def export_static_nif(
             "userVersion": int(data.user_version),
             "userVersion2": int(data.user_version_2),
         },
-        "compiler": {
-            "name": GENERATOR,
-            "sha256": sha256_bytes(Path(__file__).read_bytes()),
-        },
+        "compiler": compiler_provenance(),
         "outputs": {
             "gltf": {"file": gltf_path.name, "bytes": len(gltf_bytes), "sha256": sha256_bytes(gltf_bytes)},
             "buffer": {"file": binary_name, "bytes": len(binary_bytes), "sha256": sha256_bytes(binary_bytes)},

@@ -68,11 +68,15 @@ CI pins the official Godot 4.7.1 Mono Windows archive by SHA-256
 `764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45`.
 
 ```powershell
-python -m pip install -r content/requirements.txt
+python -m pip install -r content/requirements-build.txt
 .\scripts\Test-GodotRuntime.ps1
 .\scripts\Test-GodotRuntime.ps1 `
   -FalloutNewVegasData 'D:\SteamLibrary\steamapps\common\Fallout New Vegas\Data'
 ```
+
+`Build-GodotRuntime.ps1` packages the legal-content helper with the experimental
+Windows export. The resulting `OpenNV.exe` lets a player select their owned
+`Data` folder directly; it does not require Python or another engine at runtime.
 
 This is a real geometry transport path, not a playable game build. See
 [installation status](docs/installation.md), [clean implementation boundary](docs/clean-room.md),

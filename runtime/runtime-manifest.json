@@ -6,11 +6,14 @@
     "status": "experimental",
     "label": "Experimental direct static NIF geometry slice; campaigns are not playable yet.",
     "canLaunch": false,
-    "executables": {}
+    "executables": {},
+    "contentExecutables": {}
   },
   "campaigns": [],
   "capabilities": [
     "direct-static-nif-gltf",
+    "legal-data-folder-picker",
+    "packaged-legal-content-helper",
     "forward-plus-static-model-load",
     "artifact-provenance-validation"
   ]

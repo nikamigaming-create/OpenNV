@@ -5,7 +5,7 @@ runtime. No playable Godot package is published yet, and archived previews are
 not the current engine.
 
 Developers can validate the asset-free synthetic slice on Windows with Godot
-4.7.1 Mono, .NET 9, and Python 3.11:
+4.7.1 Mono, .NET 9, and Python 3.11.9:
 
 ```powershell
 python -m pip install -r content/requirements.txt
@@ -21,9 +21,11 @@ temporary cache, loads it in Godot, and removes the cache afterward:
   -FalloutNewVegasData 'D:\SteamLibrary\steamapps\common\Fallout New Vegas\Data'
 ```
 
-For a persistent local developer cache, run
-`Configure-OpenNVRuntime.ps1 -FalloutNewVegasData <path>`. The input is
-read-only. No commercial file or conversion output is committed or packaged.
+Experimental packaged builds include `OpenNV.Content.exe` beside the Godot
+runtime. A player launches `OpenNV.exe`, selects their legal Fallout: New Vegas
+`Data` folder, and the runtime prepares its private cache directly. The player
+does not install Python or another engine. The retail input is read-only, and no
+commercial file or conversion output is committed or distributed.
 
 Player installation instructions will return only after the Godot runtime
 passes campaign, natural-route, persistence, packaging, and retail differential

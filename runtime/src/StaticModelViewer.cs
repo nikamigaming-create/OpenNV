@@ -8,6 +8,11 @@ public partial class StaticModelViewer : Node3D
 {
     private const string SidecarSchema = "opennv-static-nif-gltf/v1";
 
+    private Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
+    private CanvasLayer? _onboardingLayer;
+    private Label? _statusLabel;
+    private Button? _selectButton;
+
     public override void _Ready()
     {
         Callable.From(LoadConfiguredModel).CallDeferred();
@@ -17,69 +22,83 @@ public partial class StaticModelViewer : Node3D
     {
         try
         {
-            var options = ParseOptions(OS.GetCmdlineUserArgs());
-            if (!options.ContainsKey("model"))
+            _options = ParseOptions(OS.GetCmdlineUserArgs());
+            var hasDataRoot = _options.TryGetValue("data-root", out var dataRoot);
+            var hasModel = _options.ContainsKey("model");
+            if (hasDataRoot && hasModel)
+                throw new ArgumentException("Use either --data-root or --model/--sidecar, not both.");
+            if (!hasModel && _options.ContainsKey("sidecar"))
+                throw new ArgumentException("--sidecar requires --model.");
+
+            if (hasDataRoot)
             {
-                ShowExperimentalStatus();
-                if (options.TryGetValue("report", out var startupReportPath))
-                {
-                    WriteReport(startupReportPath, new
-                    {
-                        schema = "opennv-godot-startup/v1",
-                        status = "experimental",
-                        playable = false,
-                        engine = "Godot 4.7.1 Forward+",
-                    });
-                }
-                GD.Print("OPENNV_GODOT_EXPERIMENTAL_READY playable=0");
-                if (DisplayServer.GetName() == "headless")
-                    GetTree().Quit(0);
+                var prepared = LegalAssetPreparer.Prepare(dataRoot!, _options);
+                LoadModel(prepared.ModelPath, prepared.SidecarPath, _options);
                 return;
             }
-            var modelPath = RequireOption(options, "model");
-            var sidecarPath = RequireOption(options, "sidecar");
-            var provenance = ValidateProvenance(modelPath, sidecarPath);
-            var model = LoadGltfScene(modelPath);
-            model.Name = "RetailStaticModel";
-            AddChild(model);
 
-            var meshes = Descendants<MeshInstance3D>(model).ToArray();
-            if (meshes.Length == 0)
-                throw new InvalidOperationException("Imported glTF contains no MeshInstance3D nodes.");
-            var surfaces = meshes.Sum(mesh => mesh.Mesh?.GetSurfaceCount() ?? 0);
-            var vertices = meshes.Sum(mesh =>
-                mesh.Mesh is not ArrayMesh arrayMesh
-                    ? 0
-                    : Enumerable.Range(0, arrayMesh.GetSurfaceCount()).Sum(arrayMesh.SurfaceGetArrayLen));
-            if (surfaces == 0 || vertices == 0)
-                throw new InvalidOperationException("Imported glTF contains no renderable surfaces or vertices.");
-
-            BuildReferenceView(meshes[0]);
-            var report = new
+            if (hasModel)
             {
-                schema = "opennv-godot-static-model/v1",
-                status = "pass",
-                renderer = "forward_plus",
-                model = modelPath,
-                sidecar = sidecarPath,
-                sourceSha256 = provenance.SourceSha256,
-                meshes = meshes.Length,
-                surfaces,
-                vertices,
-            };
-            if (options.TryGetValue("report", out var reportPath))
-                WriteReport(reportPath, report);
-            GD.Print(
-                $"OPENNV_GODOT_STATIC_MODEL_PASS source={provenance.SourceSha256} " +
-                $"meshes={meshes.Length} surfaces={surfaces} vertices={vertices}");
-            if (options.ContainsKey("quit-after-load"))
+                LoadModel(RequireOption(_options, "model"), RequireOption(_options, "sidecar"), _options);
+                return;
+            }
+
+            if (_options.TryGetValue("report", out var startupReportPath))
+                WriteStartupReport(startupReportPath);
+            GD.Print("OPENNV_GODOT_EXPERIMENTAL_READY playable=0");
+            if (DisplayServer.GetName() == "headless")
                 GetTree().Quit(0);
+            else
+                ShowExperimentalStatus();
         }
         catch (Exception exception)
         {
             GD.PushError($"OPENNV_GODOT_STATIC_MODEL_FAIL {exception.Message}");
             GetTree().Quit(1);
         }
+    }
+
+    private void LoadModel(
+        string modelPath,
+        string sidecarPath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var provenance = ValidateProvenance(modelPath, sidecarPath);
+        var model = LoadGltfScene(modelPath);
+        model.Name = "RetailStaticModel";
+        AddChild(model);
+
+        var meshes = Descendants<MeshInstance3D>(model).ToArray();
+        if (meshes.Length == 0)
+            throw new InvalidOperationException("Imported glTF contains no MeshInstance3D nodes.");
+        var surfaces = meshes.Sum(mesh => mesh.Mesh?.GetSurfaceCount() ?? 0);
+        var vertices = meshes.Sum(mesh =>
+            mesh.Mesh is not ArrayMesh arrayMesh
+                ? 0
+                : Enumerable.Range(0, arrayMesh.GetSurfaceCount()).Sum(arrayMesh.SurfaceGetArrayLen));
+        if (surfaces == 0 || vertices == 0)
+            throw new InvalidOperationException("Imported glTF contains no renderable surfaces or vertices.");
+
+        BuildReferenceView(meshes[0]);
+        var report = new
+        {
+            schema = "opennv-godot-static-model/v1",
+            status = "pass",
+            renderer = "forward_plus",
+            model = modelPath,
+            sidecar = sidecarPath,
+            sourceSha256 = provenance.SourceSha256,
+            meshes = meshes.Length,
+            surfaces,
+            vertices,
+        };
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, report);
+        GD.Print(
+            $"OPENNV_GODOT_STATIC_MODEL_PASS source={provenance.SourceSha256} " +
+            $"meshes={meshes.Length} surfaces={surfaces} vertices={vertices}");
+        if (options.ContainsKey("quit-after-load"))
+            GetTree().Quit(0);
     }
 
     private void BuildReferenceView(MeshInstance3D referenceMesh)
@@ -117,7 +136,8 @@ public partial class StaticModelViewer : Node3D
 
     private void ShowExperimentalStatus()
     {
-        var layer = new CanvasLayer();
+        var layer = new CanvasLayer { Name = "LegalAssetSetup" };
+        _onboardingLayer = layer;
         AddChild(layer);
         var background = new ColorRect
         {
@@ -138,12 +158,73 @@ public partial class StaticModelViewer : Node3D
         var body = new Label
         {
             Text = "The direct legal-asset pipeline and Forward+ geometry slice are working.\n\n" +
-                   "Playable campaigns are not enabled yet. Use the Open Nevada launcher or\n" +
-                   "Configure-OpenNVRuntime.ps1 to validate your legal Fallout: New Vegas Data folder.\n\n" +
+                   "Select your legal Fallout: New Vegas Data folder to prepare and load the first\n" +
+                   "retail geometry slice. Python and external engine runtimes are not required.\n\n" +
                    "No game assets are included in this build, and your installation is never modified.",
         };
         body.AddThemeFontSizeOverride("font_size", 18);
         text.AddChild(body);
+
+        var button = new Button
+        {
+            Text = "Select Fallout: New Vegas Data folder",
+            CustomMinimumSize = new Vector2(0.0f, 48.0f),
+        };
+        _selectButton = button;
+        text.AddChild(button);
+
+        var status = new Label { Text = "Waiting for a legal Data folder." };
+        status.AddThemeColorOverride("font_color", new Color(0.70f, 0.80f, 0.90f));
+        status.AddThemeFontSizeOverride("font_size", 16);
+        _statusLabel = status;
+        text.AddChild(status);
+
+        var dialog = new FileDialog
+        {
+            Access = FileDialog.AccessEnum.Filesystem,
+            FileMode = FileDialog.FileModeEnum.OpenDir,
+            UseNativeDialog = true,
+            ModeOverridesTitle = false,
+            Title = "Select Fallout: New Vegas Data folder",
+        };
+        dialog.DirSelected += OnDataRootSelected;
+        layer.AddChild(dialog);
+        button.Pressed += () => dialog.PopupCenteredRatio(0.8f);
+    }
+
+    private void OnDataRootSelected(string dataRoot)
+    {
+        _selectButton!.Disabled = true;
+        _statusLabel!.Text = "Validating the installation and preparing the local cache...";
+        Callable.From(() => PrepareSelectedData(dataRoot)).CallDeferred();
+    }
+
+    private void PrepareSelectedData(string dataRoot)
+    {
+        try
+        {
+            var prepared = LegalAssetPreparer.Prepare(dataRoot, _options);
+            LoadModel(prepared.ModelPath, prepared.SidecarPath, _options);
+            _onboardingLayer?.QueueFree();
+            _onboardingLayer = null;
+        }
+        catch (Exception exception)
+        {
+            _statusLabel!.Text = "That folder could not be prepared. Choose the Fallout: New Vegas Data folder and try again.";
+            _selectButton!.Disabled = false;
+            GD.PushError($"OPENNV_LEGAL_ASSET_SETUP_FAIL {exception.Message}");
+        }
+    }
+
+    private static void WriteStartupReport(string reportPath)
+    {
+        WriteReport(reportPath, new
+        {
+            schema = "opennv-godot-startup/v1",
+            status = "experimental",
+            playable = false,
+            engine = "Godot 4.7.1 Forward+",
+        });
     }
 
     private static Provenance ValidateProvenance(string modelPath, string sidecarPath)

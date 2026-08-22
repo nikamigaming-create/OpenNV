@@ -11,7 +11,10 @@
 *.ps1 text eol=lf
 *.py text eol=lf
 *.sln text eol=crlf
+*.spec text eol=lf
 *.tscn text eol=lf
+*.txt text eol=lf
+*.uid text eol=lf
 *.yml text eol=lf
 
 *.bin binary

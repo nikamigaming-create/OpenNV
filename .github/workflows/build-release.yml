@@ -22,16 +22,16 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: pip
-          cache-dependency-path: content/requirements.txt
+          cache-dependency-path: content/requirements-build.txt
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "9.0.x"
 
       - name: Install direct-content dependencies
-        run: python -m pip install -r content/requirements.txt
+        run: python -m pip install -r content/requirements-build.txt
 
       - name: Download pinned Godot Mono
         id: godot
