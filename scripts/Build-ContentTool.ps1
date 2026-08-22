@@ -34,6 +34,7 @@ try {
     New-Item -ItemType Directory -Path $licenseDirectory | Out-Null
     $licenseQueries = @(
         @{ Package = "PyFFI"; Suffix = "LICENSE.rst"; Output = "PyFFI-LICENSE.rst" },
+        @{ Package = "Pillow"; Suffix = "licenses/LICENSE"; Output = "Pillow-LICENSE.txt" },
         @{ Package = "PyInstaller"; Suffix = "licenses/COPYING.txt"; Output = "PyInstaller-COPYING.txt" },
         @{ Package = "setuptools"; Suffix = "LICENSE"; Output = "setuptools-LICENSE.txt" }
     )

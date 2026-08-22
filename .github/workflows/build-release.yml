@@ -24,7 +24,9 @@ jobs:
         with:
           python-version: "3.11.9"
           cache: pip
-          cache-dependency-path: content/requirements-build.txt
+          cache-dependency-path: |
+            content/requirements.txt
+            content/requirements-build.txt
 
       - uses: actions/setup-dotnet@v4
         with:

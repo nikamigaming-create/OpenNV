@@ -45,7 +45,7 @@ internal static class VerifiedGltfLoader
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
 
-    private static void VerifyHash(string path, string expected)
+    internal static void VerifyHash(string path, string expected)
     {
         using var stream = File.OpenRead(path);
         var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();

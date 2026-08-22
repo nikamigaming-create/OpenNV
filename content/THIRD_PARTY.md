@@ -15,4 +15,9 @@ a packaging tool and is not part of OpenNV's runtime behavior or data model.
 
 The one-file helper embeds the CPython 3.11 runtime and setuptools support used
 by PyFFI. Packaged outputs include the exact installed license texts for
-CPython, setuptools, PyFFI, and PyInstaller in their `licenses` directory.
+CPython, setuptools, PyFFI, Pillow, and PyInstaller in their `licenses`
+directory.
+
+Pillow 12.3.0 decodes the player's DDS texture members into portable PNG cache
+artifacts. Pillow is distributed under the HPND license. It is a file decoder,
+not a game engine or source of OpenNV assets.

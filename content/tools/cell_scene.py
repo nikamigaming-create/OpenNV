@@ -12,9 +12,10 @@ from pathlib import Path
 from bsa_archive import BsaArchive
 from cell_catalog import BaseObject, CellCatalog, PlacedReference, Transform, scan_cell_catalog
 from export_static_nif_gltf import export_static_nif
+from texture_pipeline import TexturePipeline
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v1"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v2"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 
 
@@ -88,6 +89,8 @@ def _arrival_transform(catalog: CellCatalog, target_door_form_id: int) -> tuple[
 def prepare_cell_scene(
     master_path: Path,
     meshes_path: Path,
+    texture_archive_paths: list[Path],
+    texture_archive_rows: list[dict[str, object]],
     cache_root: Path,
     recipe: dict[str, object],
     master_sha256: str,
@@ -118,6 +121,7 @@ def prepare_cell_scene(
 
     archive = BsaArchive(meshes_path)
     assets: dict[str, dict[str, object]] = {}
+    asset_sidecars: dict[str, dict[str, object]] = {}
     compiler: dict[str, str] | None = None
     models = sorted({base.model_path for _, base in selected if base.model_path})
     for model_path in models:
@@ -142,6 +146,51 @@ def prepare_cell_scene(
             "sidecar": str(sidecar_path.resolve()),
             "surfaces": sidecar["coverage"]["surfaces"],
         }
+        asset_sidecars[model_path] = sidecar
+
+    requested_textures = sorted(
+        {
+            texture
+            for sidecar in asset_sidecars.values()
+            for surface in sidecar["surfaces"]
+            for texture in surface["textures"]
+            if texture
+        }
+    )
+    texture_pipeline = TexturePipeline(
+        texture_archive_paths,
+        cache_root,
+        {str(source): str(target) for source, target in recipe.get("textureAliases", {}).items()},
+    )
+    texture_artifacts = {
+        requested: texture_pipeline.prepare(requested) for requested in requested_textures
+    }
+    for model_path, asset in assets.items():
+        bindings = []
+        for surface_index, surface in enumerate(asset_sidecars[model_path]["surfaces"]):
+            textures = surface["textures"]
+            diffuse = textures[0] if len(textures) > 0 and textures[0] else None
+            normal = textures[1] if len(textures) > 1 and textures[1] else None
+            emissive = textures[2] if len(textures) > 2 and textures[2] else None
+            material = surface["material"]
+            glossiness = float(material.get("glossiness", 10.0))
+            bindings.append(
+                {
+                    "surfaceIndex": surface_index,
+                    "name": surface["name"],
+                    "diffuseTextureId": texture_artifacts[diffuse].asset_id if diffuse else None,
+                    "normalTextureId": texture_artifacts[normal].asset_id if normal else None,
+                    "emissiveTextureId": texture_artifacts[emissive].asset_id if emissive else None,
+                    "environmentTextureIgnored": textures[4] if len(textures) > 4 and textures[4] else None,
+                    "environmentMaskIgnored": textures[5] if len(textures) > 5 and textures[5] else None,
+                    "emissiveColor": material.get("emissive", [0.0, 0.0, 0.0]),
+                    "roughness": max(0.25, min(0.95, 1.0 - glossiness / 128.0)),
+                    "alphaBlend": "NiAlphaProperty" in surface["propertyTypes"],
+                    "doubleSided": bool(recipe.get("interiorDoubleSided", False)),
+                    "unshaded": "BSShaderNoLightingProperty" in surface["propertyTypes"],
+                }
+            )
+        asset["materials"] = bindings
 
     references = []
     for reference, base in selected:
@@ -170,7 +219,11 @@ def prepare_cell_scene(
         "schema": CELL_SCENE_SCHEMA,
         "status": "geometry-structure",
         "recipe": str(recipe["id"]),
-        "source": {"master": master_path.name, "masterSha256": master_sha256},
+        "source": {
+            "master": master_path.name,
+            "masterSha256": master_sha256,
+            "textureArchives": texture_archive_rows,
+        },
         "compiler": compiler,
         "cell": {
             "formId": form_id(cell.form_id),
@@ -195,6 +248,9 @@ def prepare_cell_scene(
             "visibilityModel": "whole-cell-no-portal-culling",
         },
         "assets": sorted(assets.values(), key=lambda value: value["id"]),
+        "textures": [
+            texture_artifacts[path].manifest() for path in sorted(texture_artifacts)
+        ],
         "references": references,
         "coverage": {
             "selectedReferences": len(selected),
@@ -202,7 +258,9 @@ def prepare_cell_scene(
             "doors": sum(1 for _, base in selected if base.record_type == "DOOR"),
             "skippedNonYawReferences": skipped_non_yaw,
             "collision": "runtime-trimesh",
-            "textures": "not-exported",
+            "textures": "decoded-png-material-bindings",
+            "decodedTextures": len(texture_artifacts),
+            "materialBindings": sum(len(asset["materials"]) for asset in assets.values()),
         },
     }
     _atomic_json(output_path, document)

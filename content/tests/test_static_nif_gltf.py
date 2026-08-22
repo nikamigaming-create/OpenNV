@@ -7,18 +7,21 @@ import tempfile
 import time
 import unittest
 import zlib
+from io import BytesIO
 from pathlib import Path
 
 if not hasattr(time, "clock"):
     time.clock = time.perf_counter
 
 from pyffi.formats.nif import NifFormat  # type: ignore  # noqa: E402
+from PIL import Image  # noqa: E402
 
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from export_static_nif_gltf import export_static_nif  # noqa: E402
-from bsa_archive import canonical_member_path, decode_member_payload  # noqa: E402
+from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
+from texture_pipeline import decode_dds  # noqa: E402
 
 
 def identity_transform(target: object) -> None:
@@ -83,6 +86,11 @@ class StaticNifGltfTest(unittest.TestCase):
             canonical_member_path("meshes/../test.nif")
         with self.assertRaises(ValueError):
             decode_member_payload(struct.pack("<I", len(original) + 1) + zlib.compress(original), True)
+        logical_path = "textures\\test\\owned.dds"
+        embedded = bytes([len(logical_path)]) + logical_path.encode() + payload
+        self.assertEqual(strip_embedded_name(embedded, logical_path), payload)
+        with self.assertRaises(ValueError):
+            strip_embedded_name(embedded, "textures\\test\\different.dds")
 
     def test_synthetic_export_is_deterministic_and_complete(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
@@ -121,6 +129,17 @@ class StaticNifGltfTest(unittest.TestCase):
             self.assertEqual(first_gltf["asset"]["version"], "2.0")
             self.assertEqual(first_gltf["accessors"][0]["min"], [-1.0, 0.0, -0.0])
             self.assertEqual(first_gltf["accessors"][0]["max"], [1.0, 2.0, -0.0])
+
+    def test_dds_decode_and_normal_green_conversion(self) -> None:
+        source = Image.new("RGBA", (4, 4), (10, 20, 30, 40))
+        encoded = BytesIO()
+        source.save(encoded, format="DDS")
+        self.assertEqual(decode_dds(encoded.getvalue(), False).getpixel((0, 0)), (10, 20, 30, 40))
+        self.assertEqual(decode_dds(encoded.getvalue(), True).getpixel((0, 0)), (10, 235, 30, 40))
+        wrong_format = BytesIO()
+        source.save(wrong_format, format="PNG")
+        with self.assertRaises(ValueError):
+            decode_dds(wrong_format.getvalue(), False)
 
 
 if __name__ == "__main__":

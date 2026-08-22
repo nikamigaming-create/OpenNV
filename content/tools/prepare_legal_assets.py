@@ -68,10 +68,26 @@ def prepare(
     sidecar_path = output_root / "retail-static.opennv.json"
     sidecar = export_static_nif(source_path, member.logical_path, gltf_path, sidecar_path, strict=True)
     cell_scene = None
+    texture_archives: list[Path] = []
+    texture_archive_rows: list[dict[str, object]] = []
     if cell_recipe:
+        texture_archives = [
+            find_required_file(data_root, "Fallout - Textures.bsa"),
+            find_required_file(data_root, "Fallout - Textures2.bsa"),
+        ]
+        texture_archive_rows = [
+            {
+                "file": archive.name,
+                "bytes": archive.stat().st_size,
+                "sha256": file_sha256(archive),
+            }
+            for archive in texture_archives
+        ]
         cell_scene = prepare_cell_scene(
             master,
             meshes,
+            texture_archives,
+            texture_archive_rows,
             cache_root,
             load_recipe(cell_recipe),
             master_hash,
@@ -83,6 +99,7 @@ def prepare(
             "dataRoot": str(data_root.resolve()),
             "master": {"file": master.name, "bytes": master.stat().st_size, "sha256": master_hash},
             "meshesArchive": {"file": meshes.name, "bytes": meshes.stat().st_size, "sha256": meshes_hash},
+            "textureArchives": texture_archive_rows,
         },
         "asset": {
             "logicalPath": member.logical_path,
