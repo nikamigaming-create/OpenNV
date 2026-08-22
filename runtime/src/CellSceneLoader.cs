@@ -13,7 +13,10 @@ internal static class CellSceneLoader
         bool openProofDoor,
         string? proofDoorOverride = null,
         string? savePath = null,
-        bool useXr = false)
+        bool useXr = false,
+        string? actorScenePath = null,
+        bool proofEnableActor = false,
+        bool buildCollision = true)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -152,8 +155,11 @@ internal static class CellSceneLoader
                     surfaces += mesh.Mesh.GetSurfaceCount();
                     if (mesh.Mesh is ArrayMesh arrayMesh)
                         vertices += Enumerable.Range(0, arrayMesh.GetSurfaceCount()).Sum(arrayMesh.SurfaceGetArrayLen);
-                    mesh.CreateTrimeshCollision();
-                    collisionMeshes++;
+                    if (buildCollision)
+                    {
+                        mesh.CreateTrimeshCollision();
+                        collisionMeshes++;
+                    }
                 }
                 loadedReferences++;
             }
@@ -164,6 +170,17 @@ internal static class CellSceneLoader
                 throw new InvalidOperationException($"Cell proof door was not loaded: {proofDoor}");
             if (openProofDoor)
                 doors[proofDoor].SetOpen(true);
+            var actors = new List<CellActorLoader.PlacedActor>();
+            if (actorScenePath is not null)
+            {
+                var placedActor = CellActorLoader.Load(
+                    actorScenePath,
+                    cell.GetProperty("formId").GetString()!,
+                    root,
+                    proofEnableActor);
+                if (placedActor is not null)
+                    actors.Add(placedActor.Value);
+            }
             var spawn = source.GetProperty("spawn");
             var authoredLights = source.GetProperty("lighting").GetProperty("lights").GetArrayLength();
             var player = BuildView(
@@ -192,7 +209,8 @@ internal static class CellSceneLoader
                 player,
                 session,
                 pickups,
-                containers);
+                containers,
+                actors);
         }
         finally
         {
@@ -374,7 +392,8 @@ internal static class CellSceneLoader
         CellPlayer Player,
         GameplaySession Session,
         IReadOnlyDictionary<string, PickupInstance> Pickups,
-        IReadOnlyDictionary<string, ContainerInstance> Containers);
+        IReadOnlyDictionary<string, ContainerInstance> Containers,
+        IReadOnlyList<CellActorLoader.PlacedActor> Actors);
 
     internal readonly record struct DoorRay(Vector3 From, Vector3 To, Vector3 LocalSize, Vector3 LocalNormal);
 
