@@ -1,24 +1,25 @@
 # Open Nevada
 
-**Open Nevada** (OpenNV) is an independent, cross-platform launcher and
-compatibility project for worlds built from game assets that a player legally
-owns. Its interface, product identity, and launcher contract are Open Nevada's
-own; it is not a front end branded as or affiliated with another engine or
-game series.
+**Open Nevada** (OpenNV) is an independent Godot-based runtime, direct retail
+content pipeline, and cross-platform launcher for worlds built from game assets
+that a player legally owns. Its engine, interface, product identity, and
+launcher contract are Open Nevada's own.
 
 > **Live:** **[opennevada.com](https://opennevada.com)** is the public Open
 > Nevada home. **[opennv.org](https://opennv.org)** is the short technical and
 > community address, permanently forwarding to the canonical site.
 
-GitHub Releases remains the download authority while the site links to verified
-nightly artifacts and their source information.
+Playable runtime downloads are paused while the new first-party Godot runtime
+passes its promotion gates. GitHub remains the source and future release
+authority; archived previews are not the current runtime.
 
 ![Open Nevada atlas visual](desktop/assets/open-nevada-atlas-hero-v1.png)
 
 The first-party desktop launcher has a portable Electron shell for Windows,
-macOS, and Linux. Runtime builds are promoted per platform only after the same
-campaign and compatibility tests pass; the current downloadable runtime
-preview is Windows x64. See [the launcher architecture](docs/desktop-launcher.md).
+macOS, and Linux. It now reads the in-repository Godot runtime manifest directly
+instead of using a Windows-only engine bridge. Runtime builds are promoted per
+platform only after the same campaign and compatibility tests pass. See [the
+launcher architecture](docs/desktop-launcher.md).
 See [the domain deployment plan](docs/domains.md) and [Cloudflare Pages
 handoff](docs/cloudflare-pages.md) before publishing the public site or a
 redirect.
@@ -56,39 +57,35 @@ pretending that an arbitrary Windows DLL is safe to load into a different
 runtime. The current catalog distinguishes validated modules from ones still
 waiting on an extender bridge. See [the mod policy](docs/mods.md).
 
-## Quick start: current Windows runtime preview
+## Current Godot development slice
 
-1. Download and extract `OpenNV-nightly-windows-x64.zip` outside `Program Files`.
-2. Install the games you own from a legal store and point OpenNV at their `Data`
-   folders:
+The current checked-in slice directly reads a synthetic NIF fixture, exports
+glTF plus a provenance sidecar, and proves that Godot 4.7.1 Forward+ imports and
+loads it. A local opt-in gate repeats the same path against one hash-pinned
+retail NIF without committing commercial bytes.
 
-   ```powershell
-   .\scripts\Configure-OpenNV.ps1 `
-     -Fallout3Data 'D:\SteamLibrary\steamapps\common\Fallout 3 goty\Data' `
-     -FalloutNewVegasData 'D:\SteamLibrary\steamapps\common\Fallout New Vegas\Data'
-   ```
+CI pins the official Godot 4.7.1 Mono Windows archive by SHA-256
+`764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45`.
 
-3. Review the character choices, then launch one:
+```powershell
+python -m pip install -r content/requirements.txt
+.\scripts\Test-GodotRuntime.ps1
+.\scripts\Test-GodotRuntime.ps1 `
+  -FalloutNewVegasData 'D:\SteamLibrary\steamapps\common\Fallout New Vegas\Data'
+```
 
-   ```powershell
-   .\scripts\Start-OpenNV.ps1 -ShowChoices
-   .\scripts\Start-OpenNV.ps1 -Campaign NewVegas
-   ```
-
-For TTW, run its official installer into a dedicated output directory and
-register that directory. OpenNV never writes to a game directory or to the
-official conversion output. See [installation](docs/installation.md) and
-[nightlies](docs/nightlies.md).
+This is a real geometry transport path, not a playable game build. See
+[installation status](docs/installation.md), [clean implementation boundary](docs/clean-room.md),
+and [release policy](docs/nightlies.md).
 
 ## Release contents
 
-Every runtime release contains the OpenNV runtime, launcher bridge, module
-catalog, and source-revision metadata. It does **not** contain:
+Future runtime releases will contain the exported Godot runtime, direct content
+contracts, launcher, and source-revision metadata. They will not contain:
 
 - commercial game files, DLC, or conversion output;
 - third-party mod archives or downloader credentials;
 - a player's saves, profiles, or mod-manager state.
 
-The runtime includes code subject to its upstream free-software license.
-Required notices, source information, and contributor attribution are retained
-in every archive; see [NOTICE.md](NOTICE.md).
+No playable Godot runtime is currently published. Historical preview archives
+retain the notices that applied when they were built; see [NOTICE.md](NOTICE.md).

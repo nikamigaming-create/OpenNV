@@ -25,13 +25,17 @@ The portable contract is implemented in
 separate from the current Windows PowerShell bridge, so platform-specific
 runtime launches cannot redefine product or save semantics.
 
-## Runtime bridge and portability
+## Runtime manifest and portability
 
-The Electron shell asks a local runtime bridge for readiness and launch state.
-On the current Windows preview, the bridge reads the existing OpenNV profile
-API and hands launches to it. On macOS and Linux, the shell remains usable as a
-launcher and compatibility console while their runtime packages are being
-promoted.
+The Electron shell reads `runtime-manifest.json` from a selected OpenNV runtime
+folder on every platform. The manifest declares its Godot version,
+capabilities, campaign readiness, launch eligibility, and platform executable.
+The launcher never infers playability from a folder name or a bridge script.
+
+The checked-in static-geometry slice deliberately declares `canLaunch: false`.
+Once a campaign passes, the launcher spawns the declared Godot executable with
+an explicit campaign request. No Windows-only PowerShell engine bridge defines
+the product contract.
 
 Each runtime port must pass the same gates before a release calls it playable:
 

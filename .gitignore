@@ -9,6 +9,14 @@
 /desktop/release/
 /site-preview*.png
 /desktop/assets/open-nevada-reddit-banner-*-safe-v2.png
+/runtime/.godot/
+/runtime/.mono/
+/runtime/generated/
+/runtime/bin/
+/runtime/obj/
+/runtime/tests/fixtures/*.gltf.import
+/content/.pytest_cache/
+**/__pycache__/
 
 # wrangler files
 .wrangler

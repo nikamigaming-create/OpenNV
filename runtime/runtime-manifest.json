@@ -1,0 +1,17 @@
+{
+  "schema": "opennv-runtime-manifest/v1",
+  "runtime": {
+    "engine": "Godot",
+    "engineVersion": "4.7.1",
+    "status": "experimental",
+    "label": "Experimental direct static NIF geometry slice; campaigns are not playable yet.",
+    "canLaunch": false,
+    "executables": {}
+  },
+  "campaigns": [],
+  "capabilities": [
+    "direct-static-nif-gltf",
+    "forward-plus-static-model-load",
+    "artifact-provenance-validation"
+  ]
+}
