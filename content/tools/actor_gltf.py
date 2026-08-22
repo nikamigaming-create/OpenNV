@@ -39,6 +39,7 @@ class ActorComponent:
     egm_path: str | None = None
     egm_payload: bytes | None = None
     rigid_to_head: bool = False
+    bake_shape_transform: bool = False
     selected_shape: str | None = None
     excluded_shape_prefixes: tuple[str, ...] = ()
     diffuse_override: str | None = None
@@ -330,16 +331,26 @@ def _append_shape(
             vertex_offset=component.egm_vertex_offset,
         )
         morphed = True
-    if component.rigid_to_head:
-        transform = shape.get_transform(component_root)
-        positions = [_transform_position(position, transform) for position in raw_positions]
-    else:
-        positions = [_convert_vector(position) for position in raw_positions]
+    shape_transform = shape.get_transform(component_root)
+    transform_shape = component.rigid_to_head or component.bake_shape_transform
+    positions = [
+        _transform_position(position, shape_transform)
+        if transform_shape else _convert_vector(position)
+        for position in raw_positions
+    ]
     triangles = [tuple(int(index) for index in triangle) for triangle in mesh.get_triangles()]
     if not triangles:
         raise ValueError(f"Actor shape has no triangles: {_text(shape.name)}")
     normals = _recompute_normals(positions, triangles) if morphed else [
-        _convert_direction((float(value.x), float(value.y), float(value.z))) for value in mesh.normals
+        (
+            _transform_direction(
+                (float(value.x), float(value.y), float(value.z)),
+                shape_transform,
+            )
+            if transform_shape
+            else _convert_direction((float(value.x), float(value.y), float(value.z)))
+        )
+        for value in mesh.normals
     ]
     uvs = [(float(value.u), float(value.v)) for value in mesh.uv_sets[0]]
     tangents = generate_tangents(positions, normals, uvs, triangles)
@@ -752,6 +763,17 @@ def _transform_position(value: tuple[float, float, float], matrix: object) -> tu
             x * matrix.m_11 + y * matrix.m_21 + z * matrix.m_31 + matrix.m_41,
             x * matrix.m_12 + y * matrix.m_22 + z * matrix.m_32 + matrix.m_42,
             x * matrix.m_13 + y * matrix.m_23 + z * matrix.m_33 + matrix.m_43,
+        )
+    )
+
+
+def _transform_direction(value: tuple[float, float, float], matrix: object) -> tuple[float, float, float]:
+    x, y, z = value
+    return _convert_direction(
+        (
+            x * matrix.m_11 + y * matrix.m_21 + z * matrix.m_31,
+            x * matrix.m_12 + y * matrix.m_22 + z * matrix.m_32,
+            x * matrix.m_13 + y * matrix.m_23 + z * matrix.m_33,
         )
     )
 

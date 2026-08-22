@@ -13,6 +13,14 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageStat
 
 
 UNITS_TO_METERS = 0.0142875
+NON_DEFORMING_POSE_NODES = {
+    "Bip01",
+    "Bip01 NonAccum",
+    "Bip01 Neck",
+    "Bip01 R ForeTwistDriver",
+    "Bip01 LPauldron",
+    "Bip01 RPauldron",
+}
 
 
 def normalize_form(value: object) -> str:
@@ -93,6 +101,88 @@ def retail_bone_in_godot(transform: dict[str, object]) -> tuple[list[float], lis
     return [translation[0], translation[2], -translation[1]], quaternion_from_matrix(rotation)
 
 
+def game_position_to_godot(
+    position: object,
+    origin: object,
+    units_to_meters: float,
+) -> list[float]:
+    values = [float(value) for value in position]
+    anchor = [float(value) for value in origin]
+    if len(values) != 3 or len(anchor) != 3:
+        raise ValueError("Game/Godot position conversion requires three values.")
+    return [
+        (values[0] - anchor[0]) * units_to_meters,
+        (values[2] - anchor[2]) * units_to_meters,
+        -(values[1] - anchor[1]) * units_to_meters,
+    ]
+
+
+def bone_pose_metrics(
+    retail_rows: object,
+    godot_rows: object,
+    origin: object,
+    units_to_meters: float,
+) -> dict[str, object]:
+    retail_bones = {
+        bone["name"]: bone
+        for bone in retail_rows
+        if bone["name"] not in NON_DEFORMING_POSE_NODES
+    }
+    godot_bones = {bone["name"]: bone for bone in godot_rows}
+    names_match = (
+        retail_bones.keys() == godot_bones.keys()
+        and len(retail_bones) >= 50
+    )
+    translation_errors = []
+    rotation_errors = []
+    rows = []
+    if names_match:
+        for name, retail_bone in retail_bones.items():
+            transform = retail_bone["transform"]
+            translation = game_position_to_godot(
+                transform["worldTranslation"], origin, units_to_meters
+            )
+            _, rotation = retail_bone_in_godot(
+                {
+                    "localRotation": transform["worldRotation"],
+                    "localTranslation": [0.0, 0.0, 0.0],
+                }
+            )
+            translation_error = vector_error(
+                translation, godot_bones[name]["worldPosition"]
+            )
+            rotation_error = quaternion_error(
+                rotation, godot_bones[name]["worldRotationQuaternion"]
+            )
+            translation_errors.append(translation_error)
+            rotation_errors.append(rotation_error)
+            rows.append(
+                {
+                    "name": name,
+                    "translationErrorMeters": translation_error,
+                    "rotationErrorRadians": rotation_error,
+                }
+            )
+    maximum_translation = max(translation_errors) if translation_errors else math.inf
+    maximum_rotation = max(rotation_errors) if rotation_errors else math.inf
+    return {
+        "status": "pass"
+        if maximum_translation <= 0.00005 and maximum_rotation <= 0.001
+        else "fail",
+        "bones": len(retail_bones),
+        "maximumTranslationErrorMeters": maximum_translation,
+        "maximumRotationErrorRadians": maximum_rotation,
+        "worstBones": sorted(
+            rows,
+            key=lambda row: max(
+                row["translationErrorMeters"] / 0.00005,
+                row["rotationErrorRadians"] / 0.001,
+            ),
+            reverse=True,
+        )[:8],
+    }
+
+
 def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, object]) -> dict[str, object]:
     retail_camera = retail_state["camera"]
     retail_pose = retail_state["pose"]
@@ -131,24 +221,67 @@ def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, ob
     phase_error = abs(
         float(idle["lastScaled"]) - float(godot_shot["appliedAnimationPhaseSeconds"])
     )
-    retail_bones = {bone["name"]: bone for bone in retail_pose["armBones"]}
-    godot_bones = {bone["name"]: bone for bone in godot_shot["armBones"]}
-    bone_names_match = retail_bones.keys() == godot_bones.keys() and len(retail_bones) == 4
-    bone_translation_errors = []
-    bone_rotation_errors = []
-    if bone_names_match:
-        for name, retail_bone in retail_bones.items():
-            translation, rotation = retail_bone_in_godot(retail_bone["transform"])
-            bone_translation_errors.append(
-                vector_error(translation, godot_bones[name]["localTranslation"])
-            )
-            bone_rotation_errors.append(
-                quaternion_error(rotation, godot_bones[name]["localRotationQuaternion"])
-            )
-    maximum_bone_translation_error = (
-        max(bone_translation_errors) if bone_translation_errors else math.inf
+    origin = godot_shot["cellOriginGameUnits"]
+    units_to_meters = float(godot_shot["unitsToMeters"])
+    target_pose = bone_pose_metrics(
+        retail_pose["bones"],
+        godot_shot["poseBones"],
+        origin,
+        units_to_meters,
     )
-    maximum_bone_rotation_error = max(bone_rotation_errors) if bone_rotation_errors else math.inf
+    retail_contexts = {
+        normalize_form(actor["referenceForm"]): actor for actor in retail_state["contextActors"]
+    }
+    godot_contexts = {
+        normalize_form(actor["referenceFormId"]): actor for actor in godot_shot["contextActors"]
+    }
+    context_status = "pass"
+    context_metrics = []
+    if retail_contexts.keys() != godot_contexts.keys() or not retail_contexts:
+        context_status = "fail"
+    else:
+        for reference, retail_context in retail_contexts.items():
+            godot_context = godot_contexts[reference]
+            sequence = next(
+                row for row in retail_context["activeSequences"] if float(row["weight"]) >= 0.99
+            )
+            pose = bone_pose_metrics(
+                retail_context["bones"],
+                godot_context["poseBones"],
+                origin,
+                units_to_meters,
+            )
+            placement = vector_error(
+                retail_context["position"], godot_context["positionGameUnits"]
+            )
+            yaw = angle_error(
+                -float(retail_context["rotation"][2]),
+                float(godot_context["godotYawRadians"]),
+            )
+            phase = abs(
+                float(sequence["lastScaled"])
+                - float(godot_context["appliedAnimationPhaseSeconds"])
+            )
+            actor_passed = (
+                normalize_form(retail_context["baseForm"])
+                == normalize_form(godot_context["baseFormId"])
+                and placement <= 0.001
+                and yaw <= 0.00001
+                and phase <= 0.01
+                and pose["status"] == "pass"
+            )
+            if not actor_passed:
+                context_status = "fail"
+            context_metrics.append(
+                {
+                    "referenceForm": reference,
+                    "status": "pass" if actor_passed else "fail",
+                    "placementErrorGameUnits": placement,
+                    "godotYawErrorRadians": yaw,
+                    "animationPhaseErrorSeconds": phase,
+                    "pose": pose,
+                }
+            )
     passed = (
         bool(godot_shot["retailStateApplied"])
         and placement_error <= 0.001
@@ -159,8 +292,8 @@ def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, ob
         and camera_distance_error <= 0.00001
         and fov_error <= 0.001
         and phase_error <= 0.01
-        and maximum_bone_translation_error <= 0.05
-        and maximum_bone_rotation_error <= 0.01
+        and target_pose["status"] == "pass"
+        and context_status == "pass"
     )
     return {
         "status": "pass" if passed else "fail",
@@ -172,8 +305,9 @@ def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, ob
         "cameraDistanceErrorMeters": camera_distance_error,
         "verticalFovErrorDegrees": fov_error,
         "animationPhaseErrorSeconds": phase_error,
-        "maximumArmTranslationErrorGameUnits": maximum_bone_translation_error,
-        "maximumArmRotationErrorRadians": maximum_bone_rotation_error,
+        "targetPose": target_pose,
+        "contextActorsStatus": context_status,
+        "contextActors": context_metrics,
     }
 
 

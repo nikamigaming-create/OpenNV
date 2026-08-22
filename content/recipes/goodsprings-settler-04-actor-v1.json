@@ -1,6 +1,6 @@
 {
   "schema": "opennv-actor-recipe/v1",
-  "id": "goodsprings-trudy-actor-v1",
+  "id": "goodsprings-settler-04-actor-v1",
   "master": {
     "file": "FalloutNV.esm",
     "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1"
@@ -21,19 +21,27 @@
   ],
   "cellFormId": "00106185",
   "cellRecipe": "goodsprings-saloon-structure-v1",
-  "proofActorReferenceFormId": "00104c6d",
-  "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
-  "hairShape": "NoHat",
+  "proofActorReferenceFormId": "00104f08",
+  "idleAnimation": "meshes\\characters\\_male\\idleanims\\dynamicidle_sitstool.kf",
+  "hairShape": "Hat",
   "skinToneRgba": [
     62,
     65,
     62,
     64
   ],
-  "bodyTextureSourceAliases": [
-    "textures\\characters\\childfemale\\upperbodyfemale.dds"
+  "skinToneSource": "provisional-caucasian-runtime-calibration",
+  "outfitArmorFormIds": [
+    "000ef1ce",
+    "001083e1"
+  ],
+  "rigidOutfitArmorFormIds": [
+    "001083e1"
   ],
   "excludeOutfitShapePrefixes": [
-    "MeatCap"
+    "MeatCap",
+    "meat",
+    "armmeat",
+    "arm2"
   ]
 }

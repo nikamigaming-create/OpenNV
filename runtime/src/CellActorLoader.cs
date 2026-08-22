@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
@@ -6,6 +7,36 @@ namespace OpenNV.Runtime;
 internal static class CellActorLoader
 {
     private const string ActorSceneSchema = "opennv-actor-scene/v2";
+    private const string ActorSceneSetSchema = "opennv-cell-actor-scenes/v1";
+
+    internal static IReadOnlyList<string> LoadManifest(
+        string manifestPath,
+        string expectedCellFormId)
+    {
+        var resolvedManifest = VerifiedGltfLoader.ResolvePath(manifestPath);
+        using var document = JsonDocument.Parse(File.ReadAllText(resolvedManifest));
+        var root = document.RootElement;
+        if (root.GetProperty("schema").GetString() != ActorSceneSetSchema ||
+            root.GetProperty("cellFormId").GetString() != expectedCellFormId)
+            throw new InvalidOperationException($"Unexpected OpenNV cell actor manifest: {resolvedManifest}");
+        var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scenes = new List<string>();
+        foreach (var row in root.GetProperty("actors").EnumerateArray())
+        {
+            var reference = row.GetProperty("referenceFormId").GetString()!;
+            if (!references.Add(reference))
+                throw new InvalidOperationException($"Cell actor manifest duplicates ACHR {reference}.");
+            var scene = VerifiedGltfLoader.ResolvePath(row.GetProperty("scene").GetString()!);
+            using var stream = File.OpenRead(scene);
+            var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            if (!actual.Equals(row.GetProperty("sha256").GetString(), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Cell actor scene hash mismatch: {scene}");
+            scenes.Add(scene);
+        }
+        if (scenes.Count < 1)
+            throw new InvalidOperationException("Cell actor manifest contains no actor scenes.");
+        return scenes;
+    }
 
     internal static PlacedActor? Load(
         string actorScenePath,
@@ -55,6 +86,7 @@ internal static class CellActorLoader
             actor.GetProperty("headPartFormIds").EnumerateArray()
                 .Select(value => value.GetString()!)
                 .ToArray(),
+            root.GetProperty("idleAnimation").GetString()!,
             loaded);
     }
 
@@ -77,5 +109,6 @@ internal static class CellActorLoader
         string EyesFormId,
         string OutfitFormId,
         IReadOnlyList<string> HeadPartFormIds,
+        string IdleAnimationPath,
         ActorModelSlice.LoadedActor Actor);
 }
