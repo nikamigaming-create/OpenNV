@@ -86,6 +86,11 @@ function launch(request) {
   if (!installed.manifest.runtime?.canLaunch) {
     return { ok: false, code: "runtime-slice-not-playable", message: installed.manifest.runtime?.label || "This runtime slice is not playable yet." };
   }
+  const runtimeCampaign = installed.manifest.campaigns?.find((entry) =>
+    String(entry?.id ?? "").toLowerCase() === campaign.engineCampaign.toLowerCase());
+  if (enableJam && !runtimeCampaign?.variants?.jam?.ready) {
+    return { ok: false, code: "jam-not-ready", message: runtimeCampaign?.variants?.jam?.message || "JAM is not ready in this runtime." };
+  }
   const relativeExecutable = installed.manifest.runtime?.executables?.[process.platform];
   const executable = relativeExecutable ? path.join(installed.root, relativeExecutable) : null;
   if (!executable || !existsSync(executable)) {

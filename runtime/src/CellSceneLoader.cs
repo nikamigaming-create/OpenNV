@@ -5,13 +5,14 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v2";
+    private const string CellSceneSchema = "opennv-cell-scene/v3";
 
     internal static LoadedCell Load(
         string scenePath,
         Node3D parent,
         bool openProofDoor,
-        string? proofDoorOverride = null)
+        string? proofDoorOverride = null,
+        string? savePath = null)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -54,9 +55,14 @@ internal static class CellSceneLoader
                 Scale = Vector3.One * unitScale,
             };
             parent.AddChild(root);
+            var session = new GameplaySession();
+            session.Configure(cell.GetProperty("formId").GetString()!, savePath);
+            parent.AddChild(session);
 
             var loadedReferences = 0;
             var doors = new Dictionary<string, DoorInstance>(StringComparer.OrdinalIgnoreCase);
+            var pickups = new Dictionary<string, PickupInstance>(StringComparer.OrdinalIgnoreCase);
+            var containers = new Dictionary<string, ContainerInstance>(StringComparer.OrdinalIgnoreCase);
             var collisionMeshes = 0;
             var surfaces = 0;
             var vertices = 0;
@@ -66,20 +72,69 @@ internal static class CellSceneLoader
                     continue;
                 var formId = reference.GetProperty("formId").GetString()!;
                 var yaw = reference.GetProperty("yawRadians").GetSingle();
+                var rotation = ReadQuaternion(reference.GetProperty("rotationGodotQuaternion"));
+                var interaction = reference.GetProperty("interaction");
+                var interactionType = interaction.ValueKind == JsonValueKind.Object
+                    ? interaction.GetProperty("type").GetString()
+                    : null;
+                if (interactionType == "pickup" && session.IsReferenceRemoved(formId))
+                    continue;
                 Node3D placement;
-                if (reference.GetProperty("baseRecordType").GetString() == "DOOR")
+                if (interactionType == "door")
                 {
                     var door = new DoorInstance { Name = $"DOOR_{formId}" };
-                    door.Configure(yaw);
+                    door.Configure(formId, yaw);
+                    door.SetOpen(session.IsDoorOpen(formId));
                     doors.Add(formId, door);
                     placement = door;
+                }
+                else if (interactionType == "pickup")
+                {
+                    PickupInstance.WeaponProfile? weapon = null;
+                    if (interaction.TryGetProperty("weapon", out var weaponSource))
+                    {
+                        weapon = new PickupInstance.WeaponProfile(
+                            weaponSource.GetProperty("damage").GetInt32(),
+                            weaponSource.GetProperty("clipSize").GetInt32(),
+                            weaponSource.GetProperty("ammoFormId").ValueKind == JsonValueKind.String
+                                ? weaponSource.GetProperty("ammoFormId").GetString()
+                                : null);
+                    }
+                    var pickup = new PickupInstance();
+                    pickup.Configure(
+                        formId,
+                        interaction.GetProperty("itemFormId").GetString()!,
+                        interaction.GetProperty("itemEditorId").GetString()!,
+                        interaction.GetProperty("itemRecordType").GetString()!,
+                        interaction.GetProperty("count").GetInt32(),
+                        weapon);
+                    pickup.Basis = new Basis(rotation);
+                    pickups.Add(formId, pickup);
+                    placement = pickup;
+                }
+                else if (interactionType == "container")
+                {
+                    var entries = interaction.GetProperty("items")
+                        .EnumerateArray()
+                        .Select(item => new ContainerInstance.Entry(
+                            item.GetProperty("itemFormId").GetString()!,
+                            item.GetProperty("itemEditorId").GetString()!,
+                            item.GetProperty("itemRecordType").GetString()!,
+                            item.GetProperty("count").GetInt32(),
+                            item.GetProperty("resolved").GetBoolean()))
+                        .ToArray();
+                    var container = new ContainerInstance();
+                    container.Configure(formId, reference.GetProperty("baseEditorId").GetString()!, entries);
+                    container.Basis = new Basis(rotation);
+                    containers.Add(formId, container);
+                    placement = container;
                 }
                 else
                 {
                     placement = new Node3D
                     {
                         Name = $"REFR_{formId}",
-                        Rotation = new Vector3(0.0f, yaw, 0.0f),
+                        Basis = new Basis(rotation),
                     };
                 }
                 placement.Position = ReadVector(reference.GetProperty("positionGodotUnits"));
@@ -114,7 +169,8 @@ internal static class CellSceneLoader
                 parent,
                 spawn.GetProperty("yawRadians").GetSingle(),
                 source.GetProperty("lighting"),
-                unitScale);
+                unitScale,
+                session);
             return new LoadedCell(
                 root,
                 cell.GetProperty("formId").GetString()!,
@@ -129,9 +185,12 @@ internal static class CellSceneLoader
                 surfaces,
                 vertices,
                 proofDoor,
-                openProofDoor,
+                doors[proofDoor].IsOpen,
                 doors[proofDoor],
-                player);
+                player,
+                session,
+                pickups,
+                containers);
         }
         finally
         {
@@ -140,7 +199,12 @@ internal static class CellSceneLoader
         }
     }
 
-    private static CellPlayer BuildView(Node3D parent, float yaw, JsonElement lighting, float unitScale)
+    private static CellPlayer BuildView(
+        Node3D parent,
+        float yaw,
+        JsonElement lighting,
+        float unitScale,
+        GameplaySession session)
     {
         var calibration = lighting.GetProperty("calibration");
         var environment = new Godot.Environment
@@ -186,7 +250,7 @@ internal static class CellSceneLoader
             });
         }
         var player = new CellPlayer();
-        player.Configure(yaw);
+        player.Configure(yaw, session);
         parent.AddChild(player);
         return player;
     }
@@ -205,6 +269,14 @@ internal static class CellSceneLoader
         if (values.Length != 3)
             throw new InvalidOperationException("Cell scene color must contain three values.");
         return new Color(values[0], values[1], values[2]);
+    }
+
+    private static Quaternion ReadQuaternion(JsonElement array)
+    {
+        var values = array.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != 4)
+            throw new InvalidOperationException("Cell scene quaternion must contain four values.");
+        return new Quaternion(values[0], values[1], values[2], values[3]).Normalized();
     }
 
     internal static DoorRay BuildProofRay(DoorInstance door)
@@ -296,7 +368,10 @@ internal static class CellSceneLoader
         string ProofDoorFormId,
         bool ProofDoorOpen,
         DoorInstance ProofDoor,
-        CellPlayer Player);
+        CellPlayer Player,
+        GameplaySession Session,
+        IReadOnlyDictionary<string, PickupInstance> Pickups,
+        IReadOnlyDictionary<string, ContainerInstance> Containers);
 
     internal readonly record struct DoorRay(Vector3 From, Vector3 To, Vector3 LocalSize, Vector3 LocalNormal);
 

@@ -11,7 +11,13 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from cell_catalog import BaseObject, scan_cell_catalog  # noqa: E402
-from cell_scene import godot_position, load_recipe, reference_selection_reason  # noqa: E402
+from cell_scene import (  # noqa: E402
+    godot_position,
+    godot_rotation_quaternion,
+    interaction_manifest,
+    load_recipe,
+    reference_selection_reason,
+)
 from plugin_records import COMPRESSED_RECORD_FLAG, PluginFormatError, iter_plugin_records  # noqa: E402
 
 
@@ -51,6 +57,26 @@ def synthetic_plugin() -> bytes:
         + subrecord("DATA", struct.pack("<iI4BIffIf", -1, 256, 100, 80, 40, 0, 0, 1.0, 90.0, 0, 0.0))
         + subrecord("FNAM", struct.pack("<f", 1.5)),
     )
+    item = record(
+        "MISC",
+        0x303,
+        subrecord("EDID", b"SyntheticPickup\0") + subrecord("MODL", b"clutter/test/pickup.nif\0"),
+    )
+    container = record(
+        "CONT",
+        0x304,
+        subrecord("EDID", b"SyntheticContainer\0")
+        + subrecord("MODL", b"clutter/test/container.nif\0")
+        + subrecord("CNTO", struct.pack("<Ii", 0x303, 2)),
+    )
+    weapon = record(
+        "WEAP",
+        0x305,
+        subrecord("EDID", b"SyntheticWeapon\0")
+        + subrecord("MODL", b"weapons/test/weapon.nif\0")
+        + subrecord("NAM0", struct.pack("<I", 0x306))
+        + subrecord("DATA", struct.pack("<IIfHB", 100, 200, 2.0, 26, 6)),
+    )
     xcll = bytes((10, 20, 30, 0, 40, 50, 60, 0, 70, 80, 90, 0)) + struct.pack(
         "<ffii3f", 64.0, 3750.0, 0, 250, 1.0, 6600.0, 1.25
     )
@@ -78,16 +104,46 @@ def synthetic_plugin() -> bytes:
         subrecord("NAME", struct.pack("<I", 0x302))
         + subrecord("DATA", struct.pack("<6f", 15.0, 25.0, 35.0, 0.0, 0.0, 0.0)),
     )
+    item_reference = record(
+        "REFR",
+        0x203,
+        subrecord("NAME", struct.pack("<I", 0x303))
+        + subrecord("DATA", struct.pack("<6f", 18.0, 28.0, 38.0, 0.0, 0.0, 0.0)),
+    )
+    container_reference = record(
+        "REFR",
+        0x204,
+        subrecord("NAME", struct.pack("<I", 0x304))
+        + subrecord("DATA", struct.pack("<6f", 19.0, 29.0, 39.0, 0.0, 0.0, 0.0)),
+    )
+    weapon_reference = record(
+        "REFR",
+        0x205,
+        subrecord("NAME", struct.pack("<I", 0x305))
+        + subrecord("DATA", struct.pack("<6f", 20.0, 30.0, 40.0, 0.1, 0.2, 0.3)),
+    )
     children = group(
         struct.pack("<I", 0x100),
         6,
-        group(struct.pack("<I", 0x100), 9, floor_reference + door_reference + light_reference),
+        group(
+            struct.pack("<I", 0x100),
+            9,
+            floor_reference
+            + door_reference
+            + light_reference
+            + item_reference
+            + container_reference
+            + weapon_reference,
+        ),
     )
     return (
         header
         + group(b"STAT", 0, static)
         + group(b"DOOR", 0, door)
         + group(b"LIGH", 0, light)
+        + group(b"MISC", 0, item)
+        + group(b"CONT", 0, container)
+        + group(b"WEAP", 0, weapon)
         + group(b"CELL", 0, cell + children)
     )
 
@@ -104,7 +160,7 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(cell.editor_id, "SyntheticRoom")
         self.assertEqual(catalog.base_objects[0x300].model_path, "meshes\\test\\floor.nif")
         references = catalog.references_for(cell.form_id)
-        self.assertEqual(len(references), 3)
+        self.assertEqual(len(references), 6)
         self.assertEqual(references[0].transform.position, (10.0, 20.0, 30.0))
         self.assertEqual(references[0].transform.rotation_radians, (0.0, 0.0, 1.5))
         self.assertEqual(references[1].teleport_destination_form_id, 0x400)
@@ -115,6 +171,40 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(catalog.lights[0x302].radius, 256)
         self.assertEqual(catalog.lights[0x302].color_rgb, (100, 80, 40))
         self.assertEqual(catalog.lights[0x302].intensity, 1.5)
+        self.assertEqual(catalog.base_objects[0x303].record_type, "MISC")
+        self.assertEqual(catalog.containers[0x304].items[0].item_form_id, 0x303)
+        self.assertEqual(catalog.containers[0x304].items[0].count, 2)
+        self.assertEqual(catalog.weapons[0x305].damage, 26)
+        self.assertEqual(catalog.weapons[0x305].clip_size, 6)
+        self.assertEqual(catalog.weapons[0x305].ammo_form_id, 0x306)
+        container_interaction = interaction_manifest(
+            next(reference for reference in references if reference.form_id == 0x204),
+            catalog.base_objects[0x304],
+            catalog,
+        )
+        self.assertEqual(
+            container_interaction,
+            {
+                "type": "container",
+                "items": [
+                    {
+                        "itemFormId": "00000303",
+                        "itemEditorId": "SyntheticPickup",
+                        "itemRecordType": "MISC",
+                        "count": 2,
+                        "resolved": True,
+                    }
+                ],
+            },
+        )
+        weapon_interaction = interaction_manifest(
+            next(reference for reference in references if reference.form_id == 0x205),
+            catalog.base_objects[0x305],
+            catalog,
+        )
+        self.assertEqual(weapon_interaction["weapon"]["damage"], 26)
+        self.assertEqual(weapon_interaction["weapon"]["clipSize"], 6)
+        self.assertEqual(weapon_interaction["weapon"]["ammoFormId"], "00000306")
 
     def test_truncated_group_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
@@ -125,6 +215,21 @@ class CellCatalogTest(unittest.TestCase):
 
     def test_reference_position_conversion_applies_origin_once(self) -> None:
         self.assertEqual(godot_position((11.0, 22.0, 33.0), (1.0, 2.0, 3.0)), [10.0, 30.0, -20.0])
+        yaw = godot_rotation_quaternion((0.0, 0.0, 1.5707963267948966))
+        self.assertAlmostEqual(yaw[0], 0.0)
+        self.assertAlmostEqual(yaw[1], 0.7071067811865475)
+        self.assertAlmostEqual(yaw[2], 0.0)
+        self.assertAlmostEqual(yaw[3], 0.7071067811865476)
+        pitch = godot_rotation_quaternion((1.5707963267948966, 0.0, 0.0))
+        self.assertAlmostEqual(pitch[0], 0.7071067811865475)
+        self.assertAlmostEqual(pitch[1], 0.0)
+        self.assertAlmostEqual(pitch[2], 0.0)
+        self.assertAlmostEqual(pitch[3], 0.7071067811865476)
+        roll = godot_rotation_quaternion((0.0, 1.5707963267948966, 0.0))
+        self.assertAlmostEqual(roll[0], 0.0)
+        self.assertAlmostEqual(roll[1], 0.0)
+        self.assertAlmostEqual(roll[2], -0.7071067811865475)
+        self.assertAlmostEqual(roll[3], 0.7071067811865476)
 
     def test_recipe_accounts_for_editor_and_effect_exclusions(self) -> None:
         recipe = load_recipe("goodsprings-saloon-structure-v1")

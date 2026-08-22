@@ -59,13 +59,13 @@ waiting on an extender bridge. See [the mod policy](docs/mods.md).
 
 ## Current Godot development slice
 
-The current checked-in slice keeps the synthetic NIF gate and adds one
-hash-pinned, data-driven retail interior. It directly resolves the Goodsprings
-Prospector Saloon CELL, its REFR-to-base relationships, 117 unique rendered
-assets, 251 yaw-safe placements, 194 textures, 274 material bindings, 24 placed
-lights, and the incoming XTEL spawn. Godot loads the dense cell, generates
-collision, and proves that the spawn hits the floor and a physical ray passes
-after the authored entry door opens.
+The current checked-in slice is a playable Goodsprings sandbox, not only a
+renderer. It resolves 153 visible assets, 348 placements, 255 textures, 332
+materials, 97 authored pickups, five containers, 24 lights, and the incoming
+XTEL spawn. The promoted route collects the saloon's real `.357`, fires using
+its retail damage/clip/ammo profile, takes an authored Beer, loots a resolved
+authored crate, opens the main door, autosaves, exits, and restores the exact
+state in a second Godot process.
 
 CI pins the official Godot 4.7.1 Mono Windows archive by SHA-256
 `764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45`.
@@ -81,10 +81,13 @@ python -m pip install -r content/requirements-build.txt
 Windows export. The resulting `OpenNV.exe` lets a player select their owned
 `Data` folder directly; it does not require Python or another engine at runtime.
 
-This is a real cell/runtime path, not a playable campaign. See the
+This is a playable experimental sandbox, not the full New Vegas campaign. See the
 [single-page architecture](docs/architecture.md),
 [installation status](docs/installation.md), [clean implementation boundary](docs/clean-room.md),
 and [release policy](docs/nightlies.md).
+
+Flat play and OpenXR are first-class targets for one shared game state. OpenXR
+is an explicit next promotion gate; the current package does not claim VR yet.
 
 ## Release contents
 

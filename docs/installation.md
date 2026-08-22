@@ -1,8 +1,8 @@
 # Installation status
 
 OpenNV is replacing its historical runtime preview with a first-party Godot
-runtime. No playable Godot package is published yet, and archived previews are
-not the current engine.
+runtime. The checked-in Windows slice is a playable experimental Goodsprings
+sandbox; no full-campaign package is published yet.
 
 Developers can validate the asset-free synthetic slice on Windows with Godot
 4.7.1 Mono, .NET 9, and Python 3.11.9:
@@ -28,8 +28,8 @@ does not install Python or another engine. The retail input is read-only, and no
 commercial file or conversion output is committed or distributed. The verified
 cache remembers the selected installation and is reopened automatically on
 later launches. The current recipe-pinned proof opens the Goodsprings Prospector
-Saloon structure at the main entrance's data-defined XTEL target.
+Saloon at the main entrance's data-defined XTEL target. Use WASD/mouse, E to
+activate, left-click to fire after taking the `.357`, and F5 to save.
 
-Player installation instructions will return only after the Godot runtime
-passes campaign, natural-route, persistence, packaging, and retail differential
-gates.
+The New Vegas launcher path is enabled only for this sandbox. Fallout 3, TTW,
+JAM, and the full New Vegas campaign remain disabled until their own gates pass.

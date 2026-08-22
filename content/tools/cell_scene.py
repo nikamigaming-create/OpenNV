@@ -10,12 +10,19 @@ import sys
 from pathlib import Path
 
 from bsa_archive import BsaArchive
-from cell_catalog import BaseObject, CellCatalog, PlacedReference, Transform, scan_cell_catalog
+from cell_catalog import (
+    ITEM_RECORD_TYPES,
+    BaseObject,
+    CellCatalog,
+    PlacedReference,
+    Transform,
+    scan_cell_catalog,
+)
 from export_static_nif_gltf import export_static_nif
 from texture_pipeline import TexturePipeline
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v2"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v3"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 
 
@@ -70,6 +77,50 @@ def normalized_rgb(color: tuple[int, int, int]) -> list[float]:
     return [component / 255.0 for component in color]
 
 
+def _matrix_multiply(left: list[list[float]], right: list[list[float]]) -> list[list[float]]:
+    return [
+        [sum(left[row][axis] * right[axis][column] for axis in range(3)) for column in range(3)]
+        for row in range(3)
+    ]
+
+
+def godot_rotation_quaternion(rotation_radians: tuple[float, float, float]) -> list[float]:
+    x, y, z = rotation_radians
+    cosine_x, sine_x = math.cos(x), math.sin(x)
+    cosine_y, sine_y = math.cos(y), math.sin(y)
+    cosine_z, sine_z = math.cos(z), math.sin(z)
+    rotation_x = [[1.0, 0.0, 0.0], [0.0, cosine_x, -sine_x], [0.0, sine_x, cosine_x]]
+    rotation_y = [[cosine_y, 0.0, sine_y], [0.0, 1.0, 0.0], [-sine_y, 0.0, cosine_y]]
+    rotation_z = [[cosine_z, -sine_z, 0.0], [sine_z, cosine_z, 0.0], [0.0, 0.0, 1.0]]
+    game_rotation = _matrix_multiply(rotation_z, _matrix_multiply(rotation_y, rotation_x))
+    conversion = [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]]
+    conversion_inverse = [[conversion[column][row] for column in range(3)] for row in range(3)]
+    matrix = _matrix_multiply(conversion, _matrix_multiply(game_rotation, conversion_inverse))
+
+    trace = matrix[0][0] + matrix[1][1] + matrix[2][2]
+    if trace > 0.0:
+        scale = math.sqrt(trace + 1.0) * 2.0
+        quaternion = [
+            (matrix[2][1] - matrix[1][2]) / scale,
+            (matrix[0][2] - matrix[2][0]) / scale,
+            (matrix[1][0] - matrix[0][1]) / scale,
+            0.25 * scale,
+        ]
+    else:
+        axis = max(range(3), key=lambda index: matrix[index][index])
+        next_axis = (axis + 1) % 3
+        last_axis = (axis + 2) % 3
+        scale = math.sqrt(1.0 + matrix[axis][axis] - matrix[next_axis][next_axis] - matrix[last_axis][last_axis]) * 2.0
+        components = [0.0, 0.0, 0.0, 0.0]
+        components[axis] = 0.25 * scale
+        components[3] = (matrix[last_axis][next_axis] - matrix[next_axis][last_axis]) / scale
+        components[next_axis] = (matrix[next_axis][axis] + matrix[axis][next_axis]) / scale
+        components[last_axis] = (matrix[last_axis][axis] + matrix[axis][last_axis]) / scale
+        quaternion = components
+    length = math.sqrt(sum(component * component for component in quaternion))
+    return [component / length for component in quaternion]
+
+
 def _atomic_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
@@ -102,6 +153,48 @@ def _arrival_transform(catalog: CellCatalog, target_door_form_id: int) -> tuple[
     return incoming[0].form_id, incoming[0].teleport_destination_transform
 
 
+def interaction_manifest(
+    reference: PlacedReference,
+    base: BaseObject,
+    catalog: CellCatalog,
+) -> dict[str, object] | None:
+    if base.record_type in ITEM_RECORD_TYPES:
+        interaction = {
+            "type": "pickup",
+            "itemFormId": form_id(base.form_id),
+            "itemEditorId": base.editor_id,
+            "itemRecordType": base.record_type,
+            "count": 1,
+        }
+        weapon = catalog.weapons.get(base.form_id)
+        if weapon is not None:
+            interaction["weapon"] = {
+                "damage": weapon.damage,
+                "clipSize": weapon.clip_size,
+                "ammoFormId": form_id(weapon.ammo_form_id) if weapon.ammo_form_id is not None else None,
+            }
+        return interaction
+    if base.record_type == "CONT":
+        container = catalog.containers.get(base.form_id)
+        items = []
+        if container is not None:
+            for entry in container.items:
+                item = catalog.base_objects.get(entry.item_form_id)
+                items.append(
+                    {
+                        "itemFormId": form_id(entry.item_form_id),
+                        "itemEditorId": item.editor_id if item is not None else "",
+                        "itemRecordType": item.record_type if item is not None else "",
+                        "count": entry.count,
+                        "resolved": item is not None,
+                    }
+                )
+        return {"type": "container", "items": items}
+    if base.record_type == "DOOR":
+        return {"type": "door"}
+    return None
+
+
 def prepare_cell_scene(
     master_path: Path,
     meshes_path: Path,
@@ -127,6 +220,9 @@ def prepare_cell_scene(
     selected: list[tuple[PlacedReference, BaseObject]] = []
     excluded_references: list[dict[str, str]] = []
     skipped_non_yaw: list[str] = []
+    allow_non_yaw_types = {
+        str(value) for value in recipe["selection"].get("allowNonYawRecordTypes", [])
+    }
     for reference in catalog.references_for(cell_form_id):
         base = catalog.base_objects.get(reference.base_form_id)
         if base is None:
@@ -143,7 +239,11 @@ def prepare_cell_scene(
                     }
                 )
             continue
-        if bool(recipe["selection"]["yawOnly"]) and not yaw_only(reference.transform):
+        if (
+            bool(recipe["selection"]["yawOnly"])
+            and base.record_type not in allow_non_yaw_types
+            and not yaw_only(reference.transform)
+        ):
             skipped_non_yaw.append(form_id(reference.form_id))
             continue
         selected.append((reference, base))
@@ -245,12 +345,14 @@ def prepare_cell_scene(
                 "positionGameUnits": list(reference.transform.position),
                 "positionGodotUnits": godot_position(reference.transform.position, origin),
                 "yawRadians": reference.transform.rotation_radians[2],
+                "rotationGodotQuaternion": godot_rotation_quaternion(reference.transform.rotation_radians),
                 "initiallyDisabled": bool(reference.flags & 0x00000800),
                 "teleportDestinationFormId": (
                     form_id(reference.teleport_destination_form_id)
                     if reference.teleport_destination_form_id is not None
                     else None
                 ),
+                "interaction": interaction_manifest(reference, base, catalog),
             }
         )
 
@@ -343,6 +445,8 @@ def prepare_cell_scene(
             "decodedTextures": len(texture_artifacts),
             "materialBindings": sum(len(asset["materials"]) for asset in assets.values()),
             "authoredLights": len(lights),
+            "pickups": sum(1 for reference in references if reference["interaction"] and reference["interaction"]["type"] == "pickup"),
+            "containers": sum(1 for reference in references if reference["interaction"] and reference["interaction"]["type"] == "container"),
         },
     }
     _atomic_json(output_path, document)

@@ -4,12 +4,27 @@
     "engine": "Godot",
     "engineVersion": "4.7.1",
     "status": "experimental",
-    "label": "Experimental dense, textured Goodsprings interior slice; campaigns are not playable yet.",
-    "canLaunch": false,
+    "label": "Playable experimental Goodsprings sandbox; the full New Vegas campaign is not ready.",
+    "canLaunch": true,
     "executables": {},
     "contentExecutables": {}
   },
-  "campaigns": [],
+  "campaigns": [
+    {
+      "id": "NewVegas",
+      "variants": {
+        "vanilla": {
+          "ready": true,
+          "message": "Playable Goodsprings sandbox route",
+          "unavailableDlc": []
+        },
+        "jam": {
+          "ready": false,
+          "message": "JAM gameplay semantics are not promoted in the Godot sandbox."
+        }
+      }
+    }
+  ],
   "capabilities": [
     "direct-static-nif-gltf",
     "legal-data-folder-picker",
@@ -24,9 +39,13 @@
     "placed-ligh-color-radius-intensity",
     "xtel-data-derived-spawn",
     "runtime-trimesh-cell-collision",
-    "interactive-doors-and-projectile-rays",
+    "interactive-doors-and-physical-fire-rays",
     "whole-cell-no-portal-culling",
     "forward-plus-static-model-load",
-    "artifact-provenance-validation"
+    "artifact-provenance-validation",
+    "authored-pickup-inventory-loop",
+    "retail-weap-damage-and-clip-profile",
+    "persistent-sandbox-save-cold-reload",
+    "playable-objective-route"
   ]
 }

@@ -11,7 +11,18 @@ from pathlib import Path
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 
 
-BASE_RECORD_TYPES = {
+ITEM_RECORD_TYPES = {
+    "ALCH",
+    "AMMO",
+    "ARMO",
+    "BOOK",
+    "IMOD",
+    "KEYM",
+    "MISC",
+    "NOTE",
+    "WEAP",
+}
+BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "ACTI",
     "CONT",
     "DOOR",
@@ -76,6 +87,26 @@ class LightObject:
 
 
 @dataclass(frozen=True)
+class ContainerItem:
+    item_form_id: int
+    count: int
+
+
+@dataclass(frozen=True)
+class ContainerObject:
+    form_id: int
+    items: tuple[ContainerItem, ...]
+
+
+@dataclass(frozen=True)
+class WeaponObject:
+    form_id: int
+    damage: int
+    clip_size: int
+    ammo_form_id: int | None
+
+
+@dataclass(frozen=True)
 class PlacedReference:
     form_id: int
     cell_form_id: int
@@ -91,6 +122,8 @@ class CellCatalog:
     cells: dict[int, Cell]
     base_objects: dict[int, BaseObject]
     lights: dict[int, LightObject]
+    containers: dict[int, ContainerObject]
+    weapons: dict[int, WeaponObject]
     references: list[PlacedReference]
 
     def references_for(self, cell_form_id: int) -> list[PlacedReference]:
@@ -166,8 +199,33 @@ def _light_object(record: Record, values: dict[str, list[bytes]]) -> LightObject
     )
 
 
+def _container_object(record: Record, values: dict[str, list[bytes]]) -> ContainerObject:
+    items = []
+    for data in values.get("CNTO", []):
+        if len(data) != 8:
+            raise ValueError(f"CONT CNTO must be 8 bytes in {record.form_id:08x}")
+        item_form_id, count = struct.unpack("<Ii", data)
+        items.append(ContainerItem(item_form_id, count))
+    return ContainerObject(record.form_id, tuple(items))
+
+
+def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObject:
+    matches = values.get("DATA", [])
+    if len(matches) != 1 or len(matches[0]) != 15:
+        raise ValueError(f"WEAP DATA must be 15 bytes in {record.form_id:08x}")
+    data = matches[0]
+    ammo_values = values.get("NAM0", [])
+    ammo = _form_id(ammo_values[0], record, "NAM0") if ammo_values else None
+    return WeaponObject(
+        record.form_id,
+        struct.unpack_from("<H", data, 12)[0],
+        data[14],
+        ammo,
+    )
+
+
 def scan_cell_catalog(path: Path) -> CellCatalog:
-    catalog = CellCatalog({}, {}, {}, [])
+    catalog = CellCatalog({}, {}, {}, {}, {}, [])
     for record in iter_plugin_records(path, CATALOG_RECORD_TYPES):
         if record.signature == "CELL":
             values = _subrecords(record)
@@ -195,6 +253,10 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 light = _light_object(record, values)
                 if light is not None:
                     catalog.lights[record.form_id] = light
+            elif record.signature == "CONT":
+                catalog.containers[record.form_id] = _container_object(record, values)
+            elif record.signature == "WEAP":
+                catalog.weapons[record.form_id] = _weapon_object(record, values)
         elif record.signature == "REFR":
             cell_form_id = _cell_parent(record)
             if cell_form_id is None:

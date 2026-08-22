@@ -20,11 +20,20 @@
     ],
     "includeBaseRecordTypes": [
       "ACTI",
+      "ALCH",
+      "AMMO",
+      "ARMO",
+      "BOOK",
       "CONT",
       "DOOR",
       "FURN",
+      "IMOD",
+      "KEYM",
+      "MISC",
       "MSTT",
-      "STAT"
+      "NOTE",
+      "STAT",
+      "WEAP"
     ],
     "excludeBaseEditorIds": [
       "AudioMarker",
@@ -34,7 +43,18 @@
     "excludeModelPrefixes": [
       "effects\\"
     ],
-    "yawOnly": true
+    "yawOnly": true,
+    "allowNonYawRecordTypes": [
+      "ALCH",
+      "AMMO",
+      "ARMO",
+      "BOOK",
+      "IMOD",
+      "KEYM",
+      "MISC",
+      "NOTE",
+      "WEAP"
+    ]
   },
   "unitsToMeters": 0.0142875
 }

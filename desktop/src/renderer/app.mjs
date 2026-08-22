@@ -71,15 +71,16 @@ function renderLayers() {
 
 function render() {
   const campaign = selectedCampaign();
+  const jamAvailable = Boolean(campaign.jam && campaign.jamReady);
   document.querySelector("#campaign-rule").textContent = state.campaignRule;
   document.querySelector("#jam-rule").textContent = state.jamRule;
   statusElement.textContent = statusLabel(state.runtime);
   statusElement.dataset.status = state.runtime.status;
   selectionTitle.textContent = campaign.title;
   selectionDetail.textContent = campaign.detail;
-  jamRow.classList.toggle("disabled", !campaign.jam);
-  jamToggle.disabled = !campaign.jam;
-  if (!campaign.jam) jamToggle.checked = false;
+  jamRow.classList.toggle("disabled", !jamAvailable);
+  jamToggle.disabled = !jamAvailable;
+  if (!jamAvailable) jamToggle.checked = false;
   launchButton.disabled = !state.runtime.canLaunch;
   launchButton.title = state.runtime.canLaunch ? "Launch this path" : state.runtime.label;
   document.querySelector("#platform-label").textContent = `${state.runtime.platform.toUpperCase()} / ${state.runtime.source.toUpperCase()}`;

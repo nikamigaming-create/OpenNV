@@ -3,12 +3,14 @@
 This is the first-party Open Nevada runtime. It uses Godot Forward+ and accepts
 only artifacts produced by the direct retail-content pipeline in `../content`.
 
-The current slice reads the owned master directly, resolves one recipe-pinned
-interior CELL and its placed REFR graph, exports 117 visible NIF assets, and
-loads 251 yaw-safe references in Godot with 194 textures, 274 material bindings,
-and 24 placed authored lights. The incoming door's XTEL target is the spawn
-origin; runtime trimeshes provide the current collision proof. It does not claim
-retail collision blocks, animation, actors, or campaigns.
+The current slice reads the owned master directly and runs a playable,
+recipe-pinned Goodsprings sandbox. It loads 153 assets, 348 references, 255
+textures, 332 materials, 97 pickups, five containers, and 24 authored lights.
+The incoming XTEL owns the spawn. The `.357` pickup uses retail damage and clip
+data; inventory, ammo, objective, removed pickups, and door state autosave and
+cold-reload. One fully resolved crate is transferable; containers backed by
+unimplemented leveled-list records stay explicitly locked. It does not claim
+actors, damageable combat, simulated projectiles, or a complete campaign.
 
 Run the complete repository gate from the repository root:
 
@@ -29,19 +31,15 @@ pwsh -File scripts/Build-GodotRuntime.ps1 -OutputRoot D:\Builds\OpenNV
 ```
 
 The archive contains the Godot executable and a packaged legal-content helper,
-but no commercial content. Launching it displays an explicit
-experimental/non-playable screen with a native Data-folder picker. Selecting a
-legal Fallout: New Vegas `Data` folder prepares a private cache and immediately
-loads the first retail geometry slice; Python and OpenMW are not required on the
-player's machine. Later launches reopen that verified cache automatically. If a
-runtime update changes the packaged compiler, OpenNV rebuilds the cache from the
-remembered read-only installation before loading it.
+but no commercial content. On first launch, select a legal Fallout: New Vegas
+`Data` folder; OpenNV prepares its private cache and enters the playable saloon
+sandbox. Python and OpenMW are not required on the player's machine. Later
+launches reopen that verified cache automatically.
 
-The cell slice has basic first-person movement. Use WASD and mouse-look, press E
-on a door to open or close it, and use the left mouse button for a physical ray
-query. The gate proves that the XTEL spawn lands on floor collision and that the
-same short ray hits a closed interior door but passes after it opens. OpenNV
-loads the whole cell instead of inserting a fake opaque portal plane.
+Use WASD and mouse-look, press E to pick up items, open containers, or operate a
+door, left-click to fire an equipped weapon, and F5 to save. The HUD tracks the
+four-stage sandbox objective and inventory. Packaging proves the route and a
+separate cold reload before accepting the build.
 
 Add `-FalloutNewVegasData <path>` to the build command for a local end-to-end
 gate of the exported executable, packaged helper, legal cache, and Godot load.

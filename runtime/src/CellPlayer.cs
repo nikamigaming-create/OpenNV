@@ -16,11 +16,13 @@ internal partial class CellPlayer : CharacterBody3D
         Far = 200.0f,
         Current = true,
     };
+    private GameplaySession? _session;
 
     internal Camera3D Camera => _camera;
 
-    internal void Configure(float yaw)
+    internal void Configure(float yaw, GameplaySession session)
     {
+        _session = session;
         Name = "Player";
         Position = new Vector3(0.0f, 0.9f, 0.0f);
         Rotation = new Vector3(0.0f, yaw, 0.0f);
@@ -63,14 +65,16 @@ internal partial class CellPlayer : CharacterBody3D
         if (inputEvent is InputEventKey key && key.Pressed && !key.Echo)
         {
             if (key.PhysicalKeycode == Key.E)
-                ToggleDoor();
+                Activate();
+            else if (key.PhysicalKeycode == Key.F5)
+                _session!.SaveAndNotify();
             else if (key.PhysicalKeycode == Key.Escape)
                 Input.MouseMode = Input.MouseModeEnum.Visible;
         }
         else if (inputEvent is InputEventMouseButton button && button.Pressed)
         {
             if (button.ButtonIndex == MouseButton.Left)
-                FireRay();
+                _session!.Fire(_camera);
             else if (button.ButtonIndex == MouseButton.Right)
                 Input.MouseMode = Input.MouseModeEnum.Captured;
         }
@@ -86,23 +90,27 @@ internal partial class CellPlayer : CharacterBody3D
         }
     }
 
-    private void ToggleDoor()
+    private void Activate()
     {
         var collider = Cast(2.5f);
+        var pickup = Ancestor<PickupInstance>(collider);
+        if (pickup is not null)
+        {
+            _session!.Collect(pickup);
+            return;
+        }
+        var container = Ancestor<ContainerInstance>(collider);
+        if (container is not null)
+        {
+            _session!.OpenContainer(container);
+            return;
+        }
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
             return;
         door.SetOpen(!door.IsOpen);
+        _session!.DoorChanged(door);
         GD.Print($"OPENNV_DOOR_STATE form={door.Name.ToString().Replace("DOOR_", "")} open={door.IsOpen}");
-    }
-
-    private void FireRay()
-    {
-        var collider = Cast(100.0f);
-        GD.Print(
-            collider is null
-                ? "OPENNV_PROJECTILE_RAY miss=1"
-                : $"OPENNV_PROJECTILE_RAY hit=1 collider={collider.GetPath()}");
     }
 
     private Node? Cast(float distance)

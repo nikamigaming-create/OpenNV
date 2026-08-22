@@ -32,10 +32,10 @@ folder on every platform. The manifest declares its Godot version,
 capabilities, campaign readiness, launch eligibility, and platform executable.
 The launcher never infers playability from a folder name or a bridge script.
 
-The checked-in static-geometry slice deliberately declares `canLaunch: false`.
-Once a campaign passes, the launcher spawns the declared Godot executable with
-an explicit campaign request. No Windows-only PowerShell engine bridge defines
-the product contract.
+The checked-in runtime declares `canLaunch: true` only for the experimental New
+Vegas Goodsprings sandbox. Fallout 3, TTW, JAM, and full-campaign readiness stay
+false. The launcher spawns the declared Godot executable with an explicit
+campaign request; no Windows-only PowerShell bridge defines the product.
 
 Each runtime port must pass the same gates before a release calls it playable:
 

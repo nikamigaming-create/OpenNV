@@ -87,7 +87,8 @@ public partial class RuntimeCoordinator : Node3D
             scenePath,
             this,
             !runTraversalProof && options.ContainsKey("open-proof-door"),
-            options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null);
+            options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
+            options.TryGetValue("save-path", out var savePath) ? savePath : null);
         if (options.TryGetValue("capture-root", out var captureRoot))
         {
             _ = EnvironmentCapture.Run(
@@ -98,12 +99,98 @@ public partial class RuntimeCoordinator : Node3D
                 options.TryGetValue("report", out var captureReport) ? captureReport : null);
             return;
         }
+        if (options.ContainsKey("gameplay-proof"))
+        {
+            _ = RunGameplayProof(loaded, scenePath, options);
+            return;
+        }
+        if (options.ContainsKey("gameplay-reload-proof"))
+        {
+            CompleteGameplayReloadProof(loaded, scenePath, options);
+            return;
+        }
         if (runTraversalProof)
         {
             _ = RunDoorTraversalProof(loaded, scenePath, options);
             return;
         }
         CompleteCellLoad(loaded, scenePath, options, null);
+    }
+
+    private async Task RunGameplayProof(
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        try
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            var revolver = loaded.Pickups.Values.Single(pickup => pickup.ItemFormId == "0008f216");
+            loaded.Session.Collect(revolver);
+            loaded.Session.Fire(loaded.Player.Camera);
+            var aid = loaded.Pickups.Values.First(pickup => pickup.EditorId == "Beer");
+            loaded.Session.Collect(aid);
+            var container = loaded.Containers.Values.Single(candidate => candidate.EditorId == "SSCrateContainerFull");
+            loaded.Session.OpenContainer(container);
+            loaded.ProofDoor.SetOpen(true);
+            loaded.Session.DoorChanged(loaded.ProofDoor);
+            if (!loaded.Session.ObjectiveComplete || loaded.Session.ShotsFired != 1 ||
+                loaded.Session.AmmoInMagazine != 5 || !loaded.Session.HasItem("00103b1e") ||
+                !loaded.Session.IsContainerEmptied("0010873e") || !File.Exists(loaded.Session.SavePath))
+                throw new InvalidOperationException("Playable route did not reach its persisted completion state.");
+            WriteGameplayReport("first-run", loaded, scenePath, options);
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_GODOT_GAMEPLAY_PROOF_FAIL {exception.Message}");
+            GetTree().Quit(1);
+        }
+    }
+
+    private void CompleteGameplayReloadProof(
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        if (!loaded.Session.ObjectiveComplete || loaded.Session.ShotsFired != 1 ||
+            loaded.Session.AmmoInMagazine != 5 || !loaded.ProofDoor.IsOpen ||
+            !loaded.Session.HasItem("00103b1e") || !loaded.Session.IsContainerEmptied("0010873e") ||
+            loaded.Pickups.Values.Any(pickup => pickup.ItemFormId == "0008f216"))
+            throw new InvalidOperationException("Cold reload did not restore the completed playable route.");
+        WriteGameplayReport("cold-reload", loaded, scenePath, options);
+        GetTree().Quit(0);
+    }
+
+    private static void WriteGameplayReport(
+        string phase,
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var report = new
+        {
+            schema = "opennv-godot-playable-route/v1",
+            status = "pass",
+            phase,
+            scene = scenePath,
+            cellFormId = loaded.FormId,
+            cellEditorId = loaded.EditorId,
+            route = new[]
+            {
+                "pickup-revolver",
+                "fire-physical-ray",
+                "pickup-aid",
+                "open-resolved-container",
+                "open-entry-door",
+            },
+            session = loaded.Session.Report(),
+            noHostControl = true,
+        };
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, report);
+        GD.Print($"OPENNV_GODOT_PLAYABLE_ROUTE_PASS phase={phase} save={loaded.Session.SavePath}");
     }
 
     private async Task RunDoorTraversalProof(
