@@ -19,10 +19,10 @@ analysis = Analysis(
     binaries=[],
     datas=pyffi_data,
     hiddenimports=[],
-    hookspath=[],
+    hookspath=[str(content_root / "hooks")],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["numpy"],
     noarchive=False,
     optimize=0,
 )

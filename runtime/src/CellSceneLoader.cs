@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v1";
+    private const string CellSceneSchema = "opennv-cell-scene/v2";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -23,6 +23,8 @@ internal static class CellSceneLoader
         var prototypes = new Dictionary<string, VerifiedGltfLoader.LoadedGltf>(StringComparer.Ordinal);
         try
         {
+            var textures = RuntimeMaterialLoader.LoadTextures(source);
+            var materialBindings = 0;
             var compiler = source.GetProperty("compiler");
             var compilerName = compiler.GetProperty("name").GetString()!;
             var compilerSha256 = compiler.GetProperty("sha256").GetString()!;
@@ -39,6 +41,7 @@ internal static class CellSceneLoader
                 if (!loaded.CompilerName.Equals(compilerName, StringComparison.Ordinal) ||
                     !loaded.CompilerSha256.Equals(compilerSha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"Cell asset compiler provenance mismatch: {assetId}");
+                materialBindings += RuntimeMaterialLoader.Apply(loaded.Scene, asset, textures);
                 prototypes.Add(assetId, loaded);
             }
 
@@ -112,6 +115,8 @@ internal static class CellSceneLoader
                 cell.GetProperty("formId").GetString()!,
                 cell.GetProperty("editorId").GetString()!,
                 prototypes.Count,
+                textures.Count,
+                materialBindings,
                 loadedReferences,
                 doors.Count,
                 collisionMeshes,
@@ -136,15 +141,33 @@ internal static class CellSceneLoader
             BackgroundMode = Godot.Environment.BGMode.Color,
             BackgroundColor = new Color(0.015f, 0.018f, 0.022f),
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
-            AmbientLightColor = new Color(0.72f, 0.68f, 0.60f),
-            AmbientLightEnergy = 0.85f,
+            AmbientLightColor = new Color(0.52f, 0.45f, 0.34f),
+            AmbientLightEnergy = 0.42f,
             TonemapMode = Godot.Environment.ToneMapper.Filmic,
         };
         parent.AddChild(new WorldEnvironment { Environment = environment });
         parent.AddChild(new DirectionalLight3D
         {
             RotationDegrees = new Vector3(-55.0f, -25.0f, 0.0f),
-            LightEnergy = 1.2f,
+            LightEnergy = 0.45f,
+            ShadowEnabled = true,
+        });
+        parent.AddChild(new OmniLight3D
+        {
+            Name = "EntryWarmLight",
+            Position = new Vector3(0.0f, 2.45f, -3.5f),
+            LightColor = new Color(1.0f, 0.73f, 0.46f),
+            LightEnergy = 2.2f,
+            OmniRange = 9.0f,
+            ShadowEnabled = true,
+        });
+        parent.AddChild(new OmniLight3D
+        {
+            Name = "RoomWarmLight",
+            Position = new Vector3(-1.5f, 2.35f, -10.0f),
+            LightColor = new Color(1.0f, 0.62f, 0.34f),
+            LightEnergy = 2.5f,
+            OmniRange = 12.0f,
             ShadowEnabled = true,
         });
         var player = new CellPlayer();
@@ -239,6 +262,8 @@ internal static class CellSceneLoader
         string FormId,
         string EditorId,
         int Assets,
+        int Textures,
+        int MaterialBindings,
         int References,
         int Doors,
         int CollisionMeshes,

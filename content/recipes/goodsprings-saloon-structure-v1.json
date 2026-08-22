@@ -8,6 +8,7 @@
   "cellEditorId": "GSProspectorSaloonInterior",
   "entryDoorReferenceFormId": "0010618e",
   "portalProofDoorReferenceFormId": "00108bc8",
+  "interiorDoubleSided": true,
   "selection": {
     "modelPrefixes": [
       "dungeons\\nv_goodsprings\\"

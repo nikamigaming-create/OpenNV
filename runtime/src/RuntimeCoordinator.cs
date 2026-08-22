@@ -88,6 +88,16 @@ public partial class RuntimeCoordinator : Node3D
             this,
             !runTraversalProof && options.ContainsKey("open-proof-door"),
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null);
+        if (options.TryGetValue("capture-root", out var captureRoot))
+        {
+            _ = EnvironmentCapture.Run(
+                this,
+                loaded,
+                captureRoot,
+                scenePath,
+                options.TryGetValue("report", out var captureReport) ? captureReport : null);
+            return;
+        }
         if (runTraversalProof)
         {
             _ = RunDoorTraversalProof(loaded, scenePath, options);
@@ -154,6 +164,8 @@ public partial class RuntimeCoordinator : Node3D
             cellFormId = loaded.FormId,
             cellEditorId = loaded.EditorId,
             assets = loaded.Assets,
+            textures = loaded.Textures,
+            materialBindings = loaded.MaterialBindings,
             references = loaded.References,
             doors = loaded.Doors,
             collisionMeshes = loaded.CollisionMeshes,
@@ -180,7 +192,8 @@ public partial class RuntimeCoordinator : Node3D
         if (options.TryGetValue("report", out var reportPath))
             WriteReport(reportPath, report);
         GD.Print(
-            $"OPENNV_GODOT_CELL_PASS cell={loaded.FormId} assets={loaded.Assets} " +
+            $"OPENNV_GODOT_CELL_PASS cell={loaded.FormId} assets={loaded.Assets} textures={loaded.Textures} " +
+            $"materials={loaded.MaterialBindings} " +
             $"references={loaded.References} doors={loaded.Doors} collision={loaded.CollisionMeshes} " +
             $"surfaces={loaded.Surfaces} vertices={loaded.Vertices} proofDoorOpen={loaded.ProofDoorOpen} " +
             $"doorTraversal={(traversalProof is null ? "not-requested" : "pass")}");

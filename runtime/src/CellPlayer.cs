@@ -17,6 +17,8 @@ internal partial class CellPlayer : CharacterBody3D
         Current = true,
     };
 
+    internal Camera3D Camera => _camera;
+
     internal void Configure(float yaw)
     {
         Name = "Player";

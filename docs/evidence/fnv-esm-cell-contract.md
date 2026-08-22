@@ -15,6 +15,13 @@ No commercial bytes or decompiled engine code are retained in this repository.
   spawn-floor ray hits at Y `0.0`.
 - Closed interior door `00108bc8` blocks the proof ray. The identical ray has no
   hit after the door and its collision rotate open.
+- `Fallout - Textures.bsa` SHA-256
+  `68c0f4beb00e07cc06361e3a5be0909873220731db3bd43bc013e85544b67578`
+  and `Fallout - Textures2.bsa` SHA-256
+  `bdaa85989b30a68c2c9ce79a07b167ecd72942df47f2e58c4a0299b016410dc2`
+  supply 22 exact recipe texture members. They decode into hash-pinned PNGs and
+  bind 66 surfaces; the actor-free Forward+ capture retains the no-control
+  flags in `opennv-godot-environment-capture/v1`.
 
 ## Contradiction retained
 

@@ -63,6 +63,18 @@ def decode_member_payload(payload: bytes, compressed: bool) -> bytes:
     return result
 
 
+def strip_embedded_name(payload: bytes, expected_path: str) -> bytes:
+    if not payload:
+        raise ValueError("Embedded-name BSA member is empty")
+    name_bytes = payload[1 : 1 + payload[0]]
+    if len(name_bytes) != payload[0]:
+        raise ValueError("Embedded-name BSA member has a truncated name")
+    embedded_path = canonical_member_path(name_bytes.decode("utf-8", errors="strict"))
+    if embedded_path != expected_path:
+        raise ValueError(f"BSA embedded name mismatch: expected={expected_path} actual={embedded_path}")
+    return payload[1 + payload[0] :]
+
+
 class BsaArchive:
     def __init__(self, archive: Path):
         self.archive = archive
@@ -73,6 +85,7 @@ class BsaArchive:
             raise ValueError(f"The first OpenNV BSA slice supports version 104, found {document.version}")
 
         archive_compressed = bool(int(document.archive_flags) & 0x4)
+        self.embedded_names = bool(int(document.archive_flags) & 0x100)
         members: dict[str, MemberLocation] = {}
         for folder in document.folders:
             folder_name = canonical_member_path(text(folder.name))
@@ -99,9 +112,10 @@ class BsaArchive:
             raise ValueError(
                 f"Truncated BSA member: expected={location.stored_bytes} actual={len(payload)}"
             )
+        member_payload = strip_embedded_name(payload, requested) if self.embedded_names else payload
         return ExtractedMember(
             requested,
-            decode_member_payload(payload, location.compressed),
+            decode_member_payload(member_payload, location.compressed),
             location.compressed,
             location.offset,
             location.stored_bytes,

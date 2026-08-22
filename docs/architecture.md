@@ -63,7 +63,8 @@ stateDiagram-v2
 | `cell_catalog.py` | CELL, base, REFR, DATA, XTEL relationships | BSA/NIF/Godot behavior |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `export_static_nif_gltf.py` | NIF static geometry to glTF plus provenance | World placement or gameplay |
-| `cell_scene.py` | Recipe selection, XTEL origin, asset/reference manifest | Godot nodes or input |
+| `cell_scene.py` | Recipe selection, XTEL origin, asset/reference/material manifest | Godot nodes or input |
+| `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
 | `goodsprings-saloon-structure-v1.json` | Exact proof target, hash, selection, entry, scale | Parsing logic |
 | `test_cell_catalog.py` | Synthetic group/relationship/transform regressions | Retail bytes |
@@ -72,6 +73,8 @@ stateDiagram-v2
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
 | `CellSceneLoader.cs` | Manifest-to-node graph, placement, collision, proof queries | Binary parsing |
+| `RuntimeMaterialLoader.cs` | PNG hash validation and surface material construction | DDS/BSA parsing |
+| `EnvironmentCapture.cs` | Actor-free native frames, hashes, and visual-quality gates | Gameplay or desktop control |
 | `DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
 | `CellPlayer.cs` | Movement, view, interaction ray, projectile ray | Asset preparation |
 | `RuntimeCoordinator.cs` | Startup routing, reports, and gate orchestration | UI construction or file-format parsing |
@@ -93,16 +96,17 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
 
-Implemented: direct owned ESM/BSA/NIF path, XTEL-derived spawn, 42 saloon
-structural references, collision, walking, mouse-look, interactive doors,
-physical ray queries, and whole-cell visibility without fake portal planes.
+Implemented: direct owned ESM/BSA/NIF/DDS path, XTEL-derived spawn, 42 saloon
+structural references, 22 decoded textures, 66 material bindings, collision,
+walking, mouse-look, interactive doors, physical ray queries, and whole-cell
+visibility without fake portal planes.
 
-Not implemented: DDS textures, full Bethesda materials, authored bhk collision,
-general X/Y reference rotation, animation, actors/creatures, weapons, VATS,
+Not implemented: full Bethesda environment/mask material semantics, authored
+bhk collision, general X/Y reference rotation, animation, actors/creatures, weapons, VATS,
 saves, exterior streaming, or campaigns. There are no placeholder managers for
 these. Each enters only with a data contract, synthetic test, retail proof, and
 promotion gate.
 
-Next order: DDS/material fidelity, authored collision, generalized cell recipes,
+Next order: complete material semantics, authored collision, generalized cell recipes,
 then actors/combat and VATS recording. See the retained retail evidence in
 [fnv-esm-cell-contract.md](evidence/fnv-esm-cell-contract.md).

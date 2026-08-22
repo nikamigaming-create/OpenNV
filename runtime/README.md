@@ -7,7 +7,7 @@ The current slice reads the owned master directly, resolves one recipe-pinned
 interior CELL and its placed REFR graph, exports 14 structural/door NIFs, and
 loads 42 data-positioned references in Godot. The incoming door's XTEL target is
 the spawn origin; runtime trimeshes provide the first collision proof. It does
-not claim textures, retail collision blocks, animation, actors, or campaigns.
+does not claim retail collision blocks, animation, actors, or campaigns.
 
 Run the complete repository gate from the repository root:
 

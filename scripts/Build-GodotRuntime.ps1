@@ -110,6 +110,8 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         if ($owned.schema -ne "opennv-godot-cell/v1" -or
             $owned.status -ne "pass" -or
             [int]$owned.assets -lt 1 -or
+            [int]$owned.textures -lt 22 -or
+            [int]$owned.materialBindings -lt 66 -or
             [int]$owned.references -lt 1 -or
             [int]$owned.doors -lt 1 -or
             [int]$owned.collisionMeshes -lt 1 -or
