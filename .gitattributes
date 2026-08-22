@@ -1,0 +1,20 @@
+* text=auto
+
+*.cs text eol=lf
+*.cfg text eol=lf
+*.gd text eol=lf
+*.gltf text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.ps1 text eol=lf
+*.py text eol=lf
+*.sln text eol=crlf
+*.tscn text eol=lf
+*.yml text eol=lf
+
+*.bin binary
+*.nif binary
+*.png binary
+*.zip binary
