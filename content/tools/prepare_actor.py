@@ -346,7 +346,7 @@ def prepare_actor(
         sidecar_path,
     )
     manifest = {
-        "schema": "opennv-actor-scene/v2",
+        "schema": "opennv-actor-scene/v3",
         "status": "skinned-animated",
         "recipe": recipe_id,
         "cellFormId": recipe["cellFormId"],
@@ -378,6 +378,8 @@ def prepare_actor(
             "gltf": gltf_path.name,
             "sidecar": sidecar_path.name,
             "gltfSha256": sidecar["outputs"]["gltf"]["sha256"],
+            "sidecarSha256": file_sha256(sidecar_path),
+            "bufferSha256": sidecar["outputs"]["buffer"]["sha256"],
         },
         "coverage": sidecar["coverage"],
     }

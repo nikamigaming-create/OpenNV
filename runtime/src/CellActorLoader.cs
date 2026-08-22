@@ -6,7 +6,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellActorLoader
 {
-    private const string ActorSceneSchema = "opennv-actor-scene/v2";
+    private const string ActorSceneSchema = "opennv-actor-scene/v3";
     private const string ActorSceneSetSchema = "opennv-cell-actor-scenes/v1";
 
     internal static IReadOnlyList<string> LoadManifest(
@@ -68,9 +68,21 @@ internal static class CellActorLoader
         var outputs = root.GetProperty("outputs");
         var actor = root.GetProperty("actor");
         var actorRoot = Path.GetDirectoryName(resolvedManifest)!;
+        var modelPath = Path.Combine(actorRoot, outputs.GetProperty("gltf").GetString()!);
+        var sidecarPath = Path.Combine(actorRoot, outputs.GetProperty("sidecar").GetString()!);
+        VerifyHash(modelPath, outputs.GetProperty("gltfSha256").GetString()!);
+        VerifyHash(sidecarPath, outputs.GetProperty("sidecarSha256").GetString()!);
+        using (var sidecarDocument = JsonDocument.Parse(File.ReadAllText(sidecarPath)))
+        {
+            var buffer = sidecarDocument.RootElement.GetProperty("outputs").GetProperty("buffer");
+            if (!buffer.GetProperty("sha256").GetString()!.Equals(
+                    outputs.GetProperty("bufferSha256").GetString(),
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Actor scene and sidecar disagree on the buffer hash.");
+        }
         var loaded = ActorModelSlice.Load(
-            Path.Combine(actorRoot, outputs.GetProperty("gltf").GetString()!),
-            Path.Combine(actorRoot, outputs.GetProperty("sidecar").GetString()!),
+            modelPath,
+            sidecarPath,
             placement,
             false);
         return new PlacedActor(
@@ -96,6 +108,14 @@ internal static class CellActorLoader
         if (values.Length != 3)
             throw new InvalidOperationException("Actor scene vector must contain three values.");
         return new Vector3(values[0], values[1], values[2]);
+    }
+
+    private static void VerifyHash(string path, string expected)
+    {
+        using var stream = File.OpenRead(path);
+        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Actor scene artifact hash mismatch: {path}");
     }
 
     internal readonly record struct PlacedActor(
