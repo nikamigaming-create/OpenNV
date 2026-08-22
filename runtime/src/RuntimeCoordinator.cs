@@ -168,6 +168,7 @@ public partial class RuntimeCoordinator : Node3D
             materialBindings = loaded.MaterialBindings,
             references = loaded.References,
             doors = loaded.Doors,
+            authoredLights = loaded.AuthoredLights,
             collisionMeshes = loaded.CollisionMeshes,
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,
@@ -194,7 +195,8 @@ public partial class RuntimeCoordinator : Node3D
         GD.Print(
             $"OPENNV_GODOT_CELL_PASS cell={loaded.FormId} assets={loaded.Assets} textures={loaded.Textures} " +
             $"materials={loaded.MaterialBindings} " +
-            $"references={loaded.References} doors={loaded.Doors} collision={loaded.CollisionMeshes} " +
+            $"references={loaded.References} doors={loaded.Doors} lights={loaded.AuthoredLights} " +
+            $"collision={loaded.CollisionMeshes} " +
             $"surfaces={loaded.Surfaces} vertices={loaded.Vertices} proofDoorOpen={loaded.ProofDoorOpen} " +
             $"doorTraversal={(traversalProof is null ? "not-requested" : "pass")}");
         if (options.ContainsKey("quit-after-load"))

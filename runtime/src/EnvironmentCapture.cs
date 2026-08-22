@@ -48,6 +48,7 @@ internal static class EnvironmentCapture
                 actorCount = 0,
                 textures = loaded.Textures,
                 materialBindings = loaded.MaterialBindings,
+                authoredLights = loaded.AuthoredLights,
                 proofDoorFormId = loaded.ProofDoorFormId,
                 proofDoorOpen = true,
                 windowsAppControlUsed = false,

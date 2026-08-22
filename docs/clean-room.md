@@ -46,10 +46,11 @@ This proves only static geometry transport. It is not a rendering-parity claim.
 The next contract directly scans `FalloutNV.esm`, SHA-256
 `50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1`,
 and selects `GSProspectorSaloonInterior` through a committed recipe. CELL group
-ownership, REFR NAME/DATA, base MODL, and incoming XTEL fields produce a neutral
-cell-scene manifest. The recipe exports 14 unique structural/door NIFs and
-places 42 references. Godot verifies every artifact, derives the spawn from
-XTEL, and runs floor and open-door collision rays. See the retained
+ownership, REFR NAME/DATA, base MODL, XCLL, LIGH, and incoming XTEL fields
+produce a neutral cell-scene manifest. The dense recipe exports 117 unique
+visible NIFs, places 251 yaw-safe references, binds 194 textures and 274
+materials, and places 24 authored lights. Godot verifies every artifact,
+derives the spawn from XTEL, and runs floor and open-door collision rays. See the retained
 [cell-contract evidence](evidence/fnv-esm-cell-contract.md).
 
 This is not a general ESM, world, collision, or gameplay compatibility claim.

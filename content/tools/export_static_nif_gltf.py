@@ -48,6 +48,10 @@ def canonical_asset_path(value: object) -> str:
     return path[5:] if path.startswith("data\\") else path
 
 
+def is_editor_marker(value: object) -> bool:
+    return decode_text(value).casefold().startswith("editormarker")
+
+
 def transform_xyz(value: object, matrix: object, *, direction: bool) -> tuple[float, float, float]:
     x, y, z = float(value.x), float(value.y), float(value.z)
     tx = x * matrix.m_11 + y * matrix.m_21 + z * matrix.m_31
@@ -140,6 +144,61 @@ def pack_floats(rows: Iterable[Iterable[float]]) -> bytes:
     return struct.pack(f"<{len(flat)}f", *flat)
 
 
+def generate_tangents(
+    positions: list[tuple[float, float, float]],
+    normals: list[tuple[float, float, float]],
+    uvs: list[tuple[float, float]],
+    triangles: list[tuple[int, int, int]],
+) -> list[tuple[float, float, float, float]]:
+    tangent_rows = [[0.0, 0.0, 0.0] for _ in positions]
+    bitangent_rows = [[0.0, 0.0, 0.0] for _ in positions]
+    for triangle in triangles:
+        first, second, third = triangle
+        edge_one = tuple(positions[second][axis] - positions[first][axis] for axis in range(3))
+        edge_two = tuple(positions[third][axis] - positions[first][axis] for axis in range(3))
+        delta_one = (uvs[second][0] - uvs[first][0], uvs[second][1] - uvs[first][1])
+        delta_two = (uvs[third][0] - uvs[first][0], uvs[third][1] - uvs[first][1])
+        determinant = delta_one[0] * delta_two[1] - delta_one[1] * delta_two[0]
+        if abs(determinant) <= 1.0e-12:
+            continue
+        reciprocal = 1.0 / determinant
+        tangent = tuple(
+            (edge_one[axis] * delta_two[1] - edge_two[axis] * delta_one[1]) * reciprocal
+            for axis in range(3)
+        )
+        bitangent = tuple(
+            (edge_two[axis] * delta_one[0] - edge_one[axis] * delta_two[0]) * reciprocal
+            for axis in range(3)
+        )
+        for index in triangle:
+            for axis in range(3):
+                tangent_rows[index][axis] += tangent[axis]
+                bitangent_rows[index][axis] += bitangent[axis]
+
+    result = []
+    for normal, tangent_row, bitangent_row in zip(normals, tangent_rows, bitangent_rows):
+        projection = sum(normal[axis] * tangent_row[axis] for axis in range(3))
+        tangent = tuple(tangent_row[axis] - normal[axis] * projection for axis in range(3))
+        length = math.sqrt(sum(value * value for value in tangent))
+        if length <= 1.0e-12:
+            axis = (1.0, 0.0, 0.0) if abs(normal[0]) < 0.9 else (0.0, 1.0, 0.0)
+            tangent = (
+                axis[1] * normal[2] - axis[2] * normal[1],
+                axis[2] * normal[0] - axis[0] * normal[2],
+                axis[0] * normal[1] - axis[1] * normal[0],
+            )
+            length = math.sqrt(sum(value * value for value in tangent))
+        tangent = tuple(value / length for value in tangent)
+        cross = (
+            normal[1] * tangent[2] - normal[2] * tangent[1],
+            normal[2] * tangent[0] - normal[0] * tangent[2],
+            normal[0] * tangent[1] - normal[1] * tangent[0],
+        )
+        handedness = -1.0 if sum(cross[axis] * bitangent_row[axis] for axis in range(3)) < 0.0 else 1.0
+        result.append((*tangent, handedness))
+    return result
+
+
 def atomic_write(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
@@ -173,11 +232,17 @@ def export_static_nif(
     blocks = list(data.get_global_iterator())
     block_index = {id(block): index for index, block in enumerate(blocks)}
     controllers = [type(block).__name__ for block in blocks if isinstance(block, NifFormat.NiTimeController)]
-    shapes = [
+    all_shapes = [
         block
         for block in blocks
         if isinstance(block, (NifFormat.NiTriShape, NifFormat.NiTriStrips)) and block.data is not None
     ]
+    excluded_editor_markers = [
+        {"sourceBlockIndex": block_index[id(shape)], "name": decode_text(shape.name)}
+        for shape in all_shapes
+        if is_editor_marker(shape.name)
+    ]
+    shapes = [shape for shape in all_shapes if not is_editor_marker(shape.name)]
     if not shapes:
         raise ValueError("NIF contains no supported static geometry")
     if strict and controllers:
@@ -223,8 +288,11 @@ def export_static_nif(
         attributes["NORMAL"] = builder.add(
             pack_floats(normals), component_type=5126, count=vertex_count, value_type="VEC3", target=34962,
         )
-        for uv_index, uv_set in enumerate(mesh.uv_sets[:2]):
-            uvs = [(float(value.u), 1.0 - float(value.v)) for value in uv_set]
+        converted_uv_sets = [
+            [(float(value.u), 1.0 - float(value.v)) for value in uv_set]
+            for uv_set in mesh.uv_sets[:2]
+        ]
+        for uv_index, uvs in enumerate(converted_uv_sets):
             attributes[f"TEXCOORD_{uv_index}"] = builder.add(
                 pack_floats(uvs), component_type=5126, count=vertex_count, value_type="VEC2", target=34962,
             )
@@ -233,18 +301,29 @@ def export_static_nif(
             attributes["COLOR_0"] = builder.add(
                 pack_floats(colors), component_type=5126, count=vertex_count, value_type="VEC4", target=34962,
             )
-        if len(mesh.tangents) == vertex_count and len(mesh.bitangents) == vertex_count:
+        tangent_source = "absent"
+        if converted_uv_sets:
             tangents = []
-            for normal, tangent, bitangent in zip(normals, mesh.tangents, mesh.bitangents):
-                tangent_xyz = transform_xyz(tangent, matrix, direction=True)
-                bitangent_xyz = transform_xyz(bitangent, matrix, direction=True)
-                cross = (
-                    normal[1] * tangent_xyz[2] - normal[2] * tangent_xyz[1],
-                    normal[2] * tangent_xyz[0] - normal[0] * tangent_xyz[2],
-                    normal[0] * tangent_xyz[1] - normal[1] * tangent_xyz[0],
-                )
-                handedness = 1.0 if sum(a * b for a, b in zip(cross, bitangent_xyz)) >= 0.0 else -1.0
-                tangents.append((*tangent_xyz, handedness))
+            tangent_source = "nif"
+            if len(mesh.tangents) == vertex_count and len(mesh.bitangents) == vertex_count:
+                try:
+                    for normal, tangent, bitangent in zip(normals, mesh.tangents, mesh.bitangents):
+                        tangent_xyz = transform_xyz(tangent, matrix, direction=True)
+                        bitangent_xyz = transform_xyz(bitangent, matrix, direction=True)
+                        cross = (
+                            normal[1] * tangent_xyz[2] - normal[2] * tangent_xyz[1],
+                            normal[2] * tangent_xyz[0] - normal[0] * tangent_xyz[2],
+                            normal[0] * tangent_xyz[1] - normal[1] * tangent_xyz[0],
+                        )
+                        handedness = (
+                            1.0 if sum(a * b for a, b in zip(cross, bitangent_xyz)) >= 0.0 else -1.0
+                        )
+                        tangents.append((*tangent_xyz, handedness))
+                except ValueError:
+                    tangents = []
+            if len(tangents) != vertex_count:
+                tangents = generate_tangents(positions, normals, converted_uv_sets[0], triangles)
+                tangent_source = "generated-uv-triangle"
             attributes["TANGENT"] = builder.add(
                 pack_floats(tangents), component_type=5126, count=vertex_count, value_type="VEC4", target=34962,
             )
@@ -281,6 +360,7 @@ def export_static_nif(
             "textures": texture_paths(shape),
             "material": material_metadata(shape),
             "transformBakedToRoot": True,
+            "tangentSource": tangent_source,
         })
 
     binary_name = gltf_path.with_suffix(".bin").name
@@ -323,6 +403,7 @@ def export_static_nif(
             "collisionExported": False,
             "collisionBlockTypes": collision_types,
             "controllers": sorted(set(controllers)),
+            "excludedEditorMarkerSurfaces": excluded_editor_markers,
         },
         "surfaces": surface_rows,
     }

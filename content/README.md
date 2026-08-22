@@ -17,13 +17,14 @@ properties fail closed.
 
 The cell slice adds a bounded TES4-family record reader and a hash-pinned
 Goodsprings Saloon recipe. It resolves CELL-to-REFR one-to-many relationships,
-REFR-to-base many-to-one relationships, incoming XTEL placement, and 14
-structural/door NIF assets. It does not yet export authored NIF collision
-blocks, animation, actors, or a campaign.
+REFR-to-base many-to-one relationships, incoming XTEL placement, 117 unique
+rendered NIF assets, 251 yaw-safe placements, CELL XCLL lighting, and 24 placed
+LIGH records. It does not yet export authored NIF collision blocks, animation,
+actors, or a campaign.
 
-The fidelity slice directly extracts 22 recipe-referenced DDS members from the
+The fidelity slice directly extracts 194 recipe-referenced DDS members from the
 two owned texture archives, decodes them into hash-pinned PNG cache artifacts,
-converts DirectX normal-map green channels for Godot, and emits 66 explicit
+converts DirectX normal-map green channels for Godot, and emits 274 explicit
 surface material bindings. Environment and mask slots remain inventoried but
 are not yet rendered.
 

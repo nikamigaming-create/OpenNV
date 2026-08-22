@@ -10,8 +10,8 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from cell_catalog import scan_cell_catalog  # noqa: E402
-from cell_scene import godot_position  # noqa: E402
+from cell_catalog import BaseObject, scan_cell_catalog  # noqa: E402
+from cell_scene import godot_position, load_recipe, reference_selection_reason  # noqa: E402
 from plugin_records import COMPRESSED_RECORD_FLAG, PluginFormatError, iter_plugin_records  # noqa: E402
 
 
@@ -44,7 +44,21 @@ def synthetic_plugin() -> bytes:
         0x301,
         subrecord("EDID", b"SyntheticDoor\0") + subrecord("MODL", b"meshes/test/door.nif\0"),
     )
-    cell = record("CELL", 0x100, subrecord("EDID", b"SyntheticRoom\0") + subrecord("DATA", b"\x01"))
+    light = record(
+        "LIGH",
+        0x302,
+        subrecord("EDID", b"SyntheticLight\0")
+        + subrecord("DATA", struct.pack("<iI4BIffIf", -1, 256, 100, 80, 40, 0, 0, 1.0, 90.0, 0, 0.0))
+        + subrecord("FNAM", struct.pack("<f", 1.5)),
+    )
+    xcll = bytes((10, 20, 30, 0, 40, 50, 60, 0, 70, 80, 90, 0)) + struct.pack(
+        "<ffii3f", 64.0, 3750.0, 0, 250, 1.0, 6600.0, 1.25
+    )
+    cell = record(
+        "CELL",
+        0x100,
+        subrecord("EDID", b"SyntheticRoom\0") + subrecord("DATA", b"\x01") + subrecord("XCLL", xcll),
+    )
     floor_reference = record(
         "REFR",
         0x200,
@@ -58,8 +72,24 @@ def synthetic_plugin() -> bytes:
         + subrecord("XTEL", struct.pack("<I6f", 0x400, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0))
         + subrecord("DATA", struct.pack("<6f", 40.0, 50.0, 60.0, 0.0, 0.0, 0.0)),
     )
-    children = group(struct.pack("<I", 0x100), 6, group(struct.pack("<I", 0x100), 9, floor_reference + door_reference))
-    return header + group(b"STAT", 0, static) + group(b"DOOR", 0, door) + group(b"CELL", 0, cell + children)
+    light_reference = record(
+        "REFR",
+        0x202,
+        subrecord("NAME", struct.pack("<I", 0x302))
+        + subrecord("DATA", struct.pack("<6f", 15.0, 25.0, 35.0, 0.0, 0.0, 0.0)),
+    )
+    children = group(
+        struct.pack("<I", 0x100),
+        6,
+        group(struct.pack("<I", 0x100), 9, floor_reference + door_reference + light_reference),
+    )
+    return (
+        header
+        + group(b"STAT", 0, static)
+        + group(b"DOOR", 0, door)
+        + group(b"LIGH", 0, light)
+        + group(b"CELL", 0, cell + children)
+    )
 
 
 class CellCatalogTest(unittest.TestCase):
@@ -74,12 +104,17 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(cell.editor_id, "SyntheticRoom")
         self.assertEqual(catalog.base_objects[0x300].model_path, "meshes\\test\\floor.nif")
         references = catalog.references_for(cell.form_id)
-        self.assertEqual(len(references), 2)
+        self.assertEqual(len(references), 3)
         self.assertEqual(references[0].transform.position, (10.0, 20.0, 30.0))
         self.assertEqual(references[0].transform.rotation_radians, (0.0, 0.0, 1.5))
         self.assertEqual(references[1].teleport_destination_form_id, 0x400)
         self.assertEqual(references[1].teleport_destination_transform.position, (1.0, 2.0, 3.0))
         self.assertEqual(catalog.base_objects[references[1].base_form_id].record_type, "DOOR")
+        self.assertEqual(cell.lighting.ambient_rgb, (10, 20, 30))
+        self.assertEqual(cell.lighting.fog_far, 3750.0)
+        self.assertEqual(catalog.lights[0x302].radius, 256)
+        self.assertEqual(catalog.lights[0x302].color_rgb, (100, 80, 40))
+        self.assertEqual(catalog.lights[0x302].intensity, 1.5)
 
     def test_truncated_group_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
@@ -90,6 +125,21 @@ class CellCatalogTest(unittest.TestCase):
 
     def test_reference_position_conversion_applies_origin_once(self) -> None:
         self.assertEqual(godot_position((11.0, 22.0, 33.0), (1.0, 2.0, 3.0)), [10.0, 30.0, -20.0])
+
+    def test_recipe_accounts_for_editor_and_effect_exclusions(self) -> None:
+        recipe = load_recipe("goodsprings-saloon-structure-v1")
+        self.assertEqual(
+            reference_selection_reason(BaseObject(1, "FURN", "BarKeep", "furniture\\barkeep.nif"), recipe),
+            "editor-only-base",
+        )
+        self.assertEqual(
+            reference_selection_reason(BaseObject(2, "STAT", "Glow", "effects\\glow.nif"), recipe),
+            "special-effect-shader-required",
+        )
+        self.assertEqual(
+            reference_selection_reason(BaseObject(3, "STAT", "Table", "furniture\\table01.nif"), recipe),
+            "selected",
+        )
 
 
 if __name__ == "__main__":

@@ -30,11 +30,25 @@ class Transform:
 
 
 @dataclass(frozen=True)
+class CellLighting:
+    ambient_rgb: tuple[int, int, int]
+    directional_rgb: tuple[int, int, int]
+    fog_rgb: tuple[int, int, int]
+    fog_near: float
+    fog_far: float
+    directional_rotation: tuple[int, int]
+    directional_fade: float
+    fog_clip_distance: float
+    fog_power: float
+
+
+@dataclass(frozen=True)
 class Cell:
     form_id: int
     editor_id: str
     flags: int
     coordinates: tuple[int, int] | None
+    lighting: CellLighting | None
 
     @property
     def interior(self) -> bool:
@@ -47,6 +61,18 @@ class BaseObject:
     record_type: str
     editor_id: str
     model_path: str | None
+
+
+@dataclass(frozen=True)
+class LightObject:
+    form_id: int
+    editor_id: str
+    radius: int
+    color_rgb: tuple[int, int, int]
+    flags: int
+    falloff: float
+    field_of_view: float
+    intensity: float
 
 
 @dataclass(frozen=True)
@@ -64,6 +90,7 @@ class PlacedReference:
 class CellCatalog:
     cells: dict[int, Cell]
     base_objects: dict[int, BaseObject]
+    lights: dict[int, LightObject]
     references: list[PlacedReference]
 
     def references_for(self, cell_form_id: int) -> list[PlacedReference]:
@@ -102,19 +129,58 @@ def _form_id(data: bytes, record: Record, signature: str) -> int:
     return struct.unpack_from("<I", data)[0]
 
 
+def _cell_lighting(data: bytes, record: Record) -> CellLighting:
+    if len(data) != 40:
+        raise ValueError(f"XCLL must be 40 bytes in CELL {record.form_id:08x}")
+    return CellLighting(
+        tuple(data[0:3]),
+        tuple(data[4:7]),
+        tuple(data[8:11]),
+        struct.unpack_from("<f", data, 12)[0],
+        struct.unpack_from("<f", data, 16)[0],
+        struct.unpack_from("<ii", data, 20),
+        struct.unpack_from("<f", data, 28)[0],
+        struct.unpack_from("<f", data, 32)[0],
+        struct.unpack_from("<f", data, 36)[0],
+    )
+
+
+def _light_object(record: Record, values: dict[str, list[bytes]]) -> LightObject | None:
+    matches = values.get("DATA", [])
+    if not matches:
+        return None
+    data = matches[0]
+    if len(data) != 32:
+        raise ValueError(f"LIGH DATA must be 32 bytes in {record.form_id:08x}")
+    intensity_values = values.get("FNAM", [])
+    intensity = struct.unpack("<f", intensity_values[0])[0] if intensity_values else 1.0
+    return LightObject(
+        record.form_id,
+        _first_text(values, "EDID"),
+        struct.unpack_from("<I", data, 4)[0],
+        tuple(data[8:11]),
+        struct.unpack_from("<I", data, 12)[0],
+        struct.unpack_from("<f", data, 16)[0],
+        struct.unpack_from("<f", data, 20)[0],
+        intensity,
+    )
+
+
 def scan_cell_catalog(path: Path) -> CellCatalog:
-    catalog = CellCatalog({}, {}, [])
+    catalog = CellCatalog({}, {}, {}, [])
     for record in iter_plugin_records(path, CATALOG_RECORD_TYPES):
         if record.signature == "CELL":
             values = _subrecords(record)
             data = values.get("DATA", [b"\0"])[0]
             coordinates_data = values.get("XCLC", [])
             coordinates = struct.unpack_from("<ii", coordinates_data[0]) if coordinates_data else None
+            lighting_data = values.get("XCLL", [])
             catalog.cells[record.form_id] = Cell(
                 record.form_id,
                 _first_text(values, "EDID"),
                 data[0] if data else 0,
                 coordinates,
+                _cell_lighting(lighting_data[0], record) if lighting_data else None,
             )
         elif record.signature in BASE_RECORD_TYPES:
             values = _subrecords(record)
@@ -125,6 +191,10 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 _first_text(values, "EDID"),
                 zstring(models[0]).replace("/", "\\").lower() if models else None,
             )
+            if record.signature == "LIGH":
+                light = _light_object(record, values)
+                if light is not None:
+                    catalog.lights[record.form_id] = light
         elif record.signature == "REFR":
             cell_form_id = _cell_parent(record)
             if cell_form_id is None:

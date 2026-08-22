@@ -109,7 +109,12 @@ internal static class CellSceneLoader
             if (openProofDoor)
                 doors[proofDoor].SetOpen(true);
             var spawn = source.GetProperty("spawn");
-            var player = BuildView(parent, spawn.GetProperty("yawRadians").GetSingle());
+            var authoredLights = source.GetProperty("lighting").GetProperty("lights").GetArrayLength();
+            var player = BuildView(
+                parent,
+                spawn.GetProperty("yawRadians").GetSingle(),
+                source.GetProperty("lighting"),
+                unitScale);
             return new LoadedCell(
                 root,
                 cell.GetProperty("formId").GetString()!,
@@ -119,6 +124,7 @@ internal static class CellSceneLoader
                 materialBindings,
                 loadedReferences,
                 doors.Count,
+                authoredLights,
                 collisionMeshes,
                 surfaces,
                 vertices,
@@ -134,42 +140,51 @@ internal static class CellSceneLoader
         }
     }
 
-    private static CellPlayer BuildView(Node3D parent, float yaw)
+    private static CellPlayer BuildView(Node3D parent, float yaw, JsonElement lighting, float unitScale)
     {
+        var calibration = lighting.GetProperty("calibration");
         var environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,
             BackgroundColor = new Color(0.015f, 0.018f, 0.022f),
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
-            AmbientLightColor = new Color(0.52f, 0.45f, 0.34f),
-            AmbientLightEnergy = 0.42f,
+            AmbientLightColor = ReadColor(lighting.GetProperty("ambientColor")),
+            AmbientLightEnergy = calibration.GetProperty("ambientEnergy").GetSingle(),
             TonemapMode = Godot.Environment.ToneMapper.Filmic,
         };
         parent.AddChild(new WorldEnvironment { Environment = environment });
+        var direction = lighting.GetProperty("directionalRotationDegrees")
+            .EnumerateArray()
+            .Select(value => value.GetSingle())
+            .ToArray();
+        if (direction.Length != 2)
+            throw new InvalidOperationException("CELL directional rotation must contain two values.");
         parent.AddChild(new DirectionalLight3D
         {
-            RotationDegrees = new Vector3(-55.0f, -25.0f, 0.0f),
-            LightEnergy = 0.45f,
+            Name = "CELL_XCLL_Directional",
+            RotationDegrees = new Vector3(direction[0], direction[1], 0.0f),
+            LightColor = ReadColor(lighting.GetProperty("directionalColor")),
+            LightEnergy = lighting.GetProperty("directionalFade").GetSingle() *
+                calibration.GetProperty("directionalEnergyScale").GetSingle(),
             ShadowEnabled = true,
         });
-        parent.AddChild(new OmniLight3D
+        foreach (var light in lighting.GetProperty("lights").EnumerateArray())
         {
-            Name = "EntryWarmLight",
-            Position = new Vector3(0.0f, 2.45f, -3.5f),
-            LightColor = new Color(1.0f, 0.73f, 0.46f),
-            LightEnergy = 2.2f,
-            OmniRange = 9.0f,
-            ShadowEnabled = true,
-        });
-        parent.AddChild(new OmniLight3D
-        {
-            Name = "RoomWarmLight",
-            Position = new Vector3(-1.5f, 2.35f, -10.0f),
-            LightColor = new Color(1.0f, 0.62f, 0.34f),
-            LightEnergy = 2.5f,
-            OmniRange = 12.0f,
-            ShadowEnabled = true,
-        });
+            if (light.GetProperty("initiallyDisabled").GetBoolean())
+                continue;
+            parent.AddChild(new OmniLight3D
+            {
+                Name = $"LIGH_{light.GetProperty("formId").GetString()}_{light.GetProperty("baseEditorId").GetString()}",
+                Position = ReadVector(light.GetProperty("positionGodotUnits")) * unitScale,
+                LightColor = ReadColor(light.GetProperty("color")),
+                LightEnergy = MathF.Max(
+                    0.1f,
+                    light.GetProperty("intensity").GetSingle() *
+                    calibration.GetProperty("omniEnergyScale").GetSingle()),
+                OmniRange = light.GetProperty("radiusMeters").GetSingle(),
+                ShadowEnabled = false,
+            });
+        }
         var player = new CellPlayer();
         player.Configure(yaw);
         parent.AddChild(player);
@@ -182,6 +197,14 @@ internal static class CellSceneLoader
         if (values.Length != 3)
             throw new InvalidOperationException("Cell scene vector must contain three values.");
         return new Vector3(values[0], values[1], values[2]);
+    }
+
+    private static Color ReadColor(JsonElement array)
+    {
+        var values = array.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != 3)
+            throw new InvalidOperationException("Cell scene color must contain three values.");
+        return new Color(values[0], values[1], values[2]);
     }
 
     internal static DoorRay BuildProofRay(DoorInstance door)
@@ -266,6 +289,7 @@ internal static class CellSceneLoader
         int MaterialBindings,
         int References,
         int Doors,
+        int AuthoredLights,
         int CollisionMeshes,
         int Surfaces,
         int Vertices,

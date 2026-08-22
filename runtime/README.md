@@ -4,10 +4,11 @@ This is the first-party Open Nevada runtime. It uses Godot Forward+ and accepts
 only artifacts produced by the direct retail-content pipeline in `../content`.
 
 The current slice reads the owned master directly, resolves one recipe-pinned
-interior CELL and its placed REFR graph, exports 14 structural/door NIFs, and
-loads 42 data-positioned references in Godot. The incoming door's XTEL target is
-the spawn origin; runtime trimeshes provide the first collision proof. It does
-does not claim retail collision blocks, animation, actors, or campaigns.
+interior CELL and its placed REFR graph, exports 117 visible NIF assets, and
+loads 251 yaw-safe references in Godot with 194 textures, 274 material bindings,
+and 24 placed authored lights. The incoming door's XTEL target is the spawn
+origin; runtime trimeshes provide the current collision proof. It does not claim
+retail collision blocks, animation, actors, or campaigns.
 
 Run the complete repository gate from the repository root:
 

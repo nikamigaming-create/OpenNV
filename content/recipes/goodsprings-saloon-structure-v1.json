@@ -7,14 +7,32 @@
   },
   "cellEditorId": "GSProspectorSaloonInterior",
   "entryDoorReferenceFormId": "0010618e",
-  "portalProofDoorReferenceFormId": "00108bc8",
+  "portalProofDoorReferenceFormId": "0010618e",
   "interiorDoubleSided": true,
+  "lightingCalibration": {
+    "ambientEnergy": 1.4,
+    "omniEnergyScale": 2.0,
+    "directionalEnergyScale": 0.25
+  },
   "selection": {
     "modelPrefixes": [
       "dungeons\\nv_goodsprings\\"
     ],
     "includeBaseRecordTypes": [
-      "DOOR"
+      "ACTI",
+      "CONT",
+      "DOOR",
+      "FURN",
+      "MSTT",
+      "STAT"
+    ],
+    "excludeBaseEditorIds": [
+      "AudioMarker",
+      "BarKeep",
+      "XMarker"
+    ],
+    "excludeModelPrefixes": [
+      "effects\\"
     ],
     "yawOnly": true
   },

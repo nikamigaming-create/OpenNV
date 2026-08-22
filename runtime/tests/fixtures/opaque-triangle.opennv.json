@@ -1,12 +1,13 @@
 {
   "compiler": {
     "name": "OpenNV direct static NIF exporter v1",
-    "sha256": "e16aad31c26980f689d8a5299db6a8191fce7cdbea9ce73986c5995343ff2d2b"
+    "sha256": "083f8ad2b6117933b6ffe00688c094334dd54a4a0977a82226e548eb5059aaee"
   },
   "coverage": {
     "collisionBlockTypes": [],
     "collisionExported": false,
     "controllers": [],
+    "excludedEditorMarkerSurfaces": [],
     "surfaces": 1
   },
   "outputs": {
@@ -45,6 +46,7 @@
       "propertyTypes": [],
       "sourceBlockIndex": 2,
       "stableId": "b3462df0f13ba78603f27734",
+      "tangentSource": "nif",
       "textures": [],
       "transformBakedToRoot": true,
       "triangles": 1,
