@@ -30,8 +30,8 @@ internal partial class LegalAssetSetupView : CanvasLayer
 
         var body = new Label
         {
-            Text = "Select your legal Fallout: New Vegas Data folder to prepare the first\n" +
-                   "data-driven interior cell. Python and external engine runtimes are not required.\n\n" +
+            Text = "Select your legal Fallout: New Vegas Data folder to prepare the playable\n" +
+                   "Goodsprings sandbox. Python and external engine runtimes are not required.\n\n" +
                    "No game assets are included, and your installation is never modified.",
         };
         body.AddThemeFontSizeOverride("font_size", 18);

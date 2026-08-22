@@ -64,6 +64,8 @@ function defaultRuntime(platform) {
     platform,
     label: windows ? "Choose a local OpenNV Godot runtime folder" : "Launcher shell ready; runtime export is not published for this platform",
     canLaunch: false,
+    openXrLaunchable: false,
+    openXrHardwareValidated: false,
     source: "offline"
   };
 }
@@ -124,6 +126,7 @@ export function mergeRuntimeState(baseState, runtimeState) {
   });
 
   const declaredRuntime = runtimeState.runtime ?? {};
+  const openXr = declaredRuntime.presentationModes?.openxr ?? {};
   const canLaunch = Boolean(declaredRuntime.canLaunch) && campaigns.some((campaign) => campaign.ready);
   return {
     ...baseState,
@@ -133,6 +136,9 @@ export function mergeRuntimeState(baseState, runtimeState) {
       status: String(declaredRuntime.status || "connected"),
       label: String(declaredRuntime.label || "Connected to the local OpenNV Godot runtime"),
       canLaunch,
+      openXrLaunchable: Boolean(openXr.launchable),
+      openXrHardwareValidated: Boolean(openXr.hardwareValidated),
+      openXrStatus: String(openXr.status || "unavailable"),
       source: "runtime-manifest"
     },
     installer: runtimeState.installer ?? null
@@ -145,5 +151,16 @@ export function validateLaunchRequest(request) {
   if (request?.enableJam && !campaign.jam) {
     throw new Error("JAM is available for New Vegas and TTW, not standalone Fallout 3.");
   }
-  return { campaign, enableJam: Boolean(request?.enableJam) };
+  return {
+    campaign,
+    enableJam: Boolean(request?.enableJam),
+    enableVr: Boolean(request?.enableVr)
+  };
+}
+
+export function createRuntimeArguments({ campaign, enableJam, enableVr }) {
+  const args = ["--xr-mode", enableVr ? "on" : "off", "--", "--campaign", campaign.engineCampaign];
+  if (enableJam) args.push("--enable-jam");
+  if (enableVr) args.push("--vr");
+  return args;
 }

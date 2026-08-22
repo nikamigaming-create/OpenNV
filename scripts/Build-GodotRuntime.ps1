@@ -74,7 +74,7 @@ if (-not (Test-Path -LiteralPath $contentBinary -PathType Leaf)) {
 
 $smokeReport = Join-Path $stage "startup-smoke.json"
 $smokeProcess = Start-Process -FilePath $binary `
-    -ArgumentList @("--headless", "--", "--report", $smokeReport) `
+    -ArgumentList @("--headless", "--xr-mode", "off", "--", "--report", $smokeReport) `
     -PassThru -Wait -WindowStyle Hidden
 $smokeExitCode = $smokeProcess.ExitCode
 if ($smokeExitCode -ne 0 -or -not (Test-Path -LiteralPath $smokeReport -PathType Leaf)) {
@@ -83,10 +83,43 @@ if ($smokeExitCode -ne 0 -or -not (Test-Path -LiteralPath $smokeReport -PathType
 $smoke = Get-Content -Raw -LiteralPath $smokeReport | ConvertFrom-Json
 if ($smoke.schema -ne "opennv-godot-startup/v1" -or
     $smoke.status -ne "experimental" -or
-    [bool]$smoke.playable) {
+    [bool]$smoke.playable -or
+    -not [bool]$smoke.playableSandbox -or
+    -not [bool]$smoke.openXrLaunchable -or
+    [bool]$smoke.openXrHardwareValidated) {
     throw "Exported OpenNV startup report is invalid."
 }
 Remove-Item -LiteralPath $smokeReport
+
+$xrReport = Join-Path $stage "openxr-rig-smoke.json"
+$xrSave = Join-Path $stage "openxr-rig-save.json"
+$xrProcess = Start-Process -FilePath $binary `
+    -ArgumentList @(
+        "--headless", "--xr-mode", "off", "--",
+        "--xr-rig-proof",
+        "--save-path", ('"' + $xrSave + '"'),
+        "--report", ('"' + $xrReport + '"')
+    ) `
+    -PassThru -Wait -WindowStyle Hidden
+if ($xrProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $xrReport -PathType Leaf)) {
+    throw "Exported OpenNV runtime did not complete its OpenXR rig smoke."
+}
+$xr = Get-Content -Raw -LiteralPath $xrReport | ConvertFrom-Json
+if ($xr.schema -ne "opennv-openxr-rig/v1" -or
+    $xr.status -ne "pass" -or
+    [int]$xr.actions -ne 7 -or
+    $xr.testedInteractionProfile -ne "/interaction_profiles/oculus/touch_controller" -or
+    $xr.controllerRenderModelManagerType -ne "OpenXRRenderModelManager" -or
+    [double]$xr.worldScale -ne 1.0 -or
+    [int]$xr.physicsTicksPerSecond -ne 90 -or
+    -not [bool]$xr.worldSpaceHud) {
+    throw "Exported OpenNV OpenXR rig report is invalid."
+}
+foreach ($temporaryPath in @($xrReport, $xrSave)) {
+    if (Test-Path -LiteralPath $temporaryPath) {
+        Remove-Item -LiteralPath $temporaryPath -Force
+    }
+}
 
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $ownedCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-cache-{0}" -f [guid]::NewGuid().ToString("N"))
@@ -99,7 +132,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     try {
         $ownedProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
-                "--headless", "--",
+                "--headless", "--xr-mode", "off", "--",
                 "--data-root", ('"' + [IO.Path]::GetFullPath($FalloutNewVegasData) + '"'),
                 "--cache-root", ('"' + $ownedCache + '"'),
                 "--report", ('"' + $ownedReport + '"'),
@@ -132,7 +165,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
 
         $reuseProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
-                "--headless", "--",
+                "--headless", "--xr-mode", "off", "--",
                 "--reuse-cache",
                 "--cache-root", ('"' + $ownedCache + '"'),
                 "--report", ('"' + $reuseReport + '"'),
@@ -155,7 +188,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
 
         $gameplayProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
-                "--headless", "--",
+                "--headless", "--xr-mode", "off", "--",
                 "--reuse-cache",
                 "--cache-root", ('"' + $ownedCache + '"'),
                 "--save-path", ('"' + $gameplaySave + '"'),
@@ -186,7 +219,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
 
         $gameplayReloadProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
-                "--headless", "--",
+                "--headless", "--xr-mode", "off", "--",
                 "--reuse-cache",
                 "--cache-root", ('"' + $ownedCache + '"'),
                 "--save-path", ('"' + $gameplaySave + '"'),
@@ -248,6 +281,8 @@ $buildInfo = [ordered]@{
     contentToolSha256 = (Get-FileHash -LiteralPath $contentBinary -Algorithm SHA256).Hash.ToLowerInvariant()
     playable = $false
     playableSandbox = $true
+    openXrLaunchable = $true
+    openXrHardwareValidated = $false
     assetsIncluded = $false
 }
 $buildInfo | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $stage "BUILD-INFO.json") -Encoding utf8NoBOM
@@ -260,6 +295,38 @@ if ($forbiddenAssets.Count -gt 0) {
 }
 
 Compress-Archive -LiteralPath $stage -DestinationPath $archive -CompressionLevel Optimal
+$archiveReader = [IO.Compression.ZipFile]::OpenRead($archive)
+try {
+    $entryNames = @($archiveReader.Entries | ForEach-Object FullName)
+    $unsafeEntries = @($entryNames | Where-Object {
+        $normalized = $_.Replace("\\", "/")
+        $normalized.StartsWith("/", [StringComparison]::Ordinal) -or
+        $normalized.Split("/", [StringSplitOptions]::RemoveEmptyEntries) -contains ".."
+    })
+    if ($unsafeEntries.Count -gt 0) {
+        throw "OpenNV archive contains unsafe entry paths:`n$($unsafeEntries -join [Environment]::NewLine)"
+    }
+    $forbiddenArchiveEntries = @($entryNames | Where-Object {
+        [IO.Path]::GetExtension($_) -in @(".bsa", ".dds", ".esm", ".esp", ".fos", ".nif")
+    })
+    if ($forbiddenArchiveEntries.Count -gt 0) {
+        throw "OpenNV archive contains retail-derived assets:`n$($forbiddenArchiveEntries -join [Environment]::NewLine)"
+    }
+    foreach ($requiredName in @(
+        "OpenNV.exe",
+        "OpenNV.pck",
+        "OpenNV.Content.exe",
+        "runtime-manifest.json",
+        "BUILD-INFO.json"
+    )) {
+        if (-not ($entryNames | Where-Object { $_.Replace("\\", "/").EndsWith("/$requiredName", [StringComparison]::OrdinalIgnoreCase) })) {
+            throw "OpenNV archive is missing required payload: $requiredName"
+        }
+    }
+}
+finally {
+    $archiveReader.Dispose()
+}
 [pscustomobject][ordered]@{
     schema = "opennv-godot-package/v1"
     status = "pass"

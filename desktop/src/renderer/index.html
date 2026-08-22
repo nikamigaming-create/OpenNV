@@ -63,11 +63,18 @@
           </div>
         </div>
         <p id="selection-detail" class="selection-detail"></p>
-        <label id="jam-toggle-row" class="jam-toggle">
-          <input id="jam-toggle" type="checkbox">
-          <span class="switch" aria-hidden="true"></span>
-          <span><strong>JAM layer</strong><small>add now or later · save-safe once retained</small></span>
-        </label>
+        <div class="launch-options">
+          <label id="vr-toggle-row" class="jam-toggle">
+            <input id="vr-toggle" type="checkbox">
+            <span class="switch" aria-hidden="true"></span>
+            <span><strong>OpenXR mode</strong><small>Meta Touch profile · hardware gate pending</small></span>
+          </label>
+          <label id="jam-toggle-row" class="jam-toggle">
+            <input id="jam-toggle" type="checkbox">
+            <span class="switch" aria-hidden="true"></span>
+            <span><strong>JAM layer</strong><small>add now or later · save-safe once retained</small></span>
+          </label>
+        </div>
         <button id="launch" class="launch-button" type="button">Enter route <span>↗</span></button>
       </section>
 

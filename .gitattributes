@@ -1,9 +1,12 @@
 * text=auto
+.gitattributes text eol=lf
 
 *.cs text eol=lf
+*.css text eol=lf
 *.cfg text eol=lf
 *.gd text eol=lf
 *.gltf text eol=lf
+*.godot text eol=lf
 *.html text eol=lf
 *.json text eol=lf
 *.md text eol=lf
@@ -13,6 +16,7 @@
 *.sln text eol=crlf
 *.spec text eol=lf
 *.tscn text eol=lf
+*.tres text eol=lf
 *.txt text eol=lf
 *.uid text eol=lf
 *.yml text eol=lf

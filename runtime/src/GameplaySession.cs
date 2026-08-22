@@ -16,8 +16,10 @@ internal partial class GameplaySession : Node
     private Label? _objectiveLabel;
     private Label? _statusLabel;
     private Label? _inventoryLabel;
+    private Label3D? _xrHudLabel;
     private string _savePath = "";
     private string _cellFormId = "";
+    private bool _useXrHud;
     private string? _equippedWeaponFormId;
     private string? _weaponAmmoFormId;
     private int _weaponDamage;
@@ -37,16 +39,19 @@ internal partial class GameplaySession : Node
         !_inventory.Values.Any(entry => entry.RecordType == "ALCH") ? 2 :
         !_doorStates.GetValueOrDefault(EntryDoorFormId) ? 3 : 4;
 
-    internal void Configure(string cellFormId, string? configuredSavePath)
+    internal void Configure(string cellFormId, string? configuredSavePath, bool useXrHud = false)
     {
         Name = "GameplaySession";
         _cellFormId = cellFormId;
+        _useXrHud = useXrHud;
         _savePath = ResolvePath(configuredSavePath ?? "user://saves/goodsprings-sandbox-v1.json");
         Load(cellFormId);
     }
 
     public override void _Ready()
     {
+        if (_useXrHud)
+            return;
         var layer = new CanvasLayer { Name = "GameplayHud" };
         AddChild(layer);
         var panel = new ColorRect
@@ -80,6 +85,30 @@ internal partial class GameplaySession : Node
         crosshair.AddThemeFontSizeOverride("font_size", 24);
         layer.AddChild(crosshair);
         RefreshHud("WASD move • E activate • Left click fire • F5 save");
+    }
+
+    internal void AttachXrHud(Node3D leftHand)
+    {
+        if (!_useXrHud)
+            throw new InvalidOperationException("Cannot attach an XR HUD to a desktop gameplay session.");
+        var mount = new Node3D
+        {
+            Name = "XrWristHud",
+            Position = new Vector3(0.0f, 0.08f, -0.06f),
+            RotationDegrees = new Vector3(-62.0f, 0.0f, 0.0f),
+        };
+        leftHand.AddChild(mount);
+        _xrHudLabel = new Label3D
+        {
+            Name = "XrObjectiveInventory",
+            FontSize = 34,
+            PixelSize = 0.00125f,
+            Modulate = new Color(0.70f, 0.95f, 0.50f),
+            OutlineSize = 8,
+            Text = "OPENNV XR HUD",
+        };
+        mount.AddChild(_xrHudLabel);
+        RefreshHud("Left stick move • Right stick snap-turn • Grip activate • Trigger fire • X save");
     }
 
     internal bool IsReferenceRemoved(string referenceFormId) => _removedReferences.Contains(referenceFormId);
@@ -140,29 +169,30 @@ internal partial class GameplaySession : Node
         RefreshHud($"Door {door.ReferenceFormId}: {(door.IsOpen ? "open" : "closed")}");
     }
 
-    internal void Fire(Camera3D camera)
+    internal bool Fire(Node3D aimSource)
     {
         if (_equippedWeaponFormId is null)
         {
             RefreshHud("No weapon equipped");
-            return;
+            return false;
         }
         if (_ammoInMagazine <= 0)
         {
             RefreshHud("Empty cylinder");
-            return;
+            return false;
         }
         _ammoInMagazine--;
         _shotsFired++;
-        var from = camera.GlobalPosition;
-        var to = from - camera.GlobalBasis.Z * 100.0f;
-        var hit = camera.GetWorld3D().DirectSpaceState.IntersectRay(
+        var from = aimSource.GlobalPosition;
+        var to = from - aimSource.GlobalBasis.Z * 100.0f;
+        var hit = aimSource.GetWorld3D().DirectSpaceState.IntersectRay(
             PhysicsRayQueryParameters3D.Create(from, to, 1));
         Save();
         RefreshHud(
             hit.Count == 0
                 ? $".357 fired ({_weaponDamage} damage profile) • miss"
                 : $".357 fired ({_weaponDamage} damage profile) • hit {hit["collider"].AsGodotObject()}");
+        return true;
     }
 
     internal void Save()
@@ -260,9 +290,7 @@ internal partial class GameplaySession : Node
 
     private void RefreshHud(string status)
     {
-        if (_objectiveLabel is null)
-            return;
-        _objectiveLabel.Text = ObjectiveStage switch
+        var objective = ObjectiveStage switch
         {
             0 => "OBJECTIVE  Find and take the authored .357 revolver",
             1 => "OBJECTIVE  Fire the .357 once",
@@ -273,8 +301,8 @@ internal partial class GameplaySession : Node
         var ammunition = _equippedWeaponFormId is null
             ? "--/--"
             : $"{_ammoInMagazine}/{_weaponClipSize}";
-        _statusLabel!.Text = $".357 {ammunition}   {status}";
-        _inventoryLabel!.Text = "INVENTORY  " +
+        var statusLine = $".357 {ammunition}   {status}";
+        var inventory = "INVENTORY  " +
             (_inventory.Count == 0
                 ? "empty"
                 : string.Join(
@@ -282,6 +310,14 @@ internal partial class GameplaySession : Node
                     _inventory.Values
                         .OrderBy(item => item.EditorId, StringComparer.OrdinalIgnoreCase)
                         .Select(item => $"{item.EditorId} x{item.Count}")));
+        if (_objectiveLabel is not null)
+        {
+            _objectiveLabel.Text = objective;
+            _statusLabel!.Text = statusLine;
+            _inventoryLabel!.Text = inventory;
+        }
+        if (_xrHudLabel is not null)
+            _xrHudLabel.Text = $"{objective}\n{statusLine}\n{inventory}";
     }
 
     private static string ResolvePath(string path) =>

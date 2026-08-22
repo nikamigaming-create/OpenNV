@@ -4,10 +4,24 @@
     "engine": "Godot",
     "engineVersion": "4.7.1",
     "status": "experimental",
-    "label": "Playable experimental Goodsprings sandbox; the full New Vegas campaign is not ready.",
+    "label": "Playable experimental Goodsprings sandbox with a launchable OpenXR path; full campaigns are not ready.",
     "canLaunch": true,
     "executables": {},
-    "contentExecutables": {}
+    "contentExecutables": {},
+    "presentationModes": {
+      "flat": {
+        "launchable": true,
+        "status": "playable-sandbox"
+      },
+      "openxr": {
+        "launchable": true,
+        "status": "experimental-hardware-gate-pending",
+        "hardwareValidated": false,
+        "testedInteractionProfiles": [
+          "/interaction_profiles/oculus/touch_controller"
+        ]
+      }
+    }
   },
   "campaigns": [
     {
@@ -46,6 +60,12 @@
     "authored-pickup-inventory-loop",
     "retail-weap-damage-and-clip-profile",
     "persistent-sandbox-save-cold-reload",
-    "playable-objective-route"
+    "playable-objective-route",
+    "openxr-stereo-rig",
+    "openxr-oculus-touch-action-map",
+    "openxr-runtime-controller-models",
+    "meter-correct-xr-world-scale",
+    "world-space-xr-hud",
+    "shared-flat-xr-gameplay-save-state"
   ]
 }

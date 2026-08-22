@@ -12,7 +12,8 @@ internal static class CellSceneLoader
         Node3D parent,
         bool openProofDoor,
         string? proofDoorOverride = null,
-        string? savePath = null)
+        string? savePath = null,
+        bool useXr = false)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -56,7 +57,7 @@ internal static class CellSceneLoader
             };
             parent.AddChild(root);
             var session = new GameplaySession();
-            session.Configure(cell.GetProperty("formId").GetString()!, savePath);
+            session.Configure(cell.GetProperty("formId").GetString()!, savePath, useXr);
             parent.AddChild(session);
 
             var loadedReferences = 0;
@@ -170,7 +171,8 @@ internal static class CellSceneLoader
                 spawn.GetProperty("yawRadians").GetSingle(),
                 source.GetProperty("lighting"),
                 unitScale,
-                session);
+                session,
+                useXr);
             return new LoadedCell(
                 root,
                 cell.GetProperty("formId").GetString()!,
@@ -204,7 +206,8 @@ internal static class CellSceneLoader
         float yaw,
         JsonElement lighting,
         float unitScale,
-        GameplaySession session)
+        GameplaySession session,
+        bool useXr)
     {
         var calibration = lighting.GetProperty("calibration");
         var environment = new Godot.Environment
@@ -250,7 +253,7 @@ internal static class CellSceneLoader
             });
         }
         var player = new CellPlayer();
-        player.Configure(yaw, session);
+        player.Configure(yaw, session, useXr, useXr);
         parent.AddChild(player);
         return player;
     }

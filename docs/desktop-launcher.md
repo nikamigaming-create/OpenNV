@@ -37,6 +37,12 @@ Vegas Goodsprings sandbox. Fallout 3, TTW, JAM, and full-campaign readiness stay
 false. The launcher spawns the declared Godot executable with an explicit
 campaign request; no Windows-only PowerShell bridge defines the product.
 
+Presentation is selected independently from campaign and mod profile. Flat mode
+launches Godot with `--xr-mode off`; experimental OpenXR mode launches with
+`--xr-mode on -- --vr`. The runtime manifest must explicitly declare the OpenXR
+mode launchable, and retains a separate `hardwareValidated` flag so a software
+rig proof cannot be mistaken for a headset proof.
+
 Each runtime port must pass the same gates before a release calls it playable:
 
 1. isolated profile generation without source-folder writes;
