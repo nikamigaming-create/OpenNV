@@ -48,6 +48,27 @@ flowchart TD
     Session --> Save[Atomic sandbox save]
 ```
 
+The actor data boundary is separate from model assembly and rendering:
+
+```mermaid
+flowchart LR
+    Cell[CELL] -->|1:N| ActorRef[ACHR / ACRE]
+    ActorRef -->|N:1 NAME| ActorBase[NPC_ / CREA]
+    ActorBase -->|N:1| Race[RACE]
+    ActorBase -->|0:1 each| Hair[HAIR]
+    ActorBase -->|0:1 each| Eyes[EYES]
+    ActorBase -->|0:N| HeadPart[HDPT]
+    ActorBase -->|0:N inventory| Armor[ARMO]
+    ActorBase --> FaceGen[FGGS / FGGA / FGTS]
+    Race --> Baseline[Female head/body tables and FaceGen baselines]
+    FaceGen --> Morph[Pure geometry/texture composition primitives]
+```
+
+`actor_catalog.py` owns these record relationships and preserves authored
+placement/enable state; `facegen.py` owns only deterministic FaceGen math. This
+slice deliberately does not choose meshes, build a skeleton, create a Godot
+node, or claim that a rendered actor matches retail.
+
 ## Runtime states
 
 ```mermaid
@@ -109,6 +130,8 @@ input translation and presentation differ.
 | --- | --- | --- |
 | `plugin_records.py` | Bounded TES4-family headers, groups, compression, subrecords | Cell or rendering semantics |
 | `cell_catalog.py` | CELL, base, REFR, DATA, XTEL relationships | BSA/NIF/Godot behavior |
+| `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
+| `facegen.py` | Pure EGM/EGT morph and retail skin/body texture composition primitives | Record selection or runtime nodes |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `export_static_nif_gltf.py` | NIF static geometry to glTF plus provenance | World placement or gameplay |
 | `cell_scene.py` | Recipe selection, XTEL origin, asset/reference/material manifest | Godot nodes or input |
@@ -116,6 +139,8 @@ input translation and presentation differ.
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
 | `goodsprings-saloon-structure-v1.json` | Exact proof target, hash, selection, entry, scale | Parsing logic |
 | `test_cell_catalog.py` | Synthetic group/relationship/transform regressions | Retail bytes |
+| `test_actor_catalog.py` | Synthetic actor identity/appearance/placement graph regressions | Mesh or renderer assertions |
+| `test_facegen.py` | Synthetic geometry, texture-mode, skin, and body composition regressions | Retail actor selection |
 | `test_static_nif_gltf.py` | Synthetic BSA/NIF geometry regressions | Runtime orchestration |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
@@ -157,6 +182,9 @@ The OpenXR software path adds a Meta Touch action map, `XROrigin3D`, tracked hea
 and hands, metre scale, 90 Hz physics, locomotion, snap-turn, controller
 activation/fire/save, haptics, runtime-provided controller models, world-space
 HUD, and explicit launcher routing.
+
+Implemented but not yet promoted to rendering: direct humanoid/creature record
+relationships and deterministic FaceGen geometry/texture primitives.
 
 Not implemented: full Bethesda environment/mask material semantics, authored
 bhk collision, non-item arbitrary rotation promotion, visible first-person
