@@ -85,10 +85,8 @@ def resolve_proof_actor(
     actor = catalog.actors.get(references[0].actor_form_id)
     if actor is None:
         raise ValueError(f"Proof ACHR has no NPC_ base: {references[0].actor_form_id:08x}")
-    if actor.template_form_id is not None:
-        raise ValueError("Proof actor uses an unresolved NPC_ template chain")
-    if not actor.female or actor.race_form_id is None or actor.skeleton_path is None:
-        raise ValueError("Proof actor does not contain the required female race/skeleton identity")
+    if actor.race_form_id is None or actor.skeleton_path is None:
+        raise ValueError("Proof actor does not contain the required race/skeleton identity")
     if (len(actor.face_symmetric_geometry), len(actor.face_asymmetric_geometry), len(actor.face_symmetric_texture)) != (
         50,
         30,
@@ -132,24 +130,58 @@ def prepare_actor(
         form_id(cell_recipe["entryDoorReferenceFormId"]),
     )
     race = catalog.races.get(actor.race_form_id)
+    head_models = race.female_head_models if actor.female and race is not None else (
+        race.male_head_models if race is not None else ()
+    )
+    head_textures = race.female_head_textures if actor.female and race is not None else (
+        race.male_head_textures if race is not None else ()
+    )
+    body_models = race.female_body_models if actor.female and race is not None else (
+        race.male_body_models if race is not None else ()
+    )
+    body_textures = race.female_body_textures if actor.female and race is not None else (
+        race.male_body_textures if race is not None else ()
+    )
+    race_face_symmetric_geometry = (
+        race.female_face_symmetric_geometry if actor.female and race is not None else
+        race.male_face_symmetric_geometry if race is not None else ()
+    )
+    race_face_asymmetric_geometry = (
+        race.female_face_asymmetric_geometry if actor.female and race is not None else
+        race.male_face_asymmetric_geometry if race is not None else ()
+    )
+    race_face_symmetric_texture = (
+        race.female_face_symmetric_texture if actor.female and race is not None else
+        race.male_face_symmetric_texture if race is not None else ()
+    )
     if (
         race is None
-        or len(race.female_head_models) < 8
-        or len(race.female_head_textures) < 1
-        or len(race.female_body_models) < 3
-        or len(race.female_body_textures) < 1
+        or len(head_models) < 8
+        or len(head_textures) < 1
+        or len(body_models) < 3
+        or len(body_textures) < 3
     ):
-        raise ValueError("Proof actor race has no complete female head-part table")
+        raise ValueError("Proof actor race has no complete sex-specific head/body table")
     hair = catalog.parts.get(actor.hair_form_id or 0)
     eyes = catalog.parts.get(actor.eyes_form_id or 0)
     head_parts = [catalog.parts.get(part) for part in actor.head_part_form_ids]
     if hair is None or hair.model_path is None or eyes is None or eyes.texture_path is None:
         raise ValueError("Proof actor has incomplete hair or eye records")
-    if any(part is None or part.model_path is None for part in head_parts):
+    if any(part is None for part in head_parts):
         raise ValueError("Proof actor has an unresolved head-part record")
-    outfits = [catalog.armor[item.form_id] for item in actor.inventory if item.form_id in catalog.armor]
-    if len(outfits) != 1 or outfits[0].female_model_path is None:
-        raise ValueError(f"Proof actor must resolve one female outfit, found {len(outfits)}")
+    recipe_outfits = [form_id(value) for value in recipe.get("outfitArmorFormIds", [])]
+    outfit_forms = recipe_outfits or [
+        item.form_id for item in actor.inventory if item.form_id in catalog.armor
+    ]
+    outfits = [catalog.armor.get(value) for value in outfit_forms]
+    if not outfits or any(outfit is None for outfit in outfits):
+        raise ValueError(f"Proof actor has unresolved outfit armor: {outfit_forms}")
+    outfit_models = [
+        outfit.female_model_path if actor.female else outfit.male_model_path
+        for outfit in outfits
+    ]
+    if any(path is None for path in outfit_models):
+        raise ValueError("Proof actor outfit lacks a sex-specific model")
 
     meshes = BsaArchive(meshes_path)
     texture_archives = [BsaArchive(path) for path in texture_paths]
@@ -159,18 +191,18 @@ def prepare_actor(
         logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
         return meshes.extract(logical_path).data
 
-    head_model = race.female_head_models[0]
-    head_texture = race.female_head_textures[0]
+    head_model = head_models[0]
+    head_texture = head_textures[0]
     if head_model is None or head_texture is None:
-        raise ValueError("Proof actor race has no female head model or texture")
+        raise ValueError("Proof actor race has no sex-specific head model or texture")
     head_egm = model_companion(head_model, ".egm")
     head_egt = model_companion(head_model, ".egt")
     if (
-        len(race.female_face_symmetric_geometry),
-        len(race.female_face_asymmetric_geometry),
-        len(race.female_face_symmetric_texture),
+        len(race_face_symmetric_geometry),
+        len(race_face_asymmetric_geometry),
+        len(race_face_symmetric_texture),
     ) != (50, 30, 50):
-        raise ValueError("Proof actor race has incomplete female FaceGen baseline coordinates")
+        raise ValueError("Proof actor race has incomplete sex-specific FaceGen baseline coordinates")
     face_mod_path = f"textures\\characters\\facemods\\falloutnv.esm\\{actor.form_id:08x}_0.dds"
     if has_texture(texture_archives, face_mod_path):
         detail = decode_dds(extract_texture(texture_archives, face_mod_path), False)
@@ -181,23 +213,24 @@ def prepare_actor(
     base_diffuse = decode_dds(extract_texture(texture_archives, head_texture), False)
     tone = tuple(int(value) for value in recipe["skinToneRgba"][:3])
     generated_head = compose_skin_albedo(base_diffuse, detail, tone)
-    body_texture = race.female_body_textures[0]
-    if body_texture is None or race.female_body_models[1] is None or race.female_body_models[2] is None:
-        raise ValueError("Proof actor race has no female upper-body texture or hand meshes")
+    body_texture = body_textures[0]
+    if body_texture is None or body_models[1] is None or body_models[2] is None:
+        raise ValueError("Proof actor race has no sex-specific upper-body texture or hand meshes")
+    sex_label = "female" if actor.female else "male"
     body_mod_path = (
-        f"textures\\characters\\bodymods\\falloutnv.esm\\{actor.form_id:08x}modbodyfemale.dds"
+        f"textures\\characters\\bodymods\\falloutnv.esm\\{actor.form_id:08x}modbody{sex_label}.dds"
     )
     if not has_texture(texture_archives, body_mod_path):
-        raise ValueError("Proof actor has no retail precomputed female body-mod texture")
+        raise ValueError("Proof actor has no retail precomputed body-mod texture")
     body_mod = decode_dds(extract_texture(texture_archives, body_mod_path), False)
     generated_body = compose_body_albedo(
         decode_dds(extract_texture(texture_archives, body_texture), False),
         body_mod,
     )
-    left_hand_texture = race.female_body_textures[1]
-    right_hand_texture = race.female_body_textures[2]
+    left_hand_texture = body_textures[1]
+    right_hand_texture = body_textures[2]
     if left_hand_texture is None or right_hand_texture is None:
-        raise ValueError("Proof actor race has no female hand textures")
+        raise ValueError("Proof actor race has no sex-specific hand textures")
     generated_left_hand = compose_body_albedo(
         decode_dds(extract_texture(texture_archives, left_hand_texture), False),
         body_mod,
@@ -207,27 +240,40 @@ def prepare_actor(
         body_mod,
     )
 
+    body_texture_sources = {
+        texture_member(body_texture),
+        *(texture_member(value) for value in recipe.get("bodyTextureSourceAliases", [])),
+    }
+    rigid_outfit_forms = {
+        form_id(value) for value in recipe.get("rigidOutfitArmorFormIds", [])
+    }
     components = [
         ActorComponent(
-            "outfit",
-            outfits[0].female_model_path,
-            mesh(outfits[0].female_model_path),
+            f"outfit-{index}",
+            outfit_model,
+            mesh(outfit_model),
             excluded_shape_prefixes=tuple(recipe["excludeOutfitShapePrefixes"]),
-            generated_diffuse_by_source=(
-                ("textures\\characters\\childfemale\\upperbodyfemale.dds", generated_body),
+            rigid_to_head=outfit_forms[index] in rigid_outfit_forms,
+            generated_diffuse_by_source=tuple(
+                (source, generated_body) for source in sorted(body_texture_sources)
             ),
-        ),
+        )
+        for index, outfit_model in enumerate(outfit_models)
+    ]
+    components.extend([
         ActorComponent(
             "left-hand",
-            race.female_body_models[1],
-            mesh(race.female_body_models[1]),
+            body_models[1],
+            mesh(body_models[1]),
             generated_diffuse=generated_left_hand,
+            bake_shape_transform=not actor.female,
         ),
         ActorComponent(
             "right-hand",
-            race.female_body_models[2],
-            mesh(race.female_body_models[2]),
+            body_models[2],
+            mesh(body_models[2]),
             generated_diffuse=generated_right_hand,
+            bake_shape_transform=not actor.female,
         ),
         ActorComponent(
             "head",
@@ -237,12 +283,12 @@ def prepare_actor(
             egm_payload=mesh(head_egm),
             generated_diffuse=generated_head,
         ),
-    ]
+    ])
     roles = {2: "mouth", 3: "teeth-lower", 4: "teeth-upper", 5: "tongue", 6: "eye-left", 7: "eye-right"}
     for index, role in roles.items():
-        path = race.female_head_models[index]
+        path = head_models[index]
         if path is None:
-            raise ValueError(f"Proof actor race has no female head component {index}")
+            raise ValueError(f"Proof actor race has no sex-specific head component {index}")
         components.append(
             ActorComponent(
                 role,
@@ -267,7 +313,7 @@ def prepare_actor(
             tint_rgb=tuple(value / 255.0 for value in actor.hair_color_rgba[:3]),
         )
     )
-    for part in head_parts:
+    for part in (part for part in head_parts if part.model_path is not None):
         components.append(
             ActorComponent(
                 f"head-part-{part.editor_id}",
@@ -348,14 +394,51 @@ def _atomic_json(path: Path, value: object) -> None:
     os.replace(temporary, path)
 
 
+def prepare_actor_set(
+    data_root: Path,
+    cache_root: Path,
+    recipe_ids: list[str],
+) -> dict[str, object]:
+    if len(recipe_ids) < 1 or len(set(recipe_ids)) != len(recipe_ids):
+        raise ValueError("Actor-set recipes must be non-empty and unique")
+    actors = [prepare_actor(data_root, cache_root, recipe_id) for recipe_id in recipe_ids]
+    cell_form_ids = {str(actor["cellFormId"]) for actor in actors}
+    reference_form_ids = {str(actor["reference"]["formId"]) for actor in actors}
+    if len(cell_form_ids) != 1 or len(reference_form_ids) != len(actors):
+        raise ValueError("Actor-set members must belong to one cell and unique references")
+    document = {
+        "schema": "opennv-cell-actor-scenes/v1",
+        "cellFormId": next(iter(cell_form_ids)),
+        "actors": [
+            {
+                "recipe": actor["recipe"],
+                "referenceFormId": actor["reference"]["formId"],
+                "baseFormId": actor["reference"]["baseFormId"],
+                "scene": actor["manifest"],
+                "sha256": file_sha256(Path(actor["manifest"])),
+            }
+            for actor in actors
+        ],
+    }
+    path = cache_root / "generated" / "actors" / "actor-scenes.json"
+    _atomic_json(path, document)
+    document["manifest"] = str(path.resolve())
+    return document
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--cache-root", type=Path, required=True)
-    parser.add_argument("--recipe", default="goodsprings-trudy-actor-v1")
+    parser.add_argument("--recipe", action="append")
     args = parser.parse_args()
-    result = prepare_actor(args.data_root.resolve(), args.cache_root.resolve(), args.recipe)
-    print("OPENNV_ACTOR_SCENE " + json.dumps(result, sort_keys=True))
+    recipes = args.recipe or ["goodsprings-trudy-actor-v1"]
+    if len(recipes) == 1:
+        result = prepare_actor(args.data_root.resolve(), args.cache_root.resolve(), recipes[0])
+        print("OPENNV_ACTOR_SCENE " + json.dumps(result, sort_keys=True))
+    else:
+        result = prepare_actor_set(args.data_root.resolve(), args.cache_root.resolve(), recipes)
+        print("OPENNV_ACTOR_SCENE_SET " + json.dumps(result, sort_keys=True))
     return 0
 
 

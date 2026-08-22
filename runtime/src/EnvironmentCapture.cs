@@ -31,15 +31,28 @@ internal static class EnvironmentCapture
             var visualGates = new List<bool>();
             var actorShots = new List<object>();
             RetailActorStateContract.Contract? retailState = null;
+            CellActorLoader.PlacedActor? targetActor = null;
             if (loaded.Actors.Count > 0)
             {
-                if (loaded.Actors.Count != 1 || retailStateContractPath is null)
+                var proofActors = loaded.Actors.Where(actor => actor.ProofEnabled).ToArray();
+                if (proofActors.Length != 1 || retailStateContractPath is null)
                     throw new InvalidOperationException(
-                        "Actor capture requires one actor and one --retail-state-contract.");
+                        "Actor capture requires one proof-enabled target and one --retail-state-contract.");
+                targetActor = proofActors[0];
                 retailState = RetailActorStateContract.Load(
                     retailStateContractPath,
-                    loaded.Actors[0].ReferenceFormId,
-                    loaded.Actors[0].BaseFormId);
+                    targetActor.Value.ReferenceFormId,
+                    targetActor.Value.BaseFormId);
+                var contextReferences = retailState.Shots.Values.First().ContextActors
+                    .Select(actor => NormalizeForm(actor.ReferenceFormId))
+                    .ToHashSet(StringComparer.Ordinal);
+                var loadedContexts = loaded.Actors
+                    .Where(actor => !actor.ProofEnabled)
+                    .Select(actor => NormalizeForm(actor.ReferenceFormId))
+                    .ToHashSet(StringComparer.Ordinal);
+                if (!loadedContexts.SetEquals(contextReferences))
+                    throw new InvalidOperationException(
+                        "Loaded actor scenes do not exactly match the retail context actors.");
             }
             camera.Fov = 58.0f;
             camera.GlobalPosition = new Vector3(0.0f, 1.62f, -1.6f);
@@ -59,16 +72,52 @@ internal static class EnvironmentCapture
 
             if (loaded.Actors.Count > 0)
             {
-                var actor = loaded.Actors[0];
-                var skeleton = Descendants<Skeleton3D>(actor.Actor.Root).Single();
+                var actor = targetActor!.Value;
                 foreach (var kind in new[] { "front-portrait", "front-full-body" })
                 {
                     var state = retailState!.Shots[kind];
-                    actor.Placement.Position = loaded.GameToCellUnits(state.ReferencePositionGameUnits);
-                    actor.Placement.Rotation = new Vector3(0.0f, -state.ReferenceYawRadians, 0.0f);
-                    actor.Actor.AnimationPlayer.Play(actor.Actor.PlayingAnimation);
-                    actor.Actor.AnimationPlayer.Seek(state.AnimationPhaseSeconds, true);
-                    actor.Actor.AnimationPlayer.Pause();
+                    ApplyActorState(
+                        loaded,
+                        actor,
+                        state.ReferencePositionGameUnits,
+                        state.ReferenceYawRadians,
+                        state.AnimationFile,
+                        state.AnimationPhaseSeconds,
+                        state.PoseBones);
+                    var contextActors = state.ContextActors.Select(context =>
+                    {
+                        var placed = loaded.Actors.Single(candidate =>
+                            NormalizeForm(candidate.ReferenceFormId) ==
+                            NormalizeForm(context.ReferenceFormId));
+                        ApplyActorState(
+                            loaded,
+                            placed,
+                            context.PositionGameUnits,
+                            context.YawRadians,
+                            context.AnimationFile,
+                            context.AnimationPhaseSeconds,
+                            context.PoseBones);
+                        return new
+                        {
+                            referenceFormId = placed.ReferenceFormId,
+                            baseFormId = placed.BaseFormId,
+                            positionGameUnits = Vector(context.PositionGameUnits),
+                            positionGodotWorld = Vector(placed.Placement.GlobalPosition),
+                            yawRadians = context.YawRadians,
+                            godotYawRadians = -context.YawRadians,
+                            context.ActorSitSleepState,
+                            context.FurnitureReferenceFormId,
+                            context.FurnitureBaseFormId,
+                            animationFile = context.AnimationFile,
+                            requestedAnimationPhaseSeconds = context.AnimationPhaseSeconds,
+                            appliedAnimationPhaseSeconds =
+                                placed.Actor.AnimationPlayer.CurrentAnimationPosition,
+                            poseBones = CaptureBonePoses(
+                                placed,
+                                context.PoseBones.Select(bone => bone.Name).ToArray()),
+                            faceVertexHash = context.FaceVertexHash,
+                        };
+                    }).ToArray();
                     camera.Fov = state.VerticalFovDegrees;
                     camera.GlobalPosition = loaded.GameToWorld(state.CameraPositionGameUnits);
                     var cameraTarget = loaded.GameToWorld(state.CameraAimGameUnits);
@@ -78,37 +127,12 @@ internal static class EnvironmentCapture
                     var actorFrame = SaveViewportPng(host, output, fileName, 0.04);
                     files.Add(actorFrame.Evidence);
                     visualGates.Add(actorFrame.Passed);
-                    var armBones = state.ArmBones.Select(name =>
-                    {
-                        var index = skeleton.FindBone(name);
-                        if (index < 0)
-                            throw new InvalidOperationException($"Godot actor is missing retail arm bone: {name}");
-                        var pose = skeleton.GetBoneGlobalPose(index);
-                        var parentIndex = skeleton.GetBoneParent(index);
-                        var localPose = parentIndex < 0
-                            ? pose
-                            : skeleton.GetBoneGlobalPose(parentIndex).AffineInverse() * pose;
-                        var localRotation = localPose.Basis.GetRotationQuaternion();
-                        var rotation = (skeleton.GlobalBasis * pose.Basis).GetRotationQuaternion();
-                        return new
-                        {
-                            name,
-                            localTranslation = Vector(localPose.Origin),
-                            localRotationQuaternion = new[]
-                            {
-                                localRotation.X,
-                                localRotation.Y,
-                                localRotation.Z,
-                                localRotation.W,
-                            },
-                            worldPosition = Vector(skeleton.ToGlobal(pose.Origin)),
-                            worldRotationQuaternion = new[] { rotation.X, rotation.Y, rotation.Z, rotation.W },
-                        };
-                    }).ToArray();
                     actorShots.Add(new
                     {
                         shotKind = kind,
                         retailStateApplied = true,
+                        cellOriginGameUnits = Vector(loaded.OriginGameUnits),
+                        unitsToMeters = loaded.UnitsToMeters,
                         referencePositionGameUnits = Vector(state.ReferencePositionGameUnits),
                         referencePositionGodotWorld = Vector(actor.Placement.GlobalPosition),
                         referenceYawRadians = state.ReferenceYawRadians,
@@ -127,7 +151,10 @@ internal static class EnvironmentCapture
                         animationFile = state.AnimationFile,
                         requestedAnimationPhaseSeconds = state.AnimationPhaseSeconds,
                         appliedAnimationPhaseSeconds = actor.Actor.AnimationPlayer.CurrentAnimationPosition,
-                        armBones,
+                        poseBones = CaptureBonePoses(
+                            actor,
+                            state.PoseBones.Select(bone => bone.Name).ToArray()),
+                        contextActors,
                         faceVertexHash = state.FaceVertexHash,
                         hairVertexHash = state.HairVertexHash,
                         file = Path.Combine(output, fileName),
@@ -169,6 +196,7 @@ internal static class EnvironmentCapture
                     outfitFormId = actor.OutfitFormId,
                     headPartFormIds = actor.HeadPartFormIds,
                     animation = actor.Actor.PlayingAnimation,
+                    idleAnimationPath = actor.IdleAnimationPath,
                     boundsMinimum = Vector(actor.Actor.Bounds.Position),
                     boundsSize = Vector(actor.Actor.Bounds.Size),
                 }),
@@ -265,6 +293,90 @@ internal static class EnvironmentCapture
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    private static void ApplyActorState(
+        CellSceneLoader.LoadedCell loaded,
+        CellActorLoader.PlacedActor actor,
+        Vector3 positionGameUnits,
+        float yawRadians,
+        string animationFile,
+        double animationPhaseSeconds,
+        IReadOnlyList<RetailActorStateContract.PoseBone> poseBones)
+    {
+        if (!NormalizeMeshPath(actor.IdleAnimationPath).Equals(
+                NormalizeMeshPath(animationFile),
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Actor animation does not match retail: actor={actor.ReferenceFormId} " +
+                $"cache={actor.IdleAnimationPath} retail={animationFile}");
+        actor.Placement.Position = loaded.GameToCellUnits(positionGameUnits);
+        actor.Placement.Rotation = new Vector3(0.0f, -yawRadians, 0.0f);
+        actor.Actor.AnimationPlayer.Play(actor.Actor.PlayingAnimation);
+        actor.Actor.AnimationPlayer.Seek(animationPhaseSeconds, true);
+        actor.Actor.AnimationPlayer.Pause();
+        var skeleton = Descendants<Skeleton3D>(actor.Actor.Root).Single();
+        foreach (var bone in poseBones)
+        {
+            var index = skeleton.FindBone(bone.Name);
+            if (index < 0)
+                throw new InvalidOperationException(
+                    $"Godot actor {actor.ReferenceFormId} is missing retail pose bone: {bone.Name}");
+            var worldPosition = loaded.GameToWorld(bone.WorldPositionGameUnits);
+            var skeletonPose = new Transform3D(
+                skeleton.GlobalBasis.Orthonormalized().Inverse() *
+                    bone.WorldBasis.Orthonormalized(),
+                skeleton.ToLocal(worldPosition));
+            skeleton.SetBoneGlobalPose(index, skeletonPose);
+        }
+    }
+
+    private static object[] CaptureBonePoses(
+        CellActorLoader.PlacedActor actor,
+        IReadOnlyList<string> names)
+    {
+        var skeleton = Descendants<Skeleton3D>(actor.Actor.Root).Single();
+        return names.Select(name =>
+        {
+            var index = skeleton.FindBone(name);
+            if (index < 0)
+                throw new InvalidOperationException(
+                    $"Godot actor {actor.ReferenceFormId} is missing retail pose bone: {name}");
+            var pose = skeleton.GetBoneGlobalPose(index);
+            var parentIndex = skeleton.GetBoneParent(index);
+            var localPose = parentIndex < 0
+                ? pose
+                : skeleton.GetBoneGlobalPose(parentIndex).AffineInverse() * pose;
+            var localRotation = localPose.Basis.GetRotationQuaternion();
+            var rotation = (skeleton.GlobalBasis * pose.Basis).GetRotationQuaternion();
+            return (object)new
+            {
+                name,
+                localTranslation = Vector(localPose.Origin),
+                localRotationQuaternion = new[]
+                {
+                    localRotation.X,
+                    localRotation.Y,
+                    localRotation.Z,
+                    localRotation.W,
+                },
+                worldPosition = Vector(skeleton.ToGlobal(pose.Origin)),
+                worldRotationQuaternion = new[] { rotation.X, rotation.Y, rotation.Z, rotation.W },
+            };
+        }).ToArray();
+    }
+
+    private static string NormalizeForm(string value) =>
+        value.Replace("0x", "", StringComparison.OrdinalIgnoreCase)
+            .PadLeft(8, '0')
+            .ToLowerInvariant();
+
+    private static string NormalizeMeshPath(string value)
+    {
+        var path = value.Replace('/', '\\').TrimStart('\\');
+        return path.StartsWith("meshes\\", StringComparison.OrdinalIgnoreCase)
+            ? path["meshes\\".Length..]
+            : path;
     }
 
     private static float[] Vector(Vector3 value) => new[] { value.X, value.Y, value.Z };

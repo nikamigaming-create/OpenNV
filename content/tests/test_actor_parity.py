@@ -30,6 +30,29 @@ class ActorParityTest(unittest.TestCase):
             self.assertEqual(difference_metrics(first, second)["meanAbsoluteError"], 0.0)
 
     def test_retail_shot_state_metrics_fail_closed(self):
+        bone_names = [f"bone-{index}" for index in range(50)]
+        retail_bones = [
+            {
+                "name": name,
+                "transform": {
+                    "localRotation": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                    "localTranslation": [0.0, 0.0, 0.0],
+                    "worldRotation": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                    "worldTranslation": [0.0, 0.0, 0.0],
+                },
+            }
+            for name in bone_names
+        ]
+        godot_bones = [
+            {
+                "name": name,
+                "localTranslation": [0.0, 0.0, 0.0],
+                "localRotationQuaternion": [0.0, 0.0, 0.0, 1.0],
+                "worldPosition": [0.0, 0.0, 0.0],
+                "worldRotationQuaternion": [0.0, 0.0, 0.0, 1.0],
+            }
+            for name in bone_names
+        ]
         retail = {
             "referenceTransform": {"position": [1.0, 2.0, 3.0], "rotation": [0.0, 0.0, 3.1]},
             "camera": {
@@ -45,20 +68,23 @@ class ActorParityTest(unittest.TestCase):
                         "lastScaled": 1.202,
                     }
                 ],
-                "armBones": [
-                    {
-                        "name": name,
-                        "transform": {
-                            "localRotation": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-                            "localTranslation": [0.0, 0.0, 0.0],
-                        },
-                    }
-                    for name in ("left-upper", "left-fore", "right-upper", "right-fore")
-                ],
+                "bones": retail_bones,
             },
+            "contextActors": [
+                {
+                    "referenceForm": "0x20",
+                    "baseForm": "0x21",
+                    "position": [8.0, 9.0, 10.0],
+                    "rotation": [0.0, 0.0, 1.25],
+                    "activeSequences": [{"file": "sit.kf", "weight": 1.0, "lastScaled": 0.5}],
+                    "bones": retail_bones,
+                }
+            ],
         }
         godot = {
             "retailStateApplied": True,
+            "cellOriginGameUnits": [0.0, 0.0, 0.0],
+            "unitsToMeters": 1.0,
             "referencePositionGameUnits": [1.0, 2.0, 3.0],
             "referenceYawRadians": 3.1,
             "referenceGodotYawRadians": -3.1,
@@ -67,13 +93,16 @@ class ActorParityTest(unittest.TestCase):
             "distanceMeters": 70.0 * 0.0142875,
             "verticalFovDegrees": 46.6921257,
             "appliedAnimationPhaseSeconds": 1.202,
-            "armBones": [
+            "poseBones": godot_bones,
+            "contextActors": [
                 {
-                    "name": name,
-                    "localTranslation": [0.0, 0.0, 0.0],
-                    "localRotationQuaternion": [0.0, 0.0, 0.0, 1.0],
+                    "referenceFormId": "00000020",
+                    "baseFormId": "00000021",
+                    "positionGameUnits": [8.0, 9.0, 10.0],
+                    "godotYawRadians": -1.25,
+                    "appliedAnimationPhaseSeconds": 0.5,
+                    "poseBones": godot_bones,
                 }
-                for name in ("left-upper", "left-fore", "right-upper", "right-fore")
             ],
         }
         self.assertEqual(shot_state_metrics(retail, godot)["status"], "pass")

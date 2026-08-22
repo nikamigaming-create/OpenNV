@@ -15,6 +15,7 @@ internal static class CellSceneLoader
         string? savePath = null,
         bool useXr = false,
         string? actorScenePath = null,
+        string? actorScenesManifestPath = null,
         bool proofEnableActor = false,
         bool buildCollision = true)
     {
@@ -172,10 +173,17 @@ internal static class CellSceneLoader
             if (openProofDoor)
                 doors[proofDoor].SetOpen(true);
             var actors = new List<CellActorLoader.PlacedActor>();
-            if (actorScenePath is not null)
+            var actorScenePaths = actorScenesManifestPath is not null
+                ? CellActorLoader.LoadManifest(
+                    actorScenesManifestPath,
+                    cell.GetProperty("formId").GetString()!)
+                : actorScenePath is not null
+                    ? new[] { actorScenePath }
+                    : Array.Empty<string>();
+            foreach (var path in actorScenePaths)
             {
                 var placedActor = CellActorLoader.Load(
-                    actorScenePath,
+                    path,
                     cell.GetProperty("formId").GetString()!,
                     root,
                     proofEnableActor);

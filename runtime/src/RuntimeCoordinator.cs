@@ -40,10 +40,13 @@ public partial class RuntimeCoordinator : Node3D
                 throw new ArgumentException("--actor-sidecar requires --actor-model.");
             if (hasActorModel && _options.ContainsKey("capture-root"))
                 throw new ArgumentException("Actor captures require --cell-scene plus --actor-scene.");
+            if (_options.ContainsKey("actor-scene") && _options.ContainsKey("actor-scenes"))
+                throw new ArgumentException("Use --actor-scene or --actor-scenes, not both.");
             if (_options.ContainsKey("retail-state-contract") &&
-                (!hasCellScene || !_options.ContainsKey("capture-root") || !_options.ContainsKey("actor-scene")))
+                (!hasCellScene || !_options.ContainsKey("capture-root") ||
+                    (!_options.ContainsKey("actor-scene") && !_options.ContainsKey("actor-scenes"))))
                 throw new ArgumentException(
-                    "--retail-state-contract requires --cell-scene, --actor-scene, and --capture-root.");
+                    "--retail-state-contract requires --cell-scene, actor scenes, and --capture-root.");
 
             if (hasDataRoot)
             {
@@ -119,6 +122,7 @@ public partial class RuntimeCoordinator : Node3D
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
             options.ContainsKey("vr"),
             options.TryGetValue("actor-scene", out var actorScene) ? actorScene : null,
+            options.TryGetValue("actor-scenes", out var actorScenes) ? actorScenes : null,
             options.ContainsKey("proof-enable-actor"),
             !options.ContainsKey("capture-root"));
         if (options.TryGetValue("capture-root", out var captureRoot))

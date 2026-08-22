@@ -57,6 +57,13 @@ class ActorReference:
 class RaceAppearance:
     form_id: int
     editor_id: str
+    male_head_models: tuple[str | None, ...]
+    male_head_textures: tuple[str | None, ...]
+    male_body_models: tuple[str | None, ...]
+    male_body_textures: tuple[str | None, ...]
+    male_face_symmetric_geometry: tuple[float, ...]
+    male_face_asymmetric_geometry: tuple[float, ...]
+    male_face_symmetric_texture: tuple[float, ...]
     female_head_models: tuple[str | None, ...]
     female_head_textures: tuple[str | None, ...]
     female_body_models: tuple[str | None, ...]
@@ -199,10 +206,17 @@ def _race(record: Record, subrecords: list[tuple[str, bytes]]) -> RaceAppearance
     group = ""
     sex = ""
     index: int | None = None
+    male_models: dict[int, str] = {}
+    male_textures: dict[int, str] = {}
+    male_body_models: dict[int, str] = {}
+    male_body_textures: dict[int, str] = {}
     female_models: dict[int, str] = {}
     female_textures: dict[int, str] = {}
     female_body_models: dict[int, str] = {}
     female_body_textures: dict[int, str] = {}
+    male_face_symmetric_geometry: tuple[float, ...] = ()
+    male_face_asymmetric_geometry: tuple[float, ...] = ()
+    male_face_symmetric_texture: tuple[float, ...] = ()
     female_face_symmetric_geometry: tuple[float, ...] = ()
     female_face_asymmetric_geometry: tuple[float, ...] = ()
     female_face_symmetric_texture: tuple[float, ...] = ()
@@ -217,29 +231,48 @@ def _race(record: Record, subrecords: list[tuple[str, bytes]]) -> RaceAppearance
             sex, index = "female", None
         elif signature == "INDX":
             index = _form_id(data, record, "INDX")
-        elif sex == "female" and index is not None:
-            models = female_models if group == "head" else female_body_models
-            textures = female_textures if group == "head" else female_body_textures
+        elif sex in {"male", "female"} and index is not None:
+            if sex == "male":
+                models = male_models if group == "head" else male_body_models
+                textures = male_textures if group == "head" else male_body_textures
+            else:
+                models = female_models if group == "head" else female_body_models
+                textures = female_textures if group == "head" else female_body_textures
             if signature == "MODL":
                 models[index] = _canonical_model(data)
             elif signature == "ICON":
                 textures[index] = _canonical_model(data)
-        if sex == "female" and signature in {"FGGS", "FGGA", "FGTS"}:
+        if sex in {"male", "female"} and signature in {"FGGS", "FGGA", "FGTS"}:
             count = {"FGGS": 50, "FGGA": 30, "FGTS": 50}[signature]
             if len(data) != count * 4:
                 raise ValueError(f"RACE {signature} must contain {count} floats in {record.form_id:08x}")
             coordinates = struct.unpack(f"<{count}f", data)
-            if signature == "FGGS":
+            if sex == "male" and signature == "FGGS":
+                male_face_symmetric_geometry = coordinates
+            elif sex == "male" and signature == "FGGA":
+                male_face_asymmetric_geometry = coordinates
+            elif sex == "male":
+                male_face_symmetric_texture = coordinates
+            elif signature == "FGGS":
                 female_face_symmetric_geometry = coordinates
             elif signature == "FGGA":
                 female_face_asymmetric_geometry = coordinates
             else:
                 female_face_symmetric_texture = coordinates
+    male_maximum = max((*male_models.keys(), *male_textures.keys()), default=-1)
+    male_body_maximum = max((*male_body_models.keys(), *male_body_textures.keys()), default=-1)
     maximum = max((*female_models.keys(), *female_textures.keys()), default=-1)
     body_maximum = max((*female_body_models.keys(), *female_body_textures.keys()), default=-1)
     return RaceAppearance(
         record.form_id,
         _first_text(values, "EDID"),
+        tuple(male_models.get(part) for part in range(male_maximum + 1)),
+        tuple(male_textures.get(part) for part in range(male_maximum + 1)),
+        tuple(male_body_models.get(part) for part in range(male_body_maximum + 1)),
+        tuple(male_body_textures.get(part) for part in range(male_body_maximum + 1)),
+        male_face_symmetric_geometry,
+        male_face_asymmetric_geometry,
+        male_face_symmetric_texture,
         tuple(female_models.get(part) for part in range(maximum + 1)),
         tuple(female_textures.get(part) for part in range(maximum + 1)),
         tuple(female_body_models.get(part) for part in range(body_maximum + 1)),
