@@ -1,7 +1,7 @@
 {
   "compiler": {
     "name": "OpenNV direct static NIF exporter v1",
-    "sha256": "07cc4858c7f4e0d8951929e5134e9f016923fa56147160f5a113177314765b54"
+    "sha256": "e16aad31c26980f689d8a5299db6a8191fce7cdbea9ce73986c5995343ff2d2b"
   },
   "coverage": {
     "collisionBlockTypes": [],

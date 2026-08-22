@@ -7,3 +7,12 @@ PyFFI's copyright, conditions, and disclaimer.
 
 PyFFI is a file-format library. It is not a game engine, runtime oracle, or
 source of generated OpenNV assets.
+
+Experimental packages build the command-line content helper with PyInstaller
+6.22.2. PyInstaller is GPLv2 with its bootloader exception; packaged builds must
+retain the license and exception terms supplied by that project. PyInstaller is
+a packaging tool and is not part of OpenNV's runtime behavior or data model.
+
+The one-file helper embeds the CPython 3.11 runtime and setuptools support used
+by PyFFI. Packaged outputs include the exact installed license texts for
+CPython, setuptools, PyFFI, and PyInstaller in their `licenses` directory.

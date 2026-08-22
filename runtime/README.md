@@ -19,12 +19,18 @@ delete the cache afterward. No retail-derived file or generated conversion
 belongs in Git.
 
 Build an asset-free experimental Windows archive after installing the pinned
-Godot Mono export templates:
+Godot Mono export templates and `content/requirements-build.txt`:
 
 ```powershell
 pwsh -File scripts/Build-GodotRuntime.ps1 -OutputRoot D:\Builds\OpenNV
 ```
 
-Launching the exported executable without configured assets displays an
-explicit experimental/non-playable status instead of crashing or claiming a
-campaign is ready.
+The archive contains the Godot executable and a packaged legal-content helper,
+but no commercial content. Launching it displays an explicit
+experimental/non-playable screen with a native Data-folder picker. Selecting a
+legal Fallout: New Vegas `Data` folder prepares a private cache and immediately
+loads the first retail geometry slice; Python and OpenMW are not required on the
+player's machine.
+
+Add `-FalloutNewVegasData <path>` to the build command for a local end-to-end
+gate of the exported executable, packaged helper, legal cache, and Godot load.
