@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { CAMPAIGNS, createOfflineState, mergeRuntimeState, validateLaunchRequest } from "../src/contract.mjs";
 
 test("the launcher has distinct standalone and TTW character paths", () => {
@@ -23,6 +24,7 @@ test("a Godot runtime manifest augments rather than replaces product campaign ru
   assert.equal(merged.runtime.status, "ready");
   assert.equal(merged.runtime.canLaunch, true);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").ready, true);
+  assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").jamReady, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "ttw").ready, false);
   assert.equal(CAMPAIGNS.length, 3);
 });
@@ -35,4 +37,14 @@ test("an experimental runtime connects without claiming campaigns are playable",
   assert.equal(merged.runtime.status, "experimental");
   assert.equal(merged.runtime.canLaunch, false);
   assert.match(merged.runtime.label, /Static geometry/);
+});
+
+test("the checked-in runtime exposes only the playable New Vegas sandbox", () => {
+  const manifest = JSON.parse(readFileSync(new URL("../../runtime/runtime-manifest.json", import.meta.url), "utf8"));
+  const merged = mergeRuntimeState(createOfflineState({ platform: "win32" }), manifest);
+  assert.equal(merged.runtime.canLaunch, true);
+  assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").ready, true);
+  assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").jamReady, false);
+  assert.equal(merged.campaigns.find((campaign) => campaign.id === "fallout3").ready, false);
+  assert.equal(merged.campaigns.find((campaign) => campaign.id === "ttw").ready, false);
 });

@@ -92,6 +92,10 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $ownedCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-cache-{0}" -f [guid]::NewGuid().ToString("N"))
     $ownedReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-report-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $reuseReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-reuse-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $portalSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-portal-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $gameplaySave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-gameplay-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $gameplayReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-gameplay-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $gameplayReloadReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-gameplay-reload-{0}.json" -f [guid]::NewGuid().ToString("N"))
     try {
         $ownedProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
@@ -99,6 +103,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
                 "--data-root", ('"' + [IO.Path]::GetFullPath($FalloutNewVegasData) + '"'),
                 "--cache-root", ('"' + $ownedCache + '"'),
                 "--report", ('"' + $ownedReport + '"'),
+                "--save-path", ('"' + $portalSave + '"'),
                 "--portal-proof",
                 "--quit-after-load"
             ) `
@@ -109,13 +114,13 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         $owned = Get-Content -Raw -LiteralPath $ownedReport | ConvertFrom-Json
         if ($owned.schema -ne "opennv-godot-cell/v1" -or
             $owned.status -ne "pass" -or
-            [int]$owned.assets -lt 117 -or
-            [int]$owned.textures -lt 194 -or
-            [int]$owned.materialBindings -lt 274 -or
-            [int]$owned.references -lt 251 -or
+            [int]$owned.assets -lt 153 -or
+            [int]$owned.textures -lt 255 -or
+            [int]$owned.materialBindings -lt 332 -or
+            [int]$owned.references -lt 348 -or
             [int]$owned.doors -lt 1 -or
             [int]$owned.authoredLights -lt 24 -or
-            [int]$owned.collisionMeshes -lt 251 -or
+            [int]$owned.collisionMeshes -lt 348 -or
             [int]$owned.surfaces -lt 1 -or
             [int]$owned.vertices -lt 3 -or
             -not [bool]$owned.doorTraversal.floorHit -or
@@ -131,6 +136,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
                 "--reuse-cache",
                 "--cache-root", ('"' + $ownedCache + '"'),
                 "--report", ('"' + $reuseReport + '"'),
+                "--save-path", ('"' + $portalSave + '"'),
                 "--portal-proof",
                 "--quit-after-load"
             ) `
@@ -146,9 +152,74 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             [bool]$reused.doorTraversal.openHit) {
             throw "Packaged OpenNV persistent-cache report is invalid."
         }
+
+        $gameplayProcess = Start-Process -FilePath $binary `
+            -ArgumentList @(
+                "--headless", "--",
+                "--reuse-cache",
+                "--cache-root", ('"' + $ownedCache + '"'),
+                "--save-path", ('"' + $gameplaySave + '"'),
+                "--gameplay-proof",
+                "--report", ('"' + $gameplayReport + '"')
+            ) `
+            -PassThru -Wait -WindowStyle Hidden
+        if ($gameplayProcess.ExitCode -ne 0 -or
+            -not (Test-Path -LiteralPath $gameplayReport -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $gameplaySave -PathType Leaf)) {
+            throw "Packaged OpenNV runtime failed its playable-route gate."
+        }
+        $gameplay = Get-Content -Raw -LiteralPath $gameplayReport | ConvertFrom-Json
+        if ($gameplay.schema -ne "opennv-godot-playable-route/v1" -or
+            $gameplay.status -ne "pass" -or
+            $gameplay.phase -ne "first-run" -or
+            -not [bool]$gameplay.session.objectiveComplete -or
+            $gameplay.session.equippedWeaponFormId -ne "0008f216" -or
+            $gameplay.session.weaponAmmoFormId -ne "001537e3" -or
+            [int]$gameplay.session.weaponDamage -ne 26 -or
+            [int]$gameplay.session.weaponClipSize -ne 6 -or
+            [int]$gameplay.session.ammoInMagazine -ne 5 -or
+            [int]$gameplay.session.shotsFired -ne 1 -or
+            [int]$gameplay.session.emptiedContainers -ne 1 -or
+            [int]$gameplay.session.openDoors -ne 1) {
+            throw "Packaged OpenNV playable-route report is invalid."
+        }
+
+        $gameplayReloadProcess = Start-Process -FilePath $binary `
+            -ArgumentList @(
+                "--headless", "--",
+                "--reuse-cache",
+                "--cache-root", ('"' + $ownedCache + '"'),
+                "--save-path", ('"' + $gameplaySave + '"'),
+                "--gameplay-reload-proof",
+                "--report", ('"' + $gameplayReloadReport + '"')
+            ) `
+            -PassThru -Wait -WindowStyle Hidden
+        if ($gameplayReloadProcess.ExitCode -ne 0 -or
+            -not (Test-Path -LiteralPath $gameplayReloadReport -PathType Leaf)) {
+            throw "Packaged OpenNV runtime failed its gameplay cold-reload gate."
+        }
+        $gameplayReload = Get-Content -Raw -LiteralPath $gameplayReloadReport | ConvertFrom-Json
+        if ($gameplayReload.schema -ne "opennv-godot-playable-route/v1" -or
+            $gameplayReload.status -ne "pass" -or
+            $gameplayReload.phase -ne "cold-reload" -or
+            -not [bool]$gameplayReload.session.objectiveComplete -or
+            $gameplayReload.session.weaponAmmoFormId -ne "001537e3" -or
+            [int]$gameplayReload.session.weaponClipSize -ne 6 -or
+            [int]$gameplayReload.session.ammoInMagazine -ne 5 -or
+            [int]$gameplayReload.session.emptiedContainers -ne 1) {
+            throw "Packaged OpenNV gameplay cold-reload report is invalid."
+        }
     }
     finally {
-        foreach ($temporaryPath in @($ownedCache, $ownedReport, $reuseReport)) {
+        foreach ($temporaryPath in @(
+            $ownedCache,
+            $ownedReport,
+            $reuseReport,
+            $portalSave,
+            $gameplaySave,
+            $gameplayReport,
+            $gameplayReloadReport
+        )) {
             if (Test-Path -LiteralPath $temporaryPath) {
                 $resolvedPath = [IO.Path]::GetFullPath($temporaryPath)
                 $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
@@ -176,6 +247,7 @@ $buildInfo = [ordered]@{
     godotWindowsArchiveSha256 = "764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45"
     contentToolSha256 = (Get-FileHash -LiteralPath $contentBinary -Algorithm SHA256).Hash.ToLowerInvariant()
     playable = $false
+    playableSandbox = $true
     assetsIncluded = $false
 }
 $buildInfo | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $stage "BUILD-INFO.json") -Encoding utf8NoBOM

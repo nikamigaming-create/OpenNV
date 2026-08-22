@@ -1,6 +1,6 @@
 # OpenNV architecture and code accountability
 
-Status: **experimental Godot cell slice; not a playable campaign**.
+Status: **playable experimental Goodsprings sandbox; not a full campaign**.
 
 OpenNV is a clean first-party runtime. The retail installation is a read-only
 input, the generated cache is disposable, every cross-boundary artifact has a
@@ -13,7 +13,7 @@ flowchart LR
     Recipe[Hash-pinned cell recipe] --> Cell
     Master -->|1:N| Cell[CELL]
     Cell -->|1:N cell-child group| Ref[REFR]
-    Ref -->|N:1 NAME| Base[STAT / DOOR base]
+    Ref -->|N:1 NAME| Base[World / item / container / door base]
     Ref -->|0:1 XTEL| DoorTarget[Destination door REFR]
     Base -->|N:1 MODL| Nif[NIF member]
     MeshesBsa --> Nif
@@ -38,7 +38,14 @@ flowchart TD
     Player --> Capsule[Capsule collision]
     Player --> Camera[Camera3D]
     Player -->|E ray| Door
+    Player -->|E ray| Pickup[PickupInstance]
+    Player -->|E ray| Container[ContainerInstance]
     Player -->|fire ray| Collision
+    Pickup --> Session[GameplaySession]
+    Container --> Session
+    Door --> Session
+    Session --> Hud[Objective / inventory / ammo HUD]
+    Session --> Save[Atomic sandbox save]
 ```
 
 ## Runtime states
@@ -53,7 +60,44 @@ stateDiagram-v2
     Preparing --> Unconfigured: legal input invalid
     CellLoaded --> DoorOpen: interaction or proof opens door
     DoorOpen --> CellLoaded: interaction closes door
+    CellLoaded --> Armed: collect authored .357
+    Armed --> Fired: fire physical ray
+    Fired --> Supplied: collect authored aid
+    Supplied --> Complete: open entry door
+    Complete --> Complete: cold reload restores state
 ```
+
+## First-class flat/VR boundary
+
+VR is a product mode, not a later camera patch. Before the next gameplay system
+is promoted, desktop and OpenXR must share one authoritative intent/state/event
+path:
+
+```mermaid
+flowchart LR
+    Desktop[Keyboard / mouse adapter] --> Intent[Player intent]
+    XR[OpenXR head / hand adapter] --> Intent
+    Intent --> Game[Authoritative gameplay state]
+    Game --> Snapshot[Stable state snapshot]
+    Game --> Events[One-shot events]
+    Snapshot --> Flat[Flat presentation]
+    Events --> Flat
+    Snapshot --> Stereo[Stereo presentation]
+    Events --> Stereo
+    Game <--> Save[One save contract]
+```
+
+The current `CellPlayer` desktop input and `GameplaySession` screen-space HUD are
+temporary vertical-slice code, not the final cross-mode boundary. They may not
+accumulate actor, combat, VATS, or quest rules. The first OpenXR promotion must
+replace that coupling with code exercised by both modes; no unused VR manager,
+empty interface, or speculative abstraction counts as progress.
+
+The OpenXR gate requires a real stereo run, head and two-controller pose input,
+metre-correct world scale, world-space interaction/HUD, identical scripted
+gameplay reports and save state between flat and VR adapters, and stereo-safe
+materials. Gameplay outcomes remain mode-independent; only input translation
+and presentation differ.
 
 ## Source ownership
 
@@ -76,7 +120,10 @@ stateDiagram-v2
 | `RuntimeMaterialLoader.cs` | PNG hash validation and surface material construction | DDS/BSA parsing |
 | `EnvironmentCapture.cs` | Actor-free native frames, hashes, and visual-quality gates | Gameplay or desktop control |
 | `DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
-| `CellPlayer.cs` | Movement, view, interaction ray, projectile ray | Asset preparation |
+| `PickupInstance.cs` | One authored pickup's identity and weapon profile | Inventory ownership |
+| `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
+| `GameplaySession.cs` | Objective, HUD, inventory, ammo, world delta, save/reload | Asset parsing |
+| `CellPlayer.cs` | Movement, view, activation and firing input | Asset preparation |
 | `RuntimeCoordinator.cs` | Startup routing, reports, and gate orchestration | UI construction or file-format parsing |
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
 | `StaticModelSlice.cs` | Legacy one-model proof view | Cell relationships |
@@ -90,24 +137,49 @@ stateDiagram-v2
 
 Tests mirror those boundaries: synthetic plugin graph tests cover parsing and
 relationships; synthetic NIF tests cover deterministic geometry; Godot reports
-cover node counts, floor placement, collision, and door traversal. Build scripts
+cover node counts, floor placement, collision, door traversal, objective
+completion, save, and cold reload. Build scripts
 package only a clean commit, refuse overwrites, scan for commercial extensions,
 and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
 
-Implemented: direct owned ESM/BSA/NIF/DDS path, XTEL-derived spawn, 251 saloon
-references, 117 unique visible assets, 194 decoded textures, 274 material
-bindings, 24 XCLL/LIGH-authored lights, collision, walking, mouse-look,
-interactive doors, physical ray queries, dense-cell entry-door traversal, and
-whole-cell visibility without fake portal planes.
+Implemented: direct owned ESM/BSA/NIF/DDS path, XTEL-derived spawn, 348 saloon
+references, 153 visible assets, 255 textures, 332 materials, 97 pickups, five
+containers, 24 authored lights, full converted item rotations, collision,
+movement, HUD, inventory, authored `.357` damage/clip data, firing, objectives,
+doors, atomic save, cold reload, and launcher-enabled sandbox play.
 
 Not implemented: full Bethesda environment/mask material semantics, authored
-bhk collision, general X/Y reference rotation, animation, actors/creatures, weapons, VATS,
-saves, exterior streaming, or campaigns. There are no placeholder managers for
+bhk collision, non-item arbitrary rotation promotion, visible first-person
+weapon animation, damageable actors/creatures, VATS, exterior streaming, or full
+campaigns. There are no placeholder managers for
 these. Each enters only with a data contract, synthetic test, retail proof, and
 promotion gate.
 
-Next order: complete material semantics, authored collision, generalized cell recipes,
-then actors/combat and VATS recording. See the retained retail evidence in
+The current screenshots are **not** a retail-fidelity claim. Environment/mask
+shader semantics, alpha/effect paths, fog and light calibration, authored Havok
+collision, and all actor rendering remain open differential gates.
+
+Next promotion order:
+
+1. close and package this playable saloon route;
+2. promote the shared desktop/OpenXR intent, state, event, scale, and save
+   boundary through a real OpenXR rig;
+3. promote Trudy as one complete `ACHR -> NPC_ -> RACE/body/clothing/FaceGen ->
+   skeleton -> idle` actor, with no proxy mesh or generated substitute;
+4. run fixed-camera retail/Godot interior differentials for materials, lighting,
+   effects, and collision until the saloon reaches its visual gate;
+5. add damageable targets, authored flat/VR weapon presentation,
+   ballistics/projectiles,
+   creatures and raiders; and
+6. promote VATS only after the same combat route passes deterministic recording,
+   flat/VR presentation, and cold-reload gates.
+
+The asset distribution follows the four-surface model described in
+[Shipping an asset-free Godot XR port](https://github.com/Brobert-in-aus/guides/blob/main/vr/shipping-an-asset-free-godot-xr-port.md): public source, asset-free build,
+user-owned game data, and private identity material remain separately auditable.
+OpenNV does not use the guide's native-ABI shortcut because no lawful,
+cross-platform New Vegas simulation library is available to embed. See the
+retained retail evidence in
 [fnv-esm-cell-contract.md](evidence/fnv-esm-cell-contract.md).

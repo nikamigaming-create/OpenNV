@@ -16,7 +16,8 @@
     "repository": "nikamigaming-create/OpenNV",
     "path": "runtime",
     "status": "experimental",
-    "playable": false
+    "playable": false,
+    "playableSandbox": true
   },
   "launcher": {
     "repository": "nikamigaming-create/OpenNV",
@@ -33,6 +34,8 @@
     "artifact-provenance",
     "godot-forward-plus-load",
     "desktop-launcher-contract",
-    "campaign-chooser"
+    "campaign-chooser",
+    "authored-pickup-inventory-loop",
+    "persistent-sandbox-cold-reload"
   ]
 }
