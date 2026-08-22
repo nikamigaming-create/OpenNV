@@ -69,6 +69,7 @@ internal static class ActorModelSlice
             skeletons.Length,
             animations,
             animationName.Name.ToString(),
+            animationName.Player,
             bounds,
             root.GetProperty("coverage").GetProperty("surfaces").GetInt32(),
             root.GetProperty("coverage").GetProperty("textures").GetInt32());
@@ -133,6 +134,7 @@ internal static class ActorModelSlice
         int Skeletons,
         int Animations,
         string PlayingAnimation,
+        AnimationPlayer AnimationPlayer,
         Aabb Bounds,
         int AuthoredSurfaces,
         int AuthoredTextures);

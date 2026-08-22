@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v3";
+    private const string CellSceneSchema = "opennv-cell-scene/v4";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -52,6 +52,7 @@ internal static class CellSceneLoader
 
             var coordinates = source.GetProperty("coordinates");
             var unitScale = coordinates.GetProperty("unitsToMeters").GetSingle();
+            var originGameUnits = ReadVector(coordinates.GetProperty("originGameUnits"));
             var cell = source.GetProperty("cell");
             var root = new Node3D
             {
@@ -75,7 +76,7 @@ internal static class CellSceneLoader
                 if (reference.GetProperty("initiallyDisabled").GetBoolean())
                     continue;
                 var formId = reference.GetProperty("formId").GetString()!;
-                var yaw = reference.GetProperty("yawRadians").GetSingle();
+                var yaw = reference.GetProperty("yawGodotRadians").GetSingle();
                 var rotation = ReadQuaternion(reference.GetProperty("rotationGodotQuaternion"));
                 var interaction = reference.GetProperty("interaction");
                 var interactionType = interaction.ValueKind == JsonValueKind.Object
@@ -185,7 +186,7 @@ internal static class CellSceneLoader
             var authoredLights = source.GetProperty("lighting").GetProperty("lights").GetArrayLength();
             var player = BuildView(
                 parent,
-                spawn.GetProperty("yawRadians").GetSingle(),
+                spawn.GetProperty("yawGodotRadians").GetSingle(),
                 source.GetProperty("lighting"),
                 unitScale,
                 session,
@@ -194,6 +195,8 @@ internal static class CellSceneLoader
                 root,
                 cell.GetProperty("formId").GetString()!,
                 cell.GetProperty("editorId").GetString()!,
+                originGameUnits,
+                unitScale,
                 prototypes.Count,
                 textures.Count,
                 materialBindings,
@@ -377,6 +380,8 @@ internal static class CellSceneLoader
         Node3D Root,
         string FormId,
         string EditorId,
+        Vector3 OriginGameUnits,
+        float UnitsToMeters,
         int Assets,
         int Textures,
         int MaterialBindings,
@@ -393,7 +398,15 @@ internal static class CellSceneLoader
         GameplaySession Session,
         IReadOnlyDictionary<string, PickupInstance> Pickups,
         IReadOnlyDictionary<string, ContainerInstance> Containers,
-        IReadOnlyList<CellActorLoader.PlacedActor> Actors);
+        IReadOnlyList<CellActorLoader.PlacedActor> Actors)
+    {
+        internal Vector3 GameToCellUnits(Vector3 position) => new(
+            position.X - OriginGameUnits.X,
+            position.Z - OriginGameUnits.Z,
+            -(position.Y - OriginGameUnits.Y));
+
+        internal Vector3 GameToWorld(Vector3 position) => Root.ToGlobal(GameToCellUnits(position));
+    }
 
     internal readonly record struct DoorRay(Vector3 From, Vector3 To, Vector3 LocalSize, Vector3 LocalNormal);
 

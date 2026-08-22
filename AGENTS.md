@@ -20,13 +20,22 @@ changing subsystem boundaries or promotion claims.
 
 - Direct actor records, FaceGen primitives, deterministic actor-cache export,
   Godot import, and a fail-closed retail differential are merged.
-- Trudy identity currently passes; rendering still fails. Do not describe the
-  actor or saloon as retail-parity.
+- Trudy identity and application of the provisional retail shot-state contract
+  currently pass; rendering still fails. Do not describe the actor or saloon as
+  retail-parity.
 - An initially disabled ACHR may appear only through an explicit proof override
   until quest, enable-parent, and package state are implemented.
 - The active gate is exact per-shot retail state: live reference transform,
   camera projection/FOV, idle phase, arm-bone transforms, final head/hair
   geometry, followed by matched Godot frames.
+- The canonical compact contract is emitted as `retail/retail-state-contract.json`.
+  Godot actor captures must receive it through `--retail-state-contract`; do not
+  restore authored placement, arbitrary animation time, or 75-degree vertical
+  FOV fallbacks.
+- Latest private proof: Godot capture `trudy-saloon-retail-state-20260822-r20`
+  and differential `trudy-retail-godot-differential-20260822-r16`. Both shots
+  have zero placement/yaw/FOV/phase error and sub-0.00002 arm transform error;
+  pixel MAE remains about 0.080/0.085 and exact projection is unresolved.
 
 ## Canonical evidence and tools
 

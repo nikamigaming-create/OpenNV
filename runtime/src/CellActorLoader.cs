@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellActorLoader
 {
-    private const string ActorSceneSchema = "opennv-actor-scene/v1";
+    private const string ActorSceneSchema = "opennv-actor-scene/v2";
 
     internal static PlacedActor? Load(
         string actorScenePath,
@@ -26,7 +26,7 @@ internal static class CellActorLoader
         if (initiallyDisabled && !proofEnableInitiallyDisabled)
             return null;
         var position = ReadVector(reference.GetProperty("positionGodotUnits"));
-        var yaw = reference.GetProperty("yawRadians").GetSingle();
+        var yaw = reference.GetProperty("yawGodotRadians").GetSingle();
         var placement = new Node3D
         {
             Name = $"ACHR_{reference.GetProperty("formId").GetString()}",

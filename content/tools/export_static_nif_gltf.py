@@ -99,7 +99,16 @@ def material_metadata(shape: object) -> dict[str, object]:
             result["shaderFlags1"] = int(getattr(prop, "shader_flags_1", prop.shader_flags))
             result["shaderFlags2"] = int(prop.shader_flags_2)
             result["textureClampMode"] = int(prop.texture_clamp_mode)
+        elif isinstance(prop, NifFormat.NiStencilProperty):
+            result["stencilDrawMode"] = int(prop.draw_mode)
     return result
+
+
+def shape_double_sided(shape: object) -> bool:
+    return any(
+        isinstance(prop, NifFormat.NiStencilProperty) and int(prop.draw_mode) == 3
+        for prop in getattr(shape, "properties", [])
+    )
 
 
 @dataclass
@@ -341,7 +350,7 @@ def export_static_nif(
         material_index = len(materials)
         materials.append({
             "name": f"{decode_text(shape.name)} material",
-            "doubleSided": False,
+            "doubleSided": shape_double_sided(shape),
             "pbrMetallicRoughness": {
                 "baseColorFactor": [0.65, 0.65, 0.65, 1.0],
                 "metallicFactor": 0.0,

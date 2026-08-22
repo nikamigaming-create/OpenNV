@@ -23,6 +23,14 @@ extract the model directly, build a temporary cache, load it in Godot, and
 delete the cache afterward. No retail-derived file or generated conversion
 belongs in Git.
 
+Actor parity captures require `--cell-scene`, `--actor-scene`, `--capture-root`,
+and the compact oracle artifact supplied as `--retail-state-contract`. The
+runtime rejects a missing/mismatched ACHR, shot set, pose, geometry gate, or
+projection label. A provisional retail FOV may improve a failing comparison but
+cannot promote exact projection parity.
+Cell scene v4 and actor scene v2 are required; older caches carry the mirrored
+Gamebryo yaw convention and are rejected.
+
 Build an asset-free experimental Windows archive after installing the pinned
 Godot Mono export templates and `content/requirements-build.txt`:
 

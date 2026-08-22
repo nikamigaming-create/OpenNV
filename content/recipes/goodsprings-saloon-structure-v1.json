@@ -8,7 +8,6 @@
   "cellEditorId": "GSProspectorSaloonInterior",
   "entryDoorReferenceFormId": "0010618e",
   "portalProofDoorReferenceFormId": "0010618e",
-  "interiorDoubleSided": true,
   "lightingCalibration": {
     "ambientEnergy": 1.4,
     "omniEnergyScale": 2.0,
