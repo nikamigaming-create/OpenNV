@@ -4,7 +4,7 @@
     "engine": "Godot",
     "engineVersion": "4.7.1",
     "status": "experimental",
-    "label": "Experimental direct static NIF geometry slice; campaigns are not playable yet.",
+    "label": "Experimental dense, textured Goodsprings interior slice; campaigns are not playable yet.",
     "canLaunch": false,
     "executables": {},
     "contentExecutables": {}
@@ -19,6 +19,9 @@
     "direct-dds-png-texture-cache",
     "surface-material-bindings",
     "normal-map-green-channel-conversion",
+    "authored-furniture-fixtures-and-clutter",
+    "cell-xcll-ambient-lighting",
+    "placed-ligh-color-radius-intensity",
     "xtel-data-derived-spawn",
     "runtime-trimesh-cell-collision",
     "interactive-doors-and-projectile-rays",

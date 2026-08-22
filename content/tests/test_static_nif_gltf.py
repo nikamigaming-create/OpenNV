@@ -19,7 +19,7 @@ from PIL import Image  # noqa: E402
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from export_static_nif_gltf import export_static_nif  # noqa: E402
+from export_static_nif_gltf import export_static_nif, generate_tangents, is_editor_marker  # noqa: E402
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
 from texture_pipeline import decode_dds  # noqa: E402
 
@@ -140,6 +140,19 @@ class StaticNifGltfTest(unittest.TestCase):
         source.save(wrong_format, format="PNG")
         with self.assertRaises(ValueError):
             decode_dds(wrong_format.getvalue(), False)
+
+    def test_generated_tangent_fallback_is_normalized(self) -> None:
+        tangents = generate_tangents(
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            [(0.0, 0.0, 1.0)] * 3,
+            [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            [(0, 1, 2)],
+        )
+        self.assertEqual(tangents, [(1.0, 0.0, 0.0, 1.0)] * 3)
+
+    def test_editor_marker_surface_identity_is_explicit(self) -> None:
+        self.assertTrue(is_editor_marker(b"EditorMarker:0"))
+        self.assertFalse(is_editor_marker(b"DinerBooth"))
 
 
 if __name__ == "__main__":

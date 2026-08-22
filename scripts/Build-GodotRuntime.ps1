@@ -109,12 +109,13 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         $owned = Get-Content -Raw -LiteralPath $ownedReport | ConvertFrom-Json
         if ($owned.schema -ne "opennv-godot-cell/v1" -or
             $owned.status -ne "pass" -or
-            [int]$owned.assets -lt 1 -or
-            [int]$owned.textures -lt 22 -or
-            [int]$owned.materialBindings -lt 66 -or
-            [int]$owned.references -lt 1 -or
+            [int]$owned.assets -lt 117 -or
+            [int]$owned.textures -lt 194 -or
+            [int]$owned.materialBindings -lt 274 -or
+            [int]$owned.references -lt 251 -or
             [int]$owned.doors -lt 1 -or
-            [int]$owned.collisionMeshes -lt 1 -or
+            [int]$owned.authoredLights -lt 24 -or
+            [int]$owned.collisionMeshes -lt 251 -or
             [int]$owned.surfaces -lt 1 -or
             [int]$owned.vertices -lt 3 -or
             -not [bool]$owned.doorTraversal.floorHit -or

@@ -96,10 +96,11 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
 
-Implemented: direct owned ESM/BSA/NIF/DDS path, XTEL-derived spawn, 42 saloon
-structural references, 22 decoded textures, 66 material bindings, collision,
-walking, mouse-look, interactive doors, physical ray queries, and whole-cell
-visibility without fake portal planes.
+Implemented: direct owned ESM/BSA/NIF/DDS path, XTEL-derived spawn, 251 saloon
+references, 117 unique visible assets, 194 decoded textures, 274 material
+bindings, 24 XCLL/LIGH-authored lights, collision, walking, mouse-look,
+interactive doors, physical ray queries, dense-cell entry-door traversal, and
+whole-cell visibility without fake portal planes.
 
 Not implemented: full Bethesda environment/mask material semantics, authored
 bhk collision, general X/Y reference rotation, animation, actors/creatures, weapons, VATS,

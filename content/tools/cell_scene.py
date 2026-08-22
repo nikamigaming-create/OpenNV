@@ -36,11 +36,23 @@ def load_recipe(recipe_id: str) -> dict[str, object]:
     return document
 
 
-def selected_reference(base: BaseObject, recipe: dict[str, object]) -> bool:
+def reference_selection_reason(base: BaseObject, recipe: dict[str, object]) -> str:
     selection = recipe["selection"]
     prefixes = tuple(str(value).lower() for value in selection["modelPrefixes"])
     record_types = {str(value) for value in selection["includeBaseRecordTypes"]}
-    return bool(base.model_path) and (base.model_path.startswith(prefixes) or base.record_type in record_types)
+    excluded_editor_ids = {str(value) for value in selection.get("excludeBaseEditorIds", [])}
+    excluded_model_prefixes = tuple(
+        str(value).lower() for value in selection.get("excludeModelPrefixes", [])
+    )
+    if not base.model_path:
+        return "no-model"
+    if base.editor_id in excluded_editor_ids:
+        return "editor-only-base"
+    if base.model_path.startswith(excluded_model_prefixes):
+        return "special-effect-shader-required"
+    if base.model_path.startswith(prefixes) or base.record_type in record_types:
+        return "selected"
+    return "outside-recipe"
 
 
 def yaw_only(transform: Transform) -> bool:
@@ -52,6 +64,10 @@ def yaw_only(transform: Transform) -> bool:
 def godot_position(position: tuple[float, float, float], origin: tuple[float, float, float]) -> list[float]:
     delta = tuple(value - anchor for value, anchor in zip(position, origin))
     return [delta[0], delta[2], -delta[1]]
+
+
+def normalized_rgb(color: tuple[int, int, int]) -> list[float]:
+    return [component / 255.0 for component in color]
 
 
 def _atomic_bytes(path: Path, data: bytes) -> None:
@@ -105,12 +121,27 @@ def prepare_cell_scene(
     entry_door = int(str(recipe["entryDoorReferenceFormId"]), 16)
     source_door, arrival = _arrival_transform(catalog, entry_door)
     origin = arrival.position
+    if cell.lighting is None:
+        raise ValueError(f"Cell recipe requires XCLL lighting: {cell.editor_id}")
 
     selected: list[tuple[PlacedReference, BaseObject]] = []
+    excluded_references: list[dict[str, str]] = []
     skipped_non_yaw: list[str] = []
     for reference in catalog.references_for(cell_form_id):
         base = catalog.base_objects.get(reference.base_form_id)
-        if base is None or not selected_reference(base, recipe):
+        if base is None:
+            continue
+        selection_reason = reference_selection_reason(base, recipe)
+        if selection_reason != "selected":
+            if base.model_path:
+                excluded_references.append(
+                    {
+                        "formId": form_id(reference.form_id),
+                        "baseEditorId": base.editor_id,
+                        "modelPath": base.model_path,
+                        "reason": selection_reason,
+                    }
+                )
             continue
         if bool(recipe["selection"]["yawOnly"]) and not yaw_only(reference.transform):
             skipped_non_yaw.append(form_id(reference.form_id))
@@ -133,7 +164,16 @@ def prepare_cell_scene(
         output_root = cache_root / "generated" / "cells" / str(recipe["id"]) / "assets"
         gltf_path = output_root / f"{asset_id}.gltf"
         sidecar_path = output_root / f"{asset_id}.opennv.json"
-        sidecar = export_static_nif(source_path, member.logical_path, gltf_path, sidecar_path, strict=False)
+        try:
+            sidecar = export_static_nif(
+                source_path,
+                member.logical_path,
+                gltf_path,
+                sidecar_path,
+                strict=False,
+            )
+        except Exception as error:
+            raise ValueError(f"Cell asset export failed: {member.logical_path}: {error}") from error
         if compiler is None:
             compiler = sidecar["compiler"]
         elif compiler != sidecar["compiler"]:
@@ -214,6 +254,29 @@ def prepare_cell_scene(
             }
         )
 
+    lights = []
+    for reference in catalog.references_for(cell_form_id):
+        light = catalog.lights.get(reference.base_form_id)
+        if light is None:
+            continue
+        lights.append(
+            {
+                "formId": form_id(reference.form_id),
+                "baseFormId": form_id(reference.base_form_id),
+                "baseEditorId": light.editor_id,
+                "positionGameUnits": list(reference.transform.position),
+                "positionGodotUnits": godot_position(reference.transform.position, origin),
+                "radiusGameUnits": light.radius,
+                "radiusMeters": light.radius * float(recipe["unitsToMeters"]),
+                "color": normalized_rgb(light.color_rgb),
+                "intensity": light.intensity,
+                "falloff": light.falloff,
+                "fieldOfView": light.field_of_view,
+                "lightFlags": light.flags,
+                "initiallyDisabled": bool(reference.flags & 0x00000800),
+            }
+        )
+
     output_path = cache_root / "generated" / "cells" / str(recipe["id"]) / "cell-scene.json"
     document = {
         "schema": CELL_SCENE_SCHEMA,
@@ -247,6 +310,19 @@ def prepare_cell_scene(
             "doorReferenceFormId": str(recipe["portalProofDoorReferenceFormId"]),
             "visibilityModel": "whole-cell-no-portal-culling",
         },
+        "lighting": {
+            "ambientColor": normalized_rgb(cell.lighting.ambient_rgb),
+            "directionalColor": normalized_rgb(cell.lighting.directional_rgb),
+            "fogColor": normalized_rgb(cell.lighting.fog_rgb),
+            "fogNearGameUnits": cell.lighting.fog_near,
+            "fogFarGameUnits": cell.lighting.fog_far,
+            "directionalRotationDegrees": list(cell.lighting.directional_rotation),
+            "directionalFade": cell.lighting.directional_fade,
+            "fogClipDistanceGameUnits": cell.lighting.fog_clip_distance,
+            "fogPower": cell.lighting.fog_power,
+            "calibration": recipe["lightingCalibration"],
+            "lights": lights,
+        },
         "assets": sorted(assets.values(), key=lambda value: value["id"]),
         "textures": [
             texture_artifacts[path].manifest() for path in sorted(texture_artifacts)
@@ -257,10 +333,16 @@ def prepare_cell_scene(
             "exportedAssets": len(assets),
             "doors": sum(1 for _, base in selected if base.record_type == "DOOR"),
             "skippedNonYawReferences": skipped_non_yaw,
+            "excludedReferences": excluded_references,
+            "excludedEditorMarkerSurfaces": sum(
+                len(sidecar["coverage"]["excludedEditorMarkerSurfaces"])
+                for sidecar in asset_sidecars.values()
+            ),
             "collision": "runtime-trimesh",
             "textures": "decoded-png-material-bindings",
             "decodedTextures": len(texture_artifacts),
             "materialBindings": sum(len(asset["materials"]) for asset in assets.values()),
+            "authoredLights": len(lights),
         },
     }
     _atomic_json(output_path, document)

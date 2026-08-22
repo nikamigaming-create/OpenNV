@@ -61,11 +61,11 @@ waiting on an extender bridge. See [the mod policy](docs/mods.md).
 
 The current checked-in slice keeps the synthetic NIF gate and adds one
 hash-pinned, data-driven retail interior. It directly resolves the Goodsprings
-Prospector Saloon CELL, its REFR-to-base relationships, 14 structural/door NIF
-assets, 42 placements, and the incoming XTEL spawn. Godot loads the whole cell,
-generates collision, and proves that the spawn hits the floor and a physical ray
-passes after an interior door opens. The current fidelity gate also decodes 22
-retail DDS textures and binds 66 diffuse/normal/material surfaces.
+Prospector Saloon CELL, its REFR-to-base relationships, 117 unique rendered
+assets, 251 yaw-safe placements, 194 textures, 274 material bindings, 24 placed
+lights, and the incoming XTEL spawn. Godot loads the dense cell, generates
+collision, and proves that the spawn hits the floor and a physical ray passes
+after the authored entry door opens.
 
 CI pins the official Godot 4.7.1 Mono Windows archive by SHA-256
 `764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45`.
