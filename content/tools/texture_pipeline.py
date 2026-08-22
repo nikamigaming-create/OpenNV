@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import struct
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -24,9 +25,11 @@ class TextureArtifact:
     width: int
     height: int
     normal_green_inverted: bool
+    cube_face_paths: tuple[Path, ...] = ()
+    cube_face_sha256: tuple[str, ...] = ()
 
     def manifest(self) -> dict[str, object]:
-        return {
+        result = {
             "id": self.asset_id,
             "requestedPath": self.requested_path,
             "archivePath": self.archive_path,
@@ -37,6 +40,15 @@ class TextureArtifact:
             "height": self.height,
             "normalGreenInverted": self.normal_green_inverted,
         }
+        if self.cube_face_paths:
+            result["cubeFaces"] = [
+                {
+                    "png": str(path.resolve()),
+                    "pngSha256": sha256,
+                }
+                for path, sha256 in zip(self.cube_face_paths, self.cube_face_sha256)
+            ]
+        return result
 
 
 def file_sha256(path: Path) -> str:
@@ -76,8 +88,19 @@ class TexturePipeline:
         asset_id = hashlib.sha256(requested.encode()).hexdigest()[:20]
         png_path = self.cache_root / "generated" / "textures" / f"{asset_id}.png"
         normal_green_inverted = requested.endswith("_n.dds")
-        image = decode_dds(member.data, normal_green_inverted)
+        cube_images = decode_dds_cubemap(member.data)
+        image = (
+            cube_images[0]
+            if cube_images
+            else decode_dds(member.data, normal_green_inverted)
+        )
         _atomic_png(png_path, image)
+        cube_paths = tuple(
+            png_path.with_name(f"{asset_id}-cube-{index}.png")
+            for index in range(len(cube_images))
+        )
+        for path, cube_image in zip(cube_paths, cube_images):
+            _atomic_png(path, cube_image)
         width, height = image.size
         return TextureArtifact(
             asset_id,
@@ -89,6 +112,8 @@ class TexturePipeline:
             width,
             height,
             normal_green_inverted,
+            cube_paths,
+            tuple(file_sha256(path) for path in cube_paths),
         )
 
 
@@ -101,6 +126,27 @@ def decode_dds(payload: bytes, invert_normal_green: bool) -> Image.Image:
         red, green, blue, alpha = image.split()
         image = Image.merge("RGBA", (red, ImageOps.invert(green), blue, alpha))
     return image
+
+
+def decode_dds_cubemap(payload: bytes) -> list[Image.Image]:
+    if len(payload) < 128 or payload[:4] != b"DDS ":
+        raise ValueError("Texture payload is not DDS")
+    caps_two = struct.unpack_from("<I", payload, 112)[0]
+    if not caps_two & 0x0200:
+        return []
+    if caps_two & 0xFC00 != 0xFC00:
+        raise ValueError("DDS cubemap does not contain all six faces")
+    face_payload = payload[128:]
+    if len(face_payload) % 6:
+        raise ValueError("DDS cubemap face payloads are not equal in size")
+    face_size = len(face_payload) // 6
+    header = bytearray(payload[:128])
+    struct.pack_into("<I", header, 112, 0)
+    source_faces = [
+        decode_dds(bytes(header) + face_payload[index * face_size : (index + 1) * face_size], False)
+        for index in range(6)
+    ]
+    return [source_faces[index] for index in (0, 1, 4, 5, 3, 2)]
 
 
 def _atomic_bytes(path: Path, data: bytes) -> None:

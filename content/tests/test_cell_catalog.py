@@ -12,6 +12,7 @@ sys.path.insert(0, str(TOOLS))
 
 from cell_catalog import BaseObject, scan_cell_catalog  # noqa: E402
 from cell_scene import (  # noqa: E402
+    environment_texture_paths,
     godot_position,
     godot_rotation_quaternion,
     godot_yaw_radians,
@@ -150,6 +151,17 @@ def synthetic_plugin() -> bytes:
 
 
 class CellCatalogTest(unittest.TestCase):
+    def test_environment_slots_require_the_retail_shader_flag(self):
+        surface = {
+            "textures": ["diffuse", "normal", "", "", "cube", "mask"],
+            "material": {"shaderFlags1Enabled": []},
+        }
+        self.assertEqual(environment_texture_paths(surface), (None, None))
+        surface["material"]["shaderFlags1Enabled"] = ["sf_environment_mapping"]
+        self.assertEqual(environment_texture_paths(surface), ("cube", "mask"))
+        surface["material"]["shaderFlags2Enabled"] = ["sf_2_envmap_light_fade"]
+        self.assertEqual(environment_texture_paths(surface), (None, None))
+
     def test_cell_reference_graph_and_transforms(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
             path = Path(raw_directory) / "synthetic.esm"

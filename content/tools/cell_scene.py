@@ -22,7 +22,7 @@ from export_static_nif_gltf import export_static_nif
 from texture_pipeline import TexturePipeline
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v4"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v5"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 
 
@@ -79,6 +79,18 @@ def godot_yaw_radians(game_yaw_radians: float) -> float:
 
 def normalized_rgb(color: tuple[int, int, int]) -> list[float]:
     return [component / 255.0 for component in color]
+
+
+def environment_texture_paths(surface: dict[str, object]) -> tuple[str | None, str | None]:
+    material = surface["material"]
+    if "sf_environment_mapping" not in set(material.get("shaderFlags1Enabled", [])):
+        return None, None
+    if "sf_2_envmap_light_fade" in set(material.get("shaderFlags2Enabled", [])):
+        return None, None
+    textures = surface["textures"]
+    environment = textures[4] if len(textures) > 4 and textures[4] else None
+    mask = textures[5] if len(textures) > 5 and textures[5] else None
+    return environment, mask
 
 
 def _matrix_multiply(left: list[list[float]], right: list[list[float]]) -> list[list[float]]:
@@ -318,21 +330,53 @@ def prepare_cell_scene(
             normal = textures[1] if len(textures) > 1 and textures[1] else None
             emissive = textures[2] if len(textures) > 2 and textures[2] else None
             material = surface["material"]
+            environment, environment_mask = environment_texture_paths(surface)
             glossiness = float(material.get("glossiness", 10.0))
+            specular = [float(value) for value in material.get("specular", [0.0, 0.0, 0.0])]
+            roughness = (
+                1.0
+                if max(specular) <= 1.0e-6
+                else max(0.08, min(1.0, math.sqrt(2.0 / (glossiness + 2.0))))
+            )
+            unshaded = "BSShaderNoLightingProperty" in surface["propertyTypes"]
+            emissive_color = [float(value) for value in material.get("emissive", [0.0, 0.0, 0.0])]
+            emissive_controlled = bool(material.get("emissiveControlled", False))
+            emissive_active = not unshaded and (emissive is not None or emissive_controlled)
+            emission_texture = emissive if emissive_active else None
+            if not emissive_active:
+                emissive_color = [0.0, 0.0, 0.0]
+            alpha = float(material.get("alpha", 1.0))
             bindings.append(
                 {
                     "surfaceIndex": surface_index,
                     "name": surface["name"],
                     "diffuseTextureId": texture_artifacts[diffuse].asset_id if diffuse else None,
                     "normalTextureId": texture_artifacts[normal].asset_id if normal else None,
-                    "emissiveTextureId": texture_artifacts[emissive].asset_id if emissive else None,
-                    "environmentTextureIgnored": textures[4] if len(textures) > 4 and textures[4] else None,
-                    "environmentMaskIgnored": textures[5] if len(textures) > 5 and textures[5] else None,
-                    "emissiveColor": material.get("emissive", [0.0, 0.0, 0.0]),
-                    "roughness": max(0.25, min(0.95, 1.0 - glossiness / 128.0)),
-                    "alphaBlend": "NiAlphaProperty" in surface["propertyTypes"],
+                    "emissiveTextureId": (
+                        texture_artifacts[emission_texture].asset_id
+                        if emission_texture
+                        else None
+                    ),
+                    "environmentTextureId": (
+                        texture_artifacts[environment].asset_id if environment else None
+                    ),
+                    "environmentMaskTextureId": (
+                        texture_artifacts[environment_mask].asset_id
+                        if environment_mask
+                        else None
+                    ),
+                    "environmentMapScale": float(material.get("environmentMapScale", 1.0)),
+                    "emissiveColor": emissive_color,
+                    "emissiveReplace": emissive_controlled and emissive is None,
+                    "baseColorFactor": [
+                        *[float(value) for value in material.get("baseColor", [1.0, 1.0, 1.0])],
+                        alpha,
+                    ],
+                    "roughness": roughness,
+                    "alphaContract": material["alphaContract"],
+                    "vertexColorMode": material["vertexColorMode"],
                     "doubleSided": int(material.get("stencilDrawMode", 1)) == 3,
-                    "unshaded": "BSShaderNoLightingProperty" in surface["propertyTypes"],
+                    "unshaded": unshaded,
                 }
             )
         asset["materials"] = bindings

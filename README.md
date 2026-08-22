@@ -60,7 +60,7 @@ waiting on an extender bridge. See [the mod policy](docs/mods.md).
 ## Current Godot development slice
 
 The current checked-in slice is a playable Goodsprings sandbox, not only a
-renderer. It resolves 153 visible assets, 348 placements, 255 textures, 332
+renderer. It resolves 153 visible assets, 348 placements, 261 textures, 332
 materials, 97 authored pickups, five containers, 24 lights, and the incoming
 XTEL spawn. The promoted route collects the saloon's real `.357`, fires using
 its retail damage/clip/ammo profile, takes an authored Beer, loots a resolved

@@ -20,13 +20,18 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from export_static_nif_gltf import (  # noqa: E402
+    alpha_contract,
     export_static_nif,
     generate_tangents,
     is_editor_marker,
+    material_metadata,
     shape_double_sided,
+    texture_uv,
+    texture_paths,
+    vertex_color_mode,
 )
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
-from texture_pipeline import decode_dds  # noqa: E402
+from texture_pipeline import decode_dds, decode_dds_cubemap  # noqa: E402
 
 
 def identity_transform(target: object) -> None:
@@ -146,6 +151,18 @@ class StaticNifGltfTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_dds(wrong_format.getvalue(), False)
 
+    def test_complete_dds_cubemap_faces_are_retained(self) -> None:
+        source = Image.new("RGBA", (4, 4), (10, 20, 30, 255))
+        encoded = BytesIO()
+        source.save(encoded, format="DDS")
+        flat = encoded.getvalue()
+        header = bytearray(flat[:128])
+        struct.pack_into("<I", header, 112, 0xFE00)
+        cube = bytes(header) + flat[128:] * 6
+        faces = decode_dds_cubemap(cube)
+        self.assertEqual(len(faces), 6)
+        self.assertEqual([face.getpixel((0, 0)) for face in faces], [(10, 20, 30, 255)] * 6)
+
     def test_generated_tangent_fallback_is_normalized(self) -> None:
         tangents = generate_tangents(
             [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
@@ -154,6 +171,12 @@ class StaticNifGltfTest(unittest.TestCase):
             [(0, 1, 2)],
         )
         self.assertEqual(tangents, [(1.0, 0.0, 0.0, 1.0)] * 3)
+
+    def test_direct3d_texture_v_coordinate_is_converted_for_png(self) -> None:
+        value = NifFormat.TexCoord()
+        value.u = 0.25
+        value.v = 0.125
+        self.assertEqual(texture_uv(value), (0.25, 0.875))
 
     def test_editor_marker_surface_identity_is_explicit(self) -> None:
         self.assertTrue(is_editor_marker(b"EditorMarker:0"))
@@ -168,6 +191,56 @@ class StaticNifGltfTest(unittest.TestCase):
         self.assertFalse(shape_double_sided(shape))
         stencil.draw_mode = 3
         self.assertTrue(shape_double_sided(shape))
+
+    def test_static_alpha_and_vertex_color_flags_are_not_guessed(self) -> None:
+        shape = NifFormat.NiTriShape()
+        shader = NifFormat.BSShaderNoLightingProperty()
+        shader.shader_flags.sf_vertex_alpha = 1
+        shape.add_property(shader)
+        self.assertEqual(alpha_contract(shape)["source"], "BSShaderFlags")
+        self.assertEqual(alpha_contract(shape)["mode"], "BLEND")
+        self.assertEqual(vertex_color_mode(shape), "alpha")
+
+        alpha = NifFormat.NiAlphaProperty()
+        alpha.flags = 0x12EC
+        alpha.threshold = 20
+        shape.add_property(alpha)
+        contract = alpha_contract(shape)
+        self.assertEqual(contract["source"], "NiAlphaProperty")
+        self.assertEqual(contract["mode"], "MASK")
+        self.assertAlmostEqual(contract["cutoff"], 20 / 255)
+
+    def test_no_lighting_texture_and_neutral_shader_base_color_survive(self) -> None:
+        shape = NifFormat.NiTriShape()
+        material = NifFormat.NiMaterialProperty()
+        material.diffuse_color.r = 0.0
+        material.diffuse_color.g = 0.0
+        material.diffuse_color.b = 0.0
+        material.alpha = 0.75
+        shader = NifFormat.BSShaderNoLightingProperty()
+        shader.file_name = r"Textures\Architecture\Barracks\White.dds"
+        shape.add_property(material)
+        shape.add_property(shader)
+        self.assertEqual(
+            texture_paths(shape),
+            [r"textures\architecture\barracks\white.dds"],
+        )
+        metadata = material_metadata(shape)
+        self.assertEqual(metadata["baseColor"], [1.0, 1.0, 1.0])
+        self.assertEqual(metadata["alpha"], 0.75)
+
+    def test_self_illum_requires_the_material_color_controller(self) -> None:
+        shape = NifFormat.NiTriShape()
+        material = NifFormat.NiMaterialProperty()
+        material.emissive_color.r = 1.0
+        material.emissive_color.g = 1.0
+        material.emissive_color.b = 1.0
+        shape.add_property(material)
+        self.assertFalse(material_metadata(shape)["emissiveControlled"])
+        controller = NifFormat.NiMaterialColorController()
+        controller.target_color = 3
+        material.controller = controller
+        self.assertTrue(material_metadata(shape)["emissiveControlled"])
 
 
 if __name__ == "__main__":
