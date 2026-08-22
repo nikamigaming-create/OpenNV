@@ -76,7 +76,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     if ($LASTEXITCODE -ne 0) { throw "Direct legal-asset preparation failed." }
     $install = Get-Content -Raw -LiteralPath (Join-Path $temporaryCache "install-manifest.json") | ConvertFrom-Json
     if ($install.schema -ne "opennv-legal-asset-cache/v1" -or
-        $install.status -ne "prepared-static-geometry-slice") {
+        $install.status -ne "prepared-legal-assets") {
         throw "Legal-asset cache manifest is invalid."
     }
     $retailModel = [string]$install.outputs.model

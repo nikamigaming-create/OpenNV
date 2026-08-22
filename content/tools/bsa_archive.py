@@ -28,6 +28,13 @@ class ExtractedMember:
         return hashlib.sha256(self.data).hexdigest()
 
 
+@dataclass(frozen=True)
+class MemberLocation:
+    offset: int
+    stored_bytes: int
+    compressed: bool
+
+
 def text(value: object) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="strict")
@@ -56,33 +63,50 @@ def decode_member_payload(payload: bytes, compressed: bool) -> bytes:
     return result
 
 
+class BsaArchive:
+    def __init__(self, archive: Path):
+        self.archive = archive
+        document = BsaFormat.Data()
+        with archive.open("rb") as stream:
+            document.read(stream)
+        if int(document.version) != 104:
+            raise ValueError(f"The first OpenNV BSA slice supports version 104, found {document.version}")
+
+        archive_compressed = bool(int(document.archive_flags) & 0x4)
+        members: dict[str, MemberLocation] = {}
+        for folder in document.folders:
+            folder_name = canonical_member_path(text(folder.name))
+            for file_record in folder.files:
+                logical_path = canonical_member_path(f"{folder_name}\\{text(file_record.name)}")
+                if logical_path in members:
+                    raise ValueError(f"Duplicate BSA member path: {logical_path}")
+                members[logical_path] = MemberLocation(
+                    int(file_record.offset),
+                    int(file_record.file_size.num_bytes),
+                    archive_compressed != bool(file_record.file_size.is_compressed_override),
+                )
+        self.members = members
+
+    def extract(self, logical_path: str) -> ExtractedMember:
+        requested = canonical_member_path(logical_path)
+        if requested not in self.members:
+            raise FileNotFoundError(f"BSA member not found: {requested}")
+        location = self.members[requested]
+        with self.archive.open("rb") as stream:
+            stream.seek(location.offset)
+            payload = stream.read(location.stored_bytes)
+        if len(payload) != location.stored_bytes:
+            raise ValueError(
+                f"Truncated BSA member: expected={location.stored_bytes} actual={len(payload)}"
+            )
+        return ExtractedMember(
+            requested,
+            decode_member_payload(payload, location.compressed),
+            location.compressed,
+            location.offset,
+            location.stored_bytes,
+        )
+
+
 def extract_member(archive: Path, logical_path: str) -> ExtractedMember:
-    requested = canonical_member_path(logical_path)
-    document = BsaFormat.Data()
-    with archive.open("rb") as stream:
-        document.read(stream)
-    if int(document.version) != 104:
-        raise ValueError(f"The first OpenNV BSA slice supports version 104, found {document.version}")
-
-    archive_compressed = bool(int(document.archive_flags) & 0x4)
-    match = None
-    for folder in document.folders:
-        folder_name = canonical_member_path(text(folder.name))
-        for file_record in folder.files:
-            candidate = canonical_member_path(f"{folder_name}\\{text(file_record.name)}")
-            if candidate == requested:
-                if match is not None:
-                    raise ValueError(f"Duplicate BSA member path: {requested}")
-                match = file_record
-    if match is None:
-        raise FileNotFoundError(f"BSA member not found: {requested}")
-
-    stored_bytes = int(match.file_size.num_bytes)
-    offset = int(match.offset)
-    with archive.open("rb") as stream:
-        stream.seek(offset)
-        payload = stream.read(stored_bytes)
-    if len(payload) != stored_bytes:
-        raise ValueError(f"Truncated BSA member: expected={stored_bytes} actual={len(payload)}")
-    compressed = archive_compressed != bool(match.file_size.is_compressed_override)
-    return ExtractedMember(requested, decode_member_payload(payload, compressed), compressed, offset, stored_bytes)
+    return BsaArchive(archive).extract(logical_path)

@@ -1,0 +1,21 @@
+{
+  "schema": "opennv-cell-recipe/v1",
+  "id": "goodsprings-saloon-structure-v1",
+  "master": {
+    "file": "FalloutNV.esm",
+    "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1"
+  },
+  "cellEditorId": "GSProspectorSaloonInterior",
+  "entryDoorReferenceFormId": "0010618e",
+  "portalProofDoorReferenceFormId": "00108bc8",
+  "selection": {
+    "modelPrefixes": [
+      "dungeons\\nv_goodsprings\\"
+    ],
+    "includeBaseRecordTypes": [
+      "DOOR"
+    ],
+    "yawOnly": true
+  },
+  "unitsToMeters": 0.0142875
+}

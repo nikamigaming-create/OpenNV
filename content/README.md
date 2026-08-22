@@ -15,5 +15,11 @@ and Bethesda shader/material metadata. Collision is inventoried but not
 exported. Controllers, skinning, alpha properties, and unknown surface
 properties fail closed.
 
+The cell slice adds a bounded TES4-family record reader and a hash-pinned
+Goodsprings Saloon recipe. It resolves CELL-to-REFR one-to-many relationships,
+REFR-to-base many-to-one relationships, incoming XTEL placement, and 14
+structural/door NIF assets. It does not yet export textures, authored NIF
+collision blocks, animation, actors, or a campaign.
+
 The committed NIF fixture is synthetic. Owned retail inputs and generated glTF
 outputs remain local and ignored.

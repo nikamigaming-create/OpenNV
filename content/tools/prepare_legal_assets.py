@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from bsa_archive import extract_member
+from cell_scene import load_recipe, prepare_cell_scene
 from export_static_nif_gltf import export_static_nif
 
 
@@ -44,6 +45,7 @@ def prepare(
     cache_root: Path,
     logical_model: str,
     expected_meshes_sha256: str = "",
+    cell_recipe: str = "",
 ) -> dict[str, object]:
     master = find_required_file(data_root, "FalloutNV.esm")
     meshes = find_required_file(data_root, "Fallout - Meshes.bsa")
@@ -65,9 +67,18 @@ def prepare(
     gltf_path = output_root / "retail-static.gltf"
     sidecar_path = output_root / "retail-static.opennv.json"
     sidecar = export_static_nif(source_path, member.logical_path, gltf_path, sidecar_path, strict=True)
+    cell_scene = None
+    if cell_recipe:
+        cell_scene = prepare_cell_scene(
+            master,
+            meshes,
+            cache_root,
+            load_recipe(cell_recipe),
+            master_hash,
+        )
     manifest = {
         "schema": SCHEMA,
-        "status": "prepared-static-geometry-slice",
+        "status": "prepared-legal-assets",
         "install": {
             "dataRoot": str(data_root.resolve()),
             "master": {"file": master.name, "bytes": master.stat().st_size, "sha256": master_hash},
@@ -86,6 +97,10 @@ def prepare(
             "sidecar": str(sidecar_path.resolve()),
             "modelSha256": sidecar["outputs"]["gltf"]["sha256"],
             "bufferSha256": sidecar["outputs"]["buffer"]["sha256"],
+            "cellScene": None if cell_scene is None else cell_scene["output"],
+            "cellSceneSha256": (
+                None if cell_scene is None else file_sha256(Path(str(cell_scene["output"])))
+            ),
         },
     }
     atomic_text(cache_root / "install-manifest.json", manifest)
@@ -101,6 +116,7 @@ def main() -> int:
         default="meshes\\landscape\\nv_rocks\\nvn_rockcanyon12.nif",
     )
     parser.add_argument("--expected-meshes-bsa-sha256", default="")
+    parser.add_argument("--cell-recipe", default="")
     args = parser.parse_args()
     try:
         result = prepare(
@@ -108,6 +124,7 @@ def main() -> int:
             args.cache_root.resolve(),
             args.logical_model,
             args.expected_meshes_bsa_sha256,
+            args.cell_recipe,
         )
     except Exception as error:
         print(f"OPENNV_LEGAL_ASSET_ERROR {error}", file=sys.stderr)
@@ -117,6 +134,7 @@ def main() -> int:
         "archive": actual_archive_hash,
         "asset": result["asset"]["sha256"],
         "model": result["outputs"]["modelSha256"],
+        "cellScene": result["outputs"]["cellScene"],
     }, sort_keys=True))
     return 0
 

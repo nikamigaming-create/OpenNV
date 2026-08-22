@@ -11,6 +11,7 @@ pyffi_data.extend(
     (str(source), str(Path("pyffi") / source.parent.relative_to(pyffi_root)))
     for source in pyffi_root.rglob("*.xml")
 )
+pyffi_data.append((str(content_root / "recipes"), "recipes"))
 
 analysis = Analysis(
     [str(tools / "prepare_legal_assets.py")],
