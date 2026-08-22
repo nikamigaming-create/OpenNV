@@ -150,8 +150,8 @@ input translation and presentation differ.
 | `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, and alpha flag translation | Geometry, records, or runtime lighting |
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
-| `export_static_nif_gltf.py` | NIF static geometry to glTF plus provenance | World placement or gameplay |
-| `cell_scene.py` | Recipe selection, XTEL origin, asset/reference/material manifest | Godot nodes or input |
+| `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
+| `cell_scene.py` | Recipe selection, XTEL origin, Gamebryo-to-Godot coordinate/yaw conversion, asset/reference/material manifest | Godot nodes or input |
 | `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
 | `goodsprings-saloon-structure-v1.json` | Exact proof target, hash, selection, entry, scale | Parsing logic |
@@ -168,7 +168,8 @@ input translation and presentation differ.
 | `RuntimeMaterialLoader.cs` | PNG hash validation and surface material construction | DDS/BSA parsing |
 | `ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
 | `CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
-| `EnvironmentCapture.cs` | Native cell/actor frames, normalized camera telemetry, hashes, and visual-quality gates | Gameplay or desktop control |
+| `RetailActorStateContract.cs` | Fail-closed retail shot-state parsing for ACHR transform, camera, idle phase, arm bones, and face/hair hashes | Process addresses, asset parsing, or rendering |
+| `EnvironmentCapture.cs` | Native cell/actor frames, application of validated retail shot state, normalized telemetry, hashes, and visual-quality gates | Gameplay or desktop control |
 | `actor_parity.py` | Retail/Godot identity, camera, pixel metrics, and labelled differential sheets | Rendering or automatic human approval |
 | `DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
 | `PickupInstance.cs` | One authored pickup's identity and weapon profile | Inventory ownership |
@@ -211,8 +212,26 @@ recipe-pinned skinned/animated actor cache. Godot can load that cache at the
 authored ACHR placement only through an explicit proof-enable override, retain
 native actor/cell frames, and emit a normalized retail differential. The current
 Trudy differential still fails; cache generation and import are not fidelity
-claims. Production still needs quest/enable-parent/package state before an
-initially disabled actor can appear naturally.
+claims. The capture lane can now consume a compact retail state contract and
+apply each shot's live ACHR placement, camera/aim, vertical FOV, and `mtidle`
+phase. Projection remains explicitly provisional; current framing evidence
+favors 59.840 degrees vertical by interpreting retail 75 degrees at the 4:3
+reference aspect, until a render-pass world projection is recovered. Production still needs
+quest/enable-parent/package state before an initially disabled actor can appear
+naturally.
+
+The latest private differential applies the two-shot state contract with zero
+placement, yaw, FOV, and animation-phase error. All four arm-bone local
+transforms agree within `0.00002` game units/radians. Identity and state pass;
+rendering remains a hard failure at portrait/full-body MAE `0.0804`/`0.0853`
+and changed-pixel fractions `67.3%`/`86.6%`. The remaining visual gap is not a
+camera-placement or idle-phase excuse.
+
+The cell transform boundary negates Gamebryo yaw when producing Godot Y rotation:
+retail forward is `(sin(yaw), cos(yaw))`, while Godot positive Y rotation has the
+opposite sign. Cell scene v4 and actor scene v2 make that correction explicit
+and reject older mirrored caches. Runtime culling now follows each NIF's
+`NiStencilProperty`; the former recipe-wide double-sided override is removed.
 
 Not implemented: full Bethesda environment/mask material semantics, authored
 bhk collision, non-item arbitrary rotation promotion, visible first-person

@@ -8,7 +8,13 @@ from PIL import Image
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from actor_parity import difference_metrics, image_metrics, normalize_form  # noqa: E402
+from actor_parity import (  # noqa: E402
+    angle_error,
+    difference_metrics,
+    image_metrics,
+    normalize_form,
+    shot_state_metrics,
+)
 
 
 class ActorParityTest(unittest.TestCase):
@@ -22,6 +28,58 @@ class ActorParityTest(unittest.TestCase):
             Image.new("RGB", (4, 3), (10, 20, 30)).save(second)
             self.assertEqual(image_metrics(first)["width"], 4)
             self.assertEqual(difference_metrics(first, second)["meanAbsoluteError"], 0.0)
+
+    def test_retail_shot_state_metrics_fail_closed(self):
+        retail = {
+            "referenceTransform": {"position": [1.0, 2.0, 3.0], "rotation": [0.0, 0.0, 3.1]},
+            "camera": {
+                "position": [4.0, 5.0, 6.0],
+                "aim": [1.0, 2.0, 7.0],
+                "distance": 70.0,
+                "projection": {"fovYDegrees": 46.6921257},
+            },
+            "pose": {
+                "activeSequences": [
+                    {
+                        "file": r"Characters\_Male\Locomotion\mtidle.kf",
+                        "lastScaled": 1.202,
+                    }
+                ],
+                "armBones": [
+                    {
+                        "name": name,
+                        "transform": {
+                            "localRotation": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                            "localTranslation": [0.0, 0.0, 0.0],
+                        },
+                    }
+                    for name in ("left-upper", "left-fore", "right-upper", "right-fore")
+                ],
+            },
+        }
+        godot = {
+            "retailStateApplied": True,
+            "referencePositionGameUnits": [1.0, 2.0, 3.0],
+            "referenceYawRadians": 3.1,
+            "referenceGodotYawRadians": -3.1,
+            "cameraPositionGameUnits": [4.0, 5.0, 6.0],
+            "cameraAimGameUnits": [1.0, 2.0, 7.0],
+            "distanceMeters": 70.0 * 0.0142875,
+            "verticalFovDegrees": 46.6921257,
+            "appliedAnimationPhaseSeconds": 1.202,
+            "armBones": [
+                {
+                    "name": name,
+                    "localTranslation": [0.0, 0.0, 0.0],
+                    "localRotationQuaternion": [0.0, 0.0, 0.0, 1.0],
+                }
+                for name in ("left-upper", "left-fore", "right-upper", "right-fore")
+            ],
+        }
+        self.assertEqual(shot_state_metrics(retail, godot)["status"], "pass")
+        godot["verticalFovDegrees"] = 75.0
+        self.assertEqual(shot_state_metrics(retail, godot)["status"], "fail")
+        self.assertAlmostEqual(angle_error(0.0, 2.0 * 3.141592653589793), 0.0)
 
 
 if __name__ == "__main__":

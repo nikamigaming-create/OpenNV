@@ -11,7 +11,8 @@ internal static class EnvironmentCapture
         CellSceneLoader.LoadedCell loaded,
         string captureRoot,
         string scenePath,
-        string? reportPath)
+        string? reportPath,
+        string? retailStateContractPath)
     {
         try
         {
@@ -27,80 +28,133 @@ internal static class EnvironmentCapture
             await WaitForRenderedFrames(host, 3);
 
             var files = new List<object>();
+            var visualGates = new List<bool>();
             var actorShots = new List<object>();
+            RetailActorStateContract.Contract? retailState = null;
+            if (loaded.Actors.Count > 0)
+            {
+                if (loaded.Actors.Count != 1 || retailStateContractPath is null)
+                    throw new InvalidOperationException(
+                        "Actor capture requires one actor and one --retail-state-contract.");
+                retailState = RetailActorStateContract.Load(
+                    retailStateContractPath,
+                    loaded.Actors[0].ReferenceFormId,
+                    loaded.Actors[0].BaseFormId);
+            }
             camera.Fov = 58.0f;
             camera.GlobalPosition = new Vector3(0.0f, 1.62f, -1.6f);
             camera.LookAt(new Vector3(-0.5f, 1.45f, -8.0f), Vector3.Up);
             await WaitForRenderedFrames(host, 3);
-            files.Add(SaveViewportPng(host, output, "saloon-entry-textured.png"));
+            var entryFrame = SaveViewportPng(host, output, "saloon-entry-textured.png");
+            files.Add(entryFrame.Evidence);
+            visualGates.Add(entryFrame.Passed);
 
             loaded.ProofDoor.SetOpen(true);
             camera.GlobalPosition = new Vector3(0.25f, 1.58f, -6.5f);
             camera.LookAt(new Vector3(0.0f, 1.42f, -13.0f), Vector3.Up);
             await WaitForRenderedFrames(host, 3);
-            files.Add(SaveViewportPng(host, output, "saloon-room-wide.png"));
+            var roomFrame = SaveViewportPng(host, output, "saloon-room-wide.png");
+            files.Add(roomFrame.Evidence);
+            visualGates.Add(roomFrame.Passed);
 
             if (loaded.Actors.Count > 0)
             {
                 var actor = loaded.Actors[0];
-                var forward = -actor.Placement.GlobalBasis.Z;
-                forward.Y = 0.0f;
-                forward = forward.Normalized();
                 var skeleton = Descendants<Skeleton3D>(actor.Actor.Root).Single();
-                var headIndex = skeleton.FindBone("Bip01 Head");
-                if (headIndex < 0)
-                    throw new InvalidOperationException("Retail portrait contract requires Bip01 Head.");
-                const float unitsToMeters = 0.0142875f;
-                var head = skeleton.ToGlobal(skeleton.GetBoneGlobalPose(headIndex).Origin);
-                var faceTarget = head + Vector3.Up * (20.0f * unitsToMeters);
-                var faceDistance = 70.0f * unitsToMeters;
-                camera.Fov = 75.0f;
-                camera.GlobalPosition = faceTarget + forward * faceDistance;
-                camera.LookAt(faceTarget, Vector3.Up);
-                await WaitForRenderedFrames(host, 5);
-                const string faceFileName = "godot-current-front-portrait.png";
-                files.Add(SaveViewportPng(host, output, faceFileName, 0.04));
-                actorShots.Add(new
+                foreach (var kind in new[] { "front-portrait", "front-full-body" })
                 {
-                    shotKind = "front-portrait",
-                    cameraPosition = Vector(camera.GlobalPosition),
-                    target = Vector(faceTarget),
-                    distanceMeters = faceDistance,
-                    sourceDistanceGameUnits = 70.0,
-                    verticalFovDegrees = camera.Fov,
-                    file = Path.Combine(output, faceFileName),
-                });
-
-                var bodyTarget = actor.Actor.Bounds.GetCenter();
-                var bodyDistance = 366.962036f * unitsToMeters;
-                camera.Fov = 75.0f;
-                camera.GlobalPosition = bodyTarget + forward * bodyDistance;
-                camera.LookAt(bodyTarget, Vector3.Up);
-                await WaitForRenderedFrames(host, 5);
-                const string bodyFileName = "godot-current-front-full-body.png";
-                files.Add(SaveViewportPng(host, output, bodyFileName, 0.04));
-                actorShots.Add(new
-                {
-                    shotKind = "front-full-body",
-                    cameraPosition = Vector(camera.GlobalPosition),
-                    target = Vector(bodyTarget),
-                    distanceMeters = bodyDistance,
-                    sourceDistanceGameUnits = 366.962036,
-                    verticalFovDegrees = camera.Fov,
-                    file = Path.Combine(output, bodyFileName),
-                });
+                    var state = retailState!.Shots[kind];
+                    actor.Placement.Position = loaded.GameToCellUnits(state.ReferencePositionGameUnits);
+                    actor.Placement.Rotation = new Vector3(0.0f, -state.ReferenceYawRadians, 0.0f);
+                    actor.Actor.AnimationPlayer.Play(actor.Actor.PlayingAnimation);
+                    actor.Actor.AnimationPlayer.Seek(state.AnimationPhaseSeconds, true);
+                    actor.Actor.AnimationPlayer.Pause();
+                    camera.Fov = state.VerticalFovDegrees;
+                    camera.GlobalPosition = loaded.GameToWorld(state.CameraPositionGameUnits);
+                    var cameraTarget = loaded.GameToWorld(state.CameraAimGameUnits);
+                    camera.LookAt(cameraTarget, Vector3.Up);
+                    await WaitForRenderedFrames(host, 5);
+                    var fileName = $"godot-current-{kind}.png";
+                    var actorFrame = SaveViewportPng(host, output, fileName, 0.04);
+                    files.Add(actorFrame.Evidence);
+                    visualGates.Add(actorFrame.Passed);
+                    var armBones = state.ArmBones.Select(name =>
+                    {
+                        var index = skeleton.FindBone(name);
+                        if (index < 0)
+                            throw new InvalidOperationException($"Godot actor is missing retail arm bone: {name}");
+                        var pose = skeleton.GetBoneGlobalPose(index);
+                        var parentIndex = skeleton.GetBoneParent(index);
+                        var localPose = parentIndex < 0
+                            ? pose
+                            : skeleton.GetBoneGlobalPose(parentIndex).AffineInverse() * pose;
+                        var localRotation = localPose.Basis.GetRotationQuaternion();
+                        var rotation = (skeleton.GlobalBasis * pose.Basis).GetRotationQuaternion();
+                        return new
+                        {
+                            name,
+                            localTranslation = Vector(localPose.Origin),
+                            localRotationQuaternion = new[]
+                            {
+                                localRotation.X,
+                                localRotation.Y,
+                                localRotation.Z,
+                                localRotation.W,
+                            },
+                            worldPosition = Vector(skeleton.ToGlobal(pose.Origin)),
+                            worldRotationQuaternion = new[] { rotation.X, rotation.Y, rotation.Z, rotation.W },
+                        };
+                    }).ToArray();
+                    actorShots.Add(new
+                    {
+                        shotKind = kind,
+                        retailStateApplied = true,
+                        referencePositionGameUnits = Vector(state.ReferencePositionGameUnits),
+                        referencePositionGodotWorld = Vector(actor.Placement.GlobalPosition),
+                        referenceYawRadians = state.ReferenceYawRadians,
+                        referenceGodotYawRadians = -state.ReferenceYawRadians,
+                        cameraPositionGameUnits = Vector(state.CameraPositionGameUnits),
+                        cameraAimGameUnits = Vector(state.CameraAimGameUnits),
+                        cameraPosition = Vector(camera.GlobalPosition),
+                        target = Vector(cameraTarget),
+                        distanceMeters = state.CameraDistanceGameUnits * loaded.UnitsToMeters,
+                        sourceDistanceGameUnits = state.CameraDistanceGameUnits,
+                        verticalFovDegrees = camera.Fov,
+                        projectionExact = state.ExactProjection,
+                        projectionStatus = state.ProjectionStatus,
+                        projectionSource = state.ProjectionSource,
+                        projectionConfidence = state.ProjectionConfidence,
+                        animationFile = state.AnimationFile,
+                        requestedAnimationPhaseSeconds = state.AnimationPhaseSeconds,
+                        appliedAnimationPhaseSeconds = actor.Actor.AnimationPlayer.CurrentAnimationPosition,
+                        armBones,
+                        faceVertexHash = state.FaceVertexHash,
+                        hairVertexHash = state.HairVertexHash,
+                        file = Path.Combine(output, fileName),
+                    });
+                }
             }
 
+            var visualQualityPassed = visualGates.All(passed => passed);
             var captureReport = new
             {
                 schema = "opennv-godot-environment-capture/v1",
-                status = "pass",
+                status = visualQualityPassed ? "pass" : "fail",
                 renderer = "forward_plus",
                 scene = scenePath,
                 sceneSha256 = FileSha256(VerifiedGltfLoader.ResolvePath(scenePath)),
                 cellFormId = loaded.FormId,
                 cellEditorId = loaded.EditorId,
                 actorCount = loaded.Actors.Count,
+                retailActorStateContract = retailState is null
+                    ? null
+                    : new
+                    {
+                        path = retailState.Path,
+                        sha256 = retailState.Sha256,
+                        exactProjectionResolved = retailState.ExactProjectionResolved,
+                        shots = retailState.Shots.Count,
+                    },
                 actorReferences = loaded.Actors.Select(actor => new
                 {
                     formId = actor.ReferenceFormId,
@@ -132,8 +186,11 @@ internal static class EnvironmentCapture
             WriteReport(Path.Combine(output, "environment-capture-report.json"), captureReport);
             if (reportPath is not null)
                 WriteReport(reportPath, captureReport);
-            GD.Print($"OPENNV_GODOT_ENVIRONMENT_CAPTURE_PASS output={output} files={files.Count}");
-            host.GetTree().Quit(0);
+            if (visualQualityPassed)
+                GD.Print($"OPENNV_GODOT_ENVIRONMENT_CAPTURE_PASS output={output} files={files.Count}");
+            else
+                GD.PushError($"OPENNV_GODOT_ENVIRONMENT_CAPTURE_VISUAL_FAIL output={output} files={files.Count}");
+            host.GetTree().Quit(visualQualityPassed ? 0 : 1);
         }
         catch (Exception exception)
         {
@@ -148,7 +205,7 @@ internal static class EnvironmentCapture
             await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
     }
 
-    private static object SaveViewportPng(
+    private static (object Evidence, bool Passed) SaveViewportPng(
         Node host,
         string output,
         string name,
@@ -176,16 +233,20 @@ internal static class EnvironmentCapture
         var variance = Math.Max(0.0, luminanceSquaredSum / pixels - meanLuminance * meanLuminance);
         var luminanceDeviation = Math.Sqrt(variance);
         var darkFraction = (double)darkPixels / pixels;
-        if (image.GetWidth() != 1280 || image.GetHeight() != 720 ||
-            meanLuminance < minimumMeanLuminance || luminanceDeviation < 0.05 || darkFraction > 0.60)
-            throw new InvalidOperationException(
-                $"Capture frame failed visual metrics: name={name} size={image.GetWidth()}x{image.GetHeight()} " +
-                $"mean={meanLuminance:F4} deviation={luminanceDeviation:F4} darkFraction={darkFraction:F4}");
         var error = image.SavePng(path);
         if (error != Error.Ok)
             throw new InvalidOperationException($"Godot could not save capture frame ({error}): {path}");
+        var gateFailure = image.GetWidth() != 1280 || image.GetHeight() != 720
+            ? "unexpected-size"
+            : meanLuminance < minimumMeanLuminance
+                ? "mean-luminance"
+                : luminanceDeviation < 0.05
+                    ? "luminance-deviation"
+                    : darkFraction > 0.60
+                        ? "dark-fraction"
+                        : null;
         using var stream = File.OpenRead(path);
-        return new
+        return (new
         {
             path,
             bytes = stream.Length,
@@ -194,8 +255,10 @@ internal static class EnvironmentCapture
             meanLuminance,
             luminanceDeviation,
             darkFraction,
+            visualGatePassed = gateFailure is null,
+            visualGateFailure = gateFailure,
             sha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(),
-        };
+        }, gateFailure is null);
     }
 
     private static string FileSha256(string path)

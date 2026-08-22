@@ -40,6 +40,10 @@ public partial class RuntimeCoordinator : Node3D
                 throw new ArgumentException("--actor-sidecar requires --actor-model.");
             if (hasActorModel && _options.ContainsKey("capture-root"))
                 throw new ArgumentException("Actor captures require --cell-scene plus --actor-scene.");
+            if (_options.ContainsKey("retail-state-contract") &&
+                (!hasCellScene || !_options.ContainsKey("capture-root") || !_options.ContainsKey("actor-scene")))
+                throw new ArgumentException(
+                    "--retail-state-contract requires --cell-scene, --actor-scene, and --capture-root.");
 
             if (hasDataRoot)
             {
@@ -124,7 +128,8 @@ public partial class RuntimeCoordinator : Node3D
                 loaded,
                 captureRoot,
                 scenePath,
-                options.TryGetValue("report", out var captureReport) ? captureReport : null);
+                options.TryGetValue("report", out var captureReport) ? captureReport : null,
+                options.TryGetValue("retail-state-contract", out var retailState) ? retailState : null);
             return;
         }
         if (options.ContainsKey("gameplay-proof"))
@@ -328,6 +333,7 @@ public partial class RuntimeCoordinator : Node3D
                     closed.Hit,
                     closed.HitProofDoor,
                     opened.Hit));
+            GetTree().Quit(0);
         }
         catch (Exception exception)
         {
