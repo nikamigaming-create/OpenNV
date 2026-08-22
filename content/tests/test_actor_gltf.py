@@ -5,7 +5,13 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from actor_gltf import NifFormat, actor_animation_translations  # noqa: E402
+from actor_gltf import (  # noqa: E402
+    NifFormat,
+    _compensated_inverse_bind,
+    _converted_matrix,
+    _multiply,
+    actor_animation_translations,
+)
 from actor_material import (  # noqa: E402
     actor_alpha_contract,
     actor_base_color_factor,
@@ -60,6 +66,19 @@ class ActorGltfTest(unittest.TestCase):
             [(0.0, 0.0, 0.0), (0.5, -0.25, 0.5)],
         )
         self.assertIs(actor_animation_translations("Bip01 Head", values), values)
+
+    def test_baked_shape_transform_is_removed_from_skin_bind(self):
+        inverse_bind = NifFormat.Matrix44()
+        inverse_bind.set_identity()
+        shape = NifFormat.Matrix44()
+        shape.set_identity()
+        shape.m_11 = -1.0
+        shape.m_22 = -1.0
+        corrected = _compensated_inverse_bind(inverse_bind, shape)
+        product = _multiply(corrected, _converted_matrix(shape))
+        for row in range(4):
+            for column in range(4):
+                self.assertAlmostEqual(product[row][column], 1.0 if row == column else 0.0)
 
 
 if __name__ == "__main__":

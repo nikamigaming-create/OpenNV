@@ -165,7 +165,7 @@ input translation and presentation differ.
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
 | `CellSceneLoader.cs` | Manifest-to-node graph, placement, collision, proof queries | Binary parsing |
-| `RuntimeMaterialLoader.cs` | PNG hash validation and surface material construction | DDS/BSA parsing |
+| `RuntimeMaterialLoader.cs` | Hash-verified 2D/cubemap load and name-keyed retail material passes | DDS/BSA parsing |
 | `ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
 | `CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
 | `RetailActorStateContract.cs` | Fail-closed retail shot-state parsing for ACHR transform, camera, idle phase, arm bones, and face/hair hashes | Process addresses, asset parsing, or rendering |
@@ -197,7 +197,7 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 ## Current truth and deliberate gaps
 
 Implemented: direct owned ESM/BSA/NIF/DDS path, XTEL-derived spawn, 348 saloon
-references, 153 visible assets, 255 textures, 332 materials, 97 pickups, five
+references, 153 visible assets, 261 textures, 332 materials, 97 pickups, five
 containers, 24 authored lights, full converted item rotations, collision,
 movement, HUD, inventory, authored `.357` damage/clip data, firing, objectives,
 doors, atomic save, cold reload, and launcher-enabled sandbox play.
@@ -206,7 +206,7 @@ and hands, metre scale, 90 Hz physics, locomotion, snap-turn, controller
 activation/fire/save, haptics, runtime-provided controller models, world-space
 HUD, and explicit launcher routing.
 
-Implemented but not yet promoted to rendering: direct humanoid/creature record
+Implemented but not yet promoted to gameplay: direct humanoid/creature record
 relationships, deterministic FaceGen geometry/texture primitives, and a
 recipe-pinned skinned/animated actor cache. Godot can load that cache at the
 authored ACHR placement only through an explicit proof-enable override, retain
@@ -220,29 +220,34 @@ reference aspect, until a render-pass world projection is recovered. Production 
 quest/enable-parent/package state before an initially disabled actor can appear
 naturally.
 
-The latest private differential applies the two-shot state contract with zero
-placement, yaw, FOV, and animation-phase error. All four arm-bone local
-transforms agree within `0.00002` game units/radians. Identity and state pass;
-rendering remains a hard failure at portrait/full-body MAE `0.0804`/`0.0853`
-and changed-pixel fractions `67.3%`/`86.6%`. The remaining visual gap is not a
-camera-placement or idle-phase excuse.
+The latest private differential applies Trudy plus the authored seated
+Goodsprings settler in both shots. Identity, placement, yaw, camera, animation
+phase, and all 56 deform-bone world transforms pass for both actors; worst bone
+translation is below `0.000002` metres. Rendering remains a hard failure at
+portrait/full-body MAE `0.0790`/`0.0811` and changed-pixel fractions
+`75.9%`/`86.4%`. The remaining visual gap is not a camera, placement, or pose
+excuse.
 
 The cell transform boundary negates Gamebryo yaw when producing Godot Y rotation:
 retail forward is `(sin(yaw), cos(yaw))`, while Godot positive Y rotation has the
-opposite sign. Cell scene v4 and actor scene v2 make that correction explicit
-and reject older mirrored caches. Runtime culling now follows each NIF's
+opposite sign. Cell scene v5 and actor scene v3 make that correction explicit,
+carry decoded alpha/vertex/emission/cubemap state, and hash the complete actor
+artifact chain. Runtime culling now follows each NIF's
 `NiStencilProperty`; the former recipe-wide double-sided override is removed.
 
-Not implemented: full Bethesda environment/mask material semantics, authored
+Not implemented: environment-map light fade and external-emittance color, authored
 bhk collision, non-item arbitrary rotation promotion, visible first-person
 weapon animation, damageable actors/creatures, VATS, exterior streaming, or full
 campaigns. There are no placeholder managers for
 these. Each enters only with a data contract, synthetic test, retail proof, and
 promotion gate.
 
-The current screenshots are **not** a retail-fidelity claim. Environment/mask
-shader semantics, alpha/effect paths, fog and light calibration, authored Havok
-collision, and all actor rendering remain open differential gates.
+The current screenshots are **not** a retail-fidelity claim. The decoded alpha,
+self-illum, six-face cubemap, name-keyed surface, and CELL depth-fog paths are
+implemented, but external emittance, environment light fade, the full retail
+lighting/HDR path, authored Havok collision, and actor pixels remain open
+differential gates. The clean-room shader observations are recorded in
+`docs/evidence/fnv-retail-material-shader-contract.md`.
 
 Next promotion order:
 

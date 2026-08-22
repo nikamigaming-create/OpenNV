@@ -392,7 +392,15 @@ def _append_shape(
         )
     skin_index: int | None = None
     if not component.rigid_to_head:
-        skin_index = _append_skin(component.role, shape, node_by_name, builder, attributes, skins)
+        skin_index = _append_skin(
+            component.role,
+            shape,
+            node_by_name,
+            builder,
+            attributes,
+            skins,
+            shape_transform if component.bake_shape_transform else None,
+        )
     indices = [value for triangle in triangles for value in triangle]
     component_type = 5123 if vertex_count <= 65535 else 5125
     value_format = "H" if component_type == 5123 else "I"
@@ -424,6 +432,9 @@ def _append_shape(
         "triangles": len(triangles),
         "morphed": morphed,
         "skinned": skin_index is not None,
+        "skinShapeTransformCompensated": (
+            skin_index is not None and component.bake_shape_transform
+        ),
         "vertexColorsEnabled": vertex_colors_enabled,
         "material": material_row,
     }
@@ -436,6 +447,7 @@ def _append_skin(
     builder: BufferBuilder,
     attributes: dict[str, int],
     skins: list[dict[str, object]],
+    baked_shape_transform: object | None,
 ) -> int:
     instance = getattr(shape, "skin_instance", None)
     if instance is None or instance.data is None:
@@ -467,7 +479,13 @@ def _append_skin(
     attributes["WEIGHTS_0"] = builder.add(
         pack_floats(weight_rows), component_type=5126, count=len(weight_rows), value_type="VEC4", target=34962
     )
-    inverse_bind_rows = [_gltf_matrix(_converted_matrix(data.get_transform())) for data in instance.data.bone_list]
+    inverse_bind_rows = []
+    for data in instance.data.bone_list:
+        inverse_bind = _compensated_inverse_bind(
+            data.get_transform(),
+            baked_shape_transform,
+        )
+        inverse_bind_rows.append(_gltf_matrix(inverse_bind))
     inverse_bind = builder.add(
         pack_floats(inverse_bind_rows),
         component_type=5126,
@@ -819,6 +837,17 @@ def _converted_matrix(value: object) -> list[list[float]]:
     ]
     inverse = [[conversion[column_index][row_index] for column_index in range(4)] for row_index in range(4)]
     return _multiply(conversion, _multiply(column, inverse))
+
+
+def _compensated_inverse_bind(
+    inverse_bind: object,
+    baked_shape_transform: object | None,
+) -> list[list[float]]:
+    converted = _converted_matrix(inverse_bind)
+    if baked_shape_transform is None:
+        return converted
+    shape_inverse = _converted_matrix(baked_shape_transform.get_inverse(fast=False))
+    return _multiply(converted, shape_inverse)
 
 
 def _converted_rotation(value: list[list[float]]) -> list[list[float]]:

@@ -70,12 +70,110 @@ def transform_xyz(value: object, matrix: object, *, direction: bool) -> tuple[fl
     return tuple(component / length for component in result)
 
 
+def texture_uv(value: object) -> tuple[float, float]:
+    return float(value.u), 1.0 - float(value.v)
+
+
+def _texture_descriptor_path(prop: object, name: str) -> str:
+    if not bool(getattr(prop, f"has_{name}_texture", False)):
+        return ""
+    descriptor = getattr(prop, f"{name}_texture", None)
+    source = getattr(descriptor, "source", None)
+    return canonical_asset_path(source.file_name) if source is not None else ""
+
+
 def texture_paths(shape: object) -> list[str]:
-    for prop in getattr(shape, "properties", []):
+    properties = list(getattr(shape, "properties", []))
+    for prop in properties:
         texture_set = getattr(prop, "texture_set", None)
         if texture_set is not None:
             return [canonical_asset_path(value) for value in texture_set.textures]
+    for prop in properties:
+        if isinstance(prop, NifFormat.BSShaderNoLightingProperty):
+            path = canonical_asset_path(prop.file_name)
+            if path:
+                return [path]
+    for prop in properties:
+        if isinstance(prop, NifFormat.NiTexturingProperty):
+            normal = _texture_descriptor_path(prop, "normal") or _texture_descriptor_path(
+                prop, "bump_map"
+            )
+            return [
+                _texture_descriptor_path(prop, "base"),
+                normal,
+                _texture_descriptor_path(prop, "glow"),
+            ]
     return []
+
+
+def alpha_contract(shape: object) -> dict[str, object]:
+    properties = list(getattr(shape, "properties", []))
+    alpha = next(
+        (prop for prop in properties if isinstance(prop, NifFormat.NiAlphaProperty)),
+        None,
+    )
+    if alpha is not None:
+        flags = int(alpha.flags)
+        blend_enabled = bool(flags & 0x0001)
+        test_enabled = bool(flags & 0x0200)
+        mode = "BLEND" if blend_enabled else "MASK" if test_enabled else "OPAQUE"
+        return {
+            "mode": mode,
+            "cutoff": float(alpha.threshold) / 255.0 if test_enabled else None,
+            "flags": flags,
+            "blendEnabled": blend_enabled,
+            "testEnabled": test_enabled,
+            "sourceBlendMode": (flags >> 1) & 0xF,
+            "destinationBlendMode": (flags >> 5) & 0xF,
+            "testFunction": (flags >> 10) & 0x7,
+            "noSorter": bool(flags & 0x2000),
+            "source": "NiAlphaProperty",
+        }
+    shader = next(
+        (prop for prop in properties if isinstance(prop, NifFormat.BSShaderProperty)),
+        None,
+    )
+    flags = getattr(shader, "shader_flags", None)
+    shader_alpha = flags is not None and any(
+        bool(getattr(flags, field, False))
+        for field in ("sf_vertex_alpha", "sf_alpha_texture", "sf_dynamic_alpha")
+    )
+    return {
+        "mode": "BLEND" if shader_alpha else "OPAQUE",
+        "cutoff": None,
+        "flags": None,
+        "blendEnabled": shader_alpha,
+        "testEnabled": False,
+        "sourceBlendMode": None,
+        "destinationBlendMode": None,
+        "testFunction": None,
+        "noSorter": False,
+        "source": "BSShaderFlags" if shader_alpha else "none",
+    }
+
+
+def vertex_color_mode(shape: object) -> str:
+    shader = next(
+        (
+            prop
+            for prop in getattr(shape, "properties", [])
+            if isinstance(prop, NifFormat.BSShaderProperty)
+        ),
+        None,
+    )
+    if shader is None:
+        return "color-alpha"
+    flags_one = getattr(shader, "shader_flags", None)
+    flags_two = getattr(shader, "shader_flags_2", None)
+    color = bool(getattr(flags_two, "sf_2_vertex_colors", False))
+    alpha = bool(getattr(flags_one, "sf_vertex_alpha", False))
+    if color and alpha:
+        return "color-alpha"
+    if color:
+        return "color"
+    if alpha:
+        return "alpha"
+    return "none"
 
 
 def material_metadata(shape: object) -> dict[str, object]:
@@ -83,24 +181,58 @@ def material_metadata(shape: object) -> dict[str, object]:
     for prop in getattr(shape, "properties", []):
         if isinstance(prop, NifFormat.NiMaterialProperty):
             result["alpha"] = float(prop.alpha)
-            result["glossiness"] = float(prop.glossiness)
-            result["emissive"] = [
-                float(prop.emissive_color.r),
-                float(prop.emissive_color.g),
-                float(prop.emissive_color.b),
+            result["diffuse"] = [
+                float(prop.diffuse_color.r),
+                float(prop.diffuse_color.g),
+                float(prop.diffuse_color.b),
             ]
+            result["glossiness"] = float(prop.glossiness)
+            emit_multiplier = float(getattr(prop, "emit_multi", 1.0))
+            result["emitMultiplier"] = emit_multiplier
+            result["emissive"] = [
+                float(prop.emissive_color.r) * emit_multiplier,
+                float(prop.emissive_color.g) * emit_multiplier,
+                float(prop.emissive_color.b) * emit_multiplier,
+            ]
+            result["emissiveControlled"] = (
+                isinstance(prop.controller, NifFormat.NiMaterialColorController)
+                and int(prop.controller.target_color) == 3
+            )
             result["specular"] = [
                 float(prop.specular_color.r),
                 float(prop.specular_color.g),
                 float(prop.specular_color.b),
             ]
-        elif isinstance(prop, NifFormat.BSShaderPPLightingProperty):
+        elif isinstance(prop, NifFormat.BSShaderProperty):
             result["shaderType"] = int(prop.shader_type)
-            result["shaderFlags1"] = int(getattr(prop, "shader_flags_1", prop.shader_flags))
+            flags_one = getattr(prop, "shader_flags_1", getattr(prop, "shader_flags", 0))
+            flags_two = getattr(prop, "shader_flags_2", 0)
+            result["shaderFlags1"] = int(flags_one)
             result["shaderFlags2"] = int(prop.shader_flags_2)
+            result["environmentMapScale"] = float(prop.environment_map_scale)
             result["textureClampMode"] = int(prop.texture_clamp_mode)
+            result["shaderFlags1Enabled"] = [
+                name
+                for name in flags_one.get_detail_child_names()
+                if bool(getattr(flags_one, name))
+            ]
+            result["shaderFlags2Enabled"] = [
+                name
+                for name in flags_two.get_detail_child_names()
+                if bool(getattr(flags_two, name))
+            ]
         elif isinstance(prop, NifFormat.NiStencilProperty):
             result["stencilDrawMode"] = int(prop.draw_mode)
+    paths = texture_paths(shape)
+    shader = any(
+        isinstance(prop, NifFormat.BSShaderProperty)
+        for prop in getattr(shape, "properties", [])
+    )
+    diffuse = result.get("diffuse", [1.0, 1.0, 1.0])
+    result["baseColor"] = [1.0, 1.0, 1.0] if shader else diffuse
+    result["alphaContract"] = alpha_contract(shape)
+    result["vertexColorMode"] = vertex_color_mode(shape)
+    result["diffuseTexturePresent"] = bool(paths and paths[0])
     return result
 
 
@@ -289,6 +421,7 @@ def export_static_nif(
         triangles = [tuple(int(index) for index in triangle) for triangle in mesh.get_triangles()]
         if not triangles:
             raise ValueError(f"Shape has no triangles: {decode_text(shape.name)}")
+        surface_material = material_metadata(shape)
 
         attributes: dict[str, int] = {}
         minimum = [min(row[index] for row in positions) for index in range(3)]
@@ -301,7 +434,7 @@ def export_static_nif(
             pack_floats(normals), component_type=5126, count=vertex_count, value_type="VEC3", target=34962,
         )
         converted_uv_sets = [
-            [(float(value.u), 1.0 - float(value.v)) for value in uv_set]
+            [texture_uv(value) for value in uv_set]
             for uv_set in mesh.uv_sets[:2]
         ]
         for uv_index, uvs in enumerate(converted_uv_sets):
@@ -348,15 +481,27 @@ def export_static_nif(
             count=len(indices), value_type="SCALAR", target=34963,
         )
         material_index = len(materials)
-        materials.append({
+        base_color = [float(value) for value in surface_material["baseColor"]]
+        alpha = float(surface_material.get("alpha", 1.0))
+        glossiness = float(surface_material.get("glossiness", 10.0))
+        gltf_material: dict[str, object] = {
             "name": f"{decode_text(shape.name)} material",
             "doubleSided": shape_double_sided(shape),
             "pbrMetallicRoughness": {
-                "baseColorFactor": [0.65, 0.65, 0.65, 1.0],
+                "baseColorFactor": [*base_color, alpha],
                 "metallicFactor": 0.0,
-                "roughnessFactor": 1.0,
+                "roughnessFactor": max(0.25, min(0.95, 1.0 - glossiness / 128.0)),
             },
-        })
+        }
+        alpha_mode = str(surface_material["alphaContract"]["mode"])
+        if alpha_mode != "OPAQUE":
+            gltf_material["alphaMode"] = alpha_mode
+        if alpha_mode == "MASK":
+            gltf_material["alphaCutoff"] = surface_material["alphaContract"]["cutoff"]
+        emissive = [float(value) for value in surface_material.get("emissive", [0.0, 0.0, 0.0])]
+        if any(value > 0.0 for value in emissive):
+            gltf_material["emissiveFactor"] = emissive
+        materials.append(gltf_material)
         primitives.append({"attributes": attributes, "indices": index_accessor, "material": material_index})
 
         shape_index = block_index[id(shape)]
@@ -370,7 +515,7 @@ def export_static_nif(
             "attributes": sorted(attributes),
             "propertyTypes": property_types,
             "textures": texture_paths(shape),
-            "material": material_metadata(shape),
+            "material": surface_material,
             "transformBakedToRoot": True,
             "tangentSource": tangent_source,
         })

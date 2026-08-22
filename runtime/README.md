@@ -4,7 +4,7 @@ This is the first-party Open Nevada runtime. It uses Godot Forward+ and accepts
 only artifacts produced by the direct retail-content pipeline in `../content`.
 
 The current slice reads the owned master directly and runs a playable,
-recipe-pinned Goodsprings sandbox. It loads 153 assets, 348 references, 255
+recipe-pinned Goodsprings sandbox. It loads 153 assets, 348 references, 261
 textures, 332 materials, 97 pickups, five containers, and 24 authored lights.
 The incoming XTEL owns the spawn. The `.357` pickup uses retail damage and clip
 data; inventory, ammo, objective, removed pickups, and door state autosave and
@@ -23,13 +23,14 @@ extract the model directly, build a temporary cache, load it in Godot, and
 delete the cache afterward. No retail-derived file or generated conversion
 belongs in Git.
 
-Actor parity captures require `--cell-scene`, `--actor-scene`, `--capture-root`,
+Actor parity captures require `--cell-scene`, an actor scene/set, `--capture-root`,
 and the compact oracle artifact supplied as `--retail-state-contract`. The
 runtime rejects a missing/mismatched ACHR, shot set, pose, geometry gate, or
 projection label. A provisional retail FOV may improve a failing comparison but
 cannot promote exact projection parity.
-Cell scene v4 and actor scene v2 are required; older caches carry the mirrored
-Gamebryo yaw convention and are rejected.
+Cell scene v5 and actor scene v3 are required. Older caches carry a mirrored yaw,
+positional material binding, incomplete shader state, or unhashed actor sidecar
+and are rejected.
 
 Build an asset-free experimental Windows archive after installing the pinned
 Godot Mono export templates and `content/requirements-build.txt`:

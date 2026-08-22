@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v4";
+    private const string CellSceneSchema = "opennv-cell-scene/v5";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -206,7 +206,7 @@ internal static class CellSceneLoader
                 originGameUnits,
                 unitScale,
                 prototypes.Count,
-                textures.Count,
+                textures.TwoDimensional.Count,
                 materialBindings,
                 loadedReferences,
                 doors.Count,
@@ -247,6 +247,14 @@ internal static class CellSceneLoader
             AmbientLightColor = ReadColor(lighting.GetProperty("ambientColor")),
             AmbientLightEnergy = calibration.GetProperty("ambientEnergy").GetSingle(),
             TonemapMode = Godot.Environment.ToneMapper.Filmic,
+            FogEnabled = true,
+            FogMode = Godot.Environment.FogModeEnum.Depth,
+            FogLightColor = ReadColor(lighting.GetProperty("fogColor")),
+            FogLightEnergy = 1.0f,
+            FogDensity = 1.0f,
+            FogDepthBegin = lighting.GetProperty("fogNearGameUnits").GetSingle() * unitScale,
+            FogDepthEnd = lighting.GetProperty("fogFarGameUnits").GetSingle() * unitScale,
+            FogDepthCurve = lighting.GetProperty("fogPower").GetSingle(),
         };
         parent.AddChild(new WorldEnvironment { Environment = environment });
         var direction = lighting.GetProperty("directionalRotationDegrees")
