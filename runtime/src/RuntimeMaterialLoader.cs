@@ -65,10 +65,7 @@ internal static class RuntimeMaterialLoader
                 material.EmissionEnergyMultiplier = 1.0f;
             }
             if (binding.GetProperty("alphaBlend").GetBoolean())
-            {
                 material.Transparency = BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass;
-                material.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
-            }
             if (binding.GetProperty("doubleSided").GetBoolean())
                 material.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
             if (binding.GetProperty("unshaded").GetBoolean())

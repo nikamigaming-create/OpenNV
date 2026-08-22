@@ -14,6 +14,7 @@ from cell_catalog import BaseObject, scan_cell_catalog  # noqa: E402
 from cell_scene import (  # noqa: E402
     godot_position,
     godot_rotation_quaternion,
+    godot_yaw_radians,
     interaction_manifest,
     load_recipe,
     reference_selection_reason,
@@ -217,9 +218,10 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(godot_position((11.0, 22.0, 33.0), (1.0, 2.0, 3.0)), [10.0, 30.0, -20.0])
         yaw = godot_rotation_quaternion((0.0, 0.0, 1.5707963267948966))
         self.assertAlmostEqual(yaw[0], 0.0)
-        self.assertAlmostEqual(yaw[1], 0.7071067811865475)
+        self.assertAlmostEqual(yaw[1], -0.7071067811865475)
         self.assertAlmostEqual(yaw[2], 0.0)
         self.assertAlmostEqual(yaw[3], 0.7071067811865476)
+        self.assertAlmostEqual(godot_yaw_radians(1.5), -1.5)
         pitch = godot_rotation_quaternion((1.5707963267948966, 0.0, 0.0))
         self.assertAlmostEqual(pitch[0], 0.7071067811865475)
         self.assertAlmostEqual(pitch[1], 0.0)

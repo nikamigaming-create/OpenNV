@@ -19,7 +19,12 @@ from PIL import Image  # noqa: E402
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from export_static_nif_gltf import export_static_nif, generate_tangents, is_editor_marker  # noqa: E402
+from export_static_nif_gltf import (  # noqa: E402
+    export_static_nif,
+    generate_tangents,
+    is_editor_marker,
+    shape_double_sided,
+)
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
 from texture_pipeline import decode_dds  # noqa: E402
 
@@ -153,6 +158,16 @@ class StaticNifGltfTest(unittest.TestCase):
     def test_editor_marker_surface_identity_is_explicit(self) -> None:
         self.assertTrue(is_editor_marker(b"EditorMarker:0"))
         self.assertFalse(is_editor_marker(b"DinerBooth"))
+
+    def test_double_sided_material_requires_retail_stencil_draw_both(self) -> None:
+        shape = NifFormat.NiTriShape()
+        self.assertFalse(shape_double_sided(shape))
+        stencil = NifFormat.NiStencilProperty()
+        stencil.draw_mode = 1
+        shape.add_property(stencil)
+        self.assertFalse(shape_double_sided(shape))
+        stencil.draw_mode = 3
+        self.assertTrue(shape_double_sided(shape))
 
 
 if __name__ == "__main__":

@@ -13,7 +13,12 @@ from actor_catalog import ActorCatalog, ActorReference, HumanoidActor, scan_acto
 from actor_gltf import ActorComponent, ActorGltfInput, export_actor_gltf
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_catalog import scan_cell_catalog
-from cell_scene import arrival_transform, godot_position, load_recipe as load_cell_recipe
+from cell_scene import (
+    arrival_transform,
+    godot_position,
+    godot_yaw_radians,
+    load_recipe as load_cell_recipe,
+)
 from facegen import compose_body_albedo, compose_skin_albedo, synthesize_texture_detail
 from texture_pipeline import decode_dds
 
@@ -295,7 +300,7 @@ def prepare_actor(
         sidecar_path,
     )
     manifest = {
-        "schema": "opennv-actor-scene/v1",
+        "schema": "opennv-actor-scene/v2",
         "status": "skinned-animated",
         "recipe": recipe_id,
         "cellFormId": recipe["cellFormId"],
@@ -307,6 +312,7 @@ def prepare_actor(
             "positionGodotUnits": godot_position(reference.position, arrival.position),
             "rotationRadians": list(reference.rotation_radians),
             "yawRadians": reference.rotation_radians[2],
+            "yawGodotRadians": godot_yaw_radians(reference.rotation_radians[2]),
         },
         "actor": {
             "name": actor.name,

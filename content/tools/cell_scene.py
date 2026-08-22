@@ -22,7 +22,7 @@ from export_static_nif_gltf import export_static_nif
 from texture_pipeline import TexturePipeline
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v3"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v4"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 
 
@@ -73,6 +73,10 @@ def godot_position(position: tuple[float, float, float], origin: tuple[float, fl
     return [delta[0], delta[2], -delta[1]]
 
 
+def godot_yaw_radians(game_yaw_radians: float) -> float:
+    return -game_yaw_radians
+
+
 def normalized_rgb(color: tuple[int, int, int]) -> list[float]:
     return [component / 255.0 for component in color]
 
@@ -86,6 +90,7 @@ def _matrix_multiply(left: list[list[float]], right: list[list[float]]) -> list[
 
 def godot_rotation_quaternion(rotation_radians: tuple[float, float, float]) -> list[float]:
     x, y, z = rotation_radians
+    z = godot_yaw_radians(z)
     cosine_x, sine_x = math.cos(x), math.sin(x)
     cosine_y, sine_y = math.cos(y), math.sin(y)
     cosine_z, sine_z = math.cos(z), math.sin(z)
@@ -326,7 +331,7 @@ def prepare_cell_scene(
                     "emissiveColor": material.get("emissive", [0.0, 0.0, 0.0]),
                     "roughness": max(0.25, min(0.95, 1.0 - glossiness / 128.0)),
                     "alphaBlend": "NiAlphaProperty" in surface["propertyTypes"],
-                    "doubleSided": bool(recipe.get("interiorDoubleSided", False)),
+                    "doubleSided": int(material.get("stencilDrawMode", 1)) == 3,
                     "unshaded": "BSShaderNoLightingProperty" in surface["propertyTypes"],
                 }
             )
@@ -345,6 +350,7 @@ def prepare_cell_scene(
                 "positionGameUnits": list(reference.transform.position),
                 "positionGodotUnits": godot_position(reference.transform.position, origin),
                 "yawRadians": reference.transform.rotation_radians[2],
+                "yawGodotRadians": godot_yaw_radians(reference.transform.rotation_radians[2]),
                 "rotationGodotQuaternion": godot_rotation_quaternion(reference.transform.rotation_radians),
                 "initiallyDisabled": bool(reference.flags & 0x00000800),
                 "teleportDestinationFormId": (
@@ -407,6 +413,7 @@ def prepare_cell_scene(
             "positionGameUnits": list(arrival.position),
             "positionGodotUnits": [0.0, 0.0, 0.0],
             "yawRadians": arrival.rotation_radians[2],
+            "yawGodotRadians": godot_yaw_radians(arrival.rotation_radians[2]),
         },
         "proof": {
             "doorReferenceFormId": str(recipe["portalProofDoorReferenceFormId"]),

@@ -19,6 +19,6 @@ internal partial class DoorInstance : Node3D
     internal void SetOpen(bool open)
     {
         IsOpen = open;
-        Rotation = new Vector3(0.0f, _closedYaw + (open ? MathF.PI / 2.0f : 0.0f), 0.0f);
+        Rotation = new Vector3(0.0f, _closedYaw - (open ? MathF.PI / 2.0f : 0.0f), 0.0f);
     }
 }
