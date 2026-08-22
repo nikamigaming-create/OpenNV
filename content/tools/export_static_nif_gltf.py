@@ -115,7 +115,7 @@ class BufferBuilder:
         component_type: int,
         count: int,
         value_type: str,
-        target: int,
+        target: int | None,
         minimum: list[float] | None = None,
         maximum: list[float] | None = None,
     ) -> int:
@@ -124,7 +124,10 @@ class BufferBuilder:
         offset = len(self.data)
         self.data.extend(payload)
         view_index = len(self.views)
-        self.views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(payload), "target": target})
+        view: dict[str, object] = {"buffer": 0, "byteOffset": offset, "byteLength": len(payload)}
+        if target is not None:
+            view["target"] = target
+        self.views.append(view)
         accessor: dict[str, object] = {
             "bufferView": view_index,
             "componentType": component_type,

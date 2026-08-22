@@ -62,12 +62,23 @@ flowchart LR
     ActorBase --> FaceGen[FGGS / FGGA / FGTS]
     Race --> Baseline[Female head/body tables and FaceGen baselines]
     FaceGen --> Morph[Pure geometry/texture composition primitives]
+    MeshesBsa --> Assembly[Recipe-pinned actor assembly]
+    ActorBase --> Assembly
+    Race --> Assembly
+    Hair --> Assembly
+    Eyes --> Assembly
+    HeadPart --> Assembly
+    Armor --> Assembly
+    Morph --> Assembly
+    Assembly --> ActorGltf[Skinned glTF + animation + provenance sidecar]
 ```
 
 `actor_catalog.py` owns these record relationships and preserves authored
 placement/enable state; `facegen.py` owns only deterministic FaceGen math. This
-slice deliberately does not choose meshes, build a skeleton, create a Godot
-node, or claim that a rendered actor matches retail.
+keeps record parsing independent from `prepare_actor.py`, which resolves one
+hash-pinned recipe, and `actor_gltf.py`, which owns only the skinned glTF,
+material-flag, alpha, bind, and animation translation. None of those files
+creates a Godot node or claims that a rendered actor matches retail.
 
 ## Runtime states
 
@@ -132,15 +143,20 @@ input translation and presentation differ.
 | `cell_catalog.py` | CELL, base, REFR, DATA, XTEL relationships | BSA/NIF/Godot behavior |
 | `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
 | `facegen.py` | Pure EGM/EGT morph and retail skin/body texture composition primitives | Record selection or runtime nodes |
+| `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance | Record selection, placement, or runtime behavior |
+| `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, and alpha flag translation | Geometry, records, or runtime lighting |
+| `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `export_static_nif_gltf.py` | NIF static geometry to glTF plus provenance | World placement or gameplay |
 | `cell_scene.py` | Recipe selection, XTEL origin, asset/reference/material manifest | Godot nodes or input |
 | `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
 | `goodsprings-saloon-structure-v1.json` | Exact proof target, hash, selection, entry, scale | Parsing logic |
+| `goodsprings-trudy-actor-v1.json` | Exact retail master/archives, ACHR, CELL, idle, hair shape and skin-tone inputs | Parsing or rendering logic |
 | `test_cell_catalog.py` | Synthetic group/relationship/transform regressions | Retail bytes |
 | `test_actor_catalog.py` | Synthetic actor identity/appearance/placement graph regressions | Mesh or renderer assertions |
 | `test_facegen.py` | Synthetic geometry, texture-mode, skin, and body composition regressions | Retail actor selection |
+| `test_actor_gltf.py` | Bethesda material, alpha, vertex-color, and non-accumulating idle translation regressions | Retail visual approval |
 | `test_static_nif_gltf.py` | Synthetic BSA/NIF geometry regressions | Runtime orchestration |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
@@ -184,7 +200,9 @@ activation/fire/save, haptics, runtime-provided controller models, world-space
 HUD, and explicit launcher routing.
 
 Implemented but not yet promoted to rendering: direct humanoid/creature record
-relationships and deterministic FaceGen geometry/texture primitives.
+relationships, deterministic FaceGen geometry/texture primitives, and a
+recipe-pinned skinned/animated actor cache. The current Trudy differential still
+fails; cache generation is not a fidelity claim.
 
 Not implemented: full Bethesda environment/mask material semantics, authored
 bhk collision, non-item arbitrary rotation promotion, visible first-person
