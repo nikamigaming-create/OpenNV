@@ -59,10 +59,12 @@ waiting on an extender bridge. See [the mod policy](docs/mods.md).
 
 ## Current Godot development slice
 
-The current checked-in slice directly reads a synthetic NIF fixture, exports
-glTF plus a provenance sidecar, and proves that Godot 4.7.1 Forward+ imports and
-loads it. A local opt-in gate repeats the same path against one hash-pinned
-retail NIF without committing commercial bytes.
+The current checked-in slice keeps the synthetic NIF gate and adds one
+hash-pinned, data-driven retail interior. It directly resolves the Goodsprings
+Prospector Saloon CELL, its REFR-to-base relationships, 14 structural/door NIF
+assets, 42 placements, and the incoming XTEL spawn. Godot loads the whole cell,
+generates collision, and proves that the spawn hits the floor and a physical ray
+passes after an interior door opens.
 
 CI pins the official Godot 4.7.1 Mono Windows archive by SHA-256
 `764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45`.
@@ -78,7 +80,8 @@ python -m pip install -r content/requirements-build.txt
 Windows export. The resulting `OpenNV.exe` lets a player select their owned
 `Data` folder directly; it does not require Python or another engine at runtime.
 
-This is a real geometry transport path, not a playable game build. See
+This is a real cell/runtime path, not a playable campaign. See the
+[single-page architecture](docs/architecture.md),
 [installation status](docs/installation.md), [clean implementation boundary](docs/clean-room.md),
 and [release policy](docs/nightlies.md).
 

@@ -25,7 +25,10 @@ Experimental packaged builds include `OpenNV.Content.exe` beside the Godot
 runtime. A player launches `OpenNV.exe`, selects their legal Fallout: New Vegas
 `Data` folder, and the runtime prepares its private cache directly. The player
 does not install Python or another engine. The retail input is read-only, and no
-commercial file or conversion output is committed or distributed.
+commercial file or conversion output is committed or distributed. The verified
+cache remembers the selected installation and is reopened automatically on
+later launches. The current recipe-pinned proof opens the Goodsprings Prospector
+Saloon structure at the main entrance's data-defined XTEL target.
 
 Player installation instructions will return only after the Godot runtime
 passes campaign, natural-route, persistence, packaging, and retail differential

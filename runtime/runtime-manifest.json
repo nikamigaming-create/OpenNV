@@ -14,6 +14,12 @@
     "direct-static-nif-gltf",
     "legal-data-folder-picker",
     "packaged-legal-content-helper",
+    "persistent-legal-install-cache",
+    "direct-esm-cell-reference-graph",
+    "xtel-data-derived-spawn",
+    "runtime-trimesh-cell-collision",
+    "interactive-doors-and-projectile-rays",
+    "whole-cell-no-portal-culling",
     "forward-plus-static-model-load",
     "artifact-provenance-validation"
   ]

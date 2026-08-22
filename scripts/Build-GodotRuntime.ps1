@@ -91,6 +91,7 @@ Remove-Item -LiteralPath $smokeReport
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $ownedCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-cache-{0}" -f [guid]::NewGuid().ToString("N"))
     $ownedReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-report-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $reuseReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-reuse-{0}.json" -f [guid]::NewGuid().ToString("N"))
     try {
         $ownedProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
@@ -98,6 +99,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
                 "--data-root", ('"' + [IO.Path]::GetFullPath($FalloutNewVegasData) + '"'),
                 "--cache-root", ('"' + $ownedCache + '"'),
                 "--report", ('"' + $ownedReport + '"'),
+                "--portal-proof",
                 "--quit-after-load"
             ) `
             -PassThru -Wait -WindowStyle Hidden
@@ -105,16 +107,45 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             throw "Packaged OpenNV runtime failed its owned-data end-to-end gate."
         }
         $owned = Get-Content -Raw -LiteralPath $ownedReport | ConvertFrom-Json
-        if ($owned.schema -ne "opennv-godot-static-model/v1" -or
+        if ($owned.schema -ne "opennv-godot-cell/v1" -or
             $owned.status -ne "pass" -or
-            [int]$owned.meshes -lt 1 -or
+            [int]$owned.assets -lt 1 -or
+            [int]$owned.references -lt 1 -or
+            [int]$owned.doors -lt 1 -or
+            [int]$owned.collisionMeshes -lt 1 -or
             [int]$owned.surfaces -lt 1 -or
-            [int]$owned.vertices -lt 3) {
+            [int]$owned.vertices -lt 3 -or
+            -not [bool]$owned.doorTraversal.floorHit -or
+            [Math]::Abs([double]$owned.doorTraversal.floorY) -gt 0.2 -or
+            -not [bool]$owned.doorTraversal.closedHitDoor -or
+            [bool]$owned.doorTraversal.openHit) {
             throw "Packaged OpenNV owned-data report is invalid."
+        }
+
+        $reuseProcess = Start-Process -FilePath $binary `
+            -ArgumentList @(
+                "--headless", "--",
+                "--reuse-cache",
+                "--cache-root", ('"' + $ownedCache + '"'),
+                "--report", ('"' + $reuseReport + '"'),
+                "--portal-proof",
+                "--quit-after-load"
+            ) `
+            -PassThru -Wait -WindowStyle Hidden
+        if ($reuseProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $reuseReport -PathType Leaf)) {
+            throw "Packaged OpenNV runtime failed its persistent-cache gate."
+        }
+        $reused = Get-Content -Raw -LiteralPath $reuseReport | ConvertFrom-Json
+        if ($reused.schema -ne "opennv-godot-cell/v1" -or
+            $reused.status -ne "pass" -or
+            $reused.cellFormId -ne $owned.cellFormId -or
+            -not [bool]$reused.doorTraversal.closedHitDoor -or
+            [bool]$reused.doorTraversal.openHit) {
+            throw "Packaged OpenNV persistent-cache report is invalid."
         }
     }
     finally {
-        foreach ($temporaryPath in @($ownedCache, $ownedReport)) {
+        foreach ($temporaryPath in @($ownedCache, $ownedReport, $reuseReport)) {
             if (Test-Path -LiteralPath $temporaryPath) {
                 $resolvedPath = [IO.Path]::GetFullPath($temporaryPath)
                 $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
