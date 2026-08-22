@@ -33,3 +33,6 @@ activate, left-click to fire after taking the `.357`, and F5 to save.
 
 The New Vegas launcher path is enabled only for this sandbox. Fallout 3, TTW,
 JAM, and the full New Vegas campaign remain disabled until their own gates pass.
+The launcher also exposes an experimental OpenXR toggle. It currently targets
+the installed Meta/Oculus OpenXR runtime and Touch controllers; headset/stereo
+validation is still pending and the flat path remains the default.

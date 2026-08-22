@@ -18,6 +18,15 @@ public partial class RuntimeCoordinator : Node3D
         try
         {
             _options = ParseOptions(OS.GetCmdlineUserArgs());
+            if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
+                throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
+            if (_options.ContainsKey("vr"))
+                EnableOpenXr();
+            if (_options.ContainsKey("xr-rig-proof"))
+            {
+                CompleteXrRigProof(_options);
+                return;
+            }
             var hasDataRoot = _options.TryGetValue("data-root", out var dataRoot);
             var hasModel = _options.ContainsKey("model");
             var hasCellScene = _options.ContainsKey("cell-scene");
@@ -55,7 +64,7 @@ public partial class RuntimeCoordinator : Node3D
 
             if (_options.TryGetValue("report", out var startupReportPath))
                 WriteStartupReport(startupReportPath);
-            GD.Print("OPENNV_GODOT_EXPERIMENTAL_READY playable=0");
+            GD.Print("OPENNV_GODOT_EXPERIMENTAL_READY playable=0 playableSandbox=1 openxr=experimental");
             if (DisplayServer.GetName() == "headless")
                 GetTree().Quit(0);
             else if (LegalAssetPreparer.TryRestore(_options, out var restored, out var restoreError))
@@ -88,7 +97,8 @@ public partial class RuntimeCoordinator : Node3D
             this,
             !runTraversalProof && options.ContainsKey("open-proof-door"),
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
-            options.TryGetValue("save-path", out var savePath) ? savePath : null);
+            options.TryGetValue("save-path", out var savePath) ? savePath : null,
+            options.ContainsKey("vr"));
         if (options.TryGetValue("capture-root", out var captureRoot))
         {
             _ = EnvironmentCapture.Run(
@@ -115,6 +125,78 @@ public partial class RuntimeCoordinator : Node3D
             return;
         }
         CompleteCellLoad(loaded, scenePath, options, null);
+    }
+
+    private void EnableOpenXr()
+    {
+        var openXr = XRServer.FindInterface("OpenXR");
+        if (openXr is null || !openXr.IsInitialized())
+            throw new InvalidOperationException(
+                "OpenXR was requested but no initialized runtime is available. " +
+                "Launch with --xr-mode on before --, connect the headset, and verify the active OpenXR runtime.");
+        GetViewport().UseXR = true;
+        Engine.PhysicsTicksPerSecond = 90;
+        DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
+        GD.Print("OPENNV_OPENXR_READY interface=OpenXR worldScale=1 physicsHz=90");
+    }
+
+    private void CompleteXrRigProof(IReadOnlyDictionary<string, string> options)
+    {
+        var actionMap = ResourceLoader.Load("res://openxr_action_map.tres")
+            ?? throw new InvalidOperationException("OpenNV OpenXR action map could not be loaded.");
+        var actionSets = actionMap.Get("action_sets").AsGodotArray();
+        if (actionSets.Count != 1)
+            throw new InvalidOperationException("OpenNV OpenXR action map must expose one gameplay action set.");
+        var actionSet = actionSets[0].AsGodotObject() as Resource
+            ?? throw new InvalidOperationException("OpenNV OpenXR gameplay action set is invalid.");
+        var actions = actionSet.Get("actions").AsGodotArray();
+        if (actions.Count != 7)
+            throw new InvalidOperationException("OpenNV OpenXR gameplay action set must expose seven bounded actions.");
+
+        Engine.PhysicsTicksPerSecond = 90;
+        var session = new GameplaySession();
+        session.Configure(
+            "xr-rig-proof",
+            options.TryGetValue("save-path", out var savePath) ? savePath : null,
+            true);
+        AddChild(session);
+        var player = new CellPlayer();
+        player.Configure(0.0f, session, true, false);
+        AddChild(player);
+        var xrHud = player.LeftHand!.FindChild("XrObjectiveInventory", true, false);
+        if (!player.UsesXr || player.Camera is not XRCamera3D || player.XrOrigin is null ||
+            player.RightHand is null || player.XrRenderModels is not null || xrHud is not Label3D ||
+            player.XrOrigin.WorldScale != 1.0f)
+            throw new InvalidOperationException("OpenNV OpenXR rig hierarchy is incomplete.");
+
+        var report = new
+        {
+            schema = "opennv-openxr-rig/v1",
+            status = "pass",
+            initializedRuntimeRequiredForPlay = true,
+            viewportXrEnabledDuringProof = GetViewport().UseXR,
+            actionMap = "res://openxr_action_map.tres",
+            actionSets = actionSets.Count,
+            actions = actions.Count,
+            testedInteractionProfile = "/interaction_profiles/oculus/touch_controller",
+            originType = player.XrOrigin.GetClass().ToString(),
+            cameraType = player.Camera.GetClass().ToString(),
+            leftControllerType = player.LeftHand.GetClass().ToString(),
+            rightControllerType = player.RightHand.GetClass().ToString(),
+            controllerRenderModelManagerType = nameof(OpenXRRenderModelManager),
+            controllerRenderModelsRequireLiveRuntime = true,
+            leftTracker = player.LeftHand.Tracker.ToString(),
+            rightTracker = player.RightHand.Tracker.ToString(),
+            controllerPose = player.RightHand.Pose.ToString(),
+            worldScale = player.XrOrigin.WorldScale,
+            physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
+            worldSpaceHud = xrHud is Label3D,
+            sharedSaveSchema = session.Report(),
+        };
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, report);
+        GD.Print("OPENNV_OPENXR_RIG_PASS profile=oculus-touch worldScale=1 physicsHz=90");
+        GetTree().Quit(0);
     }
 
     private async Task RunGameplayProof(
@@ -354,6 +436,9 @@ public partial class RuntimeCoordinator : Node3D
             schema = "opennv-godot-startup/v1",
             status = "experimental",
             playable = false,
+            playableSandbox = true,
+            openXrLaunchable = true,
+            openXrHardwareValidated = false,
             engine = "Godot 4.7.1 Forward+",
         });
     }

@@ -1,0 +1,90 @@
+[gd_resource type="OpenXRActionMap" format=3]
+
+[sub_resource type="OpenXRAction" id="OpenXRAction_aim"]
+resource_name = "aim"
+localized_name = "Hand aim pose"
+action_type = 3
+toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
+
+[sub_resource type="OpenXRAction" id="OpenXRAction_move"]
+resource_name = "move"
+localized_name = "Move"
+action_type = 2
+toplevel_paths = PackedStringArray("/user/hand/left")
+
+[sub_resource type="OpenXRAction" id="OpenXRAction_turn"]
+resource_name = "turn"
+localized_name = "Turn"
+action_type = 2
+toplevel_paths = PackedStringArray("/user/hand/right")
+
+[sub_resource type="OpenXRAction" id="OpenXRAction_activate"]
+resource_name = "activate"
+localized_name = "Activate"
+toplevel_paths = PackedStringArray("/user/hand/right")
+
+[sub_resource type="OpenXRAction" id="OpenXRAction_fire"]
+resource_name = "fire"
+localized_name = "Fire"
+toplevel_paths = PackedStringArray("/user/hand/right")
+
+[sub_resource type="OpenXRAction" id="OpenXRAction_save"]
+resource_name = "save"
+localized_name = "Save"
+action_type = 0
+toplevel_paths = PackedStringArray("/user/hand/left")
+
+[sub_resource type="OpenXRAction" id="OpenXRAction_haptic"]
+resource_name = "haptic"
+localized_name = "Haptic feedback"
+action_type = 4
+toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
+
+[sub_resource type="OpenXRActionSet" id="OpenXRActionSet_gameplay"]
+resource_name = "gameplay"
+localized_name = "Open Nevada gameplay"
+actions = [SubResource("OpenXRAction_aim"), SubResource("OpenXRAction_move"), SubResource("OpenXRAction_turn"), SubResource("OpenXRAction_activate"), SubResource("OpenXRAction_fire"), SubResource("OpenXRAction_save"), SubResource("OpenXRAction_haptic")]
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_aim_left"]
+action = SubResource("OpenXRAction_aim")
+binding_path = "/user/hand/left/input/aim/pose"
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_aim_right"]
+action = SubResource("OpenXRAction_aim")
+binding_path = "/user/hand/right/input/aim/pose"
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_move"]
+action = SubResource("OpenXRAction_move")
+binding_path = "/user/hand/left/input/thumbstick"
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_turn"]
+action = SubResource("OpenXRAction_turn")
+binding_path = "/user/hand/right/input/thumbstick"
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_activate"]
+action = SubResource("OpenXRAction_activate")
+binding_path = "/user/hand/right/input/squeeze/value"
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_fire"]
+action = SubResource("OpenXRAction_fire")
+binding_path = "/user/hand/right/input/trigger/value"
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_save"]
+action = SubResource("OpenXRAction_save")
+binding_path = "/user/hand/left/input/x/click"
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_haptic_left"]
+action = SubResource("OpenXRAction_haptic")
+binding_path = "/user/hand/left/output/haptic"
+
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_haptic_right"]
+action = SubResource("OpenXRAction_haptic")
+binding_path = "/user/hand/right/output/haptic"
+
+[sub_resource type="OpenXRInteractionProfile" id="OpenXRInteractionProfile_oculus_touch"]
+interaction_profile_path = "/interaction_profiles/oculus/touch_controller"
+bindings = [SubResource("OpenXRIPBinding_aim_left"), SubResource("OpenXRIPBinding_aim_right"), SubResource("OpenXRIPBinding_move"), SubResource("OpenXRIPBinding_turn"), SubResource("OpenXRIPBinding_activate"), SubResource("OpenXRIPBinding_fire"), SubResource("OpenXRIPBinding_save"), SubResource("OpenXRIPBinding_haptic_left"), SubResource("OpenXRIPBinding_haptic_right")]
+
+[resource]
+action_sets = [SubResource("OpenXRActionSet_gameplay")]
+interaction_profiles = [SubResource("OpenXRInteractionProfile_oculus_touch")]

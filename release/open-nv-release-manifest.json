@@ -17,7 +17,14 @@
     "path": "runtime",
     "status": "experimental",
     "playable": false,
-    "playableSandbox": true
+    "playableSandbox": true,
+    "openxr": {
+      "launchable": true,
+      "hardwareValidated": false,
+      "testedInteractionProfiles": [
+        "/interaction_profiles/oculus/touch_controller"
+      ]
+    }
   },
   "launcher": {
     "repository": "nikamigaming-create/OpenNV",
@@ -36,6 +43,8 @@
     "desktop-launcher-contract",
     "campaign-chooser",
     "authored-pickup-inventory-loop",
-    "persistent-sandbox-cold-reload"
+    "persistent-sandbox-cold-reload",
+    "openxr-rig-action-map-package-gate",
+    "shared-flat-openxr-save-contract"
   ]
 }

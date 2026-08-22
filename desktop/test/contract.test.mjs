@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CAMPAIGNS, createOfflineState, mergeRuntimeState, validateLaunchRequest } from "../src/contract.mjs";
+import {
+  CAMPAIGNS,
+  createOfflineState,
+  createRuntimeArguments,
+  mergeRuntimeState,
+  validateLaunchRequest
+} from "../src/contract.mjs";
 
 test("the launcher has distinct standalone and TTW character paths", () => {
   const state = createOfflineState({ platform: "linux" });
@@ -10,9 +16,20 @@ test("the launcher has distinct standalone and TTW character paths", () => {
   assert.match(state.campaignRule, /before creating a character/i);
 });
 
+test("flat and OpenXR launches separate engine and game arguments", () => {
+  const flat = validateLaunchRequest({ campaign: "newvegas" });
+  assert.deepEqual(createRuntimeArguments(flat), ["--xr-mode", "off", "--", "--campaign", "NewVegas"]);
+  const xr = validateLaunchRequest({ campaign: "newvegas", enableVr: true });
+  assert.deepEqual(
+    createRuntimeArguments(xr),
+    ["--xr-mode", "on", "--", "--campaign", "NewVegas", "--vr"]
+  );
+});
+
 test("JAM is modular only for the supported character paths", () => {
   assert.equal(validateLaunchRequest({ campaign: "newvegas", enableJam: true }).enableJam, true);
   assert.throws(() => validateLaunchRequest({ campaign: "fallout3", enableJam: true }), /New Vegas and TTW/);
+  assert.equal(validateLaunchRequest({ campaign: "newvegas", enableVr: true }).enableVr, true);
 });
 
 test("a Godot runtime manifest augments rather than replaces product campaign rules", () => {
@@ -23,6 +40,7 @@ test("a Godot runtime manifest augments rather than replaces product campaign ru
   });
   assert.equal(merged.runtime.status, "ready");
   assert.equal(merged.runtime.canLaunch, true);
+  assert.equal(merged.runtime.openXrLaunchable, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").ready, true);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").jamReady, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "ttw").ready, false);
@@ -43,6 +61,8 @@ test("the checked-in runtime exposes only the playable New Vegas sandbox", () =>
   const manifest = JSON.parse(readFileSync(new URL("../../runtime/runtime-manifest.json", import.meta.url), "utf8"));
   const merged = mergeRuntimeState(createOfflineState({ platform: "win32" }), manifest);
   assert.equal(merged.runtime.canLaunch, true);
+  assert.equal(merged.runtime.openXrLaunchable, true);
+  assert.equal(merged.runtime.openXrHardwareValidated, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").ready, true);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").jamReady, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "fallout3").ready, false);

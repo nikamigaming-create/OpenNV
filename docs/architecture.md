@@ -87,17 +87,21 @@ flowchart LR
     Game <--> Save[One save contract]
 ```
 
-The current `CellPlayer` desktop input and `GameplaySession` screen-space HUD are
-temporary vertical-slice code, not the final cross-mode boundary. They may not
-accumulate actor, combat, VATS, or quest rules. The first OpenXR promotion must
-replace that coupling with code exercised by both modes; no unused VR manager,
-empty interface, or speculative abstraction counts as progress.
+`CellPlayer` now constructs either a flat camera/input rig or a real OpenXR
+origin, tracked head, and two tracked controllers over the same
+`GameplaySession`. `GameplaySession` renders either its flat HUD or a
+controller-mounted world-space HUD without duplicating inventory, objective, or
+save rules. This remains bounded vertical-slice code; actor, combat, VATS, and
+quest rules may not accumulate there. No unused VR manager, empty interface, or
+speculative abstraction counts as progress.
 
-The OpenXR gate requires a real stereo run, head and two-controller pose input,
-metre-correct world scale, world-space interaction/HUD, identical scripted
-gameplay reports and save state between flat and VR adapters, and stereo-safe
-materials. Gameplay outcomes remain mode-independent; only input translation
-and presentation differ.
+The software OpenXR gate now proves the action map loads, the rig contains its
+required node hierarchy, world scale is one metre, physics runs at 90 Hz, the
+HUD is world-space, and the flat save schema is shared. Promotion to
+hardware-validated requires a real stereo run with head/two-controller poses,
+room-scale collision, controller actions/haptics, identical route/save results,
+and stereo-safe materials. Gameplay outcomes remain mode-independent; only
+input translation and presentation differ.
 
 ## Source ownership
 
@@ -123,7 +127,7 @@ and presentation differ.
 | `PickupInstance.cs` | One authored pickup's identity and weapon profile | Inventory ownership |
 | `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
 | `GameplaySession.cs` | Objective, HUD, inventory, ammo, world delta, save/reload | Asset parsing |
-| `CellPlayer.cs` | Movement, view, activation and firing input | Asset preparation |
+| `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation and firing adapters | Asset preparation or gameplay outcomes |
 | `RuntimeCoordinator.cs` | Startup routing, reports, and gate orchestration | UI construction or file-format parsing |
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
 | `StaticModelSlice.cs` | Legacy one-model proof view | Cell relationships |
@@ -149,6 +153,10 @@ references, 153 visible assets, 255 textures, 332 materials, 97 pickups, five
 containers, 24 authored lights, full converted item rotations, collision,
 movement, HUD, inventory, authored `.357` damage/clip data, firing, objectives,
 doors, atomic save, cold reload, and launcher-enabled sandbox play.
+The OpenXR software path adds a Meta Touch action map, `XROrigin3D`, tracked head
+and hands, metre scale, 90 Hz physics, locomotion, snap-turn, controller
+activation/fire/save, haptics, runtime-provided controller models, world-space
+HUD, and explicit launcher routing.
 
 Not implemented: full Bethesda environment/mask material semantics, authored
 bhk collision, non-item arbitrary rotation promotion, visible first-person
@@ -164,8 +172,8 @@ collision, and all actor rendering remain open differential gates.
 Next promotion order:
 
 1. close and package this playable saloon route;
-2. promote the shared desktop/OpenXR intent, state, event, scale, and save
-   boundary through a real OpenXR rig;
+2. close the OpenXR hardware gate on a connected Meta headset, including
+   room-scale collision, stereo material review, and route/save equivalence;
 3. promote Trudy as one complete `ACHR -> NPC_ -> RACE/body/clothing/FaceGen ->
    skeleton -> idle` actor, with no proxy mesh or generated substitute;
 4. run fixed-camera retail/Godot interior differentials for materials, lighting,
@@ -182,4 +190,5 @@ user-owned game data, and private identity material remain separately auditable.
 OpenNV does not use the guide's native-ABI shortcut because no lawful,
 cross-platform New Vegas simulation library is available to embed. See the
 retained retail evidence in
-[fnv-esm-cell-contract.md](evidence/fnv-esm-cell-contract.md).
+[fnv-esm-cell-contract.md](evidence/fnv-esm-cell-contract.md) and the explicit
+[OpenXR runtime contract](evidence/openxr-runtime-contract.md).

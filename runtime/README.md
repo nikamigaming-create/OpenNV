@@ -41,5 +41,14 @@ door, left-click to fire an equipped weapon, and F5 to save. The HUD tracks the
 four-stage sandbox objective and inventory. Packaging proves the route and a
 separate cold reload before accepting the build.
 
+The same sandbox has an experimental OpenXR mode. Choose **OpenXR mode** in the
+launcher, or run `OpenNV.exe --xr-mode on -- --vr`. The current tested action
+profile is Meta/Oculus Touch: left stick moves, right stick snap-turns, right
+grip activates, right trigger fires with haptics, and X saves. The HUD is mounted
+in world space on the left controller. The rig/action-map/package gates pass,
+but a connected-headset stereo run is still pending; unsupported controller
+profiles are not guessed into the action map. This first path is Windows PCVR;
+a standalone Quest APK/export/install gate is not implemented yet.
+
 Add `-FalloutNewVegasData <path>` to the build command for a local end-to-end
 gate of the exported executable, packaged helper, legal cache, and Godot load.

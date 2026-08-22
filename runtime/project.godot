@@ -19,3 +19,9 @@ renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="mobile"
 textures/default_filters/use_nearest_mipmap_filter=false
 environment/defaults/default_clear_color=Color(0.03, 0.035, 0.04, 1)
+
+[xr]
+
+openxr/default_action_map="res://openxr_action_map.tres"
+openxr/startup_alert=false
+shaders/enabled=true

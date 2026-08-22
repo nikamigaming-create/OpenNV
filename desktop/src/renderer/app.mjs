@@ -16,6 +16,8 @@ const selectionTitle = document.querySelector("#selection-title");
 const selectionDetail = document.querySelector("#selection-detail");
 const jamRow = document.querySelector("#jam-toggle-row");
 const jamToggle = document.querySelector("#jam-toggle");
+const vrRow = document.querySelector("#vr-toggle-row");
+const vrToggle = document.querySelector("#vr-toggle");
 const launchButton = document.querySelector("#launch");
 const toast = document.querySelector("#toast");
 
@@ -55,6 +57,7 @@ function renderCampaigns() {
     element.addEventListener("click", () => {
       selectedId = element.dataset.campaign;
       jamToggle.checked = false;
+      vrToggle.checked = false;
       render();
     });
   });
@@ -72,6 +75,7 @@ function renderLayers() {
 function render() {
   const campaign = selectedCampaign();
   const jamAvailable = Boolean(campaign.jam && campaign.jamReady);
+  const vrAvailable = Boolean(campaign.ready && state.runtime.openXrLaunchable);
   document.querySelector("#campaign-rule").textContent = state.campaignRule;
   document.querySelector("#jam-rule").textContent = state.jamRule;
   statusElement.textContent = statusLabel(state.runtime);
@@ -81,15 +85,23 @@ function render() {
   jamRow.classList.toggle("disabled", !jamAvailable);
   jamToggle.disabled = !jamAvailable;
   if (!jamAvailable) jamToggle.checked = false;
-  launchButton.disabled = !state.runtime.canLaunch;
-  launchButton.title = state.runtime.canLaunch ? "Launch this path" : state.runtime.label;
+  vrRow.classList.toggle("disabled", !vrAvailable);
+  vrToggle.disabled = !vrAvailable;
+  if (!vrAvailable) vrToggle.checked = false;
+  const routeLaunchable = Boolean(state.runtime.canLaunch && campaign.ready);
+  launchButton.disabled = !routeLaunchable;
+  launchButton.title = routeLaunchable ? "Launch this path" : (campaign.readiness || state.runtime.label);
   document.querySelector("#platform-label").textContent = `${state.runtime.platform.toUpperCase()} / ${state.runtime.source.toUpperCase()}`;
   renderCampaigns();
   renderLayers();
 }
 
 launchButton.addEventListener("click", async () => {
-  const result = await api.launch({ campaign: selectedCampaign().id, enableJam: jamToggle.checked });
+  const result = await api.launch({
+    campaign: selectedCampaign().id,
+    enableJam: jamToggle.checked,
+    enableVr: vrToggle.checked
+  });
   showToast(result.message, result.ok ? "success" : "warning");
 });
 

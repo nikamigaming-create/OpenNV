@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createOfflineState, mergeRuntimeState, validateLaunchRequest } from "./contract.mjs";
+import { createOfflineState, createRuntimeArguments, mergeRuntimeState, validateLaunchRequest } from "./contract.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const renderer = path.join(here, "renderer", "index.html");
@@ -78,7 +78,7 @@ async function chooseRuntime() {
 }
 
 function launch(request) {
-  const { campaign, enableJam } = validateLaunchRequest(request);
+  const { campaign, enableJam, enableVr } = validateLaunchRequest(request);
   const installed = runtimeManifest();
   if (!installed) {
     return { ok: false, code: "runtime-not-found", message: "Choose an installed OpenNV runtime before launching a world." };
@@ -88,8 +88,15 @@ function launch(request) {
   }
   const runtimeCampaign = installed.manifest.campaigns?.find((entry) =>
     String(entry?.id ?? "").toLowerCase() === campaign.engineCampaign.toLowerCase());
+  if (!runtimeCampaign?.variants?.vanilla?.ready) {
+    return { ok: false, code: "campaign-not-ready", message: runtimeCampaign?.variants?.vanilla?.message || `${campaign.title} is not ready in this runtime.` };
+  }
   if (enableJam && !runtimeCampaign?.variants?.jam?.ready) {
     return { ok: false, code: "jam-not-ready", message: runtimeCampaign?.variants?.jam?.message || "JAM is not ready in this runtime." };
+  }
+  const openXr = installed.manifest.runtime?.presentationModes?.openxr;
+  if (enableVr && !openXr?.launchable) {
+    return { ok: false, code: "openxr-not-ready", message: "OpenXR is not launchable in this runtime." };
   }
   const relativeExecutable = installed.manifest.runtime?.executables?.[process.platform];
   const executable = relativeExecutable ? path.join(installed.root, relativeExecutable) : null;
@@ -97,11 +104,10 @@ function launch(request) {
     return { ok: false, code: "runtime-executable-missing", message: `The runtime has no ${process.platform} executable.` };
   }
 
-  const args = ["--campaign", campaign.engineCampaign];
-  if (enableJam) args.push("--enable-jam");
+  const args = createRuntimeArguments({ campaign, enableJam, enableVr });
   const child = spawn(executable, args, { detached: true, stdio: "ignore", windowsHide: true });
   child.unref();
-  return { ok: true, message: `${campaign.title} launch handed to the local OpenNV runtime.` };
+  return { ok: true, message: `${campaign.title} ${enableVr ? "OpenXR" : "flat"} launch handed to the local OpenNV runtime.` };
 }
 
 function createWindow() {

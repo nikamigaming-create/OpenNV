@@ -34,7 +34,7 @@ $sourceRoots = @(
 )
 $sourceFiles = @(
     Get-ChildItem -LiteralPath $sourceRoots -Recurse -File |
-        Where-Object Extension -in @(".cs", ".csproj", ".gd", ".gdshader", ".json", ".mjs", ".ps1", ".py", ".sln", ".yml", ".yaml")
+        Where-Object Extension -in @(".cs", ".csproj", ".gd", ".gdshader", ".json", ".mjs", ".ps1", ".py", ".sln", ".tres", ".yml", ".yaml")
 )
 $forbiddenPattern = '(?i)open' + 'mw|nif' + 'test|onv' + 'skel'
 $forbidden = @($sourceFiles | Select-String -Pattern $forbiddenPattern)
@@ -53,9 +53,45 @@ if ($LASTEXITCODE -ne 0) { throw "OpenNV C# format/analyzer gate failed." }
 & dotnet build (Join-Path $runtimeRoot "OpenNV.csproj") --configuration Debug --nologo
 if ($LASTEXITCODE -ne 0) { throw "OpenNV Godot Debug build failed." }
 
-$startupOutput = & $Godot --headless --path $runtimeRoot 2>&1
+$startupOutput = & $Godot --headless --xr-mode off --path $runtimeRoot 2>&1
 if ($LASTEXITCODE -ne 0 -or ($startupOutput | Out-String) -notmatch "OPENNV_GODOT_EXPERIMENTAL_READY playable=0") {
     throw "OpenNV experimental startup gate failed:`n$($startupOutput | Out-String)"
+}
+
+$xrReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-xr-rig-{0}.json" -f [guid]::NewGuid().ToString("N"))
+$xrSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-xr-rig-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+try {
+    $xrOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+        --xr-rig-proof --save-path $xrSave --report $xrReport 2>&1
+    $xrText = $xrOutput | Out-String
+    if ($LASTEXITCODE -ne 0 -or $xrText -notmatch "OPENNV_OPENXR_RIG_PASS" -or $xrText -match "(?m)^ERROR:") {
+        throw "OpenNV OpenXR rig gate failed:`n$xrText"
+    }
+    $xr = Get-Content -Raw -LiteralPath $xrReport | ConvertFrom-Json
+    if ($xr.schema -ne "opennv-openxr-rig/v1" -or
+        $xr.status -ne "pass" -or
+        [bool]$xr.viewportXrEnabledDuringProof -or
+        [int]$xr.actionSets -ne 1 -or
+        [int]$xr.actions -ne 7 -or
+        $xr.testedInteractionProfile -ne "/interaction_profiles/oculus/touch_controller" -or
+        $xr.originType -ne "XROrigin3D" -or
+        $xr.cameraType -ne "XRCamera3D" -or
+        $xr.controllerRenderModelManagerType -ne "OpenXRRenderModelManager" -or
+        $xr.leftTracker -ne "/user/hand/left" -or
+        $xr.rightTracker -ne "/user/hand/right" -or
+        [double]$xr.worldScale -ne 1.0 -or
+        [int]$xr.physicsTicksPerSecond -ne 90 -or
+        -not [bool]$xr.worldSpaceHud -or
+        $xr.sharedSaveSchema.schema -ne "opennv-sandbox-save/v1") {
+        throw "OpenNV OpenXR rig report is invalid."
+    }
+}
+finally {
+    foreach ($temporaryPath in @($xrReport, $xrSave)) {
+        if (Test-Path -LiteralPath $temporaryPath) {
+            Remove-Item -LiteralPath $temporaryPath -Force
+        }
+    }
 }
 
 $retailModel = ""
@@ -86,7 +122,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
 function Invoke-StaticModelGate([string]$Model, [string]$Sidecar, [string]$Label) {
     $report = Join-Path ([IO.Path]::GetTempPath()) ("opennv-{0}-{1}.json" -f $Label, [guid]::NewGuid().ToString("N"))
     try {
-        $output = & $Godot --headless --path $runtimeRoot -- `
+        $output = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
             --model $Model --sidecar $Sidecar --report $report --quit-after-load 2>&1
         $exitCode = $LASTEXITCODE
         $text = $output | Out-String
@@ -119,6 +155,8 @@ $result = [pscustomobject][ordered]@{
     schema = "opennv-godot-runtime-gate/v1"
     status = "pass"
     cleanRuntime = $true
+    openXrRig = $true
+    openXrHardwareValidated = $false
     syntheticSourceSha256 = [string]$fixture.sourceSha256
     retailSourceSha256 = if ($null -eq $retail) { "not-requested" } else { [string]$retail.sourceSha256 }
     godot = $Godot

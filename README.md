@@ -86,8 +86,10 @@ This is a playable experimental sandbox, not the full New Vegas campaign. See th
 [installation status](docs/installation.md), [clean implementation boundary](docs/clean-room.md),
 and [release policy](docs/nightlies.md).
 
-Flat play and OpenXR are first-class targets for one shared game state. OpenXR
-is an explicit next promotion gate; the current package does not claim VR yet.
+Flat play and OpenXR are first-class modes over one shared game/save state. The
+OpenXR software path is launchable with a bounded Meta Touch action map,
+metre-correct rig, controller locomotion/actions, haptics, and a wrist HUD. A
+connected-headset stereo validation is still required before calling VR ready.
 
 ## Release contents
 
