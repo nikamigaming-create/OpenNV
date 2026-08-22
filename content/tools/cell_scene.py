@@ -139,7 +139,7 @@ def _find_cell(catalog: CellCatalog, editor_id: str) -> int:
     return matches[0]
 
 
-def _arrival_transform(catalog: CellCatalog, target_door_form_id: int) -> tuple[int, Transform]:
+def arrival_transform(catalog: CellCatalog, target_door_form_id: int) -> tuple[int, Transform]:
     incoming = [
         reference
         for reference in catalog.references
@@ -212,7 +212,7 @@ def prepare_cell_scene(
     cell_form_id = _find_cell(catalog, str(recipe["cellEditorId"]))
     cell = catalog.cells[cell_form_id]
     entry_door = int(str(recipe["entryDoorReferenceFormId"]), 16)
-    source_door, arrival = _arrival_transform(catalog, entry_door)
+    source_door, arrival = arrival_transform(catalog, entry_door)
     origin = arrival.position
     if cell.lighting is None:
         raise ValueError(f"Cell recipe requires XCLL lighting: {cell.editor_id}")

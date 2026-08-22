@@ -1,0 +1,36 @@
+{
+  "schema": "opennv-actor-recipe/v1",
+  "id": "goodsprings-trudy-actor-v1",
+  "master": {
+    "file": "FalloutNV.esm",
+    "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1"
+  },
+  "meshesArchive": {
+    "file": "Fallout - Meshes.bsa",
+    "sha256": "054e299829ff24fd4bd4edf69f6424346b400c87379cee39bec02e4d082bf85a"
+  },
+  "textureArchives": [
+    {
+      "file": "Fallout - Textures.bsa",
+      "sha256": "68c0f4beb00e07cc06361e3a5be0909873220731db3bd43bc013e85544b67578"
+    },
+    {
+      "file": "Fallout - Textures2.bsa",
+      "sha256": "bdaa85989b30a68c2c9ce79a07b167ecd72942df47f2e58c4a0299b016410dc2"
+    }
+  ],
+  "cellFormId": "00106185",
+  "cellRecipe": "goodsprings-saloon-structure-v1",
+  "proofActorReferenceFormId": "00104c6d",
+  "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
+  "hairShape": "NoHat",
+  "skinToneRgba": [
+    62,
+    65,
+    62,
+    64
+  ],
+  "excludeOutfitShapePrefixes": [
+    "MeatCap"
+  ]
+}
