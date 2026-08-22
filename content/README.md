@@ -1,0 +1,19 @@
+# Direct retail-content pipeline
+
+`content` reads files supplied by the player and emits versioned, hash-pinned
+artifacts for the Godot runtime. It does not invoke or consume another game
+engine.
+
+`tools/prepare_legal_assets.py` accepts a legal Fallout New Vegas `Data`
+directory, hashes `FalloutNV.esm` and `Fallout - Meshes.bsa`, extracts the
+requested member directly from BSA v104, and builds an isolated cache.
+
+The first slice, `tools/export_static_nif_gltf.py`, supports opaque static
+`NiTriShape` and `NiTriStrips` geometry. It exports positions, normals,
+tangents, up to two UV sets, vertex colors, indices, texture-slot identities,
+and Bethesda shader/material metadata. Collision is inventoried but not
+exported. Controllers, skinning, alpha properties, and unknown surface
+properties fail closed.
+
+The committed NIF fixture is synthetic. Owned retail inputs and generated glTF
+outputs remain local and ignored.

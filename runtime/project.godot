@@ -1,0 +1,21 @@
+; OpenNV Godot runtime. Retail-derived generated content is never committed.
+config_version=5
+
+[application]
+
+config/name="OpenNV"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="mobile"
+textures/default_filters/use_nearest_mipmap_filter=false
+environment/defaults/default_clear_color=Color(0.03, 0.035, 0.04, 1)

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -30,43 +30,21 @@ function runtimeRoot() {
   return null;
 }
 
-function bridgeScript() {
+function runtimeManifest() {
   const root = runtimeRoot();
   if (!root) return null;
-  const script = path.join(root, "scripts", "Get-OpenNVLauncherState.ps1");
-  return existsSync(script) ? script : null;
-}
-
-function callPowerShell(script, args, { detached = false } = {}) {
-  const executable = process.env.SystemRoot
-    ? path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-    : "powershell.exe";
-  return spawn(executable, ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, ...args], {
-    detached,
-    stdio: detached ? "ignore" : ["ignore", "pipe", "pipe"],
-    windowsHide: true
-  });
+  const manifestPath = path.join(root, "runtime-manifest.json");
+  if (!existsSync(manifestPath)) return null;
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    return manifest?.schema === "opennv-runtime-manifest/v1" ? { root, manifest } : null;
+  } catch {
+    return null;
+  }
 }
 
 async function readRuntimeState() {
-  if (process.platform !== "win32") return null;
-  const script = bridgeScript();
-  if (!script) return null;
-
-  return new Promise((resolve) => {
-    const child = callPowerShell(script, ["-AsJson"]);
-    let stdout = "";
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.once("error", () => resolve(null));
-    child.once("close", (code) => {
-      if (code !== 0) return resolve(null);
-      try {
-        resolve(JSON.parse(stdout));
-      } catch {
-        resolve(null);
-      }
-    });
-  });
+  return runtimeManifest()?.manifest ?? null;
 }
 
 async function launcherState() {
@@ -74,24 +52,25 @@ async function launcherState() {
   return mergeRuntimeState(base, await readRuntimeState());
 }
 
-function isWindowsRuntimeRoot(candidate) {
-  return process.platform === "win32"
-    && existsSync(path.join(candidate, "scripts", "Get-OpenNVLauncherState.ps1"))
-    && existsSync(path.join(candidate, "scripts", "Start-OpenNV.ps1"));
+function isRuntimeRoot(candidate) {
+  const manifestPath = path.join(candidate, "runtime-manifest.json");
+  if (!existsSync(manifestPath)) return false;
+  try {
+    return JSON.parse(readFileSync(manifestPath, "utf8"))?.schema === "opennv-runtime-manifest/v1";
+  } catch {
+    return false;
+  }
 }
 
 async function chooseRuntime() {
-  if (process.platform !== "win32") {
-    return { ok: false, message: "This platform's runtime package is not published yet. The launcher shell is ready for its future native bridge." };
-  }
   const selection = await dialog.showOpenDialog({
     title: "Choose an extracted OpenNV runtime folder",
     properties: ["openDirectory", "createDirectory"]
   });
   if (selection.canceled || selection.filePaths.length === 0) return { ok: false, message: "No runtime folder selected." };
   const candidate = selection.filePaths[0];
-  if (!isWindowsRuntimeRoot(candidate)) {
-    return { ok: false, message: "That folder is not an extracted OpenNV Windows runtime. Select the folder containing scripts/Start-OpenNV.ps1." };
+  if (!isRuntimeRoot(candidate)) {
+    return { ok: false, message: "That folder has no valid OpenNV Godot runtime-manifest.json." };
   }
   mkdirSync(path.dirname(runtimeConfigPath()), { recursive: true });
   writeFileSync(runtimeConfigPath(), `${JSON.stringify({ runtimeRoot: candidate }, null, 2)}\n`, "utf8");
@@ -100,19 +79,22 @@ async function chooseRuntime() {
 
 function launch(request) {
   const { campaign, enableJam } = validateLaunchRequest(request);
-  if (process.platform !== "win32") {
-    return { ok: false, code: "runtime-port-pending", message: "The Open Nevada shell runs here; this runtime build is not available for this platform yet." };
-  }
-
-  const root = runtimeRoot();
-  const script = root ? path.join(root, "scripts", "Start-OpenNV.ps1") : null;
-  if (!script || !existsSync(script)) {
+  const installed = runtimeManifest();
+  if (!installed) {
     return { ok: false, code: "runtime-not-found", message: "Choose an installed OpenNV runtime before launching a world." };
   }
+  if (!installed.manifest.runtime?.canLaunch) {
+    return { ok: false, code: "runtime-slice-not-playable", message: installed.manifest.runtime?.label || "This runtime slice is not playable yet." };
+  }
+  const relativeExecutable = installed.manifest.runtime?.executables?.[process.platform];
+  const executable = relativeExecutable ? path.join(installed.root, relativeExecutable) : null;
+  if (!executable || !existsSync(executable)) {
+    return { ok: false, code: "runtime-executable-missing", message: `The runtime has no ${process.platform} executable.` };
+  }
 
-  const args = ["-Campaign", campaign.engineCampaign];
-  if (enableJam) args.push("-EnableJam");
-  const child = callPowerShell(script, args, { detached: true });
+  const args = ["--campaign", campaign.engineCampaign];
+  if (enableJam) args.push("--enable-jam");
+  const child = spawn(executable, args, { detached: true, stdio: "ignore", windowsHide: true });
   child.unref();
   return { ok: true, message: `${campaign.title} launch handed to the local OpenNV runtime.` };
 }

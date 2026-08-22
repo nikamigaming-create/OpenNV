@@ -33,8 +33,11 @@ function showToast(message, kind = "info") {
 
 function statusLabel(runtime) {
   if (runtime.status === "connected") return "Runtime connected";
+  if (runtime.status === "ready") return "Godot runtime ready";
+  if (runtime.status === "experimental") return "Experimental Godot runtime";
+  if (runtime.status === "development-slice") return "Godot development slice";
   if (runtime.status === "portable-shell") return "Cross-platform shell";
-  return "Runtime bridge not selected";
+  return "Godot runtime not selected";
 }
 
 function renderCampaigns() {

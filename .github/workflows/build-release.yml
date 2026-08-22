@@ -1,154 +1,97 @@
-name: Build OpenNV release
+name: Validate OpenNV Godot
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 6 * * *'
+  pull_request:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: opennv-release-${{ github.ref_name }}
-  cancel-in-progress: false
-
-env:
-  ENGINE_REPOSITORY: nikamigaming-create/nikami-openmw-lab
-  ENGINE_REF: codex/opennv-ttw-compat
-  LAUNCHER_REPOSITORY: nikamigaming-create/nikami-bworlds
-  LAUNCHER_REF: codex/archive-worlds-wip-20260724
-  BUILD_TYPE: RelWithDebInfo
+  group: opennv-godot-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  windows:
+  godot-runtime:
     runs-on: windows-2022
-
     steps:
-      - name: Check out release hub
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Check out OpenNV engine source
-        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          repository: ${{ env.ENGINE_REPOSITORY }}
-          ref: ${{ env.ENGINE_REF }}
-          path: engine
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: content/requirements.txt
 
-      - name: Check out launcher source
-        uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          repository: ${{ env.LAUNCHER_REPOSITORY }}
-          ref: ${{ env.LAUNCHER_REF }}
-          path: launcher
+          dotnet-version: "9.0.x"
 
-      - name: Read engine dependency revision
-        shell: pwsh
-        run: Get-Content engine/CI/github.env | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install direct-content dependencies
+        run: python -m pip install -r content/requirements.txt
 
-      - name: Download prebuilt dependencies
+      - name: Download pinned Godot Mono
+        id: godot
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path deps, deps/Qt -Force | Out-Null
-          $manifest = "vcpkg-x64-2022-$env:VCPKG_DEPS_TAG.txt"
-          curl.exe --fail --retry 3 -L -o "deps/$manifest" "https://gitlab.com/madsbuvi/openmw-deps/-/raw/openmw-vr/windows/$manifest"
-          $lines = Get-Content "deps/$manifest"
-          if ($lines.Count -lt 2) { throw "Dependency manifest is incomplete: deps/$manifest" }
-          $parts = @($lines[1] -split '\s+' | Where-Object { $_ })
-          if ($parts.Count -lt 2) { throw "Dependency manifest has no checksum and archive name: deps/$manifest" }
-          $expected = $parts[0]
-          $archive = "deps/$($parts[1])"
-          curl.exe --fail --retry 3 -L -o $archive $lines[0]
-          if ((Get-FileHash $archive -Algorithm SHA512).Hash -ne $expected) { throw 'Dependency archive hash mismatch.' }
-          7z x -y "-odeps/vcpkg-x64-2022-$env:VCPKG_DEPS_TAG" $archive
+          $version = '4.7.1-stable'
+          $archive = Join-Path $env:RUNNER_TEMP 'godot-mono.zip'
+          $root = Join-Path $env:RUNNER_TEMP 'godot-mono'
+          $expectedSha256 = '764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45'
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot/releases/download/$version/Godot_v4.7.1-stable_mono_win64.zip" -OutFile $archive
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) { throw "Godot archive hash mismatch: $actualSha256" }
+          Expand-Archive -LiteralPath $archive -DestinationPath $root
+          $godot = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*console.exe')
+          if ($godot.Count -ne 1) { throw "Expected one Godot console executable; found $($godot.Count)." }
+          "path=$($godot[0].FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: Restore Qt cache
-        id: qt-cache
+      - name: Validate clean Godot runtime
+        shell: pwsh
+        run: ./scripts/Test-GodotRuntime.ps1 -Godot '${{ steps.godot.outputs.path }}'
+
+      - name: Cache pinned Godot export templates
         uses: actions/cache@v4
         with:
-          path: deps/Qt/6.6.3/msvc2019_64
-          key: opennv-qt-6.6.3-msvc2019_64-v3
+          path: ~/AppData/Roaming/Godot/export_templates/4.7.1.stable.mono
+          key: godot-mono-4.7.1-windows-export-ef9a708be51ecd974cd7dccdcafd7a1870da3d3e1c24c072bdbb9818c7a7db63
 
-      - name: Install Qt
-        shell: pwsh
-        working-directory: deps/Qt
-        run: |
-          $qtConfig = '6.6.3/msvc2019_64/lib/cmake/Qt6/Qt6Config.cmake'
-          if (Test-Path -LiteralPath $qtConfig -PathType Leaf) {
-            Write-Host "Qt cache is valid: $qtConfig"
-            exit 0
-          }
-          curl.exe --fail --retry 3 -L -o aqt_x64.exe https://github.com/miurahr/aqtinstall/releases/download/v3.1.15/aqt_x64.exe
-          & .\aqt_x64.exe install-qt windows desktop 6.6.3 win64_msvc2019_64
-          if (-not (Test-Path -LiteralPath $qtConfig -PathType Leaf)) { throw "Qt installation did not create $qtConfig" }
-
-      - uses: ilammy/msvc-dev-cmd@v1
-      - uses: seanmiddleditch/gha-setup-ninja@master
-
-      - name: Configure OpenNV runtime
-        shell: pwsh
-        run: >
-          cmake -S engine -B engine-build -G Ninja
-          -D CMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-          -D CMAKE_TOOLCHAIN_FILE='${{ github.workspace }}/deps/vcpkg-x64-2022-${{ env.VCPKG_DEPS_TAG }}/scripts/buildsystems/vcpkg.cmake'
-          -D CMAKE_PREFIX_PATH='${{ github.workspace }}/deps/Qt/6.6.3/msvc2019_64'
-          -D LuaJit_INCLUDE_DIR='${{ github.workspace }}/deps/vcpkg-x64-2022-${{ env.VCPKG_DEPS_TAG }}/installed/x64-windows/include/luajit'
-          -D LuaJit_LIBRARY='${{ github.workspace }}/deps/vcpkg-x64-2022-${{ env.VCPKG_DEPS_TAG }}/installed/x64-windows/lib/lua51.lib'
-          -D BUILD_OPENMW=ON -D BUILD_OPENMW_VR=OFF -D BUILD_OPENCS=OFF
-          -D BUILD_BENCHMARKS=OFF -D BUILD_COMPONENTS_TESTS=OFF -D BUILD_OPENMW_TESTS=OFF -D BUILD_OPENCS_TESTS=OFF
-          -D OPENMW_USE_SYSTEM_SQLITE3=OFF -D OPENMW_USE_SYSTEM_YAML_CPP=OFF
-
-      - name: Build and stage runtime
+      - name: Install pinned Windows export template
         shell: pwsh
         run: |
-          cmake --build engine-build --target openmw --parallel
-          $vcpkgRoot = "${{ github.workspace }}/deps/vcpkg-x64-2022-$env:VCPKG_DEPS_TAG/installed/x64-windows"
-          $vcpkgBin = Join-Path $vcpkgRoot 'bin'
-          $vcpkgReleaseBin = Join-Path $vcpkgBin 'Release'
-          Copy-Item (Join-Path $vcpkgReleaseBin 'MyGUIEngine.dll') engine-build -Force
-          Get-ChildItem (Join-Path $vcpkgBin 'osgPlugins-3.6.5') -Recurse -Filter *.dll | Copy-Item -Destination engine-build -Force
-          Get-ChildItem $vcpkgBin -Filter *.dll | Copy-Item -Destination engine-build -Force
-          $qtRoot = "${{ github.workspace }}/deps/Qt/6.6.3/msvc2019_64"
-          @('Qt6Core.dll','Qt6Gui.dll','Qt6Network.dll','Qt6OpenGL.dll','Qt6OpenGLWidgets.dll','Qt6Widgets.dll','Qt6Svg.dll') |
-            ForEach-Object { Copy-Item (Join-Path $qtRoot "bin/$_") engine-build -Force }
-          foreach ($plugin in @('styles/qwindowsvistastyle.dll','platforms/qwindows.dll','imageformats/qsvg.dll','iconengines/qsvgicon.dll')) {
-            $destination = Join-Path 'engine-build' (Split-Path -Parent $plugin)
-            New-Item -ItemType Directory -Path $destination -Force | Out-Null
-            Copy-Item (Join-Path $qtRoot "plugins/$plugin") $destination -Force
-          }
-          cmake --install engine-build --prefix engine-install
-          foreach ($pluginDirectory in @('styles','platforms','imageformats','iconengines')) {
-            Copy-Item (Join-Path 'engine-build' $pluginDirectory) (Join-Path 'engine-install' $pluginDirectory) -Recurse -Force
-          }
+          $target = Join-Path $env:APPDATA 'Godot/export_templates/4.7.1.stable.mono'
+          $windowsTemplate = Join-Path $target 'windows_release_x86_64.exe'
+          if (Test-Path -LiteralPath $windowsTemplate -PathType Leaf) { exit 0 }
+          $archive = Join-Path $env:RUNNER_TEMP 'godot-mono-templates.tpz'
+          $expanded = Join-Path $env:RUNNER_TEMP 'godot-mono-templates'
+          $expectedSha256 = 'ef9a708be51ecd974cd7dccdcafd7a1870da3d3e1c24c072bdbb9818c7a7db63'
+          Invoke-WebRequest -Uri 'https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_mono_export_templates.tpz' -OutFile $archive
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) { throw "Godot template archive hash mismatch: $actualSha256" }
+          Expand-Archive -LiteralPath $archive -DestinationPath $expanded
+          $source = Join-Path $expanded 'templates'
+          if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw 'Godot template archive has no templates directory.' }
+          New-Item -ItemType Directory -Path $target -Force | Out-Null
+          Copy-Item -Path (Join-Path $source '*') -Destination $target -Recurse -Force
 
-      - name: Verify staged runtime
+      - name: Build experimental Windows runtime
         shell: pwsh
         run: |
-          if (-not (Test-Path -LiteralPath 'engine-install/openmw.exe')) { throw 'The staged OpenNV runtime has no openmw.exe.' }
-          if (-not (Test-Path -LiteralPath 'engine-install/resources/vfs' -PathType Container)) { throw 'The staged OpenNV runtime has no VFS resources.' }
-          & .\engine-install\openmw.exe --version
+          $version = 'experimental-' + '${{ github.sha }}'.Substring(0, 12)
+          ./scripts/Build-GodotRuntime.ps1 -Godot '${{ steps.godot.outputs.path }}' -OutputRoot "$env:RUNNER_TEMP/opennv" -Version $version -SkipTests
 
-      - name: Package asset-free launcher bundle
-        id: package
-        shell: pwsh
-        run: |
-          $engineRevision = (git -C engine rev-parse HEAD)
-          $launcherRevision = (git -C launcher rev-parse HEAD)
-          $version = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}' } else { 'nightly' }
-          $result = & .\scripts\New-OpenNVBundle.ps1 -EngineInstallRoot engine-install -LauncherRoot launcher -OutputRoot "$env:RUNNER_TEMP\opennv" -Version $version -EngineRevision $engineRevision -LauncherRevision $launcherRevision | ConvertFrom-Json
-          "archive=$($result.archive)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-      - name: Upload workflow artifact
+      - name: Upload experimental Godot runtime
         uses: actions/upload-artifact@v4
         with:
-          name: opennv-runtime-windows-x64
-          path: ${{ steps.package.outputs.archive }}
+          name: opennv-godot-experimental-windows-x64
+          path: ${{ runner.temp }}/opennv/*.zip
           if-no-files-found: error
 
   desktop-launcher:
-    name: Build desktop launcher (${{ matrix.label }})
+    name: Validate desktop launcher (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -156,63 +99,20 @@ jobs:
         include:
           - label: windows-x64
             os: windows-2022
-            command: npm run package --prefix desktop -- --win zip --x64 --publish never
-            artifact: opennv-launcher-windows-x64
-            output: desktop/release/*.zip
           - label: macos-arm64
             os: macos-14
-            command: npm run package --prefix desktop -- --mac zip --arm64 --publish never
-            artifact: opennv-launcher-macos-arm64
-            output: desktop/release/*.zip
           - label: linux-x64
             os: ubuntu-22.04
-            command: npm run package --prefix desktop -- --linux AppImage --x64 --publish never
-            artifact: opennv-launcher-linux-x64
-            output: desktop/release/*.AppImage
-
     steps:
-      - name: Check out release hub
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --prefix desktop
+      - run: npm run check --prefix desktop
+      - run: npm test --prefix desktop
 
-      - name: Install and verify launcher
-        run: |
-          npm ci --prefix desktop
-          npm run check --prefix desktop
-          npm test --prefix desktop
-
-      - name: Package desktop launcher
-        run: ${{ matrix.command }}
-
-      - name: Upload desktop launcher
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.output }}
-          if-no-files-found: error
-
-  publish:
-    needs: [windows, desktop-launcher]
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'nightly' }}
-          target_commitish: ${{ github.sha }}
-          name: ${{ github.ref_type == 'tag' && github.ref_name || 'Open Nevada Nightly' }}
-          prerelease: ${{ github.ref_type != 'tag' }}
-          generate_release_notes: true
-          files: release-artifacts/**/*
+# Runtime publishing intentionally remains disabled until a Godot export passes
+# campaign, natural-route, persistence, packaging, and retail differential gates.

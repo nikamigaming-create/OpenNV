@@ -14,13 +14,25 @@ test("JAM is modular only for the supported character paths", () => {
   assert.throws(() => validateLaunchRequest({ campaign: "fallout3", enableJam: true }), /New Vegas and TTW/);
 });
 
-test("a Windows runtime state augments rather than replaces product campaign rules", () => {
+test("a Godot runtime manifest augments rather than replaces product campaign rules", () => {
   const base = createOfflineState({ platform: "win32" });
   const merged = mergeRuntimeState(base, {
+    runtime: { status: "ready", label: "Godot runtime ready", canLaunch: true },
     campaigns: [{ id: "NewVegas", variants: { vanilla: { ready: true, unavailableDlc: [] } } }]
   });
-  assert.equal(merged.runtime.status, "connected");
+  assert.equal(merged.runtime.status, "ready");
+  assert.equal(merged.runtime.canLaunch, true);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "newvegas").ready, true);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "ttw").ready, false);
   assert.equal(CAMPAIGNS.length, 3);
+});
+
+test("an experimental runtime connects without claiming campaigns are playable", () => {
+  const merged = mergeRuntimeState(createOfflineState({ platform: "linux" }), {
+    runtime: { status: "experimental", label: "Static geometry only", canLaunch: false },
+    campaigns: []
+  });
+  assert.equal(merged.runtime.status, "experimental");
+  assert.equal(merged.runtime.canLaunch, false);
+  assert.match(merged.runtime.label, /Static geometry/);
 });

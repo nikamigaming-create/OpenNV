@@ -60,9 +60,9 @@ export const EXTENDER_LAYERS = Object.freeze([
 function defaultRuntime(platform) {
   const windows = platform === "win32";
   return {
-    status: windows ? "bridge-searching" : "portable-shell",
+    status: windows ? "runtime-searching" : "portable-shell",
     platform,
-    label: windows ? "Looking for a local OpenNV runtime bridge" : "Launcher shell ready; runtime port is tracked separately",
+    label: windows ? "Choose a local OpenNV Godot runtime folder" : "Launcher shell ready; runtime export is not published for this platform",
     canLaunch: false,
     source: "offline"
   };
@@ -123,15 +123,17 @@ export function mergeRuntimeState(baseState, runtimeState) {
     };
   });
 
+  const declaredRuntime = runtimeState.runtime ?? {};
+  const canLaunch = Boolean(declaredRuntime.canLaunch) && campaigns.some((campaign) => campaign.ready);
   return {
     ...baseState,
     campaigns,
     runtime: {
       ...baseState.runtime,
-      status: "connected",
-      label: "Connected to the local OpenNV runtime bridge",
-      canLaunch: true,
-      source: "runtime"
+      status: String(declaredRuntime.status || "connected"),
+      label: String(declaredRuntime.label || "Connected to the local OpenNV Godot runtime"),
+      canLaunch,
+      source: "runtime-manifest"
     },
     installer: runtimeState.installer ?? null
   };
