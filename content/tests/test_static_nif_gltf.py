@@ -137,6 +137,8 @@ class StaticNifGltfTest(unittest.TestCase):
             first_result = outputs[0][3]
             self.assertEqual(first_gltf["meshes"][0]["primitives"][0].get("mode", 4), 4)
             self.assertEqual(first_result["coverage"]["surfaces"], 1)
+            self.assertEqual(first_result["surfaces"][0]["originalName"], "Opaque Triangle")
+            self.assertTrue(first_result["surfaces"][0]["name"].startswith("Opaque Triangle@"))
             self.assertEqual(first_result["surfaces"][0]["triangles"], 1)
             self.assertEqual(first_result["surfaces"][0]["vertices"], 3)
             self.assertEqual(
@@ -151,6 +153,31 @@ class StaticNifGltfTest(unittest.TestCase):
             self.assertEqual(first_gltf["asset"]["version"], "2.0")
             self.assertEqual(first_gltf["accessors"][0]["min"], [-1.0, 0.0, -0.0])
             self.assertEqual(first_gltf["accessors"][0]["max"], [1.0, 2.0, -0.0])
+
+    def test_static_shape_prefix_filter_is_explicit_and_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            source = directory / "opaque-triangle.nif"
+            write_synthetic_nif(source)
+            result = export_static_nif(
+                source,
+                "meshes/open-nv-tests/opaque-triangle.nif",
+                directory / "filtered.gltf",
+                directory / "filtered.opennv.json",
+                strict=False,
+                include_shape_prefixes=("Opaque",),
+            )
+            self.assertEqual(result["coverage"]["includedShapePrefixes"], ["Opaque"])
+            self.assertEqual(result["coverage"]["excludedByShapeFilter"], [])
+            with self.assertRaises(ValueError):
+                export_static_nif(
+                    source,
+                    "meshes/open-nv-tests/opaque-triangle.nif",
+                    directory / "empty.gltf",
+                    directory / "empty.opennv.json",
+                    strict=False,
+                    include_shape_prefixes=("Missing",),
+                )
 
     def test_dds_decode_and_normal_green_conversion(self) -> None:
         source = Image.new("RGBA", (4, 4), (10, 20, 30, 40))

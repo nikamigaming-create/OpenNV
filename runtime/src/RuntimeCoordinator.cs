@@ -62,6 +62,10 @@ public partial class RuntimeCoordinator : Node3D
                     "Use only one of --data-root, --model/--sidecar, --cell-scene, or --actor-model/--actor-sidecar.");
             if (!hasModel && _options.ContainsKey("sidecar"))
                 throw new ArgumentException("--sidecar requires --model.");
+            if (_options.ContainsKey("material-manifest") != _options.ContainsKey("material-manifest-sha256"))
+                throw new ArgumentException("Use --material-manifest together with --material-manifest-sha256.");
+            if (!hasModel && _options.ContainsKey("material-manifest"))
+                throw new ArgumentException("--material-manifest requires --model.");
             if (!hasActorModel && _options.ContainsKey("actor-sidecar"))
                 throw new ArgumentException("--actor-sidecar requires --actor-model.");
             if (hasActorModel && _options.ContainsKey("capture-root"))
@@ -85,7 +89,10 @@ public partial class RuntimeCoordinator : Node3D
 
             if (hasModel)
             {
-                SetLoadingStatus("VERIFYING HASHED 3D MODEL");
+                SetLoadingStatus(
+                    _options.ContainsKey("classic-diorama")
+                        ? "LOADING CLASSIC DIORAMA MODEL"
+                        : "VERIFYING HASHED 3D MODEL");
                 LoadModel(RequireOption(_options, "model"), RequireOption(_options, "sidecar"), _options);
                 DismissLoadingScreen();
                 return;
@@ -632,7 +639,13 @@ public partial class RuntimeCoordinator : Node3D
         string sidecarPath,
         IReadOnlyDictionary<string, string> options)
     {
-        var loaded = StaticModelSlice.Load(modelPath, sidecarPath, this);
+        var loaded = StaticModelSlice.Load(
+            modelPath,
+            sidecarPath,
+            this,
+            options.TryGetValue("material-manifest", out var materials) ? materials : null,
+            options.TryGetValue("material-manifest-sha256", out var materialsHash) ? materialsHash : null,
+            options.ContainsKey("classic-diorama"));
         var report = new
         {
             schema = "opennv-godot-static-model/v1",
@@ -644,12 +657,28 @@ public partial class RuntimeCoordinator : Node3D
             meshes = loaded.Meshes,
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,
+            materialBindings = loaded.MaterialBindings,
+            presentation = options.ContainsKey("classic-diorama") ? "classic-diorama" : "reference",
+            projection = loaded.Projection,
+            boundsPosition = new[] { loaded.Bounds.Position.X, loaded.Bounds.Position.Y, loaded.Bounds.Position.Z },
+            boundsSize = new[] { loaded.Bounds.Size.X, loaded.Bounds.Size.Y, loaded.Bounds.Size.Z },
         };
         if (options.TryGetValue("report", out var reportPath))
             WriteReport(reportPath, report);
         GD.Print(
             $"OPENNV_GODOT_STATIC_MODEL_PASS source={loaded.SourceSha256} " +
-            $"meshes={loaded.Meshes} surfaces={loaded.Surfaces} vertices={loaded.Vertices}");
+            $"meshes={loaded.Meshes} surfaces={loaded.Surfaces} vertices={loaded.Vertices} " +
+            $"materials={loaded.MaterialBindings} projection={loaded.Projection}");
+        if (options.TryGetValue("capture-root", out var captureRoot))
+        {
+            _ = StaticModelCapture.Run(
+                this,
+                loaded,
+                modelPath,
+                captureRoot,
+                options.TryGetValue("report", out var captureReport) ? captureReport : null);
+            return;
+        }
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
     }

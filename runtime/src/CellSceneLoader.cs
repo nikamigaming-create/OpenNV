@@ -64,11 +64,16 @@ internal static class CellSceneLoader
             };
             parent.AddChild(root);
             var session = new GameplaySession();
+            var objectiveOverride = source.TryGetProperty("concept", out var concept) &&
+                concept.TryGetProperty("hudObjective", out var hudObjective)
+                    ? hudObjective.GetString()
+                    : null;
             session.Configure(
                 cell.GetProperty("formId").GetString()!,
                 savePath,
                 useXr,
-                useClassicDiorama);
+                useClassicDiorama,
+                objectiveOverride);
             parent.AddChild(session);
             if (useXr)
             {

@@ -365,6 +365,7 @@ def export_static_nif(
     sidecar_path: Path,
     *,
     strict: bool = True,
+    include_shape_prefixes: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     source_bytes = source.read_bytes()
     source_hash = sha256_bytes(source_bytes)
@@ -377,17 +378,48 @@ def export_static_nif(
     blocks = list(data.get_global_iterator())
     block_index = {id(block): index for index, block in enumerate(blocks)}
     controllers = [type(block).__name__ for block in blocks if isinstance(block, NifFormat.NiTimeController)]
-    all_shapes = [
-        block
-        for block in blocks
-        if isinstance(block, (NifFormat.NiTriShape, NifFormat.NiTriStrips)) and block.data is not None
+    all_shapes = []
+    shape_visits: dict[int, int] = {}
+    for block in blocks:
+        if not isinstance(block, (NifFormat.NiTriShape, NifFormat.NiTriStrips)) or block.data is None:
+            continue
+        shape_visits[id(block)] = shape_visits.get(id(block), 0) + 1
+        if shape_visits[id(block)] == 1:
+            all_shapes.append(block)
+    duplicate_shape_visits = [
+        {
+            "sourceBlockIndex": block_index[block_id],
+            "name": decode_text(next(shape for shape in all_shapes if id(shape) == block_id).name),
+            "visits": visits,
+        }
+        for block_id, visits in shape_visits.items()
+        if visits > 1
     ]
     excluded_editor_markers = [
         {"sourceBlockIndex": block_index[id(shape)], "name": decode_text(shape.name)}
         for shape in all_shapes
         if is_editor_marker(shape.name)
     ]
-    shapes = [shape for shape in all_shapes if not is_editor_marker(shape.name)]
+    candidate_shapes = [shape for shape in all_shapes if not is_editor_marker(shape.name)]
+    excluded_by_shape_filter = []
+    if include_shape_prefixes is not None:
+        if not include_shape_prefixes or any(not prefix for prefix in include_shape_prefixes):
+            raise ValueError("Static NIF shape prefixes must be non-empty")
+        excluded_by_shape_filter = [
+            {
+                "sourceBlockIndex": block_index[id(shape)],
+                "name": decode_text(shape.name),
+            }
+            for shape in candidate_shapes
+            if not decode_text(shape.name).startswith(include_shape_prefixes)
+        ]
+        shapes = [
+            shape
+            for shape in candidate_shapes
+            if decode_text(shape.name).startswith(include_shape_prefixes)
+        ]
+    else:
+        shapes = candidate_shapes
     if not shapes:
         raise ValueError("NIF contains no supported static geometry")
     if strict and controllers:
@@ -496,12 +528,15 @@ def export_static_nif(
             struct.pack(f"<{len(indices)}{index_format}", *indices), component_type=index_component,
             count=len(indices), value_type="SCALAR", target=34963,
         )
+        shape_index = block_index[id(shape)]
+        original_name = decode_text(shape.name)
+        surface_name = f"{original_name}@{shape_index}"
         material_index = len(materials)
         base_color = [float(value) for value in surface_material["baseColor"]]
         alpha = float(surface_material.get("alpha", 1.0))
         glossiness = float(surface_material.get("glossiness", 10.0))
         gltf_material: dict[str, object] = {
-            "name": f"{decode_text(shape.name)} material",
+            "name": f"{surface_name} material",
             "doubleSided": shape_double_sided(shape),
             "pbrMetallicRoughness": {
                 "baseColorFactor": [*base_color, alpha],
@@ -520,12 +555,12 @@ def export_static_nif(
         materials.append(gltf_material)
         primitives.append({"attributes": attributes, "indices": index_accessor, "material": material_index})
 
-        shape_index = block_index[id(shape)]
-        stable_id = sha256_bytes(f"{source_hash}:{shape_index}:{decode_text(shape.name)}".encode())[:24]
+        stable_id = sha256_bytes(f"{source_hash}:{shape_index}:{original_name}".encode())[:24]
         surface_rows.append({
             "stableId": stable_id,
             "sourceBlockIndex": shape_index,
-            "name": decode_text(shape.name),
+            "name": surface_name,
+            "originalName": original_name,
             "vertices": vertex_count,
             "triangles": len(triangles),
             "attributes": sorted(attributes),
@@ -577,6 +612,9 @@ def export_static_nif(
             "collisionBlockTypes": collision_types,
             "controllers": sorted(set(controllers)),
             "excludedEditorMarkerSurfaces": excluded_editor_markers,
+            "includedShapePrefixes": list(include_shape_prefixes or ()),
+            "excludedByShapeFilter": excluded_by_shape_filter,
+            "duplicateShapeVisits": duplicate_shape_visits,
         },
         "attachmentMarkers": attachment_markers,
         "surfaces": surface_rows,
@@ -593,6 +631,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sidecar", type=Path, required=True)
     parser.add_argument("--allow-synthetic-minimal", action="store_true")
+    parser.add_argument("--include-shape-prefix", action="append")
     args = parser.parse_args()
     result = export_static_nif(
         args.input,
@@ -600,6 +639,9 @@ def main() -> int:
         args.output,
         args.sidecar,
         strict=not args.allow_synthetic_minimal,
+        include_shape_prefixes=(
+            tuple(args.include_shape_prefix) if args.include_shape_prefix is not None else None
+        ),
     )
     print("OPENNV_STATIC_NIF_GLTF " + json.dumps({
         "source": result["source"]["sha256"],

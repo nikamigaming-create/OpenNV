@@ -33,14 +33,24 @@ outputs remain local and ignored.
 
 ## Fallout et Tu source profile
 
-`tools/fo1_profile.py` owns one deliberately narrower cross-game contract. It
-hash-validates Et Tu's `V13ENT.MAP`, verifies the exact Fallout: New Vegas
-master and archives, and resolves cave, clean-Vault, gear-door, Vault-suit, and
-giant-rat donor identities from the retail record/resource graph. It emits a
-neutral JSON contract plus detached SHA-256 into a fresh disposable cache.
+`tools/fo1_profile.py` hash-validates Et Tu's `V13ENT.MAP`, verifies the exact
+Fallout: New Vegas master and archives, transports the complete 10,000-entry
+tile grid, and resolves cave, clean-Vault, gear-door, Vault-suit, and giant-rat
+donor identities. `tools/dat2_archive.py` and `tools/fo1_map_objects.py` then
+decode the owned Fallout 2 DAT2 index, MAP script table, placed-object graph,
+PID/FID relationships, PRO filenames, and FRM art names without invoking a
+Fallout engine.
 
-This proves only **transported source identity**. It does not decode MAP tiles
-or placed objects, extract donor assets, generate a Godot scene, or claim that
-the Fallout 1 opening is rendered or interactive. The bounded recipe is
-`recipes/fo1-ettu-vault13-opening-v1.json`; retained evidence and explicit gaps
-are recorded in `docs/evidence/fo1-ettu-vault13-opening-contract.md`.
+The first rendered object mapping is the exact Et Tu Vault 13 door at tile
+`16290` (`v13secr2.frm`). `tools/prepare_fo1_door_proof.py` maps it explicitly
+to the owned New Vegas `VGearDoor01` identity and emits a filtered, hash-pinned
+static door-leaf cache. `tools/compose_fo1_vault13_concept.py` places that leaf
+in a bounded donor-cave entrance with a labelled concept-only offset and light.
+Generated NIF/glTF/PNG data remains local and ignored.
+
+This promotes a **rendered presentation concept**, not Fallout 1 placement or
+gameplay parity. NIF controller playback, the Et Tu 15-frame door sequence,
+collision/interaction parity, AP/turn order, hex pathfinding, scripts, quests,
+packaging, and headset acceptance remain explicit gaps. The source and render
+boundaries are recorded in `docs/evidence/fo1-ettu-vault13-opening-contract.md`
+and `docs/evidence/fo1-vault13-entrance-concept-contract.md`.

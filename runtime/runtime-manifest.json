@@ -32,6 +32,15 @@
   },
   "campaigns": [
     {
+      "id": "Fallout1EtTu",
+      "variants": {
+        "vault13Concept": {
+          "ready": false,
+          "message": "Owned-data Vault 13 entrance is a rendered Classic Diorama concept; Fallout 1 turn simulation is not connected."
+        }
+      }
+    },
+    {
       "id": "NewVegas",
       "variants": {
         "vanilla": {
@@ -77,6 +86,8 @@
     "world-space-xr-hud",
     "shared-flat-xr-gameplay-save-state",
     "classic-diorama-orthographic-pan-zoom-rotation",
-    "automatic-owned-data-loading-screen"
+    "automatic-owned-data-loading-screen",
+    "fo1-ettu-map-object-transport",
+    "fo1-vault13-owned-data-rendered-concept"
   ]
 }

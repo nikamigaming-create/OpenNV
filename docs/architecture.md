@@ -158,7 +158,12 @@ input translation and presentation differ.
 | `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, and alpha flag translation | Geometry, records, or runtime lighting |
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
+| `dat2_archive.py` | Indexed Fallout DAT2 member lookup, decompression, and hash identity | MAP/PRO/FRM semantics |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
+| `fo1_map_objects.py` | Fallout MAP script-table and placed-object graph decoding with DAT-backed PID/FID resolution | Cross-game presentation mapping |
+| `fo1_frm.py` | Fallout FRM header/frame decoding and deterministic inspection sheets | 3D asset generation or runtime behavior |
+| `prepare_fo1_door_proof.py` | Exact Et Tu door-to-owned-FNV identity validation and filtered static leaf cache | Cave placement, animation, or parity |
+| `compose_fo1_vault13_concept.py` | Bounded donor-cave/door-leaf composition, explicit concept offset/light, and atomic manifest | Fallout 1 placement parity or turn simulation |
 | `cell_scene.py` | Recipe selection, XTEL origin, Gamebryo-to-Godot coordinate/yaw conversion, asset/reference/material manifest | Godot nodes or input |
 | `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
@@ -169,6 +174,10 @@ input translation and presentation differ.
 | `test_facegen.py` | Synthetic geometry, texture-mode, skin, and body composition regressions | Retail actor selection |
 | `test_actor_gltf.py` | Bethesda material, alpha, vertex-color, and non-accumulating idle translation regressions | Retail visual approval |
 | `test_static_nif_gltf.py` | Synthetic BSA/NIF geometry regressions | Runtime orchestration |
+| `test_dat2_archive.py` | Synthetic DAT2 index/member/decompression regressions | Retail bytes |
+| `test_fo1_map_objects.py` | Synthetic Fallout MAP object/script-layout regressions | Cross-game mapping or rendering |
+| `test_fo1_frm.py` | Synthetic palette, shared-direction FRM, preview, and truncation regressions | Retail bytes or 3D substitution |
+| `test_fo1_concept_composition.py` | Synthetic bounded composition, door replacement, offset, light, and overwrite regressions | Retail visual approval |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
@@ -187,7 +196,8 @@ input translation and presentation differ.
 | `RuntimeCoordinator.cs` | Startup routing, reports, and gate orchestration | UI construction or file-format parsing |
 | `LoadingScreen.cs` | Automatic verified-cache/CELL boot status and fail-visible loading UI | Content preparation, file parsing, or campaign menus |
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
-| `StaticModelSlice.cs` | Legacy one-model proof view | Cell relationships |
+| `StaticModelSlice.cs` | Hash-verified one-model material binding, bounds, and reference view | Cell relationships or controller playback |
+| `StaticModelCapture.cs` | Native hash-recorded one-model visual gate | Cell placement, interaction, or retail parity |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
 | `Test-GodotRuntime.ps1` | Source, synthetic, retail-opt-in, format, and analyzer gates | Packaging state |

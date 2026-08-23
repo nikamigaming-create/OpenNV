@@ -20,6 +20,7 @@ internal partial class GameplaySession : Node
     private string _cellFormId = "";
     private bool _useXrHud;
     private bool _useClassicDioramaHud;
+    private string? _objectiveOverride;
     private string? _equippedWeaponFormId;
     private string? _weaponAmmoFormId;
     private int _weaponDamage;
@@ -47,7 +48,8 @@ internal partial class GameplaySession : Node
         string cellFormId,
         string? configuredSavePath,
         bool useXrHud = false,
-        bool useClassicDioramaHud = false)
+        bool useClassicDioramaHud = false,
+        string? objectiveOverride = null)
     {
         if (useXrHud && useClassicDioramaHud)
             throw new ArgumentException("Classic Diorama and OpenXR HUDs are separate presentation adapters.");
@@ -55,6 +57,7 @@ internal partial class GameplaySession : Node
         _cellFormId = cellFormId;
         _useXrHud = useXrHud;
         _useClassicDioramaHud = useClassicDioramaHud;
+        _objectiveOverride = objectiveOverride;
         _savePath = ResolvePath(configuredSavePath ?? "user://saves/goodsprings-sandbox-v1.json");
         Load(cellFormId);
     }
@@ -358,14 +361,14 @@ internal partial class GameplaySession : Node
 
     private void RefreshHud(string status)
     {
-        var objective = ObjectiveStage switch
+        var objective = _objectiveOverride ?? (ObjectiveStage switch
         {
             0 => "OBJECTIVE  Equip an authored weapon",
             1 => "OBJECTIVE  Fire the equipped weapon once",
             2 => "OBJECTIVE  Take any authored aid item",
             3 => "OBJECTIVE  Open the saloon entry door",
             _ => "OBJECTIVE COMPLETE  Goodsprings sandbox route passed",
-        };
+        });
         var ammunition = _equippedWeaponFormId is null
             ? "--/--"
             : $"{_ammoInMagazine}/{_weaponClipSize}";

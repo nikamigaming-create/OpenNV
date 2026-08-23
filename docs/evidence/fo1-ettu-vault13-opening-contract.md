@@ -1,10 +1,13 @@
 # Fallout et Tu Vault 13 opening source contract
 
-Status: **transported source identity only; not rendered or interactive**.
+Status: **transported source identity and object graph; a separate bounded
+door/cave presentation concept is rendered, but Fallout 1 placement and
+interaction remain unproven**.
 
 This bounded profile selects the Fallout et Tu `V13ENT.MAP` opening and a
-strictly local Fallout: New Vegas donor-asset catalog. It does not extract an
-asset, decode Fallout placed objects, create a Godot scene, or claim parity.
+strictly local Fallout: New Vegas donor-asset catalog. The complete tile grid
+and placed-object graph are decoded; one exact door identity is mapped into a
+separate concept scene. No donor placement is claimed as Fallout 1 parity.
 
 ## Pinned source
 
@@ -23,9 +26,13 @@ file hash, global/local variable arrays, and the complete 10,000-entry
 big-endian floor/roof tile grid. Elevation zero's raw tile-grid SHA-256 is
 `5ddcdaaf9cbe23247183c6424e55c77bc1c9a97d6c18ee389977d04fd4957336`;
 it contains 58 floor IDs, 7,549 non-default floor entries, one default roof ID,
-and no non-default roof entries. Scripts, objects, inventories, PRO
-relationships, and actor placement remain explicit blockers rather than
-inferred data.
+and no non-default roof entries. The object transport resolves 1,495 top-level
+objects, two doors, and 129 resource dependencies. The exact entrance gear door
+is object serial `129`, tile `16290` (`x=90`, `y=81`), FID `02000119`, PID
+`020000AD`, script index `342`, PRO `00000174.pro`, and art `v13secr2.frm`;
+its same-tile frame is serial `130` / `v13secr3.frm`. Inventories, script
+behavior, actor presentation, and simulation remain explicit blockers rather
+than inferred data.
 
 ## Pinned donor graph
 
@@ -63,6 +70,8 @@ automated coverage report identifies a missing role.
 
 ## Promotion boundary
 
-Passing `fo1_profile.py` means **transported** only: exact source bytes reached a
-neutral, deterministic, hash-pinned contract. Rendering, interaction, parity,
+Passing `fo1_profile.py` and the object transport means **transported** only:
+exact source bytes reached neutral, deterministic, hash-pinned contracts. The
+separate Vault 13 entrance evidence promotes one mapped door/cave composition
+as **rendered concept** only. Interaction, Fallout 1 placement parity,
 packaging, and OpenXR remain unproven.

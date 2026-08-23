@@ -1,0 +1,57 @@
+{
+  "schema": "opennv-fo1-concept-composition/v1",
+  "id": "fo1-vault13-entrance-concept-v1",
+  "donor": {
+    "sceneSchema": "opennv-cell-scene/v6",
+    "recipe": "fo1-vault13-cave-donor-smoke-v1",
+    "cellFormId": "00153159",
+    "cellEditorId": "SLGoodspringsCaveINT",
+    "replaceReferenceFormId": "0015315f",
+    "replaceReferenceBaseFormId": "0014842d",
+    "replaceReferenceBaseEditorId": "NVCGInvisibleCaveDoor"
+  },
+  "doorProof": {
+    "schema": "opennv-fo1-door-presentation-proof/v1",
+    "recipeId": "fo1-vault13-gear-door-mapping-v1",
+    "sourceDoorSerial": 129,
+    "targetBaseFormId": "000041e9",
+    "targetEditorId": "VGearDoor01"
+  },
+  "selection": {
+    "radiusGodotUnits": 1000.0
+  },
+  "placement": {
+    "source": "donor cave entrance reference transform",
+    "presentationOffsetGodotUnits": [
+      100.0,
+      0.0,
+      -100.0
+    ],
+    "claim": "presentation concept only; not a Fallout 1 spatial-parity transform"
+  },
+  "lighting": {
+    "doorAccent": {
+      "positionOffsetGodotUnits": [
+        0.0,
+        150.0,
+        -180.0
+      ],
+      "radiusMeters": 11.0,
+      "color": [
+        1.0,
+        0.72,
+        0.42
+      ],
+      "intensity": 2.5
+    }
+  },
+  "hud": {
+    "objective": "OBJECTIVE  Inspect the Vault 13 entrance prototype"
+  },
+  "unsupported": [
+    "Vault door controller playback and particles",
+    "Et Tu door timing, collision, or interaction parity",
+    "Fallout 1 cave geometry or object-placement parity",
+    "turn simulation, quest scripting, packaging, or headset acceptance"
+  ]
+}
