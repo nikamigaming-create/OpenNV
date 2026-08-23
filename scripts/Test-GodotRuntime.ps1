@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Godot = "D:\code\gd\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe",
+    [string]$Godot = "D:\code\gd\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe",
     [string]$FalloutNewVegasData = "",
     [string]$ExpectedMeshesBsaSha256 = "",
     [string]$RetailLogicalPath = "meshes\landscape\nv_rocks\nvn_rockcanyon12.nif"

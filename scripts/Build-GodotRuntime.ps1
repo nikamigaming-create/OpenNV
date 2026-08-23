@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Godot = "D:\code\gd\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe",
+    [string]$Godot = "D:\code\gd\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe",
     [Parameter(Mandatory)]
     [string]$OutputRoot,
     [string]$Version = "experimental",
@@ -322,8 +322,8 @@ $buildInfo = [ordered]@{
     version = $Version
     revision = $revision
     sourceTreeDirty = $dirty
-    godotVersion = "4.7.1-stable-mono"
-    godotWindowsArchiveSha256 = "764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45"
+    godotVersion = "4.7.2-stable-mono"
+    godotWindowsArchiveSha256 = "a2a48473a7414c5f19fab690518caebb738c09ef9601f6bd2388676a7f53b3c0"
     contentToolSha256 = (Get-FileHash -LiteralPath $contentBinary -Algorithm SHA256).Hash.ToLowerInvariant()
     playable = $false
     playableSandbox = $true

@@ -39,10 +39,10 @@ jobs:
         id: godot
         shell: pwsh
         run: |
-          $version = '4.7.1-stable'
+          $version = '4.7.2-stable'
           $archive = Join-Path $env:RUNNER_TEMP 'godot-mono.zip'
           $root = Join-Path $env:RUNNER_TEMP 'godot-mono'
-          $expectedSha256 = '764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45'
+          $expectedSha256 = 'a2a48473a7414c5f19fab690518caebb738c09ef9601f6bd2388676a7f53b3c0'
           Invoke-WebRequest -Uri "https://github.com/godotengine/godot/releases/download/$version/Godot_v4.7.1-stable_mono_win64.zip" -OutFile $archive
           $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actualSha256 -ne $expectedSha256) { throw "Godot archive hash mismatch: $actualSha256" }
@@ -58,19 +58,19 @@ jobs:
       - name: Cache pinned Godot export templates
         uses: actions/cache@v4
         with:
-          path: ~/AppData/Roaming/Godot/export_templates/4.7.1.stable.mono
-          key: godot-mono-4.7.1-windows-export-ef9a708be51ecd974cd7dccdcafd7a1870da3d3e1c24c072bdbb9818c7a7db63
+          path: ~/AppData/Roaming/Godot/export_templates/4.7.2.stable.mono
+          key: godot-mono-4.7.2-windows-export-92f8681e349ef1f90891b792da95e3b2b0bd1ed610b78018c58feb2d87e15a9d
 
       - name: Install pinned Windows export template
         shell: pwsh
         run: |
-          $target = Join-Path $env:APPDATA 'Godot/export_templates/4.7.1.stable.mono'
+          $target = Join-Path $env:APPDATA 'Godot/export_templates/4.7.2.stable.mono'
           $windowsTemplate = Join-Path $target 'windows_release_x86_64.exe'
           if (Test-Path -LiteralPath $windowsTemplate -PathType Leaf) { exit 0 }
           $archive = Join-Path $env:RUNNER_TEMP 'godot-mono-templates.tpz'
           $expanded = Join-Path $env:RUNNER_TEMP 'godot-mono-templates'
-          $expectedSha256 = 'ef9a708be51ecd974cd7dccdcafd7a1870da3d3e1c24c072bdbb9818c7a7db63'
-          Invoke-WebRequest -Uri 'https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_mono_export_templates.tpz' -OutFile $archive
+          $expectedSha256 = '92f8681e349ef1f90891b792da95e3b2b0bd1ed610b78018c58feb2d87e15a9d'
+          Invoke-WebRequest -Uri 'https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_export_templates.tpz' -OutFile $archive
           $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actualSha256 -ne $expectedSha256) { throw "Godot template archive hash mismatch: $actualSha256" }
           Expand-Archive -LiteralPath $archive -DestinationPath $expanded

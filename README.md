@@ -67,8 +67,8 @@ its retail damage/clip/ammo profile, takes an authored Beer, loots a resolved
 authored crate, opens the main door, autosaves, exits, and restores the exact
 state in a second Godot process.
 
-CI pins the official Godot 4.7.1 Mono Windows archive by SHA-256
-`764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45`.
+CI pins the official Godot 4.7.2 Mono Windows archive by SHA-256
+`a2a48473a7414c5f19fab690518caebb738c09ef9601f6bd2388676a7f53b3c0`.
 
 ```powershell
 python -m pip install -r content/requirements-build.txt

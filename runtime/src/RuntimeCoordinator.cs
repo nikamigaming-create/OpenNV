@@ -561,7 +561,7 @@ public partial class RuntimeCoordinator : Node3D
             playableSandbox = true,
             openXrLaunchable = true,
             openXrHardwareValidated = false,
-            engine = "Godot 4.7.1 Forward+",
+            engine = "Godot 4.7.2 Forward+",
         });
     }
 

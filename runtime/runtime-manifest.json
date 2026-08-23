@@ -2,7 +2,7 @@
   "schema": "opennv-runtime-manifest/v1",
   "runtime": {
     "engine": "Godot",
-    "engineVersion": "4.7.1",
+    "engineVersion": "4.7.2",
     "status": "experimental",
     "label": "Playable experimental Goodsprings sandbox with a launchable OpenXR path; full campaigns are not ready.",
     "canLaunch": true,
