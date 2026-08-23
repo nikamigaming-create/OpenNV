@@ -635,7 +635,7 @@ public partial class RuntimeCoordinator : Node3D
         }
         catch (Exception exception)
         {
-            _setupView!.ShowError();
+            _setupView!.ShowError(exception.Message);
             GD.PushError($"OPENNV_LEGAL_ASSET_SETUP_FAIL {exception.Message}");
         }
     }

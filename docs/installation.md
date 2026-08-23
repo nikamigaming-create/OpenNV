@@ -22,8 +22,9 @@ temporary cache, loads it in Godot, and removes the cache afterward:
 ```
 
 Experimental packaged builds include `OpenNV.Content.exe` beside the Godot
-runtime. A player launches `OpenNV.exe`, selects their legal Fallout: New Vegas
-`Data` folder, and the runtime prepares its private cache directly. The player
+runtime. A player launches `OpenNV.exe`, selects either their legal Fallout: New
+Vegas installation folder or its `Data` folder, and the runtime prepares its
+private cache directly. The player
 does not install Python or another engine. The retail input is read-only, and no
 commercial file or conversion output is committed or distributed. The verified
 cache remembers the selected installation and is reopened automatically on

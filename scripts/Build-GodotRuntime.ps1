@@ -133,6 +133,11 @@ foreach ($temporaryPath in @($xrReport, $xrSave)) {
 }
 
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
+    $ownedSelectionRoot = [IO.Path]::GetFullPath($FalloutNewVegasData)
+    if ((Split-Path -Leaf $ownedSelectionRoot).Equals("Data", [StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath (Join-Path $ownedSelectionRoot "FalloutNV.esm") -PathType Leaf)) {
+        $ownedSelectionRoot = Split-Path -Parent $ownedSelectionRoot
+    }
     $ownedCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-cache-{0}" -f [guid]::NewGuid().ToString("N"))
     $ownedReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-report-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $reuseReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-reuse-{0}.json" -f [guid]::NewGuid().ToString("N"))
@@ -146,7 +151,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         $ownedProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
                 "--headless", "--xr-mode", "off", "--",
-                "--data-root", ('"' + [IO.Path]::GetFullPath($FalloutNewVegasData) + '"'),
+                "--data-root", ('"' + $ownedSelectionRoot + '"'),
                 "--cache-root", ('"' + $ownedCache + '"'),
                 "--report", ('"' + $ownedReport + '"'),
                 "--save-path", ('"' + $portalSave + '"'),
