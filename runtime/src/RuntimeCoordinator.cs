@@ -35,12 +35,16 @@ public partial class RuntimeCoordinator : Node3D
         try
         {
             _options = ParseOptions(OS.GetCmdlineUserArgs());
+            if (_options.ContainsKey("fo1-hex-scene"))
+                _loadingScreen?.SetTitle("FALLOUT 1  //  V13ENT HEX TACTICAL");
             if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
                 throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
             if ((_options.ContainsKey("classic-diorama") || _options.ContainsKey("classic-diorama-rig-proof")) &&
                 (_options.ContainsKey("vr") || _options.ContainsKey("vr-layout-proof") ||
                     _options.ContainsKey("xr-rig-proof")))
                 throw new ArgumentException("Classic Diorama and OpenXR require separate presentation adapters.");
+            if (_options.ContainsKey("fo1-hex-scene") && _options.ContainsKey("vr"))
+                throw new ArgumentException("The Fallout 1 tactical hex slice has not passed its OpenXR gate.");
             if (_options.ContainsKey("vr"))
                 EnableOpenXr();
             if (_options.ContainsKey("xr-rig-proof"))
@@ -57,9 +61,12 @@ public partial class RuntimeCoordinator : Node3D
             var hasModel = _options.ContainsKey("model");
             var hasCellScene = _options.ContainsKey("cell-scene");
             var hasActorModel = _options.ContainsKey("actor-model");
-            if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) + (hasActorModel ? 1 : 0) > 1)
+            var hasFo1HexScene = _options.ContainsKey("fo1-hex-scene");
+            if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) +
+                (hasActorModel ? 1 : 0) + (hasFo1HexScene ? 1 : 0) > 1)
                 throw new ArgumentException(
-                    "Use only one of --data-root, --model/--sidecar, --cell-scene, or --actor-model/--actor-sidecar.");
+                    "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
+                    "--actor-model/--actor-sidecar, or --fo1-hex-scene.");
             if (!hasModel && _options.ContainsKey("sidecar"))
                 throw new ArgumentException("--sidecar requires --model.");
             if (_options.ContainsKey("material-manifest") != _options.ContainsKey("material-manifest-sha256"))
@@ -116,6 +123,14 @@ public partial class RuntimeCoordinator : Node3D
                     RequireOption(_options, "actor-model"),
                     RequireOption(_options, "actor-sidecar"),
                     _options);
+                DismissLoadingScreen();
+                return;
+            }
+
+            if (hasFo1HexScene)
+            {
+                SetLoadingStatus("LOADING V13ENT 200×200 HEX MAP");
+                LoadFo1HexScene(RequireOption(_options, "fo1-hex-scene"), _options);
                 DismissLoadingScreen();
                 return;
             }
@@ -717,6 +732,87 @@ public partial class RuntimeCoordinator : Node3D
             GetTree().Quit(0);
     }
 
+    private void LoadFo1HexScene(
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var loaded = Fo1HexSceneLoader.Load(
+            scenePath,
+            this,
+            options.TryGetValue("save-path", out var savePath) ? savePath : null);
+        var report = new
+        {
+            schema = "opennv-fo1-hex-runtime/v1",
+            status = "pass",
+            renderer = "forward_plus",
+            scene = loaded.ScenePath,
+            sceneSha256 = loaded.SceneSha256,
+            grid = new
+            {
+                width = Fo1HexMath.Width,
+                height = Fo1HexMath.Height,
+                flatToFlatMeters = Fo1HexMath.FlatToFlatMeters,
+                layout = "odd-row-offset-pointy",
+            },
+            floorEntries = loaded.FloorEntries,
+            floorTextures = loaded.FloorTextures,
+            renderedFloorTiles = loaded.RenderedFloorTiles,
+            provisionalWalkableHexes = loaded.WalkableHexes,
+            spriteArtifacts = loaded.SpriteArtifacts,
+            spritePlacements = loaded.SpritePlacements,
+            entryTile = loaded.EntryTile,
+            entryWorldMeters = Vector(Fo1HexMath.Center(loaded.EntryTile)),
+            doorTile = loaded.DoorTile,
+            doorWorldMeters = Vector(Fo1HexMath.Center(loaded.DoorTile)),
+            doorRotation = loaded.DoorRotation,
+            doorMaterialBindings = loaded.Door.MaterialBindings,
+            doorBoundsPosition = Vector(loaded.Door.Bounds.Position),
+            doorBoundsSize = Vector(loaded.Door.Bounds.Size),
+            sourceFrameMeters = new[] { loaded.Door.FrameWidthMeters, loaded.Door.FrameHeightMeters },
+            topLevelObjects = loaded.TopLevelObjects,
+            sourceDoors = loaded.SourceDoors,
+            camera = new
+            {
+                type = loaded.Camera.Camera.GetType().Name,
+                projection = "orthogonal",
+                middleMouseOrbit = true,
+                controlKeyOrbit = true,
+                rightMousePan = true,
+                wheelZoomTowardCursor = true,
+                edgePan = true,
+                keyboardPan = new[] { "W", "A", "S", "D", "arrows" },
+                playerFocusKey = "F",
+                routeResetKey = "Home",
+            },
+            tactical = loaded.Session.Report(),
+            turnSimulation = "movement-only-proof",
+            collision = "floor-art-presence-minus-MAP-OBJECT_NO_BLOCK-central-hex",
+            windowsAppControlUsed = false,
+            foregroundInputInjected = false,
+        };
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, report);
+        GD.Print(
+            $"OPENNV_FO1_HEX_PASS scene={loaded.SceneSha256} entry={loaded.EntryTile} " +
+            $"door={loaded.DoorTile} floor={loaded.RenderedFloorTiles} walkable={loaded.WalkableHexes} " +
+            $"sprites={loaded.SpritePlacements}");
+        if (options.ContainsKey("fo1-tactical-proof"))
+        {
+            _ = Fo1HexProof.Run(
+                this,
+                loaded,
+                RequireOption(options, "report"));
+            return;
+        }
+        if (options.TryGetValue("capture-root", out var captureRoot))
+        {
+            _ = Fo1HexCapture.Run(this, loaded, captureRoot, report);
+            return;
+        }
+        if (options.ContainsKey("quit-after-load"))
+            GetTree().Quit(0);
+    }
+
     private void ShowExperimentalStatus(string? restoreError)
     {
         _setupView = new LegalAssetSetupView();
@@ -792,6 +888,8 @@ public partial class RuntimeCoordinator : Node3D
         options.TryGetValue(name, out var value)
             ? value
             : throw new ArgumentException($"Missing required --{name} option.");
+
+    private static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
 
     private readonly record struct DoorTraversalProof(
         bool FloorHit,

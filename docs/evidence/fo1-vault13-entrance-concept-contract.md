@@ -3,6 +3,10 @@
 Status: **native rendered concept passed; static door leaf only; not Fallout 1
 placement, animation, interaction, gameplay, or VR parity**.
 
+Superseded as the primary test route on 2026-08-23 by the exact
+`V13ENT.MAP` tactical hex slice. This donor-cave composition remains only an
+asset/presentation smoke; it must not be used as Fallout 1 layout evidence.
+
 This slice answers one narrow visual question: can the exact Et Tu entrance
 door identity be represented by a legally owned, locally imported 3D Vault
 door and shown inside a bounded 3D cave with the Classic Diorama camera? Yes.

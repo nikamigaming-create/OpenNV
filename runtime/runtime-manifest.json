@@ -19,6 +19,18 @@
         "projection": "orthogonal",
         "cameraControls": ["pan", "zoom", "rotate-60-degrees"]
       },
+      "fo1HexTactical": {
+        "launchable": true,
+        "status": "interactive-movement-proof-full-simulation-not-connected",
+        "grid": "V13ENT 200x200 one-metre hexes",
+        "cameraControls": [
+          "middle-mouse-orbit-tilt",
+          "right-mouse-drag-pan",
+          "wheel-cursor-zoom",
+          "wasd-arrow-and-edge-pan",
+          "player-focus-and-route-reset"
+        ]
+      },
       "openxr": {
         "launchable": true,
         "status": "experimental-hardware-gate-pending",
@@ -36,7 +48,7 @@
       "variants": {
         "vault13Concept": {
           "ready": false,
-          "message": "Owned-data Vault 13 entrance is a rendered Classic Diorama concept; Fallout 1 turn simulation is not connected."
+          "message": "V13ENT now has an owned-data 200x200 hex map, exact source sprite placements, tactical camera, AP movement proof, and mapped 3D Vault door; full Fallout 1 simulation is not connected."
         }
       }
     },
@@ -88,6 +100,11 @@
     "classic-diorama-orthographic-pan-zoom-rotation",
     "automatic-owned-data-loading-screen",
     "fo1-ettu-map-object-transport",
-    "fo1-vault13-owned-data-rendered-concept"
+    "fo1-vault13-owned-data-rendered-concept",
+    "fo1-v13ent-200x200-one-metre-hex-grid",
+    "fo1-original-floor-frm-unprojection",
+    "fo1-exact-map-object-sprite-placement",
+    "fo1-one-ap-per-hex-movement-proof",
+    "fo1-kenshi-style-tactical-camera"
   ]
 }

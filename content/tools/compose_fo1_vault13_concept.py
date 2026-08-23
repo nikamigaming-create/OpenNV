@@ -41,6 +41,55 @@ def distance(first: list[float], second: list[float]) -> float:
     return math.sqrt(sum((float(left) - float(right)) ** 2 for left, right in zip(first, second)))
 
 
+def gltf_bounds(path: Path) -> dict[str, list[float]]:
+    document = read_json(path)
+    minimums = []
+    maximums = []
+    for mesh in document.get("meshes", []):
+        for primitive in mesh.get("primitives", []):
+            position_accessor = primitive.get("attributes", {}).get("POSITION")
+            if position_accessor is None:
+                continue
+            accessor = document["accessors"][position_accessor]
+            if "min" not in accessor or "max" not in accessor:
+                raise ValueError(f"glTF POSITION accessor lacks bounds: {path}")
+            minimums.append([float(value) for value in accessor["min"]])
+            maximums.append([float(value) for value in accessor["max"]])
+    if not minimums:
+        raise ValueError(f"glTF has no bounded POSITION accessor: {path}")
+    minimum = [min(row[index] for row in minimums) for index in range(3)]
+    maximum = [max(row[index] for row in maximums) for index in range(3)]
+    return {
+        "minimum": minimum,
+        "maximum": maximum,
+        "size": [maximum[index] - minimum[index] for index in range(3)],
+        "center": [(minimum[index] + maximum[index]) / 2.0 for index in range(3)],
+    }
+
+
+def quaternion_rotate(vector: list[float], quaternion: list[float]) -> list[float]:
+    if len(vector) != 3 or len(quaternion) != 4:
+        raise ValueError("Godot vector/quaternion dimensions are invalid")
+    x, y, z, w = (float(value) for value in quaternion)
+    length = math.sqrt(x * x + y * y + z * z + w * w)
+    if length <= 1.0e-12:
+        raise ValueError("Godot placement quaternion has zero length")
+    x, y, z, w = x / length, y / length, z / length, w / length
+    vx, vy, vz = (float(value) for value in vector)
+    tx = 2.0 * (y * vz - z * vy)
+    ty = 2.0 * (z * vx - x * vz)
+    tz = 2.0 * (x * vy - y * vx)
+    return [
+        vx + w * tx + (y * tz - z * ty),
+        vy + w * ty + (z * tx - x * tz),
+        vz + w * tz + (x * ty - y * tx),
+    ]
+
+
+def add_vector(first: list[float], second: list[float]) -> list[float]:
+    return [float(first[index]) + float(second[index]) for index in range(3)]
+
+
 def compose(
     recipe_path: Path,
     donor_scene_path: Path,
@@ -104,6 +153,25 @@ def compose(
     if source_reference["baseEditorId"] != donor_recipe["replaceReferenceBaseEditorId"]:
         raise ValueError("donor entrance base EDID drift")
 
+    mount_reference = next(
+        (
+            row
+            for row in donor["references"]
+            if row["formId"] == donor_recipe["mountReferenceFormId"]
+        ),
+        None,
+    )
+    if mount_reference is None:
+        raise ValueError("donor cave-entrance mount reference is absent")
+    if mount_reference["baseFormId"] != donor_recipe["mountReferenceBaseFormId"]:
+        raise ValueError("donor cave-entrance mount base FormID drift")
+    if mount_reference["baseEditorId"] != donor_recipe["mountReferenceBaseEditorId"]:
+        raise ValueError("donor cave-entrance mount EDID drift")
+    donor_assets = {asset["id"]: asset for asset in donor["assets"]}
+    mount_asset = donor_assets[mount_reference["assetId"]]
+    if mount_asset["logicalPath"] != donor_recipe["mountLogicalPath"]:
+        raise ValueError("donor cave-entrance mount model drift")
+
     door_asset_id = hashlib.sha256(
         (recipe["id"] + proof["target"]["sourceNifSha256"]).encode("utf-8")
     ).hexdigest()[:20]
@@ -116,6 +184,39 @@ def compose(
         "surfaces": sidecar["coverage"]["surfaces"],
         "materials": materials["asset"]["materials"],
     }
+
+    mount_bounds = gltf_bounds(Path(mount_asset["model"]))
+    door_bounds = gltf_bounds(model_path)
+    mount_quaternion = [float(value) for value in mount_reference["rotationGodotQuaternion"]]
+    local_y = mount_bounds["minimum"][1] + door_bounds["size"][1] / 2.0
+    local_x = mount_bounds["center"][0]
+    mouth_candidates = [
+        {
+            "name": "minimum-z",
+            "localCenter": [local_x, local_y, mount_bounds["minimum"][2]],
+            "outwardYawOffsetRadians": math.pi,
+        },
+        {
+            "name": "maximum-z",
+            "localCenter": [local_x, local_y, mount_bounds["maximum"][2]],
+            "outwardYawOffsetRadians": 0.0,
+        },
+    ]
+    for candidate in mouth_candidates:
+        candidate["worldCenter"] = add_vector(
+            mount_reference["positionGodotUnits"],
+            quaternion_rotate(candidate["localCenter"], mount_quaternion),
+        )
+        candidate["distanceToDonorDoor"] = distance(
+            [candidate["worldCenter"][0], candidate["worldCenter"][2]],
+            [source_reference["positionGodotUnits"][0], source_reference["positionGodotUnits"][2]],
+        )
+    selected_mouth = min(mouth_candidates, key=lambda row: row["distanceToDonorDoor"])
+    target_center = selected_mouth["worldCenter"]
+    rotated_door_center = quaternion_rotate(door_bounds["center"], mount_quaternion)
+    door_position = [
+        float(target_center[index]) - rotated_door_center[index] for index in range(3)
+    ]
 
     radius = float(recipe["selection"]["radiusGodotUnits"])
     entrance_position = source_reference["positionGodotUnits"]
@@ -131,36 +232,41 @@ def compose(
             continue
         reference["assetId"] = door_asset_id
         original_position = list(reference["positionGodotUnits"])
-        offset = [float(value) for value in recipe["placement"]["presentationOffsetGodotUnits"]]
-        if len(offset) != 3:
-            raise ValueError("Vault door presentation offset must contain three values")
-        reference["positionGodotUnits"] = [
-            float(value) + offset[index] for index, value in enumerate(original_position)
-        ]
-        original_game_position = list(reference["positionGameUnits"])
+        reference["positionGodotUnits"] = door_position
+        reference["yawGodotRadians"] = float(mount_reference["yawGodotRadians"])
+        reference["yawRadians"] = -float(mount_reference["yawGodotRadians"])
+        reference["rotationGodotQuaternion"] = mount_quaternion
+        origin = [float(value) for value in donor["coordinates"]["originGameUnits"]]
         reference["positionGameUnits"] = [
-            float(original_game_position[0]) + offset[0],
-            float(original_game_position[1]) - offset[2],
-            float(original_game_position[2]) + offset[1],
+            origin[0] + door_position[0],
+            origin[1] - door_position[2],
+            origin[2] + door_position[1],
         ]
         reference["presentationMapping"] = {
             "sourceDoorSerial": proof_recipe["sourceDoorSerial"],
             "targetBaseFormId": proof_recipe["targetBaseFormId"],
             "targetEditorId": proof_recipe["targetEditorId"],
             "originalPositionGodotUnits": original_position,
-            "presentationOffsetGodotUnits": offset,
+            "mountReferenceFormId": mount_reference["formId"],
+            "mountAssetId": mount_reference["assetId"],
+            "mountBounds": mount_bounds,
+            "doorBounds": door_bounds,
+            "selectedMouth": selected_mouth,
+            "resolvedDoorCenterGodotUnits": target_center,
             "claim": recipe["placement"]["claim"],
         }
 
     mapped_door = next(reference for reference in references if reference["formId"] == reference_id)
     accent = recipe["lighting"]["doorAccent"]
-    accent_offset = [float(value) for value in accent["positionOffsetGodotUnits"]]
+    accent_offset = [float(value) for value in accent["positionOffsetMountLocalUnits"]]
     if len(accent_offset) != 3:
         raise ValueError("Vault door accent-light offset must contain three values")
-    accent_position = [
-        float(value) + accent_offset[index]
-        for index, value in enumerate(mapped_door["positionGodotUnits"])
-    ]
+    if selected_mouth["name"] == "minimum-z":
+        accent_offset[2] *= -1.0
+    accent_position = add_vector(
+        target_center,
+        quaternion_rotate(accent_offset, mount_quaternion),
+    )
     unit_scale = float(donor["coordinates"]["unitsToMeters"])
     accent_light = {
         "formId": "fo1-v13-door-accent",
@@ -192,6 +298,19 @@ def compose(
 
     assets = [asset for asset in donor["assets"] if asset["id"] != door_asset_id]
     assets.append(door_asset)
+    camera_recipe = recipe["camera"]
+    camera_yaw = (
+        float(mount_reference["yawGodotRadians"])
+        + float(selected_mouth["outwardYawOffsetRadians"])
+        + math.radians(float(camera_recipe["outwardYawOffsetDegrees"]))
+    )
+    camera = {
+        "focusGodotUnits": target_center,
+        "homeSizeMeters": float(camera_recipe["homeSizeMeters"]),
+        "yawGodotRadians": camera_yaw,
+        "pitchDegrees": float(camera_recipe["pitchDegrees"]),
+        "source": "resolved donor entrance mount plus explicit presentation angles",
+    }
     composition = {
         "schema": RECIPE_SCHEMA,
         "id": recipe["id"],
@@ -200,6 +319,8 @@ def compose(
         "doorProofSha256": sha256_path(door_manifest_path),
         "sourceDoor": proof["sourceObjectContract"]["door"],
         "placement": recipe["placement"],
+        "resolvedMount": mapped_door["presentationMapping"],
+        "camera": camera,
         "hudObjective": recipe["hud"]["objective"],
         "selectionRadiusGodotUnits": radius,
         "unsupported": recipe["unsupported"],

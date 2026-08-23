@@ -73,5 +73,7 @@ automated coverage report identifies a missing role.
 Passing `fo1_profile.py` and the object transport means **transported** only:
 exact source bytes reached neutral, deterministic, hash-pinned contracts. The
 separate Vault 13 entrance evidence promotes one mapped door/cave composition
-as **rendered concept** only. Interaction, Fallout 1 placement parity,
-packaging, and OpenXR remain unproven.
+as **rendered concept** only. The later
+`fo1-v13ent-hex-tactical-contract.md` promotes the exact source floor/hex/object
+layout plus player movement as an **interactive topology proof**. Full
+simulation, packaging, parity, and OpenXR remain unproven.

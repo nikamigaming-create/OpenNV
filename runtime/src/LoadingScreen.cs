@@ -96,6 +96,11 @@ internal partial class LoadingScreen : CanvasLayer
         _status.Text = status;
     }
 
+    internal void SetTitle(string title)
+    {
+        _title.Text = title;
+    }
+
     internal void ShowError(string message)
     {
         _failed = true;

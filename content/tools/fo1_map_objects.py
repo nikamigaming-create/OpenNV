@@ -80,12 +80,19 @@ class Prototype:
 
 
 class Fo1ResourceResolver:
-    def __init__(self, ettu_root: Path, master_dat: Path):
+    def __init__(
+        self,
+        ettu_root: Path,
+        master_dat: Path,
+        additional_archives: list[Path] | None = None,
+    ):
         self.override_root = (ettu_root / "mods" / "fo1_base").resolve()
         if not self.override_root.is_dir():
             raise Fo1ProfileError(f"Et Tu fo1_base override root is missing: {self.override_root}")
         self.master_dat = master_dat.resolve()
-        self.archive = Dat2Archive(self.master_dat)
+        self.archives = [Dat2Archive(self.master_dat)] + [
+            Dat2Archive(path.resolve()) for path in additional_archives or []
+        ]
         self.loose_files = {
             canonical_dat2_path(str(path.relative_to(self.override_root))): path
             for path in self.override_root.rglob("*")
@@ -110,11 +117,21 @@ class Fo1ResourceResolver:
                 hashlib.sha256(data).hexdigest(),
             )
         else:
-            member = self.archive.extract(canonical)
+            member = None
+            archive_name = ""
+            for archive in self.archives:
+                try:
+                    member = archive.extract(canonical)
+                    archive_name = archive.path.name
+                    break
+                except FileNotFoundError:
+                    continue
+            if member is None:
+                raise FileNotFoundError(f"Fallout DAT2 member not found: {canonical}")
             resource = ResourceBytes(
                 canonical,
                 member.data,
-                f"fallout2-master-dat:{canonical}",
+                f"fallout2-{Path(archive_name).stem.casefold()}-dat:{canonical}",
                 member.sha256,
             )
         self.resources[canonical] = resource
@@ -521,4 +538,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -8,7 +8,11 @@
     "cellEditorId": "SLGoodspringsCaveINT",
     "replaceReferenceFormId": "0015315f",
     "replaceReferenceBaseFormId": "0014842d",
-    "replaceReferenceBaseEditorId": "NVCGInvisibleCaveDoor"
+    "replaceReferenceBaseEditorId": "NVCGInvisibleCaveDoor",
+    "mountReferenceFormId": "00176a23",
+    "mountReferenceBaseFormId": "000864a9",
+    "mountReferenceBaseEditorId": "CaveHallAntagonizerEntrance",
+    "mountLogicalPath": "meshes\\dungeons\\caves\\doors\\cavehallantagonizerentrance.nif"
   },
   "doorProof": {
     "schema": "opennv-fo1-door-presentation-proof/v1",
@@ -21,20 +25,22 @@
     "radiusGodotUnits": 1000.0
   },
   "placement": {
-    "source": "donor cave entrance reference transform",
-    "presentationOffsetGodotUnits": [
-      100.0,
-      0.0,
-      -100.0
-    ],
+    "source": "nearest verified end plane of the donor cave-entrance reference",
+    "mouthRule": "choose the mount AABB Z end nearest the authored donor door",
+    "verticalRule": "align the gear-door leaf bottom to the mount AABB minimum Y",
     "claim": "presentation concept only; not a Fallout 1 spatial-parity transform"
+  },
+  "camera": {
+    "homeSizeMeters": 13.0,
+    "outwardYawOffsetDegrees": -25.0,
+    "pitchDegrees": -48.0
   },
   "lighting": {
     "doorAccent": {
-      "positionOffsetGodotUnits": [
+      "positionOffsetMountLocalUnits": [
         0.0,
         150.0,
-        -180.0
+        180.0
       ],
       "radiusMeters": 11.0,
       "color": [

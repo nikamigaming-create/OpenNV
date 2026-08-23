@@ -54,3 +54,28 @@ collision/interaction parity, AP/turn order, hex pathfinding, scripts, quests,
 packaging, and headset acceptance remain explicit gaps. The source and render
 boundaries are recorded in `docs/evidence/fo1-ettu-vault13-opening-contract.md`
 and `docs/evidence/fo1-vault13-entrance-concept-contract.md`.
+
+## Fallout 1 V13ENT tactical hex slice
+
+`tools/prepare_fo1_hex_scene.py` supersedes the donor cave as the primary
+Fallout 1 test route. It transports `V13ENT.MAP` into its actual 200×200
+movement-hex namespace, with the original 100×100 floor grid mapped four hexes
+per floor tile. Each hex is one metre flat-to-flat. The tool resolves all 58
+used floor FRMs, unprojects their isometric diamonds into rotatable local floor
+textures, and emits 1,493 visible elevation-zero MAP-object sprite placements
+from 115 exact FRM/frame/rotation artifacts. Owned/derived PNG and glTF files
+remain in a fresh ignored cache.
+
+The Godot route starts at source hex `20090`, places the mapped gear door and
+exact `v13secr3.frm` frame at source hex `16290`, renders source walls, rocks,
+scenery, clutter, and all twenty rat placements, and exposes click pathfinding,
+one-AP-per-hex movement, end-turn AP restoration, and save/reload. Its tactical
+camera supports middle-mouse orbit/tilt (the Kenshi default), right-drag map
+pan, mouse-wheel zoom toward the cursor, WASD/arrows, edge pan, player focus,
+and route reset.
+
+This is an **interactive movement/topology proof**, not the complete game.
+Floor walk masks, complete multihex footprints, roof state, script execution,
+door animation, AI turns, attacks, damage, dialogue, quests, and full save
+semantics remain unpromoted. See
+`docs/evidence/fo1-v13ent-hex-tactical-contract.md`.

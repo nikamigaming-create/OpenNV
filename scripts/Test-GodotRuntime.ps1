@@ -3,7 +3,8 @@ param(
     [string]$Godot = "D:\code\gd\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe",
     [string]$FalloutNewVegasData = "",
     [string]$ExpectedMeshesBsaSha256 = "",
-    [string]$RetailLogicalPath = "meshes\landscape\nv_rocks\nvn_rockcanyon12.nif"
+    [string]$RetailLogicalPath = "meshes\landscape\nv_rocks\nvn_rockcanyon12.nif",
+    [string]$Fo1HexScene = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -102,6 +103,52 @@ finally {
     foreach ($temporaryPath in @($xrReport, $xrSave)) {
         if (Test-Path -LiteralPath $temporaryPath) {
             Remove-Item -LiteralPath $temporaryPath -Force
+        }
+    }
+}
+
+$fo1TacticalPassed = $false
+if (-not [string]::IsNullOrWhiteSpace($Fo1HexScene)) {
+    $fo1Scene = [IO.Path]::GetFullPath($Fo1HexScene)
+    if (-not (Test-Path -LiteralPath $fo1Scene -PathType Leaf)) {
+        throw "Fallout 1 hex scene is missing: $fo1Scene"
+    }
+    $fo1Report = Join-Path ([IO.Path]::GetTempPath()) ("opennv-fo1-tactical-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $fo1Save = Join-Path ([IO.Path]::GetTempPath()) ("opennv-fo1-tactical-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    try {
+        $fo1Output = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+            --fo1-hex-scene $fo1Scene --fo1-tactical-proof --save-path $fo1Save --report $fo1Report 2>&1
+        $fo1Text = $fo1Output | Out-String
+        if ($LASTEXITCODE -ne 0 -or $fo1Text -notmatch "OPENNV_FO1_TACTICAL_PROOF_PASS" -or
+            $fo1Text -match "(?m)^ERROR:") {
+            throw "Fallout 1 tactical proof failed:`n$fo1Text"
+        }
+        $fo1 = Get-Content -Raw -LiteralPath $fo1Report | ConvertFrom-Json
+        if ($fo1.schema -ne "opennv-fo1-tactical-proof/v1" -or
+            $fo1.status -ne "pass" -or
+            [int]$fo1.grid.width -ne 200 -or
+            [int]$fo1.grid.height -ne 200 -or
+            [double]$fo1.grid.flatToFlatMeters -ne 1.0 -or
+            $fo1.grid.layout -ne "odd-row-offset-pointy" -or
+            [int]$fo1.entryTile -ne 20090 -or
+            [int]$fo1.moveDistanceMeters -ne 1 -or
+            [int]$fo1.movementCostAp -ne 1 -or
+            [int]$fo1.turnAfterEnd -ne 2 -or
+            [int]$fo1.actionPointsAfterEnd -ne 10 -or
+            -not [bool]$fo1.camera.middleMouseOrbit -or
+            -not [bool]$fo1.camera.rightMousePan -or
+            -not [bool]$fo1.camera.wheelZoomTowardCursor -or
+            [bool]$fo1.windowsAppControlUsed -or
+            [bool]$fo1.foregroundInputInjected) {
+            throw "Fallout 1 tactical proof report is invalid."
+        }
+        $fo1TacticalPassed = $true
+    }
+    finally {
+        foreach ($temporaryPath in @($fo1Report, $fo1Save)) {
+            if (Test-Path -LiteralPath $temporaryPath) {
+                Remove-Item -LiteralPath $temporaryPath -Force
+            }
         }
     }
 }
@@ -213,6 +260,7 @@ $result = [pscustomobject][ordered]@{
     cleanRuntime = $true
     openXrRig = $true
     classicDioramaRig = $true
+    fo1TacticalHex = $fo1TacticalPassed
     openXrHardwareValidated = $false
     syntheticSourceSha256 = [string]$fixture.sourceSha256
     retailSourceSha256 = if ($null -eq $retail) { "not-requested" } else { [string]$retail.sourceSha256 }

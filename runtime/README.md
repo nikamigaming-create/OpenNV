@@ -65,3 +65,16 @@ install gate is not implemented yet.
 
 Add `-FalloutNewVegasData <path>` to the build command for a local end-to-end
 gate of the exported executable, packaged helper, legal cache, and Godot load.
+
+The private Fallout 1 tactical slice launches from a prepared, ignored owned
+cache with:
+
+```powershell
+Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
+  --fo1-hex-scene <cache>\hex-scene.json --save-path <cache>\v13ent-hex-save.json
+```
+
+Its controls are MMB orbit/tilt, RMB drag-pan, wheel zoom toward the cursor,
+WASD/arrows/edge pan, `F` player focus, `Home` entry-to-door route reset,
+left-click path movement, `Space` end turn, and `F5` save. This route is an
+interactive movement proof, not a full Fallout campaign.

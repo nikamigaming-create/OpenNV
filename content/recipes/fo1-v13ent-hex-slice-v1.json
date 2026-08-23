@@ -1,0 +1,60 @@
+{
+  "schema": "opennv-fo1-hex-recipe/v1",
+  "id": "fo1-v13ent-hex-slice-v1",
+  "source": {
+    "mapRelativePath": "mods/fo1_base/maps/V13ENT.MAP",
+    "mapSha256": "02b6987038a0c94c8226aa4df048f49bfcb59dfd9339a4a6a3b48da622b2a2d7",
+    "floorGridSha256": "5ddcdaaf9cbe23247183c6424e55c77bc1c9a97d6c18ee389977d04fd4957336",
+    "objectContractSha256": "6c29b67fdb317f6f1a1efbcb95028c4b1fcc477927b0d912a6377135723b38ab",
+    "fallout2MasterSha256": "9b096d3035edafd4077deeb8ee7877a803b9db98497aa4596624b5c058a84711",
+    "fallout2CritterSha256": "da83d615967c0bac41fbc50e6b86b3088401ff69ed9d8b2e5be1d6ac0c125bcd",
+    "paletteRelativePath": "mods/fo1_base/color.pal",
+    "paletteSha256": "315e06106c42646067117bc84cfdb11c992a5a3a5e058fcaaf24d5c0531a5df9"
+  },
+  "grid": {
+    "hexWidth": 200,
+    "hexHeight": 200,
+    "floorWidth": 100,
+    "floorHeight": 100,
+    "hexFlatToFlatMeters": 1.0,
+    "layout": "odd-row-offset-pointy",
+    "floorMapping": "floorIndex=(hexY/2)*100+(hexX/2)",
+    "walkability": "non-default-floor-art minus MAP objects without OBJECT_NO_BLOCK"
+  },
+  "entry": {
+    "tile": 20090,
+    "elevation": 0,
+    "rotation": 0
+  },
+  "door": {
+    "serial": 129,
+    "tile": 16290,
+    "rotation": 0,
+    "artFilename": "v13secr2.frm",
+    "frameSerial": 130,
+    "frameArtFilename": "v13secr3.frm",
+    "proofSha256": "4e0ce6237ae2d2f2c82117b3eec288cbbf8a52f7738594acd2e5e1f06e8f91ac",
+    "targetUnitsToMeters": 0.0142875
+  },
+  "tacticalProof": {
+    "actionPointsPerTurn": 10,
+    "movementCostPerHex": 1
+  },
+  "supported": [
+    "exact V13ENT 200x200 hex IDs and entry tile",
+    "exact 100x100 floor-art IDs with four movement hexes per floor tile",
+    "owned Fallout floor FRMs unprojected into rotatable local textures",
+    "exact elevation-zero MAP object FRM/frame/rotation placements",
+    "exact mapped Vault door and source frame at tile 16290",
+    "click pathfinding and one-AP-per-hex tactical movement proof",
+    "Kenshi-style tactical camera presentation"
+  ],
+  "unsupported": [
+    "Fallout floor walk masks and complete OBJECT_MULTIHEX footprints",
+    "roof art, animated wall cutaways, sprite direction switching while orbiting, inventories, and scripts",
+    "rat AI, sequence turns, attacks, and animation playback",
+    "retail character statistics, sequence, AI turns, combat RNG, attacks, or damage",
+    "door controller playback and Et Tu script state",
+    "retail visual parity, package promotion, or headset acceptance"
+  ]
+}
