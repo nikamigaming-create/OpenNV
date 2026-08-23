@@ -48,7 +48,7 @@
       "variants": {
         "vault13Concept": {
           "ready": false,
-          "message": "V13ENT now has an owned-data 200x200 hex map, exact source sprite placements, tactical camera, AP movement proof, and mapped 3D Vault door; full Fallout 1 simulation is not connected."
+          "message": "V13ENT now has the corrected reversed-X floor transform, scripted first-run spawn, owned player/rat art, source rat combat fields, tactical camera, movement/attack/rat-turn proof, combat HUD, and mapped 3D Vault door; full Fallout 1 simulation is not connected."
         }
       }
     },
@@ -105,6 +105,12 @@
     "fo1-original-floor-frm-unprojection",
     "fo1-exact-map-object-sprite-placement",
     "fo1-one-ap-per-hex-movement-proof",
-    "fo1-kenshi-style-tactical-camera"
+    "fo1-kenshi-style-tactical-camera",
+    "fo1-reversed-floor-x-source-projection",
+    "fo1-scripted-first-run-spawn",
+    "fo1-source-player-and-rat-presentation",
+    "fo1-source-rat-combat-state",
+    "fo1-bounded-attack-rat-turn-combat-hud",
+    "fo1-source-vs-godot-orientation-review"
   ]
 }

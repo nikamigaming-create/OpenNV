@@ -173,7 +173,8 @@ input translation and presentation differ.
 | `fo1_frm.py` | Fallout FRM header/frame decoding and deterministic inspection sheets | 3D asset generation or runtime behavior |
 | `prepare_fo1_door_proof.py` | Exact Et Tu door-to-owned-FNV identity validation and filtered static leaf cache | Cave placement, animation, or parity |
 | `compose_fo1_vault13_concept.py` | Bounded donor-cave/door-leaf composition, explicit concept offset/light, and atomic manifest | Fallout 1 placement parity or turn simulation |
-| `prepare_fo1_hex_scene.py` | Exact V13ENT floor/hex/object-art cache, owned FRM unprojection, MAP blocker contract, and mapped door inputs | Godot nodes, AI, or combat rules |
+| `prepare_fo1_hex_scene.py` | Exact V13ENT floor/hex/object-art cache, first-run spawn, owned FRM unprojection, MAP blockers, critter PRO state, player art, and mapped door inputs | Godot nodes or full combat rules |
+| `render_fo1_source_map.py` | Deterministic owned MAP/FRM source reconstruction, matched crop, and orientation/spawn side-by-side evidence | Executable capture or automatic parity approval |
 | `cell_scene.py` | Recipe selection, XTEL origin, Gamebryo-to-Godot coordinate/yaw conversion, asset/reference/material manifest | Godot nodes or input |
 | `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
@@ -188,7 +189,7 @@ input translation and presentation differ.
 | `test_fo1_map_objects.py` | Synthetic Fallout MAP object/script-layout regressions | Cross-game mapping or rendering |
 | `test_fo1_frm.py` | Synthetic palette, shared-direction FRM, preview, and truncation regressions | Retail bytes or 3D substitution |
 | `test_fo1_concept_composition.py` | Synthetic bounded composition, door replacement, offset, light, and overwrite regressions | Retail visual approval |
-| `test_fo1_hex_scene.py` | One-metre hex topology, four-hex floor mapping, unprojection, and bounds regressions | Retail bytes or runtime input |
+| `test_fo1_hex_scene.py` | One-metre topology, reversed floor-X projection, four-hex mapping, unprojection, critter PRO, crop, and bounds regressions | Retail bytes or runtime input |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
@@ -211,7 +212,8 @@ input translation and presentation differ.
 | `StaticModelCapture.cs` | Native hash-recorded one-model visual gate | Cell placement, interaction, or retail parity |
 | `Fo1HexMath.cs` | Fallout 200×200 tile IDs, odd-row world conversion, neighbor/distance/corner math | Rendering, AP, or source parsing |
 | `Fo1HexSceneLoader.cs` | Verified V13ENT floor/sprite/door manifests and ordinary Godot presentation nodes | MAP parsing, camera input, or gameplay rules |
-| `Fo1TacticalSession.cs` | V13ENT player hex, BFS path, AP/turn state, HUD, and atomic proof save | Camera transforms, MAP parsing, AI, or attacks |
+| `Fo1TacticalSession.cs` | V13ENT player hex, BFS movement, selected target, bounded attack/rat turn, HP/AP HUD, and atomic proof save | Camera transforms, MAP parsing, or full AI formulas |
+| `Fo1Mob.cs` | One source critter's PID/serial/tile, MAP runtime state, PRO combat values, sprite, HP/AP, and proof movement | Turn ordering, pathfinding, or asset extraction |
 | `Fo1TacticalCamera.cs` | Orthographic orbit/pan/cursor-zoom/edge/focus input adapter | Hex state, AP, or content preparation |
 | `Fo1HexProof.cs` | Headless mouse-camera, one-hex/one-AP, end-turn, and save gate | Production input or visual approval |
 | `Fo1HexCapture.cs` | Native V13ENT UI/environment frames, metrics, hashes, and no-host-control record | Gameplay or parity verdicts |
@@ -275,10 +277,12 @@ artifact chain. Runtime culling now follows each NIF's
 
 The private Fallout 1 route now loads the actual `V13ENT.MAP` elevation-zero
 topology: 10,000 floor entries, a 200×200 one-metre hex grid, 1,493 exact source
-sprite placements, entry hex `20090`, door hex `16290`, MAP-flag central-hex
-blocking, and a mapped 3D gear leaf. Mouse camera, BFS path movement, 1 AP per
-adjacent hex, end turn, and proof save are interactive. This is not yet a
-campaign or combat simulation.
+sprite placements, scripted first-run spawn `17690`, MAP-header fallback
+`20090`, door hex `16290`, MAP-flag central-hex blocking, and a mapped 3D gear
+leaf. Mouse camera, source player/rat sprites, BFS movement, 1 AP per adjacent
+hex, source rat HP/AP/AC/melee/sequence/team/AI state, one bounded attack/rat
+turn, combat HUD, end turn, and proof save are interactive. This is not yet a
+campaign or retail combat simulation.
 
 Not implemented: environment-map light fade and external-emittance color, authored
 bhk collision, non-item arbitrary rotation promotion, visible first-person

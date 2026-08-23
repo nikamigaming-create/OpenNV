@@ -130,11 +130,21 @@ if (-not [string]::IsNullOrWhiteSpace($Fo1HexScene)) {
             [int]$fo1.grid.height -ne 200 -or
             [double]$fo1.grid.flatToFlatMeters -ne 1.0 -or
             $fo1.grid.layout -ne "odd-row-offset-pointy" -or
-            [int]$fo1.entryTile -ne 20090 -or
+            [int]$fo1.entryTile -ne 17690 -or
             [int]$fo1.moveDistanceMeters -ne 1 -or
             [int]$fo1.movementCostAp -ne 1 -or
             [int]$fo1.turnAfterEnd -ne 2 -or
             [int]$fo1.actionPointsAfterEnd -ne 10 -or
+            $fo1.combat.targetPid -ne "01000030" -or
+            [int]$fo1.combat.targetSourceHitPoints -ne 6 -or
+            [int]$fo1.combat.targetSourceArmorClass -ne 4 -or
+            [int]$fo1.combat.targetSourceMeleeDamage -ne 3 -or
+            [int]$fo1.combat.targetSourceSequence -ne 12 -or
+            [int]$fo1.combat.targetSourceTeam -ne 1 -or
+            [int]$fo1.combat.targetSourceAiPacket -ne 12 -or
+            [int]$fo1.combat.playerWeaponApCost -ne 5 -or
+            [int]$fo1.combat.attacks -ne 1 -or
+            [int]$fo1.session.livingMobs -ne 19 -or
             -not [bool]$fo1.camera.middleMouseOrbit -or
             -not [bool]$fo1.camera.rightMousePan -or
             -not [bool]$fo1.camera.wheelZoomTowardCursor -or

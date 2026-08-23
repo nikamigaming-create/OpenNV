@@ -36,7 +36,7 @@ internal static class Fo1HexMath
     internal static int FloorIndex(int tile)
     {
         var coordinate = Coordinate(tile);
-        return (coordinate.Y / 2) * 100 + coordinate.X / 2;
+        return (coordinate.Y / 2) * 100 + (99 - coordinate.X / 2);
     }
 
     internal static int NearestTile(Vector3 world)

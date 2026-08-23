@@ -71,6 +71,18 @@ internal static class Fo1HexProof
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             if (loaded.Session.PlayerTile != target || loaded.Session.ActionPoints != initialAp - 1)
                 throw new InvalidOperationException("Fallout one-AP movement proof failed.");
+            var combatTarget = loaded.Session.Mobs
+                .Where(mob => mob.Alive)
+                .OrderBy(mob => Fo1HexMath.Distance(loaded.Session.PlayerTile, mob.Tile))
+                .First();
+            var targetHpBefore = combatTarget.HitPoints;
+            var apBeforeAttack = loaded.Session.ActionPoints;
+            loaded.Session.ActivateTile(combatTarget.Tile, false);
+            loaded.Session.AttackSelected();
+            if (loaded.Session.Attacks != 1 ||
+                loaded.Session.ActionPoints != apBeforeAttack - loaded.Session.WeaponActionPointCost ||
+                combatTarget.HitPoints >= targetHpBefore)
+                throw new InvalidOperationException("Fallout source-rat combat proof failed.");
             loaded.Session.EndTurn();
             if (loaded.Session.Turn != 2 || loaded.Session.ActionPoints != initialAp)
                 throw new InvalidOperationException("Fallout end-turn AP restoration proof failed.");
@@ -91,6 +103,23 @@ internal static class Fo1HexProof
                 movedToTile = target,
                 moveDistanceMeters = Fo1HexMath.Distance(loaded.EntryTile, target),
                 movementCostAp = 1,
+                combat = new
+                {
+                    targetSerial = combatTarget.Serial,
+                    targetPid = combatTarget.Pid,
+                    targetSourceHitPoints = targetHpBefore,
+                    targetRemainingHitPoints = combatTarget.HitPoints,
+                    targetSourceActionPoints = combatTarget.MaximumActionPoints,
+                    targetSourceArmorClass = combatTarget.ArmorClass,
+                    targetSourceMeleeDamage = combatTarget.MeleeDamage,
+                    targetSourceSequence = combatTarget.Sequence,
+                    targetSourceTeam = combatTarget.Team,
+                    targetSourceAiPacket = combatTarget.AiPacket,
+                    playerWeaponApCost = loaded.Session.WeaponActionPointCost,
+                    attacks = loaded.Session.Attacks,
+                    kills = loaded.Session.Kills,
+                    playerHitPointsAfterRatTurn = loaded.Session.PlayerHitPoints,
+                },
                 turnAfterEnd = loaded.Session.Turn,
                 actionPointsAfterEnd = loaded.Session.ActionPoints,
                 camera = new
@@ -117,7 +146,9 @@ internal static class Fo1HexProof
                 fullPath,
                 JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) +
                     System.Environment.NewLine);
-            GD.Print($"OPENNV_FO1_TACTICAL_PROOF_PASS moved={loaded.EntryTile}->{target} ap=1");
+            GD.Print(
+                $"OPENNV_FO1_TACTICAL_PROOF_PASS moved={loaded.EntryTile}->{target} ap=1 " +
+                $"targetPid={combatTarget.Pid} attacks={loaded.Session.Attacks} kills={loaded.Session.Kills}");
             host.GetTree().Quit(0);
         }
         catch (Exception exception)

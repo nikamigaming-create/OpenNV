@@ -18,13 +18,21 @@
     "floorHeight": 100,
     "hexFlatToFlatMeters": 1.0,
     "layout": "odd-row-offset-pointy",
-    "floorMapping": "floorIndex=(hexY/2)*100+(hexX/2)",
+    "floorMapping": "floorIndex=(hexY/2)*100+(99-hexX/2)",
     "walkability": "non-default-floor-art minus MAP objects without OBJECT_NO_BLOCK"
   },
-  "entry": {
+  "mapHeaderEntry": {
     "tile": 20090,
     "elevation": 0,
     "rotation": 0
+  },
+  "entry": {
+    "source": "V13CAVE.ssl map_first_run override_map_start_hex",
+    "sourceRelativePath": "Fallout2/Fallout1in2/Mapper/source/scripts/99map/V13CAVE.ssl",
+    "sourceSha256": "02c84efeed93c78bd6077efc81586d55f2d81448e386868ab7370cfe6e1c5d65",
+    "tile": 17690,
+    "elevation": 0,
+    "rotation": 2
   },
   "door": {
     "serial": 129,
@@ -41,7 +49,7 @@
     "movementCostPerHex": 1
   },
   "supported": [
-    "exact V13ENT 200x200 hex IDs and entry tile",
+    "exact V13ENT 200x200 hex IDs, MAP-header fallback, and first-run scripted spawn",
     "exact 100x100 floor-art IDs with four movement hexes per floor tile",
     "owned Fallout floor FRMs unprojected into rotatable local textures",
     "exact elevation-zero MAP object FRM/frame/rotation placements",

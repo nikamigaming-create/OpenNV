@@ -53,7 +53,8 @@ internal static class Fo1HexSceneLoader
         if (!floorIds.All(floorTextures.ContainsKey))
             throw new InvalidOperationException("Fallout floor grid references missing art.");
         var renderedFloorTiles = BuildFloor(root, floorIds, floorCenters, defaultFloorId, floorTextures);
-        var spriteCoverage = BuildObjectSprites(root, source.GetProperty("objectSprites"));
+        var combat = source.GetProperty("combat");
+        var spriteCoverage = BuildObjectSprites(root, source.GetProperty("objectSprites"), combat);
 
         var walkable = new bool[Fo1HexMath.Width * Fo1HexMath.Height];
         var blocked = grid.GetProperty("blockedHexes").EnumerateArray()
@@ -78,6 +79,11 @@ internal static class Fo1HexSceneLoader
         if (tactical.GetProperty("movementCostPerHex").GetInt32() != 1)
             throw new InvalidOperationException("Fallout tactical proof requires one AP per movement hex.");
         var session = new Fo1TacticalSession();
+        var playerSource = combat.GetProperty("player");
+        var playerArtifact = playerSource.GetProperty("artifact");
+        var playerStats = playerSource.GetProperty("stats");
+        var playerWeapon = playerSource.GetProperty("weapon");
+        var playerTexture = LoadTexture(playerArtifact);
         session.Configure(
             sceneSha256,
             walkable,
@@ -86,6 +92,22 @@ internal static class Fo1HexSceneLoader
             entryTile,
             doorTile,
             tactical.GetProperty("actionPointsPerTurn").GetInt32(),
+            new Fo1TacticalSession.PlayerProfile(
+                playerSource.GetProperty("name").GetString()!,
+                playerTexture,
+                playerArtifact.GetProperty("width").GetInt32(),
+                playerArtifact.GetProperty("height").GetInt32(),
+                1.0f / combat.GetProperty("objectPixelsPerMeter").GetSingle(),
+                ReadVector2(playerArtifact.GetProperty("frameOffset")),
+                playerStats.GetProperty("hitPoints").GetInt32(),
+                playerStats.GetProperty("armorClass").GetInt32(),
+                playerStats.GetProperty("sequence").GetInt32(),
+                playerWeapon.GetProperty("name").GetString()!,
+                playerWeapon.GetProperty("minimumDamage").GetInt32(),
+                playerWeapon.GetProperty("maximumDamage").GetInt32(),
+                playerWeapon.GetProperty("rangeHexes").GetInt32(),
+                playerWeapon.GetProperty("actionPointCost").GetInt32()),
+            spriteCoverage.Mobs,
             savePath);
         parent.AddChild(session);
 
@@ -113,6 +135,7 @@ internal static class Fo1HexSceneLoader
             walkableCount,
             spriteCoverage.Artifacts,
             spriteCoverage.Placements,
+            spriteCoverage.Mobs.Count,
             entryTile,
             doorTile,
             doorObject.GetProperty("rotation").GetInt32(),
@@ -190,7 +213,7 @@ internal static class Fo1HexSceneLoader
         });
     }
 
-    private static SpriteCoverage BuildObjectSprites(Node3D root, JsonElement source)
+    private static SpriteCoverage BuildObjectSprites(Node3D root, JsonElement source, JsonElement combat)
     {
         if (source.GetProperty("presentation").GetString() !=
             "exact source FRM frame at exact MAP hex; camera-facing 2.5D")
@@ -205,6 +228,9 @@ internal static class Fo1HexSceneLoader
                 row.GetProperty("width").GetInt32(),
                 row.GetProperty("height").GetInt32(),
                 ReadVector2(row.GetProperty("frameOffset"))));
+        var combatMobs = combat.GetProperty("mobs").EnumerateArray().ToDictionary(
+            row => row.GetProperty("serial").GetInt32());
+        var mobs = new List<Fo1Mob>();
         var placements = 0;
         foreach (var row in source.GetProperty("placements").EnumerateArray())
         {
@@ -214,15 +240,43 @@ internal static class Fo1HexSceneLoader
             var artifact = artifacts[row.GetProperty("artifactId").GetString()!];
             var pixelOffset = ReadVector2(row.GetProperty("pixelOffset"));
             var pixelSize = 1.0f / pixelsPerMeter;
+            var spriteOffset = new Vector2(
+                pixelOffset.X + artifact.FrameOffset.X,
+                -(pixelOffset.Y + artifact.FrameOffset.Y) + artifact.Height / 2.0f);
+            var serial = row.GetProperty("serial").GetInt32();
+            if (combatMobs.TryGetValue(serial, out var combatMob))
+            {
+                var profile = combatMob.GetProperty("profile");
+                var mob = new Fo1Mob();
+                mob.Configure(
+                    serial,
+                    combatMob.GetProperty("name").GetString()!,
+                    combatMob.GetProperty("pid").GetString()!,
+                    tile,
+                    combatMob.GetProperty("currentHitPoints").GetInt32(),
+                    profile.GetProperty("hitPoints").GetInt32(),
+                    combatMob.GetProperty("currentActionPoints").GetInt32(),
+                    profile.GetProperty("actionPoints").GetInt32(),
+                    profile.GetProperty("armorClass").GetInt32(),
+                    profile.GetProperty("meleeDamage").GetInt32(),
+                    profile.GetProperty("sequence").GetInt32(),
+                    combatMob.GetProperty("runtimeTeam").GetInt32(),
+                    combatMob.GetProperty("runtimeAiPacket").GetInt32(),
+                    artifact.Texture,
+                    pixelSize,
+                    spriteOffset);
+                root.AddChild(mob);
+                mobs.Add(mob);
+                placements++;
+                continue;
+            }
             var sprite = new Sprite3D
             {
-                Name = $"FO1_OBJ_{row.GetProperty("serial").GetInt32()}_{row.GetProperty("artFilename").GetString()}",
+                Name = $"FO1_OBJ_{serial}_{row.GetProperty("artFilename").GetString()}",
                 Texture = artifact.Texture,
                 PixelSize = pixelSize,
                 Position = expected + Vector3.Up * (artifact.Height * pixelSize / 2.0f + 0.015f),
-                Offset = new Vector2(
-                    pixelOffset.X + artifact.FrameOffset.X,
-                    -(pixelOffset.Y + artifact.FrameOffset.Y)),
+                Offset = spriteOffset,
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
                 Shaded = false,
                 DoubleSided = true,
@@ -232,7 +286,7 @@ internal static class Fo1HexSceneLoader
             root.AddChild(sprite);
             placements++;
         }
-        return new SpriteCoverage(artifacts.Count, placements);
+        return new SpriteCoverage(artifacts.Count, placements, mobs);
     }
 
     private static DoorPresentation BuildDoor(Node3D root, JsonElement source)
@@ -424,7 +478,7 @@ internal static class Fo1HexSceneLoader
     {
         for (var index = 0; index < centers.Length; index++)
         {
-            var floorX = index % 100;
+            var floorX = 99 - index % 100;
             var floorY = index / 100;
             var expected = Vector3.Zero;
             for (var offsetY = 0; offsetY < 2; offsetY++)
@@ -457,6 +511,7 @@ internal static class Fo1HexSceneLoader
         int WalkableHexes,
         int SpriteArtifacts,
         int SpritePlacements,
+        int CombatMobs,
         int EntryTile,
         int DoorTile,
         int DoorRotation,
@@ -469,5 +524,8 @@ internal static class Fo1HexSceneLoader
         int Height,
         Vector2 FrameOffset);
 
-    private readonly record struct SpriteCoverage(int Artifacts, int Placements);
+    private readonly record struct SpriteCoverage(
+        int Artifacts,
+        int Placements,
+        IReadOnlyList<Fo1Mob> Mobs);
 }

@@ -120,6 +120,8 @@ internal partial class Fo1TacticalCamera : Node3D
                 _session.EndTurn();
             else if (key.PhysicalKeycode == Key.F5)
                 _session.SaveAndNotify();
+            else if (key.PhysicalKeycode == Key.X)
+                _session.AttackSelected();
             else if (key.PhysicalKeycode == Key.Escape)
             {
                 _orbitDragging = false;
@@ -161,7 +163,7 @@ internal partial class Fo1TacticalCamera : Node3D
                 var tile = Fo1HexMath.NearestTile(point);
                 if (tile >= 0)
                 {
-                    _session.SelectTile(tile);
+                    _session.ActivateTile(tile, button.DoubleClick);
                     if (button.DoubleClick)
                         FocusPoint(Fo1HexMath.Center(tile), MathF.Min(_targetSize, 14.0f));
                 }
@@ -198,6 +200,15 @@ internal partial class Fo1TacticalCamera : Node3D
     {
         FocusPoint(Fo1HexMath.Center(_session.PlayerTile), MathF.Min(_targetSize, 12.0f));
         _session.SetCameraStatus($"Focused Vault Dweller at hex {_session.PlayerTile}");
+    }
+
+    internal void FrameCombatPair(int firstTile, int secondTile)
+    {
+        var first = Fo1HexMath.Center(firstTile);
+        var second = Fo1HexMath.Center(secondTile);
+        Position = (first + second) / 2.0f;
+        Position = new Vector3(Position.X, 0.0f, Position.Z);
+        _targetSize = Math.Clamp(Fo1HexMath.Distance(firstTile, secondTile) + 8.0f, 10.0f, 20.0f);
     }
 
     private void FocusPoint(Vector3 point, float size)

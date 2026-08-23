@@ -20,11 +20,20 @@ internal static class Fo1HexCapture
             Directory.CreateDirectory(output);
             await WaitForFrames(host, 5);
             var ui = SaveViewport(host, output, "v13ent-hex-tactical-ui.png", 0.025, 0.035);
+            var combatTarget = loaded.Session.Mobs
+                .Where(mob => mob.Alive)
+                .OrderBy(mob => Fo1HexMath.Distance(loaded.Session.PlayerTile, mob.Tile))
+                .First();
+            loaded.Session.ActivateTile(combatTarget.Tile, false);
+            loaded.Camera.FrameCombatPair(loaded.Session.PlayerTile, combatTarget.Tile);
+            await WaitForFrames(host, 4);
+            var combat = SaveViewport(host, output, "v13ent-combat-target.png", 0.025, 0.035);
+            loaded.Camera.ResetHome();
             loaded.Session.Hud.Visible = false;
             await WaitForFrames(host, 3);
             var environment = SaveViewport(host, output, "v13ent-hex-map.png", 0.025, 0.025);
             loaded.Session.Hud.Visible = true;
-            var status = ui.Passed && environment.Passed ? "pass" : "fail";
+            var status = ui.Passed && combat.Passed && environment.Passed ? "pass" : "fail";
             var report = new
             {
                 schema = "opennv-fo1-hex-capture/v1",
@@ -40,6 +49,7 @@ internal static class Fo1HexCapture
                 provisionalWalkableHexes = loaded.WalkableHexes,
                 spriteArtifacts = loaded.SpriteArtifacts,
                 spritePlacements = loaded.SpritePlacements,
+                combatMobs = loaded.CombatMobs,
                 camera = new
                 {
                     projection = "orthogonal",
@@ -52,15 +62,16 @@ internal static class Fo1HexCapture
                     edgePan = true,
                 },
                 tactical = loaded.Session.Report(),
+                selectedCombatTarget = combatTarget.Report(),
                 runtime = runtimeReport,
-                files = new[] { ui.Evidence, environment.Evidence },
+                files = new[] { ui.Evidence, combat.Evidence, environment.Evidence },
                 windowsAppControlUsed = false,
                 foregroundActivationUsed = false,
                 foregroundInputInjected = false,
             };
             WriteReport(Path.Combine(output, "fo1-hex-capture-report.json"), report);
             if (status == "pass")
-                GD.Print($"OPENNV_FO1_HEX_CAPTURE_PASS output={output} files=2");
+                GD.Print($"OPENNV_FO1_HEX_CAPTURE_PASS output={output} files=3");
             else
                 GD.PushError($"OPENNV_FO1_HEX_CAPTURE_VISUAL_FAIL output={output}");
             host.GetTree().Quit(status == "pass" ? 0 : 1);

@@ -9,6 +9,7 @@ import json
 import math
 import os
 import shutil
+import struct
 import tempfile
 from pathlib import Path
 
@@ -47,13 +48,13 @@ def hex_center(tile: int) -> list[float]:
 def floor_index_for_hex(tile: int) -> int:
     x = tile % 200
     y = tile // 200
-    return (y // 2) * 100 + (x // 2)
+    return (y // 2) * 100 + (99 - x // 2)
 
 
 def floor_patch_center(index: int) -> list[float]:
     if not 0 <= index < 10000:
         raise ValueError(f"Fallout floor tile is outside the 100x100 grid: {index}")
-    floor_x = index % 100
+    floor_x = 99 - index % 100
     floor_y = index // 100
     centers = [
         hex_center((floor_y * 2 + offset_y) * 200 + floor_x * 2 + offset_x)
@@ -61,6 +62,26 @@ def floor_patch_center(index: int) -> list[float]:
         for offset_x in range(2)
     ]
     return [sum(center[axis] for center in centers) / 4.0 for axis in range(3)]
+
+
+def classic_floor_screen(index: int) -> list[int]:
+    if not 0 <= index < 10000:
+        raise ValueError(f"Fallout floor tile is outside the 100x100 grid: {index}")
+    storage_x = index % 100
+    y = index // 100
+    x = 99 - storage_x
+    return [4752 + 32 * y - 48 * x, 24 * y + 12 * x]
+
+
+def classic_hex_screen(tile: int) -> list[int]:
+    if not 0 <= tile < 40000:
+        raise ValueError(f"Fallout hex tile is outside the 200x200 grid: {tile}")
+    x = tile % 200
+    y = tile // 200
+    return [
+        4816 - ((((x + 1) >> 1) << 5) + ((x >> 1) << 4) - (y << 4)),
+        12 * (x >> 1) + y * 12 + 11,
+    ]
 
 
 def unproject_floor(image: Image.Image, size: int = 128) -> Image.Image:
@@ -105,6 +126,34 @@ def gltf_width(path: Path) -> float:
     return width
 
 
+def parse_critter_pro(data: bytes) -> dict[str, object]:
+    if len(data) not in {0x19C, 0x1A0}:
+        raise Fo1ProfileError(f"unsupported critter PRO size: 0x{len(data):x}")
+    base = struct.unpack_from(">35i", data, 0x30)
+    bonus = struct.unpack_from(">35i", data, 0xBC)
+    stats = [base[index] + bonus[index] for index in range(35)]
+    head_fid, ai_packet, team = struct.unpack_from(">3i", data, 0x20)
+    return {
+        "headFid": head_fid,
+        "aiPacket": ai_packet,
+        "team": team,
+        "strength": stats[0],
+        "perception": stats[1],
+        "endurance": stats[2],
+        "charisma": stats[3],
+        "intelligence": stats[4],
+        "agility": stats[5],
+        "luck": stats[6],
+        "hitPoints": stats[7],
+        "actionPoints": stats[8],
+        "armorClass": stats[9],
+        "unarmedDamage": stats[10],
+        "meleeDamage": stats[11],
+        "sequence": stats[13],
+        "criticalChance": stats[15],
+    }
+
+
 def save_png(image: Image.Image, staging_path: Path, final_path: Path) -> dict[str, object]:
     staging_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(staging_path, format="PNG", optimize=False)
@@ -119,6 +168,7 @@ def save_png(image: Image.Image, staging_path: Path, final_path: Path) -> dict[s
 def prepare(
     recipe_path: Path,
     ettu_root: Path,
+    ettu_source_root: Path,
     fallout2_master: Path,
     fallout2_critter: Path,
     object_contract_path: Path,
@@ -153,11 +203,22 @@ def prepare(
     if elevation.raw_sha256 != source_recipe["floorGridSha256"]:
         raise Fo1ProfileError("V13ENT floor-grid hash drift")
     if (
-        layout.header.enteringTile != recipe["entry"]["tile"]
-        or layout.header.enteringElevation != recipe["entry"]["elevation"]
-        or layout.header.enteringRotation != recipe["entry"]["rotation"]
+        layout.header.enteringTile != recipe["mapHeaderEntry"]["tile"]
+        or layout.header.enteringElevation != recipe["mapHeaderEntry"]["elevation"]
+        or layout.header.enteringRotation != recipe["mapHeaderEntry"]["rotation"]
     ):
-        raise Fo1ProfileError("V13ENT entry contract drift")
+        raise Fo1ProfileError("V13ENT MAP-header entry contract drift")
+    entry_recipe = recipe["entry"]
+    entry_source_path = (ettu_source_root / Path(entry_recipe["sourceRelativePath"])).resolve()
+    if sha256_path(entry_source_path) != entry_recipe["sourceSha256"]:
+        raise Fo1ProfileError("V13CAVE first-run spawn source hash drift")
+    entry_source_text = entry_source_path.read_text(encoding="utf-8")
+    expected_override = (
+        f"override_map_start_hex({entry_recipe['tile']}, "
+        f"{entry_recipe['elevation']}, {entry_recipe['rotation']});"
+    )
+    if expected_override not in entry_source_text:
+        raise Fo1ProfileError("V13CAVE first-run spawn override drift")
 
     objects = read_json(object_contract_path)
     door = next(
@@ -358,6 +419,63 @@ def prepare(
                 }
             )
 
+        sprite_by_serial = {row["serial"]: row for row in sprite_placements}
+        critter_profiles: dict[int, dict[str, object]] = {}
+        combat_mobs = []
+        for obj in top_level_objects:
+            if int(obj["prototype"]["object_type"]) != 1:
+                continue
+            pid = int(obj["pid"], 16)
+            profile = critter_profiles.get(pid)
+            if profile is None:
+                prototype_filename = obj["prototype"]["filename"]
+                resource = resolver.read(f"proto\\critters\\{prototype_filename}")
+                profile = {
+                    **parse_critter_pro(resource.data),
+                    "pid": obj["pid"],
+                    "prototypeFilename": prototype_filename,
+                    "prototypeSha256": resource.sha256,
+                }
+                critter_profiles[pid] = profile
+            instance = obj["instanceValues"]
+            if len(instance) != 11:
+                raise Fo1ProfileError(f"critter MAP instance {obj['serial']} has {len(instance)} values")
+            presentation = sprite_by_serial[obj["serial"]]
+            combat_mobs.append(
+                {
+                    "serial": obj["serial"],
+                    "name": "Giant Rat",
+                    "pid": obj["pid"],
+                    "tile": obj["tile"],
+                    "rotation": obj["rotation"],
+                    "artifactId": presentation["artifactId"],
+                    "currentHitPoints": instance[8],
+                    "currentActionPoints": instance[3],
+                    "runtimeAiPacket": instance[5],
+                    "runtimeTeam": instance[6],
+                    "profile": profile,
+                }
+            )
+
+        player_resource = resolver.read("art\\critters\\hmjmpsaa.frm")
+        player_decoded = decode_frm(player_resource.data, colors)
+        player_frame = player_decoded["directions"][recipe["entry"]["rotation"]]["frames"][0]
+        player_relative = Path("sprites") / "player-hmjmpsaa.png"
+        player_artifact = {
+            "id": "fo1-player-hmjmpsaa",
+            "logicalPath": "art\\critters\\hmjmpsaa.frm",
+            "source": player_resource.source,
+            "sourceSha256": player_resource.sha256,
+            "rotation": recipe["entry"]["rotation"],
+            "frame": 0,
+            "frameOffset": [player_frame["x"], player_frame["y"]],
+            **save_png(
+                player_frame["image"],
+                staging / player_relative,
+                output_root / player_relative,
+            ),
+        }
+
         floor_by_id = {row["id"]: row for row in floor_art}
         non_default_floor_count = sum(floor_id != 1 for floor_id in floor_ids)
         blocked_set = {row["tile"] for row in blocker_rows}
@@ -393,6 +511,10 @@ def prepare(
                 "worldMeters": hex_center(recipe["entry"]["tile"]),
                 "floorId": floor_ids[floor_index_for_hex(recipe["entry"]["tile"])],
             },
+            "mapHeaderEntry": {
+                **recipe["mapHeaderEntry"],
+                "worldMeters": hex_center(recipe["mapHeaderEntry"]["tile"]),
+            },
             "door": {
                 "source": door,
                 "frame": frame,
@@ -415,13 +537,51 @@ def prepare(
                 "placements": sprite_placements,
                 "skipped": skipped_sprite_objects,
             },
+            "combat": {
+                "status": "interactive-provisional-rules",
+                "objectPixelsPerMeter": pixels_per_meter,
+                "player": {
+                    "name": "Vault Dweller",
+                    "presentation": "owned male Vault-jumpsuit idle art; character selection not connected",
+                    "tile": recipe["entry"]["tile"],
+                    "artifact": player_artifact,
+                    "stats": {
+                        "source": "provisional tactical proof profile",
+                        "hitPoints": 30,
+                        "actionPoints": recipe["tacticalProof"]["actionPointsPerTurn"],
+                        "armorClass": 5,
+                        "sequence": 10,
+                    },
+                    "weapon": {
+                        "name": "10mm Pistol",
+                        "source": "provisional tactical proof profile",
+                        "minimumDamage": 5,
+                        "maximumDamage": 12,
+                        "rangeHexes": 25,
+                        "actionPointCost": 5,
+                    },
+                },
+                "mobs": combat_mobs,
+                "rules": {
+                    "turnOrder": "player then source-team-1 rats by sequence/serial",
+                    "ratMovementLimitHexes": 3,
+                    "ratAttackRangeHexes": 1,
+                    "damageRoll": "deterministic scene-seeded proof RNG",
+                },
+                "unsupported": [
+                    "retail to-hit formula and criticals",
+                    "weapon/ammo inventory and reload",
+                    "animation playback and sound",
+                    "complete AI packet behavior and sequence queue",
+                ],
+            },
             "camera": {
                 "homeFocusMeters": [
                     (hex_center(recipe["entry"]["tile"])[0] + hex_center(door["tile"])[0]) / 2.0,
                     0.0,
                     (hex_center(recipe["entry"]["tile"])[2] + hex_center(door["tile"])[2]) / 2.0,
                 ],
-                "homeSizeMeters": 30.0,
+                "homeSizeMeters": 22.0,
                 "yawDegrees": -45.0,
                 "pitchDegrees": -52.0,
             },
@@ -438,6 +598,7 @@ def prepare(
                 "spritePlacements": len(sprite_placements),
                 "spriteArtifacts": len(sprite_artifacts),
                 "skippedSpriteObjects": len(skipped_sprite_objects),
+                "combatMobs": len(combat_mobs),
                 "doors": len(objects["map"]["doors"]),
                 "sourceDoorFrames": door["prototype"]["subtype_name"] == "door",
             },
@@ -469,6 +630,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--recipe", type=Path, required=True)
     parser.add_argument("--ettu-root", type=Path, required=True)
+    parser.add_argument("--ettu-source-root", type=Path, required=True)
     parser.add_argument("--fallout2-master", type=Path, required=True)
     parser.add_argument("--fallout2-critter", type=Path, required=True)
     parser.add_argument("--object-contract", type=Path, required=True)
@@ -478,6 +640,7 @@ def main() -> int:
     result = prepare(
         args.recipe.resolve(),
         args.ettu_root.resolve(),
+        args.ettu_source_root.resolve(),
         args.fallout2_master.resolve(),
         args.fallout2_critter.resolve(),
         args.object_contract.resolve(),

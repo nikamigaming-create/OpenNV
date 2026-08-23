@@ -760,6 +760,7 @@ public partial class RuntimeCoordinator : Node3D
             provisionalWalkableHexes = loaded.WalkableHexes,
             spriteArtifacts = loaded.SpriteArtifacts,
             spritePlacements = loaded.SpritePlacements,
+            combatMobs = loaded.CombatMobs,
             entryTile = loaded.EntryTile,
             entryWorldMeters = Vector(Fo1HexMath.Center(loaded.EntryTile)),
             doorTile = loaded.DoorTile,

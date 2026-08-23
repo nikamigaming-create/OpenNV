@@ -19,13 +19,20 @@ internal partial class Fo1TacticalSession : Node
     private int _turn = 1;
     private int _actionPoints;
     private int _playerTile;
-    private MeshInstance3D _playerToken = null!;
+    private Sprite3D _playerToken = null!;
     private MeshInstance3D _hoverMarker = null!;
     private MultiMeshInstance3D _pathMarkers = null!;
     private Label _turnLabel = null!;
     private Label _hexLabel = null!;
     private Label _statusLabel = null!;
     private string _status = "Select a highlighted floor hex to move";
+    private PlayerProfile _playerProfile;
+    private IReadOnlyList<Fo1Mob> _mobs = [];
+    private readonly Dictionary<int, Fo1Mob> _mobsByTile = [];
+    private Fo1Mob? _selectedMob;
+    private int _playerHitPoints;
+    private int _attacks;
+    private int _kills;
 
     internal int PlayerTile => _playerTile;
     internal int HoveredTile => _hoveredTile;
@@ -34,6 +41,11 @@ internal partial class Fo1TacticalSession : Node
     internal Node3D PlayerToken => _playerToken;
     internal CanvasLayer Hud { get; private set; } = null!;
     internal bool CanWalk(int tile) => tile >= 0 && tile < _walkable.Length && _walkable[tile];
+    internal IReadOnlyList<Fo1Mob> Mobs => _mobs;
+    internal int PlayerHitPoints => _playerHitPoints;
+    internal int Attacks => _attacks;
+    internal int Kills => _kills;
+    internal int WeaponActionPointCost => _playerProfile.WeaponActionPointCost;
 
     internal void Configure(
         string sceneSha256,
@@ -43,6 +55,8 @@ internal partial class Fo1TacticalSession : Node
         int entryTile,
         int doorTile,
         int actionPoints,
+        PlayerProfile playerProfile,
+        IReadOnlyList<Fo1Mob> mobs,
         string? savePath)
     {
         if (walkable.Length != Fo1HexMath.Width * Fo1HexMath.Height || floorIds.Length != 10000)
@@ -57,6 +71,11 @@ internal partial class Fo1TacticalSession : Node
         _doorTile = doorTile;
         _maximumActionPoints = actionPoints;
         _actionPoints = actionPoints;
+        _playerProfile = playerProfile;
+        _playerHitPoints = playerProfile.HitPoints;
+        _mobs = mobs;
+        foreach (var mob in mobs.Where(mob => mob.Alive))
+            _mobsByTile.Add(mob.Tile, mob);
         _savePath = ResolvePath(savePath ?? "user://saves/fo1-v13ent-hex-v1.json");
         Name = "Fo1TacticalSession";
         Load();
@@ -74,7 +93,7 @@ internal partial class Fo1TacticalSession : Node
         if (_movement.Count == 0)
             return;
         var targetTile = _movement.Peek();
-        var target = Fo1HexMath.Center(targetTile) + Vector3.Up * 0.38f;
+        var target = Fo1HexMath.Center(targetTile) + Vector3.Up * 0.015f;
         _playerToken.Position = _playerToken.Position.MoveToward(target, (float)delta * 4.0f);
         if (_playerToken.Position.DistanceTo(target) > 0.005f)
             return;
@@ -143,12 +162,71 @@ internal partial class Fo1TacticalSession : Node
         RefreshHud();
     }
 
+    internal void ActivateTile(int tile, bool attackRequested)
+    {
+        if (_mobsByTile.TryGetValue(tile, out var mob) && mob.Alive)
+        {
+            SelectMob(mob);
+            if (attackRequested)
+                AttackSelected();
+            return;
+        }
+        SelectTile(tile);
+    }
+
+    internal void AttackSelected()
+    {
+        var target = _selectedMob;
+        if (target is null || !target.Alive)
+        {
+            _status = "Select a living target first";
+            RefreshHud();
+            return;
+        }
+        var distance = Fo1HexMath.Distance(_playerTile, target.Tile);
+        if (distance > _playerProfile.WeaponRangeHexes)
+        {
+            _status = $"{target.DisplayName} is {distance} hexes away; range is {_playerProfile.WeaponRangeHexes}";
+            RefreshHud();
+            return;
+        }
+        if (_actionPoints < _playerProfile.WeaponActionPointCost)
+        {
+            _status = $"Need {_playerProfile.WeaponActionPointCost} AP to fire {_playerProfile.WeaponName}";
+            RefreshHud();
+            return;
+        }
+        _actionPoints -= _playerProfile.WeaponActionPointCost;
+        var span = _playerProfile.WeaponMaximumDamage - _playerProfile.WeaponMinimumDamage + 1;
+        var rolled = _playerProfile.WeaponMinimumDamage +
+            Math.Abs(_turn * 17 + _attacks * 31 + _playerTile + target.Serial) % span;
+        _attacks++;
+        var applied = target.TakeDamage(rolled);
+        if (!target.Alive)
+        {
+            _mobsByTile.Remove(target.Tile);
+            _walkable[target.Tile] = true;
+            _kills++;
+            _status = $"{_playerProfile.WeaponName} hit {target.DisplayName} for {applied}; killed";
+        }
+        else
+        {
+            _status = $"{_playerProfile.WeaponName} hit {target.DisplayName} for {applied}; " +
+                $"{target.HitPoints}/{target.MaximumHitPoints} HP";
+        }
+        RefreshHud();
+        Save();
+    }
+
     internal void EndTurn()
     {
         _movement.Clear();
+        RunRatTurn();
         _turn++;
         _actionPoints = _maximumActionPoints;
-        _status = $"Turn {_turn}: AP restored";
+        _status = _playerHitPoints <= 0
+            ? "Vault Dweller is down — combat proof failed"
+            : $"Turn {_turn}: rats acted, player AP restored";
         RefreshPathMarkers();
         RefreshHud();
         Save();
@@ -179,6 +257,14 @@ internal partial class Fo1TacticalSession : Node
         maximumActionPoints = _maximumActionPoints,
         movementCostPerHex = 1,
         queuedSteps = _movement.Count,
+        playerHitPoints = _playerHitPoints,
+        playerMaximumHitPoints = _playerProfile.HitPoints,
+        playerArmorClass = _playerProfile.ArmorClass,
+        weapon = _playerProfile.WeaponName,
+        attacks = _attacks,
+        kills = _kills,
+        mobs = _mobs.Select(mob => mob.Report()).ToArray(),
+        livingMobs = _mobs.Count(mob => mob.Alive),
         provisionalWalkableHexes = _walkable.Count(value => value),
         savePath = _savePath,
     };
@@ -216,29 +302,71 @@ internal partial class Fo1TacticalSession : Node
         return path;
     }
 
+    private void SelectMob(Fo1Mob mob)
+    {
+        _selectedMob?.SetSelected(false);
+        _selectedMob = mob;
+        mob.SetSelected(true);
+        _selectedTile = mob.Tile;
+        _status = $"TARGET {mob.DisplayName} • HP {mob.HitPoints}/{mob.MaximumHitPoints} • " +
+            $"AC {mob.ArmorClass} • AP {mob.ActionPoints}/{mob.MaximumActionPoints} • " +
+            $"double-click or X to attack";
+        RefreshHud();
+    }
+
+    private void RunRatTurn()
+    {
+        foreach (var mob in _mobs.Where(mob => mob.Alive)
+                     .OrderByDescending(mob => mob.Sequence)
+                     .ThenBy(mob => mob.Serial))
+        {
+            mob.ResetActionPoints();
+            var distance = Fo1HexMath.Distance(mob.Tile, _playerTile);
+            if (distance <= 1)
+            {
+                RatAttack(mob);
+                continue;
+            }
+            var original = mob.Tile;
+            _walkable[original] = true;
+            _mobsByTile.Remove(original);
+            var path = FindPath(original, _playerTile);
+            var movement = Math.Min(3, Math.Max(0, path.Count - 1));
+            movement = Math.Min(movement, mob.ActionPoints);
+            var destination = movement > 0 ? path[movement - 1] : original;
+            for (var index = 0; index < movement; index++)
+                mob.SpendActionPoint();
+            mob.SetTile(destination);
+            _walkable[destination] = false;
+            _mobsByTile[destination] = mob;
+            if (Fo1HexMath.Distance(destination, _playerTile) <= 1 && mob.ActionPoints > 0)
+                RatAttack(mob);
+        }
+    }
+
+    private void RatAttack(Fo1Mob mob)
+    {
+        var damage = Math.Max(1, mob.MeleeDamage);
+        _playerHitPoints = Math.Max(0, _playerHitPoints - damage);
+        mob.SpendActionPoint();
+    }
+
     private void BuildWorldMarkers()
     {
-        var tokenMaterial = new StandardMaterial3D
+        _playerToken = new Sprite3D
         {
-            AlbedoColor = new Color(0.10f, 0.58f, 0.95f),
-            Metallic = 0.25f,
-            Roughness = 0.35f,
-            EmissionEnabled = true,
-            Emission = new Color(0.02f, 0.18f, 0.35f),
-            EmissionEnergyMultiplier = 1.4f,
-        };
-        _playerToken = new MeshInstance3D
-        {
-            Name = "VaultDwellerHexToken",
-            Mesh = new CylinderMesh
-            {
-                TopRadius = 0.20f,
-                BottomRadius = 0.27f,
-                Height = 0.70f,
-                RadialSegments = 16,
-            },
-            MaterialOverride = tokenMaterial,
-            Position = Fo1HexMath.Center(_playerTile) + Vector3.Up * 0.38f,
+            Name = "VaultDwellerSourceSprite",
+            Texture = _playerProfile.Texture,
+            PixelSize = _playerProfile.PixelSize,
+            Offset = new Vector2(
+                _playerProfile.FrameOffset.X,
+                -_playerProfile.FrameOffset.Y + _playerProfile.Height / 2.0f),
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Shaded = false,
+            DoubleSided = true,
+            AlphaCut = SpriteBase3D.AlphaCutMode.OpaquePrepass,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+            Position = Fo1HexMath.Center(_playerTile) + Vector3.Up * 0.015f,
         };
         AddChild(_playerToken);
         _hoverMarker = new MeshInstance3D
@@ -297,7 +425,7 @@ internal partial class Fo1TacticalSession : Node
         _hexLabel = HudLabel(labels);
         _statusLabel = HudLabel(labels);
         var controls = HudLabel(labels);
-        controls.Text = "LMB move • double-LMB focus • MMB orbit/tilt • RMB drag pan • Wheel cursor-zoom • WASD/edge pan • F player • Home route • Space end turn • F5 save";
+        controls.Text = "LMB move/select • double-LMB or X attack • MMB orbit/tilt • RMB drag pan • Wheel cursor-zoom • WASD/edge pan • F player • Home route • Space end turn • F5 save";
         controls.AddThemeFontSizeOverride("font_size", 14);
     }
 
@@ -315,13 +443,18 @@ internal partial class Fo1TacticalSession : Node
         if (_turnLabel is null)
             return;
         var pips = new string('●', _actionPoints) + new string('○', _maximumActionPoints - _actionPoints);
-        _turnLabel.Text = $"TURN {_turn}   AP {pips}  {_actionPoints}/{_maximumActionPoints}   PLAYER HEX {_playerTile}   DOOR HEX {_doorTile}";
+        _turnLabel.Text = $"COMBAT TURN {_turn}   HP {_playerHitPoints}/{_playerProfile.HitPoints}   " +
+            $"AC {_playerProfile.ArmorClass}   AP {pips} {_actionPoints}/{_maximumActionPoints}   " +
+            $"{_playerProfile.WeaponName} [{_playerProfile.WeaponActionPointCost} AP]";
         var inspected = _hoveredTile >= 0 ? _hoveredTile : _selectedTile >= 0 ? _selectedTile : _playerTile;
         var floorId = _floorIds[Fo1HexMath.FloorIndex(inspected)];
         var floorName = _floorNames.GetValueOrDefault(floorId, "unknown.frm");
         _hexLabel.Text = $"CURSOR HEX {inspected} ({inspected % 200},{inspected / 200})   FLOOR {floorId} {floorName}   " +
             $"{(_walkable[inspected] ? "PROVISIONAL FLOOR" : "NO FLOOR")}";
-        _statusLabel.Text = _status;
+        var target = _selectedMob is null
+            ? "TARGET —"
+            : $"TARGET {_selectedMob.DisplayName} {_selectedMob.HitPoints}/{_selectedMob.MaximumHitPoints} HP";
+        _statusLabel.Text = $"{target}   {_status}";
     }
 
     private void Save()
@@ -334,6 +467,10 @@ internal partial class Fo1TacticalSession : Node
             playerTile = _playerTile,
             turn = _turn,
             actionPoints = _actionPoints,
+            playerHitPoints = _playerHitPoints,
+            attacks = _attacks,
+            kills = _kills,
+            mobs = _mobs.Select(mob => mob.Report()).ToArray(),
         };
         var temporary = _savePath + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(document, new JsonSerializerOptions
@@ -358,10 +495,46 @@ internal partial class Fo1TacticalSession : Node
         _playerTile = tile;
         _turn = Math.Max(1, root.GetProperty("turn").GetInt32());
         _actionPoints = Math.Clamp(root.GetProperty("actionPoints").GetInt32(), 0, _maximumActionPoints);
+        _playerHitPoints = root.GetProperty("playerHitPoints").GetInt32();
+        _attacks = root.GetProperty("attacks").GetInt32();
+        _kills = root.GetProperty("kills").GetInt32();
+        var mobRows = root.GetProperty("mobs").EnumerateArray().ToDictionary(
+            row => row.GetProperty("serial").GetInt32());
+        _mobsByTile.Clear();
+        foreach (var mob in _mobs)
+            _walkable[mob.Tile] = true;
+        foreach (var mob in _mobs)
+        {
+            var row = mobRows[mob.Serial];
+            mob.SetTile(row.GetProperty("tile").GetInt32());
+            var targetHp = row.GetProperty("hitPoints").GetInt32();
+            if (targetHp < mob.HitPoints)
+                mob.TakeDamage(mob.HitPoints - targetHp);
+            if (mob.Alive)
+                _mobsByTile[mob.Tile] = mob;
+            else
+                _walkable[mob.Tile] = true;
+        }
     }
 
     private static string ResolvePath(string path) =>
         path.StartsWith("user://", StringComparison.Ordinal)
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
+
+    internal readonly record struct PlayerProfile(
+        string Name,
+        Texture2D Texture,
+        int Width,
+        int Height,
+        float PixelSize,
+        Vector2 FrameOffset,
+        int HitPoints,
+        int ArmorClass,
+        int Sequence,
+        string WeaponName,
+        int WeaponMinimumDamage,
+        int WeaponMaximumDamage,
+        int WeaponRangeHexes,
+        int WeaponActionPointCost);
 }

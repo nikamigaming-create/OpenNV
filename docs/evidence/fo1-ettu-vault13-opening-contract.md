@@ -20,6 +20,11 @@ separate concept scene. No donor placement is claimed as Fallout 1 parity.
 - Fallout MAP layout reference:
   <https://github.com/rotators/fallout2-docs/blob/master/content/pages/map.md>
 
+`20090 / 0 / 0` is the MAP-header fallback, not the new-game spawn. On
+`map_first_run`, the authored `V13CAVE.ssl` map script overrides it with
+`17690 / 0 / 2` via `override_map_start_hex`; the tactical route uses that
+scripted state.
+
 The source MAP is version `20`, has only elevation zero present, and resolves
 through Et Tu's `Maps.txt` as `V13ENT`. The tool validates the exact header,
 file hash, global/local variable arrays, and the complete 10,000-entry

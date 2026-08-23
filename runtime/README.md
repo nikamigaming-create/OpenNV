@@ -76,5 +76,7 @@ Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
 
 Its controls are MMB orbit/tilt, RMB drag-pan, wheel zoom toward the cursor,
 WASD/arrows/edge pan, `F` player focus, `Home` entry-to-door route reset,
-left-click path movement, `Space` end turn, and `F5` save. This route is an
-interactive movement proof, not a full Fallout campaign.
+left-click path movement/target selection, double-click or `X` attack,
+`Space` end turn/rat turn, and `F5` save. This route uses the scripted first-run
+spawn, owned player/rat art, source rat combat fields, and a bounded combat
+proof. It is not a full Fallout campaign or retail combat simulation.

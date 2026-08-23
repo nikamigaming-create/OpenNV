@@ -60,22 +60,29 @@ and `docs/evidence/fo1-vault13-entrance-concept-contract.md`.
 `tools/prepare_fo1_hex_scene.py` supersedes the donor cave as the primary
 Fallout 1 test route. It transports `V13ENT.MAP` into its actual 200×200
 movement-hex namespace, with the original 100×100 floor grid mapped four hexes
-per floor tile. Each hex is one metre flat-to-flat. The tool resolves all 58
+per floor tile and its storage X reversed before object-hex projection. Each
+hex is one metre flat-to-flat. The tool resolves all 58
 used floor FRMs, unprojects their isometric diamonds into rotatable local floor
 textures, and emits 1,493 visible elevation-zero MAP-object sprite placements
 from 115 exact FRM/frame/rotation artifacts. Owned/derived PNG and glTF files
 remain in a fresh ignored cache.
 
-The Godot route starts at source hex `20090`, places the mapped gear door and
+The MAP header fallback is `20090`; the authored first-run `V13CAVE.ssl`
+override starts the player at `17690`, rotation `2`, just outside the Vault.
+Godot places the mapped gear door and
 exact `v13secr3.frm` frame at source hex `16290`, renders source walls, rocks,
-scenery, clutter, and all twenty rat placements, and exposes click pathfinding,
-one-AP-per-hex movement, end-turn AP restoration, and save/reload. Its tactical
+scenery, clutter, and all twenty rat placements, and uses owned male
+Vault-jumpsuit art for the current player-presentation proof. Rats are entities
+with MAP HP/AP/team/AI and PRO HP/AP/AC/melee/sequence values. The runtime
+exposes click pathfinding, one-AP movement, target selection, a bounded 10mm
+attack/rat turn, combat HUD, end-turn AP restoration, and save/reload. Its tactical
 camera supports middle-mouse orbit/tilt (the Kenshi default), right-drag map
 pan, mouse-wheel zoom toward the cursor, WASD/arrows, edge pan, player focus,
 and route reset.
 
 This is an **interactive movement/topology proof**, not the complete game.
-Floor walk masks, complete multihex footprints, roof state, script execution,
-door animation, AI turns, attacks, damage, dialogue, quests, and full save
-semantics remain unpromoted. See
+Floor walk masks, complete multihex footprints, roof state, door animation,
+character creation, retail to-hit/critical/damage formulas, complete AI-packet
+behavior, dialogue, quests, inventory/reload, and full save semantics remain
+unpromoted. See
 `docs/evidence/fo1-v13ent-hex-tactical-contract.md`.
