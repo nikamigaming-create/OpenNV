@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 from actor_catalog import ActorCatalog, ActorReference, HumanoidActor, scan_actor_catalog
@@ -35,7 +36,8 @@ def file_sha256(path: Path) -> str:
 
 
 def load_recipe(recipe_id: str) -> dict[str, object]:
-    path = Path(__file__).resolve().parents[1] / "recipes" / f"{recipe_id}.json"
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    path = root / "recipes" / f"{recipe_id}.json"
     recipe = json.loads(path.read_text(encoding="utf-8"))
     if recipe.get("schema") != RECIPE_SCHEMA or recipe.get("id") != recipe_id:
         raise ValueError(f"Unexpected OpenNV actor recipe: {path}")

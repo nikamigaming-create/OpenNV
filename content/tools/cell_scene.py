@@ -22,7 +22,7 @@ from export_static_nif_gltf import export_static_nif
 from texture_pipeline import TexturePipeline
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v5"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v6"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 
 
@@ -212,6 +212,45 @@ def interaction_manifest(
     return None
 
 
+def vr_smoke_loadout_manifest(
+    recipe: dict[str, object],
+    catalog: CellCatalog,
+) -> dict[str, object]:
+    configured = recipe["vrSmokeLoadout"]
+    weapon_form_id = int(str(configured["weaponFormId"]), 16)
+    reserve_magazines = int(configured["reserveMagazines"])
+    if reserve_magazines < 1:
+        raise ValueError("VR smoke loadout must retain at least one reserve magazine")
+    weapon = catalog.weapons.get(weapon_form_id)
+    weapon_base = catalog.base_objects.get(weapon_form_id)
+    if (
+        weapon is None
+        or weapon_base is None
+        or weapon_base.record_type != "WEAP"
+        or weapon_base.model_path is None
+    ):
+        raise ValueError(f"VR smoke weapon is not a resolved WEAP: {weapon_form_id:08x}")
+    ammo_form_id = int(str(configured.get("ammoFormId", "0")), 16)
+    if ammo_form_id == 0:
+        if weapon.ammo_form_id is None:
+            raise ValueError(f"VR smoke weapon has no ammo form: {weapon_form_id:08x}")
+        ammo_form_id = weapon.ammo_form_id
+    ammo = catalog.base_objects.get(ammo_form_id)
+    if ammo is None or ammo.record_type != "AMMO":
+        raise ValueError(f"VR smoke ammo is not a resolved AMMO: {ammo_form_id:08x}")
+    return {
+        "weaponFormId": form_id(weapon_form_id),
+        "weaponEditorId": weapon_base.editor_id,
+        "modelPath": weapon_base.model_path,
+        "ammoFormId": form_id(ammo_form_id),
+        "ammoEditorId": ammo.editor_id,
+        "damage": weapon.damage,
+        "clipSize": weapon.clip_size,
+        "reserveRounds": weapon.clip_size * reserve_magazines,
+        "source": "recipe-identity-plus-retail-records",
+    }
+
+
 def prepare_cell_scene(
     master_path: Path,
     meshes_path: Path,
@@ -226,6 +265,7 @@ def prepare_cell_scene(
         raise ValueError(f"Cell recipe master hash mismatch: expected={expected_master} actual={master_sha256}")
 
     catalog = scan_cell_catalog(master_path)
+    vr_loadout = vr_smoke_loadout_manifest(recipe, catalog)
     cell_form_id = _find_cell(catalog, str(recipe["cellEditorId"]))
     cell = catalog.cells[cell_form_id]
     entry_door = int(str(recipe["entryDoorReferenceFormId"]), 16)
@@ -271,7 +311,10 @@ def prepare_cell_scene(
     assets: dict[str, dict[str, object]] = {}
     asset_sidecars: dict[str, dict[str, object]] = {}
     compiler: dict[str, str] | None = None
-    models = sorted({base.model_path for _, base in selected if base.model_path})
+    models = sorted(
+        {base.model_path for _, base in selected if base.model_path}
+        | {str(vr_loadout["modelPath"])}
+    )
     for model_path in models:
         logical_path = "meshes\\" + model_path
         asset_id = hashlib.sha256(logical_path.encode()).hexdigest()[:20]
@@ -381,6 +424,19 @@ def prepare_cell_scene(
             )
         asset["materials"] = bindings
 
+    vr_weapon_model = str(vr_loadout["modelPath"])
+    vr_loadout["modelAssetId"] = assets[vr_weapon_model]["id"]
+    muzzle_markers = [
+        marker
+        for marker in asset_sidecars[vr_weapon_model]["attachmentMarkers"]
+        if marker["name"] == "ProjectileNode"
+    ]
+    if len(muzzle_markers) != 1:
+        raise ValueError(
+            f"VR smoke weapon must expose one ProjectileNode: {vr_weapon_model}"
+        )
+    vr_loadout["muzzlePositionGodotUnits"] = muzzle_markers[0]["positionGodotUnits"]
+
     references = []
     for reference, base in selected:
         asset = assets[base.model_path]
@@ -462,6 +518,9 @@ def prepare_cell_scene(
         "proof": {
             "doorReferenceFormId": str(recipe["portalProofDoorReferenceFormId"]),
             "visibilityModel": "whole-cell-no-portal-culling",
+        },
+        "vr": {
+            "startingLoadout": vr_loadout,
         },
         "lighting": {
             "ambientColor": normalized_rgb(cell.lighting.ambient_rgb),

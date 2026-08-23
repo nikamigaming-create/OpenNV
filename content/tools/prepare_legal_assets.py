@@ -13,6 +13,7 @@ from pathlib import Path
 from bsa_archive import extract_member
 from cell_scene import load_recipe, prepare_cell_scene
 from export_static_nif_gltf import export_static_nif
+from prepare_actor import prepare_actor_set
 
 
 SCHEMA = "opennv-legal-asset-cache/v1"
@@ -68,6 +69,7 @@ def prepare(
     sidecar_path = output_root / "retail-static.opennv.json"
     sidecar = export_static_nif(source_path, member.logical_path, gltf_path, sidecar_path, strict=True)
     cell_scene = None
+    actor_scenes = None
     texture_archives: list[Path] = []
     texture_archive_rows: list[dict[str, object]] = []
     if cell_recipe:
@@ -83,14 +85,20 @@ def prepare(
             }
             for archive in texture_archives
         ]
+        cell_recipe_document = load_recipe(cell_recipe)
         cell_scene = prepare_cell_scene(
             master,
             meshes,
             texture_archives,
             texture_archive_rows,
             cache_root,
-            load_recipe(cell_recipe),
+            cell_recipe_document,
             master_hash,
+        )
+        actor_scenes = prepare_actor_set(
+            data_root,
+            cache_root,
+            [str(value) for value in cell_recipe_document["actorRecipes"]],
         )
     manifest = {
         "schema": SCHEMA,
@@ -117,6 +125,12 @@ def prepare(
             "cellScene": None if cell_scene is None else cell_scene["output"],
             "cellSceneSha256": (
                 None if cell_scene is None else file_sha256(Path(str(cell_scene["output"])))
+            ),
+            "actorScenes": None if actor_scenes is None else actor_scenes["manifest"],
+            "actorScenesSha256": (
+                None
+                if actor_scenes is None
+                else file_sha256(Path(str(actor_scenes["manifest"])))
             ),
         },
     }

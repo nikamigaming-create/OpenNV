@@ -105,14 +105,25 @@ if ($xrProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $xrReport -PathTy
     throw "Exported OpenNV runtime did not complete its OpenXR rig smoke."
 }
 $xr = Get-Content -Raw -LiteralPath $xrReport | ConvertFrom-Json
-if ($xr.schema -ne "opennv-openxr-rig/v1" -or
+    if ($xr.schema -ne "opennv-openxr-rig/v2" -or
     $xr.status -ne "pass" -or
-    [int]$xr.actions -ne 7 -or
-    $xr.testedInteractionProfile -ne "/interaction_profiles/oculus/touch_controller" -or
-    $xr.controllerRenderModelManagerType -ne "OpenXRRenderModelManager" -or
-    [double]$xr.worldScale -ne 1.0 -or
-    [int]$xr.physicsTicksPerSecond -ne 90 -or
-    -not [bool]$xr.worldSpaceHud) {
+        [int]$xr.actions -ne 8 -or
+        @($xr.actionNames).Count -ne 8 -or
+        @($xr.actionNames) -notcontains "reload" -or
+        @($xr.testedInteractionProfiles).Count -ne 2 -or
+        @($xr.testedInteractionProfiles) -notcontains "/interaction_profiles/khr/generic_controller" -or
+        @($xr.testedInteractionProfiles) -notcontains "/interaction_profiles/oculus/touch_controller" -or
+        $xr.controllerRenderModelManagerType -ne "OpenXRRenderModelManager" -or
+        $xr.leftTracker -ne "left_hand" -or
+        $xr.rightTracker -ne "right_hand" -or
+        [double]$xr.worldScale -ne 1.0 -or
+        [double]$xr.desiredEyeHeightMeters -ne 1.68 -or
+        [int]$xr.physicsTicksPerSecond -ne 90 -or
+        -not [bool]$xr.worldSpaceHud -or
+        $xr.sharedSaveSchema.equippedWeaponFormId -ne "0000434f" -or
+        [int]$xr.sharedSaveSchema.ammoInMagazine -ne 12 -or
+        [int]$xr.sharedSaveSchema.reserveAmmo -ne 11 -or
+        [int]$xr.sharedSaveSchema.shotsFired -ne 1) {
     throw "Exported OpenNV OpenXR rig report is invalid."
 }
 foreach ($temporaryPath in @($xrReport, $xrSave)) {
@@ -129,6 +140,8 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $gameplaySave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-gameplay-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $gameplayReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-gameplay-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $gameplayReloadReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-gameplay-reload-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $vrLayoutSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-vr-layout-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $vrLayoutReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-vr-layout-{0}.json" -f [guid]::NewGuid().ToString("N"))
     try {
         $ownedProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
@@ -147,12 +160,13 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         $owned = Get-Content -Raw -LiteralPath $ownedReport | ConvertFrom-Json
         if ($owned.schema -ne "opennv-godot-cell/v1" -or
             $owned.status -ne "pass" -or
-            [int]$owned.assets -lt 153 -or
-            [int]$owned.textures -lt 255 -or
-            [int]$owned.materialBindings -lt 332 -or
+            [int]$owned.assets -lt 154 -or
+            [int]$owned.textures -lt 266 -or
+            [int]$owned.materialBindings -lt 339 -or
             [int]$owned.references -lt 348 -or
             [int]$owned.doors -lt 1 -or
             [int]$owned.authoredLights -lt 24 -or
+            [int]$owned.actors -ne 1 -or
             [int]$owned.collisionMeshes -lt 348 -or
             [int]$owned.surfaces -lt 1 -or
             [int]$owned.vertices -lt 3 -or
@@ -184,6 +198,36 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             -not [bool]$reused.doorTraversal.closedHitDoor -or
             [bool]$reused.doorTraversal.openHit) {
             throw "Packaged OpenNV persistent-cache report is invalid."
+        }
+
+        $vrLayoutProcess = Start-Process -FilePath $binary `
+            -ArgumentList @(
+                "--headless", "--xr-mode", "off", "--",
+                "--reuse-cache",
+                "--cache-root", ('"' + $ownedCache + '"'),
+                "--save-path", ('"' + $vrLayoutSave + '"'),
+                "--vr-layout-proof",
+                "--report", ('"' + $vrLayoutReport + '"'),
+                "--quit-after-load"
+            ) `
+            -PassThru -Wait -WindowStyle Hidden
+        if ($vrLayoutProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $vrLayoutReport -PathType Leaf)) {
+            throw "Packaged OpenNV runtime failed its VR presentation-layout gate."
+        }
+        $vrLayout = Get-Content -Raw -LiteralPath $vrLayoutReport | ConvertFrom-Json
+        if ($vrLayout.schema -ne "opennv-godot-cell/v1" -or
+            $vrLayout.status -ne "pass" -or
+            [int]$vrLayout.actors -ne 1 -or
+            -not [bool]$vrLayout.xrPresentation.heldWeapon -or
+            -not [bool]$vrLayout.xrPresentation.muzzleFeedback -or
+            -not [bool]$vrLayout.xrPresentation.wristHud -or
+            [double]$vrLayout.xrPresentation.wristHudPixelSize -gt 0.00032 -or
+            $vrLayout.xrPresentation.startingLoadout.equippedWeaponFormId -ne "0000434f" -or
+            [int]$vrLayout.xrPresentation.startingLoadout.weaponDamage -ne 22 -or
+            [int]$vrLayout.xrPresentation.startingLoadout.weaponClipSize -ne 12 -or
+            [int]$vrLayout.xrPresentation.startingLoadout.ammoInMagazine -ne 12 -or
+            [int]$vrLayout.xrPresentation.startingLoadout.reserveAmmo -ne 12) {
+            throw "Packaged OpenNV VR presentation-layout report is invalid."
         }
 
         $gameplayProcess = Start-Process -FilePath $binary `
@@ -251,7 +295,9 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             $portalSave,
             $gameplaySave,
             $gameplayReport,
-            $gameplayReloadReport
+            $gameplayReloadReport,
+            $vrLayoutSave,
+            $vrLayoutReport
         )) {
             if (Test-Path -LiteralPath $temporaryPath) {
                 $resolvedPath = [IO.Path]::GetFullPath($temporaryPath)

@@ -106,7 +106,17 @@ public partial class RuntimeCoordinator : Node3D
         IReadOnlyDictionary<string, string> options)
     {
         if (prepared.CellScenePath is not null)
-            LoadCellScene(prepared.CellScenePath, options);
+        {
+            var preparedOptions = options.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.OrdinalIgnoreCase);
+            if (prepared.ActorScenesPath is not null &&
+                !preparedOptions.ContainsKey("actor-scene") &&
+                !preparedOptions.ContainsKey("actor-scenes"))
+                preparedOptions["actor-scenes"] = prepared.ActorScenesPath;
+            LoadCellScene(prepared.CellScenePath, preparedOptions);
+        }
         else
             LoadModel(prepared.ModelPath, prepared.SidecarPath, options);
     }
@@ -114,12 +124,14 @@ public partial class RuntimeCoordinator : Node3D
     private void LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
     {
         var runTraversalProof = options.ContainsKey("portal-proof");
+        var useXrLayout = options.ContainsKey("vr") || options.ContainsKey("vr-layout-proof");
         var loaded = CellSceneLoader.Load(
             scenePath,
             this,
             !runTraversalProof && options.ContainsKey("open-proof-door"),
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
+            useXrLayout,
             options.ContainsKey("vr"),
             options.TryGetValue("actor-scene", out var actorScene) ? actorScene : null,
             options.TryGetValue("actor-scenes", out var actorScenes) ? actorScenes : null,
@@ -177,8 +189,33 @@ public partial class RuntimeCoordinator : Node3D
         var actionSet = actionSets[0].AsGodotObject() as Resource
             ?? throw new InvalidOperationException("OpenNV OpenXR gameplay action set is invalid.");
         var actions = actionSet.Get("actions").AsGodotArray();
-        if (actions.Count != 7)
-            throw new InvalidOperationException("OpenNV OpenXR gameplay action set must expose seven bounded actions.");
+        if (actions.Count != 8)
+            throw new InvalidOperationException("OpenNV OpenXR gameplay action set must expose eight bounded actions.");
+        var actionNames = actions
+            .Select(value => value.AsGodotObject() as Resource
+                ?? throw new InvalidOperationException("OpenNV OpenXR action is invalid."))
+            .Select(action => action.ResourceName)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        var expectedActions = new[]
+        {
+            "activate", "aim", "fire", "haptic", "move", "reload", "save", "turn",
+        };
+        if (!actionNames.SequenceEqual(expectedActions, StringComparer.Ordinal))
+            throw new InvalidOperationException("OpenNV OpenXR action names are incomplete.");
+        var interactionProfiles = actionMap.Get("interaction_profiles").AsGodotArray()
+            .Select(value => value.AsGodotObject() as Resource
+                ?? throw new InvalidOperationException("OpenNV OpenXR interaction profile is invalid."))
+            .Select(profile => profile.Get("interaction_profile_path").AsString())
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        var expectedProfiles = new[]
+        {
+            "/interaction_profiles/khr/generic_controller",
+            "/interaction_profiles/oculus/touch_controller",
+        };
+        if (!interactionProfiles.SequenceEqual(expectedProfiles, StringComparer.Ordinal))
+            throw new InvalidOperationException("OpenNV OpenXR interaction profile set is incomplete.");
 
         Engine.PhysicsTicksPerSecond = 90;
         var session = new GameplaySession();
@@ -190,6 +227,16 @@ public partial class RuntimeCoordinator : Node3D
         var player = new CellPlayer();
         player.Configure(0.0f, session, true, false);
         AddChild(player);
+        session.PrepareXrStartingLoadout(new GameplaySession.StartingWeapon(
+            "0000434f",
+            "Weap10mmPistol",
+            "00004241",
+            "Ammo10mm",
+            22,
+            12,
+            12));
+        if (!session.Fire(player.RightHand!) || !session.Reload())
+            throw new InvalidOperationException("OpenNV OpenXR fire/reload contract failed.");
         var xrHud = player.LeftHand!.FindChild("XrObjectiveInventory", true, false);
         if (!player.UsesXr || player.Camera is not XRCamera3D || player.XrOrigin is null ||
             player.RightHand is null || player.XrRenderModels is not null || xrHud is not Label3D ||
@@ -198,14 +245,15 @@ public partial class RuntimeCoordinator : Node3D
 
         var report = new
         {
-            schema = "opennv-openxr-rig/v1",
+            schema = "opennv-openxr-rig/v2",
             status = "pass",
             initializedRuntimeRequiredForPlay = true,
             viewportXrEnabledDuringProof = GetViewport().UseXR,
             actionMap = "res://openxr_action_map.tres",
             actionSets = actionSets.Count,
             actions = actions.Count,
-            testedInteractionProfile = "/interaction_profiles/oculus/touch_controller",
+            actionNames,
+            testedInteractionProfiles = interactionProfiles,
             originType = player.XrOrigin.GetClass().ToString(),
             cameraType = player.Camera.GetClass().ToString(),
             leftControllerType = player.LeftHand.GetClass().ToString(),
@@ -216,13 +264,14 @@ public partial class RuntimeCoordinator : Node3D
             rightTracker = player.RightHand.Tracker.ToString(),
             controllerPose = player.RightHand.Pose.ToString(),
             worldScale = player.XrOrigin.WorldScale,
+            desiredEyeHeightMeters = CellPlayer.XrDesiredEyeHeightMeters,
             physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
             worldSpaceHud = xrHud is Label3D,
             sharedSaveSchema = session.Report(),
         };
         if (options.TryGetValue("report", out var reportPath))
             WriteReport(reportPath, report);
-        GD.Print("OPENNV_OPENXR_RIG_PASS profile=oculus-touch worldScale=1 physicsHz=90");
+        GD.Print("OPENNV_OPENXR_RIG_PASS profiles=generic,oculus-touch worldScale=1 physicsHz=90");
         GetTree().Quit(0);
     }
 
@@ -367,6 +416,16 @@ public partial class RuntimeCoordinator : Node3D
             doors = loaded.Doors,
             authoredLights = loaded.AuthoredLights,
             actors = loaded.Actors.Count,
+            xrPresentation = !loaded.Player.UsesXr
+                ? null
+                : new
+                {
+                    heldWeapon = loaded.Player.HasHeldWeapon,
+                    muzzleFeedback = loaded.Player.HasMuzzleFeedback,
+                    wristHud = loaded.Session.HasXrHud,
+                    wristHudPixelSize = loaded.Session.XrHudPixelSize,
+                    startingLoadout = loaded.Session.Report(),
+                },
             collisionMeshes = loaded.CollisionMeshes,
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,

@@ -47,8 +47,8 @@ The next contract directly scans `FalloutNV.esm`, SHA-256
 `50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1`,
 and selects `GSProspectorSaloonInterior` through a committed recipe. CELL group
 ownership, REFR NAME/DATA, base MODL, XCLL, LIGH, and incoming XTEL fields
-produce a neutral cell-scene manifest. The playable recipe exports 153 visible
-NIFs, places 348 references, binds 261 textures and 332 materials, exposes 97
+produce a neutral cell-scene manifest. The playable recipe exports 154 visible/
+held NIFs, places 348 references, binds 266 textures and 339 materials, exposes 97
 pickups and five containers, and places 24 authored lights. Godot verifies every artifact,
 derives the spawn from XTEL, and runs floor and open-door collision rays. See the retained
 [cell-contract evidence](evidence/fnv-esm-cell-contract.md).
