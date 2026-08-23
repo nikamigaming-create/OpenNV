@@ -50,6 +50,12 @@ internal static class Fo1HexCapture
                 spriteArtifacts = loaded.SpriteArtifacts,
                 spritePlacements = loaded.SpritePlacements,
                 combatMobs = loaded.CombatMobs,
+                cave3d = new
+                {
+                    boundaryEdges = loaded.CaveBoundaryEdges,
+                    obstacles = loaded.CaveObstacles,
+                    triangles = loaded.CaveTriangles,
+                },
                 camera = new
                 {
                     projection = "orthogonal",

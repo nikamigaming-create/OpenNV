@@ -76,7 +76,13 @@ Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
 
 Its controls are MMB orbit/tilt, RMB drag-pan, wheel zoom toward the cursor,
 WASD/arrows/edge pan, `F` player focus, `Home` entry-to-door route reset,
-left-click path movement/target selection, double-click or `X` attack,
-`Space` end turn/rat turn, and `F5` save. This route uses the scripted first-run
-spawn, owned player/rat art, source rat combat fields, and a bounded combat
-proof. It is not a full Fallout campaign or retail combat simulation.
+left-click path movement/target selection, `Tab` hostile cycle and auto-frame,
+double-click or `X` attack, `G` grid, `V` source scenery, `B` experimental 3D
+topology blockout, `Space` end turn/rat turn, and `F5` save. Static source
+walls, rocks, and clutter are ground-anchored and world-locked at the authored
+isometric angle; actors remain camera-facing for readability. Rats use a bright
+source-art silhouette, hex beacon, and screen-space target reticle. The rough
+procedural 3D blockout is deliberately hidden by default and is not an authored
+asset replacement. This route uses the scripted first-run spawn, owned
+player/rat art, source rat combat fields, and a bounded combat proof. It is not
+a full Fallout campaign or retail combat simulation.

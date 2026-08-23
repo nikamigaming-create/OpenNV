@@ -761,6 +761,13 @@ public partial class RuntimeCoordinator : Node3D
             spriteArtifacts = loaded.SpriteArtifacts,
             spritePlacements = loaded.SpritePlacements,
             combatMobs = loaded.CombatMobs,
+            cave3d = new
+            {
+                boundaryEdges = loaded.CaveBoundaryEdges,
+                obstacles = loaded.CaveObstacles,
+                triangles = loaded.CaveTriangles,
+                sourceStaticSpriteOverlayVisible = true,
+            },
             entryTile = loaded.EntryTile,
             entryWorldMeters = Vector(Fo1HexMath.Center(loaded.EntryTile)),
             doorTile = loaded.DoorTile,

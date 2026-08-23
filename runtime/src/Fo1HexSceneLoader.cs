@@ -53,8 +53,31 @@ internal static class Fo1HexSceneLoader
         if (!floorIds.All(floorTextures.ContainsKey))
             throw new InvalidOperationException("Fallout floor grid references missing art.");
         var renderedFloorTiles = BuildFloor(root, floorIds, floorCenters, defaultFloorId, floorTextures);
+        var floorBacked = new bool[Fo1HexMath.Width * Fo1HexMath.Height];
+        for (var tile = 0; tile < floorBacked.Length; tile++)
+            floorBacked[tile] = floorIds[Fo1HexMath.FloorIndex(tile)] != defaultFloorId;
+        var presentation3d = grid.GetProperty("threeDPresentation");
+        if (presentation3d.GetProperty("status").GetString() != "procedural-topology-proof")
+            throw new InvalidOperationException("Unexpected Fallout 3D cave presentation contract.");
+        var obstacles = grid.GetProperty("threeDObstacles").EnumerateArray()
+            .Select(row => new Fo1CaveGeometry.Obstacle(
+                row.GetProperty("tile").GetInt32(),
+                row.GetProperty("heightMeters").GetSingle(),
+                row.GetProperty("radiusMeters").GetSingle(),
+                row.GetProperty("objectType").GetInt32(),
+                row.GetProperty("rotation").GetInt32()))
+            .ToArray();
+        var caveGeometry = Fo1CaveGeometry.Build(
+            root,
+            floorBacked,
+            obstacles,
+            presentation3d.GetProperty("boundaryHeightMeters").GetSingle());
         var combat = source.GetProperty("combat");
-        var spriteCoverage = BuildObjectSprites(root, source.GetProperty("objectSprites"), combat);
+        var spriteCoverage = BuildObjectSprites(
+            root,
+            source.GetProperty("objectSprites"),
+            combat,
+            presentation3d.GetProperty("sourceSpriteOverlayDefaultVisible").GetBoolean());
 
         var walkable = new bool[Fo1HexMath.Width * Fo1HexMath.Height];
         var blocked = grid.GetProperty("blockedHexes").EnumerateArray()
@@ -121,6 +144,7 @@ internal static class Fo1HexSceneLoader
             Mathf.DegToRad(cameraSource.GetProperty("yawDegrees").GetSingle()),
             Mathf.DegToRad(cameraSource.GetProperty("pitchDegrees").GetSingle()));
         parent.AddChild(camera);
+        session.AttachCamera(camera.Camera);
 
         return new LoadedFo1HexScene(
             resolvedPath,
@@ -136,6 +160,9 @@ internal static class Fo1HexSceneLoader
             spriteCoverage.Artifacts,
             spriteCoverage.Placements,
             spriteCoverage.Mobs.Count,
+            caveGeometry.BoundaryEdges,
+            caveGeometry.Obstacles,
+            caveGeometry.Triangles,
             entryTile,
             doorTile,
             doorObject.GetProperty("rotation").GetInt32(),
@@ -209,15 +236,22 @@ internal static class Fo1HexSceneLoader
         {
             Name = "V13ENT_200X200_HEX_GRID",
             Multimesh = multiMesh,
-            MaterialOverride = Fo1HexVisuals.Material(new Color(0.28f, 0.50f, 0.24f, 0.20f), true),
+            MaterialOverride = Fo1HexVisuals.Material(new Color(0.20f, 0.42f, 0.18f, 0.10f), true),
         });
     }
 
-    private static SpriteCoverage BuildObjectSprites(Node3D root, JsonElement source, JsonElement combat)
+    private static SpriteCoverage BuildObjectSprites(
+        Node3D root,
+        JsonElement source,
+        JsonElement combat,
+        bool sourceOverlayVisible)
     {
         if (source.GetProperty("presentation").GetString() !=
-            "exact source FRM frame at exact MAP hex; camera-facing 2.5D")
+            "exact source FRM frame at exact MAP hex; world-locked static 2.5D; camera-facing actors")
             throw new InvalidOperationException("Unexpected Fallout object-sprite presentation contract.");
+        var staticWorldYawDegrees = source.GetProperty("staticWorldYawDegrees").GetSingle();
+        if (!float.IsFinite(staticWorldYawDegrees))
+            throw new InvalidOperationException("Fallout static-world sprite yaw is invalid.");
         var pixelsPerMeter = source.GetProperty("pixelsPerMeter").GetSingle();
         if (pixelsPerMeter <= 1.0f)
             throw new InvalidOperationException("Fallout object-sprite scale is invalid.");
@@ -231,6 +265,12 @@ internal static class Fo1HexSceneLoader
         var combatMobs = combat.GetProperty("mobs").EnumerateArray().ToDictionary(
             row => row.GetProperty("serial").GetInt32());
         var mobs = new List<Fo1Mob>();
+        var staticOverlay = new Node3D
+        {
+            Name = "FO1_SOURCE_STATIC_SPRITE_OVERLAY",
+            Visible = sourceOverlayVisible,
+        };
+        root.AddChild(staticOverlay);
         var placements = 0;
         foreach (var row in source.GetProperty("placements").EnumerateArray())
         {
@@ -275,15 +315,16 @@ internal static class Fo1HexSceneLoader
                 Name = $"FO1_OBJ_{serial}_{row.GetProperty("artFilename").GetString()}",
                 Texture = artifact.Texture,
                 PixelSize = pixelSize,
-                Position = expected + Vector3.Up * (artifact.Height * pixelSize / 2.0f + 0.015f),
+                Position = expected + Vector3.Up * 0.015f,
                 Offset = spriteOffset,
-                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                Billboard = BaseMaterial3D.BillboardModeEnum.Disabled,
+                RotationDegrees = new Vector3(0.0f, staticWorldYawDegrees, 0.0f),
                 Shaded = false,
                 DoubleSided = true,
                 AlphaCut = SpriteBase3D.AlphaCutMode.OpaquePrepass,
                 TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
             };
-            root.AddChild(sprite);
+            staticOverlay.AddChild(sprite);
             placements++;
         }
         return new SpriteCoverage(artifacts.Count, placements, mobs);
@@ -512,6 +553,9 @@ internal static class Fo1HexSceneLoader
         int SpriteArtifacts,
         int SpritePlacements,
         int CombatMobs,
+        int CaveBoundaryEdges,
+        int CaveObstacles,
+        int CaveTriangles,
         int EntryTile,
         int DoorTile,
         int DoorRotation,

@@ -75,10 +75,15 @@ scenery, clutter, and all twenty rat placements, and uses owned male
 Vault-jumpsuit art for the current player-presentation proof. Rats are entities
 with MAP HP/AP/team/AI and PRO HP/AP/AC/melee/sequence values. The runtime
 exposes click pathfinding, one-AP movement, target selection, a bounded 10mm
-attack/rat turn, combat HUD, end-turn AP restoration, and save/reload. Its tactical
-camera supports middle-mouse orbit/tilt (the Kenshi default), right-drag map
-pan, mouse-wheel zoom toward the cursor, WASD/arrows, edge pan, player focus,
-and route reset.
+attack/rat turn, combat HUD, target-cycle framing, end-turn AP restoration, and
+save/reload. Static source cards are grounded and world-locked instead of
+turning with the camera; actor cards remain camera-facing. Rats receive a
+readability shader, world beacon, and tracked screen reticle. Its tactical camera
+supports middle-mouse orbit/tilt (the Kenshi default), right-drag map pan,
+mouse-wheel zoom toward the cursor, WASD/arrows, edge pan, player focus, and
+route reset. A fixed exact-topology cave/blocker mesh is available as an
+explicit experimental toggle but remains hidden because authored 3D asset
+mapping has not passed visual acceptance.
 
 This is an **interactive movement/topology proof**, not the complete game.
 Floor walk masks, complete multihex footprints, roof state, door animation,

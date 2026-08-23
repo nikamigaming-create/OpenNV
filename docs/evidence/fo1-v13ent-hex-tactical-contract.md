@@ -1,8 +1,9 @@
 # Fallout 1 V13ENT tactical hex contract
 
-Status: **corrected source floor/hex/object placement rendered; source player
-and rat presentation loaded; mouse camera, one-AP movement, target attack, rat
-turn, and combat HUD interactive proof passed; full Fallout simulation
+Status: **corrected source floor/hex/object placement rendered; static art is
+grounded and world-locked; source player/rat presentation, mouse camera,
+one-AP movement, target-cycle framing, target attack, rat turn, and combat HUD
+proof passed; authored full-3D environment and full Fallout simulation
 unproven**.
 
 This slice replaces the donor-cave prototype with the actual `V13ENT.MAP`
@@ -42,6 +43,10 @@ the chosen character's statistics are transported.
   FRM/frame/rotation artifacts; the mapped door and its source frame are the
   only two objects handled by the dedicated door lane
 - all 20 source giant-rat placements are present as idle source sprites
+- all 1,494 source static/actor sprites share ground anchor `Y=0.015` with
+  measured maximum anchor error `0`; 1,473 static cards disable billboarding
+  and retain the authored `-45°` world yaw, while the 21 actor cards use
+  fixed-Y billboarding
 - player presentation uses owned `hmjmpsaa.frm` male Vault-jumpsuit art; sex,
   appearance, and statistics remain pending character selection
 - each giant rat is an entity using PID `01000030`, current MAP HP/AP/team/AI,
@@ -54,44 +59,49 @@ the chosen character's statistics are transported.
 - mapped `VGearDoor01` leaf bounds: `4.384 × 4.317 × 0.916` metres
 - exact `v13secr3.frm` frame presentation: `7.932 × 5.195` metres, scaled by
   matching the source-door FRM width to the mapped 3D leaf width
+- the rejected procedural-look experiment remains a hidden topology diagnostic:
+  1,420 boundary edges, 1,048 unique blocker-tile instances, and 20,564
+  triangles; `B` toggles it for inspection, but it is not the default art
 
 All PNG/glTF derivatives and retail captures remain in ignored local caches and
 are not release inputs.
 
 ## Interactive proof
 
-Private scene: `fo1-v13ent-hex-20260823-r8`.
+Private scene: `fo1-v13ent-hex-20260823-r15`.
 
 - scene SHA-256:
-  `e0871a3af52c23c6f2667d92b364a255fdb3115db7cc6623902e15fafd408298`
+  `e84042310005fe6caf093336df58eaaedeb4d632548f388c1ff55bb57a840624`
 - proof schema/status: `opennv-fo1-tactical-proof/v1` / `pass`
 - movement: `17690 -> 17489`, one adjacent metre, exactly `1 AP`
 - selected source rat: serial `466`, PID `01000030`, HP `6`, AP `7`, AC `4`,
   melee damage `3`, sequence `12`, team `1`, AI packet `12`
 - one provisional 10mm attack cost `5 AP`, killed the 6-HP proof target, and
   reduced the living source-mob count from `20` to `19`
+- 20 hostile hex markers and health-label nodes were present; `Tab` selected
+  and framed a living hostile and activated the screen-space target reticle
 - end turn: turn `2`, AP restored to `10`
 - MMB orbit changed yaw `-45° -> -57.376°`
 - MMB tilt changed pitch `-52° -> -58.188°`
-- wheel cursor zoom changed size `22.0 -> 18.92` metres
-- RMB drag pan moved the camera focus `1.750` metres
+- wheel cursor zoom changed size `22.0 -> 16.0` metres after target framing
+- RMB drag pan moved the camera focus `7.467` metres in the combined input proof
 - proof report SHA-256:
-  `11a8aca59f3bbe2958a0276abf20aa20f2894d972e1f18935a132f9e6b2ab031`
+  `3fbcf248efc152200c43e787998d966b59f6e71b0242db0b012530cc9d45fd9a`
 - Windows app control, foreground activation, and injected foreground input:
   all `false`
 
 ## Native visual evidence
 
-Private capture: `fo1-v13ent-hex-capture-20260823-r10`.
+Private capture: `fo1-v13ent-hex-capture-20260823-r30`.
 
 - schema/status: `opennv-fo1-hex-capture/v1` / `pass`
 - renderer/projection: Godot Forward+ / orthographic
 - UI frame SHA-256:
-  `b58a614413b7ac5ef919779649cada1ad91f59f2664888e6bf8e200d40c9609a`
+  `27feae02f473927392002a73e15775d89df0792f8f5d0a139b94382d26b1c7f5`
 - selected-rat combat frame SHA-256:
-  `745d4d8de4d690d0fa7a212084c3852ddc6425df8bd48721df476daf5f57f983`
+  `eef2b6d7afcdcc5941e1a1e2a7e04e66c9480ef9f3ad261b5814a7150c597c43`
 - map frame SHA-256:
-  `fd30b1a3a97ec9164a785bc52bf345a49371e3ebff3efb43d29e6e22e0420f5e`
+  `a41c26b8fa5242313af0836be74cea89372ad937242b529782b7a9ff7bbe8b4d`
 
 ## Orientation and spawn review
 
@@ -117,8 +127,13 @@ Private comparison: `fo1-v13ent-orientation-review-20260823-r5`.
   base walkability input.
 - `OBJECT_MULTIHEX` secondary footprints are not resolved. This map state has
   no multihex blockers, but the general rule remains unsupported.
-- Roofs, dynamic wall cutaways, sprite direction changes while orbiting,
-  source lighting, and animation playback are not promoted.
+- Roofs, dynamic wall cutaways, source lighting, and animation playback are not
+  promoted. Static source cards no longer rotate with the camera, but they are
+  still single-view 2D art and become oblique when orbiting away from the
+  authored angle.
+- The exact topology blockout is a diagnostic only. Authored 3D equivalents for
+  source wall, rock, cave-mouth, and clutter identities are not mapped yet, so
+  this is an accepted grounded 2.5D presentation—not a finished 360° 3D cave.
 - The 3D gear-door controller, Et Tu 15-frame script state, opening collision,
   and persistence are not implemented.
 - Player stats and 10mm profile are provisional until character creation and

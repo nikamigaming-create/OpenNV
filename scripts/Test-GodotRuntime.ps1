@@ -144,7 +144,24 @@ if (-not [string]::IsNullOrWhiteSpace($Fo1HexScene)) {
             [int]$fo1.combat.targetSourceAiPacket -ne 12 -or
             [int]$fo1.combat.playerWeaponApCost -ne 5 -or
             [int]$fo1.combat.attacks -ne 1 -or
+            [int]$fo1.combat.hostileMarkers -ne 20 -or
+            [int]$fo1.combat.hostileHealthLabels -ne 20 -or
+            -not [bool]$fo1.combat.targetCycleAndFrame -or
+            -not [bool]$fo1.combat.screenTargetReticle -or
             [int]$fo1.session.livingMobs -ne 19 -or
+            [int]$fo1.sourceSpriteAnchoring.sprites -ne 1494 -or
+            [int]$fo1.sourceSpriteAnchoring.actorSprites -ne 21 -or
+            $fo1.sourceSpriteAnchoring.actorBillboard -ne "fixed-y" -or
+            [int]$fo1.sourceSpriteAnchoring.staticWorldSprites -ne 1473 -or
+            $fo1.sourceSpriteAnchoring.staticBillboard -ne "disabled-world-locked" -or
+            [double]$fo1.sourceSpriteAnchoring.staticWorldYawDegrees -ne -45.0 -or
+            [double]$fo1.sourceSpriteAnchoring.maximumAnchorError -gt 0.0001 -or
+            -not [bool]$fo1.sourceSpriteAnchoring.sourceStaticOverlayVisible -or
+            [int]$fo1.cave3d.boundaryEdges -lt 1 -or
+            [int]$fo1.cave3d.obstacles -ne 1048 -or
+            [int]$fo1.cave3d.triangles -lt 1 -or
+            -not [bool]$fo1.cave3d.fixedWorldGeometry -or
+            [bool]$fo1.cave3d.defaultVisible -or
             -not [bool]$fo1.camera.middleMouseOrbit -or
             -not [bool]$fo1.camera.rightMousePan -or
             -not [bool]$fo1.camera.wheelZoomTowardCursor -or

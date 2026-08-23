@@ -60,6 +60,32 @@ internal static class Fo1HexProof
                 camera.Position.IsEqualApprox(initialPosition) ||
                 camera.OrbitDragging || camera.PanDragging)
                 throw new InvalidOperationException("Fallout tactical mouse camera proof failed.");
+            var sourceSprites = Descendants<Sprite3D>(host).ToArray();
+            var sourceOverlay = host.FindChild("FO1_SOURCE_STATIC_SPRITE_OVERLAY", true, false) as Node3D;
+            var caveMeshes = new[]
+            {
+                host.FindChild("V13ENT_FIXED_3D_CAVE_GEOMETRY", true, false) as GeometryInstance3D,
+                host.FindChild("V13ENT_3D_WALL_BLOCKERS", true, false) as GeometryInstance3D,
+                host.FindChild("V13ENT_3D_ROCK_BLOCKERS", true, false) as GeometryInstance3D,
+            };
+            var actorSprites = sourceSprites.Where(sprite =>
+                sprite.Name == "SourceCritterSprite" || sprite.Name == "VaultDwellerSourceSprite").ToArray();
+            var staticSprites = sourceSprites.Where(sprite =>
+                sprite.Name.ToString().StartsWith("FO1_OBJ_", StringComparison.Ordinal)).ToArray();
+            var maximumAnchorError = sourceSprites.Length == 0
+                ? float.PositiveInfinity
+                : sourceSprites.Max(sprite => MathF.Abs(sprite.GlobalPosition.Y - 0.015f));
+            if (sourceOverlay is null || !sourceOverlay.Visible || caveMeshes.Any(mesh => mesh is null || mesh.Visible) ||
+                sourceSprites.Length != loaded.SpritePlacements + 1 ||
+                actorSprites.Length != loaded.CombatMobs + 1 ||
+                actorSprites.Any(sprite => sprite.Billboard != BaseMaterial3D.BillboardModeEnum.FixedY) ||
+                staticSprites.Length != loaded.SpritePlacements - loaded.CombatMobs ||
+                staticSprites.Any(sprite => sprite.Billboard != BaseMaterial3D.BillboardModeEnum.Disabled) ||
+                staticSprites.Any(sprite => MathF.Abs(sprite.RotationDegrees.Y + 45.0f) > 0.0001f) ||
+                maximumAnchorError > 0.0001f)
+                throw new InvalidOperationException(
+                    $"Fallout source-sprite ground anchor failed: sprites={sourceSprites.Length} " +
+                    $"expected={loaded.SpritePlacements + 1} maxError={maximumAnchorError:F6}");
 
             var target = Fo1HexMath.Neighbors(loaded.Session.PlayerTile)
                 .FirstOrDefault(loaded.Session.CanWalk, -1);
@@ -71,10 +97,18 @@ internal static class Fo1HexProof
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             if (loaded.Session.PlayerTile != target || loaded.Session.ActionPoints != initialAp - 1)
                 throw new InvalidOperationException("Fallout one-AP movement proof failed.");
-            var combatTarget = loaded.Session.Mobs
-                .Where(mob => mob.Alive)
-                .OrderBy(mob => Fo1HexMath.Distance(loaded.Session.PlayerTile, mob.Tile))
-                .First();
+            var hostileMarkers = Descendants<MeshInstance3D>(host)
+                .Count(node => node.Name == "HostileHexMarker");
+            var hostileLabels = Descendants<Label3D>(host)
+                .Count(node => node.Name == "HostileHealthLabel");
+            var combatTarget = loaded.Session.CycleTarget()
+                ?? throw new InvalidOperationException("Fallout target cycling found no source mob.");
+            loaded.Camera.FrameCombatPair(loaded.Session.PlayerTile, combatTarget.Tile);
+            var targetReticle = host.FindChild("SelectedTargetReticle", true, false) as Control;
+            var targetReticleVisible = targetReticle is not null && targetReticle.Visible;
+            if (hostileMarkers != 20 || hostileLabels != 20)
+                throw new InvalidOperationException(
+                    $"Fallout hostile readability contract failed: markers={hostileMarkers} labels={hostileLabels}");
             var targetHpBefore = combatTarget.HitPoints;
             var apBeforeAttack = loaded.Session.ActionPoints;
             loaded.Session.ActivateTile(combatTarget.Tile, false);
@@ -119,6 +153,10 @@ internal static class Fo1HexProof
                     attacks = loaded.Session.Attacks,
                     kills = loaded.Session.Kills,
                     playerHitPointsAfterRatTurn = loaded.Session.PlayerHitPoints,
+                    hostileMarkers,
+                    hostileHealthLabels = hostileLabels,
+                    targetCycleAndFrame = true,
+                    screenTargetReticle = targetReticleVisible,
                 },
                 turnAfterEnd = loaded.Session.Turn,
                 actionPointsAfterEnd = loaded.Session.ActionPoints,
@@ -134,6 +172,26 @@ internal static class Fo1HexProof
                     initialSizeMeters = initialSize,
                     resultingSizeMeters = camera.TargetSizeMeters,
                     panDeltaMeters = (camera.Position - initialPosition).Length(),
+                },
+                sourceSpriteAnchoring = new
+                {
+                    sprites = sourceSprites.Length,
+                    actorSprites = actorSprites.Length,
+                    actorBillboard = "fixed-y",
+                    staticWorldSprites = staticSprites.Length,
+                    staticBillboard = "disabled-world-locked",
+                    staticWorldYawDegrees = -45.0f,
+                    groundAnchorY = 0.015f,
+                    maximumAnchorError,
+                    sourceStaticOverlayVisible = sourceOverlay.Visible,
+                },
+                cave3d = new
+                {
+                    boundaryEdges = loaded.CaveBoundaryEdges,
+                    obstacles = loaded.CaveObstacles,
+                    triangles = loaded.CaveTriangles,
+                    fixedWorldGeometry = true,
+                    defaultVisible = false,
                 },
                 session = loaded.Session.Report(),
                 windowsAppControlUsed = false,
@@ -157,4 +215,17 @@ internal static class Fo1HexProof
             host.GetTree().Quit(1);
         }
     }
+
+    private static IEnumerable<T> Descendants<T>(Node node)
+        where T : Node
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is T match)
+                yield return match;
+            foreach (var descendant in Descendants<T>(child))
+                yield return descendant;
+        }
+    }
+
 }

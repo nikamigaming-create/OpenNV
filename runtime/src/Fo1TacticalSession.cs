@@ -25,6 +25,9 @@ internal partial class Fo1TacticalSession : Node
     private Label _turnLabel = null!;
     private Label _hexLabel = null!;
     private Label _statusLabel = null!;
+    private Control _targetReticle = null!;
+    private Label _targetReticleLabel = null!;
+    private Camera3D? _camera;
     private string _status = "Select a highlighted floor hex to move";
     private PlayerProfile _playerProfile;
     private IReadOnlyList<Fo1Mob> _mobs = [];
@@ -33,6 +36,9 @@ internal partial class Fo1TacticalSession : Node
     private int _playerHitPoints;
     private int _attacks;
     private int _kills;
+    private bool _gridVisible = true;
+    private bool _sourceOverlayVisible;
+    private bool _blockout3dVisible;
 
     internal int PlayerTile => _playerTile;
     internal int HoveredTile => _hoveredTile;
@@ -90,6 +96,7 @@ internal partial class Fo1TacticalSession : Node
 
     public override void _Process(double delta)
     {
+        RefreshTargetReticle();
         if (_movement.Count == 0)
             return;
         var targetTile = _movement.Peek();
@@ -208,6 +215,7 @@ internal partial class Fo1TacticalSession : Node
             _walkable[target.Tile] = true;
             _kills++;
             _status = $"{_playerProfile.WeaponName} hit {target.DisplayName} for {applied}; killed";
+            _targetReticle.Visible = false;
         }
         else
         {
@@ -216,6 +224,66 @@ internal partial class Fo1TacticalSession : Node
         }
         RefreshHud();
         Save();
+    }
+
+    internal Fo1Mob? CycleTarget()
+    {
+        var living = _mobs.Where(mob => mob.Alive)
+            .OrderBy(mob => Fo1HexMath.Distance(_playerTile, mob.Tile))
+            .ThenBy(mob => mob.Serial)
+            .ToArray();
+        if (living.Length == 0)
+        {
+            _status = "No living hostile targets remain";
+            RefreshHud();
+            return null;
+        }
+        var current = _selectedMob is null ? -1 : Array.IndexOf(living, _selectedMob);
+        var target = living[(current + 1) % living.Length];
+        SelectMob(target);
+        return target;
+    }
+
+    internal void ToggleGrid()
+    {
+        var grid = GetTree().CurrentScene.FindChild("V13ENT_200X200_HEX_GRID", true, false) as MultiMeshInstance3D;
+        if (grid is null)
+            throw new InvalidOperationException("Fallout tactical hex overlay is missing.");
+        _gridVisible = !_gridVisible;
+        grid.Visible = _gridVisible;
+        _status = $"Hex grid {(_gridVisible ? "shown" : "hidden")} (G toggles)";
+        RefreshHud();
+    }
+
+    internal void ToggleSourceOverlay()
+    {
+        var overlay = GetTree().CurrentScene.FindChild(
+            "FO1_SOURCE_STATIC_SPRITE_OVERLAY",
+            true,
+            false) as Node3D;
+        if (overlay is null)
+            throw new InvalidOperationException("Fallout source-sprite reference overlay is missing.");
+        _sourceOverlayVisible = !overlay.Visible;
+        overlay.Visible = _sourceOverlayVisible;
+        _status = $"Source wall/scenery reference cards {(_sourceOverlayVisible ? "shown" : "hidden")} (V toggles)";
+        RefreshHud();
+    }
+
+    internal void Toggle3DBlockout()
+    {
+        _blockout3dVisible = !_blockout3dVisible;
+        foreach (var name in new[]
+                 {
+                     "V13ENT_FIXED_3D_CAVE_GEOMETRY",
+                     "V13ENT_3D_WALL_BLOCKERS",
+                     "V13ENT_3D_ROCK_BLOCKERS",
+                 })
+        {
+            if (GetTree().CurrentScene.FindChild(name, true, false) is GeometryInstance3D geometry)
+                geometry.Visible = _blockout3dVisible;
+        }
+        _status = $"Experimental 3D topology blockout {(_blockout3dVisible ? "shown" : "hidden")} (B toggles)";
+        RefreshHud();
     }
 
     internal void EndTurn()
@@ -243,6 +311,12 @@ internal partial class Fo1TacticalSession : Node
     {
         _status = status;
         RefreshHud();
+    }
+
+    internal void AttachCamera(Camera3D camera)
+    {
+        _camera = camera;
+        RefreshTargetReticle();
     }
 
     internal object Report() => new
@@ -312,6 +386,7 @@ internal partial class Fo1TacticalSession : Node
             $"AC {mob.ArmorClass} • AP {mob.ActionPoints}/{mob.MaximumActionPoints} • " +
             $"double-click or X to attack";
         RefreshHud();
+        RefreshTargetReticle();
     }
 
     private void RunRatTurn()
@@ -361,7 +436,7 @@ internal partial class Fo1TacticalSession : Node
             Offset = new Vector2(
                 _playerProfile.FrameOffset.X,
                 -_playerProfile.FrameOffset.Y + _playerProfile.Height / 2.0f),
-            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Billboard = BaseMaterial3D.BillboardModeEnum.FixedY,
             Shaded = false,
             DoubleSided = true,
             AlphaCut = SpriteBase3D.AlphaCutMode.OpaquePrepass,
@@ -425,8 +500,81 @@ internal partial class Fo1TacticalSession : Node
         _hexLabel = HudLabel(labels);
         _statusLabel = HudLabel(labels);
         var controls = HudLabel(labels);
-        controls.Text = "LMB move/select • double-LMB or X attack • MMB orbit/tilt • RMB drag pan • Wheel cursor-zoom • WASD/edge pan • F player • Home route • Space end turn • F5 save";
+        controls.Text = "LMB move/select • Tab hostile • double-LMB/X attack • MMB orbit • RMB pan • Wheel zoom • WASD/edge • G grid • V source cards • B 3D blockout • F player • Home route • Space turn • F5 save";
         controls.AddThemeFontSizeOverride("font_size", 14);
+        BuildTargetReticle();
+    }
+
+    private void BuildTargetReticle()
+    {
+        _targetReticle = new Control
+        {
+            Name = "SelectedTargetReticle",
+            Size = new Vector2(180.0f, 104.0f),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Visible = false,
+        };
+        Hud.AddChild(_targetReticle);
+        var color = new Color(1.0f, 0.82f, 0.10f, 0.98f);
+        foreach (var (position, size) in new[]
+                 {
+                     (new Vector2(48.0f, 20.0f), new Vector2(30.0f, 4.0f)),
+                     (new Vector2(102.0f, 20.0f), new Vector2(30.0f, 4.0f)),
+                     (new Vector2(48.0f, 20.0f), new Vector2(4.0f, 28.0f)),
+                     (new Vector2(128.0f, 20.0f), new Vector2(4.0f, 28.0f)),
+                     (new Vector2(48.0f, 68.0f), new Vector2(30.0f, 4.0f)),
+                     (new Vector2(102.0f, 68.0f), new Vector2(30.0f, 4.0f)),
+                     (new Vector2(48.0f, 44.0f), new Vector2(4.0f, 28.0f)),
+                     (new Vector2(128.0f, 44.0f), new Vector2(4.0f, 28.0f)),
+                     (new Vector2(88.0f, 72.0f), new Vector2(4.0f, 13.0f)),
+                 })
+        {
+            _targetReticle.AddChild(new ColorRect
+            {
+                Position = position,
+                Size = size,
+                Color = color,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            });
+        }
+        _targetReticleLabel = new Label
+        {
+            Position = Vector2.Zero,
+            Size = new Vector2(180.0f, 22.0f),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Text = "TARGET: GIANT RAT",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _targetReticleLabel.AddThemeColorOverride("font_color", color);
+        _targetReticleLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
+        _targetReticleLabel.AddThemeConstantOverride("outline_size", 6);
+        _targetReticleLabel.AddThemeFontSizeOverride("font_size", 18);
+        _targetReticle.AddChild(_targetReticleLabel);
+    }
+
+    private void RefreshTargetReticle()
+    {
+        if (_targetReticle is null || _camera is null || _selectedMob is null || !_selectedMob.Alive)
+        {
+            if (_targetReticle is not null)
+                _targetReticle.Visible = false;
+            return;
+        }
+        var target = _selectedMob.GlobalPosition + Vector3.Up * 0.55f;
+        if (_camera.IsPositionBehind(target))
+        {
+            _targetReticle.Visible = false;
+            return;
+        }
+        var screen = _camera.UnprojectPosition(target);
+        var viewport = GetViewport().GetVisibleRect().Size;
+        var position = screen - new Vector2(90.0f, 72.0f);
+        position.X = Math.Clamp(position.X, 8.0f, MathF.Max(8.0f, viewport.X - 188.0f));
+        position.Y = Math.Clamp(position.Y, 8.0f, MathF.Min(440.0f, viewport.Y - 112.0f));
+        _targetReticle.Position = position;
+        _targetReticleLabel.Text =
+            $"TARGET: GIANT RAT  HP {_selectedMob.HitPoints}/{_selectedMob.MaximumHitPoints}";
+        _targetReticle.Visible = true;
     }
 
     private static Label HudLabel(Container parent)

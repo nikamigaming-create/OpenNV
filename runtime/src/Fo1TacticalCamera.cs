@@ -122,6 +122,18 @@ internal partial class Fo1TacticalCamera : Node3D
                 _session.SaveAndNotify();
             else if (key.PhysicalKeycode == Key.X)
                 _session.AttackSelected();
+            else if (key.PhysicalKeycode == Key.Tab)
+            {
+                var target = _session.CycleTarget();
+                if (target is not null)
+                    FrameCombatPair(_session.PlayerTile, target.Tile);
+            }
+            else if (key.PhysicalKeycode == Key.G)
+                _session.ToggleGrid();
+            else if (key.PhysicalKeycode == Key.V)
+                _session.ToggleSourceOverlay();
+            else if (key.PhysicalKeycode == Key.B)
+                _session.Toggle3DBlockout();
             else if (key.PhysicalKeycode == Key.Escape)
             {
                 _orbitDragging = false;
@@ -208,7 +220,8 @@ internal partial class Fo1TacticalCamera : Node3D
         var second = Fo1HexMath.Center(secondTile);
         Position = (first + second) / 2.0f;
         Position = new Vector3(Position.X, 0.0f, Position.Z);
-        _targetSize = Math.Clamp(Fo1HexMath.Distance(firstTile, secondTile) + 8.0f, 10.0f, 20.0f);
+        _targetSize = Math.Clamp(Fo1HexMath.Distance(firstTile, secondTile) + 5.0f, 8.0f, 16.0f);
+        _camera.Size = _targetSize;
     }
 
     private void FocusPoint(Vector3 point, float size)

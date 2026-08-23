@@ -327,6 +327,8 @@ def prepare(
                         "flags": obj["flags"],
                         "multihex": bool(flags & 0x00000800),
                         "artFilename": obj["artFilename"],
+                        "objectType": obj["prototype"]["object_type"],
+                        "objectTypeName": OBJECT_TYPE_NAMES[int(obj["prototype"]["object_type"])],
                     }
                 )
         excluded_serials = {recipe["door"]["serial"], recipe["door"]["frameSerial"]}
@@ -475,6 +477,22 @@ def prepare(
                 output_root / player_relative,
             ),
         }
+        placement_by_serial = {row["serial"]: row for row in sprite_placements}
+        obstacle_rows = []
+        for blocker in blocker_rows:
+            if int(blocker["objectType"]) == 1 or blocker["serial"] not in placement_by_serial:
+                continue
+            placement = placement_by_serial[blocker["serial"]]
+            artifact = sprite_artifacts[placement["artifactId"]]
+            obstacle_rows.append(
+                {
+                    **blocker,
+                    "heightMeters": max(0.65, min(4.5, float(artifact["height"]) / pixels_per_meter)),
+                    "radiusMeters": max(0.30, min(0.72, float(artifact["width"]) / pixels_per_meter / 2.0)),
+                    "rotation": placement["rotation"],
+                    "scaleSourceArtifactId": placement["artifactId"],
+                }
+            )
 
         floor_by_id = {row["id"]: row for row in floor_art}
         non_default_floor_count = sum(floor_id != 1 for floor_id in floor_ids)
@@ -504,6 +522,13 @@ def prepare(
                 "defaultFloorId": 1,
                 "blockedHexes": blocked_hexes,
                 "blockers": blocker_rows,
+                "threeDObstacles": obstacle_rows,
+                "threeDPresentation": {
+                    "status": "procedural-topology-proof",
+                    "boundaryHeightMeters": 3.6,
+                    "sourceSpriteOverlayDefaultVisible": True,
+                    "source": "exact floor presence and MAP blocker central hexes",
+                },
             },
             "entry": {
                 **recipe["entry"],
@@ -530,7 +555,11 @@ def prepare(
                 },
             },
             "objectSprites": {
-                "presentation": "exact source FRM frame at exact MAP hex; camera-facing 2.5D",
+                "presentation": (
+                    "exact source FRM frame at exact MAP hex; world-locked static 2.5D; "
+                    "camera-facing actors"
+                ),
+                "staticWorldYawDegrees": -45.0,
                 "pixelsPerMeter": pixels_per_meter,
                 "scaleSource": "source door FRM width matched to mapped 3D door-leaf width",
                 "artifacts": [sprite_artifacts[key] for key in sorted(sprite_artifacts)],
@@ -594,6 +623,7 @@ def prepare(
                 "provisionalWalkableHexesAfterObjectFlags": provisional_walkable_hexes,
                 "blockedHexes": len(blocked_hexes),
                 "multihexBlockersWithCentralHexOnly": sum(row["multihex"] for row in blocker_rows),
+                "threeDObstacles": len(obstacle_rows),
                 "topLevelObjects": objects["map"]["objects"]["totalTopLevelObjects"],
                 "spritePlacements": len(sprite_placements),
                 "spriteArtifacts": len(sprite_artifacts),

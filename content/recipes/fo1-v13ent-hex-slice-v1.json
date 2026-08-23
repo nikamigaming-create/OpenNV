@@ -53,14 +53,17 @@
     "exact 100x100 floor-art IDs with four movement hexes per floor tile",
     "owned Fallout floor FRMs unprojected into rotatable local textures",
     "exact elevation-zero MAP object FRM/frame/rotation placements",
+    "fixed 3D cave shell and obstacle geometry derived from exact floor/blocker hexes",
     "exact mapped Vault door and source frame at tile 16290",
     "click pathfinding and one-AP-per-hex tactical movement proof",
+    "source rat entities, target cycling, readable combat markers, and bounded deterministic turn proof",
     "Kenshi-style tactical camera presentation"
   ],
   "unsupported": [
     "Fallout floor walk masks and complete OBJECT_MULTIHEX footprints",
     "roof art, animated wall cutaways, sprite direction switching while orbiting, inventories, and scripts",
-    "rat AI, sequence turns, attacks, and animation playback",
+    "authored 3D equivalents for every source wall, rock, and clutter identity",
+    "retail critter animation playback and script-driven encounter behavior",
     "retail character statistics, sequence, AI turns, combat RNG, attacks, or damage",
     "door controller playback and Et Tu script state",
     "retail visual parity, package promotion, or headset acceptance"
