@@ -6,7 +6,6 @@ namespace OpenNV.Runtime;
 internal partial class GameplaySession : Node
 {
     private const string SaveSchema = "opennv-sandbox-save/v1";
-    private const string RevolverFormId = "0008f216";
     private const string EntryDoorFormId = "0010618e";
 
     private readonly Dictionary<string, InventoryEntry> _inventory = new(StringComparer.OrdinalIgnoreCase);
@@ -31,10 +30,14 @@ internal partial class GameplaySession : Node
     internal string SavePath => _savePath;
     internal int ShotsFired => _shotsFired;
     internal int AmmoInMagazine => _ammoInMagazine;
+    internal int ReserveAmmo =>
+        _weaponAmmoFormId is null ? 0 : _inventory.GetValueOrDefault(_weaponAmmoFormId).Count;
+    internal bool HasXrHud => _xrHudLabel is not null;
+    internal float XrHudPixelSize => _xrHudLabel?.PixelSize ?? 0.0f;
     internal bool HasItem(string itemFormId) => _inventory.ContainsKey(itemFormId);
     internal bool IsContainerEmptied(string referenceFormId) => _emptiedContainers.Contains(referenceFormId);
     internal int ObjectiveStage =>
-        !_inventory.ContainsKey(RevolverFormId) ? 0 :
+        _equippedWeaponFormId is null ? 0 :
         _shotsFired == 0 ? 1 :
         !_inventory.Values.Any(entry => entry.RecordType == "ALCH") ? 2 :
         !_doorStates.GetValueOrDefault(EntryDoorFormId) ? 3 : 4;
@@ -94,21 +97,36 @@ internal partial class GameplaySession : Node
         var mount = new Node3D
         {
             Name = "XrWristHud",
-            Position = new Vector3(0.0f, 0.08f, -0.06f),
-            RotationDegrees = new Vector3(-62.0f, 0.0f, 0.0f),
+            Position = new Vector3(0.0f, 0.035f, -0.035f),
+            RotationDegrees = new Vector3(-78.0f, 0.0f, 0.0f),
         };
         leftHand.AddChild(mount);
         _xrHudLabel = new Label3D
         {
             Name = "XrObjectiveInventory",
-            FontSize = 34,
-            PixelSize = 0.00125f,
+            FontSize = 24,
+            PixelSize = 0.00032f,
             Modulate = new Color(0.70f, 0.95f, 0.50f),
-            OutlineSize = 8,
+            OutlineSize = 4,
             Text = "OPENNV XR HUD",
         };
         mount.AddChild(_xrHudLabel);
-        RefreshHud("Left stick move • Right stick snap-turn • Grip activate • Trigger fire • X save");
+        RefreshHud("Left stick move • Right stick snap-turn • Grip activate • Trigger fire • B reload • X save");
+    }
+
+    internal void PrepareXrStartingLoadout(StartingWeapon loadout)
+    {
+        if (_equippedWeaponFormId is not null)
+            return;
+        AddInventory(loadout.WeaponFormId, loadout.WeaponEditorId, "WEAP", 1);
+        AddInventory(loadout.AmmoFormId, loadout.AmmoEditorId, "AMMO", loadout.ReserveRounds);
+        _equippedWeaponFormId = loadout.WeaponFormId;
+        _weaponAmmoFormId = loadout.AmmoFormId;
+        _weaponDamage = loadout.Damage;
+        _weaponClipSize = loadout.ClipSize;
+        _ammoInMagazine = loadout.ClipSize;
+        Save();
+        RefreshHud($"Equipped {loadout.WeaponEditorId} with one reserve magazine");
     }
 
     internal bool IsReferenceRemoved(string referenceFormId) => _removedReferences.Contains(referenceFormId);
@@ -190,8 +208,36 @@ internal partial class GameplaySession : Node
         Save();
         RefreshHud(
             hit.Count == 0
-                ? $".357 fired ({_weaponDamage} damage profile) • miss"
-                : $".357 fired ({_weaponDamage} damage profile) • hit {hit["collider"].AsGodotObject()}");
+                ? $"{WeaponLabel} fired ({_weaponDamage} damage profile) • miss"
+                : $"{WeaponLabel} fired ({_weaponDamage} damage profile) • hit {hit["collider"].AsGodotObject()}");
+        return true;
+    }
+
+    internal bool Reload()
+    {
+        if (_equippedWeaponFormId is null || _weaponAmmoFormId is null)
+        {
+            RefreshHud("No weapon equipped");
+            return false;
+        }
+        if (_ammoInMagazine >= _weaponClipSize)
+        {
+            RefreshHud($"{WeaponLabel}: magazine already full");
+            return false;
+        }
+        if (!_inventory.TryGetValue(_weaponAmmoFormId, out var reserve) || reserve.Count <= 0)
+        {
+            RefreshHud($"{WeaponLabel}: no reserve ammunition");
+            return false;
+        }
+        var loaded = Math.Min(_weaponClipSize - _ammoInMagazine, reserve.Count);
+        _ammoInMagazine += loaded;
+        if (loaded == reserve.Count)
+            _inventory.Remove(_weaponAmmoFormId);
+        else
+            _inventory[_weaponAmmoFormId] = reserve with { Count = reserve.Count - loaded };
+        Save();
+        RefreshHud($"{WeaponLabel}: reloaded {loaded} round(s)");
         return true;
     }
 
@@ -237,6 +283,7 @@ internal partial class GameplaySession : Node
         weaponDamage = _weaponDamage,
         weaponClipSize = _weaponClipSize,
         ammoInMagazine = _ammoInMagazine,
+        reserveAmmo = ReserveAmmo,
         shotsFired = _shotsFired,
         removedReferences = _removedReferences.Count,
         emptiedContainers = _emptiedContainers.Count,
@@ -292,8 +339,8 @@ internal partial class GameplaySession : Node
     {
         var objective = ObjectiveStage switch
         {
-            0 => "OBJECTIVE  Find and take the authored .357 revolver",
-            1 => "OBJECTIVE  Fire the .357 once",
+            0 => "OBJECTIVE  Equip an authored weapon",
+            1 => "OBJECTIVE  Fire the equipped weapon once",
             2 => "OBJECTIVE  Take any authored aid item",
             3 => "OBJECTIVE  Open the saloon entry door",
             _ => "OBJECTIVE COMPLETE  Goodsprings sandbox route passed",
@@ -301,7 +348,7 @@ internal partial class GameplaySession : Node
         var ammunition = _equippedWeaponFormId is null
             ? "--/--"
             : $"{_ammoInMagazine}/{_weaponClipSize}";
-        var statusLine = $".357 {ammunition}   {status}";
+        var statusLine = $"{WeaponLabel} {ammunition} +{ReserveAmmo}   {status}";
         var inventory = "INVENTORY  " +
             (_inventory.Count == 0
                 ? "empty"
@@ -317,13 +364,39 @@ internal partial class GameplaySession : Node
             _inventoryLabel!.Text = inventory;
         }
         if (_xrHudLabel is not null)
-            _xrHudLabel.Text = $"{objective}\n{statusLine}\n{inventory}";
+        {
+            var xrObjective = ObjectiveStage switch
+            {
+                0 => "OBJ Equip weapon",
+                1 => "OBJ Fire weapon",
+                2 => "OBJ Take aid",
+                3 => "OBJ Open entry door",
+                _ => "OBJ Complete",
+            };
+            var compactStatus = status.Length <= 38 ? status : status[..38];
+            _xrHudLabel.Text =
+                $"{xrObjective}\n{WeaponLabel} {ammunition} +{ReserveAmmo}\n{compactStatus}";
+        }
     }
 
     private static string ResolvePath(string path) =>
         path.StartsWith("user://", StringComparison.Ordinal)
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
+
+    private string WeaponLabel =>
+        _equippedWeaponFormId is not null && _inventory.TryGetValue(_equippedWeaponFormId, out var weapon)
+            ? weapon.EditorId
+            : "Weapon";
+
+    internal readonly record struct StartingWeapon(
+        string WeaponFormId,
+        string WeaponEditorId,
+        string AmmoFormId,
+        string AmmoEditorId,
+        int Damage,
+        int ClipSize,
+        int ReserveRounds);
 
     private readonly record struct InventoryEntry(
         string ItemFormId,

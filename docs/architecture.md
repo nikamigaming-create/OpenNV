@@ -197,22 +197,23 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 ## Current truth and deliberate gaps
 
 Implemented: direct owned ESM/BSA/NIF/DDS path, XTEL-derived spawn, 348 saloon
-references, 153 visible assets, 261 textures, 332 materials, 97 pickups, five
+references, 154 visible/held assets, 266 textures, 339 materials, 97 pickups, five
 containers, 24 authored lights, full converted item rotations, collision,
 movement, HUD, inventory, authored `.357` damage/clip data, firing, objectives,
 doors, atomic save, cold reload, and launcher-enabled sandbox play.
-The OpenXR software path adds a Meta Touch action map, `XROrigin3D`, tracked head
+The OpenXR software path adds Oculus Touch plus OpenXR generic-controller maps, `XROrigin3D`, tracked head
 and hands, metre scale, 90 Hz physics, locomotion, snap-turn, controller
 activation/fire/save, haptics, runtime-provided controller models, world-space
-HUD, and explicit launcher routing.
+HUD, standing-eye-height calibration, a data-resolved 10mm smoke loadout,
+reload, and explicit launcher routing.
 
-Implemented but not yet promoted to gameplay: direct humanoid/creature record
-relationships, deterministic FaceGen geometry/texture primitives, and a
-recipe-pinned skinned/animated actor cache. Godot can load that cache at the
-authored ACHR placement only through an explicit proof-enable override, retain
-native actor/cell frames, and emit a normalized retail differential. The current
-Trudy differential still fails; cache generation and import are not fidelity
-claims. The capture lane can now consume a compact retail state contract and
+Implemented: direct humanoid record relationships, deterministic FaceGen
+geometry/texture primitives, and a hash-verified one-to-many actor cache. The
+ordinary legal installer prepares that set and loads the authored enabled
+Goodsprings settler at his ACHR placement. Initially disabled Trudy remains out
+of normal gameplay until quest/enable state is implemented; an explicit proof
+override is still required for her comparison lane. Cache generation and import
+are not fidelity claims. The capture lane can consume a compact retail state contract and
 apply each shot's live ACHR placement, camera/aim, vertical FOV, and `mtidle`
 phase. Projection remains explicitly provisional; current framing evidence
 favors 59.840 degrees vertical by interpreting retail 75 degrees at the 4:3

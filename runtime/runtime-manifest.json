@@ -18,6 +18,7 @@
         "status": "experimental-hardware-gate-pending",
         "hardwareValidated": false,
         "testedInteractionProfiles": [
+          "/interaction_profiles/khr/generic_controller",
           "/interaction_profiles/oculus/touch_controller"
         ]
       }
@@ -62,9 +63,11 @@
     "persistent-sandbox-save-cold-reload",
     "playable-objective-route",
     "openxr-stereo-rig",
-    "openxr-oculus-touch-action-map",
+    "openxr-generic-and-oculus-touch-action-map",
     "openxr-runtime-controller-models",
     "meter-correct-xr-world-scale",
+    "calibrated-standing-xr-eye-height",
+    "vr-authored-10mm-starting-loadout-and-reload",
     "world-space-xr-hud",
     "shared-flat-xr-gameplay-save-state"
   ]

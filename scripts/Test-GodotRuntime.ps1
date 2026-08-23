@@ -68,21 +68,33 @@ try {
         throw "OpenNV OpenXR rig gate failed:`n$xrText"
     }
     $xr = Get-Content -Raw -LiteralPath $xrReport | ConvertFrom-Json
-    if ($xr.schema -ne "opennv-openxr-rig/v1" -or
+    if ($xr.schema -ne "opennv-openxr-rig/v2" -or
         $xr.status -ne "pass" -or
         [bool]$xr.viewportXrEnabledDuringProof -or
         [int]$xr.actionSets -ne 1 -or
-        [int]$xr.actions -ne 7 -or
-        $xr.testedInteractionProfile -ne "/interaction_profiles/oculus/touch_controller" -or
+        [int]$xr.actions -ne 8 -or
+        @($xr.actionNames).Count -ne 8 -or
+        @($xr.actionNames) -notcontains "reload" -or
+        @($xr.testedInteractionProfiles).Count -ne 2 -or
+        @($xr.testedInteractionProfiles) -notcontains "/interaction_profiles/khr/generic_controller" -or
+        @($xr.testedInteractionProfiles) -notcontains "/interaction_profiles/oculus/touch_controller" -or
         $xr.originType -ne "XROrigin3D" -or
         $xr.cameraType -ne "XRCamera3D" -or
         $xr.controllerRenderModelManagerType -ne "OpenXRRenderModelManager" -or
-        $xr.leftTracker -ne "/user/hand/left" -or
-        $xr.rightTracker -ne "/user/hand/right" -or
+        $xr.leftTracker -ne "left_hand" -or
+        $xr.rightTracker -ne "right_hand" -or
         [double]$xr.worldScale -ne 1.0 -or
+        [double]$xr.desiredEyeHeightMeters -ne 1.68 -or
         [int]$xr.physicsTicksPerSecond -ne 90 -or
         -not [bool]$xr.worldSpaceHud -or
-        $xr.sharedSaveSchema.schema -ne "opennv-sandbox-save/v1") {
+        $xr.sharedSaveSchema.schema -ne "opennv-sandbox-save/v1" -or
+        $xr.sharedSaveSchema.equippedWeaponFormId -ne "0000434f" -or
+        $xr.sharedSaveSchema.weaponAmmoFormId -ne "00004241" -or
+        [int]$xr.sharedSaveSchema.weaponDamage -ne 22 -or
+        [int]$xr.sharedSaveSchema.weaponClipSize -ne 12 -or
+        [int]$xr.sharedSaveSchema.ammoInMagazine -ne 12 -or
+        [int]$xr.sharedSaveSchema.reserveAmmo -ne 11 -or
+        [int]$xr.sharedSaveSchema.shotsFired -ne 1) {
         throw "OpenNV OpenXR rig report is invalid."
     }
 }

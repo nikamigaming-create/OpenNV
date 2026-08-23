@@ -28,6 +28,7 @@ SUPPORTED_SHAPE_PROPERTIES = {
     "NiMaterialProperty",
     "NiStencilProperty",
 }
+ATTACHMENT_MARKER_NAMES = {"ProjectileNode", "ShellCasingNode"}
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -397,6 +398,21 @@ def export_static_nif(
     materials: list[dict[str, object]] = []
     surface_rows: list[dict[str, object]] = []
     root = data.roots[0]
+    attachment_markers = []
+    for block in blocks:
+        if not isinstance(block, NifFormat.NiNode) or decode_text(block.name) not in ATTACHMENT_MARKER_NAMES:
+            continue
+        matrix = block.get_transform(root)
+        attachment_markers.append(
+            {
+                "name": decode_text(block.name),
+                "positionGodotUnits": [
+                    float(matrix.m_41),
+                    float(matrix.m_43),
+                    -float(matrix.m_42),
+                ],
+            }
+        )
 
     for shape in shapes:
         if getattr(shape, "skin_instance", None) is not None:
@@ -562,6 +578,7 @@ def export_static_nif(
             "controllers": sorted(set(controllers)),
             "excludedEditorMarkerSurfaces": excluded_editor_markers,
         },
+        "attachmentMarkers": attachment_markers,
         "surfaces": surface_rows,
     }
     sidecar_bytes = (json.dumps(sidecar, indent=2, sort_keys=True) + "\n").encode()

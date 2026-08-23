@@ -19,6 +19,7 @@ from cell_scene import (  # noqa: E402
     interaction_manifest,
     load_recipe,
     reference_selection_reason,
+    vr_smoke_loadout_manifest,
 )
 from plugin_records import COMPRESSED_RECORD_FLAG, PluginFormatError, iter_plugin_records  # noqa: E402
 
@@ -79,6 +80,7 @@ def synthetic_plugin() -> bytes:
         + subrecord("NAM0", struct.pack("<I", 0x306))
         + subrecord("DATA", struct.pack("<IIfHB", 100, 200, 2.0, 26, 6)),
     )
+    ammo = record("AMMO", 0x306, subrecord("EDID", b"SyntheticAmmo\0"))
     xcll = bytes((10, 20, 30, 0, 40, 50, 60, 0, 70, 80, 90, 0)) + struct.pack(
         "<ffii3f", 64.0, 3750.0, 0, 250, 1.0, 6600.0, 1.25
     )
@@ -146,6 +148,7 @@ def synthetic_plugin() -> bytes:
         + group(b"MISC", 0, item)
         + group(b"CONT", 0, container)
         + group(b"WEAP", 0, weapon)
+        + group(b"AMMO", 0, ammo)
         + group(b"CELL", 0, cell + children)
     )
 
@@ -190,6 +193,29 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(catalog.weapons[0x305].damage, 26)
         self.assertEqual(catalog.weapons[0x305].clip_size, 6)
         self.assertEqual(catalog.weapons[0x305].ammo_form_id, 0x306)
+        self.assertEqual(
+            vr_smoke_loadout_manifest(
+                {
+                    "vrSmokeLoadout": {
+                        "weaponFormId": "00000305",
+                        "ammoFormId": "00000306",
+                        "reserveMagazines": 1,
+                    }
+                },
+                catalog,
+            ),
+            {
+                "weaponFormId": "00000305",
+                "weaponEditorId": "SyntheticWeapon",
+                "modelPath": "weapons\\test\\weapon.nif",
+                "ammoFormId": "00000306",
+                "ammoEditorId": "SyntheticAmmo",
+                "damage": 26,
+                "clipSize": 6,
+                "reserveRounds": 6,
+                "source": "recipe-identity-plus-retail-records",
+            },
+        )
         container_interaction = interaction_manifest(
             next(reference for reference in references if reference.form_id == 0x204),
             catalog.base_objects[0x304],

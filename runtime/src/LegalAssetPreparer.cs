@@ -105,6 +105,14 @@ internal static class LegalAssetPreparer
             outputs.TryGetProperty("cellSceneSha256", out var cellSceneSha256) &&
             cellSceneSha256.ValueKind == JsonValueKind.String
                 ? cellSceneSha256.GetString()
+                : null,
+            outputs.TryGetProperty("actorScenes", out var actorScenes) &&
+            actorScenes.ValueKind == JsonValueKind.String
+                ? actorScenes.GetString()
+                : null,
+            outputs.TryGetProperty("actorScenesSha256", out var actorScenesSha256) &&
+            actorScenesSha256.ValueKind == JsonValueKind.String
+                ? actorScenesSha256.GetString()
                 : null);
         ValidateCompilerProvenance(prepared.SidecarPath, contentTool);
         if (prepared.CellScenePath is not null)
@@ -113,6 +121,12 @@ internal static class LegalAssetPreparer
                 throw new InvalidOperationException("Cell scene has no install-manifest hash.");
             VerifyHash(prepared.CellScenePath, prepared.CellSceneSha256);
             ValidateCellCompilerProvenance(prepared.CellScenePath, contentTool);
+        }
+        if (prepared.ActorScenesPath is not null)
+        {
+            if (prepared.ActorScenesSha256 is null)
+                throw new InvalidOperationException("Actor scene set has no install-manifest hash.");
+            VerifyHash(prepared.ActorScenesPath, prepared.ActorScenesSha256);
         }
         return prepared;
     }
@@ -180,5 +194,7 @@ internal static class LegalAssetPreparer
         string ModelPath,
         string SidecarPath,
         string? CellScenePath,
-        string? CellSceneSha256);
+        string? CellSceneSha256,
+        string? ActorScenesPath,
+        string? ActorScenesSha256);
 }

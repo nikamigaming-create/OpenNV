@@ -4,8 +4,9 @@ This is the first-party Open Nevada runtime. It uses Godot Forward+ and accepts
 only artifacts produced by the direct retail-content pipeline in `../content`.
 
 The current slice reads the owned master directly and runs a playable,
-recipe-pinned Goodsprings sandbox. It loads 153 assets, 348 references, 261
-textures, 332 materials, 97 pickups, five containers, and 24 authored lights.
+recipe-pinned Goodsprings sandbox. It loads 154 visible/held assets, 348
+references, 266 textures, 339 materials, 97 pickups, five containers, 24
+authored lights, and the authored enabled saloon settler.
 The incoming XTEL owns the spawn. The `.357` pickup uses retail damage and clip
 data; inventory, ammo, objective, removed pickups, and door state autosave and
 cold-reload. One fully resolved crate is transferable; containers backed by
@@ -51,13 +52,16 @@ four-stage sandbox objective and inventory. Packaging proves the route and a
 separate cold reload before accepting the build.
 
 The same sandbox has an experimental OpenXR mode. Choose **OpenXR mode** in the
-launcher, or run `OpenNV.exe --xr-mode on -- --vr`. The current tested action
-profile is Meta/Oculus Touch: left stick moves, right stick snap-turns, right
-grip activates, right trigger fires with haptics, and X saves. The HUD is mounted
-in world space on the left controller. The rig/action-map/package gates pass,
-but a connected-headset stereo run is still pending; unsupported controller
-profiles are not guessed into the action map. This first path is Windows PCVR;
-a standalone Quest APK/export/install gate is not implemented yet.
+launcher, or run `OpenNV.exe --xr-mode on -- --vr`. Oculus Touch and the OpenXR
+1.1 generic-controller fallback are declared: left stick moves, right stick
+snap-turns, right grip activates, right trigger fires with haptics, B reloads,
+and X saves. VR starts with the owned master-record 10mm pistol profile equipped,
+one full magazine, and one reserve magazine. The tracked eye is calibrated once
+to 1.68 metres above the authored floor. The HUD is mounted in world space on the
+left controller. A first Oculus hardware run exposed missing generic bindings
+and floor-height calibration; this corrected path remains pending a clean
+hardware rerun. This first path is Windows PCVR; a standalone Quest APK/export/
+install gate is not implemented yet.
 
 Add `-FalloutNewVegasData <path>` to the build command for a local end-to-end
 gate of the exported executable, packaged helper, legal cache, and Godot load.

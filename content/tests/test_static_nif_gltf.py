@@ -45,6 +45,14 @@ def write_synthetic_nif(path: Path) -> None:
     root.name = "Synthetic Root"
     identity_transform(root)
 
+    marker = NifFormat.NiNode()
+    marker.name = "ProjectileNode"
+    identity_transform(marker)
+    marker.translation.x = 10.0
+    marker.translation.y = 20.0
+    marker.translation.z = 30.0
+    root.add_child(marker)
+
     shape = NifFormat.NiTriShape()
     shape.name = "Opaque Triangle"
     identity_transform(shape)
@@ -136,6 +144,10 @@ class StaticNifGltfTest(unittest.TestCase):
                 ["COLOR_0", "NORMAL", "POSITION", "TANGENT", "TEXCOORD_0"],
             )
             self.assertEqual(first_result["source"]["logicalPath"], "meshes\\open-nv-tests\\opaque-triangle.nif")
+            self.assertEqual(
+                first_result["attachmentMarkers"],
+                [{"name": "ProjectileNode", "positionGodotUnits": [10.0, 30.0, -20.0]}],
+            )
             self.assertEqual(first_gltf["asset"]["version"], "2.0")
             self.assertEqual(first_gltf["accessors"][0]["min"], [-1.0, 0.0, -0.0])
             self.assertEqual(first_gltf["accessors"][0]["max"], [1.0, 2.0, -0.0])

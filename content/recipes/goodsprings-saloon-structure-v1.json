@@ -8,6 +8,15 @@
   "cellEditorId": "GSProspectorSaloonInterior",
   "entryDoorReferenceFormId": "0010618e",
   "portalProofDoorReferenceFormId": "0010618e",
+  "vrSmokeLoadout": {
+    "weaponFormId": "0000434f",
+    "ammoFormId": "00004241",
+    "reserveMagazines": 1
+  },
+  "actorRecipes": [
+    "goodsprings-trudy-actor-v1",
+    "goodsprings-settler-04-actor-v1"
+  ],
   "lightingCalibration": {
     "ambientEnergy": 1.4,
     "omniEnergyScale": 2.0,

@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v5";
+    private const string CellSceneSchema = "opennv-cell-scene/v6";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -14,6 +14,7 @@ internal static class CellSceneLoader
         string? proofDoorOverride = null,
         string? savePath = null,
         bool useXr = false,
+        bool enableXrRuntimeFeatures = false,
         string? actorScenePath = null,
         string? actorScenesManifestPath = null,
         bool proofEnableActor = false,
@@ -64,6 +65,18 @@ internal static class CellSceneLoader
             var session = new GameplaySession();
             session.Configure(cell.GetProperty("formId").GetString()!, savePath, useXr);
             parent.AddChild(session);
+            if (useXr)
+            {
+                var loadout = source.GetProperty("vr").GetProperty("startingLoadout");
+                session.PrepareXrStartingLoadout(new GameplaySession.StartingWeapon(
+                    loadout.GetProperty("weaponFormId").GetString()!,
+                    loadout.GetProperty("weaponEditorId").GetString()!,
+                    loadout.GetProperty("ammoFormId").GetString()!,
+                    loadout.GetProperty("ammoEditorId").GetString()!,
+                    loadout.GetProperty("damage").GetInt32(),
+                    loadout.GetProperty("clipSize").GetInt32(),
+                    loadout.GetProperty("reserveRounds").GetInt32()));
+            }
 
             var loadedReferences = 0;
             var doors = new Dictionary<string, DoorInstance>(StringComparer.OrdinalIgnoreCase);
@@ -83,6 +96,9 @@ internal static class CellSceneLoader
                 var interactionType = interaction.ValueKind == JsonValueKind.Object
                     ? interaction.GetProperty("type").GetString()
                     : null;
+                if (useXr && interactionType == "pickup" &&
+                    interaction.GetProperty("itemFormId").GetString() == "0008f216")
+                    continue;
                 if (interactionType == "pickup" && session.IsReferenceRemoved(formId))
                     continue;
                 Node3D placement;
@@ -198,7 +214,19 @@ internal static class CellSceneLoader
                 source.GetProperty("lighting"),
                 unitScale,
                 session,
-                useXr);
+                useXr,
+                enableXrRuntimeFeatures);
+            if (useXr)
+            {
+                var loadout = source.GetProperty("vr").GetProperty("startingLoadout");
+                var assetId = loadout.GetProperty("modelAssetId").GetString()!;
+                var heldWeapon = prototypes[assetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
+                    ?? throw new InvalidOperationException("Could not duplicate VR held weapon asset.");
+                player.AttachXrHeldWeapon(
+                    heldWeapon,
+                    unitScale,
+                    ReadVector(loadout.GetProperty("muzzlePositionGodotUnits")));
+            }
             return new LoadedCell(
                 root,
                 cell.GetProperty("formId").GetString()!,
@@ -236,7 +264,8 @@ internal static class CellSceneLoader
         JsonElement lighting,
         float unitScale,
         GameplaySession session,
-        bool useXr)
+        bool useXr,
+        bool enableXrRuntimeFeatures)
     {
         var calibration = lighting.GetProperty("calibration");
         var environment = new Godot.Environment
@@ -290,7 +319,7 @@ internal static class CellSceneLoader
             });
         }
         var player = new CellPlayer();
-        player.Configure(yaw, session, useXr, useXr);
+        player.Configure(yaw, session, useXr, enableXrRuntimeFeatures);
         parent.AddChild(player);
         return player;
     }
