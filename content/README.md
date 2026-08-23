@@ -30,3 +30,17 @@ are not yet rendered.
 
 The committed NIF fixture is synthetic. Owned retail inputs and generated glTF
 outputs remain local and ignored.
+
+## Fallout et Tu source profile
+
+`tools/fo1_profile.py` owns one deliberately narrower cross-game contract. It
+hash-validates Et Tu's `V13ENT.MAP`, verifies the exact Fallout: New Vegas
+master and archives, and resolves cave, clean-Vault, gear-door, Vault-suit, and
+giant-rat donor identities from the retail record/resource graph. It emits a
+neutral JSON contract plus detached SHA-256 into a fresh disposable cache.
+
+This proves only **transported source identity**. It does not decode MAP tiles
+or placed objects, extract donor assets, generate a Godot scene, or claim that
+the Fallout 1 opening is rendered or interactive. The bounded recipe is
+`recipes/fo1-ettu-vault13-opening-v1.json`; retained evidence and explicit gaps
+are recorded in `docs/evidence/fo1-ettu-vault13-opening-contract.md`.

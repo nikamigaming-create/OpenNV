@@ -1,0 +1,126 @@
+{
+  "schema": "opennv-fo1-profile-recipe/v1",
+  "id": "fo1-ettu-vault13-opening-v1",
+  "targetState": "transported",
+  "source": {
+    "package": {
+      "name": "Fallout et Tu",
+      "version": "v1.16.3771",
+      "archiveSha256": "68777c2c32b911da902992c2d1cd5d4ce895059bd182909b579aa1eada0c686"
+    },
+    "map": {
+      "relativePath": "mods/fo1_base/maps/V13ENT.MAP",
+      "sha256": "02b6987038a0c94c8226aa4df048f49bfcb59dfd9339a4a6a3b48da622b2a2d7",
+      "header": {
+        "version": 20,
+        "name": "V13ENT.MAP",
+        "enteringTile": 20090,
+        "enteringElevation": 0,
+        "enteringRotation": 0,
+        "localVariables": 0,
+        "scriptIndex": 430,
+        "flags": 12,
+        "darkness": 1,
+        "globalVariables": 8,
+        "mapIndex": 35,
+        "lastVisitTime": 0
+      }
+    }
+  },
+  "assetSource": {
+    "master": {
+      "file": "FalloutNV.esm",
+      "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1"
+    },
+    "archives": [
+      {
+        "file": "Fallout - Meshes.bsa",
+        "sha256": "054e299829ff24fd4bd4edf69f6424346b400c87379cee39bec02e4d082bf85a"
+      },
+      {
+        "file": "Fallout - Textures.bsa",
+        "sha256": "68c0f4beb00e07cc06361e3a5be0909873220731db3bd43bc013e85544b67578"
+      },
+      {
+        "file": "Fallout - Textures2.bsa",
+        "sha256": "bdaa85989b30a68c2c9ce79a07b167ecd72942df47f2e58c4a0299b016410dc2"
+      }
+    ],
+    "donorCells": [
+      {
+        "role": "vault13-entrance-cave-kit",
+        "cellEditorId": "SLGoodspringsCaveINT",
+        "cellFormId": "00153159",
+        "modelPrefixes": [
+          "dungeons\\caves\\",
+          "clutter\\skeleton\\"
+        ],
+        "expectedPlacementCount": 55,
+        "expectedUniqueBaseCount": 28
+      },
+      {
+        "role": "vault13-clean-vault-kit",
+        "cellEditorId": "2EOVault21",
+        "cellFormId": "0010fdeb",
+        "modelPrefixes": [
+          "dungeons\\vault\\",
+          "furniture\\vault",
+          "clutter\\consoles\\"
+        ],
+        "expectedPlacementCount": 866,
+        "expectedUniqueBaseCount": 105
+      }
+    ],
+    "explicitBases": [
+      {
+        "role": "vault13-gear-door",
+        "formId": "000041e9",
+        "recordType": "ACTI",
+        "editorId": "VGearDoor01",
+        "modelPath": "dungeons\\vault\\roomu\\vgeardoor01.nif"
+      }
+    ],
+    "armorMappings": [
+      {
+        "role": "vault-dweller-base-outfit",
+        "formId": "00104184",
+        "editorId": "VaultSuit21",
+        "maleModelPath": "armor\\vaultsuit\\m\\outfit.nif",
+        "femaleModelPath": "armor\\vaultsuit\\f\\outfit.nif",
+        "identityDelta": "locally-authored-vault-13-number-texture"
+      }
+    ],
+    "creatureMappings": [
+      {
+        "role": "vault13-cave-giant-rat",
+        "formId": "000e8e95",
+        "editorId": "NVCrGiantRat",
+        "skeletonPath": "creatures\\nvgiantrat\\skeleton.nif"
+      }
+    ]
+  },
+  "entry": {
+    "source": "map-header",
+    "tile": 20090,
+    "elevation": 0,
+    "rotation": 0
+  },
+  "expectedActors": [],
+  "supported": [
+    "exact Et Tu V13ENT.MAP identity and header validation",
+    "exact FalloutNV.esm and required BSA identity validation",
+    "data-resolved donor CELL/base/model catalog",
+    "explicit Vault gear-door, Vault suit, and giant-rat source identities",
+    "deterministic neutral JSON contract and detached SHA-256"
+  ],
+  "unsupported": [
+    "Fallout MAP tile, script, object, inventory, PRO, and actor placement decode",
+    "FO1-to-FNV per-prototype substitution",
+    "NIF/DDS extraction for this profile",
+    "Godot scene generation or rendering",
+    "player, rat, door, collision, dialogue, combat, quest, save, or traversal behavior",
+    "Fallout 3 as a secondary owned-data source",
+    "retail parity, interaction, package, or OpenXR promotion"
+  ]
+}
+
