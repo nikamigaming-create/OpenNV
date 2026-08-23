@@ -49,6 +49,9 @@ flowchart TD
     CellRoot -->|0:N actor manifests| ActorPlacement[ACHR placement]
     ActorPlacement -->|exactly 1| ActorModel[Verified skinned glTF actor]
     ActorModel --> ActorSkeleton[Skeleton3D + authored idle]
+    CellRoot -->|1:1 reciprocal XTEL| ExteriorRoot[WastelandNV exterior root]
+    ExteriorRoot --> Land[LAND height, color, texture layers]
+    ExteriorRoot --> ExteriorActor[Easy Pete ACHR]
 ```
 
 The actor data boundary is separate from model assembly and rendering:
@@ -151,7 +154,13 @@ input translation and presentation differ.
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
+| `havok_collision_gltf.py` | Bounded authored packed-triangle body/subshape/filter export | Runtime body policy or unsupported shape guessing |
+| `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
 | `cell_scene.py` | Recipe selection, XTEL origin, Gamebryo-to-Godot coordinate/yaw conversion, asset/reference/material manifest | Godot nodes or input |
+| `scene_asset_pipeline.py` | Shared NIF extraction, material bindings, interactions and data-resolved loadout artifacts | CELL selection or Godot nodes |
+| `exterior_scene.py` | Bounded grid/persistent reference selection, reciprocal XTEL and exterior manifest | LAND decoding or runtime nodes |
+| `landscape_catalog.py` | LAND ownership, height/normal/color, LTEX/TXST and quadrant-layer contracts | Godot nodes or weather |
+| `landscape_gltf.py` | One LAND grid plus deterministic owned-texture layer bake and provenance | CELL selection or runtime physics |
 | `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
 | `goodsprings-saloon-structure-v1.json` | Exact proof target, hash, selection, entry, scale | Parsing logic |
@@ -164,7 +173,8 @@ input translation and presentation differ.
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
-| `CellSceneLoader.cs` | Manifest-to-node graph, placement, collision, proof queries | Binary parsing |
+| `CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
+| `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal and proof queries | Binary parsing |
 | `RuntimeMaterialLoader.cs` | Hash-verified 2D/cubemap load and name-keyed retail material passes | DDS/BSA parsing |
 | `ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
 | `CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
@@ -196,11 +206,17 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
 
-Implemented: direct owned ESM/BSA/NIF/DDS path, XTEL-derived spawn, 348 saloon
-references, 154 visible/held assets, 266 textures, 339 materials, 97 pickups, five
-containers, 24 authored lights, full converted item rotations, collision,
+Implemented: direct owned ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 454
+interior/exterior references, 209 visible/held/terrain assets, 363 textures, 439
+materials, 97 saloon pickups, five containers, 27 authored lights, full converted item rotations,
+supported authored packed-triangle collision,
 movement, HUD, inventory, authored `.357` damage/clip data, firing, objectives,
 doors, atomic save, cold reload, and launcher-enabled sandbox play.
+The saloon door `0010618e` and exterior door `0010636f` are a reciprocal pair.
+Their visible planes align below `0.000001` metre, both states persist together,
+and the gate passes closed collision, open fire-ray clearance, and two-way player
+capsule traversal. The linked exterior includes LAND `000db010`; Sunny Smiles
+and the settler load inside while Easy Pete loads outside from their ACHRs.
 The OpenXR software path adds Oculus Touch plus OpenXR generic-controller maps, `XROrigin3D`, tracked head
 and hands, metre scale, 90 Hz physics, locomotion, snap-turn, controller
 activation/fire/save, haptics, runtime-provided controller models, world-space
@@ -209,8 +225,9 @@ reload, and explicit launcher routing.
 
 Implemented: direct humanoid record relationships, deterministic FaceGen
 geometry/texture primitives, and a hash-verified one-to-many actor cache. The
-ordinary legal installer prepares that set and loads the authored enabled
-Goodsprings settler at his ACHR placement. Initially disabled Trudy remains out
+ordinary legal installer prepares the world actor set and loads the authored
+enabled Goodsprings settler, Sunny Smiles, and exterior Easy Pete at their ACHR
+placements. Initially disabled Trudy remains out
 of normal gameplay until quest/enable state is implemented; an explicit proof
 override is still required for her comparison lane. Cache generation and import
 are not fidelity claims. The capture lane can consume a compact retail state contract and
@@ -231,14 +248,15 @@ excuse.
 
 The cell transform boundary negates Gamebryo yaw when producing Godot Y rotation:
 retail forward is `(sin(yaw), cos(yaw))`, while Godot positive Y rotation has the
-opposite sign. Cell scene v5 and actor scene v3 make that correction explicit,
+opposite sign. Cell scene v7 and actor scene v3 make that correction explicit,
 carry decoded alpha/vertex/emission/cubemap state, and hash the complete actor
 artifact chain. Runtime culling now follows each NIF's
 `NiStencilProperty`; the former recipe-wide double-sided override is removed.
 
-Not implemented: environment-map light fade and external-emittance color, authored
-bhk collision, non-item arbitrary rotation promotion, visible first-person
-weapon animation, damageable actors/creatures, VATS, exterior streaming, or full
+Not implemented: environment-map light fade and external-emittance color, non-packed
+Havok shapes/dynamics/filter policy, SpeedTree vegetation, neighboring exterior
+streaming, retail weather/time, visible first-person
+weapon animation, damageable actors/creatures, VATS, or full
 campaigns. There are no placeholder managers for
 these. Each enters only with a data contract, synthetic test, retail proof, and
 promotion gate.
@@ -246,23 +264,21 @@ promotion gate.
 The current screenshots are **not** a retail-fidelity claim. The decoded alpha,
 self-illum, six-face cubemap, name-keyed surface, and CELL depth-fog paths are
 implemented, but external emittance, environment light fade, the full retail
-lighting/HDR path, authored Havok collision, and actor pixels remain open
+lighting/HDR path, complete Havok behavior, and actor pixels remain open
 differential gates. The clean-room shader observations are recorded in
 `docs/evidence/fnv-retail-material-shader-contract.md`.
 
 Next promotion order:
 
-1. close and package this playable saloon route;
-2. close the OpenXR hardware gate on a connected Meta headset, including
-   room-scale collision, stereo material review, and route/save equivalence;
-3. promote Trudy as one complete `ACHR -> NPC_ -> RACE/body/clothing/FaceGen ->
-   skeleton -> idle` actor, with no proxy mesh or generated substitute;
-4. run fixed-camera retail/Godot interior differentials for materials, lighting,
-   effects, and collision until the saloon reaches its visual gate;
-5. add damageable targets, authored flat/VR weapon presentation,
+1. package the linked saloon/exterior route and rerun physical OpenXR acceptance;
+2. close fixed-camera interior/exterior material, lighting, weather, and actor-pixel gates;
+3. add neighboring exterior CELL streaming and SpeedTree vegetation;
+4. promote authored packages/dialogue plus jukebox interaction/audio;
+5. extend Havok body/filter/dynamic behavior and make the pool table playable;
+6. add damageable targets, authored flat/VR weapon presentation,
    ballistics/projectiles,
    creatures and raiders; and
-6. promote VATS only after the same combat route passes deterministic recording,
+7. promote VATS only after the same combat route passes deterministic recording,
    flat/VR presentation, and cold-reload gates.
 
 The asset distribution follows the four-surface model described in
@@ -272,4 +288,6 @@ OpenNV does not use the guide's native-ABI shortcut because no lawful,
 cross-platform New Vegas simulation library is available to embed. See the
 retained retail evidence in
 [fnv-esm-cell-contract.md](evidence/fnv-esm-cell-contract.md) and the explicit
-[OpenXR runtime contract](evidence/openxr-runtime-contract.md).
+[OpenXR runtime contract](evidence/openxr-runtime-contract.md). The promoted
+interior/exterior boundary is recorded in the
+[Goodsprings linked-world contract](evidence/fnv-goodsprings-linked-world-contract.md).

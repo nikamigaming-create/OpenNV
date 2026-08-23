@@ -174,7 +174,8 @@ class CellCatalogTest(unittest.TestCase):
         cell = catalog.cells[0x100]
         self.assertTrue(cell.interior)
         self.assertEqual(cell.editor_id, "SyntheticRoom")
-        self.assertEqual(catalog.base_objects[0x300].model_path, "meshes\\test\\floor.nif")
+        self.assertIsNone(cell.worldspace_form_id)
+        self.assertEqual(catalog.base_objects[0x300].model_path, "test\\floor.nif")
         references = catalog.references_for(cell.form_id)
         self.assertEqual(len(references), 6)
         self.assertEqual(references[0].transform.position, (10.0, 20.0, 30.0))
@@ -252,6 +253,18 @@ class CellCatalogTest(unittest.TestCase):
             with self.assertRaises(PluginFormatError):
                 list(iter_plugin_records(path))
 
+    def test_compressed_record_retains_explicit_bad_checksum_evidence(self) -> None:
+        payload = subrecord("EDID", b"ChecksumEvidence\0")
+        compressed = bytearray(record("STAT", 0x991, payload, COMPRESSED_RECORD_FLAG))
+        compressed[-1] ^= 0x01
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "bad-checksum.esm"
+            path.write_bytes(bytes(compressed))
+            loaded = list(iter_plugin_records(path))
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0].data, payload)
+        self.assertFalse(loaded[0].compression_checksum_valid)
+
     def test_reference_position_conversion_applies_origin_once(self) -> None:
         self.assertEqual(godot_position((11.0, 22.0, 33.0), (1.0, 2.0, 3.0)), [10.0, 30.0, -20.0])
         yaw = godot_rotation_quaternion((0.0, 0.0, 1.5707963267948966))
@@ -284,6 +297,10 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(
             reference_selection_reason(BaseObject(3, "STAT", "Table", "furniture\\table01.nif"), recipe),
             "selected",
+        )
+        self.assertEqual(
+            reference_selection_reason(BaseObject(4, "TREE", "Shrub", "wastelandshrub01.spt"), recipe),
+            "unsupported-model-format",
         )
 
 

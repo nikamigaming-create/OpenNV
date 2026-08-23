@@ -1,0 +1,266 @@
+"""Decode bounded Fallout LAND geometry and texture-layer contracts."""
+
+from __future__ import annotations
+
+import math
+import struct
+from dataclasses import dataclass
+from pathlib import Path
+
+from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
+
+
+LANDSCAPE_RECORD_TYPES = frozenset({"LAND", "LTEX", "TXST"})
+LAND_VERTEX_SIDE = 33
+LAND_VERTEX_COUNT = LAND_VERTEX_SIDE * LAND_VERTEX_SIDE
+
+
+@dataclass(frozen=True)
+class LandscapeTextureSet:
+    form_id: int
+    editor_id: str
+    diffuse_path: str
+    normal_path: str | None
+
+
+@dataclass(frozen=True)
+class LandscapeTexture:
+    form_id: int
+    editor_id: str
+    texture_set_form_id: int
+
+
+@dataclass(frozen=True)
+class LandscapeOpacity:
+    vertex_index: int
+    unknown: int
+    opacity: float
+
+
+@dataclass(frozen=True)
+class LandscapeLayer:
+    texture_form_id: int
+    quadrant: int
+    layer_index: int
+    unknown: int
+    opacities: tuple[LandscapeOpacity, ...]
+
+
+@dataclass(frozen=True)
+class Landscape:
+    form_id: int
+    cell_form_id: int
+    worldspace_form_id: int
+    flags: int
+    compression_checksum_valid: bool | None
+    heights: tuple[float, ...]
+    normals: tuple[tuple[float, float, float], ...]
+    colors: tuple[tuple[float, float, float, float], ...]
+    base_layers: tuple[LandscapeLayer, ...]
+    alpha_layers: tuple[LandscapeLayer, ...]
+    source_bytes: bytes
+
+
+@dataclass(frozen=True)
+class LandscapeCatalog:
+    landscapes: dict[int, Landscape]
+    textures: dict[int, LandscapeTexture]
+    texture_sets: dict[int, LandscapeTextureSet]
+
+    def landscape_for_cell(self, cell_form_id: int) -> Landscape:
+        matches = [value for value in self.landscapes.values() if value.cell_form_id == cell_form_id]
+        if len(matches) != 1:
+            raise ValueError(f"Expected one LAND for CELL {cell_form_id:08x}, found {len(matches)}")
+        return matches[0]
+
+    def diffuse_path(self, texture_form_id: int) -> str:
+        texture = self.textures.get(texture_form_id)
+        if texture is None:
+            raise ValueError(f"LAND references unresolved LTEX {texture_form_id:08x}")
+        texture_set = self.texture_sets.get(texture.texture_set_form_id)
+        if texture_set is None or not texture_set.diffuse_path:
+            raise ValueError(
+                f"LTEX {texture.form_id:08x} references unresolved TXST {texture.texture_set_form_id:08x}"
+            )
+        return texture_set.diffuse_path
+
+
+def _values(record: Record) -> dict[str, list[bytes]]:
+    result: dict[str, list[bytes]] = {}
+    for subrecord in iter_subrecords(record):
+        result.setdefault(subrecord.signature, []).append(subrecord.data)
+    return result
+
+
+def _first_text(values: dict[str, list[bytes]], signature: str) -> str:
+    matches = values.get(signature, [])
+    return zstring(matches[0]).replace("/", "\\").lower() if matches else ""
+
+
+def _parent(record: Record, group_type: int) -> int | None:
+    return next(
+        (group.label_u32 for group in reversed(record.groups) if group.group_type == group_type),
+        None,
+    )
+
+
+def _layer_header(data: bytes, record: Record, signature: str) -> tuple[int, int, int, int]:
+    if len(data) != 8:
+        raise ValueError(f"{signature} must be eight bytes in LAND {record.form_id:08x}")
+    texture_form_id, quadrant, unknown, layer_index = struct.unpack("<IBBH", data)
+    if quadrant > 3:
+        raise ValueError(f"{signature} has invalid quadrant {quadrant} in LAND {record.form_id:08x}")
+    return texture_form_id, quadrant, layer_index, unknown
+
+
+def _opacities(data: bytes, record: Record) -> tuple[LandscapeOpacity, ...]:
+    if len(data) % 8:
+        raise ValueError(f"VTXT must contain eight-byte rows in LAND {record.form_id:08x}")
+    rows = []
+    indices = set()
+    for offset in range(0, len(data), 8):
+        vertex_index, unknown, opacity = struct.unpack_from("<HHf", data, offset)
+        if vertex_index >= 17 * 17 or vertex_index in indices or not math.isfinite(opacity):
+            raise ValueError(f"VTXT contains an invalid vertex row in LAND {record.form_id:08x}")
+        indices.add(vertex_index)
+        rows.append(LandscapeOpacity(vertex_index, unknown, max(0.0, min(1.0, opacity))))
+    return tuple(rows)
+
+
+def _heights(data: bytes, record: Record) -> tuple[float, ...]:
+    if len(data) != 4 + LAND_VERTEX_COUNT + 3:
+        raise ValueError(f"VHGT must be 1096 bytes in LAND {record.form_id:08x}")
+    offset = struct.unpack_from("<f", data)[0] * 8.0
+    deltas = struct.unpack_from(f"<{LAND_VERTEX_COUNT}b", data, 4)
+    rows: list[list[float]] = []
+    for y in range(LAND_VERTEX_SIDE):
+        row = []
+        for x in range(LAND_VERTEX_SIDE):
+            delta = float(deltas[y * LAND_VERTEX_SIDE + x]) * 8.0
+            if x > 0:
+                row.append(row[x - 1] + delta)
+            elif y > 0:
+                row.append(rows[y - 1][0] + delta)
+            else:
+                row.append(offset + delta)
+        rows.append(row)
+    return tuple(value for row in rows for value in row)
+
+
+def _normals(data: bytes, record: Record) -> tuple[tuple[float, float, float], ...]:
+    if len(data) != LAND_VERTEX_COUNT * 3:
+        raise ValueError(f"VNML must be 3267 bytes in LAND {record.form_id:08x}")
+    values = struct.unpack(f"<{LAND_VERTEX_COUNT * 3}b", data)
+    rows = []
+    for offset in range(0, len(values), 3):
+        x, y, z = (float(value) for value in values[offset : offset + 3])
+        length = math.sqrt(x * x + y * y + z * z)
+        if length <= 1.0e-6:
+            raise ValueError(f"VNML contains a zero normal in LAND {record.form_id:08x}")
+        rows.append((x / length, y / length, z / length))
+    return tuple(rows)
+
+
+def _colors(data: bytes | None, record: Record) -> tuple[tuple[float, float, float, float], ...]:
+    if data is None:
+        return tuple((1.0, 1.0, 1.0, 1.0) for _ in range(LAND_VERTEX_COUNT))
+    if len(data) != LAND_VERTEX_COUNT * 3:
+        raise ValueError(f"VCLR must be 3267 bytes in LAND {record.form_id:08x}")
+    return tuple(
+        (data[offset] / 255.0, data[offset + 1] / 255.0, data[offset + 2] / 255.0, 1.0)
+        for offset in range(0, len(data), 3)
+    )
+
+
+def _landscape(record: Record) -> Landscape:
+    cell_form_id = _parent(record, 6)
+    worldspace_form_id = _parent(record, 1)
+    if cell_form_id is None or worldspace_form_id is None:
+        raise ValueError(f"LAND {record.form_id:08x} has no CELL/worldspace ownership")
+    subrecords = list(iter_subrecords(record))
+    values: dict[str, list[bytes]] = {}
+    for subrecord in subrecords:
+        values.setdefault(subrecord.signature, []).append(subrecord.data)
+    required = {name: values.get(name, []) for name in ("DATA", "VNML", "VHGT")}
+    if any(len(rows) != 1 for rows in required.values()) or len(required["DATA"][0]) != 4:
+        raise ValueError(f"LAND {record.form_id:08x} lacks one DATA/VNML/VHGT contract")
+
+    base_layers = []
+    alpha_layers = []
+    pending_alpha: tuple[int, int, int, int] | None = None
+    for subrecord in subrecords:
+        if subrecord.signature == "BTXT":
+            texture, quadrant, layer, unknown = _layer_header(subrecord.data, record, "BTXT")
+            base_layers.append(LandscapeLayer(texture, quadrant, layer, unknown, ()))
+        elif subrecord.signature == "ATXT":
+            if pending_alpha is not None:
+                raise ValueError(f"ATXT lacks its VTXT rows in LAND {record.form_id:08x}")
+            pending_alpha = _layer_header(subrecord.data, record, "ATXT")
+        elif subrecord.signature == "VTXT":
+            if pending_alpha is None:
+                raise ValueError(f"VTXT has no preceding ATXT in LAND {record.form_id:08x}")
+            texture, quadrant, layer, unknown = pending_alpha
+            alpha_layers.append(
+                LandscapeLayer(texture, quadrant, layer, unknown, _opacities(subrecord.data, record))
+            )
+            pending_alpha = None
+    if pending_alpha is not None:
+        raise ValueError(f"ATXT lacks its VTXT rows in LAND {record.form_id:08x}")
+    if {layer.quadrant for layer in base_layers} != {0, 1, 2, 3} or len(base_layers) != 4:
+        raise ValueError(f"LAND {record.form_id:08x} must define one BTXT per quadrant")
+    if len({(layer.quadrant, layer.layer_index) for layer in alpha_layers}) != len(alpha_layers):
+        raise ValueError(f"LAND {record.form_id:08x} duplicates an ATXT layer")
+    color_rows = values.get("VCLR", [])
+    if len(color_rows) > 1:
+        raise ValueError(f"LAND {record.form_id:08x} declares multiple VCLR records")
+    return Landscape(
+        record.form_id,
+        cell_form_id,
+        worldspace_form_id,
+        struct.unpack("<I", required["DATA"][0])[0],
+        record.compression_checksum_valid,
+        _heights(required["VHGT"][0], record),
+        _normals(required["VNML"][0], record),
+        _colors(color_rows[0] if color_rows else None, record),
+        tuple(sorted(base_layers, key=lambda value: value.quadrant)),
+        tuple(sorted(alpha_layers, key=lambda value: (value.quadrant, value.layer_index))),
+        record.data,
+    )
+
+
+def scan_landscape_catalog(path: Path, cell_form_ids: set[int]) -> LandscapeCatalog:
+    landscapes: dict[int, Landscape] = {}
+    textures: dict[int, LandscapeTexture] = {}
+    texture_sets: dict[int, LandscapeTextureSet] = {}
+    for record in iter_plugin_records(path, LANDSCAPE_RECORD_TYPES):
+        if record.signature == "LAND":
+            cell_form_id = _parent(record, 6)
+            if cell_form_id in cell_form_ids:
+                landscape = _landscape(record)
+                if landscape.cell_form_id in landscapes:
+                    raise ValueError(f"CELL {landscape.cell_form_id:08x} declares multiple LAND records")
+                landscapes[landscape.cell_form_id] = landscape
+        elif record.signature == "LTEX":
+            values = _values(record)
+            texture_sets_found = values.get("TNAM", [])
+            if len(texture_sets_found) == 1 and len(texture_sets_found[0]) == 4:
+                textures[record.form_id] = LandscapeTexture(
+                    record.form_id,
+                    _first_text(values, "EDID"),
+                    struct.unpack("<I", texture_sets_found[0])[0],
+                )
+        elif record.signature == "TXST":
+            values = _values(record)
+            diffuse = _first_text(values, "TX00")
+            if diffuse:
+                texture_sets[record.form_id] = LandscapeTextureSet(
+                    record.form_id,
+                    _first_text(values, "EDID"),
+                    diffuse,
+                    _first_text(values, "TX01") or None,
+                )
+    catalog = LandscapeCatalog(landscapes, textures, texture_sets)
+    for landscape in landscapes.values():
+        for layer in (*landscape.base_layers, *landscape.alpha_layers):
+            catalog.diffuse_path(layer.texture_form_id)
+    return catalog

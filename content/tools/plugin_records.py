@@ -34,6 +34,7 @@ class Record:
     flags: int
     data: bytes
     groups: tuple[GroupContext, ...]
+    compression_checksum_valid: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -97,19 +98,42 @@ def _iter_region(
             stream.seek(size, 1)
             continue
         data = _read_exact(stream, size, f"{signature} data")
+        compression_checksum_valid: bool | None = None
         if flags & COMPRESSED_RECORD_FLAG:
             if len(data) < 4:
                 raise PluginFormatError(f"Compressed {signature} has no size prefix")
             expected_size = struct.unpack_from("<I", data, 0)[0]
+            payload = data[4:]
             try:
-                data = zlib.decompress(data[4:])
+                data = zlib.decompress(payload)
+                compression_checksum_valid = True
             except zlib.error as error:
-                raise PluginFormatError(f"Compressed {signature} has invalid zlib data at 0x{offset:08x}") from error
+                if (
+                    len(payload) < 6
+                    or payload[0] & 0x0F != 8
+                    or (payload[0] << 8 | payload[1]) % 31 != 0
+                    or payload[1] & 0x20
+                ):
+                    raise PluginFormatError(
+                        f"Compressed {signature} has invalid zlib data at 0x{offset:08x}"
+                    ) from error
+                inflater = zlib.decompressobj(-15)
+                try:
+                    data = inflater.decompress(payload[2:-4]) + inflater.flush()
+                except zlib.error as raw_error:
+                    raise PluginFormatError(
+                        f"Compressed {signature} has invalid deflate data at 0x{offset:08x}"
+                    ) from raw_error
+                if not inflater.eof or inflater.unused_data or inflater.unconsumed_tail:
+                    raise PluginFormatError(
+                        f"Compressed {signature} has incomplete deflate data at 0x{offset:08x}"
+                    ) from error
+                compression_checksum_valid = False
             if len(data) != expected_size:
                 raise PluginFormatError(
                     f"Compressed {signature} size mismatch: expected {expected_size}, found {len(data)}"
                 )
-        yield Record(signature, form_id, flags, data, groups)
+        yield Record(signature, form_id, flags, data, groups, compression_checksum_valid)
 
     if stream.tell() != end:
         raise PluginFormatError(f"Container overrun: expected 0x{end:08x}, found 0x{stream.tell():08x}")

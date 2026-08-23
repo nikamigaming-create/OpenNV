@@ -8,17 +8,21 @@ internal static class CellActorLoader
 {
     private const string ActorSceneSchema = "opennv-actor-scene/v3";
     private const string ActorSceneSetSchema = "opennv-cell-actor-scenes/v1";
+    private const string WorldActorSceneSetSchema = "opennv-world-actor-scenes/v2";
 
     internal static IReadOnlyList<string> LoadManifest(
         string manifestPath,
-        string expectedCellFormId)
+        IReadOnlySet<string> acceptedCellFormIds)
     {
         var resolvedManifest = VerifiedGltfLoader.ResolvePath(manifestPath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedManifest));
         var root = document.RootElement;
-        if (root.GetProperty("schema").GetString() != ActorSceneSetSchema ||
-            root.GetProperty("cellFormId").GetString() != expectedCellFormId)
+        var schema = root.GetProperty("schema").GetString();
+        if (schema != ActorSceneSetSchema && schema != WorldActorSceneSetSchema)
             throw new InvalidOperationException($"Unexpected OpenNV cell actor manifest: {resolvedManifest}");
+        if (schema == ActorSceneSetSchema &&
+            !acceptedCellFormIds.Contains(root.GetProperty("cellFormId").GetString()!))
+            throw new InvalidOperationException($"Legacy actor manifest belongs to another CELL: {resolvedManifest}");
         var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var scenes = new List<string>();
         foreach (var row in root.GetProperty("actors").EnumerateArray())
@@ -31,7 +35,11 @@ internal static class CellActorLoader
             var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
             if (!actual.Equals(row.GetProperty("sha256").GetString(), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Cell actor scene hash mismatch: {scene}");
-            scenes.Add(scene);
+            var cellFormId = schema == WorldActorSceneSetSchema
+                ? row.GetProperty("cellFormId").GetString()!
+                : root.GetProperty("cellFormId").GetString()!;
+            if (acceptedCellFormIds.Contains(cellFormId))
+                scenes.Add(scene);
         }
         if (scenes.Count < 1)
             throw new InvalidOperationException("Cell actor manifest contains no actor scenes.");
@@ -40,7 +48,7 @@ internal static class CellActorLoader
 
     internal static PlacedActor? Load(
         string actorScenePath,
-        string expectedCellFormId,
+        IReadOnlySet<string> acceptedCellFormIds,
         Node3D cellRoot,
         bool proofEnableInitiallyDisabled)
     {
@@ -50,7 +58,7 @@ internal static class CellActorLoader
         if (root.GetProperty("schema").GetString() != ActorSceneSchema ||
             root.GetProperty("status").GetString() != "skinned-animated")
             throw new InvalidOperationException($"Unexpected OpenNV actor scene: {resolvedManifest}");
-        if (root.GetProperty("cellFormId").GetString() != expectedCellFormId)
+        if (!acceptedCellFormIds.Contains(root.GetProperty("cellFormId").GetString()!))
             throw new InvalidOperationException("Actor scene belongs to another CELL.");
         var reference = root.GetProperty("reference");
         var initiallyDisabled = reference.GetProperty("initiallyDisabled").GetBoolean();

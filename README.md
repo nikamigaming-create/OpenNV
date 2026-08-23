@@ -60,12 +60,15 @@ waiting on an extender bridge. See [the mod policy](docs/mods.md).
 ## Current Godot development slice
 
 The current checked-in slice is a playable Goodsprings sandbox, not only a
-renderer. It resolves 154 visible/held assets, 348 placements, 266 textures, 339
-materials, 97 authored pickups, five containers, 24 lights, and the incoming
-XTEL spawn. The promoted route collects the saloon's real `.357`, fires using
+renderer. It resolves 209 interior/exterior assets, 454 placements, 363 textures,
+439 materials, 97 authored saloon pickups, five containers, 27 lights, and a
+reciprocal XTEL pair joining the saloon to WastelandNV cell `[-17,0]`. LAND
+geometry and its 24 authored texture layers form the exterior ground. Sunny
+Smiles and the seated settler load inside; Easy Pete loads at his exterior ACHR.
+The promoted route collects the saloon's real `.357`, fires using
 its retail damage/clip/ammo profile, takes an authored Beer, loots a resolved
-authored crate, opens the main door, autosaves, exits, and restores the exact
-state in a second Godot process.
+authored crate, opens both sides of the linked door, walks and shoots through
+the opening, autosaves, exits, and restores the exact state in a second process.
 
 CI pins the official Godot 4.7.1 Mono Windows archive by SHA-256
 `764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45`.

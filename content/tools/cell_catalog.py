@@ -30,6 +30,7 @@ BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "LIGH",
     "MSTT",
     "STAT",
+    "TREE",
 }
 CATALOG_RECORD_TYPES = frozenset(BASE_RECORD_TYPES | {"CELL", "REFR"})
 
@@ -59,6 +60,7 @@ class Cell:
     editor_id: str
     flags: int
     coordinates: tuple[int, int] | None
+    worldspace_form_id: int | None
     lighting: CellLighting | None
 
     @property
@@ -142,9 +144,25 @@ def _first_text(values: dict[str, list[bytes]], signature: str) -> str:
     return zstring(matches[0]) if matches else ""
 
 
+def _model_path(data: bytes) -> str:
+    value = zstring(data).replace("/", "\\").lstrip("\\").lower()
+    if value.startswith("data\\meshes\\"):
+        return value[len("data\\meshes\\") :]
+    if value.startswith("meshes\\"):
+        return value[len("meshes\\") :]
+    return value
+
+
 def _cell_parent(record: Record) -> int | None:
     for group in reversed(record.groups):
         if group.group_type == 6:
+            return group.label_u32
+    return None
+
+
+def _worldspace_parent(record: Record) -> int | None:
+    for group in reversed(record.groups):
+        if group.group_type == 1:
             return group.label_u32
     return None
 
@@ -238,6 +256,7 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 _first_text(values, "EDID"),
                 data[0] if data else 0,
                 coordinates,
+                _worldspace_parent(record),
                 _cell_lighting(lighting_data[0], record) if lighting_data else None,
             )
         elif record.signature in BASE_RECORD_TYPES:
@@ -247,7 +266,7 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 record.form_id,
                 record.signature,
                 _first_text(values, "EDID"),
-                zstring(models[0]).replace("/", "\\").lower() if models else None,
+                _model_path(models[0]) if models else None,
             )
             if record.signature == "LIGH":
                 light = _light_object(record, values)
