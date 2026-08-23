@@ -82,7 +82,8 @@ python -m pip install -r content/requirements-build.txt
 
 `Build-GodotRuntime.ps1` packages the legal-content helper with the experimental
 Windows export. The resulting `OpenNV.exe` lets a player select their owned
-`Data` folder directly; it does not require Python or another engine at runtime.
+Fallout: New Vegas installation folder or its `Data` folder directly; it does
+not require Python or another engine at runtime.
 
 This is a playable experimental sandbox, not the full New Vegas campaign. See the
 [single-page architecture](docs/architecture.md),

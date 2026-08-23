@@ -18,6 +18,18 @@ $preparer = Join-Path $contentRoot "tools\prepare_legal_assets.py"
 $fixtureModel = "res://tests/fixtures/opaque-triangle.gltf"
 $fixtureSidecar = "res://tests/fixtures/opaque-triangle.opennv.json"
 
+function Resolve-FnvDataRoot([string]$SelectedRoot) {
+    $root = [IO.Path]::GetFullPath($SelectedRoot)
+    if (Test-Path -LiteralPath (Join-Path $root "FalloutNV.esm") -PathType Leaf) {
+        return $root
+    }
+    $data = Join-Path $root "Data"
+    if (Test-Path -LiteralPath (Join-Path $data "FalloutNV.esm") -PathType Leaf) {
+        return [IO.Path]::GetFullPath($data)
+    }
+    throw "Select either the Fallout: New Vegas installation folder or its Data folder."
+}
+
 foreach ($path in @($Godot, $solution, $exporter, $preparer, (Join-Path $runtimeRoot "project.godot"))) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Missing OpenNV Godot gate input: $path"
@@ -110,10 +122,11 @@ $retailModel = ""
 $retailSidecar = ""
 $temporaryCache = ""
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
+    $resolvedFalloutData = Resolve-FnvDataRoot $FalloutNewVegasData
     $temporaryCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-legal-cache-{0}" -f [guid]::NewGuid().ToString("N"))
     $prepareArguments = @(
         $preparer,
-        "--data-root", $FalloutNewVegasData,
+        "--data-root", $resolvedFalloutData,
         "--cache-root", $temporaryCache,
         "--logical-model", $RetailLogicalPath,
         "--cell-recipe", "goodsprings-saloon-structure-v1"

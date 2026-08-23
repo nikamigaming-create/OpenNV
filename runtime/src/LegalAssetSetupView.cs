@@ -30,20 +30,22 @@ internal partial class LegalAssetSetupView : CanvasLayer
 
         var body = new Label
         {
-            Text = "Select your legal Fallout: New Vegas Data folder to prepare the playable\n" +
+            Text = "Select your legal Fallout: New Vegas folder or its Data folder to prepare the playable\n" +
                    "Goodsprings sandbox. Python and external engine runtimes are not required.\n\n" +
                    "No game assets are included, and your installation is never modified.",
         };
         body.AddThemeFontSizeOverride("font_size", 18);
         content.AddChild(body);
 
-        _selectButton.Text = "Select Fallout: New Vegas Data folder";
+        _selectButton.Text = "Select Fallout: New Vegas folder";
         _selectButton.CustomMinimumSize = new Vector2(0.0f, 48.0f);
         content.AddChild(_selectButton);
 
         _status.Text = restoreError is null
-            ? "Waiting for a legal Data folder."
-            : "The previous cache could not be reopened. Select the legal Data folder to rebuild it.";
+            ? "Waiting for the game installation folder or its Data folder."
+            : "The previous cache could not be reopened. Select the game folder to rebuild it.\n" + restoreError;
+        _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _status.CustomMinimumSize = new Vector2(0.0f, 96.0f);
         _status.AddThemeColorOverride("font_color", new Color(0.70f, 0.80f, 0.90f));
         _status.AddThemeFontSizeOverride("font_size", 16);
         content.AddChild(_status);
@@ -54,7 +56,7 @@ internal partial class LegalAssetSetupView : CanvasLayer
             FileMode = FileDialog.FileModeEnum.OpenDir,
             UseNativeDialog = true,
             ModeOverridesTitle = false,
-            Title = "Select Fallout: New Vegas Data folder",
+            Title = "Select Fallout: New Vegas folder or Data folder",
         };
         dialog.DirSelected += dataRoot => _selected?.Invoke(dataRoot);
         AddChild(dialog);
@@ -64,12 +66,12 @@ internal partial class LegalAssetSetupView : CanvasLayer
     internal void SetPreparing()
     {
         _selectButton.Disabled = true;
-        _status.Text = "Validating the installation and preparing the private cell cache...";
+        _status.Text = "Validating the installation and preparing the private cell cache. This can take several minutes...";
     }
 
-    internal void ShowError()
+    internal void ShowError(string message)
     {
-        _status.Text = "That folder could not be prepared. Select the Fallout: New Vegas Data folder and try again.";
+        _status.Text = "That folder could not be prepared.\n" + message;
         _selectButton.Disabled = false;
     }
 }

@@ -13,9 +13,7 @@ internal static class LegalAssetPreparer
         string selectedDataRoot,
         IReadOnlyDictionary<string, string> options)
     {
-        var dataRoot = ResolvePath(selectedDataRoot);
-        if (!Directory.Exists(dataRoot))
-            throw new DirectoryNotFoundException($"Data folder does not exist: {dataRoot}");
+        var dataRoot = ResolveDataRoot(selectedDataRoot);
 
         var contentTool = ResolveContentTool(options);
         if (!File.Exists(contentTool))
@@ -184,6 +182,28 @@ internal static class LegalAssetPreparer
         options.TryGetValue("cache-root", out var configuredCache)
             ? ResolvePath(configuredCache)
             : ProjectSettings.GlobalizePath("user://cache/legal-assets-v1");
+
+    private static string ResolveDataRoot(string selectedRoot)
+    {
+        var root = ResolvePath(selectedRoot);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Selected Fallout: New Vegas folder does not exist: {root}");
+        if (ContainsFile(root, "FalloutNV.esm"))
+            return root;
+        var dataDirectories = Directory.EnumerateDirectories(root)
+            .Where(path => Path.GetFileName(path).Equals("Data", StringComparison.OrdinalIgnoreCase))
+            .Where(path => ContainsFile(path, "FalloutNV.esm"))
+            .ToArray();
+        if (dataDirectories.Length == 1)
+            return Path.GetFullPath(dataDirectories[0]);
+        throw new DirectoryNotFoundException(
+            "Select either the Fallout: New Vegas installation folder or its Data folder. " +
+            $"No FalloutNV.esm was found at '{root}' or in its Data child.");
+    }
+
+    private static bool ContainsFile(string directory, string expectedName) =>
+        Directory.EnumerateFiles(directory)
+            .Any(path => Path.GetFileName(path).Equals(expectedName, StringComparison.OrdinalIgnoreCase));
 
     private static string ResolvePath(string path) =>
         path.StartsWith("res://", StringComparison.Ordinal) || path.StartsWith("user://", StringComparison.Ordinal)
