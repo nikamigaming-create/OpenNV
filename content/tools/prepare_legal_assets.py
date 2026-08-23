@@ -95,11 +95,9 @@ def prepare(
             cell_recipe_document,
             master_hash,
         )
-        actor_scenes = prepare_actor_set(
-            data_root,
-            cache_root,
-            [str(value) for value in cell_recipe_document["actorRecipes"]],
-        )
+        actor_recipe_ids = [str(value) for value in cell_recipe_document["actorRecipes"]]
+        if actor_recipe_ids:
+            actor_scenes = prepare_actor_set(data_root, cache_root, actor_recipe_ids)
     manifest = {
         "schema": SCHEMA,
         "status": "prepared-legal-assets",

@@ -8,6 +8,7 @@ Godot node, or claim that the opening is rendered or interactive.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import os
@@ -44,6 +45,22 @@ class MapHeader:
     globalVariables: int
     mapIndex: int
     lastVisitTime: int
+
+
+@dataclass(frozen=True)
+class MapElevation:
+    elevation: int
+    raw_sha256: str
+    entries: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class MapLayout:
+    header: MapHeader
+    global_variables: tuple[int, ...]
+    local_variables: tuple[int, ...]
+    elevations: tuple[MapElevation, ...]
+    next_offset: int
 
 
 def sha256_path(path: Path) -> str:
@@ -90,6 +107,96 @@ def parse_map_header(data: bytes) -> MapHeader:
 def read_map_header(path: Path) -> MapHeader:
     with path.open("rb") as stream:
         return parse_map_header(stream.read(MAP_HEADER_SIZE))
+
+
+def parse_map_layout(data: bytes) -> MapLayout:
+    header = parse_map_header(data)
+    offset = MAP_HEADER_SIZE
+
+    def read_i32_values(count: int, label: str) -> tuple[int, ...]:
+        nonlocal offset
+        byte_count = count * 4
+        end = offset + byte_count
+        if end > len(data):
+            raise Fo1ProfileError(
+                f"truncated {label}: need {byte_count} bytes at 0x{offset:x}, file has {len(data)}"
+            )
+        values = struct.unpack_from(f">{count}i", data, offset) if count else ()
+        offset = end
+        return tuple(values)
+
+    global_variables = read_i32_values(header.globalVariables, "global MAP variables")
+    local_variables = read_i32_values(header.localVariables, "local MAP variables")
+
+    elevations = []
+    for elevation, absent_flag in ((0, 0x02), (1, 0x04), (2, 0x08)):
+        if header.flags & absent_flag:
+            continue
+        byte_count = 10000 * 4
+        end = offset + byte_count
+        if end > len(data):
+            raise Fo1ProfileError(
+                f"truncated elevation {elevation} tile grid at 0x{offset:x}: "
+                f"need {byte_count} bytes"
+            )
+        raw = data[offset:end]
+        entries = struct.unpack_from(">10000I", data, offset)
+        elevations.append(MapElevation(elevation, hashlib.sha256(raw).hexdigest(), tuple(entries)))
+        offset = end
+
+    return MapLayout(header, global_variables, local_variables, tuple(elevations), offset)
+
+
+def _id_counts(values: list[int]) -> list[dict[str, int]]:
+    return [{"id": value, "count": count} for value, count in sorted(Counter(values).items())]
+
+
+def map_layout_manifest(layout: MapLayout) -> dict[str, Any]:
+    elevation_manifests = []
+    for elevation in layout.elevations:
+        floor_ids = [entry & 0x0FFF for entry in elevation.entries]
+        roof_ids = [(entry >> 16) & 0x0FFF for entry in elevation.entries]
+        elevation_manifests.append(
+            {
+                "elevation": elevation.elevation,
+                "width": 100,
+                "height": 100,
+                "entryCount": len(elevation.entries),
+                "encoding": "row-major uint32 big-endian; roof halfword then floor halfword",
+                "rawSha256": elevation.raw_sha256,
+                "uniqueFloorIds": len(set(floor_ids)),
+                "uniqueRoofIds": len(set(roof_ids)),
+                "nonDefaultFloorCount": sum(value != 1 for value in floor_ids),
+                "nonDefaultRoofCount": sum(value != 1 for value in roof_ids),
+                "floorIdCounts": _id_counts(floor_ids),
+                "roofIdCounts": _id_counts(roof_ids),
+                "rawEntries": list(elevation.entries),
+            }
+        )
+    return {
+        "globalVariables": list(layout.global_variables),
+        "localVariables": list(layout.local_variables),
+        "presentElevations": [elevation.elevation for elevation in layout.elevations],
+        "elevations": elevation_manifests,
+        "scriptsOffset": layout.next_offset,
+    }
+
+
+def map_layout_summary(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "presentElevations": manifest["presentElevations"],
+        "elevations": [
+            {
+                "elevation": elevation["elevation"],
+                "rawSha256": elevation["rawSha256"],
+                "uniqueFloorIds": elevation["uniqueFloorIds"],
+                "uniqueRoofIds": elevation["uniqueRoofIds"],
+                "nonDefaultFloorCount": elevation["nonDefaultFloorCount"],
+                "nonDefaultRoofCount": elevation["nonDefaultRoofCount"],
+            }
+            for elevation in manifest["elevations"]
+        ],
+    }
 
 
 def load_recipe(path: Path) -> dict[str, Any]:
@@ -280,11 +387,20 @@ def build_contract(recipe_path: Path, ettu_root: Path, fnv_data_root: Path) -> d
     source_map_recipe = recipe["source"]["map"]
     source_map = resolve_owned_path(ettu_root, source_map_recipe["relativePath"])
     source_map_hash = verify_hash(source_map, source_map_recipe["sha256"], "Et Tu source MAP")
-    header = read_map_header(source_map)
+    source_map_bytes = source_map.read_bytes()
+    layout = parse_map_layout(source_map_bytes)
+    header = layout.header
     expected_header = source_map_recipe["header"]
     actual_header = asdict(header)
     if actual_header != expected_header:
         raise Fo1ProfileError(f"Et Tu source MAP header drift: expected {expected_header}, got {actual_header}")
+    layout_manifest = map_layout_manifest(layout)
+    expected_layout = source_map_recipe["layout"]
+    actual_layout_summary = map_layout_summary(layout_manifest)
+    if actual_layout_summary != expected_layout:
+        raise Fo1ProfileError(
+            f"Et Tu source MAP layout drift: expected {expected_layout}, got {actual_layout_summary}"
+        )
 
     master_recipe = recipe["assetSource"]["master"]
     master_path = resolve_owned_path(fnv_data_root, master_recipe["file"])
@@ -324,6 +440,7 @@ def build_contract(recipe_path: Path, ettu_root: Path, fnv_data_root: Path) -> d
                 "bytes": source_map.stat().st_size,
                 "sha256": source_map_hash,
                 "header": actual_header,
+                "layout": layout_manifest,
             },
             "entry": recipe["entry"],
             "expectedActors": recipe["expectedActors"],
@@ -398,4 +515,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

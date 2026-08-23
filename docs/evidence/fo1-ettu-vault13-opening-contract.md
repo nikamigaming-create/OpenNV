@@ -18,9 +18,14 @@ asset, decode Fallout placed objects, create a Godot scene, or claim parity.
   <https://github.com/rotators/fallout2-docs/blob/master/content/pages/map.md>
 
 The source MAP is version `20`, has only elevation zero present, and resolves
-through Et Tu's `Maps.txt` as `V13ENT`. The v1 tool validates only the exact
-header and file hash. Tiles, scripts, objects, inventories, PRO relationships,
-and actor placement are explicit blockers rather than inferred data.
+through Et Tu's `Maps.txt` as `V13ENT`. The tool validates the exact header,
+file hash, global/local variable arrays, and the complete 10,000-entry
+big-endian floor/roof tile grid. Elevation zero's raw tile-grid SHA-256 is
+`5ddcdaaf9cbe23247183c6424e55c77bc1c9a97d6c18ee389977d04fd4957336`;
+it contains 58 floor IDs, 7,549 non-default floor entries, one default roof ID,
+and no non-default roof entries. Scripts, objects, inventories, PRO
+relationships, and actor placement remain explicit blockers rather than
+inferred data.
 
 ## Pinned donor graph
 
@@ -61,4 +66,3 @@ automated coverage report identifies a missing role.
 Passing `fo1_profile.py` means **transported** only: exact source bytes reached a
 neutral, deterministic, hash-pinned contract. Rendering, interaction, parity,
 packaging, and OpenXR remain unproven.
-

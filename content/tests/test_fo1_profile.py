@@ -13,7 +13,9 @@ from cell_catalog import BaseObject, Cell, CellCatalog, PlacedReference, Transfo
 from fo1_profile import (  # noqa: E402
     MAP_HEADER_SIZE,
     Fo1ProfileError,
+    map_layout_manifest,
     parse_map_header,
+    parse_map_layout,
     resolve_donor_cells,
     resolve_owned_path,
 )
@@ -24,6 +26,16 @@ def synthetic_map_header(version: int = 20) -> bytes:
     struct.pack_into(">i", data, 0x00, version)
     data[0x04:0x14] = b"V13ENT.MAP\0" + bytes(5)
     struct.pack_into(">10i", data, 0x14, 20090, 0, 0, 0, 430, 12, 1, 8, 35, 0)
+    return bytes(data)
+
+
+def synthetic_map() -> bytes:
+    data = bytearray(synthetic_map_header())
+    data.extend(struct.pack(">8i", 1, 2, 3, 4, 5, 6, 7, 8))
+    entries = [(1 << 16) | 1] * 10000
+    entries[123] = (45 << 16) | 70
+    data.extend(struct.pack(">10000I", *entries))
+    data.extend(b"scripts-and-objects")
     return bytes(data)
 
 
@@ -48,6 +60,24 @@ class Fo1ProfileTest(unittest.TestCase):
         struct.pack_into(">i", data, 0x14, 40000)
         with self.assertRaises(Fo1ProfileError):
             parse_map_header(bytes(data))
+
+    def test_map_layout_transports_variables_and_present_elevation(self) -> None:
+        layout = parse_map_layout(synthetic_map())
+        self.assertEqual(layout.global_variables, (1, 2, 3, 4, 5, 6, 7, 8))
+        self.assertEqual(layout.local_variables, ())
+        self.assertEqual(len(layout.elevations), 1)
+        self.assertEqual(layout.elevations[0].entries[123], (45 << 16) | 70)
+        manifest = map_layout_manifest(layout)
+        self.assertEqual(manifest["presentElevations"], [0])
+        self.assertEqual(manifest["elevations"][0]["uniqueFloorIds"], 2)
+        self.assertEqual(manifest["elevations"][0]["nonDefaultFloorCount"], 1)
+        self.assertEqual(manifest["elevations"][0]["uniqueRoofIds"], 2)
+        self.assertEqual(manifest["elevations"][0]["nonDefaultRoofCount"], 1)
+        self.assertEqual(manifest["scriptsOffset"], MAP_HEADER_SIZE + 32 + 40000)
+
+    def test_map_layout_rejects_truncated_tiles(self) -> None:
+        with self.assertRaises(Fo1ProfileError):
+            parse_map_layout(synthetic_map_header() + struct.pack(">8i", *([0] * 8)))
 
     def test_owned_path_cannot_escape_root(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
@@ -101,4 +131,3 @@ class Fo1ProfileTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

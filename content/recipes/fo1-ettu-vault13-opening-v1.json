@@ -24,6 +24,21 @@
         "globalVariables": 8,
         "mapIndex": 35,
         "lastVisitTime": 0
+      },
+      "layout": {
+        "presentElevations": [
+          0
+        ],
+        "elevations": [
+          {
+            "elevation": 0,
+            "rawSha256": "5ddcdaaf9cbe23247183c6424e55c77bc1c9a97d6c18ee389977d04fd4957336",
+            "uniqueFloorIds": 58,
+            "uniqueRoofIds": 1,
+            "nonDefaultFloorCount": 7549,
+            "nonDefaultRoofCount": 0
+          }
+        ]
       }
     }
   },
@@ -107,14 +122,14 @@
   },
   "expectedActors": [],
   "supported": [
-    "exact Et Tu V13ENT.MAP identity and header validation",
+    "exact Et Tu V13ENT.MAP identity, header, variables, and tile-grid transport",
     "exact FalloutNV.esm and required BSA identity validation",
     "data-resolved donor CELL/base/model catalog",
     "explicit Vault gear-door, Vault suit, and giant-rat source identities",
     "deterministic neutral JSON contract and detached SHA-256"
   ],
   "unsupported": [
-    "Fallout MAP tile, script, object, inventory, PRO, and actor placement decode",
+    "Fallout MAP script, object, inventory, PRO, and actor placement decode",
     "FO1-to-FNV per-prototype substitution",
     "NIF/DDS extraction for this profile",
     "Godot scene generation or rendering",
@@ -123,4 +138,3 @@
     "retail parity, interaction, package, or OpenXR promotion"
   ]
 }
-
