@@ -11,7 +11,8 @@ import sys
 from pathlib import Path
 
 from bsa_archive import extract_member
-from cell_scene import load_recipe, prepare_cell_scene
+from cell_scene import load_recipe, load_spatial_recipe, prepare_cell_scene
+from exterior_scene import prepare_exterior_scene
 from export_static_nif_gltf import export_static_nif
 from prepare_actor import prepare_actor_set
 
@@ -69,6 +70,7 @@ def prepare(
     sidecar_path = output_root / "retail-static.opennv.json"
     sidecar = export_static_nif(source_path, member.logical_path, gltf_path, sidecar_path, strict=True)
     cell_scene = None
+    linked_cell_scenes: list[dict[str, object]] = []
     actor_scenes = None
     texture_archives: list[Path] = []
     texture_archive_rows: list[dict[str, object]] = []
@@ -86,6 +88,30 @@ def prepare(
             for archive in texture_archives
         ]
         cell_recipe_document = load_recipe(cell_recipe)
+        linked_recipe_document = None
+        if cell_recipe_document.get("linkedExteriorRecipe"):
+            linked_recipe_document = load_spatial_recipe(
+                str(cell_recipe_document["linkedExteriorRecipe"])
+            )
+            linked_scene = prepare_exterior_scene(
+                master,
+                meshes,
+                texture_archives,
+                texture_archive_rows,
+                cache_root,
+                linked_recipe_document,
+                master_hash,
+            )
+            linked_cell_scenes.append(
+                {
+                    "recipe": linked_recipe_document["id"],
+                    "cellFormId": linked_recipe_document["cellFormId"],
+                    "scene": linked_scene["output"],
+                    "sha256": file_sha256(Path(str(linked_scene["output"]))),
+                    "fromDoorReferenceFormId": cell_recipe_document["entryDoorReferenceFormId"],
+                    "toDoorReferenceFormId": linked_recipe_document["entryDoorReferenceFormId"],
+                }
+            )
         cell_scene = prepare_cell_scene(
             master,
             meshes,
@@ -95,10 +121,18 @@ def prepare(
             cell_recipe_document,
             master_hash,
         )
+        if linked_cell_scenes:
+            cell_scene_path = Path(str(cell_scene["output"]))
+            primary_document = json.loads(cell_scene_path.read_text(encoding="utf-8"))
+            primary_document["linkedCells"] = linked_cell_scenes
+            atomic_text(cell_scene_path, primary_document)
+        actor_recipe_ids = [str(value) for value in cell_recipe_document["actorRecipes"]]
+        if linked_recipe_document is not None:
+            actor_recipe_ids.extend(str(value) for value in linked_recipe_document["actorRecipes"])
         actor_scenes = prepare_actor_set(
             data_root,
             cache_root,
-            [str(value) for value in cell_recipe_document["actorRecipes"]],
+            actor_recipe_ids,
         )
     manifest = {
         "schema": SCHEMA,
@@ -126,6 +160,7 @@ def prepare(
             "cellSceneSha256": (
                 None if cell_scene is None else file_sha256(Path(str(cell_scene["output"])))
             ),
+            "linkedCellScenes": linked_cell_scenes,
             "actorScenes": None if actor_scenes is None else actor_scenes["manifest"],
             "actorScenesSha256": (
                 None

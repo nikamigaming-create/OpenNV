@@ -31,6 +31,7 @@ from export_static_nif_gltf import (  # noqa: E402
     vertex_color_mode,
 )
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
+from gltf_io import compiler_sources_sha256  # noqa: E402
 from texture_pipeline import decode_dds, decode_dds_cubemap  # noqa: E402
 
 
@@ -95,6 +96,17 @@ def write_synthetic_nif(path: Path) -> None:
 
 
 class StaticNifGltfTest(unittest.TestCase):
+    def test_compiler_source_hash_accounts_for_every_owned_module(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "first.py"
+            second = Path(directory) / "second.py"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+            baseline = compiler_sources_sha256([first, second])
+            self.assertEqual(baseline, compiler_sources_sha256([second, first]))
+            second.write_bytes(b"changed")
+            self.assertNotEqual(baseline, compiler_sources_sha256([first, second]))
+
     def test_bsa_member_path_and_compression_fail_closed(self) -> None:
         original = b"owned retail bytes"
         payload = struct.pack("<I", len(original)) + zlib.compress(original)
@@ -137,6 +149,8 @@ class StaticNifGltfTest(unittest.TestCase):
             first_result = outputs[0][3]
             self.assertEqual(first_gltf["meshes"][0]["primitives"][0].get("mode", 4), 4)
             self.assertEqual(first_result["coverage"]["surfaces"], 1)
+            self.assertFalse(first_result["coverage"]["collisionExported"])
+            self.assertIsNone(first_result["coverage"]["collisionUnsupportedReason"])
             self.assertEqual(first_result["surfaces"][0]["triangles"], 1)
             self.assertEqual(first_result["surfaces"][0]["vertices"], 3)
             self.assertEqual(

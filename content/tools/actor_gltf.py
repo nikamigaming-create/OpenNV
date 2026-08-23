@@ -19,7 +19,8 @@ from PIL import Image
 from pyffi.formats.nif import NifFormat  # type: ignore  # noqa: E402
 
 from bsa_archive import BsaArchive, canonical_member_path
-from export_static_nif_gltf import BufferBuilder, generate_tangents, pack_floats
+from export_static_nif_gltf import generate_tangents
+from gltf_io import BufferBuilder, pack_floats
 from facegen import apply_geometry_morphs, repair_facegen_nif_uv_flag
 from texture_pipeline import decode_dds
 from actor_material import (

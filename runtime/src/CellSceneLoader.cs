@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v6";
+    private const string CellSceneSchema = "opennv-cell-scene/v7";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -27,325 +27,218 @@ internal static class CellSceneLoader
             source.GetProperty("status").GetString() != "geometry-structure")
             throw new InvalidOperationException($"Unexpected OpenNV cell scene: {resolvedScenePath}");
 
-        var prototypes = new Dictionary<string, VerifiedGltfLoader.LoadedGltf>(StringComparer.Ordinal);
-        try
+        var cell = source.GetProperty("cell");
+        var session = new GameplaySession();
+        session.Configure(cell.GetProperty("formId").GetString()!, savePath, useXr);
+        parent.AddChild(session);
+        var main = CellContentLoader.Load(
+            resolvedScenePath,
+            parent,
+            session,
+            useXr,
+            actorScenePath,
+            actorScenesManifestPath,
+            proofEnableActor,
+            buildCollision,
+            1u);
+        if (useXr)
         {
-            var textures = RuntimeMaterialLoader.LoadTextures(source);
-            var materialBindings = 0;
-            var compiler = source.GetProperty("compiler");
-            var compilerName = compiler.GetProperty("name").GetString()!;
-            var compilerSha256 = compiler.GetProperty("sha256").GetString()!;
-            foreach (var asset in source.GetProperty("assets").EnumerateArray())
-            {
-                var assetId = asset.GetProperty("id").GetString()!;
-                var loaded = VerifiedGltfLoader.Load(
-                    asset.GetProperty("model").GetString()!,
-                    asset.GetProperty("sidecar").GetString()!);
-                if (!loaded.SourceSha256.Equals(
-                        asset.GetProperty("sourceSha256").GetString(),
-                        StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Cell asset source hash mismatch: {assetId}");
-                if (!loaded.CompilerName.Equals(compilerName, StringComparison.Ordinal) ||
-                    !loaded.CompilerSha256.Equals(compilerSha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Cell asset compiler provenance mismatch: {assetId}");
-                materialBindings += RuntimeMaterialLoader.Apply(loaded.Scene, asset, textures);
-                prototypes.Add(assetId, loaded);
-            }
+            var loadout = main.StartingLoadout
+                ?? throw new InvalidOperationException("OpenNV XR scene has no data-resolved starting loadout.");
+            session.PrepareXrStartingLoadout(new GameplaySession.StartingWeapon(
+                loadout.WeaponFormId,
+                loadout.WeaponEditorId,
+                loadout.AmmoFormId,
+                loadout.AmmoEditorId,
+                loadout.Damage,
+                loadout.ClipSize,
+                loadout.ReserveRounds));
+        }
 
-            var coordinates = source.GetProperty("coordinates");
-            var unitScale = coordinates.GetProperty("unitsToMeters").GetSingle();
-            var originGameUnits = ReadVector(coordinates.GetProperty("originGameUnits"));
-            var cell = source.GetProperty("cell");
-            var root = new Node3D
+        var linkedCells = new List<LinkedCell>();
+        var portalLinks = new List<PortalLink>();
+        if (source.TryGetProperty("linkedCells", out var links))
+        {
+            var linkIndex = 0;
+            foreach (var link in links.EnumerateArray())
             {
-                Name = $"CELL_{cell.GetProperty("formId").GetString()}_{cell.GetProperty("editorId").GetString()}",
-                Scale = Vector3.One * unitScale,
-            };
-            parent.AddChild(root);
-            var session = new GameplaySession();
-            session.Configure(cell.GetProperty("formId").GetString()!, savePath, useXr);
-            parent.AddChild(session);
-            if (useXr)
-            {
-                var loadout = source.GetProperty("vr").GetProperty("startingLoadout");
-                session.PrepareXrStartingLoadout(new GameplaySession.StartingWeapon(
-                    loadout.GetProperty("weaponFormId").GetString()!,
-                    loadout.GetProperty("weaponEditorId").GetString()!,
-                    loadout.GetProperty("ammoFormId").GetString()!,
-                    loadout.GetProperty("ammoEditorId").GetString()!,
-                    loadout.GetProperty("damage").GetInt32(),
-                    loadout.GetProperty("clipSize").GetInt32(),
-                    loadout.GetProperty("reserveRounds").GetInt32()));
-            }
-
-            var loadedReferences = 0;
-            var doors = new Dictionary<string, DoorInstance>(StringComparer.OrdinalIgnoreCase);
-            var pickups = new Dictionary<string, PickupInstance>(StringComparer.OrdinalIgnoreCase);
-            var containers = new Dictionary<string, ContainerInstance>(StringComparer.OrdinalIgnoreCase);
-            var collisionMeshes = 0;
-            var surfaces = 0;
-            var vertices = 0;
-            foreach (var reference in source.GetProperty("references").EnumerateArray())
-            {
-                if (reference.GetProperty("initiallyDisabled").GetBoolean())
-                    continue;
-                var formId = reference.GetProperty("formId").GetString()!;
-                var yaw = reference.GetProperty("yawGodotRadians").GetSingle();
-                var rotation = ReadQuaternion(reference.GetProperty("rotationGodotQuaternion"));
-                var interaction = reference.GetProperty("interaction");
-                var interactionType = interaction.ValueKind == JsonValueKind.Object
-                    ? interaction.GetProperty("type").GetString()
-                    : null;
-                if (useXr && interactionType == "pickup" &&
-                    interaction.GetProperty("itemFormId").GetString() == "0008f216")
-                    continue;
-                if (interactionType == "pickup" && session.IsReferenceRemoved(formId))
-                    continue;
-                Node3D placement;
-                if (interactionType == "door")
-                {
-                    var door = new DoorInstance { Name = $"DOOR_{formId}" };
-                    door.Configure(formId, yaw);
-                    door.SetOpen(session.IsDoorOpen(formId));
-                    doors.Add(formId, door);
-                    placement = door;
-                }
-                else if (interactionType == "pickup")
-                {
-                    PickupInstance.WeaponProfile? weapon = null;
-                    if (interaction.TryGetProperty("weapon", out var weaponSource))
-                    {
-                        weapon = new PickupInstance.WeaponProfile(
-                            weaponSource.GetProperty("damage").GetInt32(),
-                            weaponSource.GetProperty("clipSize").GetInt32(),
-                            weaponSource.GetProperty("ammoFormId").ValueKind == JsonValueKind.String
-                                ? weaponSource.GetProperty("ammoFormId").GetString()
-                                : null);
-                    }
-                    var pickup = new PickupInstance();
-                    pickup.Configure(
-                        formId,
-                        interaction.GetProperty("itemFormId").GetString()!,
-                        interaction.GetProperty("itemEditorId").GetString()!,
-                        interaction.GetProperty("itemRecordType").GetString()!,
-                        interaction.GetProperty("count").GetInt32(),
-                        weapon);
-                    pickup.Basis = new Basis(rotation);
-                    pickups.Add(formId, pickup);
-                    placement = pickup;
-                }
-                else if (interactionType == "container")
-                {
-                    var entries = interaction.GetProperty("items")
-                        .EnumerateArray()
-                        .Select(item => new ContainerInstance.Entry(
-                            item.GetProperty("itemFormId").GetString()!,
-                            item.GetProperty("itemEditorId").GetString()!,
-                            item.GetProperty("itemRecordType").GetString()!,
-                            item.GetProperty("count").GetInt32(),
-                            item.GetProperty("resolved").GetBoolean()))
-                        .ToArray();
-                    var container = new ContainerInstance();
-                    container.Configure(formId, reference.GetProperty("baseEditorId").GetString()!, entries);
-                    container.Basis = new Basis(rotation);
-                    containers.Add(formId, container);
-                    placement = container;
-                }
-                else
-                {
-                    placement = new Node3D
-                    {
-                        Name = $"REFR_{formId}",
-                        Basis = new Basis(rotation),
-                    };
-                }
-                placement.Position = ReadVector(reference.GetProperty("positionGodotUnits"));
-                root.AddChild(placement);
-
-                var assetId = reference.GetProperty("assetId").GetString()!;
-                var instance = prototypes[assetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
-                    ?? throw new InvalidOperationException($"Could not duplicate cell asset: {assetId}");
-                placement.AddChild(instance);
-                foreach (var mesh in Descendants<MeshInstance3D>(instance))
-                {
-                    if (mesh.Mesh is null)
-                        continue;
-                    surfaces += mesh.Mesh.GetSurfaceCount();
-                    if (mesh.Mesh is ArrayMesh arrayMesh)
-                        vertices += Enumerable.Range(0, arrayMesh.GetSurfaceCount()).Sum(arrayMesh.SurfaceGetArrayLen);
-                    if (buildCollision)
-                    {
-                        mesh.CreateTrimeshCollision();
-                        collisionMeshes++;
-                    }
-                }
-                loadedReferences++;
-            }
-
-            var proofDoor = proofDoorOverride ??
-                source.GetProperty("proof").GetProperty("doorReferenceFormId").GetString()!;
-            if (!doors.ContainsKey(proofDoor))
-                throw new InvalidOperationException($"Cell proof door was not loaded: {proofDoor}");
-            if (openProofDoor)
-                doors[proofDoor].SetOpen(true);
-            var actors = new List<CellActorLoader.PlacedActor>();
-            var actorScenePaths = actorScenesManifestPath is not null
-                ? CellActorLoader.LoadManifest(
+                var linkedScenePath = VerifiedGltfLoader.ResolvePath(link.GetProperty("scene").GetString()!);
+                VerifiedGltfLoader.VerifyHash(linkedScenePath, link.GetProperty("sha256").GetString()!);
+                var renderLayer = 1u << ++linkIndex;
+                var linked = CellContentLoader.Load(
+                    linkedScenePath,
+                    parent,
+                    session,
+                    false,
+                    null,
                     actorScenesManifestPath,
-                    cell.GetProperty("formId").GetString()!)
-                : actorScenePath is not null
-                    ? new[] { actorScenePath }
-                    : Array.Empty<string>();
-            foreach (var path in actorScenePaths)
-            {
-                var placedActor = CellActorLoader.Load(
-                    path,
-                    cell.GetProperty("formId").GetString()!,
-                    root,
-                    proofEnableActor);
-                if (placedActor is not null)
-                    actors.Add(placedActor.Value);
+                    proofEnableActor,
+                    buildCollision,
+                    renderLayer);
+                if (!Mathf.IsEqualApprox(linked.UnitsToMeters, main.UnitsToMeters))
+                    throw new InvalidOperationException("Linked CELL unit scales do not match.");
+                var fromDoorId = link.GetProperty("fromDoorReferenceFormId").GetString()!;
+                var toDoorId = link.GetProperty("toDoorReferenceFormId").GetString()!;
+                if (!main.Doors.TryGetValue(fromDoorId, out var fromDoor) ||
+                    !linked.Doors.TryGetValue(toDoorId, out var toDoor))
+                    throw new InvalidOperationException(
+                        $"Linked CELL portal doors are missing: {fromDoorId} -> {toDoorId}");
+                var fromFrame = BuildProofRay(fromDoor);
+                var toFrame = BuildProofRay(toDoor);
+                var fromCenter = (fromFrame.From + fromFrame.To) / 2.0f;
+                var toCenter = (toFrame.From + toFrame.To) / 2.0f;
+                var translation = fromCenter - toCenter;
+                linked.Root.GlobalPosition += translation;
+                var alignedToFrame = BuildProofRay(toDoor);
+                var alignedToCenter = (alignedToFrame.From + alignedToFrame.To) / 2.0f;
+                var alignmentError = fromCenter.DistanceTo(alignedToCenter);
+                var normalAgreement = MathF.Abs(
+                    (fromFrame.To - fromFrame.From).Normalized().Dot(
+                        (alignedToFrame.To - alignedToFrame.From).Normalized()));
+                if (alignmentError > 0.0001f)
+                    throw new InvalidOperationException(
+                        $"Linked CELL portal alignment failed: {alignmentError:F6} metres");
+                if (normalAgreement < 0.999f)
+                    throw new InvalidOperationException(
+                        $"Linked CELL portal normals disagree: {normalAgreement:F6}");
+                fromDoor.Link(toDoor);
+                linkedCells.Add(new LinkedCell(linked, renderLayer));
+                portalLinks.Add(new PortalLink(fromDoor, toDoor, alignmentError, normalAgreement));
             }
-            var spawn = source.GetProperty("spawn");
-            var authoredLights = source.GetProperty("lighting").GetProperty("lights").GetArrayLength();
-            var player = BuildView(
-                parent,
-                spawn.GetProperty("yawGodotRadians").GetSingle(),
-                source.GetProperty("lighting"),
-                unitScale,
-                session,
-                useXr,
-                enableXrRuntimeFeatures);
-            if (useXr)
-            {
-                var loadout = source.GetProperty("vr").GetProperty("startingLoadout");
-                var assetId = loadout.GetProperty("modelAssetId").GetString()!;
-                var heldWeapon = prototypes[assetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
-                    ?? throw new InvalidOperationException("Could not duplicate VR held weapon asset.");
-                player.AttachXrHeldWeapon(
-                    heldWeapon,
-                    unitScale,
-                    ReadVector(loadout.GetProperty("muzzlePositionGodotUnits")));
-            }
-            return new LoadedCell(
-                root,
-                cell.GetProperty("formId").GetString()!,
-                cell.GetProperty("editorId").GetString()!,
-                originGameUnits,
-                unitScale,
-                prototypes.Count,
-                textures.TwoDimensional.Count,
-                materialBindings,
-                loadedReferences,
-                doors.Count,
-                authoredLights,
-                collisionMeshes,
-                surfaces,
-                vertices,
-                proofDoor,
-                doors[proofDoor].IsOpen,
-                doors[proofDoor],
-                player,
-                session,
-                pickups,
-                containers,
-                actors);
         }
-        finally
+
+        var proofDoorId = proofDoorOverride ?? main.ProofDoorFormId;
+        var allDoors = main.Doors
+            .Concat(linkedCells.SelectMany(value => value.Content.Doors))
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
+        if (!allDoors.TryGetValue(proofDoorId, out var proofDoor))
+            throw new InvalidOperationException($"Cell proof door was not loaded: {proofDoorId}");
+        if (openProofDoor)
+            proofDoor.SetOpen(true);
+
+        var spawn = source.GetProperty("spawn");
+        var player = BuildView(
+            parent,
+            spawn.GetProperty("yawGodotRadians").GetSingle(),
+            main,
+            session,
+            useXr,
+            enableXrRuntimeFeatures);
+        player.CollisionMask = (1u << (linkedCells.Count + 1)) - 1u;
+        if (useXr)
         {
-            foreach (var prototype in prototypes.Values)
-                prototype.Scene.Free();
+            player.AttachXrHeldWeapon(
+                main.HeldWeapon ?? throw new InvalidOperationException("OpenNV XR held weapon was not prepared."),
+                main.UnitsToMeters,
+                main.MuzzlePosition);
         }
+        foreach (var linked in linkedCells)
+            AddCellLights(parent, linked.Content, linked.RenderLayer, true);
+
+        var allPickups = main.Pickups
+            .Concat(linkedCells.SelectMany(value => value.Content.Pickups))
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
+        var allContainers = main.Containers
+            .Concat(linkedCells.SelectMany(value => value.Content.Containers))
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
+        var allActors = main.Actors
+            .Concat(linkedCells.SelectMany(value => value.Content.Actors))
+            .ToArray();
+        return new LoadedCell(
+            main.Root,
+            main.FormId,
+            main.EditorId,
+            main.OriginGameUnits,
+            main.UnitsToMeters,
+            main.Assets + linkedCells.Sum(value => value.Content.Assets),
+            main.Textures + linkedCells.Sum(value => value.Content.Textures),
+            main.MaterialBindings + linkedCells.Sum(value => value.Content.MaterialBindings),
+            main.References + linkedCells.Sum(value => value.Content.References),
+            allDoors.Count,
+            main.Lighting.Lights.Count + linkedCells.Sum(value => value.Content.Lighting.Lights.Count),
+            main.CollisionMeshes + linkedCells.Sum(value => value.Content.CollisionMeshes),
+            main.Surfaces + linkedCells.Sum(value => value.Content.Surfaces),
+            main.Vertices + linkedCells.Sum(value => value.Content.Vertices),
+            proofDoorId,
+            proofDoor.IsOpen,
+            proofDoor,
+            player,
+            session,
+            allPickups,
+            allContainers,
+            allActors,
+            linkedCells,
+            portalLinks);
     }
 
     private static CellPlayer BuildView(
         Node3D parent,
         float yaw,
-        JsonElement lighting,
-        float unitScale,
+        CellContentLoader.LoadedContent main,
         GameplaySession session,
         bool useXr,
         bool enableXrRuntimeFeatures)
     {
-        var calibration = lighting.GetProperty("calibration");
+        var lighting = main.Lighting;
         var environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,
             BackgroundColor = new Color(0.015f, 0.018f, 0.022f),
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
-            AmbientLightColor = ReadColor(lighting.GetProperty("ambientColor")),
-            AmbientLightEnergy = calibration.GetProperty("ambientEnergy").GetSingle(),
+            AmbientLightColor = lighting.AmbientColor,
+            AmbientLightEnergy = lighting.AmbientEnergy,
             TonemapMode = Godot.Environment.ToneMapper.Filmic,
             FogEnabled = true,
             FogMode = Godot.Environment.FogModeEnum.Depth,
-            FogLightColor = ReadColor(lighting.GetProperty("fogColor")),
+            FogLightColor = lighting.FogColor,
             FogLightEnergy = 1.0f,
             FogDensity = 1.0f,
-            FogDepthBegin = lighting.GetProperty("fogNearGameUnits").GetSingle() * unitScale,
-            FogDepthEnd = lighting.GetProperty("fogFarGameUnits").GetSingle() * unitScale,
-            FogDepthCurve = lighting.GetProperty("fogPower").GetSingle(),
+            FogDepthBegin = lighting.FogNearGameUnits * main.UnitsToMeters,
+            FogDepthEnd = lighting.FogFarGameUnits * main.UnitsToMeters,
+            FogDepthCurve = lighting.FogPower,
         };
         parent.AddChild(new WorldEnvironment { Environment = environment });
-        var direction = lighting.GetProperty("directionalRotationDegrees")
-            .EnumerateArray()
-            .Select(value => value.GetSingle())
-            .ToArray();
-        if (direction.Length != 2)
-            throw new InvalidOperationException("CELL directional rotation must contain two values.");
-        parent.AddChild(new DirectionalLight3D
-        {
-            Name = "CELL_XCLL_Directional",
-            RotationDegrees = new Vector3(direction[0], direction[1], 0.0f),
-            LightColor = ReadColor(lighting.GetProperty("directionalColor")),
-            LightEnergy = lighting.GetProperty("directionalFade").GetSingle() *
-                calibration.GetProperty("directionalEnergyScale").GetSingle(),
-            ShadowEnabled = true,
-        });
-        foreach (var light in lighting.GetProperty("lights").EnumerateArray())
-        {
-            if (light.GetProperty("initiallyDisabled").GetBoolean())
-                continue;
-            parent.AddChild(new OmniLight3D
-            {
-                Name = $"LIGH_{light.GetProperty("formId").GetString()}_{light.GetProperty("baseEditorId").GetString()}",
-                Position = ReadVector(light.GetProperty("positionGodotUnits")) * unitScale,
-                LightColor = ReadColor(light.GetProperty("color")),
-                LightEnergy = MathF.Max(
-                    0.1f,
-                    light.GetProperty("intensity").GetSingle() *
-                    calibration.GetProperty("omniEnergyScale").GetSingle()),
-                OmniRange = light.GetProperty("radiusMeters").GetSingle(),
-                ShadowEnabled = false,
-            });
-        }
+        AddCellLights(parent, main, 1u, true);
         var player = new CellPlayer();
         player.Configure(yaw, session, useXr, enableXrRuntimeFeatures);
         parent.AddChild(player);
         return player;
     }
 
-    private static Vector3 ReadVector(JsonElement array)
+    private static void AddCellLights(
+        Node3D parent,
+        CellContentLoader.LoadedContent content,
+        uint renderLayer,
+        bool addAuthoredLights)
     {
-        var values = array.EnumerateArray().Select(value => value.GetSingle()).ToArray();
-        if (values.Length != 3)
-            throw new InvalidOperationException("Cell scene vector must contain three values.");
-        return new Vector3(values[0], values[1], values[2]);
-    }
-
-    private static Color ReadColor(JsonElement array)
-    {
-        var values = array.EnumerateArray().Select(value => value.GetSingle()).ToArray();
-        if (values.Length != 3)
-            throw new InvalidOperationException("Cell scene color must contain three values.");
-        return new Color(values[0], values[1], values[2]);
-    }
-
-    private static Quaternion ReadQuaternion(JsonElement array)
-    {
-        var values = array.EnumerateArray().Select(value => value.GetSingle()).ToArray();
-        if (values.Length != 4)
-            throw new InvalidOperationException("Cell scene quaternion must contain four values.");
-        return new Quaternion(values[0], values[1], values[2], values[3]).Normalized();
+        var lighting = content.Lighting;
+        parent.AddChild(new DirectionalLight3D
+        {
+            Name = $"CELL_{content.FormId}_Directional",
+            RotationDegrees = new Vector3(
+                lighting.DirectionalRotationDegrees.X,
+                lighting.DirectionalRotationDegrees.Y,
+                0.0f),
+            LightColor = lighting.DirectionalColor,
+            LightEnergy = lighting.DirectionalFade * lighting.DirectionalEnergyScale,
+            ShadowEnabled = true,
+            LightCullMask = renderLayer,
+        });
+        if (!addAuthoredLights)
+            return;
+        foreach (var light in lighting.Lights)
+        {
+            parent.AddChild(new OmniLight3D
+            {
+                Name = $"LIGH_{light.FormId}_{light.EditorId}",
+                Position = content.Root.ToGlobal(light.PositionGodotUnits),
+                LightColor = light.Color,
+                LightEnergy = MathF.Max(0.1f, light.Intensity * lighting.OmniEnergyScale),
+                OmniRange = light.RadiusMeters,
+                ShadowEnabled = false,
+                LightCullMask = renderLayer,
+            });
+        }
     }
 
     internal static DoorRay BuildProofRay(DoorInstance door)
@@ -381,9 +274,15 @@ internal static class CellSceneLoader
             normal);
     }
 
-    internal static RayHit CastProofRay(PhysicsDirectSpaceState3D space, DoorInstance door, DoorRay ray)
+    internal static RayHit CastProofRay(
+        PhysicsDirectSpaceState3D space,
+        DoorInstance door,
+        DoorRay ray,
+        uint collisionMask = uint.MaxValue)
     {
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(ray.From, ray.To));
+        var query = PhysicsRayQueryParameters3D.Create(ray.From, ray.To);
+        query.CollisionMask = collisionMask;
+        var hit = space.IntersectRay(query);
         if (hit.Count == 0)
             return new RayHit(false, false, "");
         var collider = hit["collider"].AsGodotObject() as Node;
@@ -443,7 +342,9 @@ internal static class CellSceneLoader
         GameplaySession Session,
         IReadOnlyDictionary<string, PickupInstance> Pickups,
         IReadOnlyDictionary<string, ContainerInstance> Containers,
-        IReadOnlyList<CellActorLoader.PlacedActor> Actors)
+        IReadOnlyList<CellActorLoader.PlacedActor> Actors,
+        IReadOnlyList<LinkedCell> LinkedCells,
+        IReadOnlyList<PortalLink> PortalLinks)
     {
         internal Vector3 GameToCellUnits(Vector3 position) => new(
             position.X - OriginGameUnits.X,
@@ -452,6 +353,14 @@ internal static class CellSceneLoader
 
         internal Vector3 GameToWorld(Vector3 position) => Root.ToGlobal(GameToCellUnits(position));
     }
+
+    internal readonly record struct LinkedCell(CellContentLoader.LoadedContent Content, uint RenderLayer);
+
+    internal readonly record struct PortalLink(
+        DoorInstance FromDoor,
+        DoorInstance ToDoor,
+        float AlignmentErrorMeters,
+        float NormalAgreement);
 
     internal readonly record struct DoorRay(Vector3 From, Vector3 To, Vector3 LocalSize, Vector3 LocalNormal);
 

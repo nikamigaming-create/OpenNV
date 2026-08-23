@@ -115,7 +115,8 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         $preparer,
         "--data-root", $FalloutNewVegasData,
         "--cache-root", $temporaryCache,
-        "--logical-model", $RetailLogicalPath
+        "--logical-model", $RetailLogicalPath,
+        "--cell-recipe", "goodsprings-saloon-structure-v1"
     )
     if (-not [string]::IsNullOrWhiteSpace($ExpectedMeshesBsaSha256)) {
         $prepareArguments += @("--expected-meshes-bsa-sha256", $ExpectedMeshesBsaSha256)
@@ -129,6 +130,39 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     }
     $retailModel = [string]$install.outputs.model
     $retailSidecar = [string]$install.outputs.sidecar
+    $cellReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-linked-cell-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $cellSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-linked-cell-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    try {
+        $cellOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+            --cell-scene ([string]$install.outputs.cellScene) `
+            --actor-scenes ([string]$install.outputs.actorScenes) `
+            --save-path $cellSave --report $cellReport --portal-proof --quit-after-load 2>&1
+        $cellText = $cellOutput | Out-String
+        if ($LASTEXITCODE -ne 0 -or $cellText -notmatch "OPENNV_GODOT_CELL_PASS" -or $cellText -match "(?m)^ERROR:") {
+            throw "OpenNV linked-cell gate failed:`n$cellText"
+        }
+        $cell = Get-Content -Raw -LiteralPath $cellReport | ConvertFrom-Json
+        if ($cell.schema -ne "opennv-godot-cell/v1" -or
+            $cell.status -ne "pass" -or
+            [int]$cell.assets -lt 209 -or
+            [int]$cell.references -lt 454 -or
+            [int]$cell.actors -ne 3 -or
+            -not [bool]$cell.connectedAuthoredSpaces -or
+            @($cell.linkedCells).Count -ne 1 -or
+            @($cell.portals).Count -ne 1 -or
+            -not [bool]$cell.portals[0].reciprocal -or
+            [double]$cell.portals[0].alignmentErrorMeters -gt 0.0001 -or
+            [double]$cell.portals[0].normalAgreement -lt 0.999 -or
+            -not [bool]$cell.doorTraversal.projectilePortalClear -or
+            -not [bool]$cell.doorTraversal.capsuleWalkThrough) {
+            throw "OpenNV linked-cell report is invalid."
+        }
+    }
+    finally {
+        foreach ($path in @($cellReport, $cellSave)) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+    }
 }
 
 function Invoke-StaticModelGate([string]$Model, [string]$Sidecar, [string]$Label) {

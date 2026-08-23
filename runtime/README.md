@@ -4,9 +4,11 @@ This is the first-party Open Nevada runtime. It uses Godot Forward+ and accepts
 only artifacts produced by the direct retail-content pipeline in `../content`.
 
 The current slice reads the owned master directly and runs a playable,
-recipe-pinned Goodsprings sandbox. It loads 154 visible/held assets, 348
-references, 266 textures, 339 materials, 97 pickups, five containers, 24
-authored lights, and the authored enabled saloon settler.
+recipe-pinned Goodsprings sandbox. It loads 209 interior/exterior assets, 454
+references, 363 textures, 439 materials, 97 saloon pickups, five containers, 27
+authored lights, Sunny Smiles, the enabled saloon settler, and exterior Easy
+Pete. The reciprocal saloon XTEL pair aligns the actual door planes and joins a
+bounded WastelandNV exterior containing LAND `000db010`.
 The incoming XTEL owns the spawn. The `.357` pickup uses retail damage and clip
 data; inventory, ammo, objective, removed pickups, and door state autosave and
 cold-reload. One fully resolved crate is transferable; containers backed by
@@ -29,7 +31,7 @@ and the compact oracle artifact supplied as `--retail-state-contract`. The
 runtime rejects a missing/mismatched ACHR, shot set, pose, geometry gate, or
 projection label. A provisional retail FOV may improve a failing comparison but
 cannot promote exact projection parity.
-Cell scene v5 and actor scene v3 are required. Older caches carry a mirrored yaw,
+Cell scene v7 and actor scene v3 are required. Older caches carry a mirrored yaw,
 positional material binding, incomplete shader state, or unhashed actor sidecar
 and are rejected.
 
@@ -47,7 +49,8 @@ sandbox. Python and OpenMW are not required on the player's machine. Later
 launches reopen that verified cache automatically.
 
 Use WASD and mouse-look, press E to pick up items, open containers, or operate a
-door, left-click to fire an equipped weapon, and F5 to save. The HUD tracks the
+door, left-click to fire an equipped weapon, and F5 to save. The main door opens
+both reciprocal references and can be crossed without a loading screen. The HUD tracks the
 four-stage sandbox objective and inventory. Packaging proves the route and a
 separate cold reload before accepting the build.
 

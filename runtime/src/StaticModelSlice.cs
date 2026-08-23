@@ -7,6 +7,7 @@ internal static class StaticModelSlice
     internal static LoadedStaticModel Load(string modelPath, string sidecarPath, Node3D parent)
     {
         var loaded = VerifiedGltfLoader.Load(modelPath, sidecarPath);
+        loaded.CollisionScene?.Free();
         var model = loaded.Scene;
         model.Name = "RetailStaticModel";
         parent.AddChild(model);

@@ -183,6 +183,8 @@ internal partial class GameplaySession : Node
     internal void DoorChanged(DoorInstance door)
     {
         _doorStates[door.ReferenceFormId] = door.IsOpen;
+        if (door.LinkedDoor is not null)
+            _doorStates[door.LinkedDoor.ReferenceFormId] = door.LinkedDoor.IsOpen;
         Save();
         RefreshHud($"Door {door.ReferenceFormId}: {(door.IsOpen ? "open" : "closed")}");
     }

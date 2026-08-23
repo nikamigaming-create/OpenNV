@@ -53,9 +53,12 @@
     "cell-xcll-ambient-lighting",
     "placed-ligh-color-radius-intensity",
     "xtel-data-derived-spawn",
-    "runtime-trimesh-cell-collision",
+    "authored-bhk-packed-static-collision",
+    "land-height-and-layer-import",
+    "reciprocal-xtel-interior-exterior-link",
+    "walk-and-fire-through-open-door",
     "interactive-doors-and-physical-fire-rays",
-    "whole-cell-no-portal-culling",
+    "bounded-linked-cells-no-portal-culling",
     "forward-plus-static-model-load",
     "artifact-provenance-validation",
     "authored-pickup-inventory-loop",
@@ -69,6 +72,7 @@
     "calibrated-standing-xr-eye-height",
     "vr-authored-10mm-starting-loadout-and-reload",
     "world-space-xr-hud",
-    "shared-flat-xr-gameplay-save-state"
+    "shared-flat-xr-gameplay-save-state",
+    "retail-actor-set-sunny-settler-easy-pete"
   ]
 }

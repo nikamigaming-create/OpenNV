@@ -18,7 +18,7 @@ from cell_scene import (
     arrival_transform,
     godot_position,
     godot_yaw_radians,
-    load_recipe as load_cell_recipe,
+    load_spatial_recipe,
 )
 from facegen import compose_body_albedo, compose_skin_albedo, synthesize_texture_detail
 from texture_pipeline import decode_dds
@@ -125,7 +125,7 @@ def prepare_actor(
         form_id(recipe["proofActorReferenceFormId"]),
         form_id(recipe["cellFormId"]),
     )
-    cell_recipe = load_cell_recipe(str(recipe["cellRecipe"]))
+    cell_recipe = load_spatial_recipe(str(recipe["cellRecipe"]))
     cell_catalog = scan_cell_catalog(master)
     _source_door, arrival = arrival_transform(
         cell_catalog,
@@ -406,16 +406,15 @@ def prepare_actor_set(
     if len(recipe_ids) < 1 or len(set(recipe_ids)) != len(recipe_ids):
         raise ValueError("Actor-set recipes must be non-empty and unique")
     actors = [prepare_actor(data_root, cache_root, recipe_id) for recipe_id in recipe_ids]
-    cell_form_ids = {str(actor["cellFormId"]) for actor in actors}
     reference_form_ids = {str(actor["reference"]["formId"]) for actor in actors}
-    if len(cell_form_ids) != 1 or len(reference_form_ids) != len(actors):
-        raise ValueError("Actor-set members must belong to one cell and unique references")
+    if len(reference_form_ids) != len(actors):
+        raise ValueError("Actor-set members must use unique references")
     document = {
-        "schema": "opennv-cell-actor-scenes/v1",
-        "cellFormId": next(iter(cell_form_ids)),
+        "schema": "opennv-world-actor-scenes/v2",
         "actors": [
             {
                 "recipe": actor["recipe"],
+                "cellFormId": actor["cellFormId"],
                 "referenceFormId": actor["reference"]["formId"],
                 "baseFormId": actor["reference"]["baseFormId"],
                 "scene": actor["manifest"],

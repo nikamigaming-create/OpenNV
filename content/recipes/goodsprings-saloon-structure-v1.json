@@ -15,8 +15,10 @@
   },
   "actorRecipes": [
     "goodsprings-trudy-actor-v1",
-    "goodsprings-settler-04-actor-v1"
+    "goodsprings-settler-04-actor-v1",
+    "goodsprings-sunny-smiles-actor-v1"
   ],
+  "linkedExteriorRecipe": "goodsprings-saloon-exterior-v1",
   "lightingCalibration": {
     "ambientEnergy": 1.4,
     "omniEnergyScale": 2.0,

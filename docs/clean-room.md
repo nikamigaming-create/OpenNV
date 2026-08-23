@@ -35,8 +35,9 @@ It is extracted directly from `Fallout - Meshes.bsa`, SHA-256
 without a third-party engine or pre-generated asset cache.
 The direct exporter produces one glTF surface with 106 vertices, 133 triangles,
 normals, tangents, UV0, vertex colors, texture-slot identities, and material
-metadata. Its Havok blocks are inventoried and explicitly reported as not
-exported. Godot Forward+ loads the result and independently validates the glTF
+metadata. Supported static `bhkMoppBvTreeShape -> bhkPackedNiTriStripsShape`
+bodies are exported separately with ordered body/subshape material and filter
+metadata; unsupported trees fail atomically. Godot Forward+ loads the result and independently validates the glTF
 and binary-buffer hashes from the sidecar.
 
 This proves only static geometry transport. It is not a rendering-parity claim.
@@ -47,11 +48,14 @@ The next contract directly scans `FalloutNV.esm`, SHA-256
 `50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1`,
 and selects `GSProspectorSaloonInterior` through a committed recipe. CELL group
 ownership, REFR NAME/DATA, base MODL, XCLL, LIGH, and incoming XTEL fields
-produce a neutral cell-scene manifest. The playable recipe exports 154 visible/
-held NIFs, places 348 references, binds 266 textures and 339 materials, exposes 97
-pickups and five containers, and places 24 authored lights. Godot verifies every artifact,
-derives the spawn from XTEL, and runs floor and open-door collision rays. See the retained
+produce a neutral cell-scene manifest. The playable recipe exports 209 interior/
+exterior assets, places 454 references, binds 363 textures and 439 materials,
+and places 27 authored lights. The exterior adds decoded LAND height, normals,
+vertex colors, four base layers, and 24 alpha layers. Godot verifies every
+artifact, aligns reciprocal door planes, and proves ray and player-capsule
+traversal through the open portal. See the retained
 [cell-contract evidence](evidence/fnv-esm-cell-contract.md).
 
-This is not a general ESM, world, collision, or gameplay compatibility claim.
-It is a playable, persistence-gated Goodsprings sandbox contract.
+This is not a general ESM, world-streaming, weather, SpeedTree, Havok, or
+gameplay compatibility claim. It is a playable, persistence-gated saloon plus
+one bounded exterior CELL contract.

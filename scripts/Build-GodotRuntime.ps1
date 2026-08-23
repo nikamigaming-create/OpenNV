@@ -160,20 +160,31 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         $owned = Get-Content -Raw -LiteralPath $ownedReport | ConvertFrom-Json
         if ($owned.schema -ne "opennv-godot-cell/v1" -or
             $owned.status -ne "pass" -or
-            [int]$owned.assets -lt 154 -or
-            [int]$owned.textures -lt 266 -or
-            [int]$owned.materialBindings -lt 339 -or
-            [int]$owned.references -lt 348 -or
-            [int]$owned.doors -lt 1 -or
-            [int]$owned.authoredLights -lt 24 -or
-            [int]$owned.actors -ne 1 -or
-            [int]$owned.collisionMeshes -lt 348 -or
+            [int]$owned.assets -lt 209 -or
+            [int]$owned.textures -lt 363 -or
+            [int]$owned.materialBindings -lt 439 -or
+            [int]$owned.references -lt 454 -or
+            [int]$owned.doors -lt 9 -or
+            [int]$owned.authoredLights -lt 27 -or
+            [int]$owned.actors -ne 3 -or
+            [int]$owned.collisionMeshes -lt 306 -or
             [int]$owned.surfaces -lt 1 -or
             [int]$owned.vertices -lt 3 -or
             -not [bool]$owned.doorTraversal.floorHit -or
             [Math]::Abs([double]$owned.doorTraversal.floorY) -gt 0.2 -or
             -not [bool]$owned.doorTraversal.closedHitDoor -or
-            [bool]$owned.doorTraversal.openHit) {
+            [bool]$owned.doorTraversal.openHit -or
+            -not [bool]$owned.doorTraversal.projectilePortalClear -or
+            -not [bool]$owned.doorTraversal.capsuleWalkForward -or
+            -not [bool]$owned.doorTraversal.capsuleWalkBackward -or
+            -not [bool]$owned.doorTraversal.capsuleWalkThrough -or
+            [int]$owned.doorTraversal.linkedCells -ne 1 -or
+            [double]$owned.doorTraversal.maximumPortalAlignmentErrorMeters -gt 0.0001 -or
+            -not [bool]$owned.connectedAuthoredSpaces -or
+            @($owned.linkedCells).Count -ne 1 -or
+            @($owned.portals).Count -ne 1 -or
+            -not [bool]$owned.portals[0].reciprocal -or
+            [double]$owned.portals[0].normalAgreement -lt 0.999) {
             throw "Packaged OpenNV owned-data report is invalid."
         }
 
@@ -196,7 +207,9 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             $reused.status -ne "pass" -or
             $reused.cellFormId -ne $owned.cellFormId -or
             -not [bool]$reused.doorTraversal.closedHitDoor -or
-            [bool]$reused.doorTraversal.openHit) {
+            [bool]$reused.doorTraversal.openHit -or
+            -not [bool]$reused.doorTraversal.capsuleWalkThrough -or
+            @($reused.linkedCells).Count -ne 1) {
             throw "Packaged OpenNV persistent-cache report is invalid."
         }
 
@@ -217,7 +230,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         $vrLayout = Get-Content -Raw -LiteralPath $vrLayoutReport | ConvertFrom-Json
         if ($vrLayout.schema -ne "opennv-godot-cell/v1" -or
             $vrLayout.status -ne "pass" -or
-            [int]$vrLayout.actors -ne 1 -or
+            [int]$vrLayout.actors -ne 3 -or
             -not [bool]$vrLayout.xrPresentation.heldWeapon -or
             -not [bool]$vrLayout.xrPresentation.muzzleFeedback -or
             -not [bool]$vrLayout.xrPresentation.wristHud -or
@@ -257,7 +270,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             [int]$gameplay.session.ammoInMagazine -ne 5 -or
             [int]$gameplay.session.shotsFired -ne 1 -or
             [int]$gameplay.session.emptiedContainers -ne 1 -or
-            [int]$gameplay.session.openDoors -ne 1) {
+            [int]$gameplay.session.openDoors -ne 2) {
             throw "Packaged OpenNV playable-route report is invalid."
         }
 

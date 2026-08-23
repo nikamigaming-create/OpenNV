@@ -1,0 +1,66 @@
+{
+  "schema": "opennv-exterior-recipe/v1",
+  "id": "goodsprings-saloon-exterior-v1",
+  "master": {
+    "file": "FalloutNV.esm",
+    "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1"
+  },
+  "editorId": "WastelandNV[-17,0]GoodspringsSaloonExterior",
+  "worldspaceFormId": "000da726",
+  "cellFormId": "000daeb9",
+  "persistentCellFormId": "000846ea",
+  "entryDoorReferenceFormId": "0010636f",
+  "reciprocalDoorReferenceFormId": "0010618e",
+  "actorRecipes": [
+    "goodsprings-easy-pete-actor-v1"
+  ],
+  "environment": {
+    "source": "NVDefaultClimate clear-day bounded presentation; retail weather-time parity unproven",
+    "ambientColor": [0.46, 0.43, 0.39],
+    "directionalColor": [1.0, 0.86, 0.70],
+    "fogColor": [0.58, 0.52, 0.45],
+    "fogNearGameUnits": 4096.0,
+    "fogFarGameUnits": 65536.0,
+    "fogPower": 1.0,
+    "directionalRotationDegrees": [-48.0, -32.0],
+    "directionalFade": 1.0,
+    "calibration": {
+      "ambientEnergy": 0.9,
+      "omniEnergyScale": 1.0,
+      "directionalEnergyScale": 1.2
+    }
+  },
+  "selection": {
+    "modelPrefixes": [],
+    "includeBaseRecordTypes": [
+      "ACTI",
+      "ALCH",
+      "AMMO",
+      "ARMO",
+      "BOOK",
+      "CONT",
+      "DOOR",
+      "FURN",
+      "IMOD",
+      "KEYM",
+      "LIGH",
+      "MISC",
+      "MSTT",
+      "NOTE",
+      "STAT",
+      "TREE",
+      "WEAP"
+    ],
+    "excludeBaseEditorIds": [
+      "AudioMarker",
+      "XMarker",
+      "XMarkerHeading"
+    ],
+    "excludeModelPrefixes": [
+      "effects\\"
+    ],
+    "yawOnly": false,
+    "allowNonYawRecordTypes": []
+  },
+  "unitsToMeters": 0.0142875
+}

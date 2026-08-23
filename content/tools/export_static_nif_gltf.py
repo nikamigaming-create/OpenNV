@@ -4,21 +4,20 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
-import os
 import struct
 import sys
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
 
 if not hasattr(time, "clock"):
     time.clock = time.perf_counter  # PyFFI 2.2.3 compatibility on Python 3.8+
 
 from pyffi.formats.nif import NifFormat  # type: ignore  # noqa: E402
+
+from gltf_io import BufferBuilder, atomic_write, compiler_sources_sha256, pack_floats, sha256_bytes
+from havok_collision_gltf import collision_contract, write_collision_gltf
 
 
 SCHEMA = "opennv-static-nif-gltf/v1"
@@ -29,10 +28,6 @@ SUPPORTED_SHAPE_PROPERTIES = {
     "NiStencilProperty",
 }
 ATTACHMENT_MARKER_NAMES = {"ProjectileNode", "ShellCasingNode"}
-
-
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def decode_text(value: object) -> str:
@@ -244,51 +239,6 @@ def shape_double_sided(shape: object) -> bool:
     )
 
 
-@dataclass
-class BufferBuilder:
-    data: bytearray = field(default_factory=bytearray)
-    views: list[dict[str, object]] = field(default_factory=list)
-    accessors: list[dict[str, object]] = field(default_factory=list)
-
-    def add(
-        self,
-        payload: bytes,
-        *,
-        component_type: int,
-        count: int,
-        value_type: str,
-        target: int | None,
-        minimum: list[float] | None = None,
-        maximum: list[float] | None = None,
-    ) -> int:
-        while len(self.data) % 4:
-            self.data.append(0)
-        offset = len(self.data)
-        self.data.extend(payload)
-        view_index = len(self.views)
-        view: dict[str, object] = {"buffer": 0, "byteOffset": offset, "byteLength": len(payload)}
-        if target is not None:
-            view["target"] = target
-        self.views.append(view)
-        accessor: dict[str, object] = {
-            "bufferView": view_index,
-            "componentType": component_type,
-            "count": count,
-            "type": value_type,
-        }
-        if minimum is not None:
-            accessor["min"] = minimum
-        if maximum is not None:
-            accessor["max"] = maximum
-        self.accessors.append(accessor)
-        return len(self.accessors) - 1
-
-
-def pack_floats(rows: Iterable[Iterable[float]]) -> bytes:
-    flat = [float(value) for row in rows for value in row]
-    return struct.pack(f"<{len(flat)}f", *flat)
-
-
 def generate_tangents(
     positions: list[tuple[float, float, float]],
     normals: list[tuple[float, float, float]],
@@ -344,18 +294,17 @@ def generate_tangents(
     return result
 
 
-def atomic_write(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_bytes(data)
-    os.replace(temporary, path)
-
-
 def compiler_provenance() -> dict[str, str]:
     if getattr(sys, "frozen", False):
         executable = Path(sys.executable)
         return {"name": "OpenNV.Content packaged direct exporter v1", "sha256": sha256_bytes(executable.read_bytes())}
-    return {"name": GENERATOR, "sha256": sha256_bytes(Path(__file__).read_bytes())}
+    root = Path(__file__).resolve().parent
+    return {
+        "name": GENERATOR,
+        "sha256": compiler_sources_sha256(
+            [Path(__file__), root / "gltf_io.py", root / "havok_collision_gltf.py"]
+        ),
+    }
 
 
 def export_static_nif(
@@ -555,6 +504,24 @@ def export_static_nif(
     atomic_write(gltf_path, gltf_bytes)
 
     collision_types = sorted({type(block).__name__ for block in blocks if type(block).__name__.startswith("bhk")})
+    collision_bodies, collision_unsupported = collision_contract(blocks, root, block_index)
+    collision_outputs = (
+        write_collision_gltf(
+            collision_bodies,
+            gltf_path.with_name(f"{gltf_path.stem}.collision.gltf"),
+            source_hash,
+            GENERATOR,
+        )
+        if collision_bodies
+        else None
+    )
+    output_manifest = {
+        "gltf": {"file": gltf_path.name, "bytes": len(gltf_bytes), "sha256": sha256_bytes(gltf_bytes)},
+        "buffer": {"file": binary_name, "bytes": len(binary_bytes), "sha256": sha256_bytes(binary_bytes)},
+    }
+    if collision_outputs is not None:
+        output_manifest["collisionGltf"] = collision_outputs["gltf"]
+        output_manifest["collisionBuffer"] = collision_outputs["buffer"]
     sidecar = {
         "schema": SCHEMA,
         "status": "geometry-only",
@@ -567,14 +534,20 @@ def export_static_nif(
             "userVersion2": int(data.user_version_2),
         },
         "compiler": compiler_provenance(),
-        "outputs": {
-            "gltf": {"file": gltf_path.name, "bytes": len(gltf_bytes), "sha256": sha256_bytes(gltf_bytes)},
-            "buffer": {"file": binary_name, "bytes": len(binary_bytes), "sha256": sha256_bytes(binary_bytes)},
-        },
+        "outputs": output_manifest,
         "coverage": {
             "surfaces": len(surface_rows),
-            "collisionExported": False,
+            "collisionExported": bool(collision_bodies),
             "collisionBlockTypes": collision_types,
+            "collisionUnsupportedReason": collision_unsupported,
+            "collisionBodies": [
+                {
+                    **{key: value for key, value in body.items() if key not in {"positions", "triangles"}},
+                    "vertices": len(body["positions"]),
+                    "triangles": len(body["triangles"]),
+                }
+                for body in collision_bodies
+            ],
             "controllers": sorted(set(controllers)),
             "excludedEditorMarkerSurfaces": excluded_editor_markers,
         },
