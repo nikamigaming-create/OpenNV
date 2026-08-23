@@ -23,6 +23,11 @@ internal static class EnvironmentCapture
             loaded.Player.ProcessMode = Node.ProcessModeEnum.Disabled;
             var camera = loaded.Player.Camera;
             var hud = loaded.Session.GetNodeOrNull<CanvasLayer>("GameplayHud");
+            if (loaded.Player.UsesClassicDiorama)
+            {
+                await CaptureClassicDiorama(host, loaded, output, scenePath, reportPath, hud);
+                return;
+            }
             if (hud is not null)
                 hud.Visible = false;
             await WaitForRenderedFrames(host, 3);
@@ -227,6 +232,74 @@ internal static class EnvironmentCapture
         }
     }
 
+    private static async Task CaptureClassicDiorama(
+        Node3D host,
+        CellSceneLoader.LoadedCell loaded,
+        string output,
+        string scenePath,
+        string? reportPath,
+        CanvasLayer? hud)
+    {
+        await WaitForRenderedFrames(host, 5);
+        var withHud = SaveViewportPng(host, output, "classic-diorama-ui.png", 0.035, 0.05);
+        if (hud is not null)
+            hud.Visible = false;
+        await WaitForRenderedFrames(host, 3);
+        var environment = SaveViewportPng(host, output, "classic-diorama-environment.png", 0.035, 0.035);
+        var visualQualityPassed = withHud.Passed && environment.Passed;
+        var camera = loaded.Player.Camera;
+        var captureReport = new
+        {
+            schema = "opennv-classic-diorama-capture/v1",
+            status = visualQualityPassed ? "pass" : "fail",
+            renderer = "forward_plus",
+            scene = scenePath,
+            sceneSha256 = FileSha256(VerifiedGltfLoader.ResolvePath(scenePath)),
+            cellFormId = loaded.FormId,
+            cellEditorId = loaded.EditorId,
+            presentation = "classic-diorama",
+            projection = "orthogonal",
+            cameraName = camera.Name.ToString(),
+            cameraPosition = Vector(camera.GlobalPosition),
+            cameraRotationDegrees = Vector(camera.GlobalRotationDegrees),
+            orthographicSizeMeters = camera.Size,
+            framingBoundsPosition = loaded.Player.DioramaFramingBounds is Aabb bounds
+                ? Vector(bounds.Position)
+                : null,
+            framingBoundsSize = loaded.Player.DioramaFramingBounds is Aabb framing
+                ? Vector(framing.Size)
+                : null,
+            cameraFill = camera.FindChild("ClassicDioramaCameraFill", true, false) is DirectionalLight3D,
+            assets = loaded.Assets,
+            textures = loaded.Textures,
+            materialBindings = loaded.MaterialBindings,
+            references = loaded.References,
+            authoredLights = loaded.AuthoredLights,
+            collisionMeshes = loaded.CollisionMeshes,
+            windowsAppControlUsed = false,
+            foregroundActivationUsed = false,
+            foregroundInputInjected = false,
+            turnSimulationConnected = false,
+            visualTarget = "manual concept reference; not a retail acceptance oracle",
+            visualThresholds = new
+            {
+                minimumMeanLuminance = 0.035,
+                uiMinimumLuminanceDeviation = 0.05,
+                environmentMinimumLuminanceDeviation = 0.035,
+                maximumDarkFraction = 0.60,
+            },
+            files = new[] { withHud.Evidence, environment.Evidence },
+        };
+        WriteReport(Path.Combine(output, "classic-diorama-capture-report.json"), captureReport);
+        if (reportPath is not null)
+            WriteReport(reportPath, captureReport);
+        if (visualQualityPassed)
+            GD.Print($"OPENNV_CLASSIC_DIORAMA_CAPTURE_PASS output={output} files=2");
+        else
+            GD.PushError($"OPENNV_CLASSIC_DIORAMA_CAPTURE_VISUAL_FAIL output={output} files=2");
+        host.GetTree().Quit(visualQualityPassed ? 0 : 1);
+    }
+
     private static async Task WaitForRenderedFrames(Node host, int count)
     {
         for (var index = 0; index < count; index++)
@@ -237,7 +310,9 @@ internal static class EnvironmentCapture
         Node host,
         string output,
         string name,
-        double minimumMeanLuminance = 0.08)
+        double minimumMeanLuminance = 0.08,
+        double minimumLuminanceDeviation = 0.05,
+        double maximumDarkFraction = 0.60)
     {
         var path = Path.Combine(output, name);
         if (File.Exists(path))
@@ -268,9 +343,9 @@ internal static class EnvironmentCapture
             ? "unexpected-size"
             : meanLuminance < minimumMeanLuminance
                 ? "mean-luminance"
-                : luminanceDeviation < 0.05
+                : luminanceDeviation < minimumLuminanceDeviation
                     ? "luminance-deviation"
-                    : darkFraction > 0.60
+                    : darkFraction > maximumDarkFraction
                         ? "dark-fraction"
                         : null;
         using var stream = File.OpenRead(path);

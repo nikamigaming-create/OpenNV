@@ -19,6 +19,7 @@ internal partial class GameplaySession : Node
     private string _savePath = "";
     private string _cellFormId = "";
     private bool _useXrHud;
+    private bool _useClassicDioramaHud;
     private string? _equippedWeaponFormId;
     private string? _weaponAmmoFormId;
     private int _weaponDamage;
@@ -42,11 +43,18 @@ internal partial class GameplaySession : Node
         !_inventory.Values.Any(entry => entry.RecordType == "ALCH") ? 2 :
         !_doorStates.GetValueOrDefault(EntryDoorFormId) ? 3 : 4;
 
-    internal void Configure(string cellFormId, string? configuredSavePath, bool useXrHud = false)
+    internal void Configure(
+        string cellFormId,
+        string? configuredSavePath,
+        bool useXrHud = false,
+        bool useClassicDioramaHud = false)
     {
+        if (useXrHud && useClassicDioramaHud)
+            throw new ArgumentException("Classic Diorama and OpenXR HUDs are separate presentation adapters.");
         Name = "GameplaySession";
         _cellFormId = cellFormId;
         _useXrHud = useXrHud;
+        _useClassicDioramaHud = useClassicDioramaHud;
         _savePath = ResolvePath(configuredSavePath ?? "user://saves/goodsprings-sandbox-v1.json");
         Load(cellFormId);
     }
@@ -60,16 +68,23 @@ internal partial class GameplaySession : Node
         var panel = new ColorRect
         {
             Position = new Vector2(18.0f, 18.0f),
-            Size = new Vector2(520.0f, 132.0f),
+            Size = new Vector2(560.0f, _useClassicDioramaHud ? 160.0f : 132.0f),
             Color = new Color(0.015f, 0.025f, 0.02f, 0.82f),
         };
         layer.AddChild(panel);
         var labels = new VBoxContainer
         {
             Position = new Vector2(32.0f, 28.0f),
-            Size = new Vector2(490.0f, 112.0f),
+            Size = new Vector2(530.0f, _useClassicDioramaHud ? 140.0f : 112.0f),
         };
         layer.AddChild(labels);
+        if (_useClassicDioramaHud)
+        {
+            var presentation = new Label { Text = "CLASSIC DIORAMA  •  PRESENTATION PROOF" };
+            presentation.AddThemeColorOverride("font_color", new Color(0.94f, 0.78f, 0.38f));
+            presentation.AddThemeFontSizeOverride("font_size", 17);
+            labels.AddChild(presentation);
+        }
         _objectiveLabel = new Label();
         _statusLabel = new Label();
         _inventoryLabel = new Label();
@@ -79,15 +94,21 @@ internal partial class GameplaySession : Node
             label.AddThemeFontSizeOverride("font_size", 17);
             labels.AddChild(label);
         }
-        var crosshair = new Label
+        if (!_useClassicDioramaHud)
         {
-            Text = "+",
-            Position = new Vector2(635.0f, 346.0f),
-        };
-        crosshair.AddThemeColorOverride("font_color", Colors.White);
-        crosshair.AddThemeFontSizeOverride("font_size", 24);
-        layer.AddChild(crosshair);
-        RefreshHud("WASD move • E activate • Left click fire • F5 save");
+            var crosshair = new Label
+            {
+                Text = "+",
+                Position = new Vector2(635.0f, 346.0f),
+            };
+            crosshair.AddThemeColorOverride("font_color", Colors.White);
+            crosshair.AddThemeFontSizeOverride("font_size", 24);
+            layer.AddChild(crosshair);
+        }
+        RefreshHud(
+            _useClassicDioramaHud
+                ? "WASD pan • Wheel zoom • Q/E rotate 60° • Home reset • F5 save"
+                : "WASD move • E activate • Left click fire • F5 save");
     }
 
     internal void AttachXrHud(Node3D leftHand)

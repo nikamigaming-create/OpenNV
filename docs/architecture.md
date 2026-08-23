@@ -130,6 +130,14 @@ save rules. This remains bounded vertical-slice code; actor, combat, VATS, and
 quest rules may not accumulate there. No unused VR manager, empty interface, or
 speculative abstraction counts as progress.
 
+The flat adapter also owns an explicit `Classic Diorama` presentation proof.
+It uses an orthographic dimetric camera over the same loaded CELL and
+`GameplaySession`, with WASD pan, bounded mouse-wheel zoom, and discrete
+60-degree rotation. It changes no authored references, gameplay state, save
+state, collision, or asset identity. The current proof is presentation-only:
+Et Tu turns, AP, hex selection, actors, and combat are not connected yet and
+must not be inferred from the camera mode.
+
 The software OpenXR gate now proves the action map loads, the rig contains its
 required node hierarchy, world scale is one metre, physics runs at 90 Hz, the
 HUD is world-space, and the flat save schema is shared. Promotion to
@@ -175,8 +183,9 @@ input translation and presentation differ.
 | `PickupInstance.cs` | One authored pickup's identity and weapon profile | Inventory ownership |
 | `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
 | `GameplaySession.cs` | Objective, HUD, inventory, ammo, world delta, save/reload | Asset parsing |
-| `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation and firing adapters | Asset preparation or gameplay outcomes |
+| `CellPlayer.cs` | Shared first-person, Classic Diorama and OpenXR view/input adapters | Asset preparation or gameplay outcomes |
 | `RuntimeCoordinator.cs` | Startup routing, reports, and gate orchestration | UI construction or file-format parsing |
+| `LoadingScreen.cs` | Automatic verified-cache/CELL boot status and fail-visible loading UI | Content preparation, file parsing, or campaign menus |
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
 | `StaticModelSlice.cs` | Legacy one-model proof view | Cell relationships |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |

@@ -13,6 +13,12 @@
         "launchable": true,
         "status": "playable-sandbox"
       },
+      "classicDiorama": {
+        "launchable": true,
+        "status": "presentation-proof-turn-simulation-not-connected",
+        "projection": "orthogonal",
+        "cameraControls": ["pan", "zoom", "rotate-60-degrees"]
+      },
       "openxr": {
         "launchable": true,
         "status": "experimental-hardware-gate-pending",
@@ -69,6 +75,8 @@
     "calibrated-standing-xr-eye-height",
     "vr-authored-10mm-starting-loadout-and-reload",
     "world-space-xr-hud",
-    "shared-flat-xr-gameplay-save-state"
+    "shared-flat-xr-gameplay-save-state",
+    "classic-diorama-orthographic-pan-zoom-rotation",
+    "automatic-owned-data-loading-screen"
   ]
 }

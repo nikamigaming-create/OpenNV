@@ -15,6 +15,7 @@ internal static class CellSceneLoader
         string? savePath = null,
         bool useXr = false,
         bool enableXrRuntimeFeatures = false,
+        bool useClassicDiorama = false,
         string? actorScenePath = null,
         string? actorScenesManifestPath = null,
         bool proofEnableActor = false,
@@ -63,7 +64,11 @@ internal static class CellSceneLoader
             };
             parent.AddChild(root);
             var session = new GameplaySession();
-            session.Configure(cell.GetProperty("formId").GetString()!, savePath, useXr);
+            session.Configure(
+                cell.GetProperty("formId").GetString()!,
+                savePath,
+                useXr,
+                useClassicDiorama);
             parent.AddChild(session);
             if (useXr)
             {
@@ -208,14 +213,17 @@ internal static class CellSceneLoader
             }
             var spawn = source.GetProperty("spawn");
             var authoredLights = source.GetProperty("lighting").GetProperty("lights").GetArrayLength();
+            var renderBounds = WorldRenderBounds(root);
             var player = BuildView(
                 parent,
                 spawn.GetProperty("yawGodotRadians").GetSingle(),
                 source.GetProperty("lighting"),
                 unitScale,
+                renderBounds,
                 session,
                 useXr,
-                enableXrRuntimeFeatures);
+                enableXrRuntimeFeatures,
+                useClassicDiorama);
             if (useXr)
             {
                 var loadout = source.GetProperty("vr").GetProperty("startingLoadout");
@@ -263,9 +271,11 @@ internal static class CellSceneLoader
         float yaw,
         JsonElement lighting,
         float unitScale,
+        Aabb renderBounds,
         GameplaySession session,
         bool useXr,
-        bool enableXrRuntimeFeatures)
+        bool enableXrRuntimeFeatures,
+        bool useClassicDiorama)
     {
         var calibration = lighting.GetProperty("calibration");
         var environment = new Godot.Environment
@@ -319,8 +329,26 @@ internal static class CellSceneLoader
             });
         }
         var player = new CellPlayer();
-        player.Configure(yaw, session, useXr, enableXrRuntimeFeatures);
+        player.Configure(yaw, session, useXr, enableXrRuntimeFeatures, useClassicDiorama);
         parent.AddChild(player);
+        if (useClassicDiorama)
+        {
+            player.FrameClassicDiorama(renderBounds);
+            environment.AmbientLightEnergy *= 1.25f;
+            player.Camera.AddChild(new DirectionalLight3D
+            {
+                Name = "ClassicDioramaCameraFill",
+                LightColor = environment.AmbientLightColor.Lerp(Colors.White, 0.20f),
+                LightEnergy = Math.Clamp(environment.AmbientLightEnergy * 0.50f, 0.35f, 1.20f),
+                ShadowEnabled = false,
+            });
+            var cameraDistance = player.Camera.Position.Length();
+            var cellSpan = MathF.Max(renderBounds.Size.X, renderBounds.Size.Z);
+            environment.FogDepthBegin = MathF.Max(environment.FogDepthBegin, cameraDistance * 0.48f);
+            environment.FogDepthEnd = MathF.Max(
+                environment.FogDepthEnd,
+                cameraDistance + cellSpan * 1.15f);
+        }
         return player;
     }
 
@@ -330,6 +358,31 @@ internal static class CellSceneLoader
         if (values.Length != 3)
             throw new InvalidOperationException("Cell scene vector must contain three values.");
         return new Vector3(values[0], values[1], values[2]);
+    }
+
+    private static Aabb WorldRenderBounds(Node3D root)
+    {
+        var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        var meshCount = 0;
+        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        {
+            var bounds = mesh.GetAabb();
+            if (bounds.Size.LengthSquared() <= 0.0f)
+                continue;
+            foreach (var x in new[] { bounds.Position.X, bounds.End.X })
+                foreach (var y in new[] { bounds.Position.Y, bounds.End.Y })
+                    foreach (var z in new[] { bounds.Position.Z, bounds.End.Z })
+                    {
+                        var point = mesh.ToGlobal(new Vector3(x, y, z));
+                        minimum = minimum.Min(point);
+                        maximum = maximum.Max(point);
+                    }
+            meshCount++;
+        }
+        if (meshCount == 0)
+            throw new InvalidOperationException("CELL has no renderable bounds for Classic Diorama framing.");
+        return new Aabb(minimum, maximum - minimum);
     }
 
     private static Color ReadColor(JsonElement array)

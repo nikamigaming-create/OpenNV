@@ -106,6 +106,50 @@ finally {
     }
 }
 
+$dioramaReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-classic-diorama-{0}.json" -f [guid]::NewGuid().ToString("N"))
+$dioramaSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-classic-diorama-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+try {
+    $dioramaOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+        --classic-diorama-rig-proof --save-path $dioramaSave --report $dioramaReport 2>&1
+    $dioramaText = $dioramaOutput | Out-String
+    if ($LASTEXITCODE -ne 0 -or $dioramaText -notmatch "OPENNV_CLASSIC_DIORAMA_RIG_PASS" -or
+        $dioramaText -match "(?m)^ERROR:") {
+        throw "OpenNV Classic Diorama rig gate failed:`n$dioramaText"
+    }
+    $diorama = Get-Content -Raw -LiteralPath $dioramaReport | ConvertFrom-Json
+    if ($diorama.schema -ne "opennv-classic-diorama-rig/v1" -or
+        $diorama.status -ne "pass" -or
+        $diorama.presentation -ne "classic-diorama" -or
+        $diorama.simulation -ne "shared-gameplay-session" -or
+        $diorama.cameraType -ne "Camera3D" -or
+        $diorama.cameraName -ne "ClassicDioramaCamera" -or
+        $diorama.orbitName -ne "ClassicDioramaOrbit" -or
+        $diorama.projection -ne "orthogonal" -or
+        [double]$diorama.initialSizeMeters -ne 18.0 -or
+        [double]$diorama.minimumSizeMeters -ne 6.0 -or
+        [double]$diorama.maximumSizeMeters -ne 64.0 -or
+        [double]$diorama.zoomedSizeMeters -ge 18.0 -or
+        [math]::Abs([double]$diorama.yawStepDegrees - 60.0) -gt 0.001 -or
+        @($diorama.panKeys).Count -ne 4 -or
+        @($diorama.panKeys) -notcontains "W" -or
+        @($diorama.rotationKeys) -notcontains "Q" -or
+        @($diorama.rotationKeys) -notcontains "E" -or
+        $diorama.zoomInput -ne "mouse-wheel" -or
+        $diorama.resetKey -ne "Home" -or
+        $diorama.gameplaySession.schema -ne "opennv-sandbox-save/v1" -or
+        [bool]$diorama.turnSimulationConnected -or
+        -not [bool]$diorama.noRetailData) {
+        throw "OpenNV Classic Diorama rig report is invalid."
+    }
+}
+finally {
+    foreach ($temporaryPath in @($dioramaReport, $dioramaSave)) {
+        if (Test-Path -LiteralPath $temporaryPath) {
+            Remove-Item -LiteralPath $temporaryPath -Force
+        }
+    }
+}
+
 $retailModel = ""
 $retailSidecar = ""
 $temporaryCache = ""
@@ -168,6 +212,7 @@ $result = [pscustomobject][ordered]@{
     status = "pass"
     cleanRuntime = $true
     openXrRig = $true
+    classicDioramaRig = $true
     openXrHardwareValidated = $false
     syntheticSourceSha256 = [string]$fixture.sourceSha256
     retailSourceSha256 = if ($null -eq $retail) { "not-requested" } else { [string]$retail.sourceSha256 }
