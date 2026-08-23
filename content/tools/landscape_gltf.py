@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import struct
+import sys
 from pathlib import Path
 from typing import Callable
 
@@ -23,6 +24,12 @@ TILES_PER_QUADRANT = 4
 
 
 def compiler_provenance() -> dict[str, str]:
+    if getattr(sys, "frozen", False):
+        executable = Path(sys.executable)
+        return {
+            "name": "OpenNV.Content packaged direct LAND exporter v1",
+            "sha256": sha256_bytes(executable.read_bytes()),
+        }
     root = Path(__file__).resolve().parent
     return {
         "name": GENERATOR,
