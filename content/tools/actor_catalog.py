@@ -2,19 +2,34 @@
 
 from __future__ import annotations
 
+import hashlib
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 
 
 ACTOR_RECORD_TYPES = frozenset(
-    {"ACHR", "ACRE", "ARMO", "CREA", "EYES", "HAIR", "HDPT", "LVLI", "NPC_", "RACE"}
+    {
+        "ACHR",
+        "ACRE",
+        "ARMO",
+        "CREA",
+        "EYES",
+        "HAIR",
+        "HDPT",
+        "LVLC",
+        "LVLI",
+        "LVLN",
+        "NPC_",
+        "RACE",
+    }
 )
 
 FORM_ID_BYTES = 4
 NPC_ACBS_BYTES = 24
+ACTOR_TEMPLATE_FLAGS_BYTES = 2
 NPC_INVENTORY_ENTRY_BYTES = 8
 REFERENCE_TRANSFORM_BYTES = 24
 REFERENCE_SCALE_BYTES = 4
@@ -26,6 +41,8 @@ FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS = 30
 FACEGEN_SYMMETRIC_TEXTURE_FLOATS = 50
 DEFAULT_REFERENCE_SCALE = 1.0
 INITIALLY_DISABLED_RECORD_FLAG = 0x00000800
+DELETED_RECORD_FLAG = 0x00000020
+FEMALE_ACTOR_FLAG = 0x00000001
 BIPED_HAIR_SLOT_FLAG = 0x00000002
 CELL_CHILDREN_GROUP_TYPE = 6
 
@@ -42,6 +59,7 @@ class HumanoidActor:
     editor_id: str
     name: str
     skeleton_path: str | None
+    actor_flags: int
     female: bool
     race_form_id: int | None
     hair_form_id: int | None
@@ -51,6 +69,7 @@ class HumanoidActor:
     hair_color_rgba: tuple[int, int, int, int]
     inventory: tuple[ActorItem, ...]
     template_form_id: int | None
+    template_flags: int
     face_symmetric_geometry: tuple[float, ...]
     face_asymmetric_geometry: tuple[float, ...]
     face_symmetric_texture: tuple[float, ...]
@@ -132,11 +151,24 @@ class LeveledList:
 
 
 @dataclass(frozen=True)
+class LeveledActorList:
+    form_id: int
+    record_type: str
+    editor_id: str
+    entries: tuple[LeveledListEntry, ...]
+
+
+@dataclass(frozen=True)
 class CreatureActor:
     form_id: int
     editor_id: str
     name: str
     skeleton_path: str | None
+    actor_flags: int
+    model_paths: tuple[str, ...]
+    inventory: tuple[ActorItem, ...]
+    template_form_id: int | None
+    template_flags: int
 
 
 @dataclass
@@ -148,6 +180,11 @@ class ActorCatalog:
     parts: dict[int, AppearancePart]
     armor: dict[int, Armor]
     leveled_lists: dict[int, LeveledList]
+    actor_leveled_lists: dict[int, LeveledActorList] = field(default_factory=dict)
+    deleted_form_ids: dict[str, set[int]] = field(default_factory=dict)
+    record_flags: dict[str, dict[int, int]] = field(default_factory=dict)
+    record_data_sha256: dict[str, dict[int, str]] = field(default_factory=dict)
+    record_counts: dict[str, int] = field(default_factory=dict)
 
     def references_for(self, cell_form_id: int) -> list[ActorReference]:
         return [reference for reference in self.references if reference.cell_form_id == cell_form_id]
@@ -180,6 +217,18 @@ def _optional_form(values: dict[str, list[bytes]], record: Record, signature: st
     return _form_id(matches[0], record, signature) if matches else None
 
 
+def _template_flags(values: dict[str, list[bytes]], record: Record) -> int:
+    matches = values.get("EAMT", [])
+    if not matches:
+        return 0
+    if len(matches) != 1 or len(matches[0]) != ACTOR_TEMPLATE_FLAGS_BYTES:
+        raise ValueError(
+            f"EAMT must contain {ACTOR_TEMPLATE_FLAGS_BYTES} bytes in "
+            f"{record.signature} {record.form_id:08x}"
+        )
+    return struct.unpack("<H", matches[0])[0]
+
+
 def _optional_float_array(
     values: dict[str, list[bytes]],
     record: Record,
@@ -205,6 +254,7 @@ def _actor(record: Record, subrecords: list[tuple[str, bytes]]) -> HumanoidActor
         raise ValueError(
             f"NPC_ ACBS must be {NPC_ACBS_BYTES} bytes in {record.form_id:08x}"
         )
+    actor_flags = struct.unpack_from("<I", acbs[0])[0]
     race_form_id = _optional_form(values, record, "RNAM")
     models = values.get("MODL", [])
     if len(models) > 1:
@@ -228,7 +278,8 @@ def _actor(record: Record, subrecords: list[tuple[str, bytes]]) -> HumanoidActor
         _first_text(values, "EDID"),
         _first_text(values, "FULL"),
         _canonical_model(models[0]) if models else None,
-        bool(struct.unpack_from("<I", acbs[0])[0] & 1),
+        actor_flags,
+        bool(actor_flags & FEMALE_ACTOR_FLAG),
         race_form_id,
         _optional_form(values, record, "HNAM"),
         _optional_form(values, record, "ENAM"),
@@ -237,6 +288,7 @@ def _actor(record: Record, subrecords: list[tuple[str, bytes]]) -> HumanoidActor
         tuple(hair_color),
         tuple(inventory),
         _optional_form(values, record, "TPLT"),
+        _template_flags(values, record),
         _optional_float_array(values, record, "FGGS", FACEGEN_SYMMETRIC_GEOMETRY_FLOATS),
         _optional_float_array(values, record, "FGGA", FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS),
         _optional_float_array(values, record, "FGTS", FACEGEN_SYMMETRIC_TEXTURE_FLOATS),
@@ -375,16 +427,61 @@ def _leveled_list(record: Record, subrecords: list[tuple[str, bytes]]) -> Levele
     return LeveledList(record.form_id, _first_text(values, "EDID"), tuple(entries))
 
 
+def _leveled_actor_list(
+    record: Record,
+    subrecords: list[tuple[str, bytes]],
+) -> LeveledActorList:
+    item_list = _leveled_list(record, subrecords)
+    return LeveledActorList(
+        item_list.form_id,
+        record.signature,
+        item_list.editor_id,
+        item_list.entries,
+    )
+
+
+def _model_paths(data: bytes) -> tuple[str, ...]:
+    return tuple(
+        _canonical_model(value)
+        for value in data.split(b"\0")
+        if value
+    )
+
+
 def _creature(record: Record, subrecords: list[tuple[str, bytes]]) -> CreatureActor:
     values = _values(subrecords)
+    acbs = values.get("ACBS", [])
+    if len(acbs) != 1 or len(acbs[0]) != NPC_ACBS_BYTES:
+        raise ValueError(
+            f"CREA ACBS must be {NPC_ACBS_BYTES} bytes in {record.form_id:08x}"
+        )
+    actor_flags = struct.unpack_from("<I", acbs[0])[0]
     models = values.get("MODL", [])
     if len(models) > 1:
         raise ValueError(f"CREA declares multiple skeleton models in {record.form_id:08x}")
+    inventory = []
+    for data in values.get("CNTO", []):
+        if len(data) != NPC_INVENTORY_ENTRY_BYTES:
+            raise ValueError(
+                f"CREA CNTO must be {NPC_INVENTORY_ENTRY_BYTES} bytes in {record.form_id:08x}"
+            )
+        item_form_id, count = struct.unpack("<Ii", data)
+        inventory.append(ActorItem(item_form_id, count))
+    variants = tuple(
+        path
+        for data in values.get("NIFZ", [])
+        for path in _model_paths(data)
+    )
     return CreatureActor(
         record.form_id,
         _first_text(values, "EDID"),
         _first_text(values, "FULL"),
         _canonical_model(models[0]) if models else None,
+        actor_flags,
+        variants,
+        tuple(inventory),
+        _optional_form(values, record, "TPLT"),
+        _template_flags(values, record),
     )
 
 
@@ -430,6 +527,16 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
 def scan_actor_catalog(path: Path) -> ActorCatalog:
     catalog = ActorCatalog({}, {}, [], {}, {}, {}, {})
     for record in iter_plugin_records(path, ACTOR_RECORD_TYPES):
+        catalog.record_counts[record.signature] = (
+            catalog.record_counts.get(record.signature, 0) + 1
+        )
+        catalog.record_flags.setdefault(record.signature, {})[record.form_id] = record.flags
+        catalog.record_data_sha256.setdefault(record.signature, {})[
+            record.form_id
+        ] = hashlib.sha256(record.data).hexdigest()
+        if record.flags & DELETED_RECORD_FLAG:
+            catalog.deleted_form_ids.setdefault(record.signature, set()).add(record.form_id)
+            continue
         subrecords = _subrecords(record)
         if record.signature == "NPC_":
             catalog.actors[record.form_id] = _actor(record, subrecords)
@@ -447,6 +554,11 @@ def scan_actor_catalog(path: Path) -> ActorCatalog:
             catalog.armor[record.form_id] = _armor(record, subrecords)
         elif record.signature == "LVLI":
             catalog.leveled_lists[record.form_id] = _leveled_list(record, subrecords)
+        elif record.signature in {"LVLC", "LVLN"}:
+            catalog.actor_leveled_lists[record.form_id] = _leveled_actor_list(
+                record,
+                subrecords,
+            )
     return catalog
 
 

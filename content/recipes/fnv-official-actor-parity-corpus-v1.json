@@ -1,0 +1,37 @@
+{
+  "schema": "opennv-actor-parity-corpus-recipe/v1",
+  "id": "fnv-official-actor-parity-corpus-v1",
+  "scope": "Every effective NPC_, CREA, ACHR, and ACRE in Fallout: New Vegas plus all official DLC; user mods are a separate corpus.",
+  "plugins": [
+    { "file": "FalloutNV.esm" },
+    { "file": "DeadMoney.esm" },
+    { "file": "HonestHearts.esm" },
+    { "file": "OldWorldBlues.esm" },
+    { "file": "LonesomeRoad.esm" },
+    { "file": "GunRunnersArsenal.esm" },
+    { "file": "CaravanPack.esm" },
+    { "file": "ClassicPack.esm" },
+    { "file": "MercenaryPack.esm" },
+    { "file": "TribalPack.esm" }
+  ],
+  "capture": {
+    "humanoidAppearanceShots": [
+      "front-portrait",
+      "left-profile",
+      "right-profile",
+      "front-full-body",
+      "idle-motion"
+    ],
+    "creatureAppearanceShots": [
+      "front-detail",
+      "left-profile",
+      "right-profile",
+      "front-full-body",
+      "idle-motion"
+    ],
+    "placementShots": [
+      "in-cell-context",
+      "activity-motion"
+    ]
+  }
+}

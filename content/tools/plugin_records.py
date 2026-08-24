@@ -27,6 +27,8 @@ ZLIB_PRESET_DICTIONARY_FLAG = 0x20
 RAW_DEFLATE_WINDOW_BITS = -15
 SUBRECORD_HEADER_BYTES = 6
 BITS_PER_BYTE = 8
+PLUGIN_HEADER_SIGNATURE = "TES4"
+MASTER_NAME_SUBRECORD_SIGNATURE = "MAST"
 
 
 class PluginFormatError(ValueError):
@@ -197,3 +199,18 @@ def iter_subrecords(record: Record) -> Iterator[Subrecord]:
 
 def zstring(data: bytes) -> str:
     return data.split(b"\0", 1)[0].decode("cp1252", errors="strict")
+
+
+def read_plugin_masters(path: Path) -> tuple[str, ...]:
+    """Return the declared TES4 master order for one plugin."""
+
+    headers = tuple(iter_plugin_records(path, frozenset({PLUGIN_HEADER_SIGNATURE})))
+    if len(headers) != 1:
+        raise PluginFormatError(
+            f"Plugin must contain exactly one {PLUGIN_HEADER_SIGNATURE} record: {path}"
+        )
+    return tuple(
+        zstring(subrecord.data)
+        for subrecord in iter_subrecords(headers[0])
+        if subrecord.signature == MASTER_NAME_SUBRECORD_SIGNATURE
+    )

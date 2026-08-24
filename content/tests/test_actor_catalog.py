@@ -96,6 +96,7 @@ def plugin() -> bytes:
         + subrecord("LNAM", struct.pack("<f", 0.25))
         + subrecord("HCLR", bytes((28, 4, 2, 0)))
         + subrecord("CNTO", struct.pack("<Ii", 0x41, 1))
+        + subrecord("EAMT", struct.pack("<H", 0x0101))
         + subrecord("FGGS", struct.pack("<50f", *range(50)))
         + subrecord("FGGA", struct.pack("<30f", *range(30)))
         + subrecord("FGTS", struct.pack("<50f", *range(50))),
@@ -114,7 +115,10 @@ def plugin() -> bytes:
         0x70,
         subrecord("EDID", b"SyntheticCreature\0")
         + subrecord("FULL", b"Creature\0")
-        + subrecord("MODL", b"creatures/test/skeleton.nif\0"),
+        + subrecord("MODL", b"creatures/test/skeleton.nif\0")
+        + subrecord("NIFZ", b"test-base.nif\0test-extra.nif\0\0")
+        + subrecord("ACBS", struct.pack("<6I", 0x20, 0, 0, 0, 0, 0))
+        + subrecord("EAMT", struct.pack("<H", 0x0040)),
     )
     creature_reference = record(
         "ACRE",
@@ -150,6 +154,8 @@ class ActorCatalogTest(unittest.TestCase):
 
         actor = catalog.actors[0x50]
         self.assertTrue(actor.female)
+        self.assertEqual(actor.actor_flags, 1)
+        self.assertEqual(actor.template_flags, 0x0101)
         self.assertEqual(actor.skeleton_path, "characters\\_male\\skeleton.nif")
         self.assertEqual(actor.race_form_id, 0x19)
         self.assertEqual(actor.hair_form_id, 0x30)
@@ -182,6 +188,12 @@ class ActorCatalogTest(unittest.TestCase):
         self.assertTrue(reference.initially_disabled)
         self.assertEqual(references[1].record_type, "ACRE")
         self.assertEqual(catalog.creatures[0x70].name, "Creature")
+        self.assertEqual(catalog.creatures[0x70].actor_flags, 0x20)
+        self.assertEqual(catalog.creatures[0x70].template_flags, 0x0040)
+        self.assertEqual(
+            catalog.creatures[0x70].model_paths,
+            ("test-base.nif", "test-extra.nif"),
+        )
 
 
 if __name__ == "__main__":

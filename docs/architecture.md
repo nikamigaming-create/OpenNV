@@ -7,6 +7,9 @@ input, the generated cache is disposable, every cross-boundary artifact has a
 schema and hashes, and no OpenMW runtime or source code participates.
 The executable-value rules, single configuration path, and source gate are
 defined in [data and configuration accountability](data-and-configuration-accountability.md).
+The official-stack actor/template/placement graph and exact meaning of a
+whole-game visual pass are defined in
+[whole-game actor and creature parity](whole-game-actor-creature-parity.md).
 
 ```mermaid
 flowchart LR
@@ -62,6 +65,10 @@ The actor data boundary is separate from model assembly and rendering:
 flowchart LR
     Cell[CELL] -->|1:N| ActorRef[ACHR / ACRE]
     ActorRef -->|N:1 NAME| ActorBase[NPC_ / CREA]
+    ActorRef -->|N:1 possible outcomes| ActorLevel[LVLN / LVLC]
+    ActorBase -->|0:1 TPLT| ActorBase
+    ActorBase -->|0:1 TPLT| ActorLevel
+    ActorLevel -->|1:N recursive outcomes| ActorBase
     ActorBase -->|N:1| Race[RACE]
     ActorBase -->|0:1 each| Hair[HAIR]
     ActorBase -->|0:1 each| Eyes[EYES]
@@ -85,8 +92,9 @@ flowchart LR
 
 `actor_catalog.py` owns these record relationships and preserves authored
 placement/enable state; `facegen.py` owns only deterministic FaceGen math. This
-keeps record parsing independent from `prepare_actor.py`, which resolves one
-hash-pinned recipe, and `actor_gltf.py`, which owns only the skinned glTF,
+keeps record parsing independent from the whole-game load-order/review corpus,
+`prepare_actor.py`, which still resolves one hash-pinned compiled slice, and
+`actor_gltf.py`, which owns only the skinned glTF,
 material-flag, alpha, bind, and animation translation. None of those files
 creates a Godot node or claims that a rendered actor matches retail.
 
@@ -164,8 +172,13 @@ require a headset session.
 | File | Sole responsibility | Must not own |
 | --- | --- | --- |
 | `plugin_records.py` | Bounded TES4-family headers, groups, compression, subrecords | Cell or rendering semantics |
+| `plugin_stack.py` | Master-aware stable FormIDs, official load-order mapping, and source identity | Actor, cell, or rendering semantics |
 | `cell_catalog.py` | CELL, base, REFR, DATA, XTEL relationships | BSA/NIF/Godot behavior |
-| `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
+| `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, TPLT/EAMT, LVLN/LVLC, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
+| `actor_parity_graph.py` | Recursive category-source appearance variants and concrete leveled placement candidates | Binary parsing, capture, or rendering |
+| `actor_parity_records.py` | Canonical actor rows and effective override/deletion merge | Template traversal, capture, or rendering |
+| `actor_parity_corpus.py` | Official-stack composition and complete private review-ledger generation | Actor-specific fixes or parity verdicts |
+| `validate_actor_parity_corpus.py` | Corpus hashes, uniqueness, graph closure, and exact review coverage | Rendering or automatic visual approval |
 | `facegen.py` | Pure EGM/EGT morph and retail skin/body texture composition primitives | Record selection or runtime nodes |
 | `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance | Record selection, placement, or runtime behavior |
 | `first_person_rig.py` | Hash-verified legal left/right first-person hand artifacts plus skeleton/pose/frame contract | Runtime tracking or weapon behavior |
@@ -257,14 +270,18 @@ HMD-pivot snap turn, controller activation/fire/reload/save, haptics, world-spac
 HUD, supported-floor eye-height calibration, simulator acceptance, and explicit
 launcher routing. `hardwareHeadsetValidated` remains false.
 
-Implemented: direct humanoid record relationships, deterministic FaceGen
-geometry/texture primitives, and a hash-verified one-to-many actor cache. The
+Implemented: master-aware official load-order identity, effective override and
+deletion merge, recursive humanoid/creature template and leveled-list
+relationships, complete private review ledgers, deterministic FaceGen
+geometry/texture primitives, and a hash-verified one-to-many Goodsprings actor
+cache. The
 ordinary legal installer prepares the world actor set and loads the authored
 enabled Goodsprings settler, Sunny Smiles, and exterior Easy Pete at their ACHR
 placements. Initially disabled Trudy remains out
 of normal gameplay until quest/enable state is implemented; an explicit proof
 override is still required for her comparison lane. Cache generation and import
-are not fidelity claims. The capture lane can consume a compact retail state contract and
+are not fidelity claims. Whole-game corpus validation proves inventory coverage,
+not visual parity. The capture lane can consume a compact retail state contract and
 apply each shot's live ACHR placement, camera/aim, vertical FOV, and `mtidle`
 phase. Projection remains explicitly provisional; current framing evidence
 favors 59.840 degrees vertical by interpreting retail 75 degrees at the 4:3
