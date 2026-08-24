@@ -36,22 +36,14 @@ def build_actor_material(
     textures: TextureLibrary,
     compiler: ContentCompilerConfiguration,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    paths = []
-    for prop in getattr(shape, "properties", []):
-        texture_set = getattr(prop, "texture_set", None)
-        if texture_set is not None:
-            paths = [
-                canonical_member_path(value) if value else ""
-                for value in (_text(texture_set.textures[index]) for index in range(len(texture_set.textures)))
-            ]
-            break
+    properties = list(getattr(shape, "properties", []))
+    paths = list(actor_texture_paths(properties))
     source_diffuse_path = paths[0] if paths else None
     diffuse_path = component.diffuse_override or source_diffuse_path
     aliases = {canonical_member_path(source): canonical_member_path(target) for source, target in component.diffuse_aliases}
     if diffuse_path in aliases:
         diffuse_path = aliases[diffuse_path]
     normal_path = paths[1] if len(paths) > 1 and paths[1] else None
-    properties = list(getattr(shape, "properties", []))
     material_property = next(
         (prop for prop in properties if isinstance(prop, NifFormat.NiMaterialProperty)),
         None,
@@ -110,6 +102,17 @@ def build_actor_material(
         "roughness": roughness,
         "roughnessSource": roughness_source,
     }
+
+
+def actor_texture_paths(properties: list[object]) -> tuple[str, ...]:
+    for prop in properties:
+        texture_set = getattr(prop, "texture_set", None)
+        if texture_set is not None:
+            return tuple(
+                canonical_member_path(value) if value else ""
+                for value in (_text(texture_set.textures[index]) for index in range(len(texture_set.textures)))
+            )
+    return ()
 
 
 def actor_base_color_factor(

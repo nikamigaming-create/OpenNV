@@ -36,6 +36,7 @@ from gltf_io import (
 from facegen import apply_geometry_morphs, repair_facegen_nif_uv_flag
 from texture_pipeline import decode_dds
 from actor_material import (
+    actor_texture_paths,
     actor_vertex_colors_enabled,
     build_actor_material as _material,
 )
@@ -231,6 +232,16 @@ def export_actor_gltf(
             repairs = repaired.uv_flag_offsets
         document = _read_nif(payload)
         component_root = document.roots[0]
+        unsupported_geometry = _unsupported_actor_geometry(document)
+        if unsupported_geometry:
+            rendered = ", ".join(
+                f"{geometry_type}:{name!r}"
+                for geometry_type, name in unsupported_geometry
+            )
+            raise ValueError(
+                f"Actor component {component.role} contains unsupported render geometry "
+                f"[{rendered}] in {component.model_path}; exact translation is required"
+            )
         rigid_attachment_node, rigid_attachment_source = _rigid_attachment(
             document,
             component_root,
@@ -391,6 +402,15 @@ def export_actor_gltf(
     return sidecar
 
 
+def _unsupported_actor_geometry(document: object) -> tuple[tuple[str, str], ...]:
+    supported = (NifFormat.NiTriShape, NifFormat.NiTriStrips)
+    return tuple(
+        (type(block).__name__, _text(block.name))
+        for block in document.get_global_iterator()
+        if isinstance(block, NifFormat.NiGeometry) and not isinstance(block, supported)
+    )
+
+
 def _append_skeleton_nodes(
     node: object,
     parent_index: int,
@@ -472,8 +492,16 @@ def _append_shape(
 ) -> tuple[int, int | None, dict[str, object]]:
     mesh = shape.data
     vertex_count = len(mesh.vertices)
-    if vertex_count == 0 or not mesh.uv_sets:
-        raise ValueError(f"Actor shape lacks vertices or UVs: {_text(shape.name)}")
+    if vertex_count == 0:
+        raise ValueError(f"Actor shape has no vertices: {_text(shape.name)}")
+    properties = list(getattr(shape, "properties", []))
+    texture_paths = actor_texture_paths(properties)
+    generated_texture = component.generated_diffuse is not None or bool(
+        component.generated_diffuse_by_source
+    )
+    requires_uv = any(texture_paths) or component.diffuse_override is not None or generated_texture
+    if not mesh.uv_sets and requires_uv:
+        raise ValueError(f"Textured actor shape has no UV0: {_text(shape.name)}")
     raw_positions = [(float(value.x), float(value.y), float(value.z)) for value in mesh.vertices]
     morphed = False
     if component.egm_payload is not None:
@@ -496,6 +524,8 @@ def _append_shape(
     triangles = [tuple(int(index) for index in triangle) for triangle in mesh.get_triangles()]
     if not triangles:
         raise ValueError(f"Actor shape has no triangles: {_text(shape.name)}")
+    if not morphed and len(mesh.normals) != vertex_count:
+        raise ValueError(f"Actor shape has incomplete normals: {_text(shape.name)}")
     normals = _recompute_normals(positions, triangles) if morphed else [
         (
             _transform_direction(
@@ -507,8 +537,6 @@ def _append_shape(
         )
         for value in mesh.normals
     ]
-    uvs = [(float(value.u), float(value.v)) for value in mesh.uv_sets[0]]
-    tangents = generate_tangents(positions, normals, uvs, triangles)
     attributes: dict[str, int] = {
         "POSITION": builder.add(
             pack_floats(positions),
@@ -522,14 +550,22 @@ def _append_shape(
         "NORMAL": builder.add(
             pack_floats(normals), component_type=GL_FLOAT, count=vertex_count, value_type="VEC3", target=GL_ARRAY_BUFFER
         ),
-        "TANGENT": builder.add(
-            pack_floats(tangents), component_type=GL_FLOAT, count=vertex_count, value_type="VEC4", target=GL_ARRAY_BUFFER
-        ),
-        "TEXCOORD_0": builder.add(
-            pack_floats(uvs), component_type=GL_FLOAT, count=vertex_count, value_type="VEC2", target=GL_ARRAY_BUFFER
-        ),
     }
-    properties = list(getattr(shape, "properties", []))
+    tangent_source = "absent"
+    if mesh.uv_sets:
+        uvs = [(float(value.u), float(value.v)) for value in mesh.uv_sets[0]]
+        if len(uvs) != vertex_count:
+            raise ValueError(f"Actor shape has incomplete UV0: {_text(shape.name)}")
+        tangents = generate_tangents(positions, normals, uvs, triangles)
+        attributes["TANGENT"] = builder.add(
+            pack_floats(tangents), component_type=GL_FLOAT, count=vertex_count,
+            value_type="VEC4", target=GL_ARRAY_BUFFER,
+        )
+        attributes["TEXCOORD_0"] = builder.add(
+            pack_floats(uvs), component_type=GL_FLOAT, count=vertex_count,
+            value_type="VEC2", target=GL_ARRAY_BUFFER,
+        )
+        tangent_source = "generated-uv-triangle"
     vertex_colors_enabled = actor_vertex_colors_enabled(properties)
     if vertex_colors_enabled:
         if len(mesh.vertex_colors) != vertex_count:
@@ -585,6 +621,8 @@ def _append_shape(
         "shape": _text(shape.name),
         "vertices": vertex_count,
         "triangles": len(triangles),
+        "uvSets": len(mesh.uv_sets),
+        "tangentSource": tangent_source,
         "morphed": morphed,
         "skinned": skin_index is not None,
         "attachmentSource": "nif-skin" if skin_index is not None else None,

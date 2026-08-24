@@ -14,12 +14,14 @@ from actor_gltf import (  # noqa: E402
     _multiply,
     _quadratic_vector_keys,
     _rigid_attachment,
+    _unsupported_actor_geometry,
     actor_animation_translations,
 )
 from actor_material import (  # noqa: E402
     actor_alpha_contract,
     actor_base_color_factor,
     actor_roughness,
+    actor_texture_paths,
     actor_vertex_colors_enabled,
 )
 from runtime_configuration import load_runtime_configuration  # noqa: E402
@@ -87,6 +89,22 @@ class ActorGltfTest(unittest.TestCase):
         self.assertEqual(
             actor_roughness(material, load_runtime_configuration().content_compiler),
             (1.0, "ni-material-zero-specular"),
+        )
+
+    def test_legacy_material_only_shape_has_no_texture_requirement(self):
+        self.assertEqual(actor_texture_paths([NifFormat.NiMaterialProperty()]), ())
+
+    def test_bethesda_texture_stages_preserve_empty_slots(self):
+        shader = NifFormat.BSShaderPPLightingProperty()
+        shader.texture_set = NifFormat.BSShaderTextureSet()
+        shader.texture_set.num_textures = 3
+        shader.texture_set.textures.update_size()
+        shader.texture_set.textures[0] = b"textures\\actor\\body.dds"
+        shader.texture_set.textures[1] = b""
+        shader.texture_set.textures[2] = b"textures\\actor\\body_g.dds"
+        self.assertEqual(
+            actor_texture_paths([shader]),
+            ("textures\\actor\\body.dds", "", "textures\\actor\\body_g.dds"),
         )
 
     def test_retail_hair_blends_while_outfit_alpha_tests(self):
@@ -216,6 +234,22 @@ class ActorGltfTest(unittest.TestCase):
                 "Bip01",
             ),
             ("Bip01 Head", "nif-prn-skeleton-node"),
+        )
+
+    def test_particle_geometry_is_an_explicit_actor_capability_gap(self):
+        particle = NifFormat.NiParticleSystem()
+        particle.name = b"PCloud02Smoke"
+        triangle = NifFormat.NiTriShape()
+        triangle.name = b"Body"
+
+        class Document:
+            @staticmethod
+            def get_global_iterator():
+                return (particle, triangle)
+
+        self.assertEqual(
+            _unsupported_actor_geometry(Document()),
+            (("NiParticleSystem", "PCloud02Smoke"),),
         )
 
 

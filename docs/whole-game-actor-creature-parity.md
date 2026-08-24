@@ -163,6 +163,15 @@ evidence, 8,659 appearances and every placement are still missing evidence,
 zero rows have been human-reviewed, and zero rows pass. Unknown or duplicate
 reports are rejected instead of being silently counted.
 
+The fresh retail queue at
+`D:\Builds\OpenNV-actor-retail-coverage-surface-v4-20260824-r3` starts from no
+inherited credit. Its first checkpoint contains one complete classified outcome,
+8,659 pending outcomes, zero incomplete-appearance attempts, and zero capture
+errors. The first row is the Dead Money ghost. Its owned-data compile remains
+pending because the authored model stack contains `NiParticleSystem` geometry;
+the generic glTF path now rejects that omission explicitly. A ghost scene without
+its breathing and leg-spray systems is not accepted as a complete rendition.
+
 ## Execution order
 
 1. Lock the representative contract: exact surface projection, component
