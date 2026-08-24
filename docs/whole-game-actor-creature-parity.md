@@ -69,9 +69,12 @@ erDiagram
 The stable key is `owner plugin + 24-bit object ID`; the high byte in an ESM
 is plugin-local and is never used as global identity. `plugin_stack.py` maps
 each local master slot through the declared `MAST` order, then the configured
-official load order. Later overrides replace earlier revisions and deleted
-records become tombstones. This prevents DLC records from being double-counted
-or attached to the wrong base, cell, race, item, or template.
+official load order observed in retail FalloutNV 1.4.0.525. Every retail
+capture retains `runtime-plugin-stack` telemetry and rejects a different order;
+configured file order alone is not runtime evidence. Later overrides replace
+earlier revisions and deleted records become tombstones. This prevents DLC
+records from being double-counted or attached to the wrong base, cell, race,
+item, or template.
 
 `EAMT`, not trailing `ACBS` bytes, owns the ten independent template-category
 flags: traits, stats, factions, actor effects, AI data, AI packages, model,
