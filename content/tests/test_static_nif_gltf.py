@@ -33,6 +33,7 @@ from export_static_nif_gltf import (  # noqa: E402
 from runtime_configuration import load_runtime_configuration  # noqa: E402
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
 from gltf_io import compiler_sources_sha256  # noqa: E402
+from havok_collision_gltf import dynamic_physics_contract  # noqa: E402
 from texture_pipeline import decode_dds, decode_dds_cubemap  # noqa: E402
 
 
@@ -97,6 +98,52 @@ def write_synthetic_nif(path: Path) -> None:
 
 
 class StaticNifGltfTest(unittest.TestCase):
+    def test_dynamic_convex_body_retains_authored_physics_and_local_shape(self) -> None:
+        root = NifFormat.NiNode()
+        root.name = "Root"
+        target = NifFormat.NiNode()
+        target.name = "PoolBall"
+        root.add_child(target)
+        collision = NifFormat.bhkCollisionObject()
+        collision.target = target
+        target.collision_object = collision
+        body = NifFormat.bhkRigidBody()
+        collision.body = body
+        body.mass = 0.45
+        body.friction = 0.5
+        body.restitution = 0.4
+        body.linear_damping = 0.1
+        body.angular_damping = 0.05
+        body.translation.x = 12.0
+        shape = NifFormat.bhkConvexVerticesShape()
+        shape.num_vertices = 4
+        shape.vertices.update_size()
+        for vertex, values in zip(
+            shape.vertices,
+            ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (-1.0, -1.0, -1.0)),
+        ):
+            vertex.x, vertex.y, vertex.z = values
+        body.shape = shape
+        blocks = [root, target, collision, body, shape]
+        bodies, unsupported = dynamic_physics_contract(
+            blocks,
+            {id(block): index for index, block in enumerate(blocks)},
+        )
+
+        self.assertEqual(unsupported, [])
+        self.assertEqual(len(bodies), 1)
+        exported = bodies[0]
+        self.assertAlmostEqual(exported["mass"], 0.45)
+        self.assertEqual(exported["sourceBodyTranslationHavokUnits"], [12.0, 0.0, 0.0])
+        self.assertEqual(
+            exported["shapeTransformPolicy"],
+            "reference-transform-authoritative;body-pose-retained-as-source-evidence",
+        )
+        self.assertEqual(
+            exported["hulls"][0]["pointsGodotGameUnits"][0],
+            (7.0, 0.0, -0.0),
+        )
+
     def test_compiler_source_hash_accounts_for_every_owned_module(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.py"
@@ -200,11 +247,11 @@ class StaticNifGltfTest(unittest.TestCase):
         )
         self.assertEqual(tangents, [(1.0, 0.0, 0.0, 1.0)] * 3)
 
-    def test_direct3d_texture_v_coordinate_is_converted_for_png(self) -> None:
+    def test_nif_texture_v_coordinate_is_preserved_for_godot_png(self) -> None:
         value = NifFormat.TexCoord()
         value.u = 0.25
         value.v = 0.125
-        self.assertEqual(texture_uv(value), (0.25, 0.875))
+        self.assertEqual(texture_uv(value), (0.25, 0.125))
 
     def test_editor_marker_surface_identity_is_explicit(self) -> None:
         self.assertTrue(is_editor_marker(b"EditorMarker:0"))

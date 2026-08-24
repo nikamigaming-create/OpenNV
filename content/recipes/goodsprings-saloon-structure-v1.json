@@ -13,6 +13,21 @@
     "ammoFormId": "00004241",
     "reserveMagazines": 1
   },
+  "poolGameplay": {
+    "mode": "open-nv-practice-v1",
+    "tableReferenceFormId": "00107d7b",
+    "playableTableModelPath": "clutter\\billiards\\pooltable.nif",
+    "playableCollisionSource": "presentation-render-triangles",
+    "cueReferenceFormId": "00107d75",
+    "cueTipEndpoint": "maximum-z",
+    "rackReferenceFormId": "00107d7a",
+    "cueBallReferenceFormId": "00107d79",
+    "objectBallReferenceFormIds": [
+      "00107d76",
+      "00107d77",
+      "00107d78"
+    ]
+  },
   "actorRecipes": [
     "goodsprings-trudy-actor-v1",
     "goodsprings-settler-04-actor-v1",

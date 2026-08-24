@@ -145,6 +145,15 @@ room-scale collision, controller actions/haptics, identical route/save results,
 and stereo-safe materials. Gameplay outcomes remain mode-independent; only
 input translation and presentation differ.
 
+The Saloon practice table follows this boundary. `PoolTableInstance` owns the
+four recipe-pinned balls, authored reset state, pocket state, cue presentation,
+and the single strike operation. `PoolBallInstance` is one hash-verified NIF
+convex rigid body. Desktop look/power and tracked OpenXR cue-tip sweeps call the
+same strike operation; `GameplaySession` serializes the resulting transforms,
+velocities, and pocket state. The software gate requires an actual ball-to-ball
+contact in both adapters. Physical headset pose, grip comfort, and haptics still
+require a headset session.
+
 ## Source ownership
 
 | File | Sole responsibility | Must not own |
@@ -158,7 +167,7 @@ input translation and presentation differ.
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
-| `havok_collision_gltf.py` | Bounded authored packed-triangle body/subshape/filter export | Runtime body policy or unsupported shape guessing |
+| `havok_collision_gltf.py` | Bounded authored packed triangles plus convex/list dynamic body, shape, mass, friction, bounce, damping and filter export | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
 | `cell_scene.py` | Recipe selection, XTEL origin, full Gamebryo-to-Godot transform/scale conversion, asset/reference/material manifest | Godot nodes or input |
 | `scene_asset_pipeline.py` | Shared NIF extraction, material bindings, interactions and data-resolved loadout artifacts | CELL selection or Godot nodes |
@@ -192,8 +201,10 @@ input translation and presentation differ.
 | `DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
 | `PickupInstance.cs` | One authored pickup's identity and weapon profile | Inventory ownership |
 | `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
-| `GameplaySession.cs` | Objective, HUD, inventory, ammo, world delta, save/reload | Asset parsing |
-| `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation and firing adapters | Asset preparation or gameplay outcomes |
+| `PoolBallInstance.cs` | One authored dynamic convex body and its persisted motion/pocket state | Table rules or input |
+| `PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
+| `GameplaySession.cs` | Objective, HUD, inventory, ammo, world delta, pool snapshots, save/reload | Asset parsing |
+| `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
 | `RuntimeCoordinator.cs` | Startup routing, reports, and gate orchestration | UI construction or file-format parsing |
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
 | `StaticModelSlice.cs` | Legacy one-model proof view | Cell relationships |
@@ -261,8 +272,8 @@ carry decoded alpha/vertex/emission/cubemap state, and hash the complete actor
 artifact chain. Runtime culling now follows each NIF's
 `NiStencilProperty`; the former recipe-wide double-sided override is removed.
 
-Not implemented: environment-map light fade and external-emittance color, non-packed
-Havok shapes/dynamics/filter policy, SpeedTree vegetation, neighboring exterior
+Not implemented: environment-map light fade and external-emittance color, Havok
+shape families beyond packed triangles and convex/list dynamics, broad filter policy, SpeedTree vegetation, neighboring exterior
 streaming, retail weather/time, visible first-person
 weapon animation, damageable actors/creatures, VATS, or full
 campaigns. There are no placeholder managers for
@@ -282,7 +293,7 @@ Next promotion order:
 2. close fixed-camera interior/exterior material, lighting, weather, and actor-pixel gates;
 3. add neighboring exterior CELL streaming and SpeedTree vegetation;
 4. promote authored packages/dialogue plus jukebox interaction/audio;
-5. extend Havok body/filter/dynamic behavior and make the pool table playable;
+5. extend Havok body/filter/dynamic behavior beyond the promoted pool slice;
 6. add damageable targets, authored flat/VR weapon presentation,
    ballistics/projectiles,
    creatures and raiders; and

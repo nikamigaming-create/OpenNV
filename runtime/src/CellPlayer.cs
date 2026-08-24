@@ -12,6 +12,9 @@ internal partial class CellPlayer : CharacterBody3D
     private XRController3D? _rightHand;
     private OpenXRRenderModelManager? _xrRenderModels;
     private Node3D? _xrWeaponMount;
+    private PoolTableInstance? _activePool;
+    private Node3D? _poolCueMount;
+    private Marker3D? _poolCueTip;
     private MeshInstance3D? _xrMuzzleFlash;
     private OmniLight3D? _xrMuzzleLight;
     private Vector3 _xrWeaponRestPosition;
@@ -34,6 +37,7 @@ internal partial class CellPlayer : CharacterBody3D
     internal OpenXRRenderModelManager? XrRenderModels => _xrRenderModels;
     internal bool HasHeldWeapon => _xrWeaponMount?.FindChild("HeldWeapon", true, false) is Node3D;
     internal bool HasMuzzleFeedback => _xrMuzzleFlash is not null && _xrMuzzleLight is not null;
+    internal bool HasHeldPoolCue => _poolCueMount is not null && _poolCueTip is not null;
     internal float DesiredEyeHeightMeters => _configuration.Xr.DesiredEyeHeightMeters;
 
     internal void Configure(
@@ -98,6 +102,7 @@ internal partial class CellPlayer : CharacterBody3D
         if (_useXr)
         {
             PollXrActions();
+            UpdateTrackedPoolCue(delta);
             UpdateXrWeaponFeedback((float)delta);
         }
     }
@@ -109,18 +114,43 @@ internal partial class CellPlayer : CharacterBody3D
         if (inputEvent is InputEventKey key && key.Pressed && !key.Echo)
         {
             if (key.PhysicalKeycode == Key.E)
-                Activate(_camera);
+            {
+                if (_activePool is null)
+                    Activate(_camera);
+                else
+                    ExitPool();
+            }
+            else if (key.PhysicalKeycode == Key.R)
+            {
+                if (_activePool is not null)
+                    _activePool.ResetAuthored();
+                else
+                    _session!.Reload();
+            }
             else if (key.PhysicalKeycode == Key.F5)
                 _session!.SaveAndNotify();
             else if (key.PhysicalKeycode == Key.Escape)
+            {
+                if (_activePool is not null)
+                    ExitPool();
                 Input.MouseMode = Input.MouseModeEnum.Visible;
+            }
         }
         else if (inputEvent is InputEventMouseButton button && button.Pressed)
         {
             if (button.ButtonIndex == MouseButton.Left)
-                _session!.Fire(_camera);
+            {
+                if (_activePool is not null)
+                    _activePool.StrikeFlat(-_camera.GlobalBasis.Z);
+                else
+                    _session!.Fire(_camera);
+            }
             else if (button.ButtonIndex == MouseButton.Right)
                 Input.MouseMode = Input.MouseModeEnum.Captured;
+            else if (_activePool is not null && button.ButtonIndex == MouseButton.WheelUp)
+                _activePool.CycleFlatPower(1);
+            else if (_activePool is not null && button.ButtonIndex == MouseButton.WheelDown)
+                _activePool.CycleFlatPower(-1);
         }
         else if (inputEvent is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
         {
@@ -137,6 +167,18 @@ internal partial class CellPlayer : CharacterBody3D
     private void Activate(Node3D aimSource)
     {
         var collider = Cast(aimSource, _configuration.Player.ActivationDistanceMeters);
+        var poolBall = Ancestor<PoolBallInstance>(collider);
+        if (poolBall is not null)
+        {
+            EnterPool(poolBall.Table);
+            return;
+        }
+        var pool = Ancestor<PoolTableInstance>(collider);
+        if (pool is not null)
+        {
+            EnterPool(pool);
+            return;
+        }
         var pickup = Ancestor<PickupInstance>(collider);
         if (pickup is not null)
         {
@@ -302,11 +344,16 @@ internal partial class CellPlayer : CharacterBody3D
 
         var activate = _rightHand.GetFloat("activate") >= _configuration.Xr.ActionThreshold;
         if (activate && !_xrActivatePressed)
-            Activate(_rightHand);
+        {
+            if (_activePool is null)
+                Activate(_rightHand);
+            else
+                ExitPool();
+        }
         _xrActivatePressed = activate;
 
         var fire = _rightHand.GetFloat("fire") >= _configuration.Xr.ActionThreshold;
-        if (fire && !_xrFirePressed && _session!.Fire(_rightHand))
+        if (_activePool is null && fire && !_xrFirePressed && _session!.Fire(_rightHand))
         {
             _xrWeaponFeedbackSeconds = _configuration.Xr.WeaponFeedbackSeconds;
             TriggerHaptic(_configuration.Xr.FireHaptic);
@@ -319,8 +366,13 @@ internal partial class CellPlayer : CharacterBody3D
         _xrSavePressed = save;
 
         var reload = _rightHand.IsButtonPressed("reload");
-        if (reload && !_xrReloadPressed && _session!.Reload())
-            TriggerHaptic(_configuration.Xr.ReloadHaptic);
+        if (reload && !_xrReloadPressed)
+        {
+            if (_activePool is not null)
+                _activePool.ResetAuthored();
+            else if (_session!.Reload())
+                TriggerHaptic(_configuration.Xr.ReloadHaptic);
+        }
         _xrReloadPressed = reload;
     }
 
@@ -369,6 +421,65 @@ internal partial class CellPlayer : CharacterBody3D
         var flashVisible = _xrWeaponFeedbackSeconds > _configuration.Xr.MuzzleFlashVisibleSeconds;
         _xrMuzzleFlash.Visible = flashVisible;
         _xrMuzzleLight.Visible = flashVisible;
+    }
+
+    private void EnterPool(PoolTableInstance table)
+    {
+        if (_activePool == table)
+            return;
+        if (_activePool is not null)
+            ExitPool();
+        _activePool = table;
+        table.SetPlayActive(true);
+        if (_xrWeaponMount is not null)
+            _xrWeaponMount.Visible = false;
+        var presentation = table.CreateCuePresentation();
+        _poolCueMount = new Node3D
+        {
+            Name = "PoolCueMount",
+            Position = (_useXr
+                ? _configuration.Pool.XrCueMountPositionMeters
+                : _configuration.Pool.DesktopCueMountPositionMeters).Vector3(),
+            RotationDegrees = (_useXr
+                ? _configuration.Pool.XrCueMountRotationDegrees
+                : _configuration.Pool.DesktopCueMountRotationDegrees).Vector3(),
+        };
+        Node3D cueParent = _useXr ? _rightHand! : _camera;
+        cueParent.AddChild(_poolCueMount);
+        presentation.Visual.Scale = Vector3.One * _configuration.World.GameUnitsToMeters;
+        _poolCueMount.AddChild(presentation.Visual);
+        _poolCueTip = new Marker3D
+        {
+            Name = "AuthoredCueTip",
+            Position = presentation.TipGodotUnits * _configuration.World.GameUnitsToMeters,
+        };
+        _poolCueMount.AddChild(_poolCueTip);
+    }
+
+    internal void EnterPoolForProof(PoolTableInstance table) => EnterPool(table);
+
+    internal void ExitPoolForProof() => ExitPool();
+
+    private void ExitPool()
+    {
+        if (_activePool is null)
+            return;
+        _activePool.SetPlayActive(false);
+        _activePool = null;
+        _poolCueMount?.QueueFree();
+        _poolCueMount = null;
+        _poolCueTip = null;
+        if (_xrWeaponMount is not null)
+            _xrWeaponMount.Visible = true;
+        _session!.Save();
+    }
+
+    private void UpdateTrackedPoolCue(double delta)
+    {
+        if (_activePool is null || _poolCueTip is null)
+            return;
+        if (_activePool.UpdateTrackedCue(_poolCueTip.GlobalPosition, _xrFirePressed, delta))
+            TriggerHaptic(_configuration.Pool.StrikeHaptic);
     }
 
     private void TriggerHaptic(HapticConfiguration haptic)

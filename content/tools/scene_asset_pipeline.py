@@ -223,6 +223,18 @@ def prepare_scene_assets(
                 "blockTypes": sidecar["coverage"]["collisionBlockTypes"],
                 "unsupportedReason": sidecar["coverage"]["collisionUnsupportedReason"],
             },
+            "physics": {
+                "enabled": bool(sidecar["coverage"]["dynamicPhysicsExported"]),
+                "source": (
+                    "NIF-authored-bhk-convex-rigid-body"
+                    if sidecar["coverage"]["dynamicPhysicsExported"]
+                    else "unsupported-or-absent"
+                ),
+                "bodies": len(sidecar["coverage"]["dynamicPhysicsBodies"]),
+                "unsupportedReasons": sidecar["coverage"][
+                    "dynamicPhysicsUnsupportedReasons"
+                ],
+            },
         }
         asset_sidecars[model_path] = sidecar
 

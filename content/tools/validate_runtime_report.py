@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 from runtime_configuration import RuntimeConfiguration, load_runtime_configuration
@@ -13,7 +14,9 @@ from runtime_configuration import RuntimeConfiguration, load_runtime_configurati
 CELL_REPORT_SCHEMA = "opennv-godot-cell/v1"
 XR_REPORT_SCHEMA = "opennv-openxr-rig/v2"
 GAMEPLAY_REPORT_SCHEMA = "opennv-godot-playable-route/v1"
-SANDBOX_SAVE_SCHEMA = "opennv-sandbox-save/v1"
+SANDBOX_SAVE_SCHEMA = "opennv-sandbox-save/v2"
+POOL_REPORT_SCHEMA = "opennv-pool-practice/v1"
+FLOAT_COMPARISON_TOLERANCE = 1.0e-6
 
 
 def _read(path: Path) -> dict[str, object]:
@@ -250,9 +253,76 @@ def validate_gameplay_report(
     _require(int(state["openDoors"]) == int(route["expectedOpenDoors"]), "Gameplay open-door count differs")
 
 
+def validate_pool_report(
+    report: dict[str, object],
+    install_manifest_path: Path,
+    configuration: RuntimeConfiguration,
+    expected_adapter: str,
+) -> None:
+    _verify_configuration(report, configuration)
+    primary, _linked, _actors = _owned_documents(install_manifest_path)
+    pool = primary.get("poolGameplay")
+    _require(isinstance(pool, dict), "Owned cell has no pool gameplay manifest")
+    table = pool["table"]
+    balls = pool["balls"]
+    assets = {str(asset["id"]): asset for asset in primary["assets"]}
+    expected_masses = []
+    for ball in balls:
+        sidecar = _read(Path(str(assets[str(ball["authoredAssetId"])]["sidecar"])))
+        bodies = sidecar["coverage"]["dynamicPhysicsBodies"]
+        _require(len(bodies) == 1, "Owned pool ball has no unique dynamic body")
+        expected_masses.append(float(bodies[0]["mass"]))
+
+    _require(report.get("schema") == POOL_REPORT_SCHEMA, "Unexpected pool report schema")
+    _require(report.get("status") == "pass", "Pool report did not pass")
+    _require(report["cellFormId"] == primary["cell"]["formId"], "Pool CELL identity differs")
+    _require(
+        report["tableReferenceFormId"] == table["referenceFormId"],
+        "Pool table reference differs",
+    )
+    _require(
+        report["presentationModelPath"] == table["presentationModelPath"],
+        "Pool table presentation model differs",
+    )
+    _require(
+        report["gameplayCollisionSource"] == table["gameplayCollisionSource"],
+        "Pool table collision source differs",
+    )
+    _require(int(report["authoredBalls"]) == len(balls), "Pool ball count differs")
+    _require(int(report["dynamicConvexBodies"]) == len(balls), "Pool body count differs")
+    actual_masses = [float(value) for value in report["massKilograms"]]
+    _require(len(actual_masses) == len(expected_masses), "Pool mass count differs")
+    _require(
+        all(
+            math.isclose(actual, expected, abs_tol=FLOAT_COMPARISON_TOLERANCE)
+            for actual, expected in zip(sorted(actual_masses), sorted(expected_masses))
+        ),
+        "Pool masses differ from NIF bodies",
+    )
+    _require(report["inputAdapter"] == expected_adapter, "Pool input adapter differs")
+    _require(bool(report["sharedSimulation"]), "Pool simulation is not shared")
+    _require(bool(report["cueMounted"]), "Pool cue was not mounted")
+    _require(bool(report["strikeAccepted"]), "Pool strike was not accepted")
+    _require(int(report["cueBallBallCollisions"]) >= 1, "Pool ball contact is missing")
+    _require(bool(report["authoredReset"]), "Pool authored reset failed")
+    _require(not bool(report["hardwareValidated"]), "Software pool proof claimed hardware validation")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("xr", "cell", "vr-layout", "gameplay", "gameplay-reload"), required=True)
+    parser.add_argument(
+        "--mode",
+        choices=(
+            "xr",
+            "cell",
+            "vr-layout",
+            "gameplay",
+            "gameplay-reload",
+            "pool-flat",
+            "pool-xr-layout",
+        ),
+        required=True,
+    )
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--install-manifest", type=Path)
     args = parser.parse_args()
@@ -269,8 +339,17 @@ def main() -> int:
             validate_vr_layout(report, args.install_manifest, configuration)
         elif args.mode == "gameplay":
             validate_gameplay_report(report, args.install_manifest, configuration, "first-run")
-        else:
+        elif args.mode == "gameplay-reload":
             validate_gameplay_report(report, args.install_manifest, configuration, "cold-reload")
+        else:
+            validate_pool_report(
+                report,
+                args.install_manifest,
+                configuration,
+                "desktop-look-and-power"
+                if args.mode == "pool-flat"
+                else "openxr-tracked-cue-layout",
+            )
     print(f"OPENNV_RUNTIME_REPORT_PASS mode={args.mode} report={args.report.resolve()}")
     return 0
 

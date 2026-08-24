@@ -6,7 +6,8 @@ namespace OpenNV.Runtime;
 
 internal static class VerifiedGltfLoader
 {
-    private const string SidecarSchema = "opennv-static-nif-gltf/v1";
+    private const string SidecarSchemaV1 = "opennv-static-nif-gltf/v1";
+    private const string SidecarSchemaV2 = "opennv-static-nif-gltf/v2";
     private const string LandscapeSidecarSchema = "opennv-landscape-gltf/v1";
 
     internal static LoadedGltf Load(string modelPath, string sidecarPath)
@@ -15,7 +16,7 @@ internal static class VerifiedGltfLoader
         using var document = JsonDocument.Parse(File.ReadAllText(sidecarFile));
         var root = document.RootElement;
         var schema = root.GetProperty("schema").GetString();
-        if (schema != SidecarSchema && schema != LandscapeSidecarSchema)
+        if (schema != SidecarSchemaV1 && schema != SidecarSchemaV2 && schema != LandscapeSidecarSchema)
             throw new InvalidOperationException($"Unexpected sidecar schema: {sidecarPath}");
         if (root.GetProperty("status").GetString() != "geometry-only")
             throw new InvalidOperationException($"Static slice requires geometry-only status: {sidecarPath}");
@@ -44,12 +45,58 @@ internal static class VerifiedGltfLoader
             collisionScene = LoadScene(collisionFile);
         }
         var compiler = root.GetProperty("compiler");
+        var dynamicBodies = ReadDynamicBodies(root);
         return new LoadedGltf(
             scene,
             collisionScene,
+            dynamicBodies,
             root.GetProperty("source").GetProperty("sha256").GetString()!,
             compiler.GetProperty("name").GetString()!,
             compiler.GetProperty("sha256").GetString()!);
+    }
+
+    private static IReadOnlyList<DynamicBodyContract> ReadDynamicBodies(JsonElement root)
+    {
+        var coverage = root.GetProperty("coverage");
+        if (!coverage.TryGetProperty("dynamicPhysicsBodies", out var bodies))
+            return Array.Empty<DynamicBodyContract>();
+        return bodies.EnumerateArray().Select(body => new DynamicBodyContract(
+            body.GetProperty("targetName").GetString()!,
+            body.GetProperty("shapeType").GetString()!,
+            body.GetProperty("shapeTransformPolicy").GetString()!,
+            ReadVector3(body.GetProperty("sourceBodyTranslationHavokUnits")),
+            ReadQuaternion(body.GetProperty("sourceBodyRotation")),
+            body.GetProperty("mass").GetSingle(),
+            body.GetProperty("friction").GetSingle(),
+            body.GetProperty("restitution").GetSingle(),
+            body.GetProperty("linearDamping").GetSingle(),
+            body.GetProperty("angularDamping").GetSingle(),
+            body.GetProperty("motionSystem").GetInt32(),
+            body.GetProperty("qualityType").GetInt32(),
+            body.GetProperty("layer").GetInt32(),
+            body.GetProperty("hulls").EnumerateArray().Select(hull => new ConvexHullContract(
+                hull.GetProperty("radiusGameUnits").GetSingle(),
+                hull.GetProperty("pointsGodotGameUnits").EnumerateArray()
+                    .Select(ReadVector3)
+                    .ToArray()))
+                .ToArray()))
+            .ToArray();
+    }
+
+    private static Vector3 ReadVector3(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != 3)
+            throw new InvalidOperationException("Dynamic physics vector must contain three values.");
+        return new Vector3(values[0], values[1], values[2]);
+    }
+
+    private static Quaternion ReadQuaternion(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != 4)
+            throw new InvalidOperationException("Dynamic physics quaternion must contain four values.");
+        return new Quaternion(values[0], values[1], values[2], values[3]);
     }
 
     private static Node3D LoadScene(string modelFile)
@@ -79,7 +126,28 @@ internal static class VerifiedGltfLoader
     internal readonly record struct LoadedGltf(
         Node3D Scene,
         Node3D? CollisionScene,
+        IReadOnlyList<DynamicBodyContract> DynamicPhysicsBodies,
         string SourceSha256,
         string CompilerName,
         string CompilerSha256);
+
+    internal readonly record struct DynamicBodyContract(
+        string TargetName,
+        string ShapeType,
+        string ShapeTransformPolicy,
+        Vector3 SourceBodyTranslationHavokUnits,
+        Quaternion SourceBodyRotation,
+        float Mass,
+        float Friction,
+        float Restitution,
+        float LinearDamping,
+        float AngularDamping,
+        int MotionSystem,
+        int QualityType,
+        int Layer,
+        IReadOnlyList<ConvexHullContract> Hulls);
+
+    internal readonly record struct ConvexHullContract(
+        float RadiusGameUnits,
+        IReadOnlyList<Vector3> PointsGodotGameUnits);
 }

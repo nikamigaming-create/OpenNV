@@ -54,6 +54,7 @@
     "placed-ligh-color-radius-intensity",
     "xtel-data-derived-spawn",
     "authored-bhk-packed-static-collision",
+    "authored-bhk-convex-dynamic-bodies",
     "land-height-and-layer-import",
     "reciprocal-xtel-interior-exterior-link",
     "walk-and-fire-through-open-door",
@@ -73,6 +74,9 @@
     "vr-authored-10mm-starting-loadout-and-reload",
     "world-space-xr-hud",
     "shared-flat-xr-gameplay-save-state",
+    "intact-retail-pool-table-practice-extension",
+    "shared-flat-openxr-pool-simulation",
+    "persistent-pool-ball-motion-and-pocket-state",
     "retail-actor-set-sunny-settler-easy-pete"
   ]
 }

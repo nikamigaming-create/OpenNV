@@ -23,6 +23,7 @@ CONFIGURATION_SECTIONS = (
     "renderer",
     "player",
     "xr",
+    "pool",
     "door",
     "hud",
     "capture",

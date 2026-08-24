@@ -96,6 +96,7 @@ finally {
 $retailModel = ""
 $retailSidecar = ""
 $temporaryCache = ""
+$poolPracticeValidated = $false
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $resolvedFalloutData = Resolve-FnvDataRoot $FalloutNewVegasData
     $temporaryCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-legal-cache-{0}" -f [guid]::NewGuid().ToString("N"))
@@ -138,6 +139,50 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
         }
     }
+
+    function Invoke-PoolPracticeGate([bool]$UseXrLayout, [string]$Label) {
+        $poolReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-pool-{0}-{1}.json" -f $Label, [guid]::NewGuid().ToString("N"))
+        $poolSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-pool-save-{0}-{1}.json" -f $Label, [guid]::NewGuid().ToString("N"))
+        try {
+            $poolArguments = @(
+                "--headless", "--xr-mode", "off", "--path", $runtimeRoot, "--",
+                "--cell-scene", ([string]$install.outputs.cellScene),
+                "--save-path", $poolSave,
+                "--pool-proof",
+                "--report", $poolReport
+            )
+            if ($UseXrLayout) { $poolArguments += "--vr-layout-proof" }
+            $poolOutput = & $Godot @poolArguments 2>&1
+            $poolText = $poolOutput | Out-String
+            if ($LASTEXITCODE -ne 0 -or
+                $poolText -notmatch "OPENNV_POOL_PRACTICE_PASS" -or
+                $poolText -match "(?m)^ERROR:") {
+                throw "OpenNV pool practice gate failed ($Label):`n$poolText"
+            }
+            $pool = Get-Content -Raw -LiteralPath $poolReport | ConvertFrom-Json
+            $expectedAdapter = if ($UseXrLayout) { "openxr-tracked-cue-layout" } else { "desktop-look-and-power" }
+            if ($pool.schema -ne "opennv-pool-practice/v1" -or
+                $pool.status -ne "pass" -or
+                $pool.inputAdapter -ne $expectedAdapter -or
+                -not [bool]$pool.sharedSimulation -or
+                -not [bool]$pool.cueMounted -or
+                -not [bool]$pool.strikeAccepted -or
+                [int]$pool.cueBallBallCollisions -lt 1 -or
+                -not [bool]$pool.authoredReset -or
+                [bool]$pool.hardwareValidated) {
+                throw "OpenNV pool practice report is invalid ($Label): $poolReport"
+            }
+        }
+        finally {
+            foreach ($path in @($poolReport, $poolSave)) {
+                if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+            }
+        }
+    }
+
+    Invoke-PoolPracticeGate -UseXrLayout $false -Label "flat"
+    Invoke-PoolPracticeGate -UseXrLayout $true -Label "xr-layout"
+    $poolPracticeValidated = $true
 }
 
 function Invoke-StaticModelGate([string]$Model, [string]$Sidecar, [string]$Label) {
@@ -177,6 +222,8 @@ $result = [pscustomobject][ordered]@{
     status = "pass"
     cleanRuntime = $true
     openXrRig = $true
+    poolFlatPractice = $poolPracticeValidated
+    poolOpenXrLayout = $poolPracticeValidated
     openXrHardwareValidated = $false
     syntheticSourceSha256 = [string]$fixture.sourceSha256
     retailSourceSha256 = if ($null -eq $retail) { "not-requested" } else { [string]$retail.sourceSha256 }

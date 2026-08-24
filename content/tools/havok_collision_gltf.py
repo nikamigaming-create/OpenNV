@@ -24,6 +24,9 @@ from gltf_io import (
 
 HAVOK_TO_GAME_UNITS = 7.0
 SCHEMA = "opennv-authored-collision-gltf/v1"
+PLACED_BODY_TRANSFORM_POLICY = (
+    "reference-transform-authoritative;body-pose-retained-as-source-evidence"
+)
 
 
 def _decode_text(value: object) -> str:
@@ -76,6 +79,105 @@ def _collision_position(
     game_y = x * target_matrix.m_12 + y * target_matrix.m_22 + z * target_matrix.m_32 + target_matrix.m_42
     game_z = x * target_matrix.m_13 + y * target_matrix.m_23 + z * target_matrix.m_33 + target_matrix.m_43
     return float(game_x), float(game_z), -float(game_y)
+
+
+def _godot_game_units(vertex: object) -> tuple[float, float, float]:
+    """Convert one Havok-local point without applying serialized body state."""
+
+    return (
+        float(vertex.x) * HAVOK_TO_GAME_UNITS,
+        float(vertex.z) * HAVOK_TO_GAME_UNITS,
+        -float(vertex.y) * HAVOK_TO_GAME_UNITS,
+    )
+
+
+def _convex_hull_contract(
+    shape: object,
+    block_index: dict[int, int],
+) -> dict[str, object] | None:
+    if not isinstance(shape, NifFormat.bhkConvexVerticesShape):
+        return None
+    points = [_godot_game_units(vertex) for vertex in shape.vertices]
+    if len(points) < 4:
+        return None
+    return {
+        "shapeBlock": block_index[id(shape)],
+        "radiusHavokUnits": float(shape.radius),
+        "radiusGameUnits": float(shape.radius) * HAVOK_TO_GAME_UNITS,
+        "pointsGodotGameUnits": points,
+    }
+
+
+def dynamic_physics_contract(
+    blocks: list[object],
+    block_index: dict[int, int],
+) -> tuple[list[dict[str, object]], list[str]]:
+    """Export dynamic convex bodies without inventing primitive collision."""
+
+    bodies: list[dict[str, object]] = []
+    unsupported: list[str] = []
+    for collision in (
+        block for block in blocks if isinstance(block, NifFormat.bhkCollisionObject)
+    ):
+        body = collision.body
+        if not isinstance(body, (NifFormat.bhkRigidBody, NifFormat.bhkRigidBodyT)):
+            unsupported.append(f"unsupported-body:{type(body).__name__}")
+            continue
+        if float(body.mass) <= 0.0:
+            continue
+        root_shape = body.shape
+        if isinstance(root_shape, NifFormat.bhkConvexVerticesShape):
+            shape_candidates = [root_shape]
+            shape_type = "convex-hull"
+        elif isinstance(root_shape, NifFormat.bhkListShape):
+            shape_candidates = list(root_shape.sub_shapes)
+            shape_type = "compound-convex-hulls"
+        else:
+            unsupported.append(f"unsupported-root-shape:{type(root_shape).__name__}")
+            continue
+        hulls = [
+            hull
+            for shape in shape_candidates
+            if (hull := _convex_hull_contract(shape, block_index)) is not None
+        ]
+        if len(hulls) != len(shape_candidates) or not hulls:
+            unsupported.append(f"unsupported-convex-child:{type(root_shape).__name__}")
+            continue
+        translation = body.translation
+        rotation = body.rotation
+        bodies.append(
+            {
+                "collisionObjectBlock": block_index[id(collision)],
+                "bodyBlock": block_index[id(body)],
+                "targetBlock": block_index[id(collision.target)],
+                "targetName": _decode_text(collision.target.name),
+                "shapeType": shape_type,
+                "shapeTransformPolicy": PLACED_BODY_TRANSFORM_POLICY,
+                "sourceBodyTranslationHavokUnits": [
+                    float(translation.x),
+                    float(translation.y),
+                    float(translation.z),
+                ],
+                "sourceBodyRotation": [
+                    float(rotation.x),
+                    float(rotation.y),
+                    float(rotation.z),
+                    float(rotation.w),
+                ],
+                "mass": float(body.mass),
+                "friction": float(body.friction),
+                "restitution": float(body.restitution),
+                "linearDamping": float(body.linear_damping),
+                "angularDamping": float(body.angular_damping),
+                "motionSystem": int(body.motion_system),
+                "qualityType": int(body.quality_type),
+                "layer": int(body.havok_col_filter.layer),
+                "flagsAndPartNumber": int(body.havok_col_filter.flags_and_part_number),
+                "unknownShort": int(body.havok_col_filter.unknown_short),
+                "hulls": hulls,
+            }
+        )
+    return bodies, sorted(set(unsupported))
 
 
 def collision_contract(

@@ -165,6 +165,11 @@ public partial class RuntimeCoordinator : Node3D
                 options.TryGetValue("retail-state-contract", out var retailState) ? retailState : null);
             return;
         }
+        if (options.ContainsKey("pool-proof"))
+        {
+            _ = RunPoolProof(loaded, scenePath, options);
+            return;
+        }
         if (options.ContainsKey("gameplay-proof"))
         {
             _ = RunGameplayProof(loaded, scenePath, options);
@@ -181,6 +186,133 @@ public partial class RuntimeCoordinator : Node3D
             return;
         }
         CompleteCellLoad(loaded, scenePath, options, null);
+    }
+
+    private async Task RunPoolProof(
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        try
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            if (loaded.Pools.Count != 1)
+                throw new InvalidOperationException("Pool proof requires one configured table.");
+            var table = loaded.Pools.Values.Single();
+            if (table.BallCount < 1 || table.Balls.Any(ball =>
+                    ball.Mass <= 0.0f || ball.CollisionRadiusMeters <= 0.0f))
+                throw new InvalidOperationException("Pool proof found an incomplete authored ball body.");
+            var authoredPositions = table.Balls.ToDictionary(
+                ball => ball.ReferenceFormId,
+                ball => ball.AuthoredTransform.Origin,
+                StringComparer.OrdinalIgnoreCase);
+            loaded.Player.EnterPoolForProof(table);
+            if (!loaded.Player.HasHeldPoolCue)
+                throw new InvalidOperationException("Pool proof did not mount the authored cue.");
+            var cueMounted = loaded.Player.HasHeldPoolCue;
+
+            var objectBall = table.Balls
+                .Where(ball => ball.Role == "object-ball")
+                .OrderBy(ball => new Vector2(
+                    ball.GlobalPosition.X - table.CueBall.GlobalPosition.X,
+                    ball.GlobalPosition.Z - table.CueBall.GlobalPosition.Z).LengthSquared())
+                .First();
+            var direction = objectBall.GlobalPosition - table.CueBall.GlobalPosition;
+            direction.Y = 0.0f;
+            if (direction.IsZeroApprox())
+                throw new InvalidOperationException("Authored pool-ball placement has no strike direction.");
+            direction = direction.Normalized();
+            table.CueBall.ClearBallCollisionEvidence();
+            var xrLayout = loaded.Player.UsesXr;
+            bool struck;
+            if (xrLayout)
+            {
+                var radius = table.CueBall.CollisionRadiusMeters;
+                var timestep = 1.0 / _configuration.Simulation.PhysicsTicksPerSecond;
+                table.UpdateTrackedCue(
+                    table.CueBall.GlobalPosition - direction * radius * 2.0f,
+                    true,
+                    timestep);
+                struck = table.UpdateTrackedCue(
+                    table.CueBall.GlobalPosition + direction * radius,
+                    true,
+                    timestep);
+            }
+            else
+            {
+                table.SelectMaximumFlatPowerForProof();
+                struck = table.StrikeFlat(direction);
+            }
+            if (!struck)
+                throw new InvalidOperationException("Pool input adapter did not produce a shared strike.");
+            for (var frame = 0;
+                 frame < _configuration.Pool.ProofMaximumPhysicsFrames &&
+                    table.CueBall.BallCollisionCount == 0;
+                 frame++)
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            if (table.CueBall.BallCollisionCount == 0)
+                throw new InvalidOperationException(
+                    "Pool cue ball did not collide with an authored object ball: " +
+                    $"cuePosition={table.CueBall.GlobalPosition} " +
+                    $"cueVelocity={table.CueBall.LinearVelocity} " +
+                    $"cuePocketed={table.CueBall.IsPocketed} " +
+                    $"targetPosition={objectBall.GlobalPosition} " +
+                    $"targetPocketed={objectBall.IsPocketed} " +
+                    $"travelFromAuthored={table.CueBall.GlobalPosition.DistanceTo(authoredPositions[table.CueBall.ReferenceFormId]):F4}");
+            var cueBallBallCollisions = table.CueBall.BallCollisionCount;
+            var travelled = table.CueBall.GlobalPosition.DistanceTo(
+                authoredPositions[table.CueBall.ReferenceFormId]);
+            if (Mathf.IsZeroApprox(travelled))
+                throw new InvalidOperationException("Pool cue ball did not move after the accepted strike.");
+
+            table.ResetAuthored();
+            if (table.Balls.Any(ball => !ball.GlobalPosition.IsEqualApprox(
+                    authoredPositions[ball.ReferenceFormId])))
+                throw new InvalidOperationException("Pool reset did not restore authored reference transforms.");
+            loaded.Player.ExitPoolForProof();
+            loaded.Session.Save();
+            if (!File.Exists(loaded.Session.SavePath))
+                throw new InvalidOperationException("Pool state was not persisted by the shared session.");
+
+            var report = new
+            {
+                schema = "opennv-pool-practice/v1",
+                status = "pass",
+                configurationSchema = RuntimeConfiguration.ExpectedSchema,
+                configurationSha256 = _configuration.Sha256,
+                scene = scenePath,
+                cellFormId = loaded.FormId,
+                tableReferenceFormId = table.ReferenceFormId,
+                presentationModelPath = table.PresentationModelPath,
+                gameplayCollisionSource = table.GameplayCollisionSource,
+                authoredBalls = table.BallCount,
+                dynamicConvexBodies = table.Balls.Count,
+                massKilograms = table.Balls.Select(ball => ball.Mass).ToArray(),
+                collisionRadiusMeters = table.Balls.Select(ball => ball.CollisionRadiusMeters).ToArray(),
+                inputAdapter = xrLayout ? "openxr-tracked-cue-layout" : "desktop-look-and-power",
+                configuredDesktopStrikeMetersPerSecond = table.SelectedFlatPowerMetersPerSecond,
+                sharedSimulation = true,
+                cueMounted,
+                strikeAccepted = struck,
+                cueBallBallCollisions,
+                cueBallTravelMeters = travelled,
+                authoredReset = true,
+                savePath = loaded.Session.SavePath,
+                hardwareValidated = false,
+            };
+            if (options.TryGetValue("report", out var reportPath))
+                WriteReport(reportPath, report);
+            GD.Print(
+                $"OPENNV_POOL_PRACTICE_PASS adapter={report.inputAdapter} " +
+                $"balls={table.BallCount} travel={travelled:F4}");
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_POOL_PRACTICE_FAIL {exception.Message}");
+            GetTree().Quit(1);
+        }
     }
 
     private void EnableOpenXr()
@@ -530,6 +662,14 @@ public partial class RuntimeCoordinator : Node3D
             doors = loaded.Doors,
             authoredLights = loaded.AuthoredLights,
             actors = loaded.Actors.Count,
+            poolTables = loaded.Pools.Values.Select(table => new
+            {
+                referenceFormId = table.ReferenceFormId,
+                presentationModelPath = table.PresentationModelPath,
+                gameplayCollisionSource = table.GameplayCollisionSource,
+                authoredBalls = table.BallCount,
+                pocketedBalls = table.PocketedBallCount,
+            }).ToArray(),
             linkedCells = loaded.LinkedCells.Select(linked => new
             {
                 cellFormId = linked.Content.FormId,

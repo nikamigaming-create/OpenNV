@@ -16,6 +16,8 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtimeRoot = Join-Path $repoRoot "runtime"
 $reportValidator = Join-Path $repoRoot "content\tools\validate_runtime_report.py"
 $RuntimeManifestJsonDepth = 8
+$ExportTimeoutSeconds = 60
+$MillisecondsPerSecond = 1000
 $dirty = -not [string]::IsNullOrWhiteSpace((git -C $repoRoot status --porcelain=v1 | Out-String))
 if ($dirty -and -not $AllowDirty) {
     throw "Refusing to package a dirty source tree. Commit the build inputs or pass -AllowDirty for a non-promotable local check."
@@ -38,12 +40,31 @@ if (-not $SkipTests) {
 }
 
 $binary = Join-Path $stage "OpenNV.exe"
-$exportOutput = & $Godot --headless --path $runtimeRoot --export-release "Windows Experimental" $binary 2>&1
-$exportExitCode = $LASTEXITCODE
-$exportText = $exportOutput | Out-String
-$exportText | Write-Host
-if ($exportExitCode -ne 0 -or -not (Test-Path -LiteralPath $binary -PathType Leaf)) {
-    throw "Godot Windows export failed:`n$exportText"
+$pack = [IO.Path]::ChangeExtension($binary, ".pck")
+$exportTimedOutAfterArtifacts = $false
+$exportProcess = Start-Process -FilePath $Godot `
+    -ArgumentList @(
+        "--headless",
+        "--path", ('"' + $runtimeRoot + '"'),
+        "--export-release", '"Windows Experimental"',
+        ('"' + $binary + '"')
+    ) `
+    -PassThru -WindowStyle Hidden
+if (-not $exportProcess.WaitForExit($ExportTimeoutSeconds * $MillisecondsPerSecond)) {
+    if (-not (Test-Path -LiteralPath $binary -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $pack -PathType Leaf)) {
+        Stop-Process -Id $exportProcess.Id -Force
+        throw "Godot Windows export timed out before producing the EXE/PCK artifacts."
+    }
+    Stop-Process -Id $exportProcess.Id -Force
+    $exportProcess.WaitForExit()
+    $exportTimedOutAfterArtifacts = $true
+    Write-Host "Godot export process exceeded its bounded exit wait after writing EXE/PCK; continuing to executable smoke validation."
+}
+elseif ($exportProcess.ExitCode -ne 0 -or
+    -not (Test-Path -LiteralPath $binary -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $pack -PathType Leaf)) {
+    throw "Godot Windows export failed with exit code $($exportProcess.ExitCode)."
 }
 
 $contentBuildRoot = Join-Path ([IO.Path]::GetTempPath()) ("opennv-content-package-{0}" -f [guid]::NewGuid().ToString("N"))
@@ -129,6 +150,10 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $gameplayReloadReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-gameplay-reload-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $vrLayoutSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-vr-layout-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $vrLayoutReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-vr-layout-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $poolFlatSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-pool-flat-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $poolFlatReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-pool-flat-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $poolXrSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-pool-xr-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $poolXrReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-pool-xr-{0}.json" -f [guid]::NewGuid().ToString("N"))
     try {
         $ownedProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
@@ -192,6 +217,47 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             throw "Packaged OpenNV VR presentation-layout report is invalid."
         }
 
+        $poolFlatProcess = Start-Process -FilePath $binary `
+            -ArgumentList @(
+                "--headless", "--xr-mode", "off", "--",
+                "--reuse-cache",
+                "--cache-root", ('"' + $ownedCache + '"'),
+                "--save-path", ('"' + $poolFlatSave + '"'),
+                "--pool-proof",
+                "--report", ('"' + $poolFlatReport + '"')
+            ) `
+            -PassThru -Wait -WindowStyle Hidden
+        if ($poolFlatProcess.ExitCode -ne 0 -or
+            -not (Test-Path -LiteralPath $poolFlatReport -PathType Leaf)) {
+            throw "Packaged OpenNV runtime failed its flat pool-contact gate."
+        }
+        & python $reportValidator --mode pool-flat --report $poolFlatReport `
+            --install-manifest $ownedInstallManifest
+        if ($LASTEXITCODE -ne 0) {
+            throw "Packaged OpenNV flat pool-contact report is invalid."
+        }
+
+        $poolXrProcess = Start-Process -FilePath $binary `
+            -ArgumentList @(
+                "--headless", "--xr-mode", "off", "--",
+                "--reuse-cache",
+                "--cache-root", ('"' + $ownedCache + '"'),
+                "--save-path", ('"' + $poolXrSave + '"'),
+                "--vr-layout-proof",
+                "--pool-proof",
+                "--report", ('"' + $poolXrReport + '"')
+            ) `
+            -PassThru -Wait -WindowStyle Hidden
+        if ($poolXrProcess.ExitCode -ne 0 -or
+            -not (Test-Path -LiteralPath $poolXrReport -PathType Leaf)) {
+            throw "Packaged OpenNV runtime failed its OpenXR-layout pool-contact gate."
+        }
+        & python $reportValidator --mode pool-xr-layout --report $poolXrReport `
+            --install-manifest $ownedInstallManifest
+        if ($LASTEXITCODE -ne 0) {
+            throw "Packaged OpenNV OpenXR-layout pool-contact report is invalid."
+        }
+
         $gameplayProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
                 "--headless", "--xr-mode", "off", "--",
@@ -241,7 +307,11 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             $gameplayReport,
             $gameplayReloadReport,
             $vrLayoutSave,
-            $vrLayoutReport
+            $vrLayoutReport,
+            $poolFlatSave,
+            $poolFlatReport,
+            $poolXrSave,
+            $poolXrReport
         )) {
             if (Test-Path -LiteralPath $temporaryPath) {
                 $resolvedPath = [IO.Path]::GetFullPath($temporaryPath)
@@ -268,6 +338,7 @@ $buildInfo = [ordered]@{
     sourceTreeDirty = $dirty
     godotVersion = "4.7.1-stable-mono"
     godotWindowsArchiveSha256 = "764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45"
+    exportTimedOutAfterArtifacts = $exportTimedOutAfterArtifacts
     contentToolSha256 = (Get-FileHash -LiteralPath $contentBinary -Algorithm SHA256).Hash.ToLowerInvariant()
     playable = $false
     playableSandbox = $true

@@ -12,6 +12,7 @@ internal sealed record RuntimeConfiguration(
     RendererConfiguration Renderer,
     PlayerConfiguration Player,
     XrConfiguration Xr,
+    PoolConfiguration Pool,
     DoorConfiguration Door,
     HudConfiguration Hud,
     CaptureConfiguration Capture,
@@ -74,6 +75,7 @@ internal sealed record RuntimeConfiguration(
             Xr.Contract.Provenance,
             Xr.DiagnosticRigProof.Provenance,
             Xr.DiagnosticMuzzleFlash.Provenance,
+            Pool.Provenance,
             Door.Provenance,
             Hud.Provenance,
             Capture.Provenance,
@@ -126,6 +128,24 @@ internal sealed record RuntimeConfiguration(
         RequireUnitInterval(Xr.SnapTurnResetThreshold, nameof(Xr.SnapTurnResetThreshold));
         if (Xr.SnapTurnResetThreshold >= Xr.SnapTurnActivationThreshold)
             throw new InvalidOperationException("XR snap-turn reset threshold must be lower than activation.");
+        if (Pool.FlatStrikeSpeedsMetersPerSecond.Count < 1 ||
+            Pool.FlatStrikeSpeedsMetersPerSecond.Any(value => !float.IsFinite(value) || value <= 0.0f))
+            throw new InvalidOperationException("Pool flat strike speeds must be nonempty and positive.");
+        RequireVector(Pool.DesktopCueMountPositionMeters, 3, nameof(Pool.DesktopCueMountPositionMeters));
+        RequireVector(Pool.DesktopCueMountRotationDegrees, 3, nameof(Pool.DesktopCueMountRotationDegrees));
+        RequireVector(Pool.XrCueMountPositionMeters, 3, nameof(Pool.XrCueMountPositionMeters));
+        RequireVector(Pool.XrCueMountRotationDegrees, 3, nameof(Pool.XrCueMountRotationDegrees));
+        RequirePositive(Pool.XrMinimumTipSpeedMetersPerSecond, nameof(Pool.XrMinimumTipSpeedMetersPerSecond));
+        if (Pool.XrMaximumTipSpeedMetersPerSecond <= Pool.XrMinimumTipSpeedMetersPerSecond)
+            throw new InvalidOperationException("Pool XR maximum tip speed must exceed its minimum.");
+        RequirePositive(Pool.XrStrikeCooldownSeconds, nameof(Pool.XrStrikeCooldownSeconds));
+        RequirePositive(Pool.XrImpulseScale, nameof(Pool.XrImpulseScale));
+        RequirePositive(Pool.MaximumReportedContacts, nameof(Pool.MaximumReportedContacts));
+        RequirePositive(Pool.ProofMaximumPhysicsFrames, nameof(Pool.ProofMaximumPhysicsFrames));
+        if (Pool.CollisionLayer == 0 || Pool.CollisionMask == 0)
+            throw new InvalidOperationException("Pool collision layer and mask must be nonzero.");
+        RequireUnitInterval((float)Pool.StrikeHaptic.Amplitude, nameof(Pool.StrikeHaptic.Amplitude));
+        RequirePositive(Pool.StrikeHaptic.DurationSeconds, nameof(Pool.StrikeHaptic.DurationSeconds));
         RequirePositive(Door.FallbackOpenAngleDegrees, nameof(Door.FallbackOpenAngleDegrees));
         RequirePositive(Proof.SpawnFloorRayStartMeters, nameof(Proof.SpawnFloorRayStartMeters));
         if (Proof.SpawnFloorRayEndMeters >= 0.0f)
@@ -396,6 +416,23 @@ internal sealed record HapticConfiguration(
     double Amplitude,
     double DurationSeconds,
     double DelaySeconds);
+
+internal sealed record PoolConfiguration(
+    ConfigurationProvenance Provenance,
+    IReadOnlyList<float> FlatStrikeSpeedsMetersPerSecond,
+    float[] DesktopCueMountPositionMeters,
+    float[] DesktopCueMountRotationDegrees,
+    float[] XrCueMountPositionMeters,
+    float[] XrCueMountRotationDegrees,
+    float XrMinimumTipSpeedMetersPerSecond,
+    float XrMaximumTipSpeedMetersPerSecond,
+    float XrStrikeCooldownSeconds,
+    float XrImpulseScale,
+    int MaximumReportedContacts,
+    int ProofMaximumPhysicsFrames,
+    uint CollisionLayer,
+    uint CollisionMask,
+    HapticConfiguration StrikeHaptic);
 
 internal sealed record XrContractConfiguration(
     ConfigurationProvenance Provenance,

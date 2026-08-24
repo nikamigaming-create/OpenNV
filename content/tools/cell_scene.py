@@ -26,12 +26,14 @@ from scene_asset_pipeline import (
 from runtime_configuration import load_runtime_configuration
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v8"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v9"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 EXTERIOR_RECIPE_SCHEMA = "opennv-exterior-recipe/v1"
 FORM_ID_RADIX = 16
 BYTE_CHANNEL_MAXIMUM = 255.0
 QUATERNION_COMPONENT_SCALE = 0.25
+POOL_CUE_TIP_ENDPOINTS = {"maximum-z", "minimum-z"}
+POOL_COLLISION_SOURCES = {"presentation-render-triangles"}
 
 
 def recipe_path(recipe_id: str) -> Path:
@@ -152,6 +154,101 @@ def arrival_transform(catalog: CellCatalog, target_door_form_id: int) -> tuple[i
     return incoming[0].form_id, incoming[0].teleport_destination_transform
 
 
+def pool_gameplay_manifest(
+    recipe: dict[str, object],
+    catalog: CellCatalog,
+    selected: list[tuple[PlacedReference, BaseObject]],
+    assets: dict[str, dict[str, object]],
+    asset_sidecars: dict[str, dict[str, object]],
+) -> tuple[dict[str, object] | None, dict[int, str]]:
+    configured = recipe.get("poolGameplay")
+    if configured is None:
+        return None, {}
+    if not isinstance(configured, dict):
+        raise ValueError("Cell pool gameplay recipe must be an object")
+
+    table_id = int(str(configured["tableReferenceFormId"]), FORM_ID_RADIX)
+    cue_id = int(str(configured["cueReferenceFormId"]), FORM_ID_RADIX)
+    rack_id = int(str(configured["rackReferenceFormId"]), FORM_ID_RADIX)
+    cue_ball_id = int(str(configured["cueBallReferenceFormId"]), FORM_ID_RADIX)
+    object_ball_ids = [
+        int(str(value), FORM_ID_RADIX)
+        for value in configured["objectBallReferenceFormIds"]
+    ]
+    role_by_reference = {
+        table_id: "table",
+        cue_id: "cue",
+        rack_id: "rack",
+        cue_ball_id: "cue-ball",
+        **{reference_id: "object-ball" for reference_id in object_ball_ids},
+    }
+    expected_count = 4 + len(object_ball_ids)
+    if len(role_by_reference) != expected_count or not object_ball_ids:
+        raise ValueError("Cell pool gameplay reference identities must be unique and complete")
+
+    selected_by_reference = {reference.form_id: (reference, base) for reference, base in selected}
+    missing = sorted(set(role_by_reference) - set(selected_by_reference))
+    if missing:
+        raise ValueError(
+            "Cell pool gameplay references were not selected: "
+            + ", ".join(form_id(value) for value in missing)
+        )
+    cue_tip_endpoint = str(configured["cueTipEndpoint"])
+    if cue_tip_endpoint not in POOL_CUE_TIP_ENDPOINTS:
+        raise ValueError(f"Unsupported pool cue tip endpoint: {cue_tip_endpoint}")
+
+    playable_table_model = str(configured["playableTableModelPath"]).lower()
+    if playable_table_model not in assets:
+        raise ValueError(f"Playable pool table model was not exported: {playable_table_model}")
+    playable_table_sidecar = asset_sidecars[playable_table_model]
+    if not playable_table_sidecar["coverage"]["collisionExported"]:
+        raise ValueError("Playable pool table requires authored packed collision")
+    playable_collision_source = str(configured["playableCollisionSource"])
+    if playable_collision_source not in POOL_COLLISION_SOURCES:
+        raise ValueError(f"Unsupported playable pool collision source: {playable_collision_source}")
+
+    def component(reference_id: int, role: str) -> dict[str, object]:
+        reference, base = selected_by_reference[reference_id]
+        if base.model_path is None:
+            raise ValueError(f"Pool component has no model: {reference_id:08x}")
+        sidecar = asset_sidecars[base.model_path]
+        physics_bodies = sidecar["coverage"]["dynamicPhysicsBodies"]
+        if role != "table" and len(physics_bodies) != 1:
+            raise ValueError(
+                f"Pool component requires one authored dynamic body: {reference_id:08x}"
+            )
+        return {
+            "role": role,
+            "referenceFormId": form_id(reference.form_id),
+            "baseFormId": form_id(reference.base_form_id),
+            "baseRecordType": base.record_type,
+            "baseEditorId": base.editor_id,
+            "authoredModelPath": base.model_path,
+            "authoredAssetId": assets[base.model_path]["id"],
+            "authoredDynamicBodyCount": len(physics_bodies),
+        }
+
+    table = component(table_id, "table")
+    table["presentationModelPath"] = playable_table_model
+    table["presentationAssetId"] = assets[playable_table_model]["id"]
+    table["gameplayCollisionSource"] = playable_collision_source
+    cue = component(cue_id, "cue")
+    cue["tipEndpoint"] = cue_tip_endpoint
+    balls = [component(cue_ball_id, "cue-ball")]
+    balls.extend(component(reference_id, "object-ball") for reference_id in object_ball_ids)
+    return (
+        {
+            "mode": str(configured["mode"]),
+            "source": "recipe-identities-plus-retail-reference-transforms-and-nif-physics",
+            "table": table,
+            "cue": cue,
+            "rack": component(rack_id, "rack"),
+            "balls": balls,
+        },
+        role_by_reference,
+    )
+
+
 def prepare_cell_scene(
     master_path: Path,
     meshes_path: Path,
@@ -199,6 +296,10 @@ def prepare_cell_scene(
     if not selected:
         raise ValueError(f"Cell recipe selected no references: {recipe['id']}")
 
+    extra_model_paths = {str(vr_loadout["modelPath"])}
+    configured_pool = recipe.get("poolGameplay")
+    if isinstance(configured_pool, dict):
+        extra_model_paths.add(str(configured_pool["playableTableModelPath"]).lower())
     assets, asset_sidecars, texture_artifacts, compiler = prepare_scene_assets(
         meshes_path,
         texture_archive_paths,
@@ -206,7 +307,14 @@ def prepare_cell_scene(
         recipe,
         selected,
         configuration.content_compiler,
-        {str(vr_loadout["modelPath"])},
+        extra_model_paths,
+    )
+    pool_gameplay, pool_roles = pool_gameplay_manifest(
+        recipe,
+        catalog,
+        selected,
+        assets,
+        asset_sidecars,
     )
     vr_weapon_model = str(vr_loadout["modelPath"])
     vr_loadout["modelAssetId"] = assets[vr_weapon_model]["id"]
@@ -222,6 +330,13 @@ def prepare_cell_scene(
     references = []
     for reference, base in selected:
         asset = assets[base.model_path]
+        pool_role = pool_roles.get(reference.form_id)
+        interaction = interaction_manifest(reference, base, catalog)
+        if pool_role is not None:
+            interaction = {
+                "type": "pool-table" if pool_role == "table" else "pool-component",
+                "role": pool_role,
+            }
         references.append(
             {
                 "formId": form_id(reference.form_id),
@@ -241,7 +356,7 @@ def prepare_cell_scene(
                     if reference.teleport_destination_form_id is not None
                     else None
                 ),
-                "interaction": interaction_manifest(reference, base, catalog),
+                "interaction": interaction,
             }
         )
     lights = []
@@ -303,6 +418,7 @@ def prepare_cell_scene(
             "visibilityModel": "whole-cell-no-portal-culling",
         },
         "vr": {"startingLoadout": vr_loadout},
+        "poolGameplay": pool_gameplay,
         "lighting": {
             "ambientColor": normalized_rgb(cell.lighting.ambient_rgb),
             "directionalColor": normalized_rgb(cell.lighting.directional_rgb),

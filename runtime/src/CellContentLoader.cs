@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellContentLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v8";
+    private const string CellSceneSchema = "opennv-cell-scene/v9";
 
     internal static LoadedContent Load(
         string scenePath,
@@ -88,6 +88,13 @@ internal static class CellContentLoader
             var doors = new Dictionary<string, DoorInstance>(StringComparer.OrdinalIgnoreCase);
             var pickups = new Dictionary<string, PickupInstance>(StringComparer.OrdinalIgnoreCase);
             var containers = new Dictionary<string, ContainerInstance>(StringComparer.OrdinalIgnoreCase);
+            var pools = new Dictionary<string, PoolTableInstance>(StringComparer.OrdinalIgnoreCase);
+            var poolManifest = ReadPoolManifest(source);
+            PoolTableInstance? poolTable = null;
+            Node3D? poolCuePlacement = null;
+            Node3D? poolCueVisual = null;
+            Node3D? poolRackPlacement = null;
+            var poolBalls = new List<PoolBallInstance>();
             var collisionMeshes = 0;
             var surfaces = 0;
             var vertices = 0;
@@ -111,8 +118,59 @@ internal static class CellContentLoader
                 if (interactionType == "pickup" && session.IsReferenceRemoved(referenceFormId))
                     continue;
                 var assetId = reference.GetProperty("assetId").GetString()!;
+                var referencePosition = ReadVector(reference.GetProperty("positionGodotUnits"));
+                var referenceScale = reference.GetProperty("scale").GetSingle();
+                if (poolManifest is not null &&
+                    poolManifest.BallRoles.TryGetValue(referenceFormId, out var ballRole))
+                {
+                    if (interactionType != "pool-component" ||
+                        interaction.GetProperty("role").GetString() != ballRole)
+                        throw new InvalidOperationException($"Pool ball role mismatch: {referenceFormId}");
+                    var loadedBall = prototypes[assetId];
+                    if (loadedBall.DynamicPhysicsBodies.Count != 1)
+                        throw new InvalidOperationException(
+                            $"Pool ball requires one authored dynamic body: {referenceFormId}");
+                    var ballVisual = loadedBall.Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
+                        ?? throw new InvalidOperationException($"Could not duplicate pool ball: {assetId}");
+                    SetRenderLayer(ballVisual, renderLayer);
+                    var ball = new PoolBallInstance();
+                    ball.Configure(
+                        referenceFormId,
+                        ballRole,
+                        loadedBall.DynamicPhysicsBodies[0],
+                        ballVisual,
+                        unitScale,
+                        referenceScale,
+                        configuration.Pool);
+                    parent.AddChild(ball);
+                    ball.GlobalPosition = root.ToGlobal(referencePosition);
+                    ball.GlobalBasis = root.GlobalBasis.Orthonormalized() * new Basis(rotation);
+                    ball.CaptureAuthoredTransform();
+                    ball.Freeze = !buildCollision;
+                    CountGeometry(ballVisual, ref surfaces, ref vertices);
+                    if (buildCollision)
+                        collisionMeshes += loadedBall.DynamicPhysicsBodies[0].Hulls.Count;
+                    poolBalls.Add(ball);
+                    loadedReferences++;
+                    continue;
+                }
                 Node3D placement;
-                if (interactionType == "door")
+                if (interactionType == "pool-table")
+                {
+                    if (poolManifest is null || referenceFormId != poolManifest.TableReferenceFormId)
+                        throw new InvalidOperationException($"Unexpected pool table reference: {referenceFormId}");
+                    assetId = poolManifest.TablePresentationAssetId;
+                    poolTable = new PoolTableInstance();
+                    poolTable.Configure(
+                        referenceFormId,
+                        poolManifest.TablePresentationModelPath,
+                        poolManifest.TableGameplayCollisionSource,
+                        configuration,
+                        session);
+                    pools.Add(referenceFormId, poolTable);
+                    placement = poolTable;
+                }
+                else if (interactionType == "door")
                 {
                     var destination = reference.GetProperty("teleportDestinationFormId");
                     var door = new DoorInstance { Name = $"DOOR_{referenceFormId}" };
@@ -177,23 +235,38 @@ internal static class CellContentLoader
                         Basis = new Basis(rotation),
                     };
                 }
-                placement.Position = ReadVector(reference.GetProperty("positionGodotUnits"));
-                placement.Scale = Vector3.One * reference.GetProperty("scale").GetSingle();
+                placement.Position = referencePosition;
+                placement.Scale = Vector3.One * referenceScale;
                 root.AddChild(placement);
 
                 var instance = prototypes[assetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
                     ?? throw new InvalidOperationException($"Could not duplicate cell asset: {assetId}");
                 placement.AddChild(instance);
-                foreach (var mesh in Descendants<MeshInstance3D>(instance))
+                SetRenderLayer(instance, renderLayer);
+                CountGeometry(instance, ref surfaces, ref vertices);
+                if (poolManifest is not null && referenceFormId == poolManifest.CueReferenceFormId)
                 {
-                    mesh.Layers = renderLayer;
-                    if (mesh.Mesh is null)
-                        continue;
-                    surfaces += mesh.Mesh.GetSurfaceCount();
-                    if (mesh.Mesh is ArrayMesh arrayMesh)
-                        vertices += Enumerable.Range(0, arrayMesh.GetSurfaceCount()).Sum(arrayMesh.SurfaceGetArrayLen);
+                    poolCuePlacement = placement;
+                    poolCueVisual = instance;
                 }
-                if (buildCollision && prototypes[assetId].CollisionScene is Node3D collisionPrototype)
+                else if (poolManifest is not null && referenceFormId == poolManifest.RackReferenceFormId)
+                {
+                    poolRackPlacement = placement;
+                }
+                if (buildCollision && interactionType == "pool-table")
+                {
+                    if (poolManifest is null ||
+                        poolManifest.TableGameplayCollisionSource != "presentation-render-triangles")
+                        throw new InvalidOperationException("Unsupported pool table gameplay collision source.");
+                    foreach (var mesh in Descendants<MeshInstance3D>(instance))
+                    {
+                        mesh.CreateTrimeshCollision();
+                        foreach (var body in Descendants<StaticBody3D>(mesh))
+                            body.CollisionLayer = renderLayer;
+                        collisionMeshes++;
+                    }
+                }
+                else if (buildCollision && prototypes[assetId].CollisionScene is Node3D collisionPrototype)
                 {
                     var collisionInstance = collisionPrototype.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
                         ?? throw new InvalidOperationException($"Could not duplicate authored collision: {assetId}");
@@ -208,7 +281,9 @@ internal static class CellContentLoader
                         collisionMeshes++;
                     }
                 }
-                else if (buildCollision && (collisionAssets.Contains(assetId) || interactionType is not null))
+                else if (buildCollision &&
+                    (collisionAssets.Contains(assetId) ||
+                        interactionType is not null and not "pool-table" and not "pool-component"))
                 {
                     foreach (var mesh in Descendants<MeshInstance3D>(instance))
                     {
@@ -219,6 +294,19 @@ internal static class CellContentLoader
                     }
                 }
                 loadedReferences++;
+            }
+
+            if (poolManifest is not null)
+            {
+                if (poolTable is null || poolCuePlacement is null || poolCueVisual is null ||
+                    poolRackPlacement is null || poolBalls.Count != poolManifest.BallRoles.Count)
+                    throw new InvalidOperationException("Prepared pool assembly is incomplete.");
+                poolTable.CompleteSetup(
+                    poolCuePlacement,
+                    poolCueVisual,
+                    poolRackPlacement,
+                    poolBalls,
+                    poolManifest.CueTipEndpoint);
             }
 
             var proofDoor = source.GetProperty("proof").GetProperty("doorReferenceFormId").GetString()!;
@@ -288,6 +376,7 @@ internal static class CellContentLoader
                 doors,
                 pickups,
                 containers,
+                pools,
                 actors,
                 collisionMeshes,
                 surfaces,
@@ -305,6 +394,45 @@ internal static class CellContentLoader
                 prototype.Scene.Free();
                 prototype.CollisionScene?.Free();
             }
+        }
+    }
+
+    private static PoolManifest? ReadPoolManifest(JsonElement source)
+    {
+        if (!source.TryGetProperty("poolGameplay", out var pool) ||
+            pool.ValueKind != JsonValueKind.Object)
+            return null;
+        var table = pool.GetProperty("table");
+        var cue = pool.GetProperty("cue");
+        var rack = pool.GetProperty("rack");
+        var balls = pool.GetProperty("balls")
+            .EnumerateArray()
+            .ToDictionary(
+                ball => ball.GetProperty("referenceFormId").GetString()!,
+                ball => ball.GetProperty("role").GetString()!,
+                StringComparer.OrdinalIgnoreCase);
+        if (balls.Count < 1)
+            throw new InvalidOperationException("Pool gameplay manifest has no authored balls.");
+        return new PoolManifest(
+            table.GetProperty("referenceFormId").GetString()!,
+            table.GetProperty("presentationAssetId").GetString()!,
+            table.GetProperty("presentationModelPath").GetString()!,
+            table.GetProperty("gameplayCollisionSource").GetString()!,
+            cue.GetProperty("referenceFormId").GetString()!,
+            cue.GetProperty("tipEndpoint").GetString()!,
+            rack.GetProperty("referenceFormId").GetString()!,
+            balls);
+    }
+
+    private static void CountGeometry(Node root, ref int surfaces, ref int vertices)
+    {
+        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        {
+            if (mesh.Mesh is null)
+                continue;
+            surfaces += mesh.Mesh.GetSurfaceCount();
+            if (mesh.Mesh is ArrayMesh arrayMesh)
+                vertices += Enumerable.Range(0, arrayMesh.GetSurfaceCount()).Sum(arrayMesh.SurfaceGetArrayLen);
         }
     }
 
@@ -398,6 +526,7 @@ internal static class CellContentLoader
         IReadOnlyDictionary<string, DoorInstance> Doors,
         IReadOnlyDictionary<string, PickupInstance> Pickups,
         IReadOnlyDictionary<string, ContainerInstance> Containers,
+        IReadOnlyDictionary<string, PoolTableInstance> Pools,
         IReadOnlyList<CellActorLoader.PlacedActor> Actors,
         int CollisionMeshes,
         int Surfaces,
@@ -436,4 +565,14 @@ internal static class CellContentLoader
         Color Color,
         float Intensity,
         float RadiusMeters);
+
+    private sealed record PoolManifest(
+        string TableReferenceFormId,
+        string TablePresentationAssetId,
+        string TablePresentationModelPath,
+        string TableGameplayCollisionSource,
+        string CueReferenceFormId,
+        string CueTipEndpoint,
+        string RackReferenceFormId,
+        IReadOnlyDictionary<string, string> BallRoles);
 }

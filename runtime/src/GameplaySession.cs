@@ -5,13 +5,17 @@ namespace OpenNV.Runtime;
 
 internal partial class GameplaySession : Node
 {
-    private const string SaveSchema = "opennv-sandbox-save/v1";
+    private const string SaveSchemaV1 = "opennv-sandbox-save/v1";
+    private const string SaveSchemaV2 = "opennv-sandbox-save/v2";
     private const int EquippedWeaponCount = 1;
 
     private readonly Dictionary<string, InventoryEntry> _inventory = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _removedReferences = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _doorStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _emptiedContainers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PoolTableInstance> _pools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PoolTableInstance.PoolState> _loadedPoolStates =
+        new(StringComparer.OrdinalIgnoreCase);
     private Label? _objectiveLabel;
     private Label? _statusLabel;
     private Label? _inventoryLabel;
@@ -99,7 +103,7 @@ internal partial class GameplaySession : Node
         crosshair.AddThemeColorOverride("font_color", Colors.White);
         crosshair.AddThemeFontSizeOverride("font_size", _configuration.Hud.CrosshairFontSizePixels);
         layer.AddChild(crosshair);
-        RefreshHud("WASD move • E activate • Left click fire • F5 save");
+        RefreshHud("WASD move • E activate • Left click use/fire • R reload/reset • F5 save");
     }
 
     internal void AttachXrHud(Node3D leftHand)
@@ -192,6 +196,15 @@ internal partial class GameplaySession : Node
         RefreshHud("Game saved");
     }
 
+    internal void RegisterPool(PoolTableInstance table)
+    {
+        _pools.Add(table.ReferenceFormId, table);
+        if (_loadedPoolStates.TryGetValue(table.ReferenceFormId, out var state))
+            table.RestoreState(state);
+    }
+
+    internal void Notify(string status) => RefreshHud(status);
+
     internal void DoorChanged(DoorInstance door)
     {
         _doorStates[door.ReferenceFormId] = door.IsOpen;
@@ -260,7 +273,7 @@ internal partial class GameplaySession : Node
         Directory.CreateDirectory(Path.GetDirectoryName(_savePath)!);
         var document = new
         {
-            schema = SaveSchema,
+            schema = SaveSchemaV2,
             cellFormId = _cellFormId,
             inventory = _inventory.Values.OrderBy(entry => entry.ItemFormId, StringComparer.OrdinalIgnoreCase),
             removedReferences = _removedReferences.Order(StringComparer.OrdinalIgnoreCase),
@@ -275,6 +288,22 @@ internal partial class GameplaySession : Node
             ammoInMagazine = _ammoInMagazine,
             shotsFired = _shotsFired,
             objectiveStage = (int)ObjectiveStage,
+            poolTables = _pools.Values
+                .OrderBy(table => table.ReferenceFormId, StringComparer.OrdinalIgnoreCase)
+                .Select(table => table.CaptureState())
+                .Select(state => new
+                {
+                    referenceFormId = state.ReferenceFormId,
+                    balls = state.Balls.Select(ball => new
+                    {
+                        referenceFormId = ball.ReferenceFormId,
+                        position = Vector(ball.Position),
+                        rotation = Quaternion(ball.Rotation),
+                        linearVelocity = Vector(ball.LinearVelocity),
+                        angularVelocity = Vector(ball.AngularVelocity),
+                        pocketed = ball.Pocketed,
+                    }),
+                }),
         };
         var temporary = _savePath + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(document, new JsonSerializerOptions
@@ -286,7 +315,7 @@ internal partial class GameplaySession : Node
 
     internal object Report() => new
     {
-        schema = SaveSchema,
+        schema = SaveSchemaV2,
         savePath = _savePath,
         objectiveStage = (int)ObjectiveStage,
         objectiveComplete = ObjectiveComplete,
@@ -302,6 +331,9 @@ internal partial class GameplaySession : Node
         removedReferences = _removedReferences.Count,
         emptiedContainers = _emptiedContainers.Count,
         openDoors = _doorStates.Count(entry => entry.Value),
+        poolTables = _pools.Count,
+        poolBalls = _pools.Values.Sum(table => table.BallCount),
+        pocketedPoolBalls = _pools.Values.Sum(table => table.PocketedBallCount),
     };
 
     private void Load(string cellFormId)
@@ -310,7 +342,8 @@ internal partial class GameplaySession : Node
             return;
         using var document = JsonDocument.Parse(File.ReadAllText(_savePath));
         var root = document.RootElement;
-        if (root.GetProperty("schema").GetString() != SaveSchema)
+        var schema = root.GetProperty("schema").GetString();
+        if (schema != SaveSchemaV1 && schema != SaveSchemaV2)
             throw new InvalidOperationException($"Unexpected sandbox save schema: {_savePath}");
         if (root.GetProperty("cellFormId").GetString() != cellFormId)
             throw new InvalidOperationException($"Sandbox save belongs to another cell: {_savePath}");
@@ -339,6 +372,25 @@ internal partial class GameplaySession : Node
         _weaponClipSize = root.GetProperty("weaponClipSize").GetInt32();
         _ammoInMagazine = root.GetProperty("ammoInMagazine").GetInt32();
         _shotsFired = root.GetProperty("shotsFired").GetInt32();
+        if (schema == SaveSchemaV2 && root.TryGetProperty("poolTables", out var pools))
+        {
+            foreach (var pool in pools.EnumerateArray())
+            {
+                var referenceFormId = pool.GetProperty("referenceFormId").GetString()!;
+                var balls = pool.GetProperty("balls").EnumerateArray()
+                    .Select(ball => new PoolBallInstance.BallState(
+                        ball.GetProperty("referenceFormId").GetString()!,
+                        ReadVector(ball.GetProperty("position")),
+                        ReadQuaternion(ball.GetProperty("rotation")),
+                        ReadVector(ball.GetProperty("linearVelocity")),
+                        ReadVector(ball.GetProperty("angularVelocity")),
+                        ball.GetProperty("pocketed").GetBoolean()))
+                    .ToArray();
+                _loadedPoolStates.Add(
+                    referenceFormId,
+                    new PoolTableInstance.PoolState(referenceFormId, balls));
+            }
+        }
     }
 
     private void AddInventory(string itemFormId, string editorId, string recordType, int count)
@@ -400,6 +452,26 @@ internal partial class GameplaySession : Node
         path.StartsWith("user://", StringComparison.Ordinal)
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
+
+    private static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
+
+    private static float[] Quaternion(Quaternion value) => [value.X, value.Y, value.Z, value.W];
+
+    private static Vector3 ReadVector(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != 3)
+            throw new InvalidOperationException("Pool save vector must contain three values.");
+        return new Vector3(values[0], values[1], values[2]);
+    }
+
+    private static Quaternion ReadQuaternion(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != 4)
+            throw new InvalidOperationException("Pool save quaternion must contain four values.");
+        return new Quaternion(values[0], values[1], values[2], values[3]).Normalized();
+    }
 
     private string WeaponLabel =>
         _equippedWeaponFormId is not null && _inventory.TryGetValue(_equippedWeaponFormId, out var weapon)

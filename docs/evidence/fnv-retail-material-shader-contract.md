@@ -41,6 +41,10 @@ texture as an emission map.
 - Vertex RGB/alpha are enabled only by their retail shader flags.
 - `BSShaderNoLightingProperty.file_name` and legacy `NiTexturingProperty` sources
   are retained.
+- NIF UV coordinates are retained without a V inversion. The decoded DDS/PNG
+  row order and Godot glTF sampler already preserve the authored convention;
+  an extra inversion was proven wrong by the intact pool-table atlas, whose
+  felt occupies the source texture's upper half.
 - DDS cubemaps retain all six faces and are converted from Gamebryo Z-up face
   order to Godot Y-up order.
 - Material binding uses the imported NIF/glTF surface name, never list position.

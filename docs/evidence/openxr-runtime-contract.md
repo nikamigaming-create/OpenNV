@@ -5,7 +5,9 @@ Status: **software/package pass; connected-headset hardware gate pending**.
 OpenNV uses Godot's built-in OpenXR path. The runtime is started with
 `--xr-mode on` before Godot's `--` separator and receives `--vr` as an OpenNV
 argument. Flat mode explicitly uses `--xr-mode off`; both modes load the same
-cell manifest and `opennv-sandbox-save/v1` state.
+cell manifest and `opennv-sandbox-save/v2` state. The runtime retains a
+read-only migration path for v1 saves; every new save is v2 so pool motion and
+pocket state share the same persistence boundary.
 
 ## Promoted software evidence
 

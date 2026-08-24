@@ -30,11 +30,15 @@ from gltf_io import (
     pack_floats,
     sha256_bytes,
 )
-from havok_collision_gltf import collision_contract, write_collision_gltf
+from havok_collision_gltf import (
+    collision_contract,
+    dynamic_physics_contract,
+    write_collision_gltf,
+)
 from runtime_configuration import ContentCompilerConfiguration, load_runtime_configuration
 
 
-SCHEMA = "opennv-static-nif-gltf/v1"
+SCHEMA = "opennv-static-nif-gltf/v2"
 GENERATOR = "OpenNV direct static NIF exporter v1"
 SUPPORTED_SHAPE_PROPERTIES = {
     "BSShaderPPLightingProperty",
@@ -83,7 +87,7 @@ def transform_xyz(value: object, matrix: object, *, direction: bool) -> tuple[fl
 
 
 def texture_uv(value: object) -> tuple[float, float]:
-    return float(value.u), 1.0 - float(value.v)
+    return float(value.u), float(value.v)
 
 
 def _texture_descriptor_path(prop: object, name: str) -> str:
@@ -519,6 +523,7 @@ def export_static_nif(
 
     collision_types = sorted({type(block).__name__ for block in blocks if type(block).__name__.startswith("bhk")})
     collision_bodies, collision_unsupported = collision_contract(blocks, root, block_index)
+    physics_bodies, physics_unsupported = dynamic_physics_contract(blocks, block_index)
     collision_outputs = (
         write_collision_gltf(
             collision_bodies,
@@ -562,6 +567,9 @@ def export_static_nif(
                 }
                 for body in collision_bodies
             ],
+            "dynamicPhysicsExported": bool(physics_bodies),
+            "dynamicPhysicsUnsupportedReasons": physics_unsupported,
+            "dynamicPhysicsBodies": physics_bodies,
             "controllers": sorted(set(controllers)),
             "excludedEditorMarkerSurfaces": excluded_editor_markers,
         },

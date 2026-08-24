@@ -150,6 +150,33 @@
       "lightRangeGameUnits": 140.0
     }
   },
+  "pool": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "playtest-required",
+      "source": "Shared desktop/OpenXR practice-table adapter over retail Saloon references and NIF physics",
+      "evidence": "docs/evidence/fnv-saloon-pool-contract.md"
+    },
+    "flatStrikeSpeedsMetersPerSecond": [0.65, 1.25, 2.1],
+    "desktopCueMountPositionMeters": [0.28, -0.24, -0.18],
+    "desktopCueMountRotationDegrees": [0.0, 180.0, 0.0],
+    "xrCueMountPositionMeters": [0.0, 0.0, 0.0],
+    "xrCueMountRotationDegrees": [0.0, 180.0, 0.0],
+    "xrMinimumTipSpeedMetersPerSecond": 0.2,
+    "xrMaximumTipSpeedMetersPerSecond": 4.5,
+    "xrStrikeCooldownSeconds": 0.12,
+    "xrImpulseScale": 1.0,
+    "maximumReportedContacts": 8,
+    "proofMaximumPhysicsFrames": 180,
+    "collisionLayer": 1,
+    "collisionMask": 1,
+    "strikeHaptic": {
+      "frequency": 0.0,
+      "amplitude": 0.28,
+      "durationSeconds": 0.035,
+      "delaySeconds": 0.0
+    }
+  },
   "door": {
     "provenance": {
       "classification": "provisional-adapter",

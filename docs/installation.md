@@ -31,6 +31,11 @@ cache remembers the selected installation and is reopened automatically on
 later launches. The current recipe-pinned proof opens the Goodsprings Prospector
 Saloon at the main entrance's data-defined XTEL target. Use WASD/mouse, E to
 activate, left-click to fire after taking the `.357`, and F5 to save.
+Aim at the intact pool table or one of its balls and press E to enter practice
+mode. Left-click strikes along the camera heading, the mouse wheel changes the
+configured power, R resets every ball to its authored Saloon transform, and E
+or Escape returns to the weapon. In OpenXR, grip enters/exits, hold trigger and
+sweep the tracked cue through the cue ball, and B resets the table.
 
 The New Vegas launcher path is enabled only for this sandbox. Fallout 3, TTW,
 JAM, and the full New Vegas campaign remain disabled until their own gates pass.

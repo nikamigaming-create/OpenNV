@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v8";
+    private const string CellSceneSchema = "opennv-cell-scene/v9";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -152,6 +152,9 @@ internal static class CellSceneLoader
         var allContainers = main.Containers
             .Concat(linkedCells.SelectMany(value => value.Content.Containers))
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
+        var allPools = main.Pools
+            .Concat(linkedCells.SelectMany(value => value.Content.Pools))
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var allActors = main.Actors
             .Concat(linkedCells.SelectMany(value => value.Content.Actors))
             .ToArray();
@@ -177,6 +180,7 @@ internal static class CellSceneLoader
             session,
             allPickups,
             allContainers,
+            allPools,
             allActors,
             linkedCells,
             portalLinks);
@@ -373,6 +377,7 @@ internal static class CellSceneLoader
         GameplaySession Session,
         IReadOnlyDictionary<string, PickupInstance> Pickups,
         IReadOnlyDictionary<string, ContainerInstance> Containers,
+        IReadOnlyDictionary<string, PoolTableInstance> Pools,
         IReadOnlyList<CellActorLoader.PlacedActor> Actors,
         IReadOnlyList<LinkedCell> LinkedCells,
         IReadOnlyList<PortalLink> PortalLinks)
