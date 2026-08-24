@@ -7,6 +7,7 @@ sys.path.insert(0, str(TOOLS))
 
 from actor_gltf import (  # noqa: E402
     NifFormat,
+    _append_runtime_surface_node,
     _compensated_inverse_bind,
     _converted_matrix,
     _converted_xyz_rotation,
@@ -28,6 +29,34 @@ from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class ActorGltfTest(unittest.TestCase):
+    def test_runtime_surface_identity_is_exact_and_independent_of_nif_punctuation(self):
+        nodes = [{"children": []}]
+        surface = {"shape": "Turret:0"}
+
+        _append_runtime_surface_node(nodes, 0, 4, 2, surface, 0)
+
+        self.assertEqual(surface["shape"], "Turret:0")
+        self.assertEqual(surface["runtimeNodeName"], "ActorSurface_0")
+        self.assertEqual(surface["runtimeNodeName"], nodes[1]["name"])
+        self.assertEqual(nodes[1]["mesh"], 4)
+        self.assertEqual(nodes[1]["skin"], 2)
+        self.assertEqual(nodes[0]["children"], [1])
+
+    def test_runtime_surface_identity_is_unique_for_each_exported_surface(self):
+        nodes = [{"children": []}]
+        surfaces = [{"shape": "Body:0"}, {"shape": "Body:0"}]
+        for index, surface in enumerate(surfaces):
+            _append_runtime_surface_node(nodes, 0, index, None, surface, index)
+
+        self.assertEqual(
+            [surface["runtimeNodeName"] for surface in surfaces],
+            ["ActorSurface_0", "ActorSurface_1"],
+        )
+        self.assertEqual(
+            [node["name"] for node in nodes[1:]],
+            ["ActorSurface_0", "ActorSurface_1"],
+        )
+
     def test_xyz_rotation_channels_preserve_identity(self):
         class Key:
             def __init__(self):

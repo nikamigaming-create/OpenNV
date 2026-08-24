@@ -43,7 +43,8 @@ from actor_material import (
 from runtime_configuration import ContentCompilerConfiguration
 
 
-ACTOR_GLTF_SCHEMA = "opennv-actor-gltf/v1"
+ACTOR_GLTF_SCHEMA = "opennv-actor-gltf/v2"
+RUNTIME_SURFACE_NODE_PREFIX = "ActorSurface_"
 RIGID_ATTACHMENT_NIF_ROOT = "nif-root-skeleton-node"
 RIGID_ATTACHMENT_NIF_PARENT = "nif-prn-skeleton-node"
 RIGID_ATTACHMENT_CONFIGURED_FALLBACK = "configured-skeleton-node-fallback"
@@ -274,21 +275,20 @@ def export_actor_gltf(
                 textures,
                 compiler,
             )
-            node: dict[str, object] = {
-                "name": f"{component.role}_{_text(shape.name)}",
-                "mesh": mesh_index,
-            }
             if skin_index is not None:
-                node["skin"] = skin_index
                 parent = 0
             else:
                 parent = node_by_name[rigid_attachment_node]
                 surface["attachmentNode"] = rigid_attachment_node
                 surface["attachmentSource"] = rigid_attachment_source
-            node_index = len(nodes)
-            nodes.append(node)
-            nodes[parent].setdefault("children", []).append(node_index)
-            surface["node"] = node_index
+            _append_runtime_surface_node(
+                nodes,
+                parent,
+                mesh_index,
+                skin_index,
+                surface,
+                len(surfaces),
+            )
             surface["faceGenUvFlagRepairs"] = list(repairs)
             surfaces.append(surface)
 
@@ -335,7 +335,7 @@ def export_actor_gltf(
 
     binary_path = gltf_path.with_suffix(".bin")
     gltf: dict[str, object] = {
-        "asset": {"version": "2.0", "generator": "OpenNV direct actor exporter v1"},
+        "asset": {"version": "2.0", "generator": "OpenNV direct actor exporter v2"},
         "scene": 0,
         "scenes": [{"nodes": [0]}],
         "nodes": nodes,
@@ -402,6 +402,34 @@ def export_actor_gltf(
     sidecar_bytes = (json.dumps(sidecar, indent=2, sort_keys=True) + "\n").encode()
     _atomic_write(sidecar_path, sidecar_bytes)
     return sidecar
+
+
+def _append_runtime_surface_node(
+    nodes: list[dict[str, object]],
+    parent_index: int,
+    mesh_index: int,
+    skin_index: int | None,
+    surface: dict[str, object],
+    surface_index: int,
+) -> None:
+    runtime_node_name = _runtime_surface_node_name(surface_index)
+    node: dict[str, object] = {
+        "name": runtime_node_name,
+        "mesh": mesh_index,
+    }
+    if skin_index is not None:
+        node["skin"] = skin_index
+    node_index = len(nodes)
+    nodes.append(node)
+    nodes[parent_index].setdefault("children", []).append(node_index)
+    surface["node"] = node_index
+    surface["runtimeNodeName"] = runtime_node_name
+
+
+def _runtime_surface_node_name(surface_index: int) -> str:
+    if surface_index < 0:
+        raise ValueError("Actor surface index cannot be negative")
+    return f"{RUNTIME_SURFACE_NODE_PREFIX}{surface_index}"
 
 
 def _unsupported_actor_geometry(document: object) -> tuple[tuple[str, str], ...]:

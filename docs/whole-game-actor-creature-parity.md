@@ -200,8 +200,32 @@ These are complete retail observation contracts, not Godot parity passes. The
 Ghost owned-data compile still fails closed because the authored model stack
 contains `NiParticleSystem` geometry; the generic glTF path rejects that
 omission explicitly. A ghost scene without its breathing and leg-spray systems
-is not accepted as a complete rendition. The exhaustive queue restarts in a new
-directory only from committed v3 producer and consumer revisions.
+is not accepted as a complete rendition.
+
+The fresh committed-v3 soak at
+`D:\Builds\OpenNV-actor-retail-coverage-surface-v4-20260824-r9` completed all
+32 selected base jobs in exactly 32 first attempts. Its checkpoint reports 32
+captured outcomes, zero unclassified attempts, zero incomplete appearances, and
+zero capture errors. The queue manifest pins the plan, corpus, retail DLL, legal
+save and executable, recipe catalog, and all seven producer scripts. The other
+8,628 appearance outcomes remain pending, and the retail queue deliberately
+reports `parityVerdictStatus = not-evaluated-by-retail-reference-queue`.
+
+The first v3 owned-data Godot integration exposed and then removed a runtime
+identity guess: Godot replaces punctuation such as the turret shape's `:` when
+it creates node names. Actor glTF v2 now gives every surface a deterministic,
+punctuation-safe `runtimeNodeName`, records the exact relation beside the
+unchanged NIF shape name, and requires a one-to-one sidecar/import join before
+capture. Retail skin palettes select exact authored shape names and are then
+disambiguated by bind count and ordered bone identity; no sanitized-name suffix
+match remains. The canonical capture at
+`D:\Builds\OpenNV-actor-v3-turret-godot-review-20260824-r3` retains ten matched
+source frames with its one skin and six palette bones resolved. The differential
+at `D:\Builds\OpenNV-actor-v3-turret-differential-20260824-r1` correctly fails:
+retail light direction is unresolved, the current neutral Godot review
+environment cannot match the retail frame, and named-node pose/surface gates are
+not yet within tolerance. It is evidence of a working exact-surface capture
+path, not an appearance-parity pass.
 
 ## Execution order
 

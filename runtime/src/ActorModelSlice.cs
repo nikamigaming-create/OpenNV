@@ -6,7 +6,7 @@ namespace OpenNV.Runtime;
 
 internal static class ActorModelSlice
 {
-    private const string ActorSchema = "opennv-actor-gltf/v1";
+    private const string ActorSchema = "opennv-actor-gltf/v2";
 
     internal static LoadedActor Load(
         string modelPath,
@@ -42,13 +42,17 @@ internal static class ActorModelSlice
         scene.Name = $"ACTOR_{root.GetProperty("actorFormId").GetString()}_{root.GetProperty("actorName").GetString()}";
         scene.Scale = Vector3.One * (scaleToMeters ? configuration.World.GameUnitsToMeters : 1.0f);
         parent.AddChild(scene);
-        var meshes = Descendants<MeshInstance3D>(scene).Count(mesh => mesh.Mesh is not null);
+        var importedMeshes = Descendants<MeshInstance3D>(scene)
+            .Where(mesh => mesh.Mesh is not null)
+            .ToArray();
+        var surfaces = LoadSurfaces(root, importedMeshes, resolvedSidecar);
         var skeletons = Descendants<Skeleton3D>(scene).ToArray();
         var players = Descendants<AnimationPlayer>(scene).ToArray();
         var animations = players.Sum(player => player.GetAnimationList().Length);
-        if (meshes < 1 || skeletons.Length < 1 || animations < 1)
+        if (importedMeshes.Length < 1 || skeletons.Length < 1 || animations < 1)
             throw new InvalidOperationException(
-                $"Actor import is incomplete: meshes={meshes} skeletons={skeletons.Length} animations={animations}");
+                $"Actor import is incomplete: meshes={importedMeshes.Length} " +
+                $"skeletons={skeletons.Length} animations={animations}");
         var animationName = players
             .SelectMany(player => player.GetAnimationList().Select(name => (Player: player, Name: name)))
             .First(row => row.Name != "RESET");
@@ -69,14 +73,77 @@ internal static class ActorModelSlice
             scene,
             root.GetProperty("actorFormId").GetString()!,
             root.GetProperty("actorName").GetString()!,
-            meshes,
+            importedMeshes.Length,
             skeletons.Length,
             animations,
             animationName.Name.ToString(),
             animationName.Player,
             bounds,
             root.GetProperty("coverage").GetProperty("surfaces").GetInt32(),
-            root.GetProperty("coverage").GetProperty("textures").GetInt32());
+            root.GetProperty("coverage").GetProperty("textures").GetInt32(),
+            surfaces);
+    }
+
+    private static IReadOnlyList<LoadedSurface> LoadSurfaces(
+        JsonElement sidecar,
+        IReadOnlyList<MeshInstance3D> importedMeshes,
+        string sidecarPath)
+    {
+        var declared = sidecar.GetProperty("surfaces").EnumerateArray().ToArray();
+        var authoredSurfaceCount = sidecar.GetProperty("coverage").GetProperty("surfaces").GetInt32();
+        if (declared.Length != authoredSurfaceCount || importedMeshes.Count != authoredSurfaceCount)
+            throw new InvalidOperationException(
+                $"Actor surface counts disagree in {sidecarPath}: " +
+                $"declared={declared.Length} coverage={authoredSurfaceCount} imported={importedMeshes.Count}.");
+
+        var importedByName = importedMeshes
+            .GroupBy(mesh => mesh.Name.ToString(), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+        var duplicateImportedNames = importedByName
+            .Where(row => row.Value.Length != 1)
+            .Select(row => row.Key)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        if (duplicateImportedNames.Length > 0)
+            throw new InvalidOperationException(
+                $"Actor import has duplicate runtime surface names in {sidecarPath}: " +
+                string.Join(", ", duplicateImportedNames));
+
+        var loaded = new List<LoadedSurface>(declared.Length);
+        var declaredRuntimeNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var surface in declared)
+        {
+            var role = RequireSurfaceText(surface, "role", sidecarPath);
+            var shape = RequireSurfaceText(surface, "shape", sidecarPath);
+            var runtimeNodeName = RequireSurfaceText(surface, "runtimeNodeName", sidecarPath);
+            if (!declaredRuntimeNames.Add(runtimeNodeName))
+                throw new InvalidOperationException(
+                    $"Actor sidecar repeats runtime surface {runtimeNodeName} in {sidecarPath}.");
+            if (!importedByName.TryGetValue(runtimeNodeName, out var matches) || matches.Length != 1)
+                throw new InvalidOperationException(
+                    $"Actor sidecar surface {role}/{shape} maps to no exact runtime node " +
+                    $"{runtimeNodeName} in {sidecarPath}.");
+            var skinned = surface.GetProperty("skinned").GetBoolean();
+            if (skinned != (matches[0].Skin is not null))
+                throw new InvalidOperationException(
+                    $"Actor sidecar skin state disagrees for {role}/{shape} at {runtimeNodeName} " +
+                    $"in {sidecarPath}.");
+            loaded.Add(new LoadedSurface(role, shape, runtimeNodeName, matches[0], skinned));
+        }
+        if (declaredRuntimeNames.Count != importedByName.Count)
+            throw new InvalidOperationException(
+                $"Actor import contains a surface absent from its sidecar: {sidecarPath}.");
+        return loaded;
+    }
+
+    private static string RequireSurfaceText(JsonElement surface, string property, string sidecarPath)
+    {
+        if (!surface.TryGetProperty(property, out var value) ||
+            value.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(value.GetString()))
+            throw new InvalidOperationException(
+                $"Actor sidecar surface has no {property}: {sidecarPath}.");
+        return value.GetString()!;
     }
 
     private static void VerifyHash(string path, string expected)
@@ -141,7 +208,15 @@ internal static class ActorModelSlice
         AnimationPlayer AnimationPlayer,
         Aabb Bounds,
         int AuthoredSurfaces,
-        int AuthoredTextures);
+        int AuthoredTextures,
+        IReadOnlyList<LoadedSurface> Surfaces);
+
+    internal readonly record struct LoadedSurface(
+        string Role,
+        string Shape,
+        string RuntimeNodeName,
+        MeshInstance3D Mesh,
+        bool Skinned);
 
     internal enum BoundsContract
     {

@@ -186,7 +186,7 @@ require a headset session.
 | `actor_review_differential.py` | Exact retail/Godot sample pairing, hash verification, objective image/structure gates, side-by-side stills, retail-timed motion clip, and one fail-closed ledger row | Importing assets, altering capture state, or human approval |
 | `actor_review_coverage.py` | Exhaustive join of every corpus appearance and placement to unique differential evidence with aggregate missing/failed/unreviewed counts | Sampling, visual approval, or changing evidence verdicts |
 | `facegen.py` | Pure EGM/EGT morph and retail skin/body texture composition primitives | Record selection or runtime nodes |
-| `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance, with an explicit gate against silently omitted render geometry | Record selection, placement, particle simulation, or runtime behavior |
+| `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance and stable per-surface runtime identities, with an explicit gate against silently omitted render geometry | Record selection, placement, particle simulation, or runtime behavior |
 | `first_person_rig.py` | Hash-verified legal left/right first-person hand artifacts plus skeleton/pose/frame contract | Runtime tracking or weapon behavior |
 | `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, and alpha flag translation | Geometry, records, or runtime lighting |
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |

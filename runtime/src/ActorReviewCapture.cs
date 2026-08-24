@@ -50,7 +50,7 @@ internal static class ActorReviewCapture
                 skeleton,
                 samples[0],
                 configuration.World.GameUnitsToMeters);
-            var skinMappings = BuildSkinMappings(actor.Root, skeleton, samples[0]);
+            var skinMappings = BuildSkinMappings(actor, skeleton, samples[0]);
             BuildReviewView(host, contract, configuration);
             var camera = new Camera3D
             {
@@ -367,27 +367,26 @@ internal static class ActorReviewCapture
     }
 
     private static IReadOnlyList<SkinMapping> BuildSkinMappings(
-        Node3D actorRoot,
+        ActorModelSlice.LoadedActor actor,
         Skeleton3D skeleton,
         ActorReviewContract.Sample sample)
     {
         var captured = sample.SkinPalette.Instances
             .Where(instance => instance.Bones.Count > 0)
             .ToArray();
-        var meshes = Descendants<MeshInstance3D>(actorRoot)
-            .Where(mesh => mesh.Skin is not null)
+        var surfaces = actor.Surfaces
+            .Where(surface => surface.Skinned)
             .ToArray();
         var used = new HashSet<MeshInstance3D>();
         var mappings = new List<SkinMapping>();
         foreach (var instance in captured)
         {
             var candidates = new List<SkinMapping>();
-            foreach (var mesh in meshes.Where(mesh => !used.Contains(mesh)))
+            foreach (var surface in surfaces.Where(surface => !used.Contains(surface.Mesh)))
             {
-                var meshName = mesh.Name.ToString();
-                if (!meshName.Equals(instance.GeometryName, StringComparison.Ordinal) &&
-                    !meshName.EndsWith($"_{instance.GeometryName}", StringComparison.Ordinal))
+                if (!surface.Shape.Equals(instance.GeometryName, StringComparison.Ordinal))
                     continue;
+                var mesh = surface.Mesh;
                 var skin = mesh.Skin!;
                 if (skin.GetBindCount() != instance.Bones.Count)
                     continue;
@@ -417,7 +416,7 @@ internal static class ActorReviewCapture
                     candidates.Add(new SkinMapping(
                         instance.NodePath,
                         instance.GeometryName,
-                        meshName,
+                        surface.RuntimeNodeName,
                         mesh,
                         skin,
                         bindings));
@@ -429,10 +428,10 @@ internal static class ActorReviewCapture
             used.Add(candidates[0].Mesh);
             mappings.Add(candidates[0]);
         }
-        if (mappings.Count != captured.Length || used.Count != meshes.Length)
+        if (mappings.Count != captured.Length || used.Count != surfaces.Length)
             throw new InvalidOperationException(
                 $"Imported skinned meshes differ from active retail palettes: " +
-                $"retail={captured.Length} imported={meshes.Length}.");
+                $"retail={captured.Length} imported={surfaces.Length}.");
         return mappings;
     }
 
