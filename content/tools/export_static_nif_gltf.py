@@ -16,8 +16,22 @@ if not hasattr(time, "clock"):
 
 from pyffi.formats.nif import NifFormat  # type: ignore  # noqa: E402
 
-from gltf_io import BufferBuilder, atomic_write, compiler_sources_sha256, pack_floats, sha256_bytes
+from actor_material import actor_alpha_contract, nif_material_roughness
+from gltf_io import (
+    GL_ARRAY_BUFFER,
+    GL_ELEMENT_ARRAY_BUFFER,
+    GL_FLOAT,
+    GL_UNSIGNED_INT,
+    GL_UNSIGNED_SHORT,
+    GL_UNSIGNED_SHORT_MAX,
+    BufferBuilder,
+    atomic_write,
+    compiler_sources_sha256,
+    pack_floats,
+    sha256_bytes,
+)
 from havok_collision_gltf import collision_contract, write_collision_gltf
+from runtime_configuration import ContentCompilerConfiguration, load_runtime_configuration
 
 
 SCHEMA = "opennv-static-nif-gltf/v1"
@@ -28,6 +42,7 @@ SUPPORTED_SHAPE_PROPERTIES = {
     "NiStencilProperty",
 }
 ATTACHMENT_MARKER_NAMES = {"ProjectileNode", "ShellCasingNode"}
+NORMALIZATION_EPSILON = 1.0e-12
 
 
 def decode_text(value: object) -> str:
@@ -41,7 +56,8 @@ def decode_text(value: object) -> str:
 
 def canonical_asset_path(value: object) -> str:
     path = decode_text(value).replace("/", "\\").lstrip("\\").lower()
-    return path[5:] if path.startswith("data\\") else path
+    data_prefix = "data\\"
+    return path[len(data_prefix):] if path.startswith(data_prefix) else path
 
 
 def is_editor_marker(value: object) -> bool:
@@ -61,7 +77,7 @@ def transform_xyz(value: object, matrix: object, *, direction: bool) -> tuple[fl
     if not direction:
         return result
     length = math.sqrt(sum(component * component for component in result))
-    if length <= 1.0e-12:
+    if length <= NORMALIZATION_EPSILON:
         raise ValueError("NIF contains a zero-length direction vector")
     return tuple(component / length for component in result)
 
@@ -109,22 +125,7 @@ def alpha_contract(shape: object) -> dict[str, object]:
         None,
     )
     if alpha is not None:
-        flags = int(alpha.flags)
-        blend_enabled = bool(flags & 0x0001)
-        test_enabled = bool(flags & 0x0200)
-        mode = "BLEND" if blend_enabled else "MASK" if test_enabled else "OPAQUE"
-        return {
-            "mode": mode,
-            "cutoff": float(alpha.threshold) / 255.0 if test_enabled else None,
-            "flags": flags,
-            "blendEnabled": blend_enabled,
-            "testEnabled": test_enabled,
-            "sourceBlendMode": (flags >> 1) & 0xF,
-            "destinationBlendMode": (flags >> 5) & 0xF,
-            "testFunction": (flags >> 10) & 0x7,
-            "noSorter": bool(flags & 0x2000),
-            "source": "NiAlphaProperty",
-        }
+        return {**actor_alpha_contract(alpha), "source": "NiAlphaProperty"}
     shader = next(
         (prop for prop in properties if isinstance(prop, NifFormat.BSShaderProperty)),
         None,
@@ -254,7 +255,7 @@ def generate_tangents(
         delta_one = (uvs[second][0] - uvs[first][0], uvs[second][1] - uvs[first][1])
         delta_two = (uvs[third][0] - uvs[first][0], uvs[third][1] - uvs[first][1])
         determinant = delta_one[0] * delta_two[1] - delta_one[1] * delta_two[0]
-        if abs(determinant) <= 1.0e-12:
+        if abs(determinant) <= NORMALIZATION_EPSILON:
             continue
         reciprocal = 1.0 / determinant
         tangent = tuple(
@@ -275,8 +276,12 @@ def generate_tangents(
         projection = sum(normal[axis] * tangent_row[axis] for axis in range(3))
         tangent = tuple(tangent_row[axis] - normal[axis] * projection for axis in range(3))
         length = math.sqrt(sum(value * value for value in tangent))
-        if length <= 1.0e-12:
-            axis = (1.0, 0.0, 0.0) if abs(normal[0]) < 0.9 else (0.0, 1.0, 0.0)
+        if length <= NORMALIZATION_EPSILON:
+            least_aligned_axis = min(range(3), key=lambda index: abs(normal[index]))
+            axis = tuple(
+                1.0 if index == least_aligned_axis else 0.0
+                for index in range(3)
+            )
             tangent = (
                 axis[1] * normal[2] - axis[2] * normal[1],
                 axis[2] * normal[0] - axis[0] * normal[2],
@@ -312,6 +317,7 @@ def export_static_nif(
     logical_path: str,
     gltf_path: Path,
     sidecar_path: Path,
+    compiler: ContentCompilerConfiguration,
     *,
     strict: bool = True,
 ) -> dict[str, object]:
@@ -392,11 +398,11 @@ def export_static_nif(
         minimum = [min(row[index] for row in positions) for index in range(3)]
         maximum = [max(row[index] for row in positions) for index in range(3)]
         attributes["POSITION"] = builder.add(
-            pack_floats(positions), component_type=5126, count=vertex_count, value_type="VEC3",
-            target=34962, minimum=minimum, maximum=maximum,
+            pack_floats(positions), component_type=GL_FLOAT, count=vertex_count, value_type="VEC3",
+            target=GL_ARRAY_BUFFER, minimum=minimum, maximum=maximum,
         )
         attributes["NORMAL"] = builder.add(
-            pack_floats(normals), component_type=5126, count=vertex_count, value_type="VEC3", target=34962,
+            pack_floats(normals), component_type=GL_FLOAT, count=vertex_count, value_type="VEC3", target=GL_ARRAY_BUFFER,
         )
         converted_uv_sets = [
             [texture_uv(value) for value in uv_set]
@@ -404,12 +410,12 @@ def export_static_nif(
         ]
         for uv_index, uvs in enumerate(converted_uv_sets):
             attributes[f"TEXCOORD_{uv_index}"] = builder.add(
-                pack_floats(uvs), component_type=5126, count=vertex_count, value_type="VEC2", target=34962,
+                pack_floats(uvs), component_type=GL_FLOAT, count=vertex_count, value_type="VEC2", target=GL_ARRAY_BUFFER,
             )
         if len(mesh.vertex_colors) == vertex_count:
             colors = [(float(v.r), float(v.g), float(v.b), float(v.a)) for v in mesh.vertex_colors]
             attributes["COLOR_0"] = builder.add(
-                pack_floats(colors), component_type=5126, count=vertex_count, value_type="VEC4", target=34962,
+                pack_floats(colors), component_type=GL_FLOAT, count=vertex_count, value_type="VEC4", target=GL_ARRAY_BUFFER,
             )
         tangent_source = "absent"
         if converted_uv_sets:
@@ -435,27 +441,33 @@ def export_static_nif(
                 tangents = generate_tangents(positions, normals, converted_uv_sets[0], triangles)
                 tangent_source = "generated-uv-triangle"
             attributes["TANGENT"] = builder.add(
-                pack_floats(tangents), component_type=5126, count=vertex_count, value_type="VEC4", target=34962,
+                pack_floats(tangents), component_type=GL_FLOAT, count=vertex_count, value_type="VEC4", target=GL_ARRAY_BUFFER,
             )
 
-        index_component = 5123 if vertex_count <= 65535 else 5125
-        index_format = "H" if index_component == 5123 else "I"
+        index_component = (
+            GL_UNSIGNED_SHORT if vertex_count <= GL_UNSIGNED_SHORT_MAX else GL_UNSIGNED_INT
+        )
+        index_format = "H" if index_component == GL_UNSIGNED_SHORT else "I"
         indices = [value for triangle in triangles for value in triangle]
         index_accessor = builder.add(
             struct.pack(f"<{len(indices)}{index_format}", *indices), component_type=index_component,
-            count=len(indices), value_type="SCALAR", target=34963,
+            count=len(indices), value_type="SCALAR", target=GL_ELEMENT_ARRAY_BUFFER,
         )
         material_index = len(materials)
         base_color = [float(value) for value in surface_material["baseColor"]]
         alpha = float(surface_material.get("alpha", 1.0))
-        glossiness = float(surface_material.get("glossiness", 10.0))
+        glossiness = float(
+            surface_material.get("glossiness", compiler.default_material_glossiness)
+        )
+        specular = [float(value) for value in surface_material.get("specular", [0.0, 0.0, 0.0])]
+        roughness, _roughness_source = nif_material_roughness(specular, glossiness, compiler)
         gltf_material: dict[str, object] = {
             "name": f"{decode_text(shape.name)} material",
             "doubleSided": shape_double_sided(shape),
             "pbrMetallicRoughness": {
                 "baseColorFactor": [*base_color, alpha],
                 "metallicFactor": 0.0,
-                "roughnessFactor": max(0.25, min(0.95, 1.0 - glossiness / 128.0)),
+                "roughnessFactor": roughness,
             },
         }
         alpha_mode = str(surface_material["alphaContract"]["mode"])
@@ -470,7 +482,9 @@ def export_static_nif(
         primitives.append({"attributes": attributes, "indices": index_accessor, "material": material_index})
 
         shape_index = block_index[id(shape)]
-        stable_id = sha256_bytes(f"{source_hash}:{shape_index}:{decode_text(shape.name)}".encode())[:24]
+        stable_id = sha256_bytes(
+            f"{source_hash}:{shape_index}:{decode_text(shape.name)}".encode()
+        )[:compiler.stable_id_hex_characters]
         surface_rows.append({
             "stableId": stable_id,
             "sourceBlockIndex": shape_index,
@@ -567,11 +581,13 @@ def main() -> int:
     parser.add_argument("--sidecar", type=Path, required=True)
     parser.add_argument("--allow-synthetic-minimal", action="store_true")
     args = parser.parse_args()
+    compiler = load_runtime_configuration().content_compiler
     result = export_static_nif(
         args.input,
         args.logical_path,
         args.output,
         args.sidecar,
+        compiler,
         strict=not args.allow_synthetic_minimal,
     )
     print("OPENNV_STATIC_NIF_GLTF " + json.dumps({

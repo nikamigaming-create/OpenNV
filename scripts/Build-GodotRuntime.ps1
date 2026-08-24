@@ -14,6 +14,8 @@ Set-StrictMode -Version Latest
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtimeRoot = Join-Path $repoRoot "runtime"
+$reportValidator = Join-Path $repoRoot "content\tools\validate_runtime_report.py"
+$RuntimeManifestJsonDepth = 8
 $dirty = -not [string]::IsNullOrWhiteSpace((git -C $repoRoot status --porcelain=v1 | Out-String))
 if ($dirty -and -not $AllowDirty) {
     throw "Refusing to package a dirty source tree. Commit the build inputs or pass -AllowDirty for a non-promotable local check."
@@ -104,28 +106,8 @@ $xrProcess = Start-Process -FilePath $binary `
 if ($xrProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $xrReport -PathType Leaf)) {
     throw "Exported OpenNV runtime did not complete its OpenXR rig smoke."
 }
-$xr = Get-Content -Raw -LiteralPath $xrReport | ConvertFrom-Json
-    if ($xr.schema -ne "opennv-openxr-rig/v2" -or
-    $xr.status -ne "pass" -or
-        [int]$xr.actions -ne 8 -or
-        @($xr.actionNames).Count -ne 8 -or
-        @($xr.actionNames) -notcontains "reload" -or
-        @($xr.testedInteractionProfiles).Count -ne 2 -or
-        @($xr.testedInteractionProfiles) -notcontains "/interaction_profiles/khr/generic_controller" -or
-        @($xr.testedInteractionProfiles) -notcontains "/interaction_profiles/oculus/touch_controller" -or
-        $xr.controllerRenderModelManagerType -ne "OpenXRRenderModelManager" -or
-        $xr.leftTracker -ne "left_hand" -or
-        $xr.rightTracker -ne "right_hand" -or
-        [double]$xr.worldScale -ne 1.0 -or
-        [double]$xr.desiredEyeHeightMeters -ne 1.68 -or
-        [int]$xr.physicsTicksPerSecond -ne 90 -or
-        -not [bool]$xr.worldSpaceHud -or
-        $xr.sharedSaveSchema.equippedWeaponFormId -ne "0000434f" -or
-        [int]$xr.sharedSaveSchema.ammoInMagazine -ne 12 -or
-        [int]$xr.sharedSaveSchema.reserveAmmo -ne 11 -or
-        [int]$xr.sharedSaveSchema.shotsFired -ne 1) {
-    throw "Exported OpenNV OpenXR rig report is invalid."
-}
+& python $reportValidator --mode xr --report $xrReport
+if ($LASTEXITCODE -ne 0) { throw "Exported OpenNV OpenXR rig report is invalid." }
 foreach ($temporaryPath in @($xrReport, $xrSave)) {
     if (Test-Path -LiteralPath $temporaryPath) {
         Remove-Item -LiteralPath $temporaryPath -Force
@@ -162,36 +144,11 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         if ($ownedProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $ownedReport -PathType Leaf)) {
             throw "Packaged OpenNV runtime failed its owned-data end-to-end gate."
         }
+        $ownedInstallManifest = Join-Path $ownedCache "install-manifest.json"
+        & python $reportValidator --mode cell --report $ownedReport `
+            --install-manifest $ownedInstallManifest
+        if ($LASTEXITCODE -ne 0) { throw "Packaged OpenNV owned-data report is invalid." }
         $owned = Get-Content -Raw -LiteralPath $ownedReport | ConvertFrom-Json
-        if ($owned.schema -ne "opennv-godot-cell/v1" -or
-            $owned.status -ne "pass" -or
-            [int]$owned.assets -lt 209 -or
-            [int]$owned.textures -lt 363 -or
-            [int]$owned.materialBindings -lt 439 -or
-            [int]$owned.references -lt 454 -or
-            [int]$owned.doors -lt 9 -or
-            [int]$owned.authoredLights -lt 27 -or
-            [int]$owned.actors -ne 3 -or
-            [int]$owned.collisionMeshes -lt 306 -or
-            [int]$owned.surfaces -lt 1 -or
-            [int]$owned.vertices -lt 3 -or
-            -not [bool]$owned.doorTraversal.floorHit -or
-            [Math]::Abs([double]$owned.doorTraversal.floorY) -gt 0.2 -or
-            -not [bool]$owned.doorTraversal.closedHitDoor -or
-            [bool]$owned.doorTraversal.openHit -or
-            -not [bool]$owned.doorTraversal.projectilePortalClear -or
-            -not [bool]$owned.doorTraversal.capsuleWalkForward -or
-            -not [bool]$owned.doorTraversal.capsuleWalkBackward -or
-            -not [bool]$owned.doorTraversal.capsuleWalkThrough -or
-            [int]$owned.doorTraversal.linkedCells -ne 1 -or
-            [double]$owned.doorTraversal.maximumPortalAlignmentErrorMeters -gt 0.0001 -or
-            -not [bool]$owned.connectedAuthoredSpaces -or
-            @($owned.linkedCells).Count -ne 1 -or
-            @($owned.portals).Count -ne 1 -or
-            -not [bool]$owned.portals[0].reciprocal -or
-            [double]$owned.portals[0].normalAgreement -lt 0.999) {
-            throw "Packaged OpenNV owned-data report is invalid."
-        }
 
         $reuseProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
@@ -207,15 +164,12 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         if ($reuseProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $reuseReport -PathType Leaf)) {
             throw "Packaged OpenNV runtime failed its persistent-cache gate."
         }
+        & python $reportValidator --mode cell --report $reuseReport `
+            --install-manifest $ownedInstallManifest
+        if ($LASTEXITCODE -ne 0) { throw "Packaged OpenNV persistent-cache report is invalid." }
         $reused = Get-Content -Raw -LiteralPath $reuseReport | ConvertFrom-Json
-        if ($reused.schema -ne "opennv-godot-cell/v1" -or
-            $reused.status -ne "pass" -or
-            $reused.cellFormId -ne $owned.cellFormId -or
-            -not [bool]$reused.doorTraversal.closedHitDoor -or
-            [bool]$reused.doorTraversal.openHit -or
-            -not [bool]$reused.doorTraversal.capsuleWalkThrough -or
-            @($reused.linkedCells).Count -ne 1) {
-            throw "Packaged OpenNV persistent-cache report is invalid."
+        if ($reused.cellFormId -ne $owned.cellFormId) {
+            throw "Packaged OpenNV persistent-cache loaded another cell."
         }
 
         $vrLayoutProcess = Start-Process -FilePath $binary `
@@ -232,19 +186,9 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         if ($vrLayoutProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $vrLayoutReport -PathType Leaf)) {
             throw "Packaged OpenNV runtime failed its VR presentation-layout gate."
         }
-        $vrLayout = Get-Content -Raw -LiteralPath $vrLayoutReport | ConvertFrom-Json
-        if ($vrLayout.schema -ne "opennv-godot-cell/v1" -or
-            $vrLayout.status -ne "pass" -or
-            [int]$vrLayout.actors -ne 3 -or
-            -not [bool]$vrLayout.xrPresentation.heldWeapon -or
-            -not [bool]$vrLayout.xrPresentation.muzzleFeedback -or
-            -not [bool]$vrLayout.xrPresentation.wristHud -or
-            [double]$vrLayout.xrPresentation.wristHudPixelSize -gt 0.00032 -or
-            $vrLayout.xrPresentation.startingLoadout.equippedWeaponFormId -ne "0000434f" -or
-            [int]$vrLayout.xrPresentation.startingLoadout.weaponDamage -ne 22 -or
-            [int]$vrLayout.xrPresentation.startingLoadout.weaponClipSize -ne 12 -or
-            [int]$vrLayout.xrPresentation.startingLoadout.ammoInMagazine -ne 12 -or
-            [int]$vrLayout.xrPresentation.startingLoadout.reserveAmmo -ne 12) {
+        & python $reportValidator --mode vr-layout --report $vrLayoutReport `
+            --install-manifest $ownedInstallManifest
+        if ($LASTEXITCODE -ne 0) {
             throw "Packaged OpenNV VR presentation-layout report is invalid."
         }
 
@@ -263,21 +207,9 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             -not (Test-Path -LiteralPath $gameplaySave -PathType Leaf)) {
             throw "Packaged OpenNV runtime failed its playable-route gate."
         }
-        $gameplay = Get-Content -Raw -LiteralPath $gameplayReport | ConvertFrom-Json
-        if ($gameplay.schema -ne "opennv-godot-playable-route/v1" -or
-            $gameplay.status -ne "pass" -or
-            $gameplay.phase -ne "first-run" -or
-            -not [bool]$gameplay.session.objectiveComplete -or
-            $gameplay.session.equippedWeaponFormId -ne "0008f216" -or
-            $gameplay.session.weaponAmmoFormId -ne "001537e3" -or
-            [int]$gameplay.session.weaponDamage -ne 26 -or
-            [int]$gameplay.session.weaponClipSize -ne 6 -or
-            [int]$gameplay.session.ammoInMagazine -ne 5 -or
-            [int]$gameplay.session.shotsFired -ne 1 -or
-            [int]$gameplay.session.emptiedContainers -ne 1 -or
-            [int]$gameplay.session.openDoors -ne 2) {
-            throw "Packaged OpenNV playable-route report is invalid."
-        }
+        & python $reportValidator --mode gameplay --report $gameplayReport `
+            --install-manifest $ownedInstallManifest
+        if ($LASTEXITCODE -ne 0) { throw "Packaged OpenNV playable-route report is invalid." }
 
         $gameplayReloadProcess = Start-Process -FilePath $binary `
             -ArgumentList @(
@@ -293,15 +225,9 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             -not (Test-Path -LiteralPath $gameplayReloadReport -PathType Leaf)) {
             throw "Packaged OpenNV runtime failed its gameplay cold-reload gate."
         }
-        $gameplayReload = Get-Content -Raw -LiteralPath $gameplayReloadReport | ConvertFrom-Json
-        if ($gameplayReload.schema -ne "opennv-godot-playable-route/v1" -or
-            $gameplayReload.status -ne "pass" -or
-            $gameplayReload.phase -ne "cold-reload" -or
-            -not [bool]$gameplayReload.session.objectiveComplete -or
-            $gameplayReload.session.weaponAmmoFormId -ne "001537e3" -or
-            [int]$gameplayReload.session.weaponClipSize -ne 6 -or
-            [int]$gameplayReload.session.ammoInMagazine -ne 5 -or
-            [int]$gameplayReload.session.emptiedContainers -ne 1) {
+        & python $reportValidator --mode gameplay-reload --report $gameplayReloadReport `
+            --install-manifest $ownedInstallManifest
+        if ($LASTEXITCODE -ne 0) {
             throw "Packaged OpenNV gameplay cold-reload report is invalid."
         }
     }
@@ -332,7 +258,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
 $manifest = Get-Content -Raw -LiteralPath (Join-Path $runtimeRoot "runtime-manifest.json") | ConvertFrom-Json
 $manifest.runtime.executables | Add-Member -NotePropertyName win32 -NotePropertyValue "OpenNV.exe" -Force
 $manifest.runtime.contentExecutables | Add-Member -NotePropertyName win32 -NotePropertyValue "OpenNV.Content.exe" -Force
-$manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stage "runtime-manifest.json") -Encoding utf8NoBOM
+$manifest | ConvertTo-Json -Depth $RuntimeManifestJsonDepth | Set-Content -LiteralPath (Join-Path $stage "runtime-manifest.json") -Encoding utf8NoBOM
 $revision = (git -C $repoRoot rev-parse HEAD).Trim()
 $buildInfo = [ordered]@{
     schema = "opennv-godot-build/v1"

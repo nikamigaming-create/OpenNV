@@ -1,0 +1,455 @@
+{
+  "schema": "opennv-runtime-configuration/v1",
+  "world": {
+    "provenance": {
+      "classification": "clean-room-observation",
+      "status": "verified",
+      "source": "Fallout: New Vegas world-unit contract",
+      "evidence": "docs/evidence/fnv-esm-cell-contract.md"
+    },
+    "gameUnitsToMeters": 0.0142875
+  },
+  "simulation": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "hardware-gated",
+      "source": "OpenNV shared flat/OpenXR simulation policy",
+      "evidence": "docs/evidence/openxr-runtime-contract.md"
+    },
+    "physicsTicksPerSecond": 90,
+    "gravityMetersPerSecondSquared": 9.8
+  },
+  "renderer": {
+    "provenance": {
+      "classification": "provisional-adapter",
+      "status": "parity-failing",
+      "source": "Neutral Godot adapter pending the complete retail D3D9 lighting/HDR contract",
+      "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
+    },
+    "backgroundColorRgba": [0.015, 0.018, 0.022, 1.0],
+    "toneMapper": "filmic",
+    "fogLightEnergy": 1.0,
+    "fogDensity": 1.0,
+    "ambientEnergyScale": 1.0,
+    "directionalEnergyScale": 1.0,
+    "pointLightEnergyScale": 1.0,
+    "minimumPointLightEnergy": 0.0,
+    "authoredPointLightShadows": false,
+    "neutralNormalColorRgba": [0.5, 0.5, 1.0, 1.0],
+    "neutralNormalTextureSizePixels": [1, 1],
+    "defaultMetallic": 0.0,
+    "emissionEnergyMultiplier": 1.0,
+    "environmentNormalDecodeScale": 2.0,
+    "environmentNormalDecodeBias": -1.0,
+    "environmentReflectionHomogeneousW": 0.0,
+    "environmentOpaqueAlpha": 1.0,
+    "cubemapFaceCount": 6
+  },
+  "player": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "playtest-required",
+      "source": "OpenNV player adapter; never used as retail scene or actor data",
+      "evidence": "docs/architecture.md#first-class-flatvr-boundary"
+    },
+    "spawnCenterHeightMeters": 0.9,
+    "capsuleRadiusMeters": 0.32,
+    "capsuleHeightMeters": 1.8,
+    "moveSpeedMetersPerSecond": 3.6,
+    "mouseSensitivityRadiansPerPixel": 0.0022,
+    "verticalLookLimitRadians": 1.45,
+    "activationDistanceMeters": 2.5,
+    "fireRayDistanceMeters": 100.0,
+    "desktopCameraOffsetMeters": [0.0, 0.72, 0.0],
+    "cameraNearMeters": 0.02,
+    "cameraFarMeters": 200.0,
+    "collisionLayer": 2,
+    "collisionMask": 1
+  },
+  "xr": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "hardware-gated",
+      "source": "OpenNV OpenXR comfort and controller adapter",
+      "evidence": "docs/evidence/openxr-runtime-contract.md"
+    },
+    "worldScale": 1.0,
+    "originYOffsetMeters": -0.9,
+    "desiredEyeHeightMeters": 1.68,
+    "eyeHeightCalibrationTrackedFrames": 30,
+    "inputHealthReportFrames": 90,
+    "movementDeadzone": 0.18,
+    "actionThreshold": 0.70,
+    "snapTurnActivationThreshold": 0.75,
+    "snapTurnResetThreshold": 0.35,
+    "snapTurnDegrees": 30.0,
+    "weaponMountRotationDegrees": [0.0, 90.0, 0.0],
+    "weaponFeedbackSeconds": 0.09,
+    "weaponRecoilMeters": 0.035,
+    "muzzleFlashVisibleSeconds": 0.045,
+    "fireHaptic": {
+      "frequency": 0.0,
+      "amplitude": 0.45,
+      "durationSeconds": 0.06,
+      "delaySeconds": 0.0
+    },
+    "reloadHaptic": {
+      "frequency": 0.0,
+      "amplitude": 0.32,
+      "durationSeconds": 0.04,
+      "delaySeconds": 0.0
+    },
+    "contract": {
+      "provenance": {
+        "classification": "open-nv-policy",
+        "status": "hardware-gated",
+        "source": "OpenNV OpenXR action and interaction-profile contract",
+        "evidence": "docs/evidence/openxr-runtime-contract.md"
+      },
+      "actionMapResourcePath": "res://openxr_action_map.tres",
+      "expectedActionSetCount": 1,
+      "actionNames": ["activate", "aim", "fire", "haptic", "move", "reload", "save", "turn"],
+      "interactionProfilePaths": [
+        "/interaction_profiles/khr/generic_controller",
+        "/interaction_profiles/oculus/touch_controller"
+      ]
+    },
+    "diagnosticRigProof": {
+      "provenance": {
+        "classification": "diagnostic-only",
+        "status": "blocking-layout-test",
+        "source": "Retail-derived 10mm loadout used only by the asset-free XR hierarchy proof",
+        "evidence": "docs/evidence/openxr-runtime-contract.md"
+      },
+      "sessionId": "xr-rig-proof",
+      "weaponFormId": "0000434f",
+      "weaponEditorId": "Weap10mmPistol",
+      "ammoFormId": "00004241",
+      "ammoEditorId": "Ammo10mm",
+      "damage": 22,
+      "clipSize": 12,
+      "reserveRounds": 12,
+      "expectedShotsFired": 1,
+      "expectedAmmoInMagazineAfterReload": 12,
+      "expectedReserveRoundsAfterReload": 11
+    },
+    "diagnosticMuzzleFlash": {
+      "provenance": {
+        "classification": "diagnostic-only",
+        "status": "must-be-replaced-by-retail-effect",
+        "source": "Temporary visibility diagnostic; not a retail effect",
+        "evidence": "docs/architecture.md#current-truth-and-deliberate-gaps"
+      },
+      "sphereRadiusGameUnits": 1.1,
+      "sphereHeightGameUnits": 2.2,
+      "albedoColorRgba": [1.0, 0.55, 0.08, 1.0],
+      "emissionColorRgba": [1.0, 0.35, 0.03, 1.0],
+      "emissionEnergy": 4.0,
+      "lightColorRgba": [1.0, 0.48, 0.08, 1.0],
+      "lightEnergy": 3.0,
+      "lightRangeGameUnits": 140.0
+    }
+  },
+  "door": {
+    "provenance": {
+      "classification": "provisional-adapter",
+      "status": "must-be-replaced-by-nif-controller-data",
+      "source": "Bounded interaction fallback while door controller tracks are unsupported",
+      "evidence": "docs/evidence/fnv-goodsprings-linked-world-contract.md"
+    },
+    "fallbackOpenAngleDegrees": 90.0
+  },
+  "hud": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "experimental",
+      "source": "OpenNV accessibility presentation",
+      "evidence": "docs/evidence/openxr-runtime-contract.md"
+    },
+    "desktopPanelPositionPixels": [18.0, 18.0],
+    "desktopPanelSizePixels": [520.0, 132.0],
+    "desktopPanelColorRgba": [0.015, 0.025, 0.02, 0.82],
+    "desktopLabelsPositionPixels": [32.0, 28.0],
+    "desktopLabelsSizePixels": [490.0, 112.0],
+    "textColorRgba": [0.70, 0.95, 0.50, 1.0],
+    "desktopFontSizePixels": 17,
+    "crosshairPositionPixels": [635.0, 346.0],
+    "crosshairFontSizePixels": 24,
+    "xrMountPositionMeters": [0.0, 0.035, -0.035],
+    "xrMountRotationDegrees": [-78.0, 0.0, 0.0],
+    "xrFontSizePixels": 24,
+    "xrPixelSizeMeters": 0.00032,
+    "xrOutlineSizePixels": 4,
+    "xrMaximumStatusCharacters": 38,
+    "defaultSavePath": "user://saves/goodsprings-sandbox-v1.json"
+  },
+  "capture": {
+    "provenance": {
+      "classification": "diagnostic-only",
+      "status": "parity-gate-policy",
+      "source": "OpenNV native capture acceptance policy",
+      "evidence": "docs/evidence/fnv-esm-cell-contract.md"
+    },
+    "renderedFramesBeforeCapture": 3,
+    "actorRenderedFramesBeforeCapture": 5,
+    "minimumMeanLuminance": 0.08,
+    "actorMinimumMeanLuminance": 0.04,
+    "darkPixelLuminance": 0.03,
+    "minimumLuminanceDeviation": 0.05,
+    "maximumDarkPixelFraction": 0.60,
+    "expectedWidthPixels": 1280,
+    "expectedHeightPixels": 720,
+    "rgbaChannelCount": 4,
+    "pixelChannelMaximum": 255.0,
+    "luminanceWeightsRgb": [0.2126, 0.7152, 0.0722],
+    "actorShotKinds": ["front-portrait", "front-full-body"],
+    "environmentShots": [
+      {
+        "name": "saloon-wide",
+        "outputFile": "saloon-entry-textured.png",
+        "openProofDoorBeforeShot": false,
+        "verticalFovDegrees": 58.0,
+        "cameraPositionMeters": [0.0, 1.62, -1.6],
+        "lookAtMeters": [-0.5, 1.45, -8.0]
+      },
+      {
+        "name": "saloon-bar",
+        "outputFile": "saloon-room-wide.png",
+        "openProofDoorBeforeShot": true,
+        "verticalFovDegrees": 58.0,
+        "cameraPositionMeters": [0.25, 1.58, -6.5],
+        "lookAtMeters": [0.0, 1.42, -13.0]
+      }
+    ]
+  },
+  "proof": {
+    "provenance": {
+      "classification": "diagnostic-only",
+      "status": "blocking-test-policy",
+      "source": "OpenNV deterministic geometry and portal gates",
+      "evidence": "docs/evidence/fnv-goodsprings-linked-world-contract.md"
+    },
+    "portalAlignmentToleranceMeters": 0.0001,
+    "portalNormalAgreementMinimum": 0.999,
+    "spawnFloorToleranceMeters": 0.20,
+    "spawnFloorRayStartMeters": 2.0,
+    "spawnFloorRayEndMeters": -2.0,
+    "doorRayThicknessMultiplier": 2.0,
+    "doorRayMinimumReachGameUnits": 12.0,
+    "projectileRayStartMeters": 1.5,
+    "projectileRayEndMeters": 6.0,
+    "portalCapsuleCenterHeightMeters": 1.05,
+    "portalCapsuleMotionMeters": 3.0,
+    "walkableSurfaceNormalYMinimum": 0.7,
+    "gameplayRoute": {
+      "provenance": {
+        "classification": "diagnostic-only",
+        "status": "blocking-test-policy",
+        "source": "Authored Goodsprings sandbox route identities and expected persisted state",
+        "evidence": "docs/evidence/fnv-esm-cell-contract.md"
+      },
+      "weaponPickupFormId": "0008f216",
+      "aidPickupEditorId": "Beer",
+      "containerEditorId": "SSCrateContainerFull",
+      "expectedShotsFired": 1,
+      "expectedAmmoInMagazine": 5,
+      "expectedEmptiedContainers": 1,
+      "expectedOpenDoors": 2,
+      "expectedInventoryItemFormId": "00103b1e",
+      "expectedContainerReferenceFormId": "0010873e"
+    }
+  },
+  "diagnosticPreview": {
+    "provenance": {
+      "classification": "diagnostic-only",
+      "status": "not-a-parity-renderer",
+      "source": "Standalone mesh transport preview",
+      "evidence": "docs/clean-room.md#first-direct-slice"
+    },
+    "backgroundColorRgba": [0.03, 0.035, 0.04, 1.0],
+    "ambientColorRgba": [0.35, 0.38, 0.42, 1.0],
+    "ambientEnergy": 0.65,
+    "lightRotationDegrees": [-50.0, -30.0, 0.0],
+    "lightEnergy": 1.4,
+    "cameraOffsetExtentMultipliers": [1.2, 0.65, 1.8],
+    "minimumNearMeters": 0.01,
+    "nearExtentDivisor": 10000.0,
+    "minimumFarMeters": 100.0,
+    "farExtentMultiplier": 20.0,
+    "actorMinimumHeightMeters": 1.2,
+    "actorMaximumHeightMeters": 2.4
+  },
+  "exteriorEnvironment": {
+    "provenance": {
+      "classification": "provisional-adapter",
+      "status": "parity-failing",
+      "source": "Bounded NVDefaultClimate clear-day approximation pending authored climate/weather/time evaluation",
+      "evidence": "docs/evidence/fnv-goodsprings-linked-world-contract.md"
+    },
+    "mode": "exterior-bounded-clear-day",
+    "ambientColor": [0.46, 0.43, 0.39],
+    "directionalColor": [1.0, 0.86, 0.70],
+    "fogColor": [0.58, 0.52, 0.45],
+    "fogNearGameUnits": 4096.0,
+    "fogFarGameUnits": 65536.0,
+    "fogPower": 1.0,
+    "directionalRotationDegrees": [-48.0, -32.0],
+    "directionalFade": 1.0
+  },
+  "retailActorState": {
+    "provenance": {
+      "classification": "diagnostic-only",
+      "status": "blocking-test-policy",
+      "source": "Matched retail actor-state acceptance contract",
+      "evidence": "docs/evidence/fnv-retail-actor-state-contract.md"
+    },
+    "requiredShotKinds": ["front-portrait", "front-full-body"],
+    "fullSequenceWeight": 1.0,
+    "sequenceWeightTolerance": 0.001,
+    "minimumContextSequenceWeight": 0.99,
+    "minimumContextActors": 1,
+    "minimumPoseBones": 50,
+    "minimumArmBones": 4,
+    "excludedPoseNodes": [
+      "Bip01",
+      "Bip01 NonAccum",
+      "Bip01 Neck",
+      "Bip01 R ForeTwistDriver",
+      "Bip01 LPauldron",
+      "Bip01 RPauldron"
+    ]
+  },
+  "actorParity": {
+    "provenance": {
+      "classification": "diagnostic-only",
+      "status": "blocking-parity-policy",
+      "source": "Matched-state retail-versus-OpenNV actor differential thresholds and report presentation",
+      "evidence": "docs/evidence/fnv-retail-actor-state-contract.md"
+    },
+    "poseTranslationToleranceMeters": 0.00005,
+    "poseRotationToleranceRadians": 0.001,
+    "maximumReportedWorstBones": 8,
+    "placementToleranceGameUnits": 0.001,
+    "yawToleranceRadians": 0.00001,
+    "cameraPositionToleranceGameUnits": 0.001,
+    "cameraAimToleranceGameUnits": 0.001,
+    "cameraDistanceToleranceMeters": 0.00001,
+    "verticalFovToleranceDegrees": 0.001,
+    "animationPhaseToleranceSeconds": 0.01,
+    "changedPixelChannelTolerance": 8,
+    "maximumMeanAbsoluteError": 0.05,
+    "maximumChangedPixelFraction": 0.25,
+    "maximumMeanLuminanceDelta": 0.03,
+    "contactSheet": {
+      "headerPixels": 104,
+      "backgroundRgb": [20, 22, 26],
+      "titleFontPixels": 32,
+      "detailFontPixels": 22,
+      "textMarginXPixels": 24,
+      "titleYPixels": 13,
+      "detailYPixels": 61,
+      "retailTitleRgb": [245, 245, 245],
+      "godotTitleRgb": [255, 118, 98],
+      "detailRgb": [190, 198, 208]
+    }
+  },
+  "setupView": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "experimental",
+      "source": "OpenNV legal-owned-data setup presentation",
+      "evidence": "docs/architecture.md#asset-free-distribution-and-local-import"
+    },
+    "backgroundColorRgba": [0.025, 0.045, 0.07, 1.0],
+    "contentPositionPixels": [64.0, 64.0],
+    "contentSizePixels": [760.0, 460.0],
+    "titleFontSizePixels": 28,
+    "bodyFontSizePixels": 18,
+    "buttonMinimumHeightPixels": 48.0,
+    "statusMinimumHeightPixels": 96.0,
+    "statusColorRgba": [0.70, 0.80, 0.90, 1.0],
+    "statusFontSizePixels": 16,
+    "dialogCenteredRatio": 0.8
+  },
+  "desktopLauncher": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "verified",
+      "source": "Independent launcher boot-window and notification presentation policy",
+      "evidence": "docs/desktop-launcher.md"
+    },
+    "mainWindowWidthPixels": 1380,
+    "mainWindowHeightPixels": 900,
+    "mainWindowMinimumWidthPixels": 1040,
+    "mainWindowMinimumHeightPixels": 720,
+    "toastVisibilityMilliseconds": 5200
+  },
+  "legalAssets": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "verified",
+      "source": "Asset-free local import and disposable cache contract",
+      "evidence": "docs/clean-room.md#asset-boundary"
+    },
+    "defaultCellRecipe": "goodsprings-saloon-structure-v1",
+    "defaultCacheRoot": "user://cache/legal-assets-v1",
+    "packagedCompilerName": "OpenNV.Content packaged direct exporter v1"
+  },
+  "contentCompiler": {
+    "provenance": {
+      "classification": "provisional-adapter",
+      "status": "parity-failing",
+      "source": "Single deterministic OpenNV conversion policy for output identity, sampling, materials, and bounded LAND baking",
+      "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
+    },
+    "assetIdHexCharacters": 20,
+    "stableIdHexCharacters": 24,
+    "pngCompressionLevel": 9,
+    "animationSamplesPerSecond": 30.0,
+    "xyzRotationEqualityTolerance": 0.000001,
+    "zeroSpecularEpsilon": 0.000001,
+    "minimumMaterialRoughness": 0.08,
+    "defaultMaterialGlossiness": 10.0,
+    "landscapeQuadrantPixels": 512,
+    "landscapeTilesPerQuadrant": 4,
+    "landscapeTileRepeatsPerCell": 8
+  },
+  "actorCompiler": {
+    "provenance": {
+      "classification": "provisional-adapter",
+      "status": "parity-failing",
+      "source": "Bounded actor presentation state pending full package/furniture and FaceGen skin-color evaluation",
+      "evidence": "docs/evidence/fnv-retail-actor-state-contract.md"
+    },
+    "states": [
+      {
+        "referenceFormId": "00104c6d",
+        "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
+        "skinToneRgba": [62, 65, 62, 64],
+        "skinToneSource": "provisional-caucasian-runtime-calibration",
+        "bodyTextureSourceAliases": ["textures\\characters\\childfemale\\upperbodyfemale.dds"]
+      },
+      {
+        "referenceFormId": "00104e85",
+        "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
+        "skinToneRgba": [62, 65, 62, 64],
+        "skinToneSource": "provisional-caucasian-runtime-calibration",
+        "bodyTextureSourceAliases": []
+      },
+      {
+        "referenceFormId": "00104f08",
+        "idleAnimation": "meshes\\characters\\_male\\idleanims\\dynamicidle_sitstool.kf",
+        "skinToneRgba": [62, 65, 62, 64],
+        "skinToneSource": "provisional-caucasian-runtime-calibration",
+        "bodyTextureSourceAliases": []
+      },
+      {
+        "referenceFormId": "00104c80",
+        "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
+        "skinToneRgba": [62, 65, 62, 64],
+        "skinToneSource": "provisional-caucasian-runtime-calibration",
+        "bodyTextureSourceAliases": []
+      }
+    ]
+  }
+}

@@ -14,22 +14,6 @@
   "actorRecipes": [
     "goodsprings-easy-pete-actor-v1"
   ],
-  "environment": {
-    "source": "NVDefaultClimate clear-day bounded presentation; retail weather-time parity unproven",
-    "ambientColor": [0.46, 0.43, 0.39],
-    "directionalColor": [1.0, 0.86, 0.70],
-    "fogColor": [0.58, 0.52, 0.45],
-    "fogNearGameUnits": 4096.0,
-    "fogFarGameUnits": 65536.0,
-    "fogPower": 1.0,
-    "directionalRotationDegrees": [-48.0, -32.0],
-    "directionalFade": 1.0,
-    "calibration": {
-      "ambientEnergy": 0.9,
-      "omniEnergyScale": 1.0,
-      "directionalEnergyScale": 1.2
-    }
-  },
   "selection": {
     "modelPrefixes": [],
     "includeBaseRecordTypes": [
@@ -58,9 +42,6 @@
     ],
     "excludeModelPrefixes": [
       "effects\\"
-    ],
-    "yawOnly": false,
-    "allowNonYawRecordTypes": []
-  },
-  "unitsToMeters": 0.0142875
+    ]
+  }
 }

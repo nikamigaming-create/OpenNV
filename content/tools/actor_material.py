@@ -16,12 +16,25 @@ from bsa_archive import canonical_member_path
 
 if TYPE_CHECKING:
     from actor_gltf import ActorComponent, TextureLibrary
+    from runtime_configuration import ContentCompilerConfiguration
+
+
+NIF_ALPHA_BLEND_ENABLED_FLAG = 0x0001
+NIF_ALPHA_TEST_ENABLED_FLAG = 0x0200
+NIF_ALPHA_BLEND_MODE_MASK = 0xF
+NIF_ALPHA_TEST_FUNCTION_MASK = 0x7
+NIF_ALPHA_SOURCE_BLEND_SHIFT = 1
+NIF_ALPHA_DESTINATION_BLEND_SHIFT = 5
+NIF_ALPHA_TEST_FUNCTION_SHIFT = 10
+NIF_ALPHA_NO_SORTER_FLAG = 0x2000
+BYTE_CHANNEL_MAXIMUM = 255.0
 
 
 def build_actor_material(
     component: ActorComponent,
     shape: object,
     textures: TextureLibrary,
+    compiler: ContentCompilerConfiguration,
 ) -> tuple[dict[str, object], dict[str, object]]:
     paths = []
     for prop in getattr(shape, "properties", []):
@@ -43,7 +56,7 @@ def build_actor_material(
         (prop for prop in properties if isinstance(prop, NifFormat.NiMaterialProperty)),
         None,
     )
-    roughness, roughness_source = actor_roughness(material_property)
+    roughness, roughness_source = actor_roughness(material_property, compiler)
     material: dict[str, object] = {
         "name": f"{component.role}_{_text(shape.name)} material",
         "doubleSided": False,
@@ -129,31 +142,61 @@ def actor_vertex_colors_enabled(properties: list[object]) -> bool:
     )
 
 
-def actor_roughness(material: object | None) -> tuple[float, str]:
+def actor_roughness(
+    material: object | None,
+    compiler: ContentCompilerConfiguration,
+) -> tuple[float, str]:
     if material is None:
         return 1.0, "no-ni-material"
     specular = material.specular_color
-    if max(float(specular.r), float(specular.g), float(specular.b)) <= 1.0e-6:
+    return nif_material_roughness(
+        (float(specular.r), float(specular.g), float(specular.b)),
+        float(material.glossiness),
+        compiler,
+    )
+
+
+def nif_material_roughness(
+    specular_rgb: tuple[float, float, float] | list[float],
+    glossiness: float,
+    compiler: ContentCompilerConfiguration,
+) -> tuple[float, str]:
+    if max(specular_rgb) <= compiler.zero_specular_epsilon:
         return 1.0, "ni-material-zero-specular"
-    glossiness = float(material.glossiness)
-    return max(0.08, min(1.0, math.sqrt(2.0 / (glossiness + 2.0)))), "ni-material-glossiness"
+    return (
+        max(
+            compiler.minimum_material_roughness,
+            min(1.0, math.sqrt(2.0 / (glossiness + 2.0))),
+        ),
+        "ni-material-glossiness",
+    )
 
 
 def actor_alpha_contract(alpha_property: object) -> dict[str, object]:
     flags = int(alpha_property.flags)
-    blend_enabled = bool(flags & 0x0001)
-    test_enabled = bool(flags & 0x0200)
+    blend_enabled = bool(flags & NIF_ALPHA_BLEND_ENABLED_FLAG)
+    test_enabled = bool(flags & NIF_ALPHA_TEST_ENABLED_FLAG)
     mode = "BLEND" if blend_enabled else "MASK" if test_enabled else "OPAQUE"
     return {
         "mode": mode,
-        "cutoff": float(alpha_property.threshold) / 255.0 if test_enabled else None,
+        "cutoff": (
+            float(alpha_property.threshold) / BYTE_CHANNEL_MAXIMUM
+            if test_enabled
+            else None
+        ),
         "flags": flags,
         "blendEnabled": blend_enabled,
         "testEnabled": test_enabled,
-        "sourceBlendMode": (flags >> 1) & 0xF,
-        "destinationBlendMode": (flags >> 5) & 0xF,
-        "testFunction": (flags >> 10) & 0x7,
-        "noSorter": bool(flags & 0x2000),
+        "sourceBlendMode": (
+            flags >> NIF_ALPHA_SOURCE_BLEND_SHIFT
+        ) & NIF_ALPHA_BLEND_MODE_MASK,
+        "destinationBlendMode": (
+            flags >> NIF_ALPHA_DESTINATION_BLEND_SHIFT
+        ) & NIF_ALPHA_BLEND_MODE_MASK,
+        "testFunction": (
+            flags >> NIF_ALPHA_TEST_FUNCTION_SHIFT
+        ) & NIF_ALPHA_TEST_FUNCTION_MASK,
+        "noSorter": bool(flags & NIF_ALPHA_NO_SORTER_FLAG),
     }
 
 

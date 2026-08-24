@@ -9,7 +9,7 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from actor_catalog import scan_actor_catalog  # noqa: E402
+from actor_catalog import resolve_actor_outfit_form_ids, scan_actor_catalog  # noqa: E402
 
 
 def subrecord(signature: str, data: bytes) -> bytes:
@@ -72,7 +72,15 @@ def plugin() -> bytes:
         + subrecord("MODL", b"armor/male.nif\0")
         + subrecord("MOD2", b"armor/male_go.nif\0")
         + subrecord("MOD3", b"armor/female.nif\0")
-        + subrecord("MOD4", b"armor/female_go.nif\0"),
+        + subrecord("MOD4", b"armor/female_go.nif\0")
+        + subrecord("BMDT", struct.pack("<II", 0x00000004, 0)),
+    )
+    outfit_list = record(
+        "LVLI",
+        0x41,
+        subrecord("EDID", b"SyntheticOutfitList\0")
+        + subrecord("LVLO", struct.pack("<HHIHH", 1, 0, 0x40, 1, 0))
+        + subrecord("LVLO", struct.pack("<HHIHH", 1, 0, 0x40, 1, 0)),
     )
     actor = record(
         "NPC_",
@@ -87,7 +95,7 @@ def plugin() -> bytes:
         + subrecord("PNAM", struct.pack("<I", 0x32))
         + subrecord("LNAM", struct.pack("<f", 0.25))
         + subrecord("HCLR", bytes((28, 4, 2, 0)))
-        + subrecord("CNTO", struct.pack("<Ii", 0x40, 1))
+        + subrecord("CNTO", struct.pack("<Ii", 0x41, 1))
         + subrecord("FGGS", struct.pack("<50f", *range(50)))
         + subrecord("FGGA", struct.pack("<30f", *range(30)))
         + subrecord("FGTS", struct.pack("<50f", *range(50))),
@@ -96,6 +104,7 @@ def plugin() -> bytes:
         "ACHR",
         0x60,
         subrecord("NAME", struct.pack("<I", 0x50))
+        + subrecord("XSCL", struct.pack("<f", 0.95))
         + subrecord("DATA", struct.pack("<6f", 1.0, 2.0, 3.0, 0.0, 0.0, 1.5)),
         0x00000800,
     )
@@ -125,6 +134,7 @@ def plugin() -> bytes:
         + group(b"EYES", 0, eyes)
         + group(b"HDPT", 0, eyebrow)
         + group(b"ARMO", 0, armor)
+        + group(b"LVLI", 0, outfit_list)
         + group(b"NPC_", 0, actor)
         + group(b"CREA", 0, creature)
         + group(b"CELL", 0, cell + children)
@@ -145,7 +155,7 @@ class ActorCatalogTest(unittest.TestCase):
         self.assertEqual(actor.hair_form_id, 0x30)
         self.assertEqual(actor.eyes_form_id, 0x31)
         self.assertEqual(actor.head_part_form_ids, (0x32,))
-        self.assertEqual(actor.inventory[0].form_id, 0x40)
+        self.assertEqual(actor.inventory[0].form_id, 0x41)
         self.assertEqual(len(actor.face_symmetric_geometry), 50)
         self.assertEqual(len(actor.face_asymmetric_geometry), 30)
         self.assertEqual(len(actor.face_symmetric_texture), 50)
@@ -160,11 +170,15 @@ class ActorCatalogTest(unittest.TestCase):
         self.assertEqual(race.female_face_symmetric_texture[0], 3.0)
         self.assertEqual(catalog.armor[0x40].female_model_path, "armor\\female.nif")
         self.assertEqual(catalog.armor[0x40].female_ground_model_path, "armor\\female_go.nif")
+        self.assertEqual(catalog.armor[0x40].biped_flags, 0x00000004)
+        self.assertFalse(catalog.armor[0x40].hides_hair)
+        self.assertEqual(resolve_actor_outfit_form_ids(catalog, actor), (0x40,))
         references = catalog.references_for(0x100)
         reference = references[0]
         self.assertEqual(reference.actor_form_id, actor.form_id)
         self.assertEqual(reference.record_type, "ACHR")
         self.assertEqual(reference.position, (1.0, 2.0, 3.0))
+        self.assertAlmostEqual(reference.scale, 0.95)
         self.assertTrue(reference.initially_disabled)
         self.assertEqual(references[1].record_type, "ACRE")
         self.assertEqual(catalog.creatures[0x70].name, "Creature")

@@ -5,12 +5,13 @@ namespace OpenNV.Runtime;
 
 internal static class CellContentLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v7";
+    private const string CellSceneSchema = "opennv-cell-scene/v8";
 
     internal static LoadedContent Load(
         string scenePath,
         Node3D parent,
         GameplaySession session,
+        RuntimeConfiguration configuration,
         bool useXr,
         string? actorScenePath,
         string? actorScenesManifestPath,
@@ -24,12 +25,13 @@ internal static class CellContentLoader
         if (source.GetProperty("schema").GetString() != CellSceneSchema ||
             source.GetProperty("status").GetString() != "geometry-structure")
             throw new InvalidOperationException($"Unexpected OpenNV cell content: {resolvedScenePath}");
+        configuration.VerifyCompiledConfiguration(source);
 
         var prototypes = new Dictionary<string, VerifiedGltfLoader.LoadedGltf>(StringComparer.Ordinal);
         var collisionAssets = new HashSet<string>(StringComparer.Ordinal);
         try
         {
-            var textures = RuntimeMaterialLoader.LoadTextures(source);
+            var textures = RuntimeMaterialLoader.LoadTextures(source, configuration.Renderer);
             var materialBindings = 0;
             var defaultCompiler = source.GetProperty("compiler");
             foreach (var asset in source.GetProperty("assets").EnumerateArray())
@@ -50,7 +52,11 @@ internal static class CellContentLoader
                         compiler.GetProperty("sha256").GetString(),
                         StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"Cell asset compiler provenance mismatch: {assetId}");
-                materialBindings += RuntimeMaterialLoader.Apply(loaded.Scene, asset, textures);
+                materialBindings += RuntimeMaterialLoader.Apply(
+                    loaded.Scene,
+                    asset,
+                    textures,
+                    configuration.Renderer);
                 SetRenderLayer(loaded.Scene, renderLayer);
                 var collision = asset.GetProperty("collision");
                 if (collision.GetProperty("enabled").GetBoolean())
@@ -65,6 +71,8 @@ internal static class CellContentLoader
 
             var coordinates = source.GetProperty("coordinates");
             var unitScale = coordinates.GetProperty("unitsToMeters").GetSingle();
+            if (!Mathf.IsEqualApprox(unitScale, configuration.World.GameUnitsToMeters))
+                throw new InvalidOperationException("Prepared CELL unit scale disagrees with OpenNV configuration.");
             var originGameUnits = ReadVector(coordinates.GetProperty("originGameUnits"));
             var cell = source.GetProperty("cell");
             var formId = cell.GetProperty("formId").GetString()!;
@@ -83,6 +91,9 @@ internal static class CellContentLoader
             var collisionMeshes = 0;
             var surfaces = 0;
             var vertices = 0;
+            var xrStartingWeaponFormId = source.TryGetProperty("vr", out var xrSource)
+                ? xrSource.GetProperty("startingLoadout").GetProperty("weaponFormId").GetString()
+                : null;
             foreach (var reference in source.GetProperty("references").EnumerateArray())
             {
                 if (reference.GetProperty("initiallyDisabled").GetBoolean())
@@ -95,7 +106,7 @@ internal static class CellContentLoader
                     ? interaction.GetProperty("type").GetString()
                     : null;
                 if (useXr && interactionType == "pickup" &&
-                    interaction.GetProperty("itemFormId").GetString() == "0008f216")
+                    interaction.GetProperty("itemFormId").GetString() == xrStartingWeaponFormId)
                     continue;
                 if (interactionType == "pickup" && session.IsReferenceRemoved(referenceFormId))
                     continue;
@@ -108,6 +119,7 @@ internal static class CellContentLoader
                     door.Configure(
                         referenceFormId,
                         yaw,
+                        configuration.Door.FallbackOpenAngleDegrees,
                         destination.ValueKind == JsonValueKind.String ? destination.GetString() : null);
                     door.SetOpen(session.IsDoorOpen(referenceFormId));
                     doors.Add(referenceFormId, door);
@@ -166,6 +178,7 @@ internal static class CellContentLoader
                     };
                 }
                 placement.Position = ReadVector(reference.GetProperty("positionGodotUnits"));
+                placement.Scale = Vector3.One * reference.GetProperty("scale").GetSingle();
                 root.AddChild(placement);
 
                 var instance = prototypes[assetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
@@ -226,6 +239,7 @@ internal static class CellContentLoader
                     path,
                     acceptedCellFormIds,
                     root,
+                    configuration,
                     proofEnableActor);
                 if (placedActor is not null)
                 {
@@ -296,7 +310,6 @@ internal static class CellContentLoader
 
     private static LightingContract ReadLighting(JsonElement lighting)
     {
-        var calibration = lighting.GetProperty("calibration");
         var direction = lighting.GetProperty("directionalRotationDegrees")
             .EnumerateArray()
             .Select(value => value.GetSingle())
@@ -324,9 +337,6 @@ internal static class CellContentLoader
             lighting.GetProperty("fogPower").GetSingle(),
             new Vector2(direction[0], direction[1]),
             lighting.GetProperty("directionalFade").GetSingle(),
-            calibration.GetProperty("ambientEnergy").GetSingle(),
-            calibration.GetProperty("omniEnergyScale").GetSingle(),
-            calibration.GetProperty("directionalEnergyScale").GetSingle(),
             lights);
     }
 
@@ -417,9 +427,6 @@ internal static class CellContentLoader
         float FogPower,
         Vector2 DirectionalRotationDegrees,
         float DirectionalFade,
-        float AmbientEnergy,
-        float OmniEnergyScale,
-        float DirectionalEnergyScale,
         IReadOnlyList<LightContract> Lights);
 
     internal readonly record struct LightContract(

@@ -4,8 +4,8 @@ This is the first-party Open Nevada runtime. It uses Godot Forward+ and accepts
 only artifacts produced by the direct retail-content pipeline in `../content`.
 
 The current slice reads the owned master directly and runs a playable,
-recipe-pinned Goodsprings sandbox. It loads 209 interior/exterior assets, 454
-references, 363 textures, 439 materials, 97 saloon pickups, five containers, 27
+recipe-pinned Goodsprings sandbox. It loads 228 interior/exterior assets, 504
+enabled references, 379 textures, 476 materials, 97 saloon pickups, five containers, 27
 authored lights, Sunny Smiles, the enabled saloon settler, and exterior Easy
 Pete. The reciprocal saloon XTEL pair aligns the actual door planes and joins a
 bounded WastelandNV exterior containing LAND `000db010`.
@@ -13,7 +13,7 @@ The incoming XTEL owns the spawn. The `.357` pickup uses retail damage and clip
 data; inventory, ammo, objective, removed pickups, and door state autosave and
 cold-reload. One fully resolved crate is transferable; containers backed by
 unimplemented leveled-list records stay explicitly locked. It does not claim
-actors, damageable combat, simulated projectiles, or a complete campaign.
+AI/package simulation, damageable combat, simulated projectiles, or a complete campaign.
 
 Run the complete repository gate from the repository root:
 
@@ -31,9 +31,9 @@ and the compact oracle artifact supplied as `--retail-state-contract`. The
 runtime rejects a missing/mismatched ACHR, shot set, pose, geometry gate, or
 projection label. A provisional retail FOV may improve a failing comparison but
 cannot promote exact projection parity.
-Cell scene v7 and actor scene v3 are required. Older caches carry a mirrored yaw,
-positional material binding, incomplete shader state, or unhashed actor sidecar
-and are rejected.
+Cell scene v8 and actor scene v5 are required. Older caches omit full authored
+rotation/scale, configuration identity, deterministic outfit resolution, or
+current actor sidecars and are rejected.
 
 Build an asset-free experimental Windows archive after installing the pinned
 Godot Mono export templates and `content/requirements-build.txt`:

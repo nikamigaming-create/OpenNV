@@ -8,23 +8,26 @@ internal partial class LegalAssetSetupView : CanvasLayer
     private readonly Button _selectButton = new();
     private Action<string>? _selected;
 
-    internal void Configure(string? restoreError, Action<string> selected)
+    internal void Configure(
+        string? restoreError,
+        Action<string> selected,
+        SetupViewConfiguration configuration)
     {
         _selected = selected;
         Name = "LegalAssetSetup";
 
-        var background = new ColorRect { Color = new Color(0.025f, 0.045f, 0.07f) };
+        var background = new ColorRect { Color = configuration.BackgroundColorRgba.Color() };
         background.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         AddChild(background);
 
         var content = new VBoxContainer
         {
-            Position = new Vector2(64.0f, 64.0f),
-            Size = new Vector2(760.0f, 460.0f),
+            Position = configuration.ContentPositionPixels.Vector2(),
+            Size = configuration.ContentSizePixels.Vector2(),
         };
         AddChild(content);
         var title = new Label { Text = "OPEN NEVADA  /  EXPERIMENTAL GODOT RUNTIME" };
-        title.AddThemeFontSizeOverride("font_size", 28);
+        title.AddThemeFontSizeOverride("font_size", configuration.TitleFontSizePixels);
         content.AddChild(title);
         content.AddChild(new HSeparator());
 
@@ -34,20 +37,20 @@ internal partial class LegalAssetSetupView : CanvasLayer
                    "Goodsprings sandbox. Python and external engine runtimes are not required.\n\n" +
                    "No game assets are included, and your installation is never modified.",
         };
-        body.AddThemeFontSizeOverride("font_size", 18);
+        body.AddThemeFontSizeOverride("font_size", configuration.BodyFontSizePixels);
         content.AddChild(body);
 
         _selectButton.Text = "Select Fallout: New Vegas folder";
-        _selectButton.CustomMinimumSize = new Vector2(0.0f, 48.0f);
+        _selectButton.CustomMinimumSize = new Vector2(0.0f, configuration.ButtonMinimumHeightPixels);
         content.AddChild(_selectButton);
 
         _status.Text = restoreError is null
             ? "Waiting for the game installation folder or its Data folder."
             : "The previous cache could not be reopened. Select the game folder to rebuild it.\n" + restoreError;
         _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        _status.CustomMinimumSize = new Vector2(0.0f, 96.0f);
-        _status.AddThemeColorOverride("font_color", new Color(0.70f, 0.80f, 0.90f));
-        _status.AddThemeFontSizeOverride("font_size", 16);
+        _status.CustomMinimumSize = new Vector2(0.0f, configuration.StatusMinimumHeightPixels);
+        _status.AddThemeColorOverride("font_color", configuration.StatusColorRgba.Color());
+        _status.AddThemeFontSizeOverride("font_size", configuration.StatusFontSizePixels);
         content.AddChild(_status);
 
         var dialog = new FileDialog
@@ -60,7 +63,7 @@ internal partial class LegalAssetSetupView : CanvasLayer
         };
         dialog.DirSelected += dataRoot => _selected?.Invoke(dataRoot);
         AddChild(dialog);
-        _selectButton.Pressed += () => dialog.PopupCenteredRatio(0.8f);
+        _selectButton.Pressed += () => dialog.PopupCenteredRatio(configuration.DialogCenteredRatio);
     }
 
     internal void SetPreparing()

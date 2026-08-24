@@ -4,15 +4,7 @@ namespace OpenNV.Runtime;
 
 internal partial class CellPlayer : CharacterBody3D
 {
-    private const float MoveSpeed = 3.6f;
-    private const float MouseSensitivity = 0.0022f;
-    private const float Gravity = 9.8f;
-    private const float XrActionThreshold = 0.70f;
-    private const float XrSnapTurnThreshold = 0.75f;
-    private const float XrSnapTurnRadians = MathF.PI / 6.0f;
-    internal const float XrDesiredEyeHeightMeters = 1.68f;
-    private const int XrEyeHeightCalibrationFrames = 30;
-
+    private RuntimeConfiguration _configuration = null!;
     private Camera3D _camera = null!;
     private GameplaySession? _session;
     private XROrigin3D? _xrOrigin;
@@ -40,26 +32,33 @@ internal partial class CellPlayer : CharacterBody3D
     internal XRController3D? LeftHand => _leftHand;
     internal XRController3D? RightHand => _rightHand;
     internal OpenXRRenderModelManager? XrRenderModels => _xrRenderModels;
-    internal bool HasHeldWeapon => _xrWeaponMount?.FindChild("HeldWeap10mmPistol", true, false) is Node3D;
+    internal bool HasHeldWeapon => _xrWeaponMount?.FindChild("HeldWeapon", true, false) is Node3D;
     internal bool HasMuzzleFeedback => _xrMuzzleFlash is not null && _xrMuzzleLight is not null;
+    internal float DesiredEyeHeightMeters => _configuration.Xr.DesiredEyeHeightMeters;
 
     internal void Configure(
         float yaw,
         GameplaySession session,
+        RuntimeConfiguration configuration,
         bool useXr = false,
         bool enableXrRuntimeFeatures = false)
     {
+        _configuration = configuration;
         _session = session;
         _useXr = useXr;
         Name = "Player";
-        Position = new Vector3(0.0f, 0.9f, 0.0f);
+        Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters;
         Rotation = new Vector3(0.0f, yaw, 0.0f);
-        CollisionLayer = 2;
-        CollisionMask = 1;
+        CollisionLayer = configuration.Player.CollisionLayer;
+        CollisionMask = configuration.Player.CollisionMask;
         AddChild(new CollisionShape3D
         {
             Name = "Capsule",
-            Shape = new CapsuleShape3D { Radius = 0.32f, Height = 1.8f },
+            Shape = new CapsuleShape3D
+            {
+                Radius = configuration.Player.CapsuleRadiusMeters,
+                Height = configuration.Player.CapsuleHeightMeters,
+            },
         });
         if (useXr)
             BuildXrRig(enableXrRuntimeFeatures);
@@ -89,9 +88,11 @@ internal partial class CellPlayer : CharacterBody3D
         direction = direction.Normalized();
 
         var velocity = Velocity;
-        velocity.X = direction.X * MoveSpeed;
-        velocity.Z = direction.Z * MoveSpeed;
-        velocity.Y = IsOnFloor() ? MathF.Min(velocity.Y, 0.0f) : velocity.Y - Gravity * (float)delta;
+        velocity.X = direction.X * _configuration.Player.MoveSpeedMetersPerSecond;
+        velocity.Z = direction.Z * _configuration.Player.MoveSpeedMetersPerSecond;
+        velocity.Y = IsOnFloor()
+            ? MathF.Min(velocity.Y, 0.0f)
+            : velocity.Y - _configuration.Simulation.GravityMetersPerSecondSquared * (float)delta;
         Velocity = velocity;
         MoveAndSlide();
         if (_useXr)
@@ -123,19 +124,19 @@ internal partial class CellPlayer : CharacterBody3D
         }
         else if (inputEvent is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
         {
-            RotateY(-motion.Relative.X * MouseSensitivity);
+            RotateY(-motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel);
             var cameraRotation = _camera.Rotation;
             cameraRotation.X = Math.Clamp(
-                cameraRotation.X - motion.Relative.Y * MouseSensitivity,
-                -1.45f,
-                1.45f);
+                cameraRotation.X - motion.Relative.Y * _configuration.Player.MouseSensitivityRadiansPerPixel,
+                -_configuration.Player.VerticalLookLimitRadians,
+                _configuration.Player.VerticalLookLimitRadians);
             _camera.Rotation = cameraRotation;
         }
     }
 
     private void Activate(Node3D aimSource)
     {
-        var collider = Cast(aimSource, 2.5f);
+        var collider = Cast(aimSource, _configuration.Player.ActivationDistanceMeters);
         var pickup = Ancestor<PickupInstance>(collider);
         if (pickup is not null)
         {
@@ -160,7 +161,7 @@ internal partial class CellPlayer : CharacterBody3D
     {
         var from = aimSource.GlobalPosition;
         var to = from - aimSource.GlobalBasis.Z * distance;
-        var query = PhysicsRayQueryParameters3D.Create(from, to, 1);
+        var query = PhysicsRayQueryParameters3D.Create(from, to, _configuration.Player.CollisionMask);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         return hit.Count == 0 ? null : hit["collider"].AsGodotObject() as Node;
     }
@@ -170,9 +171,9 @@ internal partial class CellPlayer : CharacterBody3D
         _camera = new Camera3D
         {
             Name = "DataDerivedEntryCamera",
-            Position = new Vector3(0.0f, 0.72f, 0.0f),
-            Near = 0.02f,
-            Far = 200.0f,
+            Position = _configuration.Player.DesktopCameraOffsetMeters.Vector3(),
+            Near = _configuration.Player.CameraNearMeters,
+            Far = _configuration.Player.CameraFarMeters,
             Current = true,
         };
         AddChild(_camera);
@@ -183,16 +184,16 @@ internal partial class CellPlayer : CharacterBody3D
         _xrOrigin = new XROrigin3D
         {
             Name = "XrOrigin",
-            Position = new Vector3(0.0f, -0.9f, 0.0f),
-            WorldScale = 1.0f,
+            Position = Vector3.Up * _configuration.Xr.OriginYOffsetMeters,
+            WorldScale = _configuration.Xr.WorldScale,
             Current = true,
         };
         AddChild(_xrOrigin);
         _camera = new XRCamera3D
         {
             Name = "TrackedHead",
-            Near = 0.02f,
-            Far = 200.0f,
+            Near = _configuration.Player.CameraNearMeters,
+            Far = _configuration.Player.CameraFarMeters,
             Current = true,
         };
         _xrOrigin.AddChild(_camera);
@@ -224,25 +225,29 @@ internal partial class CellPlayer : CharacterBody3D
         {
             Name = "RightHandWeaponMount",
             Position = _xrWeaponRestPosition,
-            RotationDegrees = new Vector3(0.0f, 90.0f, 0.0f),
+            RotationDegrees = _configuration.Xr.WeaponMountRotationDegrees.Vector3(),
         };
         _rightHand.AddChild(_xrWeaponMount);
-        weapon.Name = "HeldWeap10mmPistol";
+        weapon.Name = "HeldWeapon";
         weapon.Scale = Vector3.One * unitsToMeters;
         _xrWeaponMount.AddChild(weapon);
 
         var flashMaterial = new StandardMaterial3D
         {
-            AlbedoColor = new Color(1.0f, 0.55f, 0.08f),
+            AlbedoColor = _configuration.Xr.DiagnosticMuzzleFlash.AlbedoColorRgba.Color(),
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             EmissionEnabled = true,
-            Emission = new Color(1.0f, 0.35f, 0.03f),
-            EmissionEnergyMultiplier = 4.0f,
+            Emission = _configuration.Xr.DiagnosticMuzzleFlash.EmissionColorRgba.Color(),
+            EmissionEnergyMultiplier = _configuration.Xr.DiagnosticMuzzleFlash.EmissionEnergy,
         };
         _xrMuzzleFlash = new MeshInstance3D
         {
             Name = "MuzzleFlash",
-            Mesh = new SphereMesh { Radius = 1.1f, Height = 2.2f },
+            Mesh = new SphereMesh
+            {
+                Radius = _configuration.Xr.DiagnosticMuzzleFlash.SphereRadiusGameUnits,
+                Height = _configuration.Xr.DiagnosticMuzzleFlash.SphereHeightGameUnits,
+            },
             MaterialOverride = flashMaterial,
             Position = muzzlePositionGodotUnits,
             Visible = false,
@@ -252,9 +257,9 @@ internal partial class CellPlayer : CharacterBody3D
         {
             Name = "MuzzleLight",
             Position = muzzlePositionGodotUnits,
-            LightColor = new Color(1.0f, 0.48f, 0.08f),
-            LightEnergy = 3.0f,
-            OmniRange = 140.0f,
+            LightColor = _configuration.Xr.DiagnosticMuzzleFlash.LightColorRgba.Color(),
+            LightEnergy = _configuration.Xr.DiagnosticMuzzleFlash.LightEnergy,
+            OmniRange = _configuration.Xr.DiagnosticMuzzleFlash.LightRangeGameUnits * unitsToMeters,
             ShadowEnabled = false,
             Visible = false,
         };
@@ -273,7 +278,7 @@ internal partial class CellPlayer : CharacterBody3D
         if (_useXr)
         {
             var stick = _leftHand!.GetVector2("move");
-            return stick.Length() < 0.18f ? Vector2.Zero : stick;
+            return stick.Length() < _configuration.Xr.MovementDeadzone ? Vector2.Zero : stick;
         }
         var left = Input.IsPhysicalKeyPressed(Key.A) ? 1.0f : 0.0f;
         var right = Input.IsPhysicalKeyPressed(Key.D) ? 1.0f : 0.0f;
@@ -285,26 +290,26 @@ internal partial class CellPlayer : CharacterBody3D
     private void PollXrActions()
     {
         var turn = _rightHand!.GetVector2("turn").X;
-        if (MathF.Abs(turn) >= XrSnapTurnThreshold && _xrSnapTurnReady)
+        if (MathF.Abs(turn) >= _configuration.Xr.SnapTurnActivationThreshold && _xrSnapTurnReady)
         {
-            SnapTurn(-MathF.Sign(turn) * XrSnapTurnRadians);
+            SnapTurn(-MathF.Sign(turn) * Mathf.DegToRad(_configuration.Xr.SnapTurnDegrees));
             _xrSnapTurnReady = false;
         }
-        else if (MathF.Abs(turn) < 0.35f)
+        else if (MathF.Abs(turn) < _configuration.Xr.SnapTurnResetThreshold)
         {
             _xrSnapTurnReady = true;
         }
 
-        var activate = _rightHand.GetFloat("activate") >= XrActionThreshold;
+        var activate = _rightHand.GetFloat("activate") >= _configuration.Xr.ActionThreshold;
         if (activate && !_xrActivatePressed)
             Activate(_rightHand);
         _xrActivatePressed = activate;
 
-        var fire = _rightHand.GetFloat("fire") >= XrActionThreshold;
+        var fire = _rightHand.GetFloat("fire") >= _configuration.Xr.ActionThreshold;
         if (fire && !_xrFirePressed && _session!.Fire(_rightHand))
         {
-            _xrWeaponFeedbackSeconds = 0.09f;
-            _rightHand.TriggerHapticPulse("haptic", 0.0, 0.45, 0.06, 0.0);
+            _xrWeaponFeedbackSeconds = _configuration.Xr.WeaponFeedbackSeconds;
+            TriggerHaptic(_configuration.Xr.FireHaptic);
         }
         _xrFirePressed = fire;
 
@@ -315,7 +320,7 @@ internal partial class CellPlayer : CharacterBody3D
 
         var reload = _rightHand.IsButtonPressed("reload");
         if (reload && !_xrReloadPressed && _session!.Reload())
-            _rightHand.TriggerHapticPulse("haptic", 0.0, 0.32, 0.04, 0.0);
+            TriggerHaptic(_configuration.Xr.ReloadHaptic);
         _xrReloadPressed = reload;
     }
 
@@ -325,18 +330,19 @@ internal partial class CellPlayer : CharacterBody3D
             _xrTrackedFrames++;
         else
             _xrTrackedFrames = 0;
-        if (!_xrEyeHeightCalibrated && _xrTrackedFrames >= XrEyeHeightCalibrationFrames)
+        if (!_xrEyeHeightCalibrated &&
+            _xrTrackedFrames >= _configuration.Xr.EyeHeightCalibrationTrackedFrames)
         {
             var before = _camera.GlobalPosition.Y;
-            _xrOrigin!.Position += Vector3.Up * (XrDesiredEyeHeightMeters - before);
+            _xrOrigin!.Position += Vector3.Up * (_configuration.Xr.DesiredEyeHeightMeters - before);
             _xrEyeHeightCalibrated = true;
             GD.Print(
                 $"OPENNV_XR_EYE_HEIGHT_CALIBRATED before={before:F3} " +
-                $"after={_camera.GlobalPosition.Y:F3} target={XrDesiredEyeHeightMeters:F3}");
+                $"after={_camera.GlobalPosition.Y:F3} target={_configuration.Xr.DesiredEyeHeightMeters:F3}");
         }
 
         _xrHealthFrames++;
-        if (_xrHealthFrames < 90)
+        if (_xrHealthFrames < _configuration.Xr.InputHealthReportFrames)
             return;
         _xrHealthFrames = 0;
         var leftTracker = XRServer.GetTracker("left_hand") as XRPositionalTracker;
@@ -357,11 +363,22 @@ internal partial class CellPlayer : CharacterBody3D
         if (_xrWeaponMount is null || _xrMuzzleFlash is null || _xrMuzzleLight is null)
             return;
         _xrWeaponFeedbackSeconds = MathF.Max(0.0f, _xrWeaponFeedbackSeconds - delta);
-        var strength = _xrWeaponFeedbackSeconds / 0.09f;
-        _xrWeaponMount.Position = _xrWeaponRestPosition + Vector3.Back * (0.035f * strength);
-        var flashVisible = _xrWeaponFeedbackSeconds > 0.045f;
+        var strength = _xrWeaponFeedbackSeconds / _configuration.Xr.WeaponFeedbackSeconds;
+        _xrWeaponMount.Position =
+            _xrWeaponRestPosition + Vector3.Back * (_configuration.Xr.WeaponRecoilMeters * strength);
+        var flashVisible = _xrWeaponFeedbackSeconds > _configuration.Xr.MuzzleFlashVisibleSeconds;
         _xrMuzzleFlash.Visible = flashVisible;
         _xrMuzzleLight.Visible = flashVisible;
+    }
+
+    private void TriggerHaptic(HapticConfiguration haptic)
+    {
+        _rightHand!.TriggerHapticPulse(
+            "haptic",
+            haptic.Frequency,
+            haptic.Amplitude,
+            haptic.DurationSeconds,
+            haptic.DelaySeconds);
     }
 
     private void SnapTurn(float radians)

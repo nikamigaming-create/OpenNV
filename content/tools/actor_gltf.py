@@ -20,16 +20,35 @@ from pyffi.formats.nif import NifFormat  # type: ignore  # noqa: E402
 
 from bsa_archive import BsaArchive, canonical_member_path
 from export_static_nif_gltf import generate_tangents
-from gltf_io import BufferBuilder, pack_floats
+from gltf_io import (
+    GL_ARRAY_BUFFER,
+    GL_ELEMENT_ARRAY_BUFFER,
+    GL_FLOAT,
+    GL_LINEAR,
+    GL_LINEAR_MIPMAP_LINEAR,
+    GL_REPEAT,
+    GL_UNSIGNED_INT,
+    GL_UNSIGNED_SHORT,
+    GL_UNSIGNED_SHORT_MAX,
+    BufferBuilder,
+    pack_floats,
+)
 from facegen import apply_geometry_morphs, repair_facegen_nif_uv_flag
 from texture_pipeline import decode_dds
 from actor_material import (
     actor_vertex_colors_enabled,
     build_actor_material as _material,
 )
+from runtime_configuration import ContentCompilerConfiguration
 
 
 ACTOR_GLTF_SCHEMA = "opennv-actor-gltf/v1"
+NIF_LINEAR_INTERPOLATION = 1
+NIF_XYZ_ROTATION_INTERPOLATION = 4
+SLERP_LINEAR_DOT_THRESHOLD = 0.9995
+NORMALIZATION_EPSILON = 1.0e-12
+UNIFORM_CUBIC_BASIS_DIVISOR = 6.0
+QUATERNION_DIAGONAL_COEFFICIENT = 0.25
 
 
 @dataclass(frozen=True)
@@ -39,10 +58,8 @@ class ActorComponent:
     model_payload: bytes
     egm_path: str | None = None
     egm_payload: bytes | None = None
-    rigid_to_head: bool = False
     bake_shape_transform: bool = False
     selected_shape: str | None = None
-    excluded_shape_prefixes: tuple[str, ...] = ()
     diffuse_override: str | None = None
     generated_diffuse: Image.Image | None = None
     generated_diffuse_by_source: tuple[tuple[str, Image.Image], ...] = ()
@@ -66,10 +83,17 @@ class ActorGltfInput:
 
 
 class TextureLibrary:
-    def __init__(self, archives: list[BsaArchive], output_root: Path, gltf_path: Path):
+    def __init__(
+        self,
+        archives: list[BsaArchive],
+        output_root: Path,
+        gltf_path: Path,
+        compiler: ContentCompilerConfiguration,
+    ):
         self.archives = archives
         self.output_root = output_root
         self.gltf_path = gltf_path
+        self.compiler = compiler
         self.images: list[dict[str, object]] = []
         self.textures: list[dict[str, object]] = []
         self.rows: list[dict[str, object]] = []
@@ -114,11 +138,18 @@ class TextureLibrary:
         normal_green_inverted: bool,
         key: tuple[str, bool],
     ) -> int:
-        asset_id = hashlib.sha256(f"{identity}:{normal_green_inverted}".encode()).hexdigest()[:20]
+        asset_id = hashlib.sha256(f"{identity}:{normal_green_inverted}".encode()).hexdigest()[
+            :self.compiler.asset_id_hex_characters
+        ]
         path = self.output_root / "textures" / f"{asset_id}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(path.name + ".tmp")
-        image.convert("RGBA").save(temporary, format="PNG", optimize=True, compress_level=9)
+        image.convert("RGBA").save(
+            temporary,
+            format="PNG",
+            optimize=True,
+            compress_level=self.compiler.png_compression_level,
+        )
         os.replace(temporary, path)
         payload_hash = hashlib.sha256(path.read_bytes()).hexdigest()
         uri = os.path.relpath(path, self.gltf_path.parent).replace("\\", "/")
@@ -146,6 +177,7 @@ def export_actor_gltf(
     texture_archives: list[BsaArchive],
     gltf_path: Path,
     sidecar_path: Path,
+    compiler: ContentCompilerConfiguration,
 ) -> dict[str, object]:
     gltf_path.parent.mkdir(parents=True, exist_ok=True)
     skeleton = _read_nif(source.skeleton_payload)
@@ -161,7 +193,7 @@ def export_actor_gltf(
     skins: list[dict[str, object]] = []
     materials: list[dict[str, object]] = []
     surfaces: list[dict[str, object]] = []
-    textures = TextureLibrary(texture_archives, gltf_path.parent, gltf_path)
+    textures = TextureLibrary(texture_archives, gltf_path.parent, gltf_path, compiler)
 
     for component in source.components:
         payload = component.model_payload
@@ -179,11 +211,7 @@ def export_actor_gltf(
         ]
         if component.selected_shape is not None:
             shapes = [shape for shape in shapes if _text(shape.name) == component.selected_shape]
-        shapes = [
-            shape
-            for shape in shapes
-            if not any(_text(shape.name).startswith(prefix) for prefix in component.excluded_shape_prefixes)
-        ]
+        shapes = [shape for shape in shapes if not _is_dismember_cap_shape(shape)]
         if not shapes:
             raise ValueError(f"Actor component {component.role} selected no shapes from {component.model_path}")
         for shape in shapes:
@@ -198,6 +226,7 @@ def export_actor_gltf(
                 skins,
                 materials,
                 textures,
+                compiler,
             )
             node: dict[str, object] = {
                 "name": f"{component.role}_{_text(shape.name)}",
@@ -219,6 +248,7 @@ def export_actor_gltf(
         source.idle_animation_payload,
         node_by_name,
         builder,
+        compiler,
     )
 
     binary_path = gltf_path.with_suffix(".bin")
@@ -230,7 +260,12 @@ def export_actor_gltf(
         "meshes": meshes,
         "skins": skins,
         "materials": materials,
-        "samplers": [{"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}],
+        "samplers": [{
+            "magFilter": GL_LINEAR,
+            "minFilter": GL_LINEAR_MIPMAP_LINEAR,
+            "wrapS": GL_REPEAT,
+            "wrapT": GL_REPEAT,
+        }],
         "images": textures.images,
         "textures": textures.textures,
         "buffers": [{"uri": binary_path.name, "byteLength": len(builder.data)}],
@@ -316,6 +351,7 @@ def _append_shape(
     skins: list[dict[str, object]],
     materials: list[dict[str, object]],
     textures: TextureLibrary,
+    compiler: ContentCompilerConfiguration,
 ) -> tuple[int, int | None, dict[str, object]]:
     mesh = shape.data
     vertex_count = len(mesh.vertices)
@@ -333,7 +369,8 @@ def _append_shape(
         )
         morphed = True
     shape_transform = shape.get_transform(component_root)
-    transform_shape = component.rigid_to_head or component.bake_shape_transform
+    rigid_to_head = getattr(shape, "skin_instance", None) is None
+    transform_shape = rigid_to_head or component.bake_shape_transform
     positions = [
         _transform_position(position, shape_transform)
         if transform_shape else _convert_vector(position)
@@ -358,21 +395,21 @@ def _append_shape(
     attributes: dict[str, int] = {
         "POSITION": builder.add(
             pack_floats(positions),
-            component_type=5126,
+            component_type=GL_FLOAT,
             count=vertex_count,
             value_type="VEC3",
-            target=34962,
+            target=GL_ARRAY_BUFFER,
             minimum=[min(row[axis] for row in positions) for axis in range(3)],
             maximum=[max(row[axis] for row in positions) for axis in range(3)],
         ),
         "NORMAL": builder.add(
-            pack_floats(normals), component_type=5126, count=vertex_count, value_type="VEC3", target=34962
+            pack_floats(normals), component_type=GL_FLOAT, count=vertex_count, value_type="VEC3", target=GL_ARRAY_BUFFER
         ),
         "TANGENT": builder.add(
-            pack_floats(tangents), component_type=5126, count=vertex_count, value_type="VEC4", target=34962
+            pack_floats(tangents), component_type=GL_FLOAT, count=vertex_count, value_type="VEC4", target=GL_ARRAY_BUFFER
         ),
         "TEXCOORD_0": builder.add(
-            pack_floats(uvs), component_type=5126, count=vertex_count, value_type="VEC2", target=34962
+            pack_floats(uvs), component_type=GL_FLOAT, count=vertex_count, value_type="VEC2", target=GL_ARRAY_BUFFER
         ),
     }
     properties = list(getattr(shape, "properties", []))
@@ -386,13 +423,13 @@ def _append_shape(
         ]
         attributes["COLOR_0"] = builder.add(
             pack_floats(colors),
-            component_type=5126,
+            component_type=GL_FLOAT,
             count=vertex_count,
             value_type="VEC4",
-            target=34962,
+            target=GL_ARRAY_BUFFER,
         )
     skin_index: int | None = None
-    if not component.rigid_to_head:
+    if not rigid_to_head:
         skin_index = _append_skin(
             component.role,
             shape,
@@ -403,17 +440,17 @@ def _append_shape(
             shape_transform if component.bake_shape_transform else None,
         )
     indices = [value for triangle in triangles for value in triangle]
-    component_type = 5123 if vertex_count <= 65535 else 5125
-    value_format = "H" if component_type == 5123 else "I"
+    component_type = GL_UNSIGNED_SHORT if vertex_count <= GL_UNSIGNED_SHORT_MAX else GL_UNSIGNED_INT
+    value_format = "H" if component_type == GL_UNSIGNED_SHORT else "I"
     index_accessor = builder.add(
         struct.pack(f"<{len(indices)}{value_format}", *indices),
         component_type=component_type,
         count=len(indices),
         value_type="SCALAR",
-        target=34963,
+        target=GL_ELEMENT_ARRAY_BUFFER,
     )
     material_index = len(materials)
-    material, material_row = _material(component, shape, textures)
+    material, material_row = _material(component, shape, textures, compiler)
     materials.append(material)
     mesh_index = len(meshes)
     meshes.append(
@@ -433,12 +470,43 @@ def _append_shape(
         "triangles": len(triangles),
         "morphed": morphed,
         "skinned": skin_index is not None,
+        "attachmentSource": "nif-skin" if skin_index is not None else "nif-rigid-head",
         "skinShapeTransformCompensated": (
             skin_index is not None and component.bake_shape_transform
         ),
         "vertexColorsEnabled": vertex_colors_enabled,
         "material": material_row,
     }
+
+
+_DISMEMBER_CAP_BODY_PARTS = frozenset(
+    value
+    for name, value in zip(
+        NifFormat.BSDismemberBodyPartType._enumkeys,
+        NifFormat.BSDismemberBodyPartType._enumvalues,
+    )
+    if name.startswith("BP_SECTIONCAP_")
+    or name.startswith("BP_TORSOCAP_")
+    or name in {
+        "SBP_130_HEAD",
+        "SBP_131_HAIR",
+        "SBP_141_LONGHAIR",
+        "SBP_142_CIRCLET",
+        "SBP_143_EARS",
+        "SBP_150_DECAPITATEDHEAD",
+        "SBP_230_HEAD",
+    }
+)
+
+
+def _is_dismember_cap_shape(shape: object) -> bool:
+    instance = getattr(shape, "skin_instance", None)
+    if not isinstance(instance, NifFormat.BSDismemberSkinInstance):
+        return False
+    partitions = list(getattr(instance, "partitions", []))
+    return bool(partitions) and all(
+        int(partition.body_part) in _DISMEMBER_CAP_BODY_PARTS for partition in partitions
+    )
 
 
 def _append_skin(
@@ -475,10 +543,10 @@ def _append_skin(
         f"<{len(joint_rows) * 4}H", *(value for row in joint_rows for value in row)
     )
     attributes["JOINTS_0"] = builder.add(
-        joint_payload, component_type=5123, count=len(joint_rows), value_type="VEC4", target=34962
+        joint_payload, component_type=GL_UNSIGNED_SHORT, count=len(joint_rows), value_type="VEC4", target=GL_ARRAY_BUFFER
     )
     attributes["WEIGHTS_0"] = builder.add(
-        pack_floats(weight_rows), component_type=5126, count=len(weight_rows), value_type="VEC4", target=34962
+        pack_floats(weight_rows), component_type=GL_FLOAT, count=len(weight_rows), value_type="VEC4", target=GL_ARRAY_BUFFER
     )
     inverse_bind_rows = []
     for data in instance.data.bone_list:
@@ -489,7 +557,7 @@ def _append_skin(
         inverse_bind_rows.append(_gltf_matrix(inverse_bind))
     inverse_bind = builder.add(
         pack_floats(inverse_bind_rows),
-        component_type=5126,
+        component_type=GL_FLOAT,
         count=len(inverse_bind_rows),
         value_type="MAT4",
         target=None,
@@ -510,6 +578,7 @@ def _build_animation(
     payload: bytes,
     node_by_name: dict[str, int],
     builder: BufferBuilder,
+    compiler: ContentCompilerConfiguration,
 ) -> tuple[dict[str, object] | None, int, tuple[float, float, float] | None]:
     document = _read_nif(payload)
     sequence = document.roots[0]
@@ -519,12 +588,15 @@ def _build_animation(
     stop = float(sequence.stop_time)
     if start != 0.0 or stop <= start:
         raise ValueError(f"Actor idle has an unexpected time range: {start}..{stop}")
-    frame_count = round((stop - start) * 30.0) + 1
-    times = [start + frame / 30.0 for frame in range(frame_count)]
+    frame_count = round((stop - start) * compiler.animation_samples_per_second) + 1
+    times = [
+        start + frame / compiler.animation_samples_per_second
+        for frame in range(frame_count)
+    ]
     times[-1] = stop
     time_accessor = builder.add(
         struct.pack(f"<{len(times)}f", *times),
-        component_type=5126,
+        component_type=GL_FLOAT,
         count=len(times),
         value_type="SCALAR",
         target=None,
@@ -558,20 +630,24 @@ def _build_animation(
             if data is not None:
                 translation_keys = list(data.translations.keys)
                 if translation_keys:
-                    if int(data.translations.interpolation) != 1:
+                    if int(data.translations.interpolation) != NIF_LINEAR_INTERPOLATION:
                         raise ValueError(f"Actor idle uses unsupported translation interpolation on {node_name}")
                     translations = [
                         _convert_vector(_linear_vector_keys(translation_keys, time)) for time in times
                     ]
                 if int(data.num_rotation_keys) > 0:
-                    if int(data.rotation_type) == 1:
+                    if int(data.rotation_type) == NIF_LINEAR_INTERPOLATION:
                         quaternion_keys = list(data.quaternion_keys)
                         rotations = [
                             _converted_nif_quaternion(_slerp_keys(quaternion_keys, time)) for time in times
                         ]
-                    elif int(data.rotation_type) == 4:
+                    elif int(data.rotation_type) == NIF_XYZ_ROTATION_INTERPOLATION:
                         if any(
-                            any(abs(float(key.value) - float(group.keys[0].value)) > 1.0e-6 for key in group.keys)
+                            any(
+                                abs(float(key.value) - float(group.keys[0].value))
+                                > compiler.xyz_rotation_equality_tolerance
+                                for key in group.keys
+                            )
                             for group in data.xyz_rotations
                             if len(group.keys) > 0
                         ):
@@ -587,7 +663,7 @@ def _build_animation(
             translations = actor_animation_translations(node_name, translations)
             output = builder.add(
                 pack_floats(translations),
-                component_type=5126,
+                component_type=GL_FLOAT,
                 count=len(translations),
                 value_type="VEC3",
                 target=None,
@@ -599,7 +675,7 @@ def _build_animation(
             rotations = _continuous_quaternions(rotations)
             output = builder.add(
                 pack_floats(rotations),
-                component_type=5126,
+                component_type=GL_FLOAT,
                 count=len(rotations),
                 value_type="VEC4",
                 target=None,
@@ -631,10 +707,19 @@ def _uniform_cubic(
         value = 1.0
     inverse = 1.0 - value
     basis = (
-        inverse**3 / 6.0,
-        (3.0 * value**3 - 6.0 * value**2 + 4.0) / 6.0,
-        (-3.0 * value**3 + 3.0 * value**2 + 3.0 * value + 1.0) / 6.0,
-        value**3 / 6.0,
+        inverse**3 / UNIFORM_CUBIC_BASIS_DIVISOR,
+        (
+            3.0 * value**3
+            - UNIFORM_CUBIC_BASIS_DIVISOR * value**2
+            + 4.0
+        ) / UNIFORM_CUBIC_BASIS_DIVISOR,
+        (
+            -3.0 * value**3
+            + 3.0 * value**2
+            + 3.0 * value
+            + 1.0
+        ) / UNIFORM_CUBIC_BASIS_DIVISOR,
+        value**3 / UNIFORM_CUBIC_BASIS_DIVISOR,
     )
     return tuple(
         sum(basis[index] * float(control_points[segment + index][axis]) for index in range(4))
@@ -688,7 +773,7 @@ def _slerp(
     if dot < 0.0:
         second = tuple(-value for value in second)
         dot = -dot
-    if dot > 0.9995:
+    if dot > SLERP_LINEAR_DOT_THRESHOLD:
         return _normalize_quaternion(tuple(first[index] + amount * (second[index] - first[index]) for index in range(4)))
     angle = math.acos(max(-1.0, min(1.0, dot)))
     sine = math.sin(angle)
@@ -717,7 +802,7 @@ def _nif_quaternion(value: object) -> tuple[float, float, float, float]:
 
 def _normalize_quaternion(value: tuple[float, ...]) -> tuple[float, float, float, float]:
     length = math.sqrt(sum(component * component for component in value))
-    if length <= 1.0e-12:
+    if length <= NORMALIZATION_EPSILON:
         raise ValueError("Actor animation contains a zero quaternion")
     return tuple(component / length for component in value)
 
@@ -770,7 +855,7 @@ def _convert_vector(value: tuple[float, float, float]) -> tuple[float, float, fl
 def _convert_direction(value: tuple[float, float, float]) -> tuple[float, float, float]:
     converted = _convert_vector(value)
     length = math.sqrt(sum(axis * axis for axis in converted))
-    if length <= 1.0e-12:
+    if length <= NORMALIZATION_EPSILON:
         raise ValueError("Actor NIF contains a zero-length normal")
     return tuple(axis / length for axis in converted)
 
@@ -816,7 +901,7 @@ def _recompute_normals(
     result = []
     for row in rows:
         length = math.sqrt(sum(value * value for value in row))
-        if length <= 1.0e-12:
+        if length <= NORMALIZATION_EPSILON:
             raise ValueError("Actor morph produced an isolated or degenerate vertex normal")
         result.append(tuple(value / length for value in row))
     return result
@@ -873,7 +958,7 @@ def _quaternion(matrix: list[list[float]]) -> list[float]:
             (matrix[2][1] - matrix[1][2]) / scale,
             (matrix[0][2] - matrix[2][0]) / scale,
             (matrix[1][0] - matrix[0][1]) / scale,
-            0.25 * scale,
+            QUATERNION_DIAGONAL_COEFFICIENT * scale,
         ]
     else:
         axis = max(range(3), key=lambda index: matrix[index][index])
@@ -881,7 +966,7 @@ def _quaternion(matrix: list[list[float]]) -> list[float]:
         remaining = (axis + 2) % 3
         scale = math.sqrt(1.0 + matrix[axis][axis] - matrix[following][following] - matrix[remaining][remaining]) * 2.0
         result = [0.0, 0.0, 0.0, 0.0]
-        result[axis] = 0.25 * scale
+        result[axis] = QUATERNION_DIAGONAL_COEFFICIENT * scale
         result[3] = (matrix[remaining][following] - matrix[following][remaining]) / scale
         result[following] = (matrix[following][axis] + matrix[axis][following]) / scale
         result[remaining] = (matrix[remaining][axis] + matrix[axis][remaining]) / scale

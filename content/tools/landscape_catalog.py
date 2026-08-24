@@ -13,6 +13,18 @@ from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 LANDSCAPE_RECORD_TYPES = frozenset({"LAND", "LTEX", "TXST"})
 LAND_VERTEX_SIDE = 33
 LAND_VERTEX_COUNT = LAND_VERTEX_SIDE * LAND_VERTEX_SIDE
+LAND_LAYER_HEADER_BYTES = 8
+LAND_OPACITY_ROW_BYTES = 8
+LAND_QUADRANT_VERTEX_SIDE = 17
+LAND_HEIGHT_SCALE = 8.0
+LAND_HEIGHT_HEADER_BYTES = 4
+LAND_HEIGHT_TRAILER_BYTES = 3
+LAND_NORMAL_COMPONENTS = 3
+NORMAL_LENGTH_EPSILON = 1.0e-6
+BYTE_CHANNEL_MAXIMUM = 255.0
+CELL_CHILDREN_GROUP_TYPE = 6
+WORLDSPACE_CHILDREN_GROUP_TYPE = 1
+FORM_ID_BYTES = 4
 
 
 @dataclass(frozen=True)
@@ -105,7 +117,7 @@ def _parent(record: Record, group_type: int) -> int | None:
 
 
 def _layer_header(data: bytes, record: Record, signature: str) -> tuple[int, int, int, int]:
-    if len(data) != 8:
+    if len(data) != LAND_LAYER_HEADER_BYTES:
         raise ValueError(f"{signature} must be eight bytes in LAND {record.form_id:08x}")
     texture_form_id, quadrant, unknown, layer_index = struct.unpack("<IBBH", data)
     if quadrant > 3:
@@ -114,13 +126,17 @@ def _layer_header(data: bytes, record: Record, signature: str) -> tuple[int, int
 
 
 def _opacities(data: bytes, record: Record) -> tuple[LandscapeOpacity, ...]:
-    if len(data) % 8:
+    if len(data) % LAND_OPACITY_ROW_BYTES:
         raise ValueError(f"VTXT must contain eight-byte rows in LAND {record.form_id:08x}")
     rows = []
     indices = set()
-    for offset in range(0, len(data), 8):
+    for offset in range(0, len(data), LAND_OPACITY_ROW_BYTES):
         vertex_index, unknown, opacity = struct.unpack_from("<HHf", data, offset)
-        if vertex_index >= 17 * 17 or vertex_index in indices or not math.isfinite(opacity):
+        if (
+            vertex_index >= LAND_QUADRANT_VERTEX_SIDE * LAND_QUADRANT_VERTEX_SIDE
+            or vertex_index in indices
+            or not math.isfinite(opacity)
+        ):
             raise ValueError(f"VTXT contains an invalid vertex row in LAND {record.form_id:08x}")
         indices.add(vertex_index)
         rows.append(LandscapeOpacity(vertex_index, unknown, max(0.0, min(1.0, opacity))))
@@ -128,15 +144,15 @@ def _opacities(data: bytes, record: Record) -> tuple[LandscapeOpacity, ...]:
 
 
 def _heights(data: bytes, record: Record) -> tuple[float, ...]:
-    if len(data) != 4 + LAND_VERTEX_COUNT + 3:
+    if len(data) != LAND_HEIGHT_HEADER_BYTES + LAND_VERTEX_COUNT + LAND_HEIGHT_TRAILER_BYTES:
         raise ValueError(f"VHGT must be 1096 bytes in LAND {record.form_id:08x}")
-    offset = struct.unpack_from("<f", data)[0] * 8.0
-    deltas = struct.unpack_from(f"<{LAND_VERTEX_COUNT}b", data, 4)
+    offset = struct.unpack_from("<f", data)[0] * LAND_HEIGHT_SCALE
+    deltas = struct.unpack_from(f"<{LAND_VERTEX_COUNT}b", data, LAND_HEIGHT_HEADER_BYTES)
     rows: list[list[float]] = []
     for y in range(LAND_VERTEX_SIDE):
         row = []
         for x in range(LAND_VERTEX_SIDE):
-            delta = float(deltas[y * LAND_VERTEX_SIDE + x]) * 8.0
+            delta = float(deltas[y * LAND_VERTEX_SIDE + x]) * LAND_HEIGHT_SCALE
             if x > 0:
                 row.append(row[x - 1] + delta)
             elif y > 0:
@@ -148,14 +164,16 @@ def _heights(data: bytes, record: Record) -> tuple[float, ...]:
 
 
 def _normals(data: bytes, record: Record) -> tuple[tuple[float, float, float], ...]:
-    if len(data) != LAND_VERTEX_COUNT * 3:
+    if len(data) != LAND_VERTEX_COUNT * LAND_NORMAL_COMPONENTS:
         raise ValueError(f"VNML must be 3267 bytes in LAND {record.form_id:08x}")
-    values = struct.unpack(f"<{LAND_VERTEX_COUNT * 3}b", data)
+    values = struct.unpack(f"<{LAND_VERTEX_COUNT * LAND_NORMAL_COMPONENTS}b", data)
     rows = []
-    for offset in range(0, len(values), 3):
-        x, y, z = (float(value) for value in values[offset : offset + 3])
+    for offset in range(0, len(values), LAND_NORMAL_COMPONENTS):
+        x, y, z = (
+            float(value) for value in values[offset : offset + LAND_NORMAL_COMPONENTS]
+        )
         length = math.sqrt(x * x + y * y + z * z)
-        if length <= 1.0e-6:
+        if length <= NORMAL_LENGTH_EPSILON:
             raise ValueError(f"VNML contains a zero normal in LAND {record.form_id:08x}")
         rows.append((x / length, y / length, z / length))
     return tuple(rows)
@@ -164,17 +182,22 @@ def _normals(data: bytes, record: Record) -> tuple[tuple[float, float, float], .
 def _colors(data: bytes | None, record: Record) -> tuple[tuple[float, float, float, float], ...]:
     if data is None:
         return tuple((1.0, 1.0, 1.0, 1.0) for _ in range(LAND_VERTEX_COUNT))
-    if len(data) != LAND_VERTEX_COUNT * 3:
+    if len(data) != LAND_VERTEX_COUNT * LAND_NORMAL_COMPONENTS:
         raise ValueError(f"VCLR must be 3267 bytes in LAND {record.form_id:08x}")
     return tuple(
-        (data[offset] / 255.0, data[offset + 1] / 255.0, data[offset + 2] / 255.0, 1.0)
-        for offset in range(0, len(data), 3)
+        (
+            data[offset] / BYTE_CHANNEL_MAXIMUM,
+            data[offset + 1] / BYTE_CHANNEL_MAXIMUM,
+            data[offset + 2] / BYTE_CHANNEL_MAXIMUM,
+            1.0,
+        )
+        for offset in range(0, len(data), LAND_NORMAL_COMPONENTS)
     )
 
 
 def _landscape(record: Record) -> Landscape:
-    cell_form_id = _parent(record, 6)
-    worldspace_form_id = _parent(record, 1)
+    cell_form_id = _parent(record, CELL_CHILDREN_GROUP_TYPE)
+    worldspace_form_id = _parent(record, WORLDSPACE_CHILDREN_GROUP_TYPE)
     if cell_form_id is None or worldspace_form_id is None:
         raise ValueError(f"LAND {record.form_id:08x} has no CELL/worldspace ownership")
     subrecords = list(iter_subrecords(record))
@@ -234,7 +257,7 @@ def scan_landscape_catalog(path: Path, cell_form_ids: set[int]) -> LandscapeCata
     texture_sets: dict[int, LandscapeTextureSet] = {}
     for record in iter_plugin_records(path, LANDSCAPE_RECORD_TYPES):
         if record.signature == "LAND":
-            cell_form_id = _parent(record, 6)
+            cell_form_id = _parent(record, CELL_CHILDREN_GROUP_TYPE)
             if cell_form_id in cell_form_ids:
                 landscape = _landscape(record)
                 if landscape.cell_form_id in landscapes:
@@ -243,7 +266,7 @@ def scan_landscape_catalog(path: Path, cell_form_ids: set[int]) -> LandscapeCata
         elif record.signature == "LTEX":
             values = _values(record)
             texture_sets_found = values.get("TNAM", [])
-            if len(texture_sets_found) == 1 and len(texture_sets_found[0]) == 4:
+            if len(texture_sets_found) == 1 and len(texture_sets_found[0]) == FORM_ID_BYTES:
                 textures[record.form_id] = LandscapeTexture(
                     record.form_id,
                     _first_text(values, "EDID"),

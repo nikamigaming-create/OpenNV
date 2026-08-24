@@ -14,6 +14,30 @@ from PIL import Image
 from pyffi.formats.egm import EgmFormat  # type: ignore  # noqa: E402
 
 
+EGT_HEADER_BYTES = 64
+EGT_SIGNATURE_BYTES = 8
+EGT_HEADER_FIELD_COUNT = 5
+EGT_MORPH_SCALE_BYTES = 4
+RGB_CHANNEL_COUNT = 3
+RGBA_CHANNEL_COUNT = 4
+BYTE_CHANNEL_MAXIMUM = 255
+SIGNED_DETAIL_NEUTRAL = 128.0
+NIF_GEOMETRY_MINIMUM_BYTES = 12
+NIF_GEOMETRY_VERTEX_COUNT_OFFSET = 4
+NIF_GEOMETRY_UV_FLAG_PREFIX_BYTES = 9
+NIF_GEOMETRY_VERTEX_BYTES = 12
+NIF_FACEGEN_UV_FLAG = 3
+NIF_SINGLE_UV_ARRAY_FLAG = 1
+NIF_HEADER_REMAINDER_BYTES = 17
+FALLOUT_NIF_VERSION = 0x14020007
+FALLOUT_NIF_ENDIAN = 1
+FALLOUT_NIF_USER_VERSION = 11
+FALLOUT_NIF_USER_VERSION_TWO = 34
+NIF_EXPORT_INFO_STRING_COUNT = 3
+UINT16_BYTES = 2
+UINT32_BYTES = 4
+NIF_FOOTER_BYTES = 8
+
 @dataclass(frozen=True)
 class FaceGenNifRepair:
     payload: bytes
@@ -70,10 +94,10 @@ def apply_geometry_morphs(
 
 
 def synthesize_texture_detail(egt_payload: bytes, weights: tuple[float, ...]) -> Image.Image:
-    if len(egt_payload) < 64 or egt_payload[:8] != b"FREGT003":
+    if len(egt_payload) < EGT_HEADER_BYTES or egt_payload[:EGT_SIGNATURE_BYTES] != b"FREGT003":
         raise ValueError("Unexpected FaceGen EGT signature")
     width, height, symmetric_modes, asymmetric_modes, _basis_version = struct.unpack_from(
-        "<5I", egt_payload, 8
+        f"<{EGT_HEADER_FIELD_COUNT}I", egt_payload, EGT_SIGNATURE_BYTES
     )
     if width <= 0 or height <= 0 or asymmetric_modes != 0:
         raise ValueError(
@@ -83,14 +107,16 @@ def synthesize_texture_detail(egt_payload: bytes, weights: tuple[float, ...]) ->
     if len(weights) != symmetric_modes:
         raise ValueError(f"FaceGen texture mismatch: weights={len(weights)} modes={symmetric_modes}")
     pixels = width * height
-    expected = 64 + symmetric_modes * (4 + pixels * 3)
+    expected = EGT_HEADER_BYTES + symmetric_modes * (
+        EGT_MORPH_SCALE_BYTES + pixels * RGB_CHANNEL_COUNT
+    )
     if len(egt_payload) != expected:
         raise ValueError(f"FaceGen EGT byte count mismatch: expected={expected} actual={len(egt_payload)}")
-    channels = [[128.0] * pixels for _ in range(3)]
-    offset = 64
+    channels = [[SIGNED_DETAIL_NEUTRAL] * pixels for _ in range(RGB_CHANNEL_COUNT)]
+    offset = EGT_HEADER_BYTES
     for weight in weights:
         scale = struct.unpack_from("<f", egt_payload, offset)[0]
-        offset += 4
+        offset += EGT_MORPH_SCALE_BYTES
         for channel in channels:
             values = struct.unpack_from(f"<{pixels}b", egt_payload, offset)
             offset += pixels
@@ -98,11 +124,14 @@ def synthesize_texture_detail(egt_payload: bytes, weights: tuple[float, ...]) ->
                 factor = weight * scale
                 for index, value in enumerate(values):
                     channel[index] += factor * value
-    output = bytearray(pixels * 4)
+    output = bytearray(pixels * RGBA_CHANNEL_COUNT)
     for index in range(pixels):
-        for channel in range(3):
-            output[index * 4 + channel] = max(0, min(255, round(channels[channel][index])))
-        output[index * 4 + 3] = 255
+        for channel in range(RGB_CHANNEL_COUNT):
+            output[index * RGBA_CHANNEL_COUNT + channel] = max(
+                0,
+                min(BYTE_CHANNEL_MAXIMUM, round(channels[channel][index])),
+            )
+        output[index * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT] = BYTE_CHANNEL_MAXIMUM
     return Image.frombytes("RGBA", (width, height), bytes(output))
 
 
@@ -116,14 +145,19 @@ def compose_skin_albedo(
     base_bytes = base.tobytes()
     detail_bytes = detail.tobytes()
     output = bytearray(len(base_bytes))
-    tone = tuple(4.0 * value / 255.0 for value in tone_rgb)
+    tone = tuple(4.0 * value / BYTE_CHANNEL_MAXIMUM for value in tone_rgb)
     for pixel in range(base.width * base.height):
-        for channel in range(3):
-            base_value = base_bytes[pixel * 4 + channel]
-            detail_value = detail_bytes[pixel * 3 + channel]
-            value = (base_value + 2.0 * (detail_value - 128.0)) * tone[channel]
-            output[pixel * 4 + channel] = max(0, min(255, round(value)))
-        output[pixel * 4 + 3] = base_bytes[pixel * 4 + 3]
+        for channel in range(RGB_CHANNEL_COUNT):
+            base_value = base_bytes[pixel * RGBA_CHANNEL_COUNT + channel]
+            detail_value = detail_bytes[pixel * RGB_CHANNEL_COUNT + channel]
+            value = (base_value + 2.0 * (detail_value - SIGNED_DETAIL_NEUTRAL)) * tone[channel]
+            output[pixel * RGBA_CHANNEL_COUNT + channel] = max(
+                0,
+                min(BYTE_CHANNEL_MAXIMUM, round(value)),
+            )
+        output[pixel * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT] = base_bytes[
+            pixel * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT
+        ]
     return Image.frombytes("RGBA", base.size, bytes(output))
 
 
@@ -134,10 +168,19 @@ def compose_body_albedo(diffuse: Image.Image, body_mod: Image.Image) -> Image.Im
     modifier_bytes = modifier.tobytes()
     output = bytearray(len(base_bytes))
     for pixel in range(base.width * base.height):
-        for channel in range(3):
-            value = base_bytes[pixel * 4 + channel] * modifier_bytes[pixel * 3 + channel] / 128.0
-            output[pixel * 4 + channel] = max(0, min(255, round(value)))
-        output[pixel * 4 + 3] = base_bytes[pixel * 4 + 3]
+        for channel in range(RGB_CHANNEL_COUNT):
+            value = (
+                base_bytes[pixel * RGBA_CHANNEL_COUNT + channel]
+                * modifier_bytes[pixel * RGB_CHANNEL_COUNT + channel]
+                / SIGNED_DETAIL_NEUTRAL
+            )
+            output[pixel * RGBA_CHANNEL_COUNT + channel] = max(
+                0,
+                min(BYTE_CHANNEL_MAXIMUM, round(value)),
+            )
+        output[pixel * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT] = base_bytes[
+            pixel * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT
+        ]
     return Image.frombytes("RGBA", base.size, bytes(output))
 
 
@@ -156,14 +199,22 @@ def repair_facegen_nif_uv_flag(payload: bytes) -> FaceGenNifRepair:
     for block_type, block_offset, block_size in blocks:
         if block_type != "NiTriShapeData":
             continue
-        if block_size < 12:
+        if block_size < NIF_GEOMETRY_MINIMUM_BYTES:
             raise ValueError("FaceGen NiTriShapeData block is truncated")
-        vertex_count = struct.unpack_from("<H", payload, block_offset + 4)[0]
-        flag_offset = block_offset + 9 + vertex_count * 12
+        vertex_count = struct.unpack_from(
+            "<H",
+            payload,
+            block_offset + NIF_GEOMETRY_VERTEX_COUNT_OFFSET,
+        )[0]
+        flag_offset = (
+            block_offset
+            + NIF_GEOMETRY_UV_FLAG_PREFIX_BYTES
+            + vertex_count * NIF_GEOMETRY_VERTEX_BYTES
+        )
         if flag_offset >= block_offset + block_size:
             raise ValueError("FaceGen NiTriShapeData vertex array exceeds its block")
-        if payload[flag_offset] == 3:
-            data[flag_offset] = 1
+        if payload[flag_offset] == NIF_FACEGEN_UV_FLAG:
+            data[flag_offset] = NIF_SINGLE_UV_ARRAY_FLAG
             repaired.append(flag_offset)
     if not repaired:
         raise ValueError("FaceGen NIF contains no Bethesda one-array UV flag")
@@ -175,20 +226,25 @@ def _frozen_fallout_block_directory(payload: bytes) -> list[tuple[str, int, int]
     if newline < 0:
         raise ValueError("NIF has no header line")
     offset = newline + 1
-    if offset + 17 > len(payload):
+    if offset + NIF_HEADER_REMAINDER_BYTES > len(payload):
         raise ValueError("NIF header is truncated")
     version = struct.unpack_from("<I", payload, offset)[0]
     offset += 4
     endian = payload[offset]
     offset += 1
     user_version, block_count, user_version_2 = struct.unpack_from("<III", payload, offset)
-    offset += 12
-    if (version, endian, user_version, user_version_2) != (0x14020007, 1, 11, 34):
+    offset += UINT32_BYTES * 3
+    if (version, endian, user_version, user_version_2) != (
+        FALLOUT_NIF_VERSION,
+        FALLOUT_NIF_ENDIAN,
+        FALLOUT_NIF_USER_VERSION,
+        FALLOUT_NIF_USER_VERSION_TWO,
+    ):
         raise ValueError(
             f"Unexpected Fallout FaceGen NIF header: version={version:08x} endian={endian} "
             f"user={user_version}/{user_version_2}"
         )
-    for _ in range(3):
+    for _ in range(NIF_EXPORT_INFO_STRING_COUNT):
         if offset >= len(payload):
             raise ValueError("NIF export-info string is truncated")
         length = payload[offset]
@@ -202,22 +258,22 @@ def _frozen_fallout_block_directory(payload: bytes) -> list[tuple[str, int, int]
         block_types.append(payload[offset : offset + length].decode("ascii"))
         offset += length
     type_indices = struct.unpack_from(f"<{block_count}H", payload, offset)
-    offset += block_count * 2
+    offset += block_count * UINT16_BYTES
     block_sizes = struct.unpack_from(f"<{block_count}I", payload, offset)
-    offset += block_count * 4
+    offset += block_count * UINT32_BYTES
     string_count, _maximum_string = struct.unpack_from("<II", payload, offset)
-    offset += 8
+    offset += UINT32_BYTES * 2
     for _ in range(string_count):
         length = struct.unpack_from("<I", payload, offset)[0]
-        offset += 4 + length
+        offset += UINT32_BYTES + length
     group_count = struct.unpack_from("<I", payload, offset)[0]
-    offset += 4 + group_count * 4
+    offset += UINT32_BYTES + group_count * UINT32_BYTES
     result = []
     for type_index, block_size in zip(type_indices, block_sizes):
         if type_index >= len(block_types) or offset + block_size > len(payload):
             raise ValueError("NIF block directory is invalid")
         result.append((block_types[type_index], offset, block_size))
         offset += block_size
-    if len(payload) - offset != 8:
+    if len(payload) - offset != NIF_FOOTER_BYTES:
         raise ValueError(f"Unexpected Fallout NIF footer bytes: {len(payload) - offset}")
     return result

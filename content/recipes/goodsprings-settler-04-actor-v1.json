@@ -21,27 +21,5 @@
   ],
   "cellFormId": "00106185",
   "cellRecipe": "goodsprings-saloon-structure-v1",
-  "proofActorReferenceFormId": "00104f08",
-  "idleAnimation": "meshes\\characters\\_male\\idleanims\\dynamicidle_sitstool.kf",
-  "hairShape": "Hat",
-  "skinToneRgba": [
-    62,
-    65,
-    62,
-    64
-  ],
-  "skinToneSource": "provisional-caucasian-runtime-calibration",
-  "outfitArmorFormIds": [
-    "000ef1ce",
-    "001083e1"
-  ],
-  "rigidOutfitArmorFormIds": [
-    "001083e1"
-  ],
-  "excludeOutfitShapePrefixes": [
-    "MeatCap",
-    "meat",
-    "armmeat",
-    "arm2"
-  ]
+  "proofActorReferenceFormId": "00104f08"
 }

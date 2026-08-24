@@ -21,11 +21,5 @@
   ],
   "cellFormId": "00106185",
   "cellRecipe": "goodsprings-saloon-structure-v1",
-  "proofActorReferenceFormId": "00104e85",
-  "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
-  "hairShape": "NoHat",
-  "skinToneRgba": [62, 65, 62, 64],
-  "skinToneSource": "provisional-caucasian-runtime-calibration",
-  "outfitArmorFormIds": ["00020423"],
-  "excludeOutfitShapePrefixes": ["MeatCap", "meat", "armmeat", "arm2"]
+  "proofActorReferenceFormId": "00104e85"
 }

@@ -10,6 +10,18 @@ from pathlib import Path
 from typing import Iterable
 
 
+SOURCE_LENGTH_BYTES = 8
+GL_FLOAT = 5126
+GL_UNSIGNED_SHORT = 5123
+GL_UNSIGNED_INT = 5125
+GL_ARRAY_BUFFER = 34962
+GL_ELEMENT_ARRAY_BUFFER = 34963
+GL_UNSIGNED_SHORT_MAX = 65535
+GL_LINEAR = 9729
+GL_LINEAR_MIPMAP_LINEAR = 9987
+GL_REPEAT = 10497
+
+
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -18,7 +30,12 @@ def compiler_sources_sha256(paths: Iterable[Path]) -> str:
     rows = []
     for path in sorted((value.resolve() for value in paths), key=lambda value: value.name):
         payload = path.read_bytes()
-        rows.append(path.name.encode() + b"\0" + len(payload).to_bytes(8, "little") + payload)
+        rows.append(
+            path.name.encode()
+            + b"\0"
+            + len(payload).to_bytes(SOURCE_LENGTH_BYTES, "little")
+            + payload
+        )
     return sha256_bytes(b"".join(rows))
 
 

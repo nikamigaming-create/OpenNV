@@ -6,7 +6,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellActorLoader
 {
-    private const string ActorSceneSchema = "opennv-actor-scene/v3";
+    private const string ActorSceneSchema = "opennv-actor-scene/v5";
     private const string ActorSceneSetSchema = "opennv-cell-actor-scenes/v1";
     private const string WorldActorSceneSetSchema = "opennv-world-actor-scenes/v2";
 
@@ -50,6 +50,7 @@ internal static class CellActorLoader
         string actorScenePath,
         IReadOnlySet<string> acceptedCellFormIds,
         Node3D cellRoot,
+        RuntimeConfiguration configuration,
         bool proofEnableInitiallyDisabled)
     {
         var resolvedManifest = VerifiedGltfLoader.ResolvePath(actorScenePath);
@@ -58,6 +59,7 @@ internal static class CellActorLoader
         if (root.GetProperty("schema").GetString() != ActorSceneSchema ||
             root.GetProperty("status").GetString() != "skinned-animated")
             throw new InvalidOperationException($"Unexpected OpenNV actor scene: {resolvedManifest}");
+        configuration.VerifyCompiledConfiguration(root);
         if (!acceptedCellFormIds.Contains(root.GetProperty("cellFormId").GetString()!))
             throw new InvalidOperationException("Actor scene belongs to another CELL.");
         var reference = root.GetProperty("reference");
@@ -65,12 +67,13 @@ internal static class CellActorLoader
         if (initiallyDisabled && !proofEnableInitiallyDisabled)
             return null;
         var position = ReadVector(reference.GetProperty("positionGodotUnits"));
-        var yaw = reference.GetProperty("yawGodotRadians").GetSingle();
+        var rotation = ReadQuaternion(reference.GetProperty("rotationGodotQuaternion"));
         var placement = new Node3D
         {
             Name = $"ACHR_{reference.GetProperty("formId").GetString()}",
             Position = position,
-            Rotation = new Vector3(0.0f, yaw, 0.0f),
+            Basis = new Basis(rotation),
+            Scale = Vector3.One * reference.GetProperty("scale").GetSingle(),
         };
         cellRoot.AddChild(placement);
         var outputs = root.GetProperty("outputs");
@@ -92,6 +95,7 @@ internal static class CellActorLoader
             modelPath,
             sidecarPath,
             placement,
+            configuration,
             false);
         return new PlacedActor(
             placement,
@@ -102,7 +106,9 @@ internal static class CellActorLoader
             actor.GetProperty("raceFormId").GetString()!,
             actor.GetProperty("hairFormId").GetString()!,
             actor.GetProperty("eyesFormId").GetString()!,
-            actor.GetProperty("outfitFormId").GetString()!,
+            actor.GetProperty("outfitFormIds").EnumerateArray()
+                .Select(value => value.GetString()!)
+                .ToArray(),
             actor.GetProperty("headPartFormIds").EnumerateArray()
                 .Select(value => value.GetString()!)
                 .ToArray(),
@@ -116,6 +122,17 @@ internal static class CellActorLoader
         if (values.Length != 3)
             throw new InvalidOperationException("Actor scene vector must contain three values.");
         return new Vector3(values[0], values[1], values[2]);
+    }
+
+    private static Quaternion ReadQuaternion(JsonElement array)
+    {
+        var values = array.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != 4)
+            throw new InvalidOperationException("Actor scene quaternion must contain four values.");
+        var quaternion = new Quaternion(values[0], values[1], values[2], values[3]);
+        if (!quaternion.IsNormalized())
+            throw new InvalidOperationException("Actor scene quaternion must be normalized.");
+        return quaternion;
     }
 
     private static void VerifyHash(string path, string expected)
@@ -135,7 +152,7 @@ internal static class CellActorLoader
         string RaceFormId,
         string HairFormId,
         string EyesFormId,
-        string OutfitFormId,
+        IReadOnlyList<string> OutfitFormIds,
         IReadOnlyList<string> HeadPartFormIds,
         string IdleAnimationPath,
         ActorModelSlice.LoadedActor Actor);

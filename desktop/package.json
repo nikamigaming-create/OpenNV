@@ -34,6 +34,12 @@
       "assets/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "../runtime/config/open-nv-runtime-v1.json",
+        "to": "config/open-nv-runtime-v1.json"
+      }
+    ],
     "directories": {
       "output": "release"
     },

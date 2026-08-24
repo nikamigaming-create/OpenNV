@@ -19,9 +19,9 @@ rendered door planes, not merely the two reference origins.
 
 ## Promoted content
 
-- 209 unique interior/exterior/held/LAND assets;
-- 454 loaded flat-mode placements;
-- 363 decoded or derived texture artifacts and 439 material bindings;
+- 228 interior/exterior/held/LAND assets;
+- 504 loaded enabled flat-mode placements;
+- 379 decoded or derived texture artifacts and 476 material bindings;
 - 27 authored lights and nine loaded doors;
 - LAND height, normals, vertex colors, four base textures, and 24 alpha layers;
 - enabled Sunny Smiles `00104e85`, settler `00104f08`, and Easy Pete
@@ -62,8 +62,9 @@ The deterministic Godot portal gate requires:
 - an open fire ray is not blocked by either door; and
 - the full player capsule traverses the opening in both directions.
 
-The current local proof measures normal agreement `1.0`, alignment error below
-`0.000001` metre, an authored-collision floor within `0.000001` metre of the
+The current local proof measures 332 collision meshes, 938 surfaces, 294034
+vertices, normal agreement `1.0`, alignment error below `0.000001` metre, and an
+authored-collision floor within `0.000001` metre of the
 spawn origin, open ray clearance, and two-way capsule traversal.
 
 This contract does not claim neighboring CELL streaming, SpeedTree, retail

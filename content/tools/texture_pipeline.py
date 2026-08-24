@@ -12,7 +12,15 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from bsa_archive import BsaArchive, canonical_member_path
+from runtime_configuration import ContentCompilerConfiguration
 
+
+DDS_HEADER_BYTES = 128
+DDS_CAPABILITIES_TWO_OFFSET = 112
+DDS_CUBEMAP_FLAG = 0x0200
+DDS_ALL_CUBEMAP_FACES_MASK = 0xFC00
+DDS_CUBEMAP_FACE_COUNT = 6
+DDS_CUBEMAP_GODOT_FACE_ORDER = (0, 1, 4, 5, 3, 2)
 
 @dataclass(frozen=True)
 class TextureArtifact:
@@ -52,11 +60,8 @@ class TextureArtifact:
 
 
 def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 class TexturePipeline:
@@ -65,9 +70,11 @@ class TexturePipeline:
         archives: list[Path],
         cache_root: Path,
         aliases: dict[str, str],
+        compiler: ContentCompilerConfiguration,
     ):
         self.archives = [BsaArchive(path) for path in archives]
         self.cache_root = cache_root
+        self.compiler = compiler
         self.aliases = {
             canonical_member_path(source): canonical_member_path(target)
             for source, target in aliases.items()
@@ -85,7 +92,9 @@ class TexturePipeline:
         source_path = self.cache_root / "source" / Path(member.logical_path.replace("\\", "/"))
         _atomic_bytes(source_path, member.data)
 
-        asset_id = hashlib.sha256(requested.encode()).hexdigest()[:20]
+        asset_id = hashlib.sha256(requested.encode()).hexdigest()[
+            :self.compiler.asset_id_hex_characters
+        ]
         png_path = self.cache_root / "generated" / "textures" / f"{asset_id}.png"
         normal_green_inverted = requested.endswith("_n.dds")
         cube_images = decode_dds_cubemap(member.data)
@@ -94,13 +103,13 @@ class TexturePipeline:
             if cube_images
             else decode_dds(member.data, normal_green_inverted)
         )
-        _atomic_png(png_path, image)
+        _atomic_png(png_path, image, self.compiler.png_compression_level)
         cube_paths = tuple(
             png_path.with_name(f"{asset_id}-cube-{index}.png")
             for index in range(len(cube_images))
         )
         for path, cube_image in zip(cube_paths, cube_images):
-            _atomic_png(path, cube_image)
+            _atomic_png(path, cube_image, self.compiler.png_compression_level)
         width, height = image.size
         return TextureArtifact(
             asset_id,
@@ -129,24 +138,24 @@ def decode_dds(payload: bytes, invert_normal_green: bool) -> Image.Image:
 
 
 def decode_dds_cubemap(payload: bytes) -> list[Image.Image]:
-    if len(payload) < 128 or payload[:4] != b"DDS ":
+    if len(payload) < DDS_HEADER_BYTES or payload[:4] != b"DDS ":
         raise ValueError("Texture payload is not DDS")
-    caps_two = struct.unpack_from("<I", payload, 112)[0]
-    if not caps_two & 0x0200:
+    caps_two = struct.unpack_from("<I", payload, DDS_CAPABILITIES_TWO_OFFSET)[0]
+    if not caps_two & DDS_CUBEMAP_FLAG:
         return []
-    if caps_two & 0xFC00 != 0xFC00:
+    if caps_two & DDS_ALL_CUBEMAP_FACES_MASK != DDS_ALL_CUBEMAP_FACES_MASK:
         raise ValueError("DDS cubemap does not contain all six faces")
-    face_payload = payload[128:]
-    if len(face_payload) % 6:
+    face_payload = payload[DDS_HEADER_BYTES:]
+    if len(face_payload) % DDS_CUBEMAP_FACE_COUNT:
         raise ValueError("DDS cubemap face payloads are not equal in size")
-    face_size = len(face_payload) // 6
-    header = bytearray(payload[:128])
-    struct.pack_into("<I", header, 112, 0)
+    face_size = len(face_payload) // DDS_CUBEMAP_FACE_COUNT
+    header = bytearray(payload[:DDS_HEADER_BYTES])
+    struct.pack_into("<I", header, DDS_CAPABILITIES_TWO_OFFSET, 0)
     source_faces = [
         decode_dds(bytes(header) + face_payload[index * face_size : (index + 1) * face_size], False)
-        for index in range(6)
+        for index in range(DDS_CUBEMAP_FACE_COUNT)
     ]
-    return [source_faces[index] for index in (0, 1, 4, 5, 3, 2)]
+    return [source_faces[index] for index in DDS_CUBEMAP_GODOT_FACE_ORDER]
 
 
 def _atomic_bytes(path: Path, data: bytes) -> None:
@@ -156,8 +165,13 @@ def _atomic_bytes(path: Path, data: bytes) -> None:
     os.replace(temporary, path)
 
 
-def _atomic_png(path: Path, image: Image.Image) -> None:
+def _atomic_png(path: Path, image: Image.Image, compression_level: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
-    image.save(temporary, format="PNG", optimize=True, compress_level=9)
+    image.save(
+        temporary,
+        format="PNG",
+        optimize=True,
+        compress_level=compression_level,
+    )
     os.replace(temporary, path)
