@@ -19,7 +19,12 @@ CORPUS_SCHEMA = "opennv-actor-parity-corpus/v1"
 RETAIL_REPORT_SCHEMA = "nikami-fnv-actor-observation/v1"
 RETAIL_ORACLE_SCHEMA = "nikami-retail-oracle/v4"
 REVIEW_CONTRACT_SCHEMA = "opennv-actor-review-contract/v4"
-RETAIL_APPEARANCE_SCHEMA = "nikami-fnv-sidecar-appearance/v2"
+RETAIL_APPEARANCE_SCHEMA = "nikami-fnv-sidecar-appearance/v3"
+WEAPON_STATE_NONE = "none"
+WEAPON_STATE_EQUIPPED = "equipped"
+WEAPON_RENDER_STATE_NOT_APPLICABLE = "not-applicable"
+WEAPON_RENDER_STATE_VISIBLE_SOURCE_BOUND = "visible-source-bound"
+WEAPON_RENDER_STATE_NOT_VISIBLE_AT_FRAME = "not-visible-at-frame"
 CAPTURED_RETAIL_STATUS = "captured-classified-runtime-observation"
 PENDING_GODOT_STATUS = "retail-observed-godot-pending"
 FRAME_FILE_PATTERN = re.compile(r"frame-(?P<frame>[0-9]+)\.[^.]+$", re.IGNORECASE)
@@ -703,6 +708,15 @@ def _appearance_contract(events: list[dict[str, object]]) -> dict[str, object]:
         or not appearance["renderParts"]
     ):
         raise ValueError("Retail actor appearance snapshot is incomplete or truncated")
+    render_parts = appearance["renderParts"]
+    if any(not isinstance(part, dict) for part in render_parts):
+        raise ValueError("Retail actor appearance render parts are not objects")
+    if any(
+        not isinstance(part.get("textureBindings"), list)
+        or any(not isinstance(binding, dict) for binding in part["textureBindings"])
+        for part in render_parts
+    ):
+        raise ValueError("Retail actor appearance texture bindings are not object arrays")
     frame = int(snapshot["frame"])
     pose = _one(
         [
@@ -716,48 +730,74 @@ def _appearance_contract(events: list[dict[str, object]]) -> dict[str, object]:
     if not isinstance(weapon, dict):
         raise ValueError("Retail appearance snapshot has no equipped-weapon contract")
     state = str(weapon.get("state", ""))
+    render_state = str(weapon.get("renderState", ""))
+    if not isinstance(weapon.get("weaponOut"), bool):
+        raise ValueError("Retail equipped-weapon contract has no Boolean weaponOut state")
+    weapon_out = weapon["weaponOut"]
     form_text = str(weapon.get("sourceFormId", ""))
     if re.fullmatch(r"0x[0-9A-F]{8}", form_text) is None:
         raise ValueError("Retail equipped-weapon FormID is not canonical")
     form_id = int(form_text[2:], HEXADECIMAL_RADIX)
     pose_form_id = int(pose.get("weaponForm", -1))
+    if not isinstance(pose.get("weaponOut"), bool):
+        raise ValueError("Retail appearance pose has no Boolean weaponOut state")
+    pose_weapon_out = pose["weaponOut"]
     model_path = str(weapon.get("modelPath", ""))
-    node_present = bool(weapon.get("nodePresent"))
+    if not isinstance(weapon.get("nodePresent"), bool):
+        raise ValueError("Retail equipped-weapon contract has no Boolean nodePresent state")
+    node_present = weapon["nodePresent"]
     visible_weapon_parts = [
         part
-        for part in appearance["renderParts"]
-        if isinstance(part, dict)
-        and part.get("role") == "weapon"
+        for part in render_parts
+        if part.get("role") == "weapon"
         and bool(part.get("visible"))
     ]
-    if state == "none":
-        if form_id != 0 or pose_form_id != 0 or node_present or model_path or visible_weapon_parts:
-            raise ValueError("Retail no-weapon appearance disagrees with its pose or render parts")
-    elif state == "equipped-unrendered":
-        raise ValueError("Retail equipped weapon has no renderable runtime attachment")
-    elif state == "equipped":
-        canonical_model_path = model_path.strip().lower().replace("\\", "/")
-        matching_parts = [
-            part
-            for part in visible_weapon_parts
-            if part.get("sourceFormId") == form_text
-            and part.get("modelPath") == model_path
-            and bool(part.get("required"))
-            and bool(part.get("attached"))
-            and bool(part.get("drawable"))
-        ]
+    if state == WEAPON_STATE_NONE:
         if (
-            form_id == 0
-            or pose_form_id != form_id
-            or not node_present
-            or not canonical_model_path.endswith(".nif")
-            or canonical_model_path != model_path
-            or canonical_model_path.startswith("/")
-            or "../" in canonical_model_path
-            or not matching_parts
+            render_state != WEAPON_RENDER_STATE_NOT_APPLICABLE
+            or weapon_out
+            or pose_weapon_out
+            or form_id != 0
+            or pose_form_id != 0
+            or node_present
+            or model_path
+            or visible_weapon_parts
         ):
+            raise ValueError("Retail no-weapon appearance disagrees with its pose or render parts")
+    elif state == WEAPON_STATE_EQUIPPED:
+        if form_id == 0 or pose_form_id != form_id or pose_weapon_out != weapon_out:
+            raise ValueError("Retail equipped weapon disagrees with its same-frame pose")
+        canonical_model_path = model_path.strip().lower().replace("\\", "/")
+        canonical_model = (
+            canonical_model_path == model_path
+            and canonical_model_path.endswith(".nif")
+            and not canonical_model_path.startswith("/")
+            and "../" not in canonical_model_path
+        )
+        if render_state == WEAPON_RENDER_STATE_VISIBLE_SOURCE_BOUND:
+            matching_parts = [
+                part
+                for part in visible_weapon_parts
+                if part.get("sourceFormId") == form_text
+                and part.get("modelPath") == model_path
+                and bool(part.get("required"))
+                and bool(part.get("attached"))
+                and bool(part.get("drawable"))
+            ]
+            if not node_present or not canonical_model or not matching_parts:
+                raise ValueError(
+                    "Retail equipped weapon lacks an authoritative visible runtime attachment"
+                )
+        elif render_state == WEAPON_RENDER_STATE_NOT_VISIBLE_AT_FRAME:
+            if weapon_out or visible_weapon_parts:
+                raise ValueError(
+                    "Retail nonvisible equipped weapon disagrees with its same-frame pose or render parts"
+                )
+            if model_path and not canonical_model:
+                raise ValueError("Retail equipped weapon model path is not canonical")
+        else:
             raise ValueError(
-                "Retail equipped weapon lacks an authoritative visible runtime attachment"
+                f"Retail equipped-weapon render state is not evidence-capable: {render_state!r}"
             )
     else:
         raise ValueError(f"Retail equipped-weapon state is not evidence-capable: {state!r}")

@@ -17,7 +17,7 @@ from prepare_creature_review import _retail_equipped_weapon_attachment  # noqa: 
 
 class ActorReviewContractTest(unittest.TestCase):
     @staticmethod
-    def _appearance_events(role: str = "weapon", schema: str = "nikami-fnv-sidecar-appearance/v2"):
+    def _appearance_events(role: str = "weapon", schema: str = "nikami-fnv-sidecar-appearance/v3"):
         frame = 70
         weapon_form = 0x010117F7
         model_path = "weapons/2handmelee/knifespear/knifespear.nif"
@@ -26,6 +26,7 @@ class ActorReviewContractTest(unittest.TestCase):
                 "event": "actor-pose-sample",
                 "frame": frame,
                 "weaponForm": weapon_form,
+                "weaponOut": False,
             },
             {
                 "event": "actor-visual-snapshot",
@@ -36,6 +37,8 @@ class ActorReviewContractTest(unittest.TestCase):
                     "truncated": False,
                     "equippedWeapon": {
                         "state": "equipped",
+                        "renderState": "visible-source-bound",
+                        "weaponOut": False,
                         "sourceFormId": "0x010117F7",
                         "modelPath": model_path,
                         "nodePresent": True,
@@ -49,6 +52,7 @@ class ActorReviewContractTest(unittest.TestCase):
                             "attached": True,
                             "drawable": True,
                             "visible": True,
+                            "textureBindings": [],
                         }
                     ],
                 },
@@ -74,14 +78,46 @@ class ActorReviewContractTest(unittest.TestCase):
                 self._appearance_events(schema="nikami-fnv-sidecar-appearance/v1")
             )
 
-    def test_appearance_contract_rejects_equipped_weapon_without_render_node(self):
+    def test_appearance_contract_accepts_modeled_weapon_not_visible_at_frame(self):
         events = self._appearance_events()
         appearance = events[1]["appearance"]
-        appearance["equippedWeapon"]["state"] = "equipped-unrendered"
+        appearance["equippedWeapon"]["renderState"] = "not-visible-at-frame"
         appearance["equippedWeapon"]["nodePresent"] = False
         appearance["renderParts"][0]["role"] = "actor"
 
-        with self.assertRaisesRegex(ValueError, "no renderable"):
+        result = _appearance_contract(events)
+
+        self.assertEqual(
+            result["snapshot"]["equippedWeapon"]["renderState"],
+            "not-visible-at-frame",
+        )
+
+    def test_appearance_contract_accepts_model_less_embedded_weapon(self):
+        events = self._appearance_events()
+        appearance = events[1]["appearance"]
+        weapon = appearance["equippedWeapon"]
+        weapon["renderState"] = "not-visible-at-frame"
+        weapon["modelPath"] = ""
+        appearance["renderParts"][0]["role"] = "actor"
+
+        _appearance_contract(events)
+
+    def test_appearance_contract_rejects_drawn_weapon_not_visible_at_frame(self):
+        events = self._appearance_events()
+        appearance = events[1]["appearance"]
+        appearance["equippedWeapon"]["renderState"] = "not-visible-at-frame"
+        appearance["equippedWeapon"]["weaponOut"] = True
+        events[0]["weaponOut"] = True
+        appearance["renderParts"][0]["role"] = "actor"
+
+        with self.assertRaisesRegex(ValueError, "nonvisible equipped weapon"):
+            _appearance_contract(events)
+
+    def test_appearance_contract_rejects_non_object_texture_binding(self):
+        events = self._appearance_events()
+        events[1]["appearance"]["renderParts"][0]["textureBindings"] = ["invalid"]
+
+        with self.assertRaisesRegex(ValueError, "texture bindings"):
             _appearance_contract(events)
 
     def test_creature_compiler_retains_retail_weapon_source_identity(self):
@@ -101,6 +137,18 @@ class ActorReviewContractTest(unittest.TestCase):
             attachment.model_path,
             "weapons/2handmelee/knifespear/knifespear.nif",
         )
+
+    def test_creature_compiler_omits_weapon_not_visible_at_frame(self):
+        events = self._appearance_events()
+        snapshot = events[1]["appearance"]
+        snapshot["equippedWeapon"]["renderState"] = "not-visible-at-frame"
+        snapshot["renderParts"][0]["role"] = "actor"
+
+        attachment = _retail_equipped_weapon_attachment(
+            {"retail": {"appearance": {"snapshot": snapshot}}}
+        )
+
+        self.assertIsNone(attachment)
 
     def test_captured_d3d9_projection_resolves_final_scene_frustum(self):
         projection = [

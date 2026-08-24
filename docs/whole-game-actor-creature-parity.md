@@ -172,17 +172,36 @@ was produced by the v1 appearance contract, which labeled the visible equipped
 knife-spear geometry as actor geometry and therefore failed to prove its runtime
 source. No row from that directory may be resumed or counted.
 
-The replacement v2 appearance contract binds the live equipped-weapon form,
-runtime node, exact NIF path, and visible render parts to the pose at the same
-source frame. A fresh canonical Ghost canary at
-`D:\Builds\OpenNV-actor-retail-appearance-weapon-bound-20260824-r1` proves that
-link for weapon `0x010117F7` and its owned-data model path. This is a complete
-retail observation contract, not a Godot parity pass. Its owned-data compile
-still fails closed because the authored model stack contains
-`NiParticleSystem` geometry; the generic glTF path rejects that omission
-explicitly. A ghost scene without its breathing and leg-spray systems is not
-accepted as a complete rendition. The exhaustive queue will restart in a new
-directory only from committed v2 producer and consumer revisions.
+The intermediate v2 soak at
+`D:\Builds\OpenNV-actor-retail-coverage-surface-v4-20260824-r8` completed 24 of
+its first 32 base jobs. Seven model-less turret/hologram weapons were rejected
+as missing geometry and the holstered boxing tape on the Starlet remained
+incomplete after four deterministic attempts. That immutable run exposed a
+contract error and contributes no current-producer coverage credit.
+
+Appearance v3 separates logical equip state from same-frame render state while
+keeping both fail-closed. The same nonzero WEAP FormID and `weaponOut` value must
+match the pose. `visible-source-bound` requires the exact normalized NIF, node,
+and visible source-attributed render part. `not-visible-at-frame` requires
+`weaponOut = false` and zero visible weapon parts; a model-less embedded weapon
+or an authored holstered model is not turned into invented geometry. Canonical
+targeted captures prove both branches:
+
+- `D:\Builds\OpenNV-actor-v3-turret-20260824-r1`,
+  `D:\Builds\OpenNV-actor-v3-hologram-20260824-r1`, and
+  `D:\Builds\OpenNV-actor-v3-starlet-20260824-r1` are complete nonvisible
+  contracts with empty fault ledgers;
+- `D:\Builds\OpenNV-actor-v3-dean-20260824-r1` retains eight visible 9mm parts
+  and no actor mouth/eye geometry under the weapon role; and
+- `D:\Builds\OpenNV-actor-v3-ghost-20260824-r1` retains its visible authored
+  knife-spear geometry as an exact source-bound weapon.
+
+These are complete retail observation contracts, not Godot parity passes. The
+Ghost owned-data compile still fails closed because the authored model stack
+contains `NiParticleSystem` geometry; the generic glTF path rejects that
+omission explicitly. A ghost scene without its breathing and leg-spray systems
+is not accepted as a complete rendition. The exhaustive queue restarts in a new
+directory only from committed v3 producer and consumer revisions.
 
 ## Execution order
 

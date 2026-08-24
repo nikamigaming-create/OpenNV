@@ -110,7 +110,10 @@ def _retail_equipped_weapon_attachment(
 ) -> RetailAttachmentModel | None:
     snapshot = contract["retail"]["appearance"]["snapshot"]
     weapon = snapshot["equippedWeapon"]
-    if weapon["state"] != "equipped":
+    if (
+        weapon["state"] != "equipped"
+        or weapon["renderState"] != "visible-source-bound"
+    ):
         return None
     source_form_id = str(weapon["sourceFormId"])
     model_path = str(weapon["modelPath"])
