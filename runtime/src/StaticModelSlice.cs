@@ -27,14 +27,19 @@ internal static class StaticModelSlice
         if (surfaces == 0 || vertices == 0)
             throw new InvalidOperationException("Imported glTF contains no renderable surfaces or vertices.");
 
-        BuildReferenceView(parent, meshes[0], configuration.DiagnosticPreview);
+        BuildReferenceView(
+            parent,
+            meshes[0],
+            configuration.DiagnosticPreview,
+            configuration.Renderer);
         return new LoadedStaticModel(loaded.SourceSha256, meshes.Length, surfaces, vertices);
     }
 
     private static void BuildReferenceView(
         Node3D parent,
         MeshInstance3D referenceMesh,
-        DiagnosticPreviewConfiguration configuration)
+        DiagnosticPreviewConfiguration configuration,
+        RendererConfiguration renderer)
     {
         var bounds = referenceMesh.Mesh!.GetAabb();
         var center = bounds.GetCenter();
@@ -48,7 +53,7 @@ internal static class StaticModelSlice
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
             AmbientLightColor = configuration.AmbientColorRgba.Color(),
             AmbientLightEnergy = configuration.AmbientEnergy,
-            TonemapMode = Godot.Environment.ToneMapper.Filmic,
+            TonemapMode = RuntimeRendering.ParseToneMapper(renderer.ToneMapper),
         };
         parent.AddChild(new WorldEnvironment { Environment = environment });
         parent.AddChild(new DirectionalLight3D

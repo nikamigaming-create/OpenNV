@@ -43,10 +43,18 @@ from runtime_configuration import ContentCompilerConfiguration
 
 
 ACTOR_GLTF_SCHEMA = "opennv-actor-gltf/v1"
+RIGID_ATTACHMENT_NIF_ROOT = "nif-root-skeleton-node"
+RIGID_ATTACHMENT_NIF_PARENT = "nif-prn-skeleton-node"
+RIGID_ATTACHMENT_CONFIGURED_FALLBACK = "configured-skeleton-node-fallback"
+NIF_PARENT_EXTRA_DATA_NAME = "prn"
 NIF_LINEAR_INTERPOLATION = 1
+NIF_QUADRATIC_INTERPOLATION = 2
 NIF_XYZ_ROTATION_INTERPOLATION = 4
 SLERP_LINEAR_DOT_THRESHOLD = 0.9995
 NORMALIZATION_EPSILON = 1.0e-12
+GLTF_PRIMARY_SKIN_INFLUENCES = 4
+SKIN_WEIGHT_SUM_TOLERANCE = 1.0e-5
+SKIN_WEIGHT_DUPLICATE_TOLERANCE = 1.0e-7
 UNIFORM_CUBIC_BASIS_DIVISOR = 6.0
 QUATERNION_DIAGONAL_COEFFICIENT = 0.25
 
@@ -70,6 +78,12 @@ class ActorComponent:
 
 
 @dataclass(frozen=True)
+class ActorAnimation:
+    logical_path: str
+    payload: bytes
+
+
+@dataclass(frozen=True)
 class ActorGltfInput:
     actor_form_id: str
     actor_name: str
@@ -81,6 +95,7 @@ class ActorGltfInput:
     idle_animation_path: str
     idle_animation_payload: bytes
     rigid_attachment_node: str = "HeadAnims"
+    additional_animations: tuple[ActorAnimation, ...] = ()
 
 
 class TextureLibrary:
@@ -114,6 +129,8 @@ class TextureLibrary:
             requested,
             image,
             source_sha256=member.sha256,
+            source_archive=member.source_archive,
+            source_archive_sha256=member.source_archive_sha256,
             normal_green_inverted=normal,
             key=key,
         )
@@ -126,6 +143,8 @@ class TextureLibrary:
             identity,
             image,
             source_sha256=source_sha256,
+            source_archive=None,
+            source_archive_sha256=None,
             normal_green_inverted=False,
             key=key,
         )
@@ -136,6 +155,8 @@ class TextureLibrary:
         image: Image.Image,
         *,
         source_sha256: str,
+        source_archive: str | None,
+        source_archive_sha256: str | None,
         normal_green_inverted: bool,
         key: tuple[str, bool],
     ) -> int:
@@ -162,6 +183,8 @@ class TextureLibrary:
             {
                 "identity": identity,
                 "sourceSha256": source_sha256,
+                "sourceArchive": source_archive,
+                "sourceArchiveSha256": source_archive_sha256,
                 "png": uri,
                 "pngSha256": payload_hash,
                 "width": image.width,
@@ -186,9 +209,9 @@ def export_actor_gltf(
     nodes: list[dict[str, object]] = [{"name": f"ACTOR_{source.actor_form_id}_{source.actor_name}", "children": []}]
     node_by_name: dict[str, int] = {}
     _append_skeleton_nodes(skeleton_root, 0, nodes, node_by_name)
-    if "Bip01 Head" not in node_by_name or source.rigid_attachment_node not in node_by_name:
+    if source.rigid_attachment_node not in node_by_name:
         raise ValueError(
-            "Actor skeleton has no required head/rigid-attachment hierarchy: "
+            "Actor skeleton has no configured rigid-attachment node: "
             f"{source.rigid_attachment_node}"
         )
 
@@ -208,6 +231,12 @@ def export_actor_gltf(
             repairs = repaired.uv_flag_offsets
         document = _read_nif(payload)
         component_root = document.roots[0]
+        rigid_attachment_node, rigid_attachment_source = _rigid_attachment(
+            document,
+            component_root,
+            node_by_name,
+            source.rigid_attachment_node,
+        )
         shapes = [
             shape
             for shape in document.get_global_iterator()
@@ -240,7 +269,9 @@ def export_actor_gltf(
                 node["skin"] = skin_index
                 parent = 0
             else:
-                parent = node_by_name[source.rigid_attachment_node]
+                parent = node_by_name[rigid_attachment_node]
+                surface["attachmentNode"] = rigid_attachment_node
+                surface["attachmentSource"] = rigid_attachment_source
             node_index = len(nodes)
             nodes.append(node)
             nodes[parent].setdefault("children", []).append(node_index)
@@ -248,12 +279,46 @@ def export_actor_gltf(
             surface["faceGenUvFlagRepairs"] = list(repairs)
             surfaces.append(surface)
 
-    animation, animation_channels, nonaccum_origin = _build_animation(
-        source.idle_animation_payload,
-        node_by_name,
-        builder,
-        compiler,
+    animation_sources = (
+        ActorAnimation(source.idle_animation_path, source.idle_animation_payload),
+        *source.additional_animations,
     )
+    logical_paths = [row.logical_path.casefold() for row in animation_sources]
+    if len(set(logical_paths)) != len(logical_paths):
+        raise ValueError("Actor animation paths must be unique")
+    animations = []
+    animation_rows = []
+    animation_channels = 0
+    nonaccum_origin = None
+    use_path_names = len(animation_sources) > 1
+    for animation_source in animation_sources:
+        try:
+            animation, channels, animation_origin = _build_animation(
+                animation_source.payload,
+                node_by_name,
+                builder,
+                compiler,
+                animation_source.logical_path if use_path_names else None,
+            )
+        except Exception as error:
+            raise ValueError(
+                f"Actor animation {animation_source.logical_path} failed: {error}"
+            ) from error
+        if animation is not None:
+            animations.append(animation)
+        animation_channels += channels
+        if animation_source is animation_sources[0]:
+            nonaccum_origin = animation_origin
+        animation_rows.append(
+            {
+                "logicalPath": animation_source.logical_path,
+                "sha256": hashlib.sha256(animation_source.payload).hexdigest(),
+                "channels": channels,
+                "nonAccumOriginGodotUnits": (
+                    list(animation_origin) if animation_origin else None
+                ),
+            }
+        )
 
     binary_path = gltf_path.with_suffix(".bin")
     gltf: dict[str, object] = {
@@ -277,8 +342,8 @@ def export_actor_gltf(
         "accessors": builder.accessors,
         "extras": {"openNvSchema": ACTOR_GLTF_SCHEMA, "actorFormId": source.actor_form_id},
     }
-    if animation is not None:
-        gltf["animations"] = [animation]
+    if animations:
+        gltf["animations"] = animations
     binary_bytes = bytes(builder.data)
     gltf_bytes = (json.dumps(gltf, indent=2, sort_keys=True) + "\n").encode()
     _atomic_write(binary_path, binary_bytes)
@@ -293,13 +358,18 @@ def export_actor_gltf(
             "sha256": hashlib.sha256(source.skeleton_payload).hexdigest(),
             "nodes": len(node_by_name),
             "rigidAttachmentNode": source.rigid_attachment_node,
+            "rigidAttachmentPolicy": (
+                "attach a rigid component to its authored NIF Prn skeleton node; "
+                "without Prn, use a matching NIF root, then the configured fallback"
+            ),
         },
         "animation": {
             "logicalPath": source.idle_animation_path,
             "sha256": hashlib.sha256(source.idle_animation_payload).hexdigest(),
-            "channels": animation_channels,
+            "channels": animation_rows[0]["channels"],
             "nonAccumOriginGodotUnits": list(nonaccum_origin) if nonaccum_origin else None,
         },
+        "animations": animation_rows,
         "outputs": {
             "gltf": {"file": gltf_path.name, "sha256": hashlib.sha256(gltf_bytes).hexdigest()},
             "buffer": {"file": binary_path.name, "sha256": hashlib.sha256(binary_bytes).hexdigest()},
@@ -309,7 +379,9 @@ def export_actor_gltf(
             "surfaces": len(surfaces),
             "skins": len(skins),
             "textures": len(textures.rows),
-            "animated": animation is not None and animation_channels > 0,
+            "animations": len(animations),
+            "animationChannels": animation_channels,
+            "animated": bool(animations) and animation_channels > 0,
         },
         "surfaces": surfaces,
         "textures": textures.rows,
@@ -343,6 +415,46 @@ def _append_skeleton_nodes(
     for child in getattr(node, "children", []):
         if isinstance(child, NifFormat.NiNode):
             _append_skeleton_nodes(child, node_index, nodes, node_by_name)
+
+
+def _rigid_attachment(
+    document: object,
+    component_root: object,
+    node_by_name: dict[str, int],
+    configured_fallback: str,
+) -> tuple[str, str]:
+    """Resolve one rigid model from authored NIF identity before using fallback."""
+
+    authored_parents = {
+        _text(extra.string_data)
+        for extra in document.get_global_iterator()
+        if isinstance(extra, NifFormat.NiStringExtraData)
+        and _text(extra.name).casefold() == NIF_PARENT_EXTRA_DATA_NAME
+        and _text(extra.string_data)
+    }
+    if len(authored_parents) > 1:
+        raise ValueError(
+            "Actor rigid component declares multiple NIF Prn attachment nodes: "
+            f"{sorted(authored_parents)}"
+        )
+    if authored_parents:
+        authored_parent = next(iter(authored_parents))
+        if authored_parent not in node_by_name:
+            raise ValueError(
+                "Actor skeleton has no NIF Prn attachment node: "
+                f"{authored_parent}"
+            )
+        return authored_parent, RIGID_ATTACHMENT_NIF_PARENT
+
+    authored_root = _text(component_root.name)
+    if authored_root in node_by_name:
+        return authored_root, RIGID_ATTACHMENT_NIF_ROOT
+    if configured_fallback not in node_by_name:
+        raise ValueError(
+            "Actor skeleton has no configured rigid-attachment fallback: "
+            f"{configured_fallback}"
+        )
+    return configured_fallback, RIGID_ATTACHMENT_CONFIGURED_FALLBACK
 
 
 def _append_shape(
@@ -475,7 +587,8 @@ def _append_shape(
         "triangles": len(triangles),
         "morphed": morphed,
         "skinned": skin_index is not None,
-        "attachmentSource": "nif-skin" if skin_index is not None else "nif-rigid-head",
+        "attachmentSource": "nif-skin" if skin_index is not None else None,
+        "skinWeightSource": "nif-hardware-skin-partition" if skin_index is not None else None,
         "skinShapeTransformCompensated": (
             skin_index is not None and component.bake_shape_transform
         ),
@@ -532,20 +645,19 @@ def _append_skin(
         raise ValueError(
             f"Actor {role} shape {_text(shape.name)!r} skin references missing skeleton nodes: {missing}"
         )
-    weights = shape.get_vertex_weights()
+    weights = _hardware_vertex_weights(shape)
     joint_rows = []
     weight_rows = []
     for vertex_weights in weights:
-        selected = sorted(vertex_weights, key=lambda item: float(item[1]), reverse=True)[:4]
-        total = sum(float(item[1]) for item in selected)
-        if total <= 0.0:
-            raise ValueError(f"Actor skin has an unweighted vertex: {_text(shape.name)}")
-        joints = [int(item[0]) for item in selected]
-        values = [float(item[1]) / total for item in selected]
-        joint_rows.append(tuple(joints + [0] * (4 - len(joints))))
-        weight_rows.append(tuple(values + [0.0] * (4 - len(values))))
+        joints = [int(item[0]) for item in vertex_weights]
+        values = [float(item[1]) for item in vertex_weights]
+        joint_rows.append(tuple(
+            joints + [0] * (GLTF_PRIMARY_SKIN_INFLUENCES - len(joints))))
+        weight_rows.append(tuple(
+            values + [0.0] * (GLTF_PRIMARY_SKIN_INFLUENCES - len(values))))
     joint_payload = struct.pack(
-        f"<{len(joint_rows) * 4}H", *(value for row in joint_rows for value in row)
+        f"<{len(joint_rows) * GLTF_PRIMARY_SKIN_INFLUENCES}H",
+        *(value for row in joint_rows for value in row),
     )
     attributes["JOINTS_0"] = builder.add(
         joint_payload, component_type=GL_UNSIGNED_SHORT, count=len(joint_rows), value_type="VEC4", target=GL_ARRAY_BUFFER
@@ -579,11 +691,93 @@ def _append_skin(
     return skin_index
 
 
+def _hardware_vertex_weights(shape: object) -> list[list[tuple[int, float]]]:
+    """Resolve the exact bone indices and weights consumed by retail's D3D skin path."""
+
+    instance = getattr(shape, "skin_instance", None)
+    partition = getattr(instance, "skin_partition", None)
+    blocks = list(getattr(partition, "skin_partition_blocks", []))
+    vertex_count = len(shape.data.vertices)
+    if instance is None or partition is None or not blocks or vertex_count <= 0:
+        raise ValueError(f"Actor skin has no hardware partitions: {_text(shape.name)}")
+    resolved: list[list[tuple[int, float]] | None] = [None] * vertex_count
+    for block_index, block in enumerate(blocks):
+        vertex_map = list(block.vertex_map)
+        vertex_weights = list(block.vertex_weights)
+        bone_indices = list(block.bone_indices)
+        bone_palette = [int(value) for value in block.bones]
+        if (
+            not vertex_map
+            or len(vertex_map) != len(vertex_weights)
+            or len(vertex_map) != len(bone_indices)
+            or not bone_palette
+        ):
+            raise ValueError(
+                f"Actor skin partition {block_index} is incomplete: {_text(shape.name)}"
+            )
+        for local_index, vertex_value in enumerate(vertex_map):
+            vertex_index = int(vertex_value)
+            if vertex_index < 0 or vertex_index >= vertex_count:
+                raise ValueError(
+                    f"Actor skin partition {block_index} has an invalid vertex index: "
+                    f"{_text(shape.name)}"
+                )
+            weights = [float(value) for value in vertex_weights[local_index]]
+            indices = [int(value) for value in bone_indices[local_index]]
+            if len(weights) != len(indices) or len(weights) != GLTF_PRIMARY_SKIN_INFLUENCES:
+                raise ValueError(
+                    f"Actor skin partition {block_index} changes its influence width: "
+                    f"{_text(shape.name)}"
+                )
+            row = []
+            for palette_index, weight in zip(indices, weights):
+                if not math.isfinite(weight) or weight < 0.0:
+                    raise ValueError(
+                        f"Actor skin partition {block_index} has an invalid weight: "
+                        f"{_text(shape.name)}"
+                    )
+                if weight == 0.0:
+                    continue
+                if palette_index < 0 or palette_index >= len(bone_palette):
+                    raise ValueError(
+                        f"Actor skin partition {block_index} has an invalid palette index: "
+                        f"{_text(shape.name)}"
+                    )
+                row.append((bone_palette[palette_index], weight))
+            if not row or abs(sum(weight for _, weight in row) - 1.0) > SKIN_WEIGHT_SUM_TOLERANCE:
+                raise ValueError(
+                    f"Actor skin partition {block_index} has an unnormalized vertex: "
+                    f"{_text(shape.name)}"
+                )
+            previous = resolved[vertex_index]
+            if previous is not None:
+                previous_by_bone = dict(previous)
+                row_by_bone = dict(row)
+                if set(previous_by_bone) != set(row_by_bone) or any(
+                    abs(previous_by_bone[bone] - row_by_bone[bone]) >
+                        SKIN_WEIGHT_DUPLICATE_TOLERANCE
+                    for bone in previous_by_bone
+                ):
+                    raise ValueError(
+                        f"Actor hardware partitions disagree for vertex {vertex_index}: "
+                        f"{_text(shape.name)}"
+                    )
+            else:
+                resolved[vertex_index] = row
+    missing = [index for index, row in enumerate(resolved) if row is None]
+    if missing:
+        raise ValueError(
+            f"Actor hardware skin omits {len(missing)} vertices: {_text(shape.name)}"
+        )
+    return [row for row in resolved if row is not None]
+
+
 def _build_animation(
     payload: bytes,
     node_by_name: dict[str, int],
     builder: BufferBuilder,
     compiler: ContentCompilerConfiguration,
+    animation_name: str | None = None,
 ) -> tuple[dict[str, object] | None, int, tuple[float, float, float] | None]:
     document = _read_nif(payload)
     sequence = document.roots[0]
@@ -635,11 +829,19 @@ def _build_animation(
             if data is not None:
                 translation_keys = list(data.translations.keys)
                 if translation_keys:
-                    if int(data.translations.interpolation) != NIF_LINEAR_INTERPOLATION:
+                    interpolation = int(data.translations.interpolation)
+                    if interpolation == NIF_LINEAR_INTERPOLATION:
+                        translations = [
+                            _convert_vector(_linear_vector_keys(translation_keys, time))
+                            for time in times
+                        ]
+                    elif interpolation == NIF_QUADRATIC_INTERPOLATION:
+                        translations = [
+                            _convert_vector(_quadratic_vector_keys(translation_keys, time))
+                            for time in times
+                        ]
+                    else:
                         raise ValueError(f"Actor idle uses unsupported translation interpolation on {node_name}")
-                    translations = [
-                        _convert_vector(_linear_vector_keys(translation_keys, time)) for time in times
-                    ]
                 if int(data.num_rotation_keys) > 0:
                     if int(data.rotation_type) == NIF_LINEAR_INTERPOLATION:
                         quaternion_keys = list(data.quaternion_keys)
@@ -647,16 +849,10 @@ def _build_animation(
                             _converted_nif_quaternion(_slerp_keys(quaternion_keys, time)) for time in times
                         ]
                     elif int(data.rotation_type) == NIF_XYZ_ROTATION_INTERPOLATION:
-                        if any(
-                            any(
-                                abs(float(key.value) - float(group.keys[0].value))
-                                > compiler.xyz_rotation_equality_tolerance
-                                for key in group.keys
-                            )
-                            for group in data.xyz_rotations
-                            if len(group.keys) > 0
-                        ):
-                            raise ValueError(f"Actor idle uses animated XYZ rotations on {node_name}")
+                        rotations = [
+                            _converted_xyz_rotation(data.xyz_rotations, time)
+                            for time in times
+                        ]
                     else:
                         raise ValueError(f"Actor idle uses unsupported rotation interpolation on {node_name}")
         else:
@@ -691,7 +887,11 @@ def _build_animation(
     if not channels:
         return None, 0, nonaccum_origin
     return (
-        {"name": _text(sequence.name), "samplers": samplers, "channels": channels},
+        {
+            "name": animation_name or _text(sequence.name),
+            "samplers": samplers,
+            "channels": channels,
+        },
         len(channels),
         nonaccum_origin,
     )
@@ -754,6 +954,97 @@ def _linear_vector_keys(keys: list[object], time_value: float) -> tuple[float, f
             one, two = _nif_vector(first.value), _nif_vector(second.value)
             return tuple(one[axis] + amount * (two[axis] - one[axis]) for axis in range(3))
     raise ValueError("Actor translation key interval was not found")
+
+
+def _quadratic_vector_keys(
+    keys: list[object],
+    time_value: float,
+) -> tuple[float, float, float]:
+    if time_value <= float(keys[0].time):
+        return _nif_vector(keys[0].value)
+    if time_value >= float(keys[-1].time):
+        return _nif_vector(keys[-1].value)
+    for first, second in zip(keys, keys[1:]):
+        first_time, second_time = float(first.time), float(second.time)
+        if first_time <= time_value <= second_time:
+            amount = (time_value - first_time) / (second_time - first_time)
+            squared = amount * amount
+            cubed = squared * amount
+            first_value = _nif_vector(first.value)
+            second_value = _nif_vector(second.value)
+            first_tangent = _nif_vector(first.backward)
+            second_tangent = _nif_vector(second.forward)
+            first_basis = 2.0 * cubed - 3.0 * squared + 1.0
+            second_basis = -2.0 * cubed + 3.0 * squared
+            first_tangent_basis = cubed - 2.0 * squared + amount
+            second_tangent_basis = cubed - squared
+            return tuple(
+                first_value[axis] * first_basis
+                + second_value[axis] * second_basis
+                + first_tangent[axis] * first_tangent_basis
+                + second_tangent[axis] * second_tangent_basis
+                for axis in range(len(first_value))
+            )
+    raise ValueError("Actor quadratic translation key interval was not found")
+
+
+def _scalar_keys(group: object, time_value: float) -> float:
+    keys = list(group.keys)
+    if not keys:
+        raise ValueError("Actor XYZ rotation channel has no keys")
+    if time_value <= float(keys[0].time):
+        return float(keys[0].value)
+    if time_value >= float(keys[-1].time):
+        return float(keys[-1].value)
+    interpolation = int(group.interpolation)
+    for first, second in zip(keys, keys[1:]):
+        first_time, second_time = float(first.time), float(second.time)
+        if first_time <= time_value <= second_time:
+            amount = (time_value - first_time) / (second_time - first_time)
+            first_value = float(first.value)
+            second_value = float(second.value)
+            if interpolation == NIF_LINEAR_INTERPOLATION:
+                return first_value + amount * (second_value - first_value)
+            if interpolation == NIF_QUADRATIC_INTERPOLATION:
+                squared = amount * amount
+                cubed = squared * amount
+                return (
+                    first_value * (2.0 * cubed - 3.0 * squared + 1.0)
+                    + second_value * (-2.0 * cubed + 3.0 * squared)
+                    + float(first.backward) * (cubed - 2.0 * squared + amount)
+                    + float(second.forward) * (cubed - squared)
+                )
+            raise ValueError(
+                f"Actor XYZ rotation uses unsupported scalar interpolation: {interpolation}"
+            )
+    raise ValueError("Actor XYZ rotation key interval was not found")
+
+
+def _converted_xyz_rotation(
+    groups: object,
+    time_value: float,
+) -> tuple[float, float, float, float]:
+    channels = list(groups)
+    if len(channels) != 3:
+        raise ValueError(f"Actor XYZ rotation must contain three channels, found {len(channels)}")
+    x, y, z = (_scalar_keys(channel, time_value) for channel in channels)
+    sine_x, cosine_x = math.sin(x), math.cos(x)
+    sine_y, cosine_y = math.sin(y), math.cos(y)
+    sine_z, cosine_z = math.sin(z), math.cos(z)
+    game_rotation = [
+        [cosine_y * cosine_z, -cosine_y * sine_z, sine_y],
+        [
+            sine_x * sine_y * cosine_z + sine_z * cosine_x,
+            cosine_x * cosine_z - sine_x * sine_y * sine_z,
+            -sine_x * cosine_y,
+        ],
+        [
+            sine_x * sine_z - cosine_x * sine_y * cosine_z,
+            cosine_x * sine_y * sine_z + sine_x * cosine_z,
+            cosine_x * cosine_y,
+        ],
+    ]
+    return tuple(_quaternion(_converted_rotation(game_rotation)))
 
 
 def _slerp_keys(keys: list[object], time_value: float) -> tuple[float, float, float, float]:

@@ -29,6 +29,7 @@ CONFIGURATION_SECTIONS = (
     "capture",
     "proof",
     "diagnosticPreview",
+    "actorReview",
     "exteriorEnvironment",
     "retailActorState",
     "actorParity",
@@ -46,7 +47,6 @@ class ContentCompilerConfiguration:
     stable_id_hex_characters: int
     png_compression_level: int
     animation_samples_per_second: float
-    xyz_rotation_equality_tolerance: float
     zero_specular_epsilon: float
     minimum_material_roughness: float
     default_material_glossiness: float
@@ -113,7 +113,6 @@ class RuntimeConfiguration:
             stable_id_hex_characters=int(source["stableIdHexCharacters"]),
             png_compression_level=int(source["pngCompressionLevel"]),
             animation_samples_per_second=float(source["animationSamplesPerSecond"]),
-            xyz_rotation_equality_tolerance=float(source["xyzRotationEqualityTolerance"]),
             zero_specular_epsilon=float(source["zeroSpecularEpsilon"]),
             minimum_material_roughness=float(source["minimumMaterialRoughness"]),
             default_material_glossiness=float(source["defaultMaterialGlossiness"]),

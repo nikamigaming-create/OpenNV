@@ -28,6 +28,8 @@ class ExtractedMember:
     compressed: bool
     archive_offset: int
     stored_bytes: int
+    source_archive: str | None = None
+    source_archive_sha256: str | None = None
 
     @property
     def sha256(self) -> str:

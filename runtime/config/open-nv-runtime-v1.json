@@ -355,6 +355,21 @@
     "actorMinimumHeightMeters": 1.2,
     "actorMaximumHeightMeters": 2.4
   },
+  "actorReview": {
+    "provenance": {
+      "classification": "clean-room-retail-contract",
+      "status": "camera-resolved-light-vector-parity-blocking",
+      "source": "Validated FalloutNV 1.4.0.525 NiCamera world transform plus target-texture-matched source-resolution Direct3D 9 scene-color projection",
+      "evidence": "docs/whole-game-actor-creature-parity.md"
+    },
+    "projectionAspectTolerance": 0.001,
+    "cameraBasisTolerance": 0.001,
+    "projectedBoneTolerancePixels": 1.0,
+    "skinPaletteLinearTolerance": 0.001,
+    "skinPaletteTranslationToleranceGameUnits": 0.01,
+    "directionalRotationDegrees": [-48.0, -32.0, 0.0],
+    "directionalShadows": true
+  },
   "exteriorEnvironment": {
     "provenance": {
       "classification": "provisional-adapter",
@@ -482,7 +497,6 @@
     "stableIdHexCharacters": 24,
     "pngCompressionLevel": 9,
     "animationSamplesPerSecond": 30.0,
-    "xyzRotationEqualityTolerance": 0.000001,
     "zeroSpecularEpsilon": 0.000001,
     "minimumMaterialRoughness": 0.08,
     "defaultMaterialGlossiness": 10.0,

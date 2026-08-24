@@ -181,6 +181,10 @@ require a headset session.
 | `validate_actor_parity_corpus.py` | Corpus hashes, uniqueness, graph closure, and exact review coverage | Rendering or automatic visual approval |
 | `actor_capture_plan.py` | Exact review-ledger projection into resumable fixed/dynamic base observation jobs | Launching engines or claiming visual parity |
 | `validate_actor_capture_plan.py` | Capture-plan hashes, source-stack join, batch membership, and exact outcome coverage | Image comparison or changing evidence status |
+| `actor_review_contract.py` | One classified review row joined to immutable retail frames, final-eye D3D9 projection, animation, hierarchy, and skin-palette evidence | Owned-asset compilation or parity verdicts |
+| `prepare_creature_review.py` | One CREA review contract compiled from the owned official archive stack into a disposable generic actor-review scene | Retail capture, Godot runtime behavior, or comparison verdicts |
+| `actor_review_differential.py` | Exact retail/Godot sample pairing, hash verification, objective image/structure gates, side-by-side stills, retail-timed motion clip, and one fail-closed ledger row | Importing assets, altering capture state, or human approval |
+| `actor_review_coverage.py` | Exhaustive join of every corpus appearance and placement to unique differential evidence with aggregate missing/failed/unreviewed counts | Sampling, visual approval, or changing evidence verdicts |
 | `facegen.py` | Pure EGM/EGT morph and retail skin/body texture composition primitives | Record selection or runtime nodes |
 | `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance | Record selection, placement, or runtime behavior |
 | `first_person_rig.py` | Hash-verified legal left/right first-person hand artifacts plus skeleton/pose/frame contract | Runtime tracking or weapon behavior |

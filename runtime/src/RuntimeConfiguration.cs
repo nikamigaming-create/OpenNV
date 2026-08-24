@@ -18,6 +18,7 @@ internal sealed record RuntimeConfiguration(
     CaptureConfiguration Capture,
     ProofConfiguration Proof,
     DiagnosticPreviewConfiguration DiagnosticPreview,
+    ActorReviewConfiguration ActorReview,
     ExteriorEnvironmentConfiguration ExteriorEnvironment,
     RetailActorStateConfiguration RetailActorState,
     ActorParityConfiguration ActorParity,
@@ -29,6 +30,7 @@ internal sealed record RuntimeConfiguration(
 {
     internal const string ExpectedSchema = "opennv-runtime-configuration/v1";
     internal const string ResourcePath = "res://config/open-nv-runtime-v1.json";
+    private const float PerspectiveMaximumDegrees = 180.0f;
 
     internal string Sha256 { get; private set; } = "";
 
@@ -84,6 +86,7 @@ internal sealed record RuntimeConfiguration(
             Proof.Provenance,
             Proof.GameplayRoute.Provenance,
             DiagnosticPreview.Provenance,
+            ActorReview.Provenance,
             ExteriorEnvironment.Provenance,
             RetailActorState.Provenance,
             ActorParity.Provenance,
@@ -228,6 +231,25 @@ internal sealed record RuntimeConfiguration(
             nameof(DiagnosticPreview.ActorMinimumHeightMeters));
         if (DiagnosticPreview.ActorMaximumHeightMeters <= DiagnosticPreview.ActorMinimumHeightMeters)
             throw new InvalidOperationException("Diagnostic actor maximum height must exceed its minimum.");
+        RequirePositive(
+            ActorReview.ProjectionAspectTolerance,
+            nameof(ActorReview.ProjectionAspectTolerance));
+        RequirePositive(
+            ActorReview.CameraBasisTolerance,
+            nameof(ActorReview.CameraBasisTolerance));
+        RequirePositive(
+            ActorReview.ProjectedBoneTolerancePixels,
+            nameof(ActorReview.ProjectedBoneTolerancePixels));
+        RequirePositive(
+            ActorReview.SkinPaletteLinearTolerance,
+            nameof(ActorReview.SkinPaletteLinearTolerance));
+        RequirePositive(
+            ActorReview.SkinPaletteTranslationToleranceGameUnits,
+            nameof(ActorReview.SkinPaletteTranslationToleranceGameUnits));
+        RequireVector(
+            ActorReview.DirectionalRotationDegrees,
+            3,
+            nameof(ActorReview.DirectionalRotationDegrees));
         RequireVector(ExteriorEnvironment.AmbientColor, 3, nameof(ExteriorEnvironment.AmbientColor));
         RequireVector(ExteriorEnvironment.DirectionalColor, 3, nameof(ExteriorEnvironment.DirectionalColor));
         RequireVector(ExteriorEnvironment.FogColor, 3, nameof(ExteriorEnvironment.FogColor));
@@ -313,9 +335,6 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(
             ContentCompiler.AnimationSamplesPerSecond,
             nameof(ContentCompiler.AnimationSamplesPerSecond));
-        RequirePositive(
-            ContentCompiler.XyzRotationEqualityTolerance,
-            nameof(ContentCompiler.XyzRotationEqualityTolerance));
         RequirePositive(ContentCompiler.ZeroSpecularEpsilon, nameof(ContentCompiler.ZeroSpecularEpsilon));
         RequireUnitInterval(
             ContentCompiler.MinimumMaterialRoughness,
@@ -709,6 +728,16 @@ internal sealed record DiagnosticPreviewConfiguration(
     float ActorMinimumHeightMeters,
     float ActorMaximumHeightMeters);
 
+internal sealed record ActorReviewConfiguration(
+    ConfigurationProvenance Provenance,
+    float ProjectionAspectTolerance,
+    float CameraBasisTolerance,
+    float ProjectedBoneTolerancePixels,
+    float SkinPaletteLinearTolerance,
+    float SkinPaletteTranslationToleranceGameUnits,
+    float[] DirectionalRotationDegrees,
+    bool DirectionalShadows);
+
 internal sealed record ExteriorEnvironmentConfiguration(
     ConfigurationProvenance Provenance,
     string Mode,
@@ -795,7 +824,6 @@ internal sealed record ContentCompilerConfiguration(
     int StableIdHexCharacters,
     int PngCompressionLevel,
     float AnimationSamplesPerSecond,
-    float XyzRotationEqualityTolerance,
     float ZeroSpecularEpsilon,
     float MinimumMaterialRoughness,
     float DefaultMaterialGlossiness,

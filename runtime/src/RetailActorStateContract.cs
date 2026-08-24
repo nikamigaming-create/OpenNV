@@ -8,7 +8,7 @@ internal static class RetailActorStateContract
 {
     private const string ContractSchema = "opennv-retail-actor-state-contract/v2";
     private const string ShotSchema = "opennv-retail-actor-shot-state/v2";
-    private const int SpatialDimension = 3;
+    private const int SpatialDimension = GamebryoCoordinate.SpatialDimensions;
     private const float PerspectiveMinimumDegrees = 0.0f;
     private const float PerspectiveMaximumDegrees = 180.0f;
 
@@ -215,43 +215,7 @@ internal static class RetailActorStateContract
     private static Basis ReadConvertedBasis(JsonElement source, float scale, string label)
     {
         var game = ReadNumbers(source, SpatialDimension * SpatialDimension, label);
-        var rows = new float[SpatialDimension, SpatialDimension];
-        for (var row = 0; row < SpatialDimension; row++)
-            for (var column = 0; column < SpatialDimension; column++)
-                rows[row, column] = game[row * SpatialDimension + column];
-        var conversion = new[,]
-        {
-            { 1.0f, 0.0f, 0.0f },
-            { 0.0f, 0.0f, 1.0f },
-            { 0.0f, -1.0f, 0.0f },
-        };
-        var converted = Multiply(conversion, Multiply(rows, Transpose(conversion)));
-        var basis = new Basis(
-            new Vector3(converted[0, 0], converted[1, 0], converted[2, 0]),
-            new Vector3(converted[0, 1], converted[1, 1], converted[2, 1]),
-            new Vector3(converted[0, 2], converted[1, 2], converted[2, 2]));
-        if (!float.IsFinite(scale) || scale <= 0.0f)
-            throw new InvalidOperationException($"Retail {label} has invalid scale.");
-        return basis.Scaled(Vector3.One * scale);
-    }
-
-    private static float[,] Multiply(float[,] left, float[,] right)
-    {
-        var result = new float[SpatialDimension, SpatialDimension];
-        for (var row = 0; row < SpatialDimension; row++)
-            for (var column = 0; column < SpatialDimension; column++)
-                for (var axis = 0; axis < SpatialDimension; axis++)
-                    result[row, column] += left[row, axis] * right[axis, column];
-        return result;
-    }
-
-    private static float[,] Transpose(float[,] source)
-    {
-        var result = new float[SpatialDimension, SpatialDimension];
-        for (var row = 0; row < SpatialDimension; row++)
-            for (var column = 0; column < SpatialDimension; column++)
-                result[row, column] = source[column, row];
-        return result;
+        return GamebryoCoordinate.ConvertBasis(game, scale, label);
     }
 
     private static IReadOnlyList<string> ReadBoneNames(

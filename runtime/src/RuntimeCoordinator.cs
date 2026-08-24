@@ -48,15 +48,18 @@ public partial class RuntimeCoordinator : Node3D
             var hasModel = _options.ContainsKey("model");
             var hasCellScene = _options.ContainsKey("cell-scene");
             var hasActorModel = _options.ContainsKey("actor-model");
-            if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) + (hasActorModel ? 1 : 0) > 1)
+            var hasActorReviewScene = _options.ContainsKey("actor-review-scene");
+            if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) +
+                    (hasActorModel ? 1 : 0) + (hasActorReviewScene ? 1 : 0) > 1)
                 throw new ArgumentException(
-                    "Use only one of --data-root, --model/--sidecar, --cell-scene, or --actor-model/--actor-sidecar.");
+                    "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
+                    "--actor-model/--actor-sidecar, or --actor-review-scene.");
             if (!hasModel && _options.ContainsKey("sidecar"))
                 throw new ArgumentException("--sidecar requires --model.");
             if (!hasActorModel && _options.ContainsKey("actor-sidecar"))
                 throw new ArgumentException("--actor-sidecar requires --actor-model.");
-            if (hasActorModel && _options.ContainsKey("capture-root"))
-                throw new ArgumentException("Actor captures require --cell-scene plus --actor-scene.");
+            if (hasActorReviewScene && !_options.ContainsKey("capture-root"))
+                throw new ArgumentException("--actor-review-scene requires --capture-root.");
             if (_options.ContainsKey("actor-scene") && _options.ContainsKey("actor-scenes"))
                 throw new ArgumentException("Use --actor-scene or --actor-scenes, not both.");
             if (_options.ContainsKey("retail-state-contract") &&
@@ -89,6 +92,14 @@ public partial class RuntimeCoordinator : Node3D
                 LoadActorModel(
                     RequireOption(_options, "actor-model"),
                     RequireOption(_options, "actor-sidecar"),
+                    _options);
+                return;
+            }
+
+            if (hasActorReviewScene)
+            {
+                LoadActorReviewScene(
+                    RequireOption(_options, "actor-review-scene"),
                     _options);
                 return;
             }
@@ -773,6 +784,29 @@ public partial class RuntimeCoordinator : Node3D
             $"skeletons={loaded.Skeletons} animations={loaded.Animations} playing={loaded.PlayingAnimation}");
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
+    }
+
+    private void LoadActorReviewScene(
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var scene = ActorReviewScene.Load(scenePath, _configuration);
+        var actor = ActorModelSlice.Load(
+            scene.ModelPath,
+            scene.SidecarPath,
+            this,
+            _configuration,
+            boundsContract: ActorModelSlice.BoundsContract.AnyActor);
+        if (!actor.FormId.Equals(scene.ReviewKey, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Actor review scene and compiled actor identify different review outcomes.");
+        _ = ActorReviewCapture.Run(
+            this,
+            actor,
+            _configuration,
+            scene.RetailContractPath,
+            RequireOption(options, "capture-root"),
+            options.TryGetValue("report", out var report) ? report : null);
     }
 
     private void ShowExperimentalStatus(string? restoreError)

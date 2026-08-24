@@ -205,7 +205,7 @@ internal static class CellSceneLoader
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
             AmbientLightColor = lighting.AmbientColor,
             AmbientLightEnergy = configuration.Renderer.AmbientEnergyScale,
-            TonemapMode = ParseToneMapper(configuration.Renderer.ToneMapper),
+            TonemapMode = RuntimeRendering.ParseToneMapper(configuration.Renderer.ToneMapper),
             FogEnabled = true,
             FogMode = Godot.Environment.FogModeEnum.Depth,
             FogLightColor = lighting.FogColor,
@@ -261,15 +261,6 @@ internal static class CellSceneLoader
             });
         }
     }
-
-    private static Godot.Environment.ToneMapper ParseToneMapper(string value) => value switch
-    {
-        "linear" => Godot.Environment.ToneMapper.Linear,
-        "reinhard" => Godot.Environment.ToneMapper.Reinhardt,
-        "filmic" => Godot.Environment.ToneMapper.Filmic,
-        "aces" => Godot.Environment.ToneMapper.Aces,
-        _ => throw new InvalidOperationException($"Unsupported configured tone mapper: {value}"),
-    };
 
     internal static DoorRay BuildProofRay(DoorInstance door, ProofConfiguration proof)
     {

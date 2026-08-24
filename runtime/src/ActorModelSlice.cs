@@ -147,5 +147,6 @@ internal static class ActorModelSlice
     {
         Humanoid,
         FirstPersonHand,
+        AnyActor,
     }
 }

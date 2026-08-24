@@ -389,6 +389,7 @@ def contact_sheet(
     shot_kind: str,
     metrics: dict[str, float],
     configuration: RuntimeConfiguration,
+    godot_status: str = "CURRENT FAIL",
 ) -> None:
     sheet = configuration.actor_parity.contact_sheet
     with Image.open(retail_path) as retail_source, Image.open(godot_path) as godot_source:
@@ -415,7 +416,7 @@ def contact_sheet(
         )
         draw.text(
             (retail.width + sheet.text_margin_x_pixels, sheet.title_y_pixels),
-            "OPENNV GODOT — CURRENT FAIL",
+            f"OPENNV GODOT — {godot_status}",
             fill=sheet.godot_title_rgb,
             font=title_font,
         )

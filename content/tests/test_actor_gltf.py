@@ -9,7 +9,11 @@ from actor_gltf import (  # noqa: E402
     NifFormat,
     _compensated_inverse_bind,
     _converted_matrix,
+    _converted_xyz_rotation,
+    _hardware_vertex_weights,
     _multiply,
+    _quadratic_vector_keys,
+    _rigid_attachment,
     actor_animation_translations,
 )
 from actor_material import (  # noqa: E402
@@ -22,6 +26,43 @@ from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class ActorGltfTest(unittest.TestCase):
+    def test_xyz_rotation_channels_preserve_identity(self):
+        class Key:
+            def __init__(self):
+                self.time = 0.0
+                self.value = 0.0
+                self.forward = 0.0
+                self.backward = 0.0
+
+        class Group:
+            interpolation = 2
+            keys = [Key()]
+
+        self.assertEqual(
+            _converted_xyz_rotation([Group(), Group(), Group()], 0.0),
+            (0.0, 0.0, 0.0, 1.0),
+        )
+
+    def test_quadratic_translation_uses_authored_hermite_tangents(self):
+        class Vector:
+            def __init__(self, x, y, z):
+                self.x, self.y, self.z = x, y, z
+
+        class Key:
+            def __init__(self, time, value, forward, backward):
+                self.time = time
+                self.value = Vector(*value)
+                self.forward = Vector(*forward)
+                self.backward = Vector(*backward)
+
+        keys = [
+            Key(0.0, (0.0, 2.0, -1.0), (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
+            Key(1.0, (1.0, 3.0, 0.0), (1.0, 1.0, 1.0), (0.0, 0.0, 0.0)),
+        ]
+        self.assertEqual(_quadratic_vector_keys(keys, 0.0), (0.0, 2.0, -1.0))
+        self.assertEqual(_quadratic_vector_keys(keys, 0.25), (0.25, 2.25, -0.75))
+        self.assertEqual(_quadratic_vector_keys(keys, 1.0), (1.0, 3.0, 0.0))
+
     def test_bethesda_shader_does_not_multiply_textures_by_legacy_black_diffuse(self):
         material = NifFormat.NiMaterialProperty()
         material.diffuse_color.r = 0.0
@@ -83,6 +124,99 @@ class ActorGltfTest(unittest.TestCase):
         for row in range(4):
             for column in range(4):
                 self.assertAlmostEqual(product[row][column], 1.0 if row == column else 0.0)
+
+    def test_actor_skin_uses_render_hardware_partition_weights(self):
+        class Block:
+            bones = [5, 9]
+            vertex_map = [0, 1]
+            vertex_weights = [
+                [0.25, 0.75, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 0.0],
+            ]
+            bone_indices = [
+                [0, 1, 0, 0],
+                [1, 0, 0, 0],
+            ]
+
+        class Partition:
+            skin_partition_blocks = [Block()]
+
+        class Instance:
+            skin_partition = Partition()
+
+        class Data:
+            vertices = [object(), object()]
+
+        class Shape:
+            name = b"hardware-authority"
+            data = Data()
+            skin_instance = Instance()
+
+        self.assertEqual(
+            _hardware_vertex_weights(Shape()),
+            [[(5, 0.25), (9, 0.75)], [(9, 1.0)]],
+        )
+
+    def test_rigid_component_prefers_its_authored_skeleton_node(self):
+        class Root:
+            name = b"EyesOneBlue"
+
+        class Document:
+            @staticmethod
+            def get_global_iterator():
+                return ()
+
+        self.assertEqual(
+            _rigid_attachment(
+                Document(),
+                Root(),
+                {"Bip01": 1, "EyesOneBlue": 27},
+                "Bip01",
+            ),
+            ("EyesOneBlue", "nif-root-skeleton-node"),
+        )
+
+    def test_rigid_component_uses_declared_fallback_when_root_is_not_a_bone(self):
+        class Root:
+            name = b"BSFaceGenNiNodeSkinned"
+
+        class Document:
+            @staticmethod
+            def get_global_iterator():
+                return ()
+
+        self.assertEqual(
+            _rigid_attachment(
+                Document(),
+                Root(),
+                {"HeadAnims": 12},
+                "HeadAnims",
+            ),
+            ("HeadAnims", "configured-skeleton-node-fallback"),
+        )
+
+    def test_rigid_component_prefers_authored_prn_over_matching_root(self):
+        class Root:
+            name = b"EyesOneBlue"
+
+        parent = NifFormat.NiStringExtraData()
+        parent.name = b"Prn"
+        parent.string_data = b"Bip01 Head"
+
+        class Document:
+            @staticmethod
+            def get_global_iterator():
+                return (parent,)
+
+        self.assertEqual(
+            _rigid_attachment(
+                Document(),
+                Root(),
+                {"Bip01 Head": 11, "EyesOneBlue": 27},
+                "Bip01",
+            ),
+            ("Bip01 Head", "nif-prn-skeleton-node"),
+        )
 
 
 if __name__ == "__main__":

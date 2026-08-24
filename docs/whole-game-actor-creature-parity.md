@@ -1,193 +1,183 @@
 # Whole-game actor and creature parity
 
-Status: **inventory complete; visual review pending**.
+Status: inventory complete; matched visual parity pending.
 
-OpenNV treats every effective official `NPC_` and `CREA` record, every
-leveled/template outcome, and every effective `ACHR` and `ACRE` placement as
-an accountable review unit. Goodsprings is the first debugging slice, not the
-scope boundary. User mods are intentionally a separate corpus so they cannot
-change the vanilla baseline.
+This is an exhaustive gate for the player's legally owned Fallout: New Vegas
+data. It is not a showcase roster and it does not infer whole-game quality from
+Trudy, Sunny, a dog, or any other representative. A final pass requires evidence
+for every resolved appearance and every placed reference in the pinned official
+plugin stack.
 
-The private corpus is generated from the player's legally owned files with:
+## Fixed denominator
 
-```powershell
-py content/tools/actor_parity_corpus.py `
-  --data-root '<Fallout New Vegas>\Data' `
-  --output-root '<fresh private output folder>'
+The current immutable corpus is
+`D:\Builds\OpenNV-actor-parity-corpus-20260824-r10` with manifest SHA-256
+`bcd780a0749200e35a3dd15670d55a12c85b75136b38495247aa8fff3d17205f`.
+Its exact denominator is:
 
-py content/tools/validate_actor_parity_corpus.py `
-  --corpus-root '<that private output folder>'
+| Entity | Required rows |
+| --- | ---: |
+| NPC_ bases | 4,220 |
+| CREA bases | 2,235 |
+| All bases | 6,455 |
+| Resolved appearance outcomes | 8,660 |
+| ACHR/ACRE placements | 7,681 |
+| Appearance stills | 43,300 |
+| Placement stills | 15,362 |
+| Relationship gaps | 0 |
 
-py content/tools/actor_capture_plan.py `
-  --corpus-root '<that private output folder>' `
-  --output-root '<fresh private capture-plan folder>'
+The capture plan is
+`D:\Builds\OpenNV-actor-capture-plan-20260824-r5` with manifest SHA-256
+`e27052c2d15c0dae978a467800877b4db468559d7e1bc29b2ddd59b88495360d`.
+It contains one base job for every base record. The 658 dynamic bases remain
+pending until every declared runtime appearance signature has actually been
+observed; partial dynamic coverage cannot pass.
 
-py content/tools/validate_actor_capture_plan.py `
-  --plan-root '<that private capture-plan folder>' `
-  --corpus-root '<that private output folder>'
-```
-
-The output folder must be new. ESM-derived rows, retail frames, and Godot
-frames remain private and are never committed or placed in an asset-free
-release.
-
-## Entity and ownership model
+## Domain model
 
 ```mermaid
 erDiagram
-    LEGAL_GAME_INSTALL ||--|{ PLUGIN_REVISION : contains
-    PLUGIN_REVISION ||--o{ SOURCE_RECORD : defines_or_overrides
-    PLUGIN_REVISION }o--o{ PLUGIN_REVISION : declares_master
-    STABLE_FORM_KEY ||--|{ SOURCE_RECORD : revision_history
-    STABLE_FORM_KEY ||--o| EFFECTIVE_RECORD : load_order_winner
-
-    EFFECTIVE_RECORD ||--o| NPC_BASE : typed_as
-    EFFECTIVE_RECORD ||--o| CREATURE_BASE : typed_as
-    EFFECTIVE_RECORD ||--o| LEVELED_ACTOR_LIST : typed_as
-    EFFECTIVE_RECORD ||--o| PLACED_ACTOR_REFERENCE : typed_as
-
-    NPC_BASE }o--o| NPC_BASE : TPLT_EAMT
-    CREATURE_BASE }o--o| CREATURE_BASE : TPLT_EAMT
-    NPC_BASE }o--o| LEVELED_ACTOR_LIST : TPLT_EAMT
-    CREATURE_BASE }o--o| LEVELED_ACTOR_LIST : TPLT_EAMT
-    LEVELED_ACTOR_LIST ||--|{ LEVELED_ENTRY : contains
-    LEVELED_ENTRY }o--|| NPC_BASE : may_select
-    LEVELED_ENTRY }o--|| CREATURE_BASE : may_select
-    LEVELED_ENTRY }o--|| LEVELED_ACTOR_LIST : may_recurse
-
-    PLACED_ACTOR_REFERENCE }o--|| NPC_BASE : may_place
-    PLACED_ACTOR_REFERENCE }o--|| CREATURE_BASE : may_place
-    PLACED_ACTOR_REFERENCE }o--|| LEVELED_ACTOR_LIST : may_place
-    CELL ||--o{ PLACED_ACTOR_REFERENCE : owns
-
-    NPC_BASE ||--|{ APPEARANCE_VARIANT : resolves_to
-    CREATURE_BASE ||--|{ APPEARANCE_VARIANT : resolves_to
-    APPEARANCE_VARIANT ||--|| APPEARANCE_REVIEW : requires
-    PLACED_ACTOR_REFERENCE ||--|| PLACEMENT_REVIEW : requires
+    LEGAL_PLUGIN_STACK ||--|{ EFFECTIVE_RECORD : merges
+    EFFECTIVE_RECORD ||--o| ACTOR_BASE : defines
+    ACTOR_BASE ||--|{ APPEARANCE_OUTCOME : resolves
+    ACTOR_BASE ||--o{ PLACED_REFERENCE : instantiates
+    APPEARANCE_OUTCOME }o--|| CATEGORY_SOURCE_SET : selects
+    CATEGORY_SOURCE_SET }o--o{ ACTOR_BASE : references
+    APPEARANCE_OUTCOME ||--|{ RETAIL_SHOT : requires
+    APPEARANCE_OUTCOME ||--|| RETAIL_CONTRACT : binds
+    RETAIL_CONTRACT ||--|| OWNED_DATA_SCENE : compiles
+    OWNED_DATA_SCENE ||--|{ GODOT_SHOT : renders
+    RETAIL_SHOT ||--|| MATCHED_COMPARISON : compares
+    GODOT_SHOT ||--|| MATCHED_COMPARISON : compares
+    PLACED_REFERENCE ||--|{ PLACEMENT_SHOT : requires
+    MATCHED_COMPARISON }o--|| COVERAGE_LEDGER : records
+    PLACEMENT_SHOT }o--|| COVERAGE_LEDGER : records
 ```
 
-The stable key is `owner plugin + 24-bit object ID`; the high byte in an ESM
-is plugin-local and is never used as global identity. `plugin_stack.py` maps
-each local master slot through the declared `MAST` order, then the configured
-official load order observed in retail FalloutNV 1.4.0.525. Every retail
-capture retains `runtime-plugin-stack` telemetry and rejects a different order;
-configured file order alone is not runtime evidence. Later overrides replace
-earlier revisions and deleted records become tombstones. This prevents DLC
-records from being double-counted or attached to the wrong base, cell, race,
-item, or template.
+An actor base owns stable identity. An appearance outcome owns the fully resolved
+template-category sources for traits, model, and inventory. Multiple outcomes
+may belong to one dynamic base. A placement points to a base but has its own
+cell, transform, enable state, and contextual acceptance. Assets are not stored
+in the repository; an owned-data scene is a disposable cache compiled locally
+from the pinned plugins and archives.
 
-`EAMT`, not trailing `ACBS` bytes, owns the ten independent template-category
-flags: traits, stats, factions, actor effects, AI data, AI packages, model,
-base data, inventory, and script. For FNV humanoid traits, retail observation
-also requires the `ACBS` `UseTemplate` actor flag; a `TPLT`/`EAMT` pair alone
-does not replace authored race, hair, eyes, head parts, or FaceGen. The corpus
-enumerates template/list selections, resolves the source of every category,
-then collapses selections with identical category-source maps into one exact
-review variant.
-
-The modules have one job each:
-
-| Module | Responsibility |
-| --- | --- |
-| `plugin_records.py` | Bounded TES4 container and subrecord decoding; declared-master inventory. |
-| `plugin_stack.py` | Stable FormID identity, master-slot mapping, source hashes, and runtime FormIDs. |
-| `actor_catalog.py` | Typed `NPC_`, `CREA`, `ACHR`, `ACRE`, `LVLN`, `LVLC`, appearance, inventory, and transform records. |
-| `actor_parity_graph.py` | Recursive template variants and concrete candidates for leveled placements. |
-| `actor_parity_records.py` | Canonical record rows and override/deletion merge for the effective actor stack. |
-| `actor_parity_corpus.py` | Official-stack composition and immutable review-ledger generation. |
-| `validate_actor_parity_corpus.py` | Independent hashes, row counts, uniqueness, graph closure, and exact coverage checks. |
-| `actor_capture_plan.py` | Review rows to bounded, resumable base jobs and telemetry-correlated expected outcomes. |
-| `validate_actor_capture_plan.py` | Independent job/batch hashes, exact review coverage, strategy, and source-stack checks. |
-
-No actor recipe, hand-placed mesh, guessed outfit, or actor-name switch is
-part of this path.
-
-## What “looked at” means
-
-An actor is not complete because it appeared in one favorable screenshot.
-There are two independent review ledgers:
-
-1. An **appearance row** exists for every effective base and every reachable
-   template/leveled outcome. Humanoids require matched front portrait, both
-   profiles, full body, and idle-motion evidence. Creatures require matched
-   front detail, both profiles, full body, and idle-motion evidence.
-2. A **placement row** exists for every effective `ACHR` and `ACRE`. It requires
-   matched in-cell context and activity-motion evidence so identity, enable
-   state, equipment, transform, cell lighting, and package-dependent pose are
-   reviewed where the game actually uses the reference.
-
-Each evidence pair must join on all of the following, not just a display name:
-
-| Contract | Required match |
-| --- | --- |
-| Source | Official plugin stack and SHA-256 set. |
-| Identity | Stable base, template outcome, and placed-reference keys. |
-| State | Enable state, equipment outcome, animation/package state, time, weather, and cell. |
-| Transform | Authored position, rotation, scale, skeleton publication, and camera telemetry. |
-| Rendering | Mesh parts, morphs, FaceGen, skin/body detail, hair, eyes, materials, lights, shadows, effects, and background. |
-| Capture | Same shot kind, projection, resolution, crop, and source-frame provenance. |
-
-The review status begins `pending`. Only a matched retail/Godot pair with
-telemetry and a passing visual verdict may move it to `pass`. Inventory
-generation alone can never make a parity claim.
-
-The capture-plan compiler emits one job per effective base. A base with one
-appearance signature uses one telemetry-correlated observation. A base with
-multiple template/leveled outcomes is repeatedly instantiated until every
-expected category-source signature has actually been observed. An attempt
-limit may stop a run, but it may never turn incomplete coverage into a pass.
-The plan contains no camera distances: live render bounds and head markers own
-framing for humanoids and differently proportioned creatures.
-
-## Data flow and correction loop
+## One evidence path
 
 ```mermaid
 flowchart LR
-    Owned[Legally owned ESM/BSA data] --> Stack[Master-aware effective stack]
-    Stack --> Graph[Base/template/list/placement graph]
-    Graph --> Ledger[Immutable review ledgers]
-    Ledger --> Plan[Resumable base/outcome capture jobs]
-    Plan --> Retail[Sequential retail capture]
-    Plan --> Import[OpenNV data-driven actor compiler]
-    Import --> Godot[Sequential Godot capture]
-    Retail --> Join[Matched-state join]
-    Godot --> Join
-    Join --> Delta[Telemetry + visual delta]
-    Delta --> Owner{Earliest wrong owner}
-    Owner -->|record/import| Import
-    Owner -->|mesh/morph| Geometry[Geometry and FaceGen translators]
-    Owner -->|material/light| Renderer[Material and lighting translators]
-    Owner -->|pose/state| Runtime[Animation and package runtime]
-    Geometry --> Godot
-    Renderer --> Godot
-    Runtime --> Godot
-    Delta -->|all gates pass| Pass[Review row passes]
+    A[Legally owned ESM and BSA files] --> B[Effective actor graph]
+    B --> C[6,455 base jobs / 8,660 outcomes]
+    C --> D[Sequential retail observation]
+    D --> E[Native D3D9 frames and telemetry]
+    E --> F[Immutable v4 retail contract]
+    A --> G[Owned-data compiler]
+    F --> G
+    G --> H[Content-addressed glTF scene]
+    H --> I[Godot engine-owned frames]
+    F --> I
+    E --> J[Matched still and motion comparison]
+    I --> J
+    J --> K[Per-outcome verdict ledger]
+    B --> L[7,681 placement reviews]
+    L --> K
+    K --> M{All rows pass?}
+    M -- no --> N[Release remains pending]
+    M -- yes --> O[Whole-game actor parity eligible]
 ```
 
-Retail and Godot capture run sequentially through the canonical background
-capture lane. A batch is resumable by review key, never overwrites evidence,
-and records source frames, telemetry, build identity, and hashes. A failed row
-is grouped by its earliest shared owner—parser, template inheritance, NIF/KF,
-FaceGen, materials, lighting, animation, placement, or capture—so one systemic
-fix replaces thousands of actor-specific patches.
+There is no alternate hand-authored actor path. Template selection, sex, race,
+FaceGen channels, hair, eyes, head parts, equipment, skeleton, model parts,
+materials, textures, animation layers, root transform, skin palettes, camera,
+and placement identity must be derived from owned data or retained retail
+evidence. Any engine policy not present in Fallout data lives in the single
+runtime configuration document and carries provenance.
 
-## Promotion gates
+## Rendering contract
 
-The whole-game actor/creature milestone is green only when:
+Each retained retail source frame binds all of the following:
 
-- all required official plugins are present and hashed;
-- load-order override/deletion merge validates;
-- every base, template outcome, leveled result, and placement is scheduled;
-- every appearance review key occurs in exactly one validated capture job;
-- every dynamic base remains pending until all expected runtime signatures are observed;
-- relationship gaps and duplicate review keys are zero;
-- every review row has retained retail and Godot source evidence;
-- identity/state/camera/pose telemetry matches;
-- every visible component has an owned-data source ID;
-- every row passes visual review for geometry, face, hair, body, clothing,
-  creature parts, materials, lighting, effects, and context;
-- rerunning the corpus and evidence validators is deterministic; and
-- public builds remain asset-free and import only from the user's legal data.
+- the classified appearance outcome and spawned reference;
+- the native source frame hash and dimensions;
+- active animation layers and exact time;
+- the actor root and named-node hierarchy;
+- every active NiSkinInstance render-cache palette in shader register order;
+- the validated NiCamera world transform and its separate culling projection;
+- one target-texture-matched skinned draw into the source-resolution Direct3D 9
+  scene-color target, including the final projection used to produce pixels;
+- environment colors and the currently unresolved lighting fields.
 
-Until every row passes, the honest project status is **whole-game inventory
-complete, parity incomplete**.
+The NiCamera culling projection is not the final-eye projection. Godot uses the
+camera world transform plus the captured scene-color projection. Rigid NIF
+components use their authored `Prn` skeleton attachment, then a matching NIF
+root, then an explicitly configured fallback. Skin weights come from the retail
+hardware NiSkinPartition, not editor/CPU fallback weights.
+
+## Acceptance state machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> PendingRetail
+    PendingRetail --> RetailCaptured: classified frames + telemetry
+    RetailCaptured --> Compiled: owned assets resolve and hashes bind
+    Compiled --> GodotCaptured: native frames + structural gates
+    GodotCaptured --> Compared: matched stills and motion clip
+    Compared --> Failed: any identity, geometry, pose, material, light, or pixel gate fails
+    Compared --> HumanReviewed: objective gates pass
+    HumanReviewed --> Passed: reviewer accepts exact appearance
+    Failed --> PendingRetail: evidence contract was wrong
+    Failed --> Compiled: importer or runtime was wrong
+```
+
+`captured-pending-parity` is deliberately not a pass. A row cannot pass because
+the process launched, a mesh appeared, a palette was internally self-consistent,
+or one camera view looked plausible. Missing evidence, unclassified dynamic
+outcomes, unresolved assets, and comparison failures remain visible failures.
+
+## Current representative result
+
+The CrDog row proves the current vertical pipeline, not the corpus. Its retail
+contract now uses the actual source-resolution scene-color projection (about
+59.84 degrees vertical FOV in the retained front frame), fixing the earlier
+cropped/sunk Godot result. The exporter now follows the eye-set NIF's authored
+`Prn = Bip01 Head` attachment, eliminating detached eye geometry. The capture
+passes immutable-hash, final-projection, skin-palette, native-frame, and
+no-application-control gates.
+
+CrDog still fails parity because retail light direction, the matched environment,
+remaining pose error, material/shader equivalence, and objective pixel comparison
+are unresolved. Consequently, the number of fully passed appearance outcomes is
+currently zero. That is the honest baseline for the exhaustive sweep.
+
+The generic `content/tools/actor_review_differential.py` gate now hash-verifies
+the scene, retail contract, retail frames, Godot report, and Godot frames; pairs
+every required `(shot kind, source frame)` exactly; produces side-by-side stills
+and a retail-timed H.264 idle-motion clip; and emits one fail-closed coverage
+ledger row. It cannot turn a successful capture into a parity pass. CrDog's
+current differential contains ten comparisons and correctly fails lighting,
+pixel, and pose/structure gates with human review still pending.
+
+`content/tools/actor_review_coverage.py` then performs the exhaustive join back
+to the immutable corpus. Its current baseline contains all 8,660 appearance
+rows and all 7,681 placement rows: one creature appearance has differential
+evidence, 8,659 appearances and every placement are still missing evidence,
+zero rows have been human-reviewed, and zero rows pass. Unknown or duplicate
+reports are rejected instead of being silently counted.
+
+## Execution order
+
+1. Lock the representative contract: exact surface projection, component
+   attachment, palette application, materials, lighting, and matched comparison.
+2. Run the immutable retail queue until all 8,660 appearance outcomes are
+   classified; failures and missing dynamic signatures stay in the ledger.
+3. Compile each outcome from the player's owned plugins and archives through the
+   same NPC_/CREA dispatcher; no per-character recipe is allowed.
+4. Capture the same required views and idle interval in Godot, generate the
+   side-by-side stills and clip, and write one verdict per outcome.
+5. Run placement reviews for all 7,681 ACHR/ACRE references in their data-driven
+   cells and transforms.
+6. Permit a whole-game claim only when the aggregate ledger has no pending,
+   missing, unclassified, failed, or unreviewed row.
+
+OpenMW is not a runtime dependency for this path. Retail supplies legally owned
+reference behavior; OpenNV supplies the clean-room importer, C# runtime, Godot
+rendering, and acceptance evidence.

@@ -236,18 +236,19 @@ internal static class EnvironmentCapture
         }
     }
 
-    private static async Task WaitForRenderedFrames(Node host, int count)
+    internal static async Task WaitForRenderedFrames(Node host, int count)
     {
         for (var index = 0; index < count; index++)
             await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
     }
 
-    private static (object Evidence, bool Passed) SaveViewportPng(
+    internal static (object Evidence, bool Passed) SaveViewportPng(
         Node host,
         string output,
         string name,
         double minimumMeanLuminance,
-        CaptureConfiguration configuration)
+        CaptureConfiguration configuration,
+        Vector2I? expectedSize = null)
     {
         var path = Path.Combine(output, name);
         if (File.Exists(path))
@@ -278,8 +279,11 @@ internal static class EnvironmentCapture
         var error = image.SavePng(path);
         if (error != Error.Ok)
             throw new InvalidOperationException($"Godot could not save capture frame ({error}): {path}");
-        var gateFailure = image.GetWidth() != configuration.ExpectedWidthPixels ||
-            image.GetHeight() != configuration.ExpectedHeightPixels
+        var requiredSize = expectedSize ?? new Vector2I(
+            configuration.ExpectedWidthPixels,
+            configuration.ExpectedHeightPixels);
+        var gateFailure = image.GetWidth() != requiredSize.X ||
+            image.GetHeight() != requiredSize.Y
             ? "unexpected-size"
             : meanLuminance < minimumMeanLuminance
                 ? "mean-luminance"

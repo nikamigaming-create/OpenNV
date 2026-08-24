@@ -12,6 +12,8 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from actor_parity_corpus import build_corpus  # noqa: E402
+from actor_source_stack import build_actor_source_stack, parse_form_key  # noqa: E402
+from plugin_stack import build_plugin_stack  # noqa: E402
 from validate_actor_parity_corpus import validate_corpus  # noqa: E402
 
 
@@ -157,6 +159,21 @@ def read_jsonl(path: Path) -> list[dict[str, object]]:
 
 
 class ActorParityCorpusTest(unittest.TestCase):
+    def test_effective_source_stack_retains_authoring_namespace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_root = Path(directory)
+            (data_root / "FalloutNV.esm").write_bytes(base_plugin())
+            (data_root / "Dlc.esm").write_bytes(dlc_plugin())
+            contexts = build_plugin_stack(data_root, ["FalloutNV.esm", "Dlc.esm"])
+            stack = build_actor_source_stack(contexts)
+
+        overridden = stack.base(parse_form_key("FalloutNV.esm:000050"))
+        self.assertEqual(overridden.context.name, "Dlc.esm")
+        self.assertEqual(overridden.value.name, "DLC Actor Override")
+        self.assertNotIn(parse_form_key("FalloutNV.esm:000070"), stack.creatures)
+        dlc_creature = stack.base(parse_form_key("Dlc.esm:000090"))
+        self.assertEqual(dlc_creature.context.namespaces, ("FalloutNV.esm", "Dlc.esm"))
+
     def test_effective_stack_merges_overrides_deletions_lists_and_templates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
