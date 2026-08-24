@@ -39,9 +39,9 @@ actual tracked poses and suggested bindings. The accepted 2026-08-24 run proves:
 
 | Contract | Result |
 | --- | --- |
-| Touch profile / tracking | both active and tracked for 418 frames |
-| left/right hand travel | 1.610 m / 1.532 m |
-| left-stick locomotion | 1.440 m |
+| Touch profile / tracking | both active and tracked for more than 400 frames |
+| left/right hand travel | at least 1.57 m / 1.49 m |
+| left-stick locomotion | at least 1.40 m |
 | right-stick snap turn | two turns; 0.000000 m maximum HMD pivot error |
 | supported eye height | 0.0200 m maximum error against 1.680 m target |
 | squeeze / trigger / B / X | door open / fire / reload / save accepted |
