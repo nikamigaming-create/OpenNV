@@ -8,17 +8,20 @@ internal partial class CellPlayer : CharacterBody3D
     private Camera3D _camera = null!;
     private GameplaySession? _session;
     private XROrigin3D? _xrOrigin;
-    private XRController3D? _leftHand;
-    private XRController3D? _rightHand;
-    private OpenXRRenderModelManager? _xrRenderModels;
-    private Node3D? _xrWeaponMount;
+    private XRController3D? _leftGrip;
+    private XRController3D? _rightGrip;
+    private XRController3D? _leftAim;
+    private XRController3D? _rightAim;
+    private FirstPersonRig.LoadedRig? _firstPersonRig;
+    private readonly PlayerControlTelemetry _controlTelemetry = new();
+    private Node3D? _weaponMount;
     private PoolTableInstance? _activePool;
     private Node3D? _poolCueMount;
     private Marker3D? _poolCueTip;
-    private MeshInstance3D? _xrMuzzleFlash;
-    private OmniLight3D? _xrMuzzleLight;
-    private Vector3 _xrWeaponRestPosition;
-    private float _xrWeaponFeedbackSeconds;
+    private MeshInstance3D? _muzzleFlash;
+    private OmniLight3D? _muzzleLight;
+    private Vector3 _weaponRestPosition;
+    private float _weaponFeedbackSeconds;
     private bool _useXr;
     private bool _xrActivatePressed;
     private bool _xrFirePressed;
@@ -28,24 +31,29 @@ internal partial class CellPlayer : CharacterBody3D
     private bool _xrEyeHeightCalibrated;
     private int _xrTrackedFrames;
     private int _xrHealthFrames;
+    private float? _xrLastFloorY;
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
     internal XROrigin3D? XrOrigin => _xrOrigin;
-    internal XRController3D? LeftHand => _leftHand;
-    internal XRController3D? RightHand => _rightHand;
-    internal OpenXRRenderModelManager? XrRenderModels => _xrRenderModels;
-    internal bool HasHeldWeapon => _xrWeaponMount?.FindChild("HeldWeapon", true, false) is Node3D;
-    internal bool HasMuzzleFeedback => _xrMuzzleFlash is not null && _xrMuzzleLight is not null;
+    internal XRController3D? LeftGrip => _leftGrip;
+    internal XRController3D? RightGrip => _rightGrip;
+    internal XRController3D? LeftAim => _leftAim;
+    internal XRController3D? RightAim => _rightAim;
+    internal bool HasLeftHand => _firstPersonRig?.Left.VisibleMeshes > 0;
+    internal bool HasRightHand => _firstPersonRig?.Right.VisibleMeshes > 0;
+    internal string HandProvider => _firstPersonRig is null ? "missing" : FirstPersonRig.Provider;
+    internal bool HasHeldWeapon => _weaponMount?.FindChild("HeldWeapon", true, false) is Node3D;
+    internal bool HasMuzzleFeedback => _muzzleFlash is not null && _muzzleLight is not null;
     internal bool HasHeldPoolCue => _poolCueMount is not null && _poolCueTip is not null;
     internal float DesiredEyeHeightMeters => _configuration.Xr.DesiredEyeHeightMeters;
+    internal PlayerControlTelemetry.Snapshot ControlTelemetry => _controlTelemetry.Report();
 
     internal void Configure(
         float yaw,
         GameplaySession session,
         RuntimeConfiguration configuration,
-        bool useXr = false,
-        bool enableXrRuntimeFeatures = false)
+        bool useXr = false)
     {
         _configuration = configuration;
         _session = session;
@@ -65,7 +73,7 @@ internal partial class CellPlayer : CharacterBody3D
             },
         });
         if (useXr)
-            BuildXrRig(enableXrRuntimeFeatures);
+            BuildXrRig();
         else
             BuildDesktopRig();
     }
@@ -99,60 +107,22 @@ internal partial class CellPlayer : CharacterBody3D
             : velocity.Y - _configuration.Simulation.GravityMetersPerSecondSquared * (float)delta;
         Velocity = velocity;
         MoveAndSlide();
+        UpdateWeaponFeedback((float)delta);
         if (_useXr)
         {
             PollXrActions();
             UpdateTrackedPoolCue(delta);
-            UpdateXrWeaponFeedback((float)delta);
+            UpdateXrControlTelemetry();
         }
+        else
+            PollDesktopActions();
     }
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
         if (_useXr)
             return;
-        if (inputEvent is InputEventKey key && key.Pressed && !key.Echo)
-        {
-            if (key.PhysicalKeycode == Key.E)
-            {
-                if (_activePool is null)
-                    Activate(_camera);
-                else
-                    ExitPool();
-            }
-            else if (key.PhysicalKeycode == Key.R)
-            {
-                if (_activePool is not null)
-                    _activePool.ResetAuthored();
-                else
-                    _session!.Reload();
-            }
-            else if (key.PhysicalKeycode == Key.F5)
-                _session!.SaveAndNotify();
-            else if (key.PhysicalKeycode == Key.Escape)
-            {
-                if (_activePool is not null)
-                    ExitPool();
-                Input.MouseMode = Input.MouseModeEnum.Visible;
-            }
-        }
-        else if (inputEvent is InputEventMouseButton button && button.Pressed)
-        {
-            if (button.ButtonIndex == MouseButton.Left)
-            {
-                if (_activePool is not null)
-                    _activePool.StrikeFlat(-_camera.GlobalBasis.Z);
-                else
-                    _session!.Fire(_camera);
-            }
-            else if (button.ButtonIndex == MouseButton.Right)
-                Input.MouseMode = Input.MouseModeEnum.Captured;
-            else if (_activePool is not null && button.ButtonIndex == MouseButton.WheelUp)
-                _activePool.CycleFlatPower(1);
-            else if (_activePool is not null && button.ButtonIndex == MouseButton.WheelDown)
-                _activePool.CycleFlatPower(-1);
-        }
-        else if (inputEvent is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (inputEvent is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
         {
             RotateY(-motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel);
             var cameraRotation = _camera.Rotation;
@@ -164,39 +134,40 @@ internal partial class CellPlayer : CharacterBody3D
         }
     }
 
-    private void Activate(Node3D aimSource)
+    private bool Activate(Node3D aimSource)
     {
         var collider = Cast(aimSource, _configuration.Player.ActivationDistanceMeters);
         var poolBall = Ancestor<PoolBallInstance>(collider);
         if (poolBall is not null)
         {
             EnterPool(poolBall.Table);
-            return;
+            return true;
         }
         var pool = Ancestor<PoolTableInstance>(collider);
         if (pool is not null)
         {
             EnterPool(pool);
-            return;
+            return true;
         }
         var pickup = Ancestor<PickupInstance>(collider);
         if (pickup is not null)
         {
             _session!.Collect(pickup);
-            return;
+            return true;
         }
         var container = Ancestor<ContainerInstance>(collider);
         if (container is not null)
         {
             _session!.OpenContainer(container);
-            return;
+            return true;
         }
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
-            return;
+            return false;
         door.SetOpen(!door.IsOpen);
         _session!.DoorChanged(door);
         GD.Print($"OPENNV_DOOR_STATE form={door.Name.ToString().Replace("DOOR_", "")} open={door.IsOpen}");
+        return true;
     }
 
     private Node? Cast(Node3D aimSource, float distance)
@@ -221,7 +192,7 @@ internal partial class CellPlayer : CharacterBody3D
         AddChild(_camera);
     }
 
-    private void BuildXrRig(bool enableRuntimeFeatures)
+    private void BuildXrRig()
     {
         _xrOrigin = new XROrigin3D
         {
@@ -239,40 +210,54 @@ internal partial class CellPlayer : CharacterBody3D
             Current = true,
         };
         _xrOrigin.AddChild(_camera);
-        _leftHand = BuildHand("LeftHand", "left_hand");
-        _rightHand = BuildHand("RightHand", "right_hand");
-        _xrOrigin.AddChild(_leftHand);
-        _xrOrigin.AddChild(_rightHand);
-        if (enableRuntimeFeatures)
-        {
-            _xrRenderModels = new OpenXRRenderModelManager
-            {
-                Name = "RuntimeControllerModels",
-                Tracker = OpenXRRenderModelManager.RenderModelTracker.Any,
-            };
-            _xrOrigin.AddChild(_xrRenderModels);
-        }
-        _session!.AttachXrHud(_leftHand);
+        _leftGrip = BuildController("LeftGrip", "left_hand", "grip");
+        _rightGrip = BuildController("RightGrip", "right_hand", "grip");
+        _leftAim = BuildController("LeftAim", "left_hand", "aim");
+        _rightAim = BuildController("RightAim", "right_hand", "aim");
+        _xrOrigin.AddChild(_leftGrip);
+        _xrOrigin.AddChild(_rightGrip);
+        _xrOrigin.AddChild(_leftAim);
+        _xrOrigin.AddChild(_rightAim);
+        _session!.AttachXrHud(_leftGrip);
     }
 
-    internal void AttachXrHeldWeapon(
+    internal void AttachFirstPersonRig(FirstPersonRig.Contract contract, float unitsToMeters)
+    {
+        if (_firstPersonRig is not null)
+            throw new InvalidOperationException("OpenNV first-person rig is already attached.");
+        Node3D leftAnchor = _useXr ? _leftGrip! : _camera;
+        Node3D rightAnchor = _useXr ? _rightGrip! : _camera;
+        _firstPersonRig = FirstPersonRig.Attach(
+            contract,
+            leftAnchor,
+            rightAnchor,
+            _useXr,
+            unitsToMeters,
+            _configuration);
+    }
+
+    internal void AttachHeldWeapon(
         Node3D weapon,
         float unitsToMeters,
         Vector3 muzzlePositionGodotUnits)
     {
-        if (!_useXr || _rightHand is null || _xrWeaponMount is not null)
-            throw new InvalidOperationException("XR held weapon requires one configured right hand.");
-        _xrWeaponRestPosition = Vector3.Zero;
-        _xrWeaponMount = new Node3D
+        if (_firstPersonRig is null || _weaponMount is not null)
+            throw new InvalidOperationException("Held weapon requires one configured first-person rig.");
+        _weaponRestPosition = Vector3.Zero;
+        Node3D weaponAnchor = _useXr ? _rightGrip! : _camera;
+        var weaponBone = _firstPersonRig.Value.WeaponBoneWorld;
+        _weaponMount = new Node3D
         {
-            Name = "RightHandWeaponMount",
-            Position = _xrWeaponRestPosition,
-            RotationDegrees = _configuration.Xr.WeaponMountRotationDegrees.Vector3(),
+            Name = "RetailWeaponBoneMount",
+            Transform = weaponAnchor.GlobalTransform.AffineInverse() * new Transform3D(
+                weaponBone.Basis.Orthonormalized(),
+                weaponBone.Origin),
         };
-        _rightHand.AddChild(_xrWeaponMount);
+        weaponAnchor.AddChild(_weaponMount);
+        _weaponRestPosition = _weaponMount.Position;
         weapon.Name = "HeldWeapon";
         weapon.Scale = Vector3.One * unitsToMeters;
-        _xrWeaponMount.AddChild(weapon);
+        _weaponMount.AddChild(weapon);
 
         var flashMaterial = new StandardMaterial3D
         {
@@ -282,7 +267,7 @@ internal partial class CellPlayer : CharacterBody3D
             Emission = _configuration.Xr.DiagnosticMuzzleFlash.EmissionColorRgba.Color(),
             EmissionEnergyMultiplier = _configuration.Xr.DiagnosticMuzzleFlash.EmissionEnergy,
         };
-        _xrMuzzleFlash = new MeshInstance3D
+        _muzzleFlash = new MeshInstance3D
         {
             Name = "MuzzleFlash",
             Mesh = new SphereMesh
@@ -294,8 +279,8 @@ internal partial class CellPlayer : CharacterBody3D
             Position = muzzlePositionGodotUnits,
             Visible = false,
         };
-        weapon.AddChild(_xrMuzzleFlash);
-        _xrMuzzleLight = new OmniLight3D
+        weapon.AddChild(_muzzleFlash);
+        _muzzleLight = new OmniLight3D
         {
             Name = "MuzzleLight",
             Position = muzzlePositionGodotUnits,
@@ -305,33 +290,89 @@ internal partial class CellPlayer : CharacterBody3D
             ShadowEnabled = false,
             Visible = false,
         };
-        weapon.AddChild(_xrMuzzleLight);
+        weapon.AddChild(_muzzleLight);
     }
 
-    private static XRController3D BuildHand(string name, string tracker) => new()
+    private static XRController3D BuildController(string name, string tracker, string pose) => new()
     {
         Name = name,
         Tracker = tracker,
-        Pose = "aim",
+        Pose = pose,
     };
 
     private Vector2 ReadMovement()
     {
         if (_useXr)
         {
-            var stick = _leftHand!.GetVector2("move");
+            var stick = _leftGrip!.GetVector2("move");
             return stick.Length() < _configuration.Xr.MovementDeadzone ? Vector2.Zero : stick;
         }
-        var left = Input.IsPhysicalKeyPressed(Key.A) ? 1.0f : 0.0f;
-        var right = Input.IsPhysicalKeyPressed(Key.D) ? 1.0f : 0.0f;
-        var forward = Input.IsPhysicalKeyPressed(Key.W) ? 1.0f : 0.0f;
-        var backward = Input.IsPhysicalKeyPressed(Key.S) ? 1.0f : 0.0f;
-        return new Vector2(right - left, forward - backward);
+        var input = _configuration.Player.DesktopInput;
+        return Input.GetVector(
+            input.MoveLeft.Action,
+            input.MoveRight.Action,
+            input.MoveBackward.Action,
+            input.MoveForward.Action);
+    }
+
+    private void PollDesktopActions()
+    {
+        var input = _configuration.Player.DesktopInput;
+        if (Input.IsActionJustPressed(input.Activate.Action))
+        {
+            bool accepted;
+            if (_activePool is null)
+                accepted = Activate(_camera);
+            else
+            {
+                ExitPool();
+                accepted = true;
+            }
+            GD.Print($"OPENNV_FLAT_ACTION action=activate accepted={accepted}");
+        }
+        if (Input.IsActionJustPressed(input.Fire.Action))
+        {
+            var accepted = _activePool is not null
+                ? _activePool.StrikeFlat(-_camera.GlobalBasis.Z)
+                : _session!.Fire(_camera);
+            if (accepted && _activePool is null)
+                _weaponFeedbackSeconds = _configuration.Xr.WeaponFeedbackSeconds;
+            GD.Print($"OPENNV_FLAT_ACTION action=fire accepted={accepted}");
+        }
+        if (Input.IsActionJustPressed(input.Reload.Action))
+        {
+            bool accepted;
+            if (_activePool is not null)
+            {
+                _activePool.ResetAuthored();
+                accepted = true;
+            }
+            else
+                accepted = _session!.Reload();
+            GD.Print($"OPENNV_FLAT_ACTION action=reload accepted={accepted}");
+        }
+        if (Input.IsActionJustPressed(input.Save.Action))
+        {
+            _session!.SaveAndNotify();
+            GD.Print("OPENNV_FLAT_ACTION action=save accepted=True");
+        }
+        if (Input.IsActionJustPressed(input.Cancel.Action))
+        {
+            if (_activePool is not null)
+                ExitPool();
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+        }
+        if (Input.IsActionJustPressed(input.CaptureMouse.Action))
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        if (_activePool is not null && Input.IsActionJustPressed(input.PoolPowerUp.Action))
+            _activePool.CycleFlatPower(1);
+        if (_activePool is not null && Input.IsActionJustPressed(input.PoolPowerDown.Action))
+            _activePool.CycleFlatPower(-1);
     }
 
     private void PollXrActions()
     {
-        var turn = _rightHand!.GetVector2("turn").X;
+        var turn = _rightGrip!.GetVector2("turn").X;
         if (MathF.Abs(turn) >= _configuration.Xr.SnapTurnActivationThreshold && _xrSnapTurnReady)
         {
             SnapTurn(-MathF.Sign(turn) * Mathf.DegToRad(_configuration.Xr.SnapTurnDegrees));
@@ -342,43 +383,67 @@ internal partial class CellPlayer : CharacterBody3D
             _xrSnapTurnReady = true;
         }
 
-        var activate = _rightHand.GetFloat("activate") >= _configuration.Xr.ActionThreshold;
+        var activate = _rightGrip.GetFloat("activate") >= _configuration.Xr.ActionThreshold;
         if (activate && !_xrActivatePressed)
         {
+            bool accepted;
             if (_activePool is null)
-                Activate(_rightHand);
+                accepted = Activate(_rightAim!);
             else
+            {
                 ExitPool();
+                accepted = true;
+            }
+            _controlTelemetry.RecordActivation(accepted);
+            GD.Print($"OPENNV_XR_ACTION action=activate accepted={accepted}");
         }
         _xrActivatePressed = activate;
 
-        var fire = _rightHand.GetFloat("fire") >= _configuration.Xr.ActionThreshold;
-        if (_activePool is null && fire && !_xrFirePressed && _session!.Fire(_rightHand))
+        var fire = _rightGrip.GetFloat("fire") >= _configuration.Xr.ActionThreshold;
+        if (fire && !_xrFirePressed)
         {
-            _xrWeaponFeedbackSeconds = _configuration.Xr.WeaponFeedbackSeconds;
-            TriggerHaptic(_configuration.Xr.FireHaptic);
+            var accepted = _activePool is null && _session!.Fire(_rightAim!);
+            _controlTelemetry.RecordFire(accepted);
+            if (accepted)
+            {
+                _weaponFeedbackSeconds = _configuration.Xr.WeaponFeedbackSeconds;
+                TriggerHaptic(_configuration.Xr.FireHaptic);
+            }
+            GD.Print($"OPENNV_XR_ACTION action=fire accepted={accepted}");
         }
         _xrFirePressed = fire;
 
-        var save = _leftHand!.IsButtonPressed("save");
+        var save = _leftGrip!.IsButtonPressed("save");
         if (save && !_xrSavePressed)
+        {
             _session!.SaveAndNotify();
+            _controlTelemetry.RecordSave();
+            GD.Print("OPENNV_XR_ACTION action=save accepted=True");
+        }
         _xrSavePressed = save;
 
-        var reload = _rightHand.IsButtonPressed("reload");
+        var reload = _rightGrip.IsButtonPressed("reload");
         if (reload && !_xrReloadPressed)
         {
+            bool accepted;
             if (_activePool is not null)
+            {
                 _activePool.ResetAuthored();
-            else if (_session!.Reload())
+                accepted = true;
+            }
+            else
+                accepted = _session!.Reload();
+            _controlTelemetry.RecordReload(accepted);
+            if (accepted)
                 TriggerHaptic(_configuration.Xr.ReloadHaptic);
+            GD.Print($"OPENNV_XR_ACTION action=reload accepted={accepted}");
         }
         _xrReloadPressed = reload;
     }
 
     private void UpdateXrCalibrationAndHealth()
     {
-        if (_leftHand!.GetHasTrackingData() && _rightHand!.GetHasTrackingData())
+        if (_leftGrip!.GetHasTrackingData() && _rightGrip!.GetHasTrackingData())
             _xrTrackedFrames++;
         else
             _xrTrackedFrames = 0;
@@ -403,24 +468,58 @@ internal partial class CellPlayer : CharacterBody3D
             $"OPENNV_XR_INPUT_HEALTH " +
             $"leftProfile={leftTracker?.Profile.ToString() ?? "missing"} " +
             $"rightProfile={rightTracker?.Profile.ToString() ?? "missing"} " +
-            $"leftActive={_leftHand!.GetIsActive()} leftTracked={_leftHand.GetHasTrackingData()} " +
-            $"rightActive={_rightHand!.GetIsActive()} rightTracked={_rightHand.GetHasTrackingData()} " +
-            $"eyeY={_camera.GlobalPosition.Y:F3} " +
-            $"move={_leftHand.GetVector2("move")} turn={_rightHand.GetVector2("turn")} " +
-            $"grip={_rightHand.GetFloat("activate"):F2} trigger={_rightHand.GetFloat("fire"):F2}");
+            $"leftActive={_leftGrip!.GetIsActive()} leftTracked={_leftGrip.GetHasTrackingData()} " +
+            $"rightActive={_rightGrip!.GetIsActive()} rightTracked={_rightGrip.GetHasTrackingData()} " +
+            $"bodyY={GlobalPosition.Y:F3} grounded={IsOnFloor()} eyeY={_camera.GlobalPosition.Y:F3} " +
+            $"floorY={(_xrLastFloorY is { } floor ? floor.ToString("F3") : "missing")} " +
+            $"relativeEye={(_xrLastFloorY is { } relativeFloor ? (_camera.GlobalPosition.Y - relativeFloor).ToString("F3") : "missing")} " +
+            $"move={_leftGrip.GetVector2("move")} turn={_rightGrip.GetVector2("turn")} " +
+            $"grip={_rightGrip.GetFloat("activate"):F2} trigger={_rightGrip.GetFloat("fire"):F2}");
     }
 
-    private void UpdateXrWeaponFeedback(float delta)
+    private void UpdateXrControlTelemetry()
     {
-        if (_xrWeaponMount is null || _xrMuzzleFlash is null || _xrMuzzleLight is null)
+        _xrLastFloorY = ProbeFloorY();
+        var acceptance = _configuration.Xr.SimulatorAcceptance;
+        var floorSupportsBody = _xrLastFloorY is { } floor && IsOnFloor() &&
+            MathF.Abs(
+                GlobalPosition.Y - _configuration.Player.SpawnCenterHeightMeters - floor) <=
+            acceptance.EyeHeightToleranceMeters;
+        _controlTelemetry.Observe(
+            GlobalPosition,
+            _leftGrip!.GlobalPosition,
+            _rightGrip!.GlobalPosition,
+            _leftGrip.GetVector2("move"),
+            _rightGrip.GetVector2("turn"),
+            _leftGrip.GetHasTrackingData() && _rightGrip.GetHasTrackingData(),
+            floorSupportsBody,
+            _camera.GlobalPosition.Y,
+            _xrLastFloorY,
+            _configuration.Xr.DesiredEyeHeightMeters);
+    }
+
+    private float? ProbeFloorY()
+    {
+        var acceptance = _configuration.Xr.SimulatorAcceptance;
+        var from = _camera.GlobalPosition + Vector3.Up * acceptance.FloorProbeAboveEyeMeters;
+        var to = from - Vector3.Up * acceptance.FloorProbeDistanceMeters;
+        var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionMask);
+        query.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        return hit.Count == 0 ? null : hit["position"].AsVector3().Y;
+    }
+
+    private void UpdateWeaponFeedback(float delta)
+    {
+        if (_weaponMount is null || _muzzleFlash is null || _muzzleLight is null)
             return;
-        _xrWeaponFeedbackSeconds = MathF.Max(0.0f, _xrWeaponFeedbackSeconds - delta);
-        var strength = _xrWeaponFeedbackSeconds / _configuration.Xr.WeaponFeedbackSeconds;
-        _xrWeaponMount.Position =
-            _xrWeaponRestPosition + Vector3.Back * (_configuration.Xr.WeaponRecoilMeters * strength);
-        var flashVisible = _xrWeaponFeedbackSeconds > _configuration.Xr.MuzzleFlashVisibleSeconds;
-        _xrMuzzleFlash.Visible = flashVisible;
-        _xrMuzzleLight.Visible = flashVisible;
+        _weaponFeedbackSeconds = MathF.Max(0.0f, _weaponFeedbackSeconds - delta);
+        var strength = _weaponFeedbackSeconds / _configuration.Xr.WeaponFeedbackSeconds;
+        _weaponMount.Position =
+            _weaponRestPosition + Vector3.Back * (_configuration.Xr.WeaponRecoilMeters * strength);
+        var flashVisible = _weaponFeedbackSeconds > _configuration.Xr.MuzzleFlashVisibleSeconds;
+        _muzzleFlash.Visible = flashVisible;
+        _muzzleLight.Visible = flashVisible;
     }
 
     private void EnterPool(PoolTableInstance table)
@@ -431,8 +530,8 @@ internal partial class CellPlayer : CharacterBody3D
             ExitPool();
         _activePool = table;
         table.SetPlayActive(true);
-        if (_xrWeaponMount is not null)
-            _xrWeaponMount.Visible = false;
+        if (_weaponMount is not null)
+            _weaponMount.Visible = false;
         var presentation = table.CreateCuePresentation();
         _poolCueMount = new Node3D
         {
@@ -444,7 +543,7 @@ internal partial class CellPlayer : CharacterBody3D
                 ? _configuration.Pool.XrCueMountRotationDegrees
                 : _configuration.Pool.DesktopCueMountRotationDegrees).Vector3(),
         };
-        Node3D cueParent = _useXr ? _rightHand! : _camera;
+        Node3D cueParent = _useXr ? _rightGrip! : _camera;
         cueParent.AddChild(_poolCueMount);
         presentation.Visual.Scale = Vector3.One * _configuration.World.GameUnitsToMeters;
         _poolCueMount.AddChild(presentation.Visual);
@@ -469,8 +568,8 @@ internal partial class CellPlayer : CharacterBody3D
         _poolCueMount?.QueueFree();
         _poolCueMount = null;
         _poolCueTip = null;
-        if (_xrWeaponMount is not null)
-            _xrWeaponMount.Visible = true;
+        if (_weaponMount is not null)
+            _weaponMount.Visible = true;
         _session!.Save();
     }
 
@@ -484,7 +583,7 @@ internal partial class CellPlayer : CharacterBody3D
 
     private void TriggerHaptic(HapticConfiguration haptic)
     {
-        _rightHand!.TriggerHapticPulse(
+        _rightGrip!.TriggerHapticPulse(
             "haptic",
             haptic.Frequency,
             haptic.Amplitude,
@@ -494,10 +593,15 @@ internal partial class CellPlayer : CharacterBody3D
 
     private void SnapTurn(float radians)
     {
+        var headBefore = _camera.GlobalPosition;
         var headOffset = _camera.GlobalPosition - GlobalPosition;
         headOffset.Y = 0.0f;
         RotateY(radians);
         GlobalPosition += headOffset - headOffset.Rotated(Vector3.Up, radians);
+        var pivotError = _camera.GlobalPosition - headBefore;
+        pivotError.Y = 0.0f;
+        _controlTelemetry.RecordSnapTurn(pivotError.Length());
+        GD.Print($"OPENNV_XR_ACTION action=snap-turn accepted=True pivotError={pivotError.Length():F6}");
     }
 
     private static T? Ancestor<T>(Node? node)

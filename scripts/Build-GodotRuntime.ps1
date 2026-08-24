@@ -150,6 +150,8 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $gameplayReloadReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-gameplay-reload-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $vrLayoutSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-vr-layout-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $vrLayoutReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-vr-layout-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $flatControlsSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-flat-controls-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $flatControlsReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-flat-controls-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $poolFlatSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-pool-flat-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $poolFlatReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-pool-flat-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $poolXrSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-pool-xr-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
@@ -215,6 +217,26 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             --install-manifest $ownedInstallManifest
         if ($LASTEXITCODE -ne 0) {
             throw "Packaged OpenNV VR presentation-layout report is invalid."
+        }
+
+        $flatControlsProcess = Start-Process -FilePath $binary `
+            -ArgumentList @(
+                "--xr-mode", "off", "--",
+                "--reuse-cache",
+                "--cache-root", ('"' + $ownedCache + '"'),
+                "--save-path", ('"' + $flatControlsSave + '"'),
+                "--flat-controls-proof",
+                "--report", ('"' + $flatControlsReport + '"')
+            ) `
+            -PassThru -Wait -WindowStyle Hidden
+        if ($flatControlsProcess.ExitCode -ne 0 -or
+            -not (Test-Path -LiteralPath $flatControlsReport -PathType Leaf)) {
+            throw "Packaged OpenNV runtime failed its flat control-input gate."
+        }
+        & python $reportValidator --mode flat-controls --report $flatControlsReport `
+            --install-manifest $ownedInstallManifest
+        if ($LASTEXITCODE -ne 0) {
+            throw "Packaged OpenNV flat control-input report is invalid."
         }
 
         $poolFlatProcess = Start-Process -FilePath $binary `
@@ -308,6 +330,8 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             $gameplayReloadReport,
             $vrLayoutSave,
             $vrLayoutReport,
+            $flatControlsSave,
+            $flatControlsReport,
             $poolFlatSave,
             $poolFlatReport,
             $poolXrSave,

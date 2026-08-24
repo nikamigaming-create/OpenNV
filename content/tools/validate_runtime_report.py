@@ -12,7 +12,9 @@ from runtime_configuration import RuntimeConfiguration, load_runtime_configurati
 
 
 CELL_REPORT_SCHEMA = "opennv-godot-cell/v1"
-XR_REPORT_SCHEMA = "opennv-openxr-rig/v2"
+XR_REPORT_SCHEMA = "opennv-openxr-rig/v3"
+XR_SIMULATOR_REPORT_SCHEMA = "opennv-openxr-simulator-acceptance/v1"
+FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v1"
 GAMEPLAY_REPORT_SCHEMA = "opennv-godot-playable-route/v1"
 SANDBOX_SAVE_SCHEMA = "opennv-sandbox-save/v2"
 POOL_REPORT_SCHEMA = "opennv-pool-practice/v1"
@@ -53,6 +55,10 @@ def validate_xr_report(
     save = report["sharedSaveSchema"]
     _require(report.get("schema") == XR_REPORT_SCHEMA, "Unexpected OpenXR report schema")
     _require(report.get("status") == "pass", "OpenXR report did not pass")
+    _require(report.get("evidenceLevel") == "layout-only", "XR layout evidence level differs")
+    _require(not bool(report["hardwareHeadsetValidated"]), "XR layout claimed headset validation")
+    _require(not bool(report["windowsAppControlUsed"]), "XR layout used Windows app control")
+    _require(not bool(report["foregroundInputInjected"]), "XR layout injected foreground input")
     _require(not bool(report["viewportXrEnabledDuringProof"]), "Headless XR proof enabled the viewport")
     _require(int(report["actionSets"]) == int(contract["expectedActionSetCount"]), "XR action-set count differs")
     _require(sorted(report["actionNames"]) == sorted(contract["actionNames"]), "XR action names differ")
@@ -62,12 +68,16 @@ def validate_xr_report(
     )
     _require(report["originType"] == "XROrigin3D", "XR origin type differs")
     _require(report["cameraType"] == "XRCamera3D", "XR camera type differs")
+    _require(report["leftControllerType"] == "XRController3D", "XR left controller type differs")
+    _require(report["rightControllerType"] == "XRController3D", "XR right controller type differs")
     _require(
-        report["controllerRenderModelManagerType"] == "OpenXRRenderModelManager",
-        "XR render-model manager differs",
+        report["visibleProvider"] == "owned-data-required-at-cell-load",
+        "XR layout visibility boundary differs",
     )
     _require(report["leftTracker"] == "left_hand", "XR left tracker differs")
     _require(report["rightTracker"] == "right_hand", "XR right tracker differs")
+    _require(report["gripPose"] == "grip", "XR grip pose differs")
+    _require(report["aimPose"] == "aim", "XR aim pose differs")
     _require(float(report["worldScale"]) == float(xr["worldScale"]), "XR world scale differs")
     _require(
         float(report["desiredEyeHeightMeters"]) == float(xr["desiredEyeHeightMeters"]),
@@ -199,10 +209,23 @@ def validate_vr_layout(
 ) -> None:
     validate_cell_report(report, install_manifest_path, configuration, require_traversal=False)
     presentation = report["xrPresentation"]
-    loadout = configuration.document["xr"]["diagnosticRigProof"]
+    primary, _linked, _actors = _owned_documents(install_manifest_path)
+    first_person = primary["firstPerson"]
+    loadout = first_person["startingLoadout"]
+    rig = first_person["rig"]
     _require(presentation is not None, "VR presentation report is missing")
     _require(bool(presentation["heldWeapon"]), "VR held weapon is missing")
     _require(bool(presentation["muzzleFeedback"]), "VR muzzle feedback is missing")
+    _require(bool(presentation["leftHandVisible"]), "VR left hand is missing")
+    _require(bool(presentation["rightHandVisible"]), "VR right hand is missing")
+    _require(
+        presentation["visibleHandProvider"] == rig["provider"],
+        "VR hand provider differs from owned data",
+    )
+    _require(presentation["leftGripPose"] == "grip", "VR left grip pose differs")
+    _require(presentation["rightGripPose"] == "grip", "VR right grip pose differs")
+    _require(presentation["leftAimPose"] == "aim", "VR left aim pose differs")
+    _require(presentation["rightAimPose"] == "aim", "VR right aim pose differs")
     _require(bool(presentation["wristHud"]), "VR wrist HUD is missing")
     _require(
         float(presentation["wristHudPixelSize"])
@@ -215,6 +238,98 @@ def validate_vr_layout(
     _require(int(state["weaponClipSize"]) == int(loadout["clipSize"]), "VR clip size differs")
     _require(int(state["ammoInMagazine"]) == int(loadout["clipSize"]), "VR magazine start differs")
     _require(int(state["reserveAmmo"]) == int(loadout["reserveRounds"]), "VR reserve start differs")
+
+
+def validate_xr_simulator_report(
+    report: dict[str, object],
+    install_manifest_path: Path,
+    configuration: RuntimeConfiguration,
+) -> None:
+    _verify_configuration(report, configuration)
+    primary, _linked, _actors = _owned_documents(install_manifest_path)
+    xr = configuration.document["xr"]
+    acceptance = xr["simulatorAcceptance"]
+    loadout = primary["firstPerson"]["startingLoadout"]
+    rig = primary["firstPerson"]["rig"]
+    control = report["control"]
+    gameplay = report["gameplay"]
+    _require(report.get("schema") == XR_SIMULATOR_REPORT_SCHEMA, "Unexpected XR simulator schema")
+    _require(report.get("status") == "pass", "XR simulator report did not pass")
+    _require(report.get("evidenceLevel") == "simulator", "XR simulator evidence level differs")
+    _require(not bool(report["hardwareHeadsetValidated"]), "XR simulator claimed headset validation")
+    _require(not bool(report["windowsAppControlUsed"]), "XR simulator used Windows app control")
+    _require(not bool(report["foregroundInputInjected"]), "XR simulator injected foreground input")
+    _require(bool(report["leftActive"]) and bool(report["leftTracked"]), "XR left tracker is inactive")
+    _require(bool(report["rightActive"]) and bool(report["rightTracked"]), "XR right tracker is inactive")
+    _require(report["leftGripPose"] == "grip" and report["rightGripPose"] == "grip", "XR grip poses differ")
+    _require(report["leftAimPose"] == "aim" and report["rightAimPose"] == "aim", "XR aim poses differ")
+    _require(bool(report["leftHandVisible"]) and bool(report["rightHandVisible"]), "XR hands are missing")
+    _require(report["visibleHandProvider"] == rig["provider"], "XR hand provider differs")
+    _require(bool(report["heldWeapon"]), "XR 10mm presentation is missing")
+    _require(bool(report["wristHud"]), "XR wrist HUD is missing")
+    _require(int(report["openDoors"]) >= int(acceptance["minimumAcceptedActivations"]), "XR door did not open")
+    _require(float(control["MaximumLocomotionMeters"]) >= float(acceptance["minimumLocomotionMeters"]), "XR locomotion is short")
+    _require(float(control["MaximumLeftHandTravelMeters"]) >= float(acceptance["minimumHandTravelMeters"]), "XR left hand did not move")
+    _require(float(control["MaximumRightHandTravelMeters"]) >= float(acceptance["minimumHandTravelMeters"]), "XR right hand did not move")
+    _require(float(control["MaximumMoveStickMagnitude"]) >= float(xr["snapTurnActivationThreshold"]), "XR move stick is inactive")
+    _require(float(control["MaximumTurnStickMagnitude"]) >= float(xr["snapTurnActivationThreshold"]), "XR turn stick is inactive")
+    _require(bool(control["FloorObserved"]), "XR supported floor was not observed")
+    _require(float(control["MaximumEyeHeightErrorMeters"]) <= float(acceptance["eyeHeightToleranceMeters"]), "XR eye height differs")
+    _require(int(control["SnapTurns"]) >= int(acceptance["minimumSnapTurns"]), "XR snap turn count is short")
+    _require(float(control["MaximumSnapPivotErrorMeters"]) <= float(acceptance["maximumSnapPivotErrorMeters"]), "XR snap pivot moved the HMD")
+    _require(int(control["AcceptedActivations"]) >= int(acceptance["minimumAcceptedActivations"]), "XR activation was not accepted")
+    _require(int(control["AcceptedFireActions"]) >= int(acceptance["minimumAcceptedFireActions"]), "XR fire was not accepted")
+    _require(int(control["AcceptedReloadActions"]) >= int(acceptance["minimumAcceptedReloadActions"]), "XR reload was not accepted")
+    _require(int(control["SaveEdges"]) >= int(acceptance["minimumSaveActions"]), "XR save was not accepted")
+    _require(gameplay["schema"] == SANDBOX_SAVE_SCHEMA, "XR simulator save schema differs")
+    _require(gameplay["equippedWeaponFormId"] == loadout["weaponFormId"], "XR simulator weapon differs")
+    _require(int(gameplay["ammoInMagazine"]) == int(loadout["clipSize"]), "XR simulator reload outcome differs")
+    _require(int(gameplay["reserveAmmo"]) == int(loadout["reserveRounds"]) - 1, "XR simulator reserve differs")
+    _require(int(gameplay["shotsFired"]) == 1, "XR simulator shot count differs")
+
+
+def validate_flat_controls_report(
+    report: dict[str, object],
+    install_manifest_path: Path,
+    configuration: RuntimeConfiguration,
+) -> None:
+    _verify_configuration(report, configuration)
+    primary, _linked, _actors = _owned_documents(install_manifest_path)
+    desktop = configuration.document["player"]["desktopInput"]
+    acceptance = desktop["acceptance"]
+    first_person = primary["firstPerson"]
+    loadout = first_person["startingLoadout"]
+    gameplay = report["gameplay"]
+    _require(report.get("schema") == FLAT_CONTROLS_REPORT_SCHEMA, "Unexpected flat controls schema")
+    _require(report.get("status") == "pass", "Flat controls report did not pass")
+    _require(report.get("inputTransport") == "godot-input-map-plus-parse-input-event", "Flat input transport differs")
+    _require(not bool(report["windowsAppControlUsed"]), "Flat proof used Windows app control")
+    _require(not bool(report["foregroundInputInjected"]), "Flat proof injected foreground input")
+    _require(bool(report["mouseCaptured"]), "Flat mouse capture failed")
+    _require(float(report["lookRadians"]) >= float(acceptance["minimumLookRadians"]), "Flat mouse look is short")
+    _require(float(report["locomotionMeters"]) >= float(acceptance["minimumLocomotionMeters"]), "Flat locomotion is short")
+    _require(bool(report["leftHandVisible"]) and bool(report["rightHandVisible"]), "Flat first-person hands are missing")
+    _require(report["visibleHandProvider"] == first_person["rig"]["provider"], "Flat hand provider differs")
+    _require(bool(report["heldWeapon"]), "Flat held weapon is missing")
+    _require(bool(report["desktopHud"]), "Flat HUD is missing")
+    _require(int(report["openDoors"]) >= 1, "Flat activate did not open a door")
+    expected_keys = {
+        str(desktop[name]["action"]): str(desktop[name]["physicalKey"])
+        for name in ("moveLeft", "moveRight", "moveForward", "moveBackward", "activate", "reload", "save", "cancel")
+    }
+    actual_keys = {str(row["Action"]): str(row["PhysicalKey"]) for row in report["keyBindings"]}
+    _require(actual_keys == expected_keys, "Flat key bindings differ from configuration")
+    expected_mouse = {
+        str(desktop[name]["action"]): str(desktop[name]["button"])
+        for name in ("fire", "captureMouse", "poolPowerUp", "poolPowerDown")
+    }
+    actual_mouse = {str(row["Action"]): str(row["Button"]) for row in report["mouseBindings"]}
+    _require(actual_mouse == expected_mouse, "Flat mouse bindings differ from configuration")
+    _require(gameplay["schema"] == SANDBOX_SAVE_SCHEMA, "Flat save schema differs")
+    _require(gameplay["equippedWeaponFormId"] == loadout["weaponFormId"], "Flat weapon differs")
+    _require(int(gameplay["ammoInMagazine"]) == int(loadout["clipSize"]), "Flat reload outcome differs")
+    _require(int(gameplay["reserveAmmo"]) == int(loadout["reserveRounds"]) - 1, "Flat reserve differs")
+    _require(int(gameplay["shotsFired"]) == 1, "Flat shot count differs")
 
 
 def validate_gameplay_report(
@@ -320,6 +435,8 @@ def main() -> int:
             "gameplay-reload",
             "pool-flat",
             "pool-xr-layout",
+            "xr-simulator",
+            "flat-controls",
         ),
         required=True,
     )
@@ -341,6 +458,10 @@ def main() -> int:
             validate_gameplay_report(report, args.install_manifest, configuration, "first-run")
         elif args.mode == "gameplay-reload":
             validate_gameplay_report(report, args.install_manifest, configuration, "cold-reload")
+        elif args.mode == "xr-simulator":
+            validate_xr_simulator_report(report, args.install_manifest, configuration)
+        elif args.mode == "flat-controls":
+            validate_flat_controls_report(report, args.install_manifest, configuration)
         else:
             validate_pool_report(
                 report,

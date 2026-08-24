@@ -13,7 +13,8 @@ internal static class ActorModelSlice
         string sidecarPath,
         Node3D parent,
         RuntimeConfiguration configuration,
-        bool scaleToMeters = true)
+        bool scaleToMeters = true,
+        BoundsContract boundsContract = BoundsContract.Humanoid)
     {
         var resolvedModel = VerifiedGltfLoader.ResolvePath(modelPath);
         var resolvedSidecar = VerifiedGltfLoader.ResolvePath(sidecarPath);
@@ -60,8 +61,9 @@ internal static class ActorModelSlice
             var origin = ReadVector(originSource);
             bounds = new Aabb(bounds.Position - scene.GlobalBasis * origin, bounds.Size);
         }
-        if (bounds.Size.Y < configuration.DiagnosticPreview.ActorMinimumHeightMeters ||
-            bounds.Size.Y > configuration.DiagnosticPreview.ActorMaximumHeightMeters)
+        if (boundsContract == BoundsContract.Humanoid &&
+            (bounds.Size.Y < configuration.DiagnosticPreview.ActorMinimumHeightMeters ||
+             bounds.Size.Y > configuration.DiagnosticPreview.ActorMaximumHeightMeters))
             throw new InvalidOperationException($"Actor height is outside the humanoid gate: {bounds.Size.Y:F3}m");
         return new LoadedActor(
             scene,
@@ -140,4 +142,10 @@ internal static class ActorModelSlice
         Aabb Bounds,
         int AuthoredSurfaces,
         int AuthoredTextures);
+
+    internal enum BoundsContract
+    {
+        Humanoid,
+        FirstPersonHand,
+    }
 }

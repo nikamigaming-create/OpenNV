@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v9";
+    private const string CellSceneSchema = "opennv-cell-scene/v10";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -15,7 +15,7 @@ internal static class CellSceneLoader
         string? proofDoorOverride = null,
         string? savePath = null,
         bool useXr = false,
-        bool enableXrRuntimeFeatures = false,
+        bool enableFirstPersonPresentation = true,
         string? actorScenePath = null,
         string? actorScenesManifestPath = null,
         bool proofEnableActor = false,
@@ -45,17 +45,17 @@ internal static class CellSceneLoader
             parent,
             session,
             configuration,
-            useXr,
+            enableFirstPersonPresentation,
             actorScenePath,
             actorScenesManifestPath,
             proofEnableActor,
             buildCollision,
             1u);
-        if (useXr)
+        if (enableFirstPersonPresentation)
         {
             var loadout = main.StartingLoadout
-                ?? throw new InvalidOperationException("OpenNV XR scene has no data-resolved starting loadout.");
-            session.PrepareXrStartingLoadout(new GameplaySession.StartingWeapon(
+                ?? throw new InvalidOperationException("OpenNV scene has no data-resolved first-person loadout.");
+            session.PrepareStartingLoadout(new GameplaySession.StartingWeapon(
                 loadout.WeaponFormId,
                 loadout.WeaponEditorId,
                 loadout.AmmoFormId,
@@ -133,13 +133,16 @@ internal static class CellSceneLoader
             main,
             session,
             configuration,
-            useXr,
-            enableXrRuntimeFeatures);
+            useXr);
         player.CollisionMask = (1u << (linkedCells.Count + 1)) - 1u;
-        if (useXr)
+        if (enableFirstPersonPresentation)
         {
-            player.AttachXrHeldWeapon(
-                main.HeldWeapon ?? throw new InvalidOperationException("OpenNV XR held weapon was not prepared."),
+            player.AttachFirstPersonRig(
+                main.FirstPersonRig
+                    ?? throw new InvalidOperationException("OpenNV first-person hand rig was not prepared."),
+                main.UnitsToMeters);
+            player.AttachHeldWeapon(
+                main.HeldWeapon ?? throw new InvalidOperationException("OpenNV held weapon was not prepared."),
                 main.UnitsToMeters,
                 main.MuzzlePosition);
         }
@@ -192,8 +195,7 @@ internal static class CellSceneLoader
         CellContentLoader.LoadedContent main,
         GameplaySession session,
         RuntimeConfiguration configuration,
-        bool useXr,
-        bool enableXrRuntimeFeatures)
+        bool useXr)
     {
         var lighting = main.Lighting;
         var environment = new Godot.Environment
@@ -216,7 +218,7 @@ internal static class CellSceneLoader
         parent.AddChild(new WorldEnvironment { Environment = environment });
         AddCellLights(parent, main, configuration, 1u, true);
         var player = new CellPlayer();
-        player.Configure(yaw, session, configuration, useXr, enableXrRuntimeFeatures);
+        player.Configure(yaw, session, configuration, useXr);
         parent.AddChild(player);
         return player;
     }

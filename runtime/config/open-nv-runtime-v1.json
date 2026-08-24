@@ -64,7 +64,34 @@
     "cameraNearMeters": 0.02,
     "cameraFarMeters": 200.0,
     "collisionLayer": 2,
-    "collisionMask": 1
+    "collisionMask": 1,
+    "desktopInput": {
+      "provenance": {
+        "classification": "open-nv-policy",
+        "status": "blocking-flat-input-gate",
+        "source": "OpenNV keyboard and mouse action-map contract",
+        "evidence": "docs/architecture.md#first-class-flatvr-boundary"
+      },
+      "moveLeft": { "action": "flat_move_left", "physicalKey": "A" },
+      "moveRight": { "action": "flat_move_right", "physicalKey": "D" },
+      "moveForward": { "action": "flat_move_forward", "physicalKey": "W" },
+      "moveBackward": { "action": "flat_move_backward", "physicalKey": "S" },
+      "activate": { "action": "flat_activate", "physicalKey": "E" },
+      "reload": { "action": "flat_reload", "physicalKey": "R" },
+      "save": { "action": "flat_save", "physicalKey": "F5" },
+      "cancel": { "action": "flat_cancel", "physicalKey": "Escape" },
+      "fire": { "action": "flat_fire", "button": "Left" },
+      "captureMouse": { "action": "flat_capture_mouse", "button": "Right" },
+      "poolPowerUp": { "action": "flat_pool_power_up", "button": "WheelUp" },
+      "poolPowerDown": { "action": "flat_pool_power_down", "button": "WheelDown" },
+      "acceptance": {
+        "settleFrames": 3,
+        "movementFrames": 20,
+        "minimumLocomotionMeters": 0.25,
+        "minimumLookRadians": 0.5,
+        "renderedFramesBeforeScreenshot": 3
+      }
+    }
   },
   "xr": {
     "provenance": {
@@ -83,7 +110,29 @@
     "snapTurnActivationThreshold": 0.75,
     "snapTurnResetThreshold": 0.35,
     "snapTurnDegrees": 30.0,
-    "weaponMountRotationDegrees": [0.0, 90.0, 0.0],
+    "handAlignmentPositionToleranceMeters": 0.0001,
+    "handAlignmentRotationToleranceRadians": 0.001,
+    "simulatorAcceptance": {
+      "provenance": {
+        "classification": "diagnostic-only",
+        "status": "blocking-simulator-gate",
+        "source": "OpenNV OpenXR simulator acceptance thresholds",
+        "evidence": "docs/evidence/openxr-runtime-contract.md"
+      },
+      "timeoutFrames": 1800,
+      "minimumTrackedFrames": 30,
+      "minimumLocomotionMeters": 0.25,
+      "minimumHandTravelMeters": 0.05,
+      "eyeHeightToleranceMeters": 0.08,
+      "maximumSnapPivotErrorMeters": 0.002,
+      "floorProbeAboveEyeMeters": 0.1,
+      "floorProbeDistanceMeters": 3.0,
+      "minimumSnapTurns": 2,
+      "minimumAcceptedActivations": 1,
+      "minimumAcceptedFireActions": 1,
+      "minimumAcceptedReloadActions": 1,
+      "minimumSaveActions": 1
+    },
     "weaponFeedbackSeconds": 0.09,
     "weaponRecoilMeters": 0.035,
     "muzzleFlashVisibleSeconds": 0.045,
@@ -108,7 +157,7 @@
       },
       "actionMapResourcePath": "res://openxr_action_map.tres",
       "expectedActionSetCount": 1,
-      "actionNames": ["activate", "aim", "fire", "haptic", "move", "reload", "save", "turn"],
+      "actionNames": ["activate", "aim", "fire", "grip", "haptic", "move", "reload", "save", "turn"],
       "interactionProfilePaths": [
         "/interaction_profiles/khr/generic_controller",
         "/interaction_profiles/oculus/touch_controller"

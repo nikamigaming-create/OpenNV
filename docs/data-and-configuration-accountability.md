@@ -136,7 +136,7 @@ owned-data manifests and this configuration.
 | Section | Owner and present truth |
 | --- | --- |
 | `world` | Verified Gamebryo world-unit conversion. |
-| `simulation`, `player`, `xr`, `pool`, `hud` | Explicit OpenNV flat/VR policy; pool input/mount/contact-proof tuning and hardware/playtest gates are stated separately from retail data. |
+| `simulation`, `player.desktopInput`, `xr`, `pool`, `hud` | Explicit OpenNV flat/VR policy; physical key/mouse bindings, simulator thresholds, pool input/mount/contact-proof tuning, and hardware/playtest gates are stated separately from retail data. |
 | `renderer` | Honest parity-failing Godot adapter; raw authored XCLL/material inputs remain available. |
 | `door` | Provisional fallback angle until NIF controller tracks are evaluated. |
 | `capture`, `proof`, `retailActorState`, `actorParity` | Diagnostic-only gates, never world or actor authoring data. |

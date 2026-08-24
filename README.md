@@ -94,8 +94,10 @@ and [release policy](docs/nightlies.md).
 
 Flat play and OpenXR are first-class modes over one shared game/save state. The
 OpenXR software path is launchable with a bounded Meta Touch action map,
-metre-correct rig, controller locomotion/actions, haptics, and a wrist HUD. A
-connected-headset stereo validation is still required before calling VR ready.
+metre-correct rig, two owned-data retail hands, controller locomotion/actions,
+haptics, and a wrist HUD. The repo-local simulator passes both sticks, snap
+turn, door/fire/reload/save, supported eye height, and native stereo capture. A
+connected-headset final-eye validation is still required before calling VR ready.
 The owned-data Saloon slice also includes an experimental practice pool table:
 the intact retail table triangles, authored cue/rack/four placed balls, NIF
 convex bodies, shared flat/OpenXR strike simulation, and v2 save state are

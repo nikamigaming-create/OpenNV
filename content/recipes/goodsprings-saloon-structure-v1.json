@@ -13,6 +13,21 @@
     "ammoFormId": "00004241",
     "reserveMagazines": 1
   },
+  "firstPersonRig": {
+    "skeletonPath": "characters\\_1stperson\\skeleton.nif",
+    "poseAnimationPath": "characters\\_1stperson\\1hpaim.kf",
+    "rigidAttachmentBone": "Bip01 Head",
+    "cameraBone": "Camera1st",
+    "weaponBone": "Weapon",
+    "left": {
+      "modelPath": "characters\\_male\\lefthand1st.nif",
+      "gripBone": "Bip01 L Hand"
+    },
+    "right": {
+      "modelPath": "characters\\_male\\righthand1st.nif",
+      "gripBone": "Bip01 R Hand"
+    }
+  },
   "poolGameplay": {
     "mode": "open-nv-practice-v1",
     "tableReferenceFormId": "00107d7b",

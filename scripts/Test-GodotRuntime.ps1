@@ -97,6 +97,7 @@ $retailModel = ""
 $retailSidecar = ""
 $temporaryCache = ""
 $poolPracticeValidated = $false
+$flatControlsValidated = $false
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $resolvedFalloutData = Resolve-FnvDataRoot $FalloutNewVegasData
     $temporaryCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-legal-cache-{0}" -f [guid]::NewGuid().ToString("N"))
@@ -136,6 +137,30 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     }
     finally {
         foreach ($path in @($cellReport, $cellSave)) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+    }
+
+    $flatReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-flat-controls-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $flatSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-flat-controls-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    try {
+        $flatOutput = & $Godot --xr-mode off --path $runtimeRoot -- `
+            --cell-scene ([string]$install.outputs.cellScene) `
+            --actor-scenes ([string]$install.outputs.actorScenes) `
+            --save-path $flatSave --flat-controls-proof --report $flatReport 2>&1
+        $flatText = $flatOutput | Out-String
+        if ($LASTEXITCODE -ne 0 -or
+            $flatText -notmatch "OPENNV_FLAT_CONTROLS_PASS" -or
+            $flatText -match "(?m)^ERROR:") {
+            throw "OpenNV flat controls gate failed:`n$flatText"
+        }
+        & python $reportValidator --mode flat-controls --report $flatReport `
+            --install-manifest (Join-Path $temporaryCache "install-manifest.json")
+        if ($LASTEXITCODE -ne 0) { throw "OpenNV flat controls report is invalid." }
+        $flatControlsValidated = $true
+    }
+    finally {
+        foreach ($path in @($flatReport, $flatSave)) {
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
         }
     }
@@ -224,6 +249,7 @@ $result = [pscustomobject][ordered]@{
     openXrRig = $true
     poolFlatPractice = $poolPracticeValidated
     poolOpenXrLayout = $poolPracticeValidated
+    flatControls = $flatControlsValidated
     openXrHardwareValidated = $false
     syntheticSourceSha256 = [string]$fixture.sourceSha256
     retailSourceSha256 = if ($null -eq $retail) { "not-requested" } else { [string]$retail.sourceSha256 }

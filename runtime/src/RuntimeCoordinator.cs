@@ -8,6 +8,7 @@ public partial class RuntimeCoordinator : Node3D
     private Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
     private RuntimeConfiguration _configuration = null!;
     private LegalAssetSetupView? _setupView;
+    private XRInterface? _openXr;
 
     public override void _Ready()
     {
@@ -19,12 +20,21 @@ public partial class RuntimeCoordinator : Node3D
         try
         {
             _configuration = RuntimeConfiguration.Load();
+            DesktopInputMap.Configure(_configuration.Player.DesktopInput);
             GetWindow().Size = new Vector2I(
                 _configuration.Capture.ExpectedWidthPixels,
                 _configuration.Capture.ExpectedHeightPixels);
             RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
             Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
             _options = ParseOptions(OS.GetCmdlineUserArgs());
+            if (_options.ContainsKey("xr-simulator-proof") &&
+                (!_options.ContainsKey("vr") || !_options.ContainsKey("report")))
+                throw new ArgumentException("--xr-simulator-proof requires --vr and --report.");
+            if (_options.ContainsKey("flat-controls-proof") &&
+                (_options.ContainsKey("vr") || !_options.ContainsKey("report") ||
+                    !_options.ContainsKey("save-path")))
+                throw new ArgumentException(
+                    "--flat-controls-proof requires --report and --save-path and cannot use --vr.");
             if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
                 throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
             if (_options.ContainsKey("vr"))
@@ -148,11 +158,21 @@ public partial class RuntimeCoordinator : Node3D
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
             useXrLayout,
-            options.ContainsKey("vr"),
+            !options.ContainsKey("capture-root"),
             options.TryGetValue("actor-scene", out var actorScene) ? actorScene : null,
             options.TryGetValue("actor-scenes", out var actorScenes) ? actorScenes : null,
             options.ContainsKey("proof-enable-actor"),
             !options.ContainsKey("capture-root"));
+        if (options.ContainsKey("xr-simulator-proof"))
+        {
+            _ = RunXrSimulatorAcceptance(loaded, scenePath, options);
+            return;
+        }
+        if (options.ContainsKey("flat-controls-proof"))
+        {
+            _ = RunFlatControlsAcceptance(loaded, scenePath, options);
+            return;
+        }
         if (options.TryGetValue("capture-root", out var captureRoot))
         {
             _ = EnvironmentCapture.Run(
@@ -317,8 +337,8 @@ public partial class RuntimeCoordinator : Node3D
 
     private void EnableOpenXr()
     {
-        var openXr = XRServer.FindInterface("OpenXR");
-        if (openXr is null || !openXr.IsInitialized())
+        _openXr = XRServer.FindInterface("OpenXR");
+        if (_openXr is null || !_openXr.IsInitialized())
             throw new InvalidOperationException(
                 "OpenXR was requested but no initialized runtime is available. " +
                 "Launch with --xr-mode on before --, connect the headset, and verify the active OpenXR runtime.");
@@ -330,107 +350,51 @@ public partial class RuntimeCoordinator : Node3D
             $"physicsHz={_configuration.Simulation.PhysicsTicksPerSecond}");
     }
 
+    private async Task RunXrSimulatorAcceptance(
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        try
+        {
+            await XrSimulatorAcceptance.Run(this, loaded, scenePath, options, _configuration);
+            QuitOpenXr(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_XR_SIMULATOR_FAIL {exception.Message}");
+            QuitOpenXr(1);
+        }
+    }
+
+    private void QuitOpenXr(int exitCode)
+    {
+        GetViewport().UseXR = false;
+        _openXr?.Uninitialize();
+        _openXr = null;
+        GetTree().Quit(exitCode);
+    }
+
+    private async Task RunFlatControlsAcceptance(
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        try
+        {
+            await FlatControlsAcceptance.Run(this, loaded, scenePath, options, _configuration);
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FLAT_CONTROLS_FAIL {exception.Message}");
+            GetTree().Quit(1);
+        }
+    }
+
     private void CompleteXrRigProof(IReadOnlyDictionary<string, string> options)
     {
-        var contract = _configuration.Xr.Contract;
-        var proof = _configuration.Xr.DiagnosticRigProof;
-        var actionMap = ResourceLoader.Load(contract.ActionMapResourcePath)
-            ?? throw new InvalidOperationException("OpenNV OpenXR action map could not be loaded.");
-        var actionSets = actionMap.Get("action_sets").AsGodotArray();
-        if (actionSets.Count != contract.ExpectedActionSetCount)
-            throw new InvalidOperationException("OpenNV OpenXR action-map set count disagrees with configuration.");
-        var actionSet = actionSets[0].AsGodotObject() as Resource
-            ?? throw new InvalidOperationException("OpenNV OpenXR gameplay action set is invalid.");
-        var actions = actionSet.Get("actions").AsGodotArray();
-        if (actions.Count != contract.ActionNames.Count)
-            throw new InvalidOperationException("OpenNV OpenXR action count disagrees with configuration.");
-        var actionNames = actions
-            .Select(value => value.AsGodotObject() as Resource
-                ?? throw new InvalidOperationException("OpenNV OpenXR action is invalid."))
-            .Select(action => action.ResourceName)
-            .OrderBy(value => value, StringComparer.Ordinal)
-            .ToArray();
-        var expectedActions = contract.ActionNames.OrderBy(value => value, StringComparer.Ordinal).ToArray();
-        if (!actionNames.SequenceEqual(expectedActions, StringComparer.Ordinal))
-            throw new InvalidOperationException("OpenNV OpenXR action names are incomplete.");
-        var interactionProfiles = actionMap.Get("interaction_profiles").AsGodotArray()
-            .Select(value => value.AsGodotObject() as Resource
-                ?? throw new InvalidOperationException("OpenNV OpenXR interaction profile is invalid."))
-            .Select(profile => profile.Get("interaction_profile_path").AsString())
-            .OrderBy(value => value, StringComparer.Ordinal)
-            .ToArray();
-        var expectedProfiles = contract.InteractionProfilePaths
-            .OrderBy(value => value, StringComparer.Ordinal)
-            .ToArray();
-        if (!interactionProfiles.SequenceEqual(expectedProfiles, StringComparer.Ordinal))
-            throw new InvalidOperationException("OpenNV OpenXR interaction profile set is incomplete.");
-
-        Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
-        var session = new GameplaySession();
-        session.Configure(
-            proof.SessionId,
-            proof.SessionId,
-            _configuration,
-            options.TryGetValue("save-path", out var savePath) ? savePath : null,
-            true);
-        AddChild(session);
-        var player = new CellPlayer();
-        player.Configure(0.0f, session, _configuration, true, false);
-        AddChild(player);
-        session.PrepareXrStartingLoadout(new GameplaySession.StartingWeapon(
-            proof.WeaponFormId,
-            proof.WeaponEditorId,
-            proof.AmmoFormId,
-            proof.AmmoEditorId,
-            proof.Damage,
-            proof.ClipSize,
-            proof.ReserveRounds));
-        if (!session.Fire(player.RightHand!) || !session.Reload())
-            throw new InvalidOperationException("OpenNV OpenXR fire/reload contract failed.");
-        if (session.ShotsFired != proof.ExpectedShotsFired ||
-            session.AmmoInMagazine != proof.ExpectedAmmoInMagazineAfterReload ||
-            session.ReserveAmmo != proof.ExpectedReserveRoundsAfterReload)
-            throw new InvalidOperationException("OpenNV OpenXR ammunition outcome disagrees with configuration.");
-        var xrHud = player.LeftHand!.FindChild("XrObjectiveInventory", true, false);
-        if (!player.UsesXr || player.Camera is not XRCamera3D || player.XrOrigin is null ||
-            player.RightHand is null || player.XrRenderModels is not null || xrHud is not Label3D ||
-            !Mathf.IsEqualApprox(player.XrOrigin.WorldScale, _configuration.Xr.WorldScale))
-            throw new InvalidOperationException("OpenNV OpenXR rig hierarchy is incomplete.");
-
-        var report = new
-        {
-            schema = "opennv-openxr-rig/v2",
-            status = "pass",
-            configurationSchema = RuntimeConfiguration.ExpectedSchema,
-            configurationSha256 = _configuration.Sha256,
-            initializedRuntimeRequiredForPlay = true,
-            viewportXrEnabledDuringProof = GetViewport().UseXR,
-            actionMap = contract.ActionMapResourcePath,
-            actionSets = actionSets.Count,
-            actions = actions.Count,
-            actionNames,
-            testedInteractionProfiles = interactionProfiles,
-            originType = player.XrOrigin.GetClass().ToString(),
-            cameraType = player.Camera.GetClass().ToString(),
-            leftControllerType = player.LeftHand.GetClass().ToString(),
-            rightControllerType = player.RightHand.GetClass().ToString(),
-            controllerRenderModelManagerType = nameof(OpenXRRenderModelManager),
-            controllerRenderModelsRequireLiveRuntime = true,
-            leftTracker = player.LeftHand.Tracker.ToString(),
-            rightTracker = player.RightHand.Tracker.ToString(),
-            controllerPose = player.RightHand.Pose.ToString(),
-            worldScale = player.XrOrigin.WorldScale,
-            desiredEyeHeightMeters = player.DesiredEyeHeightMeters,
-            physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
-            worldSpaceHud = xrHud is Label3D,
-            sharedSaveSchema = session.Report(),
-        };
-        if (options.TryGetValue("report", out var reportPath))
-            WriteReport(reportPath, report);
-        GD.Print(
-            $"OPENNV_OPENXR_RIG_PASS profiles=generic,oculus-touch " +
-            $"worldScale={_configuration.Xr.WorldScale} " +
-            $"physicsHz={_configuration.Simulation.PhysicsTicksPerSecond}");
+        XrRigLayoutAcceptance.Run(this, options, _configuration);
         GetTree().Quit(0);
     }
 
@@ -696,6 +660,13 @@ public partial class RuntimeCoordinator : Node3D
                 {
                     heldWeapon = loaded.Player.HasHeldWeapon,
                     muzzleFeedback = loaded.Player.HasMuzzleFeedback,
+                    leftHandVisible = loaded.Player.HasLeftHand,
+                    rightHandVisible = loaded.Player.HasRightHand,
+                    visibleHandProvider = loaded.Player.HandProvider,
+                    leftGripPose = loaded.Player.LeftGrip?.Pose.ToString(),
+                    rightGripPose = loaded.Player.RightGrip?.Pose.ToString(),
+                    leftAimPose = loaded.Player.LeftAim?.Pose.ToString(),
+                    rightAimPose = loaded.Player.RightAim?.Pose.ToString(),
                     wristHud = loaded.Session.HasXrHud,
                     wristHudPixelSize = loaded.Session.XrHudPixelSize,
                     startingLoadout = loaded.Session.Report(),
@@ -851,7 +822,7 @@ public partial class RuntimeCoordinator : Node3D
         });
     }
 
-    private static void WriteReport(string reportPath, object report)
+    internal static void WriteReport(string reportPath, object report)
     {
         var fullReportPath = Path.GetFullPath(reportPath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullReportPath)!);
@@ -878,7 +849,7 @@ public partial class RuntimeCoordinator : Node3D
         return result;
     }
 
-    private static string RequireOption(IReadOnlyDictionary<string, string> options, string name) =>
+    internal static string RequireOption(IReadOnlyDictionary<string, string> options, string name) =>
         options.TryGetValue(name, out var value)
             ? value
             : throw new ArgumentException($"Missing required --{name} option.");

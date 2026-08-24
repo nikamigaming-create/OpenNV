@@ -130,16 +130,21 @@ flowchart LR
 ```
 
 `CellPlayer` now constructs either a flat camera/input rig or a real OpenXR
-origin, tracked head, and two tracked controllers over the same
-`GameplaySession`. `GameplaySession` renders either its flat HUD or a
+origin, tracked head, left/right grip publishers, and left/right aim publishers
+over the same `GameplaySession`. `DesktopInputMap` builds the keyboard/mouse
+actions from the single runtime configuration; the XR action resource declares
+the corresponding controller boundary. `GameplaySession` renders either its flat HUD or a
 controller-mounted world-space HUD without duplicating inventory, objective, or
 save rules. This remains bounded vertical-slice code; actor, combat, VATS, and
 quest rules may not accumulate there. No unused VR manager, empty interface, or
 speculative abstraction counts as progress.
 
-The software OpenXR gate now proves the action map loads, the rig contains its
-required node hierarchy, world scale is one metre, physics runs at 90 Hz, the
-HUD is world-space, and the flat save schema is shared. Promotion to
+The layout-only OpenXR gate proves the action map and required node hierarchy.
+The repo-local simulator gate additionally proves both tracked retail hands,
+both sticks, locomotion, HMD-pivot snap turn, data-derived door activation,
+10mm fire/reload/save, supported eye height, wrist HUD, and native stereo
+projection without Windows app control. The flat event-pipeline gate proves the
+configured physical key/mouse bindings and the same gameplay outcomes. Promotion to
 hardware-validated requires a real stereo run with head/two-controller poses,
 room-scale collision, controller actions/haptics, identical route/save results,
 and stereo-safe materials. Gameplay outcomes remain mode-independent; only
@@ -163,6 +168,7 @@ require a headset session.
 | `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
 | `facegen.py` | Pure EGM/EGT morph and retail skin/body texture composition primitives | Record selection or runtime nodes |
 | `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance | Record selection, placement, or runtime behavior |
+| `first_person_rig.py` | Hash-verified legal left/right first-person hand artifacts plus skeleton/pose/frame contract | Runtime tracking or weapon behavior |
 | `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, and alpha flag translation | Geometry, records, or runtime lighting |
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
@@ -205,12 +211,19 @@ require a headset session.
 | `PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
 | `GameplaySession.cs` | Objective, HUD, inventory, ammo, world delta, pool snapshots, save/reload | Asset parsing |
 | `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
-| `RuntimeCoordinator.cs` | Startup routing, reports, and gate orchestration | UI construction or file-format parsing |
+| `DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
+| `FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |
+| `PlayerControlTelemetry.cs` | Simulator-only pose, locomotion, floor-height, snap-pivot, and action acceptance measurements | Input synthesis or gameplay mutation |
+| `XrSimulatorAcceptance.cs` | Time-bounded simulator observation and evidence report for tracked hands, sticks, locomotion, interactions, weapon, save, and floor height | Input synthesis or headset claims |
+| `FlatControlsAcceptance.cs` | Configured Godot keyboard/mouse event acceptance over the shared gameplay path | Windows input injection or gameplay rules |
+| `XrRigLayoutAcceptance.cs` | Headless OpenXR action-map, node hierarchy, HUD, and shared weapon-state layout gate | Simulator or headset claims |
+| `RuntimeCoordinator.cs` | Startup option routing, composition, shared report writing, and shutdown ownership | Feature-specific acceptance logic, UI construction, or file-format parsing |
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
 | `StaticModelSlice.cs` | Legacy one-model proof view | Cell relationships |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
 | `Test-GodotRuntime.ps1` | Source, synthetic, retail-opt-in, format, and analyzer gates | Packaging state |
+| `Test-OpenXrSimulatorControls.ps1` | Isolated simulator launch, binding-path input drive, native projection, and evidence hashes | Headset claims or Windows app control |
 | `Build-ContentTool.ps1` | Helper packaging, CLI smoke, and license collection | Runtime behavior |
 | `Build-GodotRuntime.ps1` | Clean export, first/reuse proof, notice and asset-free ZIP gates | Gameplay logic |
 | `desktop/src/*` | Cross-platform campaign/launch shell | Asset parsing or rendering |
@@ -229,18 +242,20 @@ Implemented: direct owned ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 504
 enabled interior/exterior references, 228 visible/held/terrain assets, 379 textures, 476
 materials, 97 saloon pickups, five containers, 27 authored lights, full converted item rotations,
 supported authored packed-triangle collision,
-movement, HUD, inventory, authored `.357` damage/clip data, firing, objectives,
+movement, configured flat input, HUD, inventory, authored `.357` and 10mm
+damage/clip data, firing/reload, objectives,
 doors, atomic save, cold reload, and launcher-enabled sandbox play.
 The saloon door `0010618e` and exterior door `0010636f` are a reciprocal pair.
 Their visible planes align below `0.000001` metre, both states persist together,
 and the gate passes closed collision, open fire-ray clearance, and two-way player
 capsule traversal. The linked exterior includes LAND `000db010`; Sunny Smiles
 and the settler load inside while Easy Pete loads outside from their ACHRs.
-The OpenXR software path adds Oculus Touch plus OpenXR generic-controller maps, `XROrigin3D`, tracked head
-and hands, metre scale, 90 Hz physics, locomotion, snap-turn, controller
-activation/fire/save, haptics, runtime-provided controller models, world-space
-HUD, standing-eye-height calibration, a data-resolved 10mm smoke loadout,
-reload, and explicit launcher routing.
+The OpenXR software path adds Oculus Touch plus OpenXR generic-controller maps,
+`XROrigin3D`, distinct grip/aim publishers, two skinned owned-data retail hands,
+the retail `Weapon`-frame 10mm mount, metre scale, 90 Hz physics, locomotion,
+HMD-pivot snap turn, controller activation/fire/reload/save, haptics, world-space
+HUD, supported-floor eye-height calibration, simulator acceptance, and explicit
+launcher routing. `hardwareHeadsetValidated` remains false.
 
 Implemented: direct humanoid record relationships, deterministic FaceGen
 geometry/texture primitives, and a hash-verified one-to-many actor cache. The
@@ -274,8 +289,8 @@ artifact chain. Runtime culling now follows each NIF's
 
 Not implemented: environment-map light fade and external-emittance color, Havok
 shape families beyond packed triangles and convex/list dynamics, broad filter policy, SpeedTree vegetation, neighboring exterior
-streaming, retail weather/time, visible first-person
-weapon animation, damageable actors/creatures, VATS, or full
+streaming, retail weather/time, complete first-person body/weapon animation
+blending beyond the current retail pose sample, damageable actors/creatures, VATS, or full
 campaigns. There are no placeholder managers for
 these. Each enters only with a data contract, synthetic test, retail proof, and
 promotion gate.

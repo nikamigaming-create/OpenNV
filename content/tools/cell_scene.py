@@ -24,9 +24,10 @@ from scene_asset_pipeline import (
     vr_smoke_loadout_manifest,
 )
 from runtime_configuration import load_runtime_configuration
+from first_person_rig import prepare_first_person_rig
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v9"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v10"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 EXTERIOR_RECIPE_SCHEMA = "opennv-exterior-recipe/v1"
 FORM_ID_RADIX = 16
@@ -309,6 +310,13 @@ def prepare_cell_scene(
         configuration.content_compiler,
         extra_model_paths,
     )
+    first_person_rig = prepare_first_person_rig(
+        meshes_path,
+        texture_archive_paths,
+        cache_root,
+        recipe,
+        configuration.content_compiler,
+    )
     pool_gameplay, pool_roles = pool_gameplay_manifest(
         recipe,
         catalog,
@@ -417,7 +425,10 @@ def prepare_cell_scene(
             "doorReferenceFormId": str(recipe["portalProofDoorReferenceFormId"]),
             "visibilityModel": "whole-cell-no-portal-culling",
         },
-        "vr": {"startingLoadout": vr_loadout},
+        "firstPerson": {
+            "startingLoadout": vr_loadout,
+            "rig": first_person_rig,
+        },
         "poolGameplay": pool_gameplay,
         "lighting": {
             "ambientColor": normalized_rgb(cell.lighting.ambient_rgb),

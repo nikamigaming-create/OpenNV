@@ -36,11 +36,14 @@ internal partial class GameplaySession : Node
     internal string SavePath => _savePath;
     internal int ShotsFired => _shotsFired;
     internal int AmmoInMagazine => _ammoInMagazine;
+    internal int WeaponClipSize => _weaponClipSize;
     internal int EmptiedContainersCount => _emptiedContainers.Count;
     internal int OpenDoorsCount => _doorStates.Count(entry => entry.Value);
     internal int ReserveAmmo =>
         _weaponAmmoFormId is null ? 0 : _inventory.GetValueOrDefault(_weaponAmmoFormId).Count;
     internal bool HasXrHud => _xrHudLabel is not null;
+    internal bool HasDesktopHud => _objectiveLabel is not null && _statusLabel is not null &&
+        _inventoryLabel is not null;
     internal float XrHudPixelSize => _xrHudLabel?.PixelSize ?? 0.0f;
     internal bool HasItem(string itemFormId) => _inventory.ContainsKey(itemFormId);
     internal bool IsContainerEmptied(string referenceFormId) => _emptiedContainers.Contains(referenceFormId);
@@ -130,7 +133,7 @@ internal partial class GameplaySession : Node
         RefreshHud("Left stick move • Right stick snap-turn • Grip activate • Trigger fire • B reload • X save");
     }
 
-    internal void PrepareXrStartingLoadout(StartingWeapon loadout)
+    internal void PrepareStartingLoadout(StartingWeapon loadout)
     {
         if (_equippedWeaponFormId is not null)
             return;

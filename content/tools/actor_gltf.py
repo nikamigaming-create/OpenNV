@@ -80,6 +80,7 @@ class ActorGltfInput:
     components: tuple[ActorComponent, ...]
     idle_animation_path: str
     idle_animation_payload: bytes
+    rigid_attachment_node: str = "HeadAnims"
 
 
 class TextureLibrary:
@@ -185,8 +186,11 @@ def export_actor_gltf(
     nodes: list[dict[str, object]] = [{"name": f"ACTOR_{source.actor_form_id}_{source.actor_name}", "children": []}]
     node_by_name: dict[str, int] = {}
     _append_skeleton_nodes(skeleton_root, 0, nodes, node_by_name)
-    if "Bip01 Head" not in node_by_name or "HeadAnims" not in node_by_name:
-        raise ValueError("Actor skeleton has no Bip01 Head/HeadAnims hierarchy")
+    if "Bip01 Head" not in node_by_name or source.rigid_attachment_node not in node_by_name:
+        raise ValueError(
+            "Actor skeleton has no required head/rigid-attachment hierarchy: "
+            f"{source.rigid_attachment_node}"
+        )
 
     builder = BufferBuilder()
     meshes: list[dict[str, object]] = []
@@ -236,7 +240,7 @@ def export_actor_gltf(
                 node["skin"] = skin_index
                 parent = 0
             else:
-                parent = node_by_name["HeadAnims"]
+                parent = node_by_name[source.rigid_attachment_node]
             node_index = len(nodes)
             nodes.append(node)
             nodes[parent].setdefault("children", []).append(node_index)
@@ -288,6 +292,7 @@ def export_actor_gltf(
             "logicalPath": source.skeleton_path,
             "sha256": hashlib.sha256(source.skeleton_payload).hexdigest(),
             "nodes": len(node_by_name),
+            "rigidAttachmentNode": source.rigid_attachment_node,
         },
         "animation": {
             "logicalPath": source.idle_animation_path,

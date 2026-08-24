@@ -31,9 +31,9 @@ and the compact oracle artifact supplied as `--retail-state-contract`. The
 runtime rejects a missing/mismatched ACHR, shot set, pose, geometry gate, or
 projection label. A provisional retail FOV may improve a failing comparison but
 cannot promote exact projection parity.
-Cell scene v8 and actor scene v5 are required. Older caches omit full authored
-rotation/scale, configuration identity, deterministic outfit resolution, or
-current actor sidecars and are rejected.
+Cell scene v10 and actor scene v5 are required. Older caches omit full authored
+rotation/scale, configuration identity, deterministic outfit resolution,
+current actor sidecars, or the owned-data first-person rig and are rejected.
 
 Build an asset-free experimental Windows archive after installing the pinned
 Godot Mono export templates and `content/requirements-build.txt`:
@@ -49,7 +49,8 @@ sandbox. Python and OpenMW are not required on the player's machine. Later
 launches reopen that verified cache automatically.
 
 Use WASD and mouse-look, press E to pick up items, open containers, or operate a
-door, left-click to fire an equipped weapon, and F5 to save. The main door opens
+door, left-click to fire, R to reload, and F5 to save. Flat and XR both start
+with the owned-data 10mm equipped. The main door opens
 both reciprocal references and can be crossed without a loading screen. The HUD tracks the
 four-stage sandbox objective and inventory. Packaging proves the route and a
 separate cold reload before accepting the build.
@@ -61,10 +62,13 @@ snap-turns, right grip activates, right trigger fires with haptics, B reloads,
 and X saves. VR starts with the owned master-record 10mm pistol profile equipped,
 one full magazine, and one reserve magazine. The tracked eye is calibrated once
 to 1.68 metres above the authored floor. The HUD is mounted in world space on the
-left controller. A first Oculus hardware run exposed missing generic bindings
-and floor-height calibration; this corrected path remains pending a clean
-hardware rerun. This first path is Windows PCVR; a standalone Quest APK/export/
-install gate is not implemented yet.
+left hand. Legal `lefthand1st.nif` and `righthand1st.nif` assets provide the two
+visible skinned hands; grip poses own their transforms and aim poses own rays.
+The repo-local simulator passes tracking, both sticks, locomotion, snap turn,
+door activation, fire, reload, save, supported eye height, and native stereo
+capture. This corrected path remains pending a physical-headset rerun. This
+first path is Windows PCVR; a standalone Quest APK/export/install gate is not
+implemented yet.
 
 Add `-FalloutNewVegasData <path>` to the build command for a local end-to-end
 gate of the exported executable, packaged helper, legal cache, and Godot load.

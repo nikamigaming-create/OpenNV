@@ -71,8 +71,10 @@ internal sealed record RuntimeConfiguration(
             Simulation.Provenance,
             Renderer.Provenance,
             Player.Provenance,
+            Player.DesktopInput.Provenance,
             Xr.Provenance,
             Xr.Contract.Provenance,
+            Xr.SimulatorAcceptance.Provenance,
             Xr.DiagnosticRigProof.Provenance,
             Xr.DiagnosticMuzzleFlash.Provenance,
             Pool.Provenance,
@@ -102,6 +104,7 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(Player.ActivationDistanceMeters, nameof(Player.ActivationDistanceMeters));
         RequirePositive(Player.FireRayDistanceMeters, nameof(Player.FireRayDistanceMeters));
         RequirePositive(Player.CameraNearMeters, nameof(Player.CameraNearMeters));
+        Player.DesktopInput.Validate();
         if (Player.CameraFarMeters <= Player.CameraNearMeters)
             throw new InvalidOperationException("Player camera far plane must exceed its near plane.");
         RequirePositive(Xr.WorldScale, nameof(Xr.WorldScale));
@@ -160,7 +163,49 @@ internal sealed record RuntimeConfiguration(
             Proof.GameplayRoute.ExpectedOpenDoors,
             nameof(Proof.GameplayRoute.ExpectedOpenDoors));
         RequireVector(Player.DesktopCameraOffsetMeters, 3, nameof(Player.DesktopCameraOffsetMeters));
-        RequireVector(Xr.WeaponMountRotationDegrees, 3, nameof(Xr.WeaponMountRotationDegrees));
+        RequirePositive(
+            Xr.HandAlignmentPositionToleranceMeters,
+            nameof(Xr.HandAlignmentPositionToleranceMeters));
+        RequirePositive(
+            Xr.HandAlignmentRotationToleranceRadians,
+            nameof(Xr.HandAlignmentRotationToleranceRadians));
+        RequirePositive(Xr.SimulatorAcceptance.TimeoutFrames, nameof(Xr.SimulatorAcceptance.TimeoutFrames));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MinimumTrackedFrames,
+            nameof(Xr.SimulatorAcceptance.MinimumTrackedFrames));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MinimumLocomotionMeters,
+            nameof(Xr.SimulatorAcceptance.MinimumLocomotionMeters));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MinimumHandTravelMeters,
+            nameof(Xr.SimulatorAcceptance.MinimumHandTravelMeters));
+        RequirePositive(
+            Xr.SimulatorAcceptance.EyeHeightToleranceMeters,
+            nameof(Xr.SimulatorAcceptance.EyeHeightToleranceMeters));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MaximumSnapPivotErrorMeters,
+            nameof(Xr.SimulatorAcceptance.MaximumSnapPivotErrorMeters));
+        RequirePositive(
+            Xr.SimulatorAcceptance.FloorProbeAboveEyeMeters,
+            nameof(Xr.SimulatorAcceptance.FloorProbeAboveEyeMeters));
+        RequirePositive(
+            Xr.SimulatorAcceptance.FloorProbeDistanceMeters,
+            nameof(Xr.SimulatorAcceptance.FloorProbeDistanceMeters));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MinimumSnapTurns,
+            nameof(Xr.SimulatorAcceptance.MinimumSnapTurns));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MinimumAcceptedActivations,
+            nameof(Xr.SimulatorAcceptance.MinimumAcceptedActivations));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MinimumAcceptedFireActions,
+            nameof(Xr.SimulatorAcceptance.MinimumAcceptedFireActions));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MinimumAcceptedReloadActions,
+            nameof(Xr.SimulatorAcceptance.MinimumAcceptedReloadActions));
+        RequirePositive(
+            Xr.SimulatorAcceptance.MinimumSaveActions,
+            nameof(Xr.SimulatorAcceptance.MinimumSaveActions));
         RequireVector(Hud.DesktopPanelPositionPixels, 2, nameof(Hud.DesktopPanelPositionPixels));
         RequireVector(Hud.DesktopPanelSizePixels, 2, nameof(Hud.DesktopPanelSizePixels));
         RequireVector(Hud.DesktopLabelsPositionPixels, 2, nameof(Hud.DesktopLabelsPositionPixels));
@@ -387,7 +432,96 @@ internal sealed record PlayerConfiguration(
     float CameraNearMeters,
     float CameraFarMeters,
     uint CollisionLayer,
-    uint CollisionMask);
+    uint CollisionMask,
+    DesktopInputConfiguration DesktopInput);
+
+internal sealed record DesktopInputConfiguration(
+    ConfigurationProvenance Provenance,
+    DesktopKeyBindingConfiguration MoveLeft,
+    DesktopKeyBindingConfiguration MoveRight,
+    DesktopKeyBindingConfiguration MoveForward,
+    DesktopKeyBindingConfiguration MoveBackward,
+    DesktopKeyBindingConfiguration Activate,
+    DesktopKeyBindingConfiguration Reload,
+    DesktopKeyBindingConfiguration Save,
+    DesktopKeyBindingConfiguration Cancel,
+    DesktopMouseBindingConfiguration Fire,
+    DesktopMouseBindingConfiguration CaptureMouse,
+    DesktopMouseBindingConfiguration PoolPowerUp,
+    DesktopMouseBindingConfiguration PoolPowerDown,
+    DesktopInputAcceptanceConfiguration Acceptance)
+{
+    internal IEnumerable<DesktopKeyBindingConfiguration> KeyBindings
+    {
+        get
+        {
+            yield return MoveLeft;
+            yield return MoveRight;
+            yield return MoveForward;
+            yield return MoveBackward;
+            yield return Activate;
+            yield return Reload;
+            yield return Save;
+            yield return Cancel;
+        }
+    }
+
+    internal IEnumerable<DesktopMouseBindingConfiguration> MouseBindings
+    {
+        get
+        {
+            yield return Fire;
+            yield return CaptureMouse;
+            yield return PoolPowerUp;
+            yield return PoolPowerDown;
+        }
+    }
+
+    internal void Validate()
+    {
+        var actions = KeyBindings.Select(binding => binding.Action)
+            .Concat(MouseBindings.Select(binding => binding.Action))
+            .ToArray();
+        if (actions.Any(string.IsNullOrWhiteSpace) ||
+            actions.Distinct(StringComparer.Ordinal).Count() != actions.Length)
+            throw new InvalidOperationException("Desktop input actions must be nonempty and unique.");
+        foreach (var binding in KeyBindings)
+        {
+            if (!Enum.TryParse<Key>(binding.PhysicalKey, true, out var key) || key == Key.None)
+                throw new InvalidOperationException(
+                    $"Unsupported desktop physical-key binding: {binding.PhysicalKey}");
+        }
+        foreach (var binding in MouseBindings)
+        {
+            if (!Enum.TryParse<MouseButton>(binding.Button, true, out var button) ||
+                button == MouseButton.None)
+                throw new InvalidOperationException(
+                    $"Unsupported desktop mouse binding: {binding.Button}");
+        }
+        if (Acceptance.SettleFrames <= 0 || Acceptance.MovementFrames <= 0 ||
+            Acceptance.RenderedFramesBeforeScreenshot <= 0 ||
+            !float.IsFinite(Acceptance.MinimumLocomotionMeters) ||
+            Acceptance.MinimumLocomotionMeters <= 0.0f ||
+            !float.IsFinite(Acceptance.MinimumLookRadians) ||
+            Acceptance.MinimumLookRadians <= 0.0f)
+            throw new InvalidOperationException("Desktop input acceptance values must be positive.");
+    }
+}
+
+internal sealed record DesktopKeyBindingConfiguration(
+    string Action,
+    string PhysicalKey);
+
+internal sealed record DesktopMouseBindingConfiguration(
+    string Action,
+    string Button);
+
+internal sealed record DesktopInputAcceptanceConfiguration(
+    int SettleFrames,
+    int MovementFrames,
+    float MinimumLocomotionMeters,
+    float MinimumLookRadians,
+    int RenderedFramesBeforeScreenshot);
 
 internal sealed record XrConfiguration(
     ConfigurationProvenance Provenance,
@@ -401,13 +535,15 @@ internal sealed record XrConfiguration(
     float SnapTurnActivationThreshold,
     float SnapTurnResetThreshold,
     float SnapTurnDegrees,
-    float[] WeaponMountRotationDegrees,
+    float HandAlignmentPositionToleranceMeters,
+    float HandAlignmentRotationToleranceRadians,
     float WeaponFeedbackSeconds,
     float WeaponRecoilMeters,
     float MuzzleFlashVisibleSeconds,
     HapticConfiguration FireHaptic,
     HapticConfiguration ReloadHaptic,
     XrContractConfiguration Contract,
+    XrSimulatorAcceptanceConfiguration SimulatorAcceptance,
     XrDiagnosticRigProofConfiguration DiagnosticRigProof,
     DiagnosticMuzzleFlashConfiguration DiagnosticMuzzleFlash);
 
@@ -440,6 +576,22 @@ internal sealed record XrContractConfiguration(
     int ExpectedActionSetCount,
     IReadOnlyList<string> ActionNames,
     IReadOnlyList<string> InteractionProfilePaths);
+
+internal sealed record XrSimulatorAcceptanceConfiguration(
+    ConfigurationProvenance Provenance,
+    int TimeoutFrames,
+    int MinimumTrackedFrames,
+    float MinimumLocomotionMeters,
+    float MinimumHandTravelMeters,
+    float EyeHeightToleranceMeters,
+    float MaximumSnapPivotErrorMeters,
+    float FloorProbeAboveEyeMeters,
+    float FloorProbeDistanceMeters,
+    int MinimumSnapTurns,
+    int MinimumAcceptedActivations,
+    int MinimumAcceptedFireActions,
+    int MinimumAcceptedReloadActions,
+    int MinimumSaveActions);
 
 internal sealed record XrDiagnosticRigProofConfiguration(
     ConfigurationProvenance Provenance,

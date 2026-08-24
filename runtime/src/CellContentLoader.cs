@@ -5,14 +5,14 @@ namespace OpenNV.Runtime;
 
 internal static class CellContentLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v9";
+    private const string CellSceneSchema = "opennv-cell-scene/v10";
 
     internal static LoadedContent Load(
         string scenePath,
         Node3D parent,
         GameplaySession session,
         RuntimeConfiguration configuration,
-        bool useXr,
+        bool prepareFirstPersonPresentation,
         string? actorScenePath,
         string? actorScenesManifestPath,
         bool proofEnableActor,
@@ -98,8 +98,8 @@ internal static class CellContentLoader
             var collisionMeshes = 0;
             var surfaces = 0;
             var vertices = 0;
-            var xrStartingWeaponFormId = source.TryGetProperty("vr", out var xrSource)
-                ? xrSource.GetProperty("startingLoadout").GetProperty("weaponFormId").GetString()
+            var startingWeaponFormId = source.TryGetProperty("firstPerson", out var firstPersonSource)
+                ? firstPersonSource.GetProperty("startingLoadout").GetProperty("weaponFormId").GetString()
                 : null;
             foreach (var reference in source.GetProperty("references").EnumerateArray())
             {
@@ -112,8 +112,8 @@ internal static class CellContentLoader
                 var interactionType = interaction.ValueKind == JsonValueKind.Object
                     ? interaction.GetProperty("type").GetString()
                     : null;
-                if (useXr && interactionType == "pickup" &&
-                    interaction.GetProperty("itemFormId").GetString() == xrStartingWeaponFormId)
+                if (prepareFirstPersonPresentation && interactionType == "pickup" &&
+                    interaction.GetProperty("itemFormId").GetString() == startingWeaponFormId)
                     continue;
                 if (interactionType == "pickup" && session.IsReferenceRemoved(referenceFormId))
                     continue;
@@ -339,9 +339,10 @@ internal static class CellContentLoader
             Node3D? heldWeapon = null;
             var muzzlePosition = Vector3.Zero;
             StartingLoadout? startingLoadout = null;
-            if (source.TryGetProperty("vr", out var vr))
+            FirstPersonRig.Contract? firstPersonRig = null;
+            if (source.TryGetProperty("firstPerson", out var firstPerson))
             {
-                var loadout = vr.GetProperty("startingLoadout");
+                var loadout = firstPerson.GetProperty("startingLoadout");
                 startingLoadout = new StartingLoadout(
                     loadout.GetProperty("weaponFormId").GetString()!,
                     loadout.GetProperty("weaponEditorId").GetString()!,
@@ -350,7 +351,8 @@ internal static class CellContentLoader
                     loadout.GetProperty("damage").GetInt32(),
                     loadout.GetProperty("clipSize").GetInt32(),
                     loadout.GetProperty("reserveRounds").GetInt32());
-                if (useXr)
+                firstPersonRig = ReadFirstPersonRig(firstPerson.GetProperty("rig"));
+                if (prepareFirstPersonPresentation)
                 {
                     var heldAssetId = loadout.GetProperty("modelAssetId").GetString()!;
                     heldWeapon = prototypes[heldAssetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
@@ -385,6 +387,7 @@ internal static class CellContentLoader
                 heldWeapon,
                 muzzlePosition,
                 startingLoadout,
+                firstPersonRig,
                 lighting);
         }
         finally
@@ -468,6 +471,26 @@ internal static class CellContentLoader
             lights);
     }
 
+    private static FirstPersonRig.Contract ReadFirstPersonRig(JsonElement source)
+    {
+        var hands = source.GetProperty("hands");
+        return new FirstPersonRig.Contract(
+            source.GetProperty("schema").GetString()!,
+            source.GetProperty("status").GetString()!,
+            source.GetProperty("provider").GetString()!,
+            source.GetProperty("cameraBone").GetString()!,
+            source.GetProperty("weaponBone").GetString()!,
+            ReadFirstPersonHand(hands.GetProperty("left")),
+            ReadFirstPersonHand(hands.GetProperty("right")));
+    }
+
+    private static FirstPersonRig.HandContract ReadFirstPersonHand(JsonElement source) => new(
+        source.GetProperty("model").GetString()!,
+        source.GetProperty("sidecar").GetString()!,
+        source.GetProperty("modelSha256").GetString()!,
+        source.GetProperty("sidecarSha256").GetString()!,
+        source.GetProperty("gripBone").GetString()!);
+
     private static Vector3 ReadVector(JsonElement array)
     {
         var values = array.EnumerateArray().Select(value => value.GetSingle()).ToArray();
@@ -535,6 +558,7 @@ internal static class CellContentLoader
         Node3D? HeldWeapon,
         Vector3 MuzzlePosition,
         StartingLoadout? StartingLoadout,
+        FirstPersonRig.Contract? FirstPersonRig,
         LightingContract Lighting);
 
     internal readonly record struct StartingLoadout(

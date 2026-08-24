@@ -1,0 +1,99 @@
+{
+  "schema": "opennv-openxr-simulator-driver/v1",
+  "status": "simulator-acceptance-contract",
+  "capturePreflight": {
+    "target": "Godot",
+    "scenario": "GodotRoute"
+  },
+  "ipc": {
+    "readyMarker": "OPENNV_XR_INPUT_HEALTH",
+    "acceptedActivationMarker": "OPENNV_XR_ACTION action=activate accepted=True",
+    "pollMilliseconds": 5,
+    "readyTimeoutSeconds": 90,
+    "commandTimeoutSeconds": 2,
+    "screenshotTimeoutSeconds": 5,
+    "exitTimeoutMilliseconds": 30000
+  },
+  "timing": {
+    "neutralSettleMilliseconds": 180,
+    "travelSettleMilliseconds": 180,
+    "doorPoseSettleMilliseconds": 25,
+    "doorPressMilliseconds": 25,
+    "doorReleaseMilliseconds": 15,
+    "locomotionMilliseconds": 350,
+    "stickReleaseMilliseconds": 120,
+    "turnPressMilliseconds": 120,
+    "actionPressMilliseconds": 90,
+    "actionReleaseMilliseconds": 100
+  },
+  "poses": {
+    "leftNeutral": {
+      "positionMeters": [-0.28, -0.28, -0.42],
+      "yawRadians": -0.15,
+      "pitchRadians": -0.2,
+      "rollRadians": 0.0
+    },
+    "rightNeutral": {
+      "positionMeters": [0.28, -0.28, -0.42],
+      "yawRadians": 0.15,
+      "pitchRadians": -0.2,
+      "rollRadians": 0.0
+    },
+    "leftTravel": {
+      "positionMeters": [-0.42, -0.12, -0.3],
+      "yawRadians": -0.15,
+      "pitchRadians": -0.2,
+      "rollRadians": 0.0
+    },
+    "rightTravel": {
+      "positionMeters": [0.42, -0.12, -0.3],
+      "yawRadians": 0.15,
+      "pitchRadians": -0.2,
+      "rollRadians": 0.0
+    },
+    "doorAim": {
+      "positionMeters": [-0.4, -0.3, 0.0],
+      "rollRadians": 0.0
+    }
+  },
+  "doorAim": {
+    "yawOffsetsRadians": [-0.3, -0.15, 0.0, 0.15, 0.3],
+    "pitchCandidatesRadians": [-0.3, -0.1, 0.1],
+    "releaseValue": 0.0,
+    "pressValue": 1.0
+  },
+  "locomotion": {
+    "leftStick": [0.0, 1.0]
+  },
+  "turn": {
+    "rightStickSteps": [1.0, -1.0]
+  },
+  "actions": {
+    "releaseValue": 0.0,
+    "pressValue": 1.0,
+    "reloadButton": "buttonB",
+    "saveButton": "buttonA"
+  },
+  "screenshot": {
+    "eye": "both",
+    "layer": "projection"
+  },
+  "allowedGodotShutdownDiagnostics": [
+    {
+      "prefix": "ERROR: 1 RID allocations of type 'N9OpenXRAPI18InteractionProfileE' were leaked at exit.",
+      "upstreamIssue": "https://github.com/godotengine/godot/issues/122239"
+    },
+    {
+      "prefix": "ERROR: Attempt to disconnect a nonexistent connection from '<OpenXRSpatialEntityExtension#",
+      "upstreamIssue": "https://github.com/godotengine/godot/issues/122238"
+    }
+  ],
+  "provenance": {
+    "classification": "open-nv-policy",
+    "falloutSceneData": "cell scene proof door, spawn, and unit scale",
+    "simulatorData": "controller poses and deterministic acceptance timing",
+    "windowsAppControl": false,
+    "foregroundInput": false,
+    "hardwareValidated": false
+  }
+}
