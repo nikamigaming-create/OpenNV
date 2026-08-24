@@ -17,6 +17,14 @@ py content/tools/actor_parity_corpus.py `
 
 py content/tools/validate_actor_parity_corpus.py `
   --corpus-root '<that private output folder>'
+
+py content/tools/actor_capture_plan.py `
+  --corpus-root '<that private output folder>' `
+  --output-root '<fresh private capture-plan folder>'
+
+py content/tools/validate_actor_capture_plan.py `
+  --plan-root '<that private capture-plan folder>' `
+  --corpus-root '<that private output folder>'
 ```
 
 The output folder must be new. ESM-derived rows, retail frames, and Godot
@@ -85,6 +93,8 @@ The modules have one job each:
 | `actor_parity_records.py` | Canonical record rows and override/deletion merge for the effective actor stack. |
 | `actor_parity_corpus.py` | Official-stack composition and immutable review-ledger generation. |
 | `validate_actor_parity_corpus.py` | Independent hashes, row counts, uniqueness, graph closure, and exact coverage checks. |
+| `actor_capture_plan.py` | Review rows to bounded, resumable base jobs and telemetry-correlated expected outcomes. |
+| `validate_actor_capture_plan.py` | Independent job/batch hashes, exact review coverage, strategy, and source-stack checks. |
 
 No actor recipe, hand-placed mesh, guessed outfit, or actor-name switch is
 part of this path.
@@ -118,6 +128,14 @@ The review status begins `pending`. Only a matched retail/Godot pair with
 telemetry and a passing visual verdict may move it to `pass`. Inventory
 generation alone can never make a parity claim.
 
+The capture-plan compiler emits one job per effective base. A base with one
+appearance signature uses one telemetry-correlated observation. A base with
+multiple template/leveled outcomes is repeatedly instantiated until every
+expected category-source signature has actually been observed. An attempt
+limit may stop a run, but it may never turn incomplete coverage into a pass.
+The plan contains no camera distances: live render bounds and head markers own
+framing for humanoids and differently proportioned creatures.
+
 ## Data flow and correction loop
 
 ```mermaid
@@ -125,8 +143,9 @@ flowchart LR
     Owned[Legally owned ESM/BSA data] --> Stack[Master-aware effective stack]
     Stack --> Graph[Base/template/list/placement graph]
     Graph --> Ledger[Immutable review ledgers]
-    Ledger --> Retail[Sequential retail capture]
-    Ledger --> Import[OpenNV data-driven actor compiler]
+    Ledger --> Plan[Resumable base/outcome capture jobs]
+    Plan --> Retail[Sequential retail capture]
+    Plan --> Import[OpenNV data-driven actor compiler]
     Import --> Godot[Sequential Godot capture]
     Retail --> Join[Matched-state join]
     Godot --> Join
@@ -156,6 +175,8 @@ The whole-game actor/creature milestone is green only when:
 - all required official plugins are present and hashed;
 - load-order override/deletion merge validates;
 - every base, template outcome, leveled result, and placement is scheduled;
+- every appearance review key occurs in exactly one validated capture job;
+- every dynamic base remains pending until all expected runtime signatures are observed;
 - relationship gaps and duplicate review keys are zero;
 - every review row has retained retail and Godot source evidence;
 - identity/state/camera/pose telemetry matches;
