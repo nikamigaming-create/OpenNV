@@ -15,6 +15,7 @@ sys.path.insert(0, str(TOOLS))
 from landscape_catalog import LAND_VERTEX_COUNT, scan_landscape_catalog  # noqa: E402
 from landscape_gltf import bake_landscape_diffuse, landscape_geometry  # noqa: E402
 from plugin_records import COMPRESSED_RECORD_FLAG  # noqa: E402
+from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 def subrecord(signature: str, data: bytes) -> bytes:
@@ -94,11 +95,14 @@ class LandscapeCatalogTest(unittest.TestCase):
         self.assertEqual(len(colors), LAND_VERTEX_COUNT)
         self.assertEqual(len(triangles), 32 * 32 * 2)
 
+        compiler = load_runtime_configuration().content_compiler
         baked = bake_landscape_diffuse(
             landscape,
             lambda _form_id: Image.new("RGB", (4, 4), (200, 100, 50)),
+            compiler,
         )
-        self.assertEqual(baked.size, (1024, 1024))
+        expected_side = compiler.landscape_quadrant_pixels * 2
+        self.assertEqual(baked.size, (expected_side, expected_side))
         self.assertEqual(baked.getpixel((100, 900)), (200, 100, 50))
 
 

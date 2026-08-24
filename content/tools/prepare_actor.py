@@ -10,29 +10,52 @@ import os
 import sys
 from pathlib import Path
 
-from actor_catalog import ActorCatalog, ActorReference, HumanoidActor, scan_actor_catalog
+from actor_catalog import (
+    ActorCatalog,
+    ActorReference,
+    FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+    FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+    FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
+    HumanoidActor,
+    resolve_actor_outfit_form_ids,
+    scan_actor_catalog,
+)
 from actor_gltf import ActorComponent, ActorGltfInput, export_actor_gltf
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_catalog import scan_cell_catalog
 from cell_scene import (
     arrival_transform,
     godot_position,
+    godot_rotation_quaternion,
     godot_yaw_radians,
     load_spatial_recipe,
 )
 from facegen import compose_body_albedo, compose_skin_albedo, synthesize_texture_detail
 from texture_pipeline import decode_dds
+from runtime_configuration import load_runtime_configuration
 
 
 RECIPE_SCHEMA = "opennv-actor-recipe/v1"
+FORM_ID_RADIX = 16
+RACE_REQUIRED_HEAD_MODEL_COUNT = 8
+RACE_REQUIRED_BODY_MODEL_COUNT = 3
+BYTE_CHANNEL_MAXIMUM = 255.0
+RACE_HEAD_MODEL_INDEX = 0
+RACE_LEFT_HAND_MODEL_INDEX = 1
+RACE_RIGHT_HAND_MODEL_INDEX = 2
+RACE_HEAD_COMPONENT_ROLES = {
+    2: "mouth",
+    3: "teeth-lower",
+    4: "teeth-upper",
+    5: "tongue",
+    6: "eye-left",
+    7: "eye-right",
+}
 
 
 def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def load_recipe(recipe_id: str) -> dict[str, object]:
@@ -45,7 +68,7 @@ def load_recipe(recipe_id: str) -> dict[str, object]:
 
 
 def form_id(value: str) -> int:
-    return int(value, 16)
+    return int(value, FORM_ID_RADIX)
 
 
 def model_companion(path: str, suffix: str) -> str:
@@ -90,9 +113,9 @@ def resolve_proof_actor(
     if actor.race_form_id is None or actor.skeleton_path is None:
         raise ValueError("Proof actor does not contain the required race/skeleton identity")
     if (len(actor.face_symmetric_geometry), len(actor.face_asymmetric_geometry), len(actor.face_symmetric_texture)) != (
-        50,
-        30,
-        50,
+        FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+        FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+        FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
     ):
         raise ValueError("Proof actor has incomplete FaceGen coordinates")
     return references[0], actor
@@ -104,6 +127,7 @@ def prepare_actor(
     recipe_id: str = "goodsprings-trudy-actor-v1",
 ) -> dict[str, object]:
     recipe = load_recipe(recipe_id)
+    configuration = load_runtime_configuration()
     master = data_root / recipe["master"]["file"]
     meshes_path = data_root / recipe["meshesArchive"]["file"]
     texture_paths = [data_root / row["file"] for row in recipe["textureArchives"]]
@@ -125,6 +149,17 @@ def prepare_actor(
         form_id(recipe["proofActorReferenceFormId"]),
         form_id(recipe["cellFormId"]),
     )
+    actor_states = configuration.document["actorCompiler"]["states"]
+    matching_states = [
+        state
+        for state in actor_states
+        if form_id(str(state["referenceFormId"])) == reference.form_id
+    ]
+    if len(matching_states) != 1:
+        raise ValueError(
+            f"Actor {reference.form_id:08x} requires exactly one shared actor-compiler state"
+        )
+    actor_state = matching_states[0]
     cell_recipe = load_spatial_recipe(str(recipe["cellRecipe"]))
     cell_catalog = scan_cell_catalog(master)
     _source_door, arrival = arrival_transform(
@@ -158,10 +193,10 @@ def prepare_actor(
     )
     if (
         race is None
-        or len(head_models) < 8
+        or len(head_models) < RACE_REQUIRED_HEAD_MODEL_COUNT
         or len(head_textures) < 1
-        or len(body_models) < 3
-        or len(body_textures) < 3
+        or len(body_models) < RACE_REQUIRED_BODY_MODEL_COUNT
+        or len(body_textures) < RACE_REQUIRED_BODY_MODEL_COUNT
     ):
         raise ValueError("Proof actor race has no complete sex-specific head/body table")
     hair = catalog.parts.get(actor.hair_form_id or 0)
@@ -171,10 +206,7 @@ def prepare_actor(
         raise ValueError("Proof actor has incomplete hair or eye records")
     if any(part is None for part in head_parts):
         raise ValueError("Proof actor has an unresolved head-part record")
-    recipe_outfits = [form_id(value) for value in recipe.get("outfitArmorFormIds", [])]
-    outfit_forms = recipe_outfits or [
-        item.form_id for item in actor.inventory if item.form_id in catalog.armor
-    ]
+    outfit_forms = list(resolve_actor_outfit_form_ids(catalog, actor))
     outfits = [catalog.armor.get(value) for value in outfit_forms]
     if not outfits or any(outfit is None for outfit in outfits):
         raise ValueError(f"Proof actor has unresolved outfit armor: {outfit_forms}")
@@ -193,8 +225,8 @@ def prepare_actor(
         logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
         return meshes.extract(logical_path).data
 
-    head_model = head_models[0]
-    head_texture = head_textures[0]
+    head_model = head_models[RACE_HEAD_MODEL_INDEX]
+    head_texture = head_textures[RACE_HEAD_MODEL_INDEX]
     if head_model is None or head_texture is None:
         raise ValueError("Proof actor race has no sex-specific head model or texture")
     head_egm = model_companion(head_model, ".egm")
@@ -203,7 +235,11 @@ def prepare_actor(
         len(race_face_symmetric_geometry),
         len(race_face_asymmetric_geometry),
         len(race_face_symmetric_texture),
-    ) != (50, 30, 50):
+    ) != (
+        FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+        FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+        FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
+    ):
         raise ValueError("Proof actor race has incomplete sex-specific FaceGen baseline coordinates")
     face_mod_path = f"textures\\characters\\facemods\\falloutnv.esm\\{actor.form_id:08x}_0.dds"
     if has_texture(texture_archives, face_mod_path):
@@ -213,10 +249,14 @@ def prepare_actor(
         detail = synthesize_texture_detail(mesh(head_egt), actor.face_symmetric_texture)
         face_detail_source = "direct-egt-fallback"
     base_diffuse = decode_dds(extract_texture(texture_archives, head_texture), False)
-    tone = tuple(int(value) for value in recipe["skinToneRgba"][:3])
+    tone = tuple(int(value) for value in actor_state["skinToneRgba"][:3])
     generated_head = compose_skin_albedo(base_diffuse, detail, tone)
-    body_texture = body_textures[0]
-    if body_texture is None or body_models[1] is None or body_models[2] is None:
+    body_texture = body_textures[RACE_HEAD_MODEL_INDEX]
+    if (
+        body_texture is None
+        or body_models[RACE_LEFT_HAND_MODEL_INDEX] is None
+        or body_models[RACE_RIGHT_HAND_MODEL_INDEX] is None
+    ):
         raise ValueError("Proof actor race has no sex-specific upper-body texture or hand meshes")
     sex_label = "female" if actor.female else "male"
     body_mod_path = (
@@ -229,8 +269,8 @@ def prepare_actor(
         decode_dds(extract_texture(texture_archives, body_texture), False),
         body_mod,
     )
-    left_hand_texture = body_textures[1]
-    right_hand_texture = body_textures[2]
+    left_hand_texture = body_textures[RACE_LEFT_HAND_MODEL_INDEX]
+    right_hand_texture = body_textures[RACE_RIGHT_HAND_MODEL_INDEX]
     if left_hand_texture is None or right_hand_texture is None:
         raise ValueError("Proof actor race has no sex-specific hand textures")
     generated_left_hand = compose_body_albedo(
@@ -244,18 +284,13 @@ def prepare_actor(
 
     body_texture_sources = {
         texture_member(body_texture),
-        *(texture_member(value) for value in recipe.get("bodyTextureSourceAliases", [])),
-    }
-    rigid_outfit_forms = {
-        form_id(value) for value in recipe.get("rigidOutfitArmorFormIds", [])
+        *(texture_member(value) for value in actor_state["bodyTextureSourceAliases"]),
     }
     components = [
         ActorComponent(
             f"outfit-{index}",
             outfit_model,
             mesh(outfit_model),
-            excluded_shape_prefixes=tuple(recipe["excludeOutfitShapePrefixes"]),
-            rigid_to_head=outfit_forms[index] in rigid_outfit_forms,
             generated_diffuse_by_source=tuple(
                 (source, generated_body) for source in sorted(body_texture_sources)
             ),
@@ -265,15 +300,15 @@ def prepare_actor(
     components.extend([
         ActorComponent(
             "left-hand",
-            body_models[1],
-            mesh(body_models[1]),
+            body_models[RACE_LEFT_HAND_MODEL_INDEX],
+            mesh(body_models[RACE_LEFT_HAND_MODEL_INDEX]),
             generated_diffuse=generated_left_hand,
             bake_shape_transform=not actor.female,
         ),
         ActorComponent(
             "right-hand",
-            body_models[2],
-            mesh(body_models[2]),
+            body_models[RACE_RIGHT_HAND_MODEL_INDEX],
+            mesh(body_models[RACE_RIGHT_HAND_MODEL_INDEX]),
             generated_diffuse=generated_right_hand,
             bake_shape_transform=not actor.female,
         ),
@@ -286,8 +321,7 @@ def prepare_actor(
             generated_diffuse=generated_head,
         ),
     ])
-    roles = {2: "mouth", 3: "teeth-lower", 4: "teeth-upper", 5: "tongue", 6: "eye-left", 7: "eye-right"}
-    for index, role in roles.items():
+    for index, role in RACE_HEAD_COMPONENT_ROLES.items():
         path = head_models[index]
         if path is None:
             raise ValueError(f"Proof actor race has no sex-specific head component {index}")
@@ -298,11 +332,11 @@ def prepare_actor(
                 mesh(path),
                 egm_path=model_companion(path, ".egm"),
                 egm_payload=mesh(model_companion(path, ".egm")),
-                rigid_to_head=True,
                 diffuse_override=texture_member(eyes.texture_path) if role.startswith("eye-") else None,
             )
         )
-    hair_egm = model_companion(hair.model_path, f"{str(recipe['hairShape']).lower()}.egm")
+    hair_shape = "Hat" if any(outfit.hides_hair for outfit in outfits) else "NoHat"
+    hair_egm = model_companion(hair.model_path, f"{hair_shape.lower()}.egm")
     components.append(
         ActorComponent(
             "hair",
@@ -310,9 +344,8 @@ def prepare_actor(
             mesh(hair.model_path),
             egm_path=hair_egm,
             egm_payload=mesh(hair_egm),
-            rigid_to_head=True,
-            selected_shape=str(recipe["hairShape"]),
-            tint_rgb=tuple(value / 255.0 for value in actor.hair_color_rgba[:3]),
+            selected_shape=hair_shape,
+            tint_rgb=tuple(value / BYTE_CHANNEL_MAXIMUM for value in actor.hair_color_rgba[:3]),
         )
     )
     for part in (part for part in head_parts if part.model_path is not None):
@@ -323,8 +356,9 @@ def prepare_actor(
                 mesh(part.model_path),
                 egm_path=model_companion(part.model_path, ".egm"),
                 egm_payload=mesh(model_companion(part.model_path, ".egm")),
-                rigid_to_head=True,
-                tint_rgb=tuple(value / 255.0 for value in actor.hair_color_rgba[:3]),
+                tint_rgb=tuple(
+                    value / BYTE_CHANNEL_MAXIMUM for value in actor.hair_color_rgba[:3]
+                ),
             )
         )
 
@@ -340,17 +374,19 @@ def prepare_actor(
             actor.face_symmetric_geometry,
             actor.face_asymmetric_geometry,
             tuple(components),
-            str(recipe["idleAnimation"]),
-            mesh(str(recipe["idleAnimation"])),
+            str(actor_state["idleAnimation"]),
+            mesh(str(actor_state["idleAnimation"])),
         ),
         texture_archives,
         gltf_path,
         sidecar_path,
+        configuration.content_compiler,
     )
     manifest = {
-        "schema": "opennv-actor-scene/v3",
+        "schema": "opennv-actor-scene/v5",
         "status": "skinned-animated",
         "recipe": recipe_id,
+        "configuration": configuration.manifest(),
         "cellFormId": recipe["cellFormId"],
         "reference": {
             "formId": f"{reference.form_id:08x}",
@@ -361,6 +397,8 @@ def prepare_actor(
             "rotationRadians": list(reference.rotation_radians),
             "yawRadians": reference.rotation_radians[2],
             "yawGodotRadians": godot_yaw_radians(reference.rotation_radians[2]),
+            "rotationGodotQuaternion": godot_rotation_quaternion(reference.rotation_radians),
+            "scale": reference.scale,
         },
         "actor": {
             "name": actor.name,
@@ -370,9 +408,18 @@ def prepare_actor(
             "hairFormId": f"{actor.hair_form_id:08x}",
             "eyesFormId": f"{actor.eyes_form_id:08x}",
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
-            "outfitFormId": f"{outfits[0].form_id:08x}",
+            "outfitFormIds": [f"{outfit.form_id:08x}" for outfit in outfits],
         },
-        "idleAnimation": recipe["idleAnimation"],
+        "idleAnimation": actor_state["idleAnimation"],
+        "appearanceResolution": {
+            "outfitSource": "NPC_.CNTO recursively resolved through deterministic LVLI",
+            "hairShape": hair_shape,
+            "hairShapeSource": "equipped ARMO.BMDT hair-slot flag",
+            "dismemberCaps": "excluded by BSDismemberBodyPartType semantics",
+            "rigidAttachments": "derived from NIF skin-instance presence",
+            "skinToneSource": actor_state["skinToneSource"],
+            "status": configuration.document["actorCompiler"]["provenance"]["status"],
+        },
         "faceDetailSource": face_detail_source,
         "faceDetailLogicalPath": face_mod_path if face_detail_source == "retail-precomputed" else head_egt,
         "bodyModLogicalPath": body_mod_path,

@@ -60,8 +60,9 @@ waiting on an extender bridge. See [the mod policy](docs/mods.md).
 ## Current Godot development slice
 
 The current checked-in slice is a playable Goodsprings sandbox, not only a
-renderer. It resolves 209 interior/exterior assets, 454 placements, 363 textures,
-439 materials, 97 authored saloon pickups, five containers, 27 lights, and a
+renderer. The current hash-pinned retail baseline resolves 228 interior/exterior
+assets, 504 enabled placements, 379 textures, 476 materials, 97 authored saloon
+pickups, five containers, 27 lights, and a
 reciprocal XTEL pair joining the saloon to WastelandNV cell `[-17,0]`. LAND
 geometry and its 24 authored texture layers form the exterior ground. Sunny
 Smiles and the seated settler load inside; Easy Pete loads at his exterior ACHR.
@@ -87,6 +88,7 @@ not require Python or another engine at runtime.
 
 This is a playable experimental sandbox, not the full New Vegas campaign. See the
 [single-page architecture](docs/architecture.md),
+[data and configuration accountability contract](docs/data-and-configuration-accountability.md),
 [installation status](docs/installation.md), [clean implementation boundary](docs/clean-room.md),
 and [release policy](docs/nightlies.md).
 

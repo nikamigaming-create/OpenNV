@@ -93,6 +93,7 @@ def synthetic_plugin() -> bytes:
         "REFR",
         0x200,
         subrecord("NAME", struct.pack("<I", 0x300))
+        + subrecord("XSCL", struct.pack("<f", 0.75))
         + subrecord("DATA", struct.pack("<6f", 10.0, 20.0, 30.0, 0.0, 0.0, 1.5)),
     )
     door_reference = record(
@@ -180,6 +181,8 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(len(references), 6)
         self.assertEqual(references[0].transform.position, (10.0, 20.0, 30.0))
         self.assertEqual(references[0].transform.rotation_radians, (0.0, 0.0, 1.5))
+        self.assertAlmostEqual(references[0].scale, 0.75)
+        self.assertEqual(references[1].scale, 1.0)
         self.assertEqual(references[1].teleport_destination_form_id, 0x400)
         self.assertEqual(references[1].teleport_destination_transform.position, (1.0, 2.0, 3.0))
         self.assertEqual(catalog.base_objects[references[1].base_form_id].record_type, "DOOR")

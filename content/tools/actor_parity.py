@@ -11,21 +11,18 @@ from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageStat
 
+from runtime_configuration import RuntimeConfiguration, load_runtime_configuration
 
-UNITS_TO_METERS = 0.0142875
-NON_DEFORMING_POSE_NODES = {
-    "Bip01",
-    "Bip01 NonAccum",
-    "Bip01 Neck",
-    "Bip01 R ForeTwistDriver",
-    "Bip01 LPauldron",
-    "Bip01 RPauldron",
-}
+
+FORM_ID_HEX_CHARACTERS = 8
+QUATERNION_DIAGONAL_COEFFICIENT = 0.25
+BYTE_CHANNEL_MAXIMUM = 255.0
+BYTE_VALUE_COUNT = 256
 
 
 def normalize_form(value: object) -> str:
     text = str(value).lower().removeprefix("0x")
-    return text.zfill(8)
+    return text.zfill(FORM_ID_HEX_CHARACTERS)
 
 
 def vector_error(left: object, right: object) -> float:
@@ -55,7 +52,7 @@ def quaternion_from_matrix(matrix: list[list[float]]) -> list[float]:
             (matrix[2][1] - matrix[1][2]) / scale,
             (matrix[0][2] - matrix[2][0]) / scale,
             (matrix[1][0] - matrix[0][1]) / scale,
-            0.25 * scale,
+            QUATERNION_DIAGONAL_COEFFICIENT * scale,
         ]
     else:
         axis = max(range(3), key=lambda index: matrix[index][index])
@@ -68,7 +65,7 @@ def quaternion_from_matrix(matrix: list[list[float]]) -> list[float]:
             - matrix[last_axis][last_axis]
         ) * 2.0
         value = [0.0, 0.0, 0.0, 0.0]
-        value[axis] = 0.25 * scale
+        value[axis] = QUATERNION_DIAGONAL_COEFFICIENT * scale
         value[3] = (matrix[last_axis][next_axis] - matrix[next_axis][last_axis]) / scale
         value[next_axis] = (matrix[next_axis][axis] + matrix[axis][next_axis]) / scale
         value[last_axis] = (matrix[last_axis][axis] + matrix[axis][last_axis]) / scale
@@ -89,9 +86,9 @@ def quaternion_error(left: object, right: object) -> float:
 
 def retail_bone_in_godot(transform: dict[str, object]) -> tuple[list[float], list[float]]:
     values = [float(value) for value in transform["localRotation"]]
-    if len(values) != 9:
+    if len(values) != 3 * 3:
         raise ValueError("Retail bone rotation must contain nine values.")
-    game = [values[index : index + 3] for index in range(0, 9, 3)]
+    game = [values[index : index + 3] for index in range(0, 3 * 3, 3)]
     conversion = [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]]
     conversion_inverse = [list(row) for row in zip(*conversion)]
     rotation = matrix_multiply(conversion, matrix_multiply(game, conversion_inverse))
@@ -122,16 +119,20 @@ def bone_pose_metrics(
     godot_rows: object,
     origin: object,
     units_to_meters: float,
+    configuration: RuntimeConfiguration,
 ) -> dict[str, object]:
+    parity = configuration.actor_parity
+    actor_state = configuration.document["retailActorState"]
+    excluded_pose_nodes = set(actor_state["excludedPoseNodes"])
     retail_bones = {
         bone["name"]: bone
         for bone in retail_rows
-        if bone["name"] not in NON_DEFORMING_POSE_NODES
+        if bone["name"] not in excluded_pose_nodes
     }
     godot_bones = {bone["name"]: bone for bone in godot_rows}
     names_match = (
         retail_bones.keys() == godot_bones.keys()
-        and len(retail_bones) >= 50
+        and len(retail_bones) >= int(actor_state["minimumPoseBones"])
     )
     translation_errors = []
     rotation_errors = []
@@ -167,7 +168,10 @@ def bone_pose_metrics(
     maximum_rotation = max(rotation_errors) if rotation_errors else math.inf
     return {
         "status": "pass"
-        if maximum_translation <= 0.00005 and maximum_rotation <= 0.001
+        if (
+            maximum_translation <= parity.pose_translation_tolerance_meters
+            and maximum_rotation <= parity.pose_rotation_tolerance_radians
+        )
         else "fail",
         "bones": len(retail_bones),
         "maximumTranslationErrorMeters": maximum_translation,
@@ -175,15 +179,21 @@ def bone_pose_metrics(
         "worstBones": sorted(
             rows,
             key=lambda row: max(
-                row["translationErrorMeters"] / 0.00005,
-                row["rotationErrorRadians"] / 0.001,
+                row["translationErrorMeters"] / parity.pose_translation_tolerance_meters,
+                row["rotationErrorRadians"] / parity.pose_rotation_tolerance_radians,
             ),
             reverse=True,
-        )[:8],
+        )[:parity.maximum_reported_worst_bones],
     }
 
 
-def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, object]) -> dict[str, object]:
+def shot_state_metrics(
+    retail_state: dict[str, object],
+    godot_shot: dict[str, object],
+    configuration: RuntimeConfiguration,
+) -> dict[str, object]:
+    parity = configuration.actor_parity
+    actor_state = configuration.document["retailActorState"]
     retail_camera = retail_state["camera"]
     retail_pose = retail_state["pose"]
     idle = next(
@@ -211,7 +221,7 @@ def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, ob
     )
     camera_aim_error = vector_error(retail_camera["aim"], godot_shot["cameraAimGameUnits"])
     camera_distance_error = abs(
-        float(retail_camera["distance"]) * UNITS_TO_METERS
+        float(retail_camera["distance"]) * configuration.world_units_to_meters
         - float(godot_shot["distanceMeters"])
     )
     fov_error = abs(
@@ -223,11 +233,14 @@ def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, ob
     )
     origin = godot_shot["cellOriginGameUnits"]
     units_to_meters = float(godot_shot["unitsToMeters"])
+    if units_to_meters != configuration.world_units_to_meters:
+        raise ValueError("Godot actor shot was rendered with another world-unit configuration")
     target_pose = bone_pose_metrics(
         retail_pose["bones"],
         godot_shot["poseBones"],
         origin,
         units_to_meters,
+        configuration,
     )
     retail_contexts = {
         normalize_form(actor["referenceForm"]): actor for actor in retail_state["contextActors"]
@@ -243,13 +256,16 @@ def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, ob
         for reference, retail_context in retail_contexts.items():
             godot_context = godot_contexts[reference]
             sequence = next(
-                row for row in retail_context["activeSequences"] if float(row["weight"]) >= 0.99
+                row
+                for row in retail_context["activeSequences"]
+                if float(row["weight"]) >= float(actor_state["minimumContextSequenceWeight"])
             )
             pose = bone_pose_metrics(
                 retail_context["bones"],
                 godot_context["poseBones"],
                 origin,
                 units_to_meters,
+                configuration,
             )
             placement = vector_error(
                 retail_context["position"], godot_context["positionGameUnits"]
@@ -265,9 +281,9 @@ def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, ob
             actor_passed = (
                 normalize_form(retail_context["baseForm"])
                 == normalize_form(godot_context["baseFormId"])
-                and placement <= 0.001
-                and yaw <= 0.00001
-                and phase <= 0.01
+                and placement <= parity.placement_tolerance_game_units
+                and yaw <= parity.yaw_tolerance_radians
+                and phase <= parity.animation_phase_tolerance_seconds
                 and pose["status"] == "pass"
             )
             if not actor_passed:
@@ -284,14 +300,14 @@ def shot_state_metrics(retail_state: dict[str, object], godot_shot: dict[str, ob
             )
     passed = (
         bool(godot_shot["retailStateApplied"])
-        and placement_error <= 0.001
-        and yaw_error <= 0.00001
-        and godot_yaw_error <= 0.00001
-        and camera_position_error <= 0.001
-        and camera_aim_error <= 0.001
-        and camera_distance_error <= 0.00001
-        and fov_error <= 0.001
-        and phase_error <= 0.01
+        and placement_error <= parity.placement_tolerance_game_units
+        and yaw_error <= parity.yaw_tolerance_radians
+        and godot_yaw_error <= parity.yaw_tolerance_radians
+        and camera_position_error <= parity.camera_position_tolerance_game_units
+        and camera_aim_error <= parity.camera_aim_tolerance_game_units
+        and camera_distance_error <= parity.camera_distance_tolerance_meters
+        and fov_error <= parity.vertical_fov_tolerance_degrees
+        and phase_error <= parity.animation_phase_tolerance_seconds
         and target_pose["status"] == "pass"
         and context_status == "pass"
     )
@@ -319,13 +335,18 @@ def image_metrics(path: Path) -> dict[str, object]:
         return {
             "width": image.width,
             "height": image.height,
-            "meanLuminance": stats.mean[0] / 255.0,
-            "luminanceDeviation": stats.stddev[0] / 255.0,
+            "meanLuminance": stats.mean[0] / BYTE_CHANNEL_MAXIMUM,
+            "luminanceDeviation": stats.stddev[0] / BYTE_CHANNEL_MAXIMUM,
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         }
 
 
-def difference_metrics(retail_path: Path, godot_path: Path) -> dict[str, float]:
+def difference_metrics(
+    retail_path: Path,
+    godot_path: Path,
+    configuration: RuntimeConfiguration,
+) -> dict[str, float]:
+    tolerance = configuration.actor_parity.changed_pixel_channel_tolerance
     with Image.open(retail_path) as retail_source, Image.open(godot_path) as godot_source:
         retail = retail_source.convert("RGB")
         godot = godot_source.convert("RGB")
@@ -334,17 +355,21 @@ def difference_metrics(retail_path: Path, godot_path: Path) -> dict[str, float]:
         difference = ImageChops.difference(retail, godot)
         histogram = difference.histogram()
         samples = retail.width * retail.height * 3
-        absolute = sum((index % 256) * count for index, count in enumerate(histogram))
-        squared = sum(((index % 256) ** 2) * count for index, count in enumerate(histogram))
+        absolute = sum((index % BYTE_VALUE_COUNT) * count for index, count in enumerate(histogram))
+        squared = sum(
+            ((index % BYTE_VALUE_COUNT) ** 2) * count
+            for index, count in enumerate(histogram)
+        )
         changed = sum(
             1
             for pixel in difference.get_flattened_data()
-            if max(pixel) > 8
+            if max(pixel) > tolerance
         )
         return {
-            "meanAbsoluteError": absolute / samples / 255.0,
-            "rootMeanSquareError": math.sqrt(squared / samples) / 255.0,
-            "changedPixelFractionAtTolerance8": changed / (retail.width * retail.height),
+            "meanAbsoluteError": absolute / samples / BYTE_CHANNEL_MAXIMUM,
+            "rootMeanSquareError": math.sqrt(squared / samples) / BYTE_CHANNEL_MAXIMUM,
+            "changedPixelChannelTolerance": tolerance,
+            "changedPixelFraction": changed / (retail.width * retail.height),
         }
 
 
@@ -363,26 +388,47 @@ def contact_sheet(
     output_path: Path,
     shot_kind: str,
     metrics: dict[str, float],
+    configuration: RuntimeConfiguration,
 ) -> None:
+    sheet = configuration.actor_parity.contact_sheet
     with Image.open(retail_path) as retail_source, Image.open(godot_path) as godot_source:
         retail = retail_source.convert("RGB")
         godot = godot_source.convert("RGB")
         if retail.size != godot.size:
             raise ValueError("Contact-sheet inputs must have identical dimensions.")
-        header = 104
-        canvas = Image.new("RGB", (retail.width * 2, retail.height + header), (20, 22, 26))
+        header = sheet.header_pixels
+        canvas = Image.new(
+            "RGB",
+            (retail.width * 2, retail.height + header),
+            sheet.background_rgb,
+        )
         canvas.paste(retail, (0, header))
         canvas.paste(godot, (retail.width, header))
         draw = ImageDraw.Draw(canvas)
-        title_font = font(32)
-        detail_font = font(22)
-        draw.text((24, 13), "RETAIL FNV — PASS", fill=(245, 245, 245), font=title_font)
-        draw.text((retail.width + 24, 13), "OPENNV GODOT — CURRENT FAIL", fill=(255, 118, 98), font=title_font)
+        title_font = font(sheet.title_font_pixels)
+        detail_font = font(sheet.detail_font_pixels)
+        draw.text(
+            (sheet.text_margin_x_pixels, sheet.title_y_pixels),
+            "RETAIL FNV — PASS",
+            fill=sheet.retail_title_rgb,
+            font=title_font,
+        )
+        draw.text(
+            (retail.width + sheet.text_margin_x_pixels, sheet.title_y_pixels),
+            "OPENNV GODOT — CURRENT FAIL",
+            fill=sheet.godot_title_rgb,
+            font=title_font,
+        )
         detail = (
             f"{shot_kind}  |  MAE {metrics['meanAbsoluteError']:.3f}  |  "
-            f"changed pixels {metrics['changedPixelFractionAtTolerance8']:.1%}"
+            f"changed pixels {metrics['changedPixelFraction']:.1%}"
         )
-        draw.text((24, 61), detail, fill=(190, 198, 208), font=detail_font)
+        draw.text(
+            (sheet.text_margin_x_pixels, sheet.detail_y_pixels),
+            detail,
+            fill=sheet.detail_rgb,
+            font=detail_font,
+        )
         canvas.save(output_path)
 
 
@@ -392,12 +438,20 @@ def main() -> None:
     parser.add_argument("--godot-report", required=True, type=Path)
     parser.add_argument("--output-root", required=True, type=Path)
     args = parser.parse_args()
+    configuration = load_runtime_configuration()
+    parity = configuration.actor_parity
     if args.output_root.exists():
         raise SystemExit(f"Refusing to overwrite actor differential: {args.output_root}")
     args.output_root.mkdir(parents=True)
 
     retail_summary = json.loads(args.retail_summary.read_text(encoding="utf-8"))
     godot_report = json.loads(args.godot_report.read_text(encoding="utf-8"))
+    if (
+        godot_report.get("configurationSchema") != configuration.document["schema"]
+        or str(godot_report.get("configurationSha256", "")).lower()
+        != configuration.sha256
+    ):
+        raise ValueError("Godot actor report was produced with another OpenNV configuration")
     retail = retail_summary["retailPortraits"]
     retail_state_path = Path(retail["stateContract"])
     retail_state = json.loads(retail_state_path.read_text(encoding="utf-8"))
@@ -410,7 +464,8 @@ def main() -> None:
     state_contract_match = (
         godot_state is not None
         and str(godot_state_sha256).lower() == retail_state_sha256
-        and int(godot_state["shots"]) == 2
+        and int(godot_state["shots"])
+        == len(configuration.document["retailActorState"]["requiredShotKinds"])
     )
     retail_target = retail["target"]
     godot_actor = godot_report["actorReferences"][0]
@@ -443,21 +498,28 @@ def main() -> None:
         godot_frame = Path(godot_shot["file"])
         retail_metrics = image_metrics(retail_frame)
         godot_metrics = image_metrics(godot_frame)
-        difference = difference_metrics(retail_frame, godot_frame)
-        state_metrics = shot_state_metrics(retail_shot_state, godot_shot)
+        difference = difference_metrics(retail_frame, godot_frame, configuration)
+        state_metrics = shot_state_metrics(retail_shot_state, godot_shot, configuration)
         rendering_pass = (
-            difference["meanAbsoluteError"] <= 0.05
-            and difference["changedPixelFractionAtTolerance8"] <= 0.25
+            difference["meanAbsoluteError"] <= parity.maximum_mean_absolute_error
+            and difference["changedPixelFraction"] <= parity.maximum_changed_pixel_fraction
             and abs(
                 float(retail_metrics["meanLuminance"])
                 - float(godot_metrics["meanLuminance"])
-            ) <= 0.03
+            ) <= parity.maximum_mean_luminance_delta
         )
         objective_pass = (
             rendering_pass and state_contract_match and state_metrics["status"] == "pass"
         )
         sheet = args.output_root / f"trudy-{shot_kind}-retail-vs-godot.png"
-        contact_sheet(retail_frame, godot_frame, sheet, shot_kind, difference)
+        contact_sheet(
+            retail_frame,
+            godot_frame,
+            sheet,
+            shot_kind,
+            difference,
+            configuration,
+        )
         comparisons.append(
             {
                 "shotKind": shot_kind,
@@ -482,6 +544,7 @@ def main() -> None:
     )
     report = {
         "schema": "opennv-retail-godot-actor-differential/v1",
+        "configuration": configuration.manifest(),
         "status": "pass" if identity_pass and state_pass and rendering_pass else "fail",
         "target": "trudy",
         "identityStatus": "pass" if identity_pass else "fail",
@@ -495,7 +558,9 @@ def main() -> None:
         "capturesRanConcurrently": False,
         "identities": identities,
         "godotOnlyIdentities": {
-            "outfitForm": normalize_form(godot_actor["outfitFormId"]),
+            "outfitForms": [
+                normalize_form(value) for value in godot_actor["outfitFormIds"]
+            ],
             "headPartForms": [normalize_form(value) for value in godot_actor["headPartFormIds"]],
         },
         "comparisons": comparisons,

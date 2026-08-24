@@ -6,7 +6,7 @@ namespace OpenNV.Runtime;
 internal partial class GameplaySession : Node
 {
     private const string SaveSchema = "opennv-sandbox-save/v1";
-    private const string EntryDoorFormId = "0010618e";
+    private const int EquippedWeaponCount = 1;
 
     private readonly Dictionary<string, InventoryEntry> _inventory = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _removedReferences = new(StringComparer.OrdinalIgnoreCase);
@@ -18,6 +18,8 @@ internal partial class GameplaySession : Node
     private Label3D? _xrHudLabel;
     private string _savePath = "";
     private string _cellFormId = "";
+    private string _entryDoorFormId = "";
+    private RuntimeConfiguration _configuration = null!;
     private bool _useXrHud;
     private string? _equippedWeaponFormId;
     private string? _weaponAmmoFormId;
@@ -26,28 +28,38 @@ internal partial class GameplaySession : Node
     private int _ammoInMagazine;
     private int _shotsFired;
 
-    internal bool ObjectiveComplete => ObjectiveStage == 4;
+    internal bool ObjectiveComplete => ObjectiveStage == SandboxObjectiveStage.Complete;
     internal string SavePath => _savePath;
     internal int ShotsFired => _shotsFired;
     internal int AmmoInMagazine => _ammoInMagazine;
+    internal int EmptiedContainersCount => _emptiedContainers.Count;
+    internal int OpenDoorsCount => _doorStates.Count(entry => entry.Value);
     internal int ReserveAmmo =>
         _weaponAmmoFormId is null ? 0 : _inventory.GetValueOrDefault(_weaponAmmoFormId).Count;
     internal bool HasXrHud => _xrHudLabel is not null;
     internal float XrHudPixelSize => _xrHudLabel?.PixelSize ?? 0.0f;
     internal bool HasItem(string itemFormId) => _inventory.ContainsKey(itemFormId);
     internal bool IsContainerEmptied(string referenceFormId) => _emptiedContainers.Contains(referenceFormId);
-    internal int ObjectiveStage =>
-        _equippedWeaponFormId is null ? 0 :
-        _shotsFired == 0 ? 1 :
-        !_inventory.Values.Any(entry => entry.RecordType == "ALCH") ? 2 :
-        !_doorStates.GetValueOrDefault(EntryDoorFormId) ? 3 : 4;
+    internal SandboxObjectiveStage ObjectiveStage =>
+        _equippedWeaponFormId is null ? SandboxObjectiveStage.EquipWeapon :
+        _shotsFired == 0 ? SandboxObjectiveStage.FireWeapon :
+        !_inventory.Values.Any(entry => entry.RecordType == "ALCH") ? SandboxObjectiveStage.TakeAid :
+        !_doorStates.GetValueOrDefault(_entryDoorFormId) ? SandboxObjectiveStage.OpenEntryDoor :
+        SandboxObjectiveStage.Complete;
 
-    internal void Configure(string cellFormId, string? configuredSavePath, bool useXrHud = false)
+    internal void Configure(
+        string cellFormId,
+        string entryDoorFormId,
+        RuntimeConfiguration configuration,
+        string? configuredSavePath,
+        bool useXrHud = false)
     {
+        _configuration = configuration;
         Name = "GameplaySession";
         _cellFormId = cellFormId;
+        _entryDoorFormId = entryDoorFormId;
         _useXrHud = useXrHud;
-        _savePath = ResolvePath(configuredSavePath ?? "user://saves/goodsprings-sandbox-v1.json");
+        _savePath = ResolvePath(configuredSavePath ?? configuration.Hud.DefaultSavePath);
         Load(cellFormId);
     }
 
@@ -59,15 +71,15 @@ internal partial class GameplaySession : Node
         AddChild(layer);
         var panel = new ColorRect
         {
-            Position = new Vector2(18.0f, 18.0f),
-            Size = new Vector2(520.0f, 132.0f),
-            Color = new Color(0.015f, 0.025f, 0.02f, 0.82f),
+            Position = _configuration.Hud.DesktopPanelPositionPixels.Vector2(),
+            Size = _configuration.Hud.DesktopPanelSizePixels.Vector2(),
+            Color = _configuration.Hud.DesktopPanelColorRgba.Color(),
         };
         layer.AddChild(panel);
         var labels = new VBoxContainer
         {
-            Position = new Vector2(32.0f, 28.0f),
-            Size = new Vector2(490.0f, 112.0f),
+            Position = _configuration.Hud.DesktopLabelsPositionPixels.Vector2(),
+            Size = _configuration.Hud.DesktopLabelsSizePixels.Vector2(),
         };
         layer.AddChild(labels);
         _objectiveLabel = new Label();
@@ -75,17 +87,17 @@ internal partial class GameplaySession : Node
         _inventoryLabel = new Label();
         foreach (var label in new[] { _objectiveLabel, _statusLabel, _inventoryLabel })
         {
-            label.AddThemeColorOverride("font_color", new Color(0.70f, 0.95f, 0.50f));
-            label.AddThemeFontSizeOverride("font_size", 17);
+            label.AddThemeColorOverride("font_color", _configuration.Hud.TextColorRgba.Color());
+            label.AddThemeFontSizeOverride("font_size", _configuration.Hud.DesktopFontSizePixels);
             labels.AddChild(label);
         }
         var crosshair = new Label
         {
             Text = "+",
-            Position = new Vector2(635.0f, 346.0f),
+            Position = _configuration.Hud.CrosshairPositionPixels.Vector2(),
         };
         crosshair.AddThemeColorOverride("font_color", Colors.White);
-        crosshair.AddThemeFontSizeOverride("font_size", 24);
+        crosshair.AddThemeFontSizeOverride("font_size", _configuration.Hud.CrosshairFontSizePixels);
         layer.AddChild(crosshair);
         RefreshHud("WASD move • E activate • Left click fire • F5 save");
     }
@@ -97,17 +109,17 @@ internal partial class GameplaySession : Node
         var mount = new Node3D
         {
             Name = "XrWristHud",
-            Position = new Vector3(0.0f, 0.035f, -0.035f),
-            RotationDegrees = new Vector3(-78.0f, 0.0f, 0.0f),
+            Position = _configuration.Hud.XrMountPositionMeters.Vector3(),
+            RotationDegrees = _configuration.Hud.XrMountRotationDegrees.Vector3(),
         };
         leftHand.AddChild(mount);
         _xrHudLabel = new Label3D
         {
             Name = "XrObjectiveInventory",
-            FontSize = 24,
-            PixelSize = 0.00032f,
-            Modulate = new Color(0.70f, 0.95f, 0.50f),
-            OutlineSize = 4,
+            FontSize = _configuration.Hud.XrFontSizePixels,
+            PixelSize = _configuration.Hud.XrPixelSizeMeters,
+            Modulate = _configuration.Hud.TextColorRgba.Color(),
+            OutlineSize = _configuration.Hud.XrOutlineSizePixels,
             Text = "OPENNV XR HUD",
         };
         mount.AddChild(_xrHudLabel);
@@ -118,7 +130,7 @@ internal partial class GameplaySession : Node
     {
         if (_equippedWeaponFormId is not null)
             return;
-        AddInventory(loadout.WeaponFormId, loadout.WeaponEditorId, "WEAP", 1);
+        AddInventory(loadout.WeaponFormId, loadout.WeaponEditorId, "WEAP", EquippedWeaponCount);
         AddInventory(loadout.AmmoFormId, loadout.AmmoEditorId, "AMMO", loadout.ReserveRounds);
         _equippedWeaponFormId = loadout.WeaponFormId;
         _weaponAmmoFormId = loadout.AmmoFormId;
@@ -204,9 +216,9 @@ internal partial class GameplaySession : Node
         _ammoInMagazine--;
         _shotsFired++;
         var from = aimSource.GlobalPosition;
-        var to = from - aimSource.GlobalBasis.Z * 100.0f;
+        var to = from - aimSource.GlobalBasis.Z * _configuration.Player.FireRayDistanceMeters;
         var hit = aimSource.GetWorld3D().DirectSpaceState.IntersectRay(
-            PhysicsRayQueryParameters3D.Create(from, to, 1));
+            PhysicsRayQueryParameters3D.Create(from, to, _configuration.Player.CollisionMask));
         Save();
         RefreshHud(
             hit.Count == 0
@@ -262,7 +274,7 @@ internal partial class GameplaySession : Node
             weaponClipSize = _weaponClipSize,
             ammoInMagazine = _ammoInMagazine,
             shotsFired = _shotsFired,
-            objectiveStage = ObjectiveStage,
+            objectiveStage = (int)ObjectiveStage,
         };
         var temporary = _savePath + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(document, new JsonSerializerOptions
@@ -276,7 +288,7 @@ internal partial class GameplaySession : Node
     {
         schema = SaveSchema,
         savePath = _savePath,
-        objectiveStage = ObjectiveStage,
+        objectiveStage = (int)ObjectiveStage,
         objectiveComplete = ObjectiveComplete,
         inventoryEntries = _inventory.Count,
         inventoryCount = _inventory.Values.Sum(entry => entry.Count),
@@ -341,10 +353,10 @@ internal partial class GameplaySession : Node
     {
         var objective = ObjectiveStage switch
         {
-            0 => "OBJECTIVE  Equip an authored weapon",
-            1 => "OBJECTIVE  Fire the equipped weapon once",
-            2 => "OBJECTIVE  Take any authored aid item",
-            3 => "OBJECTIVE  Open the saloon entry door",
+            SandboxObjectiveStage.EquipWeapon => "OBJECTIVE  Equip an authored weapon",
+            SandboxObjectiveStage.FireWeapon => "OBJECTIVE  Fire the equipped weapon once",
+            SandboxObjectiveStage.TakeAid => "OBJECTIVE  Take any authored aid item",
+            SandboxObjectiveStage.OpenEntryDoor => "OBJECTIVE  Open the saloon entry door",
             _ => "OBJECTIVE COMPLETE  Goodsprings sandbox route passed",
         };
         var ammunition = _equippedWeaponFormId is null
@@ -369,13 +381,16 @@ internal partial class GameplaySession : Node
         {
             var xrObjective = ObjectiveStage switch
             {
-                0 => "OBJ Equip weapon",
-                1 => "OBJ Fire weapon",
-                2 => "OBJ Take aid",
-                3 => "OBJ Open entry door",
+                SandboxObjectiveStage.EquipWeapon => "OBJ Equip weapon",
+                SandboxObjectiveStage.FireWeapon => "OBJ Fire weapon",
+                SandboxObjectiveStage.TakeAid => "OBJ Take aid",
+                SandboxObjectiveStage.OpenEntryDoor => "OBJ Open entry door",
                 _ => "OBJ Complete",
             };
-            var compactStatus = status.Length <= 38 ? status : status[..38];
+            var maximumStatusCharacters = _configuration.Hud.XrMaximumStatusCharacters;
+            var compactStatus = status.Length <= maximumStatusCharacters
+                ? status
+                : status[..maximumStatusCharacters];
             _xrHudLabel.Text =
                 $"{xrObjective}\n{WeaponLabel} {ammunition} +{ReserveAmmo}\n{compactStatus}";
         }
@@ -405,4 +420,13 @@ internal partial class GameplaySession : Node
         string EditorId,
         string RecordType,
         int Count);
+
+    internal enum SandboxObjectiveStage
+    {
+        EquipWeapon,
+        FireWeapon,
+        TakeAid,
+        OpenEntryDoor,
+        Complete,
+    }
 }

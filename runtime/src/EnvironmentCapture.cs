@@ -9,6 +9,7 @@ internal static class EnvironmentCapture
     internal static async Task Run(
         Node3D host,
         CellSceneLoader.LoadedCell loaded,
+        RuntimeConfiguration configuration,
         string captureRoot,
         string scenePath,
         string? reportPath,
@@ -25,7 +26,7 @@ internal static class EnvironmentCapture
             var hud = loaded.Session.GetNodeOrNull<CanvasLayer>("GameplayHud");
             if (hud is not null)
                 hud.Visible = false;
-            await WaitForRenderedFrames(host, 3);
+            await WaitForRenderedFrames(host, configuration.Capture.RenderedFramesBeforeCapture);
 
             var files = new List<object>();
             var visualGates = new List<bool>();
@@ -42,38 +43,41 @@ internal static class EnvironmentCapture
                 retailState = RetailActorStateContract.Load(
                     retailStateContractPath,
                     targetActor.Value.ReferenceFormId,
-                    targetActor.Value.BaseFormId);
+                    targetActor.Value.BaseFormId,
+                    configuration);
                 var contextReferences = retailState.Shots.Values.First().ContextActors
-                    .Select(actor => NormalizeForm(actor.ReferenceFormId))
+                    .Select(actor => FalloutFormId.Normalize(actor.ReferenceFormId))
                     .ToHashSet(StringComparer.Ordinal);
                 var loadedContexts = loaded.Actors
                     .Where(actor => !actor.ProofEnabled)
-                    .Select(actor => NormalizeForm(actor.ReferenceFormId))
+                    .Select(actor => FalloutFormId.Normalize(actor.ReferenceFormId))
                     .ToHashSet(StringComparer.Ordinal);
                 if (!loadedContexts.SetEquals(contextReferences))
                     throw new InvalidOperationException(
                         "Loaded actor scenes do not exactly match the retail context actors.");
             }
-            camera.Fov = 58.0f;
-            camera.GlobalPosition = new Vector3(0.0f, 1.62f, -1.6f);
-            camera.LookAt(new Vector3(-0.5f, 1.45f, -8.0f), Vector3.Up);
-            await WaitForRenderedFrames(host, 3);
-            var entryFrame = SaveViewportPng(host, output, "saloon-entry-textured.png");
-            files.Add(entryFrame.Evidence);
-            visualGates.Add(entryFrame.Passed);
-
-            loaded.ProofDoor.SetOpen(true);
-            camera.GlobalPosition = new Vector3(0.25f, 1.58f, -6.5f);
-            camera.LookAt(new Vector3(0.0f, 1.42f, -13.0f), Vector3.Up);
-            await WaitForRenderedFrames(host, 3);
-            var roomFrame = SaveViewportPng(host, output, "saloon-room-wide.png");
-            files.Add(roomFrame.Evidence);
-            visualGates.Add(roomFrame.Passed);
+            foreach (var shot in configuration.Capture.EnvironmentShots)
+            {
+                if (shot.OpenProofDoorBeforeShot)
+                    loaded.ProofDoor.SetOpen(true);
+                camera.Fov = shot.VerticalFovDegrees;
+                camera.GlobalPosition = shot.CameraPositionMeters.Vector3();
+                camera.LookAt(shot.LookAtMeters.Vector3(), Vector3.Up);
+                await WaitForRenderedFrames(host, configuration.Capture.RenderedFramesBeforeCapture);
+                var frame = SaveViewportPng(
+                    host,
+                    output,
+                    shot.OutputFile,
+                    configuration.Capture.MinimumMeanLuminance,
+                    configuration.Capture);
+                files.Add(frame.Evidence);
+                visualGates.Add(frame.Passed);
+            }
 
             if (loaded.Actors.Count > 0)
             {
                 var actor = targetActor!.Value;
-                foreach (var kind in new[] { "front-portrait", "front-full-body" })
+                foreach (var kind in configuration.Capture.ActorShotKinds)
                 {
                     var state = retailState!.Shots[kind];
                     ApplyActorState(
@@ -87,8 +91,8 @@ internal static class EnvironmentCapture
                     var contextActors = state.ContextActors.Select(context =>
                     {
                         var placed = loaded.Actors.Single(candidate =>
-                            NormalizeForm(candidate.ReferenceFormId) ==
-                            NormalizeForm(context.ReferenceFormId));
+                            FalloutFormId.Normalize(candidate.ReferenceFormId) ==
+                            FalloutFormId.Normalize(context.ReferenceFormId));
                         ApplyActorState(
                             loaded,
                             placed,
@@ -122,9 +126,14 @@ internal static class EnvironmentCapture
                     camera.GlobalPosition = loaded.GameToWorld(state.CameraPositionGameUnits);
                     var cameraTarget = loaded.GameToWorld(state.CameraAimGameUnits);
                     camera.LookAt(cameraTarget, Vector3.Up);
-                    await WaitForRenderedFrames(host, 5);
+                    await WaitForRenderedFrames(host, configuration.Capture.ActorRenderedFramesBeforeCapture);
                     var fileName = $"godot-current-{kind}.png";
-                    var actorFrame = SaveViewportPng(host, output, fileName, 0.04);
+                    var actorFrame = SaveViewportPng(
+                        host,
+                        output,
+                        fileName,
+                        configuration.Capture.ActorMinimumMeanLuminance,
+                        configuration.Capture);
                     files.Add(actorFrame.Evidence);
                     visualGates.Add(actorFrame.Passed);
                     actorShots.Add(new
@@ -193,7 +202,7 @@ internal static class EnvironmentCapture
                     raceFormId = actor.RaceFormId,
                     hairFormId = actor.HairFormId,
                     eyesFormId = actor.EyesFormId,
-                    outfitFormId = actor.OutfitFormId,
+                    outfitFormIds = actor.OutfitFormIds,
                     headPartFormIds = actor.HeadPartFormIds,
                     animation = actor.Actor.PlayingAnimation,
                     idleAnimationPath = actor.IdleAnimationPath,
@@ -237,7 +246,8 @@ internal static class EnvironmentCapture
         Node host,
         string output,
         string name,
-        double minimumMeanLuminance = 0.08)
+        double minimumMeanLuminance,
+        CaptureConfiguration configuration)
     {
         var path = Path.Combine(output, name);
         if (File.Exists(path))
@@ -249,12 +259,16 @@ internal static class EnvironmentCapture
         double luminanceSum = 0.0;
         double luminanceSquaredSum = 0.0;
         var darkPixels = 0;
-        for (var index = 0; index < data.Length; index += 4)
+        var weights = configuration.LuminanceWeightsRgb;
+        for (var index = 0; index < data.Length; index += configuration.RgbaChannelCount)
         {
-            var luminance = (0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2]) / 255.0;
+            var luminance = (
+                weights[0] * data[index] +
+                weights[1] * data[index + 1] +
+                weights[2] * data[index + 2]) / configuration.PixelChannelMaximum;
             luminanceSum += luminance;
             luminanceSquaredSum += luminance * luminance;
-            if (luminance < 0.03)
+            if (luminance < configuration.DarkPixelLuminance)
                 darkPixels++;
         }
         var meanLuminance = luminanceSum / pixels;
@@ -264,13 +278,14 @@ internal static class EnvironmentCapture
         var error = image.SavePng(path);
         if (error != Error.Ok)
             throw new InvalidOperationException($"Godot could not save capture frame ({error}): {path}");
-        var gateFailure = image.GetWidth() != 1280 || image.GetHeight() != 720
+        var gateFailure = image.GetWidth() != configuration.ExpectedWidthPixels ||
+            image.GetHeight() != configuration.ExpectedHeightPixels
             ? "unexpected-size"
             : meanLuminance < minimumMeanLuminance
                 ? "mean-luminance"
-                : luminanceDeviation < 0.05
+                : luminanceDeviation < configuration.MinimumLuminanceDeviation
                     ? "luminance-deviation"
-                    : darkFraction > 0.60
+                    : darkFraction > configuration.MaximumDarkPixelFraction
                         ? "dark-fraction"
                         : null;
         using var stream = File.OpenRead(path);
@@ -365,11 +380,6 @@ internal static class EnvironmentCapture
             };
         }).ToArray();
     }
-
-    private static string NormalizeForm(string value) =>
-        value.Replace("0x", "", StringComparison.OrdinalIgnoreCase)
-            .PadLeft(8, '0')
-            .ToLowerInvariant();
 
     private static string NormalizeMeshPath(string value)
     {

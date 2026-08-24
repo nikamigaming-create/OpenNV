@@ -15,6 +15,12 @@ if not hasattr(time, "clock"):
 from pyffi.formats.bsa import BsaFormat  # type: ignore  # noqa: E402
 
 
+FNV_BSA_VERSION = 104
+BSA_ARCHIVE_COMPRESSED_FLAG = 0x0004
+BSA_ARCHIVE_EMBEDDED_NAMES_FLAG = 0x0100
+COMPRESSED_MEMBER_MINIMUM_BYTES = 5
+
+
 @dataclass(frozen=True)
 class ExtractedMember:
     logical_path: str
@@ -54,7 +60,7 @@ def canonical_member_path(value: str) -> str:
 def decode_member_payload(payload: bytes, compressed: bool) -> bytes:
     if not compressed:
         return payload
-    if len(payload) < 5:
+    if len(payload) < COMPRESSED_MEMBER_MINIMUM_BYTES:
         raise ValueError("Compressed BSA member is too short")
     expected_size = struct.unpack("<I", payload[:4])[0]
     result = zlib.decompress(payload[4:])
@@ -81,11 +87,16 @@ class BsaArchive:
         document = BsaFormat.Data()
         with archive.open("rb") as stream:
             document.read(stream)
-        if int(document.version) != 104:
-            raise ValueError(f"The first OpenNV BSA slice supports version 104, found {document.version}")
+        if int(document.version) != FNV_BSA_VERSION:
+            raise ValueError(
+                f"The OpenNV FNV BSA reader requires version {FNV_BSA_VERSION}, "
+                f"found {document.version}"
+            )
 
-        archive_compressed = bool(int(document.archive_flags) & 0x4)
-        self.embedded_names = bool(int(document.archive_flags) & 0x100)
+        archive_compressed = bool(int(document.archive_flags) & BSA_ARCHIVE_COMPRESSED_FLAG)
+        self.embedded_names = bool(
+            int(document.archive_flags) & BSA_ARCHIVE_EMBEDDED_NAMES_FLAG
+        )
         members: dict[str, MemberLocation] = {}
         for folder in document.folders:
             folder_name = canonical_member_path(text(folder.name))

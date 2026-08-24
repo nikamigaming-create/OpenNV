@@ -19,11 +19,6 @@
     "goodsprings-sunny-smiles-actor-v1"
   ],
   "linkedExteriorRecipe": "goodsprings-saloon-exterior-v1",
-  "lightingCalibration": {
-    "ambientEnergy": 1.4,
-    "omniEnergyScale": 2.0,
-    "directionalEnergyScale": 0.25
-  },
   "selection": {
     "modelPrefixes": [
       "dungeons\\nv_goodsprings\\"
@@ -52,19 +47,6 @@
     ],
     "excludeModelPrefixes": [
       "effects\\"
-    ],
-    "yawOnly": true,
-    "allowNonYawRecordTypes": [
-      "ALCH",
-      "AMMO",
-      "ARMO",
-      "BOOK",
-      "IMOD",
-      "KEYM",
-      "MISC",
-      "NOTE",
-      "WEAP"
     ]
-  },
-  "unitsToMeters": 0.0142875
+  }
 }

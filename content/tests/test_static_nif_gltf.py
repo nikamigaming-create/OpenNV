@@ -30,6 +30,7 @@ from export_static_nif_gltf import (  # noqa: E402
     texture_paths,
     vertex_color_mode,
 )
+from runtime_configuration import load_runtime_configuration  # noqa: E402
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
 from gltf_io import compiler_sources_sha256  # noqa: E402
 from texture_pipeline import decode_dds, decode_dds_cubemap  # noqa: E402
@@ -138,6 +139,7 @@ class StaticNifGltfTest(unittest.TestCase):
                     "meshes/open-nv-tests/opaque-triangle.nif",
                     gltf,
                     sidecar,
+                    load_runtime_configuration().content_compiler,
                     strict=False,
                 )
                 outputs.append((gltf.read_text(), gltf.with_suffix(".bin").read_bytes(), sidecar.read_text(), result))

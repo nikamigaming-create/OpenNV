@@ -48,8 +48,8 @@ The next contract directly scans `FalloutNV.esm`, SHA-256
 `50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1`,
 and selects `GSProspectorSaloonInterior` through a committed recipe. CELL group
 ownership, REFR NAME/DATA, base MODL, XCLL, LIGH, and incoming XTEL fields
-produce a neutral cell-scene manifest. The playable recipe exports 209 interior/
-exterior assets, places 454 references, binds 363 textures and 439 materials,
+produce a neutral cell-scene manifest. The playable recipe exports 228 interior/
+exterior assets, places 504 enabled references, binds 379 textures and 476 materials,
 and places 27 authored lights. The exterior adds decoded LAND height, normals,
 vertex colors, four base layers, and 24 alpha layers. Godot verifies every
 artifact, aligns reciprocal door planes, and proves ray and player-capsule

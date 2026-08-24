@@ -11,6 +11,22 @@ from typing import BinaryIO, Iterator
 
 RECORD_HEADER_BYTES = 24
 COMPRESSED_RECORD_FLAG = 0x00040000
+RECORD_SIZE_OFFSET = 4
+RECORD_FLAGS_OFFSET = 8
+RECORD_FORM_ID_OFFSET = 12
+GROUP_LABEL_OFFSET = 8
+GROUP_TYPE_OFFSET = 12
+COMPRESSED_SIZE_PREFIX_BYTES = 4
+ZLIB_HEADER_BYTES = 2
+ZLIB_TRAILER_BYTES = 4
+ZLIB_MINIMUM_FRAMED_BYTES = 6
+ZLIB_COMPRESSION_METHOD_MASK = 0x0F
+ZLIB_DEFLATE_METHOD = 8
+ZLIB_HEADER_CHECK_DIVISOR = 31
+ZLIB_PRESET_DICTIONARY_FLAG = 0x20
+RAW_DEFLATE_WINDOW_BITS = -15
+SUBRECORD_HEADER_BYTES = 6
+BITS_PER_BYTE = 8
 
 
 class PluginFormatError(ValueError):
@@ -75,7 +91,7 @@ def _iter_region(
             raise PluginFormatError(f"Trailing bytes in container at 0x{offset:08x}")
         header = _read_exact(stream, RECORD_HEADER_BYTES, "record header")
         signature = _signature(header[:4], offset)
-        size = struct.unpack_from("<I", header, 4)[0]
+        size = struct.unpack_from("<I", header, RECORD_SIZE_OFFSET)[0]
 
         if signature == "GRUP":
             if size < RECORD_HEADER_BYTES:
@@ -83,7 +99,10 @@ def _iter_region(
             group_end = offset + size
             if group_end > end:
                 raise PluginFormatError(f"GRUP exceeds its parent at 0x{offset:08x}")
-            context = GroupContext(header[8:12], struct.unpack_from("<i", header, 12)[0])
+            context = GroupContext(
+                header[GROUP_LABEL_OFFSET:RECORD_FORM_ID_OFFSET],
+                struct.unpack_from("<i", header, GROUP_TYPE_OFFSET)[0],
+            )
             yield from _iter_region(stream, group_end, groups + (context,), signatures)
             if stream.tell() != group_end:
                 raise PluginFormatError(f"GRUP ended at the wrong offset: 0x{offset:08x}")
@@ -92,34 +111,38 @@ def _iter_region(
         data_end = stream.tell() + size
         if data_end > end:
             raise PluginFormatError(f"{signature} exceeds its parent at 0x{offset:08x}")
-        flags = struct.unpack_from("<I", header, 8)[0]
-        form_id = struct.unpack_from("<I", header, 12)[0]
+        flags = struct.unpack_from("<I", header, RECORD_FLAGS_OFFSET)[0]
+        form_id = struct.unpack_from("<I", header, RECORD_FORM_ID_OFFSET)[0]
         if signatures is not None and signature not in signatures:
             stream.seek(size, 1)
             continue
         data = _read_exact(stream, size, f"{signature} data")
         compression_checksum_valid: bool | None = None
         if flags & COMPRESSED_RECORD_FLAG:
-            if len(data) < 4:
+            if len(data) < COMPRESSED_SIZE_PREFIX_BYTES:
                 raise PluginFormatError(f"Compressed {signature} has no size prefix")
             expected_size = struct.unpack_from("<I", data, 0)[0]
-            payload = data[4:]
+            payload = data[COMPRESSED_SIZE_PREFIX_BYTES:]
             try:
                 data = zlib.decompress(payload)
                 compression_checksum_valid = True
             except zlib.error as error:
                 if (
-                    len(payload) < 6
-                    or payload[0] & 0x0F != 8
-                    or (payload[0] << 8 | payload[1]) % 31 != 0
-                    or payload[1] & 0x20
+                    len(payload) < ZLIB_MINIMUM_FRAMED_BYTES
+                    or payload[0] & ZLIB_COMPRESSION_METHOD_MASK != ZLIB_DEFLATE_METHOD
+                    or (payload[0] << BITS_PER_BYTE | payload[1])
+                    % ZLIB_HEADER_CHECK_DIVISOR
+                    != 0
+                    or payload[1] & ZLIB_PRESET_DICTIONARY_FLAG
                 ):
                     raise PluginFormatError(
                         f"Compressed {signature} has invalid zlib data at 0x{offset:08x}"
                     ) from error
-                inflater = zlib.decompressobj(-15)
+                inflater = zlib.decompressobj(RAW_DEFLATE_WINDOW_BITS)
                 try:
-                    data = inflater.decompress(payload[2:-4]) + inflater.flush()
+                    data = inflater.decompress(
+                        payload[ZLIB_HEADER_BYTES:-ZLIB_TRAILER_BYTES]
+                    ) + inflater.flush()
                 except zlib.error as raw_error:
                     raise PluginFormatError(
                         f"Compressed {signature} has invalid deflate data at 0x{offset:08x}"
@@ -151,11 +174,11 @@ def iter_subrecords(record: Record) -> Iterator[Subrecord]:
     offset = 0
     extended_size: int | None = None
     while offset < len(record.data):
-        if len(record.data) - offset < 6:
+        if len(record.data) - offset < SUBRECORD_HEADER_BYTES:
             raise PluginFormatError(f"Truncated subrecord header in {record.signature} {record.form_id:08x}")
         signature = _signature(record.data[offset : offset + 4], offset)
         declared_size = struct.unpack_from("<H", record.data, offset + 4)[0]
-        offset += 6
+        offset += SUBRECORD_HEADER_BYTES
         if signature == "XXXX":
             if declared_size != 4 or extended_size is not None or len(record.data) - offset < 4:
                 raise PluginFormatError(f"Invalid XXXX marker in {record.signature} {record.form_id:08x}")

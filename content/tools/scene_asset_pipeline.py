@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 import os
 from pathlib import Path
 
@@ -15,7 +14,14 @@ from cell_catalog import (
     PlacedReference,
 )
 from export_static_nif_gltf import export_static_nif
+from actor_material import nif_material_roughness
+from runtime_configuration import ContentCompilerConfiguration
 from texture_pipeline import TexturePipeline
+
+
+FORM_ID_RADIX = 16
+ENVIRONMENT_TEXTURE_SLOT = 4
+ENVIRONMENT_MASK_TEXTURE_SLOT = 5
 
 
 def form_id(value: int) -> str:
@@ -50,8 +56,16 @@ def environment_texture_paths(surface: dict[str, object]) -> tuple[str | None, s
     if "sf_2_envmap_light_fade" in set(material.get("shaderFlags2Enabled", [])):
         return None, None
     textures = surface["textures"]
-    environment = textures[4] if len(textures) > 4 and textures[4] else None
-    mask = textures[5] if len(textures) > 5 and textures[5] else None
+    environment = (
+        textures[ENVIRONMENT_TEXTURE_SLOT]
+        if len(textures) > ENVIRONMENT_TEXTURE_SLOT and textures[ENVIRONMENT_TEXTURE_SLOT]
+        else None
+    )
+    mask = (
+        textures[ENVIRONMENT_MASK_TEXTURE_SLOT]
+        if len(textures) > ENVIRONMENT_MASK_TEXTURE_SLOT and textures[ENVIRONMENT_MASK_TEXTURE_SLOT]
+        else None
+    )
     return environment, mask
 
 
@@ -102,7 +116,7 @@ def vr_smoke_loadout_manifest(
     catalog: CellCatalog,
 ) -> dict[str, object]:
     configured = recipe["vrSmokeLoadout"]
-    weapon_form_id = int(str(configured["weaponFormId"]), 16)
+    weapon_form_id = int(str(configured["weaponFormId"]), FORM_ID_RADIX)
     reserve_magazines = int(configured["reserveMagazines"])
     if reserve_magazines < 1:
         raise ValueError("VR smoke loadout must retain at least one reserve magazine")
@@ -115,7 +129,7 @@ def vr_smoke_loadout_manifest(
         or weapon_base.model_path is None
     ):
         raise ValueError(f"VR smoke weapon is not a resolved WEAP: {weapon_form_id:08x}")
-    ammo_form_id = int(str(configured.get("ammoFormId", "0")), 16)
+    ammo_form_id = int(str(configured.get("ammoFormId", "0")), FORM_ID_RADIX)
     if ammo_form_id == 0:
         if weapon.ammo_form_id is None:
             raise ValueError(f"VR smoke weapon has no ammo form: {weapon_form_id:08x}")
@@ -149,6 +163,7 @@ def prepare_scene_assets(
     cache_root: Path,
     recipe: dict[str, object],
     selected: list[tuple[PlacedReference, BaseObject]],
+    compiler_configuration: ContentCompilerConfiguration,
     extra_model_paths: set[str] | None = None,
 ) -> tuple[
     dict[str, dict[str, object]],
@@ -166,7 +181,9 @@ def prepare_scene_assets(
     )
     for model_path in models:
         logical_path = "meshes\\" + model_path
-        asset_id = hashlib.sha256(logical_path.encode()).hexdigest()[:20]
+        asset_id = hashlib.sha256(logical_path.encode()).hexdigest()[
+            :compiler_configuration.asset_id_hex_characters
+        ]
         member = archive.extract(logical_path)
         source_path = cache_root / "source" / Path(member.logical_path.replace("\\", "/"))
         _atomic_bytes(source_path, member.data)
@@ -179,6 +196,7 @@ def prepare_scene_assets(
                 member.logical_path,
                 gltf_path,
                 sidecar_path,
+                compiler_configuration,
                 strict=False,
             )
         except Exception as error:
@@ -221,6 +239,7 @@ def prepare_scene_assets(
         texture_archive_paths,
         cache_root,
         {str(source): str(target) for source, target in recipe.get("textureAliases", {}).items()},
+        compiler_configuration,
     )
     texture_artifacts = {
         requested: texture_pipeline.prepare(requested) for requested in requested_textures
@@ -234,12 +253,17 @@ def prepare_scene_assets(
             emissive = textures[2] if len(textures) > 2 and textures[2] else None
             material = surface["material"]
             environment, environment_mask = environment_texture_paths(surface)
-            glossiness = float(material.get("glossiness", 10.0))
+            glossiness = float(
+                material.get(
+                    "glossiness",
+                    compiler_configuration.default_material_glossiness,
+                )
+            )
             specular = [float(value) for value in material.get("specular", [0.0, 0.0, 0.0])]
-            roughness = (
-                1.0
-                if max(specular) <= 1.0e-6
-                else max(0.08, min(1.0, math.sqrt(2.0 / (glossiness + 2.0))))
+            roughness, roughness_source = nif_material_roughness(
+                specular,
+                glossiness,
+                compiler_configuration,
             )
             unshaded = "BSShaderNoLightingProperty" in surface["propertyTypes"]
             emissive_color = [float(value) for value in material.get("emissive", [0.0, 0.0, 0.0])]
@@ -272,6 +296,7 @@ def prepare_scene_assets(
                         alpha,
                     ],
                     "roughness": roughness,
+                    "roughnessSource": roughness_source,
                     "alphaContract": material["alphaContract"],
                     "vertexColorMode": material["vertexColorMode"],
                     "doubleSided": int(material.get("stencilDrawMode", 1)) == 3,

@@ -30,9 +30,41 @@ BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "LIGH",
     "MSTT",
     "STAT",
+    "TERM",
     "TREE",
 }
 CATALOG_RECORD_TYPES = frozenset(BASE_RECORD_TYPES | {"CELL", "REFR"})
+
+REFERENCE_TRANSFORM_BYTES = 24
+REFERENCE_SCALE_BYTES = 4
+REFERENCE_TRANSFORM_FLOATS = 6
+DEFAULT_REFERENCE_SCALE = 1.0
+INITIALLY_DISABLED_RECORD_FLAG = 0x00000800
+CELL_CHILDREN_GROUP_TYPE = 6
+WORLDSPACE_CHILDREN_GROUP_TYPE = 1
+FORM_ID_BYTES = 4
+CELL_LIGHTING_BYTES = 40
+CELL_LIGHTING_AMBIENT_SLICE = slice(0, 3)
+CELL_LIGHTING_DIRECTIONAL_SLICE = slice(4, 7)
+CELL_LIGHTING_FOG_SLICE = slice(8, 11)
+CELL_LIGHTING_FOG_NEAR_OFFSET = 12
+CELL_LIGHTING_FOG_FAR_OFFSET = 16
+CELL_LIGHTING_DIRECTION_OFFSET = 20
+CELL_LIGHTING_DIRECTIONAL_FADE_OFFSET = 28
+CELL_LIGHTING_FOG_CLIP_OFFSET = 32
+CELL_LIGHTING_FOG_POWER_OFFSET = 36
+LIGHT_DATA_BYTES = 32
+LIGHT_RADIUS_OFFSET = 4
+LIGHT_COLOR_SLICE = slice(8, 11)
+LIGHT_FLAGS_OFFSET = 12
+LIGHT_FALLOFF_OFFSET = 16
+LIGHT_FIELD_OF_VIEW_OFFSET = 20
+CONTAINER_ITEM_BYTES = 8
+WEAPON_DATA_BYTES = 15
+WEAPON_DAMAGE_OFFSET = 12
+WEAPON_CLIP_SIZE_OFFSET = 14
+TELEPORT_DESTINATION_TRANSFORM_OFFSET = 4
+TELEPORT_DESTINATION_BYTES = 28
 
 
 @dataclass(frozen=True)
@@ -115,6 +147,7 @@ class PlacedReference:
     base_form_id: int
     flags: int
     transform: Transform
+    scale: float
     teleport_destination_form_id: int | None
     teleport_destination_transform: Transform | None
 
@@ -155,44 +188,64 @@ def _model_path(data: bytes) -> str:
 
 def _cell_parent(record: Record) -> int | None:
     for group in reversed(record.groups):
-        if group.group_type == 6:
+        if group.group_type == CELL_CHILDREN_GROUP_TYPE:
             return group.label_u32
     return None
 
 
 def _worldspace_parent(record: Record) -> int | None:
     for group in reversed(record.groups):
-        if group.group_type == 1:
+        if group.group_type == WORLDSPACE_CHILDREN_GROUP_TYPE:
             return group.label_u32
     return None
 
 
 def _transform(data: bytes, record: Record) -> Transform:
-    if len(data) != 24:
-        raise ValueError(f"DATA transform must be 24 bytes in {record.signature} {record.form_id:08x}")
-    values = struct.unpack("<6f", data)
+    if len(data) != REFERENCE_TRANSFORM_BYTES:
+        raise ValueError(
+            f"DATA transform must be {REFERENCE_TRANSFORM_BYTES} bytes in "
+            f"{record.signature} {record.form_id:08x}"
+        )
+    values = struct.unpack(f"<{REFERENCE_TRANSFORM_FLOATS}f", data)
     return Transform(tuple(values[:3]), tuple(values[3:]))
 
 
+def _reference_scale(values: dict[str, list[bytes]], record: Record) -> float:
+    matches = values.get("XSCL", [])
+    if not matches:
+        return DEFAULT_REFERENCE_SCALE
+    if len(matches) != 1 or len(matches[0]) != REFERENCE_SCALE_BYTES:
+        raise ValueError(
+            f"XSCL must contain one {REFERENCE_SCALE_BYTES}-byte scale in "
+            f"{record.signature} {record.form_id:08x}"
+        )
+    scale = struct.unpack("<f", matches[0])[0]
+    if not scale > 0.0:
+        raise ValueError(f"XSCL must be positive in {record.signature} {record.form_id:08x}")
+    return scale
+
+
 def _form_id(data: bytes, record: Record, signature: str) -> int:
-    if len(data) < 4:
+    if len(data) < FORM_ID_BYTES:
         raise ValueError(f"{signature} must contain a form ID in {record.signature} {record.form_id:08x}")
     return struct.unpack_from("<I", data)[0]
 
 
 def _cell_lighting(data: bytes, record: Record) -> CellLighting:
-    if len(data) != 40:
-        raise ValueError(f"XCLL must be 40 bytes in CELL {record.form_id:08x}")
+    if len(data) != CELL_LIGHTING_BYTES:
+        raise ValueError(
+            f"XCLL must be {CELL_LIGHTING_BYTES} bytes in CELL {record.form_id:08x}"
+        )
     return CellLighting(
-        tuple(data[0:3]),
-        tuple(data[4:7]),
-        tuple(data[8:11]),
-        struct.unpack_from("<f", data, 12)[0],
-        struct.unpack_from("<f", data, 16)[0],
-        struct.unpack_from("<ii", data, 20),
-        struct.unpack_from("<f", data, 28)[0],
-        struct.unpack_from("<f", data, 32)[0],
-        struct.unpack_from("<f", data, 36)[0],
+        tuple(data[CELL_LIGHTING_AMBIENT_SLICE]),
+        tuple(data[CELL_LIGHTING_DIRECTIONAL_SLICE]),
+        tuple(data[CELL_LIGHTING_FOG_SLICE]),
+        struct.unpack_from("<f", data, CELL_LIGHTING_FOG_NEAR_OFFSET)[0],
+        struct.unpack_from("<f", data, CELL_LIGHTING_FOG_FAR_OFFSET)[0],
+        struct.unpack_from("<ii", data, CELL_LIGHTING_DIRECTION_OFFSET),
+        struct.unpack_from("<f", data, CELL_LIGHTING_DIRECTIONAL_FADE_OFFSET)[0],
+        struct.unpack_from("<f", data, CELL_LIGHTING_FOG_CLIP_OFFSET)[0],
+        struct.unpack_from("<f", data, CELL_LIGHTING_FOG_POWER_OFFSET)[0],
     )
 
 
@@ -201,18 +254,20 @@ def _light_object(record: Record, values: dict[str, list[bytes]]) -> LightObject
     if not matches:
         return None
     data = matches[0]
-    if len(data) != 32:
-        raise ValueError(f"LIGH DATA must be 32 bytes in {record.form_id:08x}")
+    if len(data) != LIGHT_DATA_BYTES:
+        raise ValueError(
+            f"LIGH DATA must be {LIGHT_DATA_BYTES} bytes in {record.form_id:08x}"
+        )
     intensity_values = values.get("FNAM", [])
     intensity = struct.unpack("<f", intensity_values[0])[0] if intensity_values else 1.0
     return LightObject(
         record.form_id,
         _first_text(values, "EDID"),
-        struct.unpack_from("<I", data, 4)[0],
-        tuple(data[8:11]),
-        struct.unpack_from("<I", data, 12)[0],
-        struct.unpack_from("<f", data, 16)[0],
-        struct.unpack_from("<f", data, 20)[0],
+        struct.unpack_from("<I", data, LIGHT_RADIUS_OFFSET)[0],
+        tuple(data[LIGHT_COLOR_SLICE]),
+        struct.unpack_from("<I", data, LIGHT_FLAGS_OFFSET)[0],
+        struct.unpack_from("<f", data, LIGHT_FALLOFF_OFFSET)[0],
+        struct.unpack_from("<f", data, LIGHT_FIELD_OF_VIEW_OFFSET)[0],
         intensity,
     )
 
@@ -220,8 +275,10 @@ def _light_object(record: Record, values: dict[str, list[bytes]]) -> LightObject
 def _container_object(record: Record, values: dict[str, list[bytes]]) -> ContainerObject:
     items = []
     for data in values.get("CNTO", []):
-        if len(data) != 8:
-            raise ValueError(f"CONT CNTO must be 8 bytes in {record.form_id:08x}")
+        if len(data) != CONTAINER_ITEM_BYTES:
+            raise ValueError(
+                f"CONT CNTO must be {CONTAINER_ITEM_BYTES} bytes in {record.form_id:08x}"
+            )
         item_form_id, count = struct.unpack("<Ii", data)
         items.append(ContainerItem(item_form_id, count))
     return ContainerObject(record.form_id, tuple(items))
@@ -229,15 +286,17 @@ def _container_object(record: Record, values: dict[str, list[bytes]]) -> Contain
 
 def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObject:
     matches = values.get("DATA", [])
-    if len(matches) != 1 or len(matches[0]) != 15:
-        raise ValueError(f"WEAP DATA must be 15 bytes in {record.form_id:08x}")
+    if len(matches) != 1 or len(matches[0]) != WEAPON_DATA_BYTES:
+        raise ValueError(
+            f"WEAP DATA must be {WEAPON_DATA_BYTES} bytes in {record.form_id:08x}"
+        )
     data = matches[0]
     ammo_values = values.get("NAM0", [])
     ammo = _form_id(ammo_values[0], record, "NAM0") if ammo_values else None
     return WeaponObject(
         record.form_id,
-        struct.unpack_from("<H", data, 12)[0],
-        data[14],
+        struct.unpack_from("<H", data, WEAPON_DAMAGE_OFFSET)[0],
+        data[WEAPON_CLIP_SIZE_OFFSET],
         ammo,
     )
 
@@ -292,8 +351,16 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                     _form_id(values["NAME"][0], record, "NAME"),
                     record.flags,
                     _transform(values["DATA"][0], record),
+                    _reference_scale(values, record),
                     _form_id(teleport_data, record, "XTEL") if teleport_data else None,
-                    _transform(teleport_data[4:28], record) if len(teleport_data) >= 28 else None,
+                    _transform(
+                        teleport_data[
+                            TELEPORT_DESTINATION_TRANSFORM_OFFSET:TELEPORT_DESTINATION_BYTES
+                        ],
+                        record,
+                    )
+                    if len(teleport_data) >= TELEPORT_DESTINATION_BYTES
+                    else None,
                 )
             )
     return catalog
@@ -303,12 +370,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--find", default="")
-    parser.add_argument("--limit", type=int, default=25)
+    parser.add_argument("--limit", type=int, required=True)
     args = parser.parse_args()
     catalog = scan_cell_catalog(args.input.resolve())
     needle = args.find.casefold()
     cells = [cell for cell in catalog.cells.values() if needle in cell.editor_id.casefold()]
     rows = []
+    if args.limit <= 0:
+        raise ValueError("Cell catalog result limit must be positive")
     for cell in cells[: args.limit]:
         references = catalog.references_for(cell.form_id)
         rows.append(

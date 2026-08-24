@@ -12,6 +12,7 @@ internal static class ActorModelSlice
         string modelPath,
         string sidecarPath,
         Node3D parent,
+        RuntimeConfiguration configuration,
         bool scaleToMeters = true)
     {
         var resolvedModel = VerifiedGltfLoader.ResolvePath(modelPath);
@@ -38,7 +39,7 @@ internal static class ActorModelSlice
         var scene = document.GenerateScene(state) as Node3D
             ?? throw new InvalidOperationException($"Godot generated no actor scene: {resolvedModel}");
         scene.Name = $"ACTOR_{root.GetProperty("actorFormId").GetString()}_{root.GetProperty("actorName").GetString()}";
-        scene.Scale = Vector3.One * (scaleToMeters ? 0.0142875f : 1.0f);
+        scene.Scale = Vector3.One * (scaleToMeters ? configuration.World.GameUnitsToMeters : 1.0f);
         parent.AddChild(scene);
         var meshes = Descendants<MeshInstance3D>(scene).Count(mesh => mesh.Mesh is not null);
         var skeletons = Descendants<Skeleton3D>(scene).ToArray();
@@ -59,7 +60,8 @@ internal static class ActorModelSlice
             var origin = ReadVector(originSource);
             bounds = new Aabb(bounds.Position - scene.GlobalBasis * origin, bounds.Size);
         }
-        if (bounds.Size.Y < 1.2f || bounds.Size.Y > 2.4f)
+        if (bounds.Size.Y < configuration.DiagnosticPreview.ActorMinimumHeightMeters ||
+            bounds.Size.Y > configuration.DiagnosticPreview.ActorMaximumHeightMeters)
             throw new InvalidOperationException($"Actor height is outside the humanoid gate: {bounds.Size.Y:F3}m");
         return new LoadedActor(
             scene,

@@ -5,11 +5,12 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v7";
+    private const string CellSceneSchema = "opennv-cell-scene/v8";
 
     internal static LoadedCell Load(
         string scenePath,
         Node3D parent,
+        RuntimeConfiguration configuration,
         bool openProofDoor,
         string? proofDoorOverride = null,
         string? savePath = null,
@@ -26,15 +27,24 @@ internal static class CellSceneLoader
         if (source.GetProperty("schema").GetString() != CellSceneSchema ||
             source.GetProperty("status").GetString() != "geometry-structure")
             throw new InvalidOperationException($"Unexpected OpenNV cell scene: {resolvedScenePath}");
+        configuration.VerifyCompiledConfiguration(source);
 
         var cell = source.GetProperty("cell");
+        var proofDoorId = proofDoorOverride ??
+            source.GetProperty("proof").GetProperty("doorReferenceFormId").GetString()!;
         var session = new GameplaySession();
-        session.Configure(cell.GetProperty("formId").GetString()!, savePath, useXr);
+        session.Configure(
+            cell.GetProperty("formId").GetString()!,
+            proofDoorId,
+            configuration,
+            savePath,
+            useXr);
         parent.AddChild(session);
         var main = CellContentLoader.Load(
             resolvedScenePath,
             parent,
             session,
+            configuration,
             useXr,
             actorScenePath,
             actorScenesManifestPath,
@@ -69,6 +79,7 @@ internal static class CellSceneLoader
                     linkedScenePath,
                     parent,
                     session,
+                    configuration,
                     false,
                     null,
                     actorScenesManifestPath,
@@ -83,22 +94,22 @@ internal static class CellSceneLoader
                     !linked.Doors.TryGetValue(toDoorId, out var toDoor))
                     throw new InvalidOperationException(
                         $"Linked CELL portal doors are missing: {fromDoorId} -> {toDoorId}");
-                var fromFrame = BuildProofRay(fromDoor);
-                var toFrame = BuildProofRay(toDoor);
+                var fromFrame = BuildProofRay(fromDoor, configuration.Proof);
+                var toFrame = BuildProofRay(toDoor, configuration.Proof);
                 var fromCenter = (fromFrame.From + fromFrame.To) / 2.0f;
                 var toCenter = (toFrame.From + toFrame.To) / 2.0f;
                 var translation = fromCenter - toCenter;
                 linked.Root.GlobalPosition += translation;
-                var alignedToFrame = BuildProofRay(toDoor);
+                var alignedToFrame = BuildProofRay(toDoor, configuration.Proof);
                 var alignedToCenter = (alignedToFrame.From + alignedToFrame.To) / 2.0f;
                 var alignmentError = fromCenter.DistanceTo(alignedToCenter);
                 var normalAgreement = MathF.Abs(
                     (fromFrame.To - fromFrame.From).Normalized().Dot(
                         (alignedToFrame.To - alignedToFrame.From).Normalized()));
-                if (alignmentError > 0.0001f)
+                if (alignmentError > configuration.Proof.PortalAlignmentToleranceMeters)
                     throw new InvalidOperationException(
                         $"Linked CELL portal alignment failed: {alignmentError:F6} metres");
-                if (normalAgreement < 0.999f)
+                if (normalAgreement < configuration.Proof.PortalNormalAgreementMinimum)
                     throw new InvalidOperationException(
                         $"Linked CELL portal normals disagree: {normalAgreement:F6}");
                 fromDoor.Link(toDoor);
@@ -107,7 +118,6 @@ internal static class CellSceneLoader
             }
         }
 
-        var proofDoorId = proofDoorOverride ?? main.ProofDoorFormId;
         var allDoors = main.Doors
             .Concat(linkedCells.SelectMany(value => value.Content.Doors))
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
@@ -122,6 +132,7 @@ internal static class CellSceneLoader
             spawn.GetProperty("yawGodotRadians").GetSingle(),
             main,
             session,
+            configuration,
             useXr,
             enableXrRuntimeFeatures);
         player.CollisionMask = (1u << (linkedCells.Count + 1)) - 1u;
@@ -133,7 +144,7 @@ internal static class CellSceneLoader
                 main.MuzzlePosition);
         }
         foreach (var linked in linkedCells)
-            AddCellLights(parent, linked.Content, linked.RenderLayer, true);
+            AddCellLights(parent, linked.Content, configuration, linked.RenderLayer, true);
 
         var allPickups = main.Pickups
             .Concat(linkedCells.SelectMany(value => value.Content.Pickups))
@@ -176,6 +187,7 @@ internal static class CellSceneLoader
         float yaw,
         CellContentLoader.LoadedContent main,
         GameplaySession session,
+        RuntimeConfiguration configuration,
         bool useXr,
         bool enableXrRuntimeFeatures)
     {
@@ -183,24 +195,24 @@ internal static class CellSceneLoader
         var environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = new Color(0.015f, 0.018f, 0.022f),
+            BackgroundColor = configuration.Renderer.BackgroundColorRgba.Color(),
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
             AmbientLightColor = lighting.AmbientColor,
-            AmbientLightEnergy = lighting.AmbientEnergy,
-            TonemapMode = Godot.Environment.ToneMapper.Filmic,
+            AmbientLightEnergy = configuration.Renderer.AmbientEnergyScale,
+            TonemapMode = ParseToneMapper(configuration.Renderer.ToneMapper),
             FogEnabled = true,
             FogMode = Godot.Environment.FogModeEnum.Depth,
             FogLightColor = lighting.FogColor,
-            FogLightEnergy = 1.0f,
-            FogDensity = 1.0f,
+            FogLightEnergy = configuration.Renderer.FogLightEnergy,
+            FogDensity = configuration.Renderer.FogDensity,
             FogDepthBegin = lighting.FogNearGameUnits * main.UnitsToMeters,
             FogDepthEnd = lighting.FogFarGameUnits * main.UnitsToMeters,
             FogDepthCurve = lighting.FogPower,
         };
         parent.AddChild(new WorldEnvironment { Environment = environment });
-        AddCellLights(parent, main, 1u, true);
+        AddCellLights(parent, main, configuration, 1u, true);
         var player = new CellPlayer();
-        player.Configure(yaw, session, useXr, enableXrRuntimeFeatures);
+        player.Configure(yaw, session, configuration, useXr, enableXrRuntimeFeatures);
         parent.AddChild(player);
         return player;
     }
@@ -208,6 +220,7 @@ internal static class CellSceneLoader
     private static void AddCellLights(
         Node3D parent,
         CellContentLoader.LoadedContent content,
+        RuntimeConfiguration configuration,
         uint renderLayer,
         bool addAuthoredLights)
     {
@@ -220,7 +233,7 @@ internal static class CellSceneLoader
                 lighting.DirectionalRotationDegrees.Y,
                 0.0f),
             LightColor = lighting.DirectionalColor,
-            LightEnergy = lighting.DirectionalFade * lighting.DirectionalEnergyScale,
+            LightEnergy = lighting.DirectionalFade * configuration.Renderer.DirectionalEnergyScale,
             ShadowEnabled = true,
             LightCullMask = renderLayer,
         });
@@ -233,15 +246,26 @@ internal static class CellSceneLoader
                 Name = $"LIGH_{light.FormId}_{light.EditorId}",
                 Position = content.Root.ToGlobal(light.PositionGodotUnits),
                 LightColor = light.Color,
-                LightEnergy = MathF.Max(0.1f, light.Intensity * lighting.OmniEnergyScale),
+                LightEnergy = MathF.Max(
+                    configuration.Renderer.MinimumPointLightEnergy,
+                    light.Intensity * configuration.Renderer.PointLightEnergyScale),
                 OmniRange = light.RadiusMeters,
-                ShadowEnabled = false,
+                ShadowEnabled = configuration.Renderer.AuthoredPointLightShadows,
                 LightCullMask = renderLayer,
             });
         }
     }
 
-    internal static DoorRay BuildProofRay(DoorInstance door)
+    private static Godot.Environment.ToneMapper ParseToneMapper(string value) => value switch
+    {
+        "linear" => Godot.Environment.ToneMapper.Linear,
+        "reinhard" => Godot.Environment.ToneMapper.Reinhardt,
+        "filmic" => Godot.Environment.ToneMapper.Filmic,
+        "aces" => Godot.Environment.ToneMapper.Aces,
+        _ => throw new InvalidOperationException($"Unsupported configured tone mapper: {value}"),
+    };
+
+    internal static DoorRay BuildProofRay(DoorInstance door, ProofConfiguration proof)
     {
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
@@ -266,7 +290,9 @@ internal static class CellSceneLoader
         var center = (minimum + maximum) / 2.0f;
         var normal = size.X <= size.Z ? Vector3.Right : Vector3.Back;
         var thickness = MathF.Min(size.X, size.Z);
-        var reach = MathF.Max(thickness * 2.0f, 12.0f);
+        var reach = MathF.Max(
+            thickness * proof.DoorRayThicknessMultiplier,
+            proof.DoorRayMinimumReachGameUnits);
         return new DoorRay(
             door.ToGlobal(center - normal * reach),
             door.ToGlobal(center + normal * reach),
@@ -292,12 +318,17 @@ internal static class CellSceneLoader
             collider?.GetPath().ToString() ?? "unknown");
     }
 
-    internal static FloorHit CastSpawnFloor(PhysicsDirectSpaceState3D space)
+    internal static FloorHit CastSpawnFloor(
+        PhysicsDirectSpaceState3D space,
+        ProofConfiguration proof,
+        uint collisionMask,
+        Rid excludedBody)
     {
         var query = PhysicsRayQueryParameters3D.Create(
-            new Vector3(0.0f, 2.0f, 0.0f),
-            new Vector3(0.0f, -2.0f, 0.0f),
-            1);
+            Vector3.Up * proof.SpawnFloorRayStartMeters,
+            Vector3.Up * proof.SpawnFloorRayEndMeters,
+            collisionMask);
+        query.Exclude = new Godot.Collections.Array<Rid> { excludedBody };
         var hit = space.IntersectRay(query);
         if (hit.Count == 0)
             return new FloorHit(false, float.NaN, "");

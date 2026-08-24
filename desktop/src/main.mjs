@@ -7,6 +7,20 @@ import { createOfflineState, createRuntimeArguments, mergeRuntimeState, validate
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const renderer = path.join(here, "renderer", "index.html");
+const RUNTIME_CONFIG_JSON_INDENT = 2;
+
+function productConfigurationPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "config", "open-nv-runtime-v1.json")
+    : path.join(here, "..", "..", "runtime", "config", "open-nv-runtime-v1.json");
+}
+
+function desktopLauncherPolicy() {
+  const configuration = JSON.parse(readFileSync(productConfigurationPath(), "utf8"));
+  const policy = configuration?.desktopLauncher;
+  if (!policy) throw new Error("OpenNV desktop launcher policy is missing.");
+  return policy;
+}
 
 function runtimeConfigPath() {
   return path.join(app.getPath("userData"), "runtime.json");
@@ -49,7 +63,10 @@ async function readRuntimeState() {
 
 async function launcherState() {
   const base = createOfflineState();
-  return mergeRuntimeState(base, await readRuntimeState());
+  return {
+    ...mergeRuntimeState(base, await readRuntimeState()),
+    desktopLauncher: desktopLauncherPolicy()
+  };
 }
 
 function isRuntimeRoot(candidate) {
@@ -73,7 +90,11 @@ async function chooseRuntime() {
     return { ok: false, message: "That folder has no valid OpenNV Godot runtime-manifest.json." };
   }
   mkdirSync(path.dirname(runtimeConfigPath()), { recursive: true });
-  writeFileSync(runtimeConfigPath(), `${JSON.stringify({ runtimeRoot: candidate }, null, 2)}\n`, "utf8");
+  writeFileSync(
+    runtimeConfigPath(),
+    `${JSON.stringify({ runtimeRoot: candidate }, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
+    "utf8"
+  );
   return { ok: true, message: "OpenNV runtime bridge connected." };
 }
 
@@ -111,11 +132,12 @@ function launch(request) {
 }
 
 function createWindow() {
+  const policy = desktopLauncherPolicy();
   const window = new BrowserWindow({
-    width: 1380,
-    height: 900,
-    minWidth: 1040,
-    minHeight: 720,
+    width: policy.mainWindowWidthPixels,
+    height: policy.mainWindowHeightPixels,
+    minWidth: policy.mainWindowMinimumWidthPixels,
+    minHeight: policy.mainWindowMinimumHeightPixels,
     backgroundColor: "#050b12",
     title: "Open Nevada",
     webPreferences: {

@@ -12,15 +12,29 @@ from typing import Callable
 
 from PIL import Image
 
-from gltf_io import BufferBuilder, atomic_write, compiler_sources_sha256, pack_floats, sha256_bytes
+from gltf_io import (
+    GL_ARRAY_BUFFER,
+    GL_ELEMENT_ARRAY_BUFFER,
+    GL_FLOAT,
+    GL_UNSIGNED_SHORT,
+    BufferBuilder,
+    atomic_write,
+    compiler_sources_sha256,
+    pack_floats,
+    sha256_bytes,
+)
 from landscape_catalog import LAND_VERTEX_SIDE, Landscape, LandscapeCatalog
+from runtime_configuration import ContentCompilerConfiguration
 from texture_pipeline import TextureArtifact, TexturePipeline, file_sha256
 
 
 SCHEMA = "opennv-landscape-gltf/v1"
 GENERATOR = "OpenNV direct LAND exporter v1"
-QUADRANT_PIXELS = 512
-TILES_PER_QUADRANT = 4
+LAND_QUADRANT_VERTEX_SIDE = 17
+LAND_QUADRANT_LAST_VERTEX = LAND_QUADRANT_VERTEX_SIDE - 1
+BYTE_CHANNEL_MAXIMUM = 255.0
+EXTERIOR_CELL_SIZE_GAME_UNITS = 4096.0
+LAND_VERTEX_SPACING_GAME_UNITS = 128.0
 
 
 def compiler_provenance() -> dict[str, str]:
@@ -44,45 +58,69 @@ def canonical_texture_path(value: str) -> str:
     return path if path.startswith("textures\\") else f"textures\\{path}"
 
 
-def _tiled_quadrant(source: Image.Image) -> Image.Image:
-    tile_size = QUADRANT_PIXELS // TILES_PER_QUADRANT
+def _tiled_quadrant(
+    source: Image.Image,
+    compiler: ContentCompilerConfiguration,
+) -> Image.Image:
+    quadrant_pixels = compiler.landscape_quadrant_pixels
+    tiles_per_quadrant = compiler.landscape_tiles_per_quadrant
+    tile_size = quadrant_pixels // tiles_per_quadrant
     tile = source.convert("RGB").resize((tile_size, tile_size), Image.Resampling.LANCZOS)
-    result = Image.new("RGB", (QUADRANT_PIXELS, QUADRANT_PIXELS))
-    for y in range(TILES_PER_QUADRANT):
-        for x in range(TILES_PER_QUADRANT):
+    result = Image.new("RGB", (quadrant_pixels, quadrant_pixels))
+    for y in range(tiles_per_quadrant):
+        for x in range(tiles_per_quadrant):
             result.paste(tile, (x * tile_size, y * tile_size))
     return result
 
 
-def _opacity_mask(rows: tuple[object, ...]) -> Image.Image:
-    vertices = Image.new("L", (17, 17), 0)
+def _opacity_mask(
+    rows: tuple[object, ...],
+    compiler: ContentCompilerConfiguration,
+) -> Image.Image:
+    vertices = Image.new(
+        "L",
+        (LAND_QUADRANT_VERTEX_SIDE, LAND_QUADRANT_VERTEX_SIDE),
+        0,
+    )
     for row in rows:
-        x = row.vertex_index % 17
-        y = row.vertex_index // 17
-        vertices.putpixel((x, 16 - y), round(row.opacity * 255.0))
-    return vertices.resize((QUADRANT_PIXELS, QUADRANT_PIXELS), Image.Resampling.BILINEAR)
+        x = row.vertex_index % LAND_QUADRANT_VERTEX_SIDE
+        y = row.vertex_index // LAND_QUADRANT_VERTEX_SIDE
+        vertices.putpixel(
+            (x, LAND_QUADRANT_LAST_VERTEX - y),
+            round(row.opacity * BYTE_CHANNEL_MAXIMUM),
+        )
+    return vertices.resize(
+        (compiler.landscape_quadrant_pixels, compiler.landscape_quadrant_pixels),
+        Image.Resampling.BILINEAR,
+    )
 
 
 def bake_landscape_diffuse(
     landscape: Landscape,
     image_for_texture: Callable[[int], Image.Image],
+    compiler: ContentCompilerConfiguration,
 ) -> Image.Image:
-    result = Image.new("RGB", (QUADRANT_PIXELS * 2, QUADRANT_PIXELS * 2))
+    quadrant_pixels = compiler.landscape_quadrant_pixels
+    result = Image.new("RGB", (quadrant_pixels * 2, quadrant_pixels * 2))
     destinations = {
-        0: (0, QUADRANT_PIXELS),
-        1: (QUADRANT_PIXELS, QUADRANT_PIXELS),
+        0: (0, quadrant_pixels),
+        1: (quadrant_pixels, quadrant_pixels),
         2: (0, 0),
-        3: (QUADRANT_PIXELS, 0),
+        3: (quadrant_pixels, 0),
     }
     for quadrant in range(4):
         base = next(layer for layer in landscape.base_layers if layer.quadrant == quadrant)
-        composite = _tiled_quadrant(image_for_texture(base.texture_form_id))
+        composite = _tiled_quadrant(image_for_texture(base.texture_form_id), compiler)
         for layer in sorted(
             (value for value in landscape.alpha_layers if value.quadrant == quadrant),
             key=lambda value: value.layer_index,
         ):
-            overlay = _tiled_quadrant(image_for_texture(layer.texture_form_id))
-            composite = Image.composite(overlay, composite, _opacity_mask(layer.opacities))
+            overlay = _tiled_quadrant(image_for_texture(layer.texture_form_id), compiler)
+            composite = Image.composite(
+                overlay,
+                composite,
+                _opacity_mask(layer.opacities, compiler),
+            )
         result.paste(composite, destinations[quadrant])
     return result
 
@@ -98,16 +136,16 @@ def landscape_geometry(
     list[tuple[float, float, float, float]],
     list[tuple[int, int, int]],
 ]:
-    cell_x = cell_coordinates[0] * 4096.0
-    cell_y = cell_coordinates[1] * 4096.0
+    cell_x = cell_coordinates[0] * EXTERIOR_CELL_SIZE_GAME_UNITS
+    cell_y = cell_coordinates[1] * EXTERIOR_CELL_SIZE_GAME_UNITS
     positions = []
     normals = []
     uvs = []
     for y in range(LAND_VERTEX_SIDE):
         for x in range(LAND_VERTEX_SIDE):
             index = y * LAND_VERTEX_SIDE + x
-            game_x = cell_x + x * 128.0
-            game_y = cell_y + y * 128.0
+            game_x = cell_x + x * LAND_VERTEX_SPACING_GAME_UNITS
+            game_y = cell_y + y * LAND_VERTEX_SPACING_GAME_UNITS
             game_z = landscape.heights[index]
             positions.append(
                 (
@@ -132,10 +170,10 @@ def landscape_geometry(
     return positions, normals, uvs, list(landscape.colors), triangles
 
 
-def _atomic_png(path: Path, image: Image.Image) -> None:
+def _atomic_png(path: Path, image: Image.Image, compression_level: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
-    image.save(temporary, format="PNG", optimize=True, compress_level=9)
+    image.save(temporary, format="PNG", optimize=True, compress_level=compression_level)
     os.replace(temporary, path)
 
 
@@ -146,9 +184,12 @@ def export_landscape_gltf(
     origin_game_units: tuple[float, float, float],
     texture_pipeline: TexturePipeline,
     output_root: Path,
+    compiler_configuration: ContentCompilerConfiguration,
 ) -> tuple[dict[str, object], dict[str, object]]:
     source_hash = sha256_bytes(landscape.source_bytes)
-    asset_id = hashlib.sha256(f"LAND:{landscape.form_id:08x}:{source_hash}".encode()).hexdigest()[:20]
+    asset_id = hashlib.sha256(
+        f"LAND:{landscape.form_id:08x}:{source_hash}".encode()
+    ).hexdigest()[:compiler_configuration.asset_id_hex_characters]
     diffuse_paths = {
         layer.texture_form_id: canonical_texture_path(catalog.diffuse_path(layer.texture_form_id))
         for layer in (*landscape.base_layers, *landscape.alpha_layers)
@@ -160,10 +201,16 @@ def export_landscape_gltf(
         form_id: Image.open(artifact.png_path).convert("RGB")
         for form_id, artifact in texture_artifacts.items()
     }
-    baked = bake_landscape_diffuse(landscape, prepared_images.__getitem__)
-    baked_id = hashlib.sha256(f"LAND-BAKED:{landscape.form_id:08x}:{source_hash}".encode()).hexdigest()[:20]
+    baked = bake_landscape_diffuse(
+        landscape,
+        prepared_images.__getitem__,
+        compiler_configuration,
+    )
+    baked_id = hashlib.sha256(
+        f"LAND-BAKED:{landscape.form_id:08x}:{source_hash}".encode()
+    ).hexdigest()[:compiler_configuration.asset_id_hex_characters]
     baked_path = output_root / f"{baked_id}.png"
-    _atomic_png(baked_path, baked)
+    _atomic_png(baked_path, baked, compiler_configuration.png_compression_level)
     baked_sources = [
         {
             "ltexFormId": f"{form_id:08x}",
@@ -189,7 +236,7 @@ def export_landscape_gltf(
         "sources": baked_sources,
         "bakeContract": {
             "quadrants": "0=lower-left,1=lower-right,2=upper-left,3=upper-right",
-            "tileRepeatsPerCell": 8,
+            "tileRepeatsPerCell": compiler_configuration.landscape_tile_repeats_per_cell,
             "alphaInterpolation": "17x17-bilinear",
             "alphaOrder": "ascending-ATXT-layer",
         },
@@ -201,29 +248,41 @@ def export_landscape_gltf(
     builder = BufferBuilder()
     position_accessor = builder.add(
         pack_floats(positions),
-        component_type=5126,
+        component_type=GL_FLOAT,
         count=len(positions),
         value_type="VEC3",
-        target=34962,
+        target=GL_ARRAY_BUFFER,
         minimum=[min(value[axis] for value in positions) for axis in range(3)],
         maximum=[max(value[axis] for value in positions) for axis in range(3)],
     )
     normal_accessor = builder.add(
-        pack_floats(normals), component_type=5126, count=len(normals), value_type="VEC3", target=34962
+        pack_floats(normals),
+        component_type=GL_FLOAT,
+        count=len(normals),
+        value_type="VEC3",
+        target=GL_ARRAY_BUFFER,
     )
     uv_accessor = builder.add(
-        pack_floats(uvs), component_type=5126, count=len(uvs), value_type="VEC2", target=34962
+        pack_floats(uvs),
+        component_type=GL_FLOAT,
+        count=len(uvs),
+        value_type="VEC2",
+        target=GL_ARRAY_BUFFER,
     )
     color_accessor = builder.add(
-        pack_floats(colors), component_type=5126, count=len(colors), value_type="VEC4", target=34962
+        pack_floats(colors),
+        component_type=GL_FLOAT,
+        count=len(colors),
+        value_type="VEC4",
+        target=GL_ARRAY_BUFFER,
     )
     indices = [value for triangle in triangles for value in triangle]
     index_accessor = builder.add(
         struct.pack(f"<{len(indices)}H", *indices),
-        component_type=5123,
+        component_type=GL_UNSIGNED_SHORT,
         count=len(indices),
         value_type="SCALAR",
-        target=34963,
+        target=GL_ELEMENT_ARRAY_BUFFER,
     )
     surface_name = f"LAND_{landscape.form_id:08x}"
     model_path = output_root / f"{asset_id}.gltf"
@@ -291,7 +350,9 @@ def export_landscape_gltf(
             "alphaLayers": len(landscape.alpha_layers),
         },
         "surfaces": [{
-            "stableId": hashlib.sha256(f"{source_hash}:{surface_name}".encode()).hexdigest()[:24],
+            "stableId": hashlib.sha256(
+                f"{source_hash}:{surface_name}".encode()
+            ).hexdigest()[:compiler_configuration.stable_id_hex_characters],
             "name": surface_name,
             "vertices": len(positions),
             "triangles": len(triangles),

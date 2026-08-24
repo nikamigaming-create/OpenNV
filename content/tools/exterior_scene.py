@@ -14,8 +14,8 @@ from cell_scene import (
     godot_rotation_quaternion,
     godot_yaw_radians,
     normalized_rgb,
-    yaw_only,
 )
+from cell_catalog import INITIALLY_DISABLED_RECORD_FLAG
 from landscape_catalog import scan_landscape_catalog
 from landscape_gltf import export_landscape_gltf
 from scene_asset_pipeline import (
@@ -25,6 +25,13 @@ from scene_asset_pipeline import (
     reference_selection_reason,
 )
 from texture_pipeline import TexturePipeline
+from runtime_configuration import load_runtime_configuration
+
+
+FORM_ID_RADIX = 16
+EXTERIOR_CELL_SIZE_GAME_UNITS = 4096.0
+LAND_VERTEX_AXIS_COUNT = 33
+LAND_QUAD_AXIS_COUNT = LAND_VERTEX_AXIS_COUNT - 1
 
 
 def prepare_exterior_scene(
@@ -36,6 +43,8 @@ def prepare_exterior_scene(
     recipe: dict[str, object],
     master_sha256: str,
 ) -> dict[str, object]:
+    configuration = load_runtime_configuration()
+    units_to_meters = configuration.world_units_to_meters
     if recipe.get("schema") != EXTERIOR_RECIPE_SCHEMA:
         raise ValueError(f"Unexpected exterior recipe schema: {recipe.get('schema')}")
     expected_master = str(recipe["master"]["sha256"])
@@ -45,9 +54,9 @@ def prepare_exterior_scene(
         )
 
     catalog = scan_cell_catalog(master_path)
-    cell_form_id = int(str(recipe["cellFormId"]), 16)
-    persistent_cell_form_id = int(str(recipe["persistentCellFormId"]), 16)
-    worldspace_form_id = int(str(recipe["worldspaceFormId"]), 16)
+    cell_form_id = int(str(recipe["cellFormId"]), FORM_ID_RADIX)
+    persistent_cell_form_id = int(str(recipe["persistentCellFormId"]), FORM_ID_RADIX)
+    worldspace_form_id = int(str(recipe["worldspaceFormId"]), FORM_ID_RADIX)
     cell = catalog.cells.get(cell_form_id)
     persistent_cell = catalog.cells.get(persistent_cell_form_id)
     if (
@@ -60,16 +69,20 @@ def prepare_exterior_scene(
         or persistent_cell.worldspace_form_id != worldspace_form_id
     ):
         raise ValueError("Exterior recipe CELL/worldspace relationship is invalid")
-    entry_door = int(str(recipe["entryDoorReferenceFormId"]), 16)
-    reciprocal_door = int(str(recipe["reciprocalDoorReferenceFormId"]), 16)
+    entry_door = int(str(recipe["entryDoorReferenceFormId"]), FORM_ID_RADIX)
+    reciprocal_door = int(str(recipe["reciprocalDoorReferenceFormId"]), FORM_ID_RADIX)
     source_door, arrival = arrival_transform(catalog, entry_door)
     if source_door != reciprocal_door:
         raise ValueError(
             f"Exterior entry XTEL mismatch: expected={reciprocal_door:08x} actual={source_door:08x}"
         )
     origin = arrival.position
-    cell_minimum = (cell.coordinates[0] * 4096.0, cell.coordinates[1] * 4096.0)
-    cell_maximum = (cell_minimum[0] + 4096.0, cell_minimum[1] + 4096.0)
+    cell_minimum = tuple(
+        coordinate * EXTERIOR_CELL_SIZE_GAME_UNITS for coordinate in cell.coordinates
+    )
+    cell_maximum = tuple(
+        minimum + EXTERIOR_CELL_SIZE_GAME_UNITS for minimum in cell_minimum
+    )
     candidates = list(catalog.references_for(cell_form_id))
     candidates.extend(
         reference
@@ -82,10 +95,6 @@ def prepare_exterior_scene(
 
     selected: list[tuple[PlacedReference, BaseObject]] = []
     excluded_references: list[dict[str, str]] = []
-    skipped_non_yaw: list[str] = []
-    allow_non_yaw_types = {
-        str(value) for value in recipe["selection"].get("allowNonYawRecordTypes", [])
-    }
     for reference in candidates:
         base = catalog.base_objects.get(reference.base_form_id)
         if base is None:
@@ -102,13 +111,6 @@ def prepare_exterior_scene(
                     }
                 )
             continue
-        if (
-            bool(recipe["selection"]["yawOnly"])
-            and base.record_type not in allow_non_yaw_types
-            and not yaw_only(reference.transform)
-        ):
-            skipped_non_yaw.append(form_id(reference.form_id))
-            continue
         selected.append((reference, base))
     if entry_door not in {reference.form_id for reference, _base in selected}:
         raise ValueError(f"Exterior scene did not select its entry door {entry_door:08x}")
@@ -119,6 +121,7 @@ def prepare_exterior_scene(
         cache_root,
         recipe,
         selected,
+        configuration.content_compiler,
     )
     landscapes = scan_landscape_catalog(master_path, {cell_form_id})
     landscape = landscapes.landscape_for_cell(cell_form_id)
@@ -128,6 +131,7 @@ def prepare_exterior_scene(
         texture_archive_paths,
         cache_root,
         {str(source): str(target) for source, target in recipe.get("textureAliases", {}).items()},
+        configuration.content_compiler,
     )
     terrain_asset, terrain_texture = export_landscape_gltf(
         landscape,
@@ -136,6 +140,7 @@ def prepare_exterior_scene(
         origin,
         terrain_pipeline,
         cache_root / "generated" / "cells" / str(recipe["id"]) / "assets",
+        configuration.content_compiler,
     )
 
     references = []
@@ -154,7 +159,8 @@ def prepare_exterior_scene(
                 "yawRadians": reference.transform.rotation_radians[2],
                 "yawGodotRadians": godot_yaw_radians(reference.transform.rotation_radians[2]),
                 "rotationGodotQuaternion": godot_rotation_quaternion(reference.transform.rotation_radians),
-                "initiallyDisabled": bool(reference.flags & 0x00000800),
+                "scale": reference.scale,
+                "initiallyDisabled": bool(reference.flags & INITIALLY_DISABLED_RECORD_FLAG),
                 "teleportDestinationFormId": (
                     form_id(reference.teleport_destination_form_id)
                     if reference.teleport_destination_form_id is not None
@@ -176,6 +182,7 @@ def prepare_exterior_scene(
             "yawRadians": 0.0,
             "yawGodotRadians": 0.0,
             "rotationGodotQuaternion": [0.0, 0.0, 0.0, 1.0],
+            "scale": 1.0,
             "initiallyDisabled": False,
             "teleportDestinationFormId": None,
             "interaction": None,
@@ -195,17 +202,17 @@ def prepare_exterior_scene(
                 "positionGameUnits": list(reference.transform.position),
                 "positionGodotUnits": godot_position(reference.transform.position, origin),
                 "radiusGameUnits": light.radius,
-                "radiusMeters": light.radius * float(recipe["unitsToMeters"]),
+                "radiusMeters": light.radius * units_to_meters,
                 "color": normalized_rgb(light.color_rgb),
                 "intensity": light.intensity,
                 "falloff": light.falloff,
                 "fieldOfView": light.field_of_view,
                 "lightFlags": light.flags,
-                "initiallyDisabled": bool(reference.flags & 0x00000800),
+                "initiallyDisabled": bool(reference.flags & INITIALLY_DISABLED_RECORD_FLAG),
             }
         )
 
-    environment = recipe["environment"]
+    environment = configuration.document["exteriorEnvironment"]
     output_path = cache_root / "generated" / "cells" / str(recipe["id"]) / "cell-scene.json"
     all_assets = [*assets.values(), terrain_asset]
     all_textures = [
@@ -222,6 +229,7 @@ def prepare_exterior_scene(
             "textureArchives": texture_archive_rows,
         },
         "compiler": compiler,
+        "configuration": configuration.manifest(),
         "cell": {
             "formId": form_id(cell.form_id),
             "editorId": str(recipe["editorId"]),
@@ -232,7 +240,7 @@ def prepare_exterior_scene(
         "coordinates": {
             "source": "Gamebryo X-right/Y-forward/Z-up, radians",
             "target": "Godot X-right/Y-up/-Z-forward",
-            "unitsToMeters": recipe["unitsToMeters"],
+            "unitsToMeters": units_to_meters,
             "originGameUnits": list(origin),
             "grid": list(cell.coordinates),
         },
@@ -255,7 +263,7 @@ def prepare_exterior_scene(
             "reciprocalDoorReferenceFormId": form_id(reciprocal_door),
         },
         "lighting": {
-            "mode": "exterior-bounded-clear-day",
+            "mode": environment["mode"],
             "ambientColor": environment["ambientColor"],
             "directionalColor": environment["directionalColor"],
             "fogColor": environment["fogColor"],
@@ -265,7 +273,6 @@ def prepare_exterior_scene(
             "directionalFade": environment["directionalFade"],
             "fogClipDistanceGameUnits": environment["fogFarGameUnits"],
             "fogPower": environment["fogPower"],
-            "calibration": environment["calibration"],
             "lights": lights,
         },
         "assets": sorted(all_assets, key=lambda value: value["id"]),
@@ -273,9 +280,9 @@ def prepare_exterior_scene(
         "references": references,
         "coverage": {
             "selectedReferences": len(selected),
+            "sourceReferences": len(candidates),
             "exportedAssets": len(all_assets),
             "doors": sum(1 for _reference, base in selected if base.record_type == "DOOR"),
-            "skippedNonYawReferences": skipped_non_yaw,
             "excludedReferences": excluded_references,
             "excludedEditorMarkerSurfaces": sum(
                 len(sidecar["coverage"]["excludedEditorMarkerSurfaces"])
@@ -289,8 +296,8 @@ def prepare_exterior_scene(
             "landscape": {
                 "formId": form_id(landscape.form_id),
                 "compressionChecksumValid": landscape.compression_checksum_valid,
-                "vertices": 33 * 33,
-                "triangles": 32 * 32 * 2,
+                "vertices": LAND_VERTEX_AXIS_COUNT * LAND_VERTEX_AXIS_COUNT,
+                "triangles": LAND_QUAD_AXIS_COUNT * LAND_QUAD_AXIS_COUNT * 2,
                 "baseLayers": len(landscape.base_layers),
                 "alphaLayers": len(landscape.alpha_layers),
             },

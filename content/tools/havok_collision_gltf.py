@@ -8,7 +8,18 @@ from pathlib import Path
 
 from pyffi.formats.nif import NifFormat  # type: ignore
 
-from gltf_io import BufferBuilder, atomic_write, pack_floats, sha256_bytes
+from gltf_io import (
+    GL_ARRAY_BUFFER,
+    GL_ELEMENT_ARRAY_BUFFER,
+    GL_FLOAT,
+    GL_UNSIGNED_INT,
+    GL_UNSIGNED_SHORT,
+    GL_UNSIGNED_SHORT_MAX,
+    BufferBuilder,
+    atomic_write,
+    pack_floats,
+    sha256_bytes,
+)
 
 
 HAVOK_TO_GAME_UNITS = 7.0
@@ -158,22 +169,24 @@ def write_collision_gltf(
         triangles = body["triangles"]
         position_accessor = builder.add(
             pack_floats(positions),
-            component_type=5126,
+            component_type=GL_FLOAT,
             count=len(positions),
             value_type="VEC3",
-            target=34962,
+            target=GL_ARRAY_BUFFER,
             minimum=[min(value[axis] for value in positions) for axis in range(3)],
             maximum=[max(value[axis] for value in positions) for axis in range(3)],
         )
         indices = [value for triangle in triangles for value in triangle]
-        index_component = 5123 if len(positions) <= 65535 else 5125
-        index_format = "H" if index_component == 5123 else "I"
+        index_component = (
+            GL_UNSIGNED_SHORT if len(positions) <= GL_UNSIGNED_SHORT_MAX else GL_UNSIGNED_INT
+        )
+        index_format = "H" if index_component == GL_UNSIGNED_SHORT else "I"
         index_accessor = builder.add(
             struct.pack(f"<{len(indices)}{index_format}", *indices),
             component_type=index_component,
             count=len(indices),
             value_type="SCALAR",
-            target=34963,
+            target=GL_ELEMENT_ARRAY_BUFFER,
         )
         meshes.append(
             {

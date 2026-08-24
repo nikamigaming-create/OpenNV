@@ -18,6 +18,7 @@ from actor_material import (  # noqa: E402
     actor_roughness,
     actor_vertex_colors_enabled,
 )
+from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class ActorGltfTest(unittest.TestCase):
@@ -42,7 +43,10 @@ class ActorGltfTest(unittest.TestCase):
         material.specular_color.r = 0.0
         material.specular_color.g = 0.0
         material.specular_color.b = 0.0
-        self.assertEqual(actor_roughness(material), (1.0, "ni-material-zero-specular"))
+        self.assertEqual(
+            actor_roughness(material, load_runtime_configuration().content_compiler),
+            (1.0, "ni-material-zero-specular"),
+        )
 
     def test_retail_hair_blends_while_outfit_alpha_tests(self):
         hair = NifFormat.NiAlphaProperty()

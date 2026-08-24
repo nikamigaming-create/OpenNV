@@ -12,6 +12,7 @@ pyffi_data.extend(
     for source in pyffi_root.rglob("*.xml")
 )
 pyffi_data.append((str(content_root / "recipes"), "recipes"))
+pyffi_data.append((str(content_root.parent / "runtime" / "config"), "config"))
 
 analysis = Analysis(
     [str(tools / "prepare_legal_assets.py")],

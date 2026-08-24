@@ -4,7 +4,11 @@ namespace OpenNV.Runtime;
 
 internal static class StaticModelSlice
 {
-    internal static LoadedStaticModel Load(string modelPath, string sidecarPath, Node3D parent)
+    internal static LoadedStaticModel Load(
+        string modelPath,
+        string sidecarPath,
+        Node3D parent,
+        RuntimeConfiguration configuration)
     {
         var loaded = VerifiedGltfLoader.Load(modelPath, sidecarPath);
         loaded.CollisionScene?.Free();
@@ -23,36 +27,44 @@ internal static class StaticModelSlice
         if (surfaces == 0 || vertices == 0)
             throw new InvalidOperationException("Imported glTF contains no renderable surfaces or vertices.");
 
-        BuildReferenceView(parent, meshes[0]);
+        BuildReferenceView(parent, meshes[0], configuration.DiagnosticPreview);
         return new LoadedStaticModel(loaded.SourceSha256, meshes.Length, surfaces, vertices);
     }
 
-    private static void BuildReferenceView(Node3D parent, MeshInstance3D referenceMesh)
+    private static void BuildReferenceView(
+        Node3D parent,
+        MeshInstance3D referenceMesh,
+        DiagnosticPreviewConfiguration configuration)
     {
         var bounds = referenceMesh.Mesh!.GetAabb();
         var center = bounds.GetCenter();
-        var extent = MathF.Max(MathF.Max(bounds.Size.X, bounds.Size.Y), MathF.Max(bounds.Size.Z, 1.0f));
+        var extent = MathF.Max(
+            MathF.Max(bounds.Size.X, bounds.Size.Y),
+            MathF.Max(bounds.Size.Z, configuration.MinimumNearMeters));
         var environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = new Color(0.03f, 0.035f, 0.04f),
+            BackgroundColor = configuration.BackgroundColorRgba.Color(),
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
-            AmbientLightColor = new Color(0.35f, 0.38f, 0.42f),
-            AmbientLightEnergy = 0.65f,
+            AmbientLightColor = configuration.AmbientColorRgba.Color(),
+            AmbientLightEnergy = configuration.AmbientEnergy,
             TonemapMode = Godot.Environment.ToneMapper.Filmic,
         };
         parent.AddChild(new WorldEnvironment { Environment = environment });
         parent.AddChild(new DirectionalLight3D
         {
-            RotationDegrees = new Vector3(-50.0f, -30.0f, 0.0f),
-            LightEnergy = 1.4f,
+            RotationDegrees = configuration.LightRotationDegrees.Vector3(),
+            LightEnergy = configuration.LightEnergy,
             ShadowEnabled = true,
         });
         var camera = new Camera3D
         {
-            Position = center + new Vector3(extent * 1.2f, extent * 0.65f, extent * 1.8f),
-            Near = MathF.Max(0.01f, extent / 10_000.0f),
-            Far = MathF.Max(100.0f, extent * 20.0f),
+            Position = center + new Vector3(
+                extent * configuration.CameraOffsetExtentMultipliers[0],
+                extent * configuration.CameraOffsetExtentMultipliers[1],
+                extent * configuration.CameraOffsetExtentMultipliers[2]),
+            Near = MathF.Max(configuration.MinimumNearMeters, extent / configuration.NearExtentDivisor),
+            Far = MathF.Max(configuration.MinimumFarMeters, extent * configuration.FarExtentMultiplier),
             Current = true,
         };
         parent.AddChild(camera);

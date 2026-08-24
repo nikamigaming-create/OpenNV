@@ -15,17 +15,15 @@ from cell_scene import load_recipe, load_spatial_recipe, prepare_cell_scene
 from exterior_scene import prepare_exterior_scene
 from export_static_nif_gltf import export_static_nif
 from prepare_actor import prepare_actor_set
+from runtime_configuration import load_runtime_configuration
 
 
 SCHEMA = "opennv-legal-asset-cache/v1"
 
 
 def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def find_required_file(root: Path, expected_name: str) -> Path:
@@ -49,6 +47,7 @@ def prepare(
     expected_meshes_sha256: str = "",
     cell_recipe: str = "",
 ) -> dict[str, object]:
+    configuration = load_runtime_configuration()
     master = find_required_file(data_root, "FalloutNV.esm")
     meshes = find_required_file(data_root, "Fallout - Meshes.bsa")
     master_hash = file_sha256(master)
@@ -68,7 +67,14 @@ def prepare(
     output_root = cache_root / "generated" / "static"
     gltf_path = output_root / "retail-static.gltf"
     sidecar_path = output_root / "retail-static.opennv.json"
-    sidecar = export_static_nif(source_path, member.logical_path, gltf_path, sidecar_path, strict=True)
+    sidecar = export_static_nif(
+        source_path,
+        member.logical_path,
+        gltf_path,
+        sidecar_path,
+        configuration.content_compiler,
+        strict=True,
+    )
     cell_scene = None
     linked_cell_scenes: list[dict[str, object]] = []
     actor_scenes = None

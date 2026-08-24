@@ -21,12 +21,5 @@
   ],
   "cellFormId": "000846ea",
   "cellRecipe": "goodsprings-saloon-exterior-v1",
-  "proofActorReferenceFormId": "00104c80",
-  "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
-  "hairShape": "Hat",
-  "skinToneRgba": [62, 65, 62, 64],
-  "skinToneSource": "provisional-caucasian-runtime-calibration",
-  "outfitArmorFormIds": ["000ef1cc", "001083e0"],
-  "rigidOutfitArmorFormIds": ["001083e0"],
-  "excludeOutfitShapePrefixes": ["MeatCap", "meat", "armmeat", "arm2"]
+  "proofActorReferenceFormId": "00104c80"
 }

@@ -6,6 +6,7 @@ namespace OpenNV.Runtime;
 public partial class RuntimeCoordinator : Node3D
 {
     private Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
+    private RuntimeConfiguration _configuration = null!;
     private LegalAssetSetupView? _setupView;
 
     public override void _Ready()
@@ -17,6 +18,12 @@ public partial class RuntimeCoordinator : Node3D
     {
         try
         {
+            _configuration = RuntimeConfiguration.Load();
+            GetWindow().Size = new Vector2I(
+                _configuration.Capture.ExpectedWidthPixels,
+                _configuration.Capture.ExpectedHeightPixels);
+            RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
+            Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
             _options = ParseOptions(OS.GetCmdlineUserArgs());
             if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
                 throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
@@ -50,7 +57,7 @@ public partial class RuntimeCoordinator : Node3D
 
             if (hasDataRoot)
             {
-                var prepared = LegalAssetPreparer.Prepare(dataRoot!, _options);
+                var prepared = LegalAssetPreparer.Prepare(dataRoot!, _options, _configuration);
                 LoadPrepared(prepared, _options);
                 return;
             }
@@ -78,7 +85,11 @@ public partial class RuntimeCoordinator : Node3D
 
             if (_options.ContainsKey("reuse-cache"))
             {
-                if (!LegalAssetPreparer.TryRestore(_options, out var restored, out var restoreError))
+                if (!LegalAssetPreparer.TryRestore(
+                        _options,
+                        _configuration,
+                        out var restored,
+                        out var restoreError))
                     throw new InvalidOperationException(restoreError ?? "No prepared legal-asset cache exists.");
                 LoadPrepared(restored, _options);
                 return;
@@ -89,7 +100,11 @@ public partial class RuntimeCoordinator : Node3D
             GD.Print("OPENNV_GODOT_EXPERIMENTAL_READY playable=0 playableSandbox=1 openxr=experimental");
             if (DisplayServer.GetName() == "headless")
                 GetTree().Quit(0);
-            else if (LegalAssetPreparer.TryRestore(_options, out var restored, out var restoreError))
+            else if (LegalAssetPreparer.TryRestore(
+                         _options,
+                         _configuration,
+                         out var restored,
+                         out var restoreError))
                 LoadPrepared(restored, _options);
             else
                 ShowExperimentalStatus(restoreError);
@@ -128,6 +143,7 @@ public partial class RuntimeCoordinator : Node3D
         var loaded = CellSceneLoader.Load(
             scenePath,
             this,
+            _configuration,
             !runTraversalProof && options.ContainsKey("open-proof-door"),
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
@@ -142,6 +158,7 @@ public partial class RuntimeCoordinator : Node3D
             _ = EnvironmentCapture.Run(
                 this,
                 loaded,
+                _configuration,
                 captureRoot,
                 scenePath,
                 options.TryGetValue("report", out var captureReport) ? captureReport : null,
@@ -174,33 +191,34 @@ public partial class RuntimeCoordinator : Node3D
                 "OpenXR was requested but no initialized runtime is available. " +
                 "Launch with --xr-mode on before --, connect the headset, and verify the active OpenXR runtime.");
         GetViewport().UseXR = true;
-        Engine.PhysicsTicksPerSecond = 90;
+        Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
-        GD.Print("OPENNV_OPENXR_READY interface=OpenXR worldScale=1 physicsHz=90");
+        GD.Print(
+            $"OPENNV_OPENXR_READY interface=OpenXR worldScale={_configuration.Xr.WorldScale} " +
+            $"physicsHz={_configuration.Simulation.PhysicsTicksPerSecond}");
     }
 
     private void CompleteXrRigProof(IReadOnlyDictionary<string, string> options)
     {
-        var actionMap = ResourceLoader.Load("res://openxr_action_map.tres")
+        var contract = _configuration.Xr.Contract;
+        var proof = _configuration.Xr.DiagnosticRigProof;
+        var actionMap = ResourceLoader.Load(contract.ActionMapResourcePath)
             ?? throw new InvalidOperationException("OpenNV OpenXR action map could not be loaded.");
         var actionSets = actionMap.Get("action_sets").AsGodotArray();
-        if (actionSets.Count != 1)
-            throw new InvalidOperationException("OpenNV OpenXR action map must expose one gameplay action set.");
+        if (actionSets.Count != contract.ExpectedActionSetCount)
+            throw new InvalidOperationException("OpenNV OpenXR action-map set count disagrees with configuration.");
         var actionSet = actionSets[0].AsGodotObject() as Resource
             ?? throw new InvalidOperationException("OpenNV OpenXR gameplay action set is invalid.");
         var actions = actionSet.Get("actions").AsGodotArray();
-        if (actions.Count != 8)
-            throw new InvalidOperationException("OpenNV OpenXR gameplay action set must expose eight bounded actions.");
+        if (actions.Count != contract.ActionNames.Count)
+            throw new InvalidOperationException("OpenNV OpenXR action count disagrees with configuration.");
         var actionNames = actions
             .Select(value => value.AsGodotObject() as Resource
                 ?? throw new InvalidOperationException("OpenNV OpenXR action is invalid."))
             .Select(action => action.ResourceName)
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray();
-        var expectedActions = new[]
-        {
-            "activate", "aim", "fire", "haptic", "move", "reload", "save", "turn",
-        };
+        var expectedActions = contract.ActionNames.OrderBy(value => value, StringComparer.Ordinal).ToArray();
         if (!actionNames.SequenceEqual(expectedActions, StringComparer.Ordinal))
             throw new InvalidOperationException("OpenNV OpenXR action names are incomplete.");
         var interactionProfiles = actionMap.Get("interaction_profiles").AsGodotArray()
@@ -209,47 +227,53 @@ public partial class RuntimeCoordinator : Node3D
             .Select(profile => profile.Get("interaction_profile_path").AsString())
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray();
-        var expectedProfiles = new[]
-        {
-            "/interaction_profiles/khr/generic_controller",
-            "/interaction_profiles/oculus/touch_controller",
-        };
+        var expectedProfiles = contract.InteractionProfilePaths
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
         if (!interactionProfiles.SequenceEqual(expectedProfiles, StringComparer.Ordinal))
             throw new InvalidOperationException("OpenNV OpenXR interaction profile set is incomplete.");
 
-        Engine.PhysicsTicksPerSecond = 90;
+        Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
         var session = new GameplaySession();
         session.Configure(
-            "xr-rig-proof",
+            proof.SessionId,
+            proof.SessionId,
+            _configuration,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
             true);
         AddChild(session);
         var player = new CellPlayer();
-        player.Configure(0.0f, session, true, false);
+        player.Configure(0.0f, session, _configuration, true, false);
         AddChild(player);
         session.PrepareXrStartingLoadout(new GameplaySession.StartingWeapon(
-            "0000434f",
-            "Weap10mmPistol",
-            "00004241",
-            "Ammo10mm",
-            22,
-            12,
-            12));
+            proof.WeaponFormId,
+            proof.WeaponEditorId,
+            proof.AmmoFormId,
+            proof.AmmoEditorId,
+            proof.Damage,
+            proof.ClipSize,
+            proof.ReserveRounds));
         if (!session.Fire(player.RightHand!) || !session.Reload())
             throw new InvalidOperationException("OpenNV OpenXR fire/reload contract failed.");
+        if (session.ShotsFired != proof.ExpectedShotsFired ||
+            session.AmmoInMagazine != proof.ExpectedAmmoInMagazineAfterReload ||
+            session.ReserveAmmo != proof.ExpectedReserveRoundsAfterReload)
+            throw new InvalidOperationException("OpenNV OpenXR ammunition outcome disagrees with configuration.");
         var xrHud = player.LeftHand!.FindChild("XrObjectiveInventory", true, false);
         if (!player.UsesXr || player.Camera is not XRCamera3D || player.XrOrigin is null ||
             player.RightHand is null || player.XrRenderModels is not null || xrHud is not Label3D ||
-            player.XrOrigin.WorldScale != 1.0f)
+            !Mathf.IsEqualApprox(player.XrOrigin.WorldScale, _configuration.Xr.WorldScale))
             throw new InvalidOperationException("OpenNV OpenXR rig hierarchy is incomplete.");
 
         var report = new
         {
             schema = "opennv-openxr-rig/v2",
             status = "pass",
+            configurationSchema = RuntimeConfiguration.ExpectedSchema,
+            configurationSha256 = _configuration.Sha256,
             initializedRuntimeRequiredForPlay = true,
             viewportXrEnabledDuringProof = GetViewport().UseXR,
-            actionMap = "res://openxr_action_map.tres",
+            actionMap = contract.ActionMapResourcePath,
             actionSets = actionSets.Count,
             actions = actions.Count,
             actionNames,
@@ -264,14 +288,17 @@ public partial class RuntimeCoordinator : Node3D
             rightTracker = player.RightHand.Tracker.ToString(),
             controllerPose = player.RightHand.Pose.ToString(),
             worldScale = player.XrOrigin.WorldScale,
-            desiredEyeHeightMeters = CellPlayer.XrDesiredEyeHeightMeters,
+            desiredEyeHeightMeters = player.DesiredEyeHeightMeters,
             physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
             worldSpaceHud = xrHud is Label3D,
             sharedSaveSchema = session.Report(),
         };
         if (options.TryGetValue("report", out var reportPath))
             WriteReport(reportPath, report);
-        GD.Print("OPENNV_OPENXR_RIG_PASS profiles=generic,oculus-touch worldScale=1 physicsHz=90");
+        GD.Print(
+            $"OPENNV_OPENXR_RIG_PASS profiles=generic,oculus-touch " +
+            $"worldScale={_configuration.Xr.WorldScale} " +
+            $"physicsHz={_configuration.Simulation.PhysicsTicksPerSecond}");
         GetTree().Quit(0);
     }
 
@@ -284,18 +311,27 @@ public partial class RuntimeCoordinator : Node3D
         {
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-            var revolver = loaded.Pickups.Values.Single(pickup => pickup.ItemFormId == "0008f216");
+            var route = _configuration.Proof.GameplayRoute;
+            var revolver = loaded.Pickups.Values.Single(
+                pickup => pickup.ItemFormId == route.WeaponPickupFormId);
             loaded.Session.Collect(revolver);
             loaded.Session.Fire(loaded.Player.Camera);
-            var aid = loaded.Pickups.Values.First(pickup => pickup.EditorId == "Beer");
+            var aid = loaded.Pickups.Values.First(
+                pickup => pickup.EditorId == route.AidPickupEditorId);
             loaded.Session.Collect(aid);
-            var container = loaded.Containers.Values.Single(candidate => candidate.EditorId == "SSCrateContainerFull");
+            var container = loaded.Containers.Values.Single(
+                candidate => candidate.EditorId == route.ContainerEditorId);
             loaded.Session.OpenContainer(container);
             loaded.ProofDoor.SetOpen(true);
             loaded.Session.DoorChanged(loaded.ProofDoor);
-            if (!loaded.Session.ObjectiveComplete || loaded.Session.ShotsFired != 1 ||
-                loaded.Session.AmmoInMagazine != 5 || !loaded.Session.HasItem("00103b1e") ||
-                !loaded.Session.IsContainerEmptied("0010873e") || !File.Exists(loaded.Session.SavePath))
+            if (!loaded.Session.ObjectiveComplete ||
+                loaded.Session.ShotsFired != route.ExpectedShotsFired ||
+                loaded.Session.AmmoInMagazine != route.ExpectedAmmoInMagazine ||
+                loaded.Session.EmptiedContainersCount != route.ExpectedEmptiedContainers ||
+                loaded.Session.OpenDoorsCount != route.ExpectedOpenDoors ||
+                !loaded.Session.HasItem(route.ExpectedInventoryItemFormId) ||
+                !loaded.Session.IsContainerEmptied(route.ExpectedContainerReferenceFormId) ||
+                !File.Exists(loaded.Session.SavePath))
                 throw new InvalidOperationException("Playable route did not reach its persisted completion state.");
             WriteGameplayReport("first-run", loaded, scenePath, options);
             GetTree().Quit(0);
@@ -312,16 +348,21 @@ public partial class RuntimeCoordinator : Node3D
         string scenePath,
         IReadOnlyDictionary<string, string> options)
     {
-        if (!loaded.Session.ObjectiveComplete || loaded.Session.ShotsFired != 1 ||
-            loaded.Session.AmmoInMagazine != 5 || !loaded.ProofDoor.IsOpen ||
-            !loaded.Session.HasItem("00103b1e") || !loaded.Session.IsContainerEmptied("0010873e") ||
-            loaded.Pickups.Values.Any(pickup => pickup.ItemFormId == "0008f216"))
+        var route = _configuration.Proof.GameplayRoute;
+        if (!loaded.Session.ObjectiveComplete ||
+            loaded.Session.ShotsFired != route.ExpectedShotsFired ||
+            loaded.Session.AmmoInMagazine != route.ExpectedAmmoInMagazine || !loaded.ProofDoor.IsOpen ||
+            loaded.Session.EmptiedContainersCount != route.ExpectedEmptiedContainers ||
+            loaded.Session.OpenDoorsCount != route.ExpectedOpenDoors ||
+            !loaded.Session.HasItem(route.ExpectedInventoryItemFormId) ||
+            !loaded.Session.IsContainerEmptied(route.ExpectedContainerReferenceFormId) ||
+            loaded.Pickups.Values.Any(pickup => pickup.ItemFormId == route.WeaponPickupFormId))
             throw new InvalidOperationException("Cold reload did not restore the completed playable route.");
         WriteGameplayReport("cold-reload", loaded, scenePath, options);
         GetTree().Quit(0);
     }
 
-    private static void WriteGameplayReport(
+    private void WriteGameplayReport(
         string phase,
         CellSceneLoader.LoadedCell loaded,
         string scenePath,
@@ -331,6 +372,8 @@ public partial class RuntimeCoordinator : Node3D
         {
             schema = "opennv-godot-playable-route/v1",
             status = "pass",
+            configurationSchema = RuntimeConfiguration.ExpectedSchema,
+            configurationSha256 = _configuration.Sha256,
             phase,
             scene = scenePath,
             cellFormId = loaded.FormId,
@@ -360,24 +403,28 @@ public partial class RuntimeCoordinator : Node3D
         {
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-            var floor = CellSceneLoader.CastSpawnFloor(GetWorld3D().DirectSpaceState);
-            if (!floor.Hit || MathF.Abs(floor.Y) > 0.20f)
+            var floor = CellSceneLoader.CastSpawnFloor(
+                GetWorld3D().DirectSpaceState,
+                _configuration.Proof,
+                loaded.Player.CollisionMask,
+                loaded.Player.GetRid());
+            if (!floor.Hit || MathF.Abs(floor.Y) > _configuration.Proof.SpawnFloorToleranceMeters)
                 throw new InvalidOperationException(
                     $"XTEL floor contract failed: hit={floor.Hit} y={floor.Y} collider={floor.ColliderPath}");
-            var ray = CellSceneLoader.BuildProofRay(loaded.ProofDoor);
+            var ray = CellSceneLoader.BuildProofRay(loaded.ProofDoor, _configuration.Proof);
             var closed = CellSceneLoader.CastProofRay(
                 GetWorld3D().DirectSpaceState,
                 loaded.ProofDoor,
                 ray,
-                1u);
+                _configuration.Player.CollisionMask);
             loaded.ProofDoor.SetOpen(true);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             var opened = CellSceneLoader.CastProofRay(GetWorld3D().DirectSpaceState, loaded.ProofDoor, ray);
             var portalDirection = (ray.To - ray.From).Normalized();
             var portalCenter = (ray.From + ray.To) / 2.0f;
             var projectileRay = new CellSceneLoader.DoorRay(
-                portalCenter - portalDirection * 1.5f,
-                portalCenter + portalDirection * 6.0f,
+                portalCenter - portalDirection * _configuration.Proof.ProjectileRayStartMeters,
+                portalCenter + portalDirection * _configuration.Proof.ProjectileRayEndMeters,
                 ray.LocalSize,
                 ray.LocalNormal);
             var projectileHit = CellSceneLoader.CastProofRay(
@@ -386,8 +433,8 @@ public partial class RuntimeCoordinator : Node3D
                 projectileRay);
             var projectileBlockedByDoor = projectileHit.HitProofDoor || loaded.PortalLinks.Any(portal =>
                 projectileHit.ColliderPath.StartsWith(portal.ToDoor.GetPath().ToString(), StringComparison.Ordinal));
-            portalCenter.Y = 1.05f;
-            var portalMotion = portalDirection * 3.0f;
+            portalCenter.Y = _configuration.Proof.PortalCapsuleCenterHeightMeters;
+            var portalMotion = portalDirection * _configuration.Proof.PortalCapsuleMotionMeters;
             var forwardCollision = new KinematicCollision3D();
             var walkForwardBlocked = loaded.PortalLinks.Count > 0 && loaded.Player.TestMove(
                 new Transform3D(Basis.Identity, portalCenter - portalMotion / 2.0f),
@@ -412,9 +459,11 @@ public partial class RuntimeCoordinator : Node3D
             if (!closed.Hit || !closed.HitProofDoor || opened.HitProofDoor || linkedDoorBlocked ||
                 (requiresEmptyOpenRay && opened.Hit) ||
                 projectileBlockedByDoor ||
-                walkForwardBlocked || (walkBackwardBlocked && backwardNormal.Y < 0.7f) ||
+                walkForwardBlocked ||
+                (walkBackwardBlocked &&
+                    backwardNormal.Y < _configuration.Proof.WalkableSurfaceNormalYMinimum) ||
                 loaded.PortalLinks.Any(portal => !portal.FromDoor.IsOpen || !portal.ToDoor.IsOpen ||
-                    portal.AlignmentErrorMeters > 0.0001f))
+                    portal.AlignmentErrorMeters > _configuration.Proof.PortalAlignmentToleranceMeters))
                 throw new InvalidOperationException(
                     $"Door traversal contract failed: closedHit={closed.Hit} " +
                     $"closedHitDoor={closed.HitProofDoor} closedCollider={closed.ColliderPath} " +
@@ -440,8 +489,11 @@ public partial class RuntimeCoordinator : Node3D
                     opened.HitProofDoor || linkedDoorBlocked,
                     !projectileBlockedByDoor,
                     !walkForwardBlocked,
-                    !walkBackwardBlocked || backwardNormal.Y >= 0.7f,
-                    !walkForwardBlocked && (!walkBackwardBlocked || backwardNormal.Y >= 0.7f),
+                    !walkBackwardBlocked ||
+                        backwardNormal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum,
+                    !walkForwardBlocked &&
+                        (!walkBackwardBlocked ||
+                            backwardNormal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum),
                     loaded.LinkedCells.Count,
                     loaded.PortalLinks.Count == 0
                         ? null
@@ -465,6 +517,8 @@ public partial class RuntimeCoordinator : Node3D
         {
             schema = "opennv-godot-cell/v1",
             status = "pass",
+            configurationSchema = RuntimeConfiguration.ExpectedSchema,
+            configurationSha256 = _configuration.Sha256,
             renderer = "forward_plus",
             scene = scenePath,
             cellFormId = loaded.FormId,
@@ -554,7 +608,7 @@ public partial class RuntimeCoordinator : Node3D
         string sidecarPath,
         IReadOnlyDictionary<string, string> options)
     {
-        var loaded = StaticModelSlice.Load(modelPath, sidecarPath, this);
+        var loaded = StaticModelSlice.Load(modelPath, sidecarPath, this, _configuration);
         var report = new
         {
             schema = "opennv-godot-static-model/v1",
@@ -581,7 +635,7 @@ public partial class RuntimeCoordinator : Node3D
         string sidecarPath,
         IReadOnlyDictionary<string, string> options)
     {
-        var loaded = ActorModelSlice.Load(modelPath, sidecarPath, this);
+        var loaded = ActorModelSlice.Load(modelPath, sidecarPath, this, _configuration);
         var report = new
         {
             schema = "opennv-godot-actor/v1",
@@ -613,7 +667,7 @@ public partial class RuntimeCoordinator : Node3D
     private void ShowExperimentalStatus(string? restoreError)
     {
         _setupView = new LegalAssetSetupView();
-        _setupView.Configure(restoreError, OnDataRootSelected);
+        _setupView.Configure(restoreError, OnDataRootSelected, _configuration.SetupView);
         AddChild(_setupView);
     }
 
@@ -628,7 +682,7 @@ public partial class RuntimeCoordinator : Node3D
     {
         try
         {
-            var prepared = LegalAssetPreparer.Prepare(dataRoot, _options);
+            var prepared = LegalAssetPreparer.Prepare(dataRoot, _options, _configuration);
             LoadPrepared(prepared, _options);
             _setupView?.QueueFree();
             _setupView = null;
@@ -640,7 +694,7 @@ public partial class RuntimeCoordinator : Node3D
         }
     }
 
-    private static void WriteStartupReport(string reportPath)
+    private void WriteStartupReport(string reportPath)
     {
         WriteReport(reportPath, new
         {
@@ -650,7 +704,10 @@ public partial class RuntimeCoordinator : Node3D
             playableSandbox = true,
             openXrLaunchable = true,
             openXrHardwareValidated = false,
-            engine = "Godot 4.7.1 Forward+",
+            engine = Engine.GetVersionInfo()["string"].AsString(),
+            renderer = "forward_plus",
+            configurationSchema = RuntimeConfiguration.ExpectedSchema,
+            configurationSha256 = _configuration.Sha256,
         });
     }
 

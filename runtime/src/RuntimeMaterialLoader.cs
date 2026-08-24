@@ -14,25 +14,33 @@ internal static class RuntimeMaterialLoader
         uniform sampler2D environment_mask;
         uniform bool use_custom_mask;
         uniform float environment_scale;
+        uniform float normal_decode_scale;
+        uniform float normal_decode_bias;
+        uniform float reflection_homogeneous_w;
+        uniform float opaque_alpha;
 
         void fragment() {
             vec4 normal_sample = texture(normal_map, UV);
-            vec3 tangent_normal = normalize(normal_sample.xyz * 2.0 - 1.0);
+            vec3 tangent_normal = normalize(
+                normal_sample.xyz * normal_decode_scale + normal_decode_bias);
             vec3 view_normal = normalize(
                 TANGENT * tangent_normal.x +
                 BINORMAL * tangent_normal.y +
                 NORMAL * tangent_normal.z);
             vec3 reflected_view = reflect(-normalize(VIEW), view_normal);
-            vec3 reflected_world = normalize((INV_VIEW_MATRIX * vec4(reflected_view, 0.0)).xyz);
+            vec3 reflected_world = normalize(
+                (INV_VIEW_MATRIX * vec4(reflected_view, reflection_homogeneous_w)).xyz);
             float mask = use_custom_mask
                 ? texture(environment_mask, UV).r
                 : normal_sample.a;
             ALBEDO = texture(environment_cube, reflected_world).rgb * mask * environment_scale;
-            ALPHA = 1.0;
+            ALPHA = opaque_alpha;
         }
         """;
 
-    internal static LoadedTextures LoadTextures(JsonElement scene)
+    internal static LoadedTextures LoadTextures(
+        JsonElement scene,
+        RendererConfiguration configuration)
     {
         var textures = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
         var cubemaps = new Dictionary<string, Cubemap>(StringComparer.Ordinal);
@@ -51,7 +59,7 @@ internal static class RuntimeMaterialLoader
             if (texture.TryGetProperty("cubeFaces", out var cubeFaces))
             {
                 var rows = cubeFaces.EnumerateArray().ToArray();
-                if (rows.Length != 6)
+                if (rows.Length != configuration.CubemapFaceCount)
                     throw new InvalidOperationException($"Prepared cubemap must contain six faces: {id}");
                 var images = new Godot.Collections.Array<Image>();
                 foreach (var face in rows)
@@ -73,8 +81,12 @@ internal static class RuntimeMaterialLoader
                 cubemaps.Add(id, cubemap);
             }
         }
-        var neutralNormalImage = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
-        neutralNormalImage.Fill(new Color(0.5f, 0.5f, 1.0f, 1.0f));
+        var neutralNormalImage = Image.CreateEmpty(
+            configuration.NeutralNormalTextureSizePixels[0],
+            configuration.NeutralNormalTextureSizePixels[1],
+            false,
+            Image.Format.Rgba8);
+        neutralNormalImage.Fill(configuration.NeutralNormalColorRgba.Color());
         return new LoadedTextures(
             textures,
             cubemaps,
@@ -84,7 +96,8 @@ internal static class RuntimeMaterialLoader
     internal static int Apply(
         Node3D scene,
         JsonElement asset,
-        LoadedTextures textures)
+        LoadedTextures textures,
+        RendererConfiguration configuration)
     {
         var surfaces = Descendants<MeshInstance3D>(scene)
             .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh?.GetSurfaceCount() ?? 0)
@@ -115,7 +128,7 @@ internal static class RuntimeMaterialLoader
                     asset.GetProperty("id").GetString());
             var material = new StandardMaterial3D
             {
-                Metallic = 0.0f,
+                Metallic = configuration.DefaultMetallic,
                 Roughness = binding.GetProperty("roughness").GetSingle(),
                 AlbedoColor = ReadColor(binding.GetProperty("baseColorFactor"), 4),
                 VertexColorUseAsAlbedo =
@@ -142,7 +155,7 @@ internal static class RuntimeMaterialLoader
                 material.Emission = emissiveColor == Colors.Black ? Colors.White : emissiveColor;
                 material.EmissionTexture = emissive;
                 material.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
-                material.EmissionEnergyMultiplier = 1.0f;
+                material.EmissionEnergyMultiplier = configuration.EmissionEnergyMultiplier;
             }
             var alpha = binding.GetProperty("alphaContract");
             var alphaMode = alpha.GetProperty("mode").GetString();
@@ -170,7 +183,8 @@ internal static class RuntimeMaterialLoader
                     normal ?? textures.NeutralNormal,
                     Texture(binding, "environmentMaskTextureId", textures.TwoDimensional),
                     binding.GetProperty("environmentMapScale").GetSingle(),
-                    binding.GetProperty("doubleSided").GetBoolean());
+                    binding.GetProperty("doubleSided").GetBoolean(),
+                    configuration);
             }
             surface.Mesh.SetSurfaceOverrideMaterial(surface.Surface, material);
         }
@@ -196,7 +210,8 @@ internal static class RuntimeMaterialLoader
         Texture2D normal,
         Texture2D? mask,
         float scale,
-        bool doubleSided)
+        bool doubleSided,
+        RendererConfiguration configuration)
     {
         var shader = new Shader
         {
@@ -211,6 +226,12 @@ internal static class RuntimeMaterialLoader
         material.SetShaderParameter("environment_mask", mask ?? normal);
         material.SetShaderParameter("use_custom_mask", mask is not null);
         material.SetShaderParameter("environment_scale", scale);
+        material.SetShaderParameter("normal_decode_scale", configuration.EnvironmentNormalDecodeScale);
+        material.SetShaderParameter("normal_decode_bias", configuration.EnvironmentNormalDecodeBias);
+        material.SetShaderParameter(
+            "reflection_homogeneous_w",
+            configuration.EnvironmentReflectionHomogeneousW);
+        material.SetShaderParameter("opaque_alpha", configuration.EnvironmentOpaqueAlpha);
         return material;
     }
 

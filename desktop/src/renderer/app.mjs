@@ -30,7 +30,13 @@ function showToast(message, kind = "info") {
   toast.dataset.kind = kind;
   toast.classList.add("show");
   window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 5200);
+  const visibilityMilliseconds = state.desktopLauncher?.toastVisibilityMilliseconds;
+  if (Number.isFinite(visibilityMilliseconds)) {
+    showToast.timer = window.setTimeout(
+      () => toast.classList.remove("show"),
+      visibilityMilliseconds
+    );
+  }
 }
 
 function statusLabel(runtime) {

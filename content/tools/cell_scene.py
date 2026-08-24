@@ -8,7 +8,13 @@ import os
 import sys
 from pathlib import Path
 
-from cell_catalog import BaseObject, CellCatalog, PlacedReference, Transform, scan_cell_catalog
+from cell_catalog import (
+    INITIALLY_DISABLED_RECORD_FLAG,
+    BaseObject,
+    CellCatalog,
+    PlacedReference,
+    scan_cell_catalog,
+)
 from scene_asset_pipeline import (
     environment_texture_paths,
     form_id,
@@ -17,11 +23,15 @@ from scene_asset_pipeline import (
     reference_selection_reason,
     vr_smoke_loadout_manifest,
 )
+from runtime_configuration import load_runtime_configuration
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v7"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v8"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 EXTERIOR_RECIPE_SCHEMA = "opennv-exterior-recipe/v1"
+FORM_ID_RADIX = 16
+BYTE_CHANNEL_MAXIMUM = 255.0
+QUATERNION_COMPONENT_SCALE = 0.25
 
 
 def recipe_path(recipe_id: str) -> Path:
@@ -47,12 +57,6 @@ def load_spatial_recipe(recipe_id: str) -> dict[str, object]:
     return document
 
 
-def yaw_only(transform: Transform) -> bool:
-    return math.isclose(transform.rotation_radians[0], 0.0, abs_tol=1.0e-5) and math.isclose(
-        transform.rotation_radians[1], 0.0, abs_tol=1.0e-5
-    )
-
-
 def godot_position(
     position: tuple[float, float, float],
     origin: tuple[float, float, float],
@@ -66,7 +70,7 @@ def godot_yaw_radians(game_yaw_radians: float) -> float:
 
 
 def normalized_rgb(color: tuple[int, int, int]) -> list[float]:
-    return [component / 255.0 for component in color]
+    return [component / BYTE_CHANNEL_MAXIMUM for component in color]
 
 
 def _matrix_multiply(left: list[list[float]], right: list[list[float]]) -> list[list[float]]:
@@ -97,7 +101,7 @@ def godot_rotation_quaternion(rotation_radians: tuple[float, float, float]) -> l
             (matrix[2][1] - matrix[1][2]) / scale,
             (matrix[0][2] - matrix[2][0]) / scale,
             (matrix[1][0] - matrix[0][1]) / scale,
-            0.25 * scale,
+            QUATERNION_COMPONENT_SCALE * scale,
         ]
     else:
         axis = max(range(3), key=lambda index: matrix[index][index])
@@ -107,7 +111,7 @@ def godot_rotation_quaternion(rotation_radians: tuple[float, float, float]) -> l
             1.0 + matrix[axis][axis] - matrix[next_axis][next_axis] - matrix[last_axis][last_axis]
         ) * 2.0
         components = [0.0, 0.0, 0.0, 0.0]
-        components[axis] = 0.25 * scale
+        components[axis] = QUATERNION_COMPONENT_SCALE * scale
         components[3] = (matrix[last_axis][next_axis] - matrix[next_axis][last_axis]) / scale
         components[next_axis] = (matrix[next_axis][axis] + matrix[axis][next_axis]) / scale
         components[last_axis] = (matrix[last_axis][axis] + matrix[axis][last_axis]) / scale
@@ -157,6 +161,8 @@ def prepare_cell_scene(
     recipe: dict[str, object],
     master_sha256: str,
 ) -> dict[str, object]:
+    configuration = load_runtime_configuration()
+    units_to_meters = configuration.world_units_to_meters
     expected_master = str(recipe["master"]["sha256"])
     if master_sha256 != expected_master:
         raise ValueError(f"Cell recipe master hash mismatch: expected={expected_master} actual={master_sha256}")
@@ -165,7 +171,7 @@ def prepare_cell_scene(
     vr_loadout = vr_smoke_loadout_manifest(recipe, catalog)
     cell_form_id = _find_cell(catalog, str(recipe["cellEditorId"]))
     cell = catalog.cells[cell_form_id]
-    entry_door = int(str(recipe["entryDoorReferenceFormId"]), 16)
+    entry_door = int(str(recipe["entryDoorReferenceFormId"]), FORM_ID_RADIX)
     source_door, arrival = arrival_transform(catalog, entry_door)
     origin = arrival.position
     if cell.lighting is None:
@@ -173,10 +179,6 @@ def prepare_cell_scene(
 
     selected: list[tuple[PlacedReference, BaseObject]] = []
     excluded_references: list[dict[str, str]] = []
-    skipped_non_yaw: list[str] = []
-    allow_non_yaw_types = {
-        str(value) for value in recipe["selection"].get("allowNonYawRecordTypes", [])
-    }
     for reference in catalog.references_for(cell_form_id):
         base = catalog.base_objects.get(reference.base_form_id)
         if base is None:
@@ -193,13 +195,6 @@ def prepare_cell_scene(
                     }
                 )
             continue
-        if (
-            bool(recipe["selection"]["yawOnly"])
-            and base.record_type not in allow_non_yaw_types
-            and not yaw_only(reference.transform)
-        ):
-            skipped_non_yaw.append(form_id(reference.form_id))
-            continue
         selected.append((reference, base))
     if not selected:
         raise ValueError(f"Cell recipe selected no references: {recipe['id']}")
@@ -210,6 +205,7 @@ def prepare_cell_scene(
         cache_root,
         recipe,
         selected,
+        configuration.content_compiler,
         {str(vr_loadout["modelPath"])},
     )
     vr_weapon_model = str(vr_loadout["modelPath"])
@@ -238,7 +234,8 @@ def prepare_cell_scene(
                 "yawRadians": reference.transform.rotation_radians[2],
                 "yawGodotRadians": godot_yaw_radians(reference.transform.rotation_radians[2]),
                 "rotationGodotQuaternion": godot_rotation_quaternion(reference.transform.rotation_radians),
-                "initiallyDisabled": bool(reference.flags & 0x00000800),
+                "scale": reference.scale,
+                "initiallyDisabled": bool(reference.flags & INITIALLY_DISABLED_RECORD_FLAG),
                 "teleportDestinationFormId": (
                     form_id(reference.teleport_destination_form_id)
                     if reference.teleport_destination_form_id is not None
@@ -260,13 +257,13 @@ def prepare_cell_scene(
                 "positionGameUnits": list(reference.transform.position),
                 "positionGodotUnits": godot_position(reference.transform.position, origin),
                 "radiusGameUnits": light.radius,
-                "radiusMeters": light.radius * float(recipe["unitsToMeters"]),
+                "radiusMeters": light.radius * units_to_meters,
                 "color": normalized_rgb(light.color_rgb),
                 "intensity": light.intensity,
                 "falloff": light.falloff,
                 "fieldOfView": light.field_of_view,
                 "lightFlags": light.flags,
-                "initiallyDisabled": bool(reference.flags & 0x00000800),
+                "initiallyDisabled": bool(reference.flags & INITIALLY_DISABLED_RECORD_FLAG),
             }
         )
 
@@ -281,6 +278,7 @@ def prepare_cell_scene(
             "textureArchives": texture_archive_rows,
         },
         "compiler": compiler,
+        "configuration": configuration.manifest(),
         "cell": {
             "formId": form_id(cell.form_id),
             "editorId": cell.editor_id,
@@ -289,7 +287,7 @@ def prepare_cell_scene(
         "coordinates": {
             "source": "Gamebryo X-right/Y-forward/Z-up, radians",
             "target": "Godot X-right/Y-up/-Z-forward",
-            "unitsToMeters": recipe["unitsToMeters"],
+            "unitsToMeters": units_to_meters,
             "originGameUnits": list(origin),
         },
         "spawn": {
@@ -315,7 +313,6 @@ def prepare_cell_scene(
             "directionalFade": cell.lighting.directional_fade,
             "fogClipDistanceGameUnits": cell.lighting.fog_clip_distance,
             "fogPower": cell.lighting.fog_power,
-            "calibration": recipe["lightingCalibration"],
             "lights": lights,
         },
         "assets": sorted(assets.values(), key=lambda value: value["id"]),
@@ -323,9 +320,9 @@ def prepare_cell_scene(
         "references": references,
         "coverage": {
             "selectedReferences": len(selected),
+            "sourceReferences": len(catalog.references_for(cell_form_id)),
             "exportedAssets": len(assets),
             "doors": sum(1 for _, base in selected if base.record_type == "DOOR"),
-            "skippedNonYawReferences": skipped_non_yaw,
             "excludedReferences": excluded_references,
             "excludedEditorMarkerSurfaces": sum(
                 len(sidecar["coverage"]["excludedEditorMarkerSurfaces"])

@@ -9,7 +9,25 @@ from pathlib import Path
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 
 
-ACTOR_RECORD_TYPES = frozenset({"ACHR", "ACRE", "ARMO", "CREA", "EYES", "HAIR", "HDPT", "NPC_", "RACE"})
+ACTOR_RECORD_TYPES = frozenset(
+    {"ACHR", "ACRE", "ARMO", "CREA", "EYES", "HAIR", "HDPT", "LVLI", "NPC_", "RACE"}
+)
+
+FORM_ID_BYTES = 4
+NPC_ACBS_BYTES = 24
+NPC_INVENTORY_ENTRY_BYTES = 8
+REFERENCE_TRANSFORM_BYTES = 24
+REFERENCE_SCALE_BYTES = 4
+REFERENCE_TRANSFORM_FLOATS = 6
+ARMOR_BIPED_DATA_BYTES = 8
+LEVELED_LIST_ENTRY_BYTES = 12
+FACEGEN_SYMMETRIC_GEOMETRY_FLOATS = 50
+FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS = 30
+FACEGEN_SYMMETRIC_TEXTURE_FLOATS = 50
+DEFAULT_REFERENCE_SCALE = 1.0
+INITIALLY_DISABLED_RECORD_FLAG = 0x00000800
+BIPED_HAIR_SLOT_FLAG = 0x00000002
+CELL_CHILDREN_GROUP_TYPE = 6
 
 
 @dataclass(frozen=True)
@@ -47,10 +65,11 @@ class ActorReference:
     flags: int
     position: tuple[float, float, float]
     rotation_radians: tuple[float, float, float]
+    scale: float
 
     @property
     def initially_disabled(self) -> bool:
-        return bool(self.flags & 0x00000800)
+        return bool(self.flags & INITIALLY_DISABLED_RECORD_FLAG)
 
 
 @dataclass(frozen=True)
@@ -92,6 +111,24 @@ class Armor:
     male_ground_model_path: str | None
     female_model_path: str | None
     female_ground_model_path: str | None
+    biped_flags: int
+
+    @property
+    def hides_hair(self) -> bool:
+        return bool(self.biped_flags & BIPED_HAIR_SLOT_FLAG)
+
+
+@dataclass(frozen=True)
+class LeveledListEntry:
+    form_id: int
+    count: int
+
+
+@dataclass(frozen=True)
+class LeveledList:
+    form_id: int
+    editor_id: str
+    entries: tuple[LeveledListEntry, ...]
 
 
 @dataclass(frozen=True)
@@ -110,6 +147,7 @@ class ActorCatalog:
     races: dict[int, RaceAppearance]
     parts: dict[int, AppearancePart]
     armor: dict[int, Armor]
+    leveled_lists: dict[int, LeveledList]
 
     def references_for(self, cell_form_id: int) -> list[ActorReference]:
         return [reference for reference in self.references if reference.cell_form_id == cell_form_id]
@@ -132,7 +170,7 @@ def _first_text(values: dict[str, list[bytes]], signature: str) -> str:
 
 
 def _form_id(data: bytes, record: Record, signature: str) -> int:
-    if len(data) != 4:
+    if len(data) != FORM_ID_BYTES:
         raise ValueError(f"{signature} must be four bytes in {record.signature} {record.form_id:08x}")
     return struct.unpack("<I", data)[0]
 
@@ -163,16 +201,20 @@ def _canonical_model(value: bytes) -> str:
 def _actor(record: Record, subrecords: list[tuple[str, bytes]]) -> HumanoidActor:
     values = _values(subrecords)
     acbs = values.get("ACBS", [])
-    if len(acbs) != 1 or len(acbs[0]) != 24:
-        raise ValueError(f"NPC_ ACBS must be 24 bytes in {record.form_id:08x}")
+    if len(acbs) != 1 or len(acbs[0]) != NPC_ACBS_BYTES:
+        raise ValueError(
+            f"NPC_ ACBS must be {NPC_ACBS_BYTES} bytes in {record.form_id:08x}"
+        )
     race_form_id = _optional_form(values, record, "RNAM")
     models = values.get("MODL", [])
     if len(models) > 1:
         raise ValueError(f"NPC_ declares multiple skeleton models in {record.form_id:08x}")
     inventory = []
     for data in values.get("CNTO", []):
-        if len(data) != 8:
-            raise ValueError(f"NPC_ CNTO must be 8 bytes in {record.form_id:08x}")
+        if len(data) != NPC_INVENTORY_ENTRY_BYTES:
+            raise ValueError(
+                f"NPC_ CNTO must be {NPC_INVENTORY_ENTRY_BYTES} bytes in {record.form_id:08x}"
+            )
         item_form_id, count = struct.unpack("<Ii", data)
         inventory.append(ActorItem(item_form_id, count))
     hair_color = values.get("HCLR", [bytes(4)])[0]
@@ -195,9 +237,9 @@ def _actor(record: Record, subrecords: list[tuple[str, bytes]]) -> HumanoidActor
         tuple(hair_color),
         tuple(inventory),
         _optional_form(values, record, "TPLT"),
-        _optional_float_array(values, record, "FGGS", 50),
-        _optional_float_array(values, record, "FGGA", 30),
-        _optional_float_array(values, record, "FGTS", 50),
+        _optional_float_array(values, record, "FGGS", FACEGEN_SYMMETRIC_GEOMETRY_FLOATS),
+        _optional_float_array(values, record, "FGGA", FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS),
+        _optional_float_array(values, record, "FGTS", FACEGEN_SYMMETRIC_TEXTURE_FLOATS),
     )
 
 
@@ -243,7 +285,11 @@ def _race(record: Record, subrecords: list[tuple[str, bytes]]) -> RaceAppearance
             elif signature == "ICON":
                 textures[index] = _canonical_model(data)
         if sex in {"male", "female"} and signature in {"FGGS", "FGGA", "FGTS"}:
-            count = {"FGGS": 50, "FGGA": 30, "FGTS": 50}[signature]
+            count = {
+                "FGGS": FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+                "FGGA": FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+                "FGTS": FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
+            }[signature]
             if len(data) != count * 4:
                 raise ValueError(f"RACE {signature} must contain {count} floats in {record.form_id:08x}")
             coordinates = struct.unpack(f"<{count}f", data)
@@ -299,6 +345,11 @@ def _part(record: Record, subrecords: list[tuple[str, bytes]]) -> AppearancePart
 
 def _armor(record: Record, subrecords: list[tuple[str, bytes]]) -> Armor:
     values = _values(subrecords)
+    biped = values.get("BMDT", [])
+    if len(biped) != 1 or len(biped[0]) != ARMOR_BIPED_DATA_BYTES:
+        raise ValueError(
+            f"ARMO BMDT must contain {ARMOR_BIPED_DATA_BYTES} bytes in {record.form_id:08x}"
+        )
     return Armor(
         record.form_id,
         _first_text(values, "EDID"),
@@ -307,7 +358,21 @@ def _armor(record: Record, subrecords: list[tuple[str, bytes]]) -> Armor:
         _canonical_model(values["MOD2"][0]) if values.get("MOD2") else None,
         _canonical_model(values["MOD3"][0]) if values.get("MOD3") else None,
         _canonical_model(values["MOD4"][0]) if values.get("MOD4") else None,
+        struct.unpack_from("<I", biped[0])[0],
     )
+
+
+def _leveled_list(record: Record, subrecords: list[tuple[str, bytes]]) -> LeveledList:
+    values = _values(subrecords)
+    entries: list[LeveledListEntry] = []
+    for data in values.get("LVLO", []):
+        if len(data) != LEVELED_LIST_ENTRY_BYTES:
+            raise ValueError(
+                f"LVLI LVLO must contain {LEVELED_LIST_ENTRY_BYTES} bytes in {record.form_id:08x}"
+            )
+        _level, _unused, item_form_id, count, _unused_tail = struct.unpack("<HHIHH", data)
+        entries.append(LeveledListEntry(item_form_id, count))
+    return LeveledList(record.form_id, _first_text(values, "EDID"), tuple(entries))
 
 
 def _creature(record: Record, subrecords: list[tuple[str, bytes]]) -> CreatureActor:
@@ -325,7 +390,7 @@ def _creature(record: Record, subrecords: list[tuple[str, bytes]]) -> CreatureAc
 
 def _cell_parent(record: Record) -> int | None:
     for group in reversed(record.groups):
-        if group.group_type == 6:
+        if group.group_type == CELL_CHILDREN_GROUP_TYPE:
             return group.label_u32
     return None
 
@@ -336,9 +401,20 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
     if cell_form_id is None or not values.get("NAME") or not values.get("DATA"):
         return None
     transform = values["DATA"][0]
-    if len(transform) != 24:
-        raise ValueError(f"ACHR DATA must be 24 bytes in {record.form_id:08x}")
-    values6 = struct.unpack("<6f", transform)
+    if len(transform) != REFERENCE_TRANSFORM_BYTES:
+        raise ValueError(
+            f"{record.signature} DATA must be {REFERENCE_TRANSFORM_BYTES} bytes in {record.form_id:08x}"
+        )
+    values6 = struct.unpack(f"<{REFERENCE_TRANSFORM_FLOATS}f", transform)
+    scales = values.get("XSCL", [])
+    if scales and (len(scales) != 1 or len(scales[0]) != REFERENCE_SCALE_BYTES):
+        raise ValueError(
+            f"{record.signature} XSCL must contain one {REFERENCE_SCALE_BYTES}-byte scale in "
+            f"{record.form_id:08x}"
+        )
+    scale = struct.unpack("<f", scales[0])[0] if scales else DEFAULT_REFERENCE_SCALE
+    if not scale > 0.0:
+        raise ValueError(f"{record.signature} XSCL must be positive in {record.form_id:08x}")
     return ActorReference(
         record.form_id,
         record.signature,
@@ -347,11 +423,12 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
         record.flags,
         tuple(values6[:3]),
         tuple(values6[3:]),
+        scale,
     )
 
 
 def scan_actor_catalog(path: Path) -> ActorCatalog:
-    catalog = ActorCatalog({}, {}, [], {}, {}, {})
+    catalog = ActorCatalog({}, {}, [], {}, {}, {}, {})
     for record in iter_plugin_records(path, ACTOR_RECORD_TYPES):
         subrecords = _subrecords(record)
         if record.signature == "NPC_":
@@ -368,4 +445,39 @@ def scan_actor_catalog(path: Path) -> ActorCatalog:
             catalog.parts[record.form_id] = _part(record, subrecords)
         elif record.signature == "ARMO":
             catalog.armor[record.form_id] = _armor(record, subrecords)
+        elif record.signature == "LVLI":
+            catalog.leveled_lists[record.form_id] = _leveled_list(record, subrecords)
     return catalog
+
+
+def resolve_actor_outfit_form_ids(catalog: ActorCatalog, actor: HumanoidActor) -> tuple[int, ...]:
+    resolved: list[int] = []
+    for item in actor.inventory:
+        resolved.extend(_resolve_outfit_item(catalog, item.form_id, ()))
+    return tuple(dict.fromkeys(resolved))
+
+
+def _resolve_outfit_item(
+    catalog: ActorCatalog,
+    form_id: int,
+    stack: tuple[int, ...],
+) -> tuple[int, ...]:
+    if form_id in catalog.armor:
+        return (form_id,)
+    leveled = catalog.leveled_lists.get(form_id)
+    if leveled is None:
+        return ()
+    if form_id in stack:
+        chain = " -> ".join(f"{value:08x}" for value in (*stack, form_id))
+        raise ValueError(f"Actor outfit leveled-list cycle: {chain}")
+    if not leveled.entries:
+        return ()
+    outcomes = {
+        _resolve_outfit_item(catalog, entry.form_id, (*stack, form_id))
+        for entry in leveled.entries
+    }
+    if len(outcomes) != 1:
+        raise ValueError(
+            f"Actor outfit LVLI {leveled.editor_id} has nondeterministic armor outcomes: {outcomes}"
+        )
+    return next(iter(outcomes))

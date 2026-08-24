@@ -5,6 +5,8 @@ Status: **playable experimental Goodsprings sandbox; not a full campaign**.
 OpenNV is a clean first-party runtime. The retail installation is a read-only
 input, the generated cache is disposable, every cross-boundary artifact has a
 schema and hashes, and no OpenMW runtime or source code participates.
+The executable-value rules, single configuration path, and source gate are
+defined in [data and configuration accountability](data-and-configuration-accountability.md).
 
 ```mermaid
 flowchart LR
@@ -64,7 +66,9 @@ flowchart LR
     ActorBase -->|0:1 each| Hair[HAIR]
     ActorBase -->|0:1 each| Eyes[EYES]
     ActorBase -->|0:N| HeadPart[HDPT]
-    ActorBase -->|0:N inventory| Armor[ARMO]
+    ActorBase -->|0:N inventory| Inventory[CNTO]
+    Inventory -->|direct or recursive| Leveled[ARMO / LVLI]
+    Leveled --> Armor[ARMO models + BMDT slots]
     ActorBase --> FaceGen[FGGS / FGGA / FGTS]
     Race --> Baseline[Female head/body tables and FaceGen baselines]
     FaceGen --> Morph[Pure geometry/texture composition primitives]
@@ -156,7 +160,7 @@ input translation and presentation differ.
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
 | `havok_collision_gltf.py` | Bounded authored packed-triangle body/subshape/filter export | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
-| `cell_scene.py` | Recipe selection, XTEL origin, Gamebryo-to-Godot coordinate/yaw conversion, asset/reference/material manifest | Godot nodes or input |
+| `cell_scene.py` | Recipe selection, XTEL origin, full Gamebryo-to-Godot transform/scale conversion, asset/reference/material manifest | Godot nodes or input |
 | `scene_asset_pipeline.py` | Shared NIF extraction, material bindings, interactions and data-resolved loadout artifacts | CELL selection or Godot nodes |
 | `exterior_scene.py` | Bounded grid/persistent reference selection, reciprocal XTEL and exterior manifest | LAND decoding or runtime nodes |
 | `landscape_catalog.py` | LAND ownership, height/normal/color, LTEX/TXST and quadrant-layer contracts | Godot nodes or weather |
@@ -164,7 +168,11 @@ input translation and presentation differ.
 | `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
 | `goodsprings-saloon-structure-v1.json` | Exact proof target, hash, selection, entry, scale | Parsing logic |
-| `goodsprings-trudy-actor-v1.json` | Exact retail master/archives, ACHR, CELL, idle, hair shape and skin-tone inputs | Parsing or rendering logic |
+| `goodsprings-trudy-actor-v1.json` | Exact retail master/archives, ACHR, and CELL identity | Appearance guesses or rendering logic |
+| `runtime/config/open-nv-runtime-v1.json` | Single versioned non-retail policy boundary with provenance and parity status | Fallout-authored placement, identity, or item stats |
+| `runtime_configuration.py` / `RuntimeConfiguration.cs` | Strict typed load, validation, and SHA-256 identity for that boundary | Feature behavior |
+| `validate_runtime_report.py` | Join runtime proof reports to owned-data manifests and configuration | Rendering or gameplay implementation |
+| `audit_source_constants.py` | Production Python/C#/JavaScript/PowerShell literal accountability gate | Runtime defaults or content policy |
 | `test_cell_catalog.py` | Synthetic group/relationship/transform regressions | Retail bytes |
 | `test_actor_catalog.py` | Synthetic actor identity/appearance/placement graph regressions | Mesh or renderer assertions |
 | `test_facegen.py` | Synthetic geometry, texture-mode, skin, and body composition regressions | Retail actor selection |
@@ -206,8 +214,8 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
 
-Implemented: direct owned ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 454
-interior/exterior references, 209 visible/held/terrain assets, 363 textures, 439
+Implemented: direct owned ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 504
+enabled interior/exterior references, 228 visible/held/terrain assets, 379 textures, 476
 materials, 97 saloon pickups, five containers, 27 authored lights, full converted item rotations,
 supported authored packed-triangle collision,
 movement, HUD, inventory, authored `.357` damage/clip data, firing, objectives,

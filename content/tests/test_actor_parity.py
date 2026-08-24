@@ -15,10 +15,12 @@ from actor_parity import (  # noqa: E402
     normalize_form,
     shot_state_metrics,
 )
+from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class ActorParityTest(unittest.TestCase):
     def test_form_identity_and_pixel_metrics_are_deterministic(self):
+        configuration = load_runtime_configuration()
         self.assertEqual(normalize_form("0x104c6d"), "00104c6d")
         self.assertEqual(normalize_form("00104C6D"), "00104c6d")
         with tempfile.TemporaryDirectory() as directory:
@@ -27,9 +29,13 @@ class ActorParityTest(unittest.TestCase):
             Image.new("RGB", (4, 3), (10, 20, 30)).save(first)
             Image.new("RGB", (4, 3), (10, 20, 30)).save(second)
             self.assertEqual(image_metrics(first)["width"], 4)
-            self.assertEqual(difference_metrics(first, second)["meanAbsoluteError"], 0.0)
+            self.assertEqual(
+                difference_metrics(first, second, configuration)["meanAbsoluteError"],
+                0.0,
+            )
 
     def test_retail_shot_state_metrics_fail_closed(self):
+        configuration = load_runtime_configuration()
         bone_names = [f"bone-{index}" for index in range(50)]
         retail_bones = [
             {
@@ -84,13 +90,13 @@ class ActorParityTest(unittest.TestCase):
         godot = {
             "retailStateApplied": True,
             "cellOriginGameUnits": [0.0, 0.0, 0.0],
-            "unitsToMeters": 1.0,
+            "unitsToMeters": configuration.world_units_to_meters,
             "referencePositionGameUnits": [1.0, 2.0, 3.0],
             "referenceYawRadians": 3.1,
             "referenceGodotYawRadians": -3.1,
             "cameraPositionGameUnits": [4.0, 5.0, 6.0],
             "cameraAimGameUnits": [1.0, 2.0, 7.0],
-            "distanceMeters": 70.0 * 0.0142875,
+            "distanceMeters": 70.0 * configuration.world_units_to_meters,
             "verticalFovDegrees": 46.6921257,
             "appliedAnimationPhaseSeconds": 1.202,
             "poseBones": godot_bones,
@@ -105,9 +111,9 @@ class ActorParityTest(unittest.TestCase):
                 }
             ],
         }
-        self.assertEqual(shot_state_metrics(retail, godot)["status"], "pass")
+        self.assertEqual(shot_state_metrics(retail, godot, configuration)["status"], "pass")
         godot["verticalFovDegrees"] = 75.0
-        self.assertEqual(shot_state_metrics(retail, godot)["status"], "fail")
+        self.assertEqual(shot_state_metrics(retail, godot, configuration)["status"], "fail")
         self.assertAlmostEqual(angle_error(0.0, 2.0 * 3.141592653589793), 0.0)
 
 
