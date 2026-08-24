@@ -8,7 +8,14 @@ internal static class ActorReviewContract
 {
     private const string ContractSchema = "opennv-actor-review-contract/v4";
     private const string PendingStatus = "retail-observed-godot-pending";
-    private const string AppearanceSchema = "nikami-fnv-sidecar-appearance/v1";
+    private const string AppearanceSchema = "nikami-fnv-sidecar-appearance/v2";
+    private const string NoWeaponState = "none";
+    private const string EquippedUnrenderedWeaponState = "equipped-unrendered";
+    private const string EquippedWeaponState = "equipped";
+    private const string WeaponRole = "weapon";
+    private const string EmptyRetailFormId = "0x00000000";
+    private const string RetailFormIdPrefix = "0x";
+    private const int RetailFormIdCharacters = 10;
     private const float NormalizedViewportMinimum = 0.0f;
     private const float NormalizedViewportMaximum = 1.0f;
     private const int PerspectiveFrustumElementCount = 7;
@@ -104,14 +111,70 @@ internal static class ActorReviewContract
         var parts = snapshot.GetProperty("renderParts").EnumerateArray().ToArray();
         if (parts.Length == 0)
             throw new InvalidOperationException("Actor review appearance evidence has no render parts.");
+        var weapon = ParseEquippedWeapon(snapshot.GetProperty("equippedWeapon"), parts);
         var textureBindings = parts.Sum(part =>
             part.GetProperty("textureBindings").GetArrayLength());
         return new AppearanceState(
             source.GetProperty("frame").GetInt32(),
             RequireText(source, "eventSha256", "appearance event hash"),
             parts.Length,
-            textureBindings);
+            textureBindings,
+            weapon);
     }
+
+    private static EquippedWeaponAppearance ParseEquippedWeapon(
+        JsonElement source,
+        IReadOnlyList<JsonElement> parts)
+    {
+        var state = RequireText(source, "state", "equipped weapon state");
+        var formId = RequireText(source, "sourceFormId", "equipped weapon FormID");
+        var modelPath = source.GetProperty("modelPath").GetString() ?? "";
+        var nodePresent = source.GetProperty("nodePresent").GetBoolean();
+        if (!IsCanonicalRetailFormId(formId))
+            throw new InvalidOperationException("Equipped weapon FormID is not canonical.");
+        var visibleParts = parts.Where(part =>
+            part.GetProperty("role").GetString() == WeaponRole &&
+            part.GetProperty("visible").GetBoolean()).ToArray();
+        switch (state)
+        {
+            case NoWeaponState:
+                if (formId != EmptyRetailFormId || modelPath.Length != 0 || nodePresent ||
+                    visibleParts.Length != 0)
+                    throw new InvalidOperationException(
+                        "No-weapon appearance disagrees with its render parts.");
+                break;
+            case EquippedUnrenderedWeaponState:
+                throw new InvalidOperationException(
+                    "Equipped weapon has no renderable runtime attachment.");
+            case EquippedWeaponState:
+                var canonicalModelPath = modelPath.Trim().Replace('\\', '/').ToLowerInvariant();
+                var matchingParts = visibleParts.Count(part =>
+                    part.GetProperty("sourceFormId").GetString() == formId &&
+                    part.GetProperty("modelPath").GetString() == modelPath &&
+                    part.GetProperty("required").GetBoolean() &&
+                    part.GetProperty("attached").GetBoolean() &&
+                    part.GetProperty("drawable").GetBoolean());
+                if (formId == EmptyRetailFormId || !nodePresent ||
+                    !canonicalModelPath.Equals(modelPath, StringComparison.Ordinal) ||
+                    !canonicalModelPath.EndsWith(".nif", StringComparison.Ordinal) ||
+                    canonicalModelPath.StartsWith("/", StringComparison.Ordinal) ||
+                    canonicalModelPath.Contains("../", StringComparison.Ordinal) ||
+                    matchingParts == 0)
+                    throw new InvalidOperationException(
+                        "Equipped weapon lacks an authoritative visible runtime attachment.");
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported equipped weapon appearance state: {state}");
+        }
+        return new EquippedWeaponAppearance(state, formId, modelPath, nodePresent);
+    }
+
+    private static bool IsCanonicalRetailFormId(string value) =>
+        value.Length == RetailFormIdCharacters &&
+        value.StartsWith(RetailFormIdPrefix, StringComparison.Ordinal) &&
+        value[RetailFormIdPrefix.Length..].All(character =>
+            char.IsAsciiDigit(character) || character is >= 'A' and <= 'F');
 
     private static Shot ParseShot(JsonElement source)
     {
@@ -665,7 +728,14 @@ internal static class ActorReviewContract
         int Frame,
         string EventSha256,
         int RenderParts,
-        int TextureBindings);
+        int TextureBindings,
+        EquippedWeaponAppearance EquippedWeapon);
+
+    internal readonly record struct EquippedWeaponAppearance(
+        string State,
+        string FormId,
+        string ModelPath,
+        bool NodePresent);
 
     internal readonly record struct Shot(
         string Kind,

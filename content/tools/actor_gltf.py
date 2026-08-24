@@ -76,6 +76,8 @@ class ActorComponent:
     diffuse_aliases: tuple[tuple[str, str], ...] = ()
     repair_facegen: bool = False
     egm_vertex_offset: int = 0
+    source_form_id: str | None = None
+    source_slot: int | None = None
 
 
 @dataclass(frozen=True)
@@ -614,6 +616,8 @@ def _append_shape(
     )
     return mesh_index, skin_index, {
         "role": component.role,
+        "sourceFormId": component.source_form_id,
+        "sourceSlot": component.source_slot,
         "modelPath": component.model_path,
         "modelSha256": hashlib.sha256(component.model_payload).hexdigest(),
         "egmPath": component.egm_path,

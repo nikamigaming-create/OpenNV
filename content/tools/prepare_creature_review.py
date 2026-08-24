@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
 from actor_gltf import (
@@ -39,6 +40,14 @@ MESH_ROOT = "meshes"
 NIF_SUFFIX = ".nif"
 PRIMARY_SKELETON_NODE = "Bip01"
 EXIT_DATA_ERROR = 2
+
+
+@dataclass(frozen=True)
+class RetailAttachmentModel:
+    role: str
+    source_form_id: str
+    source_slot: int
+    model_path: str
 
 
 def _load_json(path: Path) -> dict[str, object]:
@@ -96,6 +105,34 @@ def _retail_animation_paths(contract: dict[str, object]) -> tuple[str, tuple[str
     return primary, additional
 
 
+def _retail_equipped_weapon_attachment(
+    contract: dict[str, object],
+) -> RetailAttachmentModel | None:
+    snapshot = contract["retail"]["appearance"]["snapshot"]
+    weapon = snapshot["equippedWeapon"]
+    if weapon["state"] != "equipped":
+        return None
+    source_form_id = str(weapon["sourceFormId"])
+    model_path = str(weapon["modelPath"])
+    matching = [
+        part
+        for part in snapshot["renderParts"]
+        if part["role"] == "weapon"
+        and part["sourceFormId"] == source_form_id
+        and part["modelPath"] == model_path
+        and bool(part["required"])
+        and bool(part["attached"])
+        and bool(part["drawable"])
+        and bool(part["visible"])
+    ]
+    source_slots = {int(part["sourceSlot"]) for part in matching}
+    if not matching or len(source_slots) != 1:
+        raise ValueError("Retail equipped weapon has no unique visible attachment slot")
+    if PureWindowsPath(canonical_member_path(model_path)).suffix.lower() != NIF_SUFFIX:
+        raise ValueError(f"Retail equipped weapon model is not a NIF: {model_path}")
+    return RetailAttachmentModel("weapon", source_form_id, source_slots.pop(), model_path)
+
+
 def _validate_contract_sources(
     data_root: Path,
     contract: dict[str, object],
@@ -147,6 +184,10 @@ def prepare_creature_review(
         archives.extract(_creature_model_member(creature.skeleton_path, path))
         for path in creature.model_paths
     ]
+    weapon_attachment = _retail_equipped_weapon_attachment(contract)
+    weapon_member = None if weapon_attachment is None else archives.extract(
+        _mesh_member(weapon_attachment.model_path)
+    )
     primary_animation_path, additional_animation_paths = _retail_animation_paths(contract)
     primary_animation = archives.extract(_mesh_member(primary_animation_path))
     additional_animations = [
@@ -181,7 +222,15 @@ def prepare_creature_review(
                         member.data,
                     )
                     for index, member in enumerate(model_members)
-                ),
+                ) + (() if weapon_attachment is None or weapon_member is None else (
+                    ActorComponent(
+                        weapon_attachment.role,
+                        weapon_member.logical_path,
+                        weapon_member.data,
+                        source_form_id=weapon_attachment.source_form_id,
+                        source_slot=weapon_attachment.source_slot,
+                    ),
+                )),
                 primary_animation.logical_path,
                 primary_animation.data,
                 PRIMARY_SKELETON_NODE,
@@ -208,6 +257,14 @@ def prepare_creature_review(
                 "localFormId": f"{creature.form_id:08x}",
                 "skeleton": _asset_row(skeleton),
                 "models": [_asset_row(member) for member in model_members],
+                "runtimeAttachments": [] if weapon_attachment is None or weapon_member is None else [
+                    {
+                        "role": weapon_attachment.role,
+                        "sourceFormId": weapon_attachment.source_form_id,
+                        "sourceSlot": weapon_attachment.source_slot,
+                        "asset": _asset_row(weapon_member),
+                    }
+                ],
                 "animations": [
                     _asset_row(member)
                     for member in (primary_animation, *additional_animations)

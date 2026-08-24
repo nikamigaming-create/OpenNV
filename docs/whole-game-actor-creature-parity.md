@@ -97,6 +97,8 @@ runtime configuration document and carries provenance.
 Each retained retail source frame binds all of the following:
 
 - the classified appearance outcome and spawned reference;
+- every live runtime attachment's source FormID, source slot, model path, node
+  presence, and render-part attribution, including the equipped weapon;
 - the native source frame hash and dimensions;
 - active animation layers and exact time;
 - the actor root and named-node hierarchy;
@@ -163,14 +165,24 @@ evidence, 8,659 appearances and every placement are still missing evidence,
 zero rows have been human-reviewed, and zero rows pass. Unknown or duplicate
 reports are rejected instead of being silently counted.
 
-The fresh retail queue at
-`D:\Builds\OpenNV-actor-retail-coverage-surface-v4-20260824-r3` starts from no
-inherited credit. Its first checkpoint contains one complete classified outcome,
-8,659 pending outcomes, zero incomplete-appearance attempts, and zero capture
-errors. The first row is the Dead Money ghost. Its owned-data compile remains
-pending because the authored model stack contains `NiParticleSystem` geometry;
-the generic glTF path now rejects that omission explicitly. A ghost scene without
-its breathing and leg-spray systems is not accepted as a complete rendition.
+The former retail queue at
+`D:\Builds\OpenNV-actor-retail-coverage-surface-v4-20260824-r3` is quarantined
+and contributes zero coverage credit. Its apparent complete Dead Money ghost row
+was produced by the v1 appearance contract, which labeled the visible equipped
+knife-spear geometry as actor geometry and therefore failed to prove its runtime
+source. No row from that directory may be resumed or counted.
+
+The replacement v2 appearance contract binds the live equipped-weapon form,
+runtime node, exact NIF path, and visible render parts to the pose at the same
+source frame. A fresh canonical Ghost canary at
+`D:\Builds\OpenNV-actor-retail-appearance-weapon-bound-20260824-r1` proves that
+link for weapon `0x010117F7` and its owned-data model path. This is a complete
+retail observation contract, not a Godot parity pass. Its owned-data compile
+still fails closed because the authored model stack contains
+`NiParticleSystem` geometry; the generic glTF path rejects that omission
+explicitly. A ghost scene without its breathing and leg-spray systems is not
+accepted as a complete rendition. The exhaustive queue will restart in a new
+directory only from committed v2 producer and consumer revisions.
 
 ## Execution order
 
