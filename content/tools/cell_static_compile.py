@@ -1,0 +1,520 @@
+#!/usr/bin/env python3
+"""Compile one planned CELL's supported static presentation from owned archives."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+from cell_compile_plan import MANIFEST_FILE_NAME as PLAN_MANIFEST_FILE_NAME
+from cell_parity_corpus import MANIFEST_FILE_NAME as CORPUS_MANIFEST_FILE_NAME
+from cell_scene import godot_position, godot_rotation_quaternion
+from cell_static_contract import (
+    ASSETS_FILE_NAME,
+    BLOCKED_PRESENTATION_STATUS,
+    BLOCKED_REFERENCE_STATUS,
+    BLOCKERS_FILE_NAME,
+    CELL_FILE_NAME,
+    COMPILED_REFERENCE_STATUS,
+    MANIFEST_FILE_NAME,
+    MANIFEST_SCHEMA,
+    OUTPUT_SCHEMA,
+    PASS_PRESENTATION_STATUS,
+    STATIC_COMPILER_SOURCE_NAMES,
+    STATIC_RUNTIME_PENDING_REFERENCE_STATUS,
+    TEXTURES_FILE_NAME,
+    blocker,
+    canonical_sha256,
+    cell_origin,
+    child_transform,
+    default_plan_recipe_path,
+    default_profile_path,
+    load_profile,
+    mesh_member_path,
+    recipe_path,
+    relative_output,
+    stable_exception_detail,
+    toolchain_manifest,
+)
+from cell_static_source import find_job, source_rows_for_job
+from corpus_io import atomic_bytes, atomic_json, jsonl_bytes, output_descriptor
+from export_static_nif_gltf import export_static_nif
+from owned_archive_stack import load_owned_archive_stack
+from plugin_stack import file_sha256
+from runtime_configuration import load_runtime_configuration
+from material_contract import material_bindings
+from texture_pipeline import OwnedTexturePipeline
+from validate_cell_compile_plan import validate_plan
+
+
+SUPPORTED_MODEL_PATH_COUNT = 1
+EXIT_DATA_ERROR = 2
+PRODUCER_SOURCE_NAMES = STATIC_COMPILER_SOURCE_NAMES
+
+
+def compile_model(
+    model_path: str,
+    archives,
+    staging_root: Path,
+    compiler_configuration,
+    strict: bool,
+) -> tuple[dict[str, object] | None, dict[str, object] | None, dict[str, object] | None]:
+    logical_path = mesh_member_path(model_path)
+    try:
+        member = archives.extract(logical_path)
+        asset_id = hashlib.sha256(
+            f"{member.logical_path}:{member.sha256}".encode("utf-8")
+        ).hexdigest()[:compiler_configuration.asset_id_hex_characters]
+        source_path = staging_root / "source" / Path(member.logical_path.replace("\\", "/"))
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_bytes(source_path, member.data)
+        asset_root = staging_root / "generated" / "assets" / asset_id
+        gltf_path = asset_root / "model.gltf"
+        sidecar_path = asset_root / "model.opennv.json"
+        sidecar = export_static_nif(
+            source_path,
+            member.logical_path,
+            gltf_path,
+            sidecar_path,
+            compiler_configuration,
+            strict=strict,
+        )
+    except Exception as error:
+        return None, None, blocker(
+            "asset",
+            model_path,
+            "asset-export-failed",
+            stable_exception_detail(error, staging_root),
+        )
+    compiled_outputs = {
+        name: {
+            "file": relative_output(asset_root / str(descriptor["file"]), staging_root),
+            "bytes": int(descriptor["bytes"]),
+            "sha256": str(descriptor["sha256"]),
+        }
+        for name, descriptor in sidecar["outputs"].items()
+    }
+    compiled_outputs["sidecar"] = {
+        "file": relative_output(sidecar_path, staging_root),
+        "bytes": sidecar_path.stat().st_size,
+        "sha256": file_sha256(sidecar_path),
+    }
+    asset = {
+        "assetId": asset_id,
+        "requestedModelPath": model_path,
+        "logicalPath": member.logical_path,
+        "sourceArchive": member.source_archive,
+        "sourceArchiveSha256": member.source_archive_sha256,
+        "sourceBytes": len(member.data),
+        "sourceSha256": member.sha256,
+        "outputs": compiled_outputs,
+        "coverage": sidecar["coverage"],
+        "surfaces": sidecar["surfaces"],
+    }
+    return asset, sidecar, None
+
+
+def texture_row(artifact, staging_root: Path) -> dict[str, object]:
+    return {
+        "textureId": artifact.asset_id,
+        "requestedPath": artifact.requested_path,
+        "archivePath": artifact.archive_path,
+        "sourceSha256": artifact.source_sha256,
+        "sourceBytes": artifact.source_bytes,
+        "sourceArchive": artifact.source_archive,
+        "sourceArchiveSha256": artifact.source_archive_sha256,
+        "png": relative_output(artifact.png_path, staging_root),
+        "pngBytes": artifact.png_path.stat().st_size,
+        "pngSha256": artifact.png_sha256,
+        "width": artifact.width,
+        "height": artifact.height,
+        "normalGreenInverted": artifact.normal_green_inverted,
+        "cubeFaces": [
+            {
+                "png": relative_output(path, staging_root),
+                "bytes": path.stat().st_size,
+                "pngSha256": sha256,
+            }
+            for path, sha256 in zip(
+                artifact.cube_face_paths,
+                artifact.cube_face_sha256,
+            )
+        ],
+    }
+
+
+def producer_sources() -> list[dict[str, object]]:
+    tools_root = Path(__file__).resolve().parent
+    return [
+        {"file": f"tools/{name}", "sha256": file_sha256(tools_root / name)}
+        for name in PRODUCER_SOURCE_NAMES
+    ]
+
+
+def compile_cell(
+    data_root: Path,
+    corpus_root: Path,
+    plan_root: Path,
+    cell_key: str,
+    output_root: Path,
+    profile: dict[str, object],
+    plan_recipe_path: Path,
+    profile_path: Path,
+) -> dict[str, object]:
+    if output_root.exists():
+        raise FileExistsError(f"Refusing to overwrite static CELL compile: {output_root}")
+    validate_plan(plan_root, corpus_root, plan_recipe_path)
+    plan_manifest_path = plan_root / PLAN_MANIFEST_FILE_NAME
+    plan_manifest = json.loads(plan_manifest_path.read_text(encoding="utf-8"))
+    job = find_job(plan_root, plan_manifest, cell_key)
+    corpus_manifest_path = corpus_root / CORPUS_MANIFEST_FILE_NAME
+    corpus_manifest = json.loads(corpus_manifest_path.read_text(encoding="utf-8"))
+    cell, children, bases, portals = source_rows_for_job(
+        corpus_root,
+        corpus_manifest,
+        job,
+    )
+    configuration = load_runtime_configuration()
+    archive_recipe_path = recipe_path(str(profile["archiveRecipe"]))
+    archives = load_owned_archive_stack(data_root, archive_recipe_path)
+    origin = cell_origin(cell, profile)
+    supported_children = set(profile["supportedChildRecordTypes"])
+    supported_bases = set(profile["supportedBaseRecordTypes"])
+    model_extension = str(profile["modelExtension"])
+    unique_models: set[str] = set()
+    child_reasons: dict[str, list[dict[str, object]]] = {}
+    child_base: dict[str, dict[str, object] | None] = {}
+    child_transforms: dict[
+        str,
+        tuple[tuple[float, float, float] | None, tuple[float, float, float] | None],
+    ] = {}
+    for child in children:
+        key = str(child["formKey"])
+        reasons: list[dict[str, object]] = []
+        if child["recordType"] not in supported_children:
+            reasons.append(
+                blocker("child", key, "unsupported-child-record-type", str(child["recordType"]))
+            )
+        base_link = child.get("baseOrActor")
+        base = bases.get(str(base_link["key"])) if isinstance(base_link, dict) else None
+        child_base[key] = base
+        if base is None:
+            reasons.append(blocker("child", key, "child-has-no-static-base"))
+        elif base["recordType"] not in supported_bases:
+            reasons.append(
+                blocker("child", key, "unsupported-base-record-type", str(base["recordType"]))
+            )
+        elif len(base.get("modelPaths", [])) != SUPPORTED_MODEL_PATH_COUNT:
+            reasons.append(
+                blocker(
+                    "child",
+                    key,
+                    "unsupported-model-path-count",
+                    str(len(base.get("modelPaths", []))),
+                )
+            )
+        else:
+            model_path = str(base["modelPaths"][0])
+            if not model_path.casefold().endswith(model_extension):
+                reasons.append(
+                    blocker("child", key, "unsupported-model-extension", model_path)
+                )
+            else:
+                unique_models.add(model_path)
+        if child["initiallyDisabled"]:
+            reasons.append(blocker("child", key, "initially-disabled-state-not-implemented"))
+        if child.get("enableParent") is not None:
+            reasons.append(blocker("child", key, "enable-parent-state-not-implemented"))
+        if child.get("teleport") is not None:
+            reasons.append(blocker("child", key, "xtel-runtime-not-implemented"))
+        position, rotation, transform_reason = child_transform(child)
+        child_transforms[key] = (position, rotation)
+        if transform_reason is not None:
+            reasons.append(blocker("child", key, transform_reason))
+        try:
+            scale = float(child["scale"])
+        except (KeyError, TypeError, ValueError):
+            scale = float("nan")
+        if not math.isfinite(scale) or scale <= 0.0:
+            reasons.append(blocker("child", key, "invalid-scale"))
+        child_reasons[key] = reasons
+
+    output_root.parent.mkdir(parents=True, exist_ok=True)
+    manifest: dict[str, object]
+    with tempfile.TemporaryDirectory(prefix="opennv-cell-", dir=output_root.parent) as directory:
+        staging_root = Path(directory) / "payload"
+        staging_root.mkdir()
+        assets: dict[str, dict[str, object]] = {}
+        sidecars: dict[str, dict[str, object]] = {}
+        blockers: list[dict[str, object]] = []
+        for model_path in sorted(unique_models):
+            asset, sidecar, asset_blocker = compile_model(
+                model_path,
+                archives,
+                staging_root,
+                configuration.content_compiler,
+                bool(profile["exportStrict"]),
+            )
+            if asset_blocker is not None:
+                blockers.append(asset_blocker)
+            else:
+                assert asset is not None and sidecar is not None
+                assets[model_path] = asset
+                sidecars[model_path] = sidecar
+
+        requested_textures = sorted(
+            {
+                texture
+                for sidecar in sidecars.values()
+                for surface in sidecar["surfaces"]
+                for texture in surface["textures"]
+                if texture
+            }
+        )
+        textures: dict[str, dict[str, object]] = {}
+        if profile["compileTextures"]:
+            texture_pipeline = OwnedTexturePipeline(
+                archives,
+                staging_root,
+                {
+                    str(source): str(target)
+                    for source, target in profile.get("textureAliases", {}).items()
+                },
+                configuration.content_compiler,
+            )
+            for requested in requested_textures:
+                try:
+                    textures[requested] = texture_row(
+                        texture_pipeline.prepare(requested),
+                        staging_root,
+                    )
+                except Exception as error:
+                    blockers.append(
+                        blocker(
+                            "texture",
+                            requested,
+                            "texture-compile-failed",
+                            stable_exception_detail(error, staging_root),
+                        )
+                    )
+        elif requested_textures:
+            blockers.extend(
+                blocker("texture", requested, "texture-compilation-disabled")
+                for requested in requested_textures
+            )
+
+        compiled_texture_ids = {
+            requested: str(texture["textureId"])
+            for requested, texture in textures.items()
+        }
+        for model_path, asset in assets.items():
+            requested_for_asset = sorted(
+                {
+                    texture
+                    for surface in sidecars[model_path]["surfaces"]
+                    for texture in surface["textures"]
+                    if texture
+                }
+            )
+            asset["textureBindings"] = [
+                {
+                    "requestedPath": requested,
+                    "textureId": (
+                        None
+                        if requested not in textures
+                        else textures[requested]["textureId"]
+                    ),
+                }
+                for requested in requested_for_asset
+            ]
+            asset["materials"] = material_bindings(
+                sidecars[model_path],
+                compiled_texture_ids,
+                configuration.content_compiler,
+            )
+
+        placements = []
+        for child in sorted(children, key=lambda row: str(row["formKey"])):
+            key = str(child["formKey"])
+            reasons = list(child_reasons[key])
+            base = child_base[key]
+            asset = None
+            if base is not None and len(base.get("modelPaths", [])) == SUPPORTED_MODEL_PATH_COUNT:
+                model_path = str(base["modelPaths"][0])
+                asset = assets.get(model_path)
+                if model_path in unique_models and asset is None:
+                    reasons.append(blocker("child", key, "required-asset-not-compiled", model_path))
+                elif asset is not None:
+                    reasons.extend(
+                        blocker(
+                            "child",
+                            key,
+                            "required-texture-not-compiled",
+                            str(binding["requestedPath"]),
+                        )
+                        for binding in asset["textureBindings"]
+                        if binding["textureId"] is None
+                    )
+            blockers.extend(reasons)
+            position, rotation = child_transforms[key]
+            godot_units = godot_position(position, origin) if position is not None else None
+            placements.append(
+                {
+                    "childFormKey": key,
+                    "childRuntimeFormId": child["runtimeFormId"],
+                    "base": child["baseOrActor"],
+                    "baseRecordType": None if base is None else base["recordType"],
+                    "baseEditorId": None if base is None else base.get("editorId"),
+                    "assetId": None if asset is None else asset["assetId"],
+                    "positionGameUnits": None if position is None else list(position),
+                    "positionGodotUnits": godot_units,
+                    "positionGodotMeters": (
+                        None
+                        if godot_units is None
+                        else [
+                            value * configuration.world_units_to_meters
+                            for value in godot_units
+                        ]
+                    ),
+                    "rotationGameRadians": (
+                        None if rotation is None else list(rotation)
+                    ),
+                    "rotationGodotQuaternion": (
+                        None
+                        if rotation is None
+                        else godot_rotation_quaternion(rotation)
+                    ),
+                    "scale": child["scale"],
+                    "presentationStatus": (
+                        COMPILED_REFERENCE_STATUS if asset is not None else BLOCKED_REFERENCE_STATUS
+                    ),
+                    "readinessStatus": (
+                        BLOCKED_REFERENCE_STATUS
+                        if reasons
+                        else STATIC_RUNTIME_PENDING_REFERENCE_STATUS
+                    ),
+                    "blockerReasons": sorted({str(row["reason"]) for row in reasons}),
+                }
+            )
+
+        blockers.sort(key=lambda row: json.dumps(row, sort_keys=True, separators=(",", ":")))
+        source_root = staging_root / "source"
+        if source_root.is_dir():
+            shutil.rmtree(source_root)
+        status = BLOCKED_PRESENTATION_STATUS if blockers else PASS_PRESENTATION_STATUS
+        cell_document = {
+            "schema": OUTPUT_SCHEMA,
+            "status": status,
+            "cell": cell,
+            "job": {
+                "cellFormKey": job["cellFormKey"],
+                "capabilitySetId": job["capabilitySetId"],
+                "requiredGates": job["requiredGates"],
+                "requiredShots": job["requiredShots"],
+            },
+            "originGameUnits": list(origin),
+            "worldUnitsToMeters": configuration.world_units_to_meters,
+            "placements": placements,
+            "portals": portals,
+            "assetIds": sorted(asset["assetId"] for asset in assets.values()),
+            "textureIds": sorted(texture["textureId"] for texture in textures.values()),
+            "blockerCount": len(blockers),
+            "runtimeStatus": "pending",
+            "parityStatus": "pending",
+        }
+        atomic_json(staging_root / CELL_FILE_NAME, cell_document)
+        atomic_bytes(staging_root / ASSETS_FILE_NAME, jsonl_bytes(list(assets.values())))
+        atomic_bytes(staging_root / TEXTURES_FILE_NAME, jsonl_bytes(list(textures.values())))
+        atomic_bytes(staging_root / BLOCKERS_FILE_NAME, jsonl_bytes(blockers))
+        outputs = {
+            "cell": output_descriptor(staging_root / CELL_FILE_NAME, 1),
+            "assets": output_descriptor(staging_root / ASSETS_FILE_NAME, len(assets)),
+            "textures": output_descriptor(staging_root / TEXTURES_FILE_NAME, len(textures)),
+            "blockers": output_descriptor(staging_root / BLOCKERS_FILE_NAME, len(blockers)),
+        }
+        manifest = {
+            "schema": MANIFEST_SCHEMA,
+            "status": status,
+            "cellFormKey": cell_key,
+            "profileId": profile["id"],
+            "profileCanonicalSha256": canonical_sha256(profile),
+            "profileFileSha256": file_sha256(profile_path),
+            "runtimeConfiguration": configuration.manifest(),
+            "toolchain": toolchain_manifest(),
+            "sourceCorpusManifestSha256": file_sha256(corpus_manifest_path),
+            "sourcePlanManifestSha256": file_sha256(plan_manifest_path),
+            "producerSources": producer_sources(),
+            "ownedArchives": archives.manifest(),
+            "archiveRecipe": {
+                "file": archive_recipe_path.name,
+                "sha256": file_sha256(archive_recipe_path),
+            },
+            "counts": {
+                "sourceChildren": len(children),
+                "compiledPlacements": sum(
+                    row["presentationStatus"] == COMPILED_REFERENCE_STATUS
+                    for row in placements
+                ),
+                "assets": len(assets),
+                "textures": len(textures),
+                "portals": len(portals),
+                "blockers": len(blockers),
+            },
+            "promotionPolicy": profile["promotion"],
+            "outputs": outputs,
+        }
+        atomic_json(staging_root / MANIFEST_FILE_NAME, manifest)
+        os.replace(staging_root, output_root)
+    return manifest
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-root", type=Path, required=True)
+    parser.add_argument("--corpus-root", type=Path, required=True)
+    parser.add_argument("--plan-root", type=Path, required=True)
+    parser.add_argument("--cell-form-key", required=True)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--profile", type=Path, default=default_profile_path())
+    parser.add_argument("--plan-recipe", type=Path, default=default_plan_recipe_path())
+    args = parser.parse_args()
+    try:
+        profile_path = args.profile.resolve()
+        profile = load_profile(profile_path)
+        manifest = compile_cell(
+            args.data_root.resolve(),
+            args.corpus_root.resolve(),
+            args.plan_root.resolve(),
+            args.cell_form_key,
+            args.output_root.resolve(),
+            profile,
+            args.plan_recipe.resolve(),
+            profile_path,
+        )
+    except Exception as error:
+        print(f"OPENNV_STATIC_CELL_COMPILE_ERROR {error}", file=sys.stderr)
+        return EXIT_DATA_ERROR
+    print(
+        "OPENNV_STATIC_CELL_COMPILE "
+        + json.dumps(
+            {
+                "manifest": str((args.output_root / MANIFEST_FILE_NAME).resolve()),
+                "status": manifest["status"],
+                "cellFormKey": manifest["cellFormKey"],
+                "counts": manifest["counts"],
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

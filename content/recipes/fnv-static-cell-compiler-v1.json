@@ -1,0 +1,25 @@
+{
+  "schema": "opennv-static-cell-compiler-profile/v1",
+  "id": "fnv-static-cell-compiler-v1",
+  "archiveRecipe": "fnv-official-actor-archives-v1.json",
+  "supportedChildRecordTypes": ["REFR"],
+  "supportedBaseRecordTypes": ["STAT"],
+  "modelExtension": ".nif",
+  "exportStrict": false,
+  "compileTextures": true,
+  "originPolicy": {
+    "interior": "game-origin",
+    "exterior": "cell-grid-origin",
+    "exteriorCellSizeGameUnits": 4096.0
+  },
+  "statePolicy": {
+    "initiallyDisabled": "blocked",
+    "enableParent": "blocked",
+    "teleport": "blocked"
+  },
+  "promotion": {
+    "compiledStaticPresentationIsNotRuntimeOrParity": true,
+    "anyChildBlockerBlocksCellReadiness": true,
+    "anyAssetOrTextureFailureBlocksCellReadiness": true
+  }
+}

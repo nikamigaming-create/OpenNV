@@ -182,6 +182,10 @@ require a headset session.
 | `corpus_io.py` | Deterministic atomic JSON/JSONL corpus artifacts and descriptors | Record or game semantics |
 | `cell_compile_plan.py` | Natural CELL partitioning, exact child membership, deduplicated capability requirements, and absent-output scheduling | Content implementation, runtime nodes, or parity promotion |
 | `validate_cell_compile_plan.py` | Source-corpus binding, partition hashes, exact job/child/capability coverage, and pending-state enforcement | Asset compilation or runtime claims |
+| `cell_static_compile.py` | One planned CELL's content-addressed supported static assets, material contracts, placements, and explicit blockers | Godot nodes, gameplay, or parity promotion |
+| `cell_static_contract.py` | Static CELL schemas, profile validation, coordinate policy, failure normalization, and producer-source closure | Archive reads, compilation, or Godot nodes |
+| `cell_static_source.py` | Exact compile-job to corpus CELL/child/base/portal join | Asset conversion or runtime behavior |
+| `validate_cell_static_compile.py` | Exact plan/corpus/archive/configuration join plus transform, material, nested-file, and filesystem-closure validation | Runtime loading or visual approval |
 | `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, TPLT/EAMT, LVLN/LVLC, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
 | `actor_parity_graph.py` | Recursive category-source appearance variants and concrete leveled placement candidates | Binary parsing, capture, or rendering |
 | `actor_parity_records.py` | Canonical actor rows and effective override/deletion merge | Template traversal, capture, or rendering |
@@ -203,7 +207,8 @@ require a headset session.
 | `havok_collision_gltf.py` | Bounded authored packed triangles plus convex/list dynamic body, shape, mass, friction, bounce, damping and filter export | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
 | `cell_scene.py` | Recipe selection, XTEL origin, full Gamebryo-to-Godot transform/scale conversion, asset/reference/material manifest | Godot nodes or input |
-| `scene_asset_pipeline.py` | Shared NIF extraction, material bindings, interactions and data-resolved loadout artifacts | CELL selection or Godot nodes |
+| `material_contract.py` | Shared NIF-surface to runtime material binding translation | Mesh export, archive lookup, or Godot resources |
+| `scene_asset_pipeline.py` | Shared bounded-scene NIF extraction, interactions, and data-resolved loadout artifacts | CELL selection or Godot nodes |
 | `exterior_scene.py` | Bounded grid/persistent reference selection, reciprocal XTEL and exterior manifest | LAND decoding or runtime nodes |
 | `landscape_catalog.py` | LAND ownership, height/normal/color, LTEX/TXST and quadrant-layer contracts | Godot nodes or weather |
 | `landscape_gltf.py` | One LAND grid plus deterministic owned-texture layer bake and provenance | CELL selection or runtime physics |
@@ -228,6 +233,8 @@ require a headset session.
 | `CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
 | `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal and proof queries | Binary parsing |
 | `RuntimeMaterialLoader.cs` | Hash-verified 2D/cubemap load and name-keyed retail material passes | DDS/BSA parsing |
+| `StaticCellCompileArtifact.cs` | Static compile schema/configuration/hash/path/count verification and immutable row load | Godot node construction |
+| `StaticCellCompileLoader.cs` | Verified relative artifact load, static placement instantiation, CELL lighting, and authored collision | Record parsing, actors, gameplay, or parity claims |
 | `ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
 | `CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
 | `RetailActorStateContract.cs` | Fail-closed retail shot-state parsing for ACHR transform, camera, idle phase, arm bones, and face/hair hashes | Process addresses, asset parsing, or rendering |
@@ -253,6 +260,7 @@ require a headset session.
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
 | `Test-GodotRuntime.ps1` | Source, synthetic, retail-opt-in, format, and analyzer gates | Packaging state |
 | `Test-OpenXrSimulatorControls.ps1` | Isolated simulator launch, binding-path input drive, native projection, and evidence hashes | Headset claims or Windows app control |
+| `Test-OpenNVStaticCellSlice.ps1` | Immutable owned-data compile, independent validation, Godot load, and report-to-manifest join | Visual parity or playable-campaign claims |
 | `Build-ContentTool.ps1` | Helper packaging, CLI smoke, and license collection | Runtime behavior |
 | `Build-GodotRuntime.ps1` | Clean export, first/reuse proof, notice and asset-free ZIP gates | Gameplay logic |
 | `desktop/src/*` | Cross-platform campaign/launch shell | Asset parsing or rendering |

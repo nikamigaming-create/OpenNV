@@ -40,14 +40,27 @@ internal static class RuntimeMaterialLoader
 
     internal static LoadedTextures LoadTextures(
         JsonElement scene,
-        RendererConfiguration configuration)
+        RendererConfiguration configuration) =>
+        LoadTextures(
+            scene.GetProperty("textures").EnumerateArray(),
+            configuration,
+            "id",
+            null);
+
+    internal static LoadedTextures LoadTextures(
+        IEnumerable<JsonElement> textureRows,
+        RendererConfiguration configuration,
+        string idProperty,
+        string? baseDirectory)
     {
         var textures = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
         var cubemaps = new Dictionary<string, Cubemap>(StringComparer.Ordinal);
-        foreach (var texture in scene.GetProperty("textures").EnumerateArray())
+        foreach (var texture in textureRows)
         {
-            var id = texture.GetProperty("id").GetString()!;
-            var path = VerifiedGltfLoader.ResolvePath(texture.GetProperty("png").GetString()!);
+            var id = texture.GetProperty(idProperty).GetString()!;
+            var path = ResolveContentPath(
+                texture.GetProperty("png").GetString()!,
+                baseDirectory);
             VerifiedGltfLoader.VerifyHash(path, texture.GetProperty("pngSha256").GetString()!);
             var image = Image.LoadFromFile(path);
             if (image is null || image.IsEmpty())
@@ -59,12 +72,16 @@ internal static class RuntimeMaterialLoader
             if (texture.TryGetProperty("cubeFaces", out var cubeFaces))
             {
                 var rows = cubeFaces.EnumerateArray().ToArray();
+                if (rows.Length == 0)
+                    continue;
                 if (rows.Length != configuration.CubemapFaceCount)
                     throw new InvalidOperationException($"Prepared cubemap must contain six faces: {id}");
                 var images = new Godot.Collections.Array<Image>();
                 foreach (var face in rows)
                 {
-                    var facePath = VerifiedGltfLoader.ResolvePath(face.GetProperty("png").GetString()!);
+                    var facePath = ResolveContentPath(
+                        face.GetProperty("png").GetString()!,
+                        baseDirectory);
                     VerifiedGltfLoader.VerifyHash(facePath, face.GetProperty("pngSha256").GetString()!);
                     var faceImage = Image.LoadFromFile(facePath);
                     if (faceImage is null || faceImage.IsEmpty() ||
@@ -111,9 +128,10 @@ internal static class RuntimeMaterialLoader
                 }))
             .ToArray();
         var bindings = asset.GetProperty("materials").EnumerateArray().ToArray();
+        var assetId = AssetId(asset);
         if (surfaces.Length != bindings.Length)
             throw new InvalidOperationException(
-                $"Material/surface count mismatch for asset {asset.GetProperty("id").GetString()}: " +
+                $"Material/surface count mismatch for asset {assetId}: " +
                 $"surfaces={surfaces.Length} bindings={bindings.Length}");
         var surfacesByName = surfaces.ToDictionary(
             surface => surface.Name,
@@ -125,7 +143,7 @@ internal static class RuntimeMaterialLoader
             if (!surfacesByName.TryGetValue(expectedName, out var surface))
                 throw new InvalidOperationException(
                     $"Imported glTF has no material surface named {expectedName} for asset " +
-                    asset.GetProperty("id").GetString());
+                    assetId);
             var material = new StandardMaterial3D
             {
                 Metallic = configuration.DefaultMetallic,
@@ -195,6 +213,20 @@ internal static class RuntimeMaterialLoader
         value.EndsWith(" material", StringComparison.Ordinal)
             ? value[..^" material".Length]
             : value;
+
+    private static string AssetId(JsonElement asset) =>
+        asset.TryGetProperty("id", out var id)
+            ? id.GetString()!
+            : asset.GetProperty("assetId").GetString()!;
+
+    private static string ResolveContentPath(string path, string? baseDirectory)
+    {
+        if (baseDirectory is null || Path.IsPathRooted(path) ||
+            path.StartsWith("res://", StringComparison.Ordinal) ||
+            path.StartsWith("user://", StringComparison.Ordinal))
+            return VerifiedGltfLoader.ResolvePath(path);
+        return Path.GetFullPath(Path.Combine(baseDirectory, path));
+    }
 
     private static Texture2D? Texture(
         JsonElement binding,

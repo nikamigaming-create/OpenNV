@@ -11,7 +11,8 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from bsa_archive import BsaArchive, canonical_member_path
+from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
+from owned_archive_stack import OwnedArchiveStack
 from runtime_configuration import ContentCompilerConfiguration
 
 
@@ -28,6 +29,7 @@ class TextureArtifact:
     requested_path: str
     archive_path: str
     source_sha256: str
+    source_bytes: int
     png_path: Path
     png_sha256: str
     width: int
@@ -35,6 +37,8 @@ class TextureArtifact:
     normal_green_inverted: bool
     cube_face_paths: tuple[Path, ...] = ()
     cube_face_sha256: tuple[str, ...] = ()
+    source_archive: str | None = None
+    source_archive_sha256: str | None = None
 
     def manifest(self) -> dict[str, object]:
         result = {
@@ -42,11 +46,14 @@ class TextureArtifact:
             "requestedPath": self.requested_path,
             "archivePath": self.archive_path,
             "sourceSha256": self.source_sha256,
+            "sourceBytes": self.source_bytes,
             "png": str(self.png_path.resolve()),
             "pngSha256": self.png_sha256,
             "width": self.width,
             "height": self.height,
             "normalGreenInverted": self.normal_green_inverted,
+            "sourceArchive": self.source_archive,
+            "sourceArchiveSha256": self.source_archive_sha256,
         }
         if self.cube_face_paths:
             result["cubeFaces"] = [
@@ -89,41 +96,96 @@ class TexturePipeline:
                 f"Expected one texture member {archive_path!r}, found {len(matches)} archives"
             )
         member = matches[0].extract(archive_path)
-        source_path = self.cache_root / "source" / Path(member.logical_path.replace("\\", "/"))
-        _atomic_bytes(source_path, member.data)
-
         asset_id = hashlib.sha256(requested.encode()).hexdigest()[
             :self.compiler.asset_id_hex_characters
         ]
-        png_path = self.cache_root / "generated" / "textures" / f"{asset_id}.png"
-        normal_green_inverted = requested.endswith("_n.dds")
-        cube_images = decode_dds_cubemap(member.data)
-        image = (
-            cube_images[0]
-            if cube_images
-            else decode_dds(member.data, normal_green_inverted)
-        )
-        _atomic_png(png_path, image, self.compiler.png_compression_level)
-        cube_paths = tuple(
-            png_path.with_name(f"{asset_id}-cube-{index}.png")
-            for index in range(len(cube_images))
-        )
-        for path, cube_image in zip(cube_paths, cube_images):
-            _atomic_png(path, cube_image, self.compiler.png_compression_level)
-        width, height = image.size
-        return TextureArtifact(
-            asset_id,
+        return prepare_texture_artifact(
             requested,
             archive_path,
-            member.sha256,
-            png_path,
-            file_sha256(png_path),
-            width,
-            height,
-            normal_green_inverted,
-            cube_paths,
-            tuple(file_sha256(path) for path in cube_paths),
+            member,
+            self.cache_root,
+            self.compiler,
+            asset_id,
         )
+
+
+class OwnedTexturePipeline:
+    """Prepare effective textures through the official owned-archive stack."""
+
+    def __init__(
+        self,
+        archives: OwnedArchiveStack,
+        cache_root: Path,
+        aliases: dict[str, str],
+        compiler: ContentCompilerConfiguration,
+    ):
+        self.archives = archives
+        self.cache_root = cache_root
+        self.compiler = compiler
+        self.aliases = {
+            canonical_member_path(source): canonical_member_path(target)
+            for source, target in aliases.items()
+        }
+
+    def prepare(self, requested_path: str) -> TextureArtifact:
+        requested = canonical_member_path(requested_path)
+        archive_path = self.aliases.get(requested, requested)
+        member = self.archives.extract(archive_path)
+        asset_id = hashlib.sha256(
+            f"{requested}:{member.sha256}".encode("utf-8")
+        ).hexdigest()[:self.compiler.asset_id_hex_characters]
+        return prepare_texture_artifact(
+            requested,
+            archive_path,
+            member,
+            self.cache_root,
+            self.compiler,
+            asset_id,
+        )
+
+
+def prepare_texture_artifact(
+    requested: str,
+    archive_path: str,
+    member: ExtractedMember,
+    cache_root: Path,
+    compiler: ContentCompilerConfiguration,
+    asset_id: str,
+) -> TextureArtifact:
+    source_path = cache_root / "source" / Path(member.logical_path.replace("\\", "/"))
+    _atomic_bytes(source_path, member.data)
+    png_path = cache_root / "generated" / "textures" / f"{asset_id}.png"
+    normal_green_inverted = requested.endswith("_n.dds")
+    cube_images = decode_dds_cubemap(member.data)
+    image = (
+        cube_images[0]
+        if cube_images
+        else decode_dds(member.data, normal_green_inverted)
+    )
+    _atomic_png(png_path, image, compiler.png_compression_level)
+    cube_paths = tuple(
+        png_path.with_name(f"{asset_id}-cube-{index}.png")
+        for index in range(len(cube_images))
+    )
+    for path, cube_image in zip(cube_paths, cube_images):
+        _atomic_png(path, cube_image, compiler.png_compression_level)
+    width, height = image.size
+    return TextureArtifact(
+        asset_id,
+        requested,
+        archive_path,
+        member.sha256,
+        len(member.data),
+        png_path,
+        file_sha256(png_path),
+        width,
+        height,
+        normal_green_inverted,
+        cube_paths,
+        tuple(file_sha256(path) for path in cube_paths),
+        member.source_archive,
+        member.source_archive_sha256,
+    )
 
 
 def decode_dds(payload: bytes, invert_normal_green: bool) -> Image.Image:

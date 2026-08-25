@@ -59,7 +59,11 @@ internal sealed record RuntimeConfiguration(
 
     internal void VerifyCompiledConfiguration(JsonElement source)
     {
-        var compiled = source.GetProperty("configuration");
+        VerifyCompiledConfigurationDescriptor(source.GetProperty("configuration"));
+    }
+
+    internal void VerifyCompiledConfigurationDescriptor(JsonElement compiled)
+    {
         if (compiled.GetProperty("schema").GetString() != ExpectedSchema ||
             !compiled.GetProperty("sha256").GetString()!.Equals(Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Prepared content was compiled with another runtime configuration.");

@@ -178,6 +178,49 @@ contains the exact child FormKeys, source CELL hash, capability-set identity,
 review gates/shots, and source-anomaly assignments. Every compile output starts
 `not-built`; parsing and scheduling did not promote any implementation status.
 
-The next slice is no longer planning. It is the content-addressed per-CELL
-compiler output contract, starting with one representative member of each
-capability family and retaining explicit blockers for every unsupported member.
+## First content-addressed CELL compile
+
+The first owned-data compile/runtime bridge is complete for representative
+interior `FalloutNV.esm:10561a` (`RanchHouseInterior03`). The immutable output is
+`D:\Builds\OpenNV-static-cell-FalloutNV-10561a-20260824-r6`; its manifest
+SHA-256 is
+`ff19b71f966231d01e0380da081961113c5413ee8c0f62c0259ff1ec1274c639`.
+An independent rebuild at revision `r7` is byte-for-byte identical across all
+65 files.
+
+| Static compile/runtime entity | Exact result |
+| --- | ---: |
+| Source child outcomes | 26 / 26 |
+| Compiled placements | 26 |
+| Content-addressed NIF assets | 10 |
+| Compiled DDS textures | 12 |
+| Retail-derived material bindings | 30 |
+| Compiler blockers | 0 |
+| Accounted artifact files | 65 |
+| Retained extracted source files | 0 |
+| Godot authored collision instances | 25 |
+| Godot render surfaces | 79 |
+| Godot vertices | 5,316 |
+
+The compiler resolves assets through the one official owned-archive precedence
+recipe, converts each supported `STAT`/`REFR`, retains source archive identity,
+emits every nested output hash and byte count, and gives every source child one
+placement or blocker outcome. The validator rejoins the exact CELL job and
+corpus rows, reopens the owned archives, checks transforms, materials, files,
+and complete filesystem closure, and refuses runtime/parity promotion.
+
+`StaticCellCompileLoader` then verifies the same manifest and runtime
+configuration, loads its relative glTF/PNG outputs, binds the shared material
+contract, instantiates every authored placement, and builds authored collision.
+The runtime evidence is
+`D:\Builds\OpenNV-static-cell-godot-load-20260824-r4.json`, SHA-256
+`29ce9730ad890ab569e381d3a014892fce8dcaa4f6b82eb020e8af42fadcd8ed`.
+It explicitly records `playable=false` and `parity=false`: this closes the
+static compiler-to-Godot contract only.
+
+Run the same fail-closed path for another immutable target with
+`scripts/Test-OpenNVStaticCellSlice.ps1`. The next implementation slice expands
+the compiler by capability family (`LIGH`, doors/XTEL, actors/creatures, LAND,
+NAVM, enable state), then promotes the same per-CELL artifacts into streamed
+flat/VR gameplay and matched retail evidence. Unsupported records remain
+blockers; they are never silently omitted.

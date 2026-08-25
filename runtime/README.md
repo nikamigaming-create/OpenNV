@@ -26,6 +26,25 @@ extract the model directly, build a temporary cache, load it in Godot, and
 delete the cache afterward. No retail-derived file or generated conversion
 belongs in Git.
 
+The whole-game CELL path is partitioned separately from the bounded Goodsprings
+sandbox. Given the immutable CELL corpus and compile plan, compile, validate,
+and load one CELL without any hand-authored scene data:
+
+```powershell
+pwsh -File scripts/Test-OpenNVStaticCellSlice.ps1 `
+  -DataRoot "D:\SteamLibrary\steamapps\common\Fallout New Vegas\Data" `
+  -CorpusRoot "D:\Builds\OpenNV-cell-parity-corpus-20260824-r4" `
+  -PlanRoot "D:\Builds\OpenNV-cell-compile-plan-20260824-r1" `
+  -CellFormKey "FalloutNV.esm:10561a" `
+  -OutputRoot "D:\Builds\OpenNV-static-cell-FalloutNV-10561a-run1" `
+  -RuntimeReport "D:\Builds\OpenNV-static-cell-FalloutNV-10561a-run1.json"
+```
+
+That gate refuses overwrites, requires zero blockers, verifies all owned source
+and generated hashes, and proves Godot instantiation plus authored collision.
+Its report deliberately remains `playable=false` and `parity=false` until the
+remaining CELL capability families and matched retail evidence pass.
+
 Actor parity captures require `--cell-scene`, an actor scene/set, `--capture-root`,
 and the compact oracle artifact supplied as `--retail-state-contract`. The
 runtime rejects a missing/mismatched ACHR, shot set, pose, geometry gate, or

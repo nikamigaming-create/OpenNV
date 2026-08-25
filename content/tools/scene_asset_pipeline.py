@@ -14,14 +14,12 @@ from cell_catalog import (
     PlacedReference,
 )
 from export_static_nif_gltf import export_static_nif
-from actor_material import nif_material_roughness
+from material_contract import environment_texture_paths, material_bindings
 from runtime_configuration import ContentCompilerConfiguration
 from texture_pipeline import TexturePipeline
 
 
 FORM_ID_RADIX = 16
-ENVIRONMENT_TEXTURE_SLOT = 4
-ENVIRONMENT_MASK_TEXTURE_SLOT = 5
 
 
 def form_id(value: int) -> str:
@@ -47,26 +45,6 @@ def reference_selection_reason(base: BaseObject, recipe: dict[str, object]) -> s
     if base.model_path.startswith(prefixes) or base.record_type in record_types:
         return "selected"
     return "outside-recipe"
-
-
-def environment_texture_paths(surface: dict[str, object]) -> tuple[str | None, str | None]:
-    material = surface["material"]
-    if "sf_environment_mapping" not in set(material.get("shaderFlags1Enabled", [])):
-        return None, None
-    if "sf_2_envmap_light_fade" in set(material.get("shaderFlags2Enabled", [])):
-        return None, None
-    textures = surface["textures"]
-    environment = (
-        textures[ENVIRONMENT_TEXTURE_SLOT]
-        if len(textures) > ENVIRONMENT_TEXTURE_SLOT and textures[ENVIRONMENT_TEXTURE_SLOT]
-        else None
-    )
-    mask = (
-        textures[ENVIRONMENT_MASK_TEXTURE_SLOT]
-        if len(textures) > ENVIRONMENT_MASK_TEXTURE_SLOT and textures[ENVIRONMENT_MASK_TEXTURE_SLOT]
-        else None
-    )
-    return environment, mask
 
 
 def interaction_manifest(
@@ -256,66 +234,16 @@ def prepare_scene_assets(
     texture_artifacts = {
         requested: texture_pipeline.prepare(requested) for requested in requested_textures
     }
+    texture_ids = {
+        requested: artifact.asset_id
+        for requested, artifact in texture_artifacts.items()
+    }
     for model_path, asset in assets.items():
-        bindings = []
-        for surface_index, surface in enumerate(asset_sidecars[model_path]["surfaces"]):
-            textures = surface["textures"]
-            diffuse = textures[0] if len(textures) > 0 and textures[0] else None
-            normal = textures[1] if len(textures) > 1 and textures[1] else None
-            emissive = textures[2] if len(textures) > 2 and textures[2] else None
-            material = surface["material"]
-            environment, environment_mask = environment_texture_paths(surface)
-            glossiness = float(
-                material.get(
-                    "glossiness",
-                    compiler_configuration.default_material_glossiness,
-                )
-            )
-            specular = [float(value) for value in material.get("specular", [0.0, 0.0, 0.0])]
-            roughness, roughness_source = nif_material_roughness(
-                specular,
-                glossiness,
-                compiler_configuration,
-            )
-            unshaded = "BSShaderNoLightingProperty" in surface["propertyTypes"]
-            emissive_color = [float(value) for value in material.get("emissive", [0.0, 0.0, 0.0])]
-            emissive_controlled = bool(material.get("emissiveControlled", False))
-            emissive_active = not unshaded and (emissive is not None or emissive_controlled)
-            emission_texture = emissive if emissive_active else None
-            if not emissive_active:
-                emissive_color = [0.0, 0.0, 0.0]
-            alpha = float(material.get("alpha", 1.0))
-            bindings.append(
-                {
-                    "surfaceIndex": surface_index,
-                    "name": surface["name"],
-                    "diffuseTextureId": texture_artifacts[diffuse].asset_id if diffuse else None,
-                    "normalTextureId": texture_artifacts[normal].asset_id if normal else None,
-                    "emissiveTextureId": (
-                        texture_artifacts[emission_texture].asset_id if emission_texture else None
-                    ),
-                    "environmentTextureId": (
-                        texture_artifacts[environment].asset_id if environment else None
-                    ),
-                    "environmentMaskTextureId": (
-                        texture_artifacts[environment_mask].asset_id if environment_mask else None
-                    ),
-                    "environmentMapScale": float(material.get("environmentMapScale", 1.0)),
-                    "emissiveColor": emissive_color,
-                    "emissiveReplace": emissive_controlled and emissive is None,
-                    "baseColorFactor": [
-                        *[float(value) for value in material.get("baseColor", [1.0, 1.0, 1.0])],
-                        alpha,
-                    ],
-                    "roughness": roughness,
-                    "roughnessSource": roughness_source,
-                    "alphaContract": material["alphaContract"],
-                    "vertexColorMode": material["vertexColorMode"],
-                    "doubleSided": int(material.get("stencilDrawMode", 1)) == 3,
-                    "unshaded": unshaded,
-                }
-            )
-        asset["materials"] = bindings
+        asset["materials"] = material_bindings(
+            asset_sidecars[model_path],
+            texture_ids,
+            compiler_configuration,
+        )
     if compiler is None:
         raise ValueError(f"Cell recipe exported no asset compiler: {recipe['id']}")
     return assets, asset_sidecars, texture_artifacts, compiler

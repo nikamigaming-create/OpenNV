@@ -47,13 +47,16 @@ public partial class RuntimeCoordinator : Node3D
             var hasDataRoot = _options.TryGetValue("data-root", out var dataRoot);
             var hasModel = _options.ContainsKey("model");
             var hasCellScene = _options.ContainsKey("cell-scene");
+            var hasStaticCellCompile = _options.ContainsKey("static-cell-compile");
             var hasActorModel = _options.ContainsKey("actor-model");
             var hasActorReviewScene = _options.ContainsKey("actor-review-scene");
             if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) +
-                    (hasActorModel ? 1 : 0) + (hasActorReviewScene ? 1 : 0) > 1)
+                    (hasStaticCellCompile ? 1 : 0) + (hasActorModel ? 1 : 0) +
+                    (hasActorReviewScene ? 1 : 0) > 1)
                 throw new ArgumentException(
                     "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
-                    "--actor-model/--actor-sidecar, or --actor-review-scene.");
+                    "--static-cell-compile, --actor-model/--actor-sidecar, or " +
+                    "--actor-review-scene.");
             if (!hasModel && _options.ContainsKey("sidecar"))
                 throw new ArgumentException("--sidecar requires --model.");
             if (!hasActorModel && _options.ContainsKey("actor-sidecar"))
@@ -84,6 +87,14 @@ public partial class RuntimeCoordinator : Node3D
             if (hasCellScene)
             {
                 LoadCellScene(RequireOption(_options, "cell-scene"), _options);
+                return;
+            }
+
+            if (hasStaticCellCompile)
+            {
+                LoadStaticCellCompile(
+                    RequireOption(_options, "static-cell-compile"),
+                    _options);
                 return;
             }
 
@@ -748,6 +759,47 @@ public partial class RuntimeCoordinator : Node3D
         GD.Print(
             $"OPENNV_GODOT_STATIC_MODEL_PASS source={loaded.SourceSha256} " +
             $"meshes={loaded.Meshes} surfaces={loaded.Surfaces} vertices={loaded.Vertices}");
+        if (options.ContainsKey("quit-after-load"))
+            GetTree().Quit(0);
+    }
+
+    private void LoadStaticCellCompile(
+        string compilePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var loaded = StaticCellCompileLoader.Load(
+            compilePath,
+            this,
+            _configuration,
+            !options.ContainsKey("no-collision"));
+        var report = new
+        {
+            schema = "opennv-godot-static-cell-runtime/v1",
+            status = "pass",
+            scope = "compiled-static-presentation",
+            playable = false,
+            parity = false,
+            configurationSchema = RuntimeConfiguration.ExpectedSchema,
+            configurationSha256 = _configuration.Sha256,
+            manifest = loaded.ManifestPath,
+            manifestSha256 = loaded.ManifestSha256,
+            cellFormKey = loaded.FormKey,
+            cellEditorId = loaded.EditorId,
+            assets = loaded.Assets,
+            textures = loaded.Textures,
+            materialBindings = loaded.MaterialBindings,
+            placements = loaded.Placements,
+            collisionMeshes = loaded.CollisionMeshes,
+            surfaces = loaded.Surfaces,
+            vertices = loaded.Vertices,
+        };
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, report);
+        GD.Print(
+            $"OPENNV_GODOT_STATIC_CELL_PASS cell={loaded.FormKey} assets={loaded.Assets} " +
+            $"textures={loaded.Textures} materials={loaded.MaterialBindings} " +
+            $"placements={loaded.Placements} collision={loaded.CollisionMeshes} " +
+            $"surfaces={loaded.Surfaces} vertices={loaded.Vertices}");
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
     }
