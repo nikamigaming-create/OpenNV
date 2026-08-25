@@ -8,10 +8,12 @@ internal static class StaticCellCompileLoader
     private const string PlacementStatus = "compiled-static-reference";
     private const string LightPlacementStatus = "compiled-point-light-reference";
     private const string LandscapePlacementStatus = "compiled-landscape-reference";
+    private const string NonvisualPlacementStatus = "accounted-nonvisual-reference";
     private const string PlacementReadiness = "static-presentation-runtime-pending";
     private const string StaticModelPresentation = "static-model";
     private const string PointLightPresentation = "point-light";
     private const string LandscapePresentation = "landscape";
+    private const string NonvisualPresentation = "nonvisual";
     private const string StaticNifAsset = "static-nif";
     private const string LandscapeAsset = "landscape";
     private const string LandscapeCollisionSource = "LAND-height-grid";
@@ -132,6 +134,21 @@ internal static class StaticCellCompileLoader
                     throw new InvalidOperationException(
                         $"Static CELL placement is not loadable: " +
                         placement.GetProperty("childFormKey").GetString());
+                if (presentationKind == NonvisualPresentation)
+                {
+                    if (presentationStatus != NonvisualPlacementStatus ||
+                        placement.GetProperty("assetId").ValueKind != JsonValueKind.Null ||
+                        placement.GetProperty("light").ValueKind != JsonValueKind.Null ||
+                        placement.GetProperty("landscape").ValueKind != JsonValueKind.Null ||
+                        placement.GetProperty("positionGodotUnits").ValueKind != JsonValueKind.Null ||
+                        placement.GetProperty("rotationGodotQuaternion").ValueKind != JsonValueKind.Null ||
+                        placement.GetProperty("scale").ValueKind != JsonValueKind.Null)
+                        throw new InvalidOperationException(
+                            $"Static CELL nonvisual outcome differs: " +
+                            placement.GetProperty("childFormKey").GetString());
+                    placements++;
+                    continue;
+                }
                 var placementNode = new Node3D
                 {
                     Name = $"REFR_{placement.GetProperty("childRuntimeFormId").GetString()}",

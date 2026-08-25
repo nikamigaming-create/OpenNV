@@ -16,6 +16,7 @@ from cell_landscape_validate import (
 from cell_parity_corpus import MANIFEST_FILE_NAME as CORPUS_MANIFEST_FILE_NAME
 from cell_scene import godot_position, godot_rotation_quaternion
 from cell_static_contract import (
+    ACCOUNTED_NONVISUAL_REFERENCE_STATUS,
     ASSETS_FILE_NAME,
     BLOCKED_PRESENTATION_STATUS,
     BLOCKED_REFERENCE_STATUS,
@@ -31,6 +32,7 @@ from cell_static_contract import (
     STATIC_COMPILER_SOURCE_NAMES,
     STATIC_RUNTIME_PENDING_REFERENCE_STATUS,
     LANDSCAPE_PRESENTATION_KIND,
+    NONVISUAL_PRESENTATION_KIND,
     POINT_LIGHT_PRESENTATION_KIND,
     STATIC_MODEL_PRESENTATION_KIND,
     TEXTURES_FILE_NAME,
@@ -384,6 +386,10 @@ def validate_compile(
             expected_position = list(origin)
             expected_rotation = [0.0, 0.0, 0.0]
             expected_scale = 1.0
+        elif expected_kind == NONVISUAL_PRESENTATION_KIND:
+            expected_position = None
+            expected_rotation = None
+            expected_scale = None
         else:
             transform = child.get("transformGameUnits")
             expected_position = None if transform is None else transform["position"]
@@ -444,6 +450,8 @@ def validate_compile(
             and asset_id is not None
         ):
             expected_presentation_status = COMPILED_LANDSCAPE_REFERENCE_STATUS
+        elif expected_kind == NONVISUAL_PRESENTATION_KIND:
+            expected_presentation_status = ACCOUNTED_NONVISUAL_REFERENCE_STATUS
         if placement["presentationStatus"] != expected_presentation_status:
             raise ValueError(f"Static CELL placement presentation status differs: {key}")
         expected_readiness = (
@@ -480,6 +488,7 @@ def validate_compile(
                 COMPILED_REFERENCE_STATUS,
                 COMPILED_LIGHT_REFERENCE_STATUS,
                 COMPILED_LANDSCAPE_REFERENCE_STATUS,
+                ACCOUNTED_NONVISUAL_REFERENCE_STATUS,
             }
             for row in placements
         ),

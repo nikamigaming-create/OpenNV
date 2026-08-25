@@ -18,6 +18,7 @@ from cell_landscape_compile import compile_landscape
 from cell_parity_corpus import MANIFEST_FILE_NAME as CORPUS_MANIFEST_FILE_NAME
 from cell_scene import godot_position, godot_rotation_quaternion
 from cell_static_contract import (
+    ACCOUNTED_NONVISUAL_REFERENCE_STATUS,
     ASSETS_FILE_NAME,
     BLOCKED_PRESENTATION_STATUS,
     BLOCKED_REFERENCE_STATUS,
@@ -33,6 +34,7 @@ from cell_static_contract import (
     STATIC_COMPILER_SOURCE_NAMES,
     STATIC_RUNTIME_PENDING_REFERENCE_STATUS,
     LANDSCAPE_PRESENTATION_KIND,
+    NONVISUAL_PRESENTATION_KIND,
     OWNED_DDS_TEXTURE_KIND,
     POINT_LIGHT_PRESENTATION_KIND,
     STATIC_NIF_ASSET_KIND,
@@ -321,6 +323,10 @@ def compile_cell(
             position = origin
             rotation = (0.0, 0.0, 0.0)
             scale = 1.0
+        elif policy is not None and policy["kind"] == NONVISUAL_PRESENTATION_KIND:
+            position = None
+            rotation = None
+            scale = None
         else:
             position, rotation, transform_reason = child_transform(child)
             if transform_reason is not None:
@@ -332,7 +338,9 @@ def compile_cell(
             if not math.isfinite(scale) or scale <= 0.0:
                 reasons.append(blocker("child", key, "invalid-scale"))
         child_transforms[key] = (position, rotation)
-        child_scales[key] = scale if math.isfinite(scale) else None
+        child_scales[key] = (
+            None if scale is None or not math.isfinite(scale) else scale
+        )
         child_reasons[key] = reasons
 
     output_root.parent.mkdir(parents=True, exist_ok=True)
@@ -511,6 +519,8 @@ def compile_cell(
                 presentation_status = COMPILED_REFERENCE_STATUS
             elif light is not None:
                 presentation_status = COMPILED_LIGHT_REFERENCE_STATUS
+            elif presentation_kind == NONVISUAL_PRESENTATION_KIND:
+                presentation_status = ACCOUNTED_NONVISUAL_REFERENCE_STATUS
             placements.append(
                 {
                     "childFormKey": key,
@@ -621,9 +631,10 @@ def compile_cell(
                     row["presentationStatus"]
                     in {
                         COMPILED_REFERENCE_STATUS,
-                        COMPILED_LIGHT_REFERENCE_STATUS,
-                        COMPILED_LANDSCAPE_REFERENCE_STATUS,
-                    }
+                COMPILED_LIGHT_REFERENCE_STATUS,
+                COMPILED_LANDSCAPE_REFERENCE_STATUS,
+                ACCOUNTED_NONVISUAL_REFERENCE_STATUS,
+            }
                     for row in placements
                 ),
                 "lights": sum(row["light"] is not None for row in placements),

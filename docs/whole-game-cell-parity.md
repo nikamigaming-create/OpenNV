@@ -152,11 +152,27 @@ default placement, guessed material, or hand-authored room.
 The partitioned compiler ledger and its presentation policies now exist. Model-
 bearing `ACTI`, `CONT`, `DOOR`, `MSTT`, `SCOL`, and `STAT` bases share the same
 strict static-model transport; `LIGH` and direct-child `LAND` retain their typed
-paths. This only admits their initial presentation. Door interaction, container
-state, activator behavior, movable-body simulation, effects, and every unknown
-reference subrecord remain separate runtime or parity work. The active order is
-to close one explicit capability family at a time without deleting the bounded
-Goodsprings vertical-slice acceptance test.
+paths. `SOUN` references and `NAVM` children receive explicit nonvisual outcomes
+so their source rows remain accounted without inventing geometry. This only
+admits initial visual presentation: audio, navigation, door interaction,
+container state, activator behavior, movable-body simulation, effects, and every
+unknown reference subrecord remain separate runtime or parity work. The active
+order is to close one explicit capability family at a time without deleting the
+bounded Goodsprings vertical-slice acceptance test.
+
+The zero-geometry regression for that distinction is exterior CELL
+`FalloutNV.esm:02d9e7` (`WastelandGoAway2`), whose only source child is one
+`NAVM`. The immutable compile at
+`D:\Builds\OpenNV-navm-nonvisual-FalloutNV-02d9e7-20260824-r1` contains five
+accounted files and 9,991 bytes with manifest SHA-256
+`c3e9034646f32aa320c0aeb4122d0b088ad470889832af0e3ef30fba5048b783`.
+The Godot report at
+`D:\Builds\OpenNV-navm-nonvisual-FalloutNV-02d9e7-godot-20260824-r1.json`
+has SHA-256
+`13088edb9fe5605a8e8a0421468a4dbb1e5aa24a852657eeb6558a277ccfb289`.
+It proves one source row and one nonvisual presentation outcome with no invented
+node, asset, texture, light, landscape, or collision. Both `playable` and
+`parity` remain false; this is not a NAVM decoder or navigation claim.
 
 ## Partitioned compile plan
 

@@ -2,9 +2,9 @@
   "schema": "opennv-static-cell-compiler-profile/v2",
   "id": "fnv-static-cell-compiler-v2",
   "archiveRecipe": "fnv-official-actor-archives-v1.json",
-  "supportedChildRecordTypes": ["LAND", "REFR"],
+  "supportedChildRecordTypes": ["LAND", "NAVM", "REFR"],
   "baseLinkedChildRecordTypes": ["REFR"],
-  "supportedBaseRecordTypes": ["ACTI", "CONT", "DOOR", "LIGH", "MSTT", "SCOL", "STAT"],
+  "supportedBaseRecordTypes": ["ACTI", "CONT", "DOOR", "LIGH", "MSTT", "SCOL", "SOUN", "STAT"],
   "presentationPolicies": {
     "ACTI": {
       "kind": "static-model",
@@ -36,6 +36,11 @@
       "modelPathCount": 1,
       "supportedReferenceSubrecords": ["DATA", "NAME", "XSCL"]
     },
+    "SOUN": {
+      "kind": "nonvisual",
+      "modelPathCount": 0,
+      "supportedReferenceSubrecords": ["DATA", "EDID", "NAME", "XESP", "XPRM", "XPWR", "XSCL"]
+    },
     "STAT": {
       "kind": "static-model",
       "modelPathCount": 1,
@@ -46,6 +51,10 @@
     "LAND": {
       "kind": "landscape",
       "supportedChildSubrecords": ["ATXT", "BTXT", "DATA", "VCLR", "VHGT", "VNML", "VTXT"]
+    },
+    "NAVM": {
+      "kind": "nonvisual",
+      "supportedChildSubrecords": ["DATA", "EDID", "NVCA", "NVDP", "NVER", "NVEX", "NVGD", "NVTR", "NVVX"]
     }
   },
   "modelExtension": ".nif",
