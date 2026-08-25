@@ -269,3 +269,43 @@ those LAND classes is next; NAVM, XTEL/doors, actors/creatures, enable state,
 effects, and the remaining reference subrecords then follow through the same
 artifact kernel. Unsupported records remain blockers and are never silently
 omitted.
+
+## Thirteen-area matched review surface
+
+The first broad visual acceptance set is declared in
+`content/recipes/fnv-thirteen-area-capture-plan-v1.json`. These are not hand-made
+Godot scenes. The recipe contains only stable selection identity and review
+intent; the generated jobs rejoin each row to the immutable CELL and review
+corpus for runtime FormID, record hash, worldspace, coordinates, lighting,
+child counts, actor/creature placements, portals, gates, and required shots.
+
+The validated plan at
+`D:\Builds\OpenNV-thirteen-area-capture-plan-20260824-r1` has manifest SHA-256
+`90beb6c6ea8c1584146b54a5d5031cdd7e73fbec7396689c6478658d15612794`.
+It schedules 13 primary comparisons across five interiors and eight exteriors,
+with 8,401 source child records, 86 actor/creature placements, 15 portal edges,
+and 26 corpus-required shots. All evidence states remain pending.
+
+| Area | Exact CELL | Class | Primary side-by-side shot |
+| --- | --- | --- | --- |
+| Goodsprings Prospector Saloon | `FalloutNV.esm:106185` | interior | entry context |
+| Goodsprings | `FalloutNV.esm:0daebb` | exterior | cell-center context |
+| Novac | `FalloutNV.esm:08434b` | exterior | cell-center context |
+| Freeside Central | `FalloutNV.esm:10bf00` | exterior | cell-center context |
+| Lucky 38 Casino Floor | `FalloutNV.esm:10d512` | interior | entry context |
+| Hoover Dam | `FalloutNV.esm:0ddd21` | exterior | cell-center context |
+| Jacobstown Lodge | `FalloutNV.esm:13ca81` | interior | entry context |
+| Nellis Air Force Base | `FalloutNV.esm:0dda4a` | exterior | cell-center context |
+| Sierra Madre Casino | `DeadMoney.esm:0011a0` | interior | entry context |
+| Sierra Madre Fountain | `DeadMoney.esm:000bbd` | exterior | cell-center context |
+| Zion Pine Creek | `HonestHearts.esm:00734d` | exterior | cell-center context |
+| Big MT Think Tank | `OldWorldBlues.esm:00169d` | exterior | cell-center context |
+| The Divide Silo 01 | `LonesomeRoad.esm:002adf` | interior | entry context |
+
+Retail runs first and emits the camera transform, view/projection matrices,
+field of view, viewport, simulation time, environment identities, loaded-set
+hash, and native-frame hash. Godot then consumes that camera contract without a
+second framing path. Engines run sequentially, native frames are retained
+uncropped, and a missing or failed side can never become a parity pass. The
+plan itself is scheduling evidence only; it deliberately starts every visual
+and human-review state pending.

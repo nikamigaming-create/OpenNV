@@ -53,3 +53,11 @@ reconstructs that graph independently. `cell_static_resource_validate.py` owns
 generic asset/texture/file closure, leaving `validate_cell_static_compile.py`
 as CELL/plan/policy orchestration. The current baseline accepts only complete
 four-quadrant LAND layouts and fails partial/default layouts closed.
+
+`recipes/fnv-thirteen-area-capture-plan-v1.json` selects a fixed base-game and
+story-DLC review surface with both interiors and exteriors. The selection is
+compiled from the immutable CELL corpus by `tools/area_capture_plan.py` and
+rejoined by `tools/validate_area_capture_plan.py`; no CELL transform, lighting,
+child count, portal count, or runtime FormID is copied into the recipe. Retail
+must be captured first, and Godot must consume its exact camera telemetry.
+Until both native frames exist, every comparison remains explicitly blocked.
