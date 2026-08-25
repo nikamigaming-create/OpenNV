@@ -165,7 +165,7 @@ class CellCatalog:
         return [reference for reference in self.references if reference.cell_form_id == cell_form_id]
 
 
-def _subrecords(record: Record) -> dict[str, list[bytes]]:
+def subrecords_by_signature(record: Record) -> dict[str, list[bytes]]:
     result: dict[str, list[bytes]] = {}
     for subrecord in iter_subrecords(record):
         result.setdefault(subrecord.signature, []).append(subrecord.data)
@@ -177,7 +177,7 @@ def _first_text(values: dict[str, list[bytes]], signature: str) -> str:
     return zstring(matches[0]) if matches else ""
 
 
-def _model_path(data: bytes) -> str:
+def normalize_model_path(data: bytes) -> str:
     value = zstring(data).replace("/", "\\").lstrip("\\").lower()
     if value.startswith("data\\meshes\\"):
         return value[len("data\\meshes\\") :]
@@ -186,21 +186,21 @@ def _model_path(data: bytes) -> str:
     return value
 
 
-def _cell_parent(record: Record) -> int | None:
+def cell_parent_form_id(record: Record) -> int | None:
     for group in reversed(record.groups):
         if group.group_type == CELL_CHILDREN_GROUP_TYPE:
             return group.label_u32
     return None
 
 
-def _worldspace_parent(record: Record) -> int | None:
+def worldspace_parent_form_id(record: Record) -> int | None:
     for group in reversed(record.groups):
         if group.group_type == WORLDSPACE_CHILDREN_GROUP_TYPE:
             return group.label_u32
     return None
 
 
-def _transform(data: bytes, record: Record) -> Transform:
+def parse_transform(data: bytes, record: Record) -> Transform:
     if len(data) != REFERENCE_TRANSFORM_BYTES:
         raise ValueError(
             f"DATA transform must be {REFERENCE_TRANSFORM_BYTES} bytes in "
@@ -210,7 +210,7 @@ def _transform(data: bytes, record: Record) -> Transform:
     return Transform(tuple(values[:3]), tuple(values[3:]))
 
 
-def _reference_scale(values: dict[str, list[bytes]], record: Record) -> float:
+def parse_reference_scale(values: dict[str, list[bytes]], record: Record) -> float:
     matches = values.get("XSCL", [])
     if not matches:
         return DEFAULT_REFERENCE_SCALE
@@ -225,13 +225,13 @@ def _reference_scale(values: dict[str, list[bytes]], record: Record) -> float:
     return scale
 
 
-def _form_id(data: bytes, record: Record, signature: str) -> int:
+def parse_form_id(data: bytes, record: Record, signature: str) -> int:
     if len(data) < FORM_ID_BYTES:
         raise ValueError(f"{signature} must contain a form ID in {record.signature} {record.form_id:08x}")
     return struct.unpack_from("<I", data)[0]
 
 
-def _cell_lighting(data: bytes, record: Record) -> CellLighting:
+def parse_cell_lighting(data: bytes, record: Record) -> CellLighting:
     if len(data) != CELL_LIGHTING_BYTES:
         raise ValueError(
             f"XCLL must be {CELL_LIGHTING_BYTES} bytes in CELL {record.form_id:08x}"
@@ -292,7 +292,7 @@ def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObje
         )
     data = matches[0]
     ammo_values = values.get("NAM0", [])
-    ammo = _form_id(ammo_values[0], record, "NAM0") if ammo_values else None
+    ammo = parse_form_id(ammo_values[0], record, "NAM0") if ammo_values else None
     return WeaponObject(
         record.form_id,
         struct.unpack_from("<H", data, WEAPON_DAMAGE_OFFSET)[0],
@@ -305,7 +305,7 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
     catalog = CellCatalog({}, {}, {}, {}, {}, [])
     for record in iter_plugin_records(path, CATALOG_RECORD_TYPES):
         if record.signature == "CELL":
-            values = _subrecords(record)
+            values = subrecords_by_signature(record)
             data = values.get("DATA", [b"\0"])[0]
             coordinates_data = values.get("XCLC", [])
             coordinates = struct.unpack_from("<ii", coordinates_data[0]) if coordinates_data else None
@@ -315,17 +315,17 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 _first_text(values, "EDID"),
                 data[0] if data else 0,
                 coordinates,
-                _worldspace_parent(record),
-                _cell_lighting(lighting_data[0], record) if lighting_data else None,
+                worldspace_parent_form_id(record),
+                parse_cell_lighting(lighting_data[0], record) if lighting_data else None,
             )
         elif record.signature in BASE_RECORD_TYPES:
-            values = _subrecords(record)
+            values = subrecords_by_signature(record)
             models = values.get("MODL", [])
             catalog.base_objects[record.form_id] = BaseObject(
                 record.form_id,
                 record.signature,
                 _first_text(values, "EDID"),
-                _model_path(models[0]) if models else None,
+                normalize_model_path(models[0]) if models else None,
             )
             if record.signature == "LIGH":
                 light = _light_object(record, values)
@@ -336,10 +336,10 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
             elif record.signature == "WEAP":
                 catalog.weapons[record.form_id] = _weapon_object(record, values)
         elif record.signature == "REFR":
-            cell_form_id = _cell_parent(record)
+            cell_form_id = cell_parent_form_id(record)
             if cell_form_id is None:
                 continue
-            values = _subrecords(record)
+            values = subrecords_by_signature(record)
             if not values.get("NAME") or not values.get("DATA"):
                 continue
             teleport = values.get("XTEL", [])
@@ -348,12 +348,12 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 PlacedReference(
                     record.form_id,
                     cell_form_id,
-                    _form_id(values["NAME"][0], record, "NAME"),
+                    parse_form_id(values["NAME"][0], record, "NAME"),
                     record.flags,
-                    _transform(values["DATA"][0], record),
-                    _reference_scale(values, record),
-                    _form_id(teleport_data, record, "XTEL") if teleport_data else None,
-                    _transform(
+                    parse_transform(values["DATA"][0], record),
+                    parse_reference_scale(values, record),
+                    parse_form_id(teleport_data, record, "XTEL") if teleport_data else None,
+                    parse_transform(
                         teleport_data[
                             TELEPORT_DESTINATION_TRANSFORM_OFFSET:TELEPORT_DESTINATION_BYTES
                         ],

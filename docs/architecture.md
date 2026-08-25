@@ -10,6 +10,8 @@ defined in [data and configuration accountability](data-and-configuration-accoun
 The official-stack actor/template/placement graph and exact meaning of a
 whole-game visual pass are defined in
 [whole-game actor and creature parity](whole-game-actor-creature-parity.md).
+The official-stack CELL/child/portal denominator and exact meaning of a working
+CELL are defined in [whole-game CELL parity](whole-game-cell-parity.md).
 
 ```mermaid
 flowchart LR
@@ -174,6 +176,10 @@ require a headset session.
 | `plugin_records.py` | Bounded TES4-family headers, groups, compression, subrecords | Cell or rendering semantics |
 | `plugin_stack.py` | Master-aware stable FormIDs, official load-order mapping, and source identity | Actor, cell, or rendering semantics |
 | `cell_catalog.py` | CELL, base, REFR, DATA, XTEL relationships | BSA/NIF/Godot behavior |
+| `cell_parity_records.py` | Canonical CELL/child rows, source accounting, and effective override/deletion merge | Resource compilation, runtime streaming, or parity verdicts |
+| `cell_parity_corpus.py` | Official-stack CELL graph, implicit-base/source-anomaly contracts, relationship closure, and complete pending review ledger | Runtime implementation or parity promotion |
+| `validate_cell_parity_corpus.py` | Artifact hashes, raw/effective conservation, relationship closure, pending-state enforcement, and exact actor-placement join | Content compilation or visual approval |
+| `corpus_io.py` | Deterministic atomic JSON/JSONL corpus artifacts and descriptors | Record or game semantics |
 | `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, TPLT/EAMT, LVLN/LVLC, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
 | `actor_parity_graph.py` | Recursive category-source appearance variants and concrete leveled placement candidates | Binary parsing, capture, or rendering |
 | `actor_parity_records.py` | Canonical actor rows and effective override/deletion merge | Template traversal, capture, or rendering |
@@ -208,6 +214,7 @@ require a headset session.
 | `validate_runtime_report.py` | Join runtime proof reports to owned-data manifests and configuration | Rendering or gameplay implementation |
 | `audit_source_constants.py` | Production Python/C#/JavaScript/PowerShell literal accountability gate | Runtime defaults or content policy |
 | `test_cell_catalog.py` | Synthetic group/relationship/transform regressions | Retail bytes |
+| `test_cell_parity_corpus.py` | Synthetic official-stack merge, deletion, portal, implicit-base, source-anomaly, conservation, and actor-join regressions | Retail bytes or runtime claims |
 | `test_actor_catalog.py` | Synthetic actor identity/appearance/placement graph regressions | Mesh or renderer assertions |
 | `test_facegen.py` | Synthetic geometry, texture-mode, skin, and body composition regressions | Retail actor selection |
 | `test_actor_gltf.py` | Bethesda material, alpha, vertex-color, and non-accumulating idle translation regressions | Retail visual approval |
@@ -327,15 +334,18 @@ differential gates. The clean-room shader observations are recorded in
 
 Next promotion order:
 
-1. package the linked saloon/exterior route and rerun physical OpenXR acceptance;
-2. close fixed-camera interior/exterior material, lighting, weather, and actor-pixel gates;
-3. add neighboring exterior CELL streaming and SpeedTree vegetation;
-4. promote authored packages/dialogue plus jukebox interaction/audio;
-5. extend Havok body/filter/dynamic behavior beyond the promoted pool slice;
-6. add damageable targets, authored flat/VR weapon presentation,
+1. partition the whole-game corpus into fail-closed per-CELL compile jobs and a
+   capability ledger;
+2. generalize owned-data compilation and streaming across representative
+   interior, exterior, LAND, NAVM, actor, and XTEL classes;
+3. close fixed-camera material, lighting, weather, effect, and actor-pixel gates;
+4. package the same streamed route and rerun physical OpenXR acceptance;
+5. promote authored packages/dialogue plus jukebox interaction/audio;
+6. extend Havok body/filter/dynamic behavior beyond the promoted pool slice;
+7. add damageable targets, authored flat/VR weapon presentation,
    ballistics/projectiles,
    creatures and raiders; and
-7. promote VATS only after the same combat route passes deterministic recording,
+8. promote VATS only after the same combat route passes deterministic recording,
    flat/VR presentation, and cold-reload gates.
 
 The asset distribution follows the four-surface model described in

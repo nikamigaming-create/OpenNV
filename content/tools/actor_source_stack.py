@@ -14,7 +14,7 @@ from actor_catalog import (
     RaceAppearance,
     scan_actor_catalog,
 )
-from plugin_stack import FormKey, PluginContext
+from plugin_stack import FormKey, PluginContext, parse_form_key
 
 
 HUMANOID_RECORD_TYPE = "NPC_"
@@ -22,7 +22,6 @@ CREATURE_RECORD_TYPE = "CREA"
 RACE_RECORD_TYPE = "RACE"
 ARMOR_RECORD_TYPE = "ARMO"
 LEVELED_ITEM_RECORD_TYPE = "LVLI"
-FORM_ID_RADIX = 16
 APPEARANCE_PART_RECORD_TYPES = frozenset({"EYES", "HAIR", "HDPT"})
 SOURCE_RECORD_TYPES = frozenset(
     {
@@ -70,17 +69,6 @@ class ActorSourceStack:
         if len(matches) != 1:
             raise KeyError(f"Expected one effective actor base {key.text}, found {len(matches)}")
         return matches[0]
-
-
-def parse_form_key(value: str) -> FormKey:
-    owner, separator, object_text = value.rpartition(":")
-    if not separator or not owner or not object_text:
-        raise ValueError(f"Invalid stable FormKey: {value!r}")
-    try:
-        object_id = int(object_text, FORM_ID_RADIX)
-    except ValueError as error:
-        raise ValueError(f"Invalid stable FormKey: {value!r}") from error
-    return FormKey(owner, object_id)
 
 
 def _mapping(

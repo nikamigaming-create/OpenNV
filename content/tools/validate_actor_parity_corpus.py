@@ -9,17 +9,11 @@ import sys
 from pathlib import Path
 
 from actor_parity_corpus import CORPUS_SCHEMA, MANIFEST_FILE_NAME
+from corpus_io import read_jsonl
 from plugin_stack import file_sha256
 
 
 EXIT_VALIDATION_ERROR = 2
-
-
-def read_jsonl(path: Path) -> list[dict[str, object]]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-    ]
 
 
 def unique_rows(rows: list[dict[str, object]], field: str, label: str) -> set[str]:

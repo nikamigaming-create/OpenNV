@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -19,9 +18,9 @@ from actor_parity_records import (
     MergeState,
     apply_plugin,
 )
+from corpus_io import atomic_bytes, atomic_json, jsonl_bytes, output_descriptor
 from plugin_stack import (
     build_plugin_stack,
-    file_sha256,
     load_order_indices as plugin_load_order_indices,
 )
 
@@ -52,35 +51,6 @@ def load_recipe(recipe_path: Path) -> dict[str, object]:
     if len({name.casefold() for name in names}) != len(names):
         raise ValueError("Actor parity corpus recipe contains duplicate plugin names")
     return document
-
-
-def jsonl_bytes(rows: list[dict[str, object]]) -> bytes:
-    return b"".join(
-        (
-            json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
-        ).encode("utf-8")
-        for row in rows
-    )
-
-
-def atomic_bytes(path: Path, payload: bytes) -> None:
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_bytes(payload)
-    os.replace(temporary, path)
-
-
-def atomic_json(path: Path, document: object) -> None:
-    payload = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    atomic_bytes(path, payload)
-
-
-def output_descriptor(path: Path, rows: int) -> dict[str, object]:
-    return {
-        "file": path.name,
-        "rows": rows,
-        "bytes": path.stat().st_size,
-        "sha256": file_sha256(path),
-    }
 
 
 def appearance_review_rows(

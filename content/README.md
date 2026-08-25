@@ -30,3 +30,11 @@ are not yet rendered.
 
 The committed NIF fixture is synthetic. Owned retail inputs and generated glTF
 outputs remain local and ignored.
+
+The whole-game inventory path is documented in
+[`docs/whole-game-cell-parity.md`](../docs/whole-game-cell-parity.md). It merges
+the pinned official plugin stack into stable CELL/child identities, accounts for
+source anomalies and engine-implicit marker bases through the versioned recipe,
+emits one pending review row per effective CELL, and validates an exact join to
+the independent actor-placement corpus. This inventory is not a runtime or
+fidelity claim.

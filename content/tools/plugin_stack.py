@@ -15,6 +15,7 @@ FORM_ID_NAMESPACE_COUNT = 1 << FORM_ID_NAMESPACE_BITS
 FORM_ID_OBJECT_MASK = (1 << FORM_ID_OBJECT_BITS) - 1
 FORM_ID_OBJECT_HEX_CHARACTERS = 6
 FORM_ID_HEX_CHARACTERS = 8
+FORM_ID_RADIX = 16
 HASH_READ_BYTES = 1024 * 1024
 
 
@@ -41,11 +42,15 @@ class PluginContext:
     sha256: str
     bytes: int
 
+    def declares_form_id_namespace(self, raw_form_id: int) -> bool:
+        local_index = raw_form_id >> FORM_ID_OBJECT_BITS
+        return local_index < len(self.namespaces)
+
     def form_key(self, raw_form_id: int, *, optional: bool = False) -> FormKey | None:
         if optional and raw_form_id == 0:
             return None
         local_index = raw_form_id >> FORM_ID_OBJECT_BITS
-        if local_index >= len(self.namespaces):
+        if not self.declares_form_id_namespace(raw_form_id):
             raise ValueError(
                 f"{self.name} form {raw_form_id:08x} uses undeclared local index "
                 f"{local_index}; namespaces={self.namespaces}"
@@ -54,6 +59,17 @@ class PluginContext:
             self.namespaces[local_index],
             raw_form_id & FORM_ID_OBJECT_MASK,
         )
+
+
+def parse_form_key(value: str) -> FormKey:
+    owner, separator, object_text = value.rpartition(":")
+    if not separator or not owner or not object_text:
+        raise ValueError(f"Invalid stable FormKey: {value!r}")
+    try:
+        object_id = int(object_text, FORM_ID_RADIX)
+    except ValueError as error:
+        raise ValueError(f"Invalid stable FormKey: {value!r}") from error
+    return FormKey(owner, object_id)
 
 
 def file_sha256(path: Path) -> str:
