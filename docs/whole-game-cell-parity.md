@@ -149,11 +149,14 @@ default placement, guessed material, or hand-authored room.
 7. Promote flat and first-class VR gameplay only through the same authoritative
    state, interaction, physics, projectile, save, and evidence paths.
 
-The partitioned compiler ledger and its first two presentation policies now
-exist. The active implementation order is to close one explicit capability
-family at a time, beginning with LAND after the bounded `STAT` and baseline
-`LIGH` transport paths below. This replaces the bounded Goodsprings selection
-as the general path without deleting that proven vertical-slice acceptance test.
+The partitioned compiler ledger and its presentation policies now exist. Model-
+bearing `ACTI`, `CONT`, `DOOR`, `MSTT`, `SCOL`, and `STAT` bases share the same
+strict static-model transport; `LIGH` and direct-child `LAND` retain their typed
+paths. This only admits their initial presentation. Door interaction, container
+state, activator behavior, movable-body simulation, effects, and every unknown
+reference subrecord remain separate runtime or parity work. The active order is
+to close one explicit capability family at a time without deleting the bounded
+Goodsprings vertical-slice acceptance test.
 
 ## Partitioned compile plan
 

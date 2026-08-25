@@ -79,6 +79,15 @@ class CellStaticCompileTest(unittest.TestCase):
             profile["childPresentationPolicies"]["LAND"]["kind"],
             "landscape",
         )
+        self.assertEqual(
+            set(profile["supportedBaseRecordTypes"]),
+            {"ACTI", "CONT", "DOOR", "LIGH", "MSTT", "SCOL", "STAT"},
+        )
+        for record_type in ("ACTI", "CONT", "DOOR", "MSTT", "SCOL", "STAT"):
+            with self.subTest(record_type=record_type):
+                policy = profile["presentationPolicies"][record_type]
+                self.assertEqual(policy["kind"], "static-model")
+                self.assertEqual(policy["modelPathCount"], 1)
 
     def test_point_light_uses_reference_radius_before_base_radius(self) -> None:
         base = {

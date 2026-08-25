@@ -4,12 +4,37 @@
   "archiveRecipe": "fnv-official-actor-archives-v1.json",
   "supportedChildRecordTypes": ["LAND", "REFR"],
   "baseLinkedChildRecordTypes": ["REFR"],
-  "supportedBaseRecordTypes": ["LIGH", "STAT"],
+  "supportedBaseRecordTypes": ["ACTI", "CONT", "DOOR", "LIGH", "MSTT", "SCOL", "STAT"],
   "presentationPolicies": {
+    "ACTI": {
+      "kind": "static-model",
+      "modelPathCount": 1,
+      "supportedReferenceSubrecords": ["DATA", "NAME", "XSCL"]
+    },
+    "CONT": {
+      "kind": "static-model",
+      "modelPathCount": 1,
+      "supportedReferenceSubrecords": ["DATA", "NAME", "XSCL"]
+    },
+    "DOOR": {
+      "kind": "static-model",
+      "modelPathCount": 1,
+      "supportedReferenceSubrecords": ["DATA", "NAME", "XSCL"]
+    },
     "LIGH": {
       "kind": "point-light",
       "modelPathCount": 0,
       "supportedReferenceSubrecords": ["DATA", "NAME", "XRDS"]
+    },
+    "MSTT": {
+      "kind": "static-model",
+      "modelPathCount": 1,
+      "supportedReferenceSubrecords": ["DATA", "NAME", "XSCL"]
+    },
+    "SCOL": {
+      "kind": "static-model",
+      "modelPathCount": 1,
+      "supportedReferenceSubrecords": ["DATA", "NAME", "XSCL"]
     },
     "STAT": {
       "kind": "static-model",
