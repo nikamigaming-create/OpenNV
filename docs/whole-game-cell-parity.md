@@ -152,3 +152,32 @@ default placement, guessed material, or hand-authored room.
 The immediate next implementation slice is the partitioned per-CELL owned-data
 compiler and capability ledger. It replaces the bounded Goodsprings selection
 as the general path without deleting that proven vertical-slice acceptance test.
+
+## Partitioned compile plan
+
+That first planning slice is now complete at
+`D:\Builds\OpenNV-cell-compile-plan-20260824-r1`, with manifest SHA-256
+`525926f5ddc12716217d58f919a7558b31b4d42d21defd57a69889538d912b5a`.
+The independent validator proves:
+
+| Compile-plan entity | Exact rows |
+| --- | ---: |
+| CELL jobs | 44,517 |
+| Child relationships | 475,915 |
+| Natural partitions | 38 |
+| Capability definitions | 173 |
+| Deduplicated capability sets | 2,248 |
+| Source anomalies assigned to parent CELLs | 2 |
+| Pending jobs | 44,517 |
+| Ready jobs | 0 |
+
+The plan is 47,671,803 bytes total and is split by authored exterior worldspace
+or interior source-plugin ownership. Its largest shard is the main WastelandNV
+worldspace at 16,340,678 bytes; there is no whole-game runtime blob. Each job
+contains the exact child FormKeys, source CELL hash, capability-set identity,
+review gates/shots, and source-anomaly assignments. Every compile output starts
+`not-built`; parsing and scheduling did not promote any implementation status.
+
+The next slice is no longer planning. It is the content-addressed per-CELL
+compiler output contract, starting with one representative member of each
+capability family and retaining explicit blockers for every unsupported member.
