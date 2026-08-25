@@ -19,6 +19,7 @@ from cell_static_compile import compile_model, texture_row  # noqa: E402
 from cell_static_contract import (  # noqa: E402
     cell_origin,
     child_transform,
+    compiled_light_contract,
     default_profile_path,
     load_profile,
     mesh_member_path,
@@ -72,6 +73,37 @@ class CellStaticCompileTest(unittest.TestCase):
             (8192.0, -12288.0, 0.0),
         )
         self.assertEqual(mesh_member_path("Dungeons/Test.NIF"), "meshes\\dungeons\\test.nif")
+        self.assertEqual(
+            profile["presentationPolicies"]["LIGH"]["kind"],
+            "point-light",
+        )
+
+    def test_point_light_uses_reference_radius_before_base_radius(self) -> None:
+        base = {
+            "formKey": "FalloutNV.esm:000020",
+            "light": {
+                "radiusGameUnits": 256,
+                "colorRgb": [100, 80, 40],
+                "lightFlags": 0,
+                "falloff": 1.0,
+                "fieldOfViewDegrees": 90.0,
+                "intensity": 1.5,
+            },
+        }
+        overridden = compiled_light_contract(
+            base,
+            {"radiusGameUnits": 96.0},
+            0.01,
+        )
+        authored = compiled_light_contract(
+            base,
+            {"radiusGameUnits": None},
+            0.01,
+        )
+
+        self.assertEqual(overridden["effectiveRadiusGameUnits"], 96.0)
+        self.assertEqual(overridden["effectiveRadiusMeters"], 0.96)
+        self.assertEqual(authored["effectiveRadiusGameUnits"], 256.0)
 
     def test_nested_owned_nif_compile_has_a_complete_output_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

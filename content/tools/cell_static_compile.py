@@ -22,6 +22,7 @@ from cell_static_contract import (
     BLOCKED_REFERENCE_STATUS,
     BLOCKERS_FILE_NAME,
     CELL_FILE_NAME,
+    COMPILED_LIGHT_REFERENCE_STATUS,
     COMPILED_REFERENCE_STATUS,
     MANIFEST_FILE_NAME,
     MANIFEST_SCHEMA,
@@ -29,15 +30,19 @@ from cell_static_contract import (
     PASS_PRESENTATION_STATUS,
     STATIC_COMPILER_SOURCE_NAMES,
     STATIC_RUNTIME_PENDING_REFERENCE_STATUS,
+    POINT_LIGHT_PRESENTATION_KIND,
+    STATIC_MODEL_PRESENTATION_KIND,
     TEXTURES_FILE_NAME,
     blocker,
     canonical_sha256,
     cell_origin,
     child_transform,
+    compiled_light_contract,
     default_plan_recipe_path,
     default_profile_path,
     load_profile,
     mesh_member_path,
+    presentation_policy,
     recipe_path,
     relative_output,
     stable_exception_detail,
@@ -54,7 +59,6 @@ from texture_pipeline import OwnedTexturePipeline
 from validate_cell_compile_plan import validate_plan
 
 
-SUPPORTED_MODEL_PATH_COUNT = 1
 EXIT_DATA_ERROR = 2
 PRODUCER_SOURCE_NAMES = STATIC_COMPILER_SOURCE_NAMES
 
@@ -191,6 +195,8 @@ def compile_cell(
     unique_models: set[str] = set()
     child_reasons: dict[str, list[dict[str, object]]] = {}
     child_base: dict[str, dict[str, object] | None] = {}
+    child_policies: dict[str, dict[str, object] | None] = {}
+    child_lights: dict[str, dict[str, object] | None] = {}
     child_transforms: dict[
         str,
         tuple[tuple[float, float, float] | None, tuple[float, float, float] | None],
@@ -205,29 +211,62 @@ def compile_cell(
         base_link = child.get("baseOrActor")
         base = bases.get(str(base_link["key"])) if isinstance(base_link, dict) else None
         child_base[key] = base
+        policy = (
+            None
+            if base is None
+            else presentation_policy(profile, str(base["recordType"]))
+        )
+        child_policies[key] = policy
+        child_lights[key] = None
         if base is None:
             reasons.append(blocker("child", key, "child-has-no-static-base"))
-        elif base["recordType"] not in supported_bases:
+        elif base["recordType"] not in supported_bases or policy is None:
             reasons.append(
                 blocker("child", key, "unsupported-base-record-type", str(base["recordType"]))
             )
-        elif len(base.get("modelPaths", [])) != SUPPORTED_MODEL_PATH_COUNT:
-            reasons.append(
-                blocker(
-                    "child",
-                    key,
-                    "unsupported-model-path-count",
-                    str(len(base.get("modelPaths", []))),
-                )
-            )
         else:
-            model_path = str(base["modelPaths"][0])
-            if not model_path.casefold().endswith(model_extension):
+            model_paths = base.get("modelPaths", [])
+            expected_models = int(policy["modelPathCount"])
+            if not isinstance(model_paths, list) or len(model_paths) != expected_models:
                 reasons.append(
-                    blocker("child", key, "unsupported-model-extension", model_path)
+                    blocker(
+                        "child",
+                        key,
+                        "unsupported-model-path-count",
+                        str(len(model_paths) if isinstance(model_paths, list) else -1),
+                    )
                 )
-            else:
-                unique_models.add(model_path)
+            elif policy["kind"] == STATIC_MODEL_PRESENTATION_KIND:
+                model_path = str(model_paths[0])
+                if not model_path.casefold().endswith(model_extension):
+                    reasons.append(
+                        blocker("child", key, "unsupported-model-extension", model_path)
+                    )
+                else:
+                    unique_models.add(model_path)
+            elif policy["kind"] == POINT_LIGHT_PRESENTATION_KIND:
+                try:
+                    child_lights[key] = compiled_light_contract(
+                        base,
+                        child,
+                        configuration.world_units_to_meters,
+                    )
+                except ValueError as error:
+                    reasons.append(
+                        blocker("child", key, "invalid-light-contract", str(error))
+                    )
+            supported_subrecords = set(policy["supportedReferenceSubrecords"])
+            for signature in sorted(
+                set(child["subrecordSignatureCounts"]) - supported_subrecords
+            ):
+                reasons.append(
+                    blocker(
+                        "child",
+                        key,
+                        "unsupported-reference-subrecord",
+                        signature,
+                    )
+                )
         if child["initiallyDisabled"]:
             reasons.append(blocker("child", key, "initially-disabled-state-not-implemented"))
         if child.get("enableParent") is not None:
@@ -345,8 +384,14 @@ def compile_cell(
             key = str(child["formKey"])
             reasons = list(child_reasons[key])
             base = child_base[key]
+            policy = child_policies[key]
+            presentation_kind = None if policy is None else str(policy["kind"])
             asset = None
-            if base is not None and len(base.get("modelPaths", [])) == SUPPORTED_MODEL_PATH_COUNT:
+            if (
+                base is not None
+                and presentation_kind == STATIC_MODEL_PRESENTATION_KIND
+                and len(base.get("modelPaths", [])) == int(policy["modelPathCount"])
+            ):
                 model_path = str(base["modelPaths"][0])
                 asset = assets.get(model_path)
                 if model_path in unique_models and asset is None:
@@ -365,6 +410,12 @@ def compile_cell(
             blockers.extend(reasons)
             position, rotation = child_transforms[key]
             godot_units = godot_position(position, origin) if position is not None else None
+            light = child_lights[key]
+            presentation_status = BLOCKED_REFERENCE_STATUS
+            if asset is not None:
+                presentation_status = COMPILED_REFERENCE_STATUS
+            elif light is not None:
+                presentation_status = COMPILED_LIGHT_REFERENCE_STATUS
             placements.append(
                 {
                     "childFormKey": key,
@@ -372,7 +423,9 @@ def compile_cell(
                     "base": child["baseOrActor"],
                     "baseRecordType": None if base is None else base["recordType"],
                     "baseEditorId": None if base is None else base.get("editorId"),
+                    "presentationKind": presentation_kind,
                     "assetId": None if asset is None else asset["assetId"],
+                    "light": light,
                     "positionGameUnits": None if position is None else list(position),
                     "positionGodotUnits": godot_units,
                     "positionGodotMeters": (
@@ -392,9 +445,7 @@ def compile_cell(
                         else godot_rotation_quaternion(rotation)
                     ),
                     "scale": child["scale"],
-                    "presentationStatus": (
-                        COMPILED_REFERENCE_STATUS if asset is not None else BLOCKED_REFERENCE_STATUS
-                    ),
+                    "presentationStatus": presentation_status,
                     "readinessStatus": (
                         BLOCKED_REFERENCE_STATUS
                         if reasons
@@ -459,9 +510,11 @@ def compile_cell(
             "counts": {
                 "sourceChildren": len(children),
                 "compiledPlacements": sum(
-                    row["presentationStatus"] == COMPILED_REFERENCE_STATUS
+                    row["presentationStatus"]
+                    in {COMPILED_REFERENCE_STATUS, COMPILED_LIGHT_REFERENCE_STATUS}
                     for row in placements
                 ),
+                "lights": sum(row["light"] is not None for row in placements),
                 "assets": len(assets),
                 "textures": len(textures),
                 "portals": len(portals),

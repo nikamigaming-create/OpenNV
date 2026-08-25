@@ -87,6 +87,7 @@ def placed(
     base_form_id: int,
     *,
     destination: int | None = None,
+    radius: float | None = None,
 ) -> bytes:
     data = subrecord("NAME", struct.pack("<I", base_form_id))
     if destination is not None:
@@ -94,6 +95,8 @@ def placed(
             "XTEL",
             struct.pack("<I6f", destination, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0),
         )
+    if radius is not None:
+        data += subrecord("XRDS", struct.pack("<f", radius))
     data += subrecord("DATA", struct.pack("<6f", 10.0, 20.0, 30.0, 0.0, 0.0, 0.0))
     return record(signature, form_id, data)
 
@@ -192,6 +195,35 @@ def missing_cell_flags_plugin() -> bytes:
     return header() + group(b"CELL", 0, missing_flags)
 
 
+def light_plugin() -> bytes:
+    light_data = struct.pack(
+        "<iI4BIffIf",
+        -1,
+        256,
+        100,
+        80,
+        40,
+        0,
+        0,
+        1.0,
+        90.0,
+        0,
+        0.0,
+    )
+    light = record(
+        "LIGH",
+        0x20,
+        subrecord("EDID", b"SyntheticLight\0")
+        + subrecord("DATA", light_data)
+        + subrecord("FNAM", struct.pack("<f", 1.5)),
+    )
+    contents = cell(0x100, "SyntheticLightCell") + cell_children(
+        0x100,
+        placed("REFR", 0x200, 0x20, radius=-96.0),
+    )
+    return header() + group(b"LIGH", 0, light) + group(b"CELL", 0, contents)
+
+
 def cell_recipe() -> dict[str, object]:
     return {
         "schema": "opennv-cell-parity-corpus-recipe/v1",
@@ -226,6 +258,33 @@ def read_jsonl(path: Path) -> list[dict[str, object]]:
 
 
 class CellParityCorpusTest(unittest.TestCase):
+    def test_light_base_and_reference_radius_are_source_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data_root = root / "Data"
+            data_root.mkdir()
+            (data_root / "FalloutNV.esm").write_bytes(light_plugin())
+            output_root = root / "cells"
+            recipe = cell_recipe()
+            recipe["plugins"] = [{"file": "FalloutNV.esm"}]
+            build_corpus(data_root, output_root, recipe)
+            validate_corpus(output_root)
+            children = read_jsonl(output_root / "cell-children.jsonl")
+            linked = read_jsonl(output_root / "linked-records.jsonl")
+
+        self.assertEqual(children[0]["radiusGameUnits"], -96.0)
+        self.assertEqual(
+            linked[0]["light"],
+            {
+                "radiusGameUnits": 256,
+                "colorRgb": [100, 80, 40],
+                "lightFlags": 0,
+                "falloff": 1.0,
+                "fieldOfViewDegrees": 90.0,
+                "intensity": 1.5,
+            },
+        )
+
     def test_effective_cells_children_portals_and_actor_join_are_exact(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

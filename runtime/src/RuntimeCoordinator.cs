@@ -789,6 +789,7 @@ public partial class RuntimeCoordinator : Node3D
             textures = loaded.Textures,
             materialBindings = loaded.MaterialBindings,
             placements = loaded.Placements,
+            authoredLights = loaded.AuthoredLights,
             collisionMeshes = loaded.CollisionMeshes,
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,
@@ -798,7 +799,8 @@ public partial class RuntimeCoordinator : Node3D
         GD.Print(
             $"OPENNV_GODOT_STATIC_CELL_PASS cell={loaded.FormKey} assets={loaded.Assets} " +
             $"textures={loaded.Textures} materials={loaded.MaterialBindings} " +
-            $"placements={loaded.Placements} collision={loaded.CollisionMeshes} " +
+            $"placements={loaded.Placements} lights={loaded.AuthoredLights} " +
+            $"collision={loaded.CollisionMeshes} " +
             $"surfaces={loaded.Surfaces} vertices={loaded.Vertices}");
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);

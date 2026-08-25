@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import struct
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -59,6 +60,8 @@ LIGHT_COLOR_SLICE = slice(8, 11)
 LIGHT_FLAGS_OFFSET = 12
 LIGHT_FALLOFF_OFFSET = 16
 LIGHT_FIELD_OF_VIEW_OFFSET = 20
+LIGHT_INTENSITY_BYTES = 4
+DEFAULT_LIGHT_INTENSITY = 1.0
 CONTAINER_ITEM_BYTES = 8
 WEAPON_DATA_BYTES = 15
 WEAPON_DAMAGE_OFFSET = 12
@@ -249,25 +252,45 @@ def parse_cell_lighting(data: bytes, record: Record) -> CellLighting:
     )
 
 
-def _light_object(record: Record, values: dict[str, list[bytes]]) -> LightObject | None:
+def parse_light_object(
+    record: Record,
+    values: dict[str, list[bytes]],
+) -> LightObject | None:
     matches = values.get("DATA", [])
     if not matches:
         return None
+    if len(matches) != 1:
+        raise ValueError(f"LIGH must contain one DATA record in {record.form_id:08x}")
     data = matches[0]
     if len(data) != LIGHT_DATA_BYTES:
         raise ValueError(
             f"LIGH DATA must be {LIGHT_DATA_BYTES} bytes in {record.form_id:08x}"
         )
     intensity_values = values.get("FNAM", [])
-    intensity = struct.unpack("<f", intensity_values[0])[0] if intensity_values else 1.0
+    if len(intensity_values) > 1 or (
+        intensity_values and len(intensity_values[0]) != LIGHT_INTENSITY_BYTES
+    ):
+        raise ValueError(
+            f"LIGH FNAM must contain one {LIGHT_INTENSITY_BYTES}-byte value in "
+            f"{record.form_id:08x}"
+        )
+    intensity = (
+        struct.unpack("<f", intensity_values[0])[0]
+        if intensity_values
+        else DEFAULT_LIGHT_INTENSITY
+    )
+    falloff = struct.unpack_from("<f", data, LIGHT_FALLOFF_OFFSET)[0]
+    field_of_view = struct.unpack_from("<f", data, LIGHT_FIELD_OF_VIEW_OFFSET)[0]
+    if not all(math.isfinite(value) for value in (intensity, falloff, field_of_view)):
+        raise ValueError(f"LIGH contains a non-finite value in {record.form_id:08x}")
     return LightObject(
         record.form_id,
         _first_text(values, "EDID"),
         struct.unpack_from("<I", data, LIGHT_RADIUS_OFFSET)[0],
         tuple(data[LIGHT_COLOR_SLICE]),
         struct.unpack_from("<I", data, LIGHT_FLAGS_OFFSET)[0],
-        struct.unpack_from("<f", data, LIGHT_FALLOFF_OFFSET)[0],
-        struct.unpack_from("<f", data, LIGHT_FIELD_OF_VIEW_OFFSET)[0],
+        falloff,
+        field_of_view,
         intensity,
     )
 
@@ -328,7 +351,7 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 normalize_model_path(models[0]) if models else None,
             )
             if record.signature == "LIGH":
-                light = _light_object(record, values)
+                light = parse_light_object(record, values)
                 if light is not None:
                     catalog.lights[record.form_id] = light
             elif record.signature == "CONT":

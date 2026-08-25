@@ -33,17 +33,20 @@ and load one CELL without any hand-authored scene data:
 ```powershell
 pwsh -File scripts/Test-OpenNVStaticCellSlice.ps1 `
   -DataRoot "D:\SteamLibrary\steamapps\common\Fallout New Vegas\Data" `
-  -CorpusRoot "D:\Builds\OpenNV-cell-parity-corpus-20260824-r4" `
-  -PlanRoot "D:\Builds\OpenNV-cell-compile-plan-20260824-r1" `
-  -CellFormKey "FalloutNV.esm:10561a" `
-  -OutputRoot "D:\Builds\OpenNV-static-cell-FalloutNV-10561a-run1" `
-  -RuntimeReport "D:\Builds\OpenNV-static-cell-FalloutNV-10561a-run1.json"
+  -CorpusRoot "D:\Builds\OpenNV-cell-parity-corpus-20260824-r6" `
+  -PlanRoot "D:\Builds\OpenNV-cell-compile-plan-20260824-r2" `
+  -CellFormKey "DeadMoney.esm:0102c7" `
+  -OutputRoot "D:\Builds\OpenNV-light-cell-DeadMoney-0102c7-run1" `
+  -RuntimeReport "D:\Builds\OpenNV-light-cell-DeadMoney-0102c7-run1.json"
 ```
 
 That gate refuses overwrites, requires zero blockers, verifies all owned source
-and generated hashes, and proves Godot instantiation plus authored collision.
-Its report deliberately remains `playable=false` and `parity=false` until the
-remaining CELL capability families and matched retail evidence pass.
+and generated hashes, and proves typed Godot instantiation. The example contains
+three placed `LIGH` references and therefore creates three authored point lights
+without a mesh asset. Static-model cells also build authored collision when all
+of their exact REFR semantics are supported. The report deliberately remains
+`playable=false` and `parity=false` until the remaining CELL capability families
+and matched retail evidence pass.
 
 Actor parity captures require `--cell-scene`, an actor scene/set, `--capture-root`,
 and the compact oracle artifact supplied as `--retail-state-contract`. The

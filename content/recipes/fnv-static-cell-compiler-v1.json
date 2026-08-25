@@ -3,7 +3,19 @@
   "id": "fnv-static-cell-compiler-v1",
   "archiveRecipe": "fnv-official-actor-archives-v1.json",
   "supportedChildRecordTypes": ["REFR"],
-  "supportedBaseRecordTypes": ["STAT"],
+  "supportedBaseRecordTypes": ["LIGH", "STAT"],
+  "presentationPolicies": {
+    "LIGH": {
+      "kind": "point-light",
+      "modelPathCount": 0,
+      "supportedReferenceSubrecords": ["DATA", "NAME", "XRDS"]
+    },
+    "STAT": {
+      "kind": "static-model",
+      "modelPathCount": 1,
+      "supportedReferenceSubrecords": ["DATA", "NAME", "XSCL"]
+    }
+  },
   "modelExtension": ".nif",
   "exportStrict": false,
   "compileTextures": true,

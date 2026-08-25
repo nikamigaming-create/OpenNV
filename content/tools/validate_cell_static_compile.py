@@ -21,6 +21,7 @@ from cell_static_contract import (
     BLOCKED_REFERENCE_STATUS,
     BLOCKERS_FILE_NAME,
     CELL_FILE_NAME,
+    COMPILED_LIGHT_REFERENCE_STATUS,
     COMPILED_REFERENCE_STATUS,
     MANIFEST_FILE_NAME,
     MANIFEST_SCHEMA,
@@ -28,13 +29,17 @@ from cell_static_contract import (
     PASS_PRESENTATION_STATUS,
     STATIC_COMPILER_SOURCE_NAMES,
     STATIC_RUNTIME_PENDING_REFERENCE_STATUS,
+    POINT_LIGHT_PRESENTATION_KIND,
+    STATIC_MODEL_PRESENTATION_KIND,
     TEXTURES_FILE_NAME,
     canonical_sha256,
     cell_origin,
+    compiled_light_contract,
     default_plan_recipe_path,
     default_profile_path,
     load_profile,
     mesh_member_path,
+    presentation_policy,
     recipe_path,
     toolchain_manifest,
 )
@@ -52,6 +57,25 @@ from validate_cell_compile_plan import validate_plan
 EXIT_VALIDATION_ERROR = 2
 PNG_FORMAT = "PNG"
 PRODUCER_SOURCE_NAMES = STATIC_COMPILER_SOURCE_NAMES
+PLACEMENT_FIELDS = {
+    "childFormKey",
+    "childRuntimeFormId",
+    "base",
+    "baseRecordType",
+    "baseEditorId",
+    "presentationKind",
+    "assetId",
+    "light",
+    "positionGameUnits",
+    "positionGodotUnits",
+    "positionGodotMeters",
+    "rotationGameRadians",
+    "rotationGodotQuaternion",
+    "scale",
+    "presentationStatus",
+    "readinessStatus",
+    "blockerReasons",
+}
 
 
 def validate_descriptor(path: Path, descriptor: dict[str, object]) -> list[dict[str, object]]:
@@ -266,6 +290,7 @@ def validate_compile(
     if len(placement_keys) != len(set(placement_keys)) or set(placement_keys) != set(source_children):
         raise ValueError("Static CELL compile does not account for every source child")
     blocker_reasons_by_child: dict[str, set[str]] = {}
+    blocker_details_by_child: dict[str, set[tuple[str, str | None]]] = {}
     blocker_rows = [json.dumps(row, sort_keys=True, separators=(",", ":")) for row in blockers]
     if blocker_rows != sorted(blocker_rows) or len(blocker_rows) != len(set(blocker_rows)):
         raise ValueError("Static CELL blockers are duplicated or unsorted")
@@ -280,10 +305,18 @@ def validate_compile(
             blocker_reasons_by_child.setdefault(str(row["owner"]), set()).add(
                 str(row["reason"])
             )
+            blocker_details_by_child.setdefault(str(row["owner"]), set()).add(
+                (
+                    str(row["reason"]),
+                    None if row["detail"] is None else str(row["detail"]),
+                )
+            )
     asset_ids = {str(row["assetId"]) for row in assets}
     if len(asset_ids) != len(assets):
         raise ValueError("Static CELL compile repeats an asset ID")
     for placement in placements:
+        if set(placement) != PLACEMENT_FIELDS:
+            raise ValueError("Static CELL placement fields differ")
         key = str(placement["childFormKey"])
         child = source_children[key]
         transform = child.get("transformGameUnits")
@@ -304,6 +337,39 @@ def validate_compile(
         expected_base = (
             bases.get(str(base_link["key"])) if isinstance(base_link, dict) else None
         )
+        policy = (
+            None
+            if expected_base is None
+            else presentation_policy(profile, str(expected_base["recordType"]))
+        )
+        expected_kind = None if policy is None else str(policy["kind"])
+        expected_light = None
+        if expected_kind == POINT_LIGHT_PRESENTATION_KIND:
+            try:
+                expected_light = compiled_light_contract(
+                    expected_base,
+                    child,
+                    configuration.world_units_to_meters,
+                )
+            except ValueError:
+                if "invalid-light-contract" not in expected_reasons:
+                    raise ValueError(
+                        f"Static CELL light contract blocker is missing: {key}"
+                    )
+        unsupported_subrecords = set()
+        if policy is not None:
+            unsupported_subrecords = set(child["subrecordSignatureCounts"]) - set(
+                policy["supportedReferenceSubrecords"]
+            )
+        actual_unsupported_subrecords = {
+            detail
+            for reason, detail in blocker_details_by_child.get(key, set())
+            if reason == "unsupported-reference-subrecord"
+        }
+        if actual_unsupported_subrecords != unsupported_subrecords:
+            raise ValueError(
+                f"Static CELL reference-subrecord blockers differ: {key}"
+            )
         if (
             placement.get("childRuntimeFormId") != child["runtimeFormId"]
             or placement.get("base") != base_link
@@ -311,6 +377,8 @@ def validate_compile(
             != (None if expected_base is None else expected_base["recordType"])
             or placement.get("baseEditorId")
             != (None if expected_base is None else expected_base.get("editorId"))
+            or placement.get("presentationKind") != expected_kind
+            or placement.get("light") != expected_light
             or placement.get("positionGameUnits") != expected_position
             or placement.get("positionGodotUnits") != expected_godot
             or placement.get("positionGodotMeters")
@@ -328,9 +396,14 @@ def validate_compile(
         asset_id = placement.get("assetId")
         if asset_id is not None and str(asset_id) not in asset_ids:
             raise ValueError(f"Static CELL placement asset is unresolved: {key}")
-        if (
-            placement["presentationStatus"] == COMPILED_REFERENCE_STATUS
-        ) != (asset_id is not None):
+        if expected_kind == POINT_LIGHT_PRESENTATION_KIND and asset_id is not None:
+            raise ValueError(f"Static CELL point light unexpectedly has an asset: {key}")
+        expected_presentation_status = BLOCKED_REFERENCE_STATUS
+        if expected_kind == STATIC_MODEL_PRESENTATION_KIND and asset_id is not None:
+            expected_presentation_status = COMPILED_REFERENCE_STATUS
+        elif expected_kind == POINT_LIGHT_PRESENTATION_KIND and expected_light is not None:
+            expected_presentation_status = COMPILED_LIGHT_REFERENCE_STATUS
+        if placement["presentationStatus"] != expected_presentation_status:
             raise ValueError(f"Static CELL placement presentation status differs: {key}")
         expected_readiness = (
             BLOCKED_REFERENCE_STATUS
@@ -525,8 +598,11 @@ def validate_compile(
     counts = {
         "sourceChildren": len(children),
         "compiledPlacements": sum(
-            row["presentationStatus"] == COMPILED_REFERENCE_STATUS for row in placements
+            row["presentationStatus"]
+            in {COMPILED_REFERENCE_STATUS, COMPILED_LIGHT_REFERENCE_STATUS}
+            for row in placements
         ),
+        "lights": sum(row.get("light") is not None for row in placements),
         "assets": len(assets),
         "textures": len(textures),
         "portals": len(portals),

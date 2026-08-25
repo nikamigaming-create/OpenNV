@@ -132,9 +132,12 @@ internal static class StaticCellCompileArtifact
         IReadOnlyList<JsonElement> blockers)
     {
         var placements = cell.GetProperty("placements").GetArrayLength();
+        var lights = cell.GetProperty("placements").EnumerateArray()
+            .Count(placement => placement.GetProperty("light").ValueKind == JsonValueKind.Object);
         if (counts.GetProperty("assets").GetInt32() != assets.Count ||
             counts.GetProperty("textures").GetInt32() != textures.Count ||
             counts.GetProperty("blockers").GetInt32() != blockers.Count ||
+            counts.GetProperty("lights").GetInt32() != lights ||
             counts.GetProperty("sourceChildren").GetInt32() != placements ||
             counts.GetProperty("compiledPlacements").GetInt32() != placements ||
             cell.GetProperty("blockerCount").GetInt32() != blockers.Count)

@@ -6,7 +6,10 @@ namespace OpenNV.Runtime;
 internal static class StaticCellCompileLoader
 {
     private const string PlacementStatus = "compiled-static-reference";
+    private const string LightPlacementStatus = "compiled-point-light-reference";
     private const string PlacementReadiness = "static-presentation-runtime-pending";
+    private const string StaticModelPresentation = "static-model";
+    private const string PointLightPresentation = "point-light";
     private const int VectorComponents = 3;
     private const int QuaternionComponents = 4;
     private const int DirectionComponents = 2;
@@ -85,20 +88,18 @@ internal static class StaticCellCompileLoader
 
             var placements = 0;
             var collisionMeshes = 0;
+            var authoredLights = 0;
             var surfaces = 0;
             var vertices = 0;
             foreach (var placement in cell.GetProperty("placements").EnumerateArray())
             {
-                if (placement.GetProperty("presentationStatus").GetString() != PlacementStatus ||
-                    placement.GetProperty("readinessStatus").GetString() != PlacementReadiness ||
+                var presentationKind = placement.GetProperty("presentationKind").GetString();
+                var presentationStatus = placement.GetProperty("presentationStatus").GetString();
+                if (placement.GetProperty("readinessStatus").GetString() != PlacementReadiness ||
                     placement.GetProperty("blockerReasons").GetArrayLength() != 0)
                     throw new InvalidOperationException(
                         $"Static CELL placement is not loadable: " +
                         placement.GetProperty("childFormKey").GetString());
-                var assetId = placement.GetProperty("assetId").GetString()!;
-                if (!prototypes.TryGetValue(assetId, out var prototype))
-                    throw new InvalidOperationException(
-                        $"Static CELL placement references an unknown asset: {assetId}");
                 var placementNode = new Node3D
                 {
                     Name = $"REFR_{placement.GetProperty("childRuntimeFormId").GetString()}",
@@ -108,29 +109,49 @@ internal static class StaticCellCompileLoader
                     Scale = Vector3.One * placement.GetProperty("scale").GetSingle(),
                 };
                 root.AddChild(placementNode);
-                var instance = prototype.Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
-                    ?? throw new InvalidOperationException(
-                        $"Could not duplicate static CELL asset: {assetId}");
-                placementNode.AddChild(instance);
-                SetRenderLayer(instance, DefaultRenderLayer);
-                CountGeometry(instance, ref surfaces, ref vertices);
-                if (buildCollision && prototype.CollisionScene is Node3D collisionPrototype)
+                if (presentationKind == StaticModelPresentation &&
+                    presentationStatus == PlacementStatus)
                 {
-                    var collision = collisionPrototype.Duplicate(
+                    var assetId = placement.GetProperty("assetId").GetString()!;
+                    if (!prototypes.TryGetValue(assetId, out var prototype))
+                        throw new InvalidOperationException(
+                            $"Static CELL placement references an unknown asset: {assetId}");
+                    var instance = prototype.Scene.Duplicate(
                         (int)Node.DuplicateFlags.Default) as Node3D
                         ?? throw new InvalidOperationException(
-                            $"Could not duplicate authored collision: {assetId}");
-                    collision.Name = $"AUTHORED_COLLISION_{assetId}";
-                    placementNode.AddChild(collision);
-                    foreach (var mesh in Descendants<MeshInstance3D>(collision))
+                            $"Could not duplicate static CELL asset: {assetId}");
+                    placementNode.AddChild(instance);
+                    SetRenderLayer(instance, DefaultRenderLayer);
+                    CountGeometry(instance, ref surfaces, ref vertices);
+                    if (buildCollision && prototype.CollisionScene is Node3D collisionPrototype)
                     {
-                        mesh.Visible = false;
-                        mesh.CreateTrimeshCollision();
-                        foreach (var body in Descendants<StaticBody3D>(mesh))
-                            body.CollisionLayer = DefaultRenderLayer;
-                        collisionMeshes++;
+                        var collision = collisionPrototype.Duplicate(
+                            (int)Node.DuplicateFlags.Default) as Node3D
+                            ?? throw new InvalidOperationException(
+                                $"Could not duplicate authored collision: {assetId}");
+                        collision.Name = $"AUTHORED_COLLISION_{assetId}";
+                        placementNode.AddChild(collision);
+                        foreach (var mesh in Descendants<MeshInstance3D>(collision))
+                        {
+                            mesh.Visible = false;
+                            mesh.CreateTrimeshCollision();
+                            foreach (var body in Descendants<StaticBody3D>(mesh))
+                                body.CollisionLayer = DefaultRenderLayer;
+                            collisionMeshes++;
+                        }
                     }
                 }
+                else if (presentationKind == PointLightPresentation &&
+                    presentationStatus == LightPlacementStatus &&
+                    placement.GetProperty("assetId").ValueKind == JsonValueKind.Null)
+                {
+                    AddPointLight(placementNode, placement, configuration);
+                    authoredLights++;
+                }
+                else
+                    throw new InvalidOperationException(
+                        $"Static CELL presentation contract differs: " +
+                        placement.GetProperty("childFormKey").GetString());
                 placements++;
             }
             return new LoadedStaticCell(
@@ -143,6 +164,7 @@ internal static class StaticCellCompileLoader
                 textures.Count,
                 materialBindings,
                 placements,
+                authoredLights,
                 collisionMeshes,
                 surfaces,
                 vertices);
@@ -160,6 +182,28 @@ internal static class StaticCellCompileLoader
                 prototype.CollisionScene?.Free();
             }
         }
+    }
+
+    private static void AddPointLight(
+        Node3D parent,
+        JsonElement placement,
+        RuntimeConfiguration configuration)
+    {
+        var light = placement.GetProperty("light");
+        if (light.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Static CELL point light has no contract.");
+        parent.AddChild(new OmniLight3D
+        {
+            Name = $"LIGH_{placement.GetProperty("childRuntimeFormId").GetString()}",
+            LightColor = ReadByteColor(light.GetProperty("colorRgb")),
+            LightEnergy = MathF.Max(
+                configuration.Renderer.MinimumPointLightEnergy,
+                light.GetProperty("intensity").GetSingle() *
+                configuration.Renderer.PointLightEnergyScale),
+            OmniRange = light.GetProperty("effectiveRadiusMeters").GetSingle(),
+            ShadowEnabled = configuration.Renderer.AuthoredPointLightShadows,
+            LightCullMask = DefaultRenderLayer,
+        });
     }
 
     private static void AddCellEnvironment(
@@ -280,6 +324,7 @@ internal static class StaticCellCompileLoader
         int Textures,
         int MaterialBindings,
         int Placements,
+        int AuthoredLights,
         int CollisionMeshes,
         int Surfaces,
         int Vertices);

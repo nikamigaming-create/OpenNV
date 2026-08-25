@@ -175,17 +175,17 @@ require a headset session.
 | --- | --- | --- |
 | `plugin_records.py` | Bounded TES4-family headers, groups, compression, subrecords | Cell or rendering semantics |
 | `plugin_stack.py` | Master-aware stable FormIDs, official load-order mapping, and source identity | Actor, cell, or rendering semantics |
-| `cell_catalog.py` | CELL, base, REFR, DATA, XTEL relationships | BSA/NIF/Godot behavior |
-| `cell_parity_records.py` | Canonical CELL/child rows, source accounting, and effective override/deletion merge | Resource compilation, runtime streaming, or parity verdicts |
+| `cell_catalog.py` | CELL/base/REFR relationships plus bounded CELL and linked `LIGH` field decoding | BSA/NIF/Godot behavior |
+| `cell_parity_records.py` | Canonical CELL/child rows, `XRDS` reference radius, linked light contracts, source accounting, and effective override/deletion merge | Resource compilation, runtime streaming, or parity verdicts |
 | `cell_parity_corpus.py` | Official-stack CELL graph, implicit-base/source-anomaly contracts, relationship closure, and complete pending review ledger | Runtime implementation or parity promotion |
 | `validate_cell_parity_corpus.py` | Artifact hashes, raw/effective conservation, relationship closure, pending-state enforcement, and exact actor-placement join | Content compilation or visual approval |
 | `corpus_io.py` | Deterministic atomic JSON/JSONL corpus artifacts and descriptors | Record or game semantics |
 | `cell_compile_plan.py` | Natural CELL partitioning, exact child membership, deduplicated capability requirements, and absent-output scheduling | Content implementation, runtime nodes, or parity promotion |
 | `validate_cell_compile_plan.py` | Source-corpus binding, partition hashes, exact job/child/capability coverage, and pending-state enforcement | Asset compilation or runtime claims |
-| `cell_static_compile.py` | One planned CELL's content-addressed supported static assets, material contracts, placements, and explicit blockers | Godot nodes, gameplay, or parity promotion |
-| `cell_static_contract.py` | Static CELL schemas, profile validation, coordinate policy, failure normalization, and producer-source closure | Archive reads, compilation, or Godot nodes |
+| `cell_static_compile.py` | One planned CELL's profile-selected static-model/point-light presentations, content-addressed assets, exact REFR policy, and explicit blockers | Godot nodes, gameplay, or parity promotion |
+| `cell_static_contract.py` | Static CELL schemas, presentation-policy validation, coordinate/light contracts, failure normalization, and producer-source closure | Archive reads, compilation, or Godot nodes |
 | `cell_static_source.py` | Exact compile-job to corpus CELL/child/base/portal join | Asset conversion or runtime behavior |
-| `validate_cell_static_compile.py` | Exact plan/corpus/archive/configuration join plus transform, material, nested-file, and filesystem-closure validation | Runtime loading or visual approval |
+| `validate_cell_static_compile.py` | Exact plan/corpus/archive/configuration join plus placement/light, subrecord, material, nested-file, and filesystem-closure validation | Runtime loading or visual approval |
 | `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, TPLT/EAMT, LVLN/LVLC, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
 | `actor_parity_graph.py` | Recursive category-source appearance variants and concrete leveled placement candidates | Binary parsing, capture, or rendering |
 | `actor_parity_records.py` | Canonical actor rows and effective override/deletion merge | Template traversal, capture, or rendering |
@@ -234,7 +234,7 @@ require a headset session.
 | `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal and proof queries | Binary parsing |
 | `RuntimeMaterialLoader.cs` | Hash-verified 2D/cubemap load and name-keyed retail material passes | DDS/BSA parsing |
 | `StaticCellCompileArtifact.cs` | Static compile schema/configuration/hash/path/count verification and immutable row load | Godot node construction |
-| `StaticCellCompileLoader.cs` | Verified relative artifact load, static placement instantiation, CELL lighting, and authored collision | Record parsing, actors, gameplay, or parity claims |
+| `StaticCellCompileLoader.cs` | Verified relative artifact load, profile-typed static/point-light placement instantiation, CELL lighting, and authored collision | Record parsing, actors, gameplay, or parity claims |
 | `ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
 | `CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
 | `RetailActorStateContract.cs` | Fail-closed retail shot-state parsing for ACHR transform, camera, idle phase, arm bones, and face/hair hashes | Process addresses, asset parsing, or rendering |
@@ -294,6 +294,17 @@ HMD-pivot snap turn, controller activation/fire/reload/save, haptics, world-spac
 HUD, supported-floor eye-height calibration, simulator acceptance, and explicit
 launcher routing. `hardwareHeadsetValidated` remains false.
 
+Implemented on the separate general-CELL path: an immutable 44,517-CELL /
+475,915-child denominator, a 38-partition compile plan, exact per-child
+capability sets, and base-specific fail-closed presentation policies. The first
+strict runtime capability transports three owned `LIGH` references in
+`DeadMoney.esm:0102c7` into three verified Godot point lights with zero assets,
+zero hand-authored placements, and zero blockers. Across the official stack the
+source ledger accounts for 602 linked light bases and 11,157 placed lights in
+836 CELLs; those counts are inventory, not visual parity. A strict rerun of the
+older Ranch House static example now exposes 12 previously ignored REFR
+semantics, so that artifact is blocked instead of being mislabeled complete.
+
 Implemented: master-aware official load-order identity, effective override and
 deletion merge, recursive humanoid/creature template and leveled-list
 relationships, complete private review ledgers, deterministic FaceGen
@@ -345,10 +356,10 @@ differential gates. The clean-room shader observations are recorded in
 
 Next promotion order:
 
-1. partition the whole-game corpus into fail-closed per-CELL compile jobs and a
-   capability ledger;
-2. generalize owned-data compilation and streaming across representative
-   interior, exterior, LAND, NAVM, actor, and XTEL classes;
+1. extend the general CELL compiler from baseline `STAT`/`LIGH` transport into
+   LAND and close the explicitly blocked REFR subrecords;
+2. add NAVM, actor/creature, XTEL/door, enable-state, and streamed neighboring
+   CELL capabilities through the same plan/artifact/validator path;
 3. close fixed-camera material, lighting, weather, effect, and actor-pixel gates;
 4. package the same streamed route and rerun physical OpenXR acceptance;
 5. promote authored packages/dialogue plus jukebox interaction/audio;

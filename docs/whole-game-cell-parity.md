@@ -11,8 +11,8 @@ records and generated corpus artifacts remain private and disposable.
 ## Fixed denominator
 
 The current immutable corpus is
-`D:\Builds\OpenNV-cell-parity-corpus-20260824-r4`. Its manifest SHA-256 is
-`324399feb4e8d603e5775127fe243a336641f64b076885c8a04b63cdb21c51bb`.
+`D:\Builds\OpenNV-cell-parity-corpus-20260824-r6`. Its manifest SHA-256 is
+`e779cf083301caca7909a3d52b899e4f8442b1c8e1d22c0625520046e3d84660`.
 
 | Entity | Exact rows |
 | --- | ---: |
@@ -149,15 +149,17 @@ default placement, guessed material, or hand-authored room.
 7. Promote flat and first-class VR gameplay only through the same authoritative
    state, interaction, physics, projectile, save, and evidence paths.
 
-The immediate next implementation slice is the partitioned per-CELL owned-data
-compiler and capability ledger. It replaces the bounded Goodsprings selection
+The partitioned compiler ledger and its first two presentation policies now
+exist. The active implementation order is to close one explicit capability
+family at a time, beginning with LAND after the bounded `STAT` and baseline
+`LIGH` transport paths below. This replaces the bounded Goodsprings selection
 as the general path without deleting that proven vertical-slice acceptance test.
 
 ## Partitioned compile plan
 
 That first planning slice is now complete at
-`D:\Builds\OpenNV-cell-compile-plan-20260824-r1`, with manifest SHA-256
-`525926f5ddc12716217d58f919a7558b31b4d42d21defd57a69889538d912b5a`.
+`D:\Builds\OpenNV-cell-compile-plan-20260824-r2`, with manifest SHA-256
+`3971b8ff9726937c21f85d6bf084365b390fb085e3e5b82cde4c21bac6f24091`.
 The independent validator proves:
 
 | Compile-plan entity | Exact rows |
@@ -178,49 +180,60 @@ contains the exact child FormKeys, source CELL hash, capability-set identity,
 review gates/shots, and source-anomaly assignments. Every compile output starts
 `not-built`; parsing and scheduling did not promote any implementation status.
 
-## First content-addressed CELL compile
+## Strict content-addressed CELL capabilities
 
-The first owned-data compile/runtime bridge is complete for representative
-interior `FalloutNV.esm:10561a` (`RanchHouseInterior03`). The immutable output is
-`D:\Builds\OpenNV-static-cell-FalloutNV-10561a-20260824-r6`; its manifest
-SHA-256 is
-`ff19b71f966231d01e0380da081961113c5413ee8c0f62c0259ff1ec1274c639`.
-An independent rebuild at revision `r7` is byte-for-byte identical across all
-65 files.
+The original `FalloutNV.esm:10561a` (`RanchHouseInterior03`) `r6`/`r7`
+artifacts remain useful deterministic geometry-transport evidence, but they are
+not a clean general-CELL readiness proof. Their former profile accepted every
+`STAT` reference without accounting for all REFR semantics. Recompiling with
+the exact base-specific subrecord policy at
+`D:\Builds\OpenNV-static-cell-FalloutNV-10561a-20260824-r8-strict` correctly
+reports 12 child blockers: five `XEMI` occurrences plus one each of `BNAM`,
+`CNAM`, `FULL`, `MMRK`, `MNAM`, `NNAM`, and `XRDS`. It still accounts for all
+26 source children and compiles the 10 NIF assets and 12 textures that are
+independently supported; the artifact cannot enter the runtime until those
+semantics close. This supersedes the old zero-blocker interpretation rather
+than hiding the regression.
 
-| Static compile/runtime entity | Exact result |
+The first strict zero-blocker capability proof is baseline placed `LIGH` data
+in `DeadMoney.esm:0102c7` (`TestSeanMap`). The immutable artifact is
+`D:\Builds\OpenNV-light-cell-DeadMoney-0102c7-20260824-r2`; its manifest SHA-256
+is `ccb27a64e2bf3f897d20857bb14968355c4b0822ad4b75f65e89653cd4ccf8e2`.
+An independent `r1` build is byte-for-byte identical across all five files.
+
+| Point-light compile/runtime entity | Exact result |
 | --- | ---: |
-| Source child outcomes | 26 / 26 |
-| Compiled placements | 26 |
-| Content-addressed NIF assets | 10 |
-| Compiled DDS textures | 12 |
-| Retail-derived material bindings | 30 |
+| Source child outcomes | 3 / 3 |
+| Compiled placements | 3 |
+| Placed point lights | 3 |
+| Content-addressed NIF assets | 0 |
+| Compiled DDS textures | 0 |
 | Compiler blockers | 0 |
-| Accounted artifact files | 65 |
-| Retained extracted source files | 0 |
-| Godot authored collision instances | 25 |
-| Godot render surfaces | 79 |
-| Godot vertices | 5,316 |
+| Accounted artifact files | 5 |
+| Accounted artifact bytes | 13,091 |
+| Godot authored point lights | 3 |
 
-The compiler resolves assets through the one official owned-archive precedence
-recipe, converts each supported `STAT`/`REFR`, retains source archive identity,
-emits every nested output hash and byte count, and gives every source child one
-placement or blocker outcome. The validator rejoins the exact CELL job and
-corpus rows, reopens the owned archives, checks transforms, materials, files,
-and complete filesystem closure, and refuses runtime/parity promotion.
+Each runtime light is sourced through `REFR -> LIGH`: placement and optional
+`XRDS` radius come from the reference, while base radius, RGB, flags, falloff,
+field of view, and intensity come from the linked `LIGH`. The example proves
+that the positive `XRDS` value `83.76019287109375` overrides its 200-unit base
+radius, while the other two references retain their 256-unit base radii. The
+same profile rejects unknown reference subrecords and invalid or unsupported
+numeric contracts instead of guessing.
 
-`StaticCellCompileLoader` then verifies the same manifest and runtime
-configuration, loads its relative glTF/PNG outputs, binds the shared material
-contract, instantiates every authored placement, and builds authored collision.
-The runtime evidence is
-`D:\Builds\OpenNV-static-cell-godot-load-20260824-r4.json`, SHA-256
-`29ce9730ad890ab569e381d3a014892fce8dcaa4f6b82eb020e8af42fadcd8ed`.
-It explicitly records `playable=false` and `parity=false`: this closes the
-static compiler-to-Godot contract only.
+The official corpus contains 602 linked `LIGH` bases and 11,157 placed `LIGH`
+references across 836 CELLs. Those are a fixed source denominator, not 836
+runtime or visual passes. The bounded Godot report at
+`D:\Builds\OpenNV-light-cell-DeadMoney-0102c7-godot-20260824-r1.json` has
+SHA-256 `0144d8e739a92a57fdb42d282e80ffa87443db242cbaa83ac5ea3762f2f17bd3`
+and explicitly records `playable=false` and `parity=false`. It closes only the
+owned-record-to-verified-Godot point-light transport contract; retail
+attenuation, flags, HDR response, shadows, and matched pixels remain parity
+work.
 
 Run the same fail-closed path for another immutable target with
-`scripts/Test-OpenNVStaticCellSlice.ps1`. The next implementation slice expands
-the compiler by capability family (`LIGH`, doors/XTEL, actors/creatures, LAND,
-NAVM, enable state), then promotes the same per-CELL artifacts into streamed
-flat/VR gameplay and matched retail evidence. Unsupported records remain
-blockers; they are never silently omitted.
+`scripts/Test-OpenNVStaticCellSlice.ps1`. LAND is next because the denominator
+contains 42,467 effective LAND child records; NAVM, XTEL/doors,
+actors/creatures, enable state, effects, and the remaining reference subrecords
+follow through the same artifact and validator path. Unsupported records remain
+blockers and are never silently omitted.

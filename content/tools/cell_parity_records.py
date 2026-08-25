@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import struct
 from collections import Counter
 from dataclasses import asdict, dataclass
@@ -16,6 +17,7 @@ from cell_catalog import (
     normalize_model_path,
     parse_cell_lighting,
     parse_form_id,
+    parse_light_object,
     parse_reference_scale,
     parse_transform,
     subrecords_by_signature,
@@ -43,6 +45,7 @@ CELL_FLAGS_BYTES = 1
 CELL_COORDINATE_BYTES = 8
 FORM_ID_BYTES = 4
 MODEL_PATH_SUBRECORD = "MODL"
+REFERENCE_RADIUS_BYTES = 4
 
 
 @dataclass
@@ -243,6 +246,18 @@ def child_row(
                 load_order_indices,
             )
 
+    radius_game_units = None
+    if "XRDS" in values:
+        radius_data = _single_payload(values, "XRDS", gaps)
+        if radius_data is not None:
+            if len(radius_data) != REFERENCE_RADIUS_BYTES:
+                gaps.append("unsupported-xrds-radius")
+            else:
+                radius_game_units = struct.unpack("<f", radius_data)[0]
+                if not math.isfinite(radius_game_units):
+                    gaps.append("invalid-xrds-radius")
+                    radius_game_units = None
+
     row = record_source_row(context, record, load_order_indices)
     row.update(
         {
@@ -252,6 +267,7 @@ def child_row(
             "initiallyDisabled": bool(record.flags & INITIALLY_DISABLED_RECORD_FLAG),
             "transformGameUnits": transform,
             "scale": scale,
+            "radiusGameUnits": radius_game_units,
             "teleport": teleport,
             "enableParent": enable_parent,
             "subrecordSignatureCounts": subrecord_counts(values),
@@ -379,6 +395,18 @@ def linked_record_row(
             "requiredBy": dict(sorted(requirements.items())),
         }
     )
+    if record.signature == "LIGH":
+        light = parse_light_object(record, values)
+        if light is None:
+            raise ValueError(f"Linked LIGH {row['formKey']} has no DATA contract")
+        row["light"] = {
+            "radiusGameUnits": light.radius,
+            "colorRgb": list(light.color_rgb),
+            "lightFlags": light.flags,
+            "falloff": light.falloff,
+            "fieldOfViewDegrees": light.field_of_view,
+            "intensity": light.intensity,
+        }
     return row
 
 

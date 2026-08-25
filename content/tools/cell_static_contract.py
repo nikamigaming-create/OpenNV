@@ -29,8 +29,18 @@ MESH_ROOT = "meshes"
 PASS_PRESENTATION_STATUS = "static-assets-compiled-runtime-pending"
 BLOCKED_PRESENTATION_STATUS = "static-assets-compiled-with-blockers"
 COMPILED_REFERENCE_STATUS = "compiled-static-reference"
+COMPILED_LIGHT_REFERENCE_STATUS = "compiled-point-light-reference"
 BLOCKED_REFERENCE_STATUS = "blocked"
 STATIC_RUNTIME_PENDING_REFERENCE_STATUS = "static-presentation-runtime-pending"
+STATIC_MODEL_PRESENTATION_KIND = "static-model"
+POINT_LIGHT_PRESENTATION_KIND = "point-light"
+PRESENTATION_KINDS = {
+    STATIC_MODEL_PRESENTATION_KIND,
+    POINT_LIGHT_PRESENTATION_KIND,
+}
+LIGHT_COLOR_COMPONENTS = 3
+BYTE_CHANNEL_MINIMUM = 0
+BYTE_CHANNEL_MAXIMUM = 255
 STATIC_COMPILER_SOURCE_NAMES = (
     "actor_material.py",
     "bsa_archive.py",
@@ -56,6 +66,7 @@ PROFILE_REQUIRED_FIELDS = {
     "archiveRecipe",
     "supportedChildRecordTypes",
     "supportedBaseRecordTypes",
+    "presentationPolicies",
     "modelExtension",
     "exportStrict",
     "compileTextures",
@@ -105,6 +116,33 @@ def load_profile(path: Path) -> dict[str, object]:
             or len(values) != len(set(values))
         ):
             raise ValueError(f"Static CELL compiler profile has invalid {field}")
+    policies = document.get("presentationPolicies")
+    if not isinstance(policies, dict) or set(policies) != set(
+        document["supportedBaseRecordTypes"]
+    ):
+        raise ValueError("Static CELL compiler presentation policies differ")
+    for record_type, policy in policies.items():
+        if (
+            not isinstance(policy, dict)
+            or set(policy)
+            != {"kind", "modelPathCount", "supportedReferenceSubrecords"}
+            or policy.get("kind") not in PRESENTATION_KINDS
+            or not isinstance(policy.get("modelPathCount"), int)
+            or int(policy["modelPathCount"]) < 0
+        ):
+            raise ValueError(
+                f"Static CELL compiler presentation policy is invalid: {record_type}"
+            )
+        subrecords = policy.get("supportedReferenceSubrecords")
+        if (
+            not isinstance(subrecords, list)
+            or not subrecords
+            or subrecords != sorted(set(subrecords))
+            or any(not isinstance(value, str) or not value for value in subrecords)
+        ):
+            raise ValueError(
+                f"Static CELL compiler reference subrecords are invalid: {record_type}"
+            )
     extension = document.get("modelExtension")
     if (
         not isinstance(extension, str)
@@ -166,6 +204,78 @@ def default_plan_recipe_path() -> Path:
 
 def recipe_path(file_name: str) -> Path:
     return _recipes_root() / file_name
+
+
+def presentation_policy(
+    profile: dict[str, object],
+    record_type: str,
+) -> dict[str, object] | None:
+    policies = profile["presentationPolicies"]
+    assert isinstance(policies, dict)
+    policy = policies.get(record_type)
+    return policy if isinstance(policy, dict) else None
+
+
+def compiled_light_contract(
+    base: dict[str, object],
+    child: dict[str, object],
+    world_units_to_meters: float,
+) -> dict[str, object]:
+    light = base.get("light")
+    required = {
+        "radiusGameUnits",
+        "colorRgb",
+        "lightFlags",
+        "falloff",
+        "fieldOfViewDegrees",
+        "intensity",
+    }
+    if not isinstance(light, dict) or set(light) != required:
+        raise ValueError(f"LIGH base contract differs: {base['formKey']}")
+    if not math.isfinite(world_units_to_meters) or world_units_to_meters <= 0.0:
+        raise ValueError("LIGH world unit scale is invalid")
+    try:
+        base_radius = float(light["radiusGameUnits"])
+        reference_value = child.get("radiusGameUnits")
+        reference_radius = (
+            None if reference_value is None else float(reference_value)
+        )
+        color = list(light["colorRgb"])
+        flags = int(light["lightFlags"])
+        falloff = float(light["falloff"])
+        field_of_view = float(light["fieldOfViewDegrees"])
+        intensity = float(light["intensity"])
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"LIGH numeric contract differs: {base['formKey']}") from error
+    numeric_values = [base_radius, falloff, field_of_view, intensity]
+    if reference_radius is not None:
+        numeric_values.append(reference_radius)
+    if (
+        not all(math.isfinite(value) for value in numeric_values)
+        or base_radius < 0.0
+        or (reference_radius is not None and reference_radius < 0.0)
+        or len(color) != LIGHT_COLOR_COMPONENTS
+        or any(
+            not isinstance(value, int)
+            or value < BYTE_CHANNEL_MINIMUM
+            or value > BYTE_CHANNEL_MAXIMUM
+            for value in color
+        )
+        or flags < 0
+    ):
+        raise ValueError(f"LIGH value contract differs: {base['formKey']}")
+    effective_radius = base_radius if reference_radius is None else reference_radius
+    return {
+        "baseRadiusGameUnits": base_radius,
+        "referenceRadiusGameUnits": reference_radius,
+        "effectiveRadiusGameUnits": effective_radius,
+        "effectiveRadiusMeters": effective_radius * world_units_to_meters,
+        "colorRgb": color,
+        "lightFlags": flags,
+        "falloff": falloff,
+        "fieldOfViewDegrees": field_of_view,
+        "intensity": intensity,
+    }
 
 
 def _recipes_root() -> Path:

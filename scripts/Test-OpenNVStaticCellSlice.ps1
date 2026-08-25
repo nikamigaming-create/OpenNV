@@ -83,6 +83,7 @@ if ($report.schema -ne "opennv-godot-static-cell-runtime/v1" -or
     $report.cellFormKey -ne $CellFormKey -or
     $report.assets -ne $manifest.counts.assets -or
     $report.textures -ne $manifest.counts.textures -or
+    $report.authoredLights -ne $manifest.counts.lights -or
     $report.placements -ne $manifest.counts.compiledPlacements) {
     throw "Godot static CELL report differs from the compiled manifest."
 }
@@ -90,11 +91,12 @@ if ($report.schema -ne "opennv-godot-static-cell-runtime/v1" -or
 Write-Output (
     (
         "OPENNV_STATIC_CELL_SLICE_PASS cell={0} assets={1} textures={2} placements={3} " +
-        "collision={4} manifestSha256={5}"
+        "lights={4} collision={5} manifestSha256={6}"
     ) -f
         $report.cellFormKey,
         $report.assets,
         $report.textures,
         $report.placements,
+        $report.authoredLights,
         $report.collisionMeshes,
         $manifestSha256)

@@ -37,4 +37,9 @@ the pinned official plugin stack into stable CELL/child identities, accounts for
 source anomalies and engine-implicit marker bases through the versioned recipe,
 emits one pending review row per effective CELL, and validates an exact join to
 the independent actor-placement corpus. This inventory is not a runtime or
-fidelity claim.
+fidelity claim. Its partitioned compiler currently has exact presentation
+policies for supported `STAT` models and baseline placed `LIGH` records. Each
+REFR subrecord outside the selected base policy becomes a named blocker; the
+compiler does not silently discard it. Light placement, optional `XRDS` radius,
+base RGB/radius/flags/falloff/FOV/intensity, transforms, and runtime conversion
+are independently rejoined and validated before Godot can load the artifact.
