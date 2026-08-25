@@ -43,3 +43,13 @@ REFR subrecord outside the selected base policy becomes a named blocker; the
 compiler does not silently discard it. Light placement, optional `XRDS` radius,
 base RGB/radius/flags/falloff/FOV/intensity, transforms, and runtime conversion
 are independently rejoined and validated before Godot can load the artifact.
+
+Profile v2 also treats `LAND` as a direct CELL child rather than pretending it
+has a base record. `landscape_stack.py` independently resolves the exact
+corpus-bound source record and effective master-aware `LTEX -> TXST` winners;
+`cell_landscape_compile.py` emits the height mesh, deterministic owned-texture
+bake, collision declaration, and provenance; `cell_landscape_validate.py`
+reconstructs that graph independently. `cell_static_resource_validate.py` owns
+generic asset/texture/file closure, leaving `validate_cell_static_compile.py`
+as CELL/plan/policy orchestration. The current baseline accepts only complete
+four-quadrant LAND layouts and fails partial/default layouts closed.

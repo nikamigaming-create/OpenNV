@@ -4,15 +4,15 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from pathlib import Path
 
-from PIL import Image
-
-from bsa_archive import canonical_member_path
 from cell_compile_plan import MANIFEST_FILE_NAME as PLAN_MANIFEST_FILE_NAME
+from cell_landscape_validate import (
+    LandscapeExpectation,
+    resolve_landscape_expectation,
+)
 from cell_parity_corpus import MANIFEST_FILE_NAME as CORPUS_MANIFEST_FILE_NAME
 from cell_scene import godot_position, godot_rotation_quaternion
 from cell_static_contract import (
@@ -21,6 +21,7 @@ from cell_static_contract import (
     BLOCKED_REFERENCE_STATUS,
     BLOCKERS_FILE_NAME,
     CELL_FILE_NAME,
+    COMPILED_LANDSCAPE_REFERENCE_STATUS,
     COMPILED_LIGHT_REFERENCE_STATUS,
     COMPILED_REFERENCE_STATUS,
     MANIFEST_FILE_NAME,
@@ -29,33 +30,31 @@ from cell_static_contract import (
     PASS_PRESENTATION_STATUS,
     STATIC_COMPILER_SOURCE_NAMES,
     STATIC_RUNTIME_PENDING_REFERENCE_STATUS,
+    LANDSCAPE_PRESENTATION_KIND,
     POINT_LIGHT_PRESENTATION_KIND,
     STATIC_MODEL_PRESENTATION_KIND,
     TEXTURES_FILE_NAME,
     canonical_sha256,
     cell_origin,
+    child_presentation_policy,
     compiled_light_contract,
     default_plan_recipe_path,
     default_profile_path,
     load_profile,
-    mesh_member_path,
     presentation_policy,
     recipe_path,
     toolchain_manifest,
 )
 from cell_static_source import find_job, source_rows_for_job
+from cell_static_resource_validate import validate_resource_artifacts
 from corpus_io import read_jsonl
-from export_static_nif_gltf import SCHEMA as STATIC_NIF_SCHEMA, compiler_provenance
 from owned_archive_stack import load_owned_archive_stack
 from plugin_stack import file_sha256
 from runtime_configuration import load_runtime_configuration
-from material_contract import material_bindings
-from texture_pipeline import DDS_CUBEMAP_FACE_COUNT
 from validate_cell_compile_plan import validate_plan
 
 
 EXIT_VALIDATION_ERROR = 2
-PNG_FORMAT = "PNG"
 PRODUCER_SOURCE_NAMES = STATIC_COMPILER_SOURCE_NAMES
 PLACEMENT_FIELDS = {
     "childFormKey",
@@ -66,6 +65,7 @@ PLACEMENT_FIELDS = {
     "presentationKind",
     "assetId",
     "light",
+    "landscape",
     "positionGameUnits",
     "positionGodotUnits",
     "positionGodotMeters",
@@ -76,8 +76,6 @@ PLACEMENT_FIELDS = {
     "readinessStatus",
     "blockerReasons",
 }
-
-
 def validate_descriptor(path: Path, descriptor: dict[str, object]) -> list[dict[str, object]]:
     if set(descriptor) != {"file", "bytes", "sha256", "rows"}:
         raise ValueError(f"Static CELL compile descriptor fields differ: {path.name}")
@@ -123,24 +121,6 @@ def validate_producer_sources(manifest: dict[str, object]) -> None:
         path = tools_root / relative.name
         if not path.is_file() or file_sha256(path) != str(row["sha256"]).lower():
             raise ValueError(f"Static CELL compiler source changed: {relative}")
-
-
-def validate_relative_file(
-    root: Path,
-    relative_text: str,
-    expected_bytes: int,
-    expected_sha256: str,
-    expected_parent: Path,
-) -> Path:
-    relative = Path(relative_text)
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError(f"Static CELL nested output is not relative: {relative}")
-    path = (root / relative).resolve()
-    if path.parent != expected_parent.resolve() or not path.is_file():
-        raise ValueError(f"Static CELL nested output path differs: {relative}")
-    if path.stat().st_size != expected_bytes or file_sha256(path) != expected_sha256.lower():
-        raise ValueError(f"Static CELL nested output descriptor differs: {relative}")
-    return path
 
 
 def validate_compile(
@@ -314,36 +294,36 @@ def validate_compile(
     asset_ids = {str(row["assetId"]) for row in assets}
     if len(asset_ids) != len(assets):
         raise ValueError("Static CELL compile repeats an asset ID")
+    base_linked_children = set(profile["baseLinkedChildRecordTypes"])
+    landscape_expectations_by_asset_id: dict[str, LandscapeExpectation] = {}
     for placement in placements:
         if set(placement) != PLACEMENT_FIELDS:
             raise ValueError("Static CELL placement fields differ")
         key = str(placement["childFormKey"])
         child = source_children[key]
-        transform = child.get("transformGameUnits")
-        expected_position = None if transform is None else transform["position"]
-        expected_rotation = None if transform is None else transform["rotation_radians"]
-        expected_godot = (
-            None
-            if expected_position is None
-            else godot_position(tuple(float(value) for value in expected_position), origin)
-        )
-        expected_quaternion = (
-            None
-            if expected_rotation is None
-            else godot_rotation_quaternion(tuple(float(value) for value in expected_rotation))
-        )
         expected_reasons = blocker_reasons_by_child.get(key, set())
+        expected_source_gaps = set(str(value) for value in child.get("parseGaps", []))
+        actual_source_gaps = {
+            detail
+            for reason, detail in blocker_details_by_child.get(key, set())
+            if reason == "source-parse-gap"
+        }
+        if actual_source_gaps != expected_source_gaps:
+            raise ValueError(f"Static CELL source-gap blockers differ: {key}")
         base_link = child.get("baseOrActor")
         expected_base = (
             bases.get(str(base_link["key"])) if isinstance(base_link, dict) else None
         )
-        policy = (
-            None
-            if expected_base is None
-            else presentation_policy(profile, str(expected_base["recordType"]))
-        )
+        record_type = str(child["recordType"])
+        policy = None
+        if record_type in base_linked_children and expected_base is not None:
+            policy = presentation_policy(profile, str(expected_base["recordType"]))
+        elif record_type not in base_linked_children:
+            policy = child_presentation_policy(profile, record_type)
         expected_kind = None if policy is None else str(policy["kind"])
         expected_light = None
+        expected_landscape = None
+        expected_landscape_asset_id = None
         if expected_kind == POINT_LIGHT_PRESENTATION_KIND:
             try:
                 expected_light = compiled_light_contract(
@@ -356,20 +336,69 @@ def validate_compile(
                     raise ValueError(
                         f"Static CELL light contract blocker is missing: {key}"
                     )
+        elif expected_kind == LANDSCAPE_PRESENTATION_KIND:
+            try:
+                landscape_expectation = resolve_landscape_expectation(
+                    data_root,
+                    corpus_manifest,
+                    cell,
+                    child,
+                    origin,
+                    configuration.content_compiler,
+                )
+                expected_landscape = landscape_expectation.contract
+                expected_landscape_asset_id = landscape_expectation.asset_id
+                landscape_expectations_by_asset_id[
+                    expected_landscape_asset_id
+                ] = landscape_expectation
+            except Exception:
+                if "landscape-compile-failed" not in expected_reasons:
+                    raise ValueError(
+                        f"Static CELL landscape blocker is missing: {key}"
+                    )
         unsupported_subrecords = set()
         if policy is not None:
-            unsupported_subrecords = set(child["subrecordSignatureCounts"]) - set(
-                policy["supportedReferenceSubrecords"]
+            supported_field = (
+                "supportedReferenceSubrecords"
+                if record_type in base_linked_children
+                else "supportedChildSubrecords"
             )
+            unsupported_subrecords = set(child["subrecordSignatureCounts"]) - set(
+                policy[supported_field]
+            )
+        unsupported_reason = (
+            "unsupported-reference-subrecord"
+            if record_type in base_linked_children
+            else "unsupported-child-subrecord"
+        )
         actual_unsupported_subrecords = {
             detail
             for reason, detail in blocker_details_by_child.get(key, set())
-            if reason == "unsupported-reference-subrecord"
+            if reason == unsupported_reason
         }
         if actual_unsupported_subrecords != unsupported_subrecords:
             raise ValueError(
                 f"Static CELL reference-subrecord blockers differ: {key}"
             )
+        if expected_kind == LANDSCAPE_PRESENTATION_KIND:
+            expected_position = list(origin)
+            expected_rotation = [0.0, 0.0, 0.0]
+            expected_scale = 1.0
+        else:
+            transform = child.get("transformGameUnits")
+            expected_position = None if transform is None else transform["position"]
+            expected_rotation = None if transform is None else transform["rotation_radians"]
+            expected_scale = child["scale"]
+        expected_godot = (
+            None
+            if expected_position is None
+            else godot_position(tuple(float(value) for value in expected_position), origin)
+        )
+        expected_quaternion = (
+            None
+            if expected_rotation is None
+            else godot_rotation_quaternion(tuple(float(value) for value in expected_rotation))
+        )
         if (
             placement.get("childRuntimeFormId") != child["runtimeFormId"]
             or placement.get("base") != base_link
@@ -379,6 +408,7 @@ def validate_compile(
             != (None if expected_base is None else expected_base.get("editorId"))
             or placement.get("presentationKind") != expected_kind
             or placement.get("light") != expected_light
+            or placement.get("landscape") != expected_landscape
             or placement.get("positionGameUnits") != expected_position
             or placement.get("positionGodotUnits") != expected_godot
             or placement.get("positionGodotMeters")
@@ -389,7 +419,7 @@ def validate_compile(
             )
             or placement.get("rotationGameRadians") != expected_rotation
             or placement.get("rotationGodotQuaternion") != expected_quaternion
-            or placement.get("scale") != child["scale"]
+            or placement.get("scale") != expected_scale
             or placement.get("blockerReasons") != sorted(expected_reasons)
         ):
             raise ValueError(f"Static CELL placement differs: {key}")
@@ -398,11 +428,22 @@ def validate_compile(
             raise ValueError(f"Static CELL placement asset is unresolved: {key}")
         if expected_kind == POINT_LIGHT_PRESENTATION_KIND and asset_id is not None:
             raise ValueError(f"Static CELL point light unexpectedly has an asset: {key}")
+        if (
+            expected_kind == LANDSCAPE_PRESENTATION_KIND
+            and asset_id != expected_landscape_asset_id
+        ):
+            raise ValueError(f"Static CELL landscape asset differs: {key}")
         expected_presentation_status = BLOCKED_REFERENCE_STATUS
         if expected_kind == STATIC_MODEL_PRESENTATION_KIND and asset_id is not None:
             expected_presentation_status = COMPILED_REFERENCE_STATUS
         elif expected_kind == POINT_LIGHT_PRESENTATION_KIND and expected_light is not None:
             expected_presentation_status = COMPILED_LIGHT_REFERENCE_STATUS
+        elif (
+            expected_kind == LANDSCAPE_PRESENTATION_KIND
+            and expected_landscape is not None
+            and asset_id is not None
+        ):
+            expected_presentation_status = COMPILED_LANDSCAPE_REFERENCE_STATUS
         if placement["presentationStatus"] != expected_presentation_status:
             raise ValueError(f"Static CELL placement presentation status differs: {key}")
         expected_readiness = (
@@ -419,179 +460,15 @@ def validate_compile(
     if referenced_asset_ids != asset_ids:
         raise ValueError("Static CELL compile contains unreferenced assets")
 
-    expected_files = {
-        manifest_path.resolve(),
-        (root / CELL_FILE_NAME).resolve(),
-        (root / ASSETS_FILE_NAME).resolve(),
-        (root / TEXTURES_FILE_NAME).resolve(),
-        (root / BLOCKERS_FILE_NAME).resolve(),
-    }
-    seen_asset_ids: set[str] = set()
-    seen_model_paths: set[str] = set()
-    texture_ids_by_requested = {
-        str(row["requestedPath"]): str(row["textureId"]) for row in textures
-    }
-    if len(texture_ids_by_requested) != len(textures):
-        raise ValueError("Static CELL compile repeats a requested texture")
-    bound_texture_ids: set[str] = set()
-    for asset in assets:
-        asset_id = str(asset["assetId"])
-        model_path = str(asset["requestedModelPath"])
-        if asset_id in seen_asset_ids or model_path in seen_model_paths:
-            raise ValueError("Static CELL compile repeats an asset")
-        seen_asset_ids.add(asset_id)
-        seen_model_paths.add(model_path)
-        member = archives.extract(mesh_member_path(model_path))
-        expected_asset_id = hashlib.sha256(
-            f"{member.logical_path}:{member.sha256}".encode("utf-8")
-        ).hexdigest()[:configuration.content_compiler.asset_id_hex_characters]
-        if (
-            asset_id != expected_asset_id
-            or asset["logicalPath"] != member.logical_path
-            or asset["sourceSha256"] != member.sha256
-            or int(asset["sourceBytes"]) != len(member.data)
-            or asset["sourceArchive"] != member.source_archive
-            or asset["sourceArchiveSha256"] != member.source_archive_sha256
-        ):
-            raise ValueError(f"Static CELL asset source differs: {model_path}")
-        asset_parent = (root / "generated" / "assets" / asset_id).resolve()
-        compiled_outputs = asset.get("outputs")
-        if not isinstance(compiled_outputs, dict) or "sidecar" not in compiled_outputs:
-            raise ValueError(f"Static CELL asset output ledger differs: {model_path}")
-        output_files = [str(row["file"]) for row in compiled_outputs.values()]
-        if len(output_files) != len(set(output_files)):
-            raise ValueError(f"Static CELL asset repeats an output file: {model_path}")
-        for descriptor in compiled_outputs.values():
-            if set(descriptor) != {"file", "bytes", "sha256"}:
-                raise ValueError(f"Static CELL asset descriptor fields differ: {model_path}")
-            path = validate_relative_file(
-                root,
-                str(descriptor["file"]),
-                int(descriptor["bytes"]),
-                str(descriptor["sha256"]),
-                asset_parent,
-            )
-            expected_files.add(path)
-        sidecar_path = root / str(compiled_outputs["sidecar"]["file"])
-        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-        expected_sidecar_outputs = {
-            name: {
-                "file": f"generated/assets/{asset_id}/{descriptor['file']}",
-                "bytes": int(descriptor["bytes"]),
-                "sha256": str(descriptor["sha256"]),
-            }
-            for name, descriptor in sidecar["outputs"].items()
-        }
-        expected_sidecar_outputs["sidecar"] = compiled_outputs["sidecar"]
-        if (
-            sidecar.get("schema") != STATIC_NIF_SCHEMA
-            or sidecar.get("status") != "geometry-only"
-            or sidecar.get("compiler") != compiler_provenance()
-            or sidecar["source"]["sha256"] != member.sha256
-            or sidecar["source"]["logicalPath"] != member.logical_path
-            or asset["coverage"] != sidecar["coverage"]
-            or asset["surfaces"] != sidecar["surfaces"]
-            or compiled_outputs != expected_sidecar_outputs
-        ):
-            raise ValueError(f"Static CELL asset sidecar source differs: {model_path}")
-        expected_bindings = [
-            {
-                "requestedPath": requested,
-                "textureId": texture_ids_by_requested.get(requested),
-            }
-            for requested in sorted(
-                {
-                    texture
-                    for surface in sidecar["surfaces"]
-                    for texture in surface["textures"]
-                    if texture
-                }
-            )
-        ]
-        if asset.get("textureBindings") != expected_bindings:
-            raise ValueError(f"Static CELL asset texture bindings differ: {model_path}")
-        if asset.get("materials") != material_bindings(
-            sidecar,
-            texture_ids_by_requested,
-            configuration.content_compiler,
-        ):
-            raise ValueError(f"Static CELL asset material bindings differ: {model_path}")
-        bound_texture_ids.update(
-            str(row["textureId"])
-            for row in expected_bindings
-            if row["textureId"] is not None
-        )
-
-    seen_texture_ids: set[str] = set()
-    seen_texture_paths: set[str] = set()
-    for texture in textures:
-        texture_id = str(texture["textureId"])
-        requested = str(texture["requestedPath"])
-        if texture_id in seen_texture_ids or requested in seen_texture_paths:
-            raise ValueError("Static CELL compile repeats a texture")
-        seen_texture_ids.add(texture_id)
-        seen_texture_paths.add(requested)
-        member = archives.extract(str(texture["archivePath"]))
-        requested_canonical = canonical_member_path(requested)
-        aliases = {
-            canonical_member_path(str(source)): canonical_member_path(str(target))
-            for source, target in profile.get("textureAliases", {}).items()
-        }
-        expected_archive_path = aliases.get(requested_canonical, requested_canonical)
-        expected_texture_id = hashlib.sha256(
-            f"{requested_canonical}:{member.sha256}".encode("utf-8")
-        ).hexdigest()[:configuration.content_compiler.asset_id_hex_characters]
-        if (
-            texture_id != expected_texture_id
-            or texture["archivePath"] != expected_archive_path
-            or texture["sourceSha256"] != member.sha256
-            or int(texture["sourceBytes"]) != len(member.data)
-            or texture["sourceArchive"] != member.source_archive
-            or texture["sourceArchiveSha256"] != member.source_archive_sha256
-        ):
-            raise ValueError(f"Static CELL texture source differs: {requested}")
-        texture_parent = (root / "generated" / "textures").resolve()
-        png = validate_relative_file(
-            root,
-            str(texture["png"]),
-            int(texture["pngBytes"]),
-            str(texture["pngSha256"]),
-            texture_parent,
-        )
-        expected_files.add(png)
-        with Image.open(png) as image:
-            image.load()
-            if (
-                image.format != PNG_FORMAT
-                or list(image.size) != [int(texture["width"]), int(texture["height"])]
-            ):
-                raise ValueError(f"Static CELL texture dimensions differ: {requested}")
-        expected_normal = requested_canonical.endswith("_n.dds")
-        if texture["normalGreenInverted"] != expected_normal:
-            raise ValueError(f"Static CELL normal-map policy differs: {requested}")
-        cube_faces = texture["cubeFaces"]
-        if cube_faces and len(cube_faces) != DDS_CUBEMAP_FACE_COUNT:
-            raise ValueError(f"Static CELL cubemap face count differs: {requested}")
-        for face in cube_faces:
-            validated = validate_relative_file(
-                root,
-                str(face["png"]),
-                int(face["bytes"]),
-                str(face["pngSha256"]),
-                texture_parent,
-            )
-            expected_files.add(validated)
-            with Image.open(validated) as image:
-                image.load()
-                if image.format != PNG_FORMAT:
-                    raise ValueError(f"Static CELL cubemap output is not PNG: {requested}")
-
-    if bound_texture_ids != seen_texture_ids:
-        raise ValueError("Static CELL compile contains unreferenced textures")
-
-    actual_files = {path.resolve() for path in root.rglob("*") if path.is_file()}
-    if actual_files != expected_files:
-        raise ValueError("Static CELL compile contains unaccounted files")
+    seen_texture_ids = validate_resource_artifacts(
+        root,
+        assets,
+        textures,
+        profile,
+        archives,
+        configuration,
+        landscape_expectations_by_asset_id,
+    )
     expected_status = BLOCKED_PRESENTATION_STATUS if blockers else PASS_PRESENTATION_STATUS
     if manifest.get("status") != expected_status or cell_document.get("status") != expected_status:
         raise ValueError("Static CELL compile status differs from blockers")
@@ -599,10 +476,17 @@ def validate_compile(
         "sourceChildren": len(children),
         "compiledPlacements": sum(
             row["presentationStatus"]
-            in {COMPILED_REFERENCE_STATUS, COMPILED_LIGHT_REFERENCE_STATUS}
+            in {
+                COMPILED_REFERENCE_STATUS,
+                COMPILED_LIGHT_REFERENCE_STATUS,
+                COMPILED_LANDSCAPE_REFERENCE_STATUS,
+            }
             for row in placements
         ),
         "lights": sum(row.get("light") is not None for row in placements),
+        "landscapes": sum(
+            row.get("landscape") is not None for row in placements
+        ),
         "assets": len(assets),
         "textures": len(textures),
         "portals": len(portals),

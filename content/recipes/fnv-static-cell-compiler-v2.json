@@ -1,8 +1,9 @@
 {
-  "schema": "opennv-static-cell-compiler-profile/v1",
-  "id": "fnv-static-cell-compiler-v1",
+  "schema": "opennv-static-cell-compiler-profile/v2",
+  "id": "fnv-static-cell-compiler-v2",
   "archiveRecipe": "fnv-official-actor-archives-v1.json",
-  "supportedChildRecordTypes": ["REFR"],
+  "supportedChildRecordTypes": ["LAND", "REFR"],
+  "baseLinkedChildRecordTypes": ["REFR"],
   "supportedBaseRecordTypes": ["LIGH", "STAT"],
   "presentationPolicies": {
     "LIGH": {
@@ -14,6 +15,12 @@
       "kind": "static-model",
       "modelPathCount": 1,
       "supportedReferenceSubrecords": ["DATA", "NAME", "XSCL"]
+    }
+  },
+  "childPresentationPolicies": {
+    "LAND": {
+      "kind": "landscape",
+      "supportedChildSubrecords": ["ATXT", "BTXT", "DATA", "VCLR", "VHGT", "VNML", "VTXT"]
     }
   },
   "modelExtension": ".nif",

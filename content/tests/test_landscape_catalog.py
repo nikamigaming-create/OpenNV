@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import struct
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -14,7 +15,13 @@ sys.path.insert(0, str(TOOLS))
 
 from landscape_catalog import LAND_VERTEX_COUNT, scan_landscape_catalog  # noqa: E402
 from landscape_gltf import bake_landscape_diffuse, landscape_geometry  # noqa: E402
-from plugin_records import COMPRESSED_RECORD_FLAG  # noqa: E402
+from landscape_stack import resolve_owned_landscape  # noqa: E402
+from plugin_records import (  # noqa: E402
+    COMPRESSED_RECORD_FLAG,
+    iter_plugin_records,
+    iter_subrecords,
+)
+from plugin_stack import file_sha256  # noqa: E402
 from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
@@ -29,6 +36,14 @@ def record(signature: str, form_id: int, data: bytes, flags: int = 0) -> bytes:
 
 def group(label: bytes, group_type: int, contents: bytes) -> bytes:
     return struct.pack("<4sI4siHHI", b"GRUP", 24 + len(contents), label, group_type, 0, 0, 0) + contents
+
+
+def header(*masters: str) -> bytes:
+    data = subrecord("HEDR", struct.pack("<fII", 1.34, 0, 0))
+    for master in masters:
+        data += subrecord("MAST", master.encode("ascii") + b"\0")
+        data += subrecord("DATA", bytes(8))
+    return record("TES4", 0, data)
 
 
 def plugin() -> bytes:
@@ -62,10 +77,95 @@ def plugin() -> bytes:
     )
     cell_children = group(struct.pack("<I", 0x40), 6, group(struct.pack("<I", 0x40), 9, land))
     world_children = group(struct.pack("<I", 0x50), 1, cell_children)
-    return group(b"TXST", 0, texture_set) + group(b"LTEX", 0, landscape_texture) + world_children
+    return (
+        header()
+        + group(b"TXST", 0, texture_set)
+        + group(b"LTEX", 0, landscape_texture)
+        + world_children
+    )
+
+
+def override_plugin() -> bytes:
+    texture_set = record(
+        "TXST",
+        0x10,
+        subrecord("EDID", b"SyntheticTextureSetOverride\0")
+        + subrecord("TX00", b"landscape/override.dds\0")
+        + subrecord("TX01", b"landscape/override_n.dds\0"),
+    )
+    return header("Synthetic.esm") + group(b"TXST", 0, texture_set)
 
 
 class LandscapeCatalogTest(unittest.TestCase):
+    def test_owned_stack_resolves_stable_land_ltex_and_winning_txst(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base_path = root / "Synthetic.esm"
+            override_path = root / "Dlc.esm"
+            base_path.write_bytes(plugin())
+            override_path.write_bytes(override_plugin())
+            landscape_record = next(
+                iter_plugin_records(base_path, frozenset({"LAND"}))
+            )
+            signature_counts: dict[str, int] = {}
+            for row in iter_subrecords(landscape_record):
+                signature_counts[row.signature] = signature_counts.get(row.signature, 0) + 1
+            manifest = {
+                "inputs": [
+                    {
+                        "file": base_path.name,
+                        "loadOrderIndex": 0,
+                        "masters": [],
+                        "sha256": file_sha256(base_path),
+                        "bytes": base_path.stat().st_size,
+                    },
+                    {
+                        "file": override_path.name,
+                        "loadOrderIndex": 1,
+                        "masters": [base_path.name],
+                        "sha256": file_sha256(override_path),
+                        "bytes": override_path.stat().st_size,
+                    },
+                ]
+            }
+            cell = {
+                "formKey": "Synthetic.esm:000040",
+                "runtimeFormId": "00000040",
+                "interior": False,
+                "coordinates": [2, -1],
+                "worldspace": {
+                    "key": "Synthetic.esm:000050",
+                    "runtimeFormId": "00000050",
+                },
+            }
+            child = {
+                "formKey": "Synthetic.esm:000030",
+                "runtimeFormId": "00000030",
+                "recordType": "LAND",
+                "childKind": "landscape",
+                "cell": {
+                    "key": cell["formKey"],
+                    "runtimeFormId": cell["runtimeFormId"],
+                },
+                "sourcePlugin": base_path.name,
+                "sourceLocalFormId": "00000030",
+                "recordFlags": "00040000",
+                "recordDataSha256": hashlib.sha256(landscape_record.data).hexdigest(),
+                "compressionChecksumValid": True,
+                "subrecordSignatureCounts": dict(sorted(signature_counts.items())),
+            }
+
+            resolved = resolve_owned_landscape(root, manifest, cell, child)
+
+        contract = resolved.textures.texture_contract(0x20)
+        self.assertEqual(resolved.identity.form_key, child["formKey"])
+        self.assertEqual(contract["ltexFormKey"], "Synthetic.esm:000020")
+        self.assertEqual(contract["txstFormKey"], "Synthetic.esm:000010")
+        self.assertEqual(contract["txstSource"]["sourcePlugin"], "Dlc.esm")
+        self.assertEqual(contract["ltexEditorId"], "SyntheticLandscape")
+        self.assertEqual(contract["txstEditorId"], "SyntheticTextureSetOverride")
+        self.assertEqual(contract["diffusePath"], "landscape\\override.dds")
+
     def test_landscape_geometry_layers_and_world_ownership(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "synthetic.esm"

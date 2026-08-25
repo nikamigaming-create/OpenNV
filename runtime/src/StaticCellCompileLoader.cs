@@ -7,12 +7,20 @@ internal static class StaticCellCompileLoader
 {
     private const string PlacementStatus = "compiled-static-reference";
     private const string LightPlacementStatus = "compiled-point-light-reference";
+    private const string LandscapePlacementStatus = "compiled-landscape-reference";
     private const string PlacementReadiness = "static-presentation-runtime-pending";
     private const string StaticModelPresentation = "static-model";
     private const string PointLightPresentation = "point-light";
+    private const string LandscapePresentation = "landscape";
+    private const string StaticNifAsset = "static-nif";
+    private const string LandscapeAsset = "landscape";
+    private const string LandscapeCollisionSource = "LAND-height-grid";
+    private const string LandscapeCollisionBlock = "LAND";
     private const int VectorComponents = 3;
     private const int QuaternionComponents = 4;
     private const int DirectionComponents = 2;
+    private const int SingleLandscapeCollisionBlock = 1;
+    private const int SingleLandscapeCollisionBody = 1;
     private const uint DefaultRenderLayer = 1u;
 
     internal static LoadedStaticCell Load(
@@ -35,7 +43,7 @@ internal static class StaticCellCompileLoader
             configuration.Renderer,
             "textureId",
             compileRoot);
-        var prototypes = new Dictionary<string, VerifiedGltfLoader.LoadedGltf>(StringComparer.Ordinal);
+        var prototypes = new Dictionary<string, CompiledPrototype>(StringComparer.Ordinal);
         var materialBindings = 0;
         Node3D? root = null;
         try
@@ -63,16 +71,39 @@ internal static class StaticCellCompileLoader
                 var collisionExpected = asset.GetProperty("coverage")
                     .GetProperty("collisionExported")
                     .GetBoolean();
-                if (collisionExpected != (loaded.CollisionScene is not null))
+                var assetKind = asset.GetProperty("assetKind").GetString();
+                var landscapeCollision = false;
+                if (assetKind == StaticNifAsset &&
+                    collisionExpected != (loaded.CollisionScene is not null))
                     throw new InvalidOperationException(
                         $"Static CELL authored collision differs: {assetId}");
+                if (assetKind == LandscapeAsset)
+                {
+                    var collision = asset.GetProperty("collision");
+                    var blocks = collision.GetProperty("blockTypes").EnumerateArray()
+                        .Select(value => value.GetString())
+                        .ToArray();
+                    if (collisionExpected || loaded.CollisionScene is not null ||
+                        !collision.GetProperty("enabled").GetBoolean() ||
+                        collision.GetProperty("source").GetString() != LandscapeCollisionSource ||
+                        blocks.Length != SingleLandscapeCollisionBlock ||
+                        blocks[0] != LandscapeCollisionBlock)
+                        throw new InvalidOperationException(
+                            $"Static CELL landscape collision differs: {assetId}");
+                    landscapeCollision = true;
+                }
+                else if (assetKind != StaticNifAsset)
+                    throw new InvalidOperationException(
+                        $"Static CELL asset kind differs: {assetId}");
                 materialBindings += RuntimeMaterialLoader.Apply(
                     loaded.Scene,
                     asset,
                     loadedTextures,
                     configuration.Renderer);
                 SetRenderLayer(loaded.Scene, DefaultRenderLayer);
-                prototypes.Add(assetId, loaded);
+                prototypes.Add(
+                    assetId,
+                    new CompiledPrototype(loaded, assetKind, landscapeCollision));
             }
 
             var sourceCell = cell.GetProperty("cell");
@@ -89,6 +120,7 @@ internal static class StaticCellCompileLoader
             var placements = 0;
             var collisionMeshes = 0;
             var authoredLights = 0;
+            var authoredLandscapes = 0;
             var surfaces = 0;
             var vertices = 0;
             foreach (var placement in cell.GetProperty("placements").EnumerateArray())
@@ -109,21 +141,31 @@ internal static class StaticCellCompileLoader
                     Scale = Vector3.One * placement.GetProperty("scale").GetSingle(),
                 };
                 root.AddChild(placementNode);
-                if (presentationKind == StaticModelPresentation &&
-                    presentationStatus == PlacementStatus)
+                if (presentationKind is StaticModelPresentation or LandscapePresentation)
                 {
                     var assetId = placement.GetProperty("assetId").GetString()!;
                     if (!prototypes.TryGetValue(assetId, out var prototype))
                         throw new InvalidOperationException(
                             $"Static CELL placement references an unknown asset: {assetId}");
-                    var instance = prototype.Scene.Duplicate(
+                    var expectedStatus = presentationKind == StaticModelPresentation
+                        ? PlacementStatus
+                        : LandscapePlacementStatus;
+                    var expectedAssetKind = presentationKind == StaticModelPresentation
+                        ? StaticNifAsset
+                        : LandscapeAsset;
+                    if (presentationStatus != expectedStatus ||
+                        prototype.AssetKind != expectedAssetKind)
+                        throw new InvalidOperationException(
+                            $"Static CELL placement asset kind differs: {assetId}");
+                    var instance = prototype.Gltf.Scene.Duplicate(
                         (int)Node.DuplicateFlags.Default) as Node3D
                         ?? throw new InvalidOperationException(
                             $"Could not duplicate static CELL asset: {assetId}");
                     placementNode.AddChild(instance);
                     SetRenderLayer(instance, DefaultRenderLayer);
                     CountGeometry(instance, ref surfaces, ref vertices);
-                    if (buildCollision && prototype.CollisionScene is Node3D collisionPrototype)
+                    if (buildCollision &&
+                        prototype.Gltf.CollisionScene is Node3D collisionPrototype)
                     {
                         var collision = collisionPrototype.Duplicate(
                             (int)Node.DuplicateFlags.Default) as Node3D
@@ -139,6 +181,28 @@ internal static class StaticCellCompileLoader
                                 body.CollisionLayer = DefaultRenderLayer;
                             collisionMeshes++;
                         }
+                    }
+                    else if (buildCollision && prototype.LandscapeCollision)
+                    {
+                        foreach (var mesh in Descendants<MeshInstance3D>(instance))
+                        {
+                            mesh.CreateTrimeshCollision();
+                            var bodies = Descendants<StaticBody3D>(mesh).ToArray();
+                            if (bodies.Length != SingleLandscapeCollisionBody)
+                                throw new InvalidOperationException(
+                                    $"Static CELL landscape collision body differs: {assetId}");
+                            foreach (var body in bodies)
+                                body.CollisionLayer = DefaultRenderLayer;
+                            collisionMeshes += bodies.Length;
+                        }
+                    }
+                    if (presentationKind == LandscapePresentation)
+                    {
+                        if (placement.GetProperty("landscape").ValueKind !=
+                            JsonValueKind.Object)
+                            throw new InvalidOperationException(
+                                $"Static CELL landscape placement has no contract: {assetId}");
+                        authoredLandscapes++;
                     }
                 }
                 else if (presentationKind == PointLightPresentation &&
@@ -165,6 +229,7 @@ internal static class StaticCellCompileLoader
                 materialBindings,
                 placements,
                 authoredLights,
+                authoredLandscapes,
                 collisionMeshes,
                 surfaces,
                 vertices);
@@ -178,8 +243,8 @@ internal static class StaticCellCompileLoader
         {
             foreach (var prototype in prototypes.Values)
             {
-                prototype.Scene.Free();
-                prototype.CollisionScene?.Free();
+                prototype.Gltf.Scene.Free();
+                prototype.Gltf.CollisionScene?.Free();
             }
         }
     }
@@ -314,6 +379,11 @@ internal static class StaticCellCompileLoader
     private static string SafeNodeName(string value) =>
         string.Concat(value.Select(character => char.IsLetterOrDigit(character) ? character : '_'));
 
+    private readonly record struct CompiledPrototype(
+        VerifiedGltfLoader.LoadedGltf Gltf,
+        string AssetKind,
+        bool LandscapeCollision);
+
     internal readonly record struct LoadedStaticCell(
         string ManifestPath,
         string ManifestSha256,
@@ -325,6 +395,7 @@ internal static class StaticCellCompileLoader
         int MaterialBindings,
         int Placements,
         int AuthoredLights,
+        int AuthoredLandscapes,
         int CollisionMeshes,
         int Surfaces,
         int Vertices);

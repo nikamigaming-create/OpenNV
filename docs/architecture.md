@@ -17,17 +17,24 @@ CELL are defined in [whole-game CELL parity](whole-game-cell-parity.md).
 flowchart LR
     Install[Legal Data folder] -->|1:1| Master[FalloutNV.esm]
     Install -->|1:1| MeshesBsa[Fallout - Meshes.bsa]
+    Install --> TexturesBsa[Official texture BSA stack]
     Recipe[Hash-pinned cell recipe] --> Cell
     Master -->|1:N| Cell[CELL]
+    Cell -->|0:1 direct child| Land[LAND]
     Cell -->|1:N cell-child group| Ref[REFR]
     Ref -->|N:1 NAME| Base[World / item / container / door base]
     Ref -->|0:1 XTEL| DoorTarget[Destination door REFR]
     Base -->|N:1 MODL| Nif[NIF member]
     MeshesBsa --> Nif
     Nif -->|direct export| Gltf[glTF + provenance sidecar]
+    Land -->|0:N layers| Ltex[LTEX]
+    Ltex -->|N:1| Txst[TXST]
+    Txst -->|diffuse and normal provenance| TexturesBsa
+    Land -->|height grid + resolved layers| LandGltf[glTF + baked diffuse + provenance]
     Cell --> Scene[cell-scene.json]
     Ref --> Scene
     Gltf --> Scene
+    LandGltf --> Scene
     Scene --> Loader[Godot CellSceneLoader]
     Loader --> Tree[Runtime node tree]
 ```
@@ -182,10 +189,14 @@ require a headset session.
 | `corpus_io.py` | Deterministic atomic JSON/JSONL corpus artifacts and descriptors | Record or game semantics |
 | `cell_compile_plan.py` | Natural CELL partitioning, exact child membership, deduplicated capability requirements, and absent-output scheduling | Content implementation, runtime nodes, or parity promotion |
 | `validate_cell_compile_plan.py` | Source-corpus binding, partition hashes, exact job/child/capability coverage, and pending-state enforcement | Asset compilation or runtime claims |
-| `cell_static_compile.py` | One planned CELL's profile-selected static-model/point-light presentations, content-addressed assets, exact REFR policy, and explicit blockers | Godot nodes, gameplay, or parity promotion |
+| `cell_static_compile.py` | One planned CELL's typed capability orchestration, immutable artifact transaction, exact child accounting, and explicit blockers | Record layouts, resource conversion, Godot nodes, gameplay, or parity promotion |
 | `cell_static_contract.py` | Static CELL schemas, presentation-policy validation, coordinate/light contracts, failure normalization, and producer-source closure | Archive reads, compilation, or Godot nodes |
 | `cell_static_source.py` | Exact compile-job to corpus CELL/child/base/portal join | Asset conversion or runtime behavior |
-| `validate_cell_static_compile.py` | Exact plan/corpus/archive/configuration join plus placement/light, subrecord, material, nested-file, and filesystem-closure validation | Runtime loading or visual approval |
+| `cell_landscape_contract.py` | Pure stable LAND placement, topology-count, and texture-graph artifact contract | Owned-data reads, cache writes, or runtime nodes |
+| `cell_landscape_compile.py` | One resolved LAND's height mesh, layer bake, collision declaration, and shared artifact rows | Plugin-stack resolution, CELL orchestration, or Godot nodes |
+| `cell_landscape_validate.py` | Independent LAND identity, source graph, sidecar, material, and baked-texture expectation | Generic asset validation or runtime loading |
+| `cell_static_resource_validate.py` | Generic NIF/LAND asset, texture, nested-output, and filesystem-closure validation | CELL policy, record resolution, or visual approval |
+| `validate_cell_static_compile.py` | Exact plan/corpus/archive/configuration join plus typed placement/blocker/count orchestration | Resource-specific decoding, runtime loading, or visual approval |
 | `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, TPLT/EAMT, LVLN/LVLC, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
 | `actor_parity_graph.py` | Recursive category-source appearance variants and concrete leveled placement candidates | Binary parsing, capture, or rendering |
 | `actor_parity_records.py` | Canonical actor rows and effective override/deletion merge | Template traversal, capture, or rendering |
@@ -212,6 +223,7 @@ require a headset session.
 | `exterior_scene.py` | Bounded grid/persistent reference selection, reciprocal XTEL and exterior manifest | LAND decoding or runtime nodes |
 | `landscape_catalog.py` | LAND ownership, height/normal/color, LTEX/TXST and quadrant-layer contracts | Godot nodes or weather |
 | `landscape_gltf.py` | One LAND grid plus deterministic owned-texture layer bake and provenance | CELL selection or runtime physics |
+| `landscape_stack.py` | Exact corpus-bound LAND source plus master-aware effective LTEX/TXST winners | Geometry export, cache writes, or Godot behavior |
 | `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
 | `prepare_legal_assets.py` | Legal-input validation and atomic cache transaction | Rendering |
 | `goodsprings-saloon-structure-v1.json` | Exact proof target, hash, selection, entry, scale | Parsing logic |
@@ -305,6 +317,19 @@ source ledger accounts for 602 linked light bases and 11,157 placed lights in
 older Ranch House static example now exposes 12 previously ignored REFR
 semantics, so that artifact is blocked instead of being mislabeled complete.
 
+The next typed capability compiles strict full-layout `LAND` records through the
+same artifact kernel. `FalloutNV.esm:0ddb26` resolves direct child
+`FalloutNV.esm:0de391`, its master-aware `LTEX -> TXST` graph, the winning owned
+diffuse/normal sources, a 1,089-vertex/2,048-triangle height mesh, a deterministic
+baked diffuse, and authored terrain collision. Independent `r10`/`r11` artifacts
+are byte-identical across all nine files; Godot loads one landscape and one
+collision mesh with zero blockers. This is a transport/runtime proof, not a
+retail-pixel or whole-world claim. Of 42,467 effective LAND rows, 4,919 satisfy
+the current complete-layout decoder, 37,064 omit one or more four-quadrant BTXT
+bases, and 484 omit core DATA/VNML/VHGT. Among the complete-layout rows, 2,446
+have no LTEX reference. Those default/partial semantics remain named work; they
+are not synthesized or silently discarded.
+
 Implemented: master-aware official load-order identity, effective override and
 deletion merge, recursive humanoid/creature template and leveled-list
 relationships, complete private review ledgers, deterministic FaceGen
@@ -356,8 +381,8 @@ differential gates. The clean-room shader observations are recorded in
 
 Next promotion order:
 
-1. extend the general CELL compiler from baseline `STAT`/`LIGH` transport into
-   LAND and close the explicitly blocked REFR subrecords;
+1. resolve the remaining partial/default LAND layout classes and close the
+   explicitly blocked REFR subrecords;
 2. add NAVM, actor/creature, XTEL/door, enable-state, and streamed neighboring
    CELL capabilities through the same plan/artifact/validator path;
 3. close fixed-camera material, lighting, weather, effect, and actor-pixel gates;

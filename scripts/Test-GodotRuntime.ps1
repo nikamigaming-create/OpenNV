@@ -98,6 +98,7 @@ $retailSidecar = ""
 $temporaryCache = ""
 $poolPracticeValidated = $false
 $flatControlsValidated = $false
+try {
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $resolvedFalloutData = Resolve-FnvDataRoot $FalloutNewVegasData
     $temporaryCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-legal-cache-{0}" -f [guid]::NewGuid().ToString("N"))
@@ -255,12 +256,16 @@ $result = [pscustomobject][ordered]@{
     retailSourceSha256 = if ($null -eq $retail) { "not-requested" } else { [string]$retail.sourceSha256 }
     godot = $Godot
 }
-if (-not [string]::IsNullOrWhiteSpace($temporaryCache)) {
-    $resolvedCache = [IO.Path]::GetFullPath($temporaryCache)
-    $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
-    if (-not $resolvedCache.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to remove non-temporary cache: $resolvedCache"
-    }
-    Remove-Item -LiteralPath $resolvedCache -Recurse
+    $result
 }
-$result
+finally {
+    if (-not [string]::IsNullOrWhiteSpace($temporaryCache) -and
+        (Test-Path -LiteralPath $temporaryCache)) {
+        $resolvedCache = [IO.Path]::GetFullPath($temporaryCache)
+        $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+        if (-not $resolvedCache.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove non-temporary cache: $resolvedCache"
+        }
+        Remove-Item -LiteralPath $resolvedCache -Recurse
+    }
+}

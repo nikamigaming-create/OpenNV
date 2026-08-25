@@ -74,6 +74,15 @@ class Landscape:
 
 
 @dataclass(frozen=True)
+class LandscapeIdentity:
+    form_key: str
+    cell_form_key: str
+    worldspace_form_key: str
+    source_plugin: str
+    source_local_form_id: str
+
+
+@dataclass(frozen=True)
 class LandscapeCatalog:
     landscapes: dict[int, Landscape]
     textures: dict[int, LandscapeTexture]
@@ -95,6 +104,25 @@ class LandscapeCatalog:
                 f"LTEX {texture.form_id:08x} references unresolved TXST {texture.texture_set_form_id:08x}"
             )
         return texture_set.diffuse_path
+
+    def texture_contract(self, texture_form_id: int) -> dict[str, object]:
+        texture = self.textures.get(texture_form_id)
+        if texture is None:
+            raise ValueError(f"LAND references unresolved LTEX {texture_form_id:08x}")
+        texture_set = self.texture_sets.get(texture.texture_set_form_id)
+        if texture_set is None:
+            raise ValueError(
+                f"LTEX {texture.form_id:08x} references unresolved TXST "
+                f"{texture.texture_set_form_id:08x}"
+            )
+        return {
+            "ltexFormId": f"{texture.form_id:08x}",
+            "ltexEditorId": texture.editor_id,
+            "txstFormId": f"{texture_set.form_id:08x}",
+            "txstEditorId": texture_set.editor_id,
+            "diffusePath": texture_set.diffuse_path,
+            "normalPath": texture_set.normal_path,
+        }
 
 
 def _values(record: Record) -> dict[str, list[bytes]]:
@@ -195,7 +223,7 @@ def _colors(data: bytes | None, record: Record) -> tuple[tuple[float, float, flo
     )
 
 
-def _landscape(record: Record) -> Landscape:
+def parse_landscape(record: Record) -> Landscape:
     cell_form_id = _parent(record, CELL_CHILDREN_GROUP_TYPE)
     worldspace_form_id = _parent(record, WORLDSPACE_CHILDREN_GROUP_TYPE)
     if cell_form_id is None or worldspace_form_id is None:
@@ -259,7 +287,7 @@ def scan_landscape_catalog(path: Path, cell_form_ids: set[int]) -> LandscapeCata
         if record.signature == "LAND":
             cell_form_id = _parent(record, CELL_CHILDREN_GROUP_TYPE)
             if cell_form_id in cell_form_ids:
-                landscape = _landscape(record)
+                landscape = parse_landscape(record)
                 if landscape.cell_form_id in landscapes:
                     raise ValueError(f"CELL {landscape.cell_form_id:08x} declares multiple LAND records")
                 landscapes[landscape.cell_form_id] = landscape

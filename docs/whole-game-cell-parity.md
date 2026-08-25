@@ -197,9 +197,9 @@ than hiding the regression.
 
 The first strict zero-blocker capability proof is baseline placed `LIGH` data
 in `DeadMoney.esm:0102c7` (`TestSeanMap`). The immutable artifact is
-`D:\Builds\OpenNV-light-cell-DeadMoney-0102c7-20260824-r2`; its manifest SHA-256
-is `ccb27a64e2bf3f897d20857bb14968355c4b0822ad4b75f65e89653cd4ccf8e2`.
-An independent `r1` build is byte-for-byte identical across all five files.
+`D:\Builds\OpenNV-light-cell-DeadMoney-0102c7-20260824-r7`; its manifest SHA-256
+is `73c3d63f6aff330ce07a1d86742585b66ab129b4db888c35bedee136809021ea`.
+This is the current profile-v2 regression after adding direct-child LAND.
 
 | Point-light compile/runtime entity | Exact result |
 | --- | ---: |
@@ -224,16 +224,48 @@ numeric contracts instead of guessing.
 The official corpus contains 602 linked `LIGH` bases and 11,157 placed `LIGH`
 references across 836 CELLs. Those are a fixed source denominator, not 836
 runtime or visual passes. The bounded Godot report at
-`D:\Builds\OpenNV-light-cell-DeadMoney-0102c7-godot-20260824-r1.json` has
-SHA-256 `0144d8e739a92a57fdb42d282e80ffa87443db242cbaa83ac5ea3762f2f17bd3`
+`D:\Builds\OpenNV-light-cell-DeadMoney-0102c7-godot-20260824-r7.json` has
+SHA-256 `25ee983f7e341d606cc72b5b8c5ba16f30f15bc7ea33e917cbad5603215095dc`
 and explicitly records `playable=false` and `parity=false`. It closes only the
 owned-record-to-verified-Godot point-light transport contract; retail
 attenuation, flags, HDR response, shadows, and matched pixels remain parity
 work.
 
-Run the same fail-closed path for another immutable target with
-`scripts/Test-OpenNVStaticCellSlice.ps1`. LAND is next because the denominator
-contains 42,467 effective LAND child records; NAVM, XTEL/doors,
-actors/creatures, enable state, effects, and the remaining reference subrecords
-follow through the same artifact and validator path. Unsupported records remain
-blockers and are never silently omitted.
+The first strict LAND capability proof is exterior CELL
+`FalloutNV.esm:0ddb26`, coordinates `[5,38]` in WastelandNV. Its sole child is
+LAND `FalloutNV.esm:0de391`. The resolver independently rejoins that record to
+effective LTEX `FalloutNV.esm:038a28`, effective TXST
+`FalloutNV.esm:038a27`, and the winning owned diffuse/normal BSA members. No
+plugin path, layer, material, or placement is supplied by a scene recipe.
+
+The independent artifacts at
+`D:\Builds\OpenNV-land-cell-FalloutNV-0ddb26-20260824-r10` and `r11` are
+byte-for-byte identical: nine files, 408,163 bytes, manifest SHA-256
+`0e3afa39f9301f0b1054b2fc0360002aeb95ebbdee7039eabd08a29a59f91833`.
+The runtime report at
+`D:\Builds\OpenNV-land-cell-FalloutNV-0ddb26-godot-20260824-r10.json` has
+SHA-256 `e5393fbb0f262d5b5ff3f50e69e195ca966f3db6aac99494abcf442b28384870`.
+It proves one 1,089-vertex/2,048-triangle landscape, one baked diffuse texture,
+one authored collision mesh, one placement, and zero blockers. It explicitly
+records `playable=false` and `parity=false`; the current runtime uses the baked
+diffuse plus vertex color, while normal-source identity is retained as
+provenance rather than presented as completed retail shading.
+
+The 42,467-row LAND denominator is not homogeneous. Exact corpus classification
+under the current decoder is:
+
+| LAND source class | Exact rows |
+| --- | ---: |
+| Complete DATA/VNML/VHGT plus four BTXT quadrant bases | 4,919 |
+| Missing one or more BTXT quadrant bases | 37,064 |
+| Missing core DATA, VNML, or VHGT | 484 |
+| Complete-layout rows with no LTEX reference | 2,446 |
+
+The last row is a subset of the 4,919 complete-layout rows. Partial/default
+quadrant semantics are still unresolved, so the compiler reports them as
+`landscape-compile-failed` instead of inventing terrain. Run the same immutable
+path for another target with `scripts/Test-OpenNVStaticCellSlice.ps1`. Closing
+those LAND classes is next; NAVM, XTEL/doors, actors/creatures, enable state,
+effects, and the remaining reference subrecords then follow through the same
+artifact kernel. Unsupported records remain blockers and are never silently
+omitted.

@@ -774,7 +774,7 @@ public partial class RuntimeCoordinator : Node3D
             !options.ContainsKey("no-collision"));
         var report = new
         {
-            schema = "opennv-godot-static-cell-runtime/v1",
+            schema = "opennv-godot-static-cell-runtime/v2",
             status = "pass",
             scope = "compiled-static-presentation",
             playable = false,
@@ -790,6 +790,7 @@ public partial class RuntimeCoordinator : Node3D
             materialBindings = loaded.MaterialBindings,
             placements = loaded.Placements,
             authoredLights = loaded.AuthoredLights,
+            authoredLandscapes = loaded.AuthoredLandscapes,
             collisionMeshes = loaded.CollisionMeshes,
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,
@@ -800,6 +801,7 @@ public partial class RuntimeCoordinator : Node3D
             $"OPENNV_GODOT_STATIC_CELL_PASS cell={loaded.FormKey} assets={loaded.Assets} " +
             $"textures={loaded.Textures} materials={loaded.MaterialBindings} " +
             $"placements={loaded.Placements} lights={loaded.AuthoredLights} " +
+            $"landscapes={loaded.AuthoredLandscapes} " +
             $"collision={loaded.CollisionMeshes} " +
             $"surfaces={loaded.Surfaces} vertices={loaded.Vertices}");
         if (options.ContainsKey("quit-after-load"))

@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 from cell_compile_plan import MANIFEST_FILE_NAME as PLAN_MANIFEST_FILE_NAME
+from cell_landscape_compile import compile_landscape
 from cell_parity_corpus import MANIFEST_FILE_NAME as CORPUS_MANIFEST_FILE_NAME
 from cell_scene import godot_position, godot_rotation_quaternion
 from cell_static_contract import (
@@ -22,6 +23,7 @@ from cell_static_contract import (
     BLOCKED_REFERENCE_STATUS,
     BLOCKERS_FILE_NAME,
     CELL_FILE_NAME,
+    COMPILED_LANDSCAPE_REFERENCE_STATUS,
     COMPILED_LIGHT_REFERENCE_STATUS,
     COMPILED_REFERENCE_STATUS,
     MANIFEST_FILE_NAME,
@@ -30,12 +32,16 @@ from cell_static_contract import (
     PASS_PRESENTATION_STATUS,
     STATIC_COMPILER_SOURCE_NAMES,
     STATIC_RUNTIME_PENDING_REFERENCE_STATUS,
+    LANDSCAPE_PRESENTATION_KIND,
+    OWNED_DDS_TEXTURE_KIND,
     POINT_LIGHT_PRESENTATION_KIND,
+    STATIC_NIF_ASSET_KIND,
     STATIC_MODEL_PRESENTATION_KIND,
     TEXTURES_FILE_NAME,
     blocker,
     canonical_sha256,
     cell_origin,
+    child_presentation_policy,
     child_transform,
     compiled_light_contract,
     default_plan_recipe_path,
@@ -111,6 +117,7 @@ def compile_model(
         "sha256": file_sha256(sidecar_path),
     }
     asset = {
+        "assetKind": STATIC_NIF_ASSET_KIND,
         "assetId": asset_id,
         "requestedModelPath": model_path,
         "logicalPath": member.logical_path,
@@ -127,6 +134,7 @@ def compile_model(
 
 def texture_row(artifact, staging_root: Path) -> dict[str, object]:
     return {
+        "textureKind": OWNED_DDS_TEXTURE_KIND,
         "textureId": artifact.asset_id,
         "requestedPath": artifact.requested_path,
         "archivePath": artifact.archive_path,
@@ -188,8 +196,13 @@ def compile_cell(
     configuration = load_runtime_configuration()
     archive_recipe_path = recipe_path(str(profile["archiveRecipe"]))
     archives = load_owned_archive_stack(data_root, archive_recipe_path)
+    texture_aliases = {
+        str(source): str(target)
+        for source, target in profile.get("textureAliases", {}).items()
+    }
     origin = cell_origin(cell, profile)
     supported_children = set(profile["supportedChildRecordTypes"])
+    base_linked_children = set(profile["baseLinkedChildRecordTypes"])
     supported_bases = set(profile["supportedBaseRecordTypes"])
     model_extension = str(profile["modelExtension"])
     unique_models: set[str] = set()
@@ -197,6 +210,8 @@ def compile_cell(
     child_base: dict[str, dict[str, object] | None] = {}
     child_policies: dict[str, dict[str, object] | None] = {}
     child_lights: dict[str, dict[str, object] | None] = {}
+    child_landscapes: dict[str, dict[str, object] | None] = {}
+    child_scales: dict[str, float | None] = {}
     child_transforms: dict[
         str,
         tuple[tuple[float, float, float] | None, tuple[float, float, float] | None],
@@ -204,66 +219,95 @@ def compile_cell(
     for child in children:
         key = str(child["formKey"])
         reasons: list[dict[str, object]] = []
-        if child["recordType"] not in supported_children:
+        record_type = str(child["recordType"])
+        if record_type not in supported_children:
             reasons.append(
-                blocker("child", key, "unsupported-child-record-type", str(child["recordType"]))
+                blocker("child", key, "unsupported-child-record-type", record_type)
             )
+        reasons.extend(
+            blocker("child", key, "source-parse-gap", str(gap))
+            for gap in child.get("parseGaps", [])
+        )
         base_link = child.get("baseOrActor")
         base = bases.get(str(base_link["key"])) if isinstance(base_link, dict) else None
         child_base[key] = base
-        policy = (
-            None
-            if base is None
-            else presentation_policy(profile, str(base["recordType"]))
-        )
+        policy = None
+        if record_type in base_linked_children and base is not None:
+            policy = presentation_policy(profile, str(base["recordType"]))
+        elif record_type not in base_linked_children:
+            policy = child_presentation_policy(profile, record_type)
         child_policies[key] = policy
         child_lights[key] = None
-        if base is None:
-            reasons.append(blocker("child", key, "child-has-no-static-base"))
-        elif base["recordType"] not in supported_bases or policy is None:
-            reasons.append(
-                blocker("child", key, "unsupported-base-record-type", str(base["recordType"]))
-            )
-        else:
-            model_paths = base.get("modelPaths", [])
-            expected_models = int(policy["modelPathCount"])
-            if not isinstance(model_paths, list) or len(model_paths) != expected_models:
+        child_landscapes[key] = None
+        if record_type in base_linked_children:
+            if base is None:
+                reasons.append(blocker("child", key, "child-has-no-static-base"))
+            elif base["recordType"] not in supported_bases or policy is None:
                 reasons.append(
                     blocker(
                         "child",
                         key,
-                        "unsupported-model-path-count",
-                        str(len(model_paths) if isinstance(model_paths, list) else -1),
+                        "unsupported-base-record-type",
+                        str(base["recordType"]),
                     )
                 )
-            elif policy["kind"] == STATIC_MODEL_PRESENTATION_KIND:
-                model_path = str(model_paths[0])
-                if not model_path.casefold().endswith(model_extension):
+            else:
+                model_paths = base.get("modelPaths", [])
+                expected_models = int(policy["modelPathCount"])
+                if not isinstance(model_paths, list) or len(model_paths) != expected_models:
                     reasons.append(
-                        blocker("child", key, "unsupported-model-extension", model_path)
+                        blocker(
+                            "child",
+                            key,
+                            "unsupported-model-path-count",
+                            str(len(model_paths) if isinstance(model_paths, list) else -1),
+                        )
                     )
-                else:
-                    unique_models.add(model_path)
-            elif policy["kind"] == POINT_LIGHT_PRESENTATION_KIND:
-                try:
-                    child_lights[key] = compiled_light_contract(
-                        base,
-                        child,
-                        configuration.world_units_to_meters,
-                    )
-                except ValueError as error:
+                elif policy["kind"] == STATIC_MODEL_PRESENTATION_KIND:
+                    model_path = str(model_paths[0])
+                    if not model_path.casefold().endswith(model_extension):
+                        reasons.append(
+                            blocker("child", key, "unsupported-model-extension", model_path)
+                        )
+                    else:
+                        unique_models.add(model_path)
+                elif policy["kind"] == POINT_LIGHT_PRESENTATION_KIND:
+                    try:
+                        child_lights[key] = compiled_light_contract(
+                            base,
+                            child,
+                            configuration.world_units_to_meters,
+                        )
+                    except ValueError as error:
+                        reasons.append(
+                            blocker("child", key, "invalid-light-contract", str(error))
+                        )
+                supported_subrecords = set(policy["supportedReferenceSubrecords"])
+                for signature in sorted(
+                    set(child["subrecordSignatureCounts"]) - supported_subrecords
+                ):
                     reasons.append(
-                        blocker("child", key, "invalid-light-contract", str(error))
+                        blocker(
+                            "child",
+                            key,
+                            "unsupported-reference-subrecord",
+                            signature,
+                        )
                     )
-            supported_subrecords = set(policy["supportedReferenceSubrecords"])
+        elif policy is None:
+            reasons.append(
+                blocker("child", key, "unsupported-child-presentation", record_type)
+            )
+        else:
             for signature in sorted(
-                set(child["subrecordSignatureCounts"]) - supported_subrecords
+                set(child["subrecordSignatureCounts"])
+                - set(policy["supportedChildSubrecords"])
             ):
                 reasons.append(
                     blocker(
                         "child",
                         key,
-                        "unsupported-reference-subrecord",
+                        "unsupported-child-subrecord",
                         signature,
                     )
                 )
@@ -273,16 +317,22 @@ def compile_cell(
             reasons.append(blocker("child", key, "enable-parent-state-not-implemented"))
         if child.get("teleport") is not None:
             reasons.append(blocker("child", key, "xtel-runtime-not-implemented"))
-        position, rotation, transform_reason = child_transform(child)
+        if policy is not None and policy["kind"] == LANDSCAPE_PRESENTATION_KIND:
+            position = origin
+            rotation = (0.0, 0.0, 0.0)
+            scale = 1.0
+        else:
+            position, rotation, transform_reason = child_transform(child)
+            if transform_reason is not None:
+                reasons.append(blocker("child", key, transform_reason))
+            try:
+                scale = float(child["scale"])
+            except (KeyError, TypeError, ValueError):
+                scale = float("nan")
+            if not math.isfinite(scale) or scale <= 0.0:
+                reasons.append(blocker("child", key, "invalid-scale"))
         child_transforms[key] = (position, rotation)
-        if transform_reason is not None:
-            reasons.append(blocker("child", key, transform_reason))
-        try:
-            scale = float(child["scale"])
-        except (KeyError, TypeError, ValueError):
-            scale = float("nan")
-        if not math.isfinite(scale) or scale <= 0.0:
-            reasons.append(blocker("child", key, "invalid-scale"))
+        child_scales[key] = scale if math.isfinite(scale) else None
         child_reasons[key] = reasons
 
     output_root.parent.mkdir(parents=True, exist_ok=True)
@@ -322,10 +372,7 @@ def compile_cell(
             texture_pipeline = OwnedTexturePipeline(
                 archives,
                 staging_root,
-                {
-                    str(source): str(target)
-                    for source, target in profile.get("textureAliases", {}).items()
-                },
+                texture_aliases,
                 configuration.content_compiler,
             )
             for requested in requested_textures:
@@ -379,6 +426,43 @@ def compile_cell(
                 configuration.content_compiler,
             )
 
+        landscape_assets: dict[str, dict[str, object]] = {}
+        landscape_textures: dict[str, dict[str, object]] = {}
+        for child in sorted(children, key=lambda row: str(row["formKey"])):
+            key = str(child["formKey"])
+            policy = child_policies[key]
+            if policy is None or policy["kind"] != LANDSCAPE_PRESENTATION_KIND:
+                continue
+            if not profile["compileTextures"]:
+                child_reasons[key].append(
+                    blocker("child", key, "landscape-texture-compilation-disabled")
+                )
+                continue
+            try:
+                asset, texture, landscape = compile_landscape(
+                    data_root,
+                    corpus_manifest,
+                    cell,
+                    child,
+                    archives,
+                    staging_root,
+                    origin,
+                    configuration.content_compiler,
+                    texture_aliases,
+                )
+                landscape_assets[key] = asset
+                landscape_textures[key] = texture
+                child_landscapes[key] = landscape
+            except Exception as error:
+                child_reasons[key].append(
+                    blocker(
+                        "child",
+                        key,
+                        "landscape-compile-failed",
+                        stable_exception_detail(error, staging_root),
+                    )
+                )
+
         placements = []
         for child in sorted(children, key=lambda row: str(row["formKey"])):
             key = str(child["formKey"])
@@ -407,12 +491,23 @@ def compile_cell(
                         for binding in asset["textureBindings"]
                         if binding["textureId"] is None
                     )
+            elif presentation_kind == LANDSCAPE_PRESENTATION_KIND:
+                asset = landscape_assets.get(key)
+                if asset is None and not any(
+                    row["reason"] == "landscape-compile-failed" for row in reasons
+                ):
+                    reasons.append(
+                        blocker("child", key, "required-landscape-not-compiled")
+                    )
             blockers.extend(reasons)
             position, rotation = child_transforms[key]
             godot_units = godot_position(position, origin) if position is not None else None
             light = child_lights[key]
+            landscape = child_landscapes[key]
             presentation_status = BLOCKED_REFERENCE_STATUS
-            if asset is not None:
+            if asset is not None and presentation_kind == LANDSCAPE_PRESENTATION_KIND:
+                presentation_status = COMPILED_LANDSCAPE_REFERENCE_STATUS
+            elif asset is not None:
                 presentation_status = COMPILED_REFERENCE_STATUS
             elif light is not None:
                 presentation_status = COMPILED_LIGHT_REFERENCE_STATUS
@@ -426,6 +521,7 @@ def compile_cell(
                     "presentationKind": presentation_kind,
                     "assetId": None if asset is None else asset["assetId"],
                     "light": light,
+                    "landscape": landscape,
                     "positionGameUnits": None if position is None else list(position),
                     "positionGodotUnits": godot_units,
                     "positionGodotMeters": (
@@ -444,7 +540,7 @@ def compile_cell(
                         if rotation is None
                         else godot_rotation_quaternion(rotation)
                     ),
-                    "scale": child["scale"],
+                    "scale": child_scales[key],
                     "presentationStatus": presentation_status,
                     "readinessStatus": (
                         BLOCKED_REFERENCE_STATUS
@@ -459,6 +555,18 @@ def compile_cell(
         source_root = staging_root / "source"
         if source_root.is_dir():
             shutil.rmtree(source_root)
+        all_assets = sorted(
+            [*assets.values(), *landscape_assets.values()],
+            key=lambda row: str(row["assetId"]),
+        )
+        all_textures = sorted(
+            [*textures.values(), *landscape_textures.values()],
+            key=lambda row: str(row["textureId"]),
+        )
+        if len({str(row["assetId"]) for row in all_assets}) != len(all_assets):
+            raise ValueError("Static CELL compile repeats an asset identity")
+        if len({str(row["textureId"]) for row in all_textures}) != len(all_textures):
+            raise ValueError("Static CELL compile repeats a texture identity")
         status = BLOCKED_PRESENTATION_STATUS if blockers else PASS_PRESENTATION_STATUS
         cell_document = {
             "schema": OUTPUT_SCHEMA,
@@ -474,20 +582,20 @@ def compile_cell(
             "worldUnitsToMeters": configuration.world_units_to_meters,
             "placements": placements,
             "portals": portals,
-            "assetIds": sorted(asset["assetId"] for asset in assets.values()),
-            "textureIds": sorted(texture["textureId"] for texture in textures.values()),
+            "assetIds": [row["assetId"] for row in all_assets],
+            "textureIds": [row["textureId"] for row in all_textures],
             "blockerCount": len(blockers),
             "runtimeStatus": "pending",
             "parityStatus": "pending",
         }
         atomic_json(staging_root / CELL_FILE_NAME, cell_document)
-        atomic_bytes(staging_root / ASSETS_FILE_NAME, jsonl_bytes(list(assets.values())))
-        atomic_bytes(staging_root / TEXTURES_FILE_NAME, jsonl_bytes(list(textures.values())))
+        atomic_bytes(staging_root / ASSETS_FILE_NAME, jsonl_bytes(all_assets))
+        atomic_bytes(staging_root / TEXTURES_FILE_NAME, jsonl_bytes(all_textures))
         atomic_bytes(staging_root / BLOCKERS_FILE_NAME, jsonl_bytes(blockers))
         outputs = {
             "cell": output_descriptor(staging_root / CELL_FILE_NAME, 1),
-            "assets": output_descriptor(staging_root / ASSETS_FILE_NAME, len(assets)),
-            "textures": output_descriptor(staging_root / TEXTURES_FILE_NAME, len(textures)),
+            "assets": output_descriptor(staging_root / ASSETS_FILE_NAME, len(all_assets)),
+            "textures": output_descriptor(staging_root / TEXTURES_FILE_NAME, len(all_textures)),
             "blockers": output_descriptor(staging_root / BLOCKERS_FILE_NAME, len(blockers)),
         }
         manifest = {
@@ -511,12 +619,19 @@ def compile_cell(
                 "sourceChildren": len(children),
                 "compiledPlacements": sum(
                     row["presentationStatus"]
-                    in {COMPILED_REFERENCE_STATUS, COMPILED_LIGHT_REFERENCE_STATUS}
+                    in {
+                        COMPILED_REFERENCE_STATUS,
+                        COMPILED_LIGHT_REFERENCE_STATUS,
+                        COMPILED_LANDSCAPE_REFERENCE_STATUS,
+                    }
                     for row in placements
                 ),
                 "lights": sum(row["light"] is not None for row in placements),
-                "assets": len(assets),
-                "textures": len(textures),
+                "landscapes": sum(
+                    row["landscape"] is not None for row in placements
+                ),
+                "assets": len(all_assets),
+                "textures": len(all_textures),
                 "portals": len(portals),
                 "blockers": len(blockers),
             },

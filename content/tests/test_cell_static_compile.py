@@ -31,10 +31,8 @@ from plugin_stack import file_sha256  # noqa: E402
 from runtime_configuration import load_runtime_configuration  # noqa: E402
 from material_contract import material_bindings  # noqa: E402
 from texture_pipeline import OwnedTexturePipeline  # noqa: E402
-from validate_cell_static_compile import (  # noqa: E402
-    validate_json_descriptor,
-    validate_relative_file,
-)
+from cell_static_resource_validate import validate_relative_file  # noqa: E402
+from validate_cell_static_compile import validate_json_descriptor  # noqa: E402
 
 
 class SingleMemberArchive:
@@ -76,6 +74,10 @@ class CellStaticCompileTest(unittest.TestCase):
         self.assertEqual(
             profile["presentationPolicies"]["LIGH"]["kind"],
             "point-light",
+        )
+        self.assertEqual(
+            profile["childPresentationPolicies"]["LAND"]["kind"],
+            "landscape",
         )
 
     def test_point_light_uses_reference_radius_before_base_radius(self) -> None:

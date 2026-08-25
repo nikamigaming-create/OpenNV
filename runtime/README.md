@@ -48,6 +48,13 @@ of their exact REFR semantics are supported. The report deliberately remains
 `playable=false` and `parity=false` until the remaining CELL capability families
 and matched retail evidence pass.
 
+For the strict full-layout LAND proof, use the same command with CELL
+`FalloutNV.esm:0ddb26` and fresh output/report paths. That target resolves one
+direct LAND child into one 1,089-vertex terrain mesh, one deterministic baked
+diffuse texture, and one Godot collision mesh. Partial/default LAND layouts are
+still explicit blockers; a successful terrain load is not a weather, lighting,
+streaming, gameplay, or retail-visual-parity claim.
+
 Actor parity captures require `--cell-scene`, an actor scene/set, `--capture-root`,
 and the compact oracle artifact supplied as `--retail-state-contract`. The
 runtime rejects a missing/mismatched ACHR, shot set, pose, geometry gate, or

@@ -64,9 +64,16 @@ internal static class FlatControlsAcceptance
                 loaded.Session.AmmoInMagazine != ammoBefore - 1)
                 throw new InvalidOperationException("Configured desktop fire input was not accepted.");
 
+            var ammoAfterFire = loaded.Session.AmmoInMagazine;
+            var expectedReloadedRounds = Math.Min(
+                loaded.Session.WeaponClipSize - ammoAfterFire,
+                reserveBefore);
+            if (expectedReloadedRounds <= 0)
+                throw new InvalidOperationException(
+                    "Flat controls acceptance has no reloadable reserve rounds.");
             await PulseKeyBinding(host, input.Reload, input.Acceptance.SettleFrames);
-            if (loaded.Session.AmmoInMagazine != loaded.Session.WeaponClipSize ||
-                loaded.Session.ReserveAmmo != reserveBefore - 1)
+            if (loaded.Session.AmmoInMagazine != ammoAfterFire + expectedReloadedRounds ||
+                loaded.Session.ReserveAmmo != reserveBefore - expectedReloadedRounds)
                 throw new InvalidOperationException("Configured desktop reload input was not accepted.");
 
             await PulseKeyBinding(host, input.Save, input.Acceptance.SettleFrames);

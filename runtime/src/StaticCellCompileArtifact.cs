@@ -6,8 +6,8 @@ namespace OpenNV.Runtime;
 internal static class StaticCellCompileArtifact
 {
     private const string ManifestFileName = "manifest.json";
-    private const string ManifestSchema = "opennv-static-cell-compile-manifest/v1";
-    private const string CellSchema = "opennv-static-cell-compile/v1";
+    private const string ManifestSchema = "opennv-static-cell-compile-manifest/v2";
+    private const string CellSchema = "opennv-static-cell-compile/v2";
     private const string CompileStatus = "static-assets-compiled-runtime-pending";
     private const string RuntimePendingStatus = "pending";
 
@@ -134,10 +134,13 @@ internal static class StaticCellCompileArtifact
         var placements = cell.GetProperty("placements").GetArrayLength();
         var lights = cell.GetProperty("placements").EnumerateArray()
             .Count(placement => placement.GetProperty("light").ValueKind == JsonValueKind.Object);
+        var landscapes = cell.GetProperty("placements").EnumerateArray()
+            .Count(placement => placement.GetProperty("landscape").ValueKind == JsonValueKind.Object);
         if (counts.GetProperty("assets").GetInt32() != assets.Count ||
             counts.GetProperty("textures").GetInt32() != textures.Count ||
             counts.GetProperty("blockers").GetInt32() != blockers.Count ||
             counts.GetProperty("lights").GetInt32() != lights ||
+            counts.GetProperty("landscapes").GetInt32() != landscapes ||
             counts.GetProperty("sourceChildren").GetInt32() != placements ||
             counts.GetProperty("compiledPlacements").GetInt32() != placements ||
             cell.GetProperty("blockerCount").GetInt32() != blockers.Count)

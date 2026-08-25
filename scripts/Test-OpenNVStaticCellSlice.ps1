@@ -74,7 +74,7 @@ $report = Get-Content -LiteralPath $resolvedReport -Raw | ConvertFrom-Json
 $manifestPath = Join-Path $resolvedOutput "manifest.json"
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $manifestSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($report.schema -ne "opennv-godot-static-cell-runtime/v1" -or
+if ($report.schema -ne "opennv-godot-static-cell-runtime/v2" -or
     $report.status -ne "pass" -or
     $report.scope -ne "compiled-static-presentation" -or
     $report.playable -ne $false -or
@@ -84,6 +84,7 @@ if ($report.schema -ne "opennv-godot-static-cell-runtime/v1" -or
     $report.assets -ne $manifest.counts.assets -or
     $report.textures -ne $manifest.counts.textures -or
     $report.authoredLights -ne $manifest.counts.lights -or
+    $report.authoredLandscapes -ne $manifest.counts.landscapes -or
     $report.placements -ne $manifest.counts.compiledPlacements) {
     throw "Godot static CELL report differs from the compiled manifest."
 }
@@ -91,12 +92,13 @@ if ($report.schema -ne "opennv-godot-static-cell-runtime/v1" -or
 Write-Output (
     (
         "OPENNV_STATIC_CELL_SLICE_PASS cell={0} assets={1} textures={2} placements={3} " +
-        "lights={4} collision={5} manifestSha256={6}"
+        "lights={4} landscapes={5} collision={6} manifestSha256={7}"
     ) -f
         $report.cellFormKey,
         $report.assets,
         $report.textures,
         $report.placements,
         $report.authoredLights,
+        $report.authoredLandscapes,
         $report.collisionMeshes,
         $manifestSha256)

@@ -13,9 +13,9 @@ from pathlib import Path
 from bsa_archive import canonical_member_path
 
 
-PROFILE_SCHEMA = "opennv-static-cell-compiler-profile/v1"
-OUTPUT_SCHEMA = "opennv-static-cell-compile/v1"
-MANIFEST_SCHEMA = "opennv-static-cell-compile-manifest/v1"
+PROFILE_SCHEMA = "opennv-static-cell-compiler-profile/v2"
+OUTPUT_SCHEMA = "opennv-static-cell-compile/v2"
+MANIFEST_SCHEMA = "opennv-static-cell-compile-manifest/v2"
 MANIFEST_FILE_NAME = "manifest.json"
 CELL_FILE_NAME = "cell-static.json"
 ASSETS_FILE_NAME = "assets.jsonl"
@@ -30,13 +30,20 @@ PASS_PRESENTATION_STATUS = "static-assets-compiled-runtime-pending"
 BLOCKED_PRESENTATION_STATUS = "static-assets-compiled-with-blockers"
 COMPILED_REFERENCE_STATUS = "compiled-static-reference"
 COMPILED_LIGHT_REFERENCE_STATUS = "compiled-point-light-reference"
+COMPILED_LANDSCAPE_REFERENCE_STATUS = "compiled-landscape-reference"
 BLOCKED_REFERENCE_STATUS = "blocked"
 STATIC_RUNTIME_PENDING_REFERENCE_STATUS = "static-presentation-runtime-pending"
 STATIC_MODEL_PRESENTATION_KIND = "static-model"
 POINT_LIGHT_PRESENTATION_KIND = "point-light"
+LANDSCAPE_PRESENTATION_KIND = "landscape"
+STATIC_NIF_ASSET_KIND = "static-nif"
+LANDSCAPE_ASSET_KIND = "landscape"
+OWNED_DDS_TEXTURE_KIND = "owned-dds"
+LANDSCAPE_TEXTURE_KIND = "landscape-bake"
 PRESENTATION_KINDS = {
     STATIC_MODEL_PRESENTATION_KIND,
     POINT_LIGHT_PRESENTATION_KIND,
+    LANDSCAPE_PRESENTATION_KIND,
 }
 LIGHT_COLOR_COMPONENTS = 3
 BYTE_CHANNEL_MINIMUM = 0
@@ -44,7 +51,9 @@ BYTE_CHANNEL_MAXIMUM = 255
 STATIC_COMPILER_SOURCE_NAMES = (
     "actor_material.py",
     "bsa_archive.py",
+    "cell_landscape_contract.py",
     "cell_scene.py",
+    "cell_landscape_compile.py",
     "cell_static_compile.py",
     "cell_static_contract.py",
     "cell_static_source.py",
@@ -52,8 +61,12 @@ STATIC_COMPILER_SOURCE_NAMES = (
     "export_static_nif_gltf.py",
     "gltf_io.py",
     "havok_collision_gltf.py",
+    "landscape_catalog.py",
+    "landscape_gltf.py",
+    "landscape_stack.py",
     "material_contract.py",
     "owned_archive_stack.py",
+    "plugin_records.py",
     "plugin_stack.py",
     "runtime_configuration.py",
     "texture_pipeline.py",
@@ -65,8 +78,10 @@ PROFILE_REQUIRED_FIELDS = {
     "id",
     "archiveRecipe",
     "supportedChildRecordTypes",
+    "baseLinkedChildRecordTypes",
     "supportedBaseRecordTypes",
     "presentationPolicies",
+    "childPresentationPolicies",
     "modelExtension",
     "exportStrict",
     "compileTextures",
@@ -116,6 +131,13 @@ def load_profile(path: Path) -> dict[str, object]:
             or len(values) != len(set(values))
         ):
             raise ValueError(f"Static CELL compiler profile has invalid {field}")
+    base_linked_children = document.get("baseLinkedChildRecordTypes")
+    if (
+        not isinstance(base_linked_children, list)
+        or base_linked_children != sorted(set(base_linked_children))
+        or not set(base_linked_children) <= set(document["supportedChildRecordTypes"])
+    ):
+        raise ValueError("Static CELL compiler base-linked child types are invalid")
     policies = document.get("presentationPolicies")
     if not isinstance(policies, dict) or set(policies) != set(
         document["supportedBaseRecordTypes"]
@@ -142,6 +164,31 @@ def load_profile(path: Path) -> dict[str, object]:
         ):
             raise ValueError(
                 f"Static CELL compiler reference subrecords are invalid: {record_type}"
+            )
+    child_policies = document.get("childPresentationPolicies")
+    expected_direct_children = set(document["supportedChildRecordTypes"]) - set(
+        base_linked_children
+    )
+    if not isinstance(child_policies, dict) or set(child_policies) != expected_direct_children:
+        raise ValueError("Static CELL compiler child presentation policies differ")
+    for record_type, policy in child_policies.items():
+        if (
+            not isinstance(policy, dict)
+            or set(policy) != {"kind", "supportedChildSubrecords"}
+            or policy.get("kind") not in PRESENTATION_KINDS
+        ):
+            raise ValueError(
+                f"Static CELL compiler child presentation policy is invalid: {record_type}"
+            )
+        subrecords = policy.get("supportedChildSubrecords")
+        if (
+            not isinstance(subrecords, list)
+            or not subrecords
+            or subrecords != sorted(set(subrecords))
+            or any(not isinstance(value, str) or not value for value in subrecords)
+        ):
+            raise ValueError(
+                f"Static CELL compiler child subrecords are invalid: {record_type}"
             )
     extension = document.get("modelExtension")
     if (
@@ -195,7 +242,7 @@ def load_profile(path: Path) -> dict[str, object]:
 
 
 def default_profile_path() -> Path:
-    return _recipes_root() / "fnv-static-cell-compiler-v1.json"
+    return _recipes_root() / "fnv-static-cell-compiler-v2.json"
 
 
 def default_plan_recipe_path() -> Path:
@@ -211,6 +258,16 @@ def presentation_policy(
     record_type: str,
 ) -> dict[str, object] | None:
     policies = profile["presentationPolicies"]
+    assert isinstance(policies, dict)
+    policy = policies.get(record_type)
+    return policy if isinstance(policy, dict) else None
+
+
+def child_presentation_policy(
+    profile: dict[str, object],
+    record_type: str,
+) -> dict[str, object] | None:
+    policies = profile["childPresentationPolicies"]
     assert isinstance(policies, dict)
     policy = policies.get(record_type)
     return policy if isinstance(policy, dict) else None

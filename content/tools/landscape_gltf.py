@@ -8,7 +8,7 @@ import os
 import struct
 import sys
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Protocol
 
 from PIL import Image
 
@@ -23,7 +23,7 @@ from gltf_io import (
     pack_floats,
     sha256_bytes,
 )
-from landscape_catalog import LAND_VERTEX_SIDE, Landscape, LandscapeCatalog
+from landscape_catalog import LAND_VERTEX_SIDE, Landscape, LandscapeIdentity
 from runtime_configuration import ContentCompilerConfiguration
 from texture_pipeline import TextureArtifact, TexturePipeline, file_sha256
 
@@ -35,6 +35,12 @@ LAND_QUADRANT_LAST_VERTEX = LAND_QUADRANT_VERTEX_SIDE - 1
 BYTE_CHANNEL_MAXIMUM = 255.0
 EXTERIOR_CELL_SIZE_GAME_UNITS = 4096.0
 LAND_VERTEX_SPACING_GAME_UNITS = 128.0
+
+
+class LandscapeTextureResolver(Protocol):
+    def diffuse_path(self, texture_form_id: int) -> str: ...
+
+    def texture_contract(self, texture_form_id: int) -> dict[str, object]: ...
 
 
 def compiler_provenance() -> dict[str, str]:
@@ -179,17 +185,21 @@ def _atomic_png(path: Path, image: Image.Image, compression_level: int) -> None:
 
 def export_landscape_gltf(
     landscape: Landscape,
-    catalog: LandscapeCatalog,
+    catalog: LandscapeTextureResolver,
     cell_coordinates: tuple[int, int],
     origin_game_units: tuple[float, float, float],
     texture_pipeline: TexturePipeline,
     output_root: Path,
     compiler_configuration: ContentCompilerConfiguration,
+    identity: LandscapeIdentity | None = None,
+    texture_output_root: Path | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
     source_hash = sha256_bytes(landscape.source_bytes)
-    asset_id = hashlib.sha256(
-        f"LAND:{landscape.form_id:08x}:{source_hash}".encode()
-    ).hexdigest()[:compiler_configuration.asset_id_hex_characters]
+    asset_id = landscape_asset_id(
+        landscape,
+        identity,
+        compiler_configuration,
+    )
     diffuse_paths = {
         layer.texture_form_id: canonical_texture_path(catalog.diffuse_path(layer.texture_form_id))
         for layer in (*landscape.base_layers, *landscape.alpha_layers)
@@ -197,49 +207,49 @@ def export_landscape_gltf(
     texture_artifacts: dict[int, TextureArtifact] = {
         form_id: texture_pipeline.prepare(path) for form_id, path in diffuse_paths.items()
     }
-    prepared_images = {
-        form_id: Image.open(artifact.png_path).convert("RGB")
-        for form_id, artifact in texture_artifacts.items()
-    }
+    prepared_images = {}
+    for form_id, artifact in texture_artifacts.items():
+        with Image.open(artifact.png_path) as image:
+            prepared_images[form_id] = image.convert("RGB")
     baked = bake_landscape_diffuse(
         landscape,
         prepared_images.__getitem__,
         compiler_configuration,
     )
-    baked_id = hashlib.sha256(
-        f"LAND-BAKED:{landscape.form_id:08x}:{source_hash}".encode()
-    ).hexdigest()[:compiler_configuration.asset_id_hex_characters]
-    baked_path = output_root / f"{baked_id}.png"
+    baked_id = landscape_baked_texture_id(
+        landscape,
+        identity,
+        compiler_configuration,
+    )
+    baked_path = (texture_output_root or output_root) / f"{baked_id}.png"
     _atomic_png(baked_path, baked, compiler_configuration.png_compression_level)
     baked_sources = [
         {
-            "ltexFormId": f"{form_id:08x}",
+            **catalog.texture_contract(form_id),
             "requestedPath": diffuse_paths[form_id],
+            "archivePath": texture_artifacts[form_id].archive_path,
             "sourceSha256": texture_artifacts[form_id].source_sha256,
+            "sourceBytes": texture_artifacts[form_id].source_bytes,
+            "sourceArchive": texture_artifacts[form_id].source_archive,
+            "sourceArchiveSha256": texture_artifacts[form_id].source_archive_sha256,
         }
         for form_id in sorted(texture_artifacts)
     ]
-    baked_source_hash = sha256_bytes(
-        landscape.source_bytes
-        + "".join(row["sourceSha256"] for row in baked_sources).encode()
-    )
+    baked_source_hash = landscape_baked_source_hash(landscape, baked_sources)
     baked_manifest = {
         "id": baked_id,
-        "requestedPath": f"generated\\landscape\\{landscape.form_id:08x}-diffuse.png",
+        "requestedPath": landscape_baked_requested_path(asset_id),
         "archivePath": None,
         "sourceSha256": baked_source_hash,
+        "sourceBytes": len(landscape.source_bytes)
+        + sum(int(row["sourceBytes"]) for row in baked_sources),
         "png": str(baked_path.resolve()),
         "pngSha256": file_sha256(baked_path),
         "width": baked.width,
         "height": baked.height,
         "normalGreenInverted": False,
         "sources": baked_sources,
-        "bakeContract": {
-            "quadrants": "0=lower-left,1=lower-right,2=upper-left,3=upper-right",
-            "tileRepeatsPerCell": compiler_configuration.landscape_tile_repeats_per_cell,
-            "alphaInterpolation": "17x17-bilinear",
-            "alphaOrder": "ascending-ATXT-layer",
-        },
+        "bakeContract": landscape_bake_contract(compiler_configuration),
     }
 
     positions, normals, uvs, colors, triangles = landscape_geometry(
@@ -284,7 +294,7 @@ def export_landscape_gltf(
         value_type="SCALAR",
         target=GL_ELEMENT_ARRAY_BUFFER,
     )
-    surface_name = f"LAND_{landscape.form_id:08x}"
+    surface_name = f"LAND_{asset_id}"
     model_path = output_root / f"{asset_id}.gltf"
     sidecar_path = output_root / f"{asset_id}.opennv.json"
     buffer_name = model_path.with_suffix(".bin").name
@@ -324,13 +334,16 @@ def export_landscape_gltf(
     atomic_write(model_path.with_suffix(".bin"), binary_bytes)
     atomic_write(model_path, gltf_bytes)
     compiler = compiler_provenance()
+    logical_path = landscape_logical_path(landscape, identity)
     sidecar = {
         "schema": SCHEMA,
         "status": "geometry-only",
         "source": {
-            "logicalPath": (
-                f"falloutnv.esm\\worldspace-{landscape.worldspace_form_id:08x}\\"
-                f"cell-{landscape.cell_form_id:08x}\\land-{landscape.form_id:08x}"
+            "logicalPath": logical_path,
+            "formKey": None if identity is None else identity.form_key,
+            "cellFormKey": None if identity is None else identity.cell_form_key,
+            "worldspaceFormKey": (
+                None if identity is None else identity.worldspace_form_key
             ),
             "bytes": len(landscape.source_bytes),
             "sha256": source_hash,
@@ -375,23 +388,102 @@ def export_landscape_gltf(
             "source": "LAND-height-grid",
             "blockTypes": ["LAND"],
         },
-        "materials": [{
-            "surfaceIndex": 0,
-            "name": surface_name,
-            "diffuseTextureId": baked_id,
-            "normalTextureId": None,
-            "emissiveTextureId": None,
-            "environmentTextureId": None,
-            "environmentMaskTextureId": None,
-            "environmentMapScale": 1.0,
-            "emissiveColor": [0.0, 0.0, 0.0],
-            "emissiveReplace": False,
-            "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
-            "roughness": 1.0,
-            "alphaContract": {"mode": "OPAQUE", "cutoff": None},
-            "vertexColorMode": "multiply",
-            "doubleSided": False,
-            "unshaded": False,
-        }],
+        "materials": landscape_materials(surface_name, baked_id),
     }
     return asset, baked_manifest
+
+
+def landscape_asset_id(
+    landscape: Landscape,
+    identity: LandscapeIdentity | None,
+    compiler_configuration: ContentCompilerConfiguration,
+) -> str:
+    source_identity = (
+        identity.form_key if identity is not None else f"{landscape.form_id:08x}"
+    )
+    source_hash = sha256_bytes(landscape.source_bytes)
+    return hashlib.sha256(
+        f"LAND:{source_identity}:{source_hash}".encode()
+    ).hexdigest()[:compiler_configuration.asset_id_hex_characters]
+
+
+def landscape_logical_path(
+    landscape: Landscape,
+    identity: LandscapeIdentity | None,
+) -> str:
+    return (
+        f"{identity.source_plugin}\\worldspace-{identity.worldspace_form_key}\\"
+        f"cell-{identity.cell_form_key}\\land-{identity.form_key}"
+        if identity is not None
+        else (
+            f"falloutnv.esm\\worldspace-{landscape.worldspace_form_id:08x}\\"
+            f"cell-{landscape.cell_form_id:08x}\\land-{landscape.form_id:08x}"
+        )
+    )
+
+
+def landscape_baked_texture_id(
+    landscape: Landscape,
+    identity: LandscapeIdentity | None,
+    compiler_configuration: ContentCompilerConfiguration,
+) -> str:
+    source_identity = (
+        identity.form_key if identity is not None else f"{landscape.form_id:08x}"
+    )
+    source_hash = sha256_bytes(landscape.source_bytes)
+    return hashlib.sha256(
+        f"LAND-BAKED:{source_identity}:{source_hash}".encode()
+    ).hexdigest()[:compiler_configuration.asset_id_hex_characters]
+
+
+def landscape_baked_requested_path(asset_id: str) -> str:
+    return f"generated\\landscape\\{asset_id}-diffuse.png"
+
+
+def landscape_baked_source_hash(
+    landscape: Landscape,
+    sources: list[dict[str, object]],
+) -> str:
+    return sha256_bytes(
+        landscape.source_bytes
+        + json.dumps(
+            sources,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+
+
+def landscape_bake_contract(
+    compiler_configuration: ContentCompilerConfiguration,
+) -> dict[str, object]:
+    return {
+        "quadrants": "0=lower-left,1=lower-right,2=upper-left,3=upper-right",
+        "tileRepeatsPerCell": compiler_configuration.landscape_tile_repeats_per_cell,
+        "alphaInterpolation": "17x17-bilinear",
+        "alphaOrder": "ascending-ATXT-layer",
+    }
+
+
+def landscape_materials(
+    surface_name: str,
+    diffuse_texture_id: str,
+) -> list[dict[str, object]]:
+    return [{
+        "surfaceIndex": 0,
+        "name": surface_name,
+        "diffuseTextureId": diffuse_texture_id,
+        "normalTextureId": None,
+        "emissiveTextureId": None,
+        "environmentTextureId": None,
+        "environmentMaskTextureId": None,
+        "environmentMapScale": 1.0,
+        "emissiveColor": [0.0, 0.0, 0.0],
+        "emissiveReplace": False,
+        "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
+        "roughness": 1.0,
+        "alphaContract": {"mode": "OPAQUE", "cutoff": None},
+        "vertexColorMode": "multiply",
+        "doubleSided": False,
+        "unshaded": False,
+    }]
