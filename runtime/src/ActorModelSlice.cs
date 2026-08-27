@@ -6,7 +6,7 @@ namespace OpenNV.Runtime;
 
 internal static class ActorModelSlice
 {
-    private const string ActorSchema = "opennv-actor-gltf/v3";
+    private const string ActorSchema = "opennv-actor-gltf/v4";
     private const string WeaponSurfaceRole = "weapon";
     private const string AuthoredPrnRootMarkerDisposition =
         "omit-authored-prn-root-marker";
@@ -26,6 +26,7 @@ internal static class ActorModelSlice
         if (root.GetProperty("schema").GetString() != ActorSchema ||
             root.GetProperty("status").GetString() != "skinned-animated")
             throw new InvalidOperationException($"Unexpected OpenNV actor sidecar: {resolvedSidecar}");
+        VerifyFaceGenAnimationContract(root, configuration, resolvedSidecar);
         var outputs = root.GetProperty("outputs");
         VerifyHash(resolvedModel, outputs.GetProperty("gltf").GetProperty("sha256").GetString()!);
         var binary = Path.Combine(Path.GetDirectoryName(resolvedModel)!, outputs.GetProperty("buffer").GetProperty("file").GetString()!);
@@ -252,6 +253,30 @@ internal static class ActorModelSlice
             var retailVisualNodePath = skinned
                 ? null
                 : OptionalSurfaceText(surface, "retailVisualNodePath", sidecarPath);
+            var declaredMorphTargets = surface.GetProperty("faceGenMorphs")
+                .GetProperty("targetNames")
+                .EnumerateArray()
+                .Select(value => value.GetString()!)
+                .ToArray();
+            var runtimeMorphCount = matches[0].GetBlendShapeCount();
+            if (runtimeMorphCount != declaredMorphTargets.Length)
+                throw new InvalidOperationException(
+                    $"Actor FaceGen target count disagrees for {role}/{shape} in {sidecarPath}: " +
+                    $"declared={declaredMorphTargets.Length} runtime={runtimeMorphCount}.");
+            if (runtimeMorphCount > 0)
+            {
+                if (matches[0].Mesh is not ArrayMesh arrayMesh)
+                    throw new InvalidOperationException(
+                        $"Actor FaceGen surface is not an ArrayMesh: {role}/{shape} in {sidecarPath}.");
+                var runtimeMorphTargets = Enumerable.Range(0, runtimeMorphCount)
+                    .Select(index => arrayMesh.GetBlendShapeName(index).ToString())
+                    .ToArray();
+                if (!runtimeMorphTargets.SequenceEqual(declaredMorphTargets, StringComparer.Ordinal))
+                    throw new InvalidOperationException(
+                        $"Actor FaceGen target names disagree for {role}/{shape} in {sidecarPath}: " +
+                        $"declared=[{string.Join(",", declaredMorphTargets)}] " +
+                        $"runtime=[{string.Join(",", runtimeMorphTargets)}].");
+            }
             RetailActorMaterial.Apply(
                 matches[0],
                 surface,
@@ -268,12 +293,37 @@ internal static class ActorModelSlice
                 sourceFormId,
                 sourceSlot,
                 retailGeometryName,
-                retailVisualNodePath));
+                retailVisualNodePath,
+                declaredMorphTargets));
         }
         if (declaredRuntimeNames.Count != importedByName.Count)
             throw new InvalidOperationException(
                 $"Actor import contains a surface absent from its sidecar: {sidecarPath}.");
         return loaded;
+    }
+
+    private static void VerifyFaceGenAnimationContract(
+        JsonElement sidecar,
+        RuntimeConfiguration configuration,
+        string sidecarPath)
+    {
+        var source = sidecar.GetProperty("faceGenAnimation");
+        var contract = configuration.ActorCompiler.FaceGenAnimation;
+        if (source.GetProperty("schema").GetString() != contract.Schema)
+            throw new InvalidOperationException(
+                $"Actor FaceGen animation schema differs in {sidecarPath}.");
+        var lipTargets = source.GetProperty("lipTargetNames").EnumerateArray()
+            .Select(value => value.GetString()!)
+            .ToArray();
+        if (!lipTargets.SequenceEqual(contract.Lip.TargetNames, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                $"Actor FaceGen LIP target order differs in {sidecarPath}.");
+        var morphTargets = source.GetProperty("morphTargetNames").EnumerateArray()
+            .Select(value => value.ValueKind == JsonValueKind.Null ? null : value.GetString())
+            .ToArray();
+        if (!morphTargets.SequenceEqual(contract.Lip.MorphTargetNames, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                $"Actor FaceGen morph binding order differs in {sidecarPath}.");
     }
 
     private static string RequireSurfaceText(JsonElement surface, string property, string sidecarPath)
@@ -621,7 +671,8 @@ internal static class ActorModelSlice
         string? SourceFormId,
         uint? SourceSlot,
         string? RetailGeometryName,
-        string? RetailVisualNodePath);
+        string? RetailVisualNodePath,
+        IReadOnlyList<string> FaceGenMorphTargets);
 
     internal readonly record struct OmittedSurface(
         string Role,

@@ -442,6 +442,14 @@ def prepare_actor(
         logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
         return meshes.extract(logical_path).data
 
+    def facegen_tri(path: str) -> dict[str, object]:
+        companion = model_companion(path, ".tri")
+        canonical = canonical_member_path(companion)
+        logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
+        if logical_path not in meshes.members:
+            return {}
+        return {"tri_path": logical_path, "tri_payload": meshes.extract(logical_path).data}
+
     outfit_payloads = [
         (str(outfit_model), mesh(str(outfit_model)))
         for outfit_model in outfit_models
@@ -594,6 +602,7 @@ def prepare_actor(
             mesh(head_model),
             egm_path=head_egm,
             egm_payload=mesh(head_egm),
+            **facegen_tri(head_model),
             diffuse_override=head_diffuse_path,
             normal_override=head_normal_path,
             facegen_detail_path=face_detail_path,
@@ -618,6 +627,7 @@ def prepare_actor(
                 mesh(path),
                 egm_path=model_companion(path, ".egm"),
                 egm_payload=mesh(model_companion(path, ".egm")),
+                **facegen_tri(path),
                 diffuse_override=texture_member(eyes.texture_path) if role.startswith("eye-") else None,
                 source_form_id=source_identity[0],
                 source_slot=source_identity[1],
@@ -641,6 +651,7 @@ def prepare_actor(
             mesh(hair.model_path),
             egm_path=hair_egm,
             egm_payload=mesh(hair_egm),
+            **facegen_tri(hair.model_path),
             selected_shape=hair_shape,
             tint_rgb=tuple(value / BYTE_CHANNEL_MAXIMUM for value in actor.hair_color_rgba[:3]),
             source_form_id=hair_identity[0],
@@ -663,6 +674,7 @@ def prepare_actor(
                 mesh(part.model_path),
                 egm_path=model_companion(part.model_path, ".egm"),
                 egm_payload=mesh(model_companion(part.model_path, ".egm")),
+                **facegen_tri(part.model_path),
                 diffuse_override=(
                     retail_surface_texture(
                         retail_presentation.appearance,

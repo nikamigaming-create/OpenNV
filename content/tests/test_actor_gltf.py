@@ -11,6 +11,7 @@ from actor_gltf import (  # noqa: E402
     ActorComponent,
     NifFormat,
     RetailRenderPart,
+    _append_facegen_morph_targets,
     _append_runtime_surface_node,
     _bake_actor_shape_transform,
     _is_authored_prn_root_marker,
@@ -28,6 +29,12 @@ from actor_gltf import (  # noqa: E402
     _visible_creature_geometry_names,
     actor_animation_translations,
 )
+from facegen_animation import (  # noqa: E402
+    FaceGenDifferentialMorph,
+    FaceGenStaticMorph,
+    FaceGenTri,
+)
+from gltf_io import BufferBuilder  # noqa: E402
 from actor_material import (  # noqa: E402
     FACEGEN_MATERIAL_SCHEMA,
     GLTF_UNLIT_EXTENSION,
@@ -705,6 +712,38 @@ class ActorGltfTest(unittest.TestCase):
             _unsupported_actor_geometry(Document()),
             (("NiParticleSystem", "PCloud02Smoke"),),
         )
+
+    def test_facegen_tri_exports_authored_named_position_and_normal_targets(self):
+        tri = FaceGenTri(
+            3,
+            ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+            ((0, 1, 2),),
+            (),
+            (
+                FaceGenDifferentialMorph(
+                    "Aah",
+                    1.0,
+                    ((0.0, 0.0, 0.1), (0.0, 0.0, 0.1), (0.0, 0.0, 0.1)),
+                ),
+            ),
+            (FaceGenStaticMorph("BlinkLeft", ((2, (0.0, 1.0, 0.2)),)),),
+        )
+        builder = BufferBuilder()
+        targets, manifest = _append_facegen_morph_targets(
+            tri,
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            [(0.0, 1.0, 0.0)] * 3,
+            [(0, 1, 2)],
+            object(),
+            False,
+            builder,
+            load_runtime_configuration().content_compiler,
+        )
+
+        self.assertEqual(manifest["targetNames"], ["Aah", "BlinkLeft"])
+        self.assertEqual(len(targets), 2)
+        self.assertTrue(all(set(target) == {"POSITION", "NORMAL"} for target in targets))
+        self.assertEqual(len(builder.accessors), 4)
 
 
 if __name__ == "__main__":

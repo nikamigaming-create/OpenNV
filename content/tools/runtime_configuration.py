@@ -17,6 +17,7 @@ from typing import Mapping
 RUNTIME_CONFIGURATION_SCHEMA = "opennv-runtime-configuration/v1"
 RUNTIME_CONFIGURATION_FILE = "open-nv-runtime-v1.json"
 FACEGEN_MATERIAL_SCHEMA = "opennv-retail-facegen-material/v2"
+FACEGEN_ANIMATION_SCHEMA = "opennv-retail-facegen-animation/v1"
 SRGB_TRANSFER_SCHEMA = "opennv-srgb-transfer/v1"
 RETAIL_IMAGE_SPACE_SCHEMA = "opennv-retail-image-space-composition/v2"
 RETAIL_GRASS_COMPILER_SCHEMA = "opennv-retail-grass-compiler-contract/v1"
@@ -71,6 +72,7 @@ class ContentCompilerConfiguration:
     landscape_tile_repeats_per_cell: int
     speed_tree: SpeedTreeCompilerConfiguration
     retail_grass: RetailGrassCompilerConfiguration
+    facegen_animation: FaceGenAnimationConfiguration
     non_presentation_base_form_ids: frozenset[int]
 
 
@@ -164,6 +166,59 @@ class RetailGrassMeshConfiguration:
 class SpeedTreeCompilerConfiguration:
     billboard_texture: str
     billboard_alpha_cutoff: float
+
+
+@dataclass(frozen=True)
+class FaceGenLipConfiguration:
+    byte_order: str
+    version: int
+    file_header_fields: tuple[str, ...]
+    decoded_header_fields: tuple[str, ...]
+    integer_bytes: int
+    value_bytes: int
+    run_marker: int
+    run_length_bytes: int
+    stored_size_bias_bytes: int
+    implicit_trailing_zero_bytes: int
+    compressed_flag: int
+    big_endian_flag: int
+    uncompressed_marker: int
+    sample_rate_hz: float
+    interpolation: str
+    zero_outside_authored_range: bool
+    maximum_decoded_bytes: int
+    maximum_frames: int
+    maximum_absolute_weight: float
+    target_names: tuple[str, ...]
+    morph_target_names: tuple[str | None, ...]
+
+
+@dataclass(frozen=True)
+class FaceGenTriConfiguration:
+    signature: str
+    byte_order: str
+    header_fields: tuple[str, ...]
+    integer_bytes: int
+    scalar_bytes: int
+    delta_component_bytes: int
+    reserved_bytes: int
+    labelled_vertex_prefix_bytes: int
+    labelled_surface_prefix_bytes: int
+    uv_extension_flag: int
+    position_components: int
+    uv_components: int
+    triangle_indices: int
+    quad_indices: int
+    export_morph_kinds: tuple[str, ...]
+    target_name_collision_policy: str
+    normal_target_policy: str
+
+
+@dataclass(frozen=True)
+class FaceGenAnimationConfiguration:
+    schema: str
+    lip: FaceGenLipConfiguration
+    tri: FaceGenTriConfiguration
 
 
 @dataclass(frozen=True)
@@ -304,6 +359,9 @@ class RuntimeConfiguration:
             retail_grass=_retail_grass_configuration(
                 _object(source, "retailGrass")
             ),
+            facegen_animation=_facegen_animation_configuration(
+                _object(_object(self.document, "actorCompiler"), "faceGenAnimation")
+            ),
             non_presentation_base_form_ids=frozenset(
                 int(str(value), FORM_ID_RADIX)
                 for value in non_presentation_form_ids
@@ -314,6 +372,7 @@ class RuntimeConfiguration:
                 "non_presentation_base_form_ids",
                 "retail_grass",
                 "speed_tree",
+                "facegen_animation",
             }:
                 continue
             if value <= 0:
@@ -1070,6 +1129,151 @@ def _retail_grass_configuration(
     ):
         raise ValueError("OpenNV retail grass material identity is empty")
     return configuration
+
+
+def _facegen_animation_configuration(
+    source: dict[str, object],
+) -> FaceGenAnimationConfiguration:
+    provenance = _object(source, "provenance")
+    for field in ("classification", "status", "source", "evidence"):
+        if not str(provenance.get(field, "")).strip():
+            raise ValueError(f"OpenNV FaceGen animation provenance {field} is empty")
+    if source.get("schema") != FACEGEN_ANIMATION_SCHEMA:
+        raise ValueError("OpenNV FaceGen animation schema is invalid")
+
+    lip_source = _object(source, "lip")
+    tri_source = _object(source, "tri")
+
+    def names(parent: dict[str, object], field: str) -> tuple[str, ...]:
+        value = parent.get(field)
+        if (
+            not isinstance(value, list)
+            or not value
+            or any(not isinstance(row, str) or not row.strip() for row in value)
+        ):
+            raise ValueError(f"OpenNV FaceGen {field} is empty or invalid")
+        result = tuple(value)
+        if len(set(result)) != len(result):
+            raise ValueError(f"OpenNV FaceGen {field} contains duplicate names")
+        return result
+
+    def optional_names(parent: dict[str, object], field: str) -> tuple[str | None, ...]:
+        value = parent.get(field)
+        if not isinstance(value, list) or not value or any(
+            row is not None and (not isinstance(row, str) or not row.strip())
+            for row in value
+        ):
+            raise ValueError(f"OpenNV FaceGen {field} is empty or invalid")
+        result = tuple(value)
+        authored = tuple(row for row in result if row is not None)
+        if not authored or len(set(authored)) != len(authored):
+            raise ValueError(
+                f"OpenNV FaceGen {field} has no authored names or contains duplicates"
+            )
+        return result
+
+    zero_outside_authored_range = lip_source.get("zeroOutsideAuthoredRange")
+    if not isinstance(zero_outside_authored_range, bool):
+        raise ValueError("OpenNV FaceGen LIP range policy is invalid")
+
+    lip = FaceGenLipConfiguration(
+        byte_order=str(lip_source["byteOrder"]),
+        version=int(lip_source["version"]),
+        file_header_fields=names(lip_source, "fileHeaderFields"),
+        decoded_header_fields=names(lip_source, "decodedHeaderFields"),
+        integer_bytes=int(lip_source["integerBytes"]),
+        value_bytes=int(lip_source["valueBytes"]),
+        run_marker=int(lip_source["runMarker"]),
+        run_length_bytes=int(lip_source["runLengthBytes"]),
+        stored_size_bias_bytes=int(lip_source["storedSizeBiasBytes"]),
+        implicit_trailing_zero_bytes=int(lip_source["implicitTrailingZeroBytes"]),
+        compressed_flag=int(lip_source["compressedFlag"]),
+        big_endian_flag=int(lip_source["bigEndianFlag"]),
+        uncompressed_marker=int(lip_source["uncompressedMarker"]),
+        sample_rate_hz=float(lip_source["sampleRateHz"]),
+        interpolation=str(lip_source["interpolation"]),
+        zero_outside_authored_range=zero_outside_authored_range,
+        maximum_decoded_bytes=int(lip_source["maximumDecodedBytes"]),
+        maximum_frames=int(lip_source["maximumFrames"]),
+        maximum_absolute_weight=float(lip_source["maximumAbsoluteWeight"]),
+        target_names=names(lip_source, "targetNames"),
+        morph_target_names=optional_names(lip_source, "morphTargetNames"),
+    )
+    positive_lip_values = (
+        lip.version,
+        lip.integer_bytes,
+        lip.value_bytes,
+        lip.run_length_bytes,
+        lip.stored_size_bias_bytes,
+        lip.compressed_flag,
+        lip.big_endian_flag,
+        lip.uncompressed_marker,
+        lip.sample_rate_hz,
+        lip.maximum_decoded_bytes,
+        lip.maximum_frames,
+        lip.maximum_absolute_weight,
+    )
+    if any(not math.isfinite(float(value)) or float(value) <= 0.0 for value in positive_lip_values):
+        raise ValueError("OpenNV FaceGen LIP positive values are invalid")
+    if (
+        lip.byte_order != "little"
+        or lip.interpolation != "linear"
+        or not lip.zero_outside_authored_range
+        or lip.implicit_trailing_zero_bytes < 0
+        or not 0 <= lip.run_marker <= BYTE_CHANNEL_MAXIMUM
+        or not 0 <= lip.uncompressed_marker <= BYTE_CHANNEL_MAXIMUM
+        or lip.compressed_flag & lip.big_endian_flag
+        or len(lip.morph_target_names) != len(lip.target_names)
+    ):
+        raise ValueError("OpenNV FaceGen LIP contract is unsupported")
+
+    tri = FaceGenTriConfiguration(
+        signature=str(tri_source["signature"]),
+        byte_order=str(tri_source["byteOrder"]),
+        header_fields=names(tri_source, "headerFields"),
+        integer_bytes=int(tri_source["integerBytes"]),
+        scalar_bytes=int(tri_source["scalarBytes"]),
+        delta_component_bytes=int(tri_source["deltaComponentBytes"]),
+        reserved_bytes=int(tri_source["reservedBytes"]),
+        labelled_vertex_prefix_bytes=int(tri_source["labelledVertexPrefixBytes"]),
+        labelled_surface_prefix_bytes=int(tri_source["labelledSurfacePrefixBytes"]),
+        uv_extension_flag=int(tri_source["uvExtensionFlag"]),
+        position_components=int(tri_source["positionComponents"]),
+        uv_components=int(tri_source["uvComponents"]),
+        triangle_indices=int(tri_source["triangleIndices"]),
+        quad_indices=int(tri_source["quadIndices"]),
+        export_morph_kinds=names(tri_source, "exportMorphKinds"),
+        target_name_collision_policy=str(tri_source["targetNameCollisionPolicy"]),
+        normal_target_policy=str(tri_source["normalTargetPolicy"]),
+    )
+    positive_tri_values = (
+        tri.integer_bytes,
+        tri.scalar_bytes,
+        tri.delta_component_bytes,
+        tri.uv_extension_flag,
+        tri.position_components,
+        tri.uv_components,
+        tri.triangle_indices,
+        tri.quad_indices,
+    )
+    if any(value <= 0 for value in positive_tri_values) or any(
+        value < 0
+        for value in (
+            tri.reserved_bytes,
+            tri.labelled_vertex_prefix_bytes,
+            tri.labelled_surface_prefix_bytes,
+        )
+    ):
+        raise ValueError("OpenNV FaceGen TRI sizes are invalid")
+    if (
+        not tri.signature
+        or tri.byte_order != "little"
+        or set(tri.export_morph_kinds) != {"differential", "static"}
+        or tri.target_name_collision_policy != "reject"
+        or tri.normal_target_policy != "recompute-from-authored-topology"
+    ):
+        raise ValueError("OpenNV FaceGen TRI contract is unsupported")
+    return FaceGenAnimationConfiguration(str(source["schema"]), lip, tri)
 
 
 def _speed_tree_configuration(

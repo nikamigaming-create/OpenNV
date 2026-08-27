@@ -146,7 +146,7 @@ owned-data manifests and this configuration.
 | `legalAssets` | Asset-free local-import/cache policy plus the configured owned master/archive names. |
 | `tooling` | The single recipe-file registry used by first-party compilers, corpora, capture plans, and gallery preparation. |
 | `contentCompiler` | Deterministic output, authored-animation sampling, material translation, LAND layering, retail-grass reconstruction, and explicit SpeedTree billboard policy. Remaining renderer gaps stay parity-failing. |
-| `actorCompiler` | Record-type animation and rigid-attachment profiles. Actor identity, meshes, textures, FaceGen, placement, and KF bytes come from the owned graph; the section does not claim unresolved retail runtime package behavior. |
+| `actorCompiler` | Record-type animation, rigid-attachment, FaceGen material, and FaceGen LIP/TRI format/binding profiles. Actor identity, meshes, textures, morph bytes, voice/LIP pairs, placement, and KF bytes come from the owned graph; unresolved head-controller and expression/mood behavior remains explicitly unbound. |
 
 ## Gallery composition, cache sealing, and complexity
 

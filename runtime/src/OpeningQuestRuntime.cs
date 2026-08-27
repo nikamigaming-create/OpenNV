@@ -61,7 +61,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private ColorRect _imageSpaceFade = null!;
     private AudioStreamPlayer _dialogueVoice = null!;
     private Action? _dialogueVoiceCompletion;
-    private double _dialogueVoiceRemainingSeconds;
+    private FaceGenMorphController _dialogueFace = null!;
+    private FaceGenLipAnimation? _activeDialogueLip;
+    private string? _activeDialogueInfoFormId;
+    private int _activeDialogueResponseIndex;
+    private bool _dialogueLipSampleLogged;
     private int _dialoguePlaybackGeneration;
     private int _stage;
     private int _generation;
@@ -117,6 +121,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _specialValues[value.FormId] = _flow.Character.SpecialInitial;
         ResolveSceneRoles();
         ResolveGuideActor();
+        _dialogueFace = new FaceGenMorphController(
+            _guideActor.Actor,
+            configuration.ActorCompiler.FaceGenAnimation.Lip);
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
 
         _viewport = new Control { Name = "OpeningFlowViewport" };
@@ -161,7 +168,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         UpdatePlayerAnimation(delta);
         UpdateImageSpaceModifiers(delta);
         UpdateGuideActor(delta);
-        UpdateDialogueVoice(delta);
+        UpdateDialogueVoice();
         if (_activeModal is not null)
             return;
         if (_timerTargetStage is { } timerTarget)
@@ -1459,9 +1466,15 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         if (!double.IsFinite(durationSeconds) || durationSeconds <= 0.0)
             throw new InvalidOperationException(
                 $"Owned dialogue voice has no duration: {response.Voice.LogicalPath}");
+        var lip = FaceGenLipAnimation.Load(
+            response.Lip.SourcePath,
+            _configuration.ActorCompiler.FaceGenAnimation.Lip);
         var playbackGeneration = ++_dialoguePlaybackGeneration;
         _dialogueVoice.Stream = stream;
-        _dialogueVoiceRemainingSeconds = durationSeconds;
+        _activeDialogueLip = lip;
+        _activeDialogueInfoFormId = infoFormId;
+        _activeDialogueResponseIndex = response.Index;
+        _dialogueLipSampleLogged = false;
         _dialogueVoiceCompletion = () =>
         {
             if (playbackGeneration != _dialoguePlaybackGeneration ||
@@ -1475,15 +1488,28 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             $"OPENNV_NEW_GAME_DIALOGUE_VOICE info={infoFormId} " +
             $"line={response.Index} duration={durationSeconds:F3} " +
             $"voice={response.Voice.LogicalPath} lip={response.Lip.LogicalPath}");
+        GD.Print(
+            $"OPENNV_NEW_GAME_DIALOGUE_LIP_LOADED info={infoFormId} " +
+            $"line={response.Index} frames={lip.FrameCount} startFrame={lip.StartFrame} " +
+            $"metadata=0x{lip.MetadataWord:x8}");
     }
 
-    private void UpdateDialogueVoice(double delta)
+    private void UpdateDialogueVoice()
     {
-        if (_dialogueVoiceCompletion is null)
+        if (_dialogueVoiceCompletion is null ||
+            _activeDialogueLip is null ||
+            !_dialogueVoice.Playing)
             return;
-        _dialogueVoiceRemainingSeconds -= delta;
-        if (_dialogueVoiceRemainingSeconds <= 0.0)
-            CompleteDialogueVoice();
+        var seconds = _dialogueVoice.GetPlaybackPosition();
+        var dominant = _dialogueFace.Apply(_activeDialogueLip, seconds);
+        if (!_dialogueLipSampleLogged && dominant.Value != 0.0f)
+        {
+            _dialogueLipSampleLogged = true;
+            GD.Print(
+                $"OPENNV_NEW_GAME_DIALOGUE_LIP_SAMPLE info={_activeDialogueInfoFormId} " +
+                $"line={_activeDialogueResponseIndex} seconds={seconds:F3} " +
+                $"target={dominant.Target} value={dominant.Value:F6}");
+        }
     }
 
     private void CompleteDialogueVoice()
@@ -1496,7 +1522,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private void StopDialogueVoice()
     {
         _dialogueVoiceCompletion = null;
-        _dialogueVoiceRemainingSeconds = 0.0;
+        _dialogueFace?.Clear();
+        _activeDialogueLip = null;
+        _activeDialogueInfoFormId = null;
+        _activeDialogueResponseIndex = 0;
+        _dialogueLipSampleLogged = false;
         _dialoguePlaybackGeneration++;
         if (_dialogueVoice is not null && _dialogueVoice.Playing)
             _dialogueVoice.Stop();

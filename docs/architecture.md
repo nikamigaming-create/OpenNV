@@ -100,12 +100,15 @@ flowchart LR
 ```
 
 `actor_catalog.py` owns these record relationships and preserves authored
-placement/enable state; `facegen.py` owns deterministic FaceGen geometry and
-body-texture math. Head base, normal, NPC detail, and tone inputs remain
-separate until the runtime FaceGen material pass. This
+placement/enable state; `facegen.py` owns deterministic FaceGen identity geometry
+and body-texture math, while `facegen_animation.py` strictly decodes the owned
+LIP/TRI animation formats. Head base, normal, NPC detail, and tone inputs remain
+separate until the runtime FaceGen material pass. Authored TRI differential and
+static targets remain named glTF morphs, and runtime speech samples those targets
+from the paired voice stream's playback clock. This
 keeps record parsing independent from the whole-game load-order/review corpus,
 `prepare_actor.py`, which still resolves one hash-pinned compiled slice, and
-`actor_gltf.py`, which owns only the skinned glTF,
+`actor_gltf.py`, which owns only the skinned glTF, FaceGen targets,
 material-flag, alpha, bind, and animation translation. None of those files
 creates a Godot node or claims that a rendered actor matches retail.
 
@@ -211,7 +214,8 @@ require a headset session.
 | `actor_review_differential.py` | Exact retail/Godot sample pairing, hash verification, objective image/structure gates, side-by-side stills, retail-timed motion clip, and one fail-closed ledger row | Importing assets, altering capture state, or human approval |
 | `actor_review_coverage.py` | Exhaustive join of every corpus appearance and placement to unique differential evidence with aggregate missing/failed/unreviewed counts | Sampling, visual approval, or changing evidence verdicts |
 | `facegen.py` | Pure EGM/EGT geometry morph and retail body-texture composition primitives | Record selection, head-material composition, or runtime nodes |
-| `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance and stable per-surface runtime identities, with an explicit gate against silently omitted render geometry | Record selection, placement, particle simulation, or runtime behavior |
+| `facegen_animation.py` | Strict configuration-driven owned LIP/TRI decoding, interpolation, and named differential/static morph contracts | Voice selection, Godot nodes, expression policy, or controller guesses |
+| `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF, including exact sibling TRI morph targets, provenance, and stable per-surface runtime identities, with an explicit gate against silently omitted render geometry | Record selection, placement, particle simulation, or runtime behavior |
 | `first_person_rig.py` | Hash-verified legal left/right first-person hand artifacts plus skeleton/pose/frame contract | Runtime tracking or weapon behavior |
 | `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, alpha, and separate FaceGen sampler contracts | Geometry, records, or runtime lighting |
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |

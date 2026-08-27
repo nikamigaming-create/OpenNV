@@ -34,6 +34,7 @@ from gltf_io import (
     pack_floats,
 )
 from facegen import apply_geometry_morphs
+from facegen_animation import FaceGenTri, decode_tri
 from nif_decoder import decode_nif
 from texture_pipeline import decode_dds
 from actor_material import (
@@ -44,7 +45,7 @@ from actor_material import (
 from runtime_configuration import ContentCompilerConfiguration
 
 
-ACTOR_GLTF_SCHEMA = "opennv-actor-gltf/v3"
+ACTOR_GLTF_SCHEMA = "opennv-actor-gltf/v4"
 RUNTIME_SURFACE_NODE_PREFIX = "ActorSurface_"
 RIGID_ATTACHMENT_NIF_ROOT = "nif-root-skeleton-node"
 RIGID_ATTACHMENT_NIF_PARENT = "nif-prn-skeleton-node"
@@ -97,6 +98,8 @@ class ActorComponent:
     model_payload: bytes
     egm_path: str | None = None
     egm_payload: bytes | None = None
+    tri_path: str | None = None
+    tri_payload: bytes | None = None
     bake_shape_transform: bool = False
     selected_shape: str | None = None
     diffuse_override: str | None = None
@@ -705,6 +708,22 @@ def export_actor_gltf(
             "nonAccumOriginGodotUnits": list(nonaccum_origin) if nonaccum_origin else None,
         },
         "animations": animation_rows,
+        "faceGenAnimation": {
+            "schema": compiler.facegen_animation.schema,
+            "lipTargetNames": list(compiler.facegen_animation.lip.target_names),
+            "morphTargetNames": list(
+                compiler.facegen_animation.lip.morph_target_names
+            ),
+            "unboundLipTargets": [
+                name
+                for name, morph_name in zip(
+                    compiler.facegen_animation.lip.target_names,
+                    compiler.facegen_animation.lip.morph_target_names,
+                    strict=True,
+                )
+                if morph_name is None
+            ],
+        },
         "outputs": {
             "gltf": {"file": gltf_path.name, "sha256": hashlib.sha256(gltf_bytes).hexdigest()},
             "buffer": {"file": binary_path.name, "sha256": hashlib.sha256(binary_bytes).hexdigest()},
@@ -718,6 +737,14 @@ def export_actor_gltf(
             "animations": len(animations),
             "animationChannels": animation_channels,
             "animated": bool(animations) and animation_channels > 0,
+            "faceGenTriSurfaces": sum(
+                surface["faceGenMorphs"]["source"] == "exact-owned-tri"
+                for surface in surfaces
+            ),
+            "faceGenMorphTargets": sum(
+                len(surface["faceGenMorphs"]["targetNames"])
+                for surface in surfaces
+            ),
         },
         "surfaces": surfaces,
         "omittedSurfaces": omitted_surfaces,
@@ -1132,6 +1159,20 @@ def _append_shape(
     if not mesh.uv_sets and requires_uv:
         raise ValueError(f"Textured actor shape has no UV0: {_text(shape.name)}")
     raw_positions = [(float(value.x), float(value.y), float(value.z)) for value in mesh.vertices]
+    if (component.tri_path is None) != (component.tri_payload is None):
+        raise ValueError(
+            f"Actor component {component.role} has incomplete FaceGen TRI provenance"
+        )
+    facegen_tri = (
+        decode_tri(component.tri_payload, compiler.facegen_animation)
+        if component.tri_payload is not None
+        else None
+    )
+    if facegen_tri is not None and facegen_tri.vertex_count != vertex_count:
+        raise ValueError(
+            "Actor FaceGen TRI vertex count differs from its exact sibling NIF: "
+            f"{component.role} nif={vertex_count} tri={facegen_tri.vertex_count}"
+        )
     morphed = False
     if component.egm_payload is not None:
         raw_positions = apply_geometry_morphs(
@@ -1210,6 +1251,16 @@ def _append_shape(
             pack_floats(normals), component_type=GL_FLOAT, count=vertex_count, value_type="VEC3", target=GL_ARRAY_BUFFER
         ),
     }
+    morph_targets, morph_manifest = _append_facegen_morph_targets(
+        facegen_tri,
+        positions,
+        normals,
+        triangles,
+        shape_transform,
+        transform_shape,
+        builder,
+        compiler,
+    )
     tangent_source = "absent"
     if mesh.uv_sets:
         uvs = [(float(value.u), float(value.v)) for value in mesh.uv_sets[0]]
@@ -1265,12 +1316,20 @@ def _append_shape(
     material, material_row = _material(component, shape, textures, compiler)
     materials.append(material)
     mesh_index = len(meshes)
-    meshes.append(
-        {
-            "name": f"{component.role}_{runtime_shape_name}",
-            "primitives": [{"attributes": attributes, "indices": index_accessor, "material": material_index}],
-        }
-    )
+    primitive: dict[str, object] = {
+        "attributes": attributes,
+        "indices": index_accessor,
+        "material": material_index,
+    }
+    mesh_document: dict[str, object] = {
+        "name": f"{component.role}_{runtime_shape_name}",
+        "primitives": [primitive],
+    }
+    if morph_targets:
+        primitive["targets"] = morph_targets
+        mesh_document["weights"] = [0.0 for _target in morph_targets]
+        mesh_document["extras"] = {"targetNames": morph_manifest["targetNames"]}
+    meshes.append(mesh_document)
     return mesh_index, skin_index, {
         "role": component.role,
         "sourceFormId": component.source_form_id,
@@ -1279,6 +1338,8 @@ def _append_shape(
         "modelSha256": hashlib.sha256(component.model_payload).hexdigest(),
         "egmPath": component.egm_path,
         "egmSha256": hashlib.sha256(component.egm_payload).hexdigest() if component.egm_payload else None,
+        "triPath": component.tri_path,
+        "triSha256": hashlib.sha256(component.tri_payload).hexdigest() if component.tri_payload else None,
         "shape": runtime_shape_name,
         "sourceShape": source_shape_name,
         "sourceShapeTranslationGameUnits": [
@@ -1291,6 +1352,7 @@ def _append_shape(
         "uvSets": len(mesh.uv_sets),
         "tangentSource": tangent_source,
         "morphed": morphed,
+        "faceGenMorphs": morph_manifest,
         "skinned": skin_index is not None,
         "attachmentSource": "nif-skin" if skin_index is not None else None,
         "retailGeometryName": (
@@ -1307,6 +1369,100 @@ def _append_shape(
         "rigidShapeTransformBaked": rigid_to_head and transform_shape,
         "vertexColorsEnabled": vertex_colors_enabled,
         "material": material_row,
+    }
+
+
+def _append_facegen_morph_targets(
+    facegen_tri: FaceGenTri | None,
+    positions: list[tuple[float, float, float]],
+    normals: list[tuple[float, float, float]],
+    triangles: list[tuple[int, int, int]],
+    shape_transform: object,
+    transform_shape: bool,
+    builder: BufferBuilder,
+    compiler: ContentCompilerConfiguration,
+) -> tuple[list[dict[str, int]], dict[str, object]]:
+    if facegen_tri is None:
+        return [], {
+            "source": "absent",
+            "targetNames": [],
+            "differentialTargets": [],
+            "staticTargets": [],
+        }
+    contract = compiler.facegen_animation.tri
+    source_targets: list[
+        tuple[str, str, tuple[tuple[float, float, float], ...]]
+    ] = []
+    if "differential" in contract.export_morph_kinds:
+        source_targets.extend(
+            (morph.name, "differential", morph.deltas)
+            for morph in facegen_tri.differential_morphs
+        )
+    if "static" in contract.export_morph_kinds:
+        for morph in facegen_tri.static_morphs:
+            deltas = [
+                tuple(0.0 for _axis in range(contract.position_components))
+                for _vertex in facegen_tri.base_vertices
+            ]
+            for vertex_index, replacement in morph.replacements:
+                deltas[vertex_index] = tuple(
+                    replacement[axis] - facegen_tri.base_vertices[vertex_index][axis]
+                    for axis in range(contract.position_components)
+                )
+            source_targets.append((morph.name, "static", tuple(deltas)))
+
+    target_documents = []
+    target_names = []
+    differential_names = []
+    static_names = []
+    for name, kind, source_deltas in source_targets:
+        if len(source_deltas) != len(positions):
+            raise ValueError(
+                f"Actor FaceGen morph {name!r} differs from its NIF vertex count"
+            )
+        deltas = [
+            _transform_delta(delta, shape_transform)
+            if transform_shape
+            else _convert_vector(delta)
+            for delta in source_deltas
+        ]
+        morphed_positions = [
+            tuple(position[axis] + delta[axis] for axis in range(contract.position_components))
+            for position, delta in zip(positions, deltas, strict=True)
+        ]
+        morphed_normals = _recompute_normals(morphed_positions, triangles)
+        normal_deltas = [
+            tuple(
+                morphed[axis] - base[axis]
+                for axis in range(contract.position_components)
+            )
+            for base, morphed in zip(normals, morphed_normals, strict=True)
+        ]
+        target_documents.append(
+            {
+                "POSITION": builder.add(
+                    pack_floats(deltas),
+                    component_type=GL_FLOAT,
+                    count=len(deltas),
+                    value_type="VEC3",
+                    target=GL_ARRAY_BUFFER,
+                ),
+                "NORMAL": builder.add(
+                    pack_floats(normal_deltas),
+                    component_type=GL_FLOAT,
+                    count=len(normal_deltas),
+                    value_type="VEC3",
+                    target=GL_ARRAY_BUFFER,
+                ),
+            }
+        )
+        target_names.append(name)
+        (differential_names if kind == "differential" else static_names).append(name)
+    return target_documents, {
+        "source": "exact-owned-tri",
+        "targetNames": target_names,
+        "differentialTargets": differential_names,
+        "staticTargets": static_names,
     }
 
 
@@ -2119,6 +2275,17 @@ def _transform_position(value: tuple[float, float, float], matrix: object) -> tu
 def _transform_direction(value: tuple[float, float, float], matrix: object) -> tuple[float, float, float]:
     x, y, z = value
     return _convert_direction(
+        (
+            x * matrix.m_11 + y * matrix.m_21 + z * matrix.m_31,
+            x * matrix.m_12 + y * matrix.m_22 + z * matrix.m_32,
+            x * matrix.m_13 + y * matrix.m_23 + z * matrix.m_33,
+        )
+    )
+
+
+def _transform_delta(value: tuple[float, float, float], matrix: object) -> tuple[float, float, float]:
+    x, y, z = value
+    return _convert_vector(
         (
             x * matrix.m_11 + y * matrix.m_21 + z * matrix.m_31,
             x * matrix.m_12 + y * matrix.m_22 + z * matrix.m_32,

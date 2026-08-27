@@ -109,6 +109,7 @@ internal sealed record RuntimeConfiguration(
             ContentCompiler.SpeedTree.Provenance,
             ContentCompiler.RetailGrass.Provenance,
             ActorCompiler.Provenance,
+            ActorCompiler.FaceGenAnimation.Provenance,
             ActorCompiler.RigidAttachment.Provenance,
         })
             provenance.Validate();
@@ -569,6 +570,7 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(transfer.Exponent, nameof(transfer.Exponent));
         if (string.IsNullOrWhiteSpace(transfer.Source))
             throw new InvalidOperationException("Actor FaceGen albedo transfer source must not be empty.");
+        ActorCompiler.FaceGenAnimation.Validate();
         ActorCompiler.AnimationProfiles.Validate();
         ActorCompiler.RigidAttachment.Validate();
     }
@@ -1690,8 +1692,145 @@ internal static class RetailGrassHash
 internal sealed record ActorCompilerConfiguration(
     ConfigurationProvenance Provenance,
     FaceGenMaterialConfiguration FaceGenMaterial,
+    FaceGenAnimationConfiguration FaceGenAnimation,
     ActorAnimationProfilesConfiguration AnimationProfiles,
     ActorRigidAttachmentConfiguration RigidAttachment);
+
+internal sealed record FaceGenAnimationConfiguration(
+    string Schema,
+    ConfigurationProvenance Provenance,
+    FaceGenLipConfiguration Lip,
+    FaceGenTriConfiguration Tri)
+{
+    internal const string ExpectedSchema = "opennv-retail-facegen-animation/v1";
+
+    internal void Validate()
+    {
+        if (Schema != ExpectedSchema)
+            throw new InvalidOperationException("Actor FaceGen animation schema is invalid.");
+        Lip.Validate();
+        Tri.Validate();
+    }
+}
+
+internal sealed record FaceGenLipConfiguration(
+    string ByteOrder,
+    int Version,
+    string[] FileHeaderFields,
+    string[] DecodedHeaderFields,
+    int IntegerBytes,
+    int ValueBytes,
+    int RunMarker,
+    int RunLengthBytes,
+    int StoredSizeBiasBytes,
+    int ImplicitTrailingZeroBytes,
+    int CompressedFlag,
+    int BigEndianFlag,
+    int UncompressedMarker,
+    double SampleRateHz,
+    string Interpolation,
+    bool ZeroOutsideAuthoredRange,
+    int MaximumDecodedBytes,
+    int MaximumFrames,
+    float MaximumAbsoluteWeight,
+    string[] TargetNames,
+    string?[] MorphTargetNames)
+{
+    internal void Validate()
+    {
+        var positiveValues = new double[]
+        {
+            Version,
+            IntegerBytes,
+            ValueBytes,
+            RunLengthBytes,
+            StoredSizeBiasBytes,
+            CompressedFlag,
+            BigEndianFlag,
+            UncompressedMarker,
+            SampleRateHz,
+            MaximumDecodedBytes,
+            MaximumFrames,
+            MaximumAbsoluteWeight,
+        };
+        if (positiveValues.Any(value => !double.IsFinite(value) || value <= 0.0) ||
+            ByteOrder != "little" ||
+            Interpolation != "linear" ||
+            !ZeroOutsideAuthoredRange ||
+            ImplicitTrailingZeroBytes < 0 ||
+            RunMarker < byte.MinValue || RunMarker > byte.MaxValue ||
+            UncompressedMarker < byte.MinValue || UncompressedMarker > byte.MaxValue ||
+            (CompressedFlag & BigEndianFlag) != 0 ||
+            !UniqueNames(FileHeaderFields) ||
+            !UniqueNames(DecodedHeaderFields) ||
+            !UniqueNames(TargetNames) ||
+            MorphTargetNames is null ||
+            MorphTargetNames.Length != TargetNames.Length ||
+            !MorphTargetNames.Any(value => value is not null) ||
+            MorphTargetNames.Any(value => value is not null && string.IsNullOrWhiteSpace(value)) ||
+            MorphTargetNames.Where(value => value is not null)
+                .Distinct(StringComparer.Ordinal).Count() !=
+                MorphTargetNames.Count(value => value is not null))
+            throw new InvalidOperationException("Actor FaceGen LIP contract is invalid.");
+    }
+
+    private static bool UniqueNames(string[]? values) =>
+        values is { Length: > 0 } &&
+        values.All(value => !string.IsNullOrWhiteSpace(value)) &&
+        values.Distinct(StringComparer.Ordinal).Count() == values.Length;
+}
+
+internal sealed record FaceGenTriConfiguration(
+    string Signature,
+    string ByteOrder,
+    string[] HeaderFields,
+    int IntegerBytes,
+    int ScalarBytes,
+    int DeltaComponentBytes,
+    int ReservedBytes,
+    int LabelledVertexPrefixBytes,
+    int LabelledSurfacePrefixBytes,
+    int UvExtensionFlag,
+    int PositionComponents,
+    int UvComponents,
+    int TriangleIndices,
+    int QuadIndices,
+    string[] ExportMorphKinds,
+    string TargetNameCollisionPolicy,
+    string NormalTargetPolicy)
+{
+    internal void Validate()
+    {
+        var positiveValues = new[]
+        {
+            IntegerBytes,
+            ScalarBytes,
+            DeltaComponentBytes,
+            UvExtensionFlag,
+            PositionComponents,
+            UvComponents,
+            TriangleIndices,
+            QuadIndices,
+        };
+        var expectedKinds = new HashSet<string>(
+            new[] { "differential", "static" },
+            StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(Signature) ||
+            ByteOrder != "little" ||
+            positiveValues.Any(value => value <= 0) ||
+            ReservedBytes < 0 ||
+            LabelledVertexPrefixBytes < 0 ||
+            LabelledSurfacePrefixBytes < 0 ||
+            HeaderFields is not { Length: > 0 } ||
+            HeaderFields.Any(string.IsNullOrWhiteSpace) ||
+            HeaderFields.Distinct(StringComparer.Ordinal).Count() != HeaderFields.Length ||
+            ExportMorphKinds is null ||
+            !expectedKinds.SetEquals(ExportMorphKinds) ||
+            TargetNameCollisionPolicy != "reject" ||
+            NormalTargetPolicy != "recompute-from-authored-topology")
+            throw new InvalidOperationException("Actor FaceGen TRI contract is invalid.");
+    }
+}
 
 internal sealed record ActorRigidAttachmentConfiguration(
     ConfigurationProvenance Provenance,

@@ -368,6 +368,13 @@ def prepare_humanoid_review(
     def mesh(path: str) -> ExtractedMember:
         return archives.extract(_mesh_member(path))
 
+    def facegen_tri(path: str) -> dict[str, object]:
+        companion_path = _mesh_member(model_companion(path, ".tri"))
+        if companion_path not in archives.members:
+            return {}
+        companion = archives.extract(companion_path)
+        return {"tri_path": companion.logical_path, "tri_payload": companion.data}
+
     skeleton = mesh(model.skeleton_path)
     head_model = head_models[RACE_HEAD_MODEL_INDEX]
     head_texture = head_textures[RACE_HEAD_MODEL_INDEX]
@@ -425,6 +432,7 @@ def prepare_humanoid_review(
             head.data,
             egm_path=head_egm.logical_path,
             egm_payload=head_egm.data,
+            **facegen_tri(head_model),
             diffuse_override=head_diffuse_path,
             normal_override=head_normal_path,
             facegen_detail_path=face_detail_path,
@@ -453,6 +461,7 @@ def prepare_humanoid_review(
                 member.data,
                 egm_path=egm.logical_path,
                 egm_payload=egm.data,
+                **facegen_tri(path),
                 diffuse_override=(texture_member(eyes.texture_path) if role.startswith("eye-") else None),
                 source_form_id=source_form,
                 source_slot=NO_SOURCE_SLOT,
@@ -472,6 +481,7 @@ def prepare_humanoid_review(
             hair_member.data,
             egm_path=hair_egm.logical_path,
             egm_payload=hair_egm.data,
+            **facegen_tri(hair.model_path),
             selected_shape=selected_hair_shape,
             tint_rgb=hair_color,
             source_form_id=_runtime_source_form(str(contract["assembly"]["hair"]["runtimeFormId"])),
@@ -491,6 +501,7 @@ def prepare_humanoid_review(
                 member.data,
                 egm_path=egm.logical_path,
                 egm_payload=egm.data,
+                **facegen_tri(part.model_path),
                 tint_rgb=hair_color,
                 source_form_id=base_runtime_form,
                 source_slot=NO_SOURCE_SLOT,

@@ -160,6 +160,14 @@ caused by teeth and tongue showing through a transparent face. Retail draw
 vertices also match OpenNV's face, mouth, upper/lower teeth, and tongue geometry
 within floating-point conversion tolerance.
 
+The owned-data actor compiler now also joins every exact sibling `FRTRI003`
+member and exports all authored differential and static morphs with their source
+names. Paired Fallout LIP files are decoded under the versioned 33-track contract
+and sampled from actual voice playback time. The corpus-backed `Eee`-to-`Ee`
+binding is declared once in configuration; the three head-controller tracks stay
+unbound until their transform publication contract is observed. Generic jaw
+motion, audio-amplitude proxies, and per-actor facial tuning are prohibited.
+
 That is not a Sunny pass. The retained r13 Godot report is
 `captured-provisional-light-direction`: exact render-cache skin palettes pass,
 but the named-node pose diagnostic reaches 8.56 projected pixels in its worst
