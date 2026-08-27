@@ -48,6 +48,20 @@ class OwnedArchiveStackTest(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             stack.extract("meshes/missing.nif")
 
+    def test_manifest_retains_recipe_identity(self) -> None:
+        base = FakeArchive("Base.bsa", {"sound\\voice.ogg": b"voice"})
+        stack = OwnedArchiveStack(
+            (OwnedArchive("Base.bsa", base.archive, "a" * 64, 5, base),),
+            "synthetic-audio-stack/v1",
+            "synthetic-audio-recipe-v1",
+            "b" * 64,
+        )
+
+        manifest = stack.manifest()
+
+        self.assertEqual(manifest["recipe"]["id"], "synthetic-audio-recipe-v1")
+        self.assertEqual(manifest["recipe"]["sha256"], "b" * 64)
+
 
 if __name__ == "__main__":
     unittest.main()

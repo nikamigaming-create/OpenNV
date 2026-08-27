@@ -1,0 +1,17 @@
+{
+  "schema": "opennv-owned-audio-archive-stack/v1",
+  "id": "fnv-base-audio-archives-v1",
+  "scope": "Base Fallout: New Vegas music, sound effects, dialogue voice, and lip data used by FalloutNV.esm; DLC audio remains outside this base-game stack and requires plugin-owned archive associations.",
+  "resolutionPolicy": "last-declared-containing-member-wins",
+  "provenance": {
+    "classification": "retail-archive-load-order-contract",
+    "status": "base-game-owned-audio",
+    "source": "FalloutNV 1.4.0.525 base-game archive association and update order",
+    "evidence": "Every private audio artifact records the archive hash and the winning archive member selected from this ordered stack."
+  },
+  "archives": [
+    { "file": "Fallout - Sound.bsa" },
+    { "file": "Fallout - Voices1.bsa" },
+    { "file": "Update.bsa" }
+  ]
+}

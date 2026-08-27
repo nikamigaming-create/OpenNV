@@ -59,6 +59,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private Control? _activeModal;
     private Label _objective = null!;
     private ColorRect _imageSpaceFade = null!;
+    private AudioStreamPlayer _dialogueVoice = null!;
+    private Action? _dialogueVoiceCompletion;
+    private double _dialogueVoiceRemainingSeconds;
+    private int _dialoguePlaybackGeneration;
     private int _stage;
     private int _generation;
     private int? _timerTargetStage;
@@ -104,6 +108,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _configuration = configuration;
         _font = OpeningUiTheme.BuildFont(opening.Font);
         Name = "OwnedNewGameFlow";
+
+        _dialogueVoice = new AudioStreamPlayer { Name = "OwnedDialogueVoice" };
+        _dialogueVoice.Finished += CompleteDialogueVoice;
+        AddChild(_dialogueVoice);
 
         foreach (var value in _flow.Character.SpecialValues)
             _specialValues[value.FormId] = _flow.Character.SpecialInitial;
@@ -153,6 +161,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         UpdatePlayerAnimation(delta);
         UpdateImageSpaceModifiers(delta);
         UpdateGuideActor(delta);
+        UpdateDialogueVoice(delta);
         if (_activeModal is not null)
             return;
         if (_timerTargetStage is { } timerTarget)
@@ -1406,27 +1415,91 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         if (generation != _generation)
             return;
-        if (lineIndex >= info.Lines.Count)
+        if (lineIndex >= info.Responses.Count)
         {
             ExecuteInfoCommands(info, topic, completed, generation, 0);
             return;
         }
+        var response = info.Responses[lineIndex];
         var content = OpenPanel(MenuRect("name"));
-        var guide = NewLabel(_flow.SceneRoles["guideActor"].DisplayName);
+        var guide = NewLabel(
+            _flow.SceneRoles[_flow.DialogueVoice.SpeakerRole].DisplayName);
         guide.HorizontalAlignment = HorizontalAlignment.Right;
         content.AddChild(guide);
-        var line = NewButton(info.Lines[lineIndex]);
+        var line = NewButton(response.Text);
         line.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         line.Alignment = HorizontalAlignment.Left;
         line.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        line.Pressed += () => PlayInfo(
-            info,
-            topic,
-            completed,
-            generation,
-            lineIndex + 1);
+        line.Pressed += CompleteDialogueVoice;
         content.AddChild(line);
+        StartDialogueVoice(
+            response,
+            info.FormId,
+            generation,
+            () => PlayInfo(
+                info,
+                topic,
+                completed,
+                generation,
+                lineIndex + 1));
         Callable.From(line.GrabFocus).CallDeferred();
+    }
+
+    private void StartDialogueVoice(
+        OpeningDialogueResponse response,
+        string infoFormId,
+        int flowGeneration,
+        Action completed)
+    {
+        StopDialogueVoice();
+        var stream = AudioStreamOggVorbis.LoadFromFile(response.Voice.SourcePath)
+            ?? throw new InvalidOperationException(
+                $"Owned dialogue voice could not be decoded: {response.Voice.LogicalPath}");
+        var durationSeconds = stream.GetLength();
+        if (!double.IsFinite(durationSeconds) || durationSeconds <= 0.0)
+            throw new InvalidOperationException(
+                $"Owned dialogue voice has no duration: {response.Voice.LogicalPath}");
+        var playbackGeneration = ++_dialoguePlaybackGeneration;
+        _dialogueVoice.Stream = stream;
+        _dialogueVoiceRemainingSeconds = durationSeconds;
+        _dialogueVoiceCompletion = () =>
+        {
+            if (playbackGeneration != _dialoguePlaybackGeneration ||
+                flowGeneration != _generation)
+                return;
+            StopDialogueVoice();
+            completed();
+        };
+        _dialogueVoice.Play();
+        GD.Print(
+            $"OPENNV_NEW_GAME_DIALOGUE_VOICE info={infoFormId} " +
+            $"line={response.Index} duration={durationSeconds:F3} " +
+            $"voice={response.Voice.LogicalPath} lip={response.Lip.LogicalPath}");
+    }
+
+    private void UpdateDialogueVoice(double delta)
+    {
+        if (_dialogueVoiceCompletion is null)
+            return;
+        _dialogueVoiceRemainingSeconds -= delta;
+        if (_dialogueVoiceRemainingSeconds <= 0.0)
+            CompleteDialogueVoice();
+    }
+
+    private void CompleteDialogueVoice()
+    {
+        var completed = _dialogueVoiceCompletion;
+        _dialogueVoiceCompletion = null;
+        completed?.Invoke();
+    }
+
+    private void StopDialogueVoice()
+    {
+        _dialogueVoiceCompletion = null;
+        _dialogueVoiceRemainingSeconds = 0.0;
+        _dialoguePlaybackGeneration++;
+        if (_dialogueVoice is not null && _dialogueVoice.Playing)
+            _dialogueVoice.Stop();
     }
 
     private void ExecuteInfoCommands(
@@ -1690,6 +1763,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void CloseModal(bool restoreControls = true)
     {
+        StopDialogueVoice();
         if (_activeModal is not null)
         {
             _activeModal.Visible = false;

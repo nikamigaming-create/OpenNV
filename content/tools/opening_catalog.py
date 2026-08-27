@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Iterable, Iterator
 
 from actor_gltf import sample_root_motion, sample_transform_animation
-from bsa_archive import BsaArchive, canonical_member_path
+from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from owned_archive_stack import OwnedArchiveStack
@@ -83,6 +83,13 @@ FONT_GLYPH_U1_INDEX = 3
 FONT_GLYPH_V1_INDEX = 6
 DIALOGUE_FLAG_GOODBYE = 0x0001
 DIALOGUE_FLAG_SAY_ONCE = 0x0004
+VOICE_MEMBER_ROOT = "sound\\voice"
+VOICE_AUDIO_EXTENSION = ".ogg"
+VOICE_LIP_EXTENSION = ".lip"
+VOICE_RESPONSE_SUFFIX_PATTERN = re.compile(
+    r"_(?P<form>[0-9a-f]{8})_(?P<index>[1-9][0-9]*)\.ogg$",
+    re.IGNORECASE,
+)
 GAMEBRYO_FONT_HEADER_BYTES = 296
 GAMEBRYO_FONT_GLYPH_COUNT = 256
 GAMEBRYO_FONT_ATLAS_NAME_OFFSET = 12
@@ -158,6 +165,7 @@ class FlowSourceCatalog:
     packages_by_editor: dict[str, Record]
     packages_by_form: dict[int, Record]
     actors_by_form: dict[int, Record]
+    voice_types_by_form: dict[int, str]
     references_by_form: dict[int, ReferenceTransformSource]
     image_space_modifiers_by_editor: dict[str, Record]
     needed: dict[int, dict[str, object]]
@@ -1987,6 +1995,7 @@ def _scan_flow_sources(
     packages_by_editor: dict[str, Record] = {}
     packages_by_form: dict[int, Record] = {}
     actors_by_form: dict[int, Record] = {}
+    voice_types_by_form: dict[int, str] = {}
     references_by_form: dict[int, ReferenceTransformSource] = {}
     image_space_modifiers_by_editor: dict[str, Record] = {}
     needed: dict[int, dict[str, object]] = {}
@@ -2056,6 +2065,17 @@ def _scan_flow_sources(
                     f"Owned opening actor base is duplicated: {record.form_id:08x}"
                 )
             actors_by_form[record.form_id] = record
+        if record.signature == "VTYP":
+            editor_id = _catalog_text(subrecords, "EDID")
+            if not editor_id:
+                raise ValueError(
+                    f"Owned opening voice type has no editor ID: {record.form_id:08x}"
+                )
+            if record.form_id in voice_types_by_form:
+                raise ValueError(
+                    f"Owned opening voice type is duplicated: {record.form_id:08x}"
+                )
+            voice_types_by_form[record.form_id] = editor_id
         if record.signature in {"REFR", "ACHR", "ACRE"}:
             transform_values = [
                 subrecord.data
@@ -2092,7 +2112,7 @@ def _scan_flow_sources(
                         "formId": form_id_text(_subrecord_form_id(subrecord.data) or 0),
                     }
                     for subrecord in subrecords
-                    if subrecord.signature in {"NAME", "SCRI"}
+                    if subrecord.signature in {"NAME", "SCRI", "VTCK"}
                     and _subrecord_form_id(subrecord.data)
                 ],
             }
@@ -2108,6 +2128,7 @@ def _scan_flow_sources(
         packages_by_editor,
         packages_by_form,
         actors_by_form,
+        voice_types_by_form,
         references_by_form,
         image_space_modifiers_by_editor,
         needed,
@@ -2420,6 +2441,145 @@ def _compile_dialogue(
         "psychologyRootInfo": psychology_root,
         "psychologyStartStage": psychology_start_stage,
         "outroTopicFormId": outro["formId"],
+    }
+
+
+def _prepare_dialogue_asset(
+    member: ExtractedMember,
+    cache_root: Path,
+) -> dict[str, object]:
+    source = cache_root / "source" / Path(member.logical_path.replace("\\", "/"))
+    if not source.is_file() or file_sha256(source) != member.sha256:
+        atomic_bytes(source, member.data)
+    if member.source_archive is None or member.source_archive_sha256 is None:
+        raise ValueError(
+            f"Owned dialogue asset has no archive provenance: {member.logical_path}"
+        )
+    return {
+        "logicalPath": member.logical_path,
+        "source": str(source.resolve()),
+        "bytes": len(member.data),
+        "sha256": member.sha256,
+        "sourceArchive": member.source_archive,
+        "sourceArchiveSha256": member.source_archive_sha256,
+    }
+
+
+def _compile_dialogue_voice(
+    dialogue: dict[str, object],
+    flow: dict[str, object],
+    roles: list[dict[str, object]],
+    sources: FlowSourceCatalog,
+    audio_archives: OwnedArchiveStack,
+    master_path: Path,
+    cache_root: Path,
+) -> None:
+    rules = flow.get("dialogueVoice")
+    if not isinstance(rules, dict):
+        raise ValueError("Owned opening dialogue voice policy is absent")
+    speaker_role = str(rules.get("speakerRole", ""))
+    role_matches = [role for role in roles if role["role"] == speaker_role]
+    if len(role_matches) != 1:
+        raise ValueError(
+            f"Owned opening dialogue speaker role is ambiguous: {speaker_role}"
+        )
+    role = role_matches[0]
+    base_form_id = int(str(role["baseFormId"]), FORM_ID_RADIX)
+    base = sources.needed[base_form_id]
+    voice_links = [
+        link["formId"]
+        for link in base["links"]
+        if link["signature"] == "VTCK"
+    ]
+    if len(voice_links) != 1:
+        raise ValueError(
+            f"Owned opening dialogue speaker has no unique voice type: {speaker_role}"
+        )
+    voice_type_form_id = int(str(voice_links[0]), FORM_ID_RADIX)
+    voice_type_editor_id = sources.voice_types_by_form.get(voice_type_form_id)
+    if voice_type_editor_id is None:
+        raise ValueError(
+            "Owned opening dialogue voice type record is absent: "
+            + form_id_text(voice_type_form_id)
+        )
+    member_namespace = canonical_member_path(
+        f"{VOICE_MEMBER_ROOT}\\{master_path.name}\\{voice_type_editor_id}"
+    )
+    member_prefix = member_namespace + "\\"
+    response_members: dict[tuple[str, int], str] = {}
+    for logical_path in audio_archives.members:
+        if not logical_path.startswith(member_prefix):
+            continue
+        match = VOICE_RESPONSE_SUFFIX_PATTERN.search(logical_path)
+        if match is None:
+            continue
+        key = (match.group("form").casefold(), int(match.group("index")))
+        if key in response_members:
+            raise ValueError(
+                "Owned opening dialogue voice member is ambiguous: "
+                f"info={key[0]} line={key[1]}"
+            )
+        response_members[key] = logical_path
+
+    info_rows = [
+        info
+        for topic in dialogue["topics"]
+        for info in topic["infos"]
+    ]
+    info_rows.append(dialogue["psychologyRootInfo"])
+    responses_by_info: dict[str, list[dict[str, object]]] = {}
+    response_count = 0
+    for info in info_rows:
+        info_form_id = str(info["formId"]).casefold()
+        lines = [str(value) for value in info.pop("lines")]
+        if info_form_id in responses_by_info:
+            existing = responses_by_info[info_form_id]
+            if [response["text"] for response in existing] != lines:
+                raise ValueError(
+                    f"Owned opening INFO response text differs: {info_form_id}"
+                )
+            info["responses"] = existing
+            continue
+        responses = []
+        for line_index, line in enumerate(lines, start=1):
+            key = (info_form_id, line_index)
+            logical_path = response_members.get(key)
+            if logical_path is None:
+                raise ValueError(
+                    "Owned opening dialogue voice is absent: "
+                    f"info={info_form_id} line={line_index}"
+                )
+            lip_path = logical_path.removesuffix(VOICE_AUDIO_EXTENSION) + VOICE_LIP_EXTENSION
+            if lip_path not in audio_archives.members:
+                raise ValueError(
+                    "Owned opening dialogue lip data is absent: "
+                    f"info={info_form_id} line={line_index}"
+                )
+            voice_member = audio_archives.extract(logical_path)
+            lip_member = audio_archives.extract(lip_path)
+            responses.append(
+                {
+                    "index": line_index,
+                    "text": line,
+                    "voice": _prepare_dialogue_asset(voice_member, cache_root),
+                    "lip": _prepare_dialogue_asset(lip_member, cache_root),
+                }
+            )
+            response_count += 1
+        if not responses:
+            raise ValueError(f"Owned opening INFO has no responses: {info_form_id}")
+        responses_by_info[info_form_id] = responses
+        info["responses"] = responses
+    dialogue["voice"] = {
+        "speakerRole": speaker_role,
+        "speakerReferenceFormId": role["referenceFormId"],
+        "speakerBaseFormId": role["baseFormId"],
+        "voiceTypeFormId": form_id_text(voice_type_form_id),
+        "voiceTypeEditorId": voice_type_editor_id,
+        "memberNamespace": member_namespace,
+        "infoCount": len(responses_by_info),
+        "responseCount": response_count,
+        "archiveStack": audio_archives.manifest(),
     }
 
 
@@ -3067,6 +3227,8 @@ def compile_new_game_flow(
     records: list[dict[str, object]],
     flow: dict[str, object],
     owned_archives: OwnedArchiveStack,
+    audio_archives: OwnedArchiveStack,
+    cache_root: Path,
     configuration: RuntimeConfiguration,
 ) -> tuple[dict[str, object], tuple[str, ...]]:
     quest_editor_id = str(flow["questEditorId"])
@@ -3224,6 +3386,15 @@ def compile_new_game_flow(
         sources.scripts,
         quest_editor_id,
     )
+    _compile_dialogue_voice(
+        dialogue,
+        flow,
+        roles,
+        sources,
+        audio_archives,
+        master_path,
+        cache_root,
+    )
     actor_animations = _resolve_actor_animation_commands(
         programs,
         dialogue,
@@ -3318,7 +3489,7 @@ def compile_new_game_flow(
     )
     return (
         {
-            "schema": "opennv-owned-new-game-flow/v3",
+            "schema": "opennv-owned-new-game-flow/v4",
             "quest": {
                 "formId": quest["formId"],
                 "editorId": quest_editor_id,
@@ -3580,6 +3751,7 @@ def prepare_opening_manifest(
     master_path: Path,
     ui_archive_path: Path,
     owned_archives: OwnedArchiveStack,
+    audio_archives: OwnedArchiveStack,
     cache_root: Path,
     recipe_path: Path,
     configuration: RuntimeConfiguration,
@@ -3642,6 +3814,8 @@ def prepare_opening_manifest(
         records,
         flow_definition,
         owned_archives,
+        audio_archives,
+        cache_root,
         configuration,
     )
     ui = compile_ui(

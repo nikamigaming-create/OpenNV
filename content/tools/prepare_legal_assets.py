@@ -14,7 +14,10 @@ from cell_scene import load_recipe, load_spatial_recipe, prepare_cell_scene
 from exterior_scene import prepare_exterior_scene
 from export_static_nif_gltf import compiler_provenance, export_static_nif
 from opening_catalog import prepare_opening_manifest
-from owned_archive_stack import load_owned_archive_stack
+from owned_archive_stack import (
+    AUDIO_ARCHIVE_RECIPE_SCHEMA,
+    load_owned_archive_stack,
+)
 from prepare_actor import prepare_actor_set
 from runtime_configuration import configured_recipe_path, load_runtime_configuration
 
@@ -75,6 +78,11 @@ def prepare(
         data_root,
         configured_recipe_path("visualArchives"),
     )
+    audio_archives = load_owned_archive_stack(
+        data_root,
+        configured_recipe_path("audioArchives"),
+        AUDIO_ARCHIVE_RECIPE_SCHEMA,
+    )
     opening_recipe_path = configured_recipe_path("opening")
     if opening_recipe_path.stem != str(legal_assets["defaultOpeningRecipe"]):
         raise ValueError("Configured opening recipe registry and legal-assets default differ")
@@ -83,6 +91,7 @@ def prepare(
         master,
         ui_archive,
         visual_archives,
+        audio_archives,
         cache_root,
         opening_recipe_path,
         configuration,

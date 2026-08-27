@@ -750,6 +750,7 @@
       "evidence": "docs/data-and-configuration-accountability.md"
     },
     "recipeFiles": {
+      "audioArchives": "fnv-base-audio-archives-v1.json",
       "visualArchives": "fnv-official-visual-archives-v1.json",
       "actorCapturePlan": "fnv-official-actor-capture-plan-v1.json",
       "actorParityCorpus": "fnv-official-actor-parity-corpus-v1.json",

@@ -1,4 +1,4 @@
-"""Resolve visual assets through one hash-bound official BSA precedence stack."""
+"""Resolve owned assets through hash-bound official BSA precedence stacks."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from plugin_stack import file_sha256, find_case_insensitive_file
 
 
 ARCHIVE_RECIPE_SCHEMA = "opennv-owned-visual-archive-stack/v1"
+AUDIO_ARCHIVE_RECIPE_SCHEMA = "opennv-owned-audio-archive-stack/v1"
 ARCHIVE_RESOLUTION_POLICY = "last-declared-containing-member-wins"
 
 
@@ -24,12 +25,25 @@ class OwnedArchive:
 
 
 class OwnedArchiveStack:
-    """Read-only effective visual BSA namespace with retained winner provenance."""
+    """Read-only effective BSA namespace with retained winner provenance."""
 
-    def __init__(self, entries: tuple[OwnedArchive, ...]):
+    def __init__(
+        self,
+        entries: tuple[OwnedArchive, ...],
+        schema: str = ARCHIVE_RECIPE_SCHEMA,
+        recipe_id: str | None = None,
+        recipe_sha256: str | None = None,
+    ):
         if not entries:
             raise ValueError("Owned archive stack cannot be empty")
+        if not schema:
+            raise ValueError("Owned archive stack schema cannot be empty")
+        if (recipe_id is None) != (recipe_sha256 is None):
+            raise ValueError("Owned archive stack recipe provenance is incomplete")
         self.entries = entries
+        self.schema = schema
+        self.recipe_id = recipe_id
+        self.recipe_sha256 = recipe_sha256
         self.members = frozenset(
             member
             for entry in entries
@@ -49,8 +63,8 @@ class OwnedArchiveStack:
         )
 
     def manifest(self) -> dict[str, object]:
-        return {
-            "schema": ARCHIVE_RECIPE_SCHEMA,
+        document: dict[str, object] = {
+            "schema": self.schema,
             "resolutionPolicy": ARCHIVE_RESOLUTION_POLICY,
             "archives": [
                 {
@@ -61,12 +75,24 @@ class OwnedArchiveStack:
                 for entry in self.entries
             ],
         }
+        if self.recipe_id is not None:
+            document["recipe"] = {
+                "id": self.recipe_id,
+                "sha256": self.recipe_sha256,
+            }
+        return document
 
 
-def load_owned_archive_stack(data_root: Path, recipe_path: Path) -> OwnedArchiveStack:
+def load_owned_archive_stack(
+    data_root: Path,
+    recipe_path: Path,
+    expected_schema: str = ARCHIVE_RECIPE_SCHEMA,
+) -> OwnedArchiveStack:
     recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
-    if recipe.get("schema") != ARCHIVE_RECIPE_SCHEMA:
+    if recipe.get("schema") != expected_schema:
         raise ValueError(f"Unexpected owned archive recipe: {recipe_path}")
+    if recipe.get("id") != recipe_path.stem:
+        raise ValueError(f"Owned archive recipe identity differs from its file: {recipe_path}")
     if recipe.get("resolutionPolicy") != ARCHIVE_RESOLUTION_POLICY:
         raise ValueError(f"Unsupported owned archive resolution policy: {recipe_path}")
     rows = recipe.get("archives")
@@ -87,4 +113,9 @@ def load_owned_archive_stack(data_root: Path, recipe_path: Path) -> OwnedArchive
                 BsaArchive(path),
             )
         )
-    return OwnedArchiveStack(tuple(entries))
+    return OwnedArchiveStack(
+        tuple(entries),
+        expected_schema,
+        recipe_path.stem,
+        file_sha256(recipe_path),
+    )

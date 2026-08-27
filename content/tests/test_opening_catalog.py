@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,10 +14,12 @@ from opening_catalog import (  # noqa: E402
     FlowSourceCatalog,
     IdleAnimationSource,
     ReferenceTransformSource,
+    _compile_dialogue_voice,
     _compile_guide_package,
     _compile_player_package,
     _script_commands,
 )
+from bsa_archive import ExtractedMember  # noqa: E402
 from plugin_records import Record  # noqa: E402
 
 
@@ -24,9 +27,34 @@ SYNTHETIC_PACKAGE_FORM = 0x10
 SYNTHETIC_IDLE_BEGIN_FORM = 0x20
 SYNTHETIC_IDLE_LOOP_FORM = 0x30
 SYNTHETIC_DESTINATION_FORM = 0x40
+SYNTHETIC_VOICE_TYPE_FORM = 0x50
+SYNTHETIC_ACTOR_BASE_FORM = 0x60
+SYNTHETIC_INFO_FORM = 0x70
 RUN_IN_SEQUENCE_FLAG = 0x01
 DO_ONCE_FLAG = 0x04
 ALWAYS_RUN_FLAG = 0x2000
+
+
+class SyntheticAudioArchives:
+    def __init__(self, payloads: dict[str, bytes]):
+        self.payloads = payloads
+        self.members = frozenset(payloads)
+
+    def extract(self, logical_path: str) -> ExtractedMember:
+        payload = self.payloads[logical_path]
+        return ExtractedMember(
+            logical_path,
+            payload,
+            False,
+            0,
+            len(payload),
+            "Synthetic Voices.bsa",
+            "synthetic-archive-sha256",
+        )
+
+    @staticmethod
+    def manifest() -> dict[str, object]:
+        return {"schema": "synthetic-owned-audio-stack/v1"}
 
 
 def subrecord(signature: str, data: bytes = b"") -> bytes:
@@ -161,6 +189,7 @@ class OpeningCatalogTest(unittest.TestCase):
             packages_by_editor={},
             packages_by_form={},
             actors_by_form={},
+            voice_types_by_form={},
             references_by_form={SYNTHETIC_DESTINATION_FORM: destination},
             image_space_modifiers_by_editor={},
             needed={},
@@ -183,6 +212,81 @@ class OpeningCatalogTest(unittest.TestCase):
             "SyntheticMarker",
         )
         self.assertEqual(idle_paths, ("meshes\\synthetic-idle.kf",))
+
+    def test_dialogue_voice_joins_vtck_info_and_paired_archive_members(self):
+        info_form_id = f"{SYNTHETIC_INFO_FORM:08x}"
+        base_form_id = f"{SYNTHETIC_ACTOR_BASE_FORM:08x}"
+        voice_form_id = f"{SYNTHETIC_VOICE_TYPE_FORM:08x}"
+        member_root = (
+            "sound\\voice\\falloutnv.esm\\syntheticvoice\\"
+            f"synthetictopic_{info_form_id}_1"
+        )
+        archives = SyntheticAudioArchives(
+            {
+                member_root + ".ogg": b"owned-voice",
+                member_root + ".lip": b"owned-lip",
+            }
+        )
+        info = {
+            "formId": info_form_id,
+            "lines": ["Owned response"],
+        }
+        dialogue = {
+            "topics": [],
+            "psychologyRootInfo": info,
+        }
+        roles = [
+            {
+                "role": "speaker",
+                "referenceFormId": "00000080",
+                "baseFormId": base_form_id,
+            }
+        ]
+        sources = FlowSourceCatalog(
+            actor_values=[],
+            traits=[],
+            scripts={},
+            idle_animations_by_editor={},
+            idle_animations_by_form={},
+            packages_by_editor={},
+            packages_by_form={},
+            actors_by_form={},
+            voice_types_by_form={
+                SYNTHETIC_VOICE_TYPE_FORM: "SyntheticVoice",
+            },
+            references_by_form={},
+            image_space_modifiers_by_editor={},
+            needed={
+                SYNTHETIC_ACTOR_BASE_FORM: {
+                    "links": [
+                        {
+                            "signature": "VTCK",
+                            "formId": voice_form_id,
+                        }
+                    ]
+                }
+            },
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            _compile_dialogue_voice(
+                dialogue,
+                {"dialogueVoice": {"speakerRole": "speaker"}},
+                roles,
+                sources,
+                archives,  # type: ignore[arg-type]
+                Path("FalloutNV.esm"),
+                Path(directory),
+            )
+            response = info["responses"][0]
+            voice_source = Path(response["voice"]["source"])
+            lip_source = Path(response["lip"]["source"])
+            self.assertEqual(voice_source.read_bytes(), b"owned-voice")
+            self.assertEqual(lip_source.read_bytes(), b"owned-lip")
+
+        self.assertNotIn("lines", info)
+        self.assertEqual(response["text"], "Owned response")
+        self.assertEqual(dialogue["voice"]["voiceTypeFormId"], voice_form_id)
 
 
 if __name__ == "__main__":

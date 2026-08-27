@@ -22,12 +22,13 @@ internal sealed record OpeningNewGameFlow(
     IReadOnlyDictionary<string, OpeningDialogueTopic> TopicsByFormId,
     IReadOnlyDictionary<string, OpeningDialogueTopic> TopicsByEditorId,
     OpeningDialogueInfo PsychologyRootInfo,
+    OpeningDialogueVoice DialogueVoice,
     OpeningGuideActorAi GuideActorAi,
     OpeningPlayerAnimationGraph PlayerAnimation,
     IReadOnlyDictionary<string, OpeningImageSpaceModifier> ImageSpaceModifiers,
     OpeningCharacterCreation Character)
 {
-    private const string ExpectedSchema = "opennv-owned-new-game-flow/v3";
+    private const string ExpectedSchema = "opennv-owned-new-game-flow/v4";
     private const string ExpectedGuideActorAiSchema =
         "opennv-owned-guide-actor-ai/v1";
     private const string ExpectedPlayerAnimationSchema =
@@ -120,6 +121,7 @@ internal sealed record OpeningNewGameFlow(
             topicsByForm,
             topicsByEditor,
             ParseInfo(dialogue.GetProperty("psychologyRootInfo")),
+            ParseDialogueVoice(dialogue.GetProperty("voice")),
             guideActorAi,
             playerAnimation,
             imageSpaceModifiers,
@@ -168,8 +170,8 @@ internal sealed record OpeningNewGameFlow(
     private static OpeningDialogueInfo ParseInfo(JsonElement value) => new(
         value.GetProperty("formId").GetString()!,
         value.GetProperty("sourceOrder").GetInt32(),
-        value.GetProperty("lines").EnumerateArray()
-            .Select(line => line.GetString()!)
+        value.GetProperty("responses").EnumerateArray()
+            .Select(ParseDialogueResponse)
             .ToArray(),
         value.GetProperty("commands").EnumerateArray().Select(ParseCommand).ToArray(),
         value.GetProperty("conditions").EnumerateArray()
@@ -189,6 +191,44 @@ internal sealed record OpeningNewGameFlow(
         value.GetProperty("flags").GetInt32(),
         value.GetProperty("goodbye").GetBoolean(),
         value.GetProperty("sayOnce").GetBoolean());
+
+    private static OpeningDialogueVoice ParseDialogueVoice(JsonElement value)
+    {
+        var archiveStack = value.GetProperty("archiveStack");
+        var archiveRecipe = archiveStack.GetProperty("recipe");
+        return new OpeningDialogueVoice(
+            value.GetProperty("speakerRole").GetString()!,
+            value.GetProperty("speakerReferenceFormId").GetString()!,
+            value.GetProperty("speakerBaseFormId").GetString()!,
+            value.GetProperty("voiceTypeFormId").GetString()!,
+            value.GetProperty("voiceTypeEditorId").GetString()!,
+            value.GetProperty("memberNamespace").GetString()!,
+            value.GetProperty("infoCount").GetInt32(),
+            value.GetProperty("responseCount").GetInt32(),
+            archiveStack.GetProperty("schema").GetString()!,
+            archiveRecipe.GetProperty("id").GetString()!,
+            archiveRecipe.GetProperty("sha256").GetString()!,
+            archiveStack.GetProperty("archives").GetArrayLength());
+    }
+
+    private static OpeningDialogueResponse ParseDialogueResponse(JsonElement value) => new(
+        value.GetProperty("index").GetInt32(),
+        value.GetProperty("text").GetString()!,
+        ParseDialogueAsset(value.GetProperty("voice")),
+        ParseDialogueAsset(value.GetProperty("lip")));
+
+    private static OpeningDialogueAsset ParseDialogueAsset(JsonElement value)
+    {
+        var source = System.IO.Path.GetFullPath(value.GetProperty("source").GetString()!);
+        var sha256 = value.GetProperty("sha256").GetString()!;
+        OpeningManifest.VerifyHash(source, sha256);
+        return new OpeningDialogueAsset(
+            value.GetProperty("logicalPath").GetString()!,
+            source,
+            sha256,
+            value.GetProperty("sourceArchive").GetString()!,
+            value.GetProperty("sourceArchiveSha256").GetString()!);
+    }
 
     private static OpeningFlowCommand ParseCommand(JsonElement value) => new(
         value.GetProperty("kind").GetString()!,
@@ -518,6 +558,15 @@ internal sealed record OpeningNewGameFlow(
             flow.Strings.Count == 0 ||
             flow.SceneRoles.Count == 0 ||
             flow.Interactions.Count == 0 ||
+            !flow.SceneRoles.TryGetValue(
+                flow.DialogueVoice.SpeakerRole,
+                out var dialogueSpeaker) ||
+            !dialogueSpeaker.ReferenceFormId.Equals(
+                flow.DialogueVoice.SpeakerReferenceFormId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !dialogueSpeaker.BaseFormId.Equals(
+                flow.DialogueVoice.SpeakerBaseFormId,
+                StringComparison.OrdinalIgnoreCase) ||
             !flow.SceneRoles.TryGetValue(flow.GuideActorAi.Role, out var guideRole) ||
             !guideRole.ReferenceFormId.Equals(
                 flow.GuideActorAi.ReferenceFormId,
@@ -554,6 +603,33 @@ internal sealed record OpeningNewGameFlow(
                 topic.Infos.SelectMany(info => info.Commands)))
             .Concat(flow.PsychologyRootInfo.Commands)
             .ToArray();
+        var dialogueInfos = flow.TopicsByFormId.Values
+            .SelectMany(topic => topic.Infos)
+            .Append(flow.PsychologyRootInfo)
+            .ToArray();
+        var uniqueDialogueInfos = dialogueInfos
+            .GroupBy(info => info.FormId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
+        if (string.IsNullOrWhiteSpace(flow.DialogueVoice.VoiceTypeFormId) ||
+            string.IsNullOrWhiteSpace(flow.DialogueVoice.VoiceTypeEditorId) ||
+            string.IsNullOrWhiteSpace(flow.DialogueVoice.MemberNamespace) ||
+            string.IsNullOrWhiteSpace(flow.DialogueVoice.ArchiveSchema) ||
+            string.IsNullOrWhiteSpace(flow.DialogueVoice.ArchiveRecipeId) ||
+            string.IsNullOrWhiteSpace(flow.DialogueVoice.ArchiveRecipeSha256) ||
+            flow.DialogueVoice.ArchiveCount == 0 ||
+            flow.DialogueVoice.InfoCount != uniqueDialogueInfos.Length ||
+            flow.DialogueVoice.ResponseCount !=
+                uniqueDialogueInfos.Sum(info => info.Responses.Count) ||
+            dialogueInfos.Any(info =>
+                info.Responses.Count == 0 ||
+                info.Responses.Where((response, index) => response.Index != index + 1).Any() ||
+                info.Responses.Any(response =>
+                    string.IsNullOrWhiteSpace(response.Text) ||
+                    !ValidDialogueAsset(response.Voice) ||
+                    !ValidDialogueAsset(response.Lip))))
+            throw new InvalidOperationException(
+                "Owned dialogue response, voice, or lip graph is incomplete.");
         var guide = flow.GuideActorAi;
         if (guide.PackagePriority.Count == 0 ||
             guide.PackagePriority.Count != guide.Packages.Count ||
@@ -634,6 +710,13 @@ internal sealed record OpeningNewGameFlow(
         clip.RootMotion.StopSeconds > clip.RootMotion.StartSeconds &&
         clip.RootMotion.SpeedGameUnitsPerSecond > 0.0f &&
         clip.RootMotion.DisplacementGodotGameUnits.IsFinite();
+
+    private static bool ValidDialogueAsset(OpeningDialogueAsset asset) =>
+        !string.IsNullOrWhiteSpace(asset.LogicalPath) &&
+        !string.IsNullOrWhiteSpace(asset.SourcePath) &&
+        !string.IsNullOrWhiteSpace(asset.Sha256) &&
+        !string.IsNullOrWhiteSpace(asset.SourceArchive) &&
+        !string.IsNullOrWhiteSpace(asset.SourceArchiveSha256);
 }
 
 internal sealed record OpeningFlowMenu(
@@ -677,7 +760,7 @@ internal sealed record OpeningDialogueTopic(
 internal sealed record OpeningDialogueInfo(
     string FormId,
     int SourceOrder,
-    IReadOnlyList<string> Lines,
+    IReadOnlyList<OpeningDialogueResponse> Responses,
     IReadOnlyList<OpeningFlowCommand> Commands,
     IReadOnlyList<OpeningDialogueCondition> Conditions,
     IReadOnlyList<string> NextTopicFormIds,
@@ -685,6 +768,33 @@ internal sealed record OpeningDialogueInfo(
     int Flags,
     bool Goodbye,
     bool SayOnce);
+
+internal sealed record OpeningDialogueVoice(
+    string SpeakerRole,
+    string SpeakerReferenceFormId,
+    string SpeakerBaseFormId,
+    string VoiceTypeFormId,
+    string VoiceTypeEditorId,
+    string MemberNamespace,
+    int InfoCount,
+    int ResponseCount,
+    string ArchiveSchema,
+    string ArchiveRecipeId,
+    string ArchiveRecipeSha256,
+    int ArchiveCount);
+
+internal sealed record OpeningDialogueResponse(
+    int Index,
+    string Text,
+    OpeningDialogueAsset Voice,
+    OpeningDialogueAsset Lip);
+
+internal sealed record OpeningDialogueAsset(
+    string LogicalPath,
+    string SourcePath,
+    string Sha256,
+    string SourceArchive,
+    string SourceArchiveSha256);
 
 internal sealed record OpeningDialogueCondition(
     int OperatorFlags,

@@ -245,7 +245,8 @@ internal sealed record OpeningManifest(
         using var stream = File.OpenRead(path);
         var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
         if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Owned opening runtime video hash differs from its manifest.");
+            throw new InvalidOperationException(
+                "Owned opening cache-file hash differs from its manifest.");
     }
 }
 
