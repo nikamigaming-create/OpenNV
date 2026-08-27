@@ -23,6 +23,7 @@ from plugin_stack import (
     build_plugin_stack,
     load_order_indices as plugin_load_order_indices,
 )
+from runtime_configuration import configured_recipe_path
 
 
 RECIPE_SCHEMA = "opennv-actor-parity-corpus-recipe/v1"
@@ -281,8 +282,7 @@ def build_corpus(
 
 
 def default_recipe_path() -> Path:
-    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    return root / "recipes" / "fnv-official-actor-parity-corpus-v1.json"
+    return configured_recipe_path("actorParityCorpus")
 
 
 def main() -> int:

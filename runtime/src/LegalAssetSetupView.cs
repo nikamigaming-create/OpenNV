@@ -26,27 +26,25 @@ internal partial class LegalAssetSetupView : CanvasLayer
             Size = configuration.ContentSizePixels.Vector2(),
         };
         AddChild(content);
-        var title = new Label { Text = "OPEN NEVADA  /  EXPERIMENTAL GODOT RUNTIME" };
+        var title = new Label { Text = configuration.Copy.Title };
         title.AddThemeFontSizeOverride("font_size", configuration.TitleFontSizePixels);
         content.AddChild(title);
         content.AddChild(new HSeparator());
 
         var body = new Label
         {
-            Text = "Select your legal Fallout: New Vegas folder or its Data folder to prepare the playable\n" +
-                   "Goodsprings sandbox. Python and external engine runtimes are not required.\n\n" +
-                   "No game assets are included, and your installation is never modified.",
+            Text = configuration.Copy.Body,
         };
         body.AddThemeFontSizeOverride("font_size", configuration.BodyFontSizePixels);
         content.AddChild(body);
 
-        _selectButton.Text = "Select Fallout: New Vegas folder";
+        _selectButton.Text = configuration.Copy.SelectButton;
         _selectButton.CustomMinimumSize = new Vector2(0.0f, configuration.ButtonMinimumHeightPixels);
         content.AddChild(_selectButton);
 
         _status.Text = restoreError is null
-            ? "Waiting for the game installation folder or its Data folder."
-            : "The previous cache could not be reopened. Select the game folder to rebuild it.\n" + restoreError;
+            ? configuration.Copy.WaitingStatus
+            : configuration.Copy.RebuildStatusPrefix + restoreError;
         _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _status.CustomMinimumSize = new Vector2(0.0f, configuration.StatusMinimumHeightPixels);
         _status.AddThemeColorOverride("font_color", configuration.StatusColorRgba.Color());
@@ -59,7 +57,7 @@ internal partial class LegalAssetSetupView : CanvasLayer
             FileMode = FileDialog.FileModeEnum.OpenDir,
             UseNativeDialog = true,
             ModeOverridesTitle = false,
-            Title = "Select Fallout: New Vegas folder or Data folder",
+            Title = configuration.Copy.DialogTitle,
         };
         dialog.DirSelected += dataRoot => _selected?.Invoke(dataRoot);
         AddChild(dialog);

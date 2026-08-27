@@ -11,6 +11,7 @@ from pathlib import Path
 from cell_parity_corpus import canonical_sha256
 from corpus_io import atomic_bytes, atomic_json, jsonl_bytes, output_descriptor, read_jsonl
 from plugin_stack import file_sha256, parse_form_key
+from runtime_configuration import configured_recipe_path
 
 
 CELL_CORPUS_SCHEMA = "opennv-cell-parity-corpus/v1"
@@ -300,8 +301,7 @@ def build_plan(
 
 
 def default_recipe_path() -> Path:
-    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    return root / "recipes" / "fnv-thirteen-area-capture-plan-v1.json"
+    return configured_recipe_path("areaCapturePlan")
 
 
 def main() -> int:

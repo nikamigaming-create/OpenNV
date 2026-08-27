@@ -15,8 +15,8 @@ from cell_catalog import (
     PlacedReference,
     scan_cell_catalog,
 )
+from material_contract import environment_texture_paths
 from scene_asset_pipeline import (
-    environment_texture_paths,
     form_id,
     interaction_manifest,
     prepare_scene_assets,
@@ -25,6 +25,7 @@ from scene_asset_pipeline import (
 )
 from runtime_configuration import load_runtime_configuration
 from first_person_rig import prepare_first_person_rig
+from owned_archive_stack import OwnedArchiveStack
 
 
 CELL_SCENE_SCHEMA = "opennv-cell-scene/v10"
@@ -55,6 +56,8 @@ def load_spatial_recipe(recipe_id: str) -> dict[str, object]:
     if (
         document.get("schema") not in {CELL_RECIPE_SCHEMA, EXTERIOR_RECIPE_SCHEMA}
         or document.get("id") != recipe_id
+        or not isinstance(document.get("exportStrict"), bool)
+        or not isinstance(document.get("textureAliases"), dict)
     ):
         raise ValueError(f"Invalid OpenNV cell recipe: {path}")
     return document
@@ -258,6 +261,7 @@ def prepare_cell_scene(
     cache_root: Path,
     recipe: dict[str, object],
     master_sha256: str,
+    owned_archives: OwnedArchiveStack | None = None,
 ) -> dict[str, object]:
     configuration = load_runtime_configuration()
     units_to_meters = configuration.world_units_to_meters
@@ -281,7 +285,11 @@ def prepare_cell_scene(
         base = catalog.base_objects.get(reference.base_form_id)
         if base is None:
             continue
-        selection_reason = reference_selection_reason(base, recipe)
+        selection_reason = reference_selection_reason(
+            base,
+            recipe,
+            configuration.content_compiler,
+        )
         if selection_reason != "selected":
             if base.model_path:
                 excluded_references.append(
@@ -301,7 +309,14 @@ def prepare_cell_scene(
     configured_pool = recipe.get("poolGameplay")
     if isinstance(configured_pool, dict):
         extra_model_paths.add(str(configured_pool["playableTableModelPath"]).lower())
-    assets, asset_sidecars, texture_artifacts, compiler = prepare_scene_assets(
+    (
+        assets,
+        asset_sidecars,
+        texture_artifacts,
+        compiler,
+        non_presentation_assets,
+        unresolved_texture_bindings,
+    ) = prepare_scene_assets(
         meshes_path,
         texture_archive_paths,
         cache_root,
@@ -309,13 +324,33 @@ def prepare_cell_scene(
         selected,
         configuration.content_compiler,
         extra_model_paths,
+        owned_archives=owned_archives,
     )
+    retained_selected = []
+    for reference, base in selected:
+        non_presentation = non_presentation_assets.get(str(base.model_path))
+        if non_presentation is None:
+            retained_selected.append((reference, base))
+            continue
+        excluded_references.append(
+            {
+                "formId": form_id(reference.form_id),
+                "baseEditorId": base.editor_id,
+                "modelPath": str(base.model_path),
+                "reason": "owned-nif-no-presentation-geometry",
+                "classificationSidecar": str(non_presentation["sidecar"]),
+            }
+        )
+    selected = retained_selected
+    if not selected:
+        raise ValueError(f"Cell recipe retained no presentation references: {recipe['id']}")
     first_person_rig = prepare_first_person_rig(
         meshes_path,
         texture_archive_paths,
         cache_root,
         recipe,
         configuration.content_compiler,
+        owned_archives,
     )
     pool_gameplay, pool_roles = pool_gameplay_manifest(
         recipe,
@@ -352,6 +387,7 @@ def prepare_cell_scene(
                 "baseRecordType": base.record_type,
                 "baseEditorId": base.editor_id,
                 "assetId": asset["id"],
+                "cellFormId": form_id(cell_form_id),
                 "positionGameUnits": list(reference.transform.position),
                 "positionGodotUnits": godot_position(reference.transform.position, origin),
                 "yawRadians": reference.transform.rotation_radians[2],
@@ -399,6 +435,9 @@ def prepare_cell_scene(
             "master": master_path.name,
             "masterSha256": master_sha256,
             "textureArchives": texture_archive_rows,
+            "ownedArchiveStack": (
+                owned_archives.manifest() if owned_archives is not None else None
+            ),
         },
         "compiler": compiler,
         "configuration": configuration.manifest(),
@@ -444,6 +483,7 @@ def prepare_cell_scene(
         },
         "assets": sorted(assets.values(), key=lambda value: value["id"]),
         "textures": [texture_artifacts[path].manifest() for path in sorted(texture_artifacts)],
+        "unresolvedTextureBindings": unresolved_texture_bindings,
         "references": references,
         "coverage": {
             "selectedReferences": len(selected),
@@ -451,13 +491,26 @@ def prepare_cell_scene(
             "exportedAssets": len(assets),
             "doors": sum(1 for _, base in selected if base.record_type == "DOOR"),
             "excludedReferences": excluded_references,
+            "nonPresentationAssets": [
+                non_presentation_assets[path]
+                for path in sorted(non_presentation_assets)
+            ],
             "excludedEditorMarkerSurfaces": sum(
                 len(sidecar["coverage"]["excludedEditorMarkerSurfaces"])
                 for sidecar in asset_sidecars.values()
             ),
-            "collision": "authored-bhk-packed-with-interaction-fallback",
+            "excludedNonPresentationSurfaces": sum(
+                len(sidecar["coverage"]["excludedNonPresentationSurfaces"])
+                for sidecar in asset_sidecars.values()
+            ),
+            "sourcePoseBakedSkinSurfaces": sum(
+                sidecar["coverage"]["sourcePoseBakedSkinSurfaces"]
+                for sidecar in asset_sidecars.values()
+            ),
+            "collision": "authored-bhk-packed-plus-explicit-interaction-policy",
             "textures": "decoded-png-material-bindings",
             "decodedTextures": len(texture_artifacts),
+            "missingOptionalMaterialTextures": unresolved_texture_bindings,
             "materialBindings": sum(len(asset["materials"]) for asset in assets.values()),
             "authoredLights": len(lights),
             "pickups": sum(

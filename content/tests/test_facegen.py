@@ -12,7 +12,7 @@ sys.path.insert(0, str(TOOLS))
 from facegen import (  # noqa: E402
     apply_geometry_morphs,
     compose_body_albedo,
-    compose_skin_albedo,
+    compose_facegen_coordinates,
     synthesize_texture_detail,
 )
 from PIL import Image  # noqa: E402
@@ -20,6 +20,20 @@ from pyffi.formats.egm import EgmFormat  # type: ignore  # noqa: E402
 
 
 class FaceGenTest(unittest.TestCase):
+    def test_identity_coordinates_add_actor_values_to_race_baseline(self) -> None:
+        self.assertEqual(
+            compose_facegen_coordinates((1.25, -2.0, 0.5), (-0.25, 3.0, 0.75)),
+            (1.0, 1.0, 1.25),
+        )
+
+    def test_identity_coordinate_composition_requires_matching_channels(self) -> None:
+        with self.assertRaisesRegex(ValueError, "actor=2 race=1"):
+            compose_facegen_coordinates((1.0, 2.0), (3.0,))
+
+    def test_identity_coordinate_composition_rejects_non_finite_results(self) -> None:
+        with self.assertRaisesRegex(ValueError, "non-finite"):
+            compose_facegen_coordinates((float("inf"),), (0.0,))
+
     def test_geometry_modes_apply_symmetric_and_asymmetric_coefficients(self) -> None:
         data = EgmFormat.Data(num_vertices=2)
         data.add_sym_morph().set_relative_vertices(((1.0, 0.0, 0.0), (0.0, 2.0, 0.0)))
@@ -54,12 +68,6 @@ class FaceGenTest(unittest.TestCase):
         payload = b"FREGT003" + struct.pack("<5I", 1, 1, 0, 1, 81) + bytes(36)
         with self.assertRaisesRegex(ValueError, "asymmetric=1"):
             synthesize_texture_detail(payload, ())
-
-    def test_skin_shader_composition_uses_detail_and_tone(self) -> None:
-        diffuse = Image.new("RGBA", (1, 1), (100, 120, 140, 200))
-        detail = Image.new("RGB", (1, 1), (138, 118, 128))
-        result = compose_skin_albedo(diffuse, detail, (64, 64, 64))
-        self.assertEqual(result.getpixel((0, 0)), (120, 100, 141, 200))
 
     def test_body_shader_composition_multiplies_the_authored_body_mod(self) -> None:
         diffuse = Image.new("RGBA", (1, 1), (128, 100, 64, 222))

@@ -27,7 +27,7 @@
       "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
     },
     "backgroundColorRgba": [0.015, 0.018, 0.022, 1.0],
-    "toneMapper": "filmic",
+    "toneMapper": "linear",
     "fogLightEnergy": 1.0,
     "fogDensity": 1.0,
     "ambientEnergyScale": 1.0,
@@ -219,6 +219,7 @@
     "proofMaximumPhysicsFrames": 180,
     "collisionLayer": 1,
     "collisionMask": 1,
+    "resetStatusText": "Pool reset to authored placements",
     "strikeHaptic": {
       "frequency": 0.0,
       "amplitude": 0.28,
@@ -228,12 +229,12 @@
   },
   "door": {
     "provenance": {
-      "classification": "provisional-adapter",
-      "status": "must-be-replaced-by-nif-controller-data",
-      "source": "Bounded interaction fallback while door controller tracks are unsupported",
+      "classification": "open-nv-policy",
+      "status": "explicit-non-parity-interaction-policy",
+      "source": "Versioned OpenNV door-interaction policy; never represented as authored NIF controller data",
       "evidence": "docs/evidence/fnv-goodsprings-linked-world-contract.md"
     },
-    "fallbackOpenAngleDegrees": 90.0
+    "openAngleDegrees": 90.0
   },
   "hud": {
     "provenance": {
@@ -257,7 +258,16 @@
     "xrPixelSizeMeters": 0.00032,
     "xrOutlineSizePixels": 4,
     "xrMaximumStatusCharacters": 38,
-    "defaultSavePath": "user://saves/goodsprings-sandbox-v1.json"
+    "defaultSavePath": "user://saves/goodsprings-sandbox-v1.json",
+    "copy": {
+      "objectiveEquipWeapon": "OBJECTIVE  Equip an authored weapon",
+      "objectiveFireWeapon": "OBJECTIVE  Fire the equipped weapon once",
+      "objectiveTakeAid": "OBJECTIVE  Take any authored aid item",
+      "objectiveOpenEntryDoor": "OBJECTIVE  Open the entry door",
+      "objectiveComplete": "OBJECTIVE COMPLETE  Authored sandbox route passed",
+      "inventoryPrefix": "INVENTORY  ",
+      "emptyInventory": "empty"
+    }
   },
   "capture": {
     "provenance": {
@@ -278,7 +288,87 @@
     "rgbaChannelCount": 4,
     "pixelChannelMaximum": 255.0,
     "luminanceWeightsRgb": [0.2126, 0.7152, 0.0722],
-    "actorShotKinds": ["front-portrait", "front-full-body"],
+    "actorShotKinds": [
+      "front-portrait",
+      "front-detail",
+      "left-profile",
+      "right-profile",
+      "front-full-body",
+      "rear-detail",
+      "rear-full-body",
+      "idle-motion"
+    ],
+    "gallery": {
+      "provenance": {
+        "classification": "open-nv-policy",
+        "status": "matched-retail-presentation-reference",
+        "source": "Every gallery shot consumes the configured semantic retail camera observation instead of subject-specific framing values",
+        "evidence": "docs/whole-game-actor-creature-parity.md"
+      },
+      "retailPresentationSelection": {
+        "schema": "opennv-gallery-presentation-selection/v1",
+        "candidateShotKinds": [
+          "front-full-body",
+          "idle-motion",
+          "rear-full-body",
+          "front-detail",
+          "rear-detail"
+        ],
+        "semanticFocusFacingRules": [
+          {
+            "focusKind": "head",
+            "allowedShotKinds": ["front-full-body", "front-detail", "idle-motion"],
+            "minimumCameraDirectionDotFocusForward": 0.99,
+            "maximumCameraDirectionDotFocusForward": 1.0
+          },
+          {
+            "focusKind": "screen",
+            "allowedShotKinds": ["rear-full-body", "rear-detail"],
+            "minimumCameraDirectionDotFocusForward": -1.0,
+            "maximumCameraDirectionDotFocusForward": -0.99
+          },
+          {
+            "focusKind": "root",
+            "allowedShotKinds": ["front-full-body", "front-detail", "idle-motion"],
+            "minimumCameraDirectionDotFocusForward": 0.99,
+            "maximumCameraDirectionDotFocusForward": 1.0
+          }
+        ],
+        "requiredSurfaceStatus": "visible-final-eye-semantic-focus-draw",
+        "requireSemanticFocusSurface": true,
+        "requireCameraOutsideActorWorldBound": true,
+        "requireClearCameraCorridor": true,
+        "cameraTranslationToleranceGameUnits": 0.1,
+        "tieBreak": "candidate-order-then-lowest-source-frame"
+      },
+      "verticalFovDegrees": 70.0,
+      "maximumFrameOccupancy": 0.62,
+      "targetNodeRole": "sidecar-biped-head",
+      "facingPoseSource": "full-body-owned-animation-root",
+      "occlusionClearanceSource": "camera-near-plane",
+      "modelFrontAxis": "negative-z",
+      "stillImageExtension": ".png",
+      "framesPerSubject": 90,
+      "framesPerSecond": 30,
+      "minimumMotionProgressFraction": 0.8,
+      "video": {
+        "provenance": {
+          "classification": "open-nv-policy",
+          "status": "deterministic-gallery-delivery",
+          "source": "Engine-owned fixed-step source movies joined without content-specific edits",
+          "evidence": "docs/whole-game-actor-creature-parity.md"
+        },
+        "sourceContainerExtension": ".avi",
+        "deliveryContainerExtension": ".mp4",
+        "deliveryFileName": "open-nv-owned-wasteland-gallery.mp4",
+        "reportFileName": "open-nv-owned-wasteland-gallery-report.json",
+        "videoCodec": "libx264",
+        "pixelFormat": "yuv420p",
+        "constantRateFactor": 18,
+        "encoderPreset": "medium",
+        "durationToleranceFrames": 2
+      }
+    },
     "environmentShots": [
       {
         "name": "saloon-wide",
@@ -358,16 +448,16 @@
   "actorReview": {
     "provenance": {
       "classification": "clean-room-retail-contract",
-      "status": "camera-resolved-light-vector-parity-blocking",
-      "source": "Validated FalloutNV 1.4.0.525 NiCamera world transform plus target-texture-matched source-resolution Direct3D 9 scene-color projection",
-      "evidence": "docs/whole-game-actor-creature-parity.md"
+      "status": "camera-and-directional-vector-resolved-material-hdr-parity-blocking",
+      "source": "Validated FalloutNV 1.4.0.525 NiCamera projection plus identity-basis road SLS vertex/pixel shader constants captured at the matched source frame",
+      "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
     },
     "projectionAspectTolerance": 0.001,
     "cameraBasisTolerance": 0.001,
     "projectedBoneTolerancePixels": 1.0,
     "skinPaletteLinearTolerance": 0.001,
     "skinPaletteTranslationToleranceGameUnits": 0.01,
-    "directionalRotationDegrees": [-48.0, -32.0, 0.0],
+    "directionalRotationDegrees": [-35.81081905, 136.17927628, 0.0],
     "directionalShadows": true
   },
   "exteriorEnvironment": {
@@ -387,6 +477,126 @@
     "directionalRotationDegrees": [-48.0, -32.0],
     "directionalFade": 1.0
   },
+  "falloutEnvironment": {
+    "provenance": {
+      "classification": "clean-room-retail-contract",
+      "status": "weather-color-atmosphere-shader-and-cinematic-stage-resolved-cloud-uv-and-light-vector-parity-blocking",
+      "source": "FalloutNV 1.4.0.525 SKY.vso/SKY.pso/SKYCLOUDS.vso/SKYTEX.pso observations plus owned WTHR/IMGS/IMAD/NIF records",
+      "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
+    },
+    "cloudSpeedDivisor": 2550.0,
+    "skyRgbMultiplierImageSpaceTraitIndex": 8,
+    "atmosphereRenderPriority": -127,
+    "cloudRenderPriority": -126,
+    "imageSpace": {
+      "provenance": {
+        "classification": "clean-room-retail-contract",
+        "status": "cinematic-stage-resolved-hdr-adaptation-bright-pass-and-bloom-parity-blocking",
+        "source": "FalloutNV 1.4.0.525 ISHDRBLENDINSHADERCIN.pso constants and bytecode instruction observations joined to owned IMGS/IMAD records",
+        "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
+      },
+      "schema": "opennv-retail-image-space-composition/v2",
+      "modifierChannels": [
+        {"name": "eyeAdaptSpeed", "traitIndex": 0},
+        {"name": "hdrBlurRadius", "traitIndex": 1},
+        {"name": "skinDimmer", "traitIndex": 14},
+        {"name": "emissiveMultiplier", "traitIndex": 3},
+        {"name": "targetLuminance", "traitIndex": 4},
+        {"name": "upperLuminanceClamp", "traitIndex": 5},
+        {"name": "brightScale", "traitIndex": 6},
+        {"name": "brightClamp", "traitIndex": 7},
+        {"name": "luminanceRampNoTexture", "traitIndex": 8},
+        {"name": "luminanceRampMin", "traitIndex": 9},
+        {"name": "luminanceRampMax", "traitIndex": 10},
+        {"name": "sunlightDimmer", "traitIndex": 11},
+        {"name": "grassDimmer", "traitIndex": 12},
+        {"name": "treeDimmer", "traitIndex": 13},
+        {"name": "bloomBlurRadius", "traitIndex": 15},
+        {"name": "bloomAlphaInterior", "traitIndex": 16},
+        {"name": "bloomAlphaExterior", "traitIndex": 17},
+        {"name": "cinematicSaturation", "traitIndex": 25},
+        {"name": "cinematicContrast", "traitIndex": 27},
+        {"name": "cinematicContrastAverageLuminance", "traitIndex": 26},
+        {"name": "cinematicBrightness", "traitIndex": 28}
+      ],
+      "traitIndices": {
+        "targetLuminance": 4,
+        "sunlightDimmer": 11,
+        "skinDimmer": 14,
+        "cinematicSaturation": 25,
+        "cinematicContrastAverageLuminance": 26,
+        "cinematicContrast": 27,
+        "cinematicBrightness": 28,
+        "cinematicTintRed": 29,
+        "cinematicTintGreen": 30,
+        "cinematicTintBlue": 31,
+        "cinematicTintStrength": 32
+      },
+      "luminanceWeightsRgb": [0.299, 0.587, 0.114],
+      "shaderPath": "hdr-cinematic",
+      "shaderByteCount": 748,
+      "shaderFnv1a32": "0x0A008802",
+      "shaderRegisterComponents": 4,
+      "hdrParametersRegister": 1,
+      "cinematicRegister": 19,
+      "tintRegister": 20,
+      "fadeRegister": 22,
+      "shaderConstantTolerance": 0.000001,
+      "hdrBlend": {
+        "blurredAdaptationStage": 0,
+        "hdrSceneStage": 1,
+        "d3d9ResourceType": 3,
+        "d3d9SurfaceType": 1,
+        "d3d9Usage": 1,
+        "d3d9Pool": 0,
+        "d3d9MultiSampleType": 0,
+        "d3d9MultiSampleQuality": 0,
+        "levelCount": 1,
+        "d3d9TextureFormat": 113,
+        "d3d9TextureFormatName": "D3DFMT_A16B16G16R16F",
+        "componentCount": 4,
+        "componentBytes": 2,
+        "workGroupSidePixels": 8,
+        "readbackTimeoutSeconds": 15,
+        "targets": {
+          "halfPixels": [640, 256],
+          "sourcePixels": [256, 256],
+          "downsamplePixels": [[64, 64], [16, 16], [4, 4]],
+          "adaptationPixels": [1, 1],
+          "brightPixels": [256, 256],
+          "bloomPixels": [256, 256]
+        },
+        "adaptationDeltaSeconds": 0.150000006,
+        "adaptationRetentionBase": 0.899999976,
+        "minimumAdaptationMagnitude": 0.00999999978,
+        "brightThreshold": 0.600000024,
+        "brightScale": 2.0,
+        "blurWeights": [
+          0.0159283616,
+          0.0270778015,
+          0.0424232148,
+          0.0612547770,
+          0.0815124661,
+          0.0999668092,
+          0.1129885540,
+          0.1176958010,
+          0.1129885540,
+          0.0999668092,
+          0.0815124661,
+          0.0612547770,
+          0.0424232148,
+          0.0270778015,
+          0.0159283616
+        ],
+        "bloomNormalizationScale": 0.5,
+        "samplerSrgbEnabled": false,
+        "renderTargetSrgbWriteEnabled": false,
+        "outputTransfer": "linear",
+        "samplerFilter": "linear"
+      },
+      "canvasLayer": 127
+    }
+  },
   "retailActorState": {
     "provenance": {
       "classification": "diagnostic-only",
@@ -394,7 +604,16 @@
       "source": "Matched retail actor-state acceptance contract",
       "evidence": "docs/evidence/fnv-retail-actor-state-contract.md"
     },
-    "requiredShotKinds": ["front-portrait", "front-full-body"],
+    "requiredShotKinds": [
+      "front-portrait",
+      "front-detail",
+      "left-profile",
+      "right-profile",
+      "front-full-body",
+      "rear-detail",
+      "rear-full-body",
+      "idle-motion"
+    ],
     "fullSequenceWeight": 1.0,
     "sequenceWeightTolerance": 0.001,
     "minimumContextSequenceWeight": 0.99,
@@ -421,6 +640,7 @@
     "poseRotationToleranceRadians": 0.001,
     "maximumReportedWorstBones": 8,
     "placementToleranceGameUnits": 0.001,
+    "groundContactMaximumUlp": 128,
     "yawToleranceRadians": 0.00001,
     "cameraPositionToleranceGameUnits": 0.001,
     "cameraAimToleranceGameUnits": 0.001,
@@ -460,7 +680,15 @@
     "statusMinimumHeightPixels": 96.0,
     "statusColorRgba": [0.70, 0.80, 0.90, 1.0],
     "statusFontSizePixels": 16,
-    "dialogCenteredRatio": 0.8
+    "dialogCenteredRatio": 0.8,
+    "copy": {
+      "title": "OPEN NEVADA  /  EXPERIMENTAL GODOT RUNTIME",
+      "body": "Select your legally owned game folder or its Data folder to prepare the configured playable slice.\nPython and external engine runtimes are not required.\n\nNo game assets are included, and your installation is never modified.",
+      "selectButton": "Select legally owned game folder",
+      "waitingStatus": "Waiting for the game installation folder or its Data folder.",
+      "rebuildStatusPrefix": "The previous cache could not be reopened. Select the game folder to rebuild it.\n",
+      "dialogTitle": "Select game installation folder or Data folder"
+    }
   },
   "desktopLauncher": {
     "provenance": {
@@ -484,7 +712,34 @@
     },
     "defaultCellRecipe": "goodsprings-saloon-structure-v1",
     "defaultCacheRoot": "user://cache/legal-assets-v1",
-    "packagedCompilerName": "OpenNV.Content packaged direct exporter v1"
+    "packagedCompilerName": "OpenNV.Content packaged direct exporter v1",
+    "smokeModelLogicalPath": "meshes\\landscape\\nv_rocks\\nvn_rockcanyon12.nif",
+    "ownedData": {
+      "masterFile": "FalloutNV.esm",
+      "meshesArchiveFile": "Fallout - Meshes.bsa",
+      "textureArchiveFiles": ["Fallout - Textures.bsa", "Fallout - Textures2.bsa"],
+      "dataDirectoryName": "Data"
+    }
+  },
+  "tooling": {
+    "provenance": {
+      "classification": "open-nv-policy",
+      "status": "single-recipe-registry",
+      "source": "One versioned registry for first-party compiler, corpus, and capture recipe entry points",
+      "evidence": "docs/data-and-configuration-accountability.md"
+    },
+    "recipeFiles": {
+      "visualArchives": "fnv-official-visual-archives-v1.json",
+      "actorCapturePlan": "fnv-official-actor-capture-plan-v1.json",
+      "actorParityCorpus": "fnv-official-actor-parity-corpus-v1.json",
+      "areaCapturePlan": "fnv-thirteen-area-capture-plan-v1.json",
+      "cellCompilePlan": "fnv-cell-compile-plan-v1.json",
+      "cellParityCorpus": "fnv-official-cell-parity-corpus-v1.json",
+      "staticCellCompiler": "fnv-static-cell-compiler-v2.json",
+      "gallery": "fnv-wasteland-gallery-v1.json",
+      "materialBinding": "fnv-material-bindings-v1.json",
+      "nifDecoder": "fnv-nif-decoder-v1.json"
+    }
   },
   "contentCompiler": {
     "provenance": {
@@ -500,46 +755,254 @@
     "zeroSpecularEpsilon": 0.000001,
     "minimumMaterialRoughness": 0.08,
     "defaultMaterialGlossiness": 10.0,
+    "exteriorCellSizeGameUnits": 4096.0,
     "landscapeQuadrantPixels": 512,
-    "landscapeTilesPerQuadrant": 4,
-    "landscapeTileRepeatsPerCell": 8
+    "landscapeTilesPerQuadrant": 8,
+    "landscapeTileRepeatsPerCell": 16,
+    "speedTree": {
+      "provenance": {
+        "classification": "owned-data-presentation-contract",
+        "status": "explicit-billboard-adapter",
+        "source": "Owned FNV SPT dimensions with the owned runtime billboard atlas selected by versioned policy",
+        "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
+      },
+      "billboardTexture": "textures\\trees\\billboards\\wastelandshrub01.dds",
+      "billboardAlphaCutoff": 0.38
+    },
+    "retailGrass": {
+      "provenance": {
+        "classification": "clean-room-retail-contract",
+        "status": "private-source-frame-reconstruction",
+        "source": "FalloutNV 1.4.0.525 GRASS23x002/GRASS23x000 draw telemetry joined to owned NIF and DDS assets",
+        "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
+      },
+      "schema": "opennv-retail-grass-compiler-contract/v1",
+      "materialSchema": "opennv-retail-grass-material/v1",
+      "materialModel": "baked-GRASS23x002-instance-transform-plus-GRASS23x000-pixel",
+      "material": {
+        "alphaMode": "MASK",
+        "diffuseDomain": "encoded",
+        "sampler": "wrap-wrap-linear-mip-linear",
+        "vertexLightingBake": "COLOR.rgb=authored-rgb*instance-shade*saturate(dot(diffuse-direction,slope));COLOR.a=instance-shade",
+        "windBake": "exact-source-frame-GRASS23x002",
+        "textureClampMode": 3,
+        "doubleSided": true,
+        "unshaded": true
+      },
+      "texture": {
+        "path": "textures\\landscape\\grass\\grasswastelandcomp01.dds",
+        "fnv1a32": "0x022F949C",
+        "topLevelFnv1a32": "0x0E5FDFC3",
+        "widthPixels": 1024,
+        "heightPixels": 1024,
+        "levelCount": 11,
+        "d3d9Format": 861165636
+      },
+      "shader": {
+        "vertexFnv1a32": "0x6F11326F",
+        "pixelFnv1a32": "0x2BBB8231",
+        "instanceFirstRegister": 20,
+        "instanceCapacity": 228,
+        "vertexConstantRegisterCount": 256,
+        "pixelConstantRegisterCount": 32,
+        "instanceRegisterCeiling": 230.0,
+        "floatTolerance": 0.00001,
+        "registers": {
+          "scaleMask": 2,
+          "instanceCeiling": 19,
+          "instanceCeilingComponent": 1,
+          "diffuseDirection": 0,
+          "diffuseColor": 1,
+          "wind": 4,
+          "fade": 5,
+          "ambientColor": 6,
+          "directionalScale": 7,
+          "fogColor": 14,
+          "fog": 15,
+          "alphaCutoff": 3
+        }
+      },
+      "draw": {
+        "primitiveType": 5,
+        "vertexStrideBytes": 52,
+        "declaration": [
+          [0, 0, 2, 0, 0, 0],
+          [0, 12, 2, 0, 3, 0],
+          [0, 24, 3, 0, 10, 0],
+          [0, 40, 1, 0, 5, 0],
+          [0, 48, 0, 0, 5, 1],
+          [255, 0, 17, 0, 0, 0]
+        ],
+        "sampler": {
+          "addressU": 3,
+          "addressV": 3,
+          "magFilter": 2,
+          "minFilter": 2,
+          "mipFilter": 2,
+          "srgbTexture": 0,
+          "srgbWrite": 0
+        },
+        "renderState": {
+          "cullMode": 1,
+          "zEnable": 1,
+          "zWriteEnable": 1,
+          "zFunction": 4,
+          "alphaTestEnable": 1,
+          "alphaReference": 10,
+          "alphaFunction": 5,
+          "alphaBlendEnable": 1,
+          "sourceBlend": 5,
+          "destinationBlend": 6,
+          "blendOperation": 1,
+          "separateAlphaBlendEnable": 0,
+          "sourceBlendAlpha": 2,
+          "destinationBlendAlpha": 1,
+          "blendOperationAlpha": 1,
+          "colorWriteEnable": 7,
+          "fogEnable": 0
+        },
+        "renderFrameLead": 1,
+        "stripBridgeIndices": 3,
+        "primitiveCountBias": 2,
+        "fullBatchTrailingBridgeIndices": 7
+      },
+      "capture": {
+        "schema": "opennv-retail-grass-capture-contract/v1",
+        "event": "texture-sampler-contract",
+        "textureStageCount": 1,
+        "maximumCandidates": 256,
+        "maximumRecords": 128,
+        "maximumShaderBytes": 65536,
+        "maximumVertexBufferBytes": 1,
+        "minimumMatchingRecords": 1,
+        "requiredMatchedResourceCount": 1,
+        "requireEveryObservedMesh": true
+      },
+      "reconstruction": {
+        "zeroLengthEpsilon": 0.000000000001,
+        "scaleBase": 1.0,
+        "scalePerInstance": 0.01,
+        "shadeBase": 0.25,
+        "shadeFraction": 0.75,
+        "phaseSpatialScale": 0.0078125,
+        "phaseRadiansScale": 0.159154937,
+        "phaseOffset": 0.5,
+        "tau": 6.28318548,
+        "pi": 3.14159274
+      },
+      "meshes": [
+        {
+          "suffix": "01",
+          "path": "meshes\\landscape\\grass\\grasswasteland01.nif",
+          "sha256": "bc81c79f41bb941f9f1d28927239c639285125acc6e9b1aeb24699c94ad6ec65",
+          "sourceVertices": 40,
+          "stripLength": 61
+        },
+        {
+          "suffix": "02",
+          "path": "meshes\\landscape\\grass\\grasswasteland02.nif",
+          "sha256": "90d7be3c6cdf8ecce4cc49d3e7f67fcd0ddc4bbe98bb54180148a0fa6e85eaca",
+          "sourceVertices": 18,
+          "stripLength": 33
+        },
+        {
+          "suffix": "03",
+          "path": "meshes\\landscape\\grass\\grasswasteland03.nif",
+          "sha256": "8947b6d244c833306e6d790cc84ec82e5230d9a72c5f1be9d7795fc4b7daa966",
+          "sourceVertices": 13,
+          "stripLength": 17
+        },
+        {
+          "suffix": "04",
+          "path": "meshes\\landscape\\grass\\grasswasteland04.nif",
+          "sha256": "17d8b15629148ef16672d96ec61faca5968fb194608319e2fe105bd3a05b9df6",
+          "sourceVertices": 54,
+          "stripLength": 93
+        },
+        {
+          "suffix": "05",
+          "path": "meshes\\landscape\\grass\\grasswasteland05.nif",
+          "sha256": "06ddbf4cfc217ccedc1a4e7b11cb8b192b08353267424e573480b9f0ac1c6099",
+          "sourceVertices": 52,
+          "stripLength": 85
+        },
+        {
+          "suffix": "06",
+          "path": "meshes\\landscape\\grass\\grasswasteland06.nif",
+          "sha256": "454afa52e62a77ae445692e6d5133576ab09a909332c85a7c51dcd1583c2a41c",
+          "sourceVertices": 65,
+          "stripLength": 99
+        },
+        {
+          "suffix": "07",
+          "path": "meshes\\landscape\\grass\\grasswasteland07.nif",
+          "sha256": "a236896a5f0b9dcd95558f53b77508c925c0ade864cb6161efee5648099e0732",
+          "sourceVertices": 26,
+          "stripLength": 37
+        }
+      ]
+    },
+    "nonPresentationBaseFormIds": [
+      "00000003",
+      "00000032",
+      "00000033",
+      "00000034"
+    ]
   },
   "actorCompiler": {
     "provenance": {
-      "classification": "provisional-adapter",
-      "status": "parity-failing",
-      "source": "Bounded actor presentation state pending full package/furniture and FaceGen skin-color evaluation",
-      "evidence": "docs/evidence/fnv-retail-actor-state-contract.md"
+      "classification": "clean-room-retail-contract",
+      "status": "facegen-four-sampler-implemented-opaque-gate-passed-parity-pending",
+      "source": "Owned RACE head texture substitution plus retail D3D9 FaceGenMap0/FaceGenMap1 shader and bound-texture observations",
+      "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
     },
-    "states": [
-      {
-        "referenceFormId": "00104c6d",
-        "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
-        "skinToneRgba": [62, 65, 62, 64],
-        "skinToneSource": "provisional-caucasian-runtime-calibration",
-        "bodyTextureSourceAliases": ["textures\\characters\\childfemale\\upperbodyfemale.dds"]
+    "faceGenMaterial": {
+      "schema": "opennv-retail-facegen-material/v2",
+      "sourceSamplerSrgbTexture": false,
+      "sourceRenderTargetSrgbWrite": false,
+      "signedDetailNeutral": 0.5,
+      "signedDetailScale": 2.0,
+      "toneMapRgba": [62, 65, 62, 64],
+      "toneScale": 4.0,
+      "runtimeAlbedoTransfer": {
+        "schema": "opennv-srgb-transfer/v1",
+        "encodedCutoff": 0.04045,
+        "linearScale": 12.92,
+        "offset": 0.055,
+        "normalization": 1.055,
+        "exponent": 2.4,
+        "source": "standard sRGB encoded-to-linear transfer used at the Godot material boundary"
       },
-      {
-        "referenceFormId": "00104e85",
-        "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
-        "skinToneRgba": [62, 65, 62, 64],
-        "skinToneSource": "provisional-caucasian-runtime-calibration",
-        "bodyTextureSourceAliases": []
+      "source": "FalloutNV 1.4.0.525 shader fnv1a32:555808e8, repeated FaceGenMap1 fnv1a32:7af89dc5, and r20 sampler/render-target state observation"
+    },
+    "animationProfiles": {
+      "NPC_": {
+        "mode": "exact-owned-member",
+        "path": "meshes\\characters\\_male\\locomotion\\mtidle.kf"
       },
-      {
-        "referenceFormId": "00104f08",
-        "idleAnimation": "meshes\\characters\\_male\\idleanims\\dynamicidle_sitstool.kf",
-        "skinToneRgba": [62, 65, 62, 64],
-        "skinToneSource": "provisional-caucasian-runtime-calibration",
-        "bodyTextureSourceAliases": []
-      },
-      {
-        "referenceFormId": "00104c80",
-        "idleAnimation": "meshes\\characters\\_male\\locomotion\\mtidle.kf",
-        "skinToneRgba": [62, 65, 62, 64],
-        "skinToneSource": "provisional-caucasian-runtime-calibration",
-        "bodyTextureSourceAliases": []
+      "CREA": {
+        "mode": "skeleton-directory",
+        "fileName": "mtidle.kf"
       }
-    ]
+    },
+    "rigidAttachment": {
+      "provenance": {
+        "classification": "clean-room-engine-contract",
+        "status": "explicit-fail-closed-node-contract",
+        "source": "Owned skeleton node identities and NIF Prn/root attachment behavior",
+        "evidence": "docs/whole-game-actor-creature-parity.md"
+      },
+      "bipedHeadNode": "Bip01 Head",
+      "profiles": {
+        "NPC_": {
+          "skeletonRootNode": "Bip01",
+          "unparentedRigidNode": "HeadAnims"
+        },
+        "CREA": {
+          "skeletonRootNode": "Bip01",
+          "unparentedRigidNode": "Bip01"
+        }
+      }
+    }
   }
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import struct
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
@@ -524,6 +525,7 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
     )
 
 
+@cache
 def scan_actor_catalog(path: Path) -> ActorCatalog:
     catalog = ActorCatalog({}, {}, [], {}, {}, {}, {})
     for record in iter_plugin_records(path, ACTOR_RECORD_TYPES):

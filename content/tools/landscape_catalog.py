@@ -7,6 +7,7 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
+from cell_static_contract import default_profile_path, load_profile
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 
 
@@ -20,11 +21,16 @@ LAND_HEIGHT_SCALE = 8.0
 LAND_HEIGHT_HEADER_BYTES = 4
 LAND_HEIGHT_TRAILER_BYTES = 3
 LAND_NORMAL_COMPONENTS = 3
+LAND_VERTEX_DATA_FLAG = 0x00000001
 NORMAL_LENGTH_EPSILON = 1.0e-6
 BYTE_CHANNEL_MAXIMUM = 255.0
 CELL_CHILDREN_GROUP_TYPE = 6
 WORLDSPACE_CHILDREN_GROUP_TYPE = 1
 FORM_ID_BYTES = 4
+NULL_FORM_ID = 0
+CONFIGURED_MISSING_BASE_SOURCE = "configured-owned-game-default-ltex"
+FORM_ID_RADIX = 16
+LAND_BASE_LAYER_INDEX = 0xFFFF
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,7 @@ class LandscapeLayer:
     layer_index: int
     unknown: int
     opacities: tuple[LandscapeOpacity, ...]
+    source: str = "authored-subrecord"
 
 
 @dataclass(frozen=True)
@@ -74,6 +81,18 @@ class Landscape:
 
 
 @dataclass(frozen=True)
+class NonGeometricLandscape:
+    form_id: int
+    cell_form_id: int
+    worldspace_form_id: int
+    flags: int
+    compression_checksum_valid: bool | None
+    base_texture_form_ids: tuple[int, ...]
+    alpha_layers: tuple[LandscapeLayer, ...]
+    source_bytes: bytes
+
+
+@dataclass(frozen=True)
 class LandscapeIdentity:
     form_key: str
     cell_form_key: str
@@ -85,6 +104,7 @@ class LandscapeIdentity:
 @dataclass(frozen=True)
 class LandscapeCatalog:
     landscapes: dict[int, Landscape]
+    non_geometric_landscapes: dict[int, NonGeometricLandscape]
     textures: dict[int, LandscapeTexture]
     texture_sets: dict[int, LandscapeTextureSet]
 
@@ -93,6 +113,15 @@ class LandscapeCatalog:
         if len(matches) != 1:
             raise ValueError(f"Expected one LAND for CELL {cell_form_id:08x}, found {len(matches)}")
         return matches[0]
+
+    def optional_landscape_for_cell(self, cell_form_id: int) -> Landscape | None:
+        landscape = self.landscapes.get(cell_form_id)
+        non_geometric = self.non_geometric_landscapes.get(cell_form_id)
+        if (landscape is None) == (non_geometric is None):
+            raise ValueError(
+                f"Expected one LAND classification for CELL {cell_form_id:08x}"
+            )
+        return landscape
 
     def diffuse_path(self, texture_form_id: int) -> str:
         texture = self.textures.get(texture_form_id)
@@ -123,6 +152,44 @@ class LandscapeCatalog:
             "diffusePath": texture_set.diffuse_path,
             "normalPath": texture_set.normal_path,
         }
+
+
+def landscape_missing_base_policy() -> dict[str, object]:
+    return dict(load_profile(default_profile_path())["landscapeMissingBasePolicy"])
+
+
+def _configured_missing_base_layer(quadrant: int) -> LandscapeLayer:
+    policy = landscape_missing_base_policy()
+    return LandscapeLayer(
+        int(str(policy["ltexRawFormId"]), FORM_ID_RADIX),
+        quadrant,
+        LAND_BASE_LAYER_INDEX,
+        0,
+        (),
+        CONFIGURED_MISSING_BASE_SOURCE,
+    )
+
+
+def resolved_layer_texture_form_id(
+    landscape: Landscape,
+    layer: LandscapeLayer,
+) -> int:
+    if layer.texture_form_id != NULL_FORM_ID:
+        return layer.texture_form_id
+    if layer in landscape.base_layers:
+        raise ValueError(
+            f"LAND {landscape.form_id:08x} has a null base texture in quadrant {layer.quadrant}"
+        )
+    matches = [
+        base.texture_form_id
+        for base in landscape.base_layers
+        if base.quadrant == layer.quadrant
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"LAND {landscape.form_id:08x} cannot resolve its quadrant {layer.quadrant} default"
+        )
+    return matches[0]
 
 
 def _values(record: Record) -> dict[str, list[bytes]]:
@@ -223,7 +290,7 @@ def _colors(data: bytes | None, record: Record) -> tuple[tuple[float, float, flo
     )
 
 
-def parse_landscape(record: Record) -> Landscape:
+def _parse_landscape_record(record: Record) -> Landscape | NonGeometricLandscape:
     cell_form_id = _parent(record, CELL_CHILDREN_GROUP_TYPE)
     worldspace_form_id = _parent(record, WORLDSPACE_CHILDREN_GROUP_TYPE)
     if cell_form_id is None or worldspace_form_id is None:
@@ -232,9 +299,64 @@ def parse_landscape(record: Record) -> Landscape:
     values: dict[str, list[bytes]] = {}
     for subrecord in subrecords:
         values.setdefault(subrecord.signature, []).append(subrecord.data)
-    required = {name: values.get(name, []) for name in ("DATA", "VNML", "VHGT")}
-    if any(len(rows) != 1 for rows in required.values()) or len(required["DATA"][0]) != 4:
-        raise ValueError(f"LAND {record.form_id:08x} lacks one DATA/VNML/VHGT contract")
+    data_rows = values.get("DATA", [])
+    normal_rows = values.get("VNML", [])
+    height_rows = values.get("VHGT", [])
+    if len(data_rows) != 1 or len(data_rows[0]) != 4:
+        raise ValueError(f"LAND {record.form_id:08x} lacks one four-byte DATA contract")
+    flags = struct.unpack("<I", data_rows[0])[0]
+    if not normal_rows and not height_rows and not (flags & LAND_VERTEX_DATA_FLAG):
+        base_textures = []
+        alpha_layers = []
+        pending_alpha: tuple[int, int, int, int] | None = None
+        for subrecord in subrecords:
+            if subrecord.signature == "BTXT":
+                texture, _quadrant, _layer, _unknown = _layer_header(
+                    subrecord.data, record, "BTXT"
+                )
+                base_textures.append(texture)
+            elif subrecord.signature == "ATXT":
+                if pending_alpha is not None:
+                    raise ValueError(
+                        f"ATXT lacks its VTXT rows in LAND {record.form_id:08x}"
+                    )
+                pending_alpha = _layer_header(subrecord.data, record, "ATXT")
+            elif subrecord.signature == "VTXT":
+                if pending_alpha is None:
+                    raise ValueError(
+                        f"VTXT has no preceding ATXT in LAND {record.form_id:08x}"
+                    )
+                texture, quadrant, layer, unknown = pending_alpha
+                alpha_layers.append(
+                    LandscapeLayer(
+                        texture,
+                        quadrant,
+                        layer,
+                        unknown,
+                        _opacities(subrecord.data, record),
+                    )
+                )
+                pending_alpha = None
+        if pending_alpha is not None:
+            raise ValueError(f"ATXT lacks its VTXT rows in LAND {record.form_id:08x}")
+        return NonGeometricLandscape(
+            record.form_id,
+            cell_form_id,
+            worldspace_form_id,
+            flags,
+            record.compression_checksum_valid,
+            tuple(base_textures),
+            tuple(alpha_layers),
+            record.data,
+        )
+    if (
+        len(normal_rows) != 1
+        or len(height_rows) != 1
+        or not (flags & LAND_VERTEX_DATA_FLAG)
+    ):
+        raise ValueError(
+            f"LAND {record.form_id:08x} has inconsistent DATA/VNML/VHGT geometry"
+        )
 
     base_layers = []
     alpha_layers = []
@@ -257,8 +379,13 @@ def parse_landscape(record: Record) -> Landscape:
             pending_alpha = None
     if pending_alpha is not None:
         raise ValueError(f"ATXT lacks its VTXT rows in LAND {record.form_id:08x}")
-    if {layer.quadrant for layer in base_layers} != {0, 1, 2, 3} or len(base_layers) != 4:
-        raise ValueError(f"LAND {record.form_id:08x} must define one BTXT per quadrant")
+    authored_base_quadrants = {layer.quadrant for layer in base_layers}
+    if len(authored_base_quadrants) != len(base_layers):
+        raise ValueError(f"LAND {record.form_id:08x} duplicates a BTXT quadrant")
+    base_layers.extend(
+        _configured_missing_base_layer(quadrant)
+        for quadrant in sorted({0, 1, 2, 3} - authored_base_quadrants)
+    )
     if len({(layer.quadrant, layer.layer_index) for layer in alpha_layers}) != len(alpha_layers):
         raise ValueError(f"LAND {record.form_id:08x} duplicates an ATXT layer")
     color_rows = values.get("VCLR", [])
@@ -268,10 +395,10 @@ def parse_landscape(record: Record) -> Landscape:
         record.form_id,
         cell_form_id,
         worldspace_form_id,
-        struct.unpack("<I", required["DATA"][0])[0],
+        flags,
         record.compression_checksum_valid,
-        _heights(required["VHGT"][0], record),
-        _normals(required["VNML"][0], record),
+        _heights(height_rows[0], record),
+        _normals(normal_rows[0], record),
         _colors(color_rows[0] if color_rows else None, record),
         tuple(sorted(base_layers, key=lambda value: value.quadrant)),
         tuple(sorted(alpha_layers, key=lambda value: (value.quadrant, value.layer_index))),
@@ -279,18 +406,34 @@ def parse_landscape(record: Record) -> Landscape:
     )
 
 
+def parse_landscape(record: Record) -> Landscape:
+    landscape = _parse_landscape_record(record)
+    if isinstance(landscape, NonGeometricLandscape):
+        raise ValueError(
+            f"LAND {record.form_id:08x} explicitly has no authored vertex geometry"
+        )
+    return landscape
+
+
 def scan_landscape_catalog(path: Path, cell_form_ids: set[int]) -> LandscapeCatalog:
     landscapes: dict[int, Landscape] = {}
+    non_geometric_landscapes: dict[int, NonGeometricLandscape] = {}
     textures: dict[int, LandscapeTexture] = {}
     texture_sets: dict[int, LandscapeTextureSet] = {}
     for record in iter_plugin_records(path, LANDSCAPE_RECORD_TYPES):
         if record.signature == "LAND":
             cell_form_id = _parent(record, CELL_CHILDREN_GROUP_TYPE)
             if cell_form_id in cell_form_ids:
-                landscape = parse_landscape(record)
-                if landscape.cell_form_id in landscapes:
+                landscape = _parse_landscape_record(record)
+                if (
+                    landscape.cell_form_id in landscapes
+                    or landscape.cell_form_id in non_geometric_landscapes
+                ):
                     raise ValueError(f"CELL {landscape.cell_form_id:08x} declares multiple LAND records")
-                landscapes[landscape.cell_form_id] = landscape
+                if isinstance(landscape, NonGeometricLandscape):
+                    non_geometric_landscapes[landscape.cell_form_id] = landscape
+                else:
+                    landscapes[landscape.cell_form_id] = landscape
         elif record.signature == "LTEX":
             values = _values(record)
             texture_sets_found = values.get("TNAM", [])
@@ -310,8 +453,36 @@ def scan_landscape_catalog(path: Path, cell_form_ids: set[int]) -> LandscapeCata
                     diffuse,
                     _first_text(values, "TX01") or None,
                 )
-    catalog = LandscapeCatalog(landscapes, textures, texture_sets)
+    catalog = LandscapeCatalog(
+        landscapes,
+        non_geometric_landscapes,
+        textures,
+        texture_sets,
+    )
+    policy = landscape_missing_base_policy()
+    default_form_id = int(str(policy["ltexRawFormId"]), FORM_ID_RADIX)
+    if any(
+        layer.source == CONFIGURED_MISSING_BASE_SOURCE
+        for landscape in landscapes.values()
+        for layer in landscape.base_layers
+    ):
+        default_texture = textures.get(default_form_id)
+        if (
+            default_texture is None
+            or default_texture.editor_id.casefold()
+            != str(policy["expectedEditorId"]).casefold()
+        ):
+            raise ValueError(
+                "Configured missing LAND base LTEX identity differs from owned data"
+            )
     for landscape in landscapes.values():
         for layer in (*landscape.base_layers, *landscape.alpha_layers):
-            catalog.diffuse_path(layer.texture_form_id)
+            try:
+                catalog.diffuse_path(resolved_layer_texture_form_id(landscape, layer))
+            except ValueError as error:
+                raise ValueError(
+                    f"{error} in LAND {landscape.form_id:08x} "
+                    f"CELL {landscape.cell_form_id:08x} quadrant {layer.quadrant} "
+                    f"layer {layer.layer_index}"
+                ) from error
     return catalog

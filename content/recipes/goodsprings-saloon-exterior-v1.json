@@ -1,6 +1,8 @@
 {
   "schema": "opennv-exterior-recipe/v1",
   "id": "goodsprings-saloon-exterior-v1",
+  "exportStrict": false,
+  "textureAliases": {},
   "master": {
     "file": "FalloutNV.esm",
     "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1"
@@ -11,6 +13,23 @@
   "persistentCellFormId": "000846ea",
   "entryDoorReferenceFormId": "0010636f",
   "reciprocalDoorReferenceFormId": "0010618e",
+  "streaming": {
+    "mode": "bounded-proof",
+    "loadedGridDiameter": 1
+  },
+  "skyModels": {
+    "atmosphere": {
+      "path": "sky\\atmosphere.nif",
+      "surface": "AtmosphereDome:0"
+    },
+    "clouds": {
+      "path": "sky\\clouds.nif",
+      "cloudLayerSurface": "CloudDome:0",
+      "horizonClearSurface": "HorizonLayerClear:1",
+      "horizonOvercastSurface": "HorizonLayerOvercast:1",
+      "lowerLayerSurface": "LowerLayer:0"
+    }
+  },
   "actorRecipes": [
     "goodsprings-easy-pete-actor-v1"
   ],
@@ -31,12 +50,15 @@
       "MISC",
       "MSTT",
       "NOTE",
+      "SCOL",
       "STAT",
       "TREE",
       "WEAP"
     ],
     "excludeBaseEditorIds": [
       "AudioMarker",
+      "MapMarker",
+      "WallMarker",
       "XMarker",
       "XMarkerHeading"
     ],

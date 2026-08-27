@@ -17,6 +17,7 @@ from actor_gltf import (
     ActorComponent,
     ActorGltfInput,
     export_actor_gltf,
+    retail_render_parts_from_snapshot,
 )
 from actor_review_contract import (
     PENDING_GODOT_STATUS,
@@ -29,8 +30,8 @@ from actor_source_stack import (
 )
 from bsa_archive import ExtractedMember, canonical_member_path
 from owned_archive_stack import load_owned_archive_stack
-from plugin_stack import build_plugin_stack, file_sha256
-from runtime_configuration import load_runtime_configuration
+from plugin_stack import FORM_ID_RADIX, build_plugin_stack, file_sha256
+from runtime_configuration import configured_recipe_path, load_runtime_configuration
 
 
 ACTOR_REVIEW_SCENE_SCHEMA = "opennv-actor-review-scene/v1"
@@ -38,7 +39,7 @@ COMPILED_PENDING_STATUS = "compiled-retail-observed-pending-godot-capture"
 CREATURE_RECORD_TYPE = "CREA"
 MESH_ROOT = "meshes"
 NIF_SUFFIX = ".nif"
-PRIMARY_SKELETON_NODE = "Bip01"
+NO_SOURCE_SLOT = 0xFFFFFFFF
 EXIT_DATA_ERROR = 2
 
 
@@ -139,11 +140,15 @@ def _retail_equipped_weapon_attachment(
 def _validate_contract_sources(
     data_root: Path,
     contract: dict[str, object],
+    expected_record_type: str = CREATURE_RECORD_TYPE,
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     if contract.get("schema") != REVIEW_CONTRACT_SCHEMA or contract.get("status") != PENDING_GODOT_STATUS:
-        raise ValueError("Creature compilation requires a pending actor review contract")
-    if contract["assembly"]["recordType"] != CREATURE_RECORD_TYPE:
-        raise ValueError("Creature compiler received a non-CREA review contract")
+        raise ValueError("Compilation requires a pending actor review contract")
+    if contract["assembly"]["recordType"] != expected_record_type:
+        raise ValueError(
+            "Actor review contract record type differs from the selected compiler: "
+            f"expected={expected_record_type} actual={contract['assembly']['recordType']}"
+        )
     manifest_descriptor = contract["provenance"]["corpusManifest"]
     manifest_path = Path(str(manifest_descriptor["path"]))
     if file_sha256(manifest_path).lower() != str(manifest_descriptor["sha256"]).lower():
@@ -181,6 +186,8 @@ def prepare_creature_review(
         raise ValueError(f"CREA {model_key.text} has no complete skeleton/model assembly")
 
     configuration = load_runtime_configuration()
+    actor_rig = configuration.actor_rig
+    rig_profile = actor_rig.profiles[CREATURE_RECORD_TYPE]
     archives = load_owned_archive_stack(data_root, archive_recipe_path)
     skeleton = archives.extract(_mesh_member(creature.skeleton_path))
     model_members = [
@@ -199,6 +206,12 @@ def prepare_creature_review(
     ]
 
     review_key = str(contract["review"]["reviewKey"])
+    base_runtime_form = (
+        f"0x{int(str(contract['review']['baseRuntimeFormId']), FORM_ID_RADIX):08X}"
+    )
+    retail_render_parts = retail_render_parts_from_snapshot(
+        contract["retail"]["appearance"]["snapshot"]
+    )
     stable_id = hashlib.sha256(review_key.encode("utf-8")).hexdigest()[
         :configuration.content_compiler.stable_id_hex_characters
     ]
@@ -223,6 +236,8 @@ def prepare_creature_review(
                         f"creature-model-{index}",
                         member.logical_path,
                         member.data,
+                        source_form_id=base_runtime_form,
+                        source_slot=NO_SOURCE_SLOT,
                     )
                     for index, member in enumerate(model_members)
                 ) + (() if weapon_attachment is None or weapon_member is None else (
@@ -236,11 +251,14 @@ def prepare_creature_review(
                 )),
                 primary_animation.logical_path,
                 primary_animation.data,
-                PRIMARY_SKELETON_NODE,
-                tuple(
+                skeleton_root_node=rig_profile.skeleton_root_node,
+                rigid_attachment_node=rig_profile.unparented_rigid_node,
+                biped_head_node=actor_rig.biped_head_node,
+                additional_animations=tuple(
                     ActorAnimation(member.logical_path, member.data)
                     for member in additional_animations
                 ),
+                retail_render_parts=retail_render_parts,
             ),
             [archives],
             gltf_path,
@@ -308,8 +326,7 @@ def prepare_creature_review(
 
 
 def default_archive_recipe_path() -> Path:
-    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    return root / "recipes" / "fnv-official-actor-archives-v1.json"
+    return configured_recipe_path("visualArchives")
 
 
 def main() -> int:

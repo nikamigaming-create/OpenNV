@@ -1,6 +1,8 @@
 {
   "schema": "opennv-cell-recipe/v1",
   "id": "goodsprings-saloon-structure-v1",
+  "exportStrict": false,
+  "textureAliases": {},
   "master": {
     "file": "FalloutNV.esm",
     "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1"
@@ -16,7 +18,9 @@
   "firstPersonRig": {
     "skeletonPath": "characters\\_1stperson\\skeleton.nif",
     "poseAnimationPath": "characters\\_1stperson\\1hpaim.kf",
+    "skeletonRootBone": "Bip01",
     "rigidAttachmentBone": "Bip01 Head",
+    "bipedHeadBone": "Bip01 Head",
     "cameraBone": "Camera1st",
     "weaponBone": "Weapon",
     "left": {

@@ -1,9 +1,10 @@
 [CmdletBinding()]
 param(
-    [string]$Godot = "D:\code\gd\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe",
+    [Parameter(Mandatory = $true)]
+    [string]$Godot,
     [string]$FalloutNewVegasData = "",
     [string]$ExpectedMeshesBsaSha256 = "",
-    [string]$RetailLogicalPath = "meshes\landscape\nv_rocks\nvn_rockcanyon12.nif"
+    [string]$RetailLogicalPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,19 +17,32 @@ $solution = Join-Path $runtimeRoot "OpenNV.sln"
 $exporter = Join-Path $contentRoot "tools\export_static_nif_gltf.py"
 $preparer = Join-Path $contentRoot "tools\prepare_legal_assets.py"
 $reportValidator = Join-Path $contentRoot "tools\validate_runtime_report.py"
+$runtimeConfigurationPath = Join-Path $runtimeRoot "config\open-nv-runtime-v1.json"
+$RuntimeConfigurationJsonDepth = 100
+$runtimeConfiguration = Get-Content -Raw -LiteralPath $runtimeConfigurationPath |
+    ConvertFrom-Json -Depth $RuntimeConfigurationJsonDepth
+$ownedData = $runtimeConfiguration.legalAssets.ownedData
+$cellRecipe = [string]$runtimeConfiguration.legalAssets.defaultCellRecipe
+if ([string]::IsNullOrWhiteSpace($RetailLogicalPath)) {
+    $RetailLogicalPath = [string]$runtimeConfiguration.legalAssets.smokeModelLogicalPath
+}
 $fixtureModel = "res://tests/fixtures/opaque-triangle.gltf"
 $fixtureSidecar = "res://tests/fixtures/opaque-triangle.opennv.json"
 
-function Resolve-FnvDataRoot([string]$SelectedRoot) {
+function Resolve-OwnedDataRoot(
+    [string]$SelectedRoot,
+    [string]$MasterFile,
+    [string]$DataDirectoryName
+) {
     $root = [IO.Path]::GetFullPath($SelectedRoot)
-    if (Test-Path -LiteralPath (Join-Path $root "FalloutNV.esm") -PathType Leaf) {
+    if (Test-Path -LiteralPath (Join-Path $root $MasterFile) -PathType Leaf) {
         return $root
     }
-    $data = Join-Path $root "Data"
-    if (Test-Path -LiteralPath (Join-Path $data "FalloutNV.esm") -PathType Leaf) {
+    $data = Join-Path $root $DataDirectoryName
+    if (Test-Path -LiteralPath (Join-Path $data $MasterFile) -PathType Leaf) {
         return [IO.Path]::GetFullPath($data)
     }
-    throw "Select either the Fallout: New Vegas installation folder or its Data folder."
+    throw "Select either the configured game installation folder or its data folder."
 }
 
 foreach ($path in @($Godot, $solution, $exporter, $preparer, $reportValidator, (Join-Path $runtimeRoot "project.godot"))) {
@@ -100,14 +114,17 @@ $poolPracticeValidated = $false
 $flatControlsValidated = $false
 try {
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
-    $resolvedFalloutData = Resolve-FnvDataRoot $FalloutNewVegasData
+    $resolvedFalloutData = Resolve-OwnedDataRoot `
+        $FalloutNewVegasData `
+        ([string]$ownedData.masterFile) `
+        ([string]$ownedData.dataDirectoryName)
     $temporaryCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-legal-cache-{0}" -f [guid]::NewGuid().ToString("N"))
     $prepareArguments = @(
         $preparer,
         "--data-root", $resolvedFalloutData,
         "--cache-root", $temporaryCache,
         "--logical-model", $RetailLogicalPath,
-        "--cell-recipe", "goodsprings-saloon-structure-v1"
+        "--cell-recipe", $cellRecipe
     )
     if (-not [string]::IsNullOrWhiteSpace($ExpectedMeshesBsaSha256)) {
         $prepareArguments += @("--expected-meshes-bsa-sha256", $ExpectedMeshesBsaSha256)

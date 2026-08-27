@@ -1,7 +1,7 @@
 {
   "schema": "opennv-static-cell-compiler-profile/v2",
   "id": "fnv-static-cell-compiler-v2",
-  "archiveRecipe": "fnv-official-actor-archives-v1.json",
+  "archiveRecipe": "fnv-official-visual-archives-v1.json",
   "supportedChildRecordTypes": ["LAND", "NAVM", "REFR"],
   "baseLinkedChildRecordTypes": ["REFR"],
   "supportedBaseRecordTypes": ["ACTI", "CONT", "DOOR", "LIGH", "MSTT", "SCOL", "SOUN", "STAT"],
@@ -60,6 +60,17 @@
   "modelExtension": ".nif",
   "exportStrict": false,
   "compileTextures": true,
+  "landscapeMissingBasePolicy": {
+    "mode": "owned-game-default-ltex",
+    "ltexRawFormId": "00000a0d",
+    "expectedEditorId": "dirt01",
+    "provenance": {
+      "classification": "clean-room-format-contract",
+      "status": "provisional-engine-default",
+      "source": "Owned FalloutNV.esm LTEX 00000A0D used when an authored LAND omits BTXT",
+      "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
+    }
+  },
   "originPolicy": {
     "interior": "game-origin",
     "exterior": "cell-grid-origin",

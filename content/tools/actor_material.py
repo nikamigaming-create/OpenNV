@@ -28,6 +28,7 @@ NIF_ALPHA_DESTINATION_BLEND_SHIFT = 5
 NIF_ALPHA_TEST_FUNCTION_SHIFT = 10
 NIF_ALPHA_NO_SORTER_FLAG = 0x2000
 BYTE_CHANNEL_MAXIMUM = 255.0
+FACEGEN_MATERIAL_SCHEMA = "opennv-retail-facegen-material/v2"
 
 
 def build_actor_material(
@@ -39,11 +40,20 @@ def build_actor_material(
     properties = list(getattr(shape, "properties", []))
     paths = list(actor_texture_paths(properties))
     source_diffuse_path = paths[0] if paths else None
-    diffuse_path = component.diffuse_override or source_diffuse_path
+    source_normal_path = paths[1] if len(paths) > 1 and paths[1] else None
+    diffuse_path = (
+        canonical_member_path(component.diffuse_override)
+        if component.diffuse_override
+        else source_diffuse_path
+    )
+    normal_path = (
+        canonical_member_path(component.normal_override)
+        if component.normal_override
+        else source_normal_path
+    )
     aliases = {canonical_member_path(source): canonical_member_path(target) for source, target in component.diffuse_aliases}
     if diffuse_path in aliases:
         diffuse_path = aliases[diffuse_path]
-    normal_path = paths[1] if len(paths) > 1 and paths[1] else None
     material_property = next(
         (prop for prop in properties if isinstance(prop, NifFormat.NiMaterialProperty)),
         None,
@@ -55,6 +65,7 @@ def build_actor_material(
         "pbrMetallicRoughness": {"metallicFactor": 0.0, "roughnessFactor": roughness},
     }
     pbr = material["pbrMetallicRoughness"]
+    base_texture_index = None
     generated_image = component.generated_diffuse
     if source_diffuse_path is not None:
         generated_by_source = {
@@ -68,13 +79,53 @@ def build_actor_material(
             f"generated:{component.role}:{generated_hash}", generated_image, generated_hash
         )
         pbr["baseColorTexture"] = {"index": texture_index}
+        base_texture_index = texture_index
     elif diffuse_path:
-        pbr["baseColorTexture"] = {"index": textures.source(diffuse_path)}
+        base_texture_index = textures.source(diffuse_path)
+        pbr["baseColorTexture"] = {"index": base_texture_index}
     tint = component.tint_rgb or (1.0, 1.0, 1.0)
     base_color_factor, factor_source = actor_base_color_factor(properties, tint)
     pbr["baseColorFactor"] = base_color_factor
+    normal_texture_index = None
     if normal_path:
-        material["normalTexture"] = {"index": textures.source(normal_path, normal=True)}
+        normal_texture_index = textures.source(normal_path, normal=True)
+        material["normalTexture"] = {"index": normal_texture_index}
+    facegen_sources = sum(
+        value is not None
+        for value in (component.facegen_detail_path, component.generated_facegen_detail)
+    )
+    if facegen_sources > 1:
+        raise ValueError(f"Actor component {component.role} declares multiple FaceGen detail maps")
+    facegen_contract = None
+    if facegen_sources == 1:
+        if base_texture_index is None or normal_texture_index is None:
+            raise ValueError(
+                f"Actor component {component.role} FaceGen material requires base and normal maps"
+            )
+        if component.facegen_detail_path is not None:
+            detail_texture_index = textures.source(component.facegen_detail_path)
+            detail_source = canonical_member_path(component.facegen_detail_path)
+            detail_sha256 = None
+        else:
+            assert component.generated_facegen_detail is not None
+            detail_sha256 = hashlib.sha256(
+                component.generated_facegen_detail.tobytes()
+            ).hexdigest()
+            detail_source = f"generated:facegen:{component.role}:{detail_sha256}"
+            detail_texture_index = textures.generated(
+                detail_source,
+                component.generated_facegen_detail,
+                detail_sha256,
+            )
+        facegen_contract = {
+            "schema": FACEGEN_MATERIAL_SCHEMA,
+            "baseTextureIndex": base_texture_index,
+            "normalTextureIndex": normal_texture_index,
+            "detailTextureIndex": detail_texture_index,
+            "detailSource": detail_source,
+            "detailGeneratedSha256": detail_sha256,
+        }
+        material["extras"] = {"openNvFaceGenMaterial": facegen_contract}
     alpha_properties = [prop for prop in properties if isinstance(prop, NifFormat.NiAlphaProperty)]
     if alpha_properties:
         alpha_contract = actor_alpha_contract(alpha_properties[0])
@@ -93,7 +144,8 @@ def build_actor_material(
     return material, {
         "sourceDiffuse": source_diffuse_path,
         "resolvedDiffuse": diffuse_path,
-        "sourceNormal": normal_path,
+        "sourceNormal": source_normal_path,
+        "resolvedNormal": normal_path,
         "generatedDiffuseSha256": generated_hash,
         "alphaMode": material.get("alphaMode", "OPAQUE"),
         "alphaContract": alpha_contract,
@@ -101,6 +153,8 @@ def build_actor_material(
         "baseColorFactorSource": factor_source,
         "roughness": roughness,
         "roughnessSource": roughness_source,
+        "metallic": 0.0,
+        "faceGen": facegen_contract,
     }
 
 
@@ -112,6 +166,19 @@ def actor_texture_paths(properties: list[object]) -> tuple[str, ...]:
                 canonical_member_path(value) if value else ""
                 for value in (_text(texture_set.textures[index]) for index in range(len(texture_set.textures)))
             )
+        # BSEffectShaderProperty stores its authored diffuse directly in Source
+        # Texture rather than a BSShaderTextureSet.
+        if isinstance(prop, NifFormat.BSEffectShaderProperty):
+            source_texture = _text(prop.source_texture)
+            if source_texture:
+                return (canonical_member_path(source_texture),)
+        # Fallout's unlit effect path predates BSEffectShaderProperty and
+        # stores the image directly in BSShaderNoLightingProperty.File Name.
+        # Preserve that external NIF contract without model-specific policy.
+        if isinstance(prop, NifFormat.BSShaderNoLightingProperty):
+            file_name = _text(prop.file_name)
+            if file_name:
+                return (canonical_member_path(file_name),)
     return ()
 
 
@@ -124,7 +191,14 @@ def actor_base_color_factor(
         None,
     )
     bethesda_shader = any(
-        isinstance(prop, (NifFormat.BSShaderProperty, NifFormat.BSLightingShaderProperty))
+        isinstance(
+            prop,
+            (
+                NifFormat.BSShaderProperty,
+                NifFormat.BSLightingShaderProperty,
+                NifFormat.BSEffectShaderProperty,
+            ),
+        )
         for prop in properties
     )
     source = (1.0, 1.0, 1.0) if bethesda_shader or material is None else (

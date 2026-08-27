@@ -8,7 +8,9 @@ import hashlib
 import json
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 from actor_catalog import (
     ActorCatalog,
@@ -20,7 +22,12 @@ from actor_catalog import (
     resolve_actor_outfit_form_ids,
     scan_actor_catalog,
 )
-from actor_gltf import ActorComponent, ActorGltfInput, export_actor_gltf
+from actor_gltf import (
+    ActorComponent,
+    ActorGltfInput,
+    actor_skin_diffuse_paths,
+    export_actor_gltf,
+)
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_catalog import scan_cell_catalog
 from cell_scene import (
@@ -30,9 +37,13 @@ from cell_scene import (
     godot_yaw_radians,
     load_spatial_recipe,
 )
-from facegen import compose_body_albedo, compose_skin_albedo, synthesize_texture_detail
+from facegen import (
+    compose_body_albedo,
+    compose_facegen_coordinates,
+    synthesize_texture_detail,
+)
 from texture_pipeline import decode_dds
-from runtime_configuration import load_runtime_configuration
+from runtime_configuration import RuntimeConfiguration, load_runtime_configuration
 
 
 RECIPE_SCHEMA = "opennv-actor-recipe/v1"
@@ -43,6 +54,7 @@ BYTE_CHANNEL_MAXIMUM = 255.0
 RACE_HEAD_MODEL_INDEX = 0
 RACE_LEFT_HAND_MODEL_INDEX = 1
 RACE_RIGHT_HAND_MODEL_INDEX = 2
+NORMAL_TEXTURE_SUFFIX = "_n"
 RACE_HEAD_COMPONENT_ROLES = {
     2: "mouth",
     3: "teeth-lower",
@@ -67,6 +79,17 @@ def load_recipe(recipe_id: str) -> dict[str, object]:
     return recipe
 
 
+def load_recipe_file(path: Path) -> dict[str, object]:
+    recipe = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(recipe, dict)
+        or recipe.get("schema") != RECIPE_SCHEMA
+        or not str(recipe.get("id", "")).strip()
+    ):
+        raise ValueError(f"Unexpected OpenNV actor recipe: {path}")
+    return recipe
+
+
 def form_id(value: str) -> int:
     return int(value, FORM_ID_RADIX)
 
@@ -82,7 +105,14 @@ def texture_member(path: str) -> str:
     return canonical if canonical.startswith("textures\\") else f"textures\\{canonical}"
 
 
-def extract_texture(archives: list[BsaArchive], logical_path: str) -> bytes:
+def texture_companion(path: str, name_suffix: str) -> str:
+    canonical = canonical_member_path(path)
+    if not canonical.endswith(".dds"):
+        raise ValueError(f"Actor texture has no DDS suffix: {path}")
+    return canonical[:-4] + name_suffix + canonical[-4:]
+
+
+def extract_texture(archives: Sequence[BsaArchive], logical_path: str) -> bytes:
     path = texture_member(logical_path)
     matches = [archive for archive in archives if path in archive.members]
     if len(matches) != 1:
@@ -90,7 +120,7 @@ def extract_texture(archives: list[BsaArchive], logical_path: str) -> bytes:
     return matches[0].extract(path).data
 
 
-def has_texture(archives: list[BsaArchive], logical_path: str) -> bool:
+def has_texture(archives: Sequence[BsaArchive], logical_path: str) -> bool:
     path = texture_member(logical_path)
     return sum(path in archive.members for archive in archives) == 1
 
@@ -121,51 +151,117 @@ def resolve_proof_actor(
     return references[0], actor
 
 
+@dataclass(frozen=True)
+class ActorPreparationContext:
+    configuration: RuntimeConfiguration
+    source_contract: tuple[tuple[Path, str], ...]
+    master: Path
+    catalog: ActorCatalog
+    meshes: BsaArchive
+    texture_archives: tuple[BsaArchive, ...]
+
+
+def _actor_source_contract(
+    data_root: Path,
+    recipe: dict[str, object],
+) -> tuple[tuple[Path, str], ...]:
+    rows = (
+        recipe["master"],
+        recipe["meshesArchive"],
+        *recipe["textureArchives"],
+    )
+    return tuple(
+        (
+            (data_root / str(row["file"])).resolve(),
+            str(row["sha256"]).lower(),
+        )
+        for row in rows
+    )
+
+
+def create_actor_preparation_context(
+    data_root: Path,
+    recipe: dict[str, object],
+    verified_source_contract: tuple[tuple[Path, str], ...] | None = None,
+) -> ActorPreparationContext:
+    source_contract = _actor_source_contract(data_root, recipe)
+    if verified_source_contract is not None:
+        if verified_source_contract != source_contract:
+            raise ValueError(
+                "Verified actor source contract differs from the requested recipe"
+            )
+    else:
+        for path, expected_hash in source_contract:
+            if not path.is_file():
+                raise FileNotFoundError(path)
+            actual = file_sha256(path)
+            if actual.lower() != expected_hash:
+                raise ValueError(
+                    f"Actor recipe source hash mismatch: {path.name} "
+                    f"expected={expected_hash} actual={actual}"
+                )
+    master = source_contract[0][0]
+    return ActorPreparationContext(
+        load_runtime_configuration(),
+        source_contract,
+        master,
+        scan_actor_catalog(master),
+        BsaArchive(source_contract[1][0]),
+        tuple(BsaArchive(path) for path, _source_hash in source_contract[2:]),
+    )
+
+
 def prepare_actor(
     data_root: Path,
     cache_root: Path,
-    recipe_id: str = "goodsprings-trudy-actor-v1",
+    recipe_id: str,
+    recipe_document: dict[str, object] | None = None,
+    preparation_context: ActorPreparationContext | None = None,
 ) -> dict[str, object]:
-    recipe = load_recipe(recipe_id)
-    configuration = load_runtime_configuration()
-    master = data_root / recipe["master"]["file"]
-    meshes_path = data_root / recipe["meshesArchive"]["file"]
-    texture_paths = [data_root / row["file"] for row in recipe["textureArchives"]]
-    expected = [
-        (master, recipe["master"]["sha256"]),
-        (meshes_path, recipe["meshesArchive"]["sha256"]),
-        *((path, row["sha256"]) for path, row in zip(texture_paths, recipe["textureArchives"])),
-    ]
-    for path, expected_hash in expected:
-        if not path.is_file():
-            raise FileNotFoundError(path)
-        actual = file_sha256(path)
-        if actual.lower() != str(expected_hash).lower():
-            raise ValueError(f"Actor recipe source hash mismatch: {path.name} expected={expected_hash} actual={actual}")
-
-    catalog = scan_actor_catalog(master)
+    recipe = load_recipe(recipe_id) if recipe_document is None else recipe_document
+    if recipe.get("schema") != RECIPE_SCHEMA or not str(recipe.get("id", "")).strip():
+        raise ValueError("Actor recipe document has an invalid schema or ID")
+    recipe_id = str(recipe["id"])
+    context = preparation_context or create_actor_preparation_context(data_root, recipe)
+    if context.source_contract != _actor_source_contract(data_root, recipe):
+        raise ValueError("Actor preparation context belongs to another owned-data recipe")
+    configuration = context.configuration
+    actor_rig = configuration.actor_rig
+    rig_profile = actor_rig.profiles["NPC_"]
+    master = context.master
+    catalog = context.catalog
     reference, actor = resolve_proof_actor(
         catalog,
         form_id(recipe["proofActorReferenceFormId"]),
         form_id(recipe["cellFormId"]),
     )
-    actor_states = configuration.document["actorCompiler"]["states"]
-    matching_states = [
-        state
-        for state in actor_states
-        if form_id(str(state["referenceFormId"])) == reference.form_id
-    ]
-    if len(matching_states) != 1:
+    expected_base = recipe.get("expectedBaseFormId")
+    if expected_base is not None and actor.form_id != form_id(str(expected_base)):
         raise ValueError(
-            f"Actor {reference.form_id:08x} requires exactly one shared actor-compiler state"
+            "Actor recipe reference resolves another base: "
+            f"expected={form_id(str(expected_base)):08x} actual={actor.form_id:08x}"
         )
-    actor_state = matching_states[0]
-    cell_recipe = load_spatial_recipe(str(recipe["cellRecipe"]))
-    cell_catalog = scan_cell_catalog(master)
-    _source_door, arrival = arrival_transform(
-        cell_catalog,
-        form_id(cell_recipe["entryDoorReferenceFormId"]),
-    )
+    if "actorState" in recipe:
+        raise ValueError(
+            "Per-actor compiler state is unsupported; use the shared owned-animation profile"
+        )
+    animation_profile = configuration.document["actorCompiler"][
+        "animationProfiles"
+    ]["NPC_"]
+    actor_animation_path = str(animation_profile["path"])
+    configured_origin = recipe.get("originGameUnits")
+    if configured_origin is None:
+        cell_recipe = load_spatial_recipe(str(recipe["cellRecipe"]))
+        cell_catalog = scan_cell_catalog(master)
+        _source_door, arrival = arrival_transform(
+            cell_catalog,
+            form_id(cell_recipe["entryDoorReferenceFormId"]),
+        )
+        origin = arrival.position
+    else:
+        origin = tuple(float(value) for value in configured_origin)
+        if len(origin) != 3:
+            raise ValueError("Actor recipe originGameUnits must contain three values")
     race = catalog.races.get(actor.race_form_id)
     head_models = race.female_head_models if actor.female and race is not None else (
         race.male_head_models if race is not None else ()
@@ -217,13 +313,18 @@ def prepare_actor(
     if any(path is None for path in outfit_models):
         raise ValueError("Proof actor outfit lacks a sex-specific model")
 
-    meshes = BsaArchive(meshes_path)
-    texture_archives = [BsaArchive(path) for path in texture_paths]
+    meshes = context.meshes
+    texture_archives = context.texture_archives
 
     def mesh(path: str) -> bytes:
         canonical = canonical_member_path(path)
         logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
         return meshes.extract(logical_path).data
+
+    outfit_payloads = [
+        (str(outfit_model), mesh(str(outfit_model)))
+        for outfit_model in outfit_models
+    ]
 
     head_model = head_models[RACE_HEAD_MODEL_INDEX]
     head_texture = head_textures[RACE_HEAD_MODEL_INDEX]
@@ -241,16 +342,33 @@ def prepare_actor(
         FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
     ):
         raise ValueError("Proof actor race has incomplete sex-specific FaceGen baseline coordinates")
-    face_mod_path = f"textures\\characters\\facemods\\falloutnv.esm\\{actor.form_id:08x}_0.dds"
+    symmetric_geometry = compose_facegen_coordinates(
+        actor.face_symmetric_geometry,
+        race_face_symmetric_geometry,
+    )
+    asymmetric_geometry = compose_facegen_coordinates(
+        actor.face_asymmetric_geometry,
+        race_face_asymmetric_geometry,
+    )
+    texture_owner = master.name.casefold()
+    face_mod_path = (
+        f"textures\\characters\\facemods\\{texture_owner}\\{actor.form_id:08x}_0.dds"
+    )
     if has_texture(texture_archives, face_mod_path):
-        detail = decode_dds(extract_texture(texture_archives, face_mod_path), False)
+        face_detail_path = face_mod_path
+        generated_face_detail = None
         face_detail_source = "retail-precomputed"
     else:
-        detail = synthesize_texture_detail(mesh(head_egt), actor.face_symmetric_texture)
-        face_detail_source = "direct-egt-fallback"
-    base_diffuse = decode_dds(extract_texture(texture_archives, head_texture), False)
-    tone = tuple(int(value) for value in actor_state["skinToneRgba"][:3])
-    generated_head = compose_skin_albedo(base_diffuse, detail, tone)
+        face_detail_path = None
+        generated_face_detail = synthesize_texture_detail(
+            mesh(head_egt),
+            actor.face_symmetric_texture,
+        )
+        face_detail_source = "direct-egt-synthesis"
+    head_diffuse_path = texture_member(head_texture)
+    head_normal_path = texture_member(
+        texture_companion(head_texture, NORMAL_TEXTURE_SUFFIX)
+    )
     body_texture = body_textures[RACE_HEAD_MODEL_INDEX]
     if (
         body_texture is None
@@ -260,15 +378,12 @@ def prepare_actor(
         raise ValueError("Proof actor race has no sex-specific upper-body texture or hand meshes")
     sex_label = "female" if actor.female else "male"
     body_mod_path = (
-        f"textures\\characters\\bodymods\\falloutnv.esm\\{actor.form_id:08x}modbody{sex_label}.dds"
+        f"textures\\characters\\bodymods\\{texture_owner}\\"
+        f"{actor.form_id:08x}modbody{sex_label}.dds"
     )
     if not has_texture(texture_archives, body_mod_path):
         raise ValueError("Proof actor has no retail precomputed body-mod texture")
     body_mod = decode_dds(extract_texture(texture_archives, body_mod_path), False)
-    generated_body = compose_body_albedo(
-        decode_dds(extract_texture(texture_archives, body_texture), False),
-        body_mod,
-    )
     left_hand_texture = body_textures[RACE_LEFT_HAND_MODEL_INDEX]
     right_hand_texture = body_textures[RACE_RIGHT_HAND_MODEL_INDEX]
     if left_hand_texture is None or right_hand_texture is None:
@@ -282,21 +397,27 @@ def prepare_actor(
         body_mod,
     )
 
-    body_texture_sources = {
-        texture_member(body_texture),
-        *(texture_member(value) for value in actor_state["bodyTextureSourceAliases"]),
-    }
-    components = [
-        ActorComponent(
-            f"outfit-{index}",
-            outfit_model,
-            mesh(outfit_model),
-            generated_diffuse_by_source=tuple(
-                (source, generated_body) for source in sorted(body_texture_sources)
-            ),
+    components = []
+    for index, (outfit_model, outfit_payload) in enumerate(outfit_payloads):
+        skin_paths = actor_skin_diffuse_paths(outfit_payload)
+        generated_skin = tuple(
+            (
+                source,
+                compose_body_albedo(
+                    decode_dds(extract_texture(texture_archives, source), False),
+                    body_mod,
+                ),
+            )
+            for source in skin_paths
         )
-        for index, outfit_model in enumerate(outfit_models)
-    ]
+        components.append(
+            ActorComponent(
+                f"outfit-{index}",
+                outfit_model,
+                outfit_payload,
+                generated_diffuse_by_source=generated_skin,
+            )
+        )
     components.extend([
         ActorComponent(
             "left-hand",
@@ -318,7 +439,10 @@ def prepare_actor(
             mesh(head_model),
             egm_path=head_egm,
             egm_payload=mesh(head_egm),
-            generated_diffuse=generated_head,
+            diffuse_override=head_diffuse_path,
+            normal_override=head_normal_path,
+            facegen_detail_path=face_detail_path,
+            generated_facegen_detail=generated_face_detail,
         ),
     ])
     for index, role in RACE_HEAD_COMPONENT_ROLES.items():
@@ -371,11 +495,14 @@ def prepare_actor(
             actor.name,
             actor.skeleton_path,
             mesh(actor.skeleton_path),
-            actor.face_symmetric_geometry,
-            actor.face_asymmetric_geometry,
+            symmetric_geometry,
+            asymmetric_geometry,
             tuple(components),
-            str(actor_state["idleAnimation"]),
-            mesh(str(actor_state["idleAnimation"])),
+            actor_animation_path,
+            mesh(actor_animation_path),
+            skeleton_root_node=rig_profile.skeleton_root_node,
+            rigid_attachment_node=rig_profile.unparented_rigid_node,
+            biped_head_node=actor_rig.biped_head_node,
         ),
         texture_archives,
         gltf_path,
@@ -393,7 +520,7 @@ def prepare_actor(
             "baseFormId": f"{reference.actor_form_id:08x}",
             "initiallyDisabled": reference.initially_disabled,
             "positionGameUnits": list(reference.position),
-            "positionGodotUnits": godot_position(reference.position, arrival.position),
+            "positionGodotUnits": godot_position(reference.position, origin),
             "rotationRadians": list(reference.rotation_radians),
             "yawRadians": reference.rotation_radians[2],
             "yawGodotRadians": godot_yaw_radians(reference.rotation_radians[2]),
@@ -409,15 +536,18 @@ def prepare_actor(
             "eyesFormId": f"{actor.eyes_form_id:08x}",
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
             "outfitFormIds": [f"{outfit.form_id:08x}" for outfit in outfits],
+            "recordType": "NPC_",
         },
-        "idleAnimation": actor_state["idleAnimation"],
+        "idleAnimation": actor_animation_path,
         "appearanceResolution": {
             "outfitSource": "NPC_.CNTO recursively resolved through deterministic LVLI",
             "hairShape": hair_shape,
             "hairShapeSource": "equipped ARMO.BMDT hair-slot flag",
             "dismemberCaps": "excluded by BSDismemberBodyPartType semantics",
             "rigidAttachments": "derived from NIF skin-instance presence",
-            "skinToneSource": actor_state["skinToneSource"],
+            "faceGenMaterialSource": configuration.document["actorCompiler"][
+                "faceGenMaterial"
+            ]["source"],
             "status": configuration.document["actorCompiler"]["provenance"]["status"],
         },
         "faceDetailSource": face_detail_source,
@@ -481,8 +611,23 @@ def main() -> int:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--cache-root", type=Path, required=True)
     parser.add_argument("--recipe", action="append")
+    parser.add_argument("--recipe-file", type=Path)
     args = parser.parse_args()
-    recipes = args.recipe or ["goodsprings-trudy-actor-v1"]
+    if args.recipe_file is not None and args.recipe:
+        parser.error("--recipe-file cannot be combined with --recipe")
+    if args.recipe_file is None and not args.recipe:
+        parser.error("one or more --recipe values or --recipe-file is required")
+    if args.recipe_file is not None:
+        recipe_document = load_recipe_file(args.recipe_file.resolve())
+        result = prepare_actor(
+            args.data_root.resolve(),
+            args.cache_root.resolve(),
+            str(recipe_document["id"]),
+            recipe_document,
+        )
+        print("OPENNV_ACTOR_SCENE " + json.dumps(result, sort_keys=True))
+        return 0
+    recipes = args.recipe
     if len(recipes) == 1:
         result = prepare_actor(args.data_root.resolve(), args.cache_root.resolve(), recipes[0])
         print("OPENNV_ACTOR_SCENE " + json.dumps(result, sort_keys=True))

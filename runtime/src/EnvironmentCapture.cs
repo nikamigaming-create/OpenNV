@@ -13,8 +13,21 @@ internal static class EnvironmentCapture
         string captureRoot,
         string scenePath,
         string? reportPath,
-        string? retailStateContractPath)
+        string? retailStateContractPath,
+        string? galleryShotPath)
     {
+        if (galleryShotPath is not null)
+        {
+            await GalleryCapture.Run(
+                host,
+                loaded,
+                configuration,
+                captureRoot,
+                scenePath,
+                reportPath,
+                galleryShotPath);
+            return;
+        }
         try
         {
             var output = Path.GetFullPath(captureRoot);

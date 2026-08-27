@@ -27,6 +27,7 @@ from plugin_stack import (
     parse_form_key,
     runtime_form_id,
 )
+from runtime_configuration import configured_recipe_path
 
 
 RECIPE_SCHEMA = "opennv-cell-parity-corpus-recipe/v1"
@@ -615,8 +616,7 @@ def build_corpus(
 
 
 def default_recipe_path() -> Path:
-    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    return root / "recipes" / "fnv-official-cell-parity-corpus-v1.json"
+    return configured_recipe_path("cellParityCorpus")
 
 
 def main() -> int:

@@ -7,7 +7,11 @@ from pathlib import Path
 
 from bsa_archive import canonical_member_path
 from cell_landscape_contract import landscape_contract_for
-from cell_static_contract import LANDSCAPE_ASSET_KIND, LANDSCAPE_TEXTURE_KIND
+from cell_static_contract import (
+    LANDSCAPE_ASSET_KIND,
+    LANDSCAPE_RUNTIME_TEXTURE_KIND,
+    LANDSCAPE_TEXTURE_KIND,
+)
 from landscape_gltf import (
     canonical_texture_path,
     export_landscape_gltf,
@@ -41,7 +45,7 @@ def compile_landscape(
     origin: tuple[float, float, float],
     compiler_configuration: ContentCompilerConfiguration,
     texture_aliases: dict[str, str],
-) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+) -> tuple[dict[str, object], list[dict[str, object]], dict[str, object]]:
     source = resolve_owned_landscape(
         data_root,
         corpus_manifest,
@@ -60,7 +64,7 @@ def compile_landscape(
         )
     )
     provisional_root = staging_root / "generated" / "landscape"
-    raw_asset, baked = export_landscape_gltf(
+    exported = export_landscape_gltf(
         source.landscape,
         source.textures,
         coordinates,
@@ -71,6 +75,8 @@ def compile_landscape(
         identity=source.identity,
         texture_output_root=staging_root / "generated" / "textures",
     )
+    raw_asset = exported.asset
+    baked = exported.diagnostic_bake
     asset_id = str(raw_asset["id"])
     asset_root = staging_root / "generated" / "assets" / asset_id
     asset_root.mkdir(parents=True, exist_ok=True)
@@ -132,7 +138,7 @@ def compile_landscape(
         )
         for row in baked["sources"]
     )
-    texture = {
+    diagnostic_texture = {
         "textureKind": LANDSCAPE_TEXTURE_KIND,
         "textureId": baked["id"],
         "requestedPath": baked["requestedPath"],
@@ -148,9 +154,14 @@ def compile_landscape(
         "height": baked["height"],
         "normalGreenInverted": False,
         "cubeFaces": [],
+        "diagnosticOnly": True,
         "sources": baked["sources"],
         "bakeContract": baked["bakeContract"],
     }
+    runtime_textures = [
+        _runtime_texture_row(manifest, staging_root)
+        for manifest in exported.runtime_textures
+    ]
     landscape_contract = landscape_contract_for(source, cell, origin)
     asset = {
         "assetKind": LANDSCAPE_ASSET_KIND,
@@ -168,21 +179,48 @@ def compile_landscape(
         "surfaces": sidecar["surfaces"],
         "textureBindings": [
             {
-                "requestedPath": baked["requestedPath"],
-                "textureId": baked["id"],
+                "requestedPath": texture["requestedPath"],
+                "textureId": texture["id"],
             }
+            for texture in runtime_textures
         ],
         "materials": raw_asset["materials"],
         "collision": raw_asset["collision"],
         "landscape": landscape_contract,
     }
-    intermediate_paths = {
-        path
-        for artifact in tracking.artifacts
-        for path in (artifact.png_path, *artifact.cube_face_paths)
+    return asset, [diagnostic_texture, *runtime_textures], landscape_contract
+
+
+def _runtime_texture_row(
+    manifest: dict[str, object],
+    staging_root: Path,
+) -> dict[str, object]:
+    png = Path(str(manifest["png"]))
+    cube_faces = [
+        {
+            "png": _relative(Path(str(face["png"])), staging_root),
+            "bytes": Path(str(face["png"])).stat().st_size,
+            "pngSha256": str(face["pngSha256"]),
+        }
+        for face in manifest.get("cubeFaces", [])
+    ]
+    return {
+        "textureKind": LANDSCAPE_RUNTIME_TEXTURE_KIND,
+        "textureId": str(manifest["id"]),
+        "requestedPath": str(manifest["requestedPath"]),
+        "archivePath": manifest.get("archivePath"),
+        "sourceSha256": str(manifest["sourceSha256"]),
+        "sourceBytes": int(manifest["sourceBytes"]),
+        "sourceArchive": manifest.get("sourceArchive"),
+        "sourceArchiveSha256": manifest.get("sourceArchiveSha256"),
+        "png": _relative(png, staging_root),
+        "pngBytes": png.stat().st_size,
+        "pngSha256": str(manifest["pngSha256"]),
+        "width": int(manifest["width"]),
+        "height": int(manifest["height"]),
+        "normalGreenInverted": bool(manifest["normalGreenInverted"]),
+        "cubeFaces": cube_faces,
+        "landscapeRole": str(manifest.get("landscapeRole", "diffuse")),
     }
-    for path in intermediate_paths:
-        path.unlink()
-    return asset, texture, landscape_contract
 def _relative(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()

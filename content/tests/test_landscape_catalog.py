@@ -6,15 +6,36 @@ import sys
 import tempfile
 import unittest
 import zlib
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from PIL import Image
 
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from landscape_catalog import LAND_VERTEX_COUNT, scan_landscape_catalog  # noqa: E402
-from landscape_gltf import bake_landscape_diffuse, landscape_geometry  # noqa: E402
+from landscape_catalog import (  # noqa: E402
+    CONFIGURED_MISSING_BASE_SOURCE,
+    LAND_VERTEX_COUNT,
+    resolved_layer_texture_form_id,
+    scan_landscape_catalog,
+)
+from landscape_gltf import (  # noqa: E402
+    LANDSCAPE_CONTRACT_SOURCE,
+    LANDSCAPE_LAYER_WEIGHT_OPERATION,
+    LANDSCAPE_LIGHTING_MODEL,
+    LANDSCAPE_MATERIAL_SCHEMA,
+    LANDSCAPE_NORMAL_DECODE,
+    LANDSCAPE_WEIGHT_INTERPOLATION,
+    LANDSCAPE_WEIGHT_STORAGE,
+    bake_landscape_diffuse,
+    landscape_geometry,
+    landscape_materials,
+    landscape_quadrant_geometry,
+    landscape_quadrant_vertex_weights,
+    landscape_weight_map_payload,
+)
 from landscape_stack import resolve_owned_landscape  # noqa: E402
 from plugin_records import (  # noqa: E402
     COMPRESSED_RECORD_FLAG,
@@ -46,7 +67,7 @@ def header(*masters: str) -> bytes:
     return record("TES4", 0, data)
 
 
-def plugin() -> bytes:
+def plugin(include_btxt: bool = True, include_geometry: bool = True) -> bytes:
     texture_set = record(
         "TXST",
         0x10,
@@ -59,18 +80,37 @@ def plugin() -> bytes:
         0x20,
         subrecord("EDID", b"SyntheticLandscape\0") + subrecord("TNAM", struct.pack("<I", 0x10)),
     )
+    default_texture_set = record(
+        "TXST",
+        0x11,
+        subrecord("EDID", b"SyntheticDefaultTextureSet\0")
+        + subrecord("TX00", b"landscape/default.dds\0")
+        + subrecord("TX01", b"landscape/default_n.dds\0"),
+    )
+    default_landscape_texture = record(
+        "LTEX",
+        0xA0D,
+        subrecord("EDID", b"dirt01\0") + subrecord("TNAM", struct.pack("<I", 0x11)),
+    )
     height_data = struct.pack("<f", 100.0) + bytes(LAND_VERTEX_COUNT) + bytes(3)
     normals = bytes((0, 0, 127)) * LAND_VERTEX_COUNT
     colors = bytes((128, 64, 32)) * LAND_VERTEX_COUNT
-    layers = b"".join(subrecord("BTXT", struct.pack("<IBBH", 0x20, quadrant, 0x66, 0xFFFF)) for quadrant in range(4))
+    layers = (
+        b"".join(
+            subrecord("BTXT", struct.pack("<IBBH", 0x20, quadrant, 0x66, 0xFFFF))
+            for quadrant in range(4)
+        )
+        if include_btxt
+        else b""
+    )
     layers += subrecord("ATXT", struct.pack("<IBBH", 0x20, 0, 0, 0))
     layers += subrecord("VTXT", struct.pack("<HHf", 18, 0xCAFE, 0.75))
     land = record(
         "LAND",
         0x30,
-        subrecord("DATA", struct.pack("<I", 0x1F))
-        + subrecord("VNML", normals)
-        + subrecord("VHGT", height_data)
+        subrecord("DATA", struct.pack("<I", 0x1F if include_geometry else 0x1E))
+        + (subrecord("VNML", normals) if include_geometry else b"")
+        + (subrecord("VHGT", height_data) if include_geometry else b"")
         + subrecord("VCLR", colors)
         + layers,
         COMPRESSED_RECORD_FLAG,
@@ -79,8 +119,8 @@ def plugin() -> bytes:
     world_children = group(struct.pack("<I", 0x50), 1, cell_children)
     return (
         header()
-        + group(b"TXST", 0, texture_set)
-        + group(b"LTEX", 0, landscape_texture)
+        + group(b"TXST", 0, texture_set + default_texture_set)
+        + group(b"LTEX", 0, landscape_texture + default_landscape_texture)
         + world_children
     )
 
@@ -97,6 +137,33 @@ def override_plugin() -> bytes:
 
 
 class LandscapeCatalogTest(unittest.TestCase):
+    def test_data_flagged_land_without_vertex_payload_is_explicitly_non_geometric(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.esm"
+            path.write_bytes(plugin(include_geometry=False))
+            catalog = scan_landscape_catalog(path, {0x40})
+        self.assertIsNone(catalog.optional_landscape_for_cell(0x40))
+        non_geometric = catalog.non_geometric_landscapes[0x40]
+        self.assertEqual(non_geometric.form_id, 0x30)
+        self.assertEqual(non_geometric.flags, 0x1E)
+        self.assertEqual(len(non_geometric.base_texture_form_ids), 4)
+        self.assertEqual(len(non_geometric.alpha_layers), 1)
+
+    def test_missing_btxt_uses_profile_owned_default_with_explicit_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.esm"
+            path.write_bytes(plugin(include_btxt=False))
+            catalog = scan_landscape_catalog(path, {0x40})
+        landscape = catalog.landscape_for_cell(0x40)
+        self.assertEqual([layer.quadrant for layer in landscape.base_layers], [0, 1, 2, 3])
+        self.assertTrue(
+            all(
+                layer.source == CONFIGURED_MISSING_BASE_SOURCE
+                for layer in landscape.base_layers
+            )
+        )
+        self.assertEqual(catalog.diffuse_path(0xA0D), "landscape\\default.dds")
+
     def test_owned_stack_resolves_stable_land_ltex_and_winning_txst(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -184,18 +251,28 @@ class LandscapeCatalogTest(unittest.TestCase):
         self.assertEqual(landscape.alpha_layers[0].opacities[0].unknown, 0xCAFE)
         self.assertEqual(catalog.diffuse_path(0x20), "landscape\\synthetic.dds")
 
+        zero_layer = replace(landscape.alpha_layers[0], texture_form_id=0)
+        zero_landscape = replace(landscape, alpha_layers=(zero_layer,))
+        self.assertEqual(
+            resolved_layer_texture_form_id(zero_landscape, zero_layer),
+            landscape.base_layers[zero_layer.quadrant].texture_form_id,
+        )
+
+        compiler = load_runtime_configuration().content_compiler
         positions, normals, uvs, colors, triangles = landscape_geometry(
-            landscape, (2, -1), (8192.0, -4096.0, 800.0)
+            landscape,
+            (2, -1),
+            (8192.0, -4096.0, 800.0),
+            compiler.exterior_cell_size_game_units,
         )
         self.assertEqual(positions[0], (0.0, 0.0, -0.0))
         self.assertEqual(positions[-1], (4096.0, 0.0, -4096.0))
         self.assertEqual(normals[0], (0.0, 1.0, -0.0))
-        self.assertEqual(uvs[0], (0.0, 1.0))
-        self.assertEqual(uvs[-1], (1.0, 0.0))
+        self.assertEqual(uvs[0], (0.0, 0.0))
+        self.assertEqual(uvs[-1], (1.0, 1.0))
         self.assertEqual(len(colors), LAND_VERTEX_COUNT)
         self.assertEqual(len(triangles), 32 * 32 * 2)
 
-        compiler = load_runtime_configuration().content_compiler
         baked = bake_landscape_diffuse(
             landscape,
             lambda _form_id: Image.new("RGB", (4, 4), (200, 100, 50)),
@@ -204,6 +281,103 @@ class LandscapeCatalogTest(unittest.TestCase):
         expected_side = compiler.landscape_quadrant_pixels * 2
         self.assertEqual(baked.size, (expected_side, expected_side))
         self.assertEqual(baked.getpixel((100, 900)), (200, 100, 50))
+
+    def test_layered_quadrants_keep_shared_borders_and_float32_weights(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.esm"
+            path.write_bytes(plugin())
+            catalog = scan_landscape_catalog(path, {0x40})
+        landscape = catalog.landscape_for_cell(0x40)
+        compiler = load_runtime_configuration().content_compiler
+        positions, normals, uvs, colors, triangles = landscape_quadrant_geometry(
+            landscape,
+            (2, -1),
+            (8192.0, -4096.0, 800.0),
+            0,
+            compiler.exterior_cell_size_game_units,
+        )
+        self.assertEqual(len(positions), 17 * 17)
+        self.assertEqual(len(normals), len(positions))
+        self.assertEqual(len(uvs), len(positions))
+        self.assertEqual(len(colors), len(positions))
+        self.assertEqual(len(triangles), 16 * 16 * 2)
+        self.assertEqual(positions[0], (0.0, 0.0, -0.0))
+        self.assertEqual(positions[-1], (2048.0, 0.0, -2048.0))
+        self.assertEqual(uvs[0], (0.0, 0.0))
+        self.assertEqual(uvs[-1], (1.0, 1.0))
+
+        first = replace(landscape.alpha_layers[0], quadrant=0, layer_index=0)
+        second = replace(first, layer_index=1, opacities=())
+        weights = landscape_quadrant_vertex_weights([first, second])
+        self.assertEqual(weights[18], (0.25, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        payload = landscape_weight_map_payload([first, second], 0)
+        self.assertEqual(len(payload), 17 * 17 * 4 * 4)
+        pixel_offset = (1 * 17 + 1) * 4 * 4
+        self.assertEqual(
+            struct.unpack_from("<4f", payload, pixel_offset),
+            (0.25, 0.75, 0.0, 0.0),
+        )
+
+        retail_overlap = [
+            0.0,
+            0.004235319793224335,
+            0.044715024530887604,
+            0.0,
+            0.9992889761924744,
+        ]
+        retail_layers = [
+            replace(
+                first,
+                layer_index=index,
+                opacities=(
+                    ()
+                    if opacity == 0.0
+                    else (SimpleNamespace(vertex_index=71, opacity=opacity),)
+                ),
+            )
+            for index, opacity in enumerate(retail_overlap)
+        ]
+        retail_weights = landscape_quadrant_vertex_weights(retail_layers)[71]
+        self.assertEqual(
+            struct.pack("<8f", *retail_weights).hex(),
+            "00000000000000007265843b64b92e3d00000000a00b743f0000000000000000",
+        )
+
+        artifact = SimpleNamespace(asset_id="diffuse")
+        materials = landscape_materials(
+            landscape,
+            "asset",
+            {0x20: artifact},
+            {},
+            {(0, 0): {"id": "weights"}},
+            load_runtime_configuration().content_compiler,
+        )
+        self.assertEqual(len(materials), 4)
+        self.assertEqual(materials[0]["name"], "LAND_asset_Q0")
+        contract = materials[0]["landscapeContract"]
+        self.assertEqual(contract["schema"], LANDSCAPE_MATERIAL_SCHEMA)
+        self.assertEqual(contract["model"], LANDSCAPE_LIGHTING_MODEL)
+        self.assertEqual(contract["diffuseDomain"], "encoded")
+        self.assertEqual(contract["normalDecode"], LANDSCAPE_NORMAL_DECODE)
+        self.assertEqual(
+            contract["layerWeightOperation"],
+            LANDSCAPE_LAYER_WEIGHT_OPERATION,
+        )
+        self.assertEqual(contract["weightInterpolation"], LANDSCAPE_WEIGHT_INTERPOLATION)
+        self.assertEqual(contract["weightStorage"], LANDSCAPE_WEIGHT_STORAGE)
+        self.assertEqual(contract["retailWeightSemantics"], ["TEXCOORD1", "TEXCOORD2"])
+        self.assertEqual(contract["retailWeightType"], "float4")
+        self.assertEqual(contract["source"], LANDSCAPE_CONTRACT_SOURCE)
+        self.assertFalse(materials[0]["diffuseSampleSrgb"])
+        self.assertEqual(contract["weightMapTextureIds"], ["weights"])
+        self.assertEqual(contract["baseWeightMapIndex"], 0)
+        self.assertEqual(contract["baseWeightChannel"], 0)
+        self.assertEqual(contract["layers"][0]["weightMapIndex"], 0)
+        self.assertEqual(contract["layers"][0]["weightChannel"], 1)
+        self.assertEqual(
+            contract["samplersUsed"],
+            2 + 2 + 1,
+        )
 
 
 if __name__ == "__main__":

@@ -81,6 +81,38 @@ class SourceConstantPolicyTest(unittest.TestCase):
             self.assertEqual(AUDIT.godot_project_violations(accepted), [])
             self.assertEqual(len(AUDIT.godot_project_violations(rejected)), 1)
 
+    def test_data_gate_rejects_owned_identities_paths_and_substitutions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            accepted = self.write(
+                directory,
+                "accepted.py",
+                'sentinel = "00000000"\npath = f"textures/{owner}/{form_id}_0.dds"\n',
+            )
+            rejected = self.write(
+                directory,
+                "rejected.py",
+                'actor = "00104e84"\n'
+                'asset = "meshes\\\\characters\\\\owned.nif"\n'
+                'digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n'
+                'name = "Configured Subject"\n'
+                'policy = "runtime fallback"\n',
+            )
+            self.assertEqual(AUDIT.source_data_violations(accepted), [])
+            violations = AUDIT.source_data_violations(
+                rejected,
+                frozenset({"Configured Subject"}),
+            )
+            self.assertEqual(
+                {violation.language for violation in violations},
+                {
+                    "content-form-id",
+                    "content-sha256",
+                    "owned-asset-path",
+                    "content-identity",
+                    "guessed-substitution",
+                },
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

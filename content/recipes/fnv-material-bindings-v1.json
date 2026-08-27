@@ -1,0 +1,37 @@
+{
+  "schema": "opennv-nif-material-binding-contract/v1",
+  "id": "fnv-material-bindings-v1",
+  "status": "owned-shader-slot-resolution",
+  "provenance": {
+    "classification": "clean-room-material-contract",
+    "status": "official-corpus-bounded",
+    "source": "NifTools BSShaderTextureSet slot semantics joined to the complete owned official Fallout: New Vegas visual archive namespace",
+    "evidence": "Active authored bindings are resolved by shader flags and archive membership; optional missing members remain unbound and are never aliased or synthesized"
+  },
+  "slots": {
+    "diffuse": {
+      "index": 0,
+      "missingOwnedMember": "error"
+    },
+    "normal": {
+      "index": 1,
+      "missingOwnedMember": "error"
+    },
+    "emissive": {
+      "index": 2,
+      "missingOwnedMember": "unbound-no-substitution"
+    },
+    "environment": {
+      "index": 4,
+      "missingOwnedMember": "error"
+    },
+    "environmentMask": {
+      "index": 5,
+      "missingOwnedMember": "unbound-no-substitution"
+    }
+  },
+  "activation": {
+    "environmentFlag1": "sf_environment_mapping",
+    "environmentDisableFlag2": "sf_2_envmap_light_fade"
+  }
+}

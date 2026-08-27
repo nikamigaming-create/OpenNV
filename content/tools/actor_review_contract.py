@@ -10,6 +10,7 @@ import os
 import re
 import struct
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from plugin_stack import file_sha256
@@ -18,8 +19,8 @@ from plugin_stack import file_sha256
 CORPUS_SCHEMA = "opennv-actor-parity-corpus/v1"
 RETAIL_REPORT_SCHEMA = "nikami-fnv-actor-observation/v1"
 RETAIL_ORACLE_SCHEMA = "nikami-retail-oracle/v4"
-REVIEW_CONTRACT_SCHEMA = "opennv-actor-review-contract/v4"
-RETAIL_APPEARANCE_SCHEMA = "nikami-fnv-sidecar-appearance/v3"
+REVIEW_CONTRACT_SCHEMA = "opennv-actor-review-contract/v6"
+RETAIL_APPEARANCE_SCHEMA = "nikami-fnv-sidecar-appearance/v4"
 WEAPON_STATE_NONE = "none"
 WEAPON_STATE_EQUIPPED = "equipped"
 WEAPON_RENDER_STATE_NOT_APPLICABLE = "not-applicable"
@@ -67,6 +68,21 @@ MATRIX_ABSOLUTE_TOLERANCE = 1.0e-5
 MATRIX_RELATIVE_TOLERANCE = 1.0e-5
 D3D_FLOAT32_FAR_RECONSTRUCTION_RELATIVE_TOLERANCE = 0.01
 D3D_FLOAT32_FAR_RECONSTRUCTION_ABSOLUTE_TOLERANCE = 1.0
+
+
+@dataclass(frozen=True)
+class ActorObservationEvidence:
+    manifest_path: Path
+    manifest: dict[str, object]
+    appearance_path: Path
+    bases_path: Path
+    review: dict[str, object]
+    bases: dict[str, dict[str, object]]
+    report: dict[str, object]
+    jsonl_path: Path
+    events: list[dict[str, object]]
+    artifact_by_path: dict[str, dict[str, object]]
+    runtime_stack: dict[str, object]
 
 
 def _load_json(path: Path) -> dict[str, object]:
@@ -517,10 +533,22 @@ def _validated_skin_palette(
     ):
         raise ValueError(f"Retail frame {frame} skin-palette traversal is incomplete")
 
+    captured_frame_ids = [
+        int(instance["frameId"])
+        for instance in instances
+        if isinstance(instance, dict) and str(instance.get("status", "")) == "captured"
+    ]
+    if not captured_frame_ids:
+        raise ValueError(f"Retail frame {frame} has no captured skin render frame")
+    current_render_frame_id = max(captured_frame_ids)
+
     canonical = []
     node_paths = []
-    captured_count = 0
-    uncached_count = 0
+    observed_captured_count = 0
+    observed_uncached_count = 0
+    canonical_captured_count = 0
+    canonical_uncached_count = 0
+    stale_render_cache_count = 0
     for instance in instances:
         if not isinstance(instance, dict):
             raise ValueError(f"Retail frame {frame} has a non-object skin instance")
@@ -553,7 +581,8 @@ def _validated_skin_palette(
                 raise ValueError(
                     f"Retail frame {frame} uncached skin {geometry_name} has matrix storage"
                 )
-            uncached_count += 1
+            observed_uncached_count += 1
+            canonical_uncached_count += 1
             canonical.append(base)
             continue
         if status != "captured":
@@ -609,6 +638,21 @@ def _validated_skin_palette(
                     ],
                 }
             )
+        observed_captured_count += 1
+        if int(instance["frameId"]) != current_render_frame_id:
+            base.update(
+                {
+                    "status": "not-render-cached",
+                    "observedStatus": "captured",
+                    "cacheClassification": "stale-not-bound-to-current-render-frame",
+                    "currentRenderFrameId": current_render_frame_id,
+                    "observedSourceFnv1a32": expected_hash,
+                }
+            )
+            canonical_uncached_count += 1
+            stale_render_cache_count += 1
+            canonical.append(base)
+            continue
         base.update(
             {
                 "matrixLayout": "row-major-3x4",
@@ -622,17 +666,24 @@ def _validated_skin_palette(
                 "bones": canonical_bones,
             }
         )
-        captured_count += 1
+        canonical_captured_count += 1
         canonical.append(base)
 
     if len(set(node_paths)) != len(node_paths):
         raise ValueError(f"Retail frame {frame} skin instance paths are ambiguous")
-    if captured_count != counts["capturedPalettes"] or uncached_count != counts["notRenderCached"]:
+    if (
+        observed_captured_count != counts["capturedPalettes"]
+        or observed_uncached_count != counts["notRenderCached"]
+    ):
         raise ValueError(f"Retail frame {frame} skin-palette counts disagree")
     return {
         "frameBoundToSourceBackbuffer": True,
         "summary": {
             **counts,
+            "capturedPalettes": canonical_captured_count,
+            "notRenderCached": canonical_uncached_count,
+            "currentRenderFrameId": current_render_frame_id,
+            "staleRenderCachesReclassified": stale_render_cache_count,
             "traversalTruncated": False,
         },
         "instances": canonical,
@@ -717,6 +768,39 @@ def _appearance_contract(events: list[dict[str, object]]) -> dict[str, object]:
         for part in render_parts
     ):
         raise ValueError("Retail actor appearance texture bindings are not object arrays")
+    required_visible_parts = [
+        part
+        for part in render_parts
+        if bool(part.get("required"))
+        and bool(part.get("attached"))
+        and bool(part.get("drawable"))
+        and bool(part.get("visible"))
+    ]
+    for part in required_visible_parts:
+        geometry_name = str(part.get("geometryName", ""))
+        visual_node_path = str(part.get("visualNodePath", ""))
+        if (
+            not geometry_name.strip()
+            or not visual_node_path.strip()
+            or not isinstance(part.get("skinned"), bool)
+        ):
+            raise ValueError(
+                "Retail actor appearance has no exact runtime geometry binding"
+            )
+        for visual_snapshot in snapshots:
+            matches = [
+                node
+                for node in visual_snapshot.get("nodes", [])
+                if isinstance(node, dict)
+                and node.get("name") == geometry_name
+                and node.get("nodePath") == visual_node_path
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    "Retail actor appearance geometry is not present exactly once "
+                    f"at frame {visual_snapshot.get('frame')}: "
+                    f"{geometry_name!r} at {visual_node_path!r}"
+                )
     frame = int(snapshot["frame"])
     pose = _one(
         [
@@ -833,7 +917,252 @@ def _animation_state(pose: dict[str, object]) -> list[dict[str, object]]:
     ]
 
 
-def _environment_contract(events: list[dict[str, object]]) -> dict[str, object]:
+WEATHER_IMAGE_SPACE_SLOT_NAMES = (
+    "currentFadeIn",
+    "currentFadeOut",
+    "transitionFadeIn",
+    "transitionFadeOut",
+)
+IMAGE_SPACE_SHADER_EVENT = "image-space-shader-constants"
+IMAGE_SPACE_SHADER_REGISTER_COMPONENTS = 4
+IMAGE_SPACE_INPUT_ARTIFACT_KIND = "retail-image-space-shader-input"
+D3D_SUCCESS = 0
+
+
+def _weather_image_space_contract(event: dict[str, object]) -> dict[str, object]:
+    source = event.get("weatherImageSpace")
+    if not isinstance(source, dict) or set(source) != set(WEATHER_IMAGE_SPACE_SLOT_NAMES):
+        raise ValueError("Retail render environment has no exact four-slot image-space state")
+    result: dict[str, object] = {}
+    for name in WEATHER_IMAGE_SPACE_SLOT_NAMES:
+        slot = source[name]
+        if not isinstance(slot, dict):
+            raise ValueError(f"Retail weather image-space slot {name} is not an object")
+        form = int(slot["form"])
+        previous_form = int(slot["previousForm"])
+        percent = float(slot["percent"])
+        age = float(slot["age"])
+        last_strength = float(slot["lastStrength"])
+        transition_time = float(slot["transitionTime"])
+        if (
+            form < 0
+            or previous_form < 0
+            or not isinstance(slot.get("hidden"), bool)
+            or not isinstance(slot.get("flags"), int)
+            or not all(
+                math.isfinite(value)
+                for value in (percent, age, last_strength, transition_time)
+            )
+            or percent < 0.0
+            or percent > 1.0
+            or age < 0.0
+            or transition_time < 0.0
+        ):
+            raise ValueError(f"Retail weather image-space slot {name} is invalid")
+        result[name] = {
+            "form": form,
+            "previousForm": previous_form,
+            "hidden": slot["hidden"],
+            "percent": percent,
+            "age": age,
+            "flags": slot["flags"],
+            "lastStrength": last_strength,
+            "transitionTime": transition_time,
+        }
+    return result
+
+
+def _image_space_shader_inputs_contract(
+    event: dict[str, object],
+    artifact_by_path: dict[str, dict[str, object]],
+) -> list[dict[str, object]]:
+    inputs = event.get("inputTextures")
+    render_frame = int(event["frame"])
+    source_frame = int(event.get("sourceFrame", -1))
+    recorded_render_frame = int(event.get("renderFrame", -1))
+    render_frame_lead = int(event.get("renderFrameLead", 0))
+    if (
+        event.get("inputCaptureEnabled") is not True
+        or not isinstance(inputs, list)
+        or not inputs
+        or source_frame != render_frame + render_frame_lead
+        or recorded_render_frame != render_frame
+        or render_frame_lead <= 0
+        or int(event.get("expectedShaderByteCount", 0)) != int(event["byteCount"])
+        or int(event.get("expectedShaderFnv1a32", -1)) != int(event["fnv1a32"])
+    ):
+        raise ValueError("Retail image-space shader input capture identity is incomplete")
+
+    srgb_write = event.get("srgbWrite")
+    if (
+        not isinstance(srgb_write, dict)
+        or int(srgb_write.get("getResult", -1)) != D3D_SUCCESS
+        or int(srgb_write.get("enabled", -1)) not in (0, 1)
+    ):
+        raise ValueError("Retail image-space render-target transfer state is incomplete")
+
+    result: list[dict[str, object]] = []
+    stages: set[int] = set()
+    for ordinal, source in enumerate(inputs):
+        if not isinstance(source, dict) or int(source.get("ordinal", -1)) != ordinal:
+            raise ValueError("Retail image-space shader input ordinals are not canonical")
+        stage = int(source.get("stage", -1))
+        if stage < 0 or stage in stages:
+            raise ValueError("Retail image-space shader input stages are invalid or duplicated")
+        stages.add(stage)
+
+        description = source.get("description")
+        srgb_texture = source.get("srgbTexture")
+        artifact = source.get("artifact")
+        if (
+            not isinstance(description, dict)
+            or not isinstance(srgb_texture, dict)
+            or not isinstance(artifact, dict)
+            or int(source.get("getTextureResult", -1)) != D3D_SUCCESS
+            or int(source.get("levelDescriptionResult", -1)) != D3D_SUCCESS
+            or int(source.get("getSurfaceResult", -1)) != D3D_SUCCESS
+            or int(source.get("createSystemSurfaceResult", -1)) != D3D_SUCCESS
+            or int(source.get("copyResult", -1)) != D3D_SUCCESS
+            or int(source.get("lockResult", -1)) != D3D_SUCCESS
+            or int(source.get("allocationResult", -1)) != D3D_SUCCESS
+            or int(source.get("unlockResult", -1)) != D3D_SUCCESS
+            or (
+                int(source.get("directTransferResult", -1)) != D3D_SUCCESS
+                and int(source.get("resolvedTransferResult", -1)) != D3D_SUCCESS
+            )
+            or source.get("layoutResolved") is not True
+            or source.get("withinConfiguredBound") is not True
+            or source.get("captured") is not True
+            or artifact.get("written") is not True
+            or int(srgb_texture.get("getResult", -1)) != D3D_SUCCESS
+            or int(srgb_texture.get("enabled", -1)) not in (0, 1)
+        ):
+            raise ValueError(f"Retail image-space shader input stage {stage} is incomplete")
+
+        width = int(description.get("width", 0))
+        height = int(description.get("height", 0))
+        row_bytes = int(source.get("rowBytes", 0))
+        row_count = int(source.get("rowCount", 0))
+        canonical_bytes = int(source.get("canonicalBytes", 0))
+        if (
+            width <= 0
+            or height <= 0
+            or row_bytes <= 0
+            or row_count != height
+            or canonical_bytes != row_bytes * row_count
+            or int(artifact.get("bytes", -1)) != canonical_bytes
+            or int(artifact.get("fnv1a32", -1)) != int(source.get("fnv1a32", -2))
+        ):
+            raise ValueError(f"Retail image-space shader input stage {stage} row layout is invalid")
+
+        artifact_path = Path(str(artifact.get("path", ""))).resolve()
+        ledger = artifact_by_path.get(str(artifact_path).casefold())
+        if (
+            not artifact_path.is_file()
+            or ledger is None
+            or ledger.get("kind") != IMAGE_SPACE_INPUT_ARTIFACT_KIND
+            or int(ledger.get("bytes", -1)) != canonical_bytes
+            or artifact_path.stat().st_size != canonical_bytes
+        ):
+            raise ValueError(
+                f"Retail image-space shader input stage {stage} is absent from the artifact ledger"
+            )
+        payload = artifact_path.read_bytes()
+        sha256 = file_sha256(artifact_path)
+        if (
+            sha256.lower() != str(ledger.get("sha256", "")).lower()
+            or _fnv1a32(payload) != int(source["fnv1a32"])
+        ):
+            raise ValueError(f"Retail image-space shader input stage {stage} content changed")
+
+        result.append(
+            {
+                "ordinal": ordinal,
+                "stage": stage,
+                "resourceType": int(source["resourceType"]),
+                "levelCount": int(source["levelCount"]),
+                "description": {
+                    name: int(description[name])
+                    for name in (
+                        "format",
+                        "type",
+                        "usage",
+                        "pool",
+                        "multiSampleType",
+                        "multiSampleQuality",
+                        "width",
+                        "height",
+                    )
+                },
+                "srgbTexture": {
+                    "getResult": int(srgb_texture["getResult"]),
+                    "enabled": int(srgb_texture["enabled"]),
+                },
+                "rowBytes": row_bytes,
+                "rowCount": row_count,
+                "canonicalBytes": canonical_bytes,
+                "fnv1a32": int(source["fnv1a32"]),
+                "artifact": {
+                    "path": str(artifact_path),
+                    "bytes": canonical_bytes,
+                    "sha256": sha256,
+                    "fnv1a32": int(source["fnv1a32"]),
+                },
+            }
+        )
+    return result
+
+
+def _image_space_shader_contract(
+    events: list[dict[str, object]],
+    artifact_by_path: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    event = _one(
+        [row for row in events if row.get("event") == IMAGE_SPACE_SHADER_EVENT],
+        "retail image-space shader constants event",
+    )
+    registers = event.get("registers")
+    if (
+        not isinstance(registers, list)
+        or not registers
+        or any(
+            not isinstance(register, list)
+            or len(register) != IMAGE_SPACE_SHADER_REGISTER_COMPONENTS
+            or any(value is not None and not math.isfinite(float(value)) for value in register)
+            for register in registers
+        )
+        or int(event["frame"]) < 0
+        or int(event["byteCount"]) <= 0
+        or int(event["fnv1a32"]) < 0
+        or int(event["getConstantsResult"]) != D3D_SUCCESS
+        or not str(event["path"]).strip()
+    ):
+        raise ValueError("Retail image-space shader evidence is incomplete")
+    inputs = _image_space_shader_inputs_contract(event, artifact_by_path)
+    srgb_write = event["srgbWrite"]
+    return {
+        "eventSha256": _event_hash(event),
+        "frame": int(event["frame"]),
+        "sourceFrame": int(event["sourceFrame"]),
+        "renderFrame": int(event["renderFrame"]),
+        "renderFrameLead": int(event["renderFrameLead"]),
+        "byteCount": int(event["byteCount"]),
+        "fnv1a32": int(event["fnv1a32"]),
+        "path": str(event["path"]),
+        "getConstantsResult": int(event["getConstantsResult"]),
+        "srgbWrite": {
+            "getResult": int(srgb_write["getResult"]),
+            "enabled": int(srgb_write["enabled"]),
+        },
+        "registers": registers,
+        "inputTextures": inputs,
+    }
+
+
+def _environment_contract(
+    events: list[dict[str, object]],
+    artifact_by_path: dict[str, dict[str, object]],
+) -> dict[str, object]:
     event = _one(
         [row for row in events if row.get("event") == "render-environment"],
         "retail render-environment event",
@@ -847,6 +1176,8 @@ def _environment_contract(events: list[dict[str, object]]) -> dict[str, object]:
         "weatherPercent": float(event["weatherPercent"]),
         "skyMode": int(event["skyMode"]),
         "baseImageSpace": event["baseImageSpace"],
+        "weatherImageSpace": _weather_image_space_contract(event),
+        "imageSpaceShader": _image_space_shader_contract(events, artifact_by_path),
         "sunAmbient": event["sunAmbient"],
         "sunDirectional": event["sunDirectional"],
         "sunFog": event["sunFog"],
@@ -1106,39 +1437,57 @@ def _assembly_contract(
     return assembly
 
 
-def build_actor_review_contract(
+def load_actor_observation_evidence(
     data_root: Path,
     corpus_root: Path,
     review_key: str,
     retail_report_path: Path,
-    output_path: Path,
-) -> dict[str, object]:
-    """Create one immutable, data-selected retail-to-Godot review contract."""
+) -> ActorObservationEvidence:
+    """Validate and index one immutable retail actor observation once."""
 
-    if output_path.exists():
-        raise FileExistsError(f"Refusing to overwrite actor review contract: {output_path}")
     manifest_path = corpus_root / "manifest.json"
     manifest = _load_json(manifest_path)
     if manifest.get("schema") != CORPUS_SCHEMA:
         raise ValueError(f"Unexpected actor corpus: {manifest_path}")
-    appearance_path = _validate_descriptor(corpus_root, manifest["outputs"]["appearanceReview"])
+    appearance_path = _validate_descriptor(
+        corpus_root, manifest["outputs"]["appearanceReview"]
+    )
     bases_path = _validate_descriptor(corpus_root, manifest["outputs"]["bases"])
     for source in manifest["inputs"]:
         plugin_path = data_root / str(source["file"])
-        if not plugin_path.is_file() or file_sha256(plugin_path).lower() != str(source["sha256"]).lower():
+        if (
+            not plugin_path.is_file()
+            or file_sha256(plugin_path).lower() != str(source["sha256"]).lower()
+        ):
             raise ValueError(f"Owned plugin differs from the actor corpus: {plugin_path}")
-    reviews = [row for row in _load_jsonl(appearance_path) if row.get("reviewKey") == review_key]
+    reviews = [
+        row
+        for row in _load_jsonl(appearance_path)
+        if row.get("reviewKey") == review_key
+    ]
     review = _one(reviews, f"appearance review row {review_key}")
     category_keys = {str(value) for value in review["categorySources"].values()}
     required_base_keys = {str(review["baseFormKey"]), *category_keys}
-    base_rows = [row for row in _load_jsonl(bases_path) if row.get("formKey") in required_base_keys]
+    base_rows = [
+        row
+        for row in _load_jsonl(bases_path)
+        if row.get("formKey") in required_base_keys
+    ]
     bases = {str(row["formKey"]): row for row in base_rows}
     if set(bases) != required_base_keys:
-        raise ValueError(f"Actor review category sources are incomplete: {required_base_keys - set(bases)}")
+        raise ValueError(
+            "Actor review category sources are incomplete: "
+            f"{required_base_keys - set(bases)}"
+        )
 
     report = _load_json(retail_report_path)
-    if report.get("schema") != RETAIL_REPORT_SCHEMA or report.get("status") != CAPTURED_RETAIL_STATUS:
-        raise ValueError(f"Retail actor report is not classified capture evidence: {retail_report_path}")
+    if (
+        report.get("schema") != RETAIL_REPORT_SCHEMA
+        or report.get("status") != CAPTURED_RETAIL_STATUS
+    ):
+        raise ValueError(
+            f"Retail actor report is not classified capture evidence: {retail_report_path}"
+        )
     if report.get("classifiedReviewKey") != review_key:
         raise ValueError("Retail actor report classified another review key")
     if not bool(report["classification"]["complete"]):
@@ -1152,18 +1501,23 @@ def build_actor_review_contract(
                 "finalEyeSourceResolutionSceneColorRequired"
             )
         )
-        or len(
-            report["runtime"].get("surfaceContract", {}).get("sourceFrames", [])
-        )
+        or len(report["runtime"].get("surfaceContract", {}).get("sourceFrames", []))
         != len(report["capture"].get("sourceFrames", []))
     ):
-        raise ValueError("Retail actor report lacks complete frame-bound visual telemetry")
-    if str(report["provenance"]["corpusManifest"]["sha256"]).lower() != file_sha256(manifest_path).lower():
+        raise ValueError(
+            "Retail actor report lacks complete frame-bound visual telemetry"
+        )
+    if (
+        str(report["provenance"]["corpusManifest"]["sha256"]).lower()
+        != file_sha256(manifest_path).lower()
+    ):
         raise ValueError("Retail report belongs to another actor corpus manifest")
     if [row["file"] for row in report["provenance"]["officialPluginStack"]] != [
         row["file"] for row in manifest["inputs"]
     ]:
-        raise ValueError("Retail report official plugin order differs from the actor corpus")
+        raise ValueError(
+            "Retail report official plugin order differs from the actor corpus"
+        )
     report_stack = [
         (str(row["file"]), int(row["bytes"]), str(row["sha256"]).lower())
         for row in report["provenance"]["officialPluginStack"]
@@ -1173,19 +1527,29 @@ def build_actor_review_contract(
         for row in manifest["inputs"]
     ]
     if report_stack != corpus_stack:
-        raise ValueError("Retail report official plugin descriptors differ from the actor corpus")
+        raise ValueError(
+            "Retail report official plugin descriptors differ from the actor corpus"
+        )
     jsonl_artifacts = [
         Path(str(row["path"]))
         for row in report["artifacts"]
         if str(row["path"]).lower().endswith(".jsonl")
     ]
-    jsonl_path = Path(str(_one(
-        [{"path": str(path)} for path in jsonl_artifacts],
-        "retail actor oracle JSONL artifact",
-    )["path"]))
+    jsonl_path = Path(
+        str(
+            _one(
+                [{"path": str(path)} for path in jsonl_artifacts],
+                "retail actor oracle JSONL artifact",
+            )["path"]
+        )
+    )
     events = _load_jsonl(jsonl_path)
     if any(row.get("schema") != RETAIL_ORACLE_SCHEMA for row in events):
         raise ValueError(f"Retail actor JSONL mixes oracle schemas: {jsonl_path}")
+    artifact_by_path = {
+        str(Path(str(row["path"])).resolve()).casefold(): row
+        for row in report["artifacts"]
+    }
     runtime_stack = _one(
         [row for row in events if row.get("event") == "runtime-plugin-stack"],
         "runtime plugin stack event",
@@ -1193,6 +1557,49 @@ def build_actor_review_contract(
     runtime_names = [row["name"] for row in runtime_stack["plugins"]]
     if runtime_names != [row["file"] for row in manifest["inputs"]]:
         raise ValueError("Retail runtime plugin stack differs from the actor corpus")
+    return ActorObservationEvidence(
+        manifest_path,
+        manifest,
+        appearance_path,
+        bases_path,
+        review,
+        bases,
+        report,
+        jsonl_path,
+        events,
+        artifact_by_path,
+        runtime_stack,
+    )
+
+
+def build_actor_review_contract(
+    data_root: Path,
+    corpus_root: Path,
+    review_key: str,
+    retail_report_path: Path,
+    output_path: Path,
+) -> dict[str, object]:
+    """Create one immutable, data-selected retail-to-Godot review contract."""
+
+    if output_path.exists():
+        raise FileExistsError(f"Refusing to overwrite actor review contract: {output_path}")
+    evidence = load_actor_observation_evidence(
+        data_root,
+        corpus_root,
+        review_key,
+        retail_report_path,
+    )
+    manifest_path = evidence.manifest_path
+    manifest = evidence.manifest
+    appearance_path = evidence.appearance_path
+    bases_path = evidence.bases_path
+    review = evidence.review
+    bases = evidence.bases
+    report = evidence.report
+    jsonl_path = evidence.jsonl_path
+    events = evidence.events
+    artifact_by_path = evidence.artifact_by_path
+    runtime_stack = evidence.runtime_stack
 
     contract = {
         "schema": REVIEW_CONTRACT_SCHEMA,
@@ -1203,7 +1610,7 @@ def build_actor_review_contract(
             "report": _descriptor(retail_report_path),
             "oracleJsonl": _descriptor(jsonl_path),
             "runtimePluginStackEventSha256": _event_hash(runtime_stack),
-            "environment": _environment_contract(events),
+            "environment": _environment_contract(events, artifact_by_path),
             "appearance": _appearance_contract(events),
             "shots": _retail_shots(review, report, events),
         },

@@ -15,13 +15,13 @@ internal partial class DoorInstance : Node3D
     internal void Configure(
         string referenceFormId,
         float closedYaw,
-        float fallbackOpenAngleDegrees,
+        float openAngleDegrees,
         string? destinationReferenceFormId = null)
     {
         ReferenceFormId = referenceFormId;
         DestinationReferenceFormId = destinationReferenceFormId;
         _closedYaw = closedYaw;
-        _openAngleRadians = Mathf.DegToRad(fallbackOpenAngleDegrees);
+        _openAngleRadians = Mathf.DegToRad(openAngleDegrees);
         SetOpen(false);
     }
 

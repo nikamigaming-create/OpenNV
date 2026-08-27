@@ -13,6 +13,10 @@
   "runtime": {
     "engine": "Godot",
     "engineVersion": "4.7.1",
+    "enginePackage": {
+      "versionLabel": "4.7.1-stable-mono",
+      "windowsArchiveSha256": "764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45"
+    },
     "repository": "nikamigaming-create/OpenNV",
     "path": "runtime",
     "status": "experimental",

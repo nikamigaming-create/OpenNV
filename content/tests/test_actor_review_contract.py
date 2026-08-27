@@ -1,5 +1,8 @@
+import hashlib
 import math
+import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -10,14 +13,170 @@ sys.path.insert(0, str(TOOLS))
 from actor_review_contract import (  # noqa: E402
     _appearance_contract,
     _d3d_perspective_frustum,
+    _environment_contract,
+    _fnv1a32,
     _replace_d3d_projection_xy,
+    _validated_skin_palette,
 )
 from prepare_creature_review import _retail_equipped_weapon_attachment  # noqa: E402
 
 
 class ActorReviewContractTest(unittest.TestCase):
     @staticmethod
-    def _appearance_events(role: str = "weapon", schema: str = "nikami-fnv-sidecar-appearance/v3"):
+    def _environment_evidence(
+        directory: Path,
+    ) -> tuple[list[dict[str, object]], dict[str, dict[str, object]]]:
+        slot = {
+            "previousForm": 0,
+            "hidden": True,
+            "age": 0.0,
+            "flags": 1,
+            "lastStrength": 0.0,
+            "transitionTime": 0.0,
+        }
+        registers = [[0.0, 0.0, 0.0, 0.0] for _ in range(24)]
+        registers[1] = [1.4, 0.0, 0.0, 0.0]
+        registers[19] = [1.1, 0.2, 1.1, 1.3]
+        registers[20] = [0.992831886, 0.660198152, 0.027684167, 0.392156869]
+        registers[22] = [0.0, 0.0, 0.0, 0.0]
+        inputs = []
+        artifacts: dict[str, dict[str, object]] = {}
+        for ordinal, (stage, width, height) in enumerate(((0, 1, 1), (1, 2, 1))):
+            payload = bytes(width * height * 8)
+            path = (directory / f"stage-{stage}.bin").resolve()
+            path.write_bytes(payload)
+            fnv1a32 = _fnv1a32(payload)
+            sha256 = hashlib.sha256(payload).hexdigest()
+            inputs.append(
+                {
+                    "ordinal": ordinal,
+                    "stage": stage,
+                    "getTextureResult": 0,
+                    "resourceType": 3,
+                    "levelCount": 1,
+                    "levelDescriptionResult": 0,
+                    "description": {
+                        "format": 113,
+                        "type": 1,
+                        "usage": 1,
+                        "pool": 0,
+                        "multiSampleType": 0,
+                        "multiSampleQuality": 0,
+                        "width": width,
+                        "height": height,
+                    },
+                    "getSurfaceResult": 0,
+                    "createSystemSurfaceResult": 0,
+                    "directTransferResult": 0,
+                    "resolvedTransferResult": -1,
+                    "copyResult": 0,
+                    "lockResult": 0,
+                    "allocationResult": 0,
+                    "unlockResult": 0,
+                    "srgbTexture": {"getResult": 0, "enabled": 0},
+                    "rowBytes": width * 8,
+                    "rowCount": height,
+                    "canonicalBytes": len(payload),
+                    "fnv1a32": fnv1a32,
+                    "layoutResolved": True,
+                    "withinConfiguredBound": True,
+                    "captured": True,
+                    "artifact": {
+                        "written": True,
+                        "path": str(path),
+                        "bytes": len(payload),
+                        "fnv1a32": fnv1a32,
+                    },
+                }
+            )
+            artifacts[str(path).casefold()] = {
+                "kind": "retail-image-space-shader-input",
+                "path": str(path),
+                "bytes": len(payload),
+                "sha256": sha256,
+            }
+        events = [
+            {
+                "event": "render-environment",
+                "frame": 46,
+                "currentWeatherForm": 0x001237D7,
+                "defaultWeatherForm": 0x00158303,
+                "gameHour": 12.1527586,
+                "weatherPercent": 1.0,
+                "skyMode": 1,
+                "baseImageSpace": {"form": 0x0008809D, "traits": [1.0] * 33},
+                "weatherImageSpace": {
+                    "currentFadeIn": {**slot, "form": 0x000CEE18, "percent": 0.0254597664},
+                    "currentFadeOut": {**slot, "form": 0x000CEE18, "percent": 0.974540234},
+                    "transitionFadeIn": {**slot, "form": 0, "percent": 0.0},
+                    "transitionFadeOut": {**slot, "form": 0, "percent": 0.0},
+                },
+                "sunAmbient": [0.0, 0.0, 0.0, 1.0],
+                "sunDirectional": [1.0, 1.0, 1.0, 1.0],
+                "sunFog": [1.0, 1.0, 1.0, 1.0],
+            },
+            {
+                "event": "image-space-shader-constants",
+                "frame": 1,
+                "byteCount": 748,
+                "fnv1a32": 0x0A008802,
+                "path": "hdr-cinematic",
+                "getConstantsResult": 0,
+                "inputCaptureEnabled": True,
+                "expectedShaderByteCount": 748,
+                "expectedShaderFnv1a32": 0x0A008802,
+                "sourceFrame": 2,
+                "renderFrame": 1,
+                "renderFrameLead": 1,
+                "srgbWrite": {"getResult": 0, "enabled": 0},
+                "registers": registers,
+                "inputTextures": inputs,
+            },
+        ]
+        return events, artifacts
+
+    def test_environment_contract_retains_weather_slots_and_shader_registers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            events, artifacts = self._environment_evidence(Path(temporary))
+            result = _environment_contract(events, artifacts)
+
+            self.assertEqual(
+                result["weatherImageSpace"]["currentFadeIn"]["form"],
+                0x000CEE18,
+            )
+            self.assertAlmostEqual(
+                result["weatherImageSpace"]["currentFadeOut"]["percent"],
+                0.974540234,
+            )
+            self.assertEqual(result["imageSpaceShader"]["fnv1a32"], 0x0A008802)
+            self.assertEqual(result["imageSpaceShader"]["registers"][19][3], 1.3)
+            self.assertEqual(
+                [row["stage"] for row in result["imageSpaceShader"]["inputTextures"]],
+                [0, 1],
+            )
+            self.assertEqual(
+                result["imageSpaceShader"]["inputTextures"][1]["description"]["width"],
+                2,
+            )
+
+    def test_environment_contract_rejects_missing_weather_slot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            events, artifacts = self._environment_evidence(Path(temporary))
+            del events[0]["weatherImageSpace"]["transitionFadeOut"]
+
+            with self.assertRaisesRegex(ValueError, "four-slot"):
+                _environment_contract(events, artifacts)
+
+    def test_environment_contract_rejects_changed_shader_input(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            events, artifacts = self._environment_evidence(Path(temporary))
+            Path(events[1]["inputTextures"][0]["artifact"]["path"]).write_bytes(b"changed!")
+
+            with self.assertRaisesRegex(ValueError, "content changed"):
+                _environment_contract(events, artifacts)
+
+    @staticmethod
+    def _appearance_events(role: str = "weapon", schema: str = "nikami-fnv-sidecar-appearance/v4"):
         frame = 70
         weapon_form = 0x010117F7
         model_path = "weapons/2handmelee/knifespear/knifespear.nif"
@@ -31,6 +190,12 @@ class ActorReviewContractTest(unittest.TestCase):
             {
                 "event": "actor-visual-snapshot",
                 "frame": frame,
+                "nodes": [
+                    {
+                        "name": "KnifeSpear:0",
+                        "nodePath": "root/weapon/0",
+                    }
+                ],
                 "appearance": {
                     "schema": schema,
                     "complete": True,
@@ -52,6 +217,9 @@ class ActorReviewContractTest(unittest.TestCase):
                             "attached": True,
                             "drawable": True,
                             "visible": True,
+                            "skinned": False,
+                            "geometryName": "KnifeSpear:0",
+                            "visualNodePath": "root/weapon/0",
                             "textureBindings": [],
                         }
                     ],
@@ -66,6 +234,54 @@ class ActorReviewContractTest(unittest.TestCase):
         self.assertEqual(
             result["snapshot"]["equippedWeapon"]["sourceFormId"],
             "0x010117F7",
+        )
+
+    def test_skin_contract_reclassifies_previous_render_frame_cache(self):
+        def instance(name: str, frame_id: int) -> dict[str, object]:
+            matrices = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+            return {
+                "nodePath": f"root/{name}",
+                "geometryName": name,
+                "skinInstanceType": "BSDismemberSkinInstance",
+                "rootParentName": "Scene Root",
+                "frameId": frame_id,
+                "status": "captured",
+                "matrixCount": 1,
+                "registersPerMatrix": 3,
+                "componentsPerRegister": 4,
+                "allocatedBytes": 48,
+                "matrixBytes": 48,
+                "matricesReadable": True,
+                "matricesFinite": True,
+                "bonesReadable": True,
+                "matrices": matrices,
+                "fnv1a32": _fnv1a32(struct.pack("<12f", *matrices)),
+                "bones": [{"index": 0, "name": "Bip01 Pelvis"}],
+            }
+
+        event = {
+            "skinPaletteCapture": {
+                "visitedNodes": 2,
+                "geometryCandidates": 2,
+                "skinInstances": 2,
+                "capturedPalettes": 2,
+                "notRenderCached": 0,
+                "invalidPalettes": 0,
+                "traversalTruncated": False,
+            },
+            "skinPalettes": [instance("Current", 11), instance("Stale", 10)],
+        }
+
+        result = _validated_skin_palette(event, 70)
+
+        self.assertEqual(result["summary"]["capturedPalettes"], 1)
+        self.assertEqual(result["summary"]["notRenderCached"], 1)
+        self.assertEqual(result["summary"]["currentRenderFrameId"], 11)
+        self.assertEqual(result["summary"]["staleRenderCachesReclassified"], 1)
+        self.assertEqual(result["instances"][1]["status"], "not-render-cached")
+        self.assertEqual(
+            result["instances"][1]["cacheClassification"],
+            "stale-not-bound-to-current-render-frame",
         )
 
     def test_appearance_contract_rejects_weapon_geometry_mislabeled_as_actor(self):

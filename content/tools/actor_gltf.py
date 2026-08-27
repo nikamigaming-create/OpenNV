@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import math
 import os
+import re
 import struct
 import time
 from dataclasses import dataclass
@@ -33,7 +33,8 @@ from gltf_io import (
     BufferBuilder,
     pack_floats,
 )
-from facegen import apply_geometry_morphs, repair_facegen_nif_uv_flag
+from facegen import apply_geometry_morphs
+from nif_decoder import decode_nif
 from texture_pipeline import decode_dds
 from actor_material import (
     actor_texture_paths,
@@ -43,11 +44,36 @@ from actor_material import (
 from runtime_configuration import ContentCompilerConfiguration
 
 
-ACTOR_GLTF_SCHEMA = "opennv-actor-gltf/v2"
+ACTOR_GLTF_SCHEMA = "opennv-actor-gltf/v3"
 RUNTIME_SURFACE_NODE_PREFIX = "ActorSurface_"
 RIGID_ATTACHMENT_NIF_ROOT = "nif-root-skeleton-node"
 RIGID_ATTACHMENT_NIF_PARENT = "nif-prn-skeleton-node"
-RIGID_ATTACHMENT_CONFIGURED_FALLBACK = "configured-skeleton-node-fallback"
+RIGID_ATTACHMENT_CONFIGURED_NODE = "configured-unparented-skeleton-node"
+PRN_ROOT_MARKER_DISPOSITION = "omit-authored-prn-root-marker"
+FACEGEN_RIGID_COMPONENT_ROLES = frozenset(
+    {
+        "eye-left",
+        "eye-right",
+        "hair",
+        "head-part",
+        "mouth",
+        "teeth-lower",
+        "teeth-upper",
+        "tongue",
+    }
+)
+RETAIL_APPEARANCE_ROLE_BY_COMPONENT_ROLE = {
+    "eye-left": "eyes",
+    "eye-right": "eyes",
+    "mouth": "headPart",
+    "teeth-lower": "headPart",
+    "teeth-upper": "headPart",
+    "tongue": "headPart",
+    "head-part": "headPart",
+}
+RUNTIME_GEOMETRY_NONIDENTITY_TOKENS = frozenset(
+    {"face", "gen", "human", "female", "male"}
+)
 NIF_PARENT_EXTRA_DATA_NAME = "prn"
 NIF_LINEAR_INTERPOLATION = 1
 NIF_QUADRATIC_INTERPOLATION = 2
@@ -71,20 +97,77 @@ class ActorComponent:
     bake_shape_transform: bool = False
     selected_shape: str | None = None
     diffuse_override: str | None = None
+    normal_override: str | None = None
     generated_diffuse: Image.Image | None = None
     generated_diffuse_by_source: tuple[tuple[str, Image.Image], ...] = ()
+    facegen_detail_path: str | None = None
+    generated_facegen_detail: Image.Image | None = None
     tint_rgb: tuple[float, float, float] | None = None
     diffuse_aliases: tuple[tuple[str, str], ...] = ()
-    repair_facegen: bool = False
     egm_vertex_offset: int = 0
     source_form_id: str | None = None
     source_slot: int | None = None
+    runtime_shape_name: str | None = None
 
 
 @dataclass(frozen=True)
 class ActorAnimation:
     logical_path: str
     payload: bytes
+
+
+@dataclass(frozen=True)
+class RetailRenderPart:
+    role: str
+    source_form_id: str
+    source_slot: int
+    required: bool
+    attached: bool
+    drawable: bool
+    visible: bool
+    skinned: bool
+    geometry_name: str
+    visual_node_path: str
+    texture_paths: tuple[str, ...]
+
+
+def retail_render_parts_from_snapshot(
+    snapshot: dict[str, object],
+) -> tuple[RetailRenderPart, ...]:
+    raw_parts = snapshot.get("renderParts")
+    if not isinstance(raw_parts, list) or not raw_parts:
+        raise ValueError("Retail appearance snapshot has no render parts")
+    parts: list[RetailRenderPart] = []
+    for raw_part in raw_parts:
+        if not isinstance(raw_part, dict):
+            raise ValueError("Retail appearance render part is not an object")
+        raw_bindings = raw_part.get("textureBindings")
+        if not isinstance(raw_bindings, list):
+            raise ValueError("Retail appearance render part has no texture bindings")
+        parts.append(
+            RetailRenderPart(
+                role=str(raw_part["role"]),
+                source_form_id=str(raw_part["sourceFormId"]),
+                source_slot=int(raw_part["sourceSlot"]),
+                required=bool(raw_part["required"]),
+                attached=bool(raw_part["attached"]),
+                drawable=bool(raw_part["drawable"]),
+                visible=bool(raw_part["visible"]),
+                skinned=bool(raw_part["skinned"]),
+                geometry_name=str(raw_part["geometryName"]),
+                visual_node_path=str(raw_part["visualNodePath"]),
+                texture_paths=tuple(
+                    sorted(
+                        {
+                            canonical_member_path(str(binding["path"]))
+                            for binding in raw_bindings
+                            if isinstance(binding, dict) and str(binding.get("path", ""))
+                        }
+                    )
+                ),
+            )
+        )
+    return tuple(parts)
 
 
 @dataclass(frozen=True)
@@ -98,8 +181,11 @@ class ActorGltfInput:
     components: tuple[ActorComponent, ...]
     idle_animation_path: str
     idle_animation_payload: bytes
-    rigid_attachment_node: str = "HeadAnims"
+    skeleton_root_node: str
+    rigid_attachment_node: str
+    biped_head_node: str
     additional_animations: tuple[ActorAnimation, ...] = ()
+    retail_render_parts: tuple[RetailRenderPart, ...] = ()
 
 
 class TextureLibrary:
@@ -208,8 +294,9 @@ def export_actor_gltf(
     compiler: ContentCompilerConfiguration,
 ) -> dict[str, object]:
     gltf_path.parent.mkdir(parents=True, exist_ok=True)
-    skeleton = _read_nif(source.skeleton_payload)
-    skeleton_root = _named_node(skeleton, "Bip01")
+    skeleton_decode = decode_nif(source.skeleton_payload)
+    skeleton = skeleton_decode.document
+    skeleton_root = _named_node(skeleton, source.skeleton_root_node)
     nodes: list[dict[str, object]] = [{"name": f"ACTOR_{source.actor_form_id}_{source.actor_name}", "children": []}]
     node_by_name: dict[str, int] = {}
     _append_skeleton_nodes(skeleton_root, 0, nodes, node_by_name)
@@ -224,16 +311,29 @@ def export_actor_gltf(
     skins: list[dict[str, object]] = []
     materials: list[dict[str, object]] = []
     surfaces: list[dict[str, object]] = []
+    omitted_surfaces: list[dict[str, object]] = []
+    nif_decodes: list[dict[str, object]] = [
+        {
+            "role": "skeleton",
+            "logicalPath": source.skeleton_path,
+            "sha256": hashlib.sha256(source.skeleton_payload).hexdigest(),
+            "decoder": skeleton_decode.evidence(),
+        }
+    ]
     textures = TextureLibrary(texture_archives, gltf_path.parent, gltf_path, compiler)
 
     for component in source.components:
         payload = component.model_payload
-        repairs: tuple[int, ...] = ()
-        if component.repair_facegen:
-            repaired = repair_facegen_nif_uv_flag(payload)
-            payload = repaired.payload
-            repairs = repaired.uv_flag_offsets
-        document = _read_nif(payload)
+        component_decode = decode_nif(payload)
+        document = component_decode.document
+        nif_decodes.append(
+            {
+                "role": component.role,
+                "logicalPath": component.model_path,
+                "sha256": hashlib.sha256(component.model_payload).hexdigest(),
+                "decoder": component_decode.evidence(),
+            }
+        )
         component_root = document.roots[0]
         unsupported_geometry = _unsupported_actor_geometry(document)
         if unsupported_geometry:
@@ -251,16 +351,55 @@ def export_actor_gltf(
             node_by_name,
             source.rigid_attachment_node,
         )
-        shapes = [
+        authored_shapes = [
             shape
             for shape in document.get_global_iterator()
             if isinstance(shape, (NifFormat.NiTriShape, NifFormat.NiTriStrips)) and shape.data is not None
         ]
         if component.selected_shape is not None:
-            shapes = [shape for shape in shapes if _text(shape.name) == component.selected_shape]
-        shapes = [shape for shape in shapes if not _is_dismember_cap_shape(shape)]
+            authored_shapes = [
+                shape
+                for shape in authored_shapes
+                if _text(shape.name) == component.selected_shape
+            ]
+        authored_shapes = [
+            shape for shape in authored_shapes if not _is_dismember_cap_shape(shape)
+        ]
+        marker_shapes = [
+            shape
+            for shape in authored_shapes
+            if _is_authored_prn_root_marker(
+                component_root,
+                shape,
+                rigid_attachment_source,
+                authored_shapes,
+            )
+        ]
+        for shape in marker_shapes:
+            omitted_surfaces.append(
+                {
+                    "role": component.role,
+                    "modelPath": component.model_path,
+                    "modelSha256": hashlib.sha256(component.model_payload).hexdigest(),
+                    "shape": _text(shape.name),
+                    "attachmentNode": rigid_attachment_node,
+                    "attachmentSource": rigid_attachment_source,
+                    "disposition": PRN_ROOT_MARKER_DISPOSITION,
+                    "authority": (
+                        "owned NIF Prn attachment, root-child topology, zero UV sets, "
+                        "and material-only geometry"
+                    ),
+                }
+            )
+        marker_ids = {id(shape) for shape in marker_shapes}
+        shapes = [shape for shape in authored_shapes if id(shape) not in marker_ids]
         if not shapes:
             raise ValueError(f"Actor component {component.role} selected no shapes from {component.model_path}")
+        if component.runtime_shape_name is not None and len(shapes) != 1:
+            raise ValueError(
+                f"Actor component {component.role} cannot apply one retail runtime shape name "
+                f"to {len(shapes)} source shapes"
+            )
         for shape in shapes:
             mesh_index, skin_index, surface = _append_shape(
                 source,
@@ -281,6 +420,23 @@ def export_actor_gltf(
                 parent = node_by_name[rigid_attachment_node]
                 surface["attachmentNode"] = rigid_attachment_node
                 surface["attachmentSource"] = rigid_attachment_source
+                if _uses_retail_biped_head_basis(
+                    component.role,
+                    rigid_attachment_node,
+                    rigid_attachment_source,
+                    source.biped_head_node,
+                ):
+                    attachment_matrix = _facegen_rigid_attachment_matrix(
+                        surface["sourceShapeTranslationGameUnits"]
+                    )
+                    surface["attachmentBasisSource"] = (
+                        "retail-biped-prn-local-quarter-turn"
+                        if rigid_attachment_source == RIGID_ATTACHMENT_NIF_PARENT
+                        else "retail-facegen-biped-local-quarter-turn"
+                    )
+                    surface["attachmentLocalMatrixGodot"] = attachment_matrix
+                else:
+                    attachment_matrix = None
             _append_runtime_surface_node(
                 nodes,
                 parent,
@@ -288,8 +444,8 @@ def export_actor_gltf(
                 skin_index,
                 surface,
                 len(surfaces),
+                attachment_matrix if skin_index is None else None,
             )
-            surface["faceGenUvFlagRepairs"] = list(repairs)
             surfaces.append(surface)
 
     animation_sources = (
@@ -370,10 +526,13 @@ def export_actor_gltf(
             "logicalPath": source.skeleton_path,
             "sha256": hashlib.sha256(source.skeleton_payload).hexdigest(),
             "nodes": len(node_by_name),
+            "rootNode": source.skeleton_root_node,
             "rigidAttachmentNode": source.rigid_attachment_node,
+            "bipedHeadNode": source.biped_head_node,
             "rigidAttachmentPolicy": (
                 "attach a rigid component to its authored NIF Prn skeleton node; "
-                "without Prn, use a matching NIF root, then the configured fallback"
+                "without Prn, require either a matching NIF root or the configured "
+                "engine-contract node"
             ),
         },
         "animation": {
@@ -390,6 +549,7 @@ def export_actor_gltf(
         "coverage": {
             "components": len(source.components),
             "surfaces": len(surfaces),
+            "omittedSurfaces": len(omitted_surfaces),
             "skins": len(skins),
             "textures": len(textures.rows),
             "animations": len(animations),
@@ -397,7 +557,9 @@ def export_actor_gltf(
             "animated": bool(animations) and animation_channels > 0,
         },
         "surfaces": surfaces,
+        "omittedSurfaces": omitted_surfaces,
         "textures": textures.rows,
+        "nifDecodes": nif_decodes,
     }
     sidecar_bytes = (json.dumps(sidecar, indent=2, sort_keys=True) + "\n").encode()
     _atomic_write(sidecar_path, sidecar_bytes)
@@ -411,6 +573,7 @@ def _append_runtime_surface_node(
     skin_index: int | None,
     surface: dict[str, object],
     surface_index: int,
+    local_matrix: list[list[float]] | None = None,
 ) -> None:
     runtime_node_name = _runtime_surface_node_name(surface_index)
     node: dict[str, object] = {
@@ -419,11 +582,61 @@ def _append_runtime_surface_node(
     }
     if skin_index is not None:
         node["skin"] = skin_index
+    if local_matrix is not None:
+        node["matrix"] = list(_gltf_matrix(local_matrix))
     node_index = len(nodes)
     nodes.append(node)
     nodes[parent_index].setdefault("children", []).append(node_index)
     surface["node"] = node_index
     surface["runtimeNodeName"] = runtime_node_name
+
+
+def _facegen_rigid_attachment_matrix(
+    source_shape_translation_game_units: object,
+) -> list[list[float]]:
+    """Return retail's BSFaceGenNiNodeBiped-to-part local transform.
+
+    Runtime FaceGen rigid parts share a quarter-turn beneath Bip01 Head. The
+    source shape translation remains authored per NIF and is converted without
+    folding the NIF shape basis into the vertices.
+    """
+
+    if (
+        not isinstance(source_shape_translation_game_units, list)
+        or len(source_shape_translation_game_units) != 3
+        or any(not isinstance(value, (int, float)) for value in source_shape_translation_game_units)
+    ):
+        raise ValueError("FaceGen rigid attachment translation must contain three numbers")
+    translation = _convert_vector(tuple(float(value) for value in source_shape_translation_game_units))
+    return [
+        [0.0, 1.0, 0.0, translation[0]],
+        [-1.0, 0.0, 0.0, translation[1]],
+        [0.0, 0.0, 1.0, translation[2]],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+
+
+def _uses_retail_biped_head_basis(
+    component_role: str,
+    attachment_node: str,
+    attachment_source: str,
+    biped_head_node: str,
+) -> bool:
+    """Identify rigid parts authored in the Gamebryo biped-head basis.
+
+    FaceGen parts use that basis, but they are not its only consumers.  Head
+    apparel can declare the configured biped-head node through owned ``Prn``
+    data and therefore requires the same local quarter-turn.
+    """
+
+    return (
+        not component_role.startswith("creature-model-")
+        and attachment_node == biped_head_node
+        and (
+            component_role in FACEGEN_RIGID_COMPONENT_ROLES
+            or attachment_source == RIGID_ATTACHMENT_NIF_PARENT
+        )
+    )
 
 
 def _runtime_surface_node_name(surface_index: int) -> str:
@@ -439,6 +652,89 @@ def _unsupported_actor_geometry(document: object) -> tuple[tuple[str, str], ...]
         for block in document.get_global_iterator()
         if isinstance(block, NifFormat.NiGeometry) and not isinstance(block, supported)
     )
+
+
+def _is_authored_prn_root_marker(
+    component_root: object,
+    shape: object,
+    attachment_source: str,
+    authored_shapes: list[object],
+) -> bool:
+    """Classify an owned NIF's non-rendering rigid attachment marker.
+
+    Fallout component NIFs attached through ``Prn`` can retain a Max-authored
+    root marker as direct child geometry.  The owned files distinguish that
+    marker structurally: it is unskinned, has no UV set, carries only a legacy
+    material property, and sits beside actual render geometry.  This avoids
+    actor, model, or shape-name exceptions while retaining the omitted source
+    identity in the sidecar.
+    """
+
+    if attachment_source != RIGID_ATTACHMENT_NIF_PARENT:
+        return False
+    if getattr(shape, "skin_instance", None) is not None:
+        return False
+    if not any(child is shape for child in getattr(component_root, "children", [])):
+        return False
+    data = getattr(shape, "data", None)
+    if data is None or len(getattr(data, "uv_sets", [])) != 0:
+        return False
+    properties = tuple(
+        prop for prop in getattr(shape, "properties", []) if prop is not None
+    )
+    if len(properties) != 1 or not isinstance(properties[0], NifFormat.NiMaterialProperty):
+        return False
+    return any(other is not shape for other in authored_shapes)
+
+
+def actor_component_geometry_inventory(
+    payload: bytes,
+) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Classify render geometry before a gallery decides component scope."""
+
+    document = _read_nif(payload)
+    supported = tuple(
+        (type(block).__name__, _text(block.name))
+        for block in document.get_global_iterator()
+        if isinstance(block, (NifFormat.NiTriShape, NifFormat.NiTriStrips))
+        and block.data is not None
+    )
+    return {
+        "supported": supported,
+        "unsupported": _unsupported_actor_geometry(document),
+    }
+
+
+def actor_skin_diffuse_paths(payload: bytes) -> tuple[str, ...]:
+    """Return diffuse members selected by authored NIF skin-tint shaders."""
+
+    document = _read_nif(payload)
+    paths = set()
+    for shape in document.get_global_iterator():
+        if not isinstance(shape, (NifFormat.NiTriShape, NifFormat.NiTriStrips)):
+            continue
+        if shape.data is None or getattr(shape, "skin_instance", None) is None:
+            continue
+        properties = tuple(
+            prop for prop in getattr(shape, "properties", ()) if prop is not None
+        )
+        shader = next(
+            (
+                prop
+                for prop in properties
+                if isinstance(prop, NifFormat.BSShaderPPLightingProperty)
+            ),
+            None,
+        )
+        if shader is None or shader.shader_type != NifFormat.BSShaderType.SHADERSKIN:
+            continue
+        texture_paths = actor_texture_paths(list(properties))
+        if not texture_paths or not texture_paths[0]:
+            raise ValueError(
+                f"Actor skin-tint shape has no authored diffuse: {_text(shape.name)}"
+            )
+        paths.add(texture_paths[0])
+    return tuple(sorted(paths))
 
 
 def _append_skeleton_nodes(
@@ -471,9 +767,9 @@ def _rigid_attachment(
     document: object,
     component_root: object,
     node_by_name: dict[str, int],
-    configured_fallback: str,
+    configured_node: str,
 ) -> tuple[str, str]:
-    """Resolve one rigid model from authored NIF identity before using fallback."""
+    """Resolve one rigid model from authored NIF identity or engine contract."""
 
     authored_parents = {
         _text(extra.string_data)
@@ -499,12 +795,135 @@ def _rigid_attachment(
     authored_root = _text(component_root.name)
     if authored_root in node_by_name:
         return authored_root, RIGID_ATTACHMENT_NIF_ROOT
-    if configured_fallback not in node_by_name:
+    if configured_node not in node_by_name:
         raise ValueError(
-            "Actor skeleton has no configured rigid-attachment fallback: "
-            f"{configured_fallback}"
+            "Actor skeleton has no configured unparented rigid-attachment node: "
+            f"{configured_node}"
         )
-    return configured_fallback, RIGID_ATTACHMENT_CONFIGURED_FALLBACK
+    return configured_node, RIGID_ATTACHMENT_CONFIGURED_NODE
+
+
+def _geometry_identity_tokens(value: str) -> frozenset[str]:
+    words = re.findall(
+        r"[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z]+|[0-9]+",
+        value.replace("_", " ").replace("-", " "),
+    )
+    return frozenset(
+        word.casefold()
+        for word in words
+        if word.casefold() not in RUNTIME_GEOMETRY_NONIDENTITY_TOKENS
+        and not word.isdecimal()
+    )
+
+
+def _component_retail_role(component_role: str) -> str:
+    if component_role.startswith("creature-model-"):
+        return "actor"
+    return RETAIL_APPEARANCE_ROLE_BY_COMPONENT_ROLE.get(
+        component_role,
+        component_role,
+    )
+
+
+def _resolved_component_texture_paths(
+    component: ActorComponent,
+    source_texture_paths: tuple[str, ...],
+) -> frozenset[str]:
+    paths = {
+        canonical_member_path(path)
+        for path in source_texture_paths
+        if path
+    }
+    if component.diffuse_override:
+        paths.add(canonical_member_path(component.diffuse_override))
+    aliases = {
+        canonical_member_path(source): canonical_member_path(target)
+        for source, target in component.diffuse_aliases
+    }
+    paths.update(aliases[path] for path in tuple(paths) if path in aliases)
+    return frozenset(paths)
+
+
+def _resolve_retail_rigid_part(
+    component: ActorComponent,
+    source_shape_name: str,
+    source_texture_paths: tuple[str, ...],
+    render_parts: tuple[RetailRenderPart, ...],
+) -> tuple[RetailRenderPart, str]:
+    if component.source_form_id is None or component.source_slot is None:
+        raise ValueError(
+            f"Rigid actor component {component.role}/{source_shape_name} has no retail source identity"
+        )
+    retail_role = _component_retail_role(component.role)
+    candidates = [
+        part
+        for part in render_parts
+        if part.role == retail_role
+        and part.source_form_id == component.source_form_id
+        and part.source_slot == component.source_slot
+        and part.required
+        and part.attached
+        and part.drawable
+        and part.visible
+        and not part.skinned
+    ]
+    if not candidates:
+        raise ValueError(
+            "Rigid actor surface has no required retail render part: "
+            f"{component.role}/{source_shape_name} "
+            f"source={component.source_form_id}/{component.source_slot}"
+        )
+
+    exact_name = [
+        part for part in candidates if part.geometry_name == source_shape_name
+    ]
+    if len(exact_name) == 1:
+        return exact_name[0], "exact-runtime-geometry-name"
+
+    component_textures = _resolved_component_texture_paths(
+        component,
+        source_texture_paths,
+    )
+    texture_scores = {
+        part: len(
+            component_textures.intersection(
+                canonical_member_path(path) for path in part.texture_paths
+            )
+        )
+        for part in candidates
+    }
+    maximum_texture_score = max(texture_scores.values())
+    texture_matches = [
+        part
+        for part, score in texture_scores.items()
+        if score == maximum_texture_score and score > 0
+    ]
+    if len(texture_matches) == 1:
+        return texture_matches[0], "exact-owned-texture-binding"
+
+    source_tokens = _geometry_identity_tokens(source_shape_name)
+    token_scores = {
+        part: len(source_tokens.intersection(_geometry_identity_tokens(part.geometry_name)))
+        for part in candidates
+    }
+    maximum_token_score = max(token_scores.values())
+    token_matches = [
+        part
+        for part, score in token_scores.items()
+        if score == maximum_token_score and score > 0
+    ]
+    if len(token_matches) == 1:
+        return token_matches[0], "exact-geometry-token-lineage"
+
+    if len(candidates) == 1:
+        return candidates[0], "unique-source-bound-runtime-part"
+    identities = sorted(
+        f"{part.geometry_name}@{part.visual_node_path}" for part in candidates
+    )
+    raise ValueError(
+        "Rigid actor surface has ambiguous retail render parts: "
+        f"{component.role}/{source_shape_name} candidates={identities}"
+    )
 
 
 def _append_shape(
@@ -521,6 +940,7 @@ def _append_shape(
     compiler: ContentCompilerConfiguration,
 ) -> tuple[int, int | None, dict[str, object]]:
     mesh = shape.data
+    source_shape_name = _text(shape.name)
     vertex_count = len(mesh.vertices)
     if vertex_count == 0:
         raise ValueError(f"Actor shape has no vertices: {_text(shape.name)}")
@@ -545,7 +965,35 @@ def _append_shape(
         morphed = True
     shape_transform = shape.get_transform(component_root)
     rigid_to_head = getattr(shape, "skin_instance", None) is None
-    transform_shape = rigid_to_head or component.bake_shape_transform
+    retail_part = None
+    retail_binding_authority = None
+    if rigid_to_head and source.retail_render_parts:
+        retail_part, retail_binding_authority = _resolve_retail_rigid_part(
+            component,
+            source_shape_name,
+            texture_paths,
+            source.retail_render_parts,
+        )
+    runtime_shape_name = (
+        retail_part.geometry_name
+        if retail_part is not None
+        else component.runtime_shape_name or source_shape_name
+    )
+    if not runtime_shape_name:
+        raise ValueError(f"Actor component {component.role} has no runtime shape identity")
+    # Rigid face and hair meshes already store their vertices in the local
+    # space of the authored PRN/root attachment. Baking the NiTriShape-to-NIF
+    # root transform here and then parenting the result under that skeleton
+    # node applies the attachment basis twice (most visibly rotating hair in
+    # front of the face). Creature add-on NIFs use ordinary authored shape
+    # transforms instead of the FaceGen biped basis, so their rigid geometry
+    # is baked once before it is parented to its declared PRN/root bone.
+    creature_rigid_shape = (
+        rigid_to_head and component.role.startswith("creature-model-")
+    )
+    transform_shape = retail_part is None and (
+        component.bake_shape_transform or creature_rigid_shape
+    )
     positions = [
         _transform_position(position, shape_transform)
         if transform_shape else _convert_vector(position)
@@ -638,7 +1086,7 @@ def _append_shape(
     mesh_index = len(meshes)
     meshes.append(
         {
-            "name": f"{component.role}_{_text(shape.name)}",
+            "name": f"{component.role}_{runtime_shape_name}",
             "primitives": [{"attributes": attributes, "indices": index_accessor, "material": material_index}],
         }
     )
@@ -650,7 +1098,13 @@ def _append_shape(
         "modelSha256": hashlib.sha256(component.model_payload).hexdigest(),
         "egmPath": component.egm_path,
         "egmSha256": hashlib.sha256(component.egm_payload).hexdigest() if component.egm_payload else None,
-        "shape": _text(shape.name),
+        "shape": runtime_shape_name,
+        "sourceShape": source_shape_name,
+        "sourceShapeTranslationGameUnits": [
+            float(shape_transform.m_41),
+            float(shape_transform.m_42),
+            float(shape_transform.m_43),
+        ],
         "vertices": vertex_count,
         "triangles": len(triangles),
         "uvSets": len(mesh.uv_sets),
@@ -658,10 +1112,18 @@ def _append_shape(
         "morphed": morphed,
         "skinned": skin_index is not None,
         "attachmentSource": "nif-skin" if skin_index is not None else None,
+        "retailGeometryName": (
+            retail_part.geometry_name if retail_part is not None else None
+        ),
+        "retailVisualNodePath": (
+            retail_part.visual_node_path if retail_part is not None else None
+        ),
+        "retailBindingAuthority": retail_binding_authority,
         "skinWeightSource": "nif-hardware-skin-partition" if skin_index is not None else None,
         "skinShapeTransformCompensated": (
             skin_index is not None and component.bake_shape_transform
         ),
+        "rigidShapeTransformBaked": rigid_to_head and transform_shape,
         "vertexColorsEnabled": vertex_colors_enabled,
         "material": material_row,
     }
@@ -1185,8 +1647,7 @@ def _continuous_quaternions(
 
 
 def _read_nif(payload: bytes) -> object:
-    document = NifFormat.Data()
-    document.read(io.BytesIO(payload))
+    document = decode_nif(payload).document
     if len(document.roots) != 1:
         raise ValueError(f"Actor NIF must have one root, found {len(document.roots)}")
     return document

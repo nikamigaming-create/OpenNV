@@ -18,10 +18,12 @@ from cell_scene import (  # noqa: E402
     godot_yaw_radians,
     interaction_manifest,
     load_recipe,
+    load_spatial_recipe,
     reference_selection_reason,
     vr_smoke_loadout_manifest,
 )
 from plugin_records import COMPRESSED_RECORD_FLAG, PluginFormatError, iter_plugin_records  # noqa: E402
+from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 def subrecord(signature: str, data: bytes) -> bytes:
@@ -155,6 +157,46 @@ def synthetic_plugin() -> bytes:
 
 
 class CellCatalogTest(unittest.TestCase):
+    def test_static_collection_base_resolves_for_placed_reference(self) -> None:
+        header = record("TES4", 0, subrecord("HEDR", struct.pack("<fII", 1.34, 1, 0)))
+        static_collection = record(
+            "SCOL",
+            0x500,
+            subrecord("EDID", b"SyntheticCollection\0")
+            + subrecord("MODL", b"SCOL/SyntheticCollection.NIF\0"),
+        )
+        cell = record(
+            "CELL",
+            0x501,
+            subrecord("EDID", b"SyntheticExterior\0") + subrecord("DATA", b"\x00"),
+        )
+        reference = record(
+            "REFR",
+            0x502,
+            subrecord("NAME", struct.pack("<I", 0x500))
+            + subrecord("DATA", struct.pack("<6f", 10.0, 20.0, 30.0, 0.0, 0.0, 0.0)),
+        )
+        children = group(
+            struct.pack("<I", 0x501),
+            6,
+            group(struct.pack("<I", 0x501), 9, reference),
+        )
+        plugin = (
+            header
+            + group(b"SCOL", 0, static_collection)
+            + group(b"CELL", 0, cell + children)
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "synthetic-scol.esm"
+            path.write_bytes(plugin)
+            catalog = scan_cell_catalog(path)
+
+        base = catalog.base_objects[0x500]
+        self.assertEqual(base.record_type, "SCOL")
+        self.assertEqual(base.model_path, "scol\\syntheticcollection.nif")
+        self.assertEqual(catalog.references_for(0x501)[0].base_form_id, base.form_id)
+
     def test_environment_slots_require_the_retail_shader_flag(self):
         surface = {
             "textures": ["diffuse", "normal", "", "", "cube", "mask"],
@@ -289,21 +331,48 @@ class CellCatalogTest(unittest.TestCase):
 
     def test_recipe_accounts_for_editor_and_effect_exclusions(self) -> None:
         recipe = load_recipe("goodsprings-saloon-structure-v1")
+        compiler = load_runtime_configuration().content_compiler
         self.assertEqual(
-            reference_selection_reason(BaseObject(1, "FURN", "BarKeep", "furniture\\barkeep.nif"), recipe),
+            reference_selection_reason(
+                BaseObject(1, "FURN", "BarKeep", "furniture\\barkeep.nif"),
+                recipe,
+                compiler,
+            ),
             "editor-only-base",
         )
         self.assertEqual(
-            reference_selection_reason(BaseObject(2, "STAT", "Glow", "effects\\glow.nif"), recipe),
+            reference_selection_reason(
+                BaseObject(2, "STAT", "Glow", "effects\\glow.nif"),
+                recipe,
+                compiler,
+            ),
             "special-effect-shader-required",
         )
         self.assertEqual(
-            reference_selection_reason(BaseObject(3, "STAT", "Table", "furniture\\table01.nif"), recipe),
+            reference_selection_reason(
+                BaseObject(300, "STAT", "Table", "furniture\\table01.nif"),
+                recipe,
+                compiler,
+            ),
             "selected",
         )
         self.assertEqual(
-            reference_selection_reason(BaseObject(4, "TREE", "Shrub", "wastelandshrub01.spt"), recipe),
-            "unsupported-model-format",
+            reference_selection_reason(
+                BaseObject(4, "TREE", "Shrub", "wastelandshrub01.spt"),
+                recipe,
+                compiler,
+            ),
+            "outside-recipe",
+        )
+
+        exterior_recipe = load_spatial_recipe("goodsprings-actor-review-background-v1")
+        self.assertEqual(
+            reference_selection_reason(
+                BaseObject(5, "SCOL", "SCOLgsHouse02", "scol\\scolgshouse02.nif"),
+                exterior_recipe,
+                compiler,
+            ),
+            "selected",
         )
 
 

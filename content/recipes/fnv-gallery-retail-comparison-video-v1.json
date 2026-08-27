@@ -1,0 +1,60 @@
+{
+  "schema": "opennv-gallery-retail-comparison-policy/v1",
+  "id": "fnv-gallery-retail-comparison-video-v1",
+  "status": "deterministic-derivative-non-parity",
+  "phaseOrder": ["retail-to-opennv-wipe", "side-by-side", "opennv-motion"],
+  "phases": {
+    "retail-to-opennv-wipe": {
+      "durationSeconds": 1.25,
+      "direction": "left-to-right"
+    },
+    "side-by-side": {
+      "durationSeconds": 1.25,
+      "retailSide": "left",
+      "openNvSide": "right"
+    },
+    "opennv-motion": {
+      "durationSource": "gallery-video-report.gallery.secondsPerSubject"
+    }
+  },
+  "labels": {
+    "retail": "RETAIL FNV",
+    "openNv": "OPENNV  /  CURRENT",
+    "wipe": "RETAIL  →  OPENNV",
+    "sideBySide": "SIDE BY SIDE",
+    "openNvOnly": "OPENNV  /  CURRENT"
+  },
+  "style": {
+    "fontCandidates": [
+      "C:\\Windows\\Fonts\\segoeuib.ttf",
+      "C:\\Windows\\Fonts\\arialbd.ttf"
+    ],
+    "labelFontPixels": 30,
+    "subjectFontPixels": 24,
+    "marginPixels": 22,
+    "boxBorderPixels": 10,
+    "dividerPixels": 4,
+    "wipeLinePixels": 5,
+    "textColor": "white",
+    "boxColor": "black@0.58",
+    "dividerColor": "white@0.95",
+    "canvasColor": "black"
+  },
+  "encoding": {
+    "deliveryFileName": "retail-vs-opennv-wipe-sbs-gallery.mp4",
+    "reportFileName": "retail-vs-opennv-wipe-sbs-gallery-report.json",
+    "segmentExtension": ".mp4",
+    "videoCodec": "libx264",
+    "pixelFormat": "yuv420p",
+    "constantRateFactor": 18,
+    "encoderPreset": "medium",
+    "durationToleranceFrames": 2
+  },
+  "provenance": {
+    "classification": "derived-visual-comparison",
+    "status": "retail-reference-versus-current-opennv-non-parity",
+    "source": "Hash-bound retained retail native frame plus current canonical OpenNV authored-motion segment for each manifest job",
+    "retailRecaptureRequired": false,
+    "parityClaimed": false
+  }
+}

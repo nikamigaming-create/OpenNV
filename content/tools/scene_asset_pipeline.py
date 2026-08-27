@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -13,10 +14,15 @@ from cell_catalog import (
     CellCatalog,
     PlacedReference,
 )
-from export_static_nif_gltf import export_static_nif
-from material_contract import environment_texture_paths, material_bindings
+from export_static_nif_gltf import NoStaticPresentationGeometryError, export_static_nif
+from material_contract import (
+    material_bindings,
+    texture_binding_requests,
+)
+from owned_archive_stack import OwnedArchiveStack
 from runtime_configuration import ContentCompilerConfiguration
-from texture_pipeline import TexturePipeline
+from speedtree_spt import export_speedtree_spt
+from texture_pipeline import OwnedTexturePipeline, TexturePipeline
 
 
 FORM_ID_RADIX = 16
@@ -26,7 +32,11 @@ def form_id(value: int) -> str:
     return f"{value:08x}"
 
 
-def reference_selection_reason(base: BaseObject, recipe: dict[str, object]) -> str:
+def reference_selection_reason(
+    base: BaseObject,
+    recipe: dict[str, object],
+    compiler_configuration: ContentCompilerConfiguration,
+) -> str:
     selection = recipe["selection"]
     prefixes = tuple(str(value).lower() for value in selection["modelPrefixes"])
     record_types = {str(value) for value in selection["includeBaseRecordTypes"]}
@@ -36,7 +46,12 @@ def reference_selection_reason(base: BaseObject, recipe: dict[str, object]) -> s
     )
     if not base.model_path:
         return "no-model"
-    if not base.model_path.endswith(".nif"):
+    if base.form_id in compiler_configuration.non_presentation_base_form_ids:
+        return "configured-non-presentation-base"
+    model_suffix = Path(base.model_path).suffix.lower()
+    if model_suffix not in {".nif", ".spt"}:
+        return "unsupported-model-format"
+    if model_suffix == ".spt" and base.record_type != "TREE":
         return "unsupported-model-format"
     if base.editor_id in excluded_editor_ids:
         return "editor-only-base"
@@ -135,6 +150,13 @@ def _atomic_bytes(path: Path, data: bytes) -> None:
     os.replace(temporary, path)
 
 
+def _atomic_json(path: Path, document: dict[str, object]) -> None:
+    _atomic_bytes(
+        path,
+        (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+    )
+
+
 def prepare_scene_assets(
     meshes_path: Path,
     texture_archive_paths: list[Path],
@@ -143,23 +165,58 @@ def prepare_scene_assets(
     selected: list[tuple[PlacedReference, BaseObject]],
     compiler_configuration: ContentCompilerConfiguration,
     extra_model_paths: set[str] | None = None,
+    presentation_clips: dict[str, dict[str, object]] | None = None,
+    fully_clipped_model_paths: set[str] | None = None,
+    owned_archives: OwnedArchiveStack | None = None,
 ) -> tuple[
     dict[str, dict[str, object]],
     dict[str, dict[str, object]],
     dict[str, object],
     dict[str, str],
+    dict[str, dict[str, object]],
+    list[dict[str, object]],
 ]:
-    archive = BsaArchive(meshes_path)
+    if not isinstance(recipe.get("exportStrict"), bool):
+        raise ValueError("Scene recipe exportStrict policy must be explicit")
+    if not isinstance(recipe.get("textureAliases"), dict):
+        raise ValueError("Scene recipe textureAliases policy must be explicit")
+    archive = owned_archives if owned_archives is not None else BsaArchive(meshes_path)
     assets: dict[str, dict[str, object]] = {}
     asset_sidecars: dict[str, dict[str, object]] = {}
+    non_presentation_assets: dict[str, dict[str, object]] = {}
     compiler: dict[str, str] | None = None
+    presentation_clips = presentation_clips or {}
+    unknown_clips = set(presentation_clips) - (extra_model_paths or set())
+    if unknown_clips:
+        raise ValueError(
+            f"Presentation clips must target declared extra models: {sorted(unknown_clips)}"
+        )
     models = sorted(
         {base.model_path for _, base in selected if base.model_path}
         | (extra_model_paths or set())
     )
     for model_path in models:
-        logical_path = "meshes\\" + model_path
-        asset_id = hashlib.sha256(logical_path.encode()).hexdigest()[
+        model_suffix = Path(model_path).suffix.lower()
+        logical_candidates = (
+            [model_path, "trees\\" + model_path, "meshes\\" + model_path]
+            if model_suffix == ".spt"
+            else ["meshes\\" + model_path, model_path]
+        )
+        members = [candidate for candidate in logical_candidates if candidate in archive.members]
+        if len(members) != 1:
+            raise FileNotFoundError(
+                f"Expected one owned mesh member for {model_path!r}, found {members}"
+            )
+        logical_path = members[0]
+        presentation_clip = presentation_clips.get(model_path)
+        asset_identity = logical_path
+        if presentation_clip is not None:
+            asset_identity += "\0" + json.dumps(
+                presentation_clip,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        asset_id = hashlib.sha256(asset_identity.encode()).hexdigest()[
             :compiler_configuration.asset_id_hex_characters
         ]
         member = archive.extract(logical_path)
@@ -169,14 +226,60 @@ def prepare_scene_assets(
         gltf_path = output_root / f"{asset_id}.gltf"
         sidecar_path = output_root / f"{asset_id}.opennv.json"
         try:
-            sidecar = export_static_nif(
-                source_path,
-                member.logical_path,
-                gltf_path,
-                sidecar_path,
-                compiler_configuration,
-                strict=False,
-            )
+            if model_suffix == ".spt":
+                if presentation_clip is not None:
+                    raise ValueError(
+                        f"Presentation clipping is unsupported for SpeedTree assets: {model_path}"
+                    )
+                sidecar = export_speedtree_spt(
+                    source_path,
+                    member.logical_path,
+                    gltf_path,
+                    sidecar_path,
+                    compiler_configuration,
+                )
+            else:
+                sidecar = export_static_nif(
+                    source_path,
+                    member.logical_path,
+                    gltf_path,
+                    sidecar_path,
+                    compiler_configuration,
+                    strict=bool(recipe["exportStrict"]),
+                    presentation_clip=presentation_clip,
+                )
+        except NoStaticPresentationGeometryError as error:
+            if model_path in (extra_model_paths or set()):
+                raise ValueError(
+                    f"Required extra scene asset has no presentation geometry: "
+                    f"{member.logical_path}"
+                ) from error
+            _atomic_json(sidecar_path, error.evidence)
+            non_presentation_assets[model_path] = {
+                "logicalPath": member.logical_path,
+                "sourceSha256": member.sha256,
+                "sourceArchive": getattr(member, "source_archive", None),
+                "sourceArchiveSha256": getattr(
+                    member, "source_archive_sha256", None
+                ),
+                "sidecar": str(sidecar_path.resolve()),
+                "compiler": error.evidence["compiler"],
+                "classification": error.evidence["classification"],
+            }
+            continue
+        except ValueError as error:
+            if (
+                presentation_clip is not None
+                and fully_clipped_model_paths is not None
+                and str(error) == "Static presentation clip removed all supported geometry"
+            ):
+                # A presentation-only LOD asset can legitimately disappear
+                # when the exact-reference authority tier covers every one of
+                # its source triangles.  Keep that outcome explicit so the
+                # caller can remove the block from its runtime ledger.
+                fully_clipped_model_paths.add(model_path)
+                continue
+            raise ValueError(f"Cell asset export failed: {member.logical_path}: {error}") from error
         except Exception as error:
             raise ValueError(f"Cell asset export failed: {member.logical_path}: {error}") from error
         if compiler is None:
@@ -187,10 +290,13 @@ def prepare_scene_assets(
             "id": asset_id,
             "logicalPath": member.logical_path,
             "sourceSha256": member.sha256,
+            "sourceArchive": getattr(member, "source_archive", None),
+            "sourceArchiveSha256": getattr(member, "source_archive_sha256", None),
             "model": str(gltf_path.resolve()),
             "sidecar": str(sidecar_path.resolve()),
             "surfaces": sidecar["coverage"]["surfaces"],
             "compiler": sidecar["compiler"],
+            "presentationClip": sidecar["coverage"].get("presentationClip"),
             "collision": {
                 "enabled": bool(sidecar["coverage"]["collisionExported"]),
                 "source": (
@@ -216,24 +322,70 @@ def prepare_scene_assets(
         }
         asset_sidecars[model_path] = sidecar
 
-    requested_textures = sorted(
-        {
-            texture
-            for sidecar in asset_sidecars.values()
-            for surface in sidecar["surfaces"]
-            for texture in surface["textures"]
-            if texture
-        }
-    )
-    texture_pipeline = TexturePipeline(
-        texture_archive_paths,
-        cache_root,
-        {str(source): str(target) for source, target in recipe.get("textureAliases", {}).items()},
-        compiler_configuration,
-    )
-    texture_artifacts = {
-        requested: texture_pipeline.prepare(requested) for requested in requested_textures
+    binding_uses: dict[str, list[dict[str, object]]] = {}
+    for model_path, sidecar in asset_sidecars.items():
+        for surface_index, surface in enumerate(sidecar["surfaces"]):
+            for request in texture_binding_requests(surface):
+                binding_uses.setdefault(request["path"], []).append(
+                    {
+                        "modelPath": model_path,
+                        "surfaceIndex": surface_index,
+                        "surfaceName": surface["name"],
+                        "role": request["role"],
+                        "missingOwnedMember": request["missingOwnedMember"],
+                    }
+                )
+    texture_aliases = {
+        str(source): str(target) for source, target in recipe["textureAliases"].items()
     }
+    texture_pipeline = (
+        OwnedTexturePipeline(
+            owned_archives,
+            cache_root,
+            texture_aliases,
+            compiler_configuration,
+        )
+        if owned_archives is not None
+        else TexturePipeline(
+            texture_archive_paths,
+            cache_root,
+            texture_aliases,
+            compiler_configuration,
+        )
+    )
+    texture_artifacts = {}
+    unresolved_texture_bindings: list[dict[str, object]] = []
+    for requested in sorted(binding_uses):
+        member_source_count = texture_pipeline.member_source_count(requested)
+        if member_source_count == 1:
+            texture_artifacts[requested] = texture_pipeline.prepare(requested)
+            continue
+        uses = binding_uses[requested]
+        policies = {str(use["missingOwnedMember"]) for use in uses}
+        if member_source_count == 0 and policies == {"unbound-no-substitution"}:
+            unresolved_texture_bindings.append(
+                {
+                    "schema": "opennv-unresolved-owned-texture-binding/v1",
+                    "status": "authored-binding-has-no-owned-member",
+                    "requestedPath": requested,
+                    "archivePath": texture_aliases.get(requested, requested),
+                    "ownedMemberSources": 0,
+                    "disposition": "unbound-no-substitution",
+                    "uses": sorted(
+                        uses,
+                        key=lambda use: (
+                            str(use["modelPath"]),
+                            int(use["surfaceIndex"]),
+                            str(use["role"]),
+                        ),
+                    ),
+                }
+            )
+            continue
+        raise FileNotFoundError(
+            "Active authored texture binding did not resolve uniquely: "
+            f"path={requested} sources={member_source_count} policies={sorted(policies)}"
+        )
     texture_ids = {
         requested: artifact.asset_id
         for requested, artifact in texture_artifacts.items()
@@ -246,4 +398,11 @@ def prepare_scene_assets(
         )
     if compiler is None:
         raise ValueError(f"Cell recipe exported no asset compiler: {recipe['id']}")
-    return assets, asset_sidecars, texture_artifacts, compiler
+    return (
+        assets,
+        asset_sidecars,
+        texture_artifacts,
+        compiler,
+        non_presentation_assets,
+        unresolved_texture_bindings,
+    )

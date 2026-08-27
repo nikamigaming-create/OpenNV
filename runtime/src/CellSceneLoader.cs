@@ -19,7 +19,8 @@ internal static class CellSceneLoader
         string? actorScenePath = null,
         string? actorScenesManifestPath = null,
         bool proofEnableActor = false,
-        bool buildCollision = true)
+        bool buildCollision = true,
+        bool applyCellEnvironment = true)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -133,7 +134,8 @@ internal static class CellSceneLoader
             main,
             session,
             configuration,
-            useXr);
+            useXr,
+            applyCellEnvironment);
         player.CollisionMask = (1u << (linkedCells.Count + 1)) - 1u;
         if (enableFirstPersonPresentation)
         {
@@ -147,7 +149,13 @@ internal static class CellSceneLoader
                 main.MuzzlePosition);
         }
         foreach (var linked in linkedCells)
-            AddCellLights(parent, linked.Content, configuration, linked.RenderLayer, true);
+            AddCellLights(
+                parent,
+                linked.Content,
+                configuration,
+                linked.RenderLayer,
+                true,
+                applyCellEnvironment);
 
         var allPickups = main.Pickups
             .Concat(linkedCells.SelectMany(value => value.Content.Pickups))
@@ -186,7 +194,8 @@ internal static class CellSceneLoader
             allPools,
             allActors,
             linkedCells,
-            portalLinks);
+            portalLinks,
+            main);
     }
 
     private static CellPlayer BuildView(
@@ -195,28 +204,32 @@ internal static class CellSceneLoader
         CellContentLoader.LoadedContent main,
         GameplaySession session,
         RuntimeConfiguration configuration,
-        bool useXr)
+        bool useXr,
+        bool applyCellEnvironment)
     {
         var lighting = main.Lighting;
-        var environment = new Godot.Environment
+        if (applyCellEnvironment)
         {
-            BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = configuration.Renderer.BackgroundColorRgba.Color(),
-            AmbientLightSource = Godot.Environment.AmbientSource.Color,
-            AmbientLightColor = lighting.AmbientColor,
-            AmbientLightEnergy = configuration.Renderer.AmbientEnergyScale,
-            TonemapMode = RuntimeRendering.ParseToneMapper(configuration.Renderer.ToneMapper),
-            FogEnabled = true,
-            FogMode = Godot.Environment.FogModeEnum.Depth,
-            FogLightColor = lighting.FogColor,
-            FogLightEnergy = configuration.Renderer.FogLightEnergy,
-            FogDensity = configuration.Renderer.FogDensity,
-            FogDepthBegin = lighting.FogNearGameUnits * main.UnitsToMeters,
-            FogDepthEnd = lighting.FogFarGameUnits * main.UnitsToMeters,
-            FogDepthCurve = lighting.FogPower,
-        };
-        parent.AddChild(new WorldEnvironment { Environment = environment });
-        AddCellLights(parent, main, configuration, 1u, true);
+            var environment = new Godot.Environment
+            {
+                BackgroundMode = Godot.Environment.BGMode.Color,
+                BackgroundColor = configuration.Renderer.BackgroundColorRgba.Color(),
+                AmbientLightSource = Godot.Environment.AmbientSource.Color,
+                AmbientLightColor = lighting.AmbientColor,
+                AmbientLightEnergy = configuration.Renderer.AmbientEnergyScale,
+                TonemapMode = RuntimeRendering.ParseToneMapper(configuration.Renderer.ToneMapper),
+                FogEnabled = true,
+                FogMode = Godot.Environment.FogModeEnum.Depth,
+                FogLightColor = lighting.FogColor,
+                FogLightEnergy = configuration.Renderer.FogLightEnergy,
+                FogDensity = configuration.Renderer.FogDensity,
+                FogDepthBegin = lighting.FogNearGameUnits * main.UnitsToMeters,
+                FogDepthEnd = lighting.FogFarGameUnits * main.UnitsToMeters,
+                FogDepthCurve = lighting.FogPower,
+            };
+            parent.AddChild(new WorldEnvironment { Environment = environment });
+        }
+        AddCellLights(parent, main, configuration, 1u, true, applyCellEnvironment);
         var player = new CellPlayer();
         player.Configure(yaw, session, configuration, useXr);
         parent.AddChild(player);
@@ -228,21 +241,53 @@ internal static class CellSceneLoader
         CellContentLoader.LoadedContent content,
         RuntimeConfiguration configuration,
         uint renderLayer,
-        bool addAuthoredLights)
+        bool addAuthoredLights,
+        bool applyEnvironmentLighting)
     {
         var lighting = content.Lighting;
-        parent.AddChild(new DirectionalLight3D
+        if (applyEnvironmentLighting)
         {
-            Name = $"CELL_{content.FormId}_Directional",
-            RotationDegrees = new Vector3(
-                lighting.DirectionalRotationDegrees.X,
-                lighting.DirectionalRotationDegrees.Y,
-                0.0f),
-            LightColor = lighting.DirectionalColor,
-            LightEnergy = lighting.DirectionalFade * configuration.Renderer.DirectionalEnergyScale,
-            ShadowEnabled = true,
-            LightCullMask = renderLayer,
-        });
+            RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
+                content.Root,
+                lighting.AmbientColor,
+                lighting.FogColor,
+                lighting.FogNearGameUnits,
+                lighting.FogFarGameUnits,
+                lighting.FogPower,
+                content.UnitsToMeters);
+            RuntimeMaterialLoader.ApplyRetailActorLighting(
+                content.Root,
+                lighting.AmbientColor,
+                lighting.FogColor,
+                lighting.FogNearGameUnits,
+                lighting.FogFarGameUnits,
+                lighting.FogPower,
+                content.UnitsToMeters);
+            RuntimeMaterialLoader.ApplyRetailLandscapeLighting(
+                content.Root,
+                lighting.AmbientColor,
+                lighting.FogColor,
+                lighting.FogNearGameUnits,
+                lighting.FogFarGameUnits,
+                lighting.FogPower,
+                content.UnitsToMeters);
+            RuntimeMaterialLoader.ApplyRetailGrassDistanceScale(
+                content.Root,
+                content.UnitsToMeters);
+            parent.AddChild(new DirectionalLight3D
+            {
+                Name = $"CELL_{content.FormId}_Directional",
+                RotationDegrees = new Vector3(
+                    lighting.DirectionalRotationDegrees.X,
+                    lighting.DirectionalRotationDegrees.Y,
+                    0.0f),
+                LightColor = lighting.DirectionalColor,
+                LightEnergy = lighting.DirectionalFade *
+                    configuration.Renderer.DirectionalEnergyScale,
+                ShadowEnabled = true,
+                LightCullMask = renderLayer,
+            });
+        }
         if (!addAuthoredLights)
             return;
         foreach (var light in lighting.Lights)
@@ -373,7 +418,8 @@ internal static class CellSceneLoader
         IReadOnlyDictionary<string, PoolTableInstance> Pools,
         IReadOnlyList<CellActorLoader.PlacedActor> Actors,
         IReadOnlyList<LinkedCell> LinkedCells,
-        IReadOnlyList<PortalLink> PortalLinks)
+        IReadOnlyList<PortalLink> PortalLinks,
+        CellContentLoader.LoadedContent MainContent)
     {
         internal Vector3 GameToCellUnits(Vector3 position) => new(
             position.X - OriginGameUnits.X,

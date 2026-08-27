@@ -21,6 +21,7 @@ from plugin_stack import (
     file_sha256,
 )
 from validate_cell_parity_corpus import validate_corpus as validate_cell_corpus
+from runtime_configuration import configured_recipe_path
 
 
 RECIPE_SCHEMA = "opennv-cell-compile-plan-recipe/v1"
@@ -414,8 +415,7 @@ def build_plan(
 
 
 def default_recipe_path() -> Path:
-    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    return root / "recipes" / "fnv-cell-compile-plan-v1.json"
+    return configured_recipe_path("cellCompilePlan")
 
 
 def main() -> int:

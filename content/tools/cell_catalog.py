@@ -7,6 +7,7 @@ import json
 import math
 import struct
 from dataclasses import asdict, dataclass
+from functools import cache
 from pathlib import Path
 
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
@@ -30,6 +31,7 @@ BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "FURN",
     "LIGH",
     "MSTT",
+    "SCOL",
     "STAT",
     "TERM",
     "TREE",
@@ -324,6 +326,7 @@ def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObje
     )
 
 
+@cache
 def scan_cell_catalog(path: Path) -> CellCatalog:
     catalog = CellCatalog({}, {}, {}, {}, {}, [])
     for record in iter_plugin_records(path, CATALOG_RECORD_TYPES):

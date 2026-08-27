@@ -167,7 +167,7 @@ internal partial class PoolTableInstance : Node3D
             ball.ResetAuthored();
         _strokeCooldownSeconds = 0.0f;
         _session.Save();
-        _session.Notify("Pool reset to authored Saloon placements");
+        _session.Notify(_configuration.ResetStatusText);
     }
 
     internal PoolState CaptureState() => new(

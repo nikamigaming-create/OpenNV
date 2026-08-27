@@ -10,7 +10,12 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $Repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$Recipe = Join-Path $Repository "content\recipes\fnv-thirteen-area-capture-plan-v1.json"
+$RuntimeConfigurationPath = Join-Path $Repository "runtime\config\open-nv-runtime-v1.json"
+$ConfigurationJsonDepth = 20
+$RuntimeConfiguration = Get-Content -Raw -LiteralPath $RuntimeConfigurationPath |
+    ConvertFrom-Json -Depth $ConfigurationJsonDepth
+$Recipe = Join-Path $Repository (
+    "content\recipes\{0}" -f [string]$RuntimeConfiguration.tooling.recipeFiles.areaCapturePlan)
 $Compiler = Join-Path $Repository "content\tools\area_capture_plan.py"
 $Validator = Join-Path $Repository "content\tools\validate_area_capture_plan.py"
 $ResolvedCorpus = [IO.Path]::GetFullPath($CorpusRoot)

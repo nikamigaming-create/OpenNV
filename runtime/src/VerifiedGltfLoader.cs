@@ -18,8 +18,13 @@ internal static class VerifiedGltfLoader
         var schema = root.GetProperty("schema").GetString();
         if (schema != SidecarSchemaV1 && schema != SidecarSchemaV2 && schema != LandscapeSidecarSchema)
             throw new InvalidOperationException($"Unexpected sidecar schema: {sidecarPath}");
-        if (root.GetProperty("status").GetString() != "geometry-only")
-            throw new InvalidOperationException($"Static slice requires geometry-only status: {sidecarPath}");
+        var status = root.GetProperty("status").GetString();
+        var expectedStatus = schema == LandscapeSidecarSchema
+            ? "layered-material"
+            : "geometry-only";
+        if (status != expectedStatus)
+            throw new InvalidOperationException(
+                $"Static slice requires {expectedStatus} status: {sidecarPath}");
 
         var modelFile = ResolvePath(modelPath);
         var outputs = root.GetProperty("outputs");

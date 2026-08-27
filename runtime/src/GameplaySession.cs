@@ -408,19 +408,19 @@ internal partial class GameplaySession : Node
     {
         var objective = ObjectiveStage switch
         {
-            SandboxObjectiveStage.EquipWeapon => "OBJECTIVE  Equip an authored weapon",
-            SandboxObjectiveStage.FireWeapon => "OBJECTIVE  Fire the equipped weapon once",
-            SandboxObjectiveStage.TakeAid => "OBJECTIVE  Take any authored aid item",
-            SandboxObjectiveStage.OpenEntryDoor => "OBJECTIVE  Open the saloon entry door",
-            _ => "OBJECTIVE COMPLETE  Goodsprings sandbox route passed",
+            SandboxObjectiveStage.EquipWeapon => _configuration.Hud.Copy.ObjectiveEquipWeapon,
+            SandboxObjectiveStage.FireWeapon => _configuration.Hud.Copy.ObjectiveFireWeapon,
+            SandboxObjectiveStage.TakeAid => _configuration.Hud.Copy.ObjectiveTakeAid,
+            SandboxObjectiveStage.OpenEntryDoor => _configuration.Hud.Copy.ObjectiveOpenEntryDoor,
+            _ => _configuration.Hud.Copy.ObjectiveComplete,
         };
         var ammunition = _equippedWeaponFormId is null
             ? "--/--"
             : $"{_ammoInMagazine}/{_weaponClipSize}";
         var statusLine = $"{WeaponLabel} {ammunition} +{ReserveAmmo}   {status}";
-        var inventory = "INVENTORY  " +
+        var inventory = _configuration.Hud.Copy.InventoryPrefix +
             (_inventory.Count == 0
-                ? "empty"
+                ? _configuration.Hud.Copy.EmptyInventory
                 : string.Join(
                     " • ",
                     _inventory.Values

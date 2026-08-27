@@ -7,7 +7,13 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
-from landscape_catalog import Landscape, LandscapeIdentity, parse_landscape
+from landscape_catalog import (
+    CONFIGURED_MISSING_BASE_SOURCE,
+    Landscape,
+    LandscapeIdentity,
+    landscape_missing_base_policy,
+    parse_landscape,
+)
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 from plugin_stack import (
     FORM_ID_HEX_CHARACTERS,
@@ -198,6 +204,21 @@ def resolve_owned_landscape(
             "diffusePath": diffuse,
             "normalPath": normal,
         }
+    if any(
+        layer.source == CONFIGURED_MISSING_BASE_SOURCE
+        for layer in landscape.base_layers
+    ):
+        policy = landscape_missing_base_policy()
+        default_form_id = int(str(policy["ltexRawFormId"]), FORM_ID_RADIX)
+        default_contract = contracts.get(default_form_id)
+        if (
+            default_contract is None
+            or str(default_contract["ltexEditorId"]).casefold()
+            != str(policy["expectedEditorId"]).casefold()
+        ):
+            raise ValueError(
+                "Configured missing LAND base LTEX identity differs from owned stack"
+            )
     return OwnedLandscapeSource(
         landscape,
         LandscapeIdentity(

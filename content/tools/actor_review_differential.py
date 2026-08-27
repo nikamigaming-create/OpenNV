@@ -16,7 +16,7 @@ from runtime_configuration import RuntimeConfiguration, load_runtime_configurati
 
 
 ACTOR_REVIEW_SCENE_SCHEMA = "opennv-actor-review-scene/v1"
-ACTOR_REVIEW_CONTRACT_SCHEMA = "opennv-actor-review-contract/v4"
+ACTOR_REVIEW_CONTRACT_SCHEMA = "opennv-actor-review-contract/v6"
 GODOT_REVIEW_REPORT_SCHEMA = "nikami-opennv-actor-review-capture/v1"
 GODOT_ENGINE_REPORT_SCHEMA = "opennv-godot-actor-review-capture/v1"
 DIFFERENTIAL_SCHEMA = "opennv-actor-review-differential/v1"

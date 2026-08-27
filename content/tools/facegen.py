@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import io
+import math
 import struct
 import time
-from dataclasses import dataclass
 
 if not hasattr(time, "clock"):
     time.clock = time.perf_counter
@@ -22,26 +22,24 @@ RGB_CHANNEL_COUNT = 3
 RGBA_CHANNEL_COUNT = 4
 BYTE_CHANNEL_MAXIMUM = 255
 SIGNED_DETAIL_NEUTRAL = 128.0
-NIF_GEOMETRY_MINIMUM_BYTES = 12
-NIF_GEOMETRY_VERTEX_COUNT_OFFSET = 4
-NIF_GEOMETRY_UV_FLAG_PREFIX_BYTES = 9
-NIF_GEOMETRY_VERTEX_BYTES = 12
-NIF_FACEGEN_UV_FLAG = 3
-NIF_SINGLE_UV_ARRAY_FLAG = 1
-NIF_HEADER_REMAINDER_BYTES = 17
-FALLOUT_NIF_VERSION = 0x14020007
-FALLOUT_NIF_ENDIAN = 1
-FALLOUT_NIF_USER_VERSION = 11
-FALLOUT_NIF_USER_VERSION_TWO = 34
-NIF_EXPORT_INFO_STRING_COUNT = 3
-UINT16_BYTES = 2
-UINT32_BYTES = 4
-NIF_FOOTER_BYTES = 8
+def compose_facegen_coordinates(
+    actor_coordinates: tuple[float, ...],
+    race_baseline_coordinates: tuple[float, ...],
+) -> tuple[float, ...]:
+    """Compose an NPC identity channel with its sex-specific RACE baseline."""
 
-@dataclass(frozen=True)
-class FaceGenNifRepair:
-    payload: bytes
-    uv_flag_offsets: tuple[int, ...]
+    if len(actor_coordinates) != len(race_baseline_coordinates):
+        raise ValueError(
+            "FaceGen coordinate count mismatch: "
+            f"actor={len(actor_coordinates)} race={len(race_baseline_coordinates)}"
+        )
+    coordinates = tuple(
+        actor_value + race_value
+        for actor_value, race_value in zip(actor_coordinates, race_baseline_coordinates)
+    )
+    if not all(math.isfinite(value) for value in coordinates):
+        raise ValueError("FaceGen coordinate composition produced a non-finite value")
+    return coordinates
 
 
 def apply_geometry_morphs(
@@ -135,32 +133,6 @@ def synthesize_texture_detail(egt_payload: bytes, weights: tuple[float, ...]) ->
     return Image.frombytes("RGBA", (width, height), bytes(output))
 
 
-def compose_skin_albedo(
-    diffuse: Image.Image,
-    face_detail: Image.Image,
-    tone_rgb: tuple[int, int, int],
-) -> Image.Image:
-    base = diffuse.convert("RGBA")
-    detail = face_detail.convert("RGB").resize(base.size, Image.Resampling.LANCZOS)
-    base_bytes = base.tobytes()
-    detail_bytes = detail.tobytes()
-    output = bytearray(len(base_bytes))
-    tone = tuple(4.0 * value / BYTE_CHANNEL_MAXIMUM for value in tone_rgb)
-    for pixel in range(base.width * base.height):
-        for channel in range(RGB_CHANNEL_COUNT):
-            base_value = base_bytes[pixel * RGBA_CHANNEL_COUNT + channel]
-            detail_value = detail_bytes[pixel * RGB_CHANNEL_COUNT + channel]
-            value = (base_value + 2.0 * (detail_value - SIGNED_DETAIL_NEUTRAL)) * tone[channel]
-            output[pixel * RGBA_CHANNEL_COUNT + channel] = max(
-                0,
-                min(BYTE_CHANNEL_MAXIMUM, round(value)),
-            )
-        output[pixel * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT] = base_bytes[
-            pixel * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT
-        ]
-    return Image.frombytes("RGBA", base.size, bytes(output))
-
-
 def compose_body_albedo(diffuse: Image.Image, body_mod: Image.Image) -> Image.Image:
     base = diffuse.convert("RGBA")
     modifier = body_mod.convert("RGB").resize(base.size, Image.Resampling.BILINEAR)
@@ -182,98 +154,3 @@ def compose_body_albedo(diffuse: Image.Image, body_mod: Image.Image) -> Image.Im
             pixel * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT
         ]
     return Image.frombytes("RGBA", base.size, bytes(output))
-
-
-def repair_facegen_nif_uv_flag(payload: bytes) -> FaceGenNifRepair:
-    """Repair Bethesda's FaceGen-only UV flag value 3 for the generic NIF reader.
-
-    The FaceGen head stores one UV array but marks the byte as 3. FNV block sizes
-    and the following triangle fields prove only one array is present. The source
-    bytes are never modified on disk; the returned parse buffer changes that one
-    byte to the generic NiGeometryData value 1.
-    """
-
-    data = bytearray(payload)
-    blocks = _frozen_fallout_block_directory(payload)
-    repaired = []
-    for block_type, block_offset, block_size in blocks:
-        if block_type != "NiTriShapeData":
-            continue
-        if block_size < NIF_GEOMETRY_MINIMUM_BYTES:
-            raise ValueError("FaceGen NiTriShapeData block is truncated")
-        vertex_count = struct.unpack_from(
-            "<H",
-            payload,
-            block_offset + NIF_GEOMETRY_VERTEX_COUNT_OFFSET,
-        )[0]
-        flag_offset = (
-            block_offset
-            + NIF_GEOMETRY_UV_FLAG_PREFIX_BYTES
-            + vertex_count * NIF_GEOMETRY_VERTEX_BYTES
-        )
-        if flag_offset >= block_offset + block_size:
-            raise ValueError("FaceGen NiTriShapeData vertex array exceeds its block")
-        if payload[flag_offset] == NIF_FACEGEN_UV_FLAG:
-            data[flag_offset] = NIF_SINGLE_UV_ARRAY_FLAG
-            repaired.append(flag_offset)
-    if not repaired:
-        raise ValueError("FaceGen NIF contains no Bethesda one-array UV flag")
-    return FaceGenNifRepair(bytes(data), tuple(repaired))
-
-
-def _frozen_fallout_block_directory(payload: bytes) -> list[tuple[str, int, int]]:
-    newline = payload.find(b"\n")
-    if newline < 0:
-        raise ValueError("NIF has no header line")
-    offset = newline + 1
-    if offset + NIF_HEADER_REMAINDER_BYTES > len(payload):
-        raise ValueError("NIF header is truncated")
-    version = struct.unpack_from("<I", payload, offset)[0]
-    offset += 4
-    endian = payload[offset]
-    offset += 1
-    user_version, block_count, user_version_2 = struct.unpack_from("<III", payload, offset)
-    offset += UINT32_BYTES * 3
-    if (version, endian, user_version, user_version_2) != (
-        FALLOUT_NIF_VERSION,
-        FALLOUT_NIF_ENDIAN,
-        FALLOUT_NIF_USER_VERSION,
-        FALLOUT_NIF_USER_VERSION_TWO,
-    ):
-        raise ValueError(
-            f"Unexpected Fallout FaceGen NIF header: version={version:08x} endian={endian} "
-            f"user={user_version}/{user_version_2}"
-        )
-    for _ in range(NIF_EXPORT_INFO_STRING_COUNT):
-        if offset >= len(payload):
-            raise ValueError("NIF export-info string is truncated")
-        length = payload[offset]
-        offset += 1 + length
-    type_count = struct.unpack_from("<H", payload, offset)[0]
-    offset += 2
-    block_types = []
-    for _ in range(type_count):
-        length = struct.unpack_from("<I", payload, offset)[0]
-        offset += 4
-        block_types.append(payload[offset : offset + length].decode("ascii"))
-        offset += length
-    type_indices = struct.unpack_from(f"<{block_count}H", payload, offset)
-    offset += block_count * UINT16_BYTES
-    block_sizes = struct.unpack_from(f"<{block_count}I", payload, offset)
-    offset += block_count * UINT32_BYTES
-    string_count, _maximum_string = struct.unpack_from("<II", payload, offset)
-    offset += UINT32_BYTES * 2
-    for _ in range(string_count):
-        length = struct.unpack_from("<I", payload, offset)[0]
-        offset += UINT32_BYTES + length
-    group_count = struct.unpack_from("<I", payload, offset)[0]
-    offset += UINT32_BYTES + group_count * UINT32_BYTES
-    result = []
-    for type_index, block_size in zip(type_indices, block_sizes):
-        if type_index >= len(block_types) or offset + block_size > len(payload):
-            raise ValueError("NIF block directory is invalid")
-        result.append((block_types[type_index], offset, block_size))
-        offset += block_size
-    if len(payload) - offset != NIF_FOOTER_BYTES:
-        raise ValueError(f"Unexpected Fallout NIF footer bytes: {len(payload) - offset}")
-    return result

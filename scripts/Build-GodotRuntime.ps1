@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$Godot = "D:\code\gd\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe",
+    [Parameter(Mandatory)]
+    [string]$Godot,
     [Parameter(Mandatory)]
     [string]$OutputRoot,
     [string]$Version = "experimental",
@@ -16,6 +17,15 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtimeRoot = Join-Path $repoRoot "runtime"
 $reportValidator = Join-Path $repoRoot "content\tools\validate_runtime_report.py"
 $RuntimeManifestJsonDepth = 8
+$RuntimeConfigurationJsonDepth = 100
+$runtimeConfigurationPath = Join-Path $runtimeRoot "config\open-nv-runtime-v1.json"
+$runtimeConfiguration = Get-Content -Raw -LiteralPath $runtimeConfigurationPath |
+    ConvertFrom-Json -Depth $RuntimeConfigurationJsonDepth
+$ownedDataConfiguration = $runtimeConfiguration.legalAssets.ownedData
+$releaseConfigurationPath = Join-Path $repoRoot "release\open-nv-release-manifest.json"
+$releaseConfiguration = Get-Content -Raw -LiteralPath $releaseConfigurationPath |
+    ConvertFrom-Json -Depth $RuntimeConfigurationJsonDepth
+$enginePackage = $releaseConfiguration.runtime.enginePackage
 $ExportTimeoutSeconds = 60
 $MillisecondsPerSecond = 1000
 $dirty = -not [string]::IsNullOrWhiteSpace((git -C $repoRoot status --porcelain=v1 | Out-String))
@@ -137,8 +147,11 @@ foreach ($temporaryPath in @($xrReport, $xrSave)) {
 
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $ownedSelectionRoot = [IO.Path]::GetFullPath($FalloutNewVegasData)
-    if ((Split-Path -Leaf $ownedSelectionRoot).Equals("Data", [StringComparison]::OrdinalIgnoreCase) -and
-        (Test-Path -LiteralPath (Join-Path $ownedSelectionRoot "FalloutNV.esm") -PathType Leaf)) {
+    if ((Split-Path -Leaf $ownedSelectionRoot).Equals(
+            [string]$ownedDataConfiguration.dataDirectoryName,
+            [StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath (
+            Join-Path $ownedSelectionRoot ([string]$ownedDataConfiguration.masterFile)) -PathType Leaf)) {
         $ownedSelectionRoot = Split-Path -Parent $ownedSelectionRoot
     }
     $ownedCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-packaged-cache-{0}" -f [guid]::NewGuid().ToString("N"))
@@ -360,8 +373,8 @@ $buildInfo = [ordered]@{
     version = $Version
     revision = $revision
     sourceTreeDirty = $dirty
-    godotVersion = "4.7.1-stable-mono"
-    godotWindowsArchiveSha256 = "764a089809fb1a6f745686ce9f6d3ca83adce8fb60fb9a4e2324b63baaebaa45"
+    godotVersion = [string]$enginePackage.versionLabel
+    godotWindowsArchiveSha256 = [string]$enginePackage.windowsArchiveSha256
     exportTimedOutAfterArtifacts = $exportTimedOutAfterArtifacts
     contentToolSha256 = (Get-FileHash -LiteralPath $contentBinary -Algorithm SHA256).Hash.ToLowerInvariant()
     playable = $false

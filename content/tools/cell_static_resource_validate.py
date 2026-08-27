@@ -16,6 +16,7 @@ from cell_landscape_validate import (
     landscape_material_contract,
     landscape_sidecar_expectation,
     validate_landscape_asset_contract,
+    validate_landscape_runtime_texture_contract,
     validate_landscape_texture_binding,
     validate_landscape_texture_contract,
 )
@@ -24,6 +25,7 @@ from cell_static_contract import (
     BLOCKERS_FILE_NAME,
     CELL_FILE_NAME,
     LANDSCAPE_ASSET_KIND,
+    LANDSCAPE_RUNTIME_TEXTURE_KIND,
     LANDSCAPE_TEXTURE_KIND,
     MANIFEST_FILE_NAME,
     OWNED_DDS_TEXTURE_KIND,
@@ -32,7 +34,12 @@ from cell_static_contract import (
     mesh_member_path,
 )
 from export_static_nif_gltf import SCHEMA as STATIC_NIF_SCHEMA, compiler_provenance
-from material_contract import material_bindings
+from landscape_gltf import (
+    LAND_QUADRANT_VERTEX_SIDE,
+    LAND_WEIGHT_MAP_ROLE,
+    landscape_baked_texture_id,
+)
+from material_contract import material_bindings, texture_binding_requests
 from owned_archive_stack import OwnedArchiveStack
 from plugin_stack import file_sha256
 from runtime_configuration import RuntimeConfiguration
@@ -74,6 +81,7 @@ COMMON_TEXTURE_FIELDS = {
     "cubeFaces",
 }
 LANDSCAPE_TEXTURE_FIELDS = COMMON_TEXTURE_FIELDS | LANDSCAPE_TEXTURE_EXTRA_FIELDS
+LANDSCAPE_RUNTIME_TEXTURE_FIELDS = COMMON_TEXTURE_FIELDS | {"landscapeRole"}
 
 
 def validate_relative_file(
@@ -208,7 +216,11 @@ def validate_resource_artifacts(
             expected_logical_path = str(expected_sidecar["logicalPath"])
         if (
             sidecar.get("schema") != expected_schema
-            or sidecar.get("status") != "geometry-only"
+            or sidecar.get("status") != (
+                "layered-material"
+                if asset_kind == LANDSCAPE_ASSET_KIND
+                else "geometry-only"
+            )
             or sidecar.get("compiler") != expected_compiler
             or sidecar["source"]["sha256"] != expected_source_sha256
             or sidecar["source"]["logicalPath"] != expected_logical_path
@@ -217,19 +229,23 @@ def validate_resource_artifacts(
             or compiled_outputs != expected_sidecar_outputs
         ):
             raise ValueError(f"Static CELL asset sidecar source differs: {model_path}")
+        binding_policies: dict[str, set[str]] = {}
+        for surface in sidecar["surfaces"]:
+            for request in texture_binding_requests(surface):
+                binding_policies.setdefault(request["path"], set()).add(
+                    request["missingOwnedMember"]
+                )
         expected_bindings = [
             {
                 "requestedPath": requested,
                 "textureId": texture_ids_by_requested.get(requested),
+                "missingOwnedMember": (
+                    "error"
+                    if "error" in policies
+                    else "unbound-no-substitution"
+                ),
             }
-            for requested in sorted(
-                {
-                    texture
-                    for surface in sidecar["surfaces"]
-                    for texture in surface["textures"]
-                    if texture
-                }
-            )
+            for requested, policies in sorted(binding_policies.items())
         ]
         if asset.get("textureBindings") != expected_bindings:
             raise ValueError(f"Static CELL asset texture bindings differ: {model_path}")
@@ -241,22 +257,30 @@ def validate_resource_artifacts(
             )
         else:
             assert landscape_expectation is not None
-            landscape_texture_id = validate_landscape_texture_binding(
-                expected_bindings,
-                landscape_expectation,
-            )
+            validate_landscape_texture_binding(expected_bindings, landscape_expectation)
             expected_materials = landscape_material_contract(
                 sidecar,
-                landscape_texture_id,
+                expected_bindings,
                 landscape_expectation,
+                configuration.content_compiler,
             )
         if asset.get("materials") != expected_materials:
             raise ValueError(f"Static CELL asset material bindings differ: {model_path}")
         if asset_kind == LANDSCAPE_ASSET_KIND:
             assert landscape_expectation is not None
             landscape_expectations_by_texture_id[
-                landscape_texture_id
+                landscape_baked_texture_id(
+                    landscape_expectation.source.landscape,
+                    landscape_expectation.source.identity,
+                    configuration.content_compiler,
+                )
             ] = landscape_expectation
+            landscape_expectations_by_texture_id.update(
+                {
+                    str(binding["textureId"]): landscape_expectation
+                    for binding in expected_bindings
+                }
+            )
         bound_texture_ids.update(
             str(row["textureId"])
             for row in expected_bindings
@@ -275,11 +299,17 @@ def validate_resource_artifacts(
         expected_texture_fields = (
             LANDSCAPE_TEXTURE_FIELDS
             if texture_kind == LANDSCAPE_TEXTURE_KIND
+            else LANDSCAPE_RUNTIME_TEXTURE_FIELDS
+            if texture_kind == LANDSCAPE_RUNTIME_TEXTURE_KIND
             else COMMON_TEXTURE_FIELDS
         )
         if set(texture) != expected_texture_fields:
             raise ValueError(f"Static CELL texture fields differ: {texture_id}")
-        if texture_kind not in {OWNED_DDS_TEXTURE_KIND, LANDSCAPE_TEXTURE_KIND}:
+        if texture_kind not in {
+            OWNED_DDS_TEXTURE_KIND,
+            LANDSCAPE_TEXTURE_KIND,
+            LANDSCAPE_RUNTIME_TEXTURE_KIND,
+        }:
             raise ValueError(f"Static CELL texture kind differs: {texture_id}")
         requested = str(texture["requestedPath"])
         if texture_id in seen_texture_ids or requested in seen_texture_paths:
@@ -303,7 +333,7 @@ def validate_resource_artifacts(
             ):
                 raise ValueError(f"Static CELL texture source differs: {requested}")
             expected_normal = requested_canonical.endswith("_n.dds")
-        else:
+        elif texture_kind == LANDSCAPE_TEXTURE_KIND:
             landscape_expectation = landscape_expectations_by_texture_id.get(
                 texture_id
             )
@@ -319,6 +349,24 @@ def validate_resource_artifacts(
                 configuration.content_compiler,
             )
             expected_normal = False
+            if texture.get("diagnosticOnly") is not True:
+                raise ValueError(
+                    f"Static CELL landscape bake is not diagnostic-only: {requested}"
+                )
+        else:
+            landscape_expectation = landscape_expectations_by_texture_id.get(texture_id)
+            if landscape_expectation is None:
+                raise ValueError(
+                    f"Static CELL LAND runtime texture source is unresolved: {texture_id}"
+                )
+            validate_landscape_runtime_texture_contract(
+                texture,
+                landscape_expectation,
+                archives,
+                aliases,
+                configuration.content_compiler,
+            )
+            expected_normal = bool(texture["normalGreenInverted"])
         texture_parent = (root / "generated" / "textures").resolve()
         png = validate_relative_file(
             root,
@@ -328,13 +376,27 @@ def validate_resource_artifacts(
             texture_parent,
         )
         expected_files.add(png)
-        with Image.open(png) as image:
-            image.load()
+        is_weight_map = (
+            texture_kind == LANDSCAPE_RUNTIME_TEXTURE_KIND
+            and texture.get("landscapeRole") == LAND_WEIGHT_MAP_ROLE
+        )
+        if is_weight_map:
+            expected_weight_bytes = LAND_QUADRANT_VERTEX_SIDE ** 2 * 4 * 4
             if (
-                image.format != PNG_FORMAT
-                or list(image.size) != [int(texture["width"]), int(texture["height"])]
+                png.stat().st_size != expected_weight_bytes
+                or int(texture["width"]) != LAND_QUADRANT_VERTEX_SIDE
+                or int(texture["height"]) != LAND_QUADRANT_VERTEX_SIDE
             ):
-                raise ValueError(f"Static CELL texture dimensions differ: {requested}")
+                raise ValueError(f"Static CELL LAND weight-map payload differs: {requested}")
+        else:
+            with Image.open(png) as image:
+                image.load()
+                if (
+                    image.format != PNG_FORMAT
+                    or list(image.size)
+                    != [int(texture["width"]), int(texture["height"])]
+                ):
+                    raise ValueError(f"Static CELL texture dimensions differ: {requested}")
         if texture["normalGreenInverted"] != expected_normal:
             raise ValueError(f"Static CELL normal-map policy differs: {requested}")
         cube_faces = texture["cubeFaces"]
@@ -354,7 +416,16 @@ def validate_resource_artifacts(
                 if image.format != PNG_FORMAT:
                     raise ValueError(f"Static CELL cubemap output is not PNG: {requested}")
 
-    if bound_texture_ids != seen_texture_ids:
+    diagnostic_texture_ids = {
+        str(texture["textureId"])
+        for texture in textures
+        if texture.get("textureKind") == LANDSCAPE_TEXTURE_KIND
+        and texture.get("diagnosticOnly") is True
+    }
+    if (
+        diagnostic_texture_ids & bound_texture_ids
+        or (bound_texture_ids | diagnostic_texture_ids) != seen_texture_ids
+    ):
         raise ValueError("Static CELL compile contains unreferenced textures")
     actual_files = {path.resolve() for path in root.rglob("*") if path.is_file()}
     if actual_files != expected_files:

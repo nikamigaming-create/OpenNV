@@ -101,7 +101,8 @@ internal static class StaticCellCompileLoader
                     loaded.Scene,
                     asset,
                     loadedTextures,
-                    configuration.Renderer);
+                    configuration.Renderer,
+                    configuration.ContentCompiler.RetailGrass);
                 SetRenderLayer(loaded.Scene, DefaultRenderLayer);
                 prototypes.Add(
                     assetId,
@@ -235,6 +236,25 @@ internal static class StaticCellCompileLoader
                         placement.GetProperty("childFormKey").GetString());
                 placements++;
             }
+            var lighting = sourceCell.GetProperty("lighting");
+            if (lighting.ValueKind == JsonValueKind.Object)
+                RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
+                    root,
+                    ReadByteColor(lighting.GetProperty("ambient_rgb")),
+                    ReadByteColor(lighting.GetProperty("fog_rgb")),
+                    lighting.GetProperty("fog_near").GetSingle(),
+                    lighting.GetProperty("fog_far").GetSingle(),
+                    lighting.GetProperty("fog_power").GetSingle(),
+                    unitsToMeters);
+            if (lighting.ValueKind == JsonValueKind.Object)
+                RuntimeMaterialLoader.ApplyRetailLandscapeLighting(
+                    root,
+                    ReadByteColor(lighting.GetProperty("ambient_rgb")),
+                    ReadByteColor(lighting.GetProperty("fog_rgb")),
+                    lighting.GetProperty("fog_near").GetSingle(),
+                    lighting.GetProperty("fog_far").GetSingle(),
+                    lighting.GetProperty("fog_power").GetSingle(),
+                    unitsToMeters);
             return new LoadedStaticCell(
                 artifact.ManifestPath,
                 artifact.ManifestSha256,

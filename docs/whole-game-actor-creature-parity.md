@@ -150,6 +150,24 @@ remaining pose error, material/shader equivalence, and objective pixel compariso
 are unresolved. Consequently, the number of fully passed appearance outcomes is
 currently zero. That is the honest baseline for the exhaustive sweep.
 
+The newer Sunny Smiles investigation closes a different bounded part of that
+same generic path. Retail FaceGen draw capture identifies four independent
+sampler roles, the exact encoded-color arithmetic, disabled D3D9 sampler/target
+sRGB conversion, and an opaque depth-writing face surface. OpenNV now keeps the
+RACE head base and normal, NPC FaceGen detail, and retail tone input separate
+until `RetailFaceGenMaterial.cs`. The opaque recapture removes the false grin
+caused by teeth and tongue showing through a transparent face. Retail draw
+vertices also match OpenNV's face, mouth, upper/lower teeth, and tongue geometry
+within floating-point conversion tolerance.
+
+That is not a Sunny pass. The retained r13 Godot report is
+`captured-provisional-light-direction`: exact render-cache skin palettes pass,
+but the named-node pose diagnostic reaches 8.56 projected pixels in its worst
+front-portrait sample, the actor-only review has no retail CELL background, and
+retail directional lighting plus HDR/color grading remain unresolved. The next
+matched gate places Sunny through her ACHR in the data-built Goodsprings cell
+and compares world and actor pixels together.
+
 The generic `content/tools/actor_review_differential.py` gate now hash-verifies
 the scene, retail contract, retail frames, Godot report, and Godot frames; pairs
 every required `(shot kind, source frame)` exactly; produces side-by-side stills

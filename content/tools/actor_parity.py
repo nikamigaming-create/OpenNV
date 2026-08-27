@@ -196,11 +196,14 @@ def shot_state_metrics(
     actor_state = configuration.document["retailActorState"]
     retail_camera = retail_state["camera"]
     retail_pose = retail_state["pose"]
+    idle_path = str(
+        configuration.document["actorCompiler"]["animationProfiles"]["NPC_"]["path"]
+    ).replace("/", "\\").casefold().removeprefix("meshes\\")
     idle = next(
         sequence
         for sequence in retail_pose["activeSequences"]
         if str(sequence["file"]).replace("/", "\\").lower().endswith(
-            r"characters\_male\locomotion\mtidle.kf"
+            idle_path
         )
     )
     placement_error = vector_error(
@@ -469,6 +472,7 @@ def main() -> None:
         == len(configuration.document["retailActorState"]["requiredShotKinds"])
     )
     retail_target = retail["target"]
+    target_id = normalize_form(retail_target["referenceForm"])
     godot_actor = godot_report["actorReferences"][0]
     identity_pairs = {
         "referenceForm": (retail_target["referenceForm"], godot_actor["formId"]),
@@ -512,7 +516,7 @@ def main() -> None:
         objective_pass = (
             rendering_pass and state_contract_match and state_metrics["status"] == "pass"
         )
-        sheet = args.output_root / f"trudy-{shot_kind}-retail-vs-godot.png"
+        sheet = args.output_root / f"{target_id}-{shot_kind}-retail-vs-godot.png"
         contact_sheet(
             retail_frame,
             godot_frame,
@@ -547,7 +551,7 @@ def main() -> None:
         "schema": "opennv-retail-godot-actor-differential/v1",
         "configuration": configuration.manifest(),
         "status": "pass" if identity_pass and state_pass and rendering_pass else "fail",
-        "target": "trudy",
+        "target": retail_target,
         "identityStatus": "pass" if identity_pass else "fail",
         "renderingStatus": "pass" if rendering_pass else "fail",
         "stateContractStatus": "pass" if state_pass else "fail",
@@ -566,7 +570,7 @@ def main() -> None:
         },
         "comparisons": comparisons,
     }
-    report_path = args.output_root / "trudy-retail-vs-godot-report.json"
+    report_path = args.output_root / f"{target_id}-retail-vs-godot-report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"status": report["status"], "report": str(report_path.resolve())}))
 

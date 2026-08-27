@@ -17,7 +17,9 @@ class FirstPersonRigTest(unittest.TestCase):
             "firstPersonRig": {
                 "skeletonPath": "characters\\_1stperson\\skeleton.nif",
                 "poseAnimationPath": "characters\\_1stperson\\1hpaim.kf",
+                "skeletonRootBone": "Bip01",
                 "rigidAttachmentBone": "HeadAnims",
+                "bipedHeadBone": "Bip01 Head",
                 "cameraBone": "Camera1st",
                 "weaponBone": "Weapon",
                 "left": {

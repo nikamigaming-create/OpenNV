@@ -20,9 +20,13 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from export_static_nif_gltf import (  # noqa: E402
+    NoStaticPresentationGeometryError,
     alpha_contract,
+    clip_triangles_outside_source_rectangle,
     export_static_nif,
     generate_tangents,
+    generate_vertex_normals,
+    has_presentation_property,
     is_editor_marker,
     material_metadata,
     shape_double_sided,
@@ -34,6 +38,11 @@ from runtime_configuration import load_runtime_configuration  # noqa: E402
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
 from gltf_io import compiler_sources_sha256  # noqa: E402
 from havok_collision_gltf import dynamic_physics_contract  # noqa: E402
+from nif_decoder import (  # noqa: E402
+    _block_directory,
+    decode_nif,
+    load_nif_decoder_contract,
+)
 from texture_pipeline import decode_dds, decode_dds_cubemap  # noqa: E402
 
 
@@ -60,6 +69,7 @@ def write_synthetic_nif(path: Path) -> None:
     shape.name = "Opaque Triangle"
     identity_transform(shape)
     root.add_child(shape)
+    shape.add_property(NifFormat.NiTexturingProperty())
 
     mesh = NifFormat.NiTriShapeData()
     shape.data = mesh
@@ -88,6 +98,27 @@ def write_synthetic_nif(path: Path) -> None:
     mesh.update_center_radius()
     shape.update_tangent_space()
 
+    helper = NifFormat.NiTriShape()
+    helper.name = "Rig Helper"
+    identity_transform(helper)
+    helper_mesh = NifFormat.NiTriShapeData()
+    helper.data = helper_mesh
+    helper_mesh.num_vertices = 3
+    helper_mesh.has_vertices = True
+    helper_mesh.vertices.update_size()
+    for vertex, values in zip(
+        helper_mesh.vertices,
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+    ):
+        vertex.x, vertex.y, vertex.z = values
+    helper_mesh.has_normals = True
+    helper_mesh.normals.update_size()
+    for normal in helper_mesh.normals:
+        normal.x, normal.y, normal.z = (0.0, 0.0, 1.0)
+    helper_mesh.set_triangles([(0, 1, 2)])
+    helper.add_property(NifFormat.NiMaterialProperty())
+    root.add_child(helper)
+
     # PyFFI 2.2.3's writer cannot round-trip Bethesda's 20.x header on modern
     # Python. The synthetic contract uses an older NIF container; the local
     # authored-data gate separately reads the real Fallout 20.2.0.7 format.
@@ -97,7 +128,162 @@ def write_synthetic_nif(path: Path) -> None:
         document.write(stream)
 
 
+def write_editor_marker_only_nif(path: Path) -> None:
+    root = NifFormat.NiNode()
+    root.name = "FurnitureMarker"
+    identity_transform(root)
+    shape = NifFormat.NiTriShape()
+    shape.name = "EditorMarker:0"
+    identity_transform(shape)
+    shape.add_property(NifFormat.NiTexturingProperty())
+    mesh = NifFormat.NiTriShapeData()
+    shape.data = mesh
+    mesh.num_vertices = 3
+    mesh.has_vertices = True
+    mesh.vertices.update_size()
+    for vertex, values in zip(
+        mesh.vertices,
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+    ):
+        vertex.x, vertex.y, vertex.z = values
+    mesh.set_triangles([(0, 1, 2)])
+    root.add_child(shape)
+    document = NifFormat.Data(version=0x0A020000)
+    document.roots = [root]
+    with path.open("wb") as stream:
+        document.write(stream)
+
+
+def write_synthetic_fallout_packed_uv_nif(path: Path) -> int:
+    contract = load_nif_decoder_contract()
+    root = NifFormat.NiNode()
+    root.name = "Synthetic Fallout Root"
+    identity_transform(root)
+    shape = NifFormat.NiTriStrips()
+    shape.name = "Synthetic Fallout Strip"
+    identity_transform(shape)
+    shape.add_property(NifFormat.NiTexturingProperty())
+    root.add_child(shape)
+    mesh = NifFormat.NiTriStripsData()
+    shape.data = mesh
+    mesh.num_vertices = 4
+    mesh.has_vertices = True
+    mesh.vertices.update_size()
+    for vertex, values in zip(
+        mesh.vertices,
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)),
+    ):
+        vertex.x, vertex.y, vertex.z = values
+    mesh.has_normals = True
+    mesh.normals.update_size()
+    for normal in mesh.normals:
+        normal.x, normal.y, normal.z = (0.0, 0.0, 1.0)
+    mesh.num_uv_sets = 1
+    mesh.uv_sets.update_size()
+    for uv, values in zip(
+        mesh.uv_sets[0],
+        ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
+    ):
+        uv.u, uv.v = values
+    mesh.set_strips([[0, 1, 2, 3]])
+    mesh.update_center_radius()
+    document = NifFormat.Data(
+        version=contract.version,
+        user_version=contract.user_version,
+        user_version_2=contract.user_version_2,
+    )
+    document.header.endian_type = contract.endian
+    document.roots = [root]
+    encoded = BytesIO()
+    document.write(encoded)
+    payload = bytearray(encoded.getvalue())
+    blocks, matched = _block_directory(bytes(payload), contract)
+    if not matched:
+        raise AssertionError("Synthetic Fallout NIF did not match its decoder contract")
+    data_block = next(row for row in blocks if row.type_name == "NiTriStripsData")
+    vertex_count = struct.unpack_from(
+        "<H",
+        payload,
+        data_block.offset + contract.vertex_count_offset_bytes,
+    )[0]
+    uv_count_offset = (
+        data_block.offset
+        + contract.uv_count_prefix_bytes
+        + vertex_count * contract.vertex_stride_bytes
+    )
+    payload[uv_count_offset] = contract.maximum_uv_sets + 1
+    path.write_bytes(payload)
+    return uv_count_offset
+
+
 class StaticNifGltfTest(unittest.TestCase):
+    def test_fallout_uv_count_is_recovered_only_by_exact_block_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "packed-uv.nif"
+            source_offset = write_synthetic_fallout_packed_uv_nif(source)
+            source_bytes = source.read_bytes()
+            decoded = decode_nif(source_bytes)
+            self.assertEqual(source.read_bytes(), source_bytes)
+            self.assertEqual(len(decoded.normalizations), 1)
+            normalization = decoded.normalizations[0]
+            self.assertEqual(normalization.source_byte_offset, source_offset)
+            self.assertEqual(normalization.decoded_uv_sets, 1)
+            self.assertEqual(normalization.candidates_tested, (0, 1))
+            exported = export_static_nif(
+                source,
+                "meshes/open-nv-tests/packed-uv.nif",
+                root / "packed-uv.gltf",
+                root / "packed-uv.opennv.json",
+                load_runtime_configuration().content_compiler,
+                strict=False,
+            )
+            decoder = exported["source"]["decoder"]
+            self.assertEqual(decoder["status"], "owned-format-normalized-in-memory")
+            self.assertFalse(decoder["sourceBytesModified"])
+            self.assertEqual(decoder["normalizations"][0]["decodedUvSets"], 1)
+
+    def test_presentation_clip_retains_only_fragments_outside_source_rectangle(self) -> None:
+        positions = [(-2.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 0.0, -2.0)]
+        normals = [(0.0, 1.0, 0.0)] * 3
+        uvs = [[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)]]
+        colors = [
+            (1.0, 0.0, 0.0, 1.0),
+            (0.0, 1.0, 0.0, 1.0),
+            (0.0, 0.0, 1.0, 1.0),
+        ]
+        clipped = clip_triangles_outside_source_rectangle(
+            positions,
+            normals,
+            uvs,
+            colors,
+            [(0, 1, 2)],
+            (-1.0, 1.0, -1.0, 1.0),
+        )
+        output_positions, output_normals, output_uvs, output_colors, triangles, report = clipped
+        self.assertGreater(len(triangles), 1)
+        self.assertEqual(report["clippedSourceTriangles"], 1)
+        self.assertEqual(report["fullyRemovedSourceTriangles"], 0)
+        self.assertEqual(len(output_positions), len(output_normals))
+        self.assertEqual(len(output_positions), len(output_uvs[0]))
+        self.assertEqual(len(output_positions), len(output_colors))
+        self.assertTrue(any(position[0] == -1.0 for position in output_positions))
+        for triangle in triangles:
+            centroid_x = sum(output_positions[index][0] for index in triangle) / 3.0
+            centroid_y = sum(-output_positions[index][2] for index in triangle) / 3.0
+            self.assertFalse(-1.0 < centroid_x < 1.0 and -1.0 < centroid_y < 1.0)
+
+        removed = clip_triangles_outside_source_rectangle(
+            [(-0.5, 0.0, 0.0), (0.5, 0.0, 0.0), (0.0, 0.0, -0.5)],
+            normals,
+            uvs,
+            colors,
+            [(0, 1, 2)],
+            (-1.0, 1.0, -1.0, 1.0),
+        )
+        self.assertEqual(removed[4], [])
+        self.assertEqual(removed[5]["fullyRemovedSourceTriangles"], 1)
+
     def test_dynamic_convex_body_retains_authored_physics_and_local_shape(self) -> None:
         root = NifFormat.NiNode()
         root.name = "Root"
@@ -198,6 +384,17 @@ class StaticNifGltfTest(unittest.TestCase):
             first_result = outputs[0][3]
             self.assertEqual(first_gltf["meshes"][0]["primitives"][0].get("mode", 4), 4)
             self.assertEqual(first_result["coverage"]["surfaces"], 1)
+            self.assertEqual(
+                first_result["coverage"]["excludedNonPresentationSurfaces"],
+                [
+                    {
+                        "sourceBlockIndex": 6,
+                        "name": "Rig Helper",
+                        "propertyTypes": ["NiMaterialProperty"],
+                        "reason": "no-Bethesda-shader-or-NiTexturingProperty",
+                    }
+                ],
+            )
             self.assertFalse(first_result["coverage"]["collisionExported"])
             self.assertIsNone(first_result["coverage"]["collisionUnsupportedReason"])
             self.assertEqual(first_result["surfaces"][0]["triangles"], 1)
@@ -247,6 +444,13 @@ class StaticNifGltfTest(unittest.TestCase):
         )
         self.assertEqual(tangents, [(1.0, 0.0, 0.0, 1.0)] * 3)
 
+    def test_generated_terrain_lod_normals_are_area_weighted_and_normalized(self) -> None:
+        normals = generate_vertex_normals(
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)],
+            [(0, 1, 2)],
+        )
+        self.assertEqual(normals, [(0.0, -1.0, 0.0)] * 3)
+
     def test_nif_texture_v_coordinate_is_preserved_for_godot_png(self) -> None:
         value = NifFormat.TexCoord()
         value.u = 0.25
@@ -256,6 +460,41 @@ class StaticNifGltfTest(unittest.TestCase):
     def test_editor_marker_surface_identity_is_explicit(self) -> None:
         self.assertTrue(is_editor_marker(b"EditorMarker:0"))
         self.assertFalse(is_editor_marker(b"DinerBooth"))
+
+    def test_marker_only_owned_nif_has_explicit_non_presentation_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "marker.nif"
+            write_editor_marker_only_nif(source)
+            with self.assertRaises(NoStaticPresentationGeometryError) as caught:
+                export_static_nif(
+                    source,
+                    "meshes/open-nv-tests/marker.nif",
+                    root / "marker.gltf",
+                    root / "marker.opennv.json",
+                    load_runtime_configuration().content_compiler,
+                    strict=False,
+                )
+            evidence = caught.exception.evidence
+            self.assertEqual(evidence["schema"], "opennv-nif-non-presentation/v1")
+            self.assertEqual(
+                evidence["status"],
+                "owned-nif-no-presentation-geometry",
+            )
+            classification = evidence["classification"]
+            self.assertEqual(classification["triangleSurfaceCount"], 1)
+            self.assertEqual(classification["classifiedSurfaceCount"], 1)
+            self.assertEqual(
+                classification["disposition"],
+                "exclude-reference-from-presentation",
+            )
+
+    def test_presentation_surface_requires_a_retail_render_property(self) -> None:
+        helper = NifFormat.NiTriShape()
+        helper.add_property(NifFormat.NiMaterialProperty())
+        self.assertFalse(has_presentation_property(helper))
+        helper.add_property(NifFormat.NiTexturingProperty())
+        self.assertTrue(has_presentation_property(helper))
 
     def test_double_sided_material_requires_retail_stencil_draw_both(self) -> None:
         shape = NifFormat.NiTriShape()

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -15,6 +16,17 @@ CS_NUMBER = re.compile(
     r"(?<![A-Za-z_0-9])[-+]?(?:\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?|\.\d+)"
     r"(?:[eE][-+]?\d+)?(?:[fFdDmMuUlL]+)?(?![A-Za-z_0-9])"
 )
+FORM_ID_STRING = re.compile(
+    r"(?i)(?P<quote>[\"'])(?P<value>(?:0x)?[0-9a-f]{8})(?P=quote)"
+)
+SHA256_STRING = re.compile(
+    r"(?i)(?P<quote>[\"'])(?P<value>[0-9a-f]{64})(?P=quote)"
+)
+OWNED_ASSET_PATH_STRING = re.compile(
+    r"(?i)(?P<quote>[\"'])(?P<value>(?:meshes|textures|sound|music|video|menus)"
+    r"[\\/]+[^\"'{}\r\n]+\.(?:nif|dds|kf|egm|egt|spt))(?P=quote)"
+)
+FORBIDDEN_SUBSTITUTION_WORD = re.compile(r"(?i)fallback|heuristic|\bguess(?:ed|es|ing)?\b")
 GODOT_DUPLICATED_POLICY_KEYS = frozenset(
     {
         "environment/defaults/default_clear_color",
@@ -26,6 +38,7 @@ DECLARATIVE_CONFIGURATION_GLOBS = (
     ".github/workflows/*.yml",
     "content/recipes/*.json",
     "desktop/package.json",
+    "desktop/src/*.json",
     "desktop/src/renderer/index.html",
     "desktop/src/renderer/styles.css",
     "release/*.json",
@@ -44,6 +57,45 @@ class Violation:
     line: int
     value: str
     language: str
+
+
+def source_data_violations(
+    path: Path,
+    forbidden_identities: frozenset[str] = frozenset(),
+) -> list[Violation]:
+    source = path.read_text(encoding="utf-8-sig")
+    violations: list[Violation] = []
+
+    def add(match: re.Match[str], value: str, kind: str) -> None:
+        violations.append(
+            Violation(
+                path,
+                source.count("\n", 0, match.start()) + 1,
+                value,
+                kind,
+            )
+        )
+
+    for match in FORM_ID_STRING.finditer(source):
+        value = match.group("value")
+        if value.casefold().removeprefix("0x") != "00000000":
+            add(match, value, "content-form-id")
+    for match in SHA256_STRING.finditer(source):
+        add(match, match.group("value"), "content-sha256")
+    for match in OWNED_ASSET_PATH_STRING.finditer(source):
+        add(match, match.group("value"), "owned-asset-path")
+    for identity in sorted(forbidden_identities, key=lambda value: (-len(value), value)):
+        pattern = (
+            r"(?<![A-Za-z0-9_])" + re.escape(identity) + r"(?![A-Za-z0-9_])"
+        )
+        for match in re.finditer(pattern, source, flags=re.IGNORECASE):
+            add(match, identity, "content-identity")
+    for match in FORBIDDEN_SUBSTITUTION_WORD.finditer(source):
+        add(match, match.group(0), "guessed-substitution")
+    unique: dict[tuple[int, str, str], Violation] = {}
+    for violation in violations:
+        unique[(violation.line, violation.value.casefold(), violation.language)] = violation
+    return list(unique.values())
 
 
 def python_violations(path: Path) -> list[Violation]:
@@ -290,7 +342,7 @@ def unsupported_source_violations(repository: Path) -> list[Violation]:
     roots = {
         repository / "content" / "hooks": {".py"},
         repository / "content" / "tools": {".py"},
-        repository / "desktop" / "src": {".css", ".html", ".mjs"},
+        repository / "desktop" / "src": {".css", ".html", ".json", ".mjs"},
         repository / "runtime" / "src": {".cs", ".uid"},
         repository / "scripts": {".ps1", ".py"},
     }
@@ -317,6 +369,63 @@ def configuration_surfaces(repository: Path) -> list[Path]:
     )
 
 
+def content_identities(repository: Path) -> frozenset[str]:
+    identities: set[str] = set()
+    for path in sorted((repository / "content" / "recipes").glob("*.json")):
+        document = json.loads(path.read_text(encoding="utf-8"))
+        recipe_id = document.get("id")
+        if isinstance(recipe_id, str) and recipe_id:
+            identities.add(recipe_id)
+        if isinstance(document.get("subjects"), list):
+            for subject in document["subjects"]:
+                if not isinstance(subject, dict):
+                    continue
+                for field in ("id", "label"):
+                    value = subject.get(field)
+                    if isinstance(value, str) and value:
+                        identities.add(value)
+        if isinstance(document.get("locations"), list):
+            for location in document["locations"]:
+                if not isinstance(location, dict):
+                    continue
+                for field in ("id", "location"):
+                    value = location.get(field)
+                    if isinstance(value, str) and value:
+                        identities.add(value)
+    runtime = json.loads(
+        (repository / "runtime" / "config" / "open-nv-runtime-v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    owned_data = runtime["legalAssets"]["ownedData"]
+    identities.add(str(owned_data["masterFile"]))
+    identities.add(str(owned_data["meshesArchiveFile"]))
+    identities.update(str(value) for value in owned_data["textureArchiveFiles"])
+    return frozenset(identities)
+
+
+def configuration_substitution_violations(repository: Path) -> list[Violation]:
+    violations: list[Violation] = []
+    for path in configuration_surfaces(repository):
+        if path.suffix.casefold() != ".json":
+            continue
+        source = path.read_text(encoding="utf-8-sig")
+        try:
+            json.loads(source)
+        except json.JSONDecodeError:
+            continue
+        for match in FORBIDDEN_SUBSTITUTION_WORD.finditer(source):
+            violations.append(
+                Violation(
+                    path,
+                    source.count("\n", 0, match.start()) + 1,
+                    match.group(0),
+                    "configuration-guessed-substitution",
+                )
+            )
+    return violations
+
+
 def main() -> int:
     repository = Path(__file__).resolve().parents[1]
     violations: list[Violation] = []
@@ -331,6 +440,12 @@ def main() -> int:
         violations.extend(scanners[language](path))
     violations.extend(unsupported_source_violations(repository))
     violations.extend(godot_project_violations(repository / "runtime" / "project.godot"))
+    identities = content_identities(repository)
+    for path, _language in sources:
+        if path.resolve() == Path(__file__).resolve():
+            continue
+        violations.extend(source_data_violations(path, identities))
+    violations.extend(configuration_substitution_violations(repository))
     if violations:
         for violation in violations:
             relative = violation.path.relative_to(repository)

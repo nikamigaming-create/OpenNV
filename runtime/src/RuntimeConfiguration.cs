@@ -20,17 +20,20 @@ internal sealed record RuntimeConfiguration(
     DiagnosticPreviewConfiguration DiagnosticPreview,
     ActorReviewConfiguration ActorReview,
     ExteriorEnvironmentConfiguration ExteriorEnvironment,
+    FalloutEnvironmentConfiguration FalloutEnvironment,
     RetailActorStateConfiguration RetailActorState,
     ActorParityConfiguration ActorParity,
     SetupViewConfiguration SetupView,
     DesktopLauncherConfiguration DesktopLauncher,
     LegalAssetsConfiguration LegalAssets,
+    ToolingConfiguration Tooling,
     ContentCompilerConfiguration ContentCompiler,
     ActorCompilerConfiguration ActorCompiler)
 {
     internal const string ExpectedSchema = "opennv-runtime-configuration/v1";
     internal const string ResourcePath = "res://config/open-nv-runtime-v1.json";
     private const float PerspectiveMaximumDegrees = 180.0f;
+    private const int RgbaChannelCount = 4;
 
     internal string Sha256 { get; private set; } = "";
 
@@ -87,18 +90,26 @@ internal sealed record RuntimeConfiguration(
             Door.Provenance,
             Hud.Provenance,
             Capture.Provenance,
+            Capture.Gallery.Provenance,
+            Capture.Gallery.Video.Provenance,
             Proof.Provenance,
             Proof.GameplayRoute.Provenance,
             DiagnosticPreview.Provenance,
             ActorReview.Provenance,
             ExteriorEnvironment.Provenance,
+            FalloutEnvironment.Provenance,
+            FalloutEnvironment.ImageSpace.Provenance,
             RetailActorState.Provenance,
             ActorParity.Provenance,
             SetupView.Provenance,
             DesktopLauncher.Provenance,
             LegalAssets.Provenance,
+            Tooling.Provenance,
             ContentCompiler.Provenance,
+            ContentCompiler.SpeedTree.Provenance,
+            ContentCompiler.RetailGrass.Provenance,
             ActorCompiler.Provenance,
+            ActorCompiler.RigidAttachment.Provenance,
         })
             provenance.Validate();
 
@@ -154,9 +165,10 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(Pool.ProofMaximumPhysicsFrames, nameof(Pool.ProofMaximumPhysicsFrames));
         if (Pool.CollisionLayer == 0 || Pool.CollisionMask == 0)
             throw new InvalidOperationException("Pool collision layer and mask must be nonzero.");
+        RequireText(Pool.ResetStatusText, nameof(Pool.ResetStatusText));
         RequireUnitInterval((float)Pool.StrikeHaptic.Amplitude, nameof(Pool.StrikeHaptic.Amplitude));
         RequirePositive(Pool.StrikeHaptic.DurationSeconds, nameof(Pool.StrikeHaptic.DurationSeconds));
-        RequirePositive(Door.FallbackOpenAngleDegrees, nameof(Door.FallbackOpenAngleDegrees));
+        RequirePositive(Door.OpenAngleDegrees, nameof(Door.OpenAngleDegrees));
         RequirePositive(Proof.SpawnFloorRayStartMeters, nameof(Proof.SpawnFloorRayStartMeters));
         if (Proof.SpawnFloorRayEndMeters >= 0.0f)
             throw new InvalidOperationException("Spawn floor proof ray end must be below the origin.");
@@ -225,9 +237,18 @@ internal sealed record RuntimeConfiguration(
         if (Renderer.NeutralNormalTextureSizePixels.Length != 2 ||
             Renderer.NeutralNormalTextureSizePixels.Any(value => value <= 0))
             throw new InvalidOperationException("Neutral normal texture dimensions must be two positive values.");
+        if (ContentCompiler.NonPresentationBaseFormIds.Count < 1 ||
+            ContentCompiler.NonPresentationBaseFormIds
+                .Select(FalloutFormId.Normalize)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count() != ContentCompiler.NonPresentationBaseFormIds.Count)
+            throw new InvalidOperationException(
+                "Content compiler non-presentation base FormIDs must be nonempty and unique.");
         RequirePositive(Renderer.CubemapFaceCount, nameof(Renderer.CubemapFaceCount));
         RequireColor(Hud.DesktopPanelColorRgba, nameof(Hud.DesktopPanelColorRgba));
         RequireColor(Hud.TextColorRgba, nameof(Hud.TextColorRgba));
+        foreach (var text in Hud.Copy.Values)
+            RequireText(text, nameof(Hud.Copy));
         RequireColor(DiagnosticPreview.BackgroundColorRgba, nameof(DiagnosticPreview.BackgroundColorRgba));
         RequireColor(DiagnosticPreview.AmbientColorRgba, nameof(DiagnosticPreview.AmbientColorRgba));
         RequirePositive(
@@ -265,11 +286,130 @@ internal sealed record RuntimeConfiguration(
         if (ExteriorEnvironment.FogNearGameUnits < 0.0f ||
             ExteriorEnvironment.FogNearGameUnits >= ExteriorEnvironment.FogFarGameUnits)
             throw new InvalidOperationException("Exterior fog near must be nonnegative and below fog far.");
+        RequirePositive(
+            FalloutEnvironment.CloudSpeedDivisor,
+            nameof(FalloutEnvironment.CloudSpeedDivisor));
+        if (FalloutEnvironment.SkyRgbMultiplierImageSpaceTraitIndex < 0)
+            throw new InvalidOperationException(
+                "Fallout sky RGB multiplier trait index cannot be negative.");
+        if (FalloutEnvironment.AtmosphereRenderPriority >=
+            FalloutEnvironment.CloudRenderPriority)
+            throw new InvalidOperationException(
+                "Fallout atmosphere must render before its cloud layers.");
+        FalloutEnvironment.ImageSpace.Validate();
         if (Capture.EnvironmentShots.Count < 1)
             throw new InvalidOperationException("Capture configuration must declare at least one environment shot.");
         RequirePositive(Capture.RgbaChannelCount, nameof(Capture.RgbaChannelCount));
         RequirePositive(Capture.PixelChannelMaximum, nameof(Capture.PixelChannelMaximum));
         RequireVector(Capture.LuminanceWeightsRgb, 3, nameof(Capture.LuminanceWeightsRgb));
+        RequirePositive(
+            Capture.Gallery.VerticalFovDegrees,
+            nameof(Capture.Gallery.VerticalFovDegrees));
+        if (Capture.Gallery.VerticalFovDegrees >= PerspectiveMaximumDegrees)
+            throw new InvalidOperationException(
+                "Gallery vertical FOV must be below the perspective limit.");
+        RequireUnitInterval(
+            Capture.Gallery.MaximumFrameOccupancy,
+            nameof(Capture.Gallery.MaximumFrameOccupancy));
+        if (Capture.Gallery.MaximumFrameOccupancy <= 0.0f)
+            throw new InvalidOperationException(
+                "Gallery frame occupancy must be greater than zero.");
+        if (Capture.Gallery.TargetNodeRole != "sidecar-biped-head")
+            throw new InvalidOperationException(
+                "Gallery target node role must use the owned sidecar biped head.");
+        if (Capture.Gallery.FacingPoseSource != "full-body-owned-animation-root")
+            throw new InvalidOperationException(
+                "Gallery facing must use the full-body owned animation root.");
+        if (Capture.Gallery.OcclusionClearanceSource != "camera-near-plane")
+            throw new InvalidOperationException(
+                "Gallery occlusion clearance must use the configured camera near plane.");
+        if (Capture.Gallery.ModelFrontAxis is not ("positive-z" or "negative-z"))
+            throw new InvalidOperationException("Gallery model front axis is unsupported.");
+        var presentation = Capture.Gallery.RetailPresentationSelection;
+        if (presentation.Schema != "opennv-gallery-presentation-selection/v1" ||
+            presentation.CandidateShotKinds.Count < 1 ||
+            presentation.CandidateShotKinds.Distinct(StringComparer.Ordinal).Count() !=
+                presentation.CandidateShotKinds.Count ||
+            presentation.CandidateShotKinds.Any(kind =>
+                !Capture.ActorShotKinds.Contains(kind, StringComparer.Ordinal)))
+            throw new InvalidOperationException(
+                "Gallery retail presentation candidates must be unique configured actor shots.");
+        if (presentation.RequiredSurfaceStatus !=
+                "visible-final-eye-semantic-focus-draw" ||
+            !presentation.RequireSemanticFocusSurface ||
+            !presentation.RequireCameraOutsideActorWorldBound ||
+            !presentation.RequireClearCameraCorridor ||
+            presentation.CameraTranslationToleranceGameUnits <= 0.0f ||
+            presentation.TieBreak != "candidate-order-then-lowest-source-frame" ||
+            presentation.SemanticFocusFacingRules.Count < 1 ||
+            presentation.SemanticFocusFacingRules
+                .Select(rule => rule.FocusKind)
+                .Distinct(StringComparer.Ordinal).Count() !=
+                    presentation.SemanticFocusFacingRules.Count)
+            throw new InvalidOperationException(
+                "Gallery retail presentation selection policy is incomplete.");
+        foreach (var rule in presentation.SemanticFocusFacingRules)
+        {
+            if (string.IsNullOrWhiteSpace(rule.FocusKind) ||
+                rule.AllowedShotKinds.Count < 1 ||
+                rule.AllowedShotKinds.Distinct(StringComparer.Ordinal).Count() !=
+                    rule.AllowedShotKinds.Count ||
+                rule.AllowedShotKinds.Any(kind =>
+                    !presentation.CandidateShotKinds.Contains(kind, StringComparer.Ordinal)) ||
+                rule.MinimumCameraDirectionDotFocusForward < -1.0f ||
+                rule.MaximumCameraDirectionDotFocusForward > 1.0f ||
+                rule.MinimumCameraDirectionDotFocusForward >
+                    rule.MaximumCameraDirectionDotFocusForward)
+                throw new InvalidOperationException(
+                    "Gallery semantic-focus facing rule is invalid.");
+        }
+        if (string.IsNullOrWhiteSpace(Capture.Gallery.StillImageExtension) ||
+            !Capture.Gallery.StillImageExtension.StartsWith(".", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Gallery still-image extension must be explicit.");
+        RequirePositive(
+            Capture.Gallery.FramesPerSubject,
+            nameof(Capture.Gallery.FramesPerSubject));
+        RequirePositive(
+            Capture.Gallery.FramesPerSecond,
+            nameof(Capture.Gallery.FramesPerSecond));
+        RequireUnitInterval(
+            Capture.Gallery.MinimumMotionProgressFraction,
+            nameof(Capture.Gallery.MinimumMotionProgressFraction));
+        if (Capture.Gallery.MinimumMotionProgressFraction <= 0.0f)
+            throw new InvalidOperationException(
+                "Gallery minimum motion progress fraction must be greater than zero.");
+        foreach (var extension in new[]
+                 {
+                     Capture.Gallery.Video.SourceContainerExtension,
+                     Capture.Gallery.Video.DeliveryContainerExtension,
+                 })
+            if (string.IsNullOrWhiteSpace(extension) ||
+                !extension.StartsWith(".", StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Gallery video container extensions must be explicit extensions.");
+        if (Path.GetFileName(Capture.Gallery.Video.DeliveryFileName) !=
+                Capture.Gallery.Video.DeliveryFileName ||
+            !Capture.Gallery.Video.DeliveryFileName.EndsWith(
+                Capture.Gallery.Video.DeliveryContainerExtension,
+                StringComparison.OrdinalIgnoreCase) ||
+            Path.GetFileName(Capture.Gallery.Video.ReportFileName) !=
+                Capture.Gallery.Video.ReportFileName)
+            throw new InvalidOperationException(
+                "Gallery video delivery artifact names must be explicit file names.");
+        foreach (var value in new[]
+                 {
+                     Capture.Gallery.Video.VideoCodec,
+                     Capture.Gallery.Video.PixelFormat,
+                     Capture.Gallery.Video.EncoderPreset,
+                 })
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException(
+                    "Gallery video encoder policy must be explicit.");
+        if (Capture.Gallery.Video.ConstantRateFactor < 0 ||
+            Capture.Gallery.Video.DurationToleranceFrames < 0)
+            throw new InvalidOperationException(
+                "Gallery video numeric policy must be nonnegative.");
         if (Capture.ActorShotKinds.Count < 1 ||
             Capture.ActorShotKinds.Any(string.IsNullOrWhiteSpace) ||
             Capture.ActorShotKinds.Distinct(StringComparer.Ordinal).Count() != Capture.ActorShotKinds.Count)
@@ -305,6 +445,9 @@ internal sealed record RuntimeConfiguration(
             ActorParity.MaximumReportedWorstBones,
             nameof(ActorParity.MaximumReportedWorstBones));
         RequirePositive(
+            ActorParity.GroundContactMaximumUlp,
+            nameof(ActorParity.GroundContactMaximumUlp));
+        RequirePositive(
             ActorParity.ChangedPixelChannelTolerance,
             nameof(ActorParity.ChangedPixelChannelTolerance));
         RequireUnitInterval(
@@ -315,6 +458,8 @@ internal sealed record RuntimeConfiguration(
         RequireVector(SetupView.ContentPositionPixels, 2, nameof(SetupView.ContentPositionPixels));
         RequireVector(SetupView.ContentSizePixels, 2, nameof(SetupView.ContentSizePixels));
         RequireUnitInterval(SetupView.DialogCenteredRatio, nameof(SetupView.DialogCenteredRatio));
+        foreach (var text in SetupView.Copy.Values)
+            RequireText(text, nameof(SetupView.Copy));
         RequirePositive(
             DesktopLauncher.MainWindowWidthPixels,
             nameof(DesktopLauncher.MainWindowWidthPixels));
@@ -333,6 +478,21 @@ internal sealed record RuntimeConfiguration(
         if (DesktopLauncher.MainWindowMinimumWidthPixels > DesktopLauncher.MainWindowWidthPixels ||
             DesktopLauncher.MainWindowMinimumHeightPixels > DesktopLauncher.MainWindowHeightPixels)
             throw new InvalidOperationException("Desktop launcher minimum dimensions exceed startup dimensions.");
+        RequireText(LegalAssets.DefaultCellRecipe, nameof(LegalAssets.DefaultCellRecipe));
+        RequireText(LegalAssets.DefaultCacheRoot, nameof(LegalAssets.DefaultCacheRoot));
+        RequireText(LegalAssets.PackagedCompilerName, nameof(LegalAssets.PackagedCompilerName));
+        RequireText(LegalAssets.SmokeModelLogicalPath, nameof(LegalAssets.SmokeModelLogicalPath));
+        RequireText(LegalAssets.OwnedData.MasterFile, nameof(LegalAssets.OwnedData.MasterFile));
+        RequireText(
+            LegalAssets.OwnedData.MeshesArchiveFile,
+            nameof(LegalAssets.OwnedData.MeshesArchiveFile));
+        RequireText(
+            LegalAssets.OwnedData.DataDirectoryName,
+            nameof(LegalAssets.OwnedData.DataDirectoryName));
+        if (LegalAssets.OwnedData.TextureArchiveFiles.Count < 1 ||
+            LegalAssets.OwnedData.TextureArchiveFiles.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException("Legal owned-data texture archives must be nonempty.");
+        Tooling.Validate();
         RequirePositive(ContentCompiler.AssetIdHexCharacters, nameof(ContentCompiler.AssetIdHexCharacters));
         RequirePositive(ContentCompiler.StableIdHexCharacters, nameof(ContentCompiler.StableIdHexCharacters));
         RequirePositive(ContentCompiler.PngCompressionLevel, nameof(ContentCompiler.PngCompressionLevel));
@@ -346,6 +506,9 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(
             ContentCompiler.DefaultMaterialGlossiness,
             nameof(ContentCompiler.DefaultMaterialGlossiness));
+        RequirePositive(
+            ContentCompiler.ExteriorCellSizeGameUnits,
+            nameof(ContentCompiler.ExteriorCellSizeGameUnits));
         RequirePositive(ContentCompiler.LandscapeQuadrantPixels, nameof(ContentCompiler.LandscapeQuadrantPixels));
         RequirePositive(
             ContentCompiler.LandscapeTilesPerQuadrant,
@@ -353,16 +516,53 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(
             ContentCompiler.LandscapeTileRepeatsPerCell,
             nameof(ContentCompiler.LandscapeTileRepeatsPerCell));
-        if (ActorCompiler.States.Count < 1 ||
-            ActorCompiler.States.Select(state => state.ReferenceFormId)
-                .Distinct(StringComparer.OrdinalIgnoreCase).Count() != ActorCompiler.States.Count)
-            throw new InvalidOperationException("Actor compiler states must be nonempty and uniquely keyed.");
+        ContentCompiler.SpeedTree.Validate();
+        ContentCompiler.RetailGrass.Validate();
+        var faceGenMaterial = ActorCompiler.FaceGenMaterial;
+        if (faceGenMaterial.Schema != FaceGenMaterialConfiguration.ExpectedSchema)
+            throw new InvalidOperationException("Actor FaceGen material schema is invalid.");
+        if (faceGenMaterial.SourceSamplerSrgbTexture ||
+            faceGenMaterial.SourceRenderTargetSrgbWrite)
+            throw new InvalidOperationException(
+                "Actor FaceGen material declares unsupported retail color-space state.");
+        RequireUnitInterval(
+            faceGenMaterial.SignedDetailNeutral,
+            nameof(faceGenMaterial.SignedDetailNeutral));
+        RequirePositive(
+            faceGenMaterial.SignedDetailScale,
+            nameof(faceGenMaterial.SignedDetailScale));
+        RequirePositive(faceGenMaterial.ToneScale, nameof(faceGenMaterial.ToneScale));
+        if (faceGenMaterial.ToneMapRgba.Length != RgbaChannelCount ||
+            faceGenMaterial.ToneMapRgba.Any(channel =>
+                channel < byte.MinValue || channel > byte.MaxValue))
+            throw new InvalidOperationException(
+                "Actor FaceGen tone map must contain four byte-range RGBA values.");
+        if (string.IsNullOrWhiteSpace(faceGenMaterial.Source))
+            throw new InvalidOperationException("Actor FaceGen material source must not be empty.");
+        var transfer = faceGenMaterial.RuntimeAlbedoTransfer;
+        if (transfer.Schema != ColorTransferConfiguration.ExpectedSchema)
+            throw new InvalidOperationException("Actor FaceGen albedo transfer schema is invalid.");
+        RequirePositive(transfer.EncodedCutoff, nameof(transfer.EncodedCutoff));
+        RequirePositive(transfer.LinearScale, nameof(transfer.LinearScale));
+        RequirePositive(transfer.Offset, nameof(transfer.Offset));
+        RequirePositive(transfer.Normalization, nameof(transfer.Normalization));
+        RequirePositive(transfer.Exponent, nameof(transfer.Exponent));
+        if (string.IsNullOrWhiteSpace(transfer.Source))
+            throw new InvalidOperationException("Actor FaceGen albedo transfer source must not be empty.");
+        ActorCompiler.AnimationProfiles.Validate();
+        ActorCompiler.RigidAttachment.Validate();
     }
 
     private static void RequirePositive(float value, string name)
     {
         if (!float.IsFinite(value) || value <= 0.0f)
             throw new InvalidOperationException($"Runtime configuration {name} must be positive.");
+    }
+
+    private static void RequireText(string value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"Runtime configuration {name} must not be empty.");
     }
 
     private static void RequirePositive(double value, string name)
@@ -591,6 +791,7 @@ internal sealed record PoolConfiguration(
     int ProofMaximumPhysicsFrames,
     uint CollisionLayer,
     uint CollisionMask,
+    string ResetStatusText,
     HapticConfiguration StrikeHaptic);
 
 internal sealed record XrContractConfiguration(
@@ -643,7 +844,7 @@ internal sealed record DiagnosticMuzzleFlashConfiguration(
 
 internal sealed record DoorConfiguration(
     ConfigurationProvenance Provenance,
-    float FallbackOpenAngleDegrees);
+    float OpenAngleDegrees);
 
 internal sealed record HudConfiguration(
     ConfigurationProvenance Provenance,
@@ -662,7 +863,29 @@ internal sealed record HudConfiguration(
     float XrPixelSizeMeters,
     int XrOutlineSizePixels,
     int XrMaximumStatusCharacters,
-    string DefaultSavePath);
+    string DefaultSavePath,
+    HudCopyConfiguration Copy);
+
+internal sealed record HudCopyConfiguration(
+    string ObjectiveEquipWeapon,
+    string ObjectiveFireWeapon,
+    string ObjectiveTakeAid,
+    string ObjectiveOpenEntryDoor,
+    string ObjectiveComplete,
+    string InventoryPrefix,
+    string EmptyInventory)
+{
+    internal IEnumerable<string> Values =>
+    [
+        ObjectiveEquipWeapon,
+        ObjectiveFireWeapon,
+        ObjectiveTakeAid,
+        ObjectiveOpenEntryDoor,
+        ObjectiveComplete,
+        InventoryPrefix,
+        EmptyInventory,
+    ];
+}
 
 internal sealed record CaptureConfiguration(
     ConfigurationProvenance Provenance,
@@ -679,7 +902,55 @@ internal sealed record CaptureConfiguration(
     double PixelChannelMaximum,
     float[] LuminanceWeightsRgb,
     IReadOnlyList<string> ActorShotKinds,
+    GalleryCaptureConfiguration Gallery,
     IReadOnlyList<EnvironmentShotConfiguration> EnvironmentShots);
+
+internal sealed record GalleryCaptureConfiguration(
+    ConfigurationProvenance Provenance,
+    GalleryPresentationSelectionConfiguration RetailPresentationSelection,
+    float VerticalFovDegrees,
+    float MaximumFrameOccupancy,
+    string TargetNodeRole,
+    string FacingPoseSource,
+    string OcclusionClearanceSource,
+    string ModelFrontAxis,
+    string StillImageExtension,
+    int FramesPerSubject,
+    int FramesPerSecond,
+    float MinimumMotionProgressFraction,
+    GalleryVideoConfiguration Video)
+{
+    internal float DurationSeconds => (float)FramesPerSubject / FramesPerSecond;
+}
+
+internal sealed record GalleryPresentationSelectionConfiguration(
+    string Schema,
+    IReadOnlyList<string> CandidateShotKinds,
+    IReadOnlyList<GallerySemanticFocusFacingRule> SemanticFocusFacingRules,
+    string RequiredSurfaceStatus,
+    bool RequireSemanticFocusSurface,
+    bool RequireCameraOutsideActorWorldBound,
+    bool RequireClearCameraCorridor,
+    float CameraTranslationToleranceGameUnits,
+    string TieBreak);
+
+internal sealed record GallerySemanticFocusFacingRule(
+    string FocusKind,
+    IReadOnlyList<string> AllowedShotKinds,
+    float MinimumCameraDirectionDotFocusForward,
+    float MaximumCameraDirectionDotFocusForward);
+
+internal sealed record GalleryVideoConfiguration(
+    ConfigurationProvenance Provenance,
+    string SourceContainerExtension,
+    string DeliveryContainerExtension,
+    string DeliveryFileName,
+    string ReportFileName,
+    string VideoCodec,
+    string PixelFormat,
+    int ConstantRateFactor,
+    string EncoderPreset,
+    int DurationToleranceFrames);
 
 internal sealed record EnvironmentShotConfiguration(
     string Name,
@@ -754,6 +1025,197 @@ internal sealed record ExteriorEnvironmentConfiguration(
     float[] DirectionalRotationDegrees,
     float DirectionalFade);
 
+internal sealed record FalloutEnvironmentConfiguration(
+    ConfigurationProvenance Provenance,
+    float CloudSpeedDivisor,
+    int SkyRgbMultiplierImageSpaceTraitIndex,
+    int AtmosphereRenderPriority,
+    int CloudRenderPriority,
+    RetailImageSpaceConfiguration ImageSpace);
+
+internal sealed record RetailImageSpaceConfiguration(
+    ConfigurationProvenance Provenance,
+    string Schema,
+    IReadOnlyList<ImageSpaceModifierChannelConfiguration> ModifierChannels,
+    ImageSpaceTraitIndexConfiguration TraitIndices,
+    float[] LuminanceWeightsRgb,
+    string ShaderPath,
+    int ShaderByteCount,
+    string ShaderFnv1a32,
+    int ShaderRegisterComponents,
+    int HdrParametersRegister,
+    int CinematicRegister,
+    int TintRegister,
+    int FadeRegister,
+    float ShaderConstantTolerance,
+    RetailHdrBlendConfiguration HdrBlend,
+    int CanvasLayer)
+{
+    internal const string ExpectedSchema = "opennv-retail-image-space-composition/v2";
+    private const int D3D9FloatRegisterComponents = 4;
+
+    internal void Validate()
+    {
+        if (Schema != ExpectedSchema)
+            throw new InvalidOperationException("Unexpected Fallout image-space configuration schema.");
+        if (ModifierChannels.Count < 1 ||
+            ModifierChannels.Any(channel =>
+                string.IsNullOrWhiteSpace(channel.Name) || channel.TraitIndex < 0) ||
+            ModifierChannels.Select(channel => channel.Name)
+                .Distinct(StringComparer.Ordinal).Count() != ModifierChannels.Count ||
+            ModifierChannels.Select(channel => channel.TraitIndex).Distinct().Count() !=
+                ModifierChannels.Count)
+            throw new InvalidOperationException(
+                "Fallout image-space modifier channels must be unique and nonempty.");
+        TraitIndices.Validate();
+        if (LuminanceWeightsRgb.Length != 3 ||
+            LuminanceWeightsRgb.Any(value => !float.IsFinite(value) || value < 0.0f) ||
+            MathF.Abs(LuminanceWeightsRgb.Sum() - 1.0f) > ShaderConstantTolerance)
+            throw new InvalidOperationException(
+                "Fallout cinematic luminance weights must be normalized and nonnegative.");
+        if (string.IsNullOrWhiteSpace(ShaderPath) || ShaderByteCount <= 0 ||
+            string.IsNullOrWhiteSpace(ShaderFnv1a32) ||
+            ShaderRegisterComponents != D3D9FloatRegisterComponents ||
+            HdrParametersRegister < 0 || CinematicRegister < 0 || TintRegister < 0 ||
+            FadeRegister < 0 || ShaderConstantTolerance <= 0.0f)
+            throw new InvalidOperationException(
+                "Fallout retail image-space shader evidence configuration is incomplete.");
+        var registers = new[]
+        {
+            HdrParametersRegister,
+            CinematicRegister,
+            TintRegister,
+            FadeRegister,
+        };
+        if (registers.Distinct().Count() != registers.Length)
+            throw new InvalidOperationException(
+                "Fallout retail image-space shader registers must be unique.");
+        HdrBlend.Validate();
+    }
+}
+
+internal sealed record RetailHdrBlendConfiguration(
+    int BlurredAdaptationStage,
+    int HdrSceneStage,
+    uint D3D9ResourceType,
+    uint D3D9SurfaceType,
+    uint D3D9Usage,
+    uint D3D9Pool,
+    uint D3D9MultiSampleType,
+    uint D3D9MultiSampleQuality,
+    int LevelCount,
+    uint D3D9TextureFormat,
+    string D3D9TextureFormatName,
+    int ComponentCount,
+    int ComponentBytes,
+    int WorkGroupSidePixels,
+    int ReadbackTimeoutSeconds,
+    RetailHdrTargetConfiguration Targets,
+    float AdaptationDeltaSeconds,
+    float AdaptationRetentionBase,
+    float MinimumAdaptationMagnitude,
+    float BrightThreshold,
+    float BrightScale,
+    IReadOnlyList<float> BlurWeights,
+    float BloomNormalizationScale,
+    bool SamplerSrgbEnabled,
+    bool RenderTargetSrgbWriteEnabled,
+    string OutputTransfer,
+    string SamplerFilter)
+{
+    internal void Validate()
+    {
+        if (BlurredAdaptationStage < 0 || HdrSceneStage < 0 ||
+            BlurredAdaptationStage == HdrSceneStage || D3D9ResourceType == 0 ||
+            D3D9SurfaceType == 0 || LevelCount <= 0 || D3D9TextureFormat == 0 ||
+            string.IsNullOrWhiteSpace(D3D9TextureFormatName) ||
+            ComponentCount <= 0 || ComponentBytes <= 0 ||
+            WorkGroupSidePixels <= 0 || ReadbackTimeoutSeconds <= 0 ||
+            !float.IsFinite(AdaptationDeltaSeconds) || AdaptationDeltaSeconds <= 0.0f ||
+            !float.IsFinite(AdaptationRetentionBase) ||
+            AdaptationRetentionBase <= 0.0f || AdaptationRetentionBase > 1.0f ||
+            !float.IsFinite(MinimumAdaptationMagnitude) ||
+            MinimumAdaptationMagnitude <= 0.0f ||
+            !float.IsFinite(BrightThreshold) || BrightThreshold <= 0.0f ||
+            !float.IsFinite(BrightScale) || BrightScale <= 0.0f ||
+            BlurWeights.Count < 1 || BlurWeights.Count % 2 == 0 ||
+            BlurWeights.Any(value => !float.IsFinite(value) || value <= 0.0f) ||
+            !float.IsFinite(BloomNormalizationScale) || BloomNormalizationScale <= 0.0f ||
+            !OutputTransfer.Equals("linear", StringComparison.Ordinal) ||
+            !SamplerFilter.Equals("linear", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Fallout HDR blend configuration is incomplete.");
+        Targets.Validate();
+    }
+
+    internal IReadOnlyList<int> InputStages =>
+        [BlurredAdaptationStage, HdrSceneStage];
+}
+
+internal sealed record RetailHdrTargetConfiguration(
+    int[] HalfPixels,
+    int[] SourcePixels,
+    IReadOnlyList<int[]> DownsamplePixels,
+    int[] AdaptationPixels,
+    int[] BrightPixels,
+    int[] BloomPixels)
+{
+    internal void Validate()
+    {
+        var targets = new[]
+        {
+            HalfPixels,
+            SourcePixels,
+            AdaptationPixels,
+            BrightPixels,
+            BloomPixels,
+        }.Concat(DownsamplePixels);
+        if (DownsamplePixels.Count < 1 || targets.Any(target =>
+                target.Length != 2 || target.Any(value => value <= 0)))
+            throw new InvalidOperationException(
+                "Fallout HDR target dimensions must contain positive pixel pairs.");
+    }
+}
+
+internal sealed record ImageSpaceModifierChannelConfiguration(string Name, int TraitIndex);
+
+internal sealed record ImageSpaceTraitIndexConfiguration(
+    int TargetLuminance,
+    int SunlightDimmer,
+    int SkinDimmer,
+    int CinematicSaturation,
+    int CinematicContrastAverageLuminance,
+    int CinematicContrast,
+    int CinematicBrightness,
+    int CinematicTintRed,
+    int CinematicTintGreen,
+    int CinematicTintBlue,
+    int CinematicTintStrength)
+{
+    internal IEnumerable<int> Values() =>
+    [
+        TargetLuminance,
+        SunlightDimmer,
+        SkinDimmer,
+        CinematicSaturation,
+        CinematicContrastAverageLuminance,
+        CinematicContrast,
+        CinematicBrightness,
+        CinematicTintRed,
+        CinematicTintGreen,
+        CinematicTintBlue,
+        CinematicTintStrength,
+    ];
+
+    internal void Validate()
+    {
+        var indices = Values().ToArray();
+        if (indices.Any(index => index < 0) || indices.Distinct().Count() != indices.Length)
+            throw new InvalidOperationException(
+                "Fallout image-space trait indices must be unique and nonnegative.");
+    }
+}
+
 internal sealed record RetailActorStateConfiguration(
     ConfigurationProvenance Provenance,
     IReadOnlyList<string> RequiredShotKinds,
@@ -771,6 +1233,7 @@ internal sealed record ActorParityConfiguration(
     float PoseRotationToleranceRadians,
     int MaximumReportedWorstBones,
     float PlacementToleranceGameUnits,
+    int GroundContactMaximumUlp,
     float YawToleranceRadians,
     float CameraPositionToleranceGameUnits,
     float CameraAimToleranceGameUnits,
@@ -806,7 +1269,20 @@ internal sealed record SetupViewConfiguration(
     float StatusMinimumHeightPixels,
     float[] StatusColorRgba,
     int StatusFontSizePixels,
-    float DialogCenteredRatio);
+    float DialogCenteredRatio,
+    SetupViewCopyConfiguration Copy);
+
+internal sealed record SetupViewCopyConfiguration(
+    string Title,
+    string Body,
+    string SelectButton,
+    string WaitingStatus,
+    string RebuildStatusPrefix,
+    string DialogTitle)
+{
+    internal IEnumerable<string> Values =>
+    [Title, Body, SelectButton, WaitingStatus, RebuildStatusPrefix, DialogTitle];
+}
 
 internal sealed record DesktopLauncherConfiguration(
     ConfigurationProvenance Provenance,
@@ -820,7 +1296,31 @@ internal sealed record LegalAssetsConfiguration(
     ConfigurationProvenance Provenance,
     string DefaultCellRecipe,
     string DefaultCacheRoot,
-    string PackagedCompilerName);
+    string PackagedCompilerName,
+    string SmokeModelLogicalPath,
+    LegalOwnedDataConfiguration OwnedData);
+
+internal sealed record LegalOwnedDataConfiguration(
+    string MasterFile,
+    string MeshesArchiveFile,
+    IReadOnlyList<string> TextureArchiveFiles,
+    string DataDirectoryName);
+
+internal sealed record ToolingConfiguration(
+    ConfigurationProvenance Provenance,
+    IReadOnlyDictionary<string, string> RecipeFiles)
+{
+    internal void Validate()
+    {
+        if (RecipeFiles.Count < 1 ||
+            RecipeFiles.Any(row =>
+                string.IsNullOrWhiteSpace(row.Key) ||
+                string.IsNullOrWhiteSpace(row.Value) ||
+                Path.GetFileName(row.Value) != row.Value))
+            throw new InvalidOperationException(
+                "Tooling recipe registry must contain nonempty file names.");
+    }
+}
 
 internal sealed record ContentCompilerConfiguration(
     ConfigurationProvenance Provenance,
@@ -831,20 +1331,386 @@ internal sealed record ContentCompilerConfiguration(
     float ZeroSpecularEpsilon,
     float MinimumMaterialRoughness,
     float DefaultMaterialGlossiness,
+    float ExteriorCellSizeGameUnits,
     int LandscapeQuadrantPixels,
     int LandscapeTilesPerQuadrant,
-    int LandscapeTileRepeatsPerCell);
+    int LandscapeTileRepeatsPerCell,
+    SpeedTreeCompilerConfiguration SpeedTree,
+    RetailGrassCompilerConfiguration RetailGrass,
+    IReadOnlyList<string> NonPresentationBaseFormIds);
+
+internal sealed record SpeedTreeCompilerConfiguration(
+    ConfigurationProvenance Provenance,
+    string BillboardTexture,
+    float BillboardAlphaCutoff)
+{
+    internal void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(BillboardTexture))
+            throw new InvalidOperationException("SpeedTree billboard texture must not be empty.");
+        if (!float.IsFinite(BillboardAlphaCutoff) ||
+            BillboardAlphaCutoff <= 0.0f || BillboardAlphaCutoff > 1.0f)
+            throw new InvalidOperationException(
+                "SpeedTree billboard alpha cutoff must be in (0, 1].");
+    }
+}
+
+internal sealed record RetailGrassCompilerConfiguration(
+    ConfigurationProvenance Provenance,
+    string Schema,
+    string MaterialSchema,
+    string MaterialModel,
+    RetailGrassMaterialConfiguration Material,
+    RetailGrassTextureConfiguration Texture,
+    RetailGrassShaderConfiguration Shader,
+    RetailGrassDrawConfiguration Draw,
+    RetailGrassCaptureConfiguration Capture,
+    RetailGrassReconstructionConfiguration Reconstruction,
+    IReadOnlyList<RetailGrassMeshConfiguration> Meshes)
+{
+    internal const string ExpectedSchema = "opennv-retail-grass-compiler-contract/v1";
+
+    internal void Validate()
+    {
+        if (Schema != ExpectedSchema || string.IsNullOrWhiteSpace(MaterialSchema) ||
+            string.IsNullOrWhiteSpace(MaterialModel) || Meshes.Count < 1 ||
+            Meshes.Select(mesh => mesh.Suffix).Distinct(StringComparer.Ordinal).Count() !=
+                Meshes.Count ||
+            Meshes.Any(mesh =>
+                string.IsNullOrWhiteSpace(mesh.Suffix) || string.IsNullOrWhiteSpace(mesh.Path) ||
+                string.IsNullOrWhiteSpace(mesh.Sha256) || mesh.SourceVertices <= 0 ||
+                mesh.StripLength <= 0))
+            throw new InvalidOperationException(
+                "Retail grass compiler contract is incomplete.");
+        Texture.Validate();
+        Material.Validate();
+        Shader.Validate();
+        Draw.Validate();
+        Capture.Validate();
+        Reconstruction.Validate();
+    }
+}
+
+internal sealed record RetailGrassMaterialConfiguration(
+    string AlphaMode,
+    string DiffuseDomain,
+    string Sampler,
+    string VertexLightingBake,
+    string WindBake,
+    int TextureClampMode,
+    bool DoubleSided,
+    bool Unshaded)
+{
+    internal void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(AlphaMode) ||
+            string.IsNullOrWhiteSpace(DiffuseDomain) ||
+            string.IsNullOrWhiteSpace(Sampler) ||
+            string.IsNullOrWhiteSpace(VertexLightingBake) ||
+            string.IsNullOrWhiteSpace(WindBake) || TextureClampMode < 0)
+            throw new InvalidOperationException(
+                "Retail grass material contract is incomplete.");
+    }
+}
+
+internal sealed record RetailGrassTextureConfiguration(
+    string Path,
+    string Fnv1a32,
+    string TopLevelFnv1a32,
+    int WidthPixels,
+    int HeightPixels,
+    int LevelCount,
+    uint D3d9Format)
+{
+    internal void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Path) || !RetailGrassHash.TryParse(Fnv1a32, out _) ||
+            !RetailGrassHash.TryParse(TopLevelFnv1a32, out _) || WidthPixels <= 0 ||
+            HeightPixels <= 0 || LevelCount <= 0 || D3d9Format == 0u)
+            throw new InvalidOperationException("Retail grass texture contract is incomplete.");
+    }
+}
+
+internal sealed record RetailGrassShaderConfiguration(
+    string VertexFnv1a32,
+    string PixelFnv1a32,
+    int InstanceFirstRegister,
+    int InstanceCapacity,
+    int VertexConstantRegisterCount,
+    int PixelConstantRegisterCount,
+    float InstanceRegisterCeiling,
+    float FloatTolerance,
+    RetailGrassRegisterConfiguration Registers)
+{
+    internal void Validate()
+    {
+        if (!RetailGrassHash.TryParse(VertexFnv1a32, out _) ||
+            !RetailGrassHash.TryParse(PixelFnv1a32, out _) ||
+            InstanceFirstRegister < 0 || InstanceCapacity <= 0 ||
+            VertexConstantRegisterCount <= 0 || PixelConstantRegisterCount <= 0 ||
+            !float.IsFinite(InstanceRegisterCeiling) || InstanceRegisterCeiling <= 0.0f ||
+            !float.IsFinite(FloatTolerance) || FloatTolerance <= 0.0f)
+            throw new InvalidOperationException("Retail grass shader contract is incomplete.");
+    }
+}
+
+internal sealed record RetailGrassRegisterConfiguration(
+    int ScaleMask,
+    int InstanceCeiling,
+    int InstanceCeilingComponent,
+    int DiffuseDirection,
+    int DiffuseColor,
+    int Wind,
+    int Fade,
+    int AmbientColor,
+    int DirectionalScale,
+    int FogColor,
+    int Fog,
+    int AlphaCutoff);
+
+internal sealed record RetailGrassDrawConfiguration(
+    int PrimitiveType,
+    int VertexStrideBytes,
+    IReadOnlyList<int[]> Declaration,
+    RetailGrassSamplerConfiguration Sampler,
+    RetailGrassRenderStateConfiguration RenderState,
+    int RenderFrameLead,
+    int StripBridgeIndices,
+    int PrimitiveCountBias,
+    int FullBatchTrailingBridgeIndices)
+{
+    internal void Validate()
+    {
+        if (PrimitiveType <= 0 || VertexStrideBytes <= 0 || Declaration.Count < 1 ||
+            Declaration.Any(row => row.Length < 1) || RenderFrameLead < 0 ||
+            StripBridgeIndices < 0 || PrimitiveCountBias < 0 ||
+            FullBatchTrailingBridgeIndices < 0)
+            throw new InvalidOperationException("Retail grass draw contract is incomplete.");
+    }
+}
+
+internal sealed record RetailGrassCaptureConfiguration(
+    string Schema,
+    string Event,
+    int TextureStageCount,
+    int MaximumCandidates,
+    int MaximumRecords,
+    int MaximumShaderBytes,
+    int MaximumVertexBufferBytes,
+    int MinimumMatchingRecords,
+    int RequiredMatchedResourceCount,
+    bool RequireEveryObservedMesh)
+{
+    internal const string ExpectedSchema = "opennv-retail-grass-capture-contract/v1";
+    internal const string ExpectedEvent = "texture-sampler-contract";
+
+    internal void Validate()
+    {
+        if (Schema != ExpectedSchema || Event != ExpectedEvent ||
+            TextureStageCount <= 0 || MaximumCandidates <= 0 || MaximumRecords <= 0 ||
+            MaximumShaderBytes <= 0 || MaximumVertexBufferBytes <= 0 ||
+            MinimumMatchingRecords <= 0 || RequiredMatchedResourceCount <= 0 ||
+            MinimumMatchingRecords >= MaximumRecords || !RequireEveryObservedMesh)
+            throw new InvalidOperationException(
+                "Retail grass capture contract is incomplete.");
+    }
+}
+
+internal sealed record RetailGrassSamplerConfiguration(
+    int AddressU,
+    int AddressV,
+    int MagFilter,
+    int MinFilter,
+    int MipFilter,
+    int SrgbTexture,
+    int SrgbWrite);
+
+internal sealed record RetailGrassRenderStateConfiguration(
+    int CullMode,
+    int ZEnable,
+    int ZWriteEnable,
+    int ZFunction,
+    int AlphaTestEnable,
+    int AlphaReference,
+    int AlphaFunction,
+    int AlphaBlendEnable,
+    int SourceBlend,
+    int DestinationBlend,
+    int BlendOperation,
+    int SeparateAlphaBlendEnable,
+    int SourceBlendAlpha,
+    int DestinationBlendAlpha,
+    int BlendOperationAlpha,
+    int ColorWriteEnable,
+    int FogEnable)
+{
+    internal IReadOnlyDictionary<string, int> Values =>
+        new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["cullMode"] = CullMode,
+            ["zEnable"] = ZEnable,
+            ["zWriteEnable"] = ZWriteEnable,
+            ["zFunction"] = ZFunction,
+            ["alphaTestEnable"] = AlphaTestEnable,
+            ["alphaReference"] = AlphaReference,
+            ["alphaFunction"] = AlphaFunction,
+            ["alphaBlendEnable"] = AlphaBlendEnable,
+            ["sourceBlend"] = SourceBlend,
+            ["destinationBlend"] = DestinationBlend,
+            ["blendOperation"] = BlendOperation,
+            ["separateAlphaBlendEnable"] = SeparateAlphaBlendEnable,
+            ["sourceBlendAlpha"] = SourceBlendAlpha,
+            ["destinationBlendAlpha"] = DestinationBlendAlpha,
+            ["blendOperationAlpha"] = BlendOperationAlpha,
+            ["colorWriteEnable"] = ColorWriteEnable,
+            ["fogEnable"] = FogEnable,
+        };
+}
+
+internal sealed record RetailGrassReconstructionConfiguration(
+    float ZeroLengthEpsilon,
+    float ScaleBase,
+    float ScalePerInstance,
+    float ShadeBase,
+    float ShadeFraction,
+    float PhaseSpatialScale,
+    float PhaseRadiansScale,
+    float PhaseOffset,
+    float Tau,
+    float Pi)
+{
+    internal void Validate()
+    {
+        var values = new[]
+        {
+            ZeroLengthEpsilon,
+            ScaleBase,
+            ScalePerInstance,
+            ShadeBase,
+            ShadeFraction,
+            PhaseSpatialScale,
+            PhaseRadiansScale,
+            PhaseOffset,
+            Tau,
+            Pi,
+        };
+        if (values.Any(value => !float.IsFinite(value) || value <= 0.0f))
+            throw new InvalidOperationException(
+                "Retail grass reconstruction contract must be finite and positive.");
+    }
+}
+
+internal sealed record RetailGrassMeshConfiguration(
+    string Suffix,
+    string Path,
+    string Sha256,
+    int SourceVertices,
+    int StripLength);
+
+internal static class RetailGrassHash
+{
+    private const string Prefix = "0x";
+    private const int CanonicalCharacters = 10;
+
+    internal static bool TryParse(string value, out uint result)
+    {
+        result = default;
+        return value.Length == CanonicalCharacters &&
+            value.StartsWith(Prefix, StringComparison.Ordinal) &&
+            uint.TryParse(
+                value.AsSpan(Prefix.Length),
+                System.Globalization.NumberStyles.AllowHexSpecifier,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out result);
+    }
+}
 
 internal sealed record ActorCompilerConfiguration(
     ConfigurationProvenance Provenance,
-    IReadOnlyList<ActorCompilerStateConfiguration> States);
+    FaceGenMaterialConfiguration FaceGenMaterial,
+    ActorAnimationProfilesConfiguration AnimationProfiles,
+    ActorRigidAttachmentConfiguration RigidAttachment);
 
-internal sealed record ActorCompilerStateConfiguration(
-    string ReferenceFormId,
-    string IdleAnimation,
-    int[] SkinToneRgba,
-    string SkinToneSource,
-    IReadOnlyList<string> BodyTextureSourceAliases);
+internal sealed record ActorRigidAttachmentConfiguration(
+    ConfigurationProvenance Provenance,
+    string BipedHeadNode,
+    ActorRigidAttachmentProfilesConfiguration Profiles)
+{
+    internal void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(BipedHeadNode))
+            throw new InvalidOperationException("Actor biped-head node must not be empty.");
+        Profiles.Validate();
+    }
+}
+
+internal sealed record ActorRigidAttachmentProfilesConfiguration(
+    ActorRigidAttachmentProfileConfiguration NPC_,
+    ActorRigidAttachmentProfileConfiguration CREA)
+{
+    internal void Validate()
+    {
+        foreach (var profile in new[] { NPC_, CREA })
+        {
+            if (string.IsNullOrWhiteSpace(profile.SkeletonRootNode) ||
+                string.IsNullOrWhiteSpace(profile.UnparentedRigidNode))
+                throw new InvalidOperationException(
+                    "Actor rigid-attachment profiles must declare both node identities.");
+        }
+    }
+}
+
+internal sealed record ActorRigidAttachmentProfileConfiguration(
+    string SkeletonRootNode,
+    string UnparentedRigidNode);
+
+internal sealed record ActorAnimationProfilesConfiguration(
+    ActorAnimationProfileConfiguration NPC_,
+    ActorAnimationProfileConfiguration CREA)
+{
+    internal void Validate()
+    {
+        if (NPC_.Mode != "exact-owned-member" ||
+            string.IsNullOrWhiteSpace(NPC_.Path) ||
+            NPC_.FileName is not null ||
+            CREA.Mode != "skeleton-directory" ||
+            CREA.Path is not null ||
+            string.IsNullOrWhiteSpace(CREA.FileName))
+            throw new InvalidOperationException(
+                "Actor animation profiles do not declare complete owned-member resolvers.");
+    }
+}
+
+internal sealed record ActorAnimationProfileConfiguration(
+    string Mode,
+    string? Path,
+    string? FileName);
+
+internal sealed record FaceGenMaterialConfiguration(
+    string Schema,
+    bool SourceSamplerSrgbTexture,
+    bool SourceRenderTargetSrgbWrite,
+    float SignedDetailNeutral,
+    float SignedDetailScale,
+    int[] ToneMapRgba,
+    float ToneScale,
+    ColorTransferConfiguration RuntimeAlbedoTransfer,
+    string Source)
+{
+    internal const string ExpectedSchema = "opennv-retail-facegen-material/v2";
+}
+
+internal sealed record ColorTransferConfiguration(
+    string Schema,
+    float EncodedCutoff,
+    float LinearScale,
+    float Offset,
+    float Normalization,
+    float Exponent,
+    string Source)
+{
+    internal const string ExpectedSchema = "opennv-srgb-transfer/v1";
+}
 
 internal static class RuntimeConfigurationConversions
 {

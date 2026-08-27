@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Godot;
 
 namespace OpenNV.Runtime;
@@ -25,7 +26,8 @@ internal static class ActorReviewCapture
         RuntimeConfiguration configuration,
         string contractPath,
         string captureRoot,
-        string? reportPath)
+        string? reportPath,
+        ActorReviewBackground? background)
     {
         try
         {
@@ -50,8 +52,12 @@ internal static class ActorReviewCapture
                 skeleton,
                 samples[0],
                 configuration.World.GameUnitsToMeters);
-            var skinMappings = BuildSkinMappings(actor, skeleton, samples[0]);
-            BuildReviewView(host, contract, configuration);
+            var skinMappings = BuildSkinMappings(actor, skeleton, samples);
+            var retailEnvironment = BuildReviewView(
+                host,
+                contract,
+                configuration,
+                background);
             var camera = new Camera3D
             {
                 Current = true,
@@ -63,9 +69,15 @@ internal static class ActorReviewCapture
                 configuration.Capture.RenderedFramesBeforeCapture);
 
             var files = new List<object>();
+            var preHdrSceneColors = new List<object>();
+            var postHdrSceneColors = new List<object>();
             var appliedSamples = new List<object>();
+            var referenceLedgers = new List<CellReferenceLedger.Result>();
+            var lodLedgers = new List<CellLodLedger.Result>();
             var allVisualGatesPassed = true;
             var allSkinPaletteGatesPassed = true;
+            var allReferenceLedgerGatesPassed = true;
+            var allLodCoverageGatesPassed = true;
             foreach (var shot in contract.Shots)
             {
                 foreach (var sample in shot.Samples)
@@ -77,10 +89,76 @@ internal static class ActorReviewCapture
                         skinMappings,
                         sample,
                         configuration);
+                    ApplyRigidAttachments(
+                        actor,
+                        contract.Appearance,
+                        sample,
+                        configuration);
+                    background?.AlignToActor(sample.ActorRoot.Translation);
                     ApplyCamera(camera, sample, configuration.World.GameUnitsToMeters);
+                    var referenceLedger = background is null
+                        ? null
+                        : CellReferenceLedger.Measure(background.Content, camera);
+                    if (referenceLedger is not null)
+                    {
+                        referenceLedgers.Add(referenceLedger);
+                        allReferenceLedgerGatesPassed &= referenceLedger.Passed;
+                    }
+                    var lodLedger = background is null
+                        ? null
+                        : CellLodLedger.Measure(background.Content, camera);
+                    if (lodLedger is not null)
+                    {
+                        lodLedgers.Add(lodLedger);
+                        allLodCoverageGatesPassed &= lodLedger.Passed;
+                    }
                     await EnvironmentCapture.WaitForRenderedFrames(
                         host,
                         configuration.Capture.ActorRenderedFramesBeforeCapture);
+                    object? preHdrSceneColor = null;
+                    object? postHdrSceneColor = null;
+                    if (retailEnvironment is not null && preHdrSceneColors.Count == 0)
+                    {
+                        var preHdrBytes = retailEnvironment.Value.ImageSpace.Effect
+                            .CapturePreHdrSceneColor();
+                        var preHdrFileName = $"godot-{SafeToken(shot.Kind)}-frame-" +
+                            sample.Frame.ToString($"D{FrameNumberDigits}") +
+                            "-pre-hdr-rgba16f.bin";
+                        var preHdrPath = Path.Combine(output, preHdrFileName);
+                        File.WriteAllBytes(preHdrPath, preHdrBytes);
+                        preHdrSceneColor = new
+                        {
+                            path = preHdrPath,
+                            bytes = preHdrBytes.Length,
+                            sha256 = Convert.ToHexString(SHA256.HashData(preHdrBytes))
+                                .ToLowerInvariant(),
+                            width = sourceSize.X,
+                            height = sourceSize.Y,
+                            format = "R16G16B16A16_SFLOAT-little-endian",
+                            retailStage = 1,
+                        };
+                        preHdrSceneColors.Add(preHdrSceneColor);
+
+                        var postHdrBytes = retailEnvironment.Value.ImageSpace.Effect
+                            .CapturePostHdrSceneColor();
+                        var postHdrFileName = $"godot-{SafeToken(shot.Kind)}-frame-" +
+                            sample.Frame.ToString($"D{FrameNumberDigits}") +
+                            "-post-hdr-rgba16f.bin";
+                        var postHdrPath = Path.Combine(output, postHdrFileName);
+                        File.WriteAllBytes(postHdrPath, postHdrBytes);
+                        postHdrSceneColor = new
+                        {
+                            path = postHdrPath,
+                            bytes = postHdrBytes.Length,
+                            sha256 = Convert.ToHexString(SHA256.HashData(postHdrBytes))
+                                .ToLowerInvariant(),
+                            width = sourceSize.X,
+                            height = sourceSize.Y,
+                            format = "R16G16B16A16_SFLOAT-little-endian",
+                            retailStage = "final-image-space-compositor-output",
+                        };
+                        postHdrSceneColors.Add(postHdrSceneColor);
+                    }
                     var pose = MeasurePose(
                         skeleton,
                         camera,
@@ -173,6 +251,9 @@ internal static class ActorReviewCapture
                         actorRootScale = Vector(sample.ActorRoot.Basis.Scale),
                         mappedSkeletonNodes = mappings.Count,
                         runtimeNamedNodes = sample.Nodes.Count,
+                        rigidAttachmentsApplied = actor.Surfaces.Count(
+                            surface => !surface.Skinned),
+                        rigidAttachmentAuthority = "exact-retail-render-part-visual-node-path",
                         sample.AnimationLayers,
                         pose.MaximumLocalTranslationErrorMeters,
                         pose.MaximumLocalRotationErrorRadians,
@@ -184,8 +265,10 @@ internal static class ActorReviewCapture
                         skinPalette = new
                         {
                             sample.SkinPalette.Summary,
-                            mappedSkins = skinMappings.Count,
-                            mappedBones = skinMappings.Sum(mapping => mapping.Bones.Count),
+                            mappedSkins = sample.SkinPalette.Instances.Count(
+                                instance => instance.Bones.Count > 0),
+                            mappedBones = sample.SkinPalette.Instances.Sum(
+                                instance => instance.Bones.Count),
                             paletteApplication.MaximumCandidateLinearError,
                             paletteApplication.MaximumCandidateTranslationErrorGameUnits,
                             skinPalette.MaximumLinearError,
@@ -194,11 +277,26 @@ internal static class ActorReviewCapture
                             passed = skinPalettePassed,
                         },
                         sample.VisualSnapshotEventSha256,
+                        referenceLedger = referenceLedger is null
+                            ? null
+                            : CellReferenceLedger.Document(referenceLedger),
+                        lodLedger = lodLedger is null
+                            ? null
+                            : CellLodLedger.Document(lodLedger),
+                        preHdrSceneColor,
+                        postHdrSceneColor,
                     });
                 }
             }
 
-            var captureSucceeded = allVisualGatesPassed && allSkinPaletteGatesPassed;
+            var allImageSpaceGatesPassed = retailEnvironment is null ||
+                (retailEnvironment.Value.ImageSpace.FinalCinematicStageResolved &&
+                    retailEnvironment.Value.ImageSpace.HdrAdaptationBrightPassBloomResolved);
+            var captureSucceeded = allVisualGatesPassed &&
+                allSkinPaletteGatesPassed &&
+                allReferenceLedgerGatesPassed &&
+                allLodCoverageGatesPassed &&
+                allImageSpaceGatesPassed;
             var captureReport = new
             {
                 schema = "opennv-godot-actor-review-capture/v1",
@@ -256,14 +354,111 @@ internal static class ActorReviewCapture
                 },
                 presentation = new
                 {
-                    retailEnvironmentColorsApplied = true,
-                    retailDirectionalVectorResolved = false,
+                    retailEnvironmentColorsApplied = retailEnvironment is not null,
+                    retailDirectionalVectorResolved =
+                        retailEnvironment?.DirectionalVectorResolved ?? false,
+                    retailRoadDiffuseCoreResolved =
+                        retailEnvironment?.RetailRoadDiffuseCoreResolved ?? false,
+                    retailRoadMaterials =
+                        retailEnvironment?.RetailRoadMaterials ?? 0,
+                    retailLandscapeDiffuseCoreResolved =
+                        retailEnvironment?.RetailLandscapeDiffuseCoreResolved ?? false,
+                    retailLandscapeMaterials =
+                        retailEnvironment?.RetailLandscapeMaterials ?? 0,
+                    retailActorDiffuseCoreResolved =
+                        retailEnvironment?.RetailActorDiffuseCoreResolved ?? false,
+                    retailActorMaterials =
+                        retailEnvironment?.RetailActorMaterials ?? 0,
+                    retailWeatherRecordApplied =
+                        retailEnvironment?.WeatherRecordApplied ?? false,
+                    retailImageSpaceValidated =
+                        retailEnvironment?.ImageSpaceValidated ?? false,
+                    retailFinalCinematicStageResolved =
+                        retailEnvironment?.ImageSpace.FinalCinematicStageResolved ?? false,
+                    retailHdrAdaptationBrightPassBloomResolved =
+                        retailEnvironment?.ImageSpace.HdrAdaptationBrightPassBloomResolved ?? false,
+                    retailCloudUvOffsetResolved =
+                        retailEnvironment?.CloudUvOffsetResolved ?? false,
+                    retailAuxiliaryCloudSurfacesResolved =
+                        retailEnvironment?.AuxiliaryCloudSurfacesResolved ?? false,
+                    environment = retailEnvironment is null
+                        ? null
+                        : new
+                        {
+                            weatherFormId = $"0x{retailEnvironment.Value.Environment.WeatherFormId:X8}",
+                            retailEnvironment.Value.Environment.WeatherEditorId,
+                            retailEnvironment.Value.Environment.GameHour,
+                            retailEnvironment.Value.Environment.SkyMode,
+                            timeBlend = retailEnvironment.Value.Environment.Blend,
+                            retailEnvironment.Value.AtmosphereSourceSha256,
+                            retailEnvironment.Value.CloudsSourceSha256,
+                            cloudLayers = retailEnvironment.Value.CloudLayers,
+                            fogNearGameUnits =
+                                retailEnvironment.Value.Environment.FogNearGameUnits,
+                            fogFarGameUnits =
+                                retailEnvironment.Value.Environment.FogFarGameUnits,
+                            fogPower = retailEnvironment.Value.Environment.FogPower,
+                            imageSpace = new
+                            {
+                                retailEnvironment.Value.ImageSpace.Schema,
+                                Cinematic = Vector(retailEnvironment.Value.ImageSpace.Cinematic),
+                                Tint = Vector(retailEnvironment.Value.ImageSpace.Tint),
+                                Fade = Vector(retailEnvironment.Value.ImageSpace.Fade),
+                                retailEnvironment.Value.ImageSpace.MatchedAdaptationSum,
+                                retailEnvironment.Value.ImageSpace.MatchedAdaptationSourceSha256,
+                                retailEnvironment.Value.ImageSpace.AppliedModifiers,
+                                retailEnvironment.Value.ImageSpace.FinalCinematicStageResolved,
+                                retailEnvironment.Value.ImageSpace.HdrAdaptationBrightPassBloomResolved,
+                            },
+                        },
                     projectionResolved = contract.ExactProjectionResolved,
                     exactRetailCameraAppliedPerSourceFrame = true,
                     exactRetailFinalSceneColorProjectionAppliedPerSourceFrame = true,
                     retailNiCameraCullingProjectionRetainedSeparately = true,
-                    provisionalDirectionalRotationDegrees =
+                    directionalRotationDegrees =
                         configuration.ActorReview.DirectionalRotationDegrees,
+                    background = background is null
+                        ? null
+                        : new
+                        {
+                            mode = "owned-cell-content",
+                            scene = background.ScenePath,
+                            sceneSha256 = background.SceneSha256,
+                            cellFormId = background.CellFormId,
+                            cellEditorId = background.CellEditorId,
+                            assets = background.Assets,
+                            references = background.References,
+                            lodBlocks = background.Content.LodBlocks.Select(block => new
+                            {
+                                block.Id,
+                                block.AssetId,
+                                block.LogicalPath,
+                                block.SourceSha256,
+                                block.Level,
+                                block.Variant,
+                                block.SelectionReason,
+                                blockOriginGameUnits = Vector(block.BlockOriginGameUnits),
+                                surfaces = block.Geometry.Surfaces,
+                                vertices = block.Geometry.Vertices,
+                                triangles = block.Geometry.Triangles,
+                            }),
+                            textures = background.Textures,
+                            authoredDdsTextures = background.AuthoredDdsTextures,
+                            authoredDdsMipChainTextures =
+                                background.AuthoredDdsMipChainTextures,
+                            decodedAuthoredBc1AlphaMipChainTextures =
+                                background.DecodedAuthoredBc1AlphaMipChainTextures,
+                            runtimeGeneratedMipTextures =
+                                background.RuntimeGeneratedMipTextures,
+                            materialBindings = background.MaterialBindings,
+                            referenceLedger = referenceLedgers.Count == 0
+                                ? null
+                                : CellReferenceLedger.Document(
+                                    referenceLedgers[^1]),
+                            lodLedger = lodLedgers.Count == 0
+                                ? null
+                                : CellLodLedger.Document(lodLedgers[^1]),
+                        },
                 },
                 evidencePolicy = new
                 {
@@ -271,10 +466,20 @@ internal static class ActorReviewCapture
                     exactRetailProjectionRequired = true,
                     exactRetailSkinPaletteRequired = true,
                     unresolvedLightDirectionCannotPass = true,
+                    unresolvedCloudUvOffsetCannotPass = true,
+                    unresolvedAuxiliaryCloudSurfacesCannotPass = true,
+                    unresolvedHdrAdaptationBrightPassBloomCannotPass = true,
+                    referenceCompletenessLedgerRequired = background is not null,
+                    missingInFrustumReferenceCannotPass = true,
                     matchedComparisonStatus = "pending",
                 },
                 allVisualGatesPassed,
+                allImageSpaceGatesPassed,
+                allReferenceLedgerGatesPassed,
+                allLodCoverageGatesPassed,
                 samples = appliedSamples,
+                preHdrSceneColors,
+                postHdrSceneColors,
                 files,
                 windowsAppControlUsed = false,
                 foregroundActivationUsed = false,
@@ -301,11 +506,18 @@ internal static class ActorReviewCapture
         }
     }
 
-    private static void BuildReviewView(
+    private static RetailEnvironmentRenderer.Application? BuildReviewView(
         Node3D host,
         ActorReviewContract.Contract contract,
-        RuntimeConfiguration configuration)
+        RuntimeConfiguration configuration,
+        ActorReviewBackground? background)
     {
+        if (background is not null)
+            return RetailEnvironmentRenderer.Apply(
+                host,
+                contract.Environment,
+                background,
+                configuration);
         var environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,
@@ -323,6 +535,7 @@ internal static class ActorReviewCapture
             LightEnergy = configuration.Renderer.DirectionalEnergyScale,
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,
         });
+        return null;
     }
 
     private static IReadOnlyList<NodeMapping> BuildNodeMappings(
@@ -369,10 +582,15 @@ internal static class ActorReviewCapture
     private static IReadOnlyList<SkinMapping> BuildSkinMappings(
         ActorModelSlice.LoadedActor actor,
         Skeleton3D skeleton,
-        ActorReviewContract.Sample sample)
+        IReadOnlyList<ActorReviewContract.Sample> samples)
     {
-        var captured = sample.SkinPalette.Instances
+        var captured = samples
+            .SelectMany(sample => sample.SkinPalette.Instances)
             .Where(instance => instance.Bones.Count > 0)
+            .GroupBy(
+                instance => (instance.NodePath, instance.GeometryName),
+                EqualityComparer<(string NodePath, string GeometryName)>.Default)
+            .Select(group => group.First())
             .ToArray();
         var surfaces = actor.Surfaces
             .Where(surface => surface.Skinned)
@@ -463,11 +681,17 @@ internal static class ActorReviewCapture
         }
 
         var paletteCandidates = new Dictionary<int, List<Transform3D>>();
+        var palettes = sample.SkinPalette.Instances
+            .Where(instance => instance.Bones.Count > 0)
+            .ToDictionary(
+                instance => (instance.NodePath, instance.GeometryName),
+                EqualityComparer<(string NodePath, string GeometryName)>.Default);
         foreach (var skinMapping in skinMappings)
         {
-            var palette = sample.SkinPalette.Instances.Single(instance =>
-                instance.NodePath.Equals(skinMapping.NodePath, StringComparison.Ordinal) &&
-                instance.GeometryName.Equals(skinMapping.GeometryName, StringComparison.Ordinal));
+            if (!palettes.TryGetValue(
+                    (skinMapping.NodePath, skinMapping.GeometryName),
+                    out var palette))
+                continue;
             foreach (var binding in skinMapping.Bones)
             {
                 var retailBone = palette.Bones[binding.BindIndex];
@@ -517,6 +741,60 @@ internal static class ActorReviewCapture
             maximumCandidateTranslationError);
     }
 
+    private static void ApplyRigidAttachments(
+        ActorModelSlice.LoadedActor actor,
+        ActorReviewContract.AppearanceState appearance,
+        ActorReviewContract.Sample sample,
+        RuntimeConfiguration configuration)
+    {
+        foreach (var surface in actor.Surfaces.Where(surface => !surface.Skinned))
+        {
+            var geometryName = surface.RetailGeometryName
+                ?? throw new InvalidOperationException(
+                    $"Rigid actor surface has no retail geometry identity: " +
+                    $"{surface.Role}/{surface.Shape}");
+            var visualNodePath = surface.RetailVisualNodePath
+                ?? throw new InvalidOperationException(
+                    $"Rigid actor surface has no retail visual-node path: " +
+                    $"{surface.Role}/{surface.Shape}");
+            var sourceFormId = surface.SourceFormId
+                ?? throw new InvalidOperationException(
+                    $"Rigid actor surface has no source FormID: " +
+                    $"{surface.Role}/{surface.Shape}");
+            var sourceSlot = surface.SourceSlot
+                ?? throw new InvalidOperationException(
+                    $"Rigid actor surface has no source slot: " +
+                    $"{surface.Role}/{surface.Shape}");
+            var renderParts = appearance.Parts
+                .Where(part =>
+                    part.SourceFormId.Equals(sourceFormId, StringComparison.Ordinal) &&
+                    part.SourceSlot == sourceSlot &&
+                    part.GeometryName.Equals(geometryName, StringComparison.Ordinal) &&
+                    part.VisualNodePath.Equals(visualNodePath, StringComparison.Ordinal) &&
+                    part.Required && part.Attached && part.Drawable && part.Visible &&
+                    !part.Skinned)
+                .ToArray();
+            if (renderParts.Length != 1)
+                throw new InvalidOperationException(
+                    $"Retail appearance resolves rigid surface {surface.Role}/{surface.Shape} " +
+                    $"to {renderParts.Length} exact render parts.");
+            var nodes = sample.Nodes
+                .Where(node =>
+                    node.Name.Equals(geometryName, StringComparison.Ordinal) &&
+                    node.NodePath.Equals(visualNodePath, StringComparison.Ordinal))
+                .ToArray();
+            if (nodes.Length != 1)
+                throw new InvalidOperationException(
+                    $"Retail actor frame {sample.Frame} resolves rigid render part " +
+                    $"{geometryName}@{visualNodePath} to {nodes.Length} nodes.");
+            surface.Mesh.TopLevel = true;
+            surface.Mesh.GlobalTransform = ExpectedWorldTransform(
+                nodes[0],
+                sample,
+                configuration.World.GameUnitsToMeters);
+        }
+    }
+
     private static SkinPaletteMeasurement MeasureSkinPalette(
         Skeleton3D skeleton,
         IReadOnlyList<SkinMapping> skinMappings,
@@ -525,11 +803,17 @@ internal static class ActorReviewCapture
         int maximumReportedWorstBones)
     {
         var measurements = new List<SkinPaletteBoneMeasurement>();
+        var palettes = sample.SkinPalette.Instances
+            .Where(instance => instance.Bones.Count > 0)
+            .ToDictionary(
+                instance => (instance.NodePath, instance.GeometryName),
+                EqualityComparer<(string NodePath, string GeometryName)>.Default);
         foreach (var skinMapping in skinMappings)
         {
-            var palette = sample.SkinPalette.Instances.Single(instance =>
-                instance.NodePath.Equals(skinMapping.NodePath, StringComparison.Ordinal) &&
-                instance.GeometryName.Equals(skinMapping.GeometryName, StringComparison.Ordinal));
+            if (!palettes.TryGetValue(
+                    (skinMapping.NodePath, skinMapping.GeometryName),
+                    out var palette))
+                continue;
             foreach (var binding in skinMapping.Bones)
             {
                 var expected = ExpectedPaletteWorldTransform(
@@ -547,7 +831,7 @@ internal static class ActorReviewCapture
         return new SkinPaletteMeasurement(
             measurements.Max(row => row.LinearError),
             measurements.Max(row => row.TranslationErrorGameUnits),
-            measurements
+                measurements
                 .OrderByDescending(row => row.TranslationErrorGameUnits)
                 .ThenByDescending(row => row.LinearError)
                 .ThenBy(row => row.GeometryName, StringComparer.Ordinal)
@@ -686,6 +970,8 @@ internal static class ActorReviewCapture
     }
 
     private static float[] Vector(Vector3 value) => new[] { value.X, value.Y, value.Z };
+
+    private static float[] Vector(Vector4 value) => new[] { value.X, value.Y, value.Z, value.W };
 
     private static float[] BasisValues(Basis value) => new[]
     {

@@ -2,33 +2,142 @@ import sys
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from actor_gltf import (  # noqa: E402
+    ActorComponent,
     NifFormat,
+    RetailRenderPart,
     _append_runtime_surface_node,
+    _is_authored_prn_root_marker,
     _compensated_inverse_bind,
     _converted_matrix,
     _converted_xyz_rotation,
+    _facegen_rigid_attachment_matrix,
     _hardware_vertex_weights,
     _multiply,
     _quadratic_vector_keys,
     _rigid_attachment,
+    _resolve_retail_rigid_part,
     _unsupported_actor_geometry,
+    _uses_retail_biped_head_basis,
     actor_animation_translations,
 )
 from actor_material import (  # noqa: E402
+    FACEGEN_MATERIAL_SCHEMA,
     actor_alpha_contract,
     actor_base_color_factor,
     actor_roughness,
     actor_texture_paths,
     actor_vertex_colors_enabled,
+    build_actor_material,
 )
 from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class ActorGltfTest(unittest.TestCase):
+    @staticmethod
+    def _retail_part(
+        geometry_name: str,
+        visual_node_path: str,
+        *,
+        role: str = "headPart",
+        texture_paths: tuple[str, ...] = (),
+    ) -> RetailRenderPart:
+        return RetailRenderPart(
+            role=role,
+            source_form_id="0x00104E84",
+            source_slot=0xFFFFFFFF,
+            required=True,
+            attached=True,
+            drawable=True,
+            visible=True,
+            skinned=False,
+            geometry_name=geometry_name,
+            visual_node_path=visual_node_path,
+            texture_paths=texture_paths,
+        )
+
+    def test_retail_rigid_part_binds_by_exact_owned_texture(self):
+        component = ActorComponent(
+            "mouth",
+            "meshes/characters/_male/mouthhuman.nif",
+            b"nif",
+            source_form_id="0x00104E84",
+            source_slot=0xFFFFFFFF,
+        )
+        expected = self._retail_part(
+            "FaceGenMouth",
+            "root/face/mouth",
+            texture_paths=("textures/characters/mouth/mouthhuman.dds",),
+        )
+        other = self._retail_part(
+            "FaceGenTongue",
+            "root/face/tongue",
+            texture_paths=("textures/characters/mouth/tonguehuman.dds",),
+        )
+
+        part, authority = _resolve_retail_rigid_part(
+            component,
+            "MouthHuman:0",
+            ("textures/characters/mouth/mouthhuman.dds",),
+            (expected, other),
+        )
+
+        self.assertEqual(part, expected)
+        self.assertEqual(authority, "exact-owned-texture-binding")
+
+    def test_retail_rigid_part_binds_eye_side_by_geometry_lineage(self):
+        component = ActorComponent(
+            "eye-left",
+            "meshes/characters/_male/eyelefthuman.nif",
+            b"nif",
+            diffuse_override="textures/characters/eyes/eyedefault.dds",
+            source_form_id="0x00104E84",
+            source_slot=0xFFFFFFFF,
+        )
+        left = self._retail_part(
+            "FaceGenEyeLeft",
+            "root/face/eye-left",
+            role="eyes",
+            texture_paths=("textures/characters/eyes/eyedefault.dds",),
+        )
+        right = self._retail_part(
+            "FaceGenEyeRight",
+            "root/face/eye-right",
+            role="eyes",
+            texture_paths=("textures/characters/eyes/eyedefault.dds",),
+        )
+
+        part, authority = _resolve_retail_rigid_part(
+            component,
+            "EyeLeftHumanFemale:0",
+            ("textures/shared/white.dds",),
+            (right, left),
+        )
+
+        self.assertEqual(part, left)
+        self.assertEqual(authority, "exact-geometry-token-lineage")
+
+    def test_retail_rigid_part_rejects_unresolved_ambiguity(self):
+        component = ActorComponent(
+            "head-part",
+            "meshes/characters/characterassets/accessory.nif",
+            b"nif",
+            source_form_id="0x00104E84",
+            source_slot=0xFFFFFFFF,
+        )
+        parts = (
+            self._retail_part("AccessoryA", "root/face/a"),
+            self._retail_part("AccessoryB", "root/face/b"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "ambiguous retail render parts"):
+            _resolve_retail_rigid_part(component, "Unknown", (), parts)
+
     def test_runtime_surface_identity_is_exact_and_independent_of_nif_punctuation(self):
         nodes = [{"children": []}]
         surface = {"shape": "Turret:0"}
@@ -55,6 +164,83 @@ class ActorGltfTest(unittest.TestCase):
         self.assertEqual(
             [node["name"] for node in nodes[1:]],
             ["ActorSurface_0", "ActorSurface_1"],
+        )
+
+    def test_prn_root_marker_is_classified_from_owned_nif_structure(self):
+        root = NifFormat.NiNode()
+        marker = NifFormat.NiTriShape()
+        marker.data = NifFormat.NiTriShapeData()
+        marker.data.num_uv_sets = 0
+        marker.data.uv_sets.update_size()
+        marker.num_properties = 1
+        marker.properties.update_size()
+        marker.properties[0] = NifFormat.NiMaterialProperty()
+        rendered = NifFormat.NiTriShape()
+        rendered.data = NifFormat.NiTriShapeData()
+        root.num_children = 2
+        root.children.update_size()
+        root.children[0] = marker
+        root.children[1] = rendered
+
+        self.assertTrue(
+            _is_authored_prn_root_marker(
+                root,
+                marker,
+                "nif-prn-skeleton-node",
+                [marker, rendered],
+            )
+        )
+        self.assertFalse(
+            _is_authored_prn_root_marker(
+                root,
+                marker,
+                "nif-root-skeleton-node",
+                [marker, rendered],
+            )
+        )
+    def test_facegen_rigid_part_keeps_owned_translation_and_retail_head_basis(self):
+        matrix = _facegen_rigid_attachment_matrix([1.0, 2.0, 3.0])
+        self.assertEqual(
+            matrix,
+            [
+                [0.0, 1.0, 0.0, 1.0],
+                [-1.0, 0.0, 0.0, 3.0],
+                [0.0, 0.0, 1.0, -2.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        )
+        nodes = [{"children": []}]
+        surface = {"shape": "FaceGenHairNoHat"}
+        _append_runtime_surface_node(nodes, 0, 4, None, surface, 0, matrix)
+        self.assertEqual(
+            nodes[1]["matrix"][12:15],
+            [1.0, 3.0, -2.0],
+        )
+
+    def test_prn_head_apparel_uses_the_same_owned_biped_head_basis(self):
+        self.assertTrue(
+            _uses_retail_biped_head_basis(
+                "outfit-1",
+                "Bip01 Head",
+                "nif-prn-skeleton-node",
+                "Bip01 Head",
+            )
+        )
+        self.assertFalse(
+            _uses_retail_biped_head_basis(
+                "outfit-0",
+                "HeadAnims",
+                "configured-unparented-skeleton-node",
+                "Bip01 Head",
+            )
+        )
+        self.assertFalse(
+            _uses_retail_biped_head_basis(
+                "creature-model-2",
+                "Bip01 Head",
+                "nif-prn-skeleton-node",
+                "Bip01 Head",
+            )
         )
 
     def test_xyz_rotation_channels_preserve_identity(self):
@@ -135,6 +321,96 @@ class ActorGltfTest(unittest.TestCase):
             actor_texture_paths([shader]),
             ("textures\\actor\\body.dds", "", "textures\\actor\\body_g.dds"),
         )
+
+    def test_effect_shader_source_texture_is_an_actor_diffuse(self):
+        shader = NifFormat.BSEffectShaderProperty()
+        shader.source_texture = b"textures\\creatures\\nvsecuritron\\yesmanhappy.dds"
+        self.assertEqual(
+            actor_texture_paths([shader]),
+            ("textures\\creatures\\nvsecuritron\\yesmanhappy.dds",),
+        )
+        material = NifFormat.NiMaterialProperty()
+        material.diffuse_color.r = 0.0
+        material.diffuse_color.g = 0.0
+        material.diffuse_color.b = 0.0
+        factor, source = actor_base_color_factor(
+            [material, shader],
+            (1.0, 1.0, 1.0),
+        )
+        self.assertEqual(factor[:3], [1.0, 1.0, 1.0])
+        self.assertEqual(source, "bethesda-shader-texture-neutral")
+
+    def test_no_lighting_shader_file_name_is_an_actor_diffuse(self):
+        shader = NifFormat.BSShaderNoLightingProperty()
+        shader.file_name = b"textures\\creatures\\nvsecuritron\\yesmanhappy.dds"
+        self.assertEqual(
+            actor_texture_paths([shader]),
+            ("textures\\creatures\\nvsecuritron\\yesmanhappy.dds",),
+        )
+
+    def test_facegen_material_keeps_retail_sampler_inputs_separate(self):
+        class TextureLibrary:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str, bool]] = []
+
+            def source(self, path: str, *, normal: bool = False) -> int:
+                self.calls.append(("source", path, normal))
+                return len(self.calls) - 1
+
+            def generated(self, identity: str, image: Image.Image, source_sha256: str) -> int:
+                del image, source_sha256
+                self.calls.append(("generated", identity, False))
+                return len(self.calls) - 1
+
+        shader = NifFormat.BSShaderPPLightingProperty()
+        shader.texture_set = NifFormat.BSShaderTextureSet()
+        shader.texture_set.num_textures = 2
+        shader.texture_set.textures.update_size()
+        shader.texture_set.textures[0] = b"textures\\characters\\male\\headhuman.dds"
+        shader.texture_set.textures[1] = b"textures\\characters\\male\\headhuman_n.dds"
+        nif_material = NifFormat.NiMaterialProperty()
+        nif_material.specular_color.r = 0.0
+        nif_material.specular_color.g = 0.0
+        nif_material.specular_color.b = 0.0
+
+        class Shape:
+            name = b"FaceGenFace"
+            properties = [shader, nif_material]
+
+        textures = TextureLibrary()
+        material, row = build_actor_material(
+            ActorComponent(
+                "head",
+                "meshes\\characters\\head\\headfemale.nif",
+                b"nif",
+                diffuse_override="textures\\characters\\female\\headhuman.dds",
+                normal_override="textures\\characters\\female\\headhuman_n.dds",
+                generated_facegen_detail=Image.new("RGBA", (1, 1), (128, 128, 128, 255)),
+            ),
+            Shape(),
+            textures,  # type: ignore[arg-type]
+            load_runtime_configuration().content_compiler,
+        )
+
+        self.assertEqual(
+            textures.calls[:2],
+            [
+                ("source", "textures\\characters\\female\\headhuman.dds", False),
+                ("source", "textures\\characters\\female\\headhuman_n.dds", True),
+            ],
+        )
+        self.assertEqual(row["resolvedDiffuse"], textures.calls[0][1])
+        self.assertEqual(row["resolvedNormal"], textures.calls[1][1])
+        self.assertEqual(
+            row["faceGen"],
+            material["extras"]["openNvFaceGenMaterial"],
+        )
+        self.assertEqual(row["faceGen"]["schema"], FACEGEN_MATERIAL_SCHEMA)
+        self.assertEqual(row["faceGen"]["baseTextureIndex"], 0)
+        self.assertEqual(row["faceGen"]["normalTextureIndex"], 1)
+        self.assertEqual(row["faceGen"]["detailTextureIndex"], 2)
+        self.assertEqual(row["alphaMode"], "OPAQUE")
+        self.assertIsNone(row["generatedDiffuseSha256"])
 
     def test_retail_hair_blends_while_outfit_alpha_tests(self):
         hair = NifFormat.NiAlphaProperty()
@@ -223,7 +499,7 @@ class ActorGltfTest(unittest.TestCase):
             ("EyesOneBlue", "nif-root-skeleton-node"),
         )
 
-    def test_rigid_component_uses_declared_fallback_when_root_is_not_a_bone(self):
+    def test_rigid_component_uses_declared_node_when_root_is_not_a_bone(self):
         class Root:
             name = b"BSFaceGenNiNodeSkinned"
 
@@ -239,7 +515,7 @@ class ActorGltfTest(unittest.TestCase):
                 {"HeadAnims": 12},
                 "HeadAnims",
             ),
-            ("HeadAnims", "configured-skeleton-node-fallback"),
+            ("HeadAnims", "configured-unparented-skeleton-node"),
         )
 
     def test_rigid_component_prefers_authored_prn_over_matching_root(self):

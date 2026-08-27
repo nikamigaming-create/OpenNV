@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
@@ -6,9 +7,9 @@ namespace OpenNV.Runtime;
 
 internal static class ActorReviewContract
 {
-    private const string ContractSchema = "opennv-actor-review-contract/v4";
+    private const string ContractSchema = "opennv-actor-review-contract/v6";
     private const string PendingStatus = "retail-observed-godot-pending";
-    private const string AppearanceSchema = "nikami-fnv-sidecar-appearance/v3";
+    private const string AppearanceSchema = "nikami-fnv-sidecar-appearance/v4";
     private const string NoWeaponState = "none";
     private const string EquippedWeaponState = "equipped";
     private const string NotApplicableWeaponRenderState = "not-applicable";
@@ -34,6 +35,13 @@ internal static class ActorReviewContract
     private const string SkinTranslationOrigin = "validated-nicamera-world-translation";
     private const string FinalEyeProjectionStatus =
         "exact-retail-final-eye-d3d9-perspective";
+    private const int FalloutImageSpaceTraitCount = 33;
+    private const float CompleteWeatherPercentage = 1.0f;
+    private const int D3DSuccess = 0;
+    private const uint D3DDisabled = 0;
+    private const uint D3DEnabled = 1;
+    private const uint Fnv1a32OffsetBasis = 2166136261;
+    private const uint Fnv1a32Prime = 16777619;
 
     internal static Contract Load(
         string path,
@@ -55,7 +63,7 @@ internal static class ActorReviewContract
             throw new InvalidOperationException($"Unsupported actor review record type: {recordType}");
 
         var retail = root.GetProperty("retail");
-        var environment = ParseEnvironment(retail.GetProperty("environment"));
+        var environment = ParseEnvironment(retail.GetProperty("environment"), configuration);
         var appearance = ParseAppearance(retail.GetProperty("appearance"));
         var shots = retail.GetProperty("shots").EnumerateArray().Select(ParseShot).ToArray();
         if (shots.Length == 0 ||
@@ -81,6 +89,7 @@ internal static class ActorReviewContract
                 .SequenceEqual(expectedSkins)))
             throw new InvalidOperationException(
                 "Retail skin-palette topology changes across actor review frames.");
+        ValidateCapturedSkinBoneTopology(samples, expectedSkins);
 
         return new Contract(
             resolved,
@@ -93,14 +102,293 @@ internal static class ActorReviewContract
             samples.All(sample => sample.ProjectionExact));
     }
 
-    private static EnvironmentState ParseEnvironment(JsonElement source)
+    private static readonly string[] WeatherImageSpaceSlotNames =
+    [
+        "currentFadeIn",
+        "currentFadeOut",
+        "transitionFadeIn",
+        "transitionFadeOut",
+    ];
+
+    internal static EnvironmentState ParseEnvironment(
+        JsonElement source,
+        RuntimeConfiguration configuration)
     {
+        var currentWeather = source.GetProperty("currentWeatherForm").GetUInt32();
+        var defaultWeather = source.GetProperty("defaultWeatherForm").GetUInt32();
+        var weatherPercent = source.GetProperty("weatherPercent").GetSingle();
+        var gameHour = source.GetProperty("gameHour").GetSingle();
+        var baseImageSpace = source.GetProperty("baseImageSpace");
+        var imageSpaceForm = baseImageSpace.GetProperty("form").GetUInt32();
+        if (defaultWeather == 0 || imageSpaceForm == 0)
+            throw new InvalidOperationException(
+                "Actor review environment lacks a default WTHR or base IMGS FormID.");
+        if (!float.IsFinite(weatherPercent) || weatherPercent != CompleteWeatherPercentage)
+            throw new InvalidOperationException(
+                "Actor review requires one fully transitioned retail weather state.");
+        if (!float.IsFinite(gameHour))
+            throw new InvalidOperationException("Actor review game hour is not finite.");
+        var weatherImageSpace = ParseWeatherImageSpace(
+            source.GetProperty("weatherImageSpace"));
+        var imageSpaceShader = ParseImageSpaceShader(
+            source.GetProperty("imageSpaceShader"),
+            configuration.FalloutEnvironment.ImageSpace);
         return new EnvironmentState(
             ReadColor(source.GetProperty("sunAmbient"), "sun ambient"),
             ReadColor(source.GetProperty("sunDirectional"), "sun directional"),
             ReadColor(source.GetProperty("sunFog"), "sun fog"),
-            source.GetProperty("currentWeatherForm").GetUInt32(),
-            source.GetProperty("gameHour").GetSingle());
+            currentWeather,
+            defaultWeather,
+            gameHour,
+            weatherPercent,
+            source.GetProperty("skyMode").GetUInt32(),
+            new ImageSpaceState(
+                imageSpaceForm,
+                ReadNumbers(
+                    baseImageSpace.GetProperty("traits"),
+                    FalloutImageSpaceTraitCount,
+                    "base image-space traits")),
+            weatherImageSpace,
+            imageSpaceShader);
+    }
+
+    private static IReadOnlyList<WeatherImageSpaceSlot> ParseWeatherImageSpace(
+        JsonElement source)
+    {
+        var properties = source.EnumerateObject().ToArray();
+        if (properties.Length != WeatherImageSpaceSlotNames.Length ||
+            !properties.Select(property => property.Name).ToHashSet(StringComparer.Ordinal)
+                .SetEquals(WeatherImageSpaceSlotNames))
+            throw new InvalidOperationException(
+                "Actor review environment lacks the exact retail weather image-space slots.");
+        return WeatherImageSpaceSlotNames.Select(name =>
+        {
+            var slot = source.GetProperty(name);
+            var percent = slot.GetProperty("percent").GetSingle();
+            var age = slot.GetProperty("age").GetSingle();
+            var lastStrength = slot.GetProperty("lastStrength").GetSingle();
+            var transitionTime = slot.GetProperty("transitionTime").GetSingle();
+            if (!float.IsFinite(percent) || percent < 0.0f || percent > 1.0f ||
+                !float.IsFinite(age) || age < 0.0f ||
+                !float.IsFinite(lastStrength) ||
+                !float.IsFinite(transitionTime) || transitionTime < 0.0f)
+                throw new InvalidOperationException(
+                    $"Actor review weather image-space slot {name} is invalid.");
+            return new WeatherImageSpaceSlot(
+                name,
+                slot.GetProperty("form").GetUInt32(),
+                slot.GetProperty("previousForm").GetUInt32(),
+                slot.GetProperty("hidden").GetBoolean(),
+                percent,
+                age,
+                slot.GetProperty("flags").GetUInt32(),
+                lastStrength,
+                transitionTime);
+        }).ToArray();
+    }
+
+    private static ImageSpaceShaderState ParseImageSpaceShader(
+        JsonElement source,
+        RetailImageSpaceConfiguration configuration)
+    {
+        var expectedHash = ParseCanonicalHex(
+            configuration.ShaderFnv1a32,
+            "configured image-space shader hash");
+        if (source.GetProperty("byteCount").GetInt32() != configuration.ShaderByteCount ||
+            source.GetProperty("fnv1a32").GetUInt32() != expectedHash ||
+            !RequireText(source, "path", "image-space shader path")
+                .Equals(configuration.ShaderPath, StringComparison.Ordinal) ||
+            source.GetProperty("getConstantsResult").GetInt32() != D3DSuccess)
+            throw new InvalidOperationException(
+                "Actor review image-space shader differs from the configured retail program.");
+        var registers = source.GetProperty("registers").EnumerateArray().ToArray();
+        var maximumRegister = new[]
+        {
+            configuration.HdrParametersRegister,
+            configuration.CinematicRegister,
+            configuration.TintRegister,
+            configuration.FadeRegister,
+        }.Max();
+        if (registers.Length <= maximumRegister)
+            throw new InvalidOperationException(
+                "Actor review image-space shader register capture is truncated.");
+        Vector4 ReadRegister(int index, string label)
+        {
+            var values = registers[index].EnumerateArray()
+                .Select(value => value.GetSingle())
+                .ToArray();
+            if (values.Length != configuration.ShaderRegisterComponents ||
+                values.Any(value => !float.IsFinite(value)))
+                throw new InvalidOperationException(
+                    $"Actor review image-space shader {label} register is invalid.");
+            return new Vector4(values[0], values[1], values[2], values[3]);
+        }
+        var frame = source.GetProperty("frame").GetInt32();
+        var sourceFrame = source.GetProperty("sourceFrame").GetInt32();
+        var renderFrame = source.GetProperty("renderFrame").GetInt32();
+        var renderFrameLead = source.GetProperty("renderFrameLead").GetInt32();
+        var srgbWrite = source.GetProperty("srgbWrite");
+        var expectedSrgbWrite = configuration.HdrBlend.RenderTargetSrgbWriteEnabled
+            ? D3DEnabled
+            : D3DDisabled;
+        if (frame < 0 || renderFrame != frame || renderFrameLead <= 0 ||
+            sourceFrame != checked(renderFrame + renderFrameLead) ||
+            srgbWrite.GetProperty("getResult").GetInt32() != D3DSuccess ||
+            srgbWrite.GetProperty("enabled").GetUInt32() != expectedSrgbWrite)
+            throw new InvalidOperationException(
+                "Actor review image-space shader draw or transfer state is invalid.");
+        var inputs = source.GetProperty("inputTextures").EnumerateArray()
+            .Select((value, ordinal) => ParseImageSpaceShaderInput(
+                value,
+                ordinal,
+                configuration.HdrBlend))
+            .ToArray();
+        if (!inputs.Select(input => input.Stage)
+                .SequenceEqual(configuration.HdrBlend.InputStages))
+            throw new InvalidOperationException(
+                "Actor review image-space shader inputs differ from the configured retail stages.");
+        return new ImageSpaceShaderState(
+            frame,
+            sourceFrame,
+            renderFrameLead,
+            RequireText(source, "eventSha256", "image-space shader event hash"),
+            configuration.ShaderByteCount,
+            expectedHash,
+            configuration.ShaderPath,
+            ReadRegister(configuration.HdrParametersRegister, "HDR parameters"),
+            ReadRegister(configuration.CinematicRegister, "cinematic"),
+            ReadRegister(configuration.TintRegister, "tint"),
+            ReadRegister(configuration.FadeRegister, "fade"),
+            configuration.HdrBlend.RenderTargetSrgbWriteEnabled,
+            inputs);
+    }
+
+    private static ImageSpaceShaderInputState ParseImageSpaceShaderInput(
+        JsonElement source,
+        int ordinal,
+        RetailHdrBlendConfiguration configuration)
+    {
+        var stage = source.GetProperty("stage").GetInt32();
+        var description = source.GetProperty("description");
+        var width = description.GetProperty("width").GetInt32();
+        var height = description.GetProperty("height").GetInt32();
+        var rowBytes = source.GetProperty("rowBytes").GetInt32();
+        var rowCount = source.GetProperty("rowCount").GetInt32();
+        var canonicalBytes = source.GetProperty("canonicalBytes").GetInt64();
+        var expectedRowBytes = checked((long)width * configuration.ComponentCount *
+            configuration.ComponentBytes);
+        var expectedSrgb = configuration.SamplerSrgbEnabled ? D3DEnabled : D3DDisabled;
+        var srgbTexture = source.GetProperty("srgbTexture");
+        if (source.GetProperty("ordinal").GetInt32() != ordinal || stage < 0 ||
+            source.GetProperty("resourceType").GetUInt32() != configuration.D3D9ResourceType ||
+            source.GetProperty("levelCount").GetInt32() != configuration.LevelCount ||
+            description.GetProperty("format").GetUInt32() != configuration.D3D9TextureFormat ||
+            description.GetProperty("type").GetUInt32() != configuration.D3D9SurfaceType ||
+            description.GetProperty("usage").GetUInt32() != configuration.D3D9Usage ||
+            description.GetProperty("pool").GetUInt32() != configuration.D3D9Pool ||
+            description.GetProperty("multiSampleType").GetUInt32() !=
+                configuration.D3D9MultiSampleType ||
+            description.GetProperty("multiSampleQuality").GetUInt32() !=
+                configuration.D3D9MultiSampleQuality ||
+            width <= 0 || height <= 0 || rowBytes != expectedRowBytes ||
+            rowCount != height || canonicalBytes != checked((long)rowBytes * rowCount) ||
+            srgbTexture.GetProperty("getResult").GetInt32() != D3DSuccess ||
+            srgbTexture.GetProperty("enabled").GetUInt32() != expectedSrgb)
+            throw new InvalidOperationException(
+                $"Actor review image-space shader input stage {stage} layout differs from retail.");
+
+        var artifact = source.GetProperty("artifact");
+        var path = Path.GetFullPath(RequireText(
+            artifact,
+            "path",
+            $"image-space shader input stage {stage} artifact path"));
+        var expectedBytes = artifact.GetProperty("bytes").GetInt64();
+        var expectedSha256 = RequireText(
+            artifact,
+            "sha256",
+            $"image-space shader input stage {stage} artifact hash");
+        var expectedFnv1a32 = artifact.GetProperty("fnv1a32").GetUInt32();
+        var file = new FileInfo(path);
+        if (!file.Exists || expectedBytes != canonicalBytes || file.Length != expectedBytes ||
+            source.GetProperty("fnv1a32").GetUInt32() != expectedFnv1a32 ||
+            !FileSha256(path).Equals(expectedSha256, StringComparison.OrdinalIgnoreCase) ||
+            FileFnv1a32(path) != expectedFnv1a32)
+            throw new InvalidOperationException(
+                $"Retail image-space shader input evidence changed: {path}");
+        float? constantAlpha = stage == configuration.BlurredAdaptationStage
+            ? ReadConstantHalfAlpha(
+                path,
+                width,
+                height,
+                configuration.ComponentCount,
+                configuration.ComponentBytes)
+            : null;
+        return new ImageSpaceShaderInputState(
+            ordinal,
+            stage,
+            new ImageSpaceTextureDescription(
+                configuration.D3D9TextureFormat,
+                width,
+                height,
+                rowBytes,
+                rowCount,
+                canonicalBytes),
+            configuration.SamplerSrgbEnabled,
+            new PrivateFileEvidence(
+                path,
+                expectedBytes,
+                expectedSha256.ToLowerInvariant(),
+                expectedFnv1a32),
+            constantAlpha);
+    }
+
+    private static float ReadConstantHalfAlpha(
+        string path,
+        int width,
+        int height,
+        int componentCount,
+        int componentBytes)
+    {
+        if (componentCount < 1 || componentBytes != sizeof(ushort))
+            throw new InvalidOperationException(
+                "Retail adaptation input is not an FP16 color texture.");
+        var bytes = File.ReadAllBytes(path);
+        var pixelBytes = checked(componentCount * componentBytes);
+        var expectedBytes = checked(width * height * pixelBytes);
+        if (bytes.Length != expectedBytes)
+            throw new InvalidOperationException(
+                "Retail adaptation input byte count changed while reading it.");
+
+        var alphaOffset = checked((componentCount - 1) * componentBytes);
+        ushort? alphaBits = null;
+        for (var offset = alphaOffset; offset < bytes.Length; offset += pixelBytes)
+        {
+            var current = BinaryPrimitives.ReadUInt16LittleEndian(
+                bytes.AsSpan(offset, sizeof(ushort)));
+            if (alphaBits is not null && alphaBits.Value != current)
+                throw new InvalidOperationException(
+                    "Retail blurred-HDR input does not contain one observed adaptation value.");
+            alphaBits = current;
+        }
+
+        if (alphaBits is null)
+            throw new InvalidOperationException("Retail adaptation input is empty.");
+        var value = (float)BitConverter.UInt16BitsToHalf(alphaBits.Value);
+        if (!float.IsFinite(value) || value <= 0.0f)
+            throw new InvalidOperationException(
+                "Retail adaptation input contains an invalid observed value.");
+        return value;
+    }
+
+    private static uint ParseCanonicalHex(string value, string label)
+    {
+        if (value.Length != RetailFormIdCharacters ||
+            !value.StartsWith(RetailFormIdPrefix, StringComparison.Ordinal))
+            throw new InvalidOperationException($"{label} is not canonical hexadecimal.");
+        return uint.Parse(
+            value.AsSpan(RetailFormIdPrefix.Length),
+            System.Globalization.NumberStyles.AllowHexSpecifier,
+            System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static AppearanceState ParseAppearance(JsonElement source)
@@ -110,23 +398,54 @@ internal static class ActorReviewContract
             !snapshot.GetProperty("complete").GetBoolean() ||
             snapshot.GetProperty("truncated").GetBoolean())
             throw new InvalidOperationException("Actor review appearance evidence is incomplete.");
-        var parts = snapshot.GetProperty("renderParts").EnumerateArray().ToArray();
-        if (parts.Length == 0 || parts.Any(part => part.ValueKind != JsonValueKind.Object))
+        var partElements = snapshot.GetProperty("renderParts").EnumerateArray().ToArray();
+        if (partElements.Length == 0 ||
+            partElements.Any(part => part.ValueKind != JsonValueKind.Object))
             throw new InvalidOperationException(
                 "Actor review appearance render parts must be a nonempty object array.");
-        var bindingGroups = parts.Select(part => part.GetProperty("textureBindings")).ToArray();
+        var parts = partElements.Select(ParseRenderPart).ToArray();
+        var bindingGroups = partElements
+            .Select(part => part.GetProperty("textureBindings"))
+            .ToArray();
         if (bindingGroups.Any(bindings => bindings.ValueKind != JsonValueKind.Array ||
                 bindings.EnumerateArray().Any(binding => binding.ValueKind != JsonValueKind.Object)))
             throw new InvalidOperationException(
                 "Actor review appearance texture bindings must be object arrays.");
-        var weapon = ParseEquippedWeapon(snapshot.GetProperty("equippedWeapon"), parts);
+        var weapon = ParseEquippedWeapon(
+            snapshot.GetProperty("equippedWeapon"),
+            partElements);
         var textureBindings = bindingGroups.Sum(bindings => bindings.GetArrayLength());
         return new AppearanceState(
             source.GetProperty("frame").GetInt32(),
             RequireText(source, "eventSha256", "appearance event hash"),
-            parts.Length,
+            parts,
             textureBindings,
             weapon);
+    }
+
+    private static RetailRenderPart ParseRenderPart(JsonElement source)
+    {
+        var part = new RetailRenderPart(
+            RequireText(source, "role", "render-part role"),
+            RequireText(source, "sourceFormId", "render-part source FormID"),
+            source.GetProperty("sourceSlot").GetUInt32(),
+            source.GetProperty("ordinal").GetUInt32(),
+            source.GetProperty("required").GetBoolean(),
+            source.GetProperty("attached").GetBoolean(),
+            source.GetProperty("drawable").GetBoolean(),
+            source.GetProperty("visible").GetBoolean(),
+            source.GetProperty("skinned").GetBoolean(),
+            source.GetProperty("geometryName").GetString() ?? "",
+            source.GetProperty("visualNodePath").GetString() ?? "");
+        if (!IsCanonicalRetailFormId(part.SourceFormId))
+            throw new InvalidOperationException(
+                "Actor review render-part FormID is not canonical.");
+        if (part.Required && part.Attached && part.Drawable && part.Visible &&
+            (string.IsNullOrWhiteSpace(part.GeometryName) ||
+             string.IsNullOrWhiteSpace(part.VisualNodePath)))
+            throw new InvalidOperationException(
+                "Actor review required render part has no exact geometry binding.");
+        return part;
     }
 
     private static EquippedWeaponAppearance ParseEquippedWeapon(
@@ -385,9 +704,43 @@ internal static class ActorReviewContract
                 instance.GeometryName,
                 instance.SkinInstanceType,
                 instance.RootParentName,
-                instance.Status,
-                string.Join('\u001e', instance.Bones.Select(bone => bone.Name)),
             })).ToArray();
+
+    private static void ValidateCapturedSkinBoneTopology(
+        IReadOnlyList<Sample> samples,
+        IReadOnlyList<string> expectedSkins)
+    {
+        var captured = samples
+            .SelectMany(sample => sample.SkinPalette.Instances)
+            .Where(instance => instance.Status == CapturedSkinStatus)
+            .GroupBy(SkinIdentity, StringComparer.Ordinal)
+            .ToArray();
+        if (captured.Length == 0 || captured.Length > expectedSkins.Count)
+            throw new InvalidOperationException(
+                "Retail review has no coherent captured skin-surface union.");
+        foreach (var group in captured)
+        {
+            var boneTopologies = group
+                .Select(instance => string.Join(
+                    '\u001e',
+                    instance.Bones.Select(bone => bone.Name)))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (boneTopologies.Length != 1)
+                throw new InvalidOperationException(
+                    $"Retail skin bone topology changes across actor review frames: {group.Key}");
+        }
+    }
+
+    private static string SkinIdentity(SkinPaletteInstance instance) => string.Join(
+        '\u001f',
+        new[]
+        {
+            instance.NodePath,
+            instance.GeometryName,
+            instance.SkinInstanceType,
+            instance.RootParentName,
+        });
 
     private static RetailNode ParseNode(JsonElement source, int frame)
     {
@@ -737,6 +1090,14 @@ internal static class ActorReviewContract
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
+    private static uint FileFnv1a32(string path)
+    {
+        var value = Fnv1a32OffsetBasis;
+        foreach (var item in File.ReadAllBytes(path))
+            value = unchecked((value ^ item) * Fnv1a32Prime);
+        return value;
+    }
+
     internal sealed record Contract(
         string Path,
         string Sha256,
@@ -752,14 +1113,85 @@ internal static class ActorReviewContract
         Color DirectionalColor,
         Color FogColor,
         uint WeatherForm,
-        float GameHour);
+        uint DefaultWeatherForm,
+        float GameHour,
+        float WeatherPercent,
+        uint SkyMode,
+        ImageSpaceState ImageSpace,
+        IReadOnlyList<WeatherImageSpaceSlot> WeatherImageSpace,
+        ImageSpaceShaderState ImageSpaceShader);
+
+    internal readonly record struct ImageSpaceState(
+        uint FormId,
+        IReadOnlyList<float> Traits);
+
+    internal readonly record struct WeatherImageSpaceSlot(
+        string Name,
+        uint FormId,
+        uint PreviousFormId,
+        bool Hidden,
+        float Strength,
+        float AgeSeconds,
+        uint Flags,
+        float LastStrength,
+        float TransitionTimeSeconds);
+
+    internal readonly record struct ImageSpaceShaderState(
+        int Frame,
+        int SourceFrame,
+        int RenderFrameLead,
+        string EventSha256,
+        int ByteCount,
+        uint Fnv1a32,
+        string Path,
+        Vector4 HdrParameters,
+        Vector4 Cinematic,
+        Vector4 Tint,
+        Vector4 Fade,
+        bool RenderTargetSrgbWriteEnabled,
+        IReadOnlyList<ImageSpaceShaderInputState> Inputs);
+
+    internal readonly record struct ImageSpaceShaderInputState(
+        int Ordinal,
+        int Stage,
+        ImageSpaceTextureDescription Description,
+        bool SamplerSrgbEnabled,
+        PrivateFileEvidence Artifact,
+        float? ConstantAlpha);
+
+    internal readonly record struct ImageSpaceTextureDescription(
+        uint D3D9Format,
+        int Width,
+        int Height,
+        int RowBytes,
+        int RowCount,
+        long CanonicalBytes);
+
+    internal readonly record struct PrivateFileEvidence(
+        string Path,
+        long Bytes,
+        string Sha256,
+        uint Fnv1a32);
 
     internal readonly record struct AppearanceState(
         int Frame,
         string EventSha256,
-        int RenderParts,
+        IReadOnlyList<RetailRenderPart> Parts,
         int TextureBindings,
         EquippedWeaponAppearance EquippedWeapon);
+
+    internal readonly record struct RetailRenderPart(
+        string Role,
+        string SourceFormId,
+        uint SourceSlot,
+        uint Ordinal,
+        bool Required,
+        bool Attached,
+        bool Drawable,
+        bool Visible,
+        bool Skinned,
+        string GeometryName,
+        string VisualNodePath);
 
     internal readonly record struct EquippedWeaponAppearance(
         string State,

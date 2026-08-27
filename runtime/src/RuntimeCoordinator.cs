@@ -63,6 +63,9 @@ public partial class RuntimeCoordinator : Node3D
                 throw new ArgumentException("--actor-sidecar requires --actor-model.");
             if (hasActorReviewScene && !_options.ContainsKey("capture-root"))
                 throw new ArgumentException("--actor-review-scene requires --capture-root.");
+            if (_options.ContainsKey("actor-review-background-cell") && !hasActorReviewScene)
+                throw new ArgumentException(
+                    "--actor-review-background-cell requires --actor-review-scene.");
             if (_options.ContainsKey("actor-scene") && _options.ContainsKey("actor-scenes"))
                 throw new ArgumentException("Use --actor-scene or --actor-scenes, not both.");
             if (_options.ContainsKey("retail-state-contract") &&
@@ -70,6 +73,14 @@ public partial class RuntimeCoordinator : Node3D
                     (!_options.ContainsKey("actor-scene") && !_options.ContainsKey("actor-scenes"))))
                 throw new ArgumentException(
                     "--retail-state-contract requires --cell-scene, actor scenes, and --capture-root.");
+            if (_options.ContainsKey("gallery-shot") &&
+                (!hasCellScene || !_options.ContainsKey("capture-root") ||
+                    !_options.ContainsKey("actor-scene") ||
+                    _options.ContainsKey("actor-scenes") ||
+                    _options.ContainsKey("retail-state-contract")))
+                throw new ArgumentException(
+                    "--gallery-shot requires --cell-scene, one --actor-scene, and " +
+                    "--capture-root, and cannot use retail-state-contract.");
 
             if (hasDataRoot)
             {
@@ -143,7 +154,7 @@ public partial class RuntimeCoordinator : Node3D
         }
         catch (Exception exception)
         {
-            GD.PushError($"OPENNV_GODOT_RUNTIME_FAIL {exception.Message}");
+            GD.PushError($"OPENNV_GODOT_RUNTIME_FAIL {exception}");
             GetTree().Quit(1);
         }
     }
@@ -172,6 +183,10 @@ public partial class RuntimeCoordinator : Node3D
     {
         var runTraversalProof = options.ContainsKey("portal-proof");
         var useXrLayout = options.ContainsKey("vr") || options.ContainsKey("vr-layout-proof");
+        var galleryContract = options.TryGetValue("gallery-shot", out var galleryShotPath)
+            ? GalleryShotContract.Load(galleryShotPath, _configuration)
+            : null;
+        var applyCellEnvironment = galleryContract?.LocationClass != "exterior";
         var loaded = CellSceneLoader.Load(
             scenePath,
             this,
@@ -184,7 +199,8 @@ public partial class RuntimeCoordinator : Node3D
             options.TryGetValue("actor-scene", out var actorScene) ? actorScene : null,
             options.TryGetValue("actor-scenes", out var actorScenes) ? actorScenes : null,
             options.ContainsKey("proof-enable-actor"),
-            !options.ContainsKey("capture-root"));
+            !options.ContainsKey("capture-root") || options.ContainsKey("gallery-shot"),
+            applyCellEnvironment);
         if (options.ContainsKey("xr-simulator-proof"))
         {
             _ = RunXrSimulatorAcceptance(loaded, scenePath, options);
@@ -204,7 +220,8 @@ public partial class RuntimeCoordinator : Node3D
                 captureRoot,
                 scenePath,
                 options.TryGetValue("report", out var captureReport) ? captureReport : null,
-                options.TryGetValue("retail-state-contract", out var retailState) ? retailState : null);
+                options.TryGetValue("retail-state-contract", out var retailState) ? retailState : null,
+                options.TryGetValue("gallery-shot", out var galleryShot) ? galleryShot : null);
             return;
         }
         if (options.ContainsKey("pool-proof"))
@@ -847,6 +864,9 @@ public partial class RuntimeCoordinator : Node3D
         IReadOnlyDictionary<string, string> options)
     {
         var scene = ActorReviewScene.Load(scenePath, _configuration);
+        var background = options.TryGetValue("actor-review-background-cell", out var backgroundPath)
+            ? ActorReviewBackground.Load(backgroundPath, this, _configuration)
+            : null;
         var actor = ActorModelSlice.Load(
             scene.ModelPath,
             scene.SidecarPath,
@@ -862,7 +882,8 @@ public partial class RuntimeCoordinator : Node3D
             _configuration,
             scene.RetailContractPath,
             RequireOption(options, "capture-root"),
-            options.TryGetValue("report", out var report) ? report : null);
+            options.TryGetValue("report", out var report) ? report : null,
+            background);
     }
 
     private void ShowExperimentalStatus(string? restoreError)

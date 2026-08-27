@@ -6,7 +6,7 @@ namespace OpenNV.Runtime;
 
 internal static class ActorModelSlice
 {
-    private const string ActorSchema = "opennv-actor-gltf/v2";
+    private const string ActorSchema = "opennv-actor-gltf/v3";
 
     internal static LoadedActor Load(
         string modelPath,
@@ -45,7 +45,8 @@ internal static class ActorModelSlice
         var importedMeshes = Descendants<MeshInstance3D>(scene)
             .Where(mesh => mesh.Mesh is not null)
             .ToArray();
-        var surfaces = LoadSurfaces(root, importedMeshes, resolvedSidecar);
+        var surfaces = LoadSurfaces(root, importedMeshes, resolvedSidecar, configuration);
+        var omittedSurfaces = LoadOmittedSurfaces(root, resolvedSidecar);
         var skeletons = Descendants<Skeleton3D>(scene).ToArray();
         var players = Descendants<AnimationPlayer>(scene).ToArray();
         var animations = players.Sum(player => player.GetAnimationList().Length);
@@ -53,12 +54,25 @@ internal static class ActorModelSlice
             throw new InvalidOperationException(
                 $"Actor import is incomplete: meshes={importedMeshes.Length} " +
                 $"skeletons={skeletons.Length} animations={animations}");
+        var poseContract = ActorPoseContract.Load(
+            root,
+            resolvedModel,
+            scene,
+            skeletons);
         var animationName = players
             .SelectMany(player => player.GetAnimationList().Select(name => (Player: player, Name: name)))
             .First(row => row.Name != "RESET");
         animationName.Player.Play(animationName.Name);
-        var bounds = Bounds(scene);
+        var bounds = WorldBounds(scene);
         var animation = root.GetProperty("animation");
+        var animationLogicalPath = animation.GetProperty("logicalPath").GetString();
+        var animationSourceSha256 = animation.GetProperty("sha256").GetString();
+        var animationChannels = animation.GetProperty("channels").GetInt32();
+        if (string.IsNullOrWhiteSpace(animationLogicalPath) ||
+            string.IsNullOrWhiteSpace(animationSourceSha256) ||
+            animationChannels < 1)
+            throw new InvalidOperationException(
+                "Actor animation source identity is incomplete.");
         if (animation.TryGetProperty("nonAccumOriginGodotUnits", out var originSource) &&
             originSource.ValueKind == JsonValueKind.Array)
         {
@@ -76,18 +90,24 @@ internal static class ActorModelSlice
             importedMeshes.Length,
             skeletons.Length,
             animations,
+            animationLogicalPath,
+            animationSourceSha256,
+            animationChannels,
             animationName.Name.ToString(),
             animationName.Player,
+            poseContract,
             bounds,
             root.GetProperty("coverage").GetProperty("surfaces").GetInt32(),
             root.GetProperty("coverage").GetProperty("textures").GetInt32(),
-            surfaces);
+            surfaces,
+            omittedSurfaces);
     }
 
     private static IReadOnlyList<LoadedSurface> LoadSurfaces(
         JsonElement sidecar,
         IReadOnlyList<MeshInstance3D> importedMeshes,
-        string sidecarPath)
+        string sidecarPath,
+        RuntimeConfiguration configuration)
     {
         var declared = sidecar.GetProperty("surfaces").EnumerateArray().ToArray();
         var authoredSurfaceCount = sidecar.GetProperty("coverage").GetProperty("surfaces").GetInt32();
@@ -128,7 +148,34 @@ internal static class ActorModelSlice
                 throw new InvalidOperationException(
                     $"Actor sidecar skin state disagrees for {role}/{shape} at {runtimeNodeName} " +
                     $"in {sidecarPath}.");
-            loaded.Add(new LoadedSurface(role, shape, runtimeNodeName, matches[0], skinned));
+            var attachmentNode = skinned
+                ? null
+                : RequireSurfaceText(surface, "attachmentNode", sidecarPath);
+            var sourceFormId = OptionalSurfaceText(surface, "sourceFormId", sidecarPath);
+            var sourceSlot = OptionalSurfaceUInt32(surface, "sourceSlot", sidecarPath);
+            var retailGeometryName = skinned
+                ? null
+                : OptionalSurfaceText(surface, "retailGeometryName", sidecarPath);
+            var retailVisualNodePath = skinned
+                ? null
+                : OptionalSurfaceText(surface, "retailVisualNodePath", sidecarPath);
+            RetailActorMaterial.Apply(
+                matches[0],
+                surface,
+                sidecar.GetProperty("textures"),
+                sidecarPath,
+                configuration.ActorCompiler.FaceGenMaterial);
+            loaded.Add(new LoadedSurface(
+                role,
+                shape,
+                runtimeNodeName,
+                matches[0],
+                skinned,
+                attachmentNode,
+                sourceFormId,
+                sourceSlot,
+                retailGeometryName,
+                retailVisualNodePath));
         }
         if (declaredRuntimeNames.Count != importedByName.Count)
             throw new InvalidOperationException(
@@ -144,6 +191,58 @@ internal static class ActorModelSlice
             throw new InvalidOperationException(
                 $"Actor sidecar surface has no {property}: {sidecarPath}.");
         return value.GetString()!;
+    }
+
+    private static IReadOnlyList<OmittedSurface> LoadOmittedSurfaces(
+        JsonElement sidecar,
+        string sidecarPath)
+    {
+        var declared = sidecar.GetProperty("omittedSurfaces").EnumerateArray()
+            .Select(surface => new OmittedSurface(
+                RequireSurfaceText(surface, "role", sidecarPath),
+                RequireSurfaceText(surface, "modelPath", sidecarPath),
+                RequireSurfaceText(surface, "modelSha256", sidecarPath),
+                RequireSurfaceText(surface, "shape", sidecarPath),
+                RequireSurfaceText(surface, "attachmentNode", sidecarPath),
+                RequireSurfaceText(surface, "attachmentSource", sidecarPath),
+                RequireSurfaceText(surface, "disposition", sidecarPath),
+                RequireSurfaceText(surface, "authority", sidecarPath)))
+            .ToArray();
+        var expected = sidecar.GetProperty("coverage").GetProperty("omittedSurfaces").GetInt32();
+        if (declared.Length != expected)
+            throw new InvalidOperationException(
+                $"Actor omitted-surface count disagrees in {sidecarPath}: " +
+                $"declared={declared.Length} coverage={expected}.");
+        return declared;
+    }
+
+    private static string? OptionalSurfaceText(
+        JsonElement surface,
+        string property,
+        string sidecarPath)
+    {
+        if (!surface.TryGetProperty(property, out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (value.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(value.GetString()))
+            throw new InvalidOperationException(
+                $"Actor sidecar surface has invalid {property}: {sidecarPath}.");
+        return value.GetString();
+    }
+
+    private static uint? OptionalSurfaceUInt32(
+        JsonElement surface,
+        string property,
+        string sidecarPath)
+    {
+        if (!surface.TryGetProperty(property, out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetUInt32(out var result))
+            throw new InvalidOperationException(
+                $"Actor sidecar surface has invalid {property}: {sidecarPath}.");
+        return result;
     }
 
     private static void VerifyHash(string path, string expected)
@@ -162,7 +261,7 @@ internal static class ActorModelSlice
         return new Vector3(values[0], values[1], values[2]);
     }
 
-    private static Aabb Bounds(Node3D root)
+    internal static Aabb WorldBounds(Node3D root)
     {
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
@@ -204,19 +303,39 @@ internal static class ActorModelSlice
         int Meshes,
         int Skeletons,
         int Animations,
+        string AnimationLogicalPath,
+        string AnimationSourceSha256,
+        int AnimationChannels,
         string PlayingAnimation,
         AnimationPlayer AnimationPlayer,
+        ActorPoseContract PoseContract,
         Aabb Bounds,
         int AuthoredSurfaces,
         int AuthoredTextures,
-        IReadOnlyList<LoadedSurface> Surfaces);
+        IReadOnlyList<LoadedSurface> Surfaces,
+        IReadOnlyList<OmittedSurface> OmittedSurfaces);
 
     internal readonly record struct LoadedSurface(
         string Role,
         string Shape,
         string RuntimeNodeName,
         MeshInstance3D Mesh,
-        bool Skinned);
+        bool Skinned,
+        string? AttachmentNode,
+        string? SourceFormId,
+        uint? SourceSlot,
+        string? RetailGeometryName,
+        string? RetailVisualNodePath);
+
+    internal readonly record struct OmittedSurface(
+        string Role,
+        string ModelPath,
+        string ModelSha256,
+        string Shape,
+        string AttachmentNode,
+        string AttachmentSource,
+        string Disposition,
+        string Authority);
 
     internal enum BoundsContract
     {

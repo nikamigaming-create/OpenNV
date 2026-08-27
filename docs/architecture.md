@@ -100,7 +100,9 @@ flowchart LR
 ```
 
 `actor_catalog.py` owns these record relationships and preserves authored
-placement/enable state; `facegen.py` owns only deterministic FaceGen math. This
+placement/enable state; `facegen.py` owns deterministic FaceGen geometry and
+body-texture math. Head base, normal, NPC detail, and tone inputs remain
+separate until the runtime FaceGen material pass. This
 keeps record parsing independent from the whole-game load-order/review corpus,
 `prepare_actor.py`, which still resolves one hash-pinned compiled slice, and
 `actor_gltf.py`, which owns only the skinned glTF,
@@ -208,10 +210,10 @@ require a headset session.
 | `prepare_creature_review.py` | One CREA review contract compiled from the owned official archive stack into a disposable generic actor-review scene | Retail capture, Godot runtime behavior, or comparison verdicts |
 | `actor_review_differential.py` | Exact retail/Godot sample pairing, hash verification, objective image/structure gates, side-by-side stills, retail-timed motion clip, and one fail-closed ledger row | Importing assets, altering capture state, or human approval |
 | `actor_review_coverage.py` | Exhaustive join of every corpus appearance and placement to unique differential evidence with aggregate missing/failed/unreviewed counts | Sampling, visual approval, or changing evidence verdicts |
-| `facegen.py` | Pure EGM/EGT morph and retail skin/body texture composition primitives | Record selection or runtime nodes |
+| `facegen.py` | Pure EGM/EGT geometry morph and retail body-texture composition primitives | Record selection, head-material composition, or runtime nodes |
 | `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance and stable per-surface runtime identities, with an explicit gate against silently omitted render geometry | Record selection, placement, particle simulation, or runtime behavior |
 | `first_person_rig.py` | Hash-verified legal left/right first-person hand artifacts plus skeleton/pose/frame contract | Runtime tracking or weapon behavior |
-| `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, and alpha flag translation | Geometry, records, or runtime lighting |
+| `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, alpha, and separate FaceGen sampler contracts | Geometry, records, or runtime lighting |
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
@@ -248,6 +250,7 @@ require a headset session.
 | `StaticCellCompileArtifact.cs` | Static compile schema/configuration/hash/path/count verification and immutable row load | Godot node construction |
 | `StaticCellCompileLoader.cs` | Verified relative artifact load, profile-typed static/point-light placement instantiation, CELL lighting, and authored collision | Record parsing, actors, gameplay, or parity claims |
 | `ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
+| `RetailFaceGenMaterial.cs` | Hash-verified runtime FaceGen sampler composition, encoded-color transfer, and opaque/depth-write enforcement | Record selection, texture extraction, actor placement, or lighting policy |
 | `CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
 | `RetailActorStateContract.cs` | Fail-closed retail shot-state parsing for ACHR transform, camera, idle phase, arm bones, and face/hair hashes | Process addresses, asset parsing, or rendering |
 | `EnvironmentCapture.cs` | Native cell/actor frames, application of validated retail shot state, normalized telemetry, hashes, and visual-quality gates | Gameplay or desktop control |
@@ -349,13 +352,22 @@ reference aspect, until a render-pass world projection is recovered. Production 
 quest/enable-parent/package state before an initially disabled actor can appear
 naturally.
 
-The latest private differential applies Trudy plus the authored seated
+The retained cell differential applies Trudy plus the authored seated
 Goodsprings settler in both shots. Identity, placement, yaw, camera, animation
 phase, and all 56 deform-bone world transforms pass for both actors; worst bone
 translation is below `0.000002` metres. Rendering remains a hard failure at
 portrait/full-body MAE `0.0790`/`0.0811` and changed-pixel fractions
 `75.9%`/`86.4%`. The remaining visual gap is not a camera, placement, or pose
 excuse.
+
+The newer generic Sunny review recovers the retail FaceGen sampler arithmetic,
+observes disabled D3D9 sampler/target sRGB conversion, and keeps the RACE base,
+normal, NPC detail, and tone map as separate runtime inputs. The first opaque
+recapture removes the false toothy grin that transparent face rendering caused.
+Its exact skin-palette gate passes, while the named-node diagnostic still fails
+and retail directional light, HDR/color grading, and the real-cell background
+remain unresolved. It is therefore still `captured-pending-parity`, not a
+retail-fidelity pass.
 
 The cell transform boundary negates Gamebryo yaw when producing Godot Y rotation:
 retail forward is `(sin(yaw), cos(yaw))`, while Godot positive Y rotation has the

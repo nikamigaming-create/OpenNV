@@ -1,13 +1,13 @@
 {
-  "schema": "opennv-owned-actor-archive-stack/v1",
-  "id": "fnv-official-actor-archives-v1",
-  "scope": "Visual actor and creature assets from Fallout: New Vegas and all official DLC; sound archives and loose mod files are excluded.",
+  "schema": "opennv-owned-visual-archive-stack/v1",
+  "id": "fnv-official-visual-archives-v1",
+  "scope": "Visual world, actor, and creature assets from Fallout: New Vegas and all official DLC; sound archives and loose mod files are excluded.",
   "resolutionPolicy": "last-declared-containing-member-wins",
   "provenance": {
     "classification": "retail-archive-load-order-contract",
     "status": "baseline-needs-corpus-validation",
     "source": "FalloutNV 1.4.0.525 official archive association and official plugin order",
-    "evidence": "Every private actor artifact records every archive hash plus the winning archive for each extracted member."
+    "evidence": "Every private visual artifact records every archive hash plus the winning archive for each extracted member."
   },
   "archives": [
     { "file": "Fallout - Meshes.bsa" },

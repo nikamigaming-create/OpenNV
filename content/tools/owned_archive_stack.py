@@ -10,7 +10,7 @@ from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
 from plugin_stack import file_sha256, find_case_insensitive_file
 
 
-ARCHIVE_RECIPE_SCHEMA = "opennv-owned-actor-archive-stack/v1"
+ARCHIVE_RECIPE_SCHEMA = "opennv-owned-visual-archive-stack/v1"
 ARCHIVE_RESOLUTION_POLICY = "last-declared-containing-member-wins"
 
 
@@ -24,7 +24,7 @@ class OwnedArchive:
 
 
 class OwnedArchiveStack:
-    """Read-only effective BSA namespace with retained winner provenance."""
+    """Read-only effective visual BSA namespace with retained winner provenance."""
 
     def __init__(self, entries: tuple[OwnedArchive, ...]):
         if not entries:

@@ -29,7 +29,15 @@ from content.tests.test_static_nif_gltf import write_synthetic_nif  # noqa: E402
 from corpus_io import atomic_json, output_descriptor  # noqa: E402
 from plugin_stack import file_sha256  # noqa: E402
 from runtime_configuration import load_runtime_configuration  # noqa: E402
-from material_contract import material_bindings  # noqa: E402
+from material_contract import (  # noqa: E402
+    RETAIL_AMBIENT_DIRECTIONAL_LAMBERT_MODEL,
+    RETAIL_LIGHTING_CONTRACT_SCHEMA,
+    diffuse_sample_srgb,
+    load_material_binding_contract,
+    material_bindings,
+    retail_lighting_contract,
+    texture_binding_requests,
+)
 from texture_pipeline import OwnedTexturePipeline  # noqa: E402
 from cell_static_resource_validate import validate_relative_file  # noqa: E402
 from validate_cell_static_compile import validate_json_descriptor  # noqa: E402
@@ -56,6 +64,91 @@ class SingleMemberArchive:
 
 
 class CellStaticCompileTest(unittest.TestCase):
+    def test_active_missing_optional_texture_remains_unbound_without_alias(self) -> None:
+        contract = load_material_binding_contract()
+        textures = [
+            "textures\\test\\diffuse.dds",
+            "textures\\test\\normal.dds",
+            "",
+            "textures\\test\\inactive-height.dds",
+            "textures\\test\\environment.dds",
+            "textures\\test\\missing-mask.dds",
+        ]
+        surface = {
+            "name": "Owned Surface",
+            "propertyTypes": ["BSShaderPPLightingProperty"],
+            "textures": textures,
+            "material": {
+                "shaderFlags1Enabled": [contract.environment_flag_1],
+                "shaderFlags2Enabled": [],
+                "alphaContract": {"mode": "OPAQUE"},
+                "vertexColorMode": "none",
+                "baseColor": [1.0, 1.0, 1.0],
+            },
+        }
+        requests = texture_binding_requests(surface)
+        self.assertEqual(
+            [request["role"] for request in requests],
+            ["diffuse", "normal", "environment", "environmentMask"],
+        )
+        self.assertNotIn(textures[3], [request["path"] for request in requests])
+        mask = next(request for request in requests if request["role"] == "environmentMask")
+        self.assertEqual(mask["missingOwnedMember"], "unbound-no-substitution")
+        texture_ids = {
+            request["path"]: f"texture-{request['role']}"
+            for request in requests
+            if request["role"] != "environmentMask"
+        }
+        binding = material_bindings(
+            {"surfaces": [surface]},
+            texture_ids,
+            load_runtime_configuration().content_compiler,
+        )[0]
+        self.assertIsNone(binding["environmentMaskTextureId"])
+        self.assertEqual(binding["unresolvedTextureRoles"], ["environmentMask"])
+
+    def test_retail_road_diffuse_sampler_contract_is_texture_family_owned(self) -> None:
+        self.assertFalse(
+            diffuse_sample_srgb("textures\\landscape\\roads\\roadwasteland01.dds")
+        )
+        self.assertFalse(
+            diffuse_sample_srgb("Textures/Landscape/Roads/AsphaltWasteland01.dds")
+        )
+        self.assertTrue(diffuse_sample_srgb("textures\\architecture\\house.dds"))
+        self.assertFalse(
+            diffuse_sample_srgb(
+                "textures\\architecture\\house.dds",
+                ["NiMaterialProperty", "BSShaderPPLightingProperty"],
+            )
+        )
+        self.assertTrue(diffuse_sample_srgb(None))
+
+        contract = retail_lighting_contract(
+            "Textures/Landscape/Roads/RoadWasteland01.dds"
+        )
+        self.assertIsNotNone(contract)
+        assert contract is not None
+        self.assertEqual(contract["schema"], RETAIL_LIGHTING_CONTRACT_SCHEMA)
+        self.assertEqual(
+            contract["model"],
+            RETAIL_AMBIENT_DIRECTIONAL_LAMBERT_MODEL,
+        )
+        self.assertEqual(contract["diffuseDomain"], "encoded")
+        self.assertEqual(contract["normalDecode"], "signed-rgb")
+        self.assertEqual(contract["vertexColorOperation"], "multiply")
+        self.assertIsNone(retail_lighting_contract("textures\\architecture\\house.dds"))
+        ordinary = retail_lighting_contract(
+            "textures\\architecture\\house.dds",
+            ["NiMaterialProperty", "BSShaderPPLightingProperty"],
+        )
+        self.assertIsNotNone(ordinary)
+        assert ordinary is not None
+        self.assertEqual(
+            ordinary["source"],
+            "recovered-sls-ordinary-lighting-family",
+        )
+        self.assertIsNone(retail_lighting_contract(None))
+
     def test_profile_and_coordinate_contract_are_explicit(self) -> None:
         profile = load_profile(default_profile_path())
 

@@ -138,14 +138,45 @@ owned-data manifests and this configuration.
 | `world` | Verified Gamebryo world-unit conversion. |
 | `simulation`, `player.desktopInput`, `xr`, `pool`, `hud` | Explicit OpenNV flat/VR policy; physical key/mouse bindings, simulator thresholds, pool input/mount/contact-proof tuning, and hardware/playtest gates are stated separately from retail data. |
 | `renderer` | Honest parity-failing Godot adapter; raw authored XCLL/material inputs remain available. |
-| `door` | Provisional fallback angle until NIF controller tracks are evaluated. |
+| `door` | Explicit non-parity OpenNV interaction angle; it is never represented as a decoded retail controller track. |
 | `capture`, `proof`, `retailActorState`, `actorParity` | Diagnostic-only gates, never world or actor authoring data. |
 | `diagnosticPreview`, `setupView` | Diagnostic/setup presentation only. |
 | `desktopLauncher` | Independently packaged launcher boot-window and notification presentation, copied from this same file at package time. |
 | `exteriorEnvironment` | Honest parity-failing clear-day adapter until climate/weather/time evaluation exists. |
-| `legalAssets` | Asset-free local-import/cache policy. |
-| `contentCompiler` | Deterministic output, animation sampling, material adapter, and bounded LAND bake policy. Material/LAND fidelity remains parity-failing. |
-| `actorCompiler` | Explicitly parity-failing unresolved idle/package, skin-tone, and body-alias state. It is not represented as Fallout-authored truth. |
+| `legalAssets` | Asset-free local-import/cache policy plus the configured owned master/archive names. |
+| `tooling` | The single recipe-file registry used by first-party compilers, corpora, capture plans, and gallery preparation. |
+| `contentCompiler` | Deterministic output, authored-animation sampling, material translation, LAND layering, retail-grass reconstruction, and explicit SpeedTree billboard policy. Remaining renderer gaps stay parity-failing. |
+| `actorCompiler` | Record-type animation and rigid-attachment profiles. Actor identity, meshes, textures, FaceGen, placement, and KF bytes come from the owned graph; the section does not claim unresolved retail runtime package behavior. |
+
+## Gallery composition, cache sealing, and complexity
+
+The wasteland gallery is a generic composition root, not thirteen executable
+special cases. Its versioned recipe declares scene profiles, subject profiles,
+locations, FormIDs, enable state, output names, and any explicitly accepted
+unsupported source geometry. The compiler owns only strategy registries for
+supported scene/record families. Adding a person, creature, or location changes
+JSON, not Python or C#.
+
+Every reusable location scene carries an
+`opennv-gallery-location-contract/v1` seal over the merged scene recipe, runtime
+configuration, gallery compiler source set, scene compiler, owned master, CELL,
+worldspace, and coordinate origin. Reuse fails closed if any member differs. An
+older visually attractive scene can therefore never be silently paired with a
+new actor or renderer configuration.
+
+The batch path is linear in declared gallery rows:
+
+- locations and subjects are traversed once;
+- location and subject joins use hash indexes;
+- the actor catalog, runtime configuration, and actor archive stacks are created
+  once and shared by all subject strategies;
+- BSA member and prepared-texture resolution uses prebuilt indexes;
+- no subject performs a scan over previously compiled subjects or locations.
+
+The compiled manifest records these algorithm contracts and all source/config
+hashes. The fixed external record-decoder work for a location remains isolated
+inside the shared cell compiler and is never multiplied by a content-specific
+search loop.
 
 ## Enforcement and promotion
 
@@ -153,7 +184,10 @@ owned-data manifests and this configuration.
 spec, hook, and the audit itself) and scans non-string code tokens in C#,
 JavaScript, and PowerShell. Production literals outside the tiny mathematical
 allow-list fail unless they are named compile-time contracts. Its own language
-scanners and the Godot bootstrap-duplication check have unit tests. The pass
+scanners and the Godot bootstrap-duplication check have unit tests. The same gate
+rejects content FormIDs, owned asset paths, owned file names, hashes, recipe or
+gallery identities, and guessed-substitution language in executable source; it
+also rejects guessed-substitution language in JSON configuration. The pass
 line reports audited source-file, source-line, and declarative-configuration
 counts. `Test-GodotRuntime.ps1` runs this gate, so release CI and packaging
 inherit it.

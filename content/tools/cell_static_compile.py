@@ -39,6 +39,7 @@ from cell_static_contract import (
     POINT_LIGHT_PRESENTATION_KIND,
     STATIC_NIF_ASSET_KIND,
     STATIC_MODEL_PRESENTATION_KIND,
+    LANDSCAPE_TEXTURE_KIND,
     TEXTURES_FILE_NAME,
     blocker,
     canonical_sha256,
@@ -62,7 +63,7 @@ from export_static_nif_gltf import export_static_nif
 from owned_archive_stack import load_owned_archive_stack
 from plugin_stack import file_sha256
 from runtime_configuration import load_runtime_configuration
-from material_contract import material_bindings
+from material_contract import material_bindings, texture_binding_requests
 from texture_pipeline import OwnedTexturePipeline
 from validate_cell_compile_plan import validate_plan
 
@@ -366,15 +367,21 @@ def compile_cell(
                 assets[model_path] = asset
                 sidecars[model_path] = sidecar
 
-        requested_textures = sorted(
-            {
-                texture
-                for sidecar in sidecars.values()
+        binding_requests_by_model = {
+            model_path: [
+                request
                 for surface in sidecar["surfaces"]
-                for texture in surface["textures"]
-                if texture
-            }
-        )
+                for request in texture_binding_requests(surface)
+            ]
+            for model_path, sidecar in sidecars.items()
+        }
+        policies_by_texture: dict[str, set[str]] = {}
+        for requests in binding_requests_by_model.values():
+            for request in requests:
+                policies_by_texture.setdefault(request["path"], set()).add(
+                    request["missingOwnedMember"]
+                )
+        requested_textures = sorted(policies_by_texture)
         textures: dict[str, dict[str, object]] = {}
         if profile["compileTextures"]:
             texture_pipeline = OwnedTexturePipeline(
@@ -384,6 +391,13 @@ def compile_cell(
                 configuration.content_compiler,
             )
             for requested in requested_textures:
+                member_source_count = texture_pipeline.member_source_count(requested)
+                policies = policies_by_texture[requested]
+                if (
+                    member_source_count == 0
+                    and policies == {"unbound-no-substitution"}
+                ):
+                    continue
                 try:
                     textures[requested] = texture_row(
                         texture_pipeline.prepare(requested),
@@ -410,12 +424,7 @@ def compile_cell(
         }
         for model_path, asset in assets.items():
             requested_for_asset = sorted(
-                {
-                    texture
-                    for surface in sidecars[model_path]["surfaces"]
-                    for texture in surface["textures"]
-                    if texture
-                }
+                {request["path"] for request in binding_requests_by_model[model_path]}
             )
             asset["textureBindings"] = [
                 {
@@ -424,6 +433,11 @@ def compile_cell(
                         None
                         if requested not in textures
                         else textures[requested]["textureId"]
+                    ),
+                    "missingOwnedMember": (
+                        "error"
+                        if "error" in policies_by_texture[requested]
+                        else "unbound-no-substitution"
                     ),
                 }
                 for requested in requested_for_asset
@@ -436,6 +450,7 @@ def compile_cell(
 
         landscape_assets: dict[str, dict[str, object]] = {}
         landscape_textures: dict[str, dict[str, object]] = {}
+        landscape_runtime_textures: dict[str, dict[str, object]] = {}
         for child in sorted(children, key=lambda row: str(row["formKey"])):
             key = str(child["formKey"])
             policy = child_policies[key]
@@ -447,7 +462,7 @@ def compile_cell(
                 )
                 continue
             try:
-                asset, texture, landscape = compile_landscape(
+                asset, texture_rows, landscape = compile_landscape(
                     data_root,
                     corpus_manifest,
                     cell,
@@ -459,7 +474,19 @@ def compile_cell(
                     texture_aliases,
                 )
                 landscape_assets[key] = asset
-                landscape_textures[key] = texture
+                for texture in texture_rows:
+                    texture_id = str(texture["textureId"])
+                    target = (
+                        landscape_textures
+                        if texture["textureKind"] == LANDSCAPE_TEXTURE_KIND
+                        else landscape_runtime_textures
+                    )
+                    previous = target.get(texture_id)
+                    if previous is not None and previous != texture:
+                        raise ValueError(
+                            f"Landscape texture ID has conflicting manifests: {texture_id}"
+                        )
+                    target[texture_id] = texture
                 child_landscapes[key] = landscape
             except Exception as error:
                 child_reasons[key].append(
@@ -498,6 +525,7 @@ def compile_cell(
                         )
                         for binding in asset["textureBindings"]
                         if binding["textureId"] is None
+                        and binding["missingOwnedMember"] == "error"
                     )
             elif presentation_kind == LANDSCAPE_PRESENTATION_KIND:
                 asset = landscape_assets.get(key)
@@ -569,8 +597,25 @@ def compile_cell(
             [*assets.values(), *landscape_assets.values()],
             key=lambda row: str(row["assetId"]),
         )
+        all_texture_rows: dict[str, dict[str, object]] = {}
+        for texture in [
+            *textures.values(),
+            *landscape_textures.values(),
+            *landscape_runtime_textures.values(),
+        ]:
+            texture_id = str(texture["textureId"])
+            previous = all_texture_rows.get(texture_id)
+            if previous is not None and previous != texture:
+                comparable_fields = set(previous) | set(texture)
+                comparable_fields -= {"textureKind", "landscapeRole"}
+                if any(previous.get(field) != texture.get(field) for field in comparable_fields):
+                    raise ValueError(
+                        f"Static CELL texture ID has conflicting manifests: {texture_id}"
+                    )
+                continue
+            all_texture_rows[texture_id] = texture
         all_textures = sorted(
-            [*textures.values(), *landscape_textures.values()],
+            all_texture_rows.values(),
             key=lambda row: str(row["textureId"]),
         )
         if len({str(row["assetId"]) for row in all_assets}) != len(all_assets):

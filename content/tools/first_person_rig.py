@@ -7,6 +7,7 @@ from pathlib import Path
 
 from actor_gltf import ActorComponent, ActorGltfInput, export_actor_gltf
 from bsa_archive import BsaArchive, canonical_member_path
+from owned_archive_stack import OwnedArchiveStack
 from runtime_configuration import ContentCompilerConfiguration
 
 
@@ -15,7 +16,7 @@ FIRST_PERSON_RIG_STATUS = "owned-data-skinned-hands"
 HAND_ROLES = ("left", "right")
 
 
-def _member(archive: BsaArchive, logical_path: str):
+def _member(archive: BsaArchive | OwnedArchiveStack, logical_path: str):
     canonical = canonical_member_path(logical_path)
     path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
     return archive.extract(path)
@@ -32,16 +33,25 @@ def prepare_first_person_rig(
     cache_root: Path,
     recipe: dict[str, object],
     compiler: ContentCompilerConfiguration,
+    owned_archives: OwnedArchiveStack | None = None,
 ) -> dict[str, object]:
     configured = recipe.get("firstPersonRig")
     if not isinstance(configured, dict):
         raise ValueError("Cell recipe requires one firstPersonRig object")
 
-    meshes = BsaArchive(meshes_path)
-    texture_archives = [BsaArchive(path) for path in texture_archive_paths]
+    meshes = owned_archives if owned_archives is not None else BsaArchive(meshes_path)
+    texture_archives = (
+        [owned_archives]
+        if owned_archives is not None
+        else [BsaArchive(path) for path in texture_archive_paths]
+    )
     skeleton = _member(meshes, str(configured["skeletonPath"]))
     animation = _member(meshes, str(configured["poseAnimationPath"]))
+    skeleton_root_node = str(configured["skeletonRootBone"])
     rigid_attachment_node = str(configured["rigidAttachmentBone"])
+    biped_head_node = str(configured["bipedHeadBone"])
+    if not skeleton_root_node or not rigid_attachment_node or not biped_head_node:
+        raise ValueError("First-person rig node identities must be explicit")
     output_root = cache_root / "generated" / "cells" / str(recipe["id"]) / "first-person"
     hands: dict[str, object] = {}
     for role in HAND_ROLES:
@@ -68,7 +78,9 @@ def prepare_first_person_rig(
                 ),
                 idle_animation_path=animation.logical_path,
                 idle_animation_payload=animation.data,
+                skeleton_root_node=skeleton_root_node,
                 rigid_attachment_node=rigid_attachment_node,
+                biped_head_node=biped_head_node,
             ),
             texture_archives,
             gltf_path,
@@ -82,6 +94,8 @@ def prepare_first_person_rig(
             "sidecarSha256": _file_sha256(sidecar_path),
             "sourceModelPath": model.logical_path,
             "sourceModelSha256": model.sha256,
+            "sourceArchive": getattr(model, "source_archive", None),
+            "sourceArchiveSha256": getattr(model, "source_archive_sha256", None),
             "gripBone": str(role_configuration["gripBone"]),
         }
 
@@ -91,8 +105,16 @@ def prepare_first_person_rig(
         "provider": "retail-first-person-skinned-hands",
         "skeletonPath": skeleton.logical_path,
         "skeletonSha256": skeleton.sha256,
+        "skeletonSourceArchive": getattr(skeleton, "source_archive", None),
+        "skeletonSourceArchiveSha256": getattr(
+            skeleton, "source_archive_sha256", None
+        ),
         "poseAnimationPath": animation.logical_path,
         "poseAnimationSha256": animation.sha256,
+        "poseAnimationSourceArchive": getattr(animation, "source_archive", None),
+        "poseAnimationSourceArchiveSha256": getattr(
+            animation, "source_archive_sha256", None
+        ),
         "cameraBone": str(configured["cameraBone"]),
         "weaponBone": str(configured["weaponBone"]),
         "hands": hands,

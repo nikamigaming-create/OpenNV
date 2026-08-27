@@ -17,6 +17,7 @@
 /runtime/tests/fixtures/*.gltf.import
 /content/.pytest_cache/
 **/__pycache__/
+/local/
 
 # wrangler files
 .wrangler

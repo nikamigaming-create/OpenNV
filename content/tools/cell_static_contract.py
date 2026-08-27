@@ -11,6 +11,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 from bsa_archive import canonical_member_path
+from runtime_configuration import configured_recipe_path
 
 
 PROFILE_SCHEMA = "opennv-static-cell-compiler-profile/v2"
@@ -42,6 +43,7 @@ STATIC_NIF_ASSET_KIND = "static-nif"
 LANDSCAPE_ASSET_KIND = "landscape"
 OWNED_DDS_TEXTURE_KIND = "owned-dds"
 LANDSCAPE_TEXTURE_KIND = "landscape-bake"
+LANDSCAPE_RUNTIME_TEXTURE_KIND = "landscape-runtime"
 PRESENTATION_KINDS = {
     STATIC_MODEL_PRESENTATION_KIND,
     POINT_LIGHT_PRESENTATION_KIND,
@@ -68,6 +70,7 @@ STATIC_COMPILER_SOURCE_NAMES = (
     "landscape_gltf.py",
     "landscape_stack.py",
     "material_contract.py",
+    "nif_decoder.py",
     "owned_archive_stack.py",
     "plugin_records.py",
     "plugin_stack.py",
@@ -88,6 +91,7 @@ PROFILE_REQUIRED_FIELDS = {
     "modelExtension",
     "exportStrict",
     "compileTextures",
+    "landscapeMissingBasePolicy",
     "originPolicy",
     "statePolicy",
     "promotion",
@@ -99,6 +103,8 @@ PROMOTION_POLICY = {
     "anyAssetOrTextureFailureBlocksCellReadiness": True,
 }
 TOOLCHAIN_PACKAGES = ("Pillow", "PyFFI")
+FORM_ID_HEX_CHARACTERS = 8
+FORM_ID_RADIX = 16
 
 
 def canonical_sha256(document: object) -> str:
@@ -204,6 +210,23 @@ def load_profile(path: Path) -> dict[str, object]:
         raise ValueError("Static CELL compiler profile exportStrict is invalid")
     if not isinstance(document.get("compileTextures"), bool):
         raise ValueError("Static CELL compiler profile compileTextures is invalid")
+    missing_base = document.get("landscapeMissingBasePolicy")
+    if (
+        not isinstance(missing_base, dict)
+        or set(missing_base)
+        != {"mode", "ltexRawFormId", "expectedEditorId", "provenance"}
+        or missing_base.get("mode") != "owned-game-default-ltex"
+        or not isinstance(missing_base.get("ltexRawFormId"), str)
+        or len(str(missing_base["ltexRawFormId"])) != FORM_ID_HEX_CHARACTERS
+        or any(
+            character not in "0123456789abcdefABCDEF"
+            for character in str(missing_base["ltexRawFormId"])
+        )
+        or int(str(missing_base["ltexRawFormId"]), FORM_ID_RADIX) == 0
+        or not str(missing_base.get("expectedEditorId", "")).strip()
+        or not isinstance(missing_base.get("provenance"), dict)
+    ):
+        raise ValueError("Static CELL compiler missing LAND base policy is invalid")
     origin = document.get("originPolicy")
     if (
         not isinstance(origin, dict)
@@ -245,11 +268,11 @@ def load_profile(path: Path) -> dict[str, object]:
 
 
 def default_profile_path() -> Path:
-    return _recipes_root() / "fnv-static-cell-compiler-v2.json"
+    return configured_recipe_path("staticCellCompiler")
 
 
 def default_plan_recipe_path() -> Path:
-    return _recipes_root() / "fnv-cell-compile-plan-v1.json"
+    return configured_recipe_path("cellCompilePlan")
 
 
 def recipe_path(file_name: str) -> Path:

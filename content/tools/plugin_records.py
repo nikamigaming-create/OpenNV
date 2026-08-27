@@ -29,6 +29,11 @@ SUBRECORD_HEADER_BYTES = 6
 BITS_PER_BYTE = 8
 PLUGIN_HEADER_SIGNATURE = "TES4"
 MASTER_NAME_SUBRECORD_SIGNATURE = "MAST"
+FALLOUT_WEATHER_IMAGE_SPACE_SUFFIX = b"IAD"
+FALLOUT_WEATHER_IMAGE_SPACE_SAMPLE_COUNT = 6
+FALLOUT_IMAGE_SPACE_MODIFIER_RECORD = "IMAD"
+FALLOUT_IMAGE_SPACE_MODIFIER_CHANNEL_COUNT = 21
+FALLOUT_IMAGE_SPACE_MODIFIER_ADD_CHANNEL_OFFSET = 0x40
 
 
 class PluginFormatError(ValueError):
@@ -72,6 +77,42 @@ def _signature(raw: bytes, offset: int) -> str:
     if len(value) != 4 or not valid_characters:
         raise PluginFormatError(f"Invalid signature {value!r} at 0x{offset:08x}")
     return value
+
+
+def _subrecord_signature(raw: bytes, offset: int, record_signature: str) -> str:
+    """Decode a TES4-family subrecord signature without widening record syntax.
+
+    Fallout 3 and New Vegas encode WTHR image-space samples and IMAD
+    multiply/add channels with binary ``?IAD`` signatures.  Keep both
+    exceptions record-scoped and numerically bounded, then expose stable
+    JSON-safe decimal names to consumers.
+    """
+
+    if len(raw) == 4 and raw[1:] == FALLOUT_WEATHER_IMAGE_SPACE_SUFFIX:
+        valid_binary_channel = (
+            (
+                record_signature == "WTHR"
+                and raw[0] < FALLOUT_WEATHER_IMAGE_SPACE_SAMPLE_COUNT
+            )
+            or (
+                record_signature == FALLOUT_IMAGE_SPACE_MODIFIER_RECORD
+                and (
+                    raw[0] < FALLOUT_IMAGE_SPACE_MODIFIER_CHANNEL_COUNT
+                    or FALLOUT_IMAGE_SPACE_MODIFIER_ADD_CHANNEL_OFFSET
+                    <= raw[0]
+                    < FALLOUT_IMAGE_SPACE_MODIFIER_ADD_CHANNEL_OFFSET
+                    + FALLOUT_IMAGE_SPACE_MODIFIER_CHANNEL_COUNT
+                )
+            )
+        )
+        if valid_binary_channel:
+            return f"{raw[0]}IAD"
+        if record_signature in {"WTHR", FALLOUT_IMAGE_SPACE_MODIFIER_RECORD}:
+            raise PluginFormatError(
+                f"Invalid binary IAD channel {raw[0]} in {record_signature} "
+                f"at 0x{offset:08x}"
+            )
+    return _signature(raw, offset)
 
 
 def _read_exact(stream: BinaryIO, size: int, description: str) -> bytes:
@@ -178,7 +219,11 @@ def iter_subrecords(record: Record) -> Iterator[Subrecord]:
     while offset < len(record.data):
         if len(record.data) - offset < SUBRECORD_HEADER_BYTES:
             raise PluginFormatError(f"Truncated subrecord header in {record.signature} {record.form_id:08x}")
-        signature = _signature(record.data[offset : offset + 4], offset)
+        signature = _subrecord_signature(
+            record.data[offset : offset + 4],
+            offset,
+            record.signature,
+        )
         declared_size = struct.unpack_from("<H", record.data, offset + 4)[0]
         offset += SUBRECORD_HEADER_BYTES
         if signature == "XXXX":

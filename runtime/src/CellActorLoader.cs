@@ -50,6 +50,7 @@ internal static class CellActorLoader
         string actorScenePath,
         IReadOnlySet<string> acceptedCellFormIds,
         Node3D cellRoot,
+        Vector3 cellOriginGameUnits,
         RuntimeConfiguration configuration,
         bool proofEnableInitiallyDisabled)
     {
@@ -66,7 +67,11 @@ internal static class CellActorLoader
         var initiallyDisabled = reference.GetProperty("initiallyDisabled").GetBoolean();
         if (initiallyDisabled && !proofEnableInitiallyDisabled)
             return null;
-        var position = ReadVector(reference.GetProperty("positionGodotUnits"));
+        var authoredPosition = ReadVector(reference.GetProperty("positionGameUnits"));
+        var position = new Vector3(
+            authoredPosition.X - cellOriginGameUnits.X,
+            authoredPosition.Z - cellOriginGameUnits.Z,
+            -(authoredPosition.Y - cellOriginGameUnits.Y));
         var rotation = ReadQuaternion(reference.GetProperty("rotationGodotQuaternion"));
         var placement = new Node3D
         {
@@ -78,6 +83,10 @@ internal static class CellActorLoader
         cellRoot.AddChild(placement);
         var outputs = root.GetProperty("outputs");
         var actor = root.GetProperty("actor");
+        var recordType = actor.GetProperty("recordType").GetString();
+        if (recordType is not ("NPC_" or "CREA"))
+            throw new InvalidOperationException(
+                $"Actor scene has unsupported record type: {recordType}");
         var actorRoot = Path.GetDirectoryName(resolvedManifest)!;
         var modelPath = Path.Combine(actorRoot, outputs.GetProperty("gltf").GetString()!);
         var sidecarPath = Path.Combine(actorRoot, outputs.GetProperty("sidecar").GetString()!);
@@ -96,7 +105,10 @@ internal static class CellActorLoader
             sidecarPath,
             placement,
             configuration,
-            false);
+            false,
+            recordType == "CREA"
+                ? ActorModelSlice.BoundsContract.AnyActor
+                : ActorModelSlice.BoundsContract.Humanoid);
         return new PlacedActor(
             placement,
             reference.GetProperty("formId").GetString()!,

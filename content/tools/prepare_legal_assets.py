@@ -10,12 +10,12 @@ import os
 import sys
 from pathlib import Path
 
-from bsa_archive import extract_member
 from cell_scene import load_recipe, load_spatial_recipe, prepare_cell_scene
 from exterior_scene import prepare_exterior_scene
 from export_static_nif_gltf import export_static_nif
+from owned_archive_stack import load_owned_archive_stack
 from prepare_actor import prepare_actor_set
-from runtime_configuration import load_runtime_configuration
+from runtime_configuration import configured_recipe_path, load_runtime_configuration
 
 
 SCHEMA = "opennv-legal-asset-cache/v1"
@@ -43,20 +43,36 @@ def atomic_text(path: Path, document: object) -> None:
 def prepare(
     data_root: Path,
     cache_root: Path,
-    logical_model: str,
+    logical_model: str | None = None,
     expected_meshes_sha256: str = "",
-    cell_recipe: str = "",
+    cell_recipe: str | None = None,
 ) -> dict[str, object]:
     configuration = load_runtime_configuration()
-    master = find_required_file(data_root, "FalloutNV.esm")
-    meshes = find_required_file(data_root, "Fallout - Meshes.bsa")
+    legal_assets = configuration.document["legalAssets"]
+    if not isinstance(legal_assets, dict):
+        raise ValueError("OpenNV legal-asset configuration is invalid")
+    owned_data = legal_assets["ownedData"]
+    if not isinstance(owned_data, dict):
+        raise ValueError("OpenNV legal owned-data configuration is invalid")
+    logical_model = logical_model or str(legal_assets["smokeModelLogicalPath"])
+    cell_recipe = (
+        str(legal_assets["defaultCellRecipe"])
+        if cell_recipe is None
+        else cell_recipe
+    )
+    master = find_required_file(data_root, str(owned_data["masterFile"]))
+    meshes = find_required_file(data_root, str(owned_data["meshesArchiveFile"]))
     master_hash = file_sha256(master)
     meshes_hash = file_sha256(meshes)
     if expected_meshes_sha256 and meshes_hash != expected_meshes_sha256.lower():
         raise ValueError(
             f"Meshes BSA hash mismatch: expected={expected_meshes_sha256.lower()} actual={meshes_hash}"
         )
-    member = extract_member(meshes, logical_model)
+    visual_archives = load_owned_archive_stack(
+        data_root,
+        configured_recipe_path("visualArchives"),
+    )
+    member = visual_archives.extract(logical_model)
 
     source_path = cache_root / "source" / Path(member.logical_path.replace("\\", "/"))
     source_path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,8 +98,8 @@ def prepare(
     texture_archive_rows: list[dict[str, object]] = []
     if cell_recipe:
         texture_archives = [
-            find_required_file(data_root, "Fallout - Textures.bsa"),
-            find_required_file(data_root, "Fallout - Textures2.bsa"),
+            find_required_file(data_root, str(file_name))
+            for file_name in owned_data["textureArchiveFiles"]
         ]
         texture_archive_rows = [
             {
@@ -107,6 +123,7 @@ def prepare(
                 cache_root,
                 linked_recipe_document,
                 master_hash,
+                owned_archives=visual_archives,
             )
             linked_cell_scenes.append(
                 {
@@ -126,6 +143,7 @@ def prepare(
             cache_root,
             cell_recipe_document,
             master_hash,
+            visual_archives,
         )
         if linked_cell_scenes:
             cell_scene_path = Path(str(cell_scene["output"]))
@@ -148,6 +166,7 @@ def prepare(
             "master": {"file": master.name, "bytes": master.stat().st_size, "sha256": master_hash},
             "meshesArchive": {"file": meshes.name, "bytes": meshes.stat().st_size, "sha256": meshes_hash},
             "textureArchives": texture_archive_rows,
+            "archiveStack": visual_archives.manifest(),
         },
         "asset": {
             "logicalPath": member.logical_path,
@@ -156,6 +175,8 @@ def prepare(
             "compressedInArchive": member.compressed,
             "archiveOffset": member.archive_offset,
             "storedBytes": member.stored_bytes,
+            "sourceArchive": member.source_archive,
+            "sourceArchiveSha256": member.source_archive_sha256,
         },
         "outputs": {
             "model": str(gltf_path.resolve()),
@@ -185,10 +206,9 @@ def main() -> int:
     parser.add_argument("--cache-root", type=Path, required=True)
     parser.add_argument(
         "--logical-model",
-        default="meshes\\landscape\\nv_rocks\\nvn_rockcanyon12.nif",
     )
     parser.add_argument("--expected-meshes-bsa-sha256", default="")
-    parser.add_argument("--cell-recipe", default="")
+    parser.add_argument("--cell-recipe")
     args = parser.parse_args()
     try:
         result = prepare(

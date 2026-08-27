@@ -13,7 +13,7 @@ internal static class LegalAssetPreparer
         IReadOnlyDictionary<string, string> options,
         RuntimeConfiguration configuration)
     {
-        var dataRoot = ResolveDataRoot(selectedDataRoot);
+        var dataRoot = ResolveDataRoot(selectedDataRoot, configuration);
 
         var contentTool = ResolveContentTool(options);
         if (!File.Exists(contentTool))
@@ -196,22 +196,27 @@ internal static class LegalAssetPreparer
             ? ResolvePath(configuredCache)
             : ProjectSettings.GlobalizePath(configuration.LegalAssets.DefaultCacheRoot);
 
-    private static string ResolveDataRoot(string selectedRoot)
+    private static string ResolveDataRoot(
+        string selectedRoot,
+        RuntimeConfiguration configuration)
     {
         var root = ResolvePath(selectedRoot);
         if (!Directory.Exists(root))
-            throw new DirectoryNotFoundException($"Selected Fallout: New Vegas folder does not exist: {root}");
-        if (ContainsFile(root, "FalloutNV.esm"))
+            throw new DirectoryNotFoundException($"Selected game folder does not exist: {root}");
+        var ownedData = configuration.LegalAssets.OwnedData;
+        if (ContainsFile(root, ownedData.MasterFile))
             return root;
         var dataDirectories = Directory.EnumerateDirectories(root)
-            .Where(path => Path.GetFileName(path).Equals("Data", StringComparison.OrdinalIgnoreCase))
-            .Where(path => ContainsFile(path, "FalloutNV.esm"))
+            .Where(path => Path.GetFileName(path).Equals(
+                ownedData.DataDirectoryName,
+                StringComparison.OrdinalIgnoreCase))
+            .Where(path => ContainsFile(path, ownedData.MasterFile))
             .ToArray();
         if (dataDirectories.Length == 1)
             return Path.GetFullPath(dataDirectories[0]);
         throw new DirectoryNotFoundException(
-            "Select either the Fallout: New Vegas installation folder or its Data folder. " +
-            $"No FalloutNV.esm was found at '{root}' or in its Data child.");
+            "Select either the configured game installation folder or its data folder. " +
+            $"No configured master file was found at '{root}' or in its data child.");
     }
 
     private static bool ContainsFile(string directory, string expectedName) =>
