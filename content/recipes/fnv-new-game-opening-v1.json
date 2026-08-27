@@ -117,6 +117,54 @@
   "newGameFlow": {
     "questEditorId": "VCG01",
     "questScriptEditorId": "VCG01SCRIPT",
+    "playerAnimation": {
+      "skeletonLogicalPath": "meshes\\characters\\_1stperson\\skeleton.nif",
+      "cameraNode": "Camera1st",
+      "eventSubrecords": {
+        "POBA": "begin",
+        "POEA": "end",
+        "POCA": "change"
+      },
+      "idleFlagBits": {
+        "runInSequence": 1,
+        "doOnce": 4
+      }
+    },
+    "guideActorAi": {
+      "role": "guideActor",
+      "packageTypeNames": {
+        "6": "travel",
+        "12": "sandbox",
+        "15": "dialogue"
+      },
+      "conditionFunctionNames": {
+        "58": "getStage",
+        "79": "getQuestVariable",
+        "546": "getQuestCompleted"
+      },
+      "locationTypeNames": {
+        "0": "nearReference",
+        "1": "inCell",
+        "2": "currentLocation",
+        "3": "editorLocation",
+        "4": "objectId",
+        "5": "objectType",
+        "6": "linkedReference"
+      },
+      "targetTypeNames": {
+        "0": "reference",
+        "1": "baseObject",
+        "2": "objectType"
+      },
+      "packageFlagBits": {
+        "alwaysRun": 8192
+      },
+      "locomotion": {
+        "rootNode": "Bip01",
+        "walkLogicalPath": "meshes\\characters\\_male\\locomotion\\male\\mtforward.kf",
+        "runLogicalPath": "meshes\\characters\\_male\\locomotion\\male\\mtfastforward.kf"
+      }
+    },
     "sceneRoles": {
       "guideActor": "DocMitchellREF",
       "vigorTester": "VCG01VigorTesterREF",

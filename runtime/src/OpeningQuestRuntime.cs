@@ -15,6 +15,17 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private const int ConditionLess = 0x80;
     private const int ConditionLessOrEqual = 0xa0;
     private const int FormIdRadix = 16;
+    private const int MovementControlIndex = 0;
+    private const int PipBoyControlIndex = 1;
+    private const int FightingControlIndex = 2;
+    private const int PointOfViewControlIndex = 3;
+    private const int LookingControlIndex = 4;
+    private const int RolloverTextControlIndex = 5;
+    private const int SneakingControlIndex = 6;
+    private const int PlayerControlCount = 7;
+    private const int DisabledControlValue = 0;
+    private const int EnabledControlValue = 1;
+    private const float TransparentAlpha = 0.0f;
 
     private readonly Dictionary<string, Node3D> _roleNodes =
         new(StringComparer.OrdinalIgnoreCase);
@@ -33,6 +44,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private readonly HashSet<string> _traits = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _inventory =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly bool[] _playerControls =
+        Enumerable.Repeat(true, PlayerControlCount).ToArray();
+    private readonly Dictionary<string, ActiveImageSpaceModifier> _activeImageSpaceModifiers =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private OpeningManifest _opening = null!;
     private OpeningNewGameFlow _flow = null!;
@@ -43,6 +58,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private Control _canvas = null!;
     private Control? _activeModal;
     private Label _objective = null!;
+    private ColorRect _imageSpaceFade = null!;
     private int _stage;
     private int _generation;
     private int? _timerTargetStage;
@@ -51,6 +67,26 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private int _sexIndex;
     private int _docReaction;
     private bool _skillDefaultsInitialized;
+    private OpeningPlayerPackage? _activePlayerPackage;
+    private OpeningPlayerAnimation? _activePlayerAnimation;
+    private double _playerAnimationElapsedSeconds;
+    private double _packageIdleWaitSeconds;
+    private int _playerAnimationSampleIndex;
+    private int _packageIdleCursor;
+    private bool _activeAnimationIsPackageEvent;
+    private bool _packageIdleSequenceComplete;
+    private CellActorLoader.PlacedActor _guideActor;
+    private bool _guideActorResolved;
+    private OpeningGuidePackage? _activeGuidePackage;
+    private OpeningGuideLocomotionClip? _activeGuideLocomotion;
+    private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
+    private Vector3 _guideDestinationCellUnits;
+    private OpeningGuideReference? _guideDestinationReference;
+    private bool _guideMoving;
+    private bool _guideLookAtPlayer;
+    private Action? _guideArrivalContinuation;
+    private int _guideArrivalGeneration;
+    private bool _openingQuestCompleted;
 
     internal int Stage => _stage;
     internal string PlayerName => _playerName;
@@ -70,12 +106,21 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         foreach (var value in _flow.Character.SpecialValues)
             _specialValues[value.FormId] = _flow.Character.SpecialInitial;
         ResolveSceneRoles();
+        ResolveGuideActor();
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
 
         _viewport = new Control { Name = "OpeningFlowViewport" };
         _viewport.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _viewport.Resized += ScaleReferenceCanvas;
         AddChild(_viewport);
+        _imageSpaceFade = new ColorRect
+        {
+            Name = "OwnedImageSpaceFade",
+            Color = Colors.Transparent,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _imageSpaceFade.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _viewport.AddChild(_imageSpaceFade);
         _canvas = new Control
         {
             Name = "RetailFlowCanvas",
@@ -103,6 +148,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     public override void _Process(double delta)
     {
+        UpdatePlayerAnimation(delta);
+        UpdateImageSpaceModifiers(delta);
+        UpdateGuideActor(delta);
         if (_activeModal is not null)
             return;
         if (_timerTargetStage is { } timerTarget)
@@ -153,6 +201,241 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         }
     }
 
+    private void ResolveGuideActor()
+    {
+        var matches = _loaded.Actors.Where(value =>
+                value.ReferenceFormId.Equals(
+                    _flow.GuideActorAi.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase) &&
+                value.BaseFormId.Equals(
+                    _flow.GuideActorAi.BaseFormId,
+                    StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (matches.Length != 1 ||
+            !_roleNodes.TryGetValue(_flow.GuideActorAi.Role, out var roleNode) ||
+            roleNode != matches[0].Placement)
+            throw new InvalidOperationException(
+                "Owned opening guide actor is absent or ambiguous in its CELL.");
+        _guideActor = matches[0];
+        _guideActorResolved = true;
+    }
+
+    private void EvaluateGuidePackage(bool force = false)
+    {
+        if (!_guideActorResolved)
+            return;
+        var package = _flow.GuideActorAi.PackagePriority
+            .Select(formId => _flow.GuideActorAi.Packages[formId])
+            .FirstOrDefault(value => value.Conditions.All(EvaluateGuideCondition))
+            ?? throw new InvalidOperationException(
+                "Owned opening guide has no eligible AI package.");
+        if (!force && _activeGuidePackage?.FormId.Equals(
+                package.FormId,
+                StringComparison.OrdinalIgnoreCase) == true)
+            return;
+        _activeGuidePackage = package;
+        _guideLookAtPlayer = false;
+        BeginGuidePackage(package);
+        GD.Print(
+            $"OPENNV_NEW_GAME_GUIDE_PACKAGE form={package.FormId} " +
+            $"editor={package.EditorId} type={package.PackageTypeName} " +
+            $"alwaysRun={package.AlwaysRun}");
+    }
+
+    private bool EvaluateGuideCondition(OpeningGuideCondition condition)
+    {
+        float actual;
+        if (condition.FunctionName.Equals("getStage", StringComparison.OrdinalIgnoreCase))
+        {
+            actual = condition.Parameter1.Equals(
+                _flow.GuideActorAi.QuestFormId,
+                StringComparison.OrdinalIgnoreCase)
+                ? _stage
+                : 0.0f;
+        }
+        else if (condition.FunctionName.Equals(
+            "getQuestCompleted",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            actual = condition.Parameter1.Equals(
+                    _flow.GuideActorAi.QuestFormId,
+                    StringComparison.OrdinalIgnoreCase) &&
+                _openingQuestCompleted
+                    ? 1.0f
+                    : 0.0f;
+        }
+        else if (condition.FunctionName.Equals(
+            "getQuestVariable",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            actual = _questVariables.GetValueOrDefault(
+                $"{condition.Parameter1}.{condition.Parameter2}");
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Owned guide condition function is unsupported: {condition.FunctionName}");
+        }
+        return CompareCondition(
+            condition.OperatorFlags,
+            actual,
+            condition.ComparisonValue);
+    }
+
+    private void BeginGuidePackage(OpeningGuidePackage package)
+    {
+        _guideArrivalContinuation = null;
+        _guideDestinationReference = package.Location?.Reference;
+        if (_guideDestinationReference is not { } destination)
+        {
+            _guideMoving = false;
+            _activeGuideLocomotion = null;
+            PlayGuidePackageIdle(package);
+            return;
+        }
+        _guideDestinationCellUnits = _loaded.GameToCellUnits(
+            destination.PositionGameUnits);
+        _activeGuideLocomotion = package.AlwaysRun
+            ? _flow.GuideActorAi.Locomotion.Run
+            : _flow.GuideActorAi.Locomotion.Walk;
+        _guideMoving = _guideActor.Placement.Position != _guideDestinationCellUnits;
+        if (!_guideMoving)
+        {
+            FinishGuideTravel();
+            return;
+        }
+        PlayGuideAnimation(
+            _activeGuideLocomotion.LogicalPath,
+            _activeGuideLocomotion.Sha256,
+            restart: true);
+    }
+
+    private void UpdateGuideActor(double delta)
+    {
+        if (!_guideActorResolved)
+            return;
+        if (!_guideMoving)
+        {
+            if (_guideLookAtPlayer)
+                FaceGuideToward(_loaded.Player.GlobalPosition);
+            return;
+        }
+        if (_activeGuideLocomotion is not { } locomotion)
+            throw new InvalidOperationException(
+                "Owned opening guide is moving without locomotion data.");
+        if (_activeGuideAnimation is not { } animation || !animation.Player.IsPlaying())
+            PlayGuideAnimation(
+                locomotion.LogicalPath,
+                locomotion.Sha256,
+                restart: true);
+        var current = _guideActor.Placement.Position;
+        var offset = _guideDestinationCellUnits - current;
+        var distance = offset.Length();
+        var travel = locomotion.RootMotion.SpeedGameUnitsPerSecond * (float)delta;
+        if (travel >= distance)
+        {
+            _guideActor.Placement.Position = _guideDestinationCellUnits;
+            FinishGuideTravel();
+            return;
+        }
+        _guideActor.Placement.Position = current + offset / distance * travel;
+        FaceGuideTowardCellPosition(_guideDestinationCellUnits);
+    }
+
+    private void FinishGuideTravel()
+    {
+        _guideMoving = false;
+        _activeGuideLocomotion = null;
+        if (_guideDestinationReference is { } destination)
+            _guideActor.Placement.Basis = new Basis(destination.RotationGodot);
+        if (_guideLookAtPlayer)
+            FaceGuideToward(_loaded.Player.GlobalPosition);
+        if (_activeGuidePackage is { } package)
+            PlayGuidePackageIdle(package);
+        GD.Print(
+            $"OPENNV_NEW_GAME_GUIDE_ARRIVED package={_activeGuidePackage?.EditorId} " +
+            $"position={_guideActor.Placement.Position}");
+        if (_guideArrivalContinuation is not { } continuation)
+            return;
+        var generation = _guideArrivalGeneration;
+        _guideArrivalContinuation = null;
+        Callable.From(() =>
+        {
+            if (generation == _generation)
+                continuation();
+        }).CallDeferred();
+    }
+
+    private void PlayGuidePackageIdle(OpeningGuidePackage package)
+    {
+        var path = package.IdleAnimationLogicalPaths.FirstOrDefault()
+            ?? _guideActor.IdleAnimationPath;
+        PlayGuideAnimation(path, expectedSha256: null, restart: true);
+        _activeGuideAnimation = null;
+    }
+
+    private void PlayGuideAnimation(
+        string logicalPath,
+        string? expectedSha256,
+        bool restart)
+    {
+        var expected = ActorModelSlice.NormalizeAnimationPath(logicalPath);
+        var matches = _guideActor.Actor.LoadedAnimations.Where(animation =>
+                ActorModelSlice.NormalizeAnimationPath(animation.LogicalPath).Equals(
+                    expected,
+                    StringComparison.OrdinalIgnoreCase) &&
+                (expectedSha256 is null || animation.SourceSha256.Equals(
+                    expectedSha256,
+                    StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        if (matches.Length != 1)
+            throw new InvalidOperationException(
+                $"Owned guide animation is absent or ambiguous: {logicalPath}");
+        var animation = matches[0];
+        if (restart || !animation.Player.IsPlaying() ||
+            !animation.Player.CurrentAnimation.ToString().Equals(
+                animation.RuntimeName,
+                StringComparison.Ordinal))
+        {
+            animation.Player.Play(animation.RuntimeName);
+            animation.Player.Advance(0.0);
+        }
+        _activeGuideAnimation = animation;
+    }
+
+    private void FaceGuideTowardCellPosition(Vector3 target)
+    {
+        var current = _guideActor.Placement.Position;
+        FaceGuideToward(_loaded.Root.ToGlobal(
+            new Vector3(target.X, current.Y, target.Z)));
+    }
+
+    private void FaceGuideToward(Vector3 globalTarget)
+    {
+        var origin = _guideActor.Placement.GlobalPosition;
+        var levelTarget = new Vector3(globalTarget.X, origin.Y, globalTarget.Z);
+        if (origin != levelTarget)
+            _guideActor.Placement.LookAt(levelTarget, Vector3.Up);
+    }
+
+    private void RunWhenGuideReady(Action continuation, int generation)
+    {
+        _guideLookAtPlayer = true;
+        if (_guideMoving)
+        {
+            _guideArrivalContinuation = continuation;
+            _guideArrivalGeneration = generation;
+            return;
+        }
+        FaceGuideToward(_loaded.Player.GlobalPosition);
+        continuation();
+    }
+
+    private bool IsGuideSpeaker(OpeningFlowCommand command) =>
+        command.SpeakerEditorId is { } speaker &&
+        _flow.SceneRoles.TryGetValue(_flow.GuideActorAi.Role, out var role) &&
+        role.EditorId.Equals(speaker, StringComparison.OrdinalIgnoreCase);
+
     private bool HandleExternalActivation(Node? collider)
     {
         foreach (var role in _flow.SceneRoles.Values)
@@ -193,8 +476,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _generation++;
         _stage = stage;
         _timerTargetStage = null;
+        _guideArrivalContinuation = null;
         CloseModal();
         ApplyStageControlPolicy();
+        EvaluateGuidePackage();
         GD.Print($"OPENNV_NEW_GAME_STAGE quest={_flow.QuestEditorId} stage={stage}");
         ExecuteStageCommand(program, 0, _generation, null);
     }
@@ -232,7 +517,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             }
             if (_stage == _flow.OutroStartStage)
             {
-                PlayTopicForm(_flow.OutroTopicFormId, () => { }, generation);
+                RunWhenGuideReady(
+                    () => PlayTopicForm(_flow.OutroTopicFormId, () => { }, generation),
+                    generation);
                 return;
             }
             if (_stage == _flow.CompletionStage)
@@ -269,7 +556,12 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             case "sayTo":
                 if (command.TopicEditorId is null)
                     throw new InvalidOperationException("Owned SayTo command has no topic.");
-                PlayTopicEditor(command.TopicEditorId, () => Next(), generation);
+                if (IsGuideSpeaker(command))
+                    RunWhenGuideReady(
+                        () => PlayTopicEditor(command.TopicEditorId, () => Next(), generation),
+                        generation);
+                else
+                    PlayTopicEditor(command.TopicEditorId, () => Next(), generation);
                 return;
             case "showMenu":
                 ShowMenu(command, () =>
@@ -293,6 +585,33 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 return;
             case "playIdle":
                 ApplyIdle(command);
+                Next();
+                return;
+            case "playerControls":
+                ApplyPlayerControls(command);
+                Next();
+                return;
+            case "addScriptPackage":
+            case "removeScriptPackage":
+                ApplyScriptPackage(command);
+                Next();
+                return;
+            case "imageSpaceModifier":
+                ApplyImageSpaceModifier(command);
+                Next();
+                return;
+            case "additem":
+            case "removeitem":
+            case "equipitem":
+                ApplyInventoryCommand(command);
+                Next();
+                return;
+            case "referenceEnabled":
+                ApplyReferenceEnabled(command);
+                Next();
+                return;
+            case "actorIntent":
+                ApplyActorIntent(command);
                 Next();
                 return;
             default:
@@ -350,6 +669,58 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _destroyedReferences.Remove(command.ReferenceEditorId);
     }
 
+    private void ApplyReferenceEnabled(OpeningFlowCommand command)
+    {
+        if (command.ReferenceEditorId is null || command.Enabled is null)
+            return;
+        foreach (var role in _flow.SceneRoles.Values.Where(role =>
+            role.EditorId.Equals(
+                command.ReferenceEditorId,
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            if (_roleNodes.TryGetValue(role.Role, out var node))
+                node.Visible = command.Enabled.Value;
+        }
+        GD.Print(
+            $"OPENNV_NEW_GAME_REFERENCE reference={command.ReferenceEditorId} " +
+            $"enabled={command.Enabled.Value}");
+    }
+
+    private void ApplyActorIntent(OpeningFlowCommand command)
+    {
+        if (command.ReferenceEditorId is { } reference &&
+            _flow.SceneRoles.TryGetValue(_flow.GuideActorAi.Role, out var role) &&
+            role.EditorId.Equals(reference, StringComparison.OrdinalIgnoreCase))
+        {
+            if (command.Operation?.Equals("look", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                _guideLookAtPlayer = true;
+                if (!_guideMoving)
+                    FaceGuideToward(_loaded.Player.GlobalPosition);
+            }
+            else if (command.Operation?.Equals(
+                "stoplook",
+                StringComparison.OrdinalIgnoreCase) == true)
+            {
+                _guideLookAtPlayer = false;
+                if (!_guideMoving && _guideDestinationReference is { } destination)
+                    _guideActor.Placement.Basis = new Basis(destination.RotationGodot);
+            }
+            else if (command.Operation?.Equals(
+                    "evp",
+                    StringComparison.OrdinalIgnoreCase) == true ||
+                command.Operation?.Equals(
+                    "resetai",
+                    StringComparison.OrdinalIgnoreCase) == true)
+            {
+                EvaluateGuidePackage(force: true);
+            }
+        }
+        GD.Print(
+            $"OPENNV_NEW_GAME_ACTOR_INTENT reference={command.ReferenceEditorId} " +
+            $"operation={command.Operation} target={command.TargetEditorId}");
+    }
+
     private void ApplyIdle(OpeningFlowCommand command)
     {
         if (command.ReferenceEditorId is null || command.IdleEditorId is null ||
@@ -378,9 +749,296 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         var animation = animations[0];
         animation.Player.Play(animation.RuntimeName);
         animation.Player.Advance(0.0);
+        if (actor.ReferenceFormId.Equals(
+            _flow.GuideActorAi.ReferenceFormId,
+            StringComparison.OrdinalIgnoreCase))
+            _activeGuideAnimation = null;
         GD.Print(
             $"OPENNV_NEW_GAME_IDLE source={command.ReferenceEditorId} " +
             $"authored={command.IdleEditorId} runtime={animation.RuntimeName}");
+    }
+
+    private void ApplyPlayerControls(OpeningFlowCommand command)
+    {
+        if (command.Operation is null || command.ControlValues.Count > PlayerControlCount ||
+            command.ControlValues.Any(value =>
+                value is not DisabledControlValue and not EnabledControlValue))
+            throw new InvalidOperationException("Owned player-control command is invalid.");
+        var enabled = command.Operation.Equals("enable", StringComparison.OrdinalIgnoreCase);
+        var disabled = command.Operation.Equals("disable", StringComparison.OrdinalIgnoreCase);
+        if (!enabled && !disabled)
+            throw new InvalidOperationException(
+                $"Owned player-control operation is unsupported: {command.Operation}");
+        for (var index = 0; index < command.ControlValues.Count; index++)
+        {
+            if (command.ControlValues[index] == EnabledControlValue)
+                _playerControls[index] = enabled;
+        }
+        ApplyStageControlPolicy();
+        GD.Print(
+            $"OPENNV_NEW_GAME_CONTROLS operation={command.Operation} " +
+            $"movement={_playerControls[MovementControlIndex]} " +
+            $"pipboy={_playerControls[PipBoyControlIndex]} " +
+            $"fighting={_playerControls[FightingControlIndex]} " +
+            $"pov={_playerControls[PointOfViewControlIndex]} " +
+            $"looking={_playerControls[LookingControlIndex]} " +
+            $"rollover={_playerControls[RolloverTextControlIndex]} " +
+            $"sneaking={_playerControls[SneakingControlIndex]}");
+    }
+
+    private void ApplyScriptPackage(OpeningFlowCommand command)
+    {
+        if (command.Kind == "removeScriptPackage")
+        {
+            _activePlayerPackage = null;
+            _activePlayerAnimation = null;
+            _packageIdleWaitSeconds = 0.0;
+            GD.Print("OPENNV_NEW_GAME_PLAYER_PACKAGE operation=remove");
+            return;
+        }
+        if (command.PackageEditorId is null ||
+            !_flow.PlayerAnimation.Packages.TryGetValue(
+                command.PackageEditorId,
+                out var package))
+            throw new InvalidOperationException(
+                $"Owned player package is absent: {command.PackageEditorId}");
+        var eventName = _activePlayerPackage?.EditorId.Equals(
+            package.EditorId,
+            StringComparison.OrdinalIgnoreCase) == true
+            ? "change"
+            : "begin";
+        _activePlayerPackage = package;
+        _packageIdleCursor = 0;
+        _packageIdleSequenceComplete = false;
+        _packageIdleWaitSeconds = 0.0;
+        if (package.EventAnimationFormIds.TryGetValue(eventName, out var formId) &&
+            formId is not null)
+        {
+            var idleIndex = package.IdleAnimationFormIds
+                .Select((value, index) => (value, index))
+                .FirstOrDefault(value => value.value.Equals(
+                    formId,
+                    StringComparison.OrdinalIgnoreCase));
+            if (idleIndex.value is not null)
+                _packageIdleCursor = idleIndex.index + 1;
+            StartPlayerAnimation(formId, true);
+        }
+        else
+            StartNextPackageIdle();
+        GD.Print(
+            $"OPENNV_NEW_GAME_PLAYER_PACKAGE operation=add " +
+            $"package={package.EditorId} event={eventName}");
+    }
+
+    private void StartNextPackageIdle()
+    {
+        var package = _activePlayerPackage;
+        if (package is null || package.IdleAnimationFormIds.Count == 0 ||
+            _packageIdleSequenceComplete)
+            return;
+        if (!package.RunInSequence && package.IdleAnimationFormIds.Count > 1)
+            throw new InvalidOperationException(
+                "Owned opening package random idle selection requires a retail RNG state.");
+        if (_packageIdleCursor >= package.IdleAnimationFormIds.Count)
+            _packageIdleCursor = 0;
+        var formId = package.IdleAnimationFormIds[_packageIdleCursor++];
+        StartPlayerAnimation(formId, false);
+    }
+
+    private void StartPlayerAnimation(string formId, bool packageEvent)
+    {
+        if (!_flow.PlayerAnimation.Animations.TryGetValue(formId, out var animation))
+            throw new InvalidOperationException(
+                $"Owned player animation is absent: {formId}");
+        _activePlayerAnimation = animation;
+        _activeAnimationIsPackageEvent = packageEvent;
+        _playerAnimationElapsedSeconds = 0.0;
+        _playerAnimationSampleIndex = 0;
+        ApplyPlayerAnimationSample(animation.Track.StartSeconds);
+        GD.Print(
+            $"OPENNV_NEW_GAME_PLAYER_ANIMATION form={animation.FormId} " +
+            $"authored={animation.EditorId} seconds={animation.Track.StopSeconds:F6}");
+    }
+
+    private void UpdatePlayerAnimation(double delta)
+    {
+        if (_activePlayerAnimation is null)
+        {
+            if (_activePlayerPackage is null || _packageIdleWaitSeconds <= 0.0)
+                return;
+            _packageIdleWaitSeconds -= delta;
+            if (_packageIdleWaitSeconds <= 0.0)
+                StartNextPackageIdle();
+            return;
+        }
+        _playerAnimationElapsedSeconds += delta;
+        var track = _activePlayerAnimation.Track;
+        var time = MathF.Min(
+            track.StopSeconds,
+            track.StartSeconds + (float)_playerAnimationElapsedSeconds);
+        ApplyPlayerAnimationSample(time);
+        if (time < track.StopSeconds)
+            return;
+
+        _activePlayerAnimation = null;
+        var package = _activePlayerPackage;
+        if (package is null)
+            return;
+        if (_activeAnimationIsPackageEvent)
+        {
+            _activeAnimationIsPackageEvent = false;
+            StartNextPackageIdle();
+            return;
+        }
+        if (package.RunInSequence && _packageIdleCursor < package.IdleAnimationFormIds.Count)
+        {
+            StartNextPackageIdle();
+            return;
+        }
+        if (package.DoOnce)
+        {
+            _packageIdleSequenceComplete = true;
+            return;
+        }
+        _packageIdleCursor = 0;
+        _packageIdleWaitSeconds = package.IdleTimerSeconds;
+        if (_packageIdleWaitSeconds <= 0.0)
+            StartNextPackageIdle();
+    }
+
+    private void ApplyPlayerAnimationSample(float time)
+    {
+        var animation = _activePlayerAnimation ??
+            throw new InvalidOperationException("Owned player animation is not active.");
+        var track = animation.Track;
+        while (_playerAnimationSampleIndex + 1 < track.Samples.Count &&
+            track.Samples[_playerAnimationSampleIndex + 1].TimeSeconds <= time)
+            _playerAnimationSampleIndex++;
+        var first = track.Samples[_playerAnimationSampleIndex];
+        var second = track.Samples[Math.Min(
+            _playerAnimationSampleIndex + 1,
+            track.Samples.Count - 1)];
+        var amount = second.TimeSeconds <= first.TimeSeconds
+            ? 0.0f
+            : (time - first.TimeSeconds) / (second.TimeSeconds - first.TimeSeconds);
+        var translation = first.TranslationGodotGameUnits.Lerp(
+            second.TranslationGodotGameUnits,
+            amount);
+        var rotation = first.Rotation.Slerp(second.Rotation, amount).Normalized();
+        var parentTransform = Transform3D.Identity;
+        foreach (var parent in track.ParentChain)
+        {
+            parentTransform *= new Transform3D(
+                new Basis(parent.Rotation).Scaled(parent.Scale),
+                parent.TranslationGodotGameUnits * _loaded.UnitsToMeters);
+        }
+        var result = parentTransform * new Transform3D(
+            new Basis(rotation),
+            translation * _loaded.UnitsToMeters);
+        _loaded.Player.ApplyAuthoredCameraTransform(
+            new Transform3D(result.Basis.Orthonormalized(), result.Origin));
+    }
+
+    private void ApplyImageSpaceModifier(OpeningFlowCommand command)
+    {
+        if (command.ModifierEditorId is null || command.Operation is null ||
+            !_flow.ImageSpaceModifiers.TryGetValue(
+                command.ModifierEditorId,
+                out var modifier))
+            throw new InvalidOperationException(
+                $"Owned image-space modifier is absent: {command.ModifierEditorId}");
+        if (command.Operation.Equals("remove", StringComparison.OrdinalIgnoreCase))
+            _activeImageSpaceModifiers.Remove(modifier.EditorId);
+        else if (command.Operation.Equals("apply", StringComparison.OrdinalIgnoreCase))
+            _activeImageSpaceModifiers[modifier.EditorId] =
+                new ActiveImageSpaceModifier(modifier);
+        else
+            throw new InvalidOperationException(
+                $"Owned image-space operation is unsupported: {command.Operation}");
+        UpdateImageSpaceFade();
+        GD.Print(
+            $"OPENNV_NEW_GAME_IMAGE_SPACE operation={command.Operation} " +
+            $"modifier={modifier.EditorId} crossFade={command.CrossFade == true}");
+    }
+
+    private void UpdateImageSpaceModifiers(double delta)
+    {
+        foreach (var active in _activeImageSpaceModifiers.Values)
+            active.ElapsedSeconds += delta;
+        foreach (var editorId in _activeImageSpaceModifiers
+            .Where(value => value.Value.ElapsedSeconds >= value.Value.Modifier.DurationSeconds)
+            .Select(value => value.Key)
+            .ToArray())
+            _activeImageSpaceModifiers.Remove(editorId);
+        UpdateImageSpaceFade();
+    }
+
+    private void UpdateImageSpaceFade()
+    {
+        var colorNumerator = Vector3.Zero;
+        var colorWeight = 0.0f;
+        var strongestAlpha = TransparentAlpha;
+        foreach (var active in _activeImageSpaceModifiers.Values)
+        {
+            var modifier = active.Modifier;
+            var normalizedTime = modifier.DurationSeconds <= 0.0f
+                ? 1.0f
+                : Mathf.Clamp(
+                    (float)(active.ElapsedSeconds / modifier.DurationSeconds),
+                    0.0f,
+                    1.0f);
+            var fade = EvaluateFade(modifier.Fade, normalizedTime);
+            var weight = MathF.Max(TransparentAlpha, fade.A);
+            colorNumerator += new Vector3(fade.R, fade.G, fade.B) * weight;
+            colorWeight += weight;
+            strongestAlpha = MathF.Max(strongestAlpha, weight);
+        }
+        _imageSpaceFade.Color = colorWeight <= TransparentAlpha
+            ? Colors.Transparent
+            : new Color(
+                colorNumerator.X / colorWeight,
+                colorNumerator.Y / colorWeight,
+                colorNumerator.Z / colorWeight,
+                strongestAlpha);
+    }
+
+    private static Color EvaluateFade(
+        IReadOnlyList<OpeningImageSpaceFadeKey> keys,
+        float time)
+    {
+        if (keys.Count == 0)
+            return Colors.Transparent;
+        if (time <= keys[0].Time)
+            return keys[0].Color;
+        if (time >= keys[^1].Time)
+            return keys[^1].Color;
+        foreach (var pair in keys.Zip(keys.Skip(1)))
+        {
+            if (time < pair.First.Time || time > pair.Second.Time)
+                continue;
+            var amount = (time - pair.First.Time) / (pair.Second.Time - pair.First.Time);
+            return pair.First.Color.Lerp(pair.Second.Color, amount);
+        }
+        throw new InvalidOperationException("Owned image-space fade interval is absent.");
+    }
+
+    private void ApplyInventoryCommand(OpeningFlowCommand command)
+    {
+        if (command.ItemEditorId is null)
+            return;
+        var count = command.Count ?? 1;
+        if (command.Kind == "removeitem")
+        {
+            var remaining = _inventory.GetValueOrDefault(command.ItemEditorId) - count;
+            if (remaining > 0)
+                _inventory[command.ItemEditorId] = remaining;
+            else
+                _inventory.Remove(command.ItemEditorId);
+            return;
+        }
+        if (command.Kind == "additem")
+            _inventory[command.ItemEditorId] =
+                _inventory.GetValueOrDefault(command.ItemEditorId) + count;
     }
 
     private void ShowNameMenu(Action completed)
@@ -777,9 +1435,25 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 ApplyDestroyedFromInfo(command);
                 break;
             case "additem":
-                if (command.ItemEditorId is not null)
-                    _inventory[command.ItemEditorId] =
-                        _inventory.GetValueOrDefault(command.ItemEditorId) + (command.Count ?? 1);
+            case "removeitem":
+            case "equipitem":
+                ApplyInventoryCommand(command);
+                break;
+            case "playerControls":
+                ApplyPlayerControls(command);
+                break;
+            case "addScriptPackage":
+            case "removeScriptPackage":
+                ApplyScriptPackage(command);
+                break;
+            case "imageSpaceModifier":
+                ApplyImageSpaceModifier(command);
+                break;
+            case "referenceEnabled":
+                ApplyReferenceEnabled(command);
+                break;
+            case "actorIntent":
+                ApplyActorIntent(command);
                 break;
             case "setStage":
                 if (command.QuestEditorId?.Equals(
@@ -794,7 +1468,12 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             case "sayTo":
                 if (command.TopicEditorId is null)
                     throw new InvalidOperationException("Owned dialogue continuation has no topic.");
-                PlayTopicEditor(command.TopicEditorId, completed, generation);
+                if (IsGuideSpeaker(command))
+                    RunWhenGuideReady(
+                        () => PlayTopicEditor(command.TopicEditorId, completed, generation),
+                        generation);
+                else
+                    PlayTopicEditor(command.TopicEditorId, completed, generation);
                 return;
             case "deferredStage":
                 if (command.Stage is { } deferred && command.Seconds is { } seconds)
@@ -841,18 +1520,27 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _ => throw new InvalidOperationException(
                 $"Owned dialogue condition function is unsupported: {condition.Function}"),
         };
-        return (condition.OperatorFlags & ConditionOperatorMask) switch
-        {
-            ConditionEqual => Mathf.IsEqualApprox(actual, condition.ComparisonValue),
-            ConditionNotEqual => !Mathf.IsEqualApprox(actual, condition.ComparisonValue),
-            ConditionGreater => actual > condition.ComparisonValue,
-            ConditionGreaterOrEqual => actual >= condition.ComparisonValue,
-            ConditionLess => actual < condition.ComparisonValue,
-            ConditionLessOrEqual => actual <= condition.ComparisonValue,
-            _ => throw new InvalidOperationException(
-                $"Owned dialogue comparison is unsupported: {condition.OperatorFlags}"),
-        };
+        return CompareCondition(
+            condition.OperatorFlags,
+            actual,
+            condition.ComparisonValue);
     }
+
+    private static bool CompareCondition(
+        int operatorFlags,
+        float actual,
+        float comparisonValue) =>
+        (operatorFlags & ConditionOperatorMask) switch
+        {
+            ConditionEqual => Mathf.IsEqualApprox(actual, comparisonValue),
+            ConditionNotEqual => !Mathf.IsEqualApprox(actual, comparisonValue),
+            ConditionGreater => actual > comparisonValue,
+            ConditionGreaterOrEqual => actual >= comparisonValue,
+            ConditionLess => actual < comparisonValue,
+            ConditionLessOrEqual => actual <= comparisonValue,
+            _ => throw new InvalidOperationException(
+                $"Owned condition comparison is unsupported: {operatorFlags}"),
+        };
 
     private void ApplyDestroyedFromInfo(OpeningFlowCommand command)
     {
@@ -866,9 +1554,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void CompleteOpening()
     {
+        _openingQuestCompleted = true;
+        EvaluateGuidePackage();
         _objective.Visible = false;
         CloseModal();
-        _loaded.Player.SetControlPolicy(true, true, true, true, true);
+        ApplyStageControlPolicy();
         GD.Print(
             $"OPENNV_NEW_GAME_OPEN_WORLD_READY quest={_flow.QuestEditorId} " +
             $"stage={_stage} name={_playerName} inventory={_inventory.Count}");
@@ -981,18 +1671,13 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _loaded.Player.SetControlPolicy(false, false, false, false, false);
             return;
         }
-        if (_stage == _flow.CompletionStage)
-        {
-            _loaded.Player.SetControlPolicy(true, true, true, true, true);
-            return;
-        }
-        var interaction = _flow.Interactions.FirstOrDefault(value => value.FromStage == _stage);
         _loaded.Player.SetControlPolicy(
-            interaction is not null,
-            true,
-            interaction?.Event.Equals("activate", StringComparison.OrdinalIgnoreCase) == true,
-            false,
-            false);
+            _playerControls[MovementControlIndex],
+            _playerControls[LookingControlIndex],
+            _playerControls[MovementControlIndex] &&
+                _playerControls[RolloverTextControlIndex],
+            _playerControls[FightingControlIndex],
+            _stage == _flow.CompletionStage);
         if (!_loaded.Player.UsesXr && DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;
     }
@@ -1010,5 +1695,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _canvas.Scale = Vector2.One * scale;
         _canvas.Position =
             (viewportSize - _flow.ReferenceCanvasSize * scale) * OpeningUiTheme.CenteringFactor;
+    }
+
+    private sealed class ActiveImageSpaceModifier(OpeningImageSpaceModifier modifier)
+    {
+        internal OpeningImageSpaceModifier Modifier { get; } = modifier;
+        internal double ElapsedSeconds { get; set; }
     }
 }

@@ -74,6 +74,15 @@ internal partial class CellPlayer : CharacterBody3D
     internal void SetExternalActivationHandler(Func<Node?, bool>? handler) =>
         _externalActivationHandler = handler;
 
+    internal void ApplyAuthoredCameraTransform(Transform3D transformFromFloor)
+    {
+        if (_useXr)
+            return;
+        transformFromFloor.Origin -=
+            Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
+        _camera.Transform = transformFromFloor;
+    }
+
     internal void Configure(
         float yaw,
         GameplaySession session,

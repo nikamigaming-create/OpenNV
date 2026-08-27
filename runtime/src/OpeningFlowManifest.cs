@@ -22,9 +22,16 @@ internal sealed record OpeningNewGameFlow(
     IReadOnlyDictionary<string, OpeningDialogueTopic> TopicsByFormId,
     IReadOnlyDictionary<string, OpeningDialogueTopic> TopicsByEditorId,
     OpeningDialogueInfo PsychologyRootInfo,
+    OpeningGuideActorAi GuideActorAi,
+    OpeningPlayerAnimationGraph PlayerAnimation,
+    IReadOnlyDictionary<string, OpeningImageSpaceModifier> ImageSpaceModifiers,
     OpeningCharacterCreation Character)
 {
-    private const string ExpectedSchema = "opennv-owned-new-game-flow/v1";
+    private const string ExpectedSchema = "opennv-owned-new-game-flow/v3";
+    private const string ExpectedGuideActorAiSchema =
+        "opennv-owned-guide-actor-ai/v1";
+    private const string ExpectedPlayerAnimationSchema =
+        "opennv-owned-player-animation-graph/v1";
 
     internal static OpeningNewGameFlow Load(
         JsonElement source,
@@ -87,6 +94,12 @@ internal sealed record OpeningNewGameFlow(
                 value => value.EditorId,
                 StringComparer.OrdinalIgnoreCase);
         var character = ParseCharacter(source.GetProperty("character"), textures);
+        var guideActorAi = ParseGuideActorAi(source.GetProperty("guideActorAi"));
+        var playerAnimation = ParsePlayerAnimation(source.GetProperty("playerAnimation"));
+        var imageSpaceModifiers = source.GetProperty("imageSpaceModifiers")
+            .EnumerateArray()
+            .Select(ParseImageSpaceModifier)
+            .ToDictionary(value => value.EditorId, StringComparer.OrdinalIgnoreCase);
 
         var result = new OpeningNewGameFlow(
             quest.GetProperty("formId").GetString()!,
@@ -107,6 +120,9 @@ internal sealed record OpeningNewGameFlow(
             topicsByForm,
             topicsByEditor,
             ParseInfo(dialogue.GetProperty("psychologyRootInfo")),
+            guideActorAi,
+            playerAnimation,
+            imageSpaceModifiers,
             character);
         Validate(result);
         return result;
@@ -182,6 +198,11 @@ internal sealed record OpeningNewGameFlow(
         OptionalString(value, "speakerEditorId"),
         OptionalString(value, "referenceEditorId"),
         OptionalString(value, "itemEditorId"),
+        OptionalString(value, "packageEditorId"),
+        OptionalString(value, "modifierEditorId"),
+        OptionalString(value, "operation"),
+        OptionalString(value, "targetEditorId"),
+        OptionalString(value, "globalEditorId"),
         OptionalString(value, "variable") ?? OptionalString(value, "value"),
         OptionalString(value, "idleEditorId"),
         OptionalString(value, "animationLogicalPath"),
@@ -196,10 +217,208 @@ internal sealed record OpeningNewGameFlow(
         OptionalFloat(value, "value"),
         OptionalBool(value, "enabled"),
         OptionalBool(value, "destroyed"),
+        OptionalBool(value, "crossFade"),
         value.TryGetProperty("values", out var controls) &&
         controls.ValueKind == JsonValueKind.Array
             ? controls.EnumerateArray().Select(control => control.GetInt32()).ToArray()
             : Array.Empty<int>());
+
+    private static OpeningGuideActorAi ParseGuideActorAi(JsonElement source)
+    {
+        if (source.GetProperty("schema").GetString() != ExpectedGuideActorAiSchema)
+            throw new InvalidOperationException(
+                "Owned guide-actor AI has an unexpected contract.");
+        var packages = source.GetProperty("packages").EnumerateArray()
+            .Select(ParseGuidePackage)
+            .ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase);
+        var locomotion = source.GetProperty("locomotion");
+        return new OpeningGuideActorAi(
+            source.GetProperty("role").GetString()!,
+            source.GetProperty("referenceFormId").GetString()!,
+            source.GetProperty("baseFormId").GetString()!,
+            source.GetProperty("questFormId").GetString()!,
+            source.GetProperty("packagePriority").EnumerateArray()
+                .Select(value => value.GetString()!)
+                .ToArray(),
+            packages,
+            new OpeningGuideLocomotion(
+                ParseGuideLocomotionClip(locomotion.GetProperty("walk")),
+                ParseGuideLocomotionClip(locomotion.GetProperty("run"))));
+    }
+
+    private static OpeningGuidePackage ParseGuidePackage(JsonElement source) => new(
+        source.GetProperty("formId").GetString()!,
+        source.GetProperty("editorId").GetString()!,
+        source.GetProperty("recordSha256").GetString()!,
+        source.GetProperty("packageFlags").GetUInt32(),
+        source.GetProperty("alwaysRun").GetBoolean(),
+        source.GetProperty("packageType").GetInt32(),
+        source.GetProperty("packageTypeName").GetString()!,
+        source.GetProperty("procedureFlags").GetInt32(),
+        source.GetProperty("typeSpecificFlags").GetInt32(),
+        source.GetProperty("conditions").EnumerateArray()
+            .Select(value => new OpeningGuideCondition(
+                value.GetProperty("operatorFlags").GetInt32(),
+                value.GetProperty("comparisonValue").GetSingle(),
+                value.GetProperty("function").GetInt32(),
+                value.GetProperty("functionName").GetString()!,
+                value.GetProperty("parameter1").GetString()!,
+                value.GetProperty("parameter2").GetUInt32(),
+                value.GetProperty("runOn").GetUInt32(),
+                value.GetProperty("reference").GetString()!))
+            .ToArray(),
+        source.GetProperty("location") is { ValueKind: JsonValueKind.Object } location
+            ? ParseGuideLocation(location)
+            : null,
+        source.GetProperty("target") is { ValueKind: JsonValueKind.Object } target
+            ? new OpeningGuideTarget(
+                target.GetProperty("type").GetInt32(),
+                target.GetProperty("typeName").GetString()!,
+                target.GetProperty("formId").GetString()!,
+                target.GetProperty("count").GetUInt32(),
+                target.GetProperty("unknown").GetUInt32())
+            : null,
+        source.GetProperty("idleAnimationFormIds").EnumerateArray()
+            .Select(value => value.GetString()!)
+            .ToArray(),
+        source.GetProperty("idleAnimationLogicalPaths").EnumerateArray()
+            .Select(value => value.GetString()!)
+            .ToArray());
+
+    private static OpeningGuideLocation ParseGuideLocation(JsonElement source) => new(
+        source.GetProperty("type").GetInt32(),
+        source.GetProperty("typeName").GetString()!,
+        source.GetProperty("formId").GetString()!,
+        source.GetProperty("radiusGameUnits").GetUInt32(),
+        source.GetProperty("reference") is { ValueKind: JsonValueKind.Object } reference
+            ? new OpeningGuideReference(
+                reference.GetProperty("formId").GetString()!,
+                OptionalString(reference, "editorId"),
+                reference.GetProperty("recordType").GetString()!,
+                ReadVector3(reference.GetProperty("positionGameUnits")),
+                ReadVector3(reference.GetProperty("rotationRadians")),
+                ReadQuaternion(reference.GetProperty("rotationGodotQuaternion")))
+            : null);
+
+    private static OpeningGuideLocomotionClip ParseGuideLocomotionClip(
+        JsonElement source)
+    {
+        var rootMotion = source.GetProperty("rootMotion");
+        return new OpeningGuideLocomotionClip(
+            source.GetProperty("logicalPath").GetString()!,
+            source.GetProperty("sha256").GetString()!,
+            new OpeningGuideRootMotion(
+                rootMotion.GetProperty("sequenceName").GetString()!,
+                rootMotion.GetProperty("targetNode").GetString()!,
+                rootMotion.GetProperty("startSeconds").GetSingle(),
+                rootMotion.GetProperty("stopSeconds").GetSingle(),
+                rootMotion.GetProperty("cycleType").GetInt32(),
+                ReadVector3(rootMotion.GetProperty("displacementGodotGameUnits")),
+                rootMotion.GetProperty("speedGameUnitsPerSecond").GetSingle()));
+    }
+
+    private static OpeningPlayerAnimationGraph ParsePlayerAnimation(JsonElement source)
+    {
+        if (source.GetProperty("schema").GetString() != ExpectedPlayerAnimationSchema)
+            throw new InvalidOperationException(
+                "Owned player-animation graph has an unexpected contract.");
+        var packages = source.GetProperty("packages").EnumerateArray()
+            .Select(value =>
+            {
+                var selection = value.GetProperty("idleSelection");
+                return new OpeningPlayerPackage(
+                    value.GetProperty("formId").GetString()!,
+                    value.GetProperty("editorId").GetString()!,
+                    value.GetProperty("recordSha256").GetString()!,
+                    selection.GetProperty("runInSequence").GetBoolean(),
+                    selection.GetProperty("doOnce").GetBoolean(),
+                    selection.GetProperty("timerSeconds").GetSingle(),
+                    value.GetProperty("idleAnimationFormIds").EnumerateArray()
+                        .Select(form => form.GetString()!)
+                        .ToArray(),
+                    value.GetProperty("events").EnumerateObject()
+                        .ToDictionary(
+                            property => property.Name,
+                            property => property.Value.ValueKind == JsonValueKind.Null
+                                ? null
+                                : property.Value.GetString(),
+                            StringComparer.OrdinalIgnoreCase));
+            })
+            .ToDictionary(value => value.EditorId, StringComparer.OrdinalIgnoreCase);
+        var animations = source.GetProperty("animations").EnumerateArray()
+            .Select(value =>
+            {
+                var track = value.GetProperty("track");
+                return new OpeningPlayerAnimation(
+                    value.GetProperty("formId").GetString()!,
+                    value.GetProperty("editorId").GetString()!,
+                    value.GetProperty("logicalPath").GetString()!,
+                    value.GetProperty("sha256").GetString()!,
+                    new OpeningTransformTrack(
+                        track.GetProperty("targetNode").GetString()!,
+                        track.GetProperty("startSeconds").GetSingle(),
+                        track.GetProperty("stopSeconds").GetSingle(),
+                        track.GetProperty("cycleType").GetInt32(),
+                        track.GetProperty("parentChain").EnumerateArray()
+                            .Select(parent => new OpeningTransformParent(
+                                parent.GetProperty("nodeName").GetString()!,
+                                ReadVector3(parent.GetProperty("translationGodotGameUnits")),
+                                ReadQuaternion(parent.GetProperty("rotationQuaternionXyzw")),
+                                ReadVector3(parent.GetProperty("scale"))))
+                            .ToArray(),
+                        track.GetProperty("samples").EnumerateArray()
+                            .Select(sample => new OpeningTransformSample(
+                                sample.GetProperty("timeSeconds").GetSingle(),
+                                ReadVector3(sample.GetProperty("translationGodotGameUnits")),
+                                ReadQuaternion(sample.GetProperty("rotationQuaternionXyzw"))))
+                            .ToArray()));
+            })
+            .ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase);
+        return new OpeningPlayerAnimationGraph(
+            source.GetProperty("cameraNode").GetString()!,
+            packages,
+            animations);
+    }
+
+    private static OpeningImageSpaceModifier ParseImageSpaceModifier(JsonElement source) => new(
+        source.GetProperty("formId").GetString()!,
+        source.GetProperty("editorId").GetString()!,
+        source.GetProperty("duration").GetSingle(),
+        source.GetProperty("fade").EnumerateArray()
+            .Select(value =>
+            {
+                var components = value.EnumerateArray()
+                    .Select(component => component.GetSingle())
+                    .ToArray();
+                if (components.Length != OpeningImageSpaceFadeKey.ComponentCount)
+                    throw new InvalidOperationException(
+                        "Owned image-space fade key has an invalid component count.");
+                return new OpeningImageSpaceFadeKey(
+                    components[OpeningImageSpaceFadeKey.TimeIndex],
+                    new Color(
+                        components[OpeningImageSpaceFadeKey.RedIndex],
+                        components[OpeningImageSpaceFadeKey.GreenIndex],
+                        components[OpeningImageSpaceFadeKey.BlueIndex],
+                        components[OpeningImageSpaceFadeKey.AlphaIndex]));
+            })
+            .ToArray(),
+        source.GetProperty("recordSha256").GetString()!);
+
+    private static Vector3 ReadVector3(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != OpeningTransformParent.VectorComponents)
+            throw new InvalidOperationException("Owned transform vector has an invalid size.");
+        return new Vector3(values[0], values[1], values[2]);
+    }
+
+    private static Quaternion ReadQuaternion(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != OpeningTransformParent.QuaternionComponents)
+            throw new InvalidOperationException("Owned transform quaternion has an invalid size.");
+        return new Quaternion(values[0], values[1], values[2], values[3]);
+    }
 
     private static OpeningCharacterCreation ParseCharacter(
         JsonElement value,
@@ -298,7 +517,17 @@ internal sealed record OpeningNewGameFlow(
             flow.Menus.Count == 0 ||
             flow.Strings.Count == 0 ||
             flow.SceneRoles.Count == 0 ||
-            flow.Interactions.Count == 0)
+            flow.Interactions.Count == 0 ||
+            !flow.SceneRoles.TryGetValue(flow.GuideActorAi.Role, out var guideRole) ||
+            !guideRole.ReferenceFormId.Equals(
+                flow.GuideActorAi.ReferenceFormId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !guideRole.BaseFormId.Equals(
+                flow.GuideActorAi.BaseFormId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !flow.GuideActorAi.QuestFormId.Equals(
+                flow.QuestFormId,
+                StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Owned New Game flow is incomplete.");
         if (flow.Stages.Values
             .SelectMany(value => value.Commands)
@@ -319,6 +548,64 @@ internal sealed record OpeningNewGameFlow(
                 !flow.Stages.ContainsKey(value.FromStage) ||
                 !flow.Stages.ContainsKey(value.ToStage)))
             throw new InvalidOperationException("Owned New Game transitions do not join authored stages.");
+        var commands = flow.Stages.Values
+            .SelectMany(value => value.Commands)
+            .Concat(flow.TopicsByFormId.Values.SelectMany(topic =>
+                topic.Infos.SelectMany(info => info.Commands)))
+            .Concat(flow.PsychologyRootInfo.Commands)
+            .ToArray();
+        var guide = flow.GuideActorAi;
+        if (guide.PackagePriority.Count == 0 ||
+            guide.PackagePriority.Count != guide.Packages.Count ||
+            guide.PackagePriority.Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                guide.PackagePriority.Count ||
+            guide.PackagePriority.Any(form => !guide.Packages.ContainsKey(form)) ||
+            guide.Packages.Values.Any(package =>
+                string.IsNullOrWhiteSpace(package.FormId) ||
+                string.IsNullOrWhiteSpace(package.EditorId) ||
+                string.IsNullOrWhiteSpace(package.RecordSha256) ||
+                string.IsNullOrWhiteSpace(package.PackageTypeName) ||
+                package.Conditions.Any(condition =>
+                    string.IsNullOrWhiteSpace(condition.FunctionName) ||
+                    !float.IsFinite(condition.ComparisonValue)) ||
+                package.Location is { TypeName: "nearReference", Reference: null } ||
+                package.Location?.Reference is { } destination &&
+                    (!destination.PositionGameUnits.IsFinite() ||
+                        !destination.RotationGodot.IsNormalized()) ||
+                package.IdleAnimationFormIds.Count !=
+                    package.IdleAnimationLogicalPaths.Count) ||
+            !ValidGuideLocomotionClip(guide.Locomotion.Walk) ||
+            !ValidGuideLocomotionClip(guide.Locomotion.Run))
+            throw new InvalidOperationException("Owned guide-actor AI graph is incomplete.");
+        if (flow.PlayerAnimation.Packages.Count == 0 ||
+            flow.PlayerAnimation.Animations.Count == 0 ||
+            flow.PlayerAnimation.Packages.Values.Any(package =>
+                package.IdleTimerSeconds < 0.0f ||
+                package.IdleAnimationFormIds.Any(form =>
+                    !flow.PlayerAnimation.Animations.ContainsKey(form)) ||
+                package.EventAnimationFormIds.Values.Any(form =>
+                    form is not null && !flow.PlayerAnimation.Animations.ContainsKey(form))) ||
+            flow.PlayerAnimation.Animations.Values.Any(animation =>
+                animation.Track.TargetNode != flow.PlayerAnimation.CameraNode ||
+                animation.Track.StopSeconds <= animation.Track.StartSeconds ||
+                animation.Track.ParentChain.Count == 0 ||
+                animation.Track.Samples.Count < 2 ||
+                animation.Track.Samples[0].TimeSeconds != animation.Track.StartSeconds ||
+                animation.Track.Samples[^1].TimeSeconds != animation.Track.StopSeconds ||
+                animation.Track.Samples.Zip(
+                    animation.Track.Samples.Skip(1),
+                    (first, second) => second.TimeSeconds > first.TimeSeconds)
+                    .Any(increasing => !increasing)) ||
+            commands.Any(command =>
+                command.Kind == "addScriptPackage" &&
+                (command.PackageEditorId is null ||
+                    !flow.PlayerAnimation.Packages.ContainsKey(command.PackageEditorId))) ||
+            commands.Any(command =>
+                command.Kind == "imageSpaceModifier" &&
+                (command.ModifierEditorId is null ||
+                    !flow.ImageSpaceModifiers.ContainsKey(command.ModifierEditorId))))
+            throw new InvalidOperationException(
+                "Owned player animation or image-space command graph is incomplete.");
         var character = flow.Character;
         if (character.SexChoices.Count == 0 ||
             character.SpecialValues.Count == 0 ||
@@ -335,6 +622,18 @@ internal sealed record OpeningNewGameFlow(
             character.TraitMaximumSelected > character.TraitValues.Count)
             throw new InvalidOperationException("Owned character-creation contract is invalid.");
     }
+
+    private static bool ValidGuideLocomotionClip(OpeningGuideLocomotionClip clip) =>
+        !string.IsNullOrWhiteSpace(clip.LogicalPath) &&
+        !string.IsNullOrWhiteSpace(clip.Sha256) &&
+        !string.IsNullOrWhiteSpace(clip.RootMotion.SequenceName) &&
+        !string.IsNullOrWhiteSpace(clip.RootMotion.TargetNode) &&
+        float.IsFinite(clip.RootMotion.StartSeconds) &&
+        float.IsFinite(clip.RootMotion.StopSeconds) &&
+        float.IsFinite(clip.RootMotion.SpeedGameUnitsPerSecond) &&
+        clip.RootMotion.StopSeconds > clip.RootMotion.StartSeconds &&
+        clip.RootMotion.SpeedGameUnitsPerSecond > 0.0f &&
+        clip.RootMotion.DisplacementGodotGameUnits.IsFinite();
 }
 
 internal sealed record OpeningFlowMenu(
@@ -404,6 +703,11 @@ internal sealed record OpeningFlowCommand(
     string? SpeakerEditorId,
     string? ReferenceEditorId,
     string? ItemEditorId,
+    string? PackageEditorId,
+    string? ModifierEditorId,
+    string? Operation,
+    string? TargetEditorId,
+    string? GlobalEditorId,
     string? ValueName,
     string? IdleEditorId,
     string? AnimationLogicalPath,
@@ -418,7 +722,145 @@ internal sealed record OpeningFlowCommand(
     float? NumericValue,
     bool? Enabled,
     bool? Destroyed,
+    bool? CrossFade,
     IReadOnlyList<int> ControlValues);
+
+internal sealed record OpeningGuideActorAi(
+    string Role,
+    string ReferenceFormId,
+    string BaseFormId,
+    string QuestFormId,
+    IReadOnlyList<string> PackagePriority,
+    IReadOnlyDictionary<string, OpeningGuidePackage> Packages,
+    OpeningGuideLocomotion Locomotion);
+
+internal sealed record OpeningGuidePackage(
+    string FormId,
+    string EditorId,
+    string RecordSha256,
+    uint PackageFlags,
+    bool AlwaysRun,
+    int PackageType,
+    string PackageTypeName,
+    int ProcedureFlags,
+    int TypeSpecificFlags,
+    IReadOnlyList<OpeningGuideCondition> Conditions,
+    OpeningGuideLocation? Location,
+    OpeningGuideTarget? Target,
+    IReadOnlyList<string> IdleAnimationFormIds,
+    IReadOnlyList<string> IdleAnimationLogicalPaths);
+
+internal sealed record OpeningGuideCondition(
+    int OperatorFlags,
+    float ComparisonValue,
+    int Function,
+    string FunctionName,
+    string Parameter1,
+    uint Parameter2,
+    uint RunOn,
+    string Reference);
+
+internal sealed record OpeningGuideLocation(
+    int Type,
+    string TypeName,
+    string FormId,
+    uint RadiusGameUnits,
+    OpeningGuideReference? Reference);
+
+internal sealed record OpeningGuideTarget(
+    int Type,
+    string TypeName,
+    string FormId,
+    uint Count,
+    uint Unknown);
+
+internal sealed record OpeningGuideReference(
+    string FormId,
+    string? EditorId,
+    string RecordType,
+    Vector3 PositionGameUnits,
+    Vector3 RotationRadians,
+    Quaternion RotationGodot);
+
+internal sealed record OpeningGuideLocomotion(
+    OpeningGuideLocomotionClip Walk,
+    OpeningGuideLocomotionClip Run);
+
+internal sealed record OpeningGuideLocomotionClip(
+    string LogicalPath,
+    string Sha256,
+    OpeningGuideRootMotion RootMotion);
+
+internal sealed record OpeningGuideRootMotion(
+    string SequenceName,
+    string TargetNode,
+    float StartSeconds,
+    float StopSeconds,
+    int CycleType,
+    Vector3 DisplacementGodotGameUnits,
+    float SpeedGameUnitsPerSecond);
+
+internal sealed record OpeningPlayerAnimationGraph(
+    string CameraNode,
+    IReadOnlyDictionary<string, OpeningPlayerPackage> Packages,
+    IReadOnlyDictionary<string, OpeningPlayerAnimation> Animations);
+
+internal sealed record OpeningPlayerPackage(
+    string FormId,
+    string EditorId,
+    string RecordSha256,
+    bool RunInSequence,
+    bool DoOnce,
+    float IdleTimerSeconds,
+    IReadOnlyList<string> IdleAnimationFormIds,
+    IReadOnlyDictionary<string, string?> EventAnimationFormIds);
+
+internal sealed record OpeningPlayerAnimation(
+    string FormId,
+    string EditorId,
+    string LogicalPath,
+    string Sha256,
+    OpeningTransformTrack Track);
+
+internal sealed record OpeningTransformTrack(
+    string TargetNode,
+    float StartSeconds,
+    float StopSeconds,
+    int CycleType,
+    IReadOnlyList<OpeningTransformParent> ParentChain,
+    IReadOnlyList<OpeningTransformSample> Samples);
+
+internal sealed record OpeningTransformParent(
+    string NodeName,
+    Vector3 TranslationGodotGameUnits,
+    Quaternion Rotation,
+    Vector3 Scale)
+{
+    internal const int VectorComponents = 3;
+    internal const int QuaternionComponents = 4;
+}
+
+internal sealed record OpeningTransformSample(
+    float TimeSeconds,
+    Vector3 TranslationGodotGameUnits,
+    Quaternion Rotation);
+
+internal sealed record OpeningImageSpaceModifier(
+    string FormId,
+    string EditorId,
+    float DurationSeconds,
+    IReadOnlyList<OpeningImageSpaceFadeKey> Fade,
+    string RecordSha256);
+
+internal sealed record OpeningImageSpaceFadeKey(float Time, Color Color)
+{
+    internal const int ComponentCount = 5;
+    internal const int TimeIndex = 0;
+    internal const int RedIndex = 1;
+    internal const int GreenIndex = 2;
+    internal const int BlueIndex = 3;
+    internal const int AlphaIndex = 4;
+}
 
 internal sealed record OpeningCharacterCreation(
     string SexTitle,

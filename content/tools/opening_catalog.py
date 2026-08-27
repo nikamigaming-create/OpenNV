@@ -14,7 +14,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator
 
+from actor_gltf import sample_root_motion, sample_transform_animation
 from bsa_archive import BsaArchive, canonical_member_path
+from cell_scene import godot_rotation_quaternion
+from environment_catalog import parse_image_space_modifier
 from owned_archive_stack import OwnedArchiveStack
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 from runtime_configuration import RuntimeConfiguration
@@ -85,6 +88,26 @@ GAMEBRYO_FONT_GLYPH_COUNT = 256
 GAMEBRYO_FONT_ATLAS_NAME_OFFSET = 12
 GAMEBRYO_FONT_GLYPH = struct.Struct("<14f")
 BYTE_CHANNEL_MAXIMUM = 255
+PACKAGE_DATA_MINIMUM_BYTES = 4
+PACKAGE_DATA_FNV_BYTES = 12
+PACKAGE_PROCEDURE_FLAGS_OFFSET = 6
+PACKAGE_TYPE_SPECIFIC_FLAGS_OFFSET = 8
+PACKAGE_IDLE_FLAGS_BYTES = 1
+PACKAGE_IDLE_COUNT_BYTES = 1
+PACKAGE_IDLE_TIMER_BYTES = 4
+PACKAGE_IDLE_FORM_BYTES = 4
+PACKAGE_LOCATION_BYTES = 12
+PACKAGE_TARGET_BYTES = 16
+REFERENCE_TRANSFORM_BYTES = 24
+PLAYER_CONTROL_ARGUMENTS = (
+    "movement",
+    "pipBoy",
+    "fighting",
+    "pointOfView",
+    "looking",
+    "rolloverText",
+    "sneaking",
+)
 
 
 @dataclass(frozen=True)
@@ -95,6 +118,49 @@ class IndexedRecord:
     links: tuple[tuple[str, int], ...]
     groups: tuple[tuple[int, int], ...]
     data_sha256: str
+
+
+@dataclass(frozen=True)
+class IdleAnimationSource:
+    form_id: int
+    editor_id: str
+    logical_path: str
+
+
+@dataclass(frozen=True)
+class ReferenceTransformSource:
+    form_id: int
+    editor_id: str | None
+    record_type: str
+    position_game_units: tuple[float, float, float]
+    rotation_radians: tuple[float, float, float]
+
+    def manifest(self) -> dict[str, object]:
+        return {
+            "formId": form_id_text(self.form_id),
+            "editorId": self.editor_id,
+            "recordType": self.record_type,
+            "positionGameUnits": list(self.position_game_units),
+            "rotationRadians": list(self.rotation_radians),
+            "rotationGodotQuaternion": godot_rotation_quaternion(
+                self.rotation_radians
+            ),
+        }
+
+
+@dataclass(frozen=True)
+class FlowSourceCatalog:
+    actor_values: list[dict[str, object]]
+    traits: list[dict[str, object]]
+    scripts: dict[str, tuple[int, str]]
+    idle_animations_by_editor: dict[str, IdleAnimationSource]
+    idle_animations_by_form: dict[int, IdleAnimationSource]
+    packages_by_editor: dict[str, Record]
+    packages_by_form: dict[int, Record]
+    actors_by_form: dict[int, Record]
+    references_by_form: dict[int, ReferenceTransformSource]
+    image_space_modifiers_by_editor: dict[str, Record]
+    needed: dict[int, dict[str, object]]
 
 
 @dataclass
@@ -1635,8 +1701,58 @@ def _script_commands(source: str) -> list[dict[str, object]]:
         )
         if match:
             values = [] if not match[2] else [int(value) for value in match[2].split()]
+            if len(values) > len(PLAYER_CONTROL_ARGUMENTS) or any(
+                value not in {0, 1} for value in values
+            ):
+                raise ValueError(f"Owned player-control command is invalid: {line}")
             commands.append(
-                {"kind": "playerControls", "operation": match[1].casefold(), "values": values}
+                {
+                    "kind": "playerControls",
+                    "operation": match[1].casefold(),
+                    "values": values,
+                    "arguments": list(PLAYER_CONTROL_ARGUMENTS[: len(values)]),
+                }
+            )
+            continue
+        match = re.fullmatch(
+            r"player\.(addscriptpackage|removescriptpackage)(?:\s+(\w+))?",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            adding = match[1].casefold() == "addscriptpackage"
+            if adding != (match[2] is not None):
+                raise ValueError(f"Owned script-package command is invalid: {line}")
+            commands.append(
+                {
+                    "kind": "addScriptPackage" if adding else "removeScriptPackage",
+                    "packageEditorId": match[2],
+                }
+            )
+            continue
+        match = re.fullmatch(
+            r"(Apply|Remove)ImageSpaceModifier\s+(\w+)(?:\s+(\*))?",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": "imageSpaceModifier",
+                    "operation": match[1].casefold(),
+                    "modifierEditorId": match[2],
+                    "crossFade": match[3] is not None,
+                }
+            )
+            continue
+        match = re.fullmatch(r"(\w+)\.(Enable|Disable)", line, re.IGNORECASE)
+        if match:
+            commands.append(
+                {
+                    "kind": "referenceEnabled",
+                    "referenceEditorId": match[1],
+                    "enabled": match[2].casefold() == "enable",
+                }
             )
             continue
         match = re.fullmatch(r"(\w+)\.SetDestroyed\s+(\d+)", line, re.IGNORECASE)
@@ -1694,7 +1810,7 @@ def _script_commands(source: str) -> list[dict[str, object]]:
             commands.append({"kind": "startQuest", "questEditorId": match[1]})
             continue
         match = re.fullmatch(
-            r"player\.(additem|equipitem)\s+(\w+)(?:\s+(\d+))?",
+            r"player\.(additem|removeitem|equipitem)\s+(\w+)(?:\s+(\d+))?(?:\s+\d+)?",
             line,
             re.IGNORECASE,
         )
@@ -1706,6 +1822,52 @@ def _script_commands(source: str) -> list[dict[str, object]]:
                     "count": 1 if match[3] is None else int(match[3]),
                 }
             )
+            continue
+        match = re.fullmatch(
+            r"(\w+)\.(ResetAI|EVP|StopLook|Look)\s*(\w+)?",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": "actorIntent",
+                    "referenceEditorId": match[1],
+                    "operation": match[2].casefold(),
+                    "targetEditorId": match[3],
+                }
+            )
+            continue
+        if re.fullmatch(r"autosave", line, re.IGNORECASE):
+            commands.append({"kind": "autosave"})
+            continue
+        match = re.fullmatch(r"StopQuest\s+(\w+)", line, re.IGNORECASE)
+        if match:
+            commands.append({"kind": "stopQuest", "questEditorId": match[1]})
+            continue
+        match = re.fullmatch(
+            r"set\s+(\w+)\s+to\s+(-?\d+(?:\.\d+)?)",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": "setGlobal",
+                    "globalEditorId": match[1],
+                    "value": float(match[2]),
+                }
+            )
+            continue
+        match = re.fullmatch(r"AutoDisplayObjectives\s+(\d+)", line, re.IGNORECASE)
+        if match:
+            commands.append(
+                {"kind": "autoDisplayObjectives", "enabled": int(match[1]) != 0}
+            )
+            continue
+        match = re.fullmatch(r"AddAchievement\s+(\d+)", line, re.IGNORECASE)
+        if match:
+            commands.append({"kind": "achievement", "index": int(match[1])})
     return commands
 
 
@@ -1816,17 +1978,17 @@ def _scan_flow_sources(
     master_path: Path,
     needed_form_ids: frozenset[int],
     trait_rules: dict[str, object],
-) -> tuple[
-    list[dict[str, object]],
-    list[dict[str, object]],
-    dict[str, tuple[int, str]],
-    dict[str, str],
-    dict[int, dict[str, object]],
-]:
+) -> FlowSourceCatalog:
     actor_values = []
     traits = []
     scripts: dict[str, tuple[int, str]] = {}
-    idle_animations: dict[str, str] = {}
+    idle_animations_by_editor: dict[str, IdleAnimationSource] = {}
+    idle_animations_by_form: dict[int, IdleAnimationSource] = {}
+    packages_by_editor: dict[str, Record] = {}
+    packages_by_form: dict[int, Record] = {}
+    actors_by_form: dict[int, Record] = {}
+    references_by_form: dict[int, ReferenceTransformSource] = {}
+    image_space_modifiers_by_editor: dict[str, Record] = {}
     needed: dict[int, dict[str, object]] = {}
     selector_type = str(trait_rules["recordType"])
     selector_signature = str(trait_rules["selectorSubrecord"])
@@ -1869,11 +2031,55 @@ def _scan_flow_sources(
             logical_path = None if model_path is None else _asset_path(model_path)
             if editor_id and logical_path:
                 identity = editor_id.casefold()
-                if identity in idle_animations:
+                if identity in idle_animations_by_editor or record.form_id in idle_animations_by_form:
                     raise ValueError(
                         f"Owned opening idle animation is duplicated: {editor_id}"
                     )
-                idle_animations[identity] = logical_path
+                source = IdleAnimationSource(record.form_id, editor_id, logical_path)
+                idle_animations_by_editor[identity] = source
+                idle_animations_by_form[record.form_id] = source
+        if record.signature == "PACK":
+            editor_id = _catalog_text(subrecords, "EDID")
+            if editor_id:
+                identity = editor_id.casefold()
+                if identity in packages_by_editor:
+                    raise ValueError(f"Owned opening package is duplicated: {editor_id}")
+                packages_by_editor[identity] = record
+            if record.form_id in packages_by_form:
+                raise ValueError(
+                    f"Owned opening package form is duplicated: {record.form_id:08x}"
+                )
+            packages_by_form[record.form_id] = record
+        if record.signature in {"NPC_", "CREA"}:
+            if record.form_id in actors_by_form:
+                raise ValueError(
+                    f"Owned opening actor base is duplicated: {record.form_id:08x}"
+                )
+            actors_by_form[record.form_id] = record
+        if record.signature in {"REFR", "ACHR", "ACRE"}:
+            transform_values = [
+                subrecord.data
+                for subrecord in subrecords
+                if subrecord.signature == "DATA"
+            ]
+            if len(transform_values) == 1 and len(transform_values[0]) == REFERENCE_TRANSFORM_BYTES:
+                values = struct.unpack("<6f", transform_values[0])
+                references_by_form[record.form_id] = ReferenceTransformSource(
+                    record.form_id,
+                    _catalog_text(subrecords, "EDID"),
+                    record.signature,
+                    tuple(values[:3]),
+                    tuple(values[3:]),
+                )
+        if record.signature == "IMAD":
+            editor_id = _catalog_text(subrecords, "EDID")
+            if editor_id:
+                identity = editor_id.casefold()
+                if identity in image_space_modifiers_by_editor:
+                    raise ValueError(
+                        f"Owned opening image-space modifier is duplicated: {editor_id}"
+                    )
+                image_space_modifiers_by_editor[identity] = record
         if record.form_id in needed_form_ids:
             needed[record.form_id] = {
                 "recordType": record.signature,
@@ -1893,7 +2099,19 @@ def _scan_flow_sources(
     if set(needed_form_ids) != set(needed):
         missing = sorted(form_id_text(value) for value in set(needed_form_ids) - set(needed))
         raise ValueError("Owned opening scene-role bases are missing: " + ", ".join(missing))
-    return actor_values, traits, scripts, idle_animations, needed
+    return FlowSourceCatalog(
+        actor_values,
+        traits,
+        scripts,
+        idle_animations_by_editor,
+        idle_animations_by_form,
+        packages_by_editor,
+        packages_by_form,
+        actors_by_form,
+        references_by_form,
+        image_space_modifiers_by_editor,
+        needed,
+    )
 
 
 def _match_actor_values(
@@ -2209,7 +2427,7 @@ def _resolve_actor_animation_commands(
     programs: list[dict[str, object]],
     dialogue: dict[str, object],
     roles: list[dict[str, object]],
-    idle_animations: dict[str, str],
+    idle_animations: dict[str, IdleAnimationSource],
 ) -> list[dict[str, object]]:
     roles_by_editor = {
         str(role["editorId"]).casefold(): role
@@ -2232,11 +2450,12 @@ def _resolve_actor_animation_commands(
         if command["kind"] != "playIdle":
             continue
         idle_editor_id = str(command["idleEditorId"])
-        logical_path = idle_animations.get(idle_editor_id.casefold())
-        if logical_path is None:
+        source = idle_animations.get(idle_editor_id.casefold())
+        if source is None:
             raise ValueError(
                 f"Owned opening idle animation is unresolved: {idle_editor_id}"
             )
+        logical_path = source.logical_path
         reference_editor_id = str(command["referenceEditorId"])
         role = roles_by_editor.get(reference_editor_id.casefold())
         if role is None or role["recordType"] not in {"ACHR", "ACRE"}:
@@ -2258,6 +2477,524 @@ def _resolve_actor_animation_commands(
             key=lambda value: int(value[0], FORM_ID_RADIX),
         )
     ]
+
+
+def _all_flow_commands(
+    programs: list[dict[str, object]],
+    dialogue: dict[str, object],
+) -> list[dict[str, object]]:
+    commands = [
+        command
+        for program in programs
+        for command in program["commands"]
+    ]
+    commands.extend(
+        command
+        for topic in dialogue["topics"]
+        for info in topic["infos"]
+        for command in info["commands"]
+    )
+    commands.extend(dialogue["psychologyRootInfo"]["commands"])
+    return commands
+
+
+def _one_package_subrecord(
+    values: dict[str, list[bytes]],
+    signature: str,
+    record: Record,
+) -> bytes:
+    matches = values.get(signature, [])
+    if len(matches) != 1:
+        raise ValueError(
+            f"Owned PACK {record.form_id:08x} must contain one {signature}, "
+            f"found {len(matches)}"
+        )
+    return matches[0]
+
+
+def _compile_player_package(
+    record: Record,
+    event_subrecords: dict[str, str],
+    idle_flag_bits: dict[str, object],
+    idle_animations_by_form: dict[int, IdleAnimationSource],
+) -> dict[str, object]:
+    values: dict[str, list[bytes]] = defaultdict(list)
+    event_idle_forms: dict[str, int | None] = {
+        event: None for event in event_subrecords.values()
+    }
+    seen_event_idles = set()
+    current_event = None
+    for subrecord in iter_subrecords(record):
+        values[subrecord.signature].append(subrecord.data)
+        if subrecord.signature in event_subrecords:
+            current_event = event_subrecords[subrecord.signature]
+            continue
+        if subrecord.signature == "INAM" and current_event is not None:
+            if current_event in seen_event_idles:
+                raise ValueError(
+                    f"Owned PACK {record.form_id:08x} duplicates {current_event} INAM"
+                )
+            if len(subrecord.data) != PACKAGE_IDLE_FORM_BYTES:
+                raise ValueError(
+                    f"Owned PACK {record.form_id:08x} has malformed {current_event} INAM"
+                )
+            value = struct.unpack("<I", subrecord.data)[0]
+            event_idle_forms[current_event] = value or None
+            seen_event_idles.add(current_event)
+
+    editor_id = _catalog_text(list(iter_subrecords(record)), "EDID")
+    if editor_id is None:
+        raise ValueError(f"Owned PACK {record.form_id:08x} has no editor ID")
+    package_data = _one_package_subrecord(values, "PKDT", record)
+    if len(package_data) < PACKAGE_DATA_MINIMUM_BYTES:
+        raise ValueError(f"Owned PACK {record.form_id:08x} has malformed PKDT")
+    package_flags = struct.unpack_from("<I", package_data)[0]
+    package_type = (
+        package_data[4]
+        if len(package_data) >= PACKAGE_DATA_FNV_BYTES
+        else struct.unpack_from("<i", package_data, PACKAGE_DATA_MINIMUM_BYTES)[0]
+    )
+    procedure_flags = (
+        struct.unpack_from("<H", package_data, PACKAGE_PROCEDURE_FLAGS_OFFSET)[0]
+        if len(package_data) >= PACKAGE_DATA_FNV_BYTES
+        else None
+    )
+    type_specific_flags = (
+        struct.unpack_from("<H", package_data, PACKAGE_TYPE_SPECIFIC_FLAGS_OFFSET)[0]
+        if len(package_data) >= PACKAGE_DATA_FNV_BYTES
+        else None
+    )
+    idle_flags_data = _one_package_subrecord(values, "IDLF", record)
+    if len(idle_flags_data) not in {PACKAGE_IDLE_FLAGS_BYTES, PACKAGE_IDLE_FORM_BYTES}:
+        raise ValueError(f"Owned PACK {record.form_id:08x} has malformed IDLF")
+    idle_flags = idle_flags_data[0]
+    idle_count_data = _one_package_subrecord(values, "IDLC", record)
+    if len(idle_count_data) not in {PACKAGE_IDLE_COUNT_BYTES, PACKAGE_IDLE_FORM_BYTES}:
+        raise ValueError(f"Owned PACK {record.form_id:08x} has malformed IDLC")
+    idle_count = (
+        idle_count_data[0]
+        if len(idle_count_data) == PACKAGE_IDLE_COUNT_BYTES
+        else struct.unpack("<I", idle_count_data)[0]
+    )
+    idle_timer_data = _one_package_subrecord(values, "IDLT", record)
+    if len(idle_timer_data) != PACKAGE_IDLE_TIMER_BYTES:
+        raise ValueError(f"Owned PACK {record.form_id:08x} has malformed IDLT")
+    idle_timer = struct.unpack("<f", idle_timer_data)[0]
+    idle_data = _one_package_subrecord(values, "IDLA", record)
+    if len(idle_data) % PACKAGE_IDLE_FORM_BYTES:
+        raise ValueError(f"Owned PACK {record.form_id:08x} has malformed IDLA")
+    idle_forms = tuple(
+        struct.unpack_from("<I", idle_data, offset)[0]
+        for offset in range(0, len(idle_data), PACKAGE_IDLE_FORM_BYTES)
+    )
+    if idle_count != len(idle_forms):
+        raise ValueError(
+            f"Owned PACK {record.form_id:08x} idle count disagrees with IDLA"
+        )
+    referenced_forms = {
+        *idle_forms,
+        *(value for value in event_idle_forms.values() if value is not None),
+    }
+    missing = sorted(referenced_forms - set(idle_animations_by_form))
+    if missing:
+        raise ValueError(
+            f"Owned PACK {record.form_id:08x} references missing IDLE records: "
+            + ", ".join(form_id_text(value) for value in missing)
+        )
+    run_in_sequence_flag = int(idle_flag_bits["runInSequence"])
+    do_once_flag = int(idle_flag_bits["doOnce"])
+    return {
+        "formId": form_id_text(record.form_id),
+        "editorId": editor_id,
+        "recordSha256": hashlib.sha256(record.data).hexdigest(),
+        "packageFlags": package_flags,
+        "packageType": package_type,
+        "procedureFlags": procedure_flags,
+        "typeSpecificFlags": type_specific_flags,
+        "idleSelection": {
+            "rawFlags": idle_flags,
+            "runInSequence": bool(idle_flags & run_in_sequence_flag),
+            "doOnce": bool(idle_flags & do_once_flag),
+            "timerSeconds": idle_timer,
+        },
+        "idleAnimationFormIds": [form_id_text(value) for value in idle_forms],
+        "events": {
+            event: None if value is None else form_id_text(value)
+            for event, value in sorted(event_idle_forms.items())
+        },
+    }
+
+
+def _compile_player_animation_graph(
+    commands: list[dict[str, object]],
+    flow: dict[str, object],
+    sources: FlowSourceCatalog,
+    owned_archives: OwnedArchiveStack,
+    configuration: RuntimeConfiguration,
+) -> dict[str, object]:
+    contract = dict(flow["playerAnimation"])
+    requested_by_identity: dict[str, str] = {}
+    for command in commands:
+        if command["kind"] != "addScriptPackage":
+            continue
+        editor_id = str(command["packageEditorId"])
+        requested_by_identity.setdefault(editor_id.casefold(), editor_id)
+    requested_editor_ids = [
+        requested_by_identity[identity]
+        for identity in sorted(requested_by_identity)
+    ]
+    package_records = []
+    for editor_id in requested_editor_ids:
+        record = sources.packages_by_editor.get(editor_id.casefold())
+        if record is None:
+            raise ValueError(f"Owned opening package is unresolved: {editor_id}")
+        package_records.append(record)
+    event_subrecords = {
+        str(signature): str(event)
+        for signature, event in dict(contract["eventSubrecords"]).items()
+    }
+    if len(set(event_subrecords.values())) != len(event_subrecords):
+        raise ValueError("Owned package-event subrecord mapping is not one-to-one")
+    idle_flag_bits = dict(contract["idleFlagBits"])
+    packages = [
+        _compile_player_package(
+            record,
+            event_subrecords,
+            idle_flag_bits,
+            sources.idle_animations_by_form,
+        )
+        for record in package_records
+    ]
+    animation_form_ids = sorted(
+        {
+            int(value, FORM_ID_RADIX)
+            for package in packages
+            for value in [
+                *package["idleAnimationFormIds"],
+                *(
+                    event_value
+                    for event_value in package["events"].values()
+                    if event_value is not None
+                ),
+            ]
+        }
+    )
+    skeleton_path = canonical_member_path(str(contract["skeletonLogicalPath"]))
+    skeleton = owned_archives.extract(skeleton_path)
+    camera_node = str(contract["cameraNode"])
+    samples_per_second = configuration.content_compiler.animation_samples_per_second
+    animations = []
+    for form_id in animation_form_ids:
+        idle = sources.idle_animations_by_form[form_id]
+        member = owned_archives.extract(idle.logical_path)
+        animations.append(
+            {
+                "formId": form_id_text(form_id),
+                "editorId": idle.editor_id,
+                "logicalPath": idle.logical_path,
+                "bytes": len(member.data),
+                "sha256": member.sha256,
+                "sourceArchive": member.source_archive,
+                "sourceArchiveSha256": member.source_archive_sha256,
+                "track": sample_transform_animation(
+                    member.data,
+                    skeleton.data,
+                    camera_node,
+                    samples_per_second,
+                ).manifest(),
+            }
+        )
+    return {
+        "schema": "opennv-owned-player-animation-graph/v1",
+        "cameraNode": camera_node,
+        "skeleton": {
+            "logicalPath": skeleton.logical_path,
+            "bytes": len(skeleton.data),
+            "sha256": skeleton.sha256,
+            "sourceArchive": skeleton.source_archive,
+            "sourceArchiveSha256": skeleton.source_archive_sha256,
+        },
+        "packages": packages,
+        "animations": animations,
+    }
+
+
+def _configured_enum_name(
+    values: dict[str, object],
+    value: int,
+    field: str,
+) -> str:
+    name = values.get(str(value))
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"Owned opening {field} is unsupported: {value}")
+    return name
+
+
+def _compile_guide_package(
+    record: Record,
+    contract: dict[str, object],
+    sources: FlowSourceCatalog,
+) -> tuple[dict[str, object], tuple[str, ...]]:
+    subrecords = list(iter_subrecords(record))
+    values: dict[str, list[bytes]] = defaultdict(list)
+    for subrecord in subrecords:
+        values[subrecord.signature].append(subrecord.data)
+    editor_id = _catalog_text(subrecords, "EDID")
+    if editor_id is None:
+        raise ValueError(f"Owned guide PACK {record.form_id:08x} has no editor ID")
+    package_data = _one_package_subrecord(values, "PKDT", record)
+    if len(package_data) < PACKAGE_DATA_FNV_BYTES:
+        raise ValueError(f"Owned guide PACK {record.form_id:08x} has malformed PKDT")
+    package_flags = struct.unpack_from("<I", package_data)[0]
+    package_type = package_data[4]
+    package_type_name = _configured_enum_name(
+        dict(contract["packageTypeNames"]),
+        package_type,
+        "guide package type",
+    )
+    always_run_flag = int(dict(contract["packageFlagBits"])["alwaysRun"])
+
+    locations = values.get("PLDT", [])
+    if len(locations) > 1 or (locations and len(locations[0]) != PACKAGE_LOCATION_BYTES):
+        raise ValueError(f"Owned guide PACK {record.form_id:08x} has malformed PLDT")
+    location = None
+    if locations:
+        location_type, location_form, radius = struct.unpack("<III", locations[0])
+        location_name = _configured_enum_name(
+            dict(contract["locationTypeNames"]),
+            location_type,
+            "guide package location type",
+        )
+        destination = sources.references_by_form.get(location_form)
+        if location_name == "nearReference" and destination is None:
+            raise ValueError(
+                f"Owned guide PACK {record.form_id:08x} references an absent "
+                f"destination: {location_form:08x}"
+            )
+        location = {
+            "type": location_type,
+            "typeName": location_name,
+            "formId": form_id_text(location_form),
+            "radiusGameUnits": radius,
+            "reference": None if destination is None else destination.manifest(),
+        }
+
+    targets = values.get("PTDT", [])
+    if len(targets) > 1 or (targets and len(targets[0]) != PACKAGE_TARGET_BYTES):
+        raise ValueError(f"Owned guide PACK {record.form_id:08x} has malformed PTDT")
+    target = None
+    if targets:
+        target_type, target_form, count, target_unknown = struct.unpack(
+            "<IIII", targets[0]
+        )
+        target = {
+            "type": target_type,
+            "typeName": _configured_enum_name(
+                dict(contract["targetTypeNames"]),
+                target_type,
+                "guide package target type",
+            ),
+            "formId": form_id_text(target_form),
+            "count": count,
+            "unknown": target_unknown,
+        }
+
+    function_names = dict(contract["conditionFunctionNames"])
+    conditions = []
+    for condition_data in values.get("CTDA", []):
+        condition = _condition_manifest(condition_data)
+        condition["functionName"] = _configured_enum_name(
+            function_names,
+            int(condition["function"]),
+            "guide package condition function",
+        )
+        conditions.append(condition)
+
+    idle_forms: tuple[int, ...] = ()
+    idle_paths: list[str] = []
+    idle_payloads = values.get("IDLA", [])
+    if idle_payloads:
+        if len(idle_payloads) != 1 or len(idle_payloads[0]) % PACKAGE_IDLE_FORM_BYTES:
+            raise ValueError(f"Owned guide PACK {record.form_id:08x} has malformed IDLA")
+        idle_forms = tuple(
+            struct.unpack_from("<I", idle_payloads[0], offset)[0]
+            for offset in range(0, len(idle_payloads[0]), PACKAGE_IDLE_FORM_BYTES)
+        )
+        idle_counts = values.get("IDLC", [])
+        if len(idle_counts) != 1 or len(idle_counts[0]) not in {
+            PACKAGE_IDLE_COUNT_BYTES,
+            PACKAGE_IDLE_FORM_BYTES,
+        }:
+            raise ValueError(f"Owned guide PACK {record.form_id:08x} has malformed IDLC")
+        idle_count = (
+            idle_counts[0][0]
+            if len(idle_counts[0]) == PACKAGE_IDLE_COUNT_BYTES
+            else struct.unpack("<I", idle_counts[0])[0]
+        )
+        if idle_count != len(idle_forms):
+            raise ValueError(
+                f"Owned guide PACK {record.form_id:08x} idle count disagrees with IDLA"
+            )
+        for form_id in idle_forms:
+            idle = sources.idle_animations_by_form.get(form_id)
+            if idle is None:
+                raise ValueError(
+                    f"Owned guide PACK {record.form_id:08x} references missing "
+                    f"IDLE {form_id:08x}"
+                )
+            idle_paths.append(idle.logical_path)
+
+    return (
+        {
+            "formId": form_id_text(record.form_id),
+            "editorId": editor_id,
+            "recordSha256": hashlib.sha256(record.data).hexdigest(),
+            "packageFlags": package_flags,
+            "alwaysRun": bool(package_flags & always_run_flag),
+            "packageType": package_type,
+            "packageTypeName": package_type_name,
+            "procedureFlags": struct.unpack_from(
+                "<H", package_data, PACKAGE_PROCEDURE_FLAGS_OFFSET
+            )[0],
+            "typeSpecificFlags": struct.unpack_from(
+                "<H", package_data, PACKAGE_TYPE_SPECIFIC_FLAGS_OFFSET
+            )[0],
+            "conditions": conditions,
+            "location": location,
+            "target": target,
+            "idleAnimationFormIds": [form_id_text(value) for value in idle_forms],
+            "idleAnimationLogicalPaths": idle_paths,
+        },
+        tuple(idle_paths),
+    )
+
+
+def _compile_guide_actor_ai(
+    flow: dict[str, object],
+    roles: list[dict[str, object]],
+    sources: FlowSourceCatalog,
+    owned_archives: OwnedArchiveStack,
+    configuration: RuntimeConfiguration,
+    quest_form_id: str,
+) -> tuple[dict[str, object], tuple[str, ...]]:
+    contract = dict(flow["guideActorAi"])
+    role_name = str(contract["role"])
+    role = next((value for value in roles if value["role"] == role_name), None)
+    if role is None or role["recordType"] != "ACHR":
+        raise ValueError("Owned opening guide AI role is not one ACHR")
+    actor_form = int(str(role["baseFormId"]), FORM_ID_RADIX)
+    actor = sources.actors_by_form.get(actor_form)
+    if actor is None or actor.signature != "NPC_":
+        raise ValueError("Owned opening guide AI base is not one NPC_")
+    package_form_ids = [
+        struct.unpack("<I", subrecord.data)[0]
+        for subrecord in iter_subrecords(actor)
+        if subrecord.signature == "PKID" and len(subrecord.data) == FORM_ID_BYTES
+    ]
+    if not package_form_ids:
+        raise ValueError("Owned opening guide AI base has no packages")
+    packages = []
+    animation_paths: list[str] = []
+    for form_id in package_form_ids:
+        package_record = sources.packages_by_form.get(form_id)
+        if package_record is None:
+            raise ValueError(
+                f"Owned opening guide AI package is absent: {form_id:08x}"
+            )
+        package, idle_paths = _compile_guide_package(
+            package_record,
+            contract,
+            sources,
+        )
+        packages.append(package)
+        animation_paths.extend(idle_paths)
+
+    locomotion_contract = dict(contract["locomotion"])
+    root_node = str(locomotion_contract["rootNode"])
+    locomotion = {}
+    for mode, field in (("walk", "walkLogicalPath"), ("run", "runLogicalPath")):
+        logical_path = canonical_member_path(str(locomotion_contract[field]))
+        member = owned_archives.extract(logical_path)
+        locomotion[mode] = {
+            "logicalPath": logical_path,
+            "bytes": len(member.data),
+            "sha256": member.sha256,
+            "sourceArchive": member.source_archive,
+            "sourceArchiveSha256": member.source_archive_sha256,
+            "rootMotion": sample_root_motion(
+                member.data,
+                root_node,
+                configuration.content_compiler.animation_samples_per_second,
+            ).manifest(),
+        }
+        animation_paths.append(logical_path)
+    return (
+        {
+            "schema": "opennv-owned-guide-actor-ai/v1",
+            "role": role_name,
+            "referenceFormId": role["referenceFormId"],
+            "baseFormId": role["baseFormId"],
+            "questFormId": quest_form_id,
+            "packagePriority": [form_id_text(value) for value in package_form_ids],
+            "packages": packages,
+            "locomotion": locomotion,
+        },
+        tuple(dict.fromkeys(animation_paths)),
+    )
+
+
+def _merge_actor_animation_paths(
+    actor_animations: list[dict[str, object]],
+    reference_form_id: str,
+    logical_paths: Iterable[str],
+) -> None:
+    row = next(
+        (
+            value
+            for value in actor_animations
+            if str(value["referenceFormId"]).casefold()
+            == reference_form_id.casefold()
+        ),
+        None,
+    )
+    if row is None:
+        row = {"referenceFormId": reference_form_id, "logicalPaths": []}
+        actor_animations.append(row)
+    paths = row["logicalPaths"]
+    if not isinstance(paths, list):
+        raise ValueError("Owned opening actor-animation paths are malformed")
+    identities = {str(value).casefold() for value in paths}
+    for path in logical_paths:
+        canonical = canonical_member_path(str(path))
+        if canonical.casefold() not in identities:
+            paths.append(canonical)
+            identities.add(canonical.casefold())
+    actor_animations.sort(
+        key=lambda value: int(str(value["referenceFormId"]), FORM_ID_RADIX)
+    )
+
+
+def _compile_image_space_modifiers(
+    commands: list[dict[str, object]],
+    sources: FlowSourceCatalog,
+) -> list[dict[str, object]]:
+    editor_ids = sorted(
+        {
+            str(command["modifierEditorId"])
+            for command in commands
+            if command["kind"] == "imageSpaceModifier"
+        },
+        key=str.casefold,
+    )
+    result = []
+    for editor_id in editor_ids:
+        record = sources.image_space_modifiers_by_editor.get(editor_id.casefold())
+        if record is None:
+            raise ValueError(
+                f"Owned opening image-space modifier is unresolved: {editor_id}"
+            )
+        result.append(parse_image_space_modifier(record).manifest())
+    return result
 
 
 def _interaction_from_script(
@@ -2329,6 +3066,8 @@ def compile_new_game_flow(
     master_path: Path,
     records: list[dict[str, object]],
     flow: dict[str, object],
+    owned_archives: OwnedArchiveStack,
+    configuration: RuntimeConfiguration,
 ) -> tuple[dict[str, object], tuple[str, ...]]:
     quest_editor_id = str(flow["questEditorId"])
     quest = _unique_manifest_record(records, quest_editor_id, "QUST")
@@ -2364,13 +3103,13 @@ def compile_new_game_flow(
     role_by_name = {row["role"]: row for row in roles}
 
     character_rules = dict(flow["characterRules"])
-    actor_values, traits, scripts, idle_animations, needed = _scan_flow_sources(
+    sources = _scan_flow_sources(
         master_path,
         frozenset(needed_forms),
         dict(character_rules["traits"]),
     )
     for role in roles:
-        base = needed[int(str(role["baseFormId"]), FORM_ID_RADIX)]
+        base = sources.needed[int(str(role["baseFormId"]), FORM_ID_RADIX)]
         role["displayName"] = base["displayName"] or base["editorId"] or role["editorId"]
     special_names = []
     for match in re.finditer(
@@ -2384,7 +3123,7 @@ def compile_new_game_flow(
     special = _match_actor_values(
         [
             value
-            for value in actor_values
+            for value in sources.actor_values
             if special_icon_selector in str(value["iconLogicalPath"]).casefold()
         ],
         special_names,
@@ -2420,20 +3159,20 @@ def compile_new_game_flow(
     skills = _match_actor_values(
         [
             value
-            for value in actor_values
+            for value in sources.actor_values
             if skill_icon_selector in str(value["iconLogicalPath"]).casefold()
         ],
         skill_names,
     )
-    if not special or not skills or not traits:
+    if not special or not skills or not sources.traits:
         raise ValueError(
             "Owned opening character catalogs are incomplete: "
-            f"special={len(special)} skills={len(skills)} traits={len(traits)}"
+            f"special={len(special)} skills={len(skills)} traits={len(sources.traits)}"
         )
 
     interaction_rows = []
     for script_editor_id, role in dict(flow["interactionBindings"]).items():
-        script = scripts.get(str(script_editor_id).casefold())
+        script = sources.scripts.get(str(script_editor_id).casefold())
         if script is None or role not in role_by_name:
             raise ValueError(
                 f"Owned opening interaction binding is unresolved: {script_editor_id} -> {role}"
@@ -2449,7 +3188,7 @@ def compile_new_game_flow(
             )
         )
     vigor = role_by_name["vigorTester"]
-    vigor_base = needed[int(str(vigor["baseFormId"]), FORM_ID_RADIX)]
+    vigor_base = sources.needed[int(str(vigor["baseFormId"]), FORM_ID_RADIX)]
     vigor_scripts = [
         link["formId"] for link in vigor_base["links"] if link["signature"] == "SCRI"
     ]
@@ -2459,7 +3198,7 @@ def compile_new_game_flow(
     vigor_script = next(
         (
             (editor_id, row)
-            for editor_id, row in scripts.items()
+            for editor_id, row in sources.scripts.items()
             if row[0] == vigor_script_form
         ),
         None,
@@ -2482,14 +3221,39 @@ def compile_new_game_flow(
         records,
         programs,
         flow,
-        scripts,
+        sources.scripts,
         quest_editor_id,
     )
     actor_animations = _resolve_actor_animation_commands(
         programs,
         dialogue,
         roles,
-        idle_animations,
+        sources.idle_animations_by_editor,
+    )
+    guide_actor_ai, guide_animation_paths = _compile_guide_actor_ai(
+        flow,
+        roles,
+        sources,
+        owned_archives,
+        configuration,
+        str(quest["formId"]),
+    )
+    _merge_actor_animation_paths(
+        actor_animations,
+        str(guide_actor_ai["referenceFormId"]),
+        guide_animation_paths,
+    )
+    flow_commands = _all_flow_commands(programs, dialogue)
+    player_animation = _compile_player_animation_graph(
+        flow_commands,
+        flow,
+        sources,
+        owned_archives,
+        configuration,
+    )
+    image_space_modifiers = _compile_image_space_modifiers(
+        flow_commands,
+        sources,
     )
     outro_interactions = [
         interaction
@@ -2547,14 +3311,14 @@ def compile_new_game_flow(
         sorted(
             {
                 str(row["iconLogicalPath"])
-                for row in [*special, *skills, *traits]
+                for row in [*special, *skills, *sources.traits]
                 if row["iconLogicalPath"] is not None
             }
         )
     )
     return (
         {
-            "schema": "opennv-owned-new-game-flow/v1",
+            "schema": "opennv-owned-new-game-flow/v3",
             "quest": {
                 "formId": quest["formId"],
                 "editorId": quest_editor_id,
@@ -2568,6 +3332,9 @@ def compile_new_game_flow(
             },
             "sceneRoles": roles,
             "actorAnimations": actor_animations,
+            "guideActorAi": guide_actor_ai,
+            "playerAnimation": player_animation,
+            "imageSpaceModifiers": image_space_modifiers,
             "interactions": interaction_rows,
             "dialogue": dialogue,
             "character": {
@@ -2595,7 +3362,7 @@ def compile_new_game_flow(
                 },
                 "traits": {
                     "maximumSelected": int(dict(character_rules["traits"])["maximumSelected"]),
-                    "values": traits,
+                    "values": sources.traits,
                 },
             },
         },
@@ -2874,6 +3641,8 @@ def prepare_opening_manifest(
         master_path,
         records,
         flow_definition,
+        owned_archives,
+        configuration,
     )
     ui = compile_ui(
         data_root,

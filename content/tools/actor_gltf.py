@@ -120,6 +120,76 @@ class ActorAnimation:
 
 
 @dataclass(frozen=True)
+class SampledTransformAnimation:
+    sequence_name: str
+    target_node: str
+    start_seconds: float
+    stop_seconds: float
+    cycle_type: int
+    samples_per_second: float
+    parent_chain: tuple[dict[str, object], ...]
+    sample_times: tuple[float, ...]
+    translations: tuple[tuple[float, float, float], ...]
+    rotations: tuple[tuple[float, float, float, float], ...]
+
+    def manifest(self) -> dict[str, object]:
+        return {
+            "sequenceName": self.sequence_name,
+            "targetNode": self.target_node,
+            "startSeconds": self.start_seconds,
+            "stopSeconds": self.stop_seconds,
+            "cycleType": self.cycle_type,
+            "samplesPerSecond": self.samples_per_second,
+            "parentChain": list(self.parent_chain),
+            "samples": [
+                {
+                    "timeSeconds": time_value,
+                    "translationGodotGameUnits": list(translation),
+                    "rotationQuaternionXyzw": list(rotation),
+                }
+                for time_value, translation, rotation in zip(
+                    self.sample_times,
+                    self.translations,
+                    self.rotations,
+                    strict=True,
+                )
+            ],
+        }
+
+
+@dataclass(frozen=True)
+class SampledRootMotion:
+    sequence_name: str
+    target_node: str
+    start_seconds: float
+    stop_seconds: float
+    cycle_type: int
+    displacement_godot_game_units: tuple[float, float, float]
+
+    @property
+    def speed_game_units_per_second(self) -> float:
+        duration = self.stop_seconds - self.start_seconds
+        if duration <= 0.0:
+            raise ValueError("Root-motion duration must be positive")
+        return math.sqrt(
+            sum(value * value for value in self.displacement_godot_game_units)
+        ) / duration
+
+    def manifest(self) -> dict[str, object]:
+        return {
+            "sequenceName": self.sequence_name,
+            "targetNode": self.target_node,
+            "startSeconds": self.start_seconds,
+            "stopSeconds": self.stop_seconds,
+            "cycleType": self.cycle_type,
+            "displacementGodotGameUnits": list(
+                self.displacement_godot_game_units
+            ),
+            "speedGameUnitsPerSecond": self.speed_game_units_per_second,
+        }
+
+
+@dataclass(frozen=True)
 class RetailRenderPart:
     role: str
     source_form_id: str
@@ -1451,12 +1521,11 @@ def _build_animation(
     stop = float(sequence.stop_time)
     if start != 0.0 or stop <= start:
         raise ValueError(f"Actor idle has an unexpected time range: {start}..{stop}")
-    frame_count = round((stop - start) * compiler.animation_samples_per_second) + 1
-    times = [
-        start + frame / compiler.animation_samples_per_second
-        for frame in range(frame_count)
-    ]
-    times[-1] = stop
+    times = _animation_sample_times(
+        start,
+        stop,
+        compiler.animation_samples_per_second,
+    )
     time_accessor = builder.add(
         struct.pack(f"<{len(times)}f", *times),
         component_type=GL_FLOAT,
@@ -1473,54 +1542,13 @@ def _build_animation(
         node_name = _text(controlled.get_node_name())
         if node_name not in node_by_name or _text(controlled.get_controller_type()) != "NiTransformController":
             continue
-        interpolator = controlled.interpolator
-        translations: list[tuple[float, float, float]] = []
-        rotations: list[tuple[float, float, float, float]] = []
-        if isinstance(interpolator, NifFormat.NiBSplineCompTransformInterpolator):
-            translation_control = list(interpolator.get_translations())
-            rotation_control = list(interpolator.get_rotations())
-            if translation_control:
-                translations = [
-                    _convert_vector(_uniform_cubic(translation_control, time, start, stop)) for time in times
-                ]
-            if rotation_control:
-                rotations = [
-                    _converted_nif_quaternion(_normalize_quaternion(_uniform_cubic(rotation_control, time, start, stop)))
-                    for time in times
-                ]
-        elif isinstance(interpolator, NifFormat.NiTransformInterpolator):
-            data = interpolator.data
-            if data is not None:
-                translation_keys = list(data.translations.keys)
-                if translation_keys:
-                    interpolation = int(data.translations.interpolation)
-                    if interpolation == NIF_LINEAR_INTERPOLATION:
-                        translations = [
-                            _convert_vector(_linear_vector_keys(translation_keys, time))
-                            for time in times
-                        ]
-                    elif interpolation == NIF_QUADRATIC_INTERPOLATION:
-                        translations = [
-                            _convert_vector(_quadratic_vector_keys(translation_keys, time))
-                            for time in times
-                        ]
-                    else:
-                        raise ValueError(f"Actor idle uses unsupported translation interpolation on {node_name}")
-                if int(data.num_rotation_keys) > 0:
-                    if int(data.rotation_type) == NIF_LINEAR_INTERPOLATION:
-                        quaternion_keys = list(data.quaternion_keys)
-                        rotations = [
-                            _converted_nif_quaternion(_slerp_keys(quaternion_keys, time)) for time in times
-                        ]
-                    elif int(data.rotation_type) == NIF_XYZ_ROTATION_INTERPOLATION:
-                        rotations = [
-                            _converted_xyz_rotation(data.xyz_rotations, time)
-                            for time in times
-                        ]
-                    else:
-                        raise ValueError(f"Actor idle uses unsupported rotation interpolation on {node_name}")
-        else:
-            raise ValueError(f"Actor idle uses unsupported transform interpolator: {type(interpolator).__name__}")
+        translations, rotations = _sample_transform_interpolator(
+            controlled.interpolator,
+            times,
+            start,
+            stop,
+            node_name,
+        )
 
         if translations:
             if node_name == nonaccumulation_root_node:
@@ -1564,6 +1592,254 @@ def _build_animation(
         len(channels),
         nonaccum_origin,
     )
+
+
+def sample_transform_animation(
+    animation_payload: bytes,
+    skeleton_payload: bytes,
+    target_node: str,
+    samples_per_second: float,
+) -> SampledTransformAnimation:
+    """Sample one owned KF transform against its owned skeleton parent chain."""
+
+    document = _read_nif(animation_payload)
+    sequence = document.roots[0]
+    if not isinstance(sequence, NifFormat.NiControllerSequence):
+        raise ValueError(
+            "Transform animation root is not NiControllerSequence: "
+            f"{type(sequence).__name__}"
+        )
+    start = float(sequence.start_time)
+    stop = float(sequence.stop_time)
+    if start != 0.0 or stop <= start:
+        raise ValueError(
+            f"Transform animation has an unexpected time range: {start}..{stop}"
+        )
+    controlled = [
+        value
+        for value in sequence.controlled_blocks
+        if _text(value.get_node_name()) == target_node
+        and _text(value.get_controller_type()) == "NiTransformController"
+    ]
+    if len(controlled) != 1:
+        raise ValueError(
+            f"Transform animation must control one {target_node!r} node, "
+            f"found {len(controlled)}"
+        )
+    times = _animation_sample_times(start, stop, samples_per_second)
+    translations, rotations = _sample_transform_interpolator(
+        controlled[0].interpolator,
+        times,
+        start,
+        stop,
+        target_node,
+    )
+    if len(translations) != len(times) or len(rotations) != len(times):
+        raise ValueError(
+            f"Transform animation {target_node!r} must author translation and rotation"
+        )
+
+    skeleton = _read_nif(skeleton_payload)
+    nodes = [
+        node
+        for node in skeleton.get_global_iterator()
+        if isinstance(node, NifFormat.NiNode) and _text(node.name) == target_node
+    ]
+    if len(nodes) != 1:
+        raise ValueError(
+            f"Actor skeleton must contain one {target_node!r} node, found {len(nodes)}"
+        )
+    parents = {
+        id(child): node
+        for node in skeleton.get_global_iterator()
+        if isinstance(node, NifFormat.NiNode)
+        for child in node.children
+        if child is not None
+    }
+    parent_nodes = []
+    parent = parents.get(id(nodes[0]))
+    while parent is not None:
+        parent_nodes.append(parent)
+        parent = parents.get(id(parent))
+    parent_nodes.reverse()
+    parent_chain = tuple(
+        {
+            "nodeName": _text(node.name),
+            "translationGodotGameUnits": translation,
+            "rotationQuaternionXyzw": rotation,
+            "scale": scale,
+        }
+        for node in parent_nodes
+        for translation, rotation, scale in [_node_trs(node)]
+    )
+    return SampledTransformAnimation(
+        _text(sequence.name),
+        target_node,
+        start,
+        stop,
+        int(sequence.cycle_type),
+        samples_per_second,
+        parent_chain,
+        tuple(times),
+        tuple(translations),
+        tuple(rotations),
+    )
+
+
+def sample_root_motion(
+    animation_payload: bytes,
+    target_node: str,
+    samples_per_second: float,
+) -> SampledRootMotion:
+    """Resolve owned locomotion displacement without baking it into the pose."""
+
+    document = _read_nif(animation_payload)
+    sequence = document.roots[0]
+    if not isinstance(sequence, NifFormat.NiControllerSequence):
+        raise ValueError(
+            "Root-motion animation root is not NiControllerSequence: "
+            f"{type(sequence).__name__}"
+        )
+    start = float(sequence.start_time)
+    stop = float(sequence.stop_time)
+    if start != 0.0 or stop <= start:
+        raise ValueError(
+            f"Root-motion animation has an unexpected time range: {start}..{stop}"
+        )
+    controlled = [
+        value
+        for value in sequence.controlled_blocks
+        if _text(value.get_node_name()) == target_node
+        and _text(value.get_controller_type()) == "NiTransformController"
+    ]
+    if len(controlled) != 1:
+        raise ValueError(
+            f"Root-motion animation must control one {target_node!r} node, "
+            f"found {len(controlled)}"
+        )
+    times = _animation_sample_times(start, stop, samples_per_second)
+    translations, _rotations = _sample_transform_interpolator(
+        controlled[0].interpolator,
+        times,
+        start,
+        stop,
+        target_node,
+    )
+    if len(translations) != len(times):
+        raise ValueError(
+            f"Root-motion animation {target_node!r} must author translation"
+        )
+    first = translations[0]
+    last = translations[-1]
+    displacement = tuple(last[axis] - first[axis] for axis in range(3))
+    if not all(math.isfinite(value) for value in displacement) or not any(
+        abs(value) > NORMALIZATION_EPSILON for value in displacement
+    ):
+        raise ValueError(
+            f"Root-motion animation {target_node!r} has no finite displacement"
+        )
+    return SampledRootMotion(
+        _text(sequence.name),
+        target_node,
+        start,
+        stop,
+        int(sequence.cycle_type),
+        displacement,
+    )
+
+
+def _animation_sample_times(
+    start: float,
+    stop: float,
+    samples_per_second: float,
+) -> list[float]:
+    if not math.isfinite(samples_per_second) or samples_per_second <= 0.0:
+        raise ValueError("Animation sampling frequency must be positive and finite")
+    frame_count = round((stop - start) * samples_per_second) + 1
+    times = [start + frame / samples_per_second for frame in range(frame_count)]
+    times[-1] = stop
+    return times
+
+
+def _sample_transform_interpolator(
+    interpolator: object,
+    times: list[float],
+    start: float,
+    stop: float,
+    node_name: str,
+) -> tuple[
+    list[tuple[float, float, float]],
+    list[tuple[float, float, float, float]],
+]:
+    translations: list[tuple[float, float, float]] = []
+    rotations: list[tuple[float, float, float, float]] = []
+    if isinstance(interpolator, NifFormat.NiBSplineCompTransformInterpolator):
+        translation_control = list(interpolator.get_translations())
+        rotation_control = list(interpolator.get_rotations())
+        if translation_control:
+            translations = [
+                _convert_vector(
+                    _uniform_cubic(translation_control, time_value, start, stop)
+                )
+                for time_value in times
+            ]
+        if rotation_control:
+            rotations = [
+                _converted_nif_quaternion(
+                    _normalize_quaternion(
+                        _uniform_cubic(rotation_control, time_value, start, stop)
+                    )
+                )
+                for time_value in times
+            ]
+    elif isinstance(interpolator, NifFormat.NiTransformInterpolator):
+        data = interpolator.data
+        if data is not None:
+            translation_keys = list(data.translations.keys)
+            if translation_keys:
+                interpolation = int(data.translations.interpolation)
+                if interpolation == NIF_LINEAR_INTERPOLATION:
+                    translations = [
+                        _convert_vector(_linear_vector_keys(translation_keys, time_value))
+                        for time_value in times
+                    ]
+                elif interpolation == NIF_QUADRATIC_INTERPOLATION:
+                    translations = [
+                        _convert_vector(
+                            _quadratic_vector_keys(translation_keys, time_value)
+                        )
+                        for time_value in times
+                    ]
+                else:
+                    raise ValueError(
+                        "Actor animation uses unsupported translation interpolation "
+                        f"on {node_name}"
+                    )
+            if int(data.num_rotation_keys) > 0:
+                if int(data.rotation_type) == NIF_LINEAR_INTERPOLATION:
+                    quaternion_keys = list(data.quaternion_keys)
+                    rotations = [
+                        _converted_nif_quaternion(
+                            _slerp_keys(quaternion_keys, time_value)
+                        )
+                        for time_value in times
+                    ]
+                elif int(data.rotation_type) == NIF_XYZ_ROTATION_INTERPOLATION:
+                    rotations = [
+                        _converted_xyz_rotation(data.xyz_rotations, time_value)
+                        for time_value in times
+                    ]
+                else:
+                    raise ValueError(
+                        "Actor animation uses unsupported rotation interpolation "
+                        f"on {node_name}"
+                    )
+    else:
+        raise ValueError(
+            "Actor animation uses unsupported transform interpolator: "
+            f"{type(interpolator).__name__}"
+        )
+    return translations, rotations
 
 
 def _uniform_cubic(
