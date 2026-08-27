@@ -200,6 +200,47 @@ internal sealed class RetailImageSpaceComposition
         return result;
     }
 
+    internal static ComposedImageSpace FromCapturedShader(
+        ActorReviewContract.ImageSpaceShaderState capturedShader,
+        RetailImageSpaceConfiguration configuration)
+    {
+        var vectors = new[]
+        {
+            capturedShader.HdrParameters,
+            capturedShader.Cinematic,
+            capturedShader.Tint,
+            capturedShader.Fade,
+        };
+        if (vectors.Any(value => !value.IsFinite()))
+            throw new InvalidOperationException(
+                "Captured retail image-space constants are not finite.");
+        var matchedAdaptation = capturedShader.Inputs.Single(
+            input => input.Stage == configuration.HdrBlend.BlurredAdaptationStage);
+        if (matchedAdaptation.ConstantAlpha is not float matchedAdaptationSum ||
+            !float.IsFinite(matchedAdaptationSum) || matchedAdaptationSum <= NoStrength)
+            throw new InvalidOperationException(
+                "Captured retail HDR adaptation state is unavailable.");
+        var traitCount = configuration.ModifierChannels
+            .Select(channel => channel.TraitIndex)
+            .Concat(configuration.TraitIndices.Values())
+            .Max() + 1;
+        var traits = new float[traitCount];
+        var indices = configuration.TraitIndices;
+        traits[indices.TargetLuminance] = capturedShader.HdrParameters.X;
+        traits[indices.CinematicSaturation] = capturedShader.Cinematic.X;
+        traits[indices.CinematicContrastAverageLuminance] =
+            capturedShader.Cinematic.Y;
+        traits[indices.CinematicContrast] = capturedShader.Cinematic.Z;
+        traits[indices.CinematicBrightness] = capturedShader.Cinematic.W;
+        return new ComposedImageSpace(
+            traits,
+            capturedShader.Tint,
+            capturedShader.Fade,
+            matchedAdaptationSum,
+            matchedAdaptation.Artifact.Sha256,
+            Array.Empty<AppliedModifier>());
+    }
+
     private void ValidateCapturedShader(
         ComposedImageSpace result,
         ActorReviewContract.ImageSpaceShaderState captured)

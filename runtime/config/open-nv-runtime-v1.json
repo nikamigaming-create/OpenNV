@@ -448,8 +448,8 @@
   "actorReview": {
     "provenance": {
       "classification": "clean-room-retail-contract",
-      "status": "camera-and-directional-vector-resolved-material-hdr-parity-blocking",
-      "source": "Validated FalloutNV 1.4.0.525 NiCamera projection plus identity-basis road SLS vertex/pixel shader constants captured at the matched source frame",
+      "status": "camera-directional-vector-and-shadow-scope-resolved-material-hdr-parity-blocking",
+      "source": "Validated FalloutNV 1.4.0.525 NiCamera projection, matched-frame identity-basis SLS constants, and the capture profile's disabled static/architecture and actor-self-shadow passes",
       "evidence": "docs/evidence/fnv-retail-material-shader-contract.md"
     },
     "projectionAspectTolerance": 0.001,
@@ -458,7 +458,7 @@
     "skinPaletteLinearTolerance": 0.001,
     "skinPaletteTranslationToleranceGameUnits": 0.01,
     "directionalRotationDegrees": [-35.81081905, 136.17927628, 0.0],
-    "directionalShadows": true
+    "directionalShadows": false
   },
   "exteriorEnvironment": {
     "provenance": {

@@ -27,6 +27,8 @@ internal static class RuntimeMaterialLoader
         "OpenNV_RetailGrass23x002";
     internal const string RetailActorMaterialResourceName =
         "OpenNV_RetailActorAmbientDirectionalLambert";
+    internal const string RetailActorUnshadedMaterialResourceName =
+        "OpenNV_RetailActorUnshaded";
 
     private static int LandscapeWeightMapCount(int layerCount) =>
         layerCount == 0
@@ -1013,10 +1015,7 @@ internal static class RuntimeMaterialLoader
         else if (alphaMode == "BLEND")
             source.AppendLine("    ALPHA = base.a;");
         source.AppendLine("}");
-        source.AppendLine("void light() {");
-        source.AppendLine(
-            "    DIFFUSE_LIGHT += LIGHT_COLOR * max(dot(NORMAL, LIGHT), 0.0) * ATTENUATION / 3.14159265358979323846;");
-        source.AppendLine("}");
+        RetailLighting.AppendDiffuseLightFunction(source);
         return source.ToString();
     }
 
@@ -1228,10 +1227,7 @@ internal static class RuntimeMaterialLoader
         source.AppendLine("    EMISSION = diffuse * retail_ambient_color;");
         source.AppendLine("    FOG = vec4(retail_fog_color, retail_fog_factor);");
         source.AppendLine("}");
-        source.AppendLine("void light() {");
-        source.AppendLine(
-            "    DIFFUSE_LIGHT += LIGHT_COLOR * max(dot(NORMAL, LIGHT), 0.0) * ATTENUATION / 3.14159265358979323846;");
-        source.AppendLine("}");
+        RetailLighting.AppendDiffuseLightFunction(source);
         return source.ToString();
     }
 

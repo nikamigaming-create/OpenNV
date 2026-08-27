@@ -18,7 +18,7 @@ POLICY_SCHEMA = "opennv-gallery-retail-comparison-policy/v1"
 GALLERY_SCHEMA = "opennv-owned-gallery-compiled/v5"
 VIDEO_REPORT_SCHEMA = "nikami-opennv-gallery-video/v1"
 SHOT_SCHEMA = "opennv-gallery-shot/v5"
-RETAIL_EVIDENCE_SCHEMA = "opennv-gallery-retail-evidence/v2"
+RETAIL_EVIDENCE_SCHEMA = "opennv-gallery-retail-evidence/v4"
 OUTPUT_SCHEMA = "opennv-gallery-retail-comparison-video/v1"
 
 

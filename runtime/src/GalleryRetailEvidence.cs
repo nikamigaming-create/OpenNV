@@ -6,9 +6,17 @@ namespace OpenNV.Runtime;
 
 internal static class GalleryRetailEvidence
 {
-    private const string ExpectedSchema = "opennv-gallery-retail-evidence/v2";
+    private const string ExpectedSchema = "opennv-gallery-retail-evidence/v4";
     private const string ExpectedStatus = "retail-authored-reference-observed";
     private const string ExpectedPlacementMode = "owned-authored-reference-preserved";
+    private const string ExpectedDirectionalLightingSchema =
+        "opennv-gallery-retail-directional-lighting/v1";
+    private const string ExpectedDirectionalLightingSource =
+        "retail-grass-shader-selected-presentation-source-frame";
+    private const string ExpectedDirectionalLightingDerivation =
+        "all-owned-grass-draws-agree-at-selected-retail-render-frame";
+    private const string ExpectedRenderProjectionSource =
+        "retail-report-runtime-surface-contract-source-frame";
     private const int FrustumComponentCount = 7;
     private const int ViewportComponentCount = 4;
     private const int MatrixComponentCount = 16;
@@ -110,10 +118,15 @@ internal static class GalleryRetailEvidence
                 "Gallery retail evidence violates unattended capture policy.");
 
         ActorReviewContract.EnvironmentState? environment = null;
+        DirectionalLightingReference? directionalLighting = null;
         uint effectiveWeatherForm = 0u;
+        var environmentSource = retail.GetProperty("environment");
+        var directionalLightingSource = retail.GetProperty("directionalLighting");
+        var imageSpaceShader = ActorReviewContract.ParseImageSpaceShader(
+            environmentSource.GetProperty("imageSpaceShader"),
+            configuration.FalloutEnvironment.ImageSpace);
         if (expectedLocationClass == "exterior")
         {
-            var environmentSource = retail.GetProperty("environment");
             environment = ActorReviewContract.ParseEnvironment(
                 environmentSource,
                 configuration);
@@ -124,7 +137,17 @@ internal static class GalleryRetailEvidence
                 effectiveWeatherForm)
                 throw new InvalidOperationException(
                     "Gallery retail evidence effective WTHR identity changed.");
+            if (directionalLightingSource.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException(
+                    "Exterior gallery retail evidence has no exact directional light.");
+            directionalLighting = ParseDirectionalLighting(
+                directionalLightingSource,
+                presentation,
+                configuration);
         }
+        else if (directionalLightingSource.ValueKind != JsonValueKind.Null)
+            throw new InvalidOperationException(
+                "Interior gallery retail evidence invents an exterior directional light.");
         return new Contract(
             evidence,
             report,
@@ -133,7 +156,61 @@ internal static class GalleryRetailEvidence
             RequireText(retail, "runtimePluginStackEventSha256"),
             presentation,
             environment,
+            directionalLighting,
+            imageSpaceShader,
             effectiveWeatherForm);
+    }
+
+    private static DirectionalLightingReference ParseDirectionalLighting(
+        JsonElement source,
+        PresentationReference presentation,
+        RuntimeConfiguration configuration)
+    {
+        var grass = configuration.ContentCompiler.RetailGrass;
+        if (!RetailGrassHash.TryParse(grass.Shader.VertexFnv1a32, out var vertexShader) ||
+            !RetailGrassHash.TryParse(grass.Shader.PixelFnv1a32, out var pixelShader))
+            throw new InvalidOperationException(
+                "Configured retail grass shader identities are invalid.");
+        var sourceFrame = source.GetProperty("sourceFrame").GetInt32();
+        var renderFrame = source.GetProperty("renderFrame").GetInt32();
+        var recordCount = source.GetProperty("recordCount").GetInt32();
+        var direction = ReadVector(
+            source.GetProperty("diffuseDirectionGamebryo"),
+            "directional-light Gamebryo vector");
+        var diffuse = ReadNumbers(
+            source.GetProperty("diffuseColorEncoded"),
+            GamebryoCoordinate.SpatialDimensions,
+            "directional-light diffuse color");
+        var ambient = ReadNumbers(
+            source.GetProperty("ambientColorEncoded"),
+            GamebryoCoordinate.SpatialDimensions,
+            "directional-light ambient color");
+        var directionalScale = source.GetProperty("directionalScale").GetSingle();
+        if (RequireText(source, "schema") != ExpectedDirectionalLightingSchema ||
+            RequireText(source, "source") != ExpectedDirectionalLightingSource ||
+            RequireText(source, "derivation") != ExpectedDirectionalLightingDerivation ||
+            RequireText(source, "shotKind") != presentation.ShotKind ||
+            sourceFrame != presentation.Frame ||
+            renderFrame != sourceFrame - grass.Draw.RenderFrameLead ||
+            recordCount < 1 ||
+            source.GetProperty("vertexShaderFnv1a32").GetUInt32() != vertexShader ||
+            source.GetProperty("pixelShaderFnv1a32").GetUInt32() != pixelShader ||
+            !float.IsFinite(directionalScale) || directionalScale <= 0.0f ||
+            MathF.Abs(direction.Length() - 1.0f) > grass.Shader.FloatTolerance)
+            throw new InvalidOperationException(
+                "Gallery retail directional-light evidence changed.");
+        return new DirectionalLightingReference(
+            ExpectedDirectionalLightingSource,
+            sourceFrame,
+            renderFrame,
+            recordCount,
+            vertexShader,
+            pixelShader,
+            direction,
+            GamebryoCoordinate.ConvertVector(direction),
+            new Color(diffuse[0], diffuse[1], diffuse[2], 1.0f),
+            new Color(ambient[0], ambient[1], ambient[2], 1.0f),
+            directionalScale);
     }
 
     private static PresentationReference ParsePresentation(
@@ -199,6 +276,14 @@ internal static class GalleryRetailEvidence
             frustum[FrustumOrthographicIndex] != 0.0f)
             throw new InvalidOperationException(
                 "Gallery retail presentation camera is invalid.");
+        ValidateRenderProjection(
+            camera.GetProperty("renderProjection"),
+            selectionProof,
+            frame,
+            fov,
+            frustum,
+            projectionMatrix,
+            configuration);
 
         var actor = source.GetProperty("actor");
         var actorRoot = actor.GetProperty("rootWorld");
@@ -316,6 +401,85 @@ internal static class GalleryRetailEvidence
             source.GetProperty("cameraCorridorPassed").GetBoolean());
     }
 
+    private static void ValidateRenderProjection(
+        JsonElement source,
+        PresentationSelectionProof selection,
+        int frame,
+        float fov,
+        IReadOnlyList<float> frustum,
+        IReadOnlyList<float> projectionMatrix,
+        RuntimeConfiguration configuration)
+    {
+        var renderFrame = source.GetProperty("renderFrame").GetInt32();
+        var width = source.GetProperty("backBufferWidth").GetInt32();
+        var height = source.GetProperty("backBufferHeight").GetInt32();
+        var reportedFov = source.GetProperty("fovYRadians").GetSingle();
+        var reportedFrustum = ReadNumbers(
+            source.GetProperty("frustum"),
+            FrustumComponentCount,
+            "presentation final-eye frustum");
+        var reportedProjection = ReadNumbers(
+            source.GetProperty("projectionMatrix"),
+            MatrixComponentCount,
+            "presentation final-eye projection matrix");
+        var numericTolerance = configuration.ActorReview.CameraBasisTolerance;
+        if (RequireText(source, "source") != ExpectedRenderProjectionSource ||
+            RequireText(source, "status") != selection.SurfaceStatus ||
+            renderFrame >= frame ||
+            width <= 0 || height <= 0 ||
+            !float.IsFinite(reportedFov) ||
+            MathF.Abs(reportedFov - fov) > numericTolerance)
+            throw new InvalidOperationException(
+                "Gallery retail presentation is not bound to its final-eye render projection.");
+        ValidateValues(
+            reportedFrustum,
+            frustum,
+            numericTolerance,
+            "presentation final-eye frustum binding");
+        ValidateValues(
+            reportedProjection,
+            projectionMatrix,
+            numericTolerance,
+            "presentation final-eye projection binding");
+
+        var aspect = (float)width / height;
+        var frustumAspect =
+            (frustum[FrustumRightIndex] - frustum[FrustumLeftIndex]) /
+            (frustum[FrustumTopIndex] - frustum[FrustumBottomIndex]);
+        var expectedFov = MathF.Atan(frustum[FrustumTopIndex]) -
+            MathF.Atan(frustum[FrustumBottomIndex]);
+        if (MathF.Abs(aspect - frustumAspect) >
+                configuration.ActorReview.ProjectionAspectTolerance ||
+            MathF.Abs(expectedFov - fov) > numericTolerance)
+            throw new InvalidOperationException(
+                "Gallery retail final-eye projection geometry is inconsistent.");
+
+        var depthRange = frustum[FrustumFarIndex] - frustum[FrustumNearIndex];
+        var expectedProjection = new[]
+        {
+            2.0f / (frustum[FrustumRightIndex] - frustum[FrustumLeftIndex]),
+            0.0f, 0.0f, 0.0f,
+            0.0f,
+            2.0f / (frustum[FrustumTopIndex] - frustum[FrustumBottomIndex]),
+            0.0f, 0.0f,
+            (frustum[FrustumLeftIndex] + frustum[FrustumRightIndex]) /
+                (frustum[FrustumLeftIndex] - frustum[FrustumRightIndex]),
+            (frustum[FrustumTopIndex] + frustum[FrustumBottomIndex]) /
+                (frustum[FrustumBottomIndex] - frustum[FrustumTopIndex]),
+            frustum[FrustumFarIndex] / depthRange,
+            1.0f,
+            0.0f,
+            0.0f,
+            -(frustum[FrustumNearIndex] * frustum[FrustumFarIndex]) / depthRange,
+            0.0f,
+        };
+        ValidateValues(
+            projectionMatrix,
+            expectedProjection,
+            numericTolerance,
+            "presentation derived final-eye projection");
+    }
+
     private static void VerifySceneIdentity(
         JsonElement source,
         GalleryShotContract.SceneIdentity expected,
@@ -341,6 +505,19 @@ internal static class GalleryRetailEvidence
             throw new InvalidOperationException(
                 $"Gallery retail {label} must contain {count} finite values.");
         return values;
+    }
+
+    private static void ValidateValues(
+        IReadOnlyList<float> actual,
+        IReadOnlyList<float> expected,
+        float tolerance,
+        string label)
+    {
+        if (actual.Count != expected.Count ||
+            actual.Where((value, index) =>
+                MathF.Abs(value - expected[index]) > tolerance).Any())
+            throw new InvalidOperationException(
+                $"Gallery retail {label} does not match its derived value.");
     }
 
     private static Vector3 ReadVector(JsonElement source, string label)
@@ -403,7 +580,22 @@ internal static class GalleryRetailEvidence
         string RuntimePluginStackEventSha256,
         PresentationReference Presentation,
         ActorReviewContract.EnvironmentState? Environment,
+        DirectionalLightingReference? DirectionalLighting,
+        ActorReviewContract.ImageSpaceShaderState ImageSpaceShader,
         uint EffectiveWeatherForm);
+
+    internal readonly record struct DirectionalLightingReference(
+        string Source,
+        int SourceFrame,
+        int RenderFrame,
+        int RecordCount,
+        uint VertexShaderFnv1a32,
+        uint PixelShaderFnv1a32,
+        Vector3 DiffuseDirectionGamebryo,
+        Vector3 SurfaceToLightGodot,
+        Color DiffuseColorEncoded,
+        Color AmbientColorEncoded,
+        float DirectionalScale);
 
     internal sealed record PresentationReference(
         string ShotKind,

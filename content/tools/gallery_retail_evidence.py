@@ -12,7 +12,9 @@ import sys
 from pathlib import Path
 
 from actor_review_contract import (
+    _close,
     _descriptor,
+    _d3d_perspective_frustum,
     _environment_contract,
     _event_hash,
     load_actor_observation_evidence,
@@ -22,8 +24,12 @@ from prepare_wasteland_gallery import _gallery_shot_identity, _load_gallery
 from runtime_configuration import configuration_path, load_runtime_configuration
 
 
-EVIDENCE_SCHEMA = "opennv-gallery-retail-evidence/v2"
+EVIDENCE_SCHEMA = "opennv-gallery-retail-evidence/v4"
 EVIDENCE_STATUS = "retail-authored-reference-observed"
+DIRECTIONAL_LIGHTING_SCHEMA = "opennv-gallery-retail-directional-lighting/v1"
+DIRECTIONAL_LIGHTING_SOURCE = (
+    "retail-grass-shader-selected-presentation-source-frame"
+)
 MANIFEST_SCHEMA = "opennv-gallery-retail-evidence-manifest/v1"
 MANIFEST_STATUS = "complete-retail-authored-reference-observations"
 AUTHORED_PLACEMENT_MODE = "owned-authored-reference-preserved"
@@ -116,9 +122,205 @@ def _finite_numbers(value: object, count: int, label: str) -> list[float]:
     return result
 
 
+def _directional_lighting_reference(
+    report: dict[str, object],
+    presentation: dict[str, object],
+    location_class: str,
+    configuration: object,
+) -> dict[str, object] | None:
+    """Retain the exact retail sun vector bound at the presentation frame.
+
+    Exterior GRASS23x002 draws publish the shared world-space sun direction and
+    encoded light colors used by retail for that render frame. The capture
+    producer already restricts these records to the owned grass resource; this
+    join additionally requires every retained draw in the selected frame to
+    agree before the values can become gallery evidence.
+    """
+
+    if location_class != "exterior":
+        return None
+    grass = configuration.content_compiler.retail_grass
+    capture = report.get("capture")
+    retail_grass = capture.get("retailGrass") if isinstance(capture, dict) else None
+    if not isinstance(retail_grass, dict):
+        raise ValueError("Exterior retail report has no grass shader capture contract")
+    if (
+        retail_grass.get("schema") != grass.capture.schema
+        or retail_grass.get("event") != grass.capture.event
+        or int(retail_grass.get("renderFrameLead", -1))
+        != grass.draw.render_frame_lead
+    ):
+        raise ValueError("Retail directional-light shader capture contract changed")
+
+    source_frame = int(presentation["frame"])
+    shot_kind = str(presentation["shotKind"])
+    candidates = [
+        row
+        for row in retail_grass.get("candidateFrames", [])
+        if isinstance(row, dict)
+        and int(row.get("sourceFrame", -1)) == source_frame
+        and str(row.get("shotKind", "")) == shot_kind
+    ]
+    if len(candidates) != 1:
+        raise ValueError(
+            "Retail presentation frame has no unique grass shader lighting record"
+        )
+    candidate = candidates[0]
+    records = candidate.get("records")
+    if (
+        not isinstance(records, list)
+        or not records
+        or len(records) != int(candidate.get("matchingRecordCount", -1))
+    ):
+        raise ValueError("Retail presentation grass shader record count changed")
+
+    shader = grass.shader
+    register_count = shader.vertex_constant_register_count
+    registers = shader.registers
+
+    def register_values(
+        record: dict[str, object], register_name: str, components: int
+    ) -> list[float]:
+        constants = record.get("vertexConstants")
+        if not isinstance(constants, dict) or int(
+            constants.get("registerCount", -1)
+        ) != register_count:
+            raise ValueError("Retail grass vertex-constant register count changed")
+        parsed = _finite_numbers(
+            constants.get("values"),
+            register_count * 4,
+            "grass vertex constants",
+        )
+        first = int(registers[register_name]) * 4
+        return parsed[first : first + components]
+
+    expected_render_frame = source_frame - grass.draw.render_frame_lead
+    shared: dict[str, list[float]] | None = None
+    for record in records:
+        if not isinstance(record, dict):
+            raise ValueError("Retail grass shader record is not an object")
+        vertex_shader = record.get("vertexShader")
+        pixel_shader = record.get("pixelShader")
+        if (
+            int(record.get("sourceFrame", -1)) != source_frame
+            or int(record.get("renderFrame", -1)) != expected_render_frame
+            or not isinstance(vertex_shader, dict)
+            or int(vertex_shader.get("fnv1a32", -1)) != shader.vertex_fnv1a32
+            or not isinstance(pixel_shader, dict)
+            or int(pixel_shader.get("fnv1a32", -1)) != shader.pixel_fnv1a32
+        ):
+            raise ValueError("Retail grass shader identity or frame ownership changed")
+        current = {
+            "diffuseDirectionGamebryo": register_values(
+                record, "diffuseDirection", 3
+            ),
+            "diffuseColorEncoded": register_values(record, "diffuseColor", 3),
+            "ambientColorEncoded": register_values(record, "ambientColor", 3),
+            "directionalScale": register_values(record, "directionalScale", 1),
+        }
+        if shared is None:
+            shared = current
+        elif any(
+            len(shared[name]) != len(values)
+            or any(
+                not math.isclose(
+                    shared[name][index],
+                    value,
+                    rel_tol=0.0,
+                    abs_tol=shader.float_tolerance,
+                )
+                for index, value in enumerate(values)
+            )
+            for name, values in current.items()
+        ):
+            raise ValueError(
+                "Retail grass shared lighting constants changed within the "
+                f"presentation frame {source_frame}"
+            )
+    assert shared is not None
+    direction = shared["diffuseDirectionGamebryo"]
+    if not math.isclose(
+        math.sqrt(sum(component * component for component in direction)),
+        1.0,
+        rel_tol=0.0,
+        abs_tol=shader.float_tolerance,
+    ):
+        raise ValueError("Retail grass diffuse direction is not normalized")
+    return {
+        "schema": DIRECTIONAL_LIGHTING_SCHEMA,
+        "source": DIRECTIONAL_LIGHTING_SOURCE,
+        "sourceFrame": source_frame,
+        "renderFrame": expected_render_frame,
+        "shotKind": shot_kind,
+        "recordCount": len(records),
+        "vertexShaderFnv1a32": shader.vertex_fnv1a32,
+        "pixelShaderFnv1a32": shader.pixel_fnv1a32,
+        "diffuseDirectionGamebryo": direction,
+        "diffuseColorEncoded": shared["diffuseColorEncoded"],
+        "ambientColorEncoded": shared["ambientColorEncoded"],
+        "directionalScale": shared["directionalScale"][0],
+        "derivation": (
+            "all-owned-grass-draws-agree-at-selected-retail-render-frame"
+        ),
+    }
+
+
+def _final_eye_projection(
+    surface_frame: dict[str, object],
+    frame: int,
+    required_status: str,
+) -> dict[str, object]:
+    if (
+        int(surface_frame.get("sourceFrame", -1)) != frame
+        or int(surface_frame.get("renderFrame", -1)) >= frame
+        or str(surface_frame.get("status", "")) != required_status
+        or not bool(surface_frame.get("semanticFocusSurface"))
+    ):
+        raise ValueError(
+            f"Retail presentation frame {frame} has no final-eye surface projection"
+        )
+    projection_matrix = _finite_numbers(
+        surface_frame.get("projection"),
+        MATRIX_COMPONENT_COUNT,
+        "presentation final-eye projection matrix",
+    )
+    frustum, fov = _d3d_perspective_frustum(
+        projection_matrix,
+        f"frame {frame} final-eye surface projection",
+    )
+    reported_fov = float(surface_frame.get("verticalFovRadians", float("nan")))
+    width = int(surface_frame.get("backBufferWidth", 0))
+    height = int(surface_frame.get("backBufferHeight", 0))
+    projection_aspect = (
+        (frustum[FRUSTUM_RIGHT_INDEX] - frustum[FRUSTUM_LEFT_INDEX])
+        / (frustum[FRUSTUM_TOP_INDEX] - frustum[FRUSTUM_BOTTOM_INDEX])
+    )
+    if (
+        not math.isfinite(reported_fov)
+        or not _close(reported_fov, fov)
+        or width <= 0
+        or height <= 0
+        or not _close(width / height, projection_aspect)
+    ):
+        raise ValueError(
+            f"Retail presentation frame {frame} final-eye projection report changed"
+        )
+    return {
+        "source": "retail-report-runtime-surface-contract-source-frame",
+        "status": str(surface_frame["status"]),
+        "renderFrame": int(surface_frame["renderFrame"]),
+        "backBufferWidth": width,
+        "backBufferHeight": height,
+        "projectionMatrix": projection_matrix,
+        "frustum": frustum,
+        "fovYRadians": fov,
+    }
+
+
 def _presentation_reference(
     events: list[dict[str, object]],
     source_frames: list[dict[str, object]],
+    surface_frame: dict[str, object],
     shot_kind: str,
     source_frame: int,
     source_frame_camera_contract: dict[str, object],
@@ -204,8 +406,8 @@ def _presentation_reference(
     )
     camera_scale = float(camera_world.get("scale", float("nan")))
     actor_scale = float(actor_root.get("scale", float("nan")))
-    fov = float(camera.get("fovYRadians", float("nan")))
-    frustum = _finite_numbers(
+    culling_fov = float(camera.get("fovYRadians", float("nan")))
+    culling_frustum = _finite_numbers(
         camera.get("frustum"), FRUSTUM_COMPONENT_COUNT, "presentation frustum"
     )
     viewport = _finite_numbers(
@@ -214,16 +416,34 @@ def _presentation_reference(
     view_matrix = _finite_numbers(
         camera.get("viewMatrix"), MATRIX_COMPONENT_COUNT, "presentation view matrix"
     )
-    projection_matrix = _finite_numbers(
+    culling_projection_matrix = _finite_numbers(
         camera.get("projectionMatrix"),
         MATRIX_COMPONENT_COUNT,
         "presentation projection matrix",
     )
+    final_eye_projection = _final_eye_projection(
+        surface_frame,
+        frame,
+        str(selection_proof["surfaceStatus"]),
+    )
+    fov = float(final_eye_projection["fovYRadians"])
+    frustum = list(final_eye_projection["frustum"])
+    projection_matrix = list(final_eye_projection["projectionMatrix"])
     if (
         not math.isfinite(camera_scale)
         or camera_scale <= 0.0
         or not math.isfinite(actor_scale)
         or actor_scale <= 0.0
+        or not math.isfinite(culling_fov)
+        or not 0.0 < culling_fov < math.pi
+        or culling_frustum[FRUSTUM_LEFT_INDEX]
+        >= culling_frustum[FRUSTUM_RIGHT_INDEX]
+        or culling_frustum[FRUSTUM_BOTTOM_INDEX]
+        >= culling_frustum[FRUSTUM_TOP_INDEX]
+        or culling_frustum[FRUSTUM_NEAR_INDEX] <= 0.0
+        or culling_frustum[FRUSTUM_FAR_INDEX]
+        <= culling_frustum[FRUSTUM_NEAR_INDEX]
+        or culling_frustum[FRUSTUM_ORTHOGRAPHIC_INDEX] != 0.0
         or not math.isfinite(fov)
         or not 0.0 < fov < math.pi
         or frustum[FRUSTUM_LEFT_INDEX] >= frustum[FRUSTUM_RIGHT_INDEX]
@@ -279,6 +499,12 @@ def _presentation_reference(
             "viewport": viewport,
             "viewMatrix": view_matrix,
             "projectionMatrix": projection_matrix,
+            "renderProjection": final_eye_projection,
+            "cullingObservation": {
+                "fovYRadians": culling_fov,
+                "frustum": culling_frustum,
+                "projectionMatrix": culling_projection_matrix,
+            },
         },
         "actor": {
             "rootWorld": {
@@ -291,7 +517,10 @@ def _presentation_reference(
             "animationDataSequences": sequences,
         },
         "selection": selection_proof,
-        "derivation": "same-frame-retail-camera-actor-root-pose-and-native-backbuffer",
+        "derivation": (
+            "same-frame-retail-final-eye-render-projection-camera-actor-root-"
+            "pose-and-native-backbuffer"
+        ),
     }
 
 
@@ -431,6 +660,7 @@ def _select_presentation_reference(
             return _presentation_reference(
                 events,
                 source_frames,
+                surface_frame,
                 shot_kind,
                 frame,
                 camera_contract,
@@ -732,6 +962,12 @@ def build_shot_evidence(
         identity["referenceFormId"],
         identity["baseFormId"],
     )
+    directional_lighting = _directional_lighting_reference(
+        source.report,
+        presentation,
+        str(identity["locationClass"]),
+        configuration,
+    )
     contract = {
         "schema": EVIDENCE_SCHEMA,
         "status": EVIDENCE_STATUS,
@@ -746,6 +982,7 @@ def build_shot_evidence(
             "actorTransformMutated": False,
             "sourceFrames": source_frames,
             "environment": environment,
+            "directionalLighting": directional_lighting,
             "sceneObserver": scene_observer,
             "presentation": presentation,
         },

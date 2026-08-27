@@ -10,7 +10,11 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from cell_catalog import BaseObject, scan_cell_catalog  # noqa: E402
+from cell_catalog import (  # noqa: E402
+    CELL_LIGHTING_TEMPLATE_AMBIENT_COLOR,
+    BaseObject,
+    scan_cell_catalog,
+)
 from cell_scene import (  # noqa: E402
     environment_texture_paths,
     godot_position,
@@ -86,10 +90,27 @@ def synthetic_plugin() -> bytes:
     xcll = bytes((10, 20, 30, 0, 40, 50, 60, 0, 70, 80, 90, 0)) + struct.pack(
         "<ffii3f", 64.0, 3750.0, 0, 250, 1.0, 6600.0, 1.25
     )
+    lighting_template = record(
+        "LGTM",
+        0x101,
+        subrecord("EDID", b"SyntheticLightingTemplate\0")
+        + subrecord(
+            "DATA",
+            bytes((90, 80, 70, 0, 60, 50, 40, 0, 30, 20, 10, 0))
+            + struct.pack("<ffii3f", 128.0, 4000.0, 45, 180, 0.5, 7000.0, 1.5),
+        ),
+    )
     cell = record(
         "CELL",
         0x100,
-        subrecord("EDID", b"SyntheticRoom\0") + subrecord("DATA", b"\x01") + subrecord("XCLL", xcll),
+        subrecord("EDID", b"SyntheticRoom\0")
+        + subrecord("DATA", b"\x01")
+        + subrecord("XCLL", xcll)
+        + subrecord("LTMP", struct.pack("<I", 0x101))
+        + subrecord(
+            "LNAM",
+            struct.pack("<I", CELL_LIGHTING_TEMPLATE_AMBIENT_COLOR),
+        ),
     )
     floor_reference = record(
         "REFR",
@@ -152,6 +173,7 @@ def synthetic_plugin() -> bytes:
         + group(b"CONT", 0, container)
         + group(b"WEAP", 0, weapon)
         + group(b"AMMO", 0, ammo)
+        + group(b"LGTM", 0, lighting_template)
         + group(b"CELL", 0, cell + children)
     )
 
@@ -228,8 +250,19 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(references[1].teleport_destination_form_id, 0x400)
         self.assertEqual(references[1].teleport_destination_transform.position, (1.0, 2.0, 3.0))
         self.assertEqual(catalog.base_objects[references[1].base_form_id].record_type, "DOOR")
-        self.assertEqual(cell.lighting.ambient_rgb, (10, 20, 30))
+        self.assertEqual(cell.authored_lighting.ambient_rgb, (10, 20, 30))
+        self.assertEqual(cell.lighting.ambient_rgb, (90, 80, 70))
+        self.assertEqual(cell.lighting.directional_rgb, (40, 50, 60))
         self.assertEqual(cell.lighting.fog_far, 3750.0)
+        self.assertEqual(cell.lighting_template_form_id, 0x101)
+        self.assertEqual(
+            cell.lighting_template_flags,
+            CELL_LIGHTING_TEMPLATE_AMBIENT_COLOR,
+        )
+        self.assertEqual(
+            catalog.lighting_templates[0x101].editor_id,
+            "SyntheticLightingTemplate",
+        )
         self.assertEqual(catalog.lights[0x302].radius, 256)
         self.assertEqual(catalog.lights[0x302].color_rgb, (100, 80, 40))
         self.assertEqual(catalog.lights[0x302].intensity, 1.5)

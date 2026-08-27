@@ -17,6 +17,10 @@ internal static class EnvironmentCapture
         string? galleryShotPath)
     {
         if (galleryShotPath is not null)
+            GD.Print(
+                $"OPENNV_GALLERY_STAGE id={Path.GetFileNameWithoutExtension(galleryShotPath)} " +
+                "stage=environment-capture-enter");
+        if (galleryShotPath is not null)
         {
             await GalleryCapture.Run(
                 host,

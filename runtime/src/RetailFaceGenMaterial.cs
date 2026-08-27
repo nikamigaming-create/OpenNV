@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Godot;
 
@@ -5,7 +6,11 @@ namespace OpenNV.Runtime;
 
 internal static class RetailFaceGenMaterial
 {
-    private const string ShaderSource = """
+    private static readonly string ShaderSource = BuildShaderSource();
+
+    private static string BuildShaderSource()
+    {
+        var source = new StringBuilder("""
         shader_type spatial;
         render_mode cull_back, ambient_light_disabled, specular_disabled;
 
@@ -51,11 +56,10 @@ internal static class RetailFaceGenMaterial
             FOG = vec4(retail_fog_color, retail_fog_factor);
         }
 
-        void light() {
-            DIFFUSE_LIGHT += LIGHT_COLOR * max(dot(NORMAL, LIGHT), 0.0) *
-                ATTENUATION / 3.14159265358979323846;
-        }
-        """;
+        """);
+        RetailLighting.AppendDiffuseLightFunction(source);
+        return source.ToString();
+    }
 
     internal static bool ApplyIfDeclared(
         MeshInstance3D mesh,

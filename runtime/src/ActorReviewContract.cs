@@ -187,7 +187,7 @@ internal static class ActorReviewContract
         }).ToArray();
     }
 
-    private static ImageSpaceShaderState ParseImageSpaceShader(
+    internal static ImageSpaceShaderState ParseImageSpaceShader(
         JsonElement source,
         RetailImageSpaceConfiguration configuration)
     {

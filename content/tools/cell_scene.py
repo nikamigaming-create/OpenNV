@@ -6,6 +6,7 @@ import json
 import math
 import os
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from cell_catalog import (
@@ -479,6 +480,20 @@ def prepare_cell_scene(
             "directionalFade": cell.lighting.directional_fade,
             "fogClipDistanceGameUnits": cell.lighting.fog_clip_distance,
             "fogPower": cell.lighting.fog_power,
+            "source": {
+                "authoredXcll": (
+                    asdict(cell.authored_lighting)
+                    if cell.authored_lighting is not None
+                    else None
+                ),
+                "lightingTemplateFormId": (
+                    form_id(cell.lighting_template_form_id)
+                    if cell.lighting_template_form_id is not None
+                    else None
+                ),
+                "lightingTemplateFlags": cell.lighting_template_flags,
+                "resolution": "owned-cell-xcll-plus-ltmp-lnam-inheritance",
+            },
             "lights": lights,
         },
         "assets": sorted(assets.values(), key=lambda value: value["id"]),

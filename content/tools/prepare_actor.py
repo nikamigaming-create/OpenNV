@@ -23,10 +23,12 @@ from actor_catalog import (
     scan_actor_catalog,
 )
 from actor_gltf import (
+    ActorAnimation,
     ActorComponent,
     ActorGltfInput,
     actor_skin_diffuse_paths,
     export_actor_gltf,
+    retail_render_parts_from_snapshot,
 )
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_catalog import scan_cell_catalog
@@ -42,6 +44,7 @@ from facegen import (
     compose_facegen_coordinates,
     synthesize_texture_detail,
 )
+from gallery_actor_presentation import load_gallery_actor_presentation
 from texture_pipeline import decode_dds
 from runtime_configuration import RuntimeConfiguration, load_runtime_configuration
 
@@ -62,6 +65,17 @@ RACE_HEAD_COMPONENT_ROLES = {
     5: "tongue",
     6: "eye-left",
     7: "eye-right",
+}
+NO_SOURCE_SLOT = 0xFFFFFFFF
+RETAIL_ROLE_BY_COMPONENT_ROLE = {
+    "head": "face",
+    "eye-left": "eyes",
+    "eye-right": "eyes",
+    "mouth": "headPart",
+    "teeth-lower": "headPart",
+    "teeth-upper": "headPart",
+    "tongue": "headPart",
+    "hair": "hair",
 }
 
 
@@ -123,6 +137,93 @@ def extract_texture(archives: Sequence[BsaArchive], logical_path: str) -> bytes:
 def has_texture(archives: Sequence[BsaArchive], logical_path: str) -> bool:
     path = texture_member(logical_path)
     return sum(path in archive.members for archive in archives) == 1
+
+
+def retail_component_identity(
+    appearance: dict[str, object],
+    component_role: str,
+) -> tuple[str, int]:
+    retail_role = (
+        "headPart"
+        if component_role.startswith("head-part-")
+        else RETAIL_ROLE_BY_COMPONENT_ROLE.get(component_role, component_role)
+    )
+    render_parts = appearance.get("renderParts")
+    if not isinstance(render_parts, list):
+        raise ValueError("Retail actor appearance has no render parts")
+    identities = {
+        (str(part["sourceFormId"]), int(part["sourceSlot"]))
+        for part in render_parts
+        if isinstance(part, dict)
+        and str(part.get("role", "")) == retail_role
+        and bool(part.get("required"))
+        and bool(part.get("attached"))
+        and bool(part.get("drawable"))
+        and bool(part.get("visible"))
+    }
+    if len(identities) != 1:
+        raise ValueError(
+            "Retail actor component has no unique source identity: "
+            f"{component_role} -> {retail_role} ({sorted(identities)})"
+        )
+    source_form_id, source_slot = identities.pop()
+    return f"0x{int(source_form_id, FORM_ID_RADIX):08X}", source_slot
+
+
+def retail_hair_shape(appearance: dict[str, object]) -> str:
+    render_parts = appearance.get("renderParts")
+    if not isinstance(render_parts, list):
+        raise ValueError("Retail actor appearance has no render parts")
+    names = {
+        str(part["geometryName"])
+        for part in render_parts
+        if isinstance(part, dict)
+        and part.get("role") == "hair"
+        and bool(part.get("required"))
+        and bool(part.get("attached"))
+        and bool(part.get("drawable"))
+        and bool(part.get("visible"))
+    }
+    shapes = {
+        name.removeprefix("FaceGenHair")
+        for name in names
+        if name in {"FaceGenHairHat", "FaceGenHairNoHat"}
+    }
+    if len(shapes) != 1:
+        raise ValueError(f"Retail actor has no unique visible hair shape: {sorted(names)}")
+    return shapes.pop()
+
+
+def retail_surface_texture(
+    appearance: dict[str, object],
+    retail_role: str,
+    runtime_geometry_name: str,
+    semantic: str,
+) -> str:
+    render_parts = appearance.get("renderParts")
+    if not isinstance(render_parts, list):
+        raise ValueError("Retail actor appearance has no render parts")
+    paths = {
+        canonical_member_path(str(binding["path"]))
+        for part in render_parts
+        if isinstance(part, dict)
+        and str(part.get("role", "")) == retail_role
+        and str(part.get("geometryName", "")) == runtime_geometry_name
+        and bool(part.get("required"))
+        and bool(part.get("attached"))
+        and bool(part.get("drawable"))
+        and bool(part.get("visible"))
+        for binding in part.get("textureBindings", [])
+        if isinstance(binding, dict)
+        and str(binding.get("semantic", "")) == semantic
+        and str(binding.get("path", ""))
+    }
+    if len(paths) != 1:
+        raise ValueError(
+            "Retail actor surface has no unique texture binding: "
+            f"{retail_role}/{runtime_geometry_name}/{semantic} ({sorted(paths)})"
+        )
+    return paths.pop()
 
 
 def resolve_proof_actor(
@@ -245,10 +346,26 @@ def prepare_actor(
         raise ValueError(
             "Per-actor compiler state is unsupported; use the shared owned-animation profile"
         )
-    animation_profile = configuration.document["actorCompiler"][
-        "animationProfiles"
-    ]["NPC_"]
-    actor_animation_path = str(animation_profile["path"])
+    retail_presentation = (
+        load_gallery_actor_presentation(
+            recipe["retailEvidence"],
+            str(recipe["proofActorReferenceFormId"]),
+            str(recipe["expectedBaseFormId"]),
+        )
+        if "retailEvidence" in recipe
+        else None
+    )
+    if retail_presentation is None:
+        animation_profile = configuration.document["actorCompiler"][
+            "animationProfiles"
+        ]["NPC_"]
+        actor_animation_path = str(animation_profile["path"])
+        actor_animation_paths = (actor_animation_path,)
+    else:
+        actor_animation_paths = tuple(
+            sequence.logical_path for sequence in retail_presentation.animations
+        )
+        actor_animation_path = actor_animation_paths[0]
     configured_origin = recipe.get("originGameUnits")
     if configured_origin is None:
         cell_recipe = load_spatial_recipe(str(recipe["cellRecipe"]))
@@ -398,41 +515,75 @@ def prepare_actor(
     )
 
     components = []
-    for index, (outfit_model, outfit_payload) in enumerate(outfit_payloads):
-        skin_paths = actor_skin_diffuse_paths(outfit_payload)
-        generated_skin = tuple(
-            (
-                source,
-                compose_body_albedo(
-                    decode_dds(extract_texture(texture_archives, source), False),
-                    body_mod,
+    if retail_presentation is None:
+        for index, (outfit_model, outfit_payload) in enumerate(outfit_payloads):
+            skin_paths = actor_skin_diffuse_paths(outfit_payload)
+            generated_skin = tuple(
+                (
+                    source,
+                    compose_body_albedo(
+                        decode_dds(extract_texture(texture_archives, source), False),
+                        body_mod,
+                    ),
+                )
+                for source in skin_paths
+            )
+            components.append(
+                ActorComponent(
+                    f"outfit-{index}",
+                    outfit_model,
+                    outfit_payload,
+                    generated_diffuse_by_source=generated_skin,
+                )
+            )
+        components.extend(
+            [
+                ActorComponent(
+                    "left-hand",
+                    body_models[RACE_LEFT_HAND_MODEL_INDEX],
+                    mesh(body_models[RACE_LEFT_HAND_MODEL_INDEX]),
+                    generated_diffuse=generated_left_hand,
+                    bake_shape_transform=not actor.female,
                 ),
-            )
-            for source in skin_paths
+                ActorComponent(
+                    "right-hand",
+                    body_models[RACE_RIGHT_HAND_MODEL_INDEX],
+                    mesh(body_models[RACE_RIGHT_HAND_MODEL_INDEX]),
+                    generated_diffuse=generated_right_hand,
+                    bake_shape_transform=not actor.female,
+                ),
+            ]
         )
-        components.append(
-            ActorComponent(
-                f"outfit-{index}",
-                outfit_model,
-                outfit_payload,
-                generated_diffuse_by_source=generated_skin,
+    else:
+        for attachment in retail_presentation.visible_attachments:
+            attachment_payload = mesh(attachment.model_path)
+            generated_skin = tuple(
+                (
+                    source,
+                    compose_body_albedo(
+                        decode_dds(extract_texture(texture_archives, source), False),
+                        body_mod,
+                    ),
+                )
+                for source in actor_skin_diffuse_paths(attachment_payload)
             )
-        )
-    components.extend([
-        ActorComponent(
-            "left-hand",
-            body_models[RACE_LEFT_HAND_MODEL_INDEX],
-            mesh(body_models[RACE_LEFT_HAND_MODEL_INDEX]),
-            generated_diffuse=generated_left_hand,
-            bake_shape_transform=not actor.female,
-        ),
-        ActorComponent(
-            "right-hand",
-            body_models[RACE_RIGHT_HAND_MODEL_INDEX],
-            mesh(body_models[RACE_RIGHT_HAND_MODEL_INDEX]),
-            generated_diffuse=generated_right_hand,
-            bake_shape_transform=not actor.female,
-        ),
+            components.append(
+                ActorComponent(
+                    attachment.role,
+                    attachment.model_path,
+                    attachment_payload,
+                    generated_diffuse_by_source=generated_skin,
+                    source_form_id=attachment.source_form_id,
+                    source_slot=attachment.source_slot,
+                )
+            )
+
+    head_identity = (
+        retail_component_identity(retail_presentation.appearance, "head")
+        if retail_presentation is not None
+        else (None, None)
+    )
+    components.append(
         ActorComponent(
             "head",
             head_model,
@@ -443,12 +594,19 @@ def prepare_actor(
             normal_override=head_normal_path,
             facegen_detail_path=face_detail_path,
             generated_facegen_detail=generated_face_detail,
-        ),
-    ])
+            source_form_id=head_identity[0],
+            source_slot=head_identity[1],
+        )
+    )
     for index, role in RACE_HEAD_COMPONENT_ROLES.items():
         path = head_models[index]
         if path is None:
             raise ValueError(f"Proof actor race has no sex-specific head component {index}")
+        source_identity = (
+            retail_component_identity(retail_presentation.appearance, role)
+            if retail_presentation is not None
+            else (None, None)
+        )
         components.append(
             ActorComponent(
                 role,
@@ -457,10 +615,21 @@ def prepare_actor(
                 egm_path=model_companion(path, ".egm"),
                 egm_payload=mesh(model_companion(path, ".egm")),
                 diffuse_override=texture_member(eyes.texture_path) if role.startswith("eye-") else None,
+                source_form_id=source_identity[0],
+                source_slot=source_identity[1],
             )
         )
-    hair_shape = "Hat" if any(outfit.hides_hair for outfit in outfits) else "NoHat"
+    hair_shape = (
+        retail_hair_shape(retail_presentation.appearance)
+        if retail_presentation is not None
+        else "Hat" if any(outfit.hides_hair for outfit in outfits) else "NoHat"
+    )
     hair_egm = model_companion(hair.model_path, f"{hair_shape.lower()}.egm")
+    hair_identity = (
+        retail_component_identity(retail_presentation.appearance, "hair")
+        if retail_presentation is not None
+        else (None, None)
+    )
     components.append(
         ActorComponent(
             "hair",
@@ -470,9 +639,19 @@ def prepare_actor(
             egm_payload=mesh(hair_egm),
             selected_shape=hair_shape,
             tint_rgb=tuple(value / BYTE_CHANNEL_MAXIMUM for value in actor.hair_color_rgba[:3]),
+            source_form_id=hair_identity[0],
+            source_slot=hair_identity[1],
         )
     )
     for part in (part for part in head_parts if part.model_path is not None):
+        source_identity = (
+            retail_component_identity(
+                retail_presentation.appearance,
+                f"head-part-{part.editor_id}",
+            )
+            if retail_presentation is not None
+            else (None, None)
+        )
         components.append(
             ActorComponent(
                 f"head-part-{part.editor_id}",
@@ -480,9 +659,31 @@ def prepare_actor(
                 mesh(part.model_path),
                 egm_path=model_companion(part.model_path, ".egm"),
                 egm_payload=mesh(model_companion(part.model_path, ".egm")),
+                diffuse_override=(
+                    retail_surface_texture(
+                        retail_presentation.appearance,
+                        "headPart",
+                        "FaceGenAccessory",
+                        "headPartColor",
+                    )
+                    if retail_presentation is not None
+                    else None
+                ),
+                normal_override=(
+                    retail_surface_texture(
+                        retail_presentation.appearance,
+                        "headPart",
+                        "FaceGenAccessory",
+                        "headPartNormal",
+                    )
+                    if retail_presentation is not None
+                    else None
+                ),
                 tint_rgb=tuple(
                     value / BYTE_CHANNEL_MAXIMUM for value in actor.hair_color_rgba[:3]
                 ),
+                source_form_id=source_identity[0],
+                source_slot=source_identity[1],
             )
         )
 
@@ -503,6 +704,15 @@ def prepare_actor(
             skeleton_root_node=rig_profile.skeleton_root_node,
             rigid_attachment_node=rig_profile.unparented_rigid_node,
             biped_head_node=actor_rig.biped_head_node,
+            additional_animations=tuple(
+                ActorAnimation(path, mesh(path))
+                for path in actor_animation_paths[1:]
+            ),
+            retail_render_parts=(
+                retail_render_parts_from_snapshot(retail_presentation.appearance)
+                if retail_presentation is not None
+                else ()
+            ),
         ),
         texture_archives,
         gltf_path,
@@ -539,6 +749,47 @@ def prepare_actor(
             "recordType": "NPC_",
         },
         "idleAnimation": actor_animation_path,
+        "retailPresentation": (
+            {
+                "evidencePath": str(retail_presentation.evidence_path),
+                "evidenceSha256": retail_presentation.evidence_sha256,
+                "oraclePath": str(retail_presentation.oracle_path),
+                "oracleSha256": retail_presentation.oracle_sha256,
+                "presentationFrame": retail_presentation.presentation_frame,
+                "actorSnapshotEventSha256": (
+                    retail_presentation.actor_snapshot_event_sha256
+                ),
+                "actorPoseEventSha256": retail_presentation.actor_pose_event_sha256,
+                "appearanceFrame": retail_presentation.appearance_frame,
+                "appearanceEventSha256": retail_presentation.appearance_event_sha256,
+                "weaponForm": retail_presentation.weapon_form,
+                "weaponOut": retail_presentation.weapon_out,
+                "visibleWeapon": (
+                    None
+                    if retail_presentation.visible_weapon is None
+                    else {
+                        "sourceFormId": retail_presentation.visible_weapon.source_form_id,
+                        "sourceSlot": retail_presentation.visible_weapon.source_slot,
+                        "modelPath": retail_presentation.visible_weapon.model_path,
+                    }
+                ),
+                "animationStack": [
+                    {
+                        "logicalPath": sequence.logical_path,
+                        "state": sequence.state,
+                        "cycle": sequence.cycle,
+                        "weight": sequence.weight,
+                        "frequency": sequence.frequency,
+                        "phaseSeconds": sequence.phase_seconds,
+                        "group": sequence.group,
+                    }
+                    for sequence in retail_presentation.animations
+                ],
+                "selection": "ordered-active-retail-animation-data-stack",
+            }
+            if retail_presentation is not None
+            else None
+        ),
         "appearanceResolution": {
             "outfitSource": "NPC_.CNTO recursively resolved through deterministic LVLI",
             "hairShape": hair_shape,

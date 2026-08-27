@@ -13,12 +13,15 @@ from pathlib import Path, PureWindowsPath
 
 from actor_catalog import ActorCatalog, ActorReference, CreatureActor, scan_actor_catalog
 from actor_gltf import (
+    ActorAnimation,
     ActorComponent,
     ActorGltfInput,
     actor_component_geometry_inventory,
     export_actor_gltf,
+    retail_render_parts_from_snapshot,
 )
 from cell_scene import godot_position, godot_rotation_quaternion, godot_yaw_radians
+from gallery_actor_presentation import load_gallery_actor_presentation
 from owned_archive_stack import OwnedArchiveStack, load_owned_archive_stack
 from prepare_creature_review import (
     NO_SOURCE_SLOT,
@@ -222,14 +225,22 @@ def prepare_gallery_creature(
         )
     if not rendered_model_members:
         raise ValueError("Gallery creature retained no renderable model components")
-    animation_profile = configuration.document["actorCompiler"][
-        "animationProfiles"
-    ]["CREA"]
-    skeleton_path = PureWindowsPath(creature.skeleton_path)
-    idle_animation_path = str(
-        skeleton_path.parent / str(animation_profile["fileName"])
+    retail_presentation = load_gallery_actor_presentation(
+        recipe["retailEvidence"],
+        str(recipe["proofActorReferenceFormId"]),
+        str(recipe["expectedBaseFormId"]),
     )
-    idle_animation = archives.extract(_mesh_member(idle_animation_path))
+    animation_members = [
+        archives.extract(_mesh_member(sequence.logical_path))
+        for sequence in retail_presentation.animations
+    ]
+    idle_animation = animation_members[0]
+    weapon_attachment = retail_presentation.visible_weapon
+    weapon_member = (
+        None
+        if weapon_attachment is None
+        else archives.extract(_mesh_member(weapon_attachment.model_path))
+    )
     output_root = cache_root / "generated" / "actors" / str(recipe["id"])
     if output_root.exists():
         raise FileExistsError(f"Refusing to overwrite gallery creature cache: {output_root}")
@@ -253,12 +264,28 @@ def prepare_gallery_creature(
                     source_slot=NO_SOURCE_SLOT,
                 )
                 for index, member in rendered_model_members
-            ),
+            )
+            + (() if weapon_attachment is None or weapon_member is None else (
+                ActorComponent(
+                    weapon_attachment.role,
+                    weapon_member.logical_path,
+                    weapon_member.data,
+                    source_form_id=weapon_attachment.source_form_id,
+                    source_slot=weapon_attachment.source_slot,
+                ),
+            )),
             idle_animation.logical_path,
             idle_animation.data,
             skeleton_root_node=rig_profile.skeleton_root_node,
             rigid_attachment_node=rig_profile.unparented_rigid_node,
             biped_head_node=actor_rig.biped_head_node,
+            additional_animations=tuple(
+                ActorAnimation(member.logical_path, member.data)
+                for member in animation_members[1:]
+            ),
+            retail_render_parts=retail_render_parts_from_snapshot(
+                retail_presentation.appearance
+            ),
         ),
         [archives],
         gltf_path,
@@ -296,6 +323,52 @@ def prepare_gallery_creature(
             "modelPaths": list(creature.model_paths),
         },
         "idleAnimation": idle_animation.logical_path,
+        "retailPresentation": {
+            "evidencePath": str(retail_presentation.evidence_path),
+            "evidenceSha256": retail_presentation.evidence_sha256,
+            "oraclePath": str(retail_presentation.oracle_path),
+            "oracleSha256": retail_presentation.oracle_sha256,
+            "presentationFrame": retail_presentation.presentation_frame,
+            "actorSnapshotEventSha256": (
+                retail_presentation.actor_snapshot_event_sha256
+            ),
+            "actorPoseEventSha256": retail_presentation.actor_pose_event_sha256,
+            "appearanceFrame": retail_presentation.appearance_frame,
+            "appearanceEventSha256": retail_presentation.appearance_event_sha256,
+            "presentationSurfaceReportPath": str(
+                retail_presentation.presentation_surface_report_path
+            ),
+            "presentationSurfaceReportSha256": (
+                retail_presentation.presentation_surface_report_sha256
+            ),
+            "presentationSurfaceGeometryNames": list(
+                retail_presentation.presentation_surface_geometry_names
+            ),
+            "weaponForm": retail_presentation.weapon_form,
+            "weaponOut": retail_presentation.weapon_out,
+            "visibleWeapon": (
+                None
+                if weapon_attachment is None
+                else {
+                    "sourceFormId": weapon_attachment.source_form_id,
+                    "sourceSlot": weapon_attachment.source_slot,
+                    "modelPath": weapon_attachment.model_path,
+                }
+            ),
+            "animationStack": [
+                {
+                    "logicalPath": sequence.logical_path,
+                    "state": sequence.state,
+                    "cycle": sequence.cycle,
+                    "weight": sequence.weight,
+                    "frequency": sequence.frequency,
+                    "phaseSeconds": sequence.phase_seconds,
+                    "group": sequence.group,
+                }
+                for sequence in retail_presentation.animations
+            ],
+            "selection": "ordered-active-retail-animation-data-stack",
+        },
         "appearanceResolution": {
             "source": "effective owned CREA skeleton/model fields",
             "placement": "authored ACRE transform",
@@ -307,7 +380,10 @@ def prepare_gallery_creature(
             "skeleton": _asset_row(skeleton),
             "models": [_asset_row(member) for member in model_members],
             "omittedParticleOnlyModels": omitted_particle_models,
-            "idleAnimation": _asset_row(idle_animation),
+            "animations": [_asset_row(member) for member in animation_members],
+            "visibleWeapon": (
+                None if weapon_member is None else _asset_row(weapon_member)
+            ),
             "archiveStack": archives.manifest(),
         },
         "outputs": {

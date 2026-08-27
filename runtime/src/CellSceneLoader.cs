@@ -274,17 +274,19 @@ internal static class CellSceneLoader
             RuntimeMaterialLoader.ApplyRetailGrassDistanceScale(
                 content.Root,
                 content.UnitsToMeters);
+            var surfaceToLight = RetailLighting.SurfaceToLightFromXcllDegrees(
+                lighting.DirectionalRotationDegrees.X,
+                lighting.DirectionalRotationDegrees.Y);
             parent.AddChild(new DirectionalLight3D
             {
                 Name = $"CELL_{content.FormId}_Directional",
-                RotationDegrees = new Vector3(
-                    lighting.DirectionalRotationDegrees.X,
-                    lighting.DirectionalRotationDegrees.Y,
-                    0.0f),
+                Transform = new Transform3D(
+                    RetailLighting.DirectionalLightBasis(surfaceToLight),
+                    Vector3.Zero),
                 LightColor = lighting.DirectionalColor,
                 LightEnergy = lighting.DirectionalFade *
                     configuration.Renderer.DirectionalEnergyScale,
-                ShadowEnabled = true,
+                ShadowEnabled = configuration.ActorReview.DirectionalShadows,
                 LightCullMask = renderLayer,
             });
         }
@@ -300,7 +302,8 @@ internal static class CellSceneLoader
                 LightEnergy = MathF.Max(
                     configuration.Renderer.MinimumPointLightEnergy,
                     light.Intensity * configuration.Renderer.PointLightEnergyScale),
-                OmniRange = light.RadiusMeters,
+                OmniRange = RetailLighting.PointShaderRadius(light.RadiusMeters),
+                OmniAttenuation = RetailLighting.GodotOmniDecayForRetailRemap,
                 ShadowEnabled = configuration.Renderer.AuthoredPointLightShadows,
                 LightCullMask = renderLayer,
             });

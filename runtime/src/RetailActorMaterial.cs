@@ -40,6 +40,7 @@ internal static class RetailActorMaterial
 
         var materialContract = surface.GetProperty("material");
         var alpha = materialContract.GetProperty("alphaContract");
+        var unshaded = materialContract.GetProperty("unshaded").GetBoolean();
         var alphaMode = alpha.GetProperty("mode").GetString() ?? "";
         if (alphaMode is not ("OPAQUE" or "MASK" or "BLEND"))
             throw new InvalidOperationException(
@@ -59,8 +60,13 @@ internal static class RetailActorMaterial
                 $"Actor surface has an invalid imported base-color factor: {mesh.Name}");
         var material = new ShaderMaterial
         {
-            ResourceName = RuntimeMaterialLoader.RetailActorMaterialResourceName,
-            Shader = new Shader { Code = BuildShader(alphaMode, blendRenderMode) },
+            ResourceName = unshaded
+                ? RuntimeMaterialLoader.RetailActorUnshadedMaterialResourceName
+                : RuntimeMaterialLoader.RetailActorMaterialResourceName,
+            Shader = new Shader
+            {
+                Code = BuildShader(alphaMode, blendRenderMode, unshaded),
+            },
         };
         if (imported.AlbedoTexture is not null)
             material.SetShaderParameter("base_map", imported.AlbedoTexture);
@@ -69,7 +75,8 @@ internal static class RetailActorMaterial
         material.SetShaderParameter("use_base_map", imported.AlbedoTexture is not null);
         material.SetShaderParameter("use_normal_map", imported.NormalTexture is not null);
         material.SetShaderParameter("base_color_factor", baseColorFactor);
-        material.SetShaderParameter("retail_ambient_color", Vector3.Zero);
+        if (!unshaded)
+            material.SetShaderParameter("retail_ambient_color", Vector3.Zero);
         material.SetShaderParameter(
             "alpha_cutoff",
             alphaMode == "MASK" && alpha.GetProperty("cutoff").ValueKind == JsonValueKind.Number
@@ -93,14 +100,23 @@ internal static class RetailActorMaterial
         };
     }
 
-    private static string BuildShader(string alphaMode, string? blendRenderMode)
+    private static string BuildShader(
+        string alphaMode,
+        string? blendRenderMode,
+        bool unshaded)
     {
         var modes = new List<string>
         {
-            alphaMode == "OPAQUE" ? "cull_back" : "cull_disabled",
-            "ambient_light_disabled",
+            // Fallout's BSShaderNoLightingProperty actor pass is used by
+            // authored emissive display surfaces.  The owned securitron screen
+            // geometry is visible in the hash-bound retail final-eye draw even
+            // though its converted front winding faces away from Godot's
+            // default opaque cull direction, so preserve that shader family's
+            // two-sided rasterization semantics instead of keying a model.
+            alphaMode == "OPAQUE" && !unshaded ? "cull_back" : "cull_disabled",
             "specular_disabled",
         };
+        modes.Add(unshaded ? "unshaded" : "ambient_light_disabled");
         if (alphaMode == "BLEND")
         {
             modes.Add(blendRenderMode!);
@@ -121,7 +137,8 @@ internal static class RetailActorMaterial
         source.AppendLine("uniform bool use_base_map;");
         source.AppendLine("uniform bool use_normal_map;");
         source.AppendLine("uniform vec4 base_color_factor;");
-        AppendRetailLightingUniforms(source);
+        if (!unshaded)
+            AppendRetailLightingUniforms(source);
         source.AppendLine("uniform float alpha_cutoff;");
         source.AppendLine("void fragment() {");
         source.AppendLine("    vec4 base = use_base_map ? texture(base_map, UV) : vec4(1.0);");
@@ -135,8 +152,11 @@ internal static class RetailActorMaterial
         source.AppendLine("            NORMAL * tangent_normal.z);");
         source.AppendLine("    }");
         source.AppendLine("    ALBEDO = base.rgb;");
-        source.AppendLine("    EMISSION = base.rgb * retail_ambient_color;");
-        source.AppendLine("    FOG = vec4(retail_fog_color, retail_fog_factor);");
+        if (!unshaded)
+        {
+            source.AppendLine("    EMISSION = base.rgb * retail_ambient_color;");
+            source.AppendLine("    FOG = vec4(retail_fog_color, retail_fog_factor);");
+        }
         if (alphaMode == "MASK")
         {
             source.AppendLine("    ALPHA = base.a;");
@@ -145,7 +165,8 @@ internal static class RetailActorMaterial
         else if (alphaMode == "BLEND")
             source.AppendLine("    ALPHA = base.a;");
         source.AppendLine("}");
-        AppendRetailLightFunction(source);
+        if (!unshaded)
+            AppendRetailLightFunction(source);
         return source.ToString();
     }
 
@@ -174,9 +195,6 @@ internal static class RetailActorMaterial
 
     internal static void AppendRetailLightFunction(StringBuilder source)
     {
-        source.AppendLine("void light() {");
-        source.AppendLine(
-            "    DIFFUSE_LIGHT += LIGHT_COLOR * max(dot(NORMAL, LIGHT), 0.0) * ATTENUATION / 3.14159265358979323846;");
-        source.AppendLine("}");
+        RetailLighting.AppendDiffuseLightFunction(source);
     }
 }

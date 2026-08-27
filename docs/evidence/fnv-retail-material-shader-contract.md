@@ -65,6 +65,56 @@ dimmer. `SLS2017` adds its authored alpha-test/specular/toggle terms; it does no
 replace this diffuse core with a PBR response. The two `SLS2156.pso` draws are
 the separate shadow-map filtering pass and remain a distinct renderer contract.
 
+The owned `SLS2034.pso` two-point-light variant exposes the radial falloff as
+shader arithmetic rather than a guessed renderer value. For each light it
+computes `saturate(length(pixelPosition - lightPosition)^2 / radius^2)` and
+subtracts that value from one before multiplying the Lambert term. OpenNV sets
+Godot omnilights to zero decay and analytically remaps Forward+'s edge envelope
+back to this exact `1 - saturate(distance^2 / radius^2)` curve in the shared
+actor, FaceGen, static-object, and landscape light processor. Godot includes
+`PI` in `LIGHT_COLOR` for custom spatial light functions, so the processor
+divides by `PI` to recover the retail byte-color-times-intensity constant.
+The retained Yes Man world-draw constants also close the engine-side radius
+mapping: two authored 450-unit room lights arrive in the SLS position slots as
+636-unit radii, so the runtime applies the observed `sqrt(2)` shader-radius
+scale to every owned LIGH radius before the recovered falloff equation.
+
+XCLL's two directional integers are Y-then-Z rotations of the Gamebryo
+surface-to-light vector `(0, 0, 1)`. OpenNV now constructs that vector from the
+owned XCLL values, converts it through the shared Z-up-to-Y-up basis, and gives
+the resulting vector directly to the Godot directional-light basis. Assigning
+the two source angles as unrelated Godot Euler components was not the same
+transform and is removed.
+
+Interior lighting is the effective CELL state, not XCLL in isolation. The
+compiler now resolves the owned CELL `LTMP` link and composes its LGTM `DATA`
+fields according to the owned `LNAM` inheritance bitmask before emitting the
+scene. The authored XCLL, template FormID, inheritance flags, and resolution
+policy remain in the scene provenance. This closes the retained Yes Man case:
+CELL `0010e429` carries `LTMP=0005c6d8` and `LNAM=00000001`, so retail inherits
+the template ambient `(46, 36, 27)` instead of using the cell-local
+`(13, 14, 21)`. No capture-specific exposure or brightness value is involved.
+
+The retail capture runner changes only window mode, dimensions, and gamepad
+input in `FalloutPrefs.ini`; it does not mutate shadow settings. The owned
+capture profile used for the matched gallery observations has
+`bDrawShadows=1`, `bDoActorShadows=1`, `bDoStaticAndArchShadows=0`, and
+`bActorSelfShadowing=0`. Godot's single directional shadow switch cannot encode
+that division: enabling it casts static/architecture shadows and actor
+self-shadows that the reference profile explicitly disables. OpenNV therefore
+keeps the generic directional shadow map disabled in the data-owned
+`actorReview.directionalShadows` setting. The retail `SLS2156` actor-shadow
+pass remains a separate renderer contract rather than being approximated by a
+blanket Godot shadow map.
+
+The matched Easy Pete calibration makes the boundary measurable. With the
+exact frame-369 retail light vector and colors, the blanket Godot shadow map
+produced full-frame mean absolute error `0.089792`; disabling only that proxy
+reduced it to `0.072486`, actor-crop error from `0.098178` to `0.078425`, and
+ground-crop error from `0.079223` to `0.067894`. The no-proxy frame luma
+(`0.295038`) also approaches the retail frame luma (`0.305944`) without a
+hand-tuned light value.
+
 `SLS2001.vso` and `SLS2012.vso` consume the object-space light vector from
 vertex constant `c25`. Repeated identity-basis road draws—including the
 near-identity `wastelandroadcurvelong04r` and identity SCOL straight-road

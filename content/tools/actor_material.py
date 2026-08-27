@@ -29,6 +29,7 @@ NIF_ALPHA_TEST_FUNCTION_SHIFT = 10
 NIF_ALPHA_NO_SORTER_FLAG = 0x2000
 BYTE_CHANNEL_MAXIMUM = 255.0
 FACEGEN_MATERIAL_SCHEMA = "opennv-retail-facegen-material/v2"
+GLTF_UNLIT_EXTENSION = "KHR_materials_unlit"
 
 
 def build_actor_material(
@@ -64,6 +65,18 @@ def build_actor_material(
         "doubleSided": False,
         "pbrMetallicRoughness": {"metallicFactor": 0.0, "roughnessFactor": roughness},
     }
+    unshaded = any(
+        isinstance(
+            prop,
+            (
+                NifFormat.BSShaderNoLightingProperty,
+                NifFormat.BSEffectShaderProperty,
+            ),
+        )
+        for prop in properties
+    )
+    if unshaded:
+        material["extensions"] = {GLTF_UNLIT_EXTENSION: {}}
     pbr = material["pbrMetallicRoughness"]
     base_texture_index = None
     generated_image = component.generated_diffuse
@@ -154,6 +167,10 @@ def build_actor_material(
         "roughness": roughness,
         "roughnessSource": roughness_source,
         "metallic": 0.0,
+        "unshaded": unshaded,
+        "unshadedSource": (
+            "owned-nif-no-lighting-or-effect-shader" if unshaded else None
+        ),
         "faceGen": facegen_contract,
     }
 

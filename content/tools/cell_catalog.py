@@ -36,7 +36,7 @@ BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "TERM",
     "TREE",
 }
-CATALOG_RECORD_TYPES = frozenset(BASE_RECORD_TYPES | {"CELL", "REFR"})
+CATALOG_RECORD_TYPES = frozenset(BASE_RECORD_TYPES | {"CELL", "LGTM", "REFR"})
 
 REFERENCE_TRANSFORM_BYTES = 24
 REFERENCE_SCALE_BYTES = 4
@@ -56,6 +56,26 @@ CELL_LIGHTING_DIRECTION_OFFSET = 20
 CELL_LIGHTING_DIRECTIONAL_FADE_OFFSET = 28
 CELL_LIGHTING_FOG_CLIP_OFFSET = 32
 CELL_LIGHTING_FOG_POWER_OFFSET = 36
+CELL_LIGHTING_TEMPLATE_AMBIENT_COLOR = 0x00000001
+CELL_LIGHTING_TEMPLATE_DIRECTIONAL_COLOR = 0x00000002
+CELL_LIGHTING_TEMPLATE_FOG_COLOR = 0x00000004
+CELL_LIGHTING_TEMPLATE_FOG_NEAR = 0x00000008
+CELL_LIGHTING_TEMPLATE_FOG_FAR = 0x00000010
+CELL_LIGHTING_TEMPLATE_DIRECTIONAL_ROTATION = 0x00000020
+CELL_LIGHTING_TEMPLATE_DIRECTIONAL_FADE = 0x00000040
+CELL_LIGHTING_TEMPLATE_FOG_CLIP_DISTANCE = 0x00000080
+CELL_LIGHTING_TEMPLATE_FOG_POWER = 0x00000100
+CELL_LIGHTING_TEMPLATE_KNOWN_FLAGS = (
+    CELL_LIGHTING_TEMPLATE_AMBIENT_COLOR
+    | CELL_LIGHTING_TEMPLATE_DIRECTIONAL_COLOR
+    | CELL_LIGHTING_TEMPLATE_FOG_COLOR
+    | CELL_LIGHTING_TEMPLATE_FOG_NEAR
+    | CELL_LIGHTING_TEMPLATE_FOG_FAR
+    | CELL_LIGHTING_TEMPLATE_DIRECTIONAL_ROTATION
+    | CELL_LIGHTING_TEMPLATE_DIRECTIONAL_FADE
+    | CELL_LIGHTING_TEMPLATE_FOG_CLIP_DISTANCE
+    | CELL_LIGHTING_TEMPLATE_FOG_POWER
+)
 LIGHT_DATA_BYTES = 32
 LIGHT_RADIUS_OFFSET = 4
 LIGHT_COLOR_SLICE = slice(8, 11)
@@ -99,6 +119,9 @@ class Cell:
     coordinates: tuple[int, int] | None
     worldspace_form_id: int | None
     lighting: CellLighting | None
+    authored_lighting: CellLighting | None
+    lighting_template_form_id: int | None
+    lighting_template_flags: int
 
     @property
     def interior(self) -> bool:
@@ -111,6 +134,13 @@ class BaseObject:
     record_type: str
     editor_id: str
     model_path: str | None
+
+
+@dataclass(frozen=True)
+class LightingTemplate:
+    form_id: int
+    editor_id: str
+    lighting: CellLighting
 
 
 @dataclass(frozen=True)
@@ -160,6 +190,7 @@ class PlacedReference:
 @dataclass
 class CellCatalog:
     cells: dict[int, Cell]
+    lighting_templates: dict[int, LightingTemplate]
     base_objects: dict[int, BaseObject]
     lights: dict[int, LightObject]
     containers: dict[int, ContainerObject]
@@ -254,6 +285,54 @@ def parse_cell_lighting(data: bytes, record: Record) -> CellLighting:
     )
 
 
+def resolve_cell_lighting(
+    authored: CellLighting | None,
+    template: CellLighting | None,
+    inheritance_flags: int,
+) -> CellLighting | None:
+    unknown_flags = inheritance_flags & ~CELL_LIGHTING_TEMPLATE_KNOWN_FLAGS
+    if unknown_flags:
+        raise ValueError(
+            f"CELL lighting template has unsupported inheritance flags: 0x{unknown_flags:08x}"
+        )
+    if inheritance_flags == 0:
+        return authored
+    if template is None:
+        raise ValueError("CELL lighting inheritance requires a resolved LGTM record")
+    if authored is None and inheritance_flags != CELL_LIGHTING_TEMPLATE_KNOWN_FLAGS:
+        raise ValueError("Partial CELL lighting inheritance requires authored XCLL lighting")
+    source = authored if authored is not None else template
+    return CellLighting(
+        template.ambient_rgb
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_AMBIENT_COLOR
+        else source.ambient_rgb,
+        template.directional_rgb
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_DIRECTIONAL_COLOR
+        else source.directional_rgb,
+        template.fog_rgb
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_FOG_COLOR
+        else source.fog_rgb,
+        template.fog_near
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_FOG_NEAR
+        else source.fog_near,
+        template.fog_far
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_FOG_FAR
+        else source.fog_far,
+        template.directional_rotation
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_DIRECTIONAL_ROTATION
+        else source.directional_rotation,
+        template.directional_fade
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_DIRECTIONAL_FADE
+        else source.directional_fade,
+        template.fog_clip_distance
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_FOG_CLIP_DISTANCE
+        else source.fog_clip_distance,
+        template.fog_power
+        if inheritance_flags & CELL_LIGHTING_TEMPLATE_FOG_POWER
+        else source.fog_power,
+    )
+
+
 def parse_light_object(
     record: Record,
     values: dict[str, list[bytes]],
@@ -328,7 +407,7 @@ def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObje
 
 @cache
 def scan_cell_catalog(path: Path) -> CellCatalog:
-    catalog = CellCatalog({}, {}, {}, {}, {}, [])
+    catalog = CellCatalog({}, {}, {}, {}, {}, {}, [])
     for record in iter_plugin_records(path, CATALOG_RECORD_TYPES):
         if record.signature == "CELL":
             values = subrecords_by_signature(record)
@@ -336,13 +415,44 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
             coordinates_data = values.get("XCLC", [])
             coordinates = struct.unpack_from("<ii", coordinates_data[0]) if coordinates_data else None
             lighting_data = values.get("XCLL", [])
+            template_data = values.get("LTMP", [])
+            inheritance_data = values.get("LNAM", [])
+            if len(template_data) > 1 or len(inheritance_data) > 1:
+                raise ValueError(f"CELL {record.form_id:08x} repeats LTMP or LNAM")
+            if inheritance_data and not template_data:
+                raise ValueError(f"CELL {record.form_id:08x} has LNAM without LTMP")
+            parsed_template_form_id = (
+                parse_form_id(template_data[0], record, "LTMP") if template_data else 0
+            )
+            lighting_template_form_id = parsed_template_form_id or None
+            lighting_template_flags = (
+                parse_form_id(inheritance_data[0], record, "LNAM")
+                if inheritance_data
+                else 0
+            )
+            authored_lighting = (
+                parse_cell_lighting(lighting_data[0], record) if lighting_data else None
+            )
             catalog.cells[record.form_id] = Cell(
                 record.form_id,
                 _first_text(values, "EDID"),
                 data[0] if data else 0,
                 coordinates,
                 worldspace_parent_form_id(record),
-                parse_cell_lighting(lighting_data[0], record) if lighting_data else None,
+                authored_lighting,
+                authored_lighting,
+                lighting_template_form_id,
+                lighting_template_flags,
+            )
+        elif record.signature == "LGTM":
+            values = subrecords_by_signature(record)
+            lighting_data = values.get("DATA", [])
+            if len(lighting_data) != 1:
+                raise ValueError(f"LGTM {record.form_id:08x} must contain one DATA record")
+            catalog.lighting_templates[record.form_id] = LightingTemplate(
+                record.form_id,
+                _first_text(values, "EDID"),
+                parse_cell_lighting(lighting_data[0], record),
             )
         elif record.signature in BASE_RECORD_TYPES:
             values = subrecords_by_signature(record)
@@ -389,6 +499,32 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                     else None,
                 )
             )
+    for form_id, cell in tuple(catalog.cells.items()):
+        template = (
+            catalog.lighting_templates.get(cell.lighting_template_form_id)
+            if cell.lighting_template_form_id is not None
+            else None
+        )
+        if cell.lighting_template_form_id is not None and template is None:
+            raise ValueError(
+                f"CELL {form_id:08x} references missing LGTM "
+                f"{cell.lighting_template_form_id:08x}"
+            )
+        catalog.cells[form_id] = Cell(
+            cell.form_id,
+            cell.editor_id,
+            cell.flags,
+            cell.coordinates,
+            cell.worldspace_form_id,
+            resolve_cell_lighting(
+                cell.authored_lighting,
+                template.lighting if template is not None else None,
+                cell.lighting_template_flags if template is not None else 0,
+            ),
+            cell.authored_lighting,
+            cell.lighting_template_form_id,
+            cell.lighting_template_flags,
+        )
     return catalog
 
 

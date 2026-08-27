@@ -12,6 +12,7 @@ from actor_gltf import (  # noqa: E402
     NifFormat,
     RetailRenderPart,
     _append_runtime_surface_node,
+    _bake_actor_shape_transform,
     _is_authored_prn_root_marker,
     _compensated_inverse_bind,
     _converted_matrix,
@@ -24,10 +25,12 @@ from actor_gltf import (  # noqa: E402
     _resolve_retail_rigid_part,
     _unsupported_actor_geometry,
     _uses_retail_biped_head_basis,
+    _visible_creature_geometry_names,
     actor_animation_translations,
 )
 from actor_material import (  # noqa: E402
     FACEGEN_MATERIAL_SCHEMA,
+    GLTF_UNLIT_EXTENSION,
     actor_alpha_contract,
     actor_base_color_factor,
     actor_roughness,
@@ -137,6 +140,100 @@ class ActorGltfTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "ambiguous retail render parts"):
             _resolve_retail_rigid_part(component, "Unknown", (), parts)
+
+    def test_creature_rigid_part_uses_exact_geometry_across_semantic_roles(self):
+        component = ActorComponent(
+            "creature-model-4",
+            "meshes/creatures/nvsecuritron/nvsecuritronyesmanscreen01.nif",
+            b"nif",
+            source_form_id="0x00104E84",
+            source_slot=0xFFFFFFFF,
+        )
+        screen = self._retail_part(
+            "Screen01:0",
+            "root/screen",
+            role="exposedBody",
+        )
+        voice = self._retail_part(
+            "VoiceBox_Root:0",
+            "root/voice",
+            role="actor",
+        )
+
+        part, authority = _resolve_retail_rigid_part(
+            component,
+            "Screen01:0",
+            (),
+            (voice, screen),
+        )
+
+        self.assertEqual(part, screen)
+        self.assertEqual(authority, "exact-runtime-geometry-name")
+
+    def test_retail_bound_creature_rigid_surface_keeps_owned_component_basis(self):
+        component = ActorComponent(
+            "creature-model-4",
+            "meshes/creatures/nvsecuritron/nvsecuritronyesmanscreen01.nif",
+            b"nif",
+        )
+
+        self.assertTrue(
+            _bake_actor_shape_transform(
+                component,
+                rigid=True,
+                retail_bound=True,
+            )
+        )
+
+    def test_retail_bound_facegen_rigid_surface_stays_attachment_local(self):
+        component = ActorComponent(
+            "head",
+            "meshes/characters/head/headhuman.nif",
+            b"nif",
+            bake_shape_transform=True,
+        )
+
+        self.assertFalse(
+            _bake_actor_shape_transform(
+                component,
+                rigid=True,
+                retail_bound=True,
+            )
+        )
+
+    def test_creature_visibility_joins_all_semantic_roles_by_owned_identity(self):
+        component = ActorComponent(
+            "creature-model-4",
+            "meshes/creatures/nvsecuritron/nvsecuritronyesmanscreen01.nif",
+            b"nif",
+            source_form_id="0x00104E84",
+            source_slot=0xFFFFFFFF,
+        )
+        actor = self._retail_part(
+            "RobotBody",
+            "root/body",
+            role="actor",
+        )
+        screen = self._retail_part(
+            "Screen01:0",
+            "root/screen",
+            role="exposedBody",
+        )
+        other_source = RetailRenderPart(
+            **{
+                **screen.__dict__,
+                "geometry_name": "WrongActorScreen",
+                "source_form_id": "0x00104E85",
+            }
+        )
+
+        self.assertEqual(
+            _visible_creature_geometry_names(
+                component,
+                (actor, screen, other_source),
+            ),
+            frozenset({"RobotBody", "Screen01:0"}),
+        )
 
     def test_runtime_surface_identity_is_exact_and_independent_of_nif_punctuation(self):
         nodes = [{"children": []}]
@@ -348,6 +445,36 @@ class ActorGltfTest(unittest.TestCase):
             ("textures\\creatures\\nvsecuritron\\yesmanhappy.dds",),
         )
 
+    def test_no_lighting_actor_material_preserves_owned_unlit_state(self):
+        class TextureLibrary:
+            def source(self, path: str, *, normal: bool = False) -> int:
+                self.path = path
+                self.normal = normal
+                return 7
+
+        shape = NifFormat.NiTriShape()
+        shape.name = b"Screen01:0"
+        shader = NifFormat.BSShaderNoLightingProperty()
+        shader.file_name = b"textures\\creatures\\securitron\\yesman_neutral.dds"
+        shape.add_property(shader)
+        material, evidence = build_actor_material(
+            ActorComponent(
+                "creature-model-4",
+                "meshes\\creatures\\nvsecuritron\\nvsecuritronyesmanscreen01.nif",
+                b"owned-nif",
+            ),
+            shape,
+            TextureLibrary(),
+            load_runtime_configuration().content_compiler,
+        )
+
+        self.assertEqual(material["extensions"], {GLTF_UNLIT_EXTENSION: {}})
+        self.assertTrue(evidence["unshaded"])
+        self.assertEqual(
+            evidence["unshadedSource"],
+            "owned-nif-no-lighting-or-effect-shader",
+        )
+
     def test_facegen_material_keeps_retail_sampler_inputs_separate(self):
         class TextureLibrary:
             def __init__(self) -> None:
@@ -427,13 +554,35 @@ class ActorGltfTest(unittest.TestCase):
         self.assertEqual(outfit_contract["mode"], "MASK")
         self.assertAlmostEqual(outfit_contract["cutoff"], 20 / 255)
 
-    def test_nonaccum_idle_translation_is_relative_to_its_first_sample(self):
+    def test_actor_root_motion_is_separated_from_absolute_nonaccum_pose(self):
         values = [(2.0, 66.0, -1.0), (2.5, 65.75, -0.5)]
         self.assertEqual(
-            actor_animation_translations("Bip01 NonAccum", values),
-            [(0.0, 0.0, 0.0), (0.5, -0.25, 0.5)],
+            actor_animation_translations(
+                "Bip01",
+                values,
+                "Bip01",
+                "Bip01 NonAccum",
+            ),
+            [(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)],
         )
-        self.assertIs(actor_animation_translations("Bip01 Head", values), values)
+        self.assertEqual(
+            actor_animation_translations(
+                "Bip01 NonAccum",
+                values,
+                "Bip01",
+                "Bip01 NonAccum",
+            ),
+            values,
+        )
+        self.assertIs(
+            actor_animation_translations(
+                "Bip01 Head",
+                values,
+                "Bip01",
+                "Bip01 NonAccum",
+            ),
+            values,
+        )
 
     def test_baked_shape_transform_is_removed_from_skin_bind(self):
         inverse_bind = NifFormat.Matrix44()

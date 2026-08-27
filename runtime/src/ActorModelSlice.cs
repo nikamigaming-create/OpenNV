@@ -7,6 +7,9 @@ namespace OpenNV.Runtime;
 internal static class ActorModelSlice
 {
     private const string ActorSchema = "opennv-actor-gltf/v3";
+    private const string WeaponSurfaceRole = "weapon";
+    private const string AuthoredPrnRootMarkerDisposition =
+        "omit-authored-prn-root-marker";
 
     internal static LoadedActor Load(
         string modelPath,
@@ -49,21 +52,36 @@ internal static class ActorModelSlice
         var omittedSurfaces = LoadOmittedSurfaces(root, resolvedSidecar);
         var skeletons = Descendants<Skeleton3D>(scene).ToArray();
         var players = Descendants<AnimationPlayer>(scene).ToArray();
-        var animations = players.Sum(player => player.GetAnimationList().Length);
-        if (importedMeshes.Length < 1 || skeletons.Length < 1 || animations < 1)
+        var runtimeAnimations = players
+            .SelectMany(player => player.GetAnimationList()
+                .Where(name => name != "RESET")
+                .Select(name => (Player: player, Name: name)))
+            .ToArray();
+        if (importedMeshes.Length < 1 || skeletons.Length < 1 ||
+            runtimeAnimations.Length < 1)
             throw new InvalidOperationException(
                 $"Actor import is incomplete: meshes={importedMeshes.Length} " +
-                $"skeletons={skeletons.Length} animations={animations}");
+                $"skeletons={skeletons.Length} animations={runtimeAnimations.Length}");
         var poseContract = ActorPoseContract.Load(
             root,
             resolvedModel,
             scene,
             skeletons);
-        var animationName = players
-            .SelectMany(player => player.GetAnimationList().Select(name => (Player: player, Name: name)))
-            .First(row => row.Name != "RESET");
+        var animationRows = root.GetProperty("animations").EnumerateArray().ToArray();
+        if (animationRows.Length != runtimeAnimations.Length)
+            throw new InvalidOperationException(
+                "Actor sidecar and Godot import disagree on authored animation count: " +
+                $"sidecar={animationRows.Length} runtime={runtimeAnimations.Length}.");
+        var loadedAnimations = ResolveAnimations(
+            animationRows,
+            runtimeAnimations,
+            resolvedSidecar);
+        var animationName = runtimeAnimations.Single(row =>
+            row.Player == loadedAnimations[0].Player &&
+            row.Name == loadedAnimations[0].RuntimeName);
         animationName.Player.Play(animationName.Name);
-        var bounds = WorldBounds(scene);
+        animationName.Player.Advance(0.0);
+        var bounds = PosedWorldBounds(scene, surfaces, includeWeapons: true);
         var animation = root.GetProperty("animation");
         var animationLogicalPath = animation.GetProperty("logicalPath").GetString();
         var animationSourceSha256 = animation.GetProperty("sha256").GetString();
@@ -73,23 +91,22 @@ internal static class ActorModelSlice
             animationChannels < 1)
             throw new InvalidOperationException(
                 "Actor animation source identity is incomplete.");
-        if (animation.TryGetProperty("nonAccumOriginGodotUnits", out var originSource) &&
-            originSource.ValueKind == JsonValueKind.Array)
-        {
-            var origin = ReadVector(originSource);
-            bounds = new Aabb(bounds.Position - scene.GlobalBasis * origin, bounds.Size);
-        }
+        var humanoidGateBounds = boundsContract == BoundsContract.Humanoid
+            ? PosedWorldBounds(scene, surfaces, includeWeapons: false)
+            : bounds;
         if (boundsContract == BoundsContract.Humanoid &&
-            (bounds.Size.Y < configuration.DiagnosticPreview.ActorMinimumHeightMeters ||
-             bounds.Size.Y > configuration.DiagnosticPreview.ActorMaximumHeightMeters))
-            throw new InvalidOperationException($"Actor height is outside the humanoid gate: {bounds.Size.Y:F3}m");
+            (humanoidGateBounds.Size.Y < configuration.DiagnosticPreview.ActorMinimumHeightMeters ||
+             humanoidGateBounds.Size.Y > configuration.DiagnosticPreview.ActorMaximumHeightMeters))
+            throw new InvalidOperationException(
+                "Actor body height is outside the humanoid gate: " +
+                $"{humanoidGateBounds.Size.Y:F3}m (full visual {bounds.Size.Y:F3}m)." );
         return new LoadedActor(
             scene,
             root.GetProperty("actorFormId").GetString()!,
             root.GetProperty("actorName").GetString()!,
             importedMeshes.Length,
             skeletons.Length,
-            animations,
+            runtimeAnimations.Length,
             animationLogicalPath,
             animationSourceSha256,
             animationChannels,
@@ -100,7 +117,83 @@ internal static class ActorModelSlice
             root.GetProperty("coverage").GetProperty("surfaces").GetInt32(),
             root.GetProperty("coverage").GetProperty("textures").GetInt32(),
             surfaces,
-            omittedSurfaces);
+            omittedSurfaces,
+            loadedAnimations);
+    }
+
+    private static IReadOnlyList<LoadedAnimation> ResolveAnimations(
+        IReadOnlyList<JsonElement> declared,
+        IReadOnlyList<(AnimationPlayer Player, string Name)> runtime,
+        string sidecarPath)
+    {
+        if (declared.Count == 1 && runtime.Count == 1)
+            return new[] { ParseAnimation(declared[0], runtime[0], sidecarPath) };
+        var remaining = runtime.ToList();
+        var result = new List<LoadedAnimation>(declared.Count);
+        foreach (var source in declared)
+        {
+            var logicalPath = RequireAnimationText(source, "logicalPath", sidecarPath);
+            var expected = NormalizeAnimationPath(logicalPath);
+            var matches = remaining.Where(candidate =>
+                    NormalizeAnimationPath(candidate.Name.ToString()).Equals(
+                        expected,
+                        StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matches.Length != 1)
+                throw new InvalidOperationException(
+                    $"Actor animation {logicalPath} maps to {matches.Length} Godot resources " +
+                    $"in {sidecarPath}.");
+            result.Add(ParseAnimation(source, matches[0], sidecarPath));
+            remaining.Remove(matches[0]);
+        }
+        if (remaining.Count != 0)
+            throw new InvalidOperationException(
+                $"Actor import has animations absent from its sidecar: {sidecarPath}.");
+        return result;
+    }
+
+    private static LoadedAnimation ParseAnimation(
+        JsonElement source,
+        (AnimationPlayer Player, string Name) runtime,
+        string sidecarPath)
+    {
+        var logicalPath = RequireAnimationText(source, "logicalPath", sidecarPath);
+        var sha256 = RequireAnimationText(source, "sha256", sidecarPath);
+        var channels = source.GetProperty("channels").GetInt32();
+        if (channels < 1)
+            throw new InvalidOperationException(
+                $"Actor animation {logicalPath} has no authored channels in {sidecarPath}.");
+        return new LoadedAnimation(
+            logicalPath,
+            sha256,
+            channels,
+            runtime.Name,
+            runtime.Player);
+    }
+
+    private static string RequireAnimationText(
+        JsonElement source,
+        string property,
+        string sidecarPath)
+    {
+        var value = source.GetProperty(property).GetString();
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException(
+                $"Actor animation has no {property}: {sidecarPath}.");
+        return value;
+    }
+
+    internal static string NormalizeAnimationPath(string value)
+    {
+        var normalized = value.Replace('/', '\\').TrimStart('\\');
+        const string meshesPrefix = "meshes\\";
+        normalized = normalized.StartsWith(meshesPrefix, StringComparison.OrdinalIgnoreCase)
+            ? normalized[meshesPrefix.Length..]
+            : normalized;
+        const string importedKfSuffix = "_kf";
+        return normalized.EndsWith(importedKfSuffix, StringComparison.OrdinalIgnoreCase)
+            ? normalized[..^importedKfSuffix.Length] + ".kf"
+            : normalized;
     }
 
     private static IReadOnlyList<LoadedSurface> LoadSurfaces(
@@ -198,15 +291,7 @@ internal static class ActorModelSlice
         string sidecarPath)
     {
         var declared = sidecar.GetProperty("omittedSurfaces").EnumerateArray()
-            .Select(surface => new OmittedSurface(
-                RequireSurfaceText(surface, "role", sidecarPath),
-                RequireSurfaceText(surface, "modelPath", sidecarPath),
-                RequireSurfaceText(surface, "modelSha256", sidecarPath),
-                RequireSurfaceText(surface, "shape", sidecarPath),
-                RequireSurfaceText(surface, "attachmentNode", sidecarPath),
-                RequireSurfaceText(surface, "attachmentSource", sidecarPath),
-                RequireSurfaceText(surface, "disposition", sidecarPath),
-                RequireSurfaceText(surface, "authority", sidecarPath)))
+            .Select(surface => LoadOmittedSurface(surface, sidecarPath))
             .ToArray();
         var expected = sidecar.GetProperty("coverage").GetProperty("omittedSurfaces").GetInt32();
         if (declared.Length != expected)
@@ -214,6 +299,35 @@ internal static class ActorModelSlice
                 $"Actor omitted-surface count disagrees in {sidecarPath}: " +
                 $"declared={declared.Length} coverage={expected}.");
         return declared;
+    }
+
+    private static OmittedSurface LoadOmittedSurface(
+        JsonElement surface,
+        string sidecarPath)
+    {
+        var disposition = RequireSurfaceText(surface, "disposition", sidecarPath);
+        var attachmentNode = OptionalSurfaceText(
+            surface,
+            "attachmentNode",
+            sidecarPath);
+        var attachmentSource = OptionalSurfaceText(
+            surface,
+            "attachmentSource",
+            sidecarPath);
+        if ((attachmentNode is null) != (attachmentSource is null) ||
+            (disposition == AuthoredPrnRootMarkerDisposition &&
+             attachmentNode is null))
+            throw new InvalidOperationException(
+                $"Actor omitted surface has an invalid attachment contract: {sidecarPath}.");
+        return new OmittedSurface(
+            RequireSurfaceText(surface, "role", sidecarPath),
+            RequireSurfaceText(surface, "modelPath", sidecarPath),
+            RequireSurfaceText(surface, "modelSha256", sidecarPath),
+            RequireSurfaceText(surface, "shape", sidecarPath),
+            attachmentNode,
+            attachmentSource,
+            disposition,
+            RequireSurfaceText(surface, "authority", sidecarPath));
     }
 
     private static string? OptionalSurfaceText(
@@ -263,10 +377,184 @@ internal static class ActorModelSlice
 
     internal static Aabb WorldBounds(Node3D root)
     {
+        return WorldBounds(Descendants<MeshInstance3D>(root));
+    }
+
+    internal static Aabb PosedWorldBounds(
+        LoadedActor actor,
+        bool includeWeapons = true) =>
+        PosedWorldBounds(actor.Root, actor.Surfaces, includeWeapons);
+
+    internal static Aabb PosedWorldBounds(
+        LoadedActor actor,
+        LoadedSurface surface) =>
+        PosedWorldBounds(actor.Root, [surface], includeWeapons: true);
+
+    internal static Vector3? PosedSemanticCenter(
+        LoadedActor actor,
+        params string[] roles)
+    {
+        var roleSet = roles.ToHashSet(StringComparer.Ordinal);
+        var surfaces = actor.Surfaces
+            .Where(surface => roleSet.Contains(surface.Role))
+            .ToArray();
+        return surfaces.Length == 0
+            ? null
+            : PosedWorldBounds(actor.Root, surfaces, includeWeapons: true).GetCenter();
+    }
+
+    private static Aabb PosedWorldBounds(
+        Node3D actorRoot,
+        IReadOnlyList<LoadedSurface> surfaces,
+        bool includeWeapons)
+    {
+        var minimum = new Vector3(
+            float.PositiveInfinity,
+            float.PositiveInfinity,
+            float.PositiveInfinity);
+        var maximum = new Vector3(
+            float.NegativeInfinity,
+            float.NegativeInfinity,
+            float.NegativeInfinity);
+        var points = 0;
+        foreach (var surface in surfaces.Where(surface =>
+                     includeWeapons || surface.Role != WeaponSurfaceRole))
+        {
+            var mesh = surface.Mesh.Mesh
+                ?? throw new InvalidOperationException(
+                    $"Actor surface has no runtime mesh: {surface.Role}/{surface.Shape}.");
+            var skeleton = surface.Skinned
+                ? ResolveSkeleton(actorRoot, surface.Mesh)
+                : null;
+            var palette = surface.Skinned
+                ? BuildSkinPalette(surface, skeleton!)
+                : Array.Empty<Transform3D>();
+            for (var surfaceIndex = 0;
+                 surfaceIndex < mesh.GetSurfaceCount();
+                 surfaceIndex++)
+            {
+                var arrays = mesh.SurfaceGetArrays(surfaceIndex);
+                var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                if (vertices.Length < 1)
+                    throw new InvalidOperationException(
+                        $"Actor surface contains no vertices: {surface.Role}/{surface.Shape}.");
+                if (!surface.Skinned)
+                {
+                    foreach (var vertex in vertices)
+                        Expand(surface.Mesh.ToGlobal(vertex));
+                    continue;
+                }
+
+                var bones = arrays[(int)Mesh.ArrayType.Bones].AsInt32Array();
+                var weights = arrays[(int)Mesh.ArrayType.Weights].AsFloat32Array();
+                var arrayMesh = mesh as ArrayMesh
+                    ?? throw new InvalidOperationException(
+                        $"Actor surface is not an ArrayMesh: " +
+                        $"{surface.Role}/{surface.Shape}.");
+                var format = arrayMesh.SurfaceGetFormat(surfaceIndex);
+                var influences = (format & Mesh.ArrayFormat.FlagUse8BoneWeights) != 0
+                    ? RenderingServer.ArrayWeightsSize * 2
+                    : RenderingServer.ArrayWeightsSize;
+                if (bones.Length != vertices.Length * influences ||
+                    weights.Length != bones.Length)
+                    throw new InvalidOperationException(
+                        $"Actor skin arrays disagree for {surface.Role}/{surface.Shape}: " +
+                        $"vertices={vertices.Length} bones={bones.Length} " +
+                        $"weights={weights.Length} influences={influences}.");
+                for (var vertexIndex = 0;
+                     vertexIndex < vertices.Length;
+                     vertexIndex++)
+                {
+                    var deformed = Vector3.Zero;
+                    var weightSum = 0.0f;
+                    var influenceStart = vertexIndex * influences;
+                    for (var influence = 0;
+                         influence < influences;
+                         influence++)
+                    {
+                        var weight = weights[influenceStart + influence];
+                        if (weight <= 0.0f)
+                            continue;
+                        var bindIndex = bones[influenceStart + influence];
+                        if (bindIndex < 0 || bindIndex >= palette.Length ||
+                            !float.IsFinite(weight))
+                            throw new InvalidOperationException(
+                                $"Actor skin influence is invalid for " +
+                                $"{surface.Role}/{surface.Shape}.");
+                        deformed += palette[bindIndex] * vertices[vertexIndex] * weight;
+                        weightSum += weight;
+                    }
+                    if (!float.IsFinite(weightSum) || weightSum <= 0.0f)
+                        throw new InvalidOperationException(
+                            $"Actor skin vertex has no finite weight for " +
+                            $"{surface.Role}/{surface.Shape}.");
+                    Expand(deformed / weightSum);
+                }
+            }
+        }
+        if (points < 1 || !minimum.IsFinite() || !maximum.IsFinite())
+            throw new InvalidOperationException(
+                "Actor scene contains no finite posed visual bounds.");
+        return new Aabb(minimum, maximum - minimum);
+
+        void Expand(Vector3 point)
+        {
+            if (!point.IsFinite())
+                throw new InvalidOperationException(
+                    "Actor posed visual bounds contain a non-finite vertex.");
+            minimum = minimum.Min(point);
+            maximum = maximum.Max(point);
+            points++;
+        }
+    }
+
+    private static Skeleton3D ResolveSkeleton(
+        Node3D actorRoot,
+        MeshInstance3D mesh)
+    {
+        var direct = mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton);
+        if (direct is not null)
+            return direct;
+        var skeletons = Descendants<Skeleton3D>(actorRoot).ToArray();
+        if (skeletons.Length != 1)
+            throw new InvalidOperationException(
+                $"Actor skinned surface {mesh.Name} resolves {skeletons.Length} skeletons.");
+        return skeletons[0];
+    }
+
+    private static Transform3D[] BuildSkinPalette(
+        LoadedSurface surface,
+        Skeleton3D skeleton)
+    {
+        var skin = surface.Mesh.Skin
+            ?? throw new InvalidOperationException(
+                $"Actor skinned surface has no Skin: {surface.Role}/{surface.Shape}.");
+        var palette = new Transform3D[skin.GetBindCount()];
+        for (var bindIndex = 0;
+             bindIndex < skin.GetBindCount();
+             bindIndex++)
+        {
+            var bindName = skin.GetBindName(bindIndex).ToString();
+            var boneIndex = string.IsNullOrEmpty(bindName)
+                ? skin.GetBindBone(bindIndex)
+                : skeleton.FindBone(bindName);
+            if (boneIndex < 0 || boneIndex >= skeleton.GetBoneCount())
+                throw new InvalidOperationException(
+                    $"Actor skin bind {bindIndex} does not resolve a skeleton bone for " +
+                    $"{surface.Role}/{surface.Shape}.");
+            palette[bindIndex] = skeleton.GlobalTransform *
+                skeleton.GetBoneGlobalPose(boneIndex) *
+                skin.GetBindPose(bindIndex);
+        }
+        return palette;
+    }
+
+    private static Aabb WorldBounds(IEnumerable<MeshInstance3D> meshes)
+    {
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         var points = 0;
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in meshes)
         {
             var bounds = mesh.GetAabb();
             foreach (var x in new[] { bounds.Position.X, bounds.End.X })
@@ -313,7 +601,15 @@ internal static class ActorModelSlice
         int AuthoredSurfaces,
         int AuthoredTextures,
         IReadOnlyList<LoadedSurface> Surfaces,
-        IReadOnlyList<OmittedSurface> OmittedSurfaces);
+        IReadOnlyList<OmittedSurface> OmittedSurfaces,
+        IReadOnlyList<LoadedAnimation> LoadedAnimations);
+
+    internal readonly record struct LoadedAnimation(
+        string LogicalPath,
+        string SourceSha256,
+        int Channels,
+        string RuntimeName,
+        AnimationPlayer Player);
 
     internal readonly record struct LoadedSurface(
         string Role,
@@ -332,8 +628,8 @@ internal static class ActorModelSlice
         string ModelPath,
         string ModelSha256,
         string Shape,
-        string AttachmentNode,
-        string AttachmentSource,
+        string? AttachmentNode,
+        string? AttachmentSource,
         string Disposition,
         string Authority);
 

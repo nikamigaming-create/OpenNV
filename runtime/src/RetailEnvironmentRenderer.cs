@@ -108,9 +108,29 @@ internal static class RetailEnvironmentRenderer
         ActorReviewContract.EnvironmentState captured,
         CellContentLoader.LoadedContent content,
         RetailExteriorEnvironment environmentCatalog,
+        RuntimeConfiguration configuration) => Apply(
+            host,
+            captured,
+            content,
+            environmentCatalog,
+            null,
+            configuration);
+
+    internal static Application Apply(
+        Node3D host,
+        ActorReviewContract.EnvironmentState captured,
+        CellContentLoader.LoadedContent content,
+        RetailExteriorEnvironment environmentCatalog,
+        GalleryRetailEvidence.DirectionalLightingReference? directionalLighting,
         RuntimeConfiguration configuration)
     {
         var resolved = environmentCatalog.Resolve(captured);
+        if (directionalLighting is { } observedLighting)
+            resolved = resolved with
+            {
+                AmbientEncoded = observedLighting.AmbientColorEncoded,
+                SunlightEncoded = observedLighting.DiffuseColorEncoded,
+            };
         var transfer = configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer;
         // WTHR/XCLL colors are normalized constant values, not sampled image
         // data. The captured retail texture sRGB state therefore does not apply
@@ -148,15 +168,23 @@ internal static class RetailEnvironmentRenderer
             Environment = environment,
         };
         host.AddChild(worldEnvironment);
-        host.AddChild(new DirectionalLight3D
+        var directionalLight = new DirectionalLight3D
         {
             Name = $"WTHR_{resolved.WeatherFormId:X8}_Sunlight",
-            RotationDegrees = configuration.ActorReview.DirectionalRotationDegrees.Vector3(),
             LightColor = sunlight,
             LightEnergy = configuration.Renderer.DirectionalEnergyScale *
                 resolved.ImageSpace.Traits[sunlightDimmerIndex],
             ShadowEnabled = configuration.ActorReview.DirectionalShadows,
-        });
+        };
+        if (directionalLighting is { } exactDirectionalLighting)
+            directionalLight.Transform = new Transform3D(
+                RetailLighting.DirectionalLightBasis(
+                    exactDirectionalLighting.SurfaceToLightGodot),
+                Vector3.Zero);
+        else
+            directionalLight.RotationDegrees =
+                configuration.ActorReview.DirectionalRotationDegrees.Vector3();
+        host.AddChild(directionalLight);
         var retailRoadMaterials = RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
             content.Root,
             ambient,
@@ -211,7 +239,10 @@ internal static class RetailEnvironmentRenderer
             true,
             false,
             false,
-            true,
+            directionalLighting is not null,
+            directionalLighting,
+            directionalLight.RotationDegrees,
+            directionalLight.ShadowEnabled,
             retailRoadMaterials,
             retailRoadMaterials > 0,
             retailLandscapeMaterials,
@@ -388,6 +419,9 @@ internal static class RetailEnvironmentRenderer
         bool AuxiliaryCloudSurfacesResolved,
         bool CloudUvOffsetResolved,
         bool DirectionalVectorResolved,
+        GalleryRetailEvidence.DirectionalLightingReference? DirectionalLighting,
+        Vector3 DirectionalRotationDegrees,
+        bool DirectionalShadowsEnabled,
         int RetailRoadMaterials,
         bool RetailRoadDiffuseCoreResolved,
         int RetailLandscapeMaterials,

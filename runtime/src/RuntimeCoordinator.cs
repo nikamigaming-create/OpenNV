@@ -187,6 +187,8 @@ public partial class RuntimeCoordinator : Node3D
             ? GalleryShotContract.Load(galleryShotPath, _configuration)
             : null;
         var applyCellEnvironment = galleryContract?.LocationClass != "exterior";
+        if (galleryContract is not null)
+            GD.Print($"OPENNV_GALLERY_STAGE id={galleryContract.Id} stage=cell-load-start");
         var loaded = CellSceneLoader.Load(
             scenePath,
             this,
@@ -201,6 +203,8 @@ public partial class RuntimeCoordinator : Node3D
             options.ContainsKey("proof-enable-actor"),
             !options.ContainsKey("capture-root") || options.ContainsKey("gallery-shot"),
             applyCellEnvironment);
+        if (galleryContract is not null)
+            GD.Print($"OPENNV_GALLERY_STAGE id={galleryContract.Id} stage=cell-load-complete");
         if (options.ContainsKey("xr-simulator-proof"))
         {
             _ = RunXrSimulatorAcceptance(loaded, scenePath, options);
@@ -213,7 +217,9 @@ public partial class RuntimeCoordinator : Node3D
         }
         if (options.TryGetValue("capture-root", out var captureRoot))
         {
-            _ = EnvironmentCapture.Run(
+            if (galleryContract is not null)
+                GD.Print($"OPENNV_GALLERY_STAGE id={galleryContract.Id} stage=capture-dispatch");
+            var captureTask = EnvironmentCapture.Run(
                 this,
                 loaded,
                 _configuration,
@@ -222,6 +228,12 @@ public partial class RuntimeCoordinator : Node3D
                 options.TryGetValue("report", out var captureReport) ? captureReport : null,
                 options.TryGetValue("retail-state-contract", out var retailState) ? retailState : null,
                 options.TryGetValue("gallery-shot", out var galleryShot) ? galleryShot : null);
+            if (galleryContract is not null)
+                GD.Print(
+                    $"OPENNV_GALLERY_STAGE id={galleryContract.Id} " +
+                    $"stage=capture-task-created status={captureTask.Status}");
+            if (captureTask.IsCompleted)
+                captureTask.GetAwaiter().GetResult();
             return;
         }
         if (options.ContainsKey("pool-proof"))

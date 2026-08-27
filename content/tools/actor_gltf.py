@@ -50,6 +50,9 @@ RIGID_ATTACHMENT_NIF_ROOT = "nif-root-skeleton-node"
 RIGID_ATTACHMENT_NIF_PARENT = "nif-prn-skeleton-node"
 RIGID_ATTACHMENT_CONFIGURED_NODE = "configured-unparented-skeleton-node"
 PRN_ROOT_MARKER_DISPOSITION = "omit-authored-prn-root-marker"
+RETAIL_HIDDEN_CREATURE_SURFACE_DISPOSITION = (
+    "omit-retail-hidden-creature-surface-at-observed-frame"
+)
 FACEGEN_RIGID_COMPONENT_ROLES = frozenset(
     {
         "eye-left",
@@ -168,6 +171,29 @@ def retail_render_parts_from_snapshot(
             )
         )
     return tuple(parts)
+
+
+def _visible_creature_geometry_names(
+    component: ActorComponent,
+    retail_render_parts: tuple[RetailRenderPart, ...],
+) -> frozenset[str]:
+    """Resolve visible shapes by exact owned source identity and runtime name.
+
+    Creature add-on NIFs (screens, voice boxes, exposed components, and similar
+    parts) can be reported under a semantic role other than ``actor``.  The
+    CREA model slot plus geometry identity is the authoritative join.
+    """
+
+    return frozenset(
+        part.geometry_name
+        for part in retail_render_parts
+        if part.source_form_id == component.source_form_id
+        and part.source_slot == component.source_slot
+        and part.required
+        and part.attached
+        and part.drawable
+        and part.visible
+    )
 
 
 @dataclass(frozen=True)
@@ -300,6 +326,21 @@ def export_actor_gltf(
     nodes: list[dict[str, object]] = [{"name": f"ACTOR_{source.actor_form_id}_{source.actor_name}", "children": []}]
     node_by_name: dict[str, int] = {}
     _append_skeleton_nodes(skeleton_root, 0, nodes, node_by_name)
+    nonaccumulation_root_nodes = [
+        name
+        for name in node_by_name
+        if name.casefold().endswith(" nonaccum")
+    ]
+    if len(nonaccumulation_root_nodes) > 1:
+        raise ValueError(
+            "Actor skeleton has multiple non-accumulation roots: "
+            f"{sorted(nonaccumulation_root_nodes)}"
+        )
+    nonaccumulation_root_node = (
+        nonaccumulation_root_nodes[0]
+        if nonaccumulation_root_nodes
+        else None
+    )
     if source.rigid_attachment_node not in node_by_name:
         raise ValueError(
             "Actor skeleton has no configured rigid-attachment node: "
@@ -393,7 +434,36 @@ def export_actor_gltf(
             )
         marker_ids = {id(shape) for shape in marker_shapes}
         shapes = [shape for shape in authored_shapes if id(shape) not in marker_ids]
+        if source.retail_render_parts and component.role.startswith("creature-model-"):
+            visible_runtime_names = _visible_creature_geometry_names(
+                component,
+                source.retail_render_parts,
+            )
+            hidden_shapes = [
+                shape
+                for shape in shapes
+                if _text(shape.name) not in visible_runtime_names
+            ]
+            for shape in hidden_shapes:
+                omitted_surfaces.append(
+                    {
+                        "role": component.role,
+                        "sourceFormId": component.source_form_id,
+                        "sourceSlot": component.source_slot,
+                        "modelPath": component.model_path,
+                        "modelSha256": hashlib.sha256(component.model_payload).hexdigest(),
+                        "shape": _text(shape.name),
+                        "disposition": RETAIL_HIDDEN_CREATURE_SURFACE_DISPOSITION,
+                        "authority": (
+                            "hash-bound retail actor appearance render-part visibility"
+                        ),
+                    }
+                )
+            hidden_ids = {id(shape) for shape in hidden_shapes}
+            shapes = [shape for shape in shapes if id(shape) not in hidden_ids]
         if not shapes:
+            if source.retail_render_parts and component.role.startswith("creature-model-"):
+                continue
             raise ValueError(f"Actor component {component.role} selected no shapes from {component.model_path}")
         if component.runtime_shape_name is not None and len(shapes) != 1:
             raise ValueError(
@@ -467,6 +537,8 @@ def export_actor_gltf(
                 node_by_name,
                 builder,
                 compiler,
+                source.skeleton_root_node,
+                nonaccumulation_root_node,
                 animation_source.logical_path if use_path_names else None,
             )
         except Exception as error:
@@ -511,6 +583,15 @@ def export_actor_gltf(
         "accessors": builder.accessors,
         "extras": {"openNvSchema": ACTOR_GLTF_SCHEMA, "actorFormId": source.actor_form_id},
     }
+    extensions_used = sorted(
+        {
+            extension
+            for material in materials
+            for extension in material.get("extensions", {})
+        }
+    )
+    if extensions_used:
+        gltf["extensionsUsed"] = extensions_used
     if animations:
         gltf["animations"] = animations
     binary_bytes = bytes(builder.data)
@@ -534,6 +615,18 @@ def export_actor_gltf(
                 "without Prn, require either a matching NIF root or the configured "
                 "engine-contract node"
             ),
+            "animationTranslationPolicy": {
+                "accumulationRootNode": source.skeleton_root_node,
+                "accumulationRootTranslation": (
+                    "owned-world-root-authoritative-zero-local-translation"
+                ),
+                "nonAccumulationRootNode": nonaccumulation_root_node,
+                "nonAccumulationRootTranslation": (
+                    "preserve-authored-absolute-local-translation"
+                    if nonaccumulation_root_node
+                    else "not-present"
+                ),
+            },
         },
         "animation": {
             "logicalPath": source.idle_animation_path,
@@ -819,6 +912,8 @@ def _geometry_identity_tokens(value: str) -> frozenset[str]:
 def _component_retail_role(component_role: str) -> str:
     if component_role.startswith("creature-model-"):
         return "actor"
+    if component_role.startswith("head-part-"):
+        return "headPart"
     return RETAIL_APPEARANCE_ROLE_BY_COMPONENT_ROLE.get(
         component_role,
         component_role,
@@ -855,10 +950,11 @@ def _resolve_retail_rigid_part(
             f"Rigid actor component {component.role}/{source_shape_name} has no retail source identity"
         )
     retail_role = _component_retail_role(component.role)
+    creature_component = component.role.startswith("creature-model-")
     candidates = [
         part
         for part in render_parts
-        if part.role == retail_role
+        if (creature_component or part.role == retail_role)
         and part.source_form_id == component.source_form_id
         and part.source_slot == component.source_slot
         and part.required
@@ -900,6 +996,19 @@ def _resolve_retail_rigid_part(
     ]
     if len(texture_matches) == 1:
         return texture_matches[0], "exact-owned-texture-binding"
+    if len(texture_matches) > 1:
+        visual_identities = {
+            (
+                part.geometry_name,
+                tuple(sorted(canonical_member_path(path) for path in part.texture_paths)),
+            )
+            for part in texture_matches
+        }
+        if len(visual_identities) == 1:
+            return (
+                min(texture_matches, key=lambda part: part.visual_node_path),
+                "retail-equivalent-duplicate-runtime-part",
+            )
 
     source_tokens = _geometry_identity_tokens(source_shape_name)
     token_scores = {
@@ -991,8 +1100,10 @@ def _append_shape(
     creature_rigid_shape = (
         rigid_to_head and component.role.startswith("creature-model-")
     )
-    transform_shape = retail_part is None and (
-        component.bake_shape_transform or creature_rigid_shape
+    transform_shape = _bake_actor_shape_transform(
+        component,
+        rigid=rigid_to_head,
+        retail_bound=retail_part is not None,
     )
     positions = [
         _transform_position(position, shape_transform)
@@ -1127,6 +1238,25 @@ def _append_shape(
         "vertexColorsEnabled": vertex_colors_enabled,
         "material": material_row,
     }
+
+
+def _bake_actor_shape_transform(
+    component: ActorComponent,
+    *,
+    rigid: bool,
+    retail_bound: bool,
+) -> bool:
+    """Apply the owned NIF component basis exactly once when required.
+
+    Retail render-part binding selects the visible owned geometry; it does not
+    replace that geometry's authored transform. Creature add-on NIFs are rigid
+    PRN attachments whose vertices must be converted into attachment-local
+    space even when a retail observation selected the surface.
+    """
+
+    if rigid and component.role.startswith("creature-model-"):
+        return True
+    return not retail_bound and component.bake_shape_transform
 
 
 _DISMEMBER_CAP_BODY_PARTS = frozenset(
@@ -1309,6 +1439,8 @@ def _build_animation(
     node_by_name: dict[str, int],
     builder: BufferBuilder,
     compiler: ContentCompilerConfiguration,
+    accumulation_root_node: str,
+    nonaccumulation_root_node: str | None,
     animation_name: str | None = None,
 ) -> tuple[dict[str, object] | None, int, tuple[float, float, float] | None]:
     document = _read_nif(payload)
@@ -1391,9 +1523,14 @@ def _build_animation(
             raise ValueError(f"Actor idle uses unsupported transform interpolator: {type(interpolator).__name__}")
 
         if translations:
-            if node_name == "Bip01 NonAccum":
+            if node_name == nonaccumulation_root_node:
                 nonaccum_origin = translations[0]
-            translations = actor_animation_translations(node_name, translations)
+            translations = actor_animation_translations(
+                node_name,
+                translations,
+                accumulation_root_node,
+                nonaccumulation_root_node,
+            )
             output = builder.add(
                 pack_floats(translations),
                 component_type=GL_FLOAT,
@@ -1467,11 +1604,16 @@ def _uniform_cubic(
 def actor_animation_translations(
     node_name: str,
     values: list[tuple[float, float, float]],
+    accumulation_root_node: str,
+    nonaccumulation_root_node: str | None,
 ) -> list[tuple[float, float, float]]:
-    if node_name != "Bip01 NonAccum" or not values:
+    if not values:
         return values
-    origin = values[0]
-    return [tuple(value[axis] - origin[axis] for axis in range(3)) for value in values]
+    if node_name == accumulation_root_node:
+        return [(0.0, 0.0, 0.0) for _ in values]
+    if node_name != nonaccumulation_root_node:
+        return values
+    return values
 
 
 def _linear_vector_keys(keys: list[object], time_value: float) -> tuple[float, float, float]:

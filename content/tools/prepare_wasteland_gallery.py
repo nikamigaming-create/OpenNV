@@ -577,6 +577,7 @@ def _actor_recipe(
     authored_cell_form_id: str,
     origin_game_units: list[float],
     cell_recipe_id: str,
+    retail_evidence: dict[str, object],
 ) -> dict[str, object]:
     return {
         "schema": "opennv-actor-recipe/v1",
@@ -589,6 +590,7 @@ def _actor_recipe(
         "proofActorReferenceFormId": str(subject["referenceFormId"]),
         "expectedBaseFormId": str(subject["baseFormId"]),
         "originGameUnits": origin_game_units,
+        "retailEvidence": copy.deepcopy(retail_evidence),
     }
 
 
@@ -597,6 +599,7 @@ def _creature_recipe(
     subject: dict[str, object],
     authored_cell_form_id: str,
     origin_game_units: list[float],
+    retail_evidence: dict[str, object],
 ) -> dict[str, object]:
     return {
         "schema": "opennv-gallery-creature-recipe/v1",
@@ -607,6 +610,7 @@ def _creature_recipe(
         "expectedBaseFormId": str(subject["baseFormId"]),
         "originGameUnits": origin_game_units,
         "allowedUnsupportedGeometryTypes": list(subject["allowedUnsupportedGeometryTypes"]),
+        "retailEvidence": copy.deepcopy(retail_evidence),
     }
 
 
@@ -619,6 +623,7 @@ class SubjectCompilationRequest:
     actor_template: dict[str, object]
     master_row: dict[str, object]
     subject: dict[str, object]
+    retail_evidence: dict[str, object]
     authored_cell_form_id: str
     origin_game_units: list[float]
     cell_recipe_id: str
@@ -633,6 +638,7 @@ def _compile_npc_subject(request: SubjectCompilationRequest) -> dict[str, object
         request.authored_cell_form_id,
         request.origin_game_units,
         request.cell_recipe_id,
+        request.retail_evidence,
     )
     _atomic_json(request.recipe_path, recipe)
     return prepare_actor(
@@ -650,6 +656,7 @@ def _compile_creature_subject(request: SubjectCompilationRequest) -> dict[str, o
         request.subject,
         request.authored_cell_form_id,
         request.origin_game_units,
+        request.retail_evidence,
     )
     _atomic_json(request.recipe_path, recipe)
     return prepare_gallery_creature(
@@ -840,6 +847,7 @@ def prepare_gallery(
                 actor_template,
                 master_row,
                 subject,
+                retail_evidence_descriptor,
                 authored_cell_form_id,
                 origin,
                 str(compiled_location["recipe"]),

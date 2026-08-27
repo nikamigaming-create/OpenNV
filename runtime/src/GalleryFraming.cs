@@ -12,7 +12,8 @@ internal static class GalleryFraming
         Aabb bounds,
         RuntimeConfiguration configuration,
         uint collisionMask,
-        GalleryRetailEvidence.PresentationReference presentation)
+        GalleryRetailEvidence.PresentationReference presentation,
+        Vector3 matchedRetailActorRootWorld)
     {
         var capture = configuration.Capture;
         var policy = capture.Gallery;
@@ -35,19 +36,15 @@ internal static class GalleryFraming
             (presentation.Frustum.Top + presentation.Frustum.Bottom) * near /
                 FrustumCenterDivisor);
         var matchedRetailCameraPosition =
-            actor.Placement.GlobalPosition +
+            matchedRetailActorRootWorld +
             GamebryoCoordinate.ConvertVector(presentation.CameraOffsetGameUnits) *
             configuration.World.GameUnitsToMeters;
-        var facingAdjustment = ResolveFacingAdjustment(
-            actor,
-            pose.FacingRotation,
-            policy.ModelFrontAxis);
-        var poseAdjustedCameraPosition =
-            actor.Placement.GlobalPosition +
-            facingAdjustment.Basis *
-                (matchedRetailCameraPosition - actor.Placement.GlobalPosition);
+        // Camera and actor-root transforms come from the same retail frame. A
+        // second animation-root orbit double-applies posed facing for rigs whose
+        // non-accumulation root carries the model's authored half-turn.
+        var poseAdjustedCameraPosition = matchedRetailCameraPosition;
         camera.GlobalTransform = new Transform3D(
-            facingAdjustment.Basis * presentation.CameraBasis,
+            presentation.CameraBasis,
             poseAdjustedCameraPosition);
         camera.SetFrustum(frustumSize, frustumOffset, near, far);
 
@@ -65,11 +62,19 @@ internal static class GalleryFraming
         var occlusionResolved = false;
         if (initialObstruction.Hit)
         {
+            var semanticFaceCenter = ActorModelSlice.PosedSemanticCenter(
+                actor.Actor,
+                "eye-left",
+                "eye-right");
+            var semanticFaceDirection = semanticFaceCenter is Vector3 faceCenter
+                ? HorizontalDirection(faceCenter - target)
+                : null;
             foreach (var candidate in AlternativeCameraPositions(
                          poseAdjustedCameraPosition,
                          target,
                          bounds,
-                         near))
+                         near,
+                         semanticFaceDirection))
             {
                 var candidateObstruction = CastVisibilityRays(
                     space,
@@ -126,7 +131,7 @@ internal static class GalleryFraming
             front,
             right,
             pose.FacingRotation,
-            facingAdjustment.YawRadians,
+            0.0f,
             projectedWidth,
             projectedDepth,
             target.DistanceTo(matchedRetailCameraPosition),
@@ -155,8 +160,6 @@ internal static class GalleryFraming
             aimAdjusted,
             occlusionResolved
                 ? "owned-pose-facing-with-collision-derived-clear-orbit"
-                : facingAdjustment.YawRadians != 0.0f
-                    ? "owned-pose-facing-from-matched-retail-camera"
                 : aimAdjusted
                 ? "current-owned-head-retarget-from-matched-retail-camera-position-and-projection"
                 : presentation.Derivation,
@@ -167,32 +170,12 @@ internal static class GalleryFraming
             presentation.ActorPoseEventSha256);
     }
 
-    private static FacingAdjustment ResolveFacingAdjustment(
-        CellActorLoader.PlacedActor actor,
-        Quaternion facingRotation,
-        string modelFrontAxis)
-    {
-        var localFront = modelFrontAxis == "negative-z"
-            ? Vector3.Forward
-            : Vector3.Back;
-        var actorBasis = actor.Placement.GlobalBasis.Orthonormalized();
-        var restWorldFront = actorBasis * localFront;
-        var posedWorldFront = actorBasis * (new Basis(facingRotation) * localFront);
-        restWorldFront.Y = 0.0f;
-        posedWorldFront.Y = 0.0f;
-        if (restWorldFront.IsZeroApprox() || posedWorldFront.IsZeroApprox())
-            return new FacingAdjustment(Basis.Identity, 0.0f);
-        var yaw = restWorldFront.Normalized().SignedAngleTo(
-            posedWorldFront.Normalized(),
-            Vector3.Up);
-        return new FacingAdjustment(new Basis(Vector3.Up, yaw), yaw);
-    }
-
     private static IEnumerable<Vector3> AlternativeCameraPositions(
         Vector3 cameraPosition,
         Vector3 target,
         Aabb bounds,
-        float cameraNear)
+        float cameraNear,
+        Vector3? semanticFaceDirection)
     {
         var offset = cameraPosition - target;
         var vertical = new Vector3(0.0f, offset.Y, 0.0f);
@@ -214,23 +197,26 @@ internal static class GalleryFraming
             1,
             Mathf.CeilToInt(Mathf.Tau / angularDiameter));
         var orbitStep = Mathf.Tau / orbitSamples;
-        for (var angularSample = 0;
-             angularSample < orbitSamples;
-             angularSample++)
+        for (var radialSample = 0;
+             radialSample <= radialSamples;
+             radialSample++)
         {
-            foreach (var direction in angularSample == 0
-                         ? new[] { 1 }
-                         : new[] { 1, -1 })
+            for (var angularSample = 0;
+                 angularSample < orbitSamples;
+                 angularSample++)
             {
-                var yaw = direction * angularSample * orbitStep;
-                var angularDirection =
-                    new Basis(Vector3.Up, yaw) * horizontal.Normalized();
-                if (angularDirection.Dot(horizontal) <= 0.0f)
+                if (radialSample == 0 && angularSample == 0)
                     continue;
-                for (var radialSample = angularSample == 0 ? 1 : 0;
-                     radialSample <= radialSamples;
-                     radialSample++)
+                foreach (var direction in angularSample == 0
+                             ? new[] { 1 }
+                             : new[] { 1, -1 })
                 {
+                    var yaw = direction * angularSample * orbitStep;
+                    var angularDirection =
+                        new Basis(Vector3.Up, yaw) * horizontal.Normalized();
+                    if (semanticFaceDirection is Vector3 faceDirection &&
+                        angularDirection.Dot(faceDirection) <= 0.0f)
+                        continue;
                     var radius = Math.Max(
                         minimumRadius,
                         initialRadius - radialSample * actorHorizontalRadius);
@@ -240,6 +226,12 @@ internal static class GalleryFraming
                 }
             }
         }
+    }
+
+    private static Vector3? HorizontalDirection(Vector3 value)
+    {
+        value.Y = 0.0f;
+        return value.IsZeroApprox() ? null : value.Normalized();
     }
 
     private static RayHit CastVisibilityRays(
@@ -313,8 +305,6 @@ internal static class GalleryFraming
         bool Hit,
         Vector3 Position,
         string ColliderPath);
-
-    private readonly record struct FacingAdjustment(Basis Basis, float YawRadians);
 
     internal readonly record struct Frame(
         Aabb Bounds,

@@ -302,7 +302,9 @@ internal static class StaticCellCompileLoader
                 configuration.Renderer.MinimumPointLightEnergy,
                 light.GetProperty("intensity").GetSingle() *
                 configuration.Renderer.PointLightEnergyScale),
-            OmniRange = light.GetProperty("effectiveRadiusMeters").GetSingle(),
+            OmniRange = RetailLighting.PointShaderRadius(
+                light.GetProperty("effectiveRadiusMeters").GetSingle()),
+            OmniAttenuation = RetailLighting.GodotOmniDecayForRetailRemap,
             ShadowEnabled = configuration.Renderer.AuthoredPointLightShadows,
             LightCullMask = DefaultRenderLayer,
         });
@@ -343,14 +345,19 @@ internal static class StaticCellCompileLoader
         if (rotation.Length != DirectionComponents)
             throw new InvalidOperationException(
                 "Static CELL directional rotation must contain two values.");
+        var surfaceToLight = RetailLighting.SurfaceToLightFromXcllDegrees(
+            rotation[0],
+            rotation[1]);
         parent.AddChild(new DirectionalLight3D
         {
             Name = $"STATIC_CELL_{SafeNodeName(formKey)}_Directional",
-            RotationDegrees = new Vector3(rotation[0], rotation[1], 0.0f),
+            Transform = new Transform3D(
+                RetailLighting.DirectionalLightBasis(surfaceToLight),
+                Vector3.Zero),
             LightColor = ReadByteColor(lighting.GetProperty("directional_rgb")),
             LightEnergy = lighting.GetProperty("directional_fade").GetSingle() *
                 configuration.Renderer.DirectionalEnergyScale,
-            ShadowEnabled = true,
+            ShadowEnabled = configuration.ActorReview.DirectionalShadows,
             LightCullMask = DefaultRenderLayer,
         });
     }
