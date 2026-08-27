@@ -115,6 +115,36 @@ entries, ARMO models, and BMDT hair visibility. A CELL reference resolves to a
 base record and its model; runtime node creation consumes that manifest rather
 than inventing placements.
 
+## Opening command and save accountability
+
+The opening compiler traverses the owned quest stages and dialogue graph once,
+then seals every emitted command in
+`opennv-owned-opening-command-contract/v1`. The seal contains the total command
+count, per-kind counts, and per-identity-field counts. Item, quest, global,
+owner, and reference editor identities must resolve to exactly one owned record;
+the compiler writes the stable FormID and record type beside the authored
+command. Unknown command kinds and ambiguous or missing records are compile
+errors. The Godot loader independently reconstructs the counts and validates
+the same identities before any command runs.
+
+Runtime code owns only operation semantics. Quest stages, timers, item counts,
+actor values, objective indices and text, global values, reference state,
+packages, animations, dialogue choices, voice/LIP members, and world targets all
+come from the verified flow. Movement uses the shared configured input map and,
+only while the opening is active, the CELL's owned NAVM plus configured capsule
+dimensions. It does not carry a Doc-specific coordinate, route, key, item, or
+stage table.
+
+`opennv-campaign-save/v3` embeds
+`opennv-opening-campaign-state/v1` in the same atomic save envelope used by the
+gameplay session. Loading validates schemas, normalized FormIDs, uniqueness,
+finite values, transform shape, and the flow-specific character constraints
+before restoring state. A headless two-process gate reaches the authored
+autosave, exits, reloads that exact incomplete state, and requires the owned
+completion stage and command effects. Godot's configured input events and
+authored UI signals drive the gate; Windows app control and foreground input
+injection are prohibited.
+
 ## Single injection path
 
 The C# runtime loads exactly one typed `RuntimeConfiguration` in

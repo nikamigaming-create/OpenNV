@@ -4,6 +4,7 @@ using Godot;
 namespace OpenNV.Runtime;
 
 internal sealed record OpeningNewGameFlow(
+    OpeningCommandContract CommandContract,
     string QuestFormId,
     string QuestEditorId,
     IReadOnlyDictionary<int, string> Objectives,
@@ -28,11 +29,43 @@ internal sealed record OpeningNewGameFlow(
     IReadOnlyDictionary<string, OpeningImageSpaceModifier> ImageSpaceModifiers,
     OpeningCharacterCreation Character)
 {
-    private const string ExpectedSchema = "opennv-owned-new-game-flow/v4";
+    private const string ExpectedSchema = "opennv-owned-new-game-flow/v5";
+    private const string ExpectedCommandContractSchema =
+        "opennv-owned-opening-command-contract/v1";
     private const string ExpectedGuideActorAiSchema =
         "opennv-owned-guide-actor-ai/v1";
     private const string ExpectedPlayerAnimationSchema =
         "opennv-owned-player-animation-graph/v1";
+    private static readonly HashSet<string> RuntimeCommandKinds = new(
+        new[]
+        {
+            "achievement",
+            "actorIntent",
+            "actorValueDelta",
+            "additem",
+            "addScriptPackage",
+            "autoDisplayObjectives",
+            "autosave",
+            "deferredStage",
+            "equipitem",
+            "imageSpaceModifier",
+            "objective",
+            "playerControls",
+            "playIdle",
+            "referenceEnabled",
+            "removeitem",
+            "removeScriptPackage",
+            "sayTo",
+            "setDestroyed",
+            "setGlobal",
+            "setQuestVariable",
+            "setStage",
+            "setTimer",
+            "showMenu",
+            "startQuest",
+            "stopQuest",
+        },
+        StringComparer.Ordinal);
 
     internal static OpeningNewGameFlow Load(
         JsonElement source,
@@ -103,6 +136,7 @@ internal sealed record OpeningNewGameFlow(
             .ToDictionary(value => value.EditorId, StringComparer.OrdinalIgnoreCase);
 
         var result = new OpeningNewGameFlow(
+            ParseCommandContract(source.GetProperty("commandContract")),
             quest.GetProperty("formId").GetString()!,
             quest.GetProperty("editorId").GetString()!,
             objectives,
@@ -129,6 +163,20 @@ internal sealed record OpeningNewGameFlow(
         Validate(result);
         return result;
     }
+
+    private static OpeningCommandContract ParseCommandContract(JsonElement source) => new(
+        source.GetProperty("schema").GetString()!,
+        source.GetProperty("commandCount").GetInt32(),
+        source.GetProperty("kindCounts").EnumerateObject().ToDictionary(
+            value => value.Name,
+            value => value.Value.GetInt32(),
+            StringComparer.Ordinal),
+        source.GetProperty("recordIdentityCounts").EnumerateObject().ToDictionary(
+            value => value.Name,
+            value => value.Value.GetInt32(),
+            StringComparer.Ordinal),
+        source.GetProperty("allEmittedKindsRuntimeBlocking").GetBoolean(),
+        source.GetProperty("allDeclaredRecordReferencesResolved").GetBoolean());
 
     private static OpeningFlowMenu ParseMenu(JsonElement value)
     {
@@ -261,7 +309,18 @@ internal sealed record OpeningNewGameFlow(
         value.TryGetProperty("values", out var controls) &&
         controls.ValueKind == JsonValueKind.Array
             ? controls.EnumerateArray().Select(control => control.GetInt32()).ToArray()
-            : Array.Empty<int>());
+            : Array.Empty<int>(),
+        OptionalString(value, "itemFormId"),
+        OptionalString(value, "itemRecordType"),
+        OptionalString(value, "questFormId"),
+        OptionalString(value, "questRecordType"),
+        OptionalString(value, "globalFormId"),
+        OptionalString(value, "globalRecordType"),
+        OptionalString(value, "ownerEditorId"),
+        OptionalString(value, "ownerFormId"),
+        OptionalString(value, "ownerRecordType"),
+        OptionalString(value, "referenceFormId"),
+        OptionalString(value, "referenceRecordType"));
 
     private static OpeningGuideActorAi ParseGuideActorAi(JsonElement source)
     {
@@ -603,6 +662,7 @@ internal sealed record OpeningNewGameFlow(
                 topic.Infos.SelectMany(info => info.Commands)))
             .Concat(flow.PsychologyRootInfo.Commands)
             .ToArray();
+        ValidateCommandContract(flow.CommandContract, commands);
         var dialogueInfos = flow.TopicsByFormId.Values
             .SelectMany(topic => topic.Infos)
             .Append(flow.PsychologyRootInfo)
@@ -699,6 +759,86 @@ internal sealed record OpeningNewGameFlow(
             throw new InvalidOperationException("Owned character-creation contract is invalid.");
     }
 
+    private static void ValidateCommandContract(
+        OpeningCommandContract contract,
+        IReadOnlyList<OpeningFlowCommand> commands)
+    {
+        var kindCounts = commands
+            .GroupBy(command => command.Kind, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var identityCounts = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["itemEditorId"] = commands.Count(command => command.ItemEditorId is not null),
+            ["questEditorId"] = commands.Count(command => command.QuestEditorId is not null),
+            ["globalEditorId"] = commands.Count(command => command.GlobalEditorId is not null),
+            ["ownerEditorId"] = commands.Count(command => command.OwnerEditorId is not null),
+            ["referenceEditorId"] = commands.Count(command => command.ReferenceEditorId is not null),
+        };
+        foreach (var empty in identityCounts.Where(value => value.Value == 0).ToArray())
+            identityCounts.Remove(empty.Key);
+        if (contract.Schema != ExpectedCommandContractSchema ||
+            !contract.AllEmittedKindsRuntimeBlocking ||
+            !contract.AllDeclaredRecordReferencesResolved ||
+            contract.CommandCount != commands.Count ||
+            !DictionaryMatches(contract.KindCounts, kindCounts) ||
+            !DictionaryMatches(contract.RecordIdentityCounts, identityCounts) ||
+            commands.Any(command => !RuntimeCommandKinds.Contains(command.Kind)) ||
+            commands.Any(command =>
+                !ValidIdentity(command.ItemEditorId, command.ItemFormId, command.ItemRecordType) ||
+                !ValidIdentity(
+                    command.QuestEditorId,
+                    command.QuestFormId,
+                    command.QuestRecordType,
+                    "QUST") ||
+                !ValidIdentity(
+                    command.GlobalEditorId,
+                    command.GlobalFormId,
+                    command.GlobalRecordType,
+                    "GLOB") ||
+                !ValidIdentity(
+                    command.OwnerEditorId,
+                    command.OwnerFormId,
+                    command.OwnerRecordType,
+                    "QUST") ||
+                !ValidReferenceIdentity(command)))
+            throw new InvalidOperationException(
+                "Owned opening command execution contract is incomplete.");
+    }
+
+    private static bool DictionaryMatches(
+        IReadOnlyDictionary<string, int> expected,
+        IReadOnlyDictionary<string, int> actual) =>
+        expected.Count == actual.Count &&
+        expected.All(value => actual.GetValueOrDefault(value.Key) == value.Value);
+
+    private static bool ValidIdentity(
+        string? editorId,
+        string? formId,
+        string? recordType,
+        string? expectedRecordType = null)
+    {
+        if (editorId is null)
+            return formId is null && recordType is null;
+        if (string.IsNullOrWhiteSpace(formId) || string.IsNullOrWhiteSpace(recordType) ||
+            expectedRecordType is not null && recordType != expectedRecordType)
+            return false;
+        try
+        {
+            return FalloutFormId.Normalize(formId) == formId;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ValidReferenceIdentity(OpeningFlowCommand command) =>
+        ValidIdentity(
+            command.ReferenceEditorId,
+            command.ReferenceFormId,
+            command.ReferenceRecordType) &&
+        (command.ReferenceRecordType is null or "REFR" or "ACHR" or "ACRE");
+
     private static bool ValidGuideLocomotionClip(OpeningGuideLocomotionClip clip) =>
         !string.IsNullOrWhiteSpace(clip.LogicalPath) &&
         !string.IsNullOrWhiteSpace(clip.Sha256) &&
@@ -732,6 +872,14 @@ internal sealed record OpeningStageProgram(
     IReadOnlyList<OpeningFlowCommand> Commands);
 
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
+
+internal sealed record OpeningCommandContract(
+    string Schema,
+    int CommandCount,
+    IReadOnlyDictionary<string, int> KindCounts,
+    IReadOnlyDictionary<string, int> RecordIdentityCounts,
+    bool AllEmittedKindsRuntimeBlocking,
+    bool AllDeclaredRecordReferencesResolved);
 
 internal sealed record OpeningSceneRole(
     string Role,
@@ -833,7 +981,18 @@ internal sealed record OpeningFlowCommand(
     bool? Enabled,
     bool? Destroyed,
     bool? CrossFade,
-    IReadOnlyList<int> ControlValues);
+    IReadOnlyList<int> ControlValues,
+    string? ItemFormId,
+    string? ItemRecordType,
+    string? QuestFormId,
+    string? QuestRecordType,
+    string? GlobalFormId,
+    string? GlobalRecordType,
+    string? OwnerEditorId,
+    string? OwnerFormId,
+    string? OwnerRecordType,
+    string? ReferenceFormId,
+    string? ReferenceRecordType);
 
 internal sealed record OpeningGuideActorAi(
     string Role,

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
@@ -14,6 +16,7 @@ public partial class RuntimeCoordinator : Node3D
             "gameplay-proof",
             "gameplay-reload-proof",
             "new-game",
+            "opening-proof",
             "open-proof-door",
             "pool-proof",
             "portal-proof",
@@ -53,6 +56,18 @@ public partial class RuntimeCoordinator : Node3D
                     !_options.ContainsKey("save-path")))
                 throw new ArgumentException(
                     "--flat-controls-proof requires --report and --save-path and cannot use --vr.");
+            if (_options.TryGetValue("opening-proof", out var openingProofMode))
+            {
+                if (!_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
+                    !_options.ContainsKey("opening-proof-name") ||
+                    !_options.ContainsKey("opening-proof-timeout-seconds") ||
+                    openingProofMode is not "checkpoint" and not "resume" ||
+                    openingProofMode == "checkpoint" != _options.ContainsKey("new-game"))
+                    throw new ArgumentException(
+                        "--opening-proof requires mode checkpoint with --new-game or mode resume " +
+                        "without it, plus --report, --save-path, --opening-proof-name, and " +
+                        "--opening-proof-timeout-seconds.");
+            }
             if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
                 throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
             if (_options.ContainsKey("vr"))
@@ -244,7 +259,7 @@ public partial class RuntimeCoordinator : Node3D
                 !preparedOptions.ContainsKey("actor-scene") &&
                 !preparedOptions.ContainsKey("actor-scenes"))
                 preparedOptions["actor-scenes"] = prepared.ActorScenesPath;
-            if (preparedOptions.ContainsKey("new-game"))
+            if (!preparedOptions.ContainsKey("opening-manifest"))
                 preparedOptions["opening-manifest"] = prepared.OpeningManifestPath;
             LoadCellScene(prepared.CellScenePath, preparedOptions);
         }
@@ -269,6 +284,7 @@ public partial class RuntimeCoordinator : Node3D
         var galleryContract = options.TryGetValue("gallery-shot", out var galleryShotPath)
             ? GalleryShotContract.Load(galleryShotPath, _configuration)
             : null;
+        var usesCampaignState = options.ContainsKey("opening-manifest");
         var applyCellEnvironment = galleryContract?.LocationClass != "exterior";
         if (galleryContract is not null)
             GD.Print($"OPENNV_GALLERY_STAGE id={galleryContract.Id} stage=cell-load-start");
@@ -280,22 +296,42 @@ public partial class RuntimeCoordinator : Node3D
             options.TryGetValue("proof-door", out var proofDoor) ? proofDoor : null,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
             useXrLayout,
-            !options.ContainsKey("capture-root"),
+            !options.ContainsKey("capture-root") && !usesCampaignState,
             options.TryGetValue("actor-scene", out var actorScene) ? actorScene : null,
             options.TryGetValue("actor-scenes", out var actorScenes) ? actorScenes : null,
             options.ContainsKey("proof-enable-actor"),
             !options.ContainsKey("capture-root") || options.ContainsKey("gallery-shot"),
             applyCellEnvironment,
             !options.ContainsKey("new-game"),
-            !options.ContainsKey("new-game"));
-        if (options.ContainsKey("new-game"))
+            !usesCampaignState);
+        var startsNewGame = options.ContainsKey("new-game");
+        var restoredOpening = startsNewGame ? null : loaded.Session.OpeningState;
+        OpeningQuestRuntime? openingFlow = null;
+        if (startsNewGame || restoredOpening is { Completed: false })
         {
             var openingManifest = OpeningManifest.Load(
                 RequireOption(options, "opening-manifest"),
                 _configuration);
-            var openingFlow = new OpeningQuestRuntime();
+            openingFlow = new OpeningQuestRuntime();
             AddChild(openingFlow);
-            openingFlow.Configure(openingManifest, loaded, _configuration);
+            openingFlow.Configure(
+                openingManifest,
+                loaded,
+                _configuration,
+                restoredOpening);
+        }
+        if (options.TryGetValue("opening-proof", out var openingProof))
+        {
+            if (openingFlow is null)
+                throw new InvalidOperationException(
+                    "Opening acceptance did not create an active opening flow.");
+            _ = RunOpeningAcceptance(
+                openingFlow,
+                loaded,
+                scenePath,
+                openingProof,
+                options);
+            return;
         }
         if (galleryContract is not null)
             GD.Print($"OPENNV_GALLERY_STAGE id={galleryContract.Id} stage=cell-load-complete");
@@ -351,6 +387,88 @@ public partial class RuntimeCoordinator : Node3D
             return;
         }
         CompleteCellLoad(loaded, scenePath, options, null);
+    }
+
+    private async Task RunOpeningAcceptance(
+        OpeningQuestRuntime opening,
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        string mode,
+        IReadOnlyDictionary<string, string> options)
+    {
+        try
+        {
+            if (!double.TryParse(
+                    RequireOption(options, "opening-proof-timeout-seconds"),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var timeoutSeconds) || timeoutSeconds <= 0.0)
+                throw new ArgumentException("Opening acceptance timeout is invalid.");
+            var initialState = loaded.Session.OpeningState;
+            var state = await opening.RunAcceptance(
+                mode,
+                RequireOption(options, "opening-proof-name"),
+                timeoutSeconds);
+            if (!File.Exists(loaded.Session.SavePath))
+                throw new InvalidOperationException(
+                    "Opening acceptance did not produce the canonical save.");
+            var saveSha256 = Convert.ToHexString(
+                    SHA256.HashData(File.ReadAllBytes(loaded.Session.SavePath)))
+                .ToLowerInvariant();
+            WriteReport(
+                RequireOption(options, "report"),
+                new
+                {
+                    schema = "opennv-opening-acceptance/v1",
+                    status = "pass",
+                    mode,
+                    inputTransport = "godot-authored-ui-signals-plus-configured-input-map",
+                    windowsAppControlUsed = false,
+                    foregroundInputInjected = false,
+                    configurationSchema = RuntimeConfiguration.ExpectedSchema,
+                    configurationSha256 = _configuration.Sha256,
+                    scene = Path.GetFullPath(scenePath),
+                    save = new
+                    {
+                        path = loaded.Session.SavePath,
+                        sha256 = saveSha256,
+                    },
+                    initial = initialState is null
+                        ? null
+                        : new
+                        {
+                            stage = initialState.Stage,
+                            completed = initialState.Completed,
+                        },
+                    final = new
+                    {
+                        schema = state.Schema,
+                        questFormId = state.QuestFormId,
+                        stage = state.Stage,
+                        completed = state.Completed,
+                        playerName = state.PlayerName,
+                        specialTotal = state.SpecialValues.Values.Sum(),
+                        tagSkills = state.TagSkillFormIds.Count,
+                        traits = state.TraitFormIds.Count,
+                        quests = state.Quests.Count,
+                        globals = state.Globals.Count,
+                        objectives = state.Objectives.Count,
+                        inventory = state.Inventory.Count,
+                        equippedItems = state.EquippedItemFormIds.Count,
+                        achievements = state.Achievements.Count,
+                    },
+                    gameplay = loaded.Session.Report(),
+                });
+            GD.Print(
+                $"OPENNV_OPENING_ACCEPTANCE_PASS mode={mode} stage={state.Stage} " +
+                $"completed={state.Completed} save={saveSha256}");
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_OPENING_ACCEPTANCE_FAIL {exception}");
+            GetTree().Quit(1);
+        }
     }
 
     private async Task RunPoolProof(

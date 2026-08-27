@@ -115,6 +115,48 @@ PLAYER_CONTROL_ARGUMENTS = (
     "rolloverText",
     "sneaking",
 )
+OPENING_COMMAND_CONTRACT_SCHEMA = "opennv-owned-opening-command-contract/v1"
+OPENING_COMMAND_KINDS = frozenset(
+    {
+        "achievement",
+        "actorIntent",
+        "actorValueDelta",
+        "additem",
+        "addScriptPackage",
+        "autoDisplayObjectives",
+        "autosave",
+        "deferredStage",
+        "equipitem",
+        "imageSpaceModifier",
+        "objective",
+        "playerControls",
+        "playIdle",
+        "referenceEnabled",
+        "removeitem",
+        "removeScriptPackage",
+        "sayTo",
+        "setDestroyed",
+        "setGlobal",
+        "setQuestVariable",
+        "setStage",
+        "setTimer",
+        "showMenu",
+        "startQuest",
+        "stopQuest",
+    }
+)
+COMMAND_RECORD_FIELDS = (
+    ("itemEditorId", "itemFormId", "itemRecordType", None),
+    ("questEditorId", "questFormId", "questRecordType", frozenset({"QUST"})),
+    ("globalEditorId", "globalFormId", "globalRecordType", frozenset({"GLOB"})),
+    ("ownerEditorId", "ownerFormId", "ownerRecordType", frozenset({"QUST"})),
+    (
+        "referenceEditorId",
+        "referenceFormId",
+        "referenceRecordType",
+        frozenset({"REFR", "ACHR", "ACRE"}),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -2658,6 +2700,56 @@ def _all_flow_commands(
     return commands
 
 
+def _resolve_command_record_identities(
+    commands: Iterable[dict[str, object]],
+    records: Iterable[dict[str, object]],
+) -> dict[str, object]:
+    records_by_editor: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for record in records:
+        editor_id = _record_editor_id_from_manifest(record)
+        if editor_id:
+            records_by_editor[editor_id.casefold()].append(record)
+
+    command_rows = list(commands)
+    kind_counts: dict[str, int] = defaultdict(int)
+    resolved_counts: dict[str, int] = defaultdict(int)
+    for command in command_rows:
+        kind = str(command.get("kind", ""))
+        if kind not in OPENING_COMMAND_KINDS:
+            raise ValueError(f"Owned opening command kind is unaccounted: {kind!r}")
+        kind_counts[kind] += 1
+        for editor_field, form_field, type_field, allowed_types in COMMAND_RECORD_FIELDS:
+            editor_id = command.get(editor_field)
+            if editor_id is None:
+                continue
+            matches = records_by_editor.get(str(editor_id).casefold(), [])
+            if allowed_types is not None:
+                matches = [
+                    record
+                    for record in matches
+                    if str(record["recordType"]) in allowed_types
+                ]
+            if len(matches) != 1:
+                raise ValueError(
+                    "Owned opening command record is ambiguous: "
+                    f"kind={kind} field={editor_field} editorId={editor_id} "
+                    f"matches={len(matches)}"
+                )
+            record = matches[0]
+            command[form_field] = record["formId"]
+            command[type_field] = record["recordType"]
+            resolved_counts[editor_field] += 1
+
+    return {
+        "schema": OPENING_COMMAND_CONTRACT_SCHEMA,
+        "commandCount": len(command_rows),
+        "kindCounts": dict(sorted(kind_counts.items())),
+        "recordIdentityCounts": dict(sorted(resolved_counts.items())),
+        "allEmittedKindsRuntimeBlocking": True,
+        "allDeclaredRecordReferencesResolved": True,
+    }
+
+
 def _one_package_subrecord(
     values: dict[str, list[bytes]],
     signature: str,
@@ -3415,6 +3507,7 @@ def compile_new_game_flow(
         guide_animation_paths,
     )
     flow_commands = _all_flow_commands(programs, dialogue)
+    command_contract = _resolve_command_record_identities(flow_commands, records)
     player_animation = _compile_player_animation_graph(
         flow_commands,
         flow,
@@ -3489,7 +3582,8 @@ def compile_new_game_flow(
     )
     return (
         {
-            "schema": "opennv-owned-new-game-flow/v4",
+            "schema": "opennv-owned-new-game-flow/v5",
+            "commandContract": command_contract,
             "quest": {
                 "formId": quest["formId"],
                 "editorId": quest_editor_id,

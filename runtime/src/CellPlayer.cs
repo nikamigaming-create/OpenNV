@@ -38,6 +38,9 @@ internal partial class CellPlayer : CharacterBody3D
     private bool _activationEnabled = true;
     private bool _combatEnabled = true;
     private bool _saveEnabled = true;
+    private CellNavigationGraph? _navigation;
+    private Node3D? _navigationRoot;
+    private Vector3 _navigationOriginGameUnits;
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
@@ -73,6 +76,23 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal void SetExternalActivationHandler(Func<Node?, bool>? handler) =>
         _externalActivationHandler = handler;
+
+    internal void ConfigureOwnedNavigation(
+        CellNavigationGraph navigation,
+        Node3D root,
+        Vector3 originGameUnits)
+    {
+        _navigation = navigation;
+        _navigationRoot = root;
+        _navigationOriginGameUnits = originGameUnits;
+    }
+
+    internal void ClearOwnedNavigation()
+    {
+        _navigation = null;
+        _navigationRoot = null;
+        Velocity = Vector3.Zero;
+    }
 
     internal void ApplyAuthoredCameraTransform(Transform3D transformFromFloor)
     {
@@ -133,14 +153,13 @@ internal partial class CellPlayer : CharacterBody3D
         direction.Y = 0.0f;
         direction = direction.Normalized();
 
-        var velocity = Velocity;
-        velocity.X = direction.X * _configuration.Player.MoveSpeedMetersPerSecond;
-        velocity.Z = direction.Z * _configuration.Player.MoveSpeedMetersPerSecond;
-        velocity.Y = IsOnFloor()
-            ? MathF.Min(velocity.Y, 0.0f)
-            : velocity.Y - _configuration.Simulation.GravityMetersPerSecondSquared * (float)delta;
-        Velocity = velocity;
-        MoveAndSlide();
+        var horizontalVelocity = direction * _configuration.Player.MoveSpeedMetersPerSecond;
+        if (!_movementEnabled)
+            Velocity = Vector3.Zero;
+        else if (_navigation is not null)
+            MoveOnOwnedNavigation(horizontalVelocity, (float)delta);
+        else
+            MoveWithPhysics(horizontalVelocity, (float)delta);
         UpdateWeaponFeedback((float)delta);
         if (_useXr)
         {
@@ -151,6 +170,51 @@ internal partial class CellPlayer : CharacterBody3D
         else
             PollDesktopActions();
     }
+
+    private void MoveOnOwnedNavigation(Vector3 horizontalVelocity, float delta)
+    {
+        if (Mathf.IsZeroApprox(delta))
+        {
+            Velocity = Vector3.Zero;
+            return;
+        }
+        var before = GlobalPosition;
+        var foot = before - Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
+        var desiredFoot = foot + horizontalVelocity * delta;
+        var reachable = _navigation!.FindReachablePoint(
+            NavigationWorldToGame(foot),
+            NavigationWorldToGame(desiredFoot));
+        GlobalPosition = NavigationGameToWorld(reachable) +
+            Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
+        Velocity = (GlobalPosition - before) / delta;
+    }
+
+    private void MoveWithPhysics(Vector3 horizontalVelocity, float delta)
+    {
+        var velocity = Velocity;
+        velocity.X = horizontalVelocity.X;
+        velocity.Z = horizontalVelocity.Z;
+        velocity.Y = IsOnFloor()
+            ? MathF.Min(velocity.Y, 0.0f)
+            : velocity.Y - _configuration.Simulation.GravityMetersPerSecondSquared * delta;
+        Velocity = velocity;
+        MoveAndSlide();
+    }
+
+    private Vector3 NavigationWorldToGame(Vector3 world)
+    {
+        var local = _navigationRoot!.ToLocal(world);
+        return new Vector3(
+            local.X + _navigationOriginGameUnits.X,
+            -local.Z + _navigationOriginGameUnits.Y,
+            local.Y + _navigationOriginGameUnits.Z);
+    }
+
+    private Vector3 NavigationGameToWorld(Vector3 game) =>
+        _navigationRoot!.ToGlobal(new Vector3(
+            game.X - _navigationOriginGameUnits.X,
+            game.Z - _navigationOriginGameUnits.Z,
+            -(game.Y - _navigationOriginGameUnits.Y)));
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {

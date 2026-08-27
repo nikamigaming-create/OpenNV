@@ -68,6 +68,50 @@ internal sealed class CellNavigationGraph
         return result;
     }
 
+    internal Vector3 FindNearestPoint(Vector3 pointGameUnits)
+    {
+        if (_navmeshes.Count == 0)
+            throw new InvalidOperationException(
+                "Owned CELL has no navigation mesh for actor placement.");
+        return _navmeshes
+            .Select(value => new
+            {
+                NavMesh = value,
+                Nearest = value.NearestTriangle(pointGameUnits),
+            })
+            .OrderBy(value => value.Nearest.DistanceSquared)
+            .ThenBy(value => value.NavMesh.FormId, StringComparer.OrdinalIgnoreCase)
+            .First()
+            .Nearest.Point;
+    }
+
+    internal Vector3 FindReachablePoint(
+        Vector3 startGameUnits,
+        Vector3 destinationGameUnits)
+    {
+        if (_navmeshes.Count == 0)
+            throw new InvalidOperationException(
+                "Owned CELL has no navigation mesh for player movement.");
+        var candidates = _navmeshes
+            .Select(value => new
+            {
+                NavMesh = value,
+                Start = value.NearestTriangle(startGameUnits),
+                Destination = value.NearestTriangle(destinationGameUnits),
+            })
+            .OrderBy(value => value.Start.DistanceSquared + value.Destination.DistanceSquared)
+            .ThenBy(value => value.NavMesh.FormId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var candidate in candidates)
+        {
+            if (candidate.NavMesh.CanReach(
+                    candidate.Start.Index,
+                    candidate.Destination.Index))
+                return candidate.Destination.Point;
+        }
+        return candidates[0].Start.Point;
+    }
+
     private static NavigationMeshRecord ParseNavMesh(JsonElement source)
     {
         var vertices = source.GetProperty("verticesGameUnits").EnumerateArray()
@@ -167,9 +211,14 @@ internal sealed class CellNavigationGraph
 
         internal NearestTriangleResult NearestTriangle(Vector3 point)
         {
-            var results = Triangles.Select((_, index) => new NearestTriangleResult(
-                    index,
-                    point.DistanceSquaredTo(ClosestPoint(index, point))))
+            var results = Triangles.Select((_, index) =>
+                {
+                    var nearest = ClosestPoint(index, point);
+                    return new NearestTriangleResult(
+                        index,
+                        nearest,
+                        point.DistanceSquaredTo(nearest));
+                })
                 .OrderBy(value => value.DistanceSquared)
                 .ThenBy(value => value.Index)
                 .ToArray();
@@ -210,6 +259,30 @@ internal sealed class CellNavigationGraph
                 path.Add(previous[path[^1]]);
             path.Reverse();
             return path;
+        }
+
+        internal bool CanReach(int start, int destination)
+        {
+            if (start == destination)
+                return true;
+            var pending = new Queue<int>();
+            var visited = new HashSet<int> { start };
+            pending.Enqueue(start);
+            while (pending.TryDequeue(out var current))
+            {
+                foreach (var adjacent in Triangles[current].AdjacentTriangles
+                    .Where(value => IsInternalNeighbor(current, value))
+                    .Distinct()
+                    .Order())
+                {
+                    if (!visited.Add(adjacent))
+                        continue;
+                    if (adjacent == destination)
+                        return true;
+                    pending.Enqueue(adjacent);
+                }
+            }
+            return false;
         }
 
         internal Vector3 SharedEdgeMidpoint(int first, int second)
@@ -319,5 +392,8 @@ internal sealed class CellNavigationGraph
         }
     }
 
-    private sealed record NearestTriangleResult(int Index, float DistanceSquared);
+    private sealed record NearestTriangleResult(
+        int Index,
+        Vector3 Point,
+        float DistanceSquared);
 }

@@ -17,6 +17,7 @@ from opening_catalog import (  # noqa: E402
     _compile_dialogue_voice,
     _compile_guide_package,
     _compile_player_package,
+    _resolve_command_record_identities,
     _script_commands,
 )
 from bsa_archive import ExtractedMember  # noqa: E402
@@ -62,6 +63,60 @@ def subrecord(signature: str, data: bytes = b"") -> bytes:
 
 
 class OpeningCatalogTest(unittest.TestCase):
+    def test_command_contract_resolves_owned_record_identities(self):
+        commands = [
+            {"kind": "additem", "itemEditorId": "SyntheticItem", "count": 1},
+            {"kind": "setStage", "questEditorId": "SyntheticQuest", "stage": 2},
+            {"kind": "setGlobal", "globalEditorId": "SyntheticGlobal", "value": 3.0},
+            {
+                "kind": "actorValueDelta",
+                "ownerEditorId": "SyntheticQuest",
+                "value": "Science",
+                "delta": 1,
+            },
+            {
+                "kind": "actorIntent",
+                "referenceEditorId": "SyntheticActor",
+                "operation": "evp",
+            },
+        ]
+        records = [
+            {
+                "formId": "00000010",
+                "recordType": "WEAP",
+                "text": [{"signature": "EDID", "value": "SyntheticItem"}],
+            },
+            {
+                "formId": "00000020",
+                "recordType": "QUST",
+                "text": [{"signature": "EDID", "value": "SyntheticQuest"}],
+            },
+            {
+                "formId": "00000030",
+                "recordType": "GLOB",
+                "text": [{"signature": "EDID", "value": "SyntheticGlobal"}],
+            },
+            {
+                "formId": "00000040",
+                "recordType": "ACHR",
+                "text": [{"signature": "EDID", "value": "SyntheticActor"}],
+            },
+        ]
+
+        contract = _resolve_command_record_identities(commands, records)
+
+        self.assertEqual(contract["commandCount"], len(commands))
+        self.assertTrue(contract["allDeclaredRecordReferencesResolved"])
+        self.assertEqual(commands[0]["itemFormId"], "00000010")
+        self.assertEqual(commands[1]["questFormId"], "00000020")
+        self.assertEqual(commands[2]["globalFormId"], "00000030")
+        self.assertEqual(commands[3]["ownerFormId"], "00000020")
+        self.assertEqual(commands[4]["referenceFormId"], "00000040")
+
+    def test_command_contract_rejects_unaccounted_runtime_kind(self):
+        with self.assertRaisesRegex(ValueError, "command kind is unaccounted"):
+            _resolve_command_record_identities([{"kind": "syntheticUnknown"}], [])
+
     def test_script_commands_preserve_player_package_camera_effect_and_controls(self):
         commands = _script_commands(
             "\n".join(

@@ -7,6 +7,7 @@ internal partial class GameplaySession : Node
 {
     private const string SaveSchemaV1 = "opennv-sandbox-save/v1";
     private const string SaveSchemaV2 = "opennv-sandbox-save/v2";
+    private const string SaveSchemaV3 = "opennv-campaign-save/v3";
     private const int EquippedWeaponCount = 1;
 
     private readonly Dictionary<string, InventoryEntry> _inventory = new(StringComparer.OrdinalIgnoreCase);
@@ -32,6 +33,7 @@ internal partial class GameplaySession : Node
     private int _weaponClipSize;
     private int _ammoInMagazine;
     private int _shotsFired;
+    private OpeningCampaignState? _openingState;
 
     internal bool ObjectiveComplete => ObjectiveStage == SandboxObjectiveStage.Complete;
     internal string SavePath => _savePath;
@@ -47,6 +49,7 @@ internal partial class GameplaySession : Node
         _inventoryLabel is not null;
     internal float XrHudPixelSize => _xrHudLabel?.PixelSize ?? 0.0f;
     internal bool HasItem(string itemFormId) => _inventory.ContainsKey(itemFormId);
+    internal OpeningCampaignState? OpeningState => _openingState;
     internal bool IsContainerEmptied(string referenceFormId) => _emptiedContainers.Contains(referenceFormId);
     internal SandboxObjectiveStage ObjectiveStage =>
         _equippedWeaponFormId is null ? SandboxObjectiveStage.EquipWeapon :
@@ -204,6 +207,21 @@ internal partial class GameplaySession : Node
         RefreshHud("Game saved");
     }
 
+    internal void StoreOpeningState(OpeningCampaignState state)
+    {
+        state.Validate();
+        foreach (var previous in _openingState?.Inventory ?? Array.Empty<OpeningInventoryState>())
+            _inventory.Remove(previous.FormId);
+        _openingState = state;
+        foreach (var item in state.Inventory)
+            _inventory[item.FormId] = new InventoryEntry(
+                item.FormId,
+                item.EditorId,
+                item.RecordType,
+                item.Count);
+        Save();
+    }
+
     internal void RegisterPool(PoolTableInstance table)
     {
         _pools.Add(table.ReferenceFormId, table);
@@ -281,8 +299,9 @@ internal partial class GameplaySession : Node
         Directory.CreateDirectory(Path.GetDirectoryName(_savePath)!);
         var document = new
         {
-            schema = SaveSchemaV2,
+            schema = SaveSchemaV3,
             cellFormId = _cellFormId,
+            opening = _openingState,
             inventory = _inventory.Values.OrderBy(entry => entry.ItemFormId, StringComparer.OrdinalIgnoreCase),
             removedReferences = _removedReferences.Order(StringComparer.OrdinalIgnoreCase),
             doorStates = _doorStates
@@ -323,7 +342,7 @@ internal partial class GameplaySession : Node
 
     internal object Report() => new
     {
-        schema = SaveSchemaV2,
+        schema = SaveSchemaV3,
         savePath = _savePath,
         objectiveStage = (int)ObjectiveStage,
         objectiveComplete = ObjectiveComplete,
@@ -342,6 +361,21 @@ internal partial class GameplaySession : Node
         poolTables = _pools.Count,
         poolBalls = _pools.Values.Sum(table => table.BallCount),
         pocketedPoolBalls = _pools.Values.Sum(table => table.PocketedBallCount),
+        opening = _openingState is null
+            ? null
+            : new
+            {
+                schema = _openingState.Schema,
+                questFormId = _openingState.QuestFormId,
+                stage = _openingState.Stage,
+                completed = _openingState.Completed,
+                playerName = _openingState.PlayerName,
+                specialValues = _openingState.SpecialValues.Count,
+                tagSkills = _openingState.TagSkillFormIds.Count,
+                traits = _openingState.TraitFormIds.Count,
+                quests = _openingState.Quests.Count,
+                inventory = _openingState.Inventory.Count,
+            },
     };
 
     private void Load(string cellFormId)
@@ -351,7 +385,7 @@ internal partial class GameplaySession : Node
         using var document = JsonDocument.Parse(File.ReadAllText(_savePath));
         var root = document.RootElement;
         var schema = root.GetProperty("schema").GetString();
-        if (schema != SaveSchemaV1 && schema != SaveSchemaV2)
+        if (schema != SaveSchemaV1 && schema != SaveSchemaV2 && schema != SaveSchemaV3)
             throw new InvalidOperationException($"Unexpected sandbox save schema: {_savePath}");
         if (root.GetProperty("cellFormId").GetString() != cellFormId)
             throw new InvalidOperationException($"Sandbox save belongs to another cell: {_savePath}");
@@ -380,7 +414,7 @@ internal partial class GameplaySession : Node
         _weaponClipSize = root.GetProperty("weaponClipSize").GetInt32();
         _ammoInMagazine = root.GetProperty("ammoInMagazine").GetInt32();
         _shotsFired = root.GetProperty("shotsFired").GetInt32();
-        if (schema == SaveSchemaV2 && root.TryGetProperty("poolTables", out var pools))
+        if (schema != SaveSchemaV1 && root.TryGetProperty("poolTables", out var pools))
         {
             foreach (var pool in pools.EnumerateArray())
             {
@@ -399,6 +433,10 @@ internal partial class GameplaySession : Node
                     new PoolTableInstance.PoolState(referenceFormId, balls));
             }
         }
+        if (schema == SaveSchemaV3 &&
+            root.TryGetProperty("opening", out var opening) &&
+            opening.ValueKind == JsonValueKind.Object)
+            _openingState = OpeningCampaignState.Parse(opening);
     }
 
     private void AddInventory(string itemFormId, string editorId, string recordType, int count)

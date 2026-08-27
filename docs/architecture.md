@@ -131,6 +131,40 @@ stateDiagram-v2
     Complete --> Complete: cold reload restores state
 ```
 
+## Owned opening and campaign-state handoff
+
+The New Vegas opening is compiled from the owned QUST, INFO, script-command,
+reference, item, global, package, animation, voice, LIP, and NAVM graph. The
+compiler emits `opennv-owned-new-game-flow/v5` plus an exact command-contract
+inventory. Every command kind is accounted for, and every declared item, quest,
+global, owner, and placed-reference editor identity is joined to one stable
+FormID and record type before the cache can be promoted. The runtime independently
+recounts that contract and rejects missing identities, unsupported operations,
+or a configuration-hash mismatch.
+
+```mermaid
+flowchart LR
+    Owned[Owned ESM/BSA records] --> Compiler[opening_catalog.py]
+    Compiler --> Flow[New-game flow v5]
+    Flow --> Interpreter[OpeningQuestRuntime]
+    Interpreter --> Checkpoint[Campaign save v3: incomplete]
+    Checkpoint --> Reload[Cold process reload]
+    Reload --> Interpreter
+    Interpreter --> Complete[Campaign save v3: stage 200 complete]
+    Complete --> World[Normal world collision and gameplay handoff]
+```
+
+The campaign state preserves character creation, quest variables and lifecycle,
+globals, objectives, achievements, exact inventory/equipment identities,
+reference state, control state, and player/guide transforms. The authored
+autosave is the only checkpoint boundary. During the opening, player grounding
+projects configured input onto the owned NAVM graph so the authored bed and
+interior collision cannot leave the player floating or trapped. That opening-only
+adapter is removed at completion; it does not become a general collision bypass.
+The two-process acceptance first stops on the owned autosave, then reloads that
+same file and must reach the owned completion stage. This proves the bounded
+opening handoff, not a complete campaign, Pip-Boy, HUD, or mod-compatibility claim.
+
 ## First-class flat/VR boundary
 
 VR is a product mode, not a later camera patch. Before the next gameplay system
@@ -247,6 +281,10 @@ require a headset session.
 | `test_static_nif_gltf.py` | Synthetic BSA/NIF geometry regressions | Runtime orchestration |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
+| `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, and versioned flow contract | Runtime state or Godot UI |
+| `OpeningFlowManifest.cs` | Flow/configuration/command-contract parsing and fail-closed runtime validation | Command execution or save state |
+| `OpeningQuestRuntime.cs` | Data-driven opening command interpreter, authored UI/dialogue/AI progression, checkpoint capture, and completion handoff | ESM/BSA parsing or guessed content identities |
+| `OpeningCampaignState.cs` | Versioned opening character/quest/world state validation and transform serialization | Flow progression or file I/O |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
 | `CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
 | `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal and proof queries | Binary parsing |
@@ -264,7 +302,7 @@ require a headset session.
 | `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
 | `PoolBallInstance.cs` | One authored dynamic convex body and its persisted motion/pocket state | Table rules or input |
 | `PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
-| `GameplaySession.cs` | Objective, HUD, inventory, ammo, world delta, pool snapshots, save/reload | Asset parsing |
+| `GameplaySession.cs` | Shared inventory/world delta, campaign-state envelope, pool snapshots, and atomic save/reload | Asset parsing or opening progression |
 | `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
 | `DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
 | `FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |

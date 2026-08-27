@@ -26,6 +26,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private const int DisabledControlValue = 0;
     private const int EnabledControlValue = 1;
     private const float TransparentAlpha = 0.0f;
+    private const double MillisecondsPerSecond = 1000.0;
 
     private readonly Dictionary<string, Node3D> _roleNodes =
         new(StringComparer.OrdinalIgnoreCase);
@@ -42,8 +43,19 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _tagSkills = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _traits = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, int> _inventory =
+    private readonly Dictionary<string, OpeningInventoryState> _inventory =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _equippedItemFormIds =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, OpeningQuestState> _quests =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, OpeningGlobalState> _globals =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, OpeningObjectiveState> _objectives =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, bool> _referenceEnabledStates =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<int> _achievements = [];
     private readonly bool[] _playerControls =
         Enumerable.Repeat(true, PlayerControlCount).ToArray();
     private readonly Dictionary<string, ActiveImageSpaceModifier> _activeImageSpaceModifiers =
@@ -97,19 +109,320 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private Action? _guideArrivalContinuation;
     private int _guideArrivalGeneration;
     private bool _openingQuestCompleted;
+    private bool _autoDisplayObjectives;
 
     internal int Stage => _stage;
     internal string PlayerName => _playerName;
 
+    internal async Task<OpeningCampaignState> RunAcceptance(
+        string mode,
+        string playerName,
+        double timeoutSeconds)
+    {
+        var stopAtCheckpoint = mode.Equals("checkpoint", StringComparison.OrdinalIgnoreCase);
+        var completeAfterResume = mode.Equals("resume", StringComparison.OrdinalIgnoreCase);
+        if ((!stopAtCheckpoint && !completeAfterResume) ||
+            string.IsNullOrWhiteSpace(playerName) || timeoutSeconds <= 0.0)
+            throw new ArgumentException("Opening acceptance arguments are invalid.");
+        if (completeAfterResume && _loaded.Session.OpeningState is not { Completed: false })
+            throw new InvalidOperationException(
+                "Opening resume acceptance requires an incomplete saved opening.");
+        var startMilliseconds = Time.GetTicksMsec();
+        var navigationStage = int.MinValue;
+        IReadOnlyList<Vector3> navigationPath = Array.Empty<Vector3>();
+        var navigationIndex = 0;
+        DesktopKeyBindingConfiguration? movementHeld = null;
+        var activateHeld = false;
+        try
+        {
+            while (true)
+            {
+                if (activateHeld)
+                {
+                    Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                        _configuration.Player.DesktopInput.Activate,
+                        false));
+                    activateHeld = false;
+                }
+                var saved = _loaded.Session.OpeningState;
+                if (stopAtCheckpoint && saved is { Completed: false })
+                {
+                    ValidateCheckpointState(saved);
+                    return saved;
+                }
+                if (completeAfterResume && saved is { Completed: true })
+                {
+                    ValidateCompletedState(saved);
+                    return saved;
+                }
+                var elapsedSeconds =
+                    (Time.GetTicksMsec() - startMilliseconds) / MillisecondsPerSecond;
+                if (elapsedSeconds > timeoutSeconds)
+                    throw new TimeoutException(
+                        $"Opening acceptance timed out at stage {_stage} after {elapsedSeconds:F1}s.");
+
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                if (_activeModal is not null)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    AdvanceAcceptanceModal(playerName);
+                    continue;
+                }
+
+                var interaction = _flow.Interactions.SingleOrDefault(value =>
+                    value.FromStage == _stage);
+                if (interaction is null)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    continue;
+                }
+                if (!_roleNodes.TryGetValue(interaction.TargetRole, out var target))
+                    throw new InvalidOperationException(
+                        $"Opening acceptance target role is absent: {interaction.TargetRole}");
+                var distance = _loaded.Player.GlobalPosition.DistanceTo(
+                    target.GlobalPosition);
+                if (distance <= _configuration.Player.ActivationDistanceMeters)
+                {
+                    SetAcceptanceMovement(null, ref movementHeld);
+                    if (interaction.Event.Equals("activate", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                            _configuration.Player.DesktopInput.Activate,
+                            true));
+                        activateHeld = true;
+                    }
+                    continue;
+                }
+
+                if (navigationStage != _stage)
+                {
+                    navigationStage = _stage;
+                    navigationIndex = 0;
+                    var startGameUnits = _loaded.CellToGameUnits(
+                        _loaded.Root.ToLocal(_loaded.Player.GlobalPosition));
+                    navigationPath = _loaded.MainContent.Navigation.FindPath(
+                            startGameUnits,
+                            _loaded.CellToGameUnits(_loaded.Root.ToLocal(target.GlobalPosition)))
+                        .Select(_loaded.GameToWorld)
+                        .ToArray();
+                    GD.Print(
+                        $"OPENNV_OPENING_ACCEPTANCE_PATH stage={_stage} " +
+                        $"event={interaction.Event} distance={distance:F3} " +
+                        $"waypoints={navigationPath.Count}");
+                }
+                while (navigationIndex < navigationPath.Count - 1 &&
+                    HorizontalDistance(
+                        _loaded.Player.GlobalPosition,
+                        navigationPath[navigationIndex]) <=
+                    _configuration.Player.CapsuleRadiusMeters)
+                    navigationIndex++;
+                var waypoint = navigationPath[Math.Min(navigationIndex, navigationPath.Count - 1)];
+                FaceAcceptanceWaypoint(waypoint);
+                SetAcceptanceMovement(
+                    SelectAcceptanceMovementBinding(waypoint),
+                    ref movementHeld);
+            }
+        }
+        finally
+        {
+            SetAcceptanceMovement(null, ref movementHeld);
+            if (activateHeld)
+                Input.ParseInputEvent(DesktopInputMap.CreateEvent(
+                    _configuration.Player.DesktopInput.Activate,
+                    false));
+        }
+    }
+
+    private void AdvanceAcceptanceModal(string playerName)
+    {
+        if (_activeModal is null || _dialogueVoice.Playing)
+            return;
+        var lineEdit = Descendants<LineEdit>(_activeModal).FirstOrDefault();
+        var buttons = Descendants<Button>(_activeModal)
+            .Where(button => !button.Disabled && button.IsVisibleInTree())
+            .ToArray();
+        if (lineEdit is not null)
+        {
+            lineEdit.Text = playerName;
+            PressAcceptanceButton(buttons.FirstOrDefault(button =>
+                button.Text == _flow.Strings["ok"]));
+            return;
+        }
+        if (_specialValues.Values.Sum() < _flow.Character.SpecialTotalPoints &&
+            buttons.FirstOrDefault(button => button.Text == "+") is { } increase)
+        {
+            PressAcceptanceButton(increase);
+            return;
+        }
+        if (buttons.FirstOrDefault(button =>
+                button.Text == _flow.Strings["accept"]) is { } accept)
+        {
+            PressAcceptanceButton(accept);
+            return;
+        }
+        PressAcceptanceButton(buttons.FirstOrDefault());
+    }
+
+    private static void PressAcceptanceButton(Button? button)
+    {
+        if (button is null)
+            throw new InvalidOperationException(
+                "Opening acceptance found no enabled authored menu action.");
+        button.EmitSignal(Button.SignalName.Pressed);
+    }
+
+    private void FaceAcceptanceWaypoint(Vector3 waypoint)
+    {
+        var direction = waypoint - _loaded.Player.GlobalPosition;
+        direction.Y = 0.0f;
+        if (direction.IsZeroApprox())
+            return;
+        direction = direction.Normalized();
+        var desiredYaw = MathF.Atan2(-direction.X, -direction.Z);
+        var yawDelta = Mathf.AngleDifference(_loaded.Player.GlobalRotation.Y, desiredYaw);
+        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Input.ParseInputEvent(new InputEventMouseMotion
+        {
+            Relative = new Vector2(
+                -yawDelta / _configuration.Player.MouseSensitivityRadiansPerPixel,
+                0.0f),
+        });
+    }
+
+    private DesktopKeyBindingConfiguration SelectAcceptanceMovementBinding(Vector3 waypoint)
+    {
+        var direction = waypoint - _loaded.Player.GlobalPosition;
+        direction.Y = 0.0f;
+        direction = direction.Normalized();
+        var forward = -_loaded.Player.Camera.GlobalBasis.Z;
+        var right = _loaded.Player.Camera.GlobalBasis.X;
+        forward.Y = 0.0f;
+        right.Y = 0.0f;
+        forward = forward.Normalized();
+        right = right.Normalized();
+        var forwardAmount = direction.Dot(forward);
+        var rightAmount = direction.Dot(right);
+        var input = _configuration.Player.DesktopInput;
+        return MathF.Abs(rightAmount) > MathF.Abs(forwardAmount)
+            ? rightAmount >= 0.0f ? input.MoveRight : input.MoveLeft
+            : forwardAmount >= 0.0f ? input.MoveForward : input.MoveBackward;
+    }
+
+    private static void SetAcceptanceMovement(
+        DesktopKeyBindingConfiguration? requested,
+        ref DesktopKeyBindingConfiguration? held)
+    {
+        if (requested == held)
+            return;
+        if (held is not null)
+            Input.ParseInputEvent(DesktopInputMap.CreateEvent(held, false));
+        held = requested;
+        if (held is not null)
+            Input.ParseInputEvent(DesktopInputMap.CreateEvent(held, true));
+    }
+
+    private static float HorizontalDistance(Vector3 first, Vector3 second)
+    {
+        var difference = second - first;
+        difference.Y = 0.0f;
+        return difference.Length();
+    }
+
+    private static IEnumerable<T> Descendants<T>(Node node)
+        where T : Node
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is T match)
+                yield return match;
+            foreach (var descendant in Descendants<T>(child))
+                yield return descendant;
+        }
+    }
+
+    private void ValidateCheckpointState(OpeningCampaignState state)
+    {
+        var checkpointStages = _flow.Stages.Values
+            .Where(program => program.Commands.Any(command => command.Kind == "autosave"))
+            .Select(program => program.Stage)
+            .ToArray();
+        if (checkpointStages.Length != 1 || state.Stage != checkpointStages[0] ||
+            state.Completed || string.IsNullOrWhiteSpace(state.PlayerName))
+            throw new InvalidOperationException(
+                "Opening autosave did not preserve the authored checkpoint state.");
+    }
+
+    private void ValidateCompletedState(OpeningCampaignState state)
+    {
+        if (state.Stage != _flow.CompletionStage || !state.Completed ||
+            string.IsNullOrWhiteSpace(state.PlayerName) ||
+            state.SpecialValues.Values.Sum() != _flow.Character.SpecialTotalPoints ||
+            state.TagSkillFormIds.Count != _flow.Character.TagSkillMaximumSelected ||
+            state.TraitFormIds.Count > _flow.Character.TraitMaximumSelected)
+            throw new InvalidOperationException(
+                "Opening completion did not preserve character creation.");
+        var quests = state.Quests.ToDictionary(
+            value => value.FormId,
+            StringComparer.OrdinalIgnoreCase);
+        var globals = state.Globals.ToDictionary(
+            value => value.FormId,
+            StringComparer.OrdinalIgnoreCase);
+        var completionCommands = _flow.Stages[_flow.CompletionStage].Commands;
+        foreach (var command in completionCommands)
+        {
+            switch (command.Kind)
+            {
+                case "startQuest" when command.QuestFormId is { } started:
+                    if (quests.GetValueOrDefault(started) is not { Running: true, Stopped: false })
+                        throw new InvalidOperationException(
+                            $"Opening completion did not start quest {started}.");
+                    break;
+                case "stopQuest" when command.QuestFormId is { } stopped:
+                    if (quests.GetValueOrDefault(stopped) is not { Running: false, Stopped: true })
+                        throw new InvalidOperationException(
+                            $"Opening completion did not stop quest {stopped}.");
+                    break;
+                case "setStage" when command.QuestFormId is { } quest &&
+                    command.Stage is { } stage:
+                    if (quests.GetValueOrDefault(quest)?.Stage != stage)
+                        throw new InvalidOperationException(
+                            $"Opening completion did not advance quest {quest} to {stage}.");
+                    break;
+                case "setGlobal" when command.GlobalFormId is { } global &&
+                    command.NumericValue is { } value:
+                    if (globals.GetValueOrDefault(global) is not { } actual ||
+                        !Mathf.IsEqualApprox(actual.Value, value))
+                        throw new InvalidOperationException(
+                            $"Opening completion did not set global {global}.");
+                    break;
+                case "autoDisplayObjectives" when command.Enabled is { } enabled:
+                    if (state.AutoDisplayObjectives != enabled)
+                        throw new InvalidOperationException(
+                            "Opening completion objective-display state is incorrect.");
+                    break;
+                case "achievement" when command.Index is { } achievement:
+                    if (!state.Achievements.Contains(achievement))
+                        throw new InvalidOperationException(
+                            $"Opening completion did not retain achievement {achievement}.");
+                    break;
+            }
+        }
+    }
+
     internal void Configure(
         OpeningManifest opening,
         CellSceneLoader.LoadedCell loaded,
-        RuntimeConfiguration configuration)
+        RuntimeConfiguration configuration,
+        OpeningCampaignState? restoredState = null)
     {
         _opening = opening;
         _flow = opening.NewGameFlow;
         _loaded = loaded;
         _configuration = configuration;
+        _loaded.Player.ConfigureOwnedNavigation(
+            _loaded.MainContent.Navigation,
+            _loaded.Root,
+            _loaded.OriginGameUnits);
         _font = OpeningUiTheme.BuildFont(opening.Font);
         Name = "OwnedNewGameFlow";
 
@@ -157,10 +470,27 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         Callable.From(ScaleReferenceCanvas).CallDeferred();
 
         var firstStage = _flow.Stages.Keys.Min();
-        SetStage(firstStage);
+        if (restoredState is null)
+        {
+            _quests.Add(
+                _flow.QuestFormId,
+                new OpeningQuestState(
+                    _flow.QuestFormId,
+                    _flow.QuestEditorId,
+                    firstStage,
+                    true,
+                    false));
+            SetStage(firstStage);
+        }
+        else
+        {
+            RestoreState(restoredState);
+            SetStage(restoredState.Stage);
+        }
         GD.Print(
             $"OPENNV_NEW_GAME_FLOW_READY quest={_flow.QuestEditorId} " +
-            $"stage={firstStage} stages={_flow.Stages.Count} topics={_flow.TopicsByFormId.Count}");
+            $"stage={_stage} restored={restoredState is not null} " +
+            $"stages={_flow.Stages.Count} topics={_flow.TopicsByFormId.Count}");
     }
 
     public override void _Process(double delta)
@@ -466,8 +796,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         var origin = _guideActor.Placement.GlobalPosition;
         var levelTarget = new Vector3(globalTarget.X, origin.Y, globalTarget.Z);
-        if (origin != levelTarget)
-            _guideActor.Placement.LookAt(levelTarget, Vector3.Up);
+        if ((levelTarget - origin).IsZeroApprox())
+            return;
+        _guideActor.Placement.LookAt(levelTarget, Vector3.Up);
     }
 
     private void RunWhenGuideReady(Action continuation, int generation)
@@ -492,7 +823,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         foreach (var role in _flow.SceneRoles.Values)
         {
-            if (!_destroyedReferences.Contains(role.EditorId) ||
+            if (!_destroyedReferences.Contains(role.ReferenceFormId) ||
                 !_roleNodes.TryGetValue(role.Role, out var destroyed) ||
                 !MatchesTarget(collider, destroyed))
                 continue;
@@ -527,6 +858,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             throw new InvalidOperationException($"Owned New Game stage is absent: {stage}");
         _generation++;
         _stage = stage;
+        ApplyQuestStage(
+            _flow.QuestFormId,
+            _flow.QuestEditorId,
+            stage,
+            true);
         _timerTargetStage = null;
         _guideArrivalContinuation = null;
         CloseModal();
@@ -588,22 +924,24 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         switch (command.Kind)
         {
             case "setTimer":
+                ApplyQuestTimer(command);
                 Next(command.Seconds);
                 return;
             case "setQuestVariable":
-                if (command.QuestEditorId is not null && command.ValueName is not null &&
-                    command.NumericValue is { } numeric)
-                    _questVariables[$"{command.QuestEditorId}.{command.ValueName}"] = numeric;
+                ApplyQuestVariable(command);
                 Next();
                 return;
             case "setStage":
-                if (command.QuestEditorId?.Equals(
-                    _flow.QuestEditorId,
-                    StringComparison.OrdinalIgnoreCase) == true &&
+                if (command.QuestFormId?.Equals(
+                        _flow.QuestFormId,
+                        StringComparison.OrdinalIgnoreCase) == true &&
                     command.Stage is { } nextStage)
                     SetStage(nextStage);
                 else
+                {
+                    ApplyQuestStage(command);
                     Next();
+                }
                 return;
             case "sayTo":
                 if (command.TopicEditorId is null)
@@ -666,9 +1004,43 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 ApplyActorIntent(command);
                 Next();
                 return;
-            default:
+            case "actorValueDelta":
+                ApplyActorValueDelta(command);
                 Next();
                 return;
+            case "startQuest":
+            case "stopQuest":
+                ApplyQuestLifecycle(command);
+                Next();
+                return;
+            case "setGlobal":
+                ApplyGlobal(command);
+                Next();
+                return;
+            case "autoDisplayObjectives":
+                ApplyAutoDisplayObjectives(command);
+                Next();
+                return;
+            case "achievement":
+                ApplyAchievement(command);
+                Next();
+                return;
+            case "autosave":
+                StoreOpeningCheckpoint();
+                Next();
+                return;
+            case "deferredStage":
+                if (command.Stage is { } deferred && command.Seconds is { } deferredSeconds)
+                {
+                    _timerTargetStage = deferred;
+                    _timerRemainingSeconds = deferredSeconds;
+                    return;
+                }
+                throw new InvalidOperationException(
+                    "Owned deferred-stage command is incomplete.");
+            default:
+                throw new InvalidOperationException(
+                    $"Owned opening stage command is unsupported: {command.Kind}");
         }
     }
 
@@ -699,75 +1071,120 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void ApplyObjective(OpeningFlowCommand command)
     {
-        if (command.Index is not { } index || command.Enabled != true ||
+        if (command.Index is not { } index || command.Enabled is not { } enabled ||
+            command.State is null || command.QuestFormId is null ||
+            command.QuestEditorId is null ||
             !_flow.Objectives.TryGetValue(index, out var text))
-            return;
-        if (command.State == "displayed")
+            throw new InvalidOperationException("Owned opening objective command is incomplete.");
+        var state = new OpeningObjectiveState(
+            command.QuestFormId,
+            command.QuestEditorId,
+            index,
+            command.State,
+            enabled,
+            text);
+        state.Validate();
+        _objectives[ObjectiveKey(state.QuestFormId, state.Index)] = state;
+        if (enabled && command.State == "displayed" && _autoDisplayObjectives)
         {
             _objective.Text = text;
             _objective.Visible = true;
         }
-        else if (command.State == "completed" && _objective.Text == text)
+        else if ((!enabled || command.State == "completed") && _objective.Text == text)
             _objective.Visible = false;
     }
 
     private void ApplyDestroyed(OpeningFlowCommand command)
     {
-        if (command.ReferenceEditorId is null || command.Destroyed is null)
-            return;
+        if (command.ReferenceEditorId is null || command.ReferenceFormId is null ||
+            command.Destroyed is null)
+            throw new InvalidOperationException("Owned destroyed-reference command is incomplete.");
         if (command.Destroyed.Value)
-            _destroyedReferences.Add(command.ReferenceEditorId);
+            _destroyedReferences.Add(command.ReferenceFormId);
         else
-            _destroyedReferences.Remove(command.ReferenceEditorId);
+            _destroyedReferences.Remove(command.ReferenceFormId);
     }
 
     private void ApplyReferenceEnabled(OpeningFlowCommand command)
     {
-        if (command.ReferenceEditorId is null || command.Enabled is null)
-            return;
-        foreach (var role in _flow.SceneRoles.Values.Where(role =>
-            role.EditorId.Equals(
-                command.ReferenceEditorId,
-                StringComparison.OrdinalIgnoreCase)))
-        {
-            if (_roleNodes.TryGetValue(role.Role, out var node))
-                node.Visible = command.Enabled.Value;
-        }
+        if (command.ReferenceEditorId is null || command.ReferenceFormId is null ||
+            command.Enabled is null)
+            throw new InvalidOperationException("Owned enabled-reference command is incomplete.");
+        _referenceEnabledStates[command.ReferenceFormId] = command.Enabled.Value;
+        var loadedNodes = SetReferenceVisibility(
+            command.ReferenceFormId,
+            command.Enabled.Value,
+            command.Enabled.Value);
         GD.Print(
-            $"OPENNV_NEW_GAME_REFERENCE reference={command.ReferenceEditorId} " +
-            $"enabled={command.Enabled.Value}");
+            $"OPENNV_NEW_GAME_REFERENCE reference={command.ReferenceFormId} " +
+            $"enabled={command.Enabled.Value} loadedNodes={loadedNodes}");
+    }
+
+    private int SetReferenceVisibility(
+        string referenceFormId,
+        bool enabled,
+        bool requireLoaded)
+    {
+        var nodes = _flow.SceneRoles.Values
+            .Where(role => role.ReferenceFormId.Equals(
+                referenceFormId,
+                StringComparison.OrdinalIgnoreCase))
+            .Select(role => _roleNodes.GetValueOrDefault(role.Role))
+            .Concat(_loaded.Actors
+                .Where(actor => actor.ReferenceFormId.Equals(
+                    referenceFormId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(actor => actor.Placement))
+            .Concat(_loaded.MainContent.PlacedReferences
+                .Where(reference => reference.FormId.Equals(
+                    referenceFormId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(reference => reference.Placement))
+            .Concat(_loaded.LinkedCells
+                .SelectMany(cell => cell.Content.PlacedReferences)
+                .Where(reference => reference.FormId.Equals(
+                    referenceFormId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(reference => reference.Placement))
+            .Where(node => node is not null)
+            .Cast<Node3D>()
+            .Distinct()
+            .ToArray();
+        if (requireLoaded && nodes.Length == 0)
+            throw new InvalidOperationException(
+                $"Owned enabled reference is absent from the loaded world: {referenceFormId}");
+        foreach (var node in nodes)
+            node.Visible = enabled;
+        return nodes.Length;
     }
 
     private void ApplyActorIntent(OpeningFlowCommand command)
     {
-        if (command.ReferenceEditorId is { } reference &&
-            _flow.SceneRoles.TryGetValue(_flow.GuideActorAi.Role, out var role) &&
-            role.EditorId.Equals(reference, StringComparison.OrdinalIgnoreCase))
+        if (command.ReferenceEditorId is not { } reference ||
+            command.ReferenceFormId is not { } referenceForm ||
+            command.Operation is null ||
+            !_flow.SceneRoles.TryGetValue(_flow.GuideActorAi.Role, out var role) ||
+            !role.EditorId.Equals(reference, StringComparison.OrdinalIgnoreCase) ||
+            !role.ReferenceFormId.Equals(referenceForm, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Owned opening actor intent target is unsupported.");
+        if (command.Operation.Equals("look", StringComparison.OrdinalIgnoreCase))
         {
-            if (command.Operation?.Equals("look", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                _guideLookAtPlayer = true;
-                if (!_guideMoving)
-                    FaceGuideToward(_loaded.Player.GlobalPosition);
-            }
-            else if (command.Operation?.Equals(
-                "stoplook",
-                StringComparison.OrdinalIgnoreCase) == true)
-            {
-                _guideLookAtPlayer = false;
-                if (!_guideMoving && _guideDestinationReference is { } destination)
-                    _guideActor.Placement.Basis = new Basis(destination.RotationGodot);
-            }
-            else if (command.Operation?.Equals(
-                    "evp",
-                    StringComparison.OrdinalIgnoreCase) == true ||
-                command.Operation?.Equals(
-                    "resetai",
-                    StringComparison.OrdinalIgnoreCase) == true)
-            {
-                EvaluateGuidePackage(force: true);
-            }
+            _guideLookAtPlayer = true;
+            if (!_guideMoving)
+                FaceGuideToward(_loaded.Player.GlobalPosition);
         }
+        else if (command.Operation.Equals("stoplook", StringComparison.OrdinalIgnoreCase))
+        {
+            _guideLookAtPlayer = false;
+            if (!_guideMoving && _guideDestinationReference is { } destination)
+                _guideActor.Placement.Basis = new Basis(destination.RotationGodot);
+        }
+        else if (command.Operation.Equals("evp", StringComparison.OrdinalIgnoreCase) ||
+            command.Operation.Equals("resetai", StringComparison.OrdinalIgnoreCase))
+            EvaluateGuidePackage(force: true);
+        else
+            throw new InvalidOperationException(
+                $"Owned opening actor intent operation is unsupported: {command.Operation}");
         GD.Print(
             $"OPENNV_NEW_GAME_ACTOR_INTENT reference={command.ReferenceEditorId} " +
             $"operation={command.Operation} target={command.TargetEditorId}");
@@ -775,12 +1192,16 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void ApplyIdle(OpeningFlowCommand command)
     {
-        if (command.ReferenceEditorId is null || command.IdleEditorId is null ||
+        if (command.ReferenceEditorId is null || command.ReferenceFormId is null ||
+            command.IdleEditorId is null ||
             command.AnimationLogicalPath is null)
-            return;
+            throw new InvalidOperationException("Owned opening idle command is incomplete.");
         var actors = _loaded.Actors.Where(value =>
             _flow.SceneRoles.Values.Any(role =>
                 role.EditorId.Equals(command.ReferenceEditorId, StringComparison.OrdinalIgnoreCase) &&
+                role.ReferenceFormId.Equals(
+                    command.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase) &&
                 role.ReferenceFormId.Equals(
                     value.ReferenceFormId,
                     StringComparison.OrdinalIgnoreCase)))
@@ -1076,21 +1497,48 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void ApplyInventoryCommand(OpeningFlowCommand command)
     {
-        if (command.ItemEditorId is null)
-            return;
+        if (command.ItemEditorId is null || command.ItemFormId is null ||
+            command.ItemRecordType is null)
+            throw new InvalidOperationException("Owned opening inventory command is incomplete.");
         var count = command.Count ?? 1;
+        if (count <= 0)
+            throw new InvalidOperationException("Owned opening inventory count is invalid.");
         if (command.Kind == "removeitem")
         {
-            var remaining = _inventory.GetValueOrDefault(command.ItemEditorId) - count;
+            var remaining = _inventory.GetValueOrDefault(command.ItemFormId)?.Count - count ?? 0;
             if (remaining > 0)
-                _inventory[command.ItemEditorId] = remaining;
+                _inventory[command.ItemFormId] = new OpeningInventoryState(
+                    command.ItemFormId,
+                    command.ItemEditorId,
+                    command.ItemRecordType,
+                    remaining);
             else
-                _inventory.Remove(command.ItemEditorId);
+            {
+                _inventory.Remove(command.ItemFormId);
+                _equippedItemFormIds.Remove(command.ItemFormId);
+            }
             return;
         }
         if (command.Kind == "additem")
-            _inventory[command.ItemEditorId] =
-                _inventory.GetValueOrDefault(command.ItemEditorId) + count;
+        {
+            var current = _inventory.GetValueOrDefault(command.ItemFormId)?.Count ?? 0;
+            _inventory[command.ItemFormId] = new OpeningInventoryState(
+                command.ItemFormId,
+                command.ItemEditorId,
+                command.ItemRecordType,
+                current + count);
+            return;
+        }
+        if (command.Kind == "equipitem")
+        {
+            if (!_inventory.ContainsKey(command.ItemFormId))
+                throw new InvalidOperationException(
+                    $"Owned opening equip item is absent from inventory: {command.ItemFormId}");
+            _equippedItemFormIds.Add(command.ItemFormId);
+            return;
+        }
+        throw new InvalidOperationException(
+            $"Owned opening inventory operation is unsupported: {command.Kind}");
     }
 
     private void ShowNameMenu(Action completed)
@@ -1545,7 +1993,12 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         {
             if (info.NextTopicFormIds.Count > 0)
             {
-                ShowTopicChoices(info.NextTopicFormIds, completed, generation);
+                ShowTopicChoices(
+                    info.NextTopicFormIds,
+                    topic is null
+                        ? completed
+                        : () => PlayTopic(topic, completed, generation),
+                    generation);
                 return;
             }
             if (!info.Goodbye && topic is not null)
@@ -1561,14 +2014,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         switch (command.Kind)
         {
             case "actorValueDelta":
-                if (command.ValueName is not null && command.Delta is { } delta)
-                    _psychologyScores[command.ValueName] =
-                        _psychologyScores.GetValueOrDefault(command.ValueName) + delta;
+                ApplyActorValueDelta(command);
                 break;
             case "setQuestVariable":
-                if (command.QuestEditorId is not null && command.ValueName is not null &&
-                    command.NumericValue is { } numeric)
-                    _questVariables[$"{command.QuestEditorId}.{command.ValueName}"] = numeric;
+                ApplyQuestVariable(command);
                 break;
             case "setDestroyed":
                 ApplyDestroyedFromInfo(command);
@@ -1594,15 +2043,38 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             case "actorIntent":
                 ApplyActorIntent(command);
                 break;
+            case "objective":
+                ApplyObjective(command);
+                break;
+            case "startQuest":
+            case "stopQuest":
+                ApplyQuestLifecycle(command);
+                break;
+            case "setGlobal":
+                ApplyGlobal(command);
+                break;
+            case "autoDisplayObjectives":
+                ApplyAutoDisplayObjectives(command);
+                break;
+            case "achievement":
+                ApplyAchievement(command);
+                break;
+            case "autosave":
+                StoreOpeningCheckpoint();
+                break;
+            case "setTimer":
+                ApplyQuestTimer(command);
+                break;
             case "setStage":
-                if (command.QuestEditorId?.Equals(
-                    _flow.QuestEditorId,
+                if (command.QuestFormId?.Equals(
+                    _flow.QuestFormId,
                     StringComparison.OrdinalIgnoreCase) == true &&
                     command.Stage is { } nextStage)
                 {
                     SetStage(nextStage);
                     return;
                 }
+                ApplyQuestStage(command);
                 break;
             case "sayTo":
                 if (command.TopicEditorId is null)
@@ -1622,7 +2094,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     _timerRemainingSeconds = seconds;
                     return;
                 }
-                break;
+                throw new InvalidOperationException(
+                    "Owned deferred-stage dialogue command is incomplete.");
+            default:
+                throw new InvalidOperationException(
+                    $"Owned opening dialogue command is unsupported: {command.Kind}");
         }
         ExecuteInfoCommands(info, topic, completed, generation, index + 1);
     }
@@ -1681,14 +2157,343 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 $"Owned condition comparison is unsupported: {operatorFlags}"),
         };
 
+    private void ApplyActorValueDelta(OpeningFlowCommand command)
+    {
+        if (command.OwnerEditorId is null || command.OwnerFormId is null ||
+            command.ValueName is null || command.Delta is not { } delta)
+            throw new InvalidOperationException("Owned actor-value command is incomplete.");
+        _psychologyScores[command.ValueName] =
+            _psychologyScores.GetValueOrDefault(command.ValueName) + delta;
+    }
+
+    private void ApplyQuestVariable(OpeningFlowCommand command)
+    {
+        if (command.QuestEditorId is null || command.QuestFormId is null ||
+            command.ValueName is null || command.NumericValue is not { } value)
+            throw new InvalidOperationException("Owned quest-variable command is incomplete.");
+        _questVariables[QuestVariableKey(command.QuestFormId, command.ValueName)] = value;
+    }
+
+    private void ApplyQuestTimer(OpeningFlowCommand command)
+    {
+        if (command.QuestEditorId is null || command.QuestFormId is null ||
+            command.Seconds is not { } seconds || seconds < 0.0f)
+            throw new InvalidOperationException("Owned quest-timer command is incomplete.");
+        _questVariables[QuestVariableKey(command.QuestFormId, "fTimer")] = seconds;
+    }
+
+    private void ApplyQuestStage(OpeningFlowCommand command)
+    {
+        if (command.QuestFormId is null || command.QuestEditorId is null ||
+            command.Stage is not { } stage)
+            throw new InvalidOperationException("Owned quest-stage command is incomplete.");
+        ApplyQuestStage(command.QuestFormId, command.QuestEditorId, stage, true);
+    }
+
+    private void ApplyQuestStage(
+        string formId,
+        string editorId,
+        int stage,
+        bool running)
+    {
+        if (stage < 0)
+            throw new InvalidOperationException("Owned quest stage is invalid.");
+        var existing = _quests.GetValueOrDefault(formId);
+        _quests[formId] = new OpeningQuestState(
+            formId,
+            editorId,
+            stage,
+            running || existing?.Running == true,
+            false);
+    }
+
+    private void ApplyQuestLifecycle(OpeningFlowCommand command)
+    {
+        if (command.QuestFormId is null || command.QuestEditorId is null)
+            throw new InvalidOperationException("Owned quest-lifecycle command is incomplete.");
+        var existing = _quests.GetValueOrDefault(command.QuestFormId);
+        var starting = command.Kind == "startQuest";
+        var stopping = command.Kind == "stopQuest";
+        if (!starting && !stopping)
+            throw new InvalidOperationException(
+                $"Owned quest-lifecycle operation is unsupported: {command.Kind}");
+        _quests[command.QuestFormId] = new OpeningQuestState(
+            command.QuestFormId,
+            command.QuestEditorId,
+            existing?.Stage ?? 0,
+            starting,
+            stopping);
+    }
+
+    private void ApplyGlobal(OpeningFlowCommand command)
+    {
+        if (command.GlobalFormId is null || command.GlobalEditorId is null ||
+            command.NumericValue is not { } value || !float.IsFinite(value))
+            throw new InvalidOperationException("Owned global command is incomplete.");
+        _globals[command.GlobalFormId] = new OpeningGlobalState(
+            command.GlobalFormId,
+            command.GlobalEditorId,
+            value);
+    }
+
+    private void ApplyAutoDisplayObjectives(OpeningFlowCommand command)
+    {
+        if (command.Enabled is not { } enabled)
+            throw new InvalidOperationException(
+                "Owned auto-display-objectives command is incomplete.");
+        _autoDisplayObjectives = enabled;
+        if (!enabled)
+            _objective.Visible = false;
+    }
+
+    private void ApplyAchievement(OpeningFlowCommand command)
+    {
+        if (command.Index is not { } index || index < 0)
+            throw new InvalidOperationException("Owned achievement command is incomplete.");
+        _achievements.Add(index);
+    }
+
+    private void StoreOpeningCheckpoint()
+    {
+        AlignPlayerToOwnedNavigation();
+        var state = CaptureState(false);
+        _loaded.Session.StoreOpeningState(state);
+        GD.Print(
+            $"OPENNV_NEW_GAME_AUTOSAVE stage={state.Stage} " +
+            $"quests={state.Quests.Count} inventory={state.Inventory.Count}");
+    }
+
+    private void AlignPlayerToOwnedNavigation()
+    {
+        var interaction = _flow.Interactions.SingleOrDefault(value =>
+            value.FromStage == _stage);
+        if (interaction is null ||
+            !_roleNodes.TryGetValue(interaction.TargetRole, out var target))
+            throw new InvalidOperationException(
+                "Owned opening autosave stage has no resolved gameplay interaction.");
+        var currentGameUnits = _loaded.CellToGameUnits(
+            _loaded.Root.ToLocal(_loaded.Player.GlobalPosition));
+        var targetGameUnits = _loaded.CellToGameUnits(
+            _loaded.Root.ToLocal(target.GlobalPosition));
+        var candidates = new[]
+            {
+                _loaded.MainContent.Navigation.FindNearestPoint(currentGameUnits),
+            }
+            .Concat(_loaded.MainContent.Navigation.FindPath(
+                currentGameUnits,
+                targetGameUnits))
+            .Distinct()
+            .ToArray();
+        var candidateIndex = -1;
+        for (var index = 0; index < candidates.Length; index++)
+        {
+            if (!PlayerNavigationDepartureIsClear(candidates, index))
+                continue;
+            candidateIndex = index;
+            break;
+        }
+        if (candidateIndex < 0)
+            throw new InvalidOperationException(
+                "Owned opening navigation has no collision-free player handoff point.");
+        var alignedWorld = PlayerNavigationCandidateWorld(candidates[candidateIndex]);
+        var before = _loaded.Player.GlobalPosition;
+        _loaded.Player.GlobalPosition = alignedWorld;
+        _loaded.Player.Velocity = Vector3.Zero;
+        GD.Print(
+            $"OPENNV_NEW_GAME_PLAYER_NAV_HANDOFF stage={_stage} " +
+            $"event={interaction.Event} before={before} after={alignedWorld} " +
+            $"candidate={candidateIndex + 1}/{candidates.Length} " +
+            $"source=owned-navmesh-first-collision-free-capsule");
+    }
+
+    private bool PlayerNavigationDepartureIsClear(
+        IReadOnlyList<Vector3> candidates,
+        int index)
+    {
+        if (!PlayerNavigationCandidateIsClear(candidates[index]))
+            return false;
+        if (index >= candidates.Count - 1)
+            return true;
+        var current = candidates[index];
+        var next = candidates[index + 1];
+        var distanceMeters = PlayerNavigationCandidateWorld(current).DistanceTo(
+            PlayerNavigationCandidateWorld(next));
+        var samples = Math.Max(
+            1,
+            Mathf.CeilToInt(distanceMeters / _configuration.Player.CapsuleRadiusMeters));
+        for (var sample = 1; sample <= samples; sample++)
+        {
+            var amount = (float)sample / samples;
+            if (!PlayerNavigationCandidateIsClear(current.Lerp(next, amount)))
+                return false;
+        }
+        return true;
+    }
+
+    private bool PlayerNavigationCandidateIsClear(Vector3 candidateGameUnits)
+    {
+        var query = new PhysicsShapeQueryParameters3D
+        {
+            Shape = new CapsuleShape3D
+            {
+                Radius = _configuration.Player.CapsuleRadiusMeters,
+                Height = _configuration.Player.CapsuleHeightMeters,
+            },
+            Transform = new Transform3D(
+                _loaded.Player.GlobalBasis.Orthonormalized(),
+                PlayerNavigationCandidateWorld(candidateGameUnits)),
+            CollisionMask = _configuration.Player.CollisionMask,
+            CollideWithAreas = false,
+            CollideWithBodies = true,
+            Exclude = new Godot.Collections.Array<Rid> { _loaded.Player.GetRid() },
+        };
+        return _loaded.Player.GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0;
+    }
+
+    private Vector3 PlayerNavigationCandidateWorld(Vector3 candidateGameUnits) =>
+        _loaded.GameToWorld(candidateGameUnits) +
+        Vector3.Up * (
+            _configuration.Player.SpawnCenterHeightMeters + _loaded.Player.SafeMargin);
+
+    private OpeningCampaignState CaptureState(bool completed) => new(
+        OpeningCampaignState.ExpectedSchema,
+        _flow.QuestFormId,
+        _flow.QuestEditorId,
+        _stage,
+        completed,
+        _playerName,
+        _sexIndex,
+        _docReaction,
+        _specialValues
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
+        _tagSkills.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+        _traits.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+        _psychologyScores
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
+        _questVariables
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
+        _quests.Values.OrderBy(value => value.FormId, StringComparer.OrdinalIgnoreCase).ToArray(),
+        _globals.Values.OrderBy(value => value.FormId, StringComparer.OrdinalIgnoreCase).ToArray(),
+        _objectives.Values
+            .OrderBy(value => value.QuestFormId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.Index)
+            .ToArray(),
+        _autoDisplayObjectives,
+        _achievements.Order().ToArray(),
+        _inventory.Values.OrderBy(value => value.FormId, StringComparer.OrdinalIgnoreCase).ToArray(),
+        _equippedItemFormIds.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+        _destroyedReferences.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+        _referenceEnabledStates
+            .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
+        _playerControls.Select(value => value ? EnabledControlValue : DisabledControlValue).ToArray(),
+        OpeningTransformState.Capture(_loaded.Player),
+        OpeningTransformState.Capture(_guideActor.Placement));
+
+    private void RestoreState(OpeningCampaignState state)
+    {
+        state.Validate();
+        var expectedSpecial = _flow.Character.SpecialValues
+            .Select(value => value.FormId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var expectedSkills = _flow.Character.SkillValues
+            .Select(value => value.FormId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var expectedTraits = _flow.Character.TraitValues
+            .Select(value => value.FormId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var specialTotal = state.SpecialValues.Values.Sum();
+        var initialSpecialTotal =
+            _flow.Character.SpecialInitial * _flow.Character.SpecialValues.Count;
+        if (!state.QuestFormId.Equals(_flow.QuestFormId, StringComparison.OrdinalIgnoreCase) ||
+            !state.QuestEditorId.Equals(_flow.QuestEditorId, StringComparison.OrdinalIgnoreCase) ||
+            !_flow.Stages.ContainsKey(state.Stage) || state.Completed ||
+            string.IsNullOrWhiteSpace(state.PlayerName) ||
+            state.SexIndex >= _flow.Character.SexChoices.Count ||
+            !state.SpecialValues.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(expectedSpecial) ||
+            state.SpecialValues.Values.Any(value =>
+                value < _flow.Character.SpecialMinimum ||
+                value > _flow.Character.SpecialMaximum) ||
+            specialTotal != initialSpecialTotal &&
+                specialTotal != _flow.Character.SpecialTotalPoints ||
+            !state.TagSkillFormIds.All(expectedSkills.Contains) ||
+            state.TagSkillFormIds.Count > _flow.Character.TagSkillMaximumSelected ||
+            !state.TraitFormIds.All(expectedTraits.Contains) ||
+            state.TraitFormIds.Count > _flow.Character.TraitMaximumSelected ||
+            state.PlayerControls.Count != PlayerControlCount)
+            throw new InvalidOperationException(
+                "Saved opening state does not match the owned New Game flow.");
+
+        _playerName = state.PlayerName;
+        _sexIndex = state.SexIndex;
+        _docReaction = state.DocReaction;
+        Replace(_specialValues, state.SpecialValues);
+        Replace(_tagSkills, state.TagSkillFormIds);
+        Replace(_traits, state.TraitFormIds);
+        Replace(_psychologyScores, state.PsychologyScores);
+        Replace(_questVariables, state.QuestVariables);
+        Replace(_quests, state.Quests, value => value.FormId);
+        Replace(_globals, state.Globals, value => value.FormId);
+        Replace(_objectives, state.Objectives, value => ObjectiveKey(value.QuestFormId, value.Index));
+        Replace(_achievements, state.Achievements);
+        Replace(_inventory, state.Inventory, value => value.FormId);
+        Replace(_equippedItemFormIds, state.EquippedItemFormIds);
+        Replace(_destroyedReferences, state.DestroyedReferenceFormIds);
+        Replace(_referenceEnabledStates, state.ReferenceEnabledStates);
+        _autoDisplayObjectives = state.AutoDisplayObjectives;
+        _skillDefaultsInitialized = _tagSkills.Count > 0;
+        for (var index = 0; index < PlayerControlCount; index++)
+            _playerControls[index] = state.PlayerControls[index] == EnabledControlValue;
+        state.PlayerTransform.Apply(_loaded.Player);
+        state.GuideTransform.Apply(_guideActor.Placement);
+        foreach (var reference in _referenceEnabledStates)
+            SetReferenceVisibility(reference.Key, reference.Value, false);
+    }
+
+    private static void Replace<T>(HashSet<T> target, IEnumerable<T> source)
+    {
+        target.Clear();
+        target.UnionWith(source);
+    }
+
+    private static void Replace<T>(
+        Dictionary<string, T> target,
+        IReadOnlyDictionary<string, T> source)
+    {
+        target.Clear();
+        foreach (var value in source)
+            target.Add(value.Key, value.Value);
+    }
+
+    private static void Replace<T>(
+        Dictionary<string, T> target,
+        IEnumerable<T> source,
+        Func<T, string> key)
+    {
+        target.Clear();
+        foreach (var value in source)
+            target.Add(key(value), value);
+    }
+
+    private static string QuestVariableKey(string questFormId, string variable) =>
+        $"{questFormId}.{variable}";
+
+    private static string ObjectiveKey(string questFormId, int index) =>
+        $"{questFormId}.{index}";
+
     private void ApplyDestroyedFromInfo(OpeningFlowCommand command)
     {
-        if (command.ReferenceEditorId is null || command.Destroyed is null)
-            return;
+        if (command.ReferenceEditorId is null || command.ReferenceFormId is null ||
+            command.Destroyed is null)
+            throw new InvalidOperationException("Owned dialogue destroyed-reference command is incomplete.");
         if (command.Destroyed.Value)
-            _destroyedReferences.Add(command.ReferenceEditorId);
+            _destroyedReferences.Add(command.ReferenceFormId);
         else
-            _destroyedReferences.Remove(command.ReferenceEditorId);
+            _destroyedReferences.Remove(command.ReferenceFormId);
     }
 
     private void CompleteOpening()
@@ -1698,9 +2503,13 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _objective.Visible = false;
         CloseModal();
         ApplyStageControlPolicy();
+        var state = CaptureState(true);
+        _loaded.Session.StoreOpeningState(state);
+        _loaded.Player.ClearOwnedNavigation();
         GD.Print(
             $"OPENNV_NEW_GAME_OPEN_WORLD_READY quest={_flow.QuestEditorId} " +
-            $"stage={_stage} name={_playerName} inventory={_inventory.Count}");
+            $"stage={_stage} name={_playerName} inventory={_inventory.Count} " +
+            $"quests={state.Quests.Count} achievements={state.Achievements.Count}");
     }
 
     private VBoxContainer OpenPanel(Rect2 rect)

@@ -100,7 +100,7 @@ internal static class ActorModelSlice
              humanoidGateBounds.Size.Y > configuration.DiagnosticPreview.ActorMaximumHeightMeters))
             throw new InvalidOperationException(
                 "Actor body height is outside the humanoid gate: " +
-                $"{humanoidGateBounds.Size.Y:F3}m (full visual {bounds.Size.Y:F3}m)." );
+                $"{humanoidGateBounds.Size.Y:F3}m (full visual {bounds.Size.Y:F3}m).");
         return new LoadedActor(
             scene,
             root.GetProperty("actorFormId").GetString()!,
