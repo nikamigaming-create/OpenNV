@@ -710,15 +710,36 @@
       "source": "Asset-free local import and disposable cache contract",
       "evidence": "docs/clean-room.md#asset-boundary"
     },
-    "defaultCellRecipe": "goodsprings-saloon-structure-v1",
+    "defaultOpeningRecipe": "fnv-new-game-opening-v1",
+    "defaultCellRecipe": "goodsprings-doc-mitchell-house-v1",
     "defaultCacheRoot": "user://cache/legal-assets-v1",
     "packagedCompilerName": "OpenNV.Content packaged direct exporter v1",
+    "sourceContentTool": {
+      "executable": "python",
+      "script": "../content/tools/prepare_legal_assets.py",
+      "compilerName": "OpenNV direct static NIF exporter v1"
+    },
     "smokeModelLogicalPath": "meshes\\landscape\\nv_rocks\\nvn_rockcanyon12.nif",
+    "videoImport": {
+      "transcoderExecutable": "ffmpeg",
+      "outputExtension": ".ogv",
+      "containerFormat": "ogg",
+      "videoCodec": "libtheora",
+      "audioCodec": "libvorbis",
+      "videoQuality": 7,
+      "audioQuality": 5,
+      "threads": 1,
+      "pixelFormat": "yuv420p",
+      "logLevel": "error"
+    },
     "ownedData": {
       "masterFile": "FalloutNV.esm",
+      "defaultIniFile": "Fallout_default.ini",
       "meshesArchiveFile": "Fallout - Meshes.bsa",
+      "uiArchiveFile": "Fallout - Misc.bsa",
       "textureArchiveFiles": ["Fallout - Textures.bsa", "Fallout - Textures2.bsa"],
-      "dataDirectoryName": "Data"
+      "dataDirectoryName": "Data",
+      "videoDirectoryName": "Video"
     }
   },
   "tooling": {
@@ -738,7 +759,8 @@
       "staticCellCompiler": "fnv-static-cell-compiler-v2.json",
       "gallery": "fnv-wasteland-gallery-v1.json",
       "materialBinding": "fnv-material-bindings-v1.json",
-      "nifDecoder": "fnv-nif-decoder-v1.json"
+      "nifDecoder": "fnv-nif-decoder-v1.json",
+      "opening": "fnv-new-game-opening-v1.json"
     }
   },
   "contentCompiler": {

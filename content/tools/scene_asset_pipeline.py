@@ -107,8 +107,12 @@ def interaction_manifest(
 def vr_smoke_loadout_manifest(
     recipe: dict[str, object],
     catalog: CellCatalog,
-) -> dict[str, object]:
-    configured = recipe["vrSmokeLoadout"]
+) -> dict[str, object] | None:
+    configured = recipe.get("vrSmokeLoadout")
+    if configured is None:
+        return None
+    if not isinstance(configured, dict):
+        raise ValueError("Cell VR smoke loadout must be an object when present")
     weapon_form_id = int(str(configured["weaponFormId"]), FORM_ID_RADIX)
     reserve_magazines = int(configured["reserveMagazines"])
     if reserve_magazines < 1:

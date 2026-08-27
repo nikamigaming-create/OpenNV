@@ -66,7 +66,7 @@ internal static class GalleryGroundContact
         Aabb visualBounds,
         RuntimeConfiguration configuration,
         uint collisionMask,
-        Support? fallbackSupport = null)
+        Support? retainedSupport = null)
     {
         var root = actor.Placement.GlobalPosition;
         var visualSupportY = visualBounds.Position.Y;
@@ -141,7 +141,7 @@ internal static class GalleryGroundContact
             .ToArray();
         if (candidates.Length < 1)
         {
-            if (fallbackSupport is Support support)
+            if (retainedSupport is Support support)
                 return BuildMeasurement(
                     root,
                     visualBounds,

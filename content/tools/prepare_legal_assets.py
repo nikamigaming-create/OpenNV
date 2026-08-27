@@ -12,7 +12,8 @@ from pathlib import Path
 
 from cell_scene import load_recipe, load_spatial_recipe, prepare_cell_scene
 from exterior_scene import prepare_exterior_scene
-from export_static_nif_gltf import export_static_nif
+from export_static_nif_gltf import compiler_provenance, export_static_nif
+from opening_catalog import prepare_opening_manifest
 from owned_archive_stack import load_owned_archive_stack
 from prepare_actor import prepare_actor_set
 from runtime_configuration import configured_recipe_path, load_runtime_configuration
@@ -61,7 +62,9 @@ def prepare(
         else cell_recipe
     )
     master = find_required_file(data_root, str(owned_data["masterFile"]))
+    default_ini = find_required_file(data_root.parent, str(owned_data["defaultIniFile"]))
     meshes = find_required_file(data_root, str(owned_data["meshesArchiveFile"]))
+    ui_archive = find_required_file(data_root, str(owned_data["uiArchiveFile"]))
     master_hash = file_sha256(master)
     meshes_hash = file_sha256(meshes)
     if expected_meshes_sha256 and meshes_hash != expected_meshes_sha256.lower():
@@ -71,6 +74,21 @@ def prepare(
     visual_archives = load_owned_archive_stack(
         data_root,
         configured_recipe_path("visualArchives"),
+    )
+    opening_recipe_path = configured_recipe_path("opening")
+    if opening_recipe_path.stem != str(legal_assets["defaultOpeningRecipe"]):
+        raise ValueError("Configured opening recipe registry and legal-assets default differ")
+    opening = prepare_opening_manifest(
+        data_root,
+        master,
+        ui_archive,
+        visual_archives,
+        cache_root,
+        opening_recipe_path,
+        configuration,
+        str(owned_data["videoDirectoryName"]),
+        master_hash,
+        default_ini,
     )
     member = visual_archives.extract(logical_model)
 
@@ -157,6 +175,12 @@ def prepare(
             data_root,
             cache_root,
             actor_recipe_ids,
+            {
+                str(row["referenceFormId"]).casefold(): tuple(
+                    str(path) for path in row["logicalPaths"]
+                )
+                for row in opening["manifest"]["newGameFlow"]["actorAnimations"]
+            },
         )
     manifest = {
         "schema": SCHEMA,
@@ -164,7 +188,17 @@ def prepare(
         "install": {
             "dataRoot": str(data_root.resolve()),
             "master": {"file": master.name, "bytes": master.stat().st_size, "sha256": master_hash},
+            "defaultIni": {
+                "file": default_ini.name,
+                "bytes": default_ini.stat().st_size,
+                "sha256": file_sha256(default_ini),
+            },
             "meshesArchive": {"file": meshes.name, "bytes": meshes.stat().st_size, "sha256": meshes_hash},
+            "uiArchive": {
+                "file": ui_archive.name,
+                "bytes": ui_archive.stat().st_size,
+                "sha256": file_sha256(ui_archive),
+            },
             "textureArchives": texture_archive_rows,
             "archiveStack": visual_archives.manifest(),
         },
@@ -182,6 +216,7 @@ def prepare(
             "model": str(gltf_path.resolve()),
             "sidecar": str(sidecar_path.resolve()),
             "modelSha256": sidecar["outputs"]["gltf"]["sha256"],
+            "sidecarSha256": file_sha256(sidecar_path),
             "bufferSha256": sidecar["outputs"]["buffer"]["sha256"],
             "cellScene": None if cell_scene is None else cell_scene["output"],
             "cellSceneSha256": (
@@ -194,6 +229,8 @@ def prepare(
                 if actor_scenes is None
                 else file_sha256(Path(str(actor_scenes["manifest"])))
             ),
+            "openingManifest": opening["output"],
+            "openingManifestSha256": file_sha256(Path(str(opening["output"]))),
         },
     }
     atomic_text(cache_root / "install-manifest.json", manifest)
@@ -202,14 +239,23 @@ def prepare(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-root", type=Path, required=True)
-    parser.add_argument("--cache-root", type=Path, required=True)
+    parser.add_argument("--compiler-identity", action="store_true")
+    parser.add_argument("--data-root", type=Path)
+    parser.add_argument("--cache-root", type=Path)
     parser.add_argument(
         "--logical-model",
     )
     parser.add_argument("--expected-meshes-bsa-sha256", default="")
     parser.add_argument("--cell-recipe")
     args = parser.parse_args()
+    if args.compiler_identity:
+        print(
+            "OPENNV_CONTENT_COMPILER_IDENTITY "
+            + json.dumps(compiler_provenance(), sort_keys=True)
+        )
+        return 0
+    if args.data_root is None or args.cache_root is None:
+        parser.error("--data-root and --cache-root are required unless --compiler-identity is used")
     try:
         result = prepare(
             args.data_root.resolve(),
@@ -227,6 +273,7 @@ def main() -> int:
         "asset": result["asset"]["sha256"],
         "model": result["outputs"]["modelSha256"],
         "cellScene": result["outputs"]["cellScene"],
+        "openingManifest": result["outputs"]["openingManifest"],
     }, sort_keys=True))
     return 0
 

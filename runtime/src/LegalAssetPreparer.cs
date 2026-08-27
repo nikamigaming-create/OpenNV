@@ -15,9 +15,10 @@ internal static class LegalAssetPreparer
     {
         var dataRoot = ResolveDataRoot(selectedDataRoot, configuration);
 
-        var contentTool = ResolveContentTool(options);
-        if (!File.Exists(contentTool))
-            throw new FileNotFoundException("The packaged legal-content helper is missing.", contentTool);
+        var contentTool = ResolveContentTool(options, configuration)
+            ?? throw new FileNotFoundException(
+                "Neither the packaged nor source-checkout legal-content helper is available.");
+        var compiler = ReadContentToolCompilerIdentity(contentTool);
         var cacheRoot = ResolveCacheRoot(options, configuration);
         var arguments = new List<string>
         {
@@ -30,20 +31,14 @@ internal static class LegalAssetPreparer
                 ? configuredRecipe
                 : configuration.LegalAssets.DefaultCellRecipe,
         };
-        var output = new Godot.Collections.Array();
-        var exitCode = OS.Execute(
-            contentTool,
-            arguments.ToArray(),
-            output,
-            true,
-            false);
+        var (exitCode, output) = ExecuteContentTool(contentTool, arguments);
         if (exitCode != 0)
         {
-            var processOutput = string.Join(System.Environment.NewLine, output.Select(value => value.AsString()));
-            throw new InvalidOperationException($"Legal-content helper exited with code {exitCode}: {processOutput}");
+            throw new InvalidOperationException(
+                $"Legal-content helper exited with code {exitCode}: {output}");
         }
 
-        return OpenPreparedCache(cacheRoot, dataRoot, contentTool, configuration);
+        return OpenPreparedCache(cacheRoot, dataRoot, compiler, configuration);
     }
 
     internal static bool TryRestore(
@@ -61,11 +56,14 @@ internal static class LegalAssetPreparer
 
         try
         {
-            var contentTool = ResolveContentTool(options);
+            var contentTool = ResolveContentTool(options, configuration)
+                ?? throw new FileNotFoundException(
+                    "Neither the packaged nor source-checkout legal-content helper is available.");
+            var compiler = ReadContentToolCompilerIdentity(contentTool);
             var dataRoot = ReadManifestDataRoot(manifestPath);
             try
             {
-                prepared = OpenPreparedCache(cacheRoot, dataRoot, contentTool, configuration);
+                prepared = OpenPreparedCache(cacheRoot, dataRoot, compiler, configuration);
             }
             catch when (Directory.Exists(dataRoot))
             {
@@ -83,7 +81,7 @@ internal static class LegalAssetPreparer
     private static PreparedContent OpenPreparedCache(
         string cacheRoot,
         string expectedDataRoot,
-        string contentTool,
+        CompilerIdentity expectedCompiler,
         RuntimeConfiguration configuration)
     {
         var manifestPath = Path.Combine(cacheRoot, "install-manifest.json");
@@ -99,9 +97,13 @@ internal static class LegalAssetPreparer
         if (!expectedDataRoot.Equals(manifestDataRoot, comparison))
             throw new InvalidOperationException("Legal-asset cache manifest belongs to a different Data folder.");
         var outputs = root.GetProperty("outputs");
+        var modelPath = outputs.GetProperty("model").GetString()!;
+        var sidecarPath = outputs.GetProperty("sidecar").GetString()!;
+        VerifyHash(modelPath, outputs.GetProperty("modelSha256").GetString()!);
+        VerifyHash(sidecarPath, outputs.GetProperty("sidecarSha256").GetString()!);
         var prepared = new PreparedContent(
-            outputs.GetProperty("model").GetString()!,
-            outputs.GetProperty("sidecar").GetString()!,
+            modelPath,
+            sidecarPath,
             outputs.TryGetProperty("cellScene", out var cellScene) && cellScene.ValueKind == JsonValueKind.String
                 ? cellScene.GetString()
                 : null,
@@ -116,14 +118,16 @@ internal static class LegalAssetPreparer
             outputs.TryGetProperty("actorScenesSha256", out var actorScenesSha256) &&
             actorScenesSha256.ValueKind == JsonValueKind.String
                 ? actorScenesSha256.GetString()
-                : null);
-        ValidateCompilerProvenance(prepared.SidecarPath, contentTool, configuration);
+                : null,
+            outputs.GetProperty("openingManifest").GetString()!,
+            outputs.GetProperty("openingManifestSha256").GetString()!);
+        ValidateCompilerProvenance(prepared.SidecarPath, expectedCompiler);
         if (prepared.CellScenePath is not null)
         {
             if (prepared.CellSceneSha256 is null)
                 throw new InvalidOperationException("Cell scene has no install-manifest hash.");
             VerifyHash(prepared.CellScenePath, prepared.CellSceneSha256);
-            ValidateCellCompilerProvenance(prepared.CellScenePath, contentTool, configuration);
+            ValidateCellCompilerProvenance(prepared.CellScenePath, expectedCompiler);
         }
         if (prepared.ActorScenesPath is not null)
         {
@@ -131,6 +135,8 @@ internal static class LegalAssetPreparer
                 throw new InvalidOperationException("Actor scene set has no install-manifest hash.");
             VerifyHash(prepared.ActorScenesPath, prepared.ActorScenesSha256);
         }
+        VerifyHash(prepared.OpeningManifestPath, prepared.OpeningManifestSha256);
+        ValidateOpeningManifest(prepared.OpeningManifestPath, configuration);
         return prepared;
     }
 
@@ -142,32 +148,38 @@ internal static class LegalAssetPreparer
 
     private static void ValidateCompilerProvenance(
         string sidecarPath,
-        string contentTool,
-        RuntimeConfiguration configuration)
+        CompilerIdentity expectedCompiler)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(sidecarPath));
-        var compiler = document.RootElement.GetProperty("compiler");
-        if (compiler.GetProperty("name").GetString() != configuration.LegalAssets.PackagedCompilerName)
-            throw new InvalidOperationException("Legal-asset sidecar was not produced by the packaged content helper.");
-        using var stream = File.OpenRead(contentTool);
-        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        if (!actual.Equals(compiler.GetProperty("sha256").GetString(), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Legal-asset sidecar compiler hash does not match the packaged content helper.");
+        ValidateCompilerIdentity(
+            document.RootElement.GetProperty("compiler"),
+            expectedCompiler,
+            "Legal-asset sidecar");
     }
 
     private static void ValidateCellCompilerProvenance(
         string cellScenePath,
-        string contentTool,
-        RuntimeConfiguration configuration)
+        CompilerIdentity expectedCompiler)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(cellScenePath));
-        var compiler = document.RootElement.GetProperty("compiler");
-        if (compiler.GetProperty("name").GetString() != configuration.LegalAssets.PackagedCompilerName)
-            throw new InvalidOperationException("Cell scene was not produced by the packaged content helper.");
-        using var stream = File.OpenRead(contentTool);
-        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        if (!actual.Equals(compiler.GetProperty("sha256").GetString(), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Cell scene compiler hash does not match the packaged content helper.");
+        ValidateCompilerIdentity(
+            document.RootElement.GetProperty("compiler"),
+            expectedCompiler,
+            "Cell scene");
+    }
+
+    private static void ValidateCompilerIdentity(
+        JsonElement source,
+        CompilerIdentity expected,
+        string label)
+    {
+        var actual = new CompilerIdentity(
+            source.GetProperty("name").GetString()!,
+            source.GetProperty("sha256").GetString()!);
+        if (!actual.Name.Equals(expected.Name, StringComparison.Ordinal) ||
+            !actual.Sha256.Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"{label} compiler identity differs from the active legal-content helper.");
     }
 
     private static void VerifyHash(string path, string expected)
@@ -178,15 +190,115 @@ internal static class LegalAssetPreparer
             throw new InvalidOperationException($"Legal-asset cache hash mismatch: {path}");
     }
 
-    private static string ResolveContentTool(IReadOnlyDictionary<string, string> options)
+    private static void ValidateOpeningManifest(
+        string manifestPath,
+        RuntimeConfiguration configuration)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var root = document.RootElement;
+        if (root.GetProperty("schema").GetString() != "opennv-owned-opening-manifest/v1" ||
+            root.GetProperty("status").GetString() != "compiled-owned-opening-graph")
+            throw new InvalidOperationException("Prepared opening manifest has an unexpected contract.");
+        configuration.VerifyCompiledConfigurationDescriptor(root.GetProperty("configuration"));
+        if (root.GetProperty("blockers").GetArrayLength() != 0)
+            throw new InvalidOperationException("Prepared opening manifest contains unresolved entry blockers.");
+    }
+
+    private static ContentToolInvocation? ResolveContentTool(
+        IReadOnlyDictionary<string, string> options,
+        RuntimeConfiguration configuration)
     {
         if (options.TryGetValue("content-tool", out var configuredTool))
-            return ResolvePath(configuredTool);
+        {
+            var resolved = ResolvePath(configuredTool);
+            if (Path.GetExtension(resolved).Equals(".py", StringComparison.OrdinalIgnoreCase))
+                return File.Exists(resolved)
+                    ? new ContentToolInvocation(
+                        configuration.LegalAssets.SourceContentTool.Executable,
+                        new[] { resolved },
+                        false,
+                        configuration.LegalAssets.SourceContentTool.CompilerName)
+                    : null;
+            return File.Exists(resolved)
+                ? new ContentToolInvocation(
+                    resolved,
+                    Array.Empty<string>(),
+                    true,
+                    configuration.LegalAssets.PackagedCompilerName)
+                : null;
+        }
         var executableDirectory = Path.GetDirectoryName(OS.GetExecutablePath())
             ?? throw new InvalidOperationException("Cannot resolve the OpenNV executable directory.");
-        return Path.Combine(
+        var packaged = Path.Combine(
             executableDirectory,
             OperatingSystem.IsWindows() ? "OpenNV.Content.exe" : "OpenNV.Content");
+        if (File.Exists(packaged))
+            return new ContentToolInvocation(
+                packaged,
+                Array.Empty<string>(),
+                true,
+                configuration.LegalAssets.PackagedCompilerName);
+        var sourceScript = Path.GetFullPath(Path.Combine(
+            ProjectSettings.GlobalizePath("res://"),
+            configuration.LegalAssets.SourceContentTool.Script));
+        return File.Exists(sourceScript)
+            ? new ContentToolInvocation(
+                configuration.LegalAssets.SourceContentTool.Executable,
+                new[] { sourceScript },
+                false,
+                configuration.LegalAssets.SourceContentTool.CompilerName)
+            : null;
+    }
+
+    private static CompilerIdentity ReadContentToolCompilerIdentity(
+        ContentToolInvocation contentTool)
+    {
+        var (exitCode, output) = ExecuteContentTool(
+            contentTool,
+            new[] { "--compiler-identity" });
+        const string Prefix = "OPENNV_CONTENT_COMPILER_IDENTITY ";
+        var payload = output.Split(
+                new[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .SingleOrDefault(value => value.StartsWith(Prefix, StringComparison.Ordinal));
+        if (exitCode != 0 || payload is null)
+            throw new InvalidOperationException(
+                $"Legal-content helper identity query failed with code {exitCode}: {output}");
+        using var document = JsonDocument.Parse(payload[Prefix.Length..]);
+        var identity = new CompilerIdentity(
+            document.RootElement.GetProperty("name").GetString()!,
+            document.RootElement.GetProperty("sha256").GetString()!);
+        if (!identity.Name.Equals(contentTool.CompilerName, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Legal-content helper reported an unexpected compiler name.");
+        if (contentTool.Packaged)
+        {
+            using var stream = File.OpenRead(contentTool.Executable);
+            var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            if (!actual.Equals(identity.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Packaged legal-content helper reported an incorrect binary hash.");
+        }
+        return identity;
+    }
+
+    private static (int ExitCode, string Output) ExecuteContentTool(
+        ContentToolInvocation contentTool,
+        IEnumerable<string> arguments)
+    {
+        var output = new Godot.Collections.Array();
+        var allArguments = contentTool.PrefixArguments.Concat(arguments).ToArray();
+        var exitCode = OS.Execute(
+            contentTool.Executable,
+            allArguments,
+            output,
+            true,
+            false);
+        return (
+            exitCode,
+            string.Join(
+                System.Environment.NewLine,
+                output.Select(value => value.AsString())));
     }
 
     private static string ResolveCacheRoot(
@@ -234,5 +346,15 @@ internal static class LegalAssetPreparer
         string? CellScenePath,
         string? CellSceneSha256,
         string? ActorScenesPath,
-        string? ActorScenesSha256);
+        string? ActorScenesSha256,
+        string OpeningManifestPath,
+        string OpeningManifestSha256);
+
+    private sealed record ContentToolInvocation(
+        string Executable,
+        IReadOnlyList<string> PrefixArguments,
+        bool Packaged,
+        string CompilerName);
+
+    private sealed record CompilerIdentity(string Name, string Sha256);
 }

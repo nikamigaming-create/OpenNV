@@ -442,23 +442,26 @@ internal static class CellContentLoader
             FirstPersonRig.Contract? firstPersonRig = null;
             if (source.TryGetProperty("firstPerson", out var firstPerson))
             {
-                var loadout = firstPerson.GetProperty("startingLoadout");
-                startingLoadout = new StartingLoadout(
-                    loadout.GetProperty("weaponFormId").GetString()!,
-                    loadout.GetProperty("weaponEditorId").GetString()!,
-                    loadout.GetProperty("ammoFormId").GetString()!,
-                    loadout.GetProperty("ammoEditorId").GetString()!,
-                    loadout.GetProperty("damage").GetInt32(),
-                    loadout.GetProperty("clipSize").GetInt32(),
-                    loadout.GetProperty("reserveRounds").GetInt32());
-                firstPersonRig = ReadFirstPersonRig(firstPerson.GetProperty("rig"));
-                if (prepareFirstPersonPresentation)
+                if (firstPerson.TryGetProperty("startingLoadout", out var loadout))
                 {
-                    var heldAssetId = loadout.GetProperty("modelAssetId").GetString()!;
-                    heldWeapon = prototypes[heldAssetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
-                        ?? throw new InvalidOperationException("Could not duplicate VR held weapon asset.");
-                    muzzlePosition = ReadVector(loadout.GetProperty("muzzlePositionGodotUnits"));
+                    startingLoadout = new StartingLoadout(
+                        loadout.GetProperty("weaponFormId").GetString()!,
+                        loadout.GetProperty("weaponEditorId").GetString()!,
+                        loadout.GetProperty("ammoFormId").GetString()!,
+                        loadout.GetProperty("ammoEditorId").GetString()!,
+                        loadout.GetProperty("damage").GetInt32(),
+                        loadout.GetProperty("clipSize").GetInt32(),
+                        loadout.GetProperty("reserveRounds").GetInt32());
+                    if (prepareFirstPersonPresentation)
+                    {
+                        var heldAssetId = loadout.GetProperty("modelAssetId").GetString()!;
+                        heldWeapon = prototypes[heldAssetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
+                            ?? throw new InvalidOperationException("Could not duplicate VR held weapon asset.");
+                        muzzlePosition = ReadVector(loadout.GetProperty("muzzlePositionGodotUnits"));
+                    }
                 }
+                if (firstPerson.TryGetProperty("rig", out var rig))
+                    firstPersonRig = ReadFirstPersonRig(rig);
             }
 
             var lighting = ReadLighting(source.GetProperty("lighting"));

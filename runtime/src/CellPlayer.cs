@@ -32,6 +32,12 @@ internal partial class CellPlayer : CharacterBody3D
     private int _xrTrackedFrames;
     private int _xrHealthFrames;
     private float? _xrLastFloorY;
+    private Func<Node?, bool>? _externalActivationHandler;
+    private bool _movementEnabled = true;
+    private bool _lookEnabled = true;
+    private bool _activationEnabled = true;
+    private bool _combatEnabled = true;
+    private bool _saveEnabled = true;
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
@@ -48,6 +54,25 @@ internal partial class CellPlayer : CharacterBody3D
     internal bool HasHeldPoolCue => _poolCueMount is not null && _poolCueTip is not null;
     internal float DesiredEyeHeightMeters => _configuration.Xr.DesiredEyeHeightMeters;
     internal PlayerControlTelemetry.Snapshot ControlTelemetry => _controlTelemetry.Report();
+
+    internal void SetControlPolicy(
+        bool movement,
+        bool look,
+        bool activation,
+        bool combat,
+        bool save)
+    {
+        _movementEnabled = movement;
+        _lookEnabled = look;
+        _activationEnabled = activation;
+        _combatEnabled = combat;
+        _saveEnabled = save;
+        if (!movement)
+            Velocity = new Vector3(0.0f, Velocity.Y, 0.0f);
+    }
+
+    internal void SetExternalActivationHandler(Func<Node?, bool>? handler) =>
+        _externalActivationHandler = handler;
 
     internal void Configure(
         float yaw,
@@ -122,7 +147,9 @@ internal partial class CellPlayer : CharacterBody3D
     {
         if (_useXr)
             return;
-        if (inputEvent is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (_lookEnabled &&
+            inputEvent is InputEventMouseMotion motion &&
+            Input.MouseMode == Input.MouseModeEnum.Captured)
         {
             RotateY(-motion.Relative.X * _configuration.Player.MouseSensitivityRadiansPerPixel);
             var cameraRotation = _camera.Rotation;
@@ -137,6 +164,8 @@ internal partial class CellPlayer : CharacterBody3D
     private bool Activate(Node3D aimSource)
     {
         var collider = Cast(aimSource, _configuration.Player.ActivationDistanceMeters);
+        if (_externalActivationHandler?.Invoke(collider) == true)
+            return true;
         var poolBall = Ancestor<PoolBallInstance>(collider);
         if (poolBall is not null)
         {
@@ -302,6 +331,8 @@ internal partial class CellPlayer : CharacterBody3D
 
     private Vector2 ReadMovement()
     {
+        if (!_movementEnabled)
+            return Vector2.Zero;
         if (_useXr)
         {
             var stick = _leftGrip!.GetVector2("move");
@@ -318,7 +349,7 @@ internal partial class CellPlayer : CharacterBody3D
     private void PollDesktopActions()
     {
         var input = _configuration.Player.DesktopInput;
-        if (Input.IsActionJustPressed(input.Activate.Action))
+        if (_activationEnabled && Input.IsActionJustPressed(input.Activate.Action))
         {
             bool accepted;
             if (_activePool is null)
@@ -330,7 +361,7 @@ internal partial class CellPlayer : CharacterBody3D
             }
             GD.Print($"OPENNV_FLAT_ACTION action=activate accepted={accepted}");
         }
-        if (Input.IsActionJustPressed(input.Fire.Action))
+        if (_combatEnabled && Input.IsActionJustPressed(input.Fire.Action))
         {
             var accepted = _activePool is not null
                 ? _activePool.StrikeFlat(-_camera.GlobalBasis.Z)
@@ -339,7 +370,7 @@ internal partial class CellPlayer : CharacterBody3D
                 _weaponFeedbackSeconds = _configuration.Xr.WeaponFeedbackSeconds;
             GD.Print($"OPENNV_FLAT_ACTION action=fire accepted={accepted}");
         }
-        if (Input.IsActionJustPressed(input.Reload.Action))
+        if (_combatEnabled && Input.IsActionJustPressed(input.Reload.Action))
         {
             bool accepted;
             if (_activePool is not null)
@@ -351,7 +382,7 @@ internal partial class CellPlayer : CharacterBody3D
                 accepted = _session!.Reload();
             GD.Print($"OPENNV_FLAT_ACTION action=reload accepted={accepted}");
         }
-        if (Input.IsActionJustPressed(input.Save.Action))
+        if (_saveEnabled && Input.IsActionJustPressed(input.Save.Action))
         {
             _session!.SaveAndNotify();
             GD.Print("OPENNV_FLAT_ACTION action=save accepted=True");
@@ -362,7 +393,7 @@ internal partial class CellPlayer : CharacterBody3D
                 ExitPool();
             Input.MouseMode = Input.MouseModeEnum.Visible;
         }
-        if (Input.IsActionJustPressed(input.CaptureMouse.Action))
+        if (_lookEnabled && Input.IsActionJustPressed(input.CaptureMouse.Action))
             Input.MouseMode = Input.MouseModeEnum.Captured;
         if (_activePool is not null && Input.IsActionJustPressed(input.PoolPowerUp.Action))
             _activePool.CycleFlatPower(1);
@@ -372,7 +403,7 @@ internal partial class CellPlayer : CharacterBody3D
 
     private void PollXrActions()
     {
-        var turn = _rightGrip!.GetVector2("turn").X;
+        var turn = _lookEnabled ? _rightGrip!.GetVector2("turn").X : 0.0f;
         if (MathF.Abs(turn) >= _configuration.Xr.SnapTurnActivationThreshold && _xrSnapTurnReady)
         {
             SnapTurn(-MathF.Sign(turn) * Mathf.DegToRad(_configuration.Xr.SnapTurnDegrees));
@@ -383,7 +414,8 @@ internal partial class CellPlayer : CharacterBody3D
             _xrSnapTurnReady = true;
         }
 
-        var activate = _rightGrip.GetFloat("activate") >= _configuration.Xr.ActionThreshold;
+        var activate = _activationEnabled &&
+            _rightGrip!.GetFloat("activate") >= _configuration.Xr.ActionThreshold;
         if (activate && !_xrActivatePressed)
         {
             bool accepted;
@@ -399,7 +431,8 @@ internal partial class CellPlayer : CharacterBody3D
         }
         _xrActivatePressed = activate;
 
-        var fire = _rightGrip.GetFloat("fire") >= _configuration.Xr.ActionThreshold;
+        var fire = _combatEnabled &&
+            _rightGrip!.GetFloat("fire") >= _configuration.Xr.ActionThreshold;
         if (fire && !_xrFirePressed)
         {
             var accepted = _activePool is null && _session!.Fire(_rightAim!);
@@ -413,7 +446,7 @@ internal partial class CellPlayer : CharacterBody3D
         }
         _xrFirePressed = fire;
 
-        var save = _leftGrip!.IsButtonPressed("save");
+        var save = _saveEnabled && _leftGrip!.IsButtonPressed("save");
         if (save && !_xrSavePressed)
         {
             _session!.SaveAndNotify();
@@ -422,7 +455,7 @@ internal partial class CellPlayer : CharacterBody3D
         }
         _xrSavePressed = save;
 
-        var reload = _rightGrip.IsButtonPressed("reload");
+        var reload = _combatEnabled && _rightGrip!.IsButtonPressed("reload");
         if (reload && !_xrReloadPressed)
         {
             bool accepted;

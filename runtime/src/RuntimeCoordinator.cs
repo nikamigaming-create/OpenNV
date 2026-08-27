@@ -5,6 +5,24 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator : Node3D
 {
+    private static readonly HashSet<string> DirectPreparedContentOptions = new(
+        new[]
+        {
+            "capture-root",
+            "cell-recipe",
+            "flat-controls-proof",
+            "gameplay-proof",
+            "gameplay-reload-proof",
+            "new-game",
+            "open-proof-door",
+            "pool-proof",
+            "portal-proof",
+            "quit-after-load",
+            "report",
+            "xr-simulator-proof",
+        },
+        StringComparer.OrdinalIgnoreCase);
+
     private Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
     private RuntimeConfiguration _configuration = null!;
     private LegalAssetSetupView? _setupView;
@@ -163,6 +181,59 @@ public partial class RuntimeCoordinator : Node3D
         LegalAssetPreparer.PreparedContent prepared,
         IReadOnlyDictionary<string, string> options)
     {
+        if (ShouldShowOpening(options))
+        {
+            ShowOpening(prepared, options);
+            return;
+        }
+        LoadPreparedGameplay(prepared, options);
+    }
+
+    private void ShowOpening(
+        LegalAssetPreparer.PreparedContent prepared,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var manifest = OpeningManifest.Load(prepared.OpeningManifestPath, _configuration);
+        var savePath = options.TryGetValue("save-path", out var configuredSavePath)
+            ? ResolveRuntimePath(configuredSavePath)
+            : ResolveRuntimePath(_configuration.Hud.DefaultSavePath);
+        var opening = new RetailOpening();
+        AddChild(opening);
+        opening.Configure(
+            manifest,
+            File.Exists(savePath),
+            _configuration.Player.DesktopInput.Cancel.Action,
+            () =>
+            {
+                var newGameOptions = options.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
+                    StringComparer.OrdinalIgnoreCase);
+                newGameOptions["new-game"] = "";
+                LoadPreparedGameplay(prepared, newGameOptions);
+            },
+            action =>
+            {
+                if (action is "continue" or "load")
+                {
+                    opening.QueueFree();
+                    LoadPreparedGameplay(prepared, options);
+                    return;
+                }
+                GD.Print($"OPENNV_OWNED_MENU_ACTION action={action} status=ui-route-pending");
+            });
+        GD.Print(
+            $"OPENNV_OWNED_OPENING_READY campaign={manifest.Campaign} " +
+            $"quest={manifest.EntryQuestEditorId} stage={manifest.EntryStage} " +
+            $"buttons={manifest.Buttons.Count}");
+        if (options.ContainsKey("quit-after-load"))
+            GetTree().Quit(0);
+    }
+
+    private void LoadPreparedGameplay(
+        LegalAssetPreparer.PreparedContent prepared,
+        IReadOnlyDictionary<string, string> options)
+    {
         if (prepared.CellScenePath is not null)
         {
             var preparedOptions = options.ToDictionary(
@@ -173,11 +244,23 @@ public partial class RuntimeCoordinator : Node3D
                 !preparedOptions.ContainsKey("actor-scene") &&
                 !preparedOptions.ContainsKey("actor-scenes"))
                 preparedOptions["actor-scenes"] = prepared.ActorScenesPath;
+            if (preparedOptions.ContainsKey("new-game"))
+                preparedOptions["opening-manifest"] = prepared.OpeningManifestPath;
             LoadCellScene(prepared.CellScenePath, preparedOptions);
         }
         else
             LoadModel(prepared.ModelPath, prepared.SidecarPath, options);
     }
+
+    private static bool ShouldShowOpening(IReadOnlyDictionary<string, string> options) =>
+        options.ContainsKey("opening-menu") ||
+        !options.Keys.Any(DirectPreparedContentOptions.Contains);
+
+    private static string ResolveRuntimePath(string path) =>
+        path.StartsWith("res://", StringComparison.Ordinal) ||
+        path.StartsWith("user://", StringComparison.Ordinal)
+            ? ProjectSettings.GlobalizePath(path)
+            : Path.GetFullPath(path);
 
     private void LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
     {
@@ -202,7 +285,18 @@ public partial class RuntimeCoordinator : Node3D
             options.TryGetValue("actor-scenes", out var actorScenes) ? actorScenes : null,
             options.ContainsKey("proof-enable-actor"),
             !options.ContainsKey("capture-root") || options.ContainsKey("gallery-shot"),
-            applyCellEnvironment);
+            applyCellEnvironment,
+            !options.ContainsKey("new-game"),
+            !options.ContainsKey("new-game"));
+        if (options.ContainsKey("new-game"))
+        {
+            var openingManifest = OpeningManifest.Load(
+                RequireOption(options, "opening-manifest"),
+                _configuration);
+            var openingFlow = new OpeningQuestRuntime();
+            AddChild(openingFlow);
+            openingFlow.Configure(openingManifest, loaded, _configuration);
+        }
         if (galleryContract is not null)
             GD.Print($"OPENNV_GALLERY_STAGE id={galleryContract.Id} stage=cell-load-complete");
         if (options.ContainsKey("xr-simulator-proof"))

@@ -1,0 +1,186 @@
+{
+  "schema": "opennv-owned-opening-recipe/v1",
+  "id": "fnv-new-game-opening-v1",
+  "campaign": "NewVegas",
+  "provenance": {
+    "classification": "owned-data-root-selection",
+    "status": "opening-route-rooted",
+    "source": "FalloutNV.esm VCG00/VCG01 plus the owned Fallout UI archive and loose Video directory",
+    "evidence": "The compiler derives stages, scripts, references, dialogue, packages, CELL ownership, menu tiles, includes, textures, and Bink assets from the selected owned records and archive bytes."
+  },
+  "rootEditorIds": [
+    "VCG00",
+    "VCG01"
+  ],
+  "entryPoint": {
+    "questEditorId": "VCG00",
+    "stage": 0
+  },
+  "recordGraph": {
+    "engineForms": {
+      "00000014": "player"
+    },
+    "universalFormLinkSubrecords": [
+      "SCRO"
+    ],
+    "formLinkSubrecordsByRecordType": {
+      "QUST": ["SCRI"],
+      "DIAL": ["QSTI"],
+      "INFO": ["QSTI"],
+      "REFR": ["NAME", "SCRI", "XOWN", "XESP", "XEZN", "XTRG"],
+      "ACHR": ["NAME", "XOWN", "XESP", "XEZN"],
+      "ACRE": ["NAME", "XOWN", "XESP", "XEZN"],
+      "NPC_": ["TPLT", "RNAM", "VTCK", "SPLO", "SCRI", "PKID", "EAMT", "CNAM", "HNAM", "LNAM", "ENAM"],
+      "CREA": ["TPLT", "VTCK", "SPLO", "SCRI", "PKID"],
+      "ACTI": ["SCRI"],
+      "CONT": ["SCRI"],
+      "DOOR": ["SCRI"],
+      "FURN": ["SCRI"],
+      "MISC": ["SCRI"],
+      "TERM": ["SCRI"],
+      "WEAP": ["SCRI"]
+    },
+    "reverseFormLinkSubrecords": [
+      "QSTI"
+    ],
+    "parentGroupTypes": [
+      1,
+      6,
+      7
+    ],
+    "childGroupTypesByRecordType": {
+      "DIAL": [7]
+    }
+  },
+  "ui": {
+    "memberPrefix": "menus\\",
+    "documentExtensions": [
+      ".xml"
+    ],
+    "additionalDocuments": [
+      "menus\\master_menu_file.txt"
+    ],
+    "includeSearchRoots": [
+      "menus\\prefabs",
+      "menus"
+    ],
+    "bootDocument": "menus\\options\\main_menu.xml",
+    "confirmationDocument": "menus\\message_menu.xml",
+    "buttonContainer": "main_button_layout",
+    "titleTile": "oblivion_logo",
+    "engineSettings": {
+      "background": {
+        "section": "Loading",
+        "key": "sMainMenuBackground",
+        "logicalPathTemplate": "textures\\interface\\main\\{value}.dds"
+      },
+      "music": {
+        "section": "General",
+        "key": "SMainMenuMusicTrack",
+        "volumeSection": "Audio",
+        "volumeKey": "fMainMenuMusicVolume",
+        "relativePathTemplate": "Music\\{value}"
+      },
+      "color": {
+        "section": "Interface",
+        "redKey": "iSystemColorMainMenuRed",
+        "greenKey": "iSystemColorMainMenuGreen",
+        "blueKey": "iSystemColorMainMenuBlue"
+      },
+      "fonts": {
+        "section": "Fonts",
+        "keyTemplate": "sFontFile_{id}"
+      },
+      "globalsDocument": "menus\\globals.xml",
+      "platformEntities": {
+        "console": false
+      },
+      "styleTraits": [
+        "_line_thickness",
+        "_line_brightness",
+        "_line_brightness_disabled",
+        "_text_brightness",
+        "_text_brightness_disabled",
+        "_background_fill_alpha",
+        "_background_fill_brightness"
+      ]
+    },
+    "actions": {
+      "main_continue": "continue",
+      "main_new": "new-game",
+      "main_load": "load",
+      "main_settings": "settings",
+      "main_crew": "credits",
+      "main_quit": "quit"
+    }
+  },
+  "newGameFlow": {
+    "questEditorId": "VCG01",
+    "questScriptEditorId": "VCG01SCRIPT",
+    "sceneRoles": {
+      "guideActor": "DocMitchellREF",
+      "vigorTester": "VCG01VigorTesterREF",
+      "exitDoor": "GSDocMitchellHouseIntDoorREF"
+    },
+    "menus": {
+      "dialogue": {
+        "document": "menus\\dialog\\dialog_menu.xml"
+      },
+      "name": {
+        "document": "menus\\dialog\\texteditmenu.xml",
+        "layoutTile": "TEM_MainRect"
+      },
+      "appearance": {
+        "document": "menus\\chargen\\race_sex_menu.xml",
+        "layoutTile": "RSM_Background"
+      },
+      "special": {
+        "document": "menus\\chargen\\love_tester_menu.xml",
+        "canvasTile": "clickable"
+      },
+      "tagSkills": {
+        "document": "menus\\chargen\\char_gen_menu.xml",
+        "layoutTile": "CGM_MainRect"
+      },
+      "traits": {
+        "document": "menus\\trait_menu.xml",
+        "layoutTile": "LUM_MainRect"
+      }
+    },
+    "engineStringEntities": {
+      "accept": "-sDone",
+      "reset": "-sReset",
+      "namePrompt": "-sEnterName",
+      "ok": "-sOk"
+    },
+    "messageEditorIds": {
+      "sex": "VCG01ChooseSexMessage"
+    },
+    "dialogueDiscovery": {
+      "psychologyStartQuestVariable": "bBeganTest",
+      "psychologyStartStage": 80,
+      "outroTopicEditorId": "VCG01DocMitchellTopic076"
+    },
+    "interactionBindings": {
+      "VCG01VigorTesterTriggerSCRIPT": "vigorTester",
+      "GSDocMitchellExitTriggerScript": "exitDoor"
+    },
+    "characterRules": {
+      "special": {
+        "minimumValue": 1,
+        "initialValue": 5,
+        "maximumValue": 10,
+        "catalogIconPathContains": "\\s.p.e.c.i.a.l\\"
+      },
+      "tagSkills": {
+        "catalogIconPathContains": "\\stats\\skills_"
+      },
+      "traits": {
+        "maximumSelected": 2,
+        "recordType": "PERK",
+        "selectorSubrecord": "DATA",
+        "selectorHex": "0101010100"
+      }
+    }
+  }
+}

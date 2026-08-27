@@ -478,17 +478,37 @@ internal sealed record RuntimeConfiguration(
         if (DesktopLauncher.MainWindowMinimumWidthPixels > DesktopLauncher.MainWindowWidthPixels ||
             DesktopLauncher.MainWindowMinimumHeightPixels > DesktopLauncher.MainWindowHeightPixels)
             throw new InvalidOperationException("Desktop launcher minimum dimensions exceed startup dimensions.");
+        RequireText(LegalAssets.DefaultOpeningRecipe, nameof(LegalAssets.DefaultOpeningRecipe));
         RequireText(LegalAssets.DefaultCellRecipe, nameof(LegalAssets.DefaultCellRecipe));
         RequireText(LegalAssets.DefaultCacheRoot, nameof(LegalAssets.DefaultCacheRoot));
         RequireText(LegalAssets.PackagedCompilerName, nameof(LegalAssets.PackagedCompilerName));
+        RequireText(
+            LegalAssets.SourceContentTool.Executable,
+            nameof(LegalAssets.SourceContentTool.Executable));
+        RequireText(
+            LegalAssets.SourceContentTool.Script,
+            nameof(LegalAssets.SourceContentTool.Script));
+        RequireText(
+            LegalAssets.SourceContentTool.CompilerName,
+            nameof(LegalAssets.SourceContentTool.CompilerName));
         RequireText(LegalAssets.SmokeModelLogicalPath, nameof(LegalAssets.SmokeModelLogicalPath));
+        LegalAssets.VideoImport.Validate();
         RequireText(LegalAssets.OwnedData.MasterFile, nameof(LegalAssets.OwnedData.MasterFile));
+        RequireText(
+            LegalAssets.OwnedData.DefaultIniFile,
+            nameof(LegalAssets.OwnedData.DefaultIniFile));
         RequireText(
             LegalAssets.OwnedData.MeshesArchiveFile,
             nameof(LegalAssets.OwnedData.MeshesArchiveFile));
         RequireText(
+            LegalAssets.OwnedData.UiArchiveFile,
+            nameof(LegalAssets.OwnedData.UiArchiveFile));
+        RequireText(
             LegalAssets.OwnedData.DataDirectoryName,
             nameof(LegalAssets.OwnedData.DataDirectoryName));
+        RequireText(
+            LegalAssets.OwnedData.VideoDirectoryName,
+            nameof(LegalAssets.OwnedData.VideoDirectoryName));
         if (LegalAssets.OwnedData.TextureArchiveFiles.Count < 1 ||
             LegalAssets.OwnedData.TextureArchiveFiles.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("Legal owned-data texture archives must be nonempty.");
@@ -1294,17 +1314,59 @@ internal sealed record DesktopLauncherConfiguration(
 
 internal sealed record LegalAssetsConfiguration(
     ConfigurationProvenance Provenance,
+    string DefaultOpeningRecipe,
     string DefaultCellRecipe,
     string DefaultCacheRoot,
     string PackagedCompilerName,
+    SourceContentToolConfiguration SourceContentTool,
     string SmokeModelLogicalPath,
+    OpeningVideoImportConfiguration VideoImport,
     LegalOwnedDataConfiguration OwnedData);
+
+internal sealed record SourceContentToolConfiguration(
+    string Executable,
+    string Script,
+    string CompilerName);
+
+internal sealed record OpeningVideoImportConfiguration(
+    string TranscoderExecutable,
+    string OutputExtension,
+    string ContainerFormat,
+    string VideoCodec,
+    string AudioCodec,
+    int VideoQuality,
+    int AudioQuality,
+    int Threads,
+    string PixelFormat,
+    string LogLevel)
+{
+    internal void Validate()
+    {
+        foreach (var value in new[]
+        {
+            TranscoderExecutable,
+            OutputExtension,
+            ContainerFormat,
+            VideoCodec,
+            AudioCodec,
+            PixelFormat,
+            LogLevel,
+        })
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException("Opening video-import strings must be nonempty.");
+        if (VideoQuality <= 0 || AudioQuality <= 0 || Threads <= 0)
+            throw new InvalidOperationException("Opening video-import quality values must be positive.");
+    }
+}
 
 internal sealed record LegalOwnedDataConfiguration(
     string MasterFile,
+    string DefaultIniFile,
     string MeshesArchiveFile,
+    string UiArchiveFile,
     IReadOnlyList<string> TextureArchiveFiles,
-    string DataDirectoryName);
+    string DataDirectoryName,
+    string VideoDirectoryName);
 
 internal sealed record ToolingConfiguration(
     ConfigurationProvenance Provenance,

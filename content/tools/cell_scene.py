@@ -275,8 +275,41 @@ def prepare_cell_scene(
     cell_form_id = _find_cell(catalog, str(recipe["cellEditorId"]))
     cell = catalog.cells[cell_form_id]
     entry_door = int(str(recipe["entryDoorReferenceFormId"]), FORM_ID_RADIX)
-    source_door, arrival = arrival_transform(catalog, entry_door)
-    origin = arrival.position
+    configured_spawn = recipe.get("spawnReferenceFormId")
+    if configured_spawn is None:
+        source_door, arrival = arrival_transform(catalog, entry_door)
+        origin = arrival.position
+        spawn = {
+            "source": "door-xtel",
+            "sourceDoorReferenceFormId": form_id(source_door),
+            "targetDoorReferenceFormId": form_id(entry_door),
+            "positionGameUnits": list(arrival.position),
+            "positionGodotUnits": [0.0, 0.0, 0.0],
+            "yawRadians": arrival.rotation_radians[2],
+            "yawGodotRadians": godot_yaw_radians(arrival.rotation_radians[2]),
+        }
+    else:
+        spawn_reference_id = int(str(configured_spawn), FORM_ID_RADIX)
+        spawn_references = [
+            reference
+            for reference in catalog.references
+            if reference.form_id == spawn_reference_id
+        ]
+        if len(spawn_references) != 1 or spawn_references[0].cell_form_id != cell_form_id:
+            raise ValueError(
+                "Cell recipe spawn reference does not resolve uniquely in its CELL: "
+                + form_id(spawn_reference_id)
+            )
+        arrival = spawn_references[0].transform
+        origin = arrival.position
+        spawn = {
+            "source": "placed-reference-transform",
+            "referenceFormId": form_id(spawn_reference_id),
+            "positionGameUnits": list(arrival.position),
+            "positionGodotUnits": [0.0, 0.0, 0.0],
+            "yawRadians": arrival.rotation_radians[2],
+            "yawGodotRadians": godot_yaw_radians(arrival.rotation_radians[2]),
+        }
     if cell.lighting is None:
         raise ValueError(f"Cell recipe requires XCLL lighting: {cell.editor_id}")
 
@@ -306,7 +339,9 @@ def prepare_cell_scene(
     if not selected:
         raise ValueError(f"Cell recipe selected no references: {recipe['id']}")
 
-    extra_model_paths = {str(vr_loadout["modelPath"])}
+    extra_model_paths: set[str] = set()
+    if vr_loadout is not None:
+        extra_model_paths.add(str(vr_loadout["modelPath"]))
     configured_pool = recipe.get("poolGameplay")
     if isinstance(configured_pool, dict):
         extra_model_paths.add(str(configured_pool["playableTableModelPath"]).lower())
@@ -345,13 +380,17 @@ def prepare_cell_scene(
     selected = retained_selected
     if not selected:
         raise ValueError(f"Cell recipe retained no presentation references: {recipe['id']}")
-    first_person_rig = prepare_first_person_rig(
-        meshes_path,
-        texture_archive_paths,
-        cache_root,
-        recipe,
-        configuration.content_compiler,
-        owned_archives,
+    first_person_rig = (
+        prepare_first_person_rig(
+            meshes_path,
+            texture_archive_paths,
+            cache_root,
+            recipe,
+            configuration.content_compiler,
+            owned_archives,
+        )
+        if recipe.get("firstPersonRig") is not None
+        else None
     )
     pool_gameplay, pool_roles = pool_gameplay_manifest(
         recipe,
@@ -360,16 +399,17 @@ def prepare_cell_scene(
         assets,
         asset_sidecars,
     )
-    vr_weapon_model = str(vr_loadout["modelPath"])
-    vr_loadout["modelAssetId"] = assets[vr_weapon_model]["id"]
-    muzzle_markers = [
-        marker
-        for marker in asset_sidecars[vr_weapon_model]["attachmentMarkers"]
-        if marker["name"] == "ProjectileNode"
-    ]
-    if len(muzzle_markers) != 1:
-        raise ValueError(f"VR smoke weapon must expose one ProjectileNode: {vr_weapon_model}")
-    vr_loadout["muzzlePositionGodotUnits"] = muzzle_markers[0]["positionGodotUnits"]
+    if vr_loadout is not None:
+        vr_weapon_model = str(vr_loadout["modelPath"])
+        vr_loadout["modelAssetId"] = assets[vr_weapon_model]["id"]
+        muzzle_markers = [
+            marker
+            for marker in asset_sidecars[vr_weapon_model]["attachmentMarkers"]
+            if marker["name"] == "ProjectileNode"
+        ]
+        if len(muzzle_markers) != 1:
+            raise ValueError(f"VR smoke weapon must expose one ProjectileNode: {vr_weapon_model}")
+        vr_loadout["muzzlePositionGodotUnits"] = muzzle_markers[0]["positionGodotUnits"]
 
     references = []
     for reference, base in selected:
@@ -453,22 +493,25 @@ def prepare_cell_scene(
             "unitsToMeters": units_to_meters,
             "originGameUnits": list(origin),
         },
-        "spawn": {
-            "sourceDoorReferenceFormId": form_id(source_door),
-            "targetDoorReferenceFormId": form_id(entry_door),
-            "positionGameUnits": list(arrival.position),
-            "positionGodotUnits": [0.0, 0.0, 0.0],
-            "yawRadians": arrival.rotation_radians[2],
-            "yawGodotRadians": godot_yaw_radians(arrival.rotation_radians[2]),
-        },
+        "spawn": spawn,
         "proof": {
             "doorReferenceFormId": str(recipe["portalProofDoorReferenceFormId"]),
             "visibilityModel": "whole-cell-no-portal-culling",
         },
-        "firstPerson": {
-            "startingLoadout": vr_loadout,
-            "rig": first_person_rig,
-        },
+        **(
+            {
+                "firstPerson": {
+                    **(
+                        {"startingLoadout": vr_loadout}
+                        if vr_loadout is not None
+                        else {}
+                    ),
+                    **({"rig": first_person_rig} if first_person_rig is not None else {}),
+                }
+            }
+            if vr_loadout is not None or first_person_rig is not None
+            else {}
+        ),
         "poolGameplay": pool_gameplay,
         "lighting": {
             "ambientColor": normalized_rgb(cell.lighting.ambient_rgb),

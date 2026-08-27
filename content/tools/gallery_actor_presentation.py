@@ -29,6 +29,8 @@ EVIDENCE_SCHEMA = "opennv-gallery-retail-evidence/v4"
 EVIDENCE_STATUS = "retail-authored-reference-observed"
 NIF_SUFFIX = ".nif"
 KF_SUFFIX = ".kf"
+FORM_ID_RADIX = 16
+UNSIGNED_INT32_MAXIMUM = 2**32 - 1
 
 
 @dataclass(frozen=True)
@@ -246,7 +248,7 @@ def _visible_weapon(
     render_state = str(weapon.get("renderState", ""))
     source_form_id = str(weapon.get("sourceFormId", ""))
     try:
-        source_form = int(source_form_id, 16)
+        source_form = int(source_form_id, FORM_ID_RADIX)
     except ValueError as error:
         raise ValueError(
             f"Gallery retail weapon FormID is invalid: {source_form_id}"
@@ -330,7 +332,7 @@ def _visible_model_attachments(
             )
         source_form_id = str(part.get("sourceFormId", ""))
         try:
-            source_form = int(source_form_id, 16)
+            source_form = int(source_form_id, FORM_ID_RADIX)
         except ValueError as error:
             raise ValueError(
                 f"Gallery retail attachment FormID is invalid: {source_form_id}"
@@ -338,7 +340,7 @@ def _visible_model_attachments(
         if source_form <= 0:
             raise ValueError("Gallery retail visible attachment has no source FormID")
         source_slot = int(part.get("sourceSlot", -1))
-        if source_slot < 0 or source_slot > 0xFFFFFFFF:
+        if source_slot < 0 or source_slot > UNSIGNED_INT32_MAXIMUM:
             raise ValueError(
                 f"Gallery retail attachment has invalid source slot: {source_slot}"
             )
@@ -377,10 +379,10 @@ def load_gallery_actor_presentation(
     if not isinstance(shot, dict) or not isinstance(retail, dict):
         raise ValueError("Gallery retail evidence has no shot/retail contract")
     if (
-        int(str(shot.get("referenceFormId", "0")), 16)
-        != int(expected_reference_form_id, 16)
-        or int(str(shot.get("baseFormId", "0")), 16)
-        != int(expected_base_form_id, 16)
+        int(str(shot.get("referenceFormId", "0")), FORM_ID_RADIX)
+        != int(expected_reference_form_id, FORM_ID_RADIX)
+        or int(str(shot.get("baseFormId", "0")), FORM_ID_RADIX)
+        != int(expected_base_form_id, FORM_ID_RADIX)
     ):
         raise ValueError("Gallery retail evidence identifies another actor")
     oracle_path, oracle_sha256 = _verified_descriptor(

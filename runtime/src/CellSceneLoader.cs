@@ -20,7 +20,9 @@ internal static class CellSceneLoader
         string? actorScenesManifestPath = null,
         bool proofEnableActor = false,
         bool buildCollision = true,
-        bool applyCellEnvironment = true)
+        bool applyCellEnvironment = true,
+        bool loadExistingSave = true,
+        bool showGameplayHud = true)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -39,7 +41,9 @@ internal static class CellSceneLoader
             proofDoorId,
             configuration,
             savePath,
-            useXr);
+            useXr,
+            loadExistingSave,
+            showGameplayHud);
         parent.AddChild(session);
         var main = CellContentLoader.Load(
             resolvedScenePath,
@@ -52,10 +56,8 @@ internal static class CellSceneLoader
             proofEnableActor,
             buildCollision,
             1u);
-        if (enableFirstPersonPresentation)
+        if (enableFirstPersonPresentation && main.StartingLoadout is { } loadout)
         {
-            var loadout = main.StartingLoadout
-                ?? throw new InvalidOperationException("OpenNV scene has no data-resolved first-person loadout.");
             session.PrepareStartingLoadout(new GameplaySession.StartingWeapon(
                 loadout.WeaponFormId,
                 loadout.WeaponEditorId,
@@ -97,6 +99,16 @@ internal static class CellSceneLoader
                         $"Linked CELL portal doors are missing: {fromDoorId} -> {toDoorId}");
                 var fromFrame = BuildProofRay(fromDoor, configuration.Proof);
                 var toFrame = BuildProofRay(toDoor, configuration.Proof);
+                var fromNormal = HorizontalDoorNormal(fromFrame);
+                var toNormal = HorizontalDoorNormal(toFrame);
+                var targetNormal = toNormal.Dot(fromNormal) < 0.0f
+                    ? -fromNormal
+                    : fromNormal;
+                var yawAlignment = MathF.Atan2(
+                    toNormal.Cross(targetNormal).Y,
+                    toNormal.Dot(targetNormal));
+                linked.Root.RotateY(yawAlignment);
+                toFrame = BuildProofRay(toDoor, configuration.Proof);
                 var fromCenter = (fromFrame.From + fromFrame.To) / 2.0f;
                 var toCenter = (toFrame.From + toFrame.To) / 2.0f;
                 var translation = fromCenter - toCenter;
@@ -139,14 +151,13 @@ internal static class CellSceneLoader
         player.CollisionMask = (1u << (linkedCells.Count + 1)) - 1u;
         if (enableFirstPersonPresentation)
         {
-            player.AttachFirstPersonRig(
-                main.FirstPersonRig
-                    ?? throw new InvalidOperationException("OpenNV first-person hand rig was not prepared."),
-                main.UnitsToMeters);
-            player.AttachHeldWeapon(
-                main.HeldWeapon ?? throw new InvalidOperationException("OpenNV held weapon was not prepared."),
-                main.UnitsToMeters,
-                main.MuzzlePosition);
+            if (main.FirstPersonRig is not null)
+                player.AttachFirstPersonRig(main.FirstPersonRig, main.UnitsToMeters);
+            if (main.HeldWeapon is not null)
+                player.AttachHeldWeapon(
+                    main.HeldWeapon,
+                    main.UnitsToMeters,
+                    main.MuzzlePosition);
         }
         foreach (var linked in linkedCells)
             AddCellLights(
@@ -343,6 +354,15 @@ internal static class CellSceneLoader
             door.ToGlobal(center + normal * reach),
             size,
             normal);
+    }
+
+    private static Vector3 HorizontalDoorNormal(DoorRay frame)
+    {
+        var normal = frame.To - frame.From;
+        normal.Y = 0.0f;
+        if (normal.IsZeroApprox())
+            throw new InvalidOperationException("Door portal has no horizontal normal.");
+        return normal.Normalized();
     }
 
     internal static RayHit CastProofRay(

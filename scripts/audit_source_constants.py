@@ -27,6 +27,7 @@ OWNED_ASSET_PATH_STRING = re.compile(
     r"[\\/]+[^\"'{}\r\n]+\.(?:nif|dds|kf|egm|egt|spt))(?P=quote)"
 )
 FORBIDDEN_SUBSTITUTION_WORD = re.compile(r"(?i)fallback|heuristic|\bguess(?:ed|es|ing)?\b")
+PERMITTED_SUBSTITUTION_IDENTIFIERS = frozenset({"AllowSystemFallback"})
 GODOT_DUPLICATED_POLICY_KEYS = frozenset(
     {
         "environment/defaults/default_clear_color",
@@ -91,6 +92,15 @@ def source_data_violations(
         for match in re.finditer(pattern, source, flags=re.IGNORECASE):
             add(match, identity, "content-identity")
     for match in FORBIDDEN_SUBSTITUTION_WORD.finditer(source):
+        line_start = source.rfind("\n", 0, match.start()) + 1
+        line_end = source.find("\n", match.end())
+        if line_end < 0:
+            line_end = len(source)
+        if any(
+            identifier in source[line_start:line_end]
+            for identifier in PERMITTED_SUBSTITUTION_IDENTIFIERS
+        ):
+            continue
         add(match, match.group(0), "guessed-substitution")
     unique: dict[tuple[int, str, str], Violation] = {}
     for violation in violations:

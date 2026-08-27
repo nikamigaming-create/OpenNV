@@ -1,0 +1,2936 @@
+"""Compile the owned Fallout opening route and UI into one private manifest."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Iterable, Iterator
+
+from bsa_archive import BsaArchive, canonical_member_path
+from owned_archive_stack import OwnedArchiveStack
+from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
+from runtime_configuration import RuntimeConfiguration
+from texture_pipeline import OwnedTexturePipeline
+
+
+OPENING_RECIPE_SCHEMA = "opennv-owned-opening-recipe/v1"
+OPENING_MANIFEST_SCHEMA = "opennv-owned-opening-manifest/v1"
+OPENING_MANIFEST_STATUS = "compiled-owned-opening-graph"
+FORM_ID_BYTES = 4
+QUEST_STAGE_INDEX_BYTES = 2
+FORM_ID_HEX_CHARACTERS = 8
+FORM_ID_RADIX = 16
+MENU_TEXT_ENCODING = "cp1252"
+COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
+TAG_PATTERN = re.compile(
+    r"<(?P<closing>/)?(?P<name>[A-Za-z_][A-Za-z0-9_-]*)(?P<attributes>[^>]*)>",
+    re.DOTALL,
+)
+ATTRIBUTE_PATTERN = re.compile(
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_-]*)\s*=\s*([\"'])(?P<value>.*?)\2",
+    re.DOTALL,
+)
+ENTITY_PATTERN = re.compile(r"&(?P<name>[^;]+);")
+PLAY_BINK_PATTERN = re.compile(
+    r"\bPlayBink\s+[\"'](?P<path>[^\"']+\.bik)[\"']",
+    re.IGNORECASE,
+)
+PLAIN_ASSET_PATTERN = re.compile(r"^[^<>&]+\.(?:dds|nif|kf)$", re.IGNORECASE)
+TEXT_SUBRECORDS = frozenset(
+    {
+        "EDID",
+        "FULL",
+        "DESC",
+        "SCTX",
+        "NAM1",
+        "NAM2",
+        "RNAM",
+        "ITXT",
+        "ICON",
+        "NNAM",
+    }
+)
+MANIFEST_FORM_LINK_SUBRECORDS = frozenset(
+    {"SCRO", "SCRI", "NAME", "QSTI", "PKID", "TCLT", "TCLF"}
+)
+CONDITION_BYTES = 28
+DIALOGUE_DATA_BYTES = 4
+CONDITION_FUNCTION_OFFSET = 8
+CONDITION_PARAMETER_1_OFFSET = 12
+CONDITION_PARAMETER_2_OFFSET = 16
+CONDITION_RUN_ON_OFFSET = 20
+CONDITION_REFERENCE_OFFSET = 24
+DIALOGUE_TOPIC_GROUP_TYPE = 7
+FONT_GLYPH_WIDTH_INDEX = 9
+FONT_GLYPH_HEIGHT_INDEX = 10
+FONT_GLYPH_HORIZONTAL_OFFSET_INDEX = 11
+FONT_GLYPH_ADVANCE_EXTRA_INDEX = 12
+FONT_GLYPH_VERTICAL_BEARING_INDEX = 13
+FONT_GLYPH_U0_INDEX = 1
+FONT_GLYPH_V0_INDEX = 2
+FONT_GLYPH_U1_INDEX = 3
+FONT_GLYPH_V1_INDEX = 6
+DIALOGUE_FLAG_GOODBYE = 0x0001
+DIALOGUE_FLAG_SAY_ONCE = 0x0004
+GAMEBRYO_FONT_HEADER_BYTES = 296
+GAMEBRYO_FONT_GLYPH_COUNT = 256
+GAMEBRYO_FONT_ATLAS_NAME_OFFSET = 12
+GAMEBRYO_FONT_GLYPH = struct.Struct("<14f")
+BYTE_CHANNEL_MAXIMUM = 255
+
+
+@dataclass(frozen=True)
+class IndexedRecord:
+    signature: str
+    form_id: int
+    editor_id: str | None
+    links: tuple[tuple[str, int], ...]
+    groups: tuple[tuple[int, int], ...]
+    data_sha256: str
+
+
+@dataclass
+class TileNode:
+    tag: str
+    attributes: dict[str, str]
+    text_parts: list[str] = field(default_factory=list)
+    children: list["TileNode"] = field(default_factory=list)
+
+    @property
+    def text(self) -> str:
+        return "".join(self.text_parts).strip()
+
+    @property
+    def name(self) -> str:
+        return self.attributes.get("name", "")
+
+    def child(self, tag: str) -> "TileNode | None":
+        return next((value for value in self.children if value.tag == tag), None)
+
+    def walk(self) -> Iterator["TileNode"]:
+        yield self
+        for child in self.children:
+            yield from child.walk()
+
+
+def file_sha256(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def atomic_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_bytes(payload)
+    os.replace(temporary, path)
+
+
+def atomic_json(path: Path, document: object) -> None:
+    atomic_bytes(
+        path,
+        (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+    )
+
+
+def form_id_text(value: int) -> str:
+    return f"{value:0{FORM_ID_HEX_CHARACTERS}x}"
+
+
+def canonical_ui_path(value: str) -> str:
+    return canonical_member_path(value).casefold()
+
+
+def load_opening_recipe(path: Path) -> dict[str, object]:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if document.get("schema") != OPENING_RECIPE_SCHEMA:
+        raise ValueError(f"Unexpected owned opening recipe: {path}")
+    if document.get("id") != path.stem:
+        raise ValueError(f"Owned opening recipe identity differs from its file: {path}")
+    roots = document.get("rootEditorIds")
+    graph = document.get("recordGraph")
+    ui = document.get("ui")
+    flow = document.get("newGameFlow")
+    if (
+        not isinstance(roots, list)
+        or not roots
+        or len(set(str(value).casefold() for value in roots)) != len(roots)
+        or not isinstance(graph, dict)
+        or not isinstance(ui, dict)
+        or not isinstance(flow, dict)
+    ):
+        raise ValueError(f"Owned opening recipe is incomplete: {path}")
+    return document
+
+
+def _subrecord_form_id(data: bytes) -> int | None:
+    if len(data) < FORM_ID_BYTES:
+        return None
+    return struct.unpack_from("<I", data)[0]
+
+
+def _record_editor_id(record: Record) -> str | None:
+    for subrecord in iter_subrecords(record):
+        if subrecord.signature == "EDID":
+            return zstring(subrecord.data)
+    return None
+
+
+def index_records(
+    master_path: Path,
+    universal_link_signatures: frozenset[str],
+    record_link_signatures: dict[str, frozenset[str]],
+) -> tuple[
+    dict[int, IndexedRecord],
+    dict[str, tuple[int, ...]],
+    dict[tuple[int, int], tuple[int, ...]],
+    dict[tuple[str, int], tuple[int, ...]],
+]:
+    by_form: dict[int, IndexedRecord] = {}
+    editor_rows: dict[str, list[int]] = defaultdict(list)
+    group_children: dict[tuple[int, int], list[int]] = defaultdict(list)
+    reverse_links: dict[tuple[str, int], list[int]] = defaultdict(list)
+    for record in iter_plugin_records(master_path):
+        links: list[tuple[str, int]] = []
+        editor_id = None
+        link_signatures = universal_link_signatures | record_link_signatures.get(
+            record.signature,
+            frozenset(),
+        )
+        for subrecord in iter_subrecords(record):
+            if subrecord.signature == "EDID":
+                editor_id = zstring(subrecord.data)
+            if subrecord.signature in link_signatures:
+                target = _subrecord_form_id(subrecord.data)
+                if target:
+                    links.append((subrecord.signature, target))
+                    reverse_links[(subrecord.signature, target)].append(record.form_id)
+        groups = tuple((group.group_type, group.label_u32) for group in record.groups)
+        row = IndexedRecord(
+            record.signature,
+            record.form_id,
+            editor_id,
+            tuple(links),
+            groups,
+            hashlib.sha256(record.data).hexdigest(),
+        )
+        if record.form_id in by_form:
+            raise ValueError(f"Duplicate form identity in owned master: {form_id_text(record.form_id)}")
+        by_form[record.form_id] = row
+        if editor_id:
+            editor_rows[editor_id.casefold()].append(record.form_id)
+        for group_type, label in groups:
+            group_children[(group_type, label)].append(record.form_id)
+    return (
+        by_form,
+        {key: tuple(value) for key, value in editor_rows.items()},
+        {key: tuple(value) for key, value in group_children.items()},
+        {key: tuple(value) for key, value in reverse_links.items()},
+    )
+
+
+def record_graph_closure(
+    roots: Iterable[str],
+    by_form: dict[int, IndexedRecord],
+    by_editor_id: dict[str, tuple[int, ...]],
+    group_children: dict[tuple[int, int], tuple[int, ...]],
+    reverse_links: dict[tuple[str, int], tuple[int, ...]],
+    reverse_signatures: frozenset[str],
+    engine_forms: frozenset[int],
+    parent_group_types: frozenset[int],
+    child_group_types: dict[str, frozenset[int]],
+) -> tuple[frozenset[int], tuple[str, ...]]:
+    selected: set[int] = set()
+    blockers: list[str] = []
+    root_forms: list[int] = []
+    for editor_id in roots:
+        matches = by_editor_id.get(editor_id.casefold(), ())
+        if len(matches) != 1:
+            blockers.append(f"root-editor-id:{editor_id}:matches={len(matches)}")
+            continue
+        root_forms.append(matches[0])
+        selected.add(matches[0])
+
+    def add_links(source_forms: Iterable[int]) -> set[int]:
+        added: set[int] = set()
+        for source in source_forms:
+            row = by_form[source]
+            for signature, target in row.links:
+                if target in engine_forms:
+                    continue
+                if target not in by_form:
+                    blockers.append(
+                        f"missing-form-link:source={form_id_text(source)}:"
+                        f"signature={signature}:target={form_id_text(target)}"
+                    )
+                    continue
+                selected.add(target)
+                added.add(target)
+        return added
+
+    root_dependencies = add_links(root_forms)
+    attached_scripts = {
+        target
+        for source in root_forms
+        for signature, target in by_form[source].links
+        if signature == "SCRI"
+        and target in by_form
+        and by_form[target].signature == "SCPT"
+    }
+    add_links(attached_scripts)
+
+    dialogue_topics = {
+        source
+        for root in root_forms
+        for signature in reverse_signatures
+        for source in reverse_links.get((signature, root), ())
+        if source in by_form and by_form[source].signature == "DIAL"
+    }
+    selected.update(dialogue_topics)
+    dialogue_children = {
+        child
+        for topic in dialogue_topics
+        for group_type in child_group_types.get("DIAL", frozenset())
+        for child in group_children.get((group_type, topic), ())
+    }
+    selected.update(dialogue_children)
+    add_links(dialogue_children)
+
+    for current in tuple(selected | root_dependencies):
+        row = by_form.get(current)
+        if row is None:
+            continue
+        for group_type, label in row.groups:
+            if group_type not in parent_group_types:
+                continue
+            if label in by_form:
+                selected.add(label)
+            else:
+                blockers.append(
+                    f"missing-parent-form:source={form_id_text(current)}:"
+                    f"group={group_type}:target={form_id_text(label)}"
+                )
+    return frozenset(selected), tuple(sorted(set(blockers)))
+
+
+def _safe_text(data: bytes) -> str | None:
+    try:
+        value = zstring(data)
+    except (UnicodeDecodeError, ValueError):
+        return None
+    return value if all(character.isprintable() or character in "\r\n\t" for character in value) else None
+
+
+def _condition_manifest(data: bytes) -> dict[str, object]:
+    if len(data) != CONDITION_BYTES:
+        raise ValueError(f"Owned dialogue condition has an unexpected size: {len(data)}")
+    return {
+        "operatorFlags": data[0],
+        "comparisonValue": struct.unpack_from("<f", data, 4)[0],
+        "function": struct.unpack_from("<H", data, CONDITION_FUNCTION_OFFSET)[0],
+        "parameter1": form_id_text(
+            struct.unpack_from("<I", data, CONDITION_PARAMETER_1_OFFSET)[0]
+        ),
+        "parameter2": struct.unpack_from(
+            "<I", data, CONDITION_PARAMETER_2_OFFSET
+        )[0],
+        "runOn": struct.unpack_from("<I", data, CONDITION_RUN_ON_OFFSET)[0],
+        "reference": form_id_text(
+            struct.unpack_from("<I", data, CONDITION_REFERENCE_OFFSET)[0]
+        ),
+    }
+
+
+def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    source_order = 0
+    for record in iter_plugin_records(master_path):
+        if record.form_id not in selected:
+            continue
+        source_order += 1
+        stage = None
+        objective_index = None
+        stage_scripts: list[dict[str, object]] = []
+        quest_objectives: list[dict[str, object]] = []
+        texts: list[dict[str, str]] = []
+        links: list[dict[str, str]] = []
+        conditions: list[dict[str, object]] = []
+        dialogue_data = None
+        inventory: list[dict[str, object]] = []
+        for subrecord in iter_subrecords(record):
+            inventory.append(
+                {
+                    "signature": subrecord.signature,
+                    "bytes": len(subrecord.data),
+                    "sha256": hashlib.sha256(subrecord.data).hexdigest(),
+                }
+            )
+            if subrecord.signature == "INDX" and len(subrecord.data) == QUEST_STAGE_INDEX_BYTES:
+                stage = struct.unpack("<H", subrecord.data)[0]
+            if subrecord.signature == "QOBJ" and len(subrecord.data) == FORM_ID_BYTES:
+                objective_index = struct.unpack("<I", subrecord.data)[0]
+            if subrecord.signature in TEXT_SUBRECORDS:
+                value = _safe_text(subrecord.data)
+                if value is not None:
+                    texts.append({"signature": subrecord.signature, "value": value})
+                    if subrecord.signature == "SCTX" and stage is not None:
+                        stage_scripts.append({"stage": stage, "source": value})
+                    if subrecord.signature == "NNAM" and objective_index is not None:
+                        quest_objectives.append(
+                            {"index": objective_index, "text": value}
+                        )
+            if subrecord.signature == "CTDA":
+                conditions.append(_condition_manifest(subrecord.data))
+            if (
+                record.signature == "INFO"
+                and subrecord.signature == "DATA"
+                and len(subrecord.data) == DIALOGUE_DATA_BYTES
+                and dialogue_data is None
+            ):
+                dialogue_data = {
+                    "responseType": subrecord.data[0],
+                    "flags": struct.unpack_from("<H", subrecord.data, 2)[0],
+                }
+            if subrecord.signature in MANIFEST_FORM_LINK_SUBRECORDS:
+                target = _subrecord_form_id(subrecord.data)
+                if target:
+                    links.append(
+                        {
+                            "signature": subrecord.signature,
+                            "formId": form_id_text(target),
+                        }
+                    )
+        rows.append(
+            {
+                "recordType": record.signature,
+                "formId": form_id_text(record.form_id),
+                "sourceOrder": source_order,
+                "flags": f"0x{record.flags:08x}",
+                "groups": [
+                    {"type": group.group_type, "label": form_id_text(group.label_u32)}
+                    for group in record.groups
+                ],
+                "dataSha256": hashlib.sha256(record.data).hexdigest(),
+                "text": texts,
+                "links": links,
+                "conditions": conditions,
+                "dialogueData": dialogue_data,
+                "questStageScripts": stage_scripts,
+                "questObjectives": quest_objectives,
+                "subrecords": inventory,
+            }
+        )
+    rows.sort(key=lambda row: int(str(row["formId"]), FORM_ID_RADIX))
+    if len(rows) != len(selected):
+        raise ValueError(
+            f"Owned opening graph record join differs: selected={len(selected)} emitted={len(rows)}"
+        )
+    return rows
+
+
+def parse_tile_document(payload: bytes) -> TileNode:
+    text = payload.decode(MENU_TEXT_ENCODING)
+    text = COMMENT_PATTERN.sub("", text)
+    synthetic = TileNode("document", {})
+    stack = [synthetic]
+    cursor = 0
+    for match in TAG_PATTERN.finditer(text):
+        if match.start() > cursor:
+            stack[-1].text_parts.append(text[cursor : match.start()])
+        name = match.group("name").casefold()
+        closing = bool(match.group("closing"))
+        attributes_text = match.group("attributes")
+        self_closing = attributes_text.rstrip().endswith("/")
+        if closing:
+            if len(stack) == 1:
+                cursor = match.end()
+                continue
+            matching_index = next(
+                (
+                    index
+                    for index in range(len(stack) - 1, 0, -1)
+                    if stack[index].tag == name
+                ),
+                None,
+            )
+            if matching_index is None:
+                stack.pop()
+            else:
+                del stack[matching_index:]
+        else:
+            attributes = {
+                value.group("name").casefold(): value.group("value")
+                for value in ATTRIBUTE_PATTERN.finditer(attributes_text)
+            }
+            node = TileNode(name, attributes)
+            stack[-1].children.append(node)
+            if not self_closing:
+                stack.append(node)
+        cursor = match.end()
+    if cursor < len(text):
+        stack[-1].text_parts.append(text[cursor:])
+    return synthetic
+
+
+def _direct_number(node: TileNode | None) -> float | None:
+    if node is None or node.children:
+        return None
+    try:
+        return float(node.text)
+    except ValueError:
+        return None
+
+
+def _expression_operand(
+    node: TileNode,
+    screen: dict[str, float],
+    traits: dict[str, float],
+    entities: dict[str, float] | None = None,
+) -> float:
+    source = node.attributes.get("src")
+    trait = node.attributes.get("trait", "")
+    if source == "screen()":
+        if trait not in screen:
+            raise ValueError(f"Owned menu screen trait is unavailable: {trait}")
+        return screen[trait]
+    if source == "me()":
+        if trait not in traits:
+            raise ValueError(f"Owned menu self trait is unavailable: {trait}")
+        return traits[trait]
+    if source:
+        raise ValueError(f"Owned menu expression source is unsupported: {source}")
+    if node.children:
+        return _evaluate_expression(node, screen, traits, entities)
+    entity = _entity_name(node.text)
+    if entity is not None:
+        if entities is None or entity not in entities:
+            raise ValueError(f"Owned menu entity is unavailable: {entity}")
+        return entities[entity]
+    return float(node.text)
+
+
+def _evaluate_expression(
+    node: TileNode,
+    screen: dict[str, float],
+    traits: dict[str, float],
+    entities: dict[str, float] | None = None,
+) -> float:
+    if not node.children:
+        return float(node.text)
+    value = None
+    for operation in node.children:
+        operand = _expression_operand(operation, screen, traits, entities)
+        if operation.tag == "copy":
+            value = operand
+        elif value is None:
+            raise ValueError(f"Owned menu expression begins with {operation.tag}")
+        elif operation.tag == "add":
+            value += operand
+        elif operation.tag == "sub":
+            value -= operand
+        elif operation.tag in {"mul", "mult"}:
+            value *= operand
+        elif operation.tag == "div":
+            value /= operand
+        elif operation.tag == "min":
+            value = min(value, operand)
+        elif operation.tag == "max":
+            value = max(value, operand)
+        elif operation.tag == "onlyif":
+            value = value if operand != 0.0 else 0.0
+        elif operation.tag == "onlyifnot":
+            value = value if operand == 0.0 else 0.0
+        else:
+            raise ValueError(f"Owned menu arithmetic operation is unsupported: {operation.tag}")
+    if value is None:
+        raise ValueError("Owned menu expression is empty")
+    return value
+
+
+def _boot_layout(
+    container: TileNode,
+    buttons: list[dict[str, object]],
+    title_tile: str,
+    configuration: RuntimeConfiguration,
+    font: dict[str, object],
+    button_style: dict[str, object],
+) -> dict[str, object]:
+    capture = configuration.document["capture"]
+    if not isinstance(capture, dict):
+        raise ValueError("OpenNV capture configuration is invalid")
+    screen = {
+        "width": float(capture["expectedWidthPixels"]),
+        "height": float(capture["expectedHeightPixels"]),
+        "cropx": 0.0,
+        "cropy": 0.0,
+    }
+    tile_child_count = sum(
+        child.tag in {"image", "rect", "hotrect", "text", "nif"}
+        for child in container.children
+    )
+    traits = {
+        "childcount": float(tile_child_count),
+    }
+    for name in ("_spacing", "_starty", "width"):
+        value = _direct_number(container.child(name))
+        if value is None:
+            raise ValueError(f"Owned boot menu trait is not numeric: {name}")
+        traits[name] = value
+    for name in ("height", "x", "y"):
+        node = container.child(name)
+        if node is None:
+            raise ValueError(f"Owned boot menu trait is absent: {name}")
+        traits[name] = _evaluate_expression(node, screen, traits)
+    button_container_left = traits["x"] - traits["width"]
+    button_rows = []
+    for index, button in enumerate(buttons):
+        width = (
+            _text_width(str(button["label"]), font)
+            + float(button_style["horizontalPaddingPixels"])
+        )
+        height = (
+            float(font["lineHeightPixels"])
+            + float(button_style["verticalPaddingPixels"])
+        )
+        button_rows.append(
+            {
+                **button,
+                "rect": [
+                    traits["x"] - width,
+                    traits["y"] + traits["_starty"] + index * traits["_spacing"],
+                    width,
+                    height,
+                ],
+            }
+        )
+    title_nodes = [node for node in container.children if node.name == title_tile]
+    if len(title_nodes) != 1:
+        raise ValueError("Owned boot menu title tile does not resolve uniquely")
+    title = title_nodes[0]
+    title_values = {
+        name: _direct_number(title.child(name))
+        for name in ("x", "y", "width", "height")
+    }
+    if any(value is None for value in title_values.values()):
+        raise ValueError("Owned boot menu title geometry is not numeric")
+    return {
+        "canvasSize": [screen["width"], screen["height"]],
+        "buttonContainerRect": [
+            button_container_left,
+            traits["y"],
+            traits["width"],
+            traits["height"],
+        ],
+        "buttons": button_rows,
+        "titleRect": [
+            traits["x"] + float(title_values["x"]),
+            traits["y"] + float(title_values["y"]),
+            float(title_values["width"]),
+            float(title_values["height"]),
+        ],
+    }
+def _entity_name(value: str) -> str | None:
+    match = ENTITY_PATTERN.fullmatch(value.strip())
+    return None if match is None else match.group("name")
+
+
+def _display_entity(value: str) -> str:
+    entity = _entity_name(value)
+    if entity is None:
+        return value.strip()
+    normalized = entity.removeprefix("-").removeprefix("s")
+    return re.sub(r"(?<!^)(?=[A-Z])", " ", normalized).strip()
+
+
+def _resolve_include(
+    source: str,
+    owner: str,
+    available: frozenset[str],
+    search_roots: tuple[str, ...],
+) -> str | None:
+    source_path = canonical_ui_path(source)
+    candidates = [
+        canonical_ui_path(str(Path(owner.replace("\\", "/")).parent / source_path.replace("\\", "/"))),
+        source_path,
+    ]
+    candidates.extend(canonical_ui_path(f"{root}\\{source_path}") for root in search_roots)
+    return next((candidate for candidate in candidates if candidate in available), None)
+
+
+def _ini_index(path: Path) -> dict[tuple[str, str], list[str]]:
+    section = ""
+    values: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for raw_line in path.read_text(encoding=MENU_TEXT_ENCODING).splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith((";", "#")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            continue
+        if "=" not in line:
+            continue
+        key, value = (part.strip() for part in line.split("=", 1))
+        identity = (section.casefold(), key.casefold())
+        values[identity].append(value)
+    return dict(values)
+
+
+def _ini_setting(
+    values: dict[tuple[str, str], list[str]],
+    section: object,
+    key: object,
+) -> str:
+    identity = (str(section).casefold(), str(key).casefold())
+    matches = values.get(identity, [])
+    if len(matches) != 1 or not matches[0]:
+        raise ValueError(
+            f"Owned default INI setting does not resolve uniquely: [{section}] {key}"
+        )
+    return matches[0]
+
+
+def _configured_relative_path(template: object, value: str, label: str) -> str:
+    template_text = str(template)
+    if template_text.count("{value}") != 1:
+        raise ValueError(f"Owned {label} path template must contain one {{value}} token")
+    rendered = template_text.replace("{value}", value).replace("/", "\\")
+    parts = tuple(part for part in rendered.split("\\") if part)
+    if not parts or any(part in {".", ".."} for part in parts):
+        raise ValueError(f"Owned {label} path is not a safe relative path: {rendered}")
+    return "\\".join(parts)
+
+
+def _case_insensitive_descendant(root: Path, relative_path: str) -> Path:
+    current = root.resolve()
+    for part in relative_path.replace("\\", "/").split("/"):
+        matches = [
+            candidate
+            for candidate in current.iterdir()
+            if candidate.name.casefold() == part.casefold()
+        ]
+        if len(matches) != 1:
+            raise FileNotFoundError(
+                f"Owned loose path component does not resolve uniquely: {current} / {part}"
+            )
+        current = matches[0]
+    if not current.is_file():
+        raise FileNotFoundError(f"Owned loose asset is not a file: {current}")
+    return current
+
+
+def _single_added_constant(node: TileNode | None, label: str) -> float:
+    if node is None:
+        raise ValueError(f"Owned button prefab expression is absent: {label}")
+    values = [
+        _direct_number(child)
+        for child in node.children
+        if child.tag == "add" and not child.attributes
+    ]
+    if len(values) != 1 or values[0] is None:
+        raise ValueError(f"Owned button prefab padding is ambiguous: {label}")
+    return float(values[0])
+
+
+def _gamebryo_font_manifest(
+    logical_path: str,
+    payload: bytes,
+    source_path: Path,
+    source_archive: str,
+    source_archive_sha256: str,
+    atlas: dict[str, object],
+) -> dict[str, object]:
+    expected_bytes = (
+        GAMEBRYO_FONT_HEADER_BYTES
+        + GAMEBRYO_FONT_GLYPH_COUNT * GAMEBRYO_FONT_GLYPH.size
+    )
+    if len(payload) != expected_bytes:
+        raise ValueError(
+            f"Owned Gamebryo font size differs: expected={expected_bytes} actual={len(payload)}"
+        )
+    line_height, atlas_count, font_version = struct.unpack_from("<fII", payload)
+    if line_height <= 0.0 or atlas_count != 1 or font_version != 1:
+        raise ValueError("Owned Gamebryo font header is unsupported")
+    atlas_name = payload[
+        GAMEBRYO_FONT_ATLAS_NAME_OFFSET:GAMEBRYO_FONT_HEADER_BYTES
+    ].split(b"\0", 1)[0].decode(MENU_TEXT_ENCODING)
+    if not atlas_name:
+        raise ValueError("Owned Gamebryo font atlas name is empty")
+    atlas_width = int(atlas["width"])
+    atlas_height = int(atlas["height"])
+    glyphs = []
+    for codepoint in range(GAMEBRYO_FONT_GLYPH_COUNT):
+        values = GAMEBRYO_FONT_GLYPH.unpack_from(
+            payload,
+            GAMEBRYO_FONT_HEADER_BYTES + codepoint * GAMEBRYO_FONT_GLYPH.size,
+        )
+        texture_index = int(values[0])
+        if float(texture_index) != values[0] or texture_index != 0:
+            raise ValueError(
+                f"Owned Gamebryo font glyph has an unsupported atlas index: {codepoint}"
+            )
+        width = values[FONT_GLYPH_WIDTH_INDEX]
+        height = values[FONT_GLYPH_HEIGHT_INDEX]
+        horizontal_offset = values[FONT_GLYPH_HORIZONTAL_OFFSET_INDEX]
+        advance_extra = values[FONT_GLYPH_ADVANCE_EXTRA_INDEX]
+        vertical_bearing = values[FONT_GLYPH_VERTICAL_BEARING_INDEX]
+        if width < 0.0 or height < 0.0:
+            raise ValueError(f"Owned Gamebryo font glyph is negative: {codepoint}")
+        advance = width + advance_extra
+        if width == 0.0 and height == 0.0 and advance == 0.0:
+            continue
+        u0 = values[FONT_GLYPH_U0_INDEX]
+        v0 = values[FONT_GLYPH_V0_INDEX]
+        u1 = values[FONT_GLYPH_U1_INDEX]
+        first_v1 = values[FONT_GLYPH_V1_INDEX]
+        uv_rect = [
+            round(u0 * atlas_width),
+            round(v0 * atlas_height),
+            round((u1 - u0) * atlas_width),
+            round((first_v1 - v0) * atlas_height),
+        ]
+        glyphs.append(
+            {
+                "codepoint": codepoint,
+                "textureIndex": texture_index,
+                "uvRectPixels": uv_rect,
+                "sizePixels": [width, height],
+                "horizontalOffsetPixels": horizontal_offset,
+                "verticalBearingPixels": vertical_bearing,
+                "advancePixels": advance,
+            }
+        )
+    if not glyphs:
+        raise ValueError("Owned Gamebryo font has no renderable glyphs")
+    ascent = max(float(value["verticalBearingPixels"]) for value in glyphs)
+    descent = max(
+        max(
+            0.0,
+            float(value["sizePixels"][1])
+            - float(value["verticalBearingPixels"]),
+        )
+        for value in glyphs
+    )
+    return {
+        "schema": "opennv-owned-gamebryo-bitmap-font/v1",
+        "logicalPath": logical_path,
+        "source": str(source_path.resolve()),
+        "bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "sourceArchive": source_archive,
+        "sourceArchiveSha256": source_archive_sha256,
+        "lineHeightPixels": line_height,
+        "ascentPixels": ascent,
+        "descentPixels": descent,
+        "atlasName": atlas_name,
+        "atlas": atlas,
+        "glyphs": glyphs,
+    }
+
+
+def _text_width(label: str, font: dict[str, object]) -> float:
+    advances = {
+        int(value["codepoint"]): float(value["advancePixels"])
+        for value in font["glyphs"]
+    }
+    missing = [character for character in label if ord(character) not in advances]
+    if missing:
+        raise ValueError(
+            "Owned opening font has no glyphs for label characters: "
+            + ", ".join(sorted(set(missing)))
+        )
+    return sum(advances[ord(character)] for character in label)
+
+
+def _compile_engine_presentation(
+    data_root: Path,
+    default_ini_path: Path,
+    owned_archives: OwnedArchiveStack,
+    cache_root: Path,
+    configuration: RuntimeConfiguration,
+    recipe_ui: dict[str, object],
+    boot_document: str,
+    container: TileNode,
+    buttons: list[dict[str, object]],
+    available: frozenset[str],
+    search_roots: tuple[str, ...],
+    trees: dict[str, TileNode],
+    texture_pipeline: OwnedTexturePipeline,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    settings = dict(recipe_ui["engineSettings"])
+    ini = _ini_index(default_ini_path)
+    background_settings = dict(settings["background"])
+    background_name = _ini_setting(
+        ini,
+        background_settings["section"],
+        background_settings["key"],
+    )
+    background_logical = canonical_member_path(
+        _configured_relative_path(
+            background_settings["logicalPathTemplate"],
+            background_name,
+            "main-menu background",
+        )
+    )
+    background = texture_pipeline.prepare(background_logical).manifest()
+
+    music_settings = dict(settings["music"])
+    music_name = _ini_setting(ini, music_settings["section"], music_settings["key"])
+    music_relative = _configured_relative_path(
+        music_settings["relativePathTemplate"],
+        music_name,
+        "main-menu music",
+    )
+    music_source = _case_insensitive_descendant(data_root, music_relative)
+    music_cache = cache_root / "source" / "audio" / Path(
+        music_relative.replace("\\", "/").casefold()
+    )
+    music_payload = music_source.read_bytes()
+    atomic_bytes(music_cache, music_payload)
+    music_volume = float(
+        _ini_setting(
+            ini,
+            music_settings["volumeSection"],
+            music_settings["volumeKey"],
+        )
+    )
+    if not 0.0 <= music_volume <= 1.0:
+        raise ValueError("Owned main-menu music volume is outside the normalized range")
+
+    color_settings = dict(settings["color"])
+    color = [
+        int(_ini_setting(ini, color_settings["section"], color_settings[key]))
+        for key in ("redKey", "greenKey", "blueKey")
+    ]
+    if any(channel < 0 or channel > BYTE_CHANNEL_MAXIMUM for channel in color):
+        raise ValueError("Owned main-menu system color is outside the byte range")
+
+    include_sources = {
+        include.attributes["src"]
+        for node in container.children
+        if node.name in {str(value["tile"]) for value in buttons}
+        for include in node.children
+        if include.tag == "include" and include.attributes.get("src")
+    }
+    resolved_prefabs = {
+        _resolve_include(source, boot_document, available, search_roots)
+        for source in include_sources
+    }
+    if len(resolved_prefabs) != 1 or None in resolved_prefabs:
+        raise ValueError("Owned opening buttons do not resolve to one prefab")
+    prefab_document = next(iter(resolved_prefabs))
+    assert prefab_document is not None
+    prefab = trees[prefab_document]
+    font_nodes = [node for node in prefab.walk() if node.tag == "_font"]
+    if len(font_nodes) != 1 or _direct_number(font_nodes[0]) is None:
+        raise ValueError("Owned opening button font id is ambiguous")
+    font_id = int(_direct_number(font_nodes[0]))
+    fonts_settings = dict(settings["fonts"])
+    font_key = str(fonts_settings["keyTemplate"]).replace("{id}", str(font_id))
+    font_logical = canonical_member_path(
+        _ini_setting(ini, fonts_settings["section"], font_key)
+    )
+    font_member = owned_archives.extract(font_logical)
+    font_source = cache_root / "source" / "fonts" / Path(
+        font_logical.replace("\\", "/")
+    )
+    atomic_bytes(font_source, font_member.data)
+    atlas_name = font_member.data[
+        GAMEBRYO_FONT_ATLAS_NAME_OFFSET:GAMEBRYO_FONT_HEADER_BYTES
+    ].split(b"\0", 1)[0].decode(MENU_TEXT_ENCODING)
+    atlas_logical = canonical_member_path(
+        str(Path(font_logical.replace("\\", "/")).parent / f"{atlas_name}.dds")
+    )
+    atlas = texture_pipeline.prepare(atlas_logical).manifest()
+    font = _gamebryo_font_manifest(
+        font_logical,
+        font_member.data,
+        font_source,
+        font_member.source_archive,
+        font_member.source_archive_sha256,
+        atlas,
+    )
+
+    width_nodes = [node for node in prefab.children if node.tag == "width"]
+    height_nodes = [node for node in prefab.children if node.tag == "height"]
+    button_text_nodes = [node for node in prefab.walk() if node.name == "button_text"]
+    if len(width_nodes) != 1 or len(height_nodes) != 1 or len(button_text_nodes) != 1:
+        raise ValueError("Owned opening button prefab geometry is ambiguous")
+    text_y = _direct_number(button_text_nodes[0].child("y"))
+    if text_y is None:
+        raise ValueError("Owned opening button text offset is not numeric")
+    button_style = {
+        "prefabDocument": prefab_document,
+        "fontId": font_id,
+        "horizontalPaddingPixels": _single_added_constant(width_nodes[0], "width"),
+        "verticalPaddingPixels": _single_added_constant(height_nodes[0], "height"),
+        "textOffsetYPixels": text_y,
+    }
+
+    globals_document = canonical_ui_path(str(settings["globalsDocument"]))
+    if globals_document not in trees:
+        raise ValueError("Owned global menu style document is absent")
+    globals_tree = trees[globals_document]
+    platform_entities = {
+        str(name): 1.0 if bool(value) else 0.0
+        for name, value in dict(settings["platformEntities"]).items()
+    }
+    style_traits = {}
+    for trait in (str(value).casefold() for value in settings["styleTraits"]):
+        nodes = [node for node in globals_tree.walk() if node.tag == trait]
+        if len(nodes) != 1:
+            raise ValueError(f"Owned global menu style trait is ambiguous: {trait}")
+        direct = _direct_number(nodes[0])
+        style_traits[trait] = (
+            direct
+            if direct is not None
+            else _evaluate_expression(
+                nodes[0],
+                {"resolutionconverter": 1.0},
+                {},
+                platform_entities,
+            )
+        )
+
+    return (
+        {
+            "defaultIni": {
+                "file": default_ini_path.name,
+                "source": str(default_ini_path.resolve()),
+                "bytes": default_ini_path.stat().st_size,
+                "sha256": file_sha256(default_ini_path),
+            },
+            "background": background,
+            "music": {
+                "logicalPath": music_relative,
+                "installedSource": str(music_source.resolve()),
+                "source": str(music_cache.resolve()),
+                "bytes": len(music_payload),
+                "sha256": hashlib.sha256(music_payload).hexdigest(),
+                "volume": music_volume,
+            },
+            "mainMenuColorRgb": color,
+            "nativeCanvasScale": 1.0,
+            "platformEntities": platform_entities,
+            "font": font,
+            "buttonStyle": button_style,
+            "globalStyleTraits": style_traits,
+        },
+        [background, atlas],
+    )
+
+
+def _asset_path(value: str) -> str | None:
+    normalized = value.strip().replace("/", "\\").lstrip("\\")
+    if PLAIN_ASSET_PATTERN.fullmatch(normalized) is None or "\\" not in normalized:
+        return None
+    lowered = normalized.casefold()
+    if lowered.startswith("textures\\") or lowered.startswith("meshes\\"):
+        return lowered
+    if lowered.endswith(".dds"):
+        return "textures\\" + lowered
+    if lowered.endswith(".nif"):
+        return "meshes\\" + lowered
+    if lowered.endswith(".kf"):
+        return "meshes\\" + lowered
+    return None
+
+
+def _document_index(member: str, payload: bytes) -> tuple[dict[str, object], TileNode]:
+    root = parse_tile_document(payload)
+    menu = next((node for node in root.children if node.tag == "menu"), None)
+    includes = [
+        node.attributes["src"]
+        for node in root.walk()
+        if node.tag == "include" and node.attributes.get("src")
+    ]
+    assets = []
+    initially_visible_assets = []
+    for node in root.walk():
+        if node.tag != "filename" or node.children:
+            continue
+        normalized = _asset_path(node.text)
+        if normalized is not None:
+            assets.append(normalized)
+    for owner in root.walk():
+        filename = owner.child("filename")
+        if filename is None or filename.children:
+            continue
+        normalized = _asset_path(filename.text)
+        if normalized is None:
+            continue
+        visible = owner.child("visible")
+        if visible is None or _entity_name(visible.text) != "false":
+            initially_visible_assets.append(normalized)
+    return (
+        {
+            "path": member,
+            "bytes": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "menuName": None if menu is None else menu.name,
+            "menuClassEntity": None
+            if menu is None or menu.child("class") is None
+            else _entity_name(menu.child("class").text),
+            "includes": includes,
+            "assetReferences": sorted(set(assets)),
+            "initiallyVisibleAssetReferences": sorted(set(initially_visible_assets)),
+        },
+        root,
+    )
+
+
+def _tile_parent_index(root: TileNode) -> dict[int, TileNode]:
+    parents: dict[int, TileNode] = {}
+
+    def visit(node: TileNode) -> None:
+        for child in node.children:
+            parents[id(child)] = node
+            visit(child)
+
+    visit(root)
+    return parents
+
+
+def _named_tile(root: TileNode, name: str) -> TileNode:
+    matches = [node for node in root.walk() if node.name.casefold() == name.casefold()]
+    if len(matches) != 1:
+        raise ValueError(f"Owned flow layout tile is ambiguous: {name} matches={len(matches)}")
+    return matches[0]
+
+
+def _layout_operand(
+    operation: TileNode,
+    trait_name: str,
+    owner: TileNode,
+    root: TileNode,
+    parents: dict[int, TileNode],
+    screen: dict[str, float],
+    stack: set[tuple[int, str]],
+) -> float:
+    source = operation.attributes.get("src")
+    source_trait = operation.attributes.get("trait", trait_name)
+    if source == "screen()":
+        if source_trait not in screen:
+            raise ValueError(f"Owned flow screen trait is unavailable: {source_trait}")
+        return screen[source_trait]
+    target = owner
+    if source == "parent()":
+        target = parents[id(owner)]
+    elif source and source.startswith("sibling(") and source.endswith(")"):
+        sibling_name = source[len("sibling(") : -1]
+        parent = parents[id(owner)]
+        target = next(
+            child
+            for child in parent.children
+            if child.name.casefold() == sibling_name.casefold()
+        )
+    elif source and source.startswith("child(") and source.endswith(")"):
+        child_name = source[len("child(") : -1]
+        target = next(
+            child
+            for child in owner.children
+            if child.name.casefold() == child_name.casefold()
+        )
+    elif source not in {None, "me()"}:
+        raise ValueError(f"Owned flow layout source is unsupported: {source}")
+    if source is not None:
+        return _layout_trait(target, source_trait, root, parents, screen, stack)
+    if operation.children:
+        return _layout_expression(operation, trait_name, owner, root, parents, screen, stack)
+    entity = _entity_name(operation.text)
+    if entity == "true":
+        return 1.0
+    if entity == "false":
+        return 0.0
+    return float(operation.text)
+
+
+def _layout_expression(
+    node: TileNode,
+    trait_name: str,
+    owner: TileNode,
+    root: TileNode,
+    parents: dict[int, TileNode],
+    screen: dict[str, float],
+    stack: set[tuple[int, str]],
+) -> float:
+    value = None
+    for operation in node.children:
+        operand = _layout_operand(
+            operation,
+            trait_name,
+            owner,
+            root,
+            parents,
+            screen,
+            stack,
+        )
+        if operation.tag == "copy":
+            value = operand
+        elif value is None:
+            raise ValueError(f"Owned flow layout expression begins with {operation.tag}")
+        elif operation.tag == "add":
+            value += operand
+        elif operation.tag == "sub":
+            value -= operand
+        elif operation.tag in {"mul", "mult"}:
+            value *= operand
+        elif operation.tag == "div":
+            value /= operand
+        else:
+            raise ValueError(f"Owned flow layout operation is unsupported: {operation.tag}")
+    if value is None:
+        raise ValueError("Owned flow layout expression is empty")
+    return value
+
+
+def _layout_trait(
+    node: TileNode,
+    trait_name: str,
+    root: TileNode,
+    parents: dict[int, TileNode],
+    screen: dict[str, float],
+    stack: set[tuple[int, str]] | None = None,
+) -> float:
+    active = set() if stack is None else stack
+    identity = (id(node), trait_name)
+    if identity in active:
+        raise ValueError(f"Owned flow layout trait is recursive: {node.name}.{trait_name}")
+    trait = node.child(trait_name)
+    if trait is None:
+        if trait_name in {"x", "y"}:
+            return 0.0
+        raise ValueError(f"Owned flow layout trait is absent: {node.name}.{trait_name}")
+    direct = _direct_number(trait)
+    if direct is not None:
+        return direct
+    active.add(identity)
+    try:
+        return _layout_expression(trait, trait_name, node, root, parents, screen, active)
+    finally:
+        active.remove(identity)
+
+
+def _flow_menu_contract(
+    flow: dict[str, object],
+    trees: dict[str, TileNode],
+    documents: dict[str, dict[str, object]],
+    resolved_includes: dict[str, list[str]],
+) -> tuple[
+    list[dict[str, object]],
+    frozenset[str],
+    list[float],
+    dict[str, str],
+]:
+    configured = dict(flow["menus"])
+    rows = []
+    roots = []
+    canvas = None
+    for role, raw in configured.items():
+        definition = dict(raw)
+        document = canonical_ui_path(str(definition["document"]))
+        if document not in trees:
+            raise ValueError(f"Owned flow menu document is absent: {role}={document}")
+        roots.append(document)
+        tree = trees[document]
+        if "canvasTile" in definition:
+            tile = _named_tile(tree, str(definition["canvasTile"]))
+            parents = _tile_parent_index(tree)
+            candidate = [
+                _layout_trait(tile, "width", tree, parents, {"width": 0.0, "height": 0.0}),
+                _layout_trait(tile, "height", tree, parents, {"width": 0.0, "height": 0.0}),
+            ]
+            if canvas is not None and canvas != candidate:
+                raise ValueError("Owned flow menus disagree on their reference canvas")
+            canvas = candidate
+    if canvas is None or any(value <= 0.0 for value in canvas):
+        raise ValueError("Owned flow reference canvas was not derived from its menu XML")
+    screen = {"width": canvas[0], "height": canvas[1]}
+    for role, raw in configured.items():
+        definition = dict(raw)
+        document = canonical_ui_path(str(definition["document"]))
+        row: dict[str, object] = {
+            "role": str(role),
+            "document": document,
+            "source": documents[document]["source"],
+            "sha256": documents[document]["sha256"],
+            "menuName": documents[document]["menuName"],
+        }
+        if "layoutTile" in definition:
+            tree = trees[document]
+            tile = _named_tile(tree, str(definition["layoutTile"]))
+            parents = _tile_parent_index(tree)
+            row["layoutTile"] = str(definition["layoutTile"])
+            row["rect"] = [
+                _layout_trait(tile, "x", tree, parents, screen),
+                _layout_trait(tile, "y", tree, parents, screen),
+                _layout_trait(tile, "width", tree, parents, screen),
+                _layout_trait(tile, "height", tree, parents, screen),
+            ]
+        rows.append(row)
+    closure = set()
+    queue = deque(roots)
+    while queue:
+        current = queue.popleft()
+        if current in closure:
+            continue
+        closure.add(current)
+        queue.extend(resolved_includes[current])
+    available_entities = {
+        entity
+        for document in closure
+        for node in trees[document].walk()
+        for entity in [_entity_name(node.text)]
+        if entity is not None
+    }
+    strings = {}
+    for semantic, configured_entity in dict(flow["engineStringEntities"]).items():
+        entity = str(configured_entity)
+        if entity not in available_entities:
+            raise ValueError(
+                f"Owned flow string entity is absent: {semantic}={entity}"
+            )
+        strings[str(semantic)] = _display_entity(f"&{entity};")
+    return rows, frozenset(closure), canvas, strings
+
+
+def compile_ui(
+    data_root: Path,
+    default_ini_path: Path,
+    ui_archive_path: Path,
+    owned_archives: OwnedArchiveStack,
+    cache_root: Path,
+    recipe_ui: dict[str, object],
+    flow: dict[str, object],
+    additional_texture_paths: Iterable[str],
+    configuration: RuntimeConfiguration,
+) -> dict[str, object]:
+    archive = BsaArchive(ui_archive_path)
+    member_prefix = canonical_ui_path(str(recipe_ui["memberPrefix"]))
+    extensions = tuple(str(value).casefold() for value in recipe_ui["documentExtensions"])
+    additional = {
+        canonical_ui_path(str(value)) for value in recipe_ui["additionalDocuments"]
+    }
+    members = sorted(
+        member
+        for member in archive.members
+        if member.startswith(member_prefix)
+        and (member.casefold().endswith(extensions) or member in additional)
+    )
+    documents: dict[str, dict[str, object]] = {}
+    trees: dict[str, TileNode] = {}
+    for member in members:
+        extracted = archive.extract(member)
+        source_path = cache_root / "source" / "ui" / Path(member.replace("\\", "/"))
+        atomic_bytes(source_path, extracted.data)
+        if member.casefold().endswith(extensions):
+            index, tree = _document_index(member, extracted.data)
+            index["source"] = str(source_path.resolve())
+            documents[member] = index
+            trees[member] = tree
+        else:
+            documents[member] = {
+                "path": member,
+                "source": str(source_path.resolve()),
+                "bytes": len(extracted.data),
+                "sha256": extracted.sha256,
+                "menuName": None,
+                "menuClassEntity": None,
+                "includes": [],
+                "assetReferences": [],
+                "initiallyVisibleAssetReferences": [],
+            }
+
+    available = frozenset(documents)
+    search_roots = tuple(str(value) for value in recipe_ui["includeSearchRoots"])
+    unresolved_includes = []
+    resolved_includes: dict[str, list[str]] = {}
+    for member, document in documents.items():
+        resolved = []
+        for include in document["includes"]:
+            target = _resolve_include(str(include), member, available, search_roots)
+            if target is None:
+                unresolved_includes.append({"document": member, "include": include})
+            else:
+                resolved.append(target)
+        resolved_includes[member] = sorted(set(resolved))
+        document["resolvedIncludes"] = resolved_includes[member]
+
+    boot_document = canonical_ui_path(str(recipe_ui["bootDocument"]))
+    confirmation_document = canonical_ui_path(str(recipe_ui["confirmationDocument"]))
+    if boot_document not in trees or confirmation_document not in trees:
+        raise ValueError("Owned opening boot or confirmation menu is absent")
+    flow_menus, flow_closure, flow_canvas, flow_strings = _flow_menu_contract(
+        flow,
+        trees,
+        documents,
+        resolved_includes,
+    )
+    boot_closure = set()
+    queue = deque([boot_document, confirmation_document])
+    while queue:
+        current = queue.popleft()
+        if current in boot_closure:
+            continue
+        boot_closure.add(current)
+        queue.extend(resolved_includes[current])
+
+    prepared_closure = boot_closure | set(flow_closure)
+    requested_assets = sorted(
+        {
+            str(asset)
+            for member in prepared_closure
+            for asset in documents[member]["initiallyVisibleAssetReferences"]
+        }
+        | {str(value) for value in additional_texture_paths}
+    )
+    texture_pipeline = OwnedTexturePipeline(
+        owned_archives,
+        cache_root,
+        {},
+        configuration.content_compiler,
+    )
+    texture_rows = []
+    unresolved_assets = []
+    for requested in requested_assets:
+        if not requested.endswith(".dds"):
+            unresolved_assets.append({"path": requested, "reason": "runtime-nif-ui-not-implemented"})
+            continue
+        if texture_pipeline.member_source_count(requested) != 1:
+            unresolved_assets.append({"path": requested, "reason": "owned-member-not-resolved"})
+            continue
+        texture_rows.append(texture_pipeline.prepare(requested).manifest())
+
+    tree = trees[boot_document]
+    container_name = str(recipe_ui["buttonContainer"])
+    container = next((node for node in tree.walk() if node.name == container_name), None)
+    if container is None:
+        raise ValueError(f"Owned boot menu button container is absent: {container_name}")
+    actions = {str(key): str(value) for key, value in dict(recipe_ui["actions"]).items()}
+    buttons = []
+    for node in container.children:
+        if node.name not in actions:
+            continue
+        string_node = node.child("_string")
+        id_node = node.child("id")
+        buttons.append(
+            {
+                "tile": node.name,
+                "action": actions[node.name],
+                "engineId": None if id_node is None else int(id_node.text),
+                "stringEntity": None if string_node is None else _entity_name(string_node.text),
+                "label": "" if string_node is None else _display_entity(string_node.text),
+            }
+        )
+    if set(value["action"] for value in buttons) != set(actions.values()):
+        raise ValueError("Owned boot menu actions do not join to authored tiles")
+    engine_presentation, engine_textures = _compile_engine_presentation(
+        data_root,
+        default_ini_path,
+        owned_archives,
+        cache_root,
+        configuration,
+        recipe_ui,
+        boot_document,
+        container,
+        buttons,
+        available,
+        search_roots,
+        trees,
+        texture_pipeline,
+    )
+    textures_by_path = {
+        str(value["requestedPath"]): value
+        for value in [*texture_rows, *engine_textures]
+    }
+    texture_rows = [textures_by_path[key] for key in sorted(textures_by_path)]
+    title_tile = str(recipe_ui["titleTile"])
+    title_nodes = [node for node in tree.walk() if node.name == title_tile]
+    title_assets = sorted(
+        {
+            asset
+            for node in title_nodes
+            for filename in node.children
+            if filename.tag == "filename"
+            for asset in [_asset_path(filename.text)]
+            if asset is not None
+        }
+    )
+    layout = _boot_layout(
+        container,
+        buttons,
+        title_tile,
+        configuration,
+        dict(engine_presentation["font"]),
+        dict(engine_presentation["buttonStyle"]),
+    )
+    return {
+        "archive": {
+            "file": ui_archive_path.name,
+            "bytes": ui_archive_path.stat().st_size,
+            "sha256": file_sha256(ui_archive_path),
+        },
+        "documents": [documents[key] for key in sorted(documents)],
+        "documentCount": len(documents),
+        "unresolvedIncludes": unresolved_includes,
+        "enginePresentation": engine_presentation,
+        "flow": {
+            "referenceCanvasSize": flow_canvas,
+            "menus": flow_menus,
+            "strings": flow_strings,
+            "documentClosure": sorted(flow_closure),
+        },
+        "boot": {
+            "document": boot_document,
+            "confirmationDocument": confirmation_document,
+            "documentClosure": sorted(boot_closure),
+            "buttonContainer": container_name,
+            "buttonWidth": _direct_number(container.child("width")),
+            "buttonSpacing": _direct_number(container.child("_spacing")),
+            "titleTile": title_tile,
+            "titleAssets": title_assets,
+            "buttons": buttons,
+            "layout": layout,
+        },
+        "preparedTextures": texture_rows,
+        "unresolvedAssets": unresolved_assets,
+    }
+
+
+def _record_text_values(record: dict[str, object], signature: str) -> list[str]:
+    return [
+        str(value["value"])
+        for value in record["text"]
+        if value["signature"] == signature
+    ]
+
+
+def _record_editor_id_from_manifest(record: dict[str, object]) -> str | None:
+    values = _record_text_values(record, "EDID")
+    return values[0] if len(values) == 1 else None
+
+
+def _unique_manifest_record(
+    records: Iterable[dict[str, object]],
+    editor_id: str,
+    expected_type: str | None = None,
+) -> dict[str, object]:
+    matches = [
+        record
+        for record in records
+        if _record_editor_id_from_manifest(record) is not None
+        and _record_editor_id_from_manifest(record).casefold() == editor_id.casefold()
+        and (expected_type is None or record["recordType"] == expected_type)
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Owned opening record is ambiguous: {editor_id} "
+            f"type={expected_type or '*'} matches={len(matches)}"
+        )
+    return matches[0]
+
+
+def _script_code_lines(source: str) -> list[str]:
+    lines = []
+    for raw in source.splitlines():
+        line = raw.split(";", 1)[0].strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _script_commands(source: str) -> list[dict[str, object]]:
+    commands: list[dict[str, object]] = []
+    for line in _script_code_lines(source):
+        match = re.fullmatch(r"SetStage\s+(\w+)\s+(\d+)", line, re.IGNORECASE)
+        if match:
+            commands.append(
+                {"kind": "setStage", "questEditorId": match[1], "stage": int(match[2])}
+            )
+            continue
+        match = re.fullmatch(
+            r"([\w]+)\.SayTo\s+([\w]+)\s+([\w]+)(?:\s+.*)?",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": "sayTo",
+                    "speakerEditorId": match[1],
+                    "targetEditorId": match[2],
+                    "topicEditorId": match[3],
+                }
+            )
+            continue
+        match = re.fullmatch(r"GetPlayerName", line, re.IGNORECASE)
+        if match:
+            commands.append({"kind": "showMenu", "role": "name"})
+            continue
+        match = re.fullmatch(r"ShowRaceMenu", line, re.IGNORECASE)
+        if match:
+            commands.append({"kind": "showMenu", "role": "appearance"})
+            continue
+        match = re.fullmatch(r"SetTagSkills\s+(\d+)\s+(\d+)", line, re.IGNORECASE)
+        if match:
+            commands.append(
+                {
+                    "kind": "showMenu",
+                    "role": "tagSkills",
+                    "maximumSelected": int(match[1]),
+                    "mode": int(match[2]),
+                }
+            )
+            continue
+        match = re.fullmatch(r"ShowTraitMenu", line, re.IGNORECASE)
+        if match:
+            commands.append({"kind": "showMenu", "role": "traits"})
+            continue
+        match = re.fullmatch(r"ShowLoveTesterMenuParams\s+(\d+)", line, re.IGNORECASE)
+        if match:
+            commands.append(
+                {"kind": "showMenu", "role": "special", "totalPoints": int(match[1])}
+            )
+            continue
+        match = re.fullmatch(
+            r"set\s+(\w+)\.fTimer\s+to\s+(-?\d+(?:\.\d+)?)",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": "setTimer",
+                    "questEditorId": match[1],
+                    "seconds": float(match[2]),
+                }
+            )
+            continue
+        match = re.fullmatch(
+            r"SetObjective(Displayed|Completed)\s+(\w+)\s+(\d+)\s+(\d+)",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": "objective",
+                    "state": match[1].casefold(),
+                    "questEditorId": match[2],
+                    "index": int(match[3]),
+                    "enabled": int(match[4]) != 0,
+                }
+            )
+            continue
+        match = re.fullmatch(
+            r"(Enable|Disable)PlayerControls(?:\s+(.*))?",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            values = [] if not match[2] else [int(value) for value in match[2].split()]
+            commands.append(
+                {"kind": "playerControls", "operation": match[1].casefold(), "values": values}
+            )
+            continue
+        match = re.fullmatch(r"(\w+)\.SetDestroyed\s+(\d+)", line, re.IGNORECASE)
+        if match:
+            commands.append(
+                {
+                    "kind": "setDestroyed",
+                    "referenceEditorId": match[1],
+                    "destroyed": int(match[2]) != 0,
+                }
+            )
+            continue
+        match = re.fullmatch(r"(\w+)\.PlayIdle\s+(\w+)", line, re.IGNORECASE)
+        if match:
+            commands.append(
+                {
+                    "kind": "playIdle",
+                    "referenceEditorId": match[1],
+                    "idleEditorId": match[2],
+                }
+            )
+            continue
+        match = re.fullmatch(
+            r"set\s+(\w+)\.n([A-Za-z0-9_]+)\s+to\s+\1\.n\2\s*\+\s*(-?\d+)",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": "actorValueDelta",
+                    "ownerEditorId": match[1],
+                    "value": match[2],
+                    "delta": int(match[3]),
+                }
+            )
+            continue
+        match = re.fullmatch(
+            r"set\s+(\w+)\.([A-Za-z0-9_]+)\s+to\s+(-?\d+(?:\.\d+)?)",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": "setQuestVariable",
+                    "questEditorId": match[1],
+                    "variable": match[2],
+                    "value": float(match[3]),
+                }
+            )
+            continue
+        match = re.fullmatch(r"StartQuest\s+(\w+)", line, re.IGNORECASE)
+        if match:
+            commands.append({"kind": "startQuest", "questEditorId": match[1]})
+            continue
+        match = re.fullmatch(
+            r"player\.(additem|equipitem)\s+(\w+)(?:\s+(\d+))?",
+            line,
+            re.IGNORECASE,
+        )
+        if match:
+            commands.append(
+                {
+                    "kind": match[1].casefold(),
+                    "itemEditorId": match[2],
+                    "count": 1 if match[3] is None else int(match[3]),
+                }
+            )
+    return commands
+
+
+def _timer_transitions(
+    quest_editor_id: str,
+    script_source: str,
+    timer_stages: Iterable[int],
+) -> list[dict[str, int]]:
+    code = "\n".join(_script_code_lines(script_source))
+    rows = []
+    for stage in sorted(set(timer_stages)):
+        pattern = re.compile(
+            rf"getstage\s+{re.escape(quest_editor_id)}\s*==\s*{stage}\b"
+            rf"(?:(?!elseif\s+getstage).)*?setstage\s+{re.escape(quest_editor_id)}\s+(\d+)",
+            re.IGNORECASE | re.DOTALL,
+        )
+        targets = {int(match[1]) for match in pattern.finditer(code)}
+        if len(targets) > 1:
+            raise ValueError(
+                f"Owned opening timer transition is ambiguous: stage={stage} targets={targets}"
+            )
+        if targets:
+            rows.append({"fromStage": stage, "toStage": next(iter(targets))})
+    return rows
+
+
+def _stage_programs(
+    quest_record: dict[str, object],
+    quest_script_source: str,
+) -> tuple[list[dict[str, object]], list[dict[str, int]], list[dict[str, int]]]:
+    programs = []
+    timer_stages = []
+    for row in quest_record["questStageScripts"]:
+        source = str(row["source"])
+        commands = _script_commands(source)
+        stage = int(row["stage"])
+        if any(command["kind"] == "setTimer" for command in commands):
+            timer_stages.append(stage)
+        programs.append(
+            {
+                "stage": stage,
+                "source": source,
+                "commands": commands,
+            }
+        )
+    programs.sort(key=lambda value: int(value["stage"]))
+    timer = _timer_transitions(
+        _record_editor_id_from_manifest(quest_record) or "",
+        quest_script_source,
+        timer_stages,
+    )
+    menu_close = []
+    code = "\n".join(_script_code_lines(quest_script_source))
+    for match in re.finditer(
+        r"BEGIN\s+menumode\s+(\d+).*?getstage\s+(\w+)\s*==\s*(\d+)"
+        r".*?setstage\s+\2\s+(\d+).*?\bEND\b",
+        code,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        menu_close.append(
+            {
+                "menuMode": int(match[1]),
+                "fromStage": int(match[3]),
+                "toStage": int(match[4]),
+            }
+        )
+    return programs, timer, menu_close
+
+
+def _normalized_identifier(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.casefold())
+
+
+def _catalog_text(subrecords: list[object], signature: str) -> str | None:
+    for subrecord in subrecords:
+        if subrecord.signature != signature:
+            continue
+        value = _safe_text(subrecord.data)
+        if value is not None:
+            return value
+    return None
+
+
+def _catalog_entry(
+    record: Record,
+    subrecords: list[object],
+    source_order: int,
+) -> dict[str, object] | None:
+    editor_id = _catalog_text(subrecords, "EDID")
+    name = _catalog_text(subrecords, "FULL")
+    if not editor_id or not name:
+        return None
+    icon = _catalog_text(subrecords, "ICON")
+    return {
+        "recordType": record.signature,
+        "formId": form_id_text(record.form_id),
+        "sourceOrder": source_order,
+        "dataSha256": hashlib.sha256(record.data).hexdigest(),
+        "editorId": editor_id,
+        "sourceName": editor_id,
+        "name": name,
+        "description": _catalog_text(subrecords, "DESC") or "",
+        "iconLogicalPath": None if icon is None else _asset_path(icon),
+    }
+
+
+def _scan_flow_sources(
+    master_path: Path,
+    needed_form_ids: frozenset[int],
+    trait_rules: dict[str, object],
+) -> tuple[
+    list[dict[str, object]],
+    list[dict[str, object]],
+    dict[str, tuple[int, str]],
+    dict[str, str],
+    dict[int, dict[str, object]],
+]:
+    actor_values = []
+    traits = []
+    scripts: dict[str, tuple[int, str]] = {}
+    idle_animations: dict[str, str] = {}
+    needed: dict[int, dict[str, object]] = {}
+    selector_type = str(trait_rules["recordType"])
+    selector_signature = str(trait_rules["selectorSubrecord"])
+    selector = bytes.fromhex(str(trait_rules["selectorHex"]))
+    source_order = 0
+    for record in iter_plugin_records(master_path):
+        source_order += 1
+        subrecords = list(iter_subrecords(record))
+        if record.signature == "AVIF":
+            entry = _catalog_entry(record, subrecords, source_order)
+            if entry is not None:
+                actor_values.append(entry)
+        if record.signature == selector_type:
+            selected_value = next(
+                (
+                    subrecord.data
+                    for subrecord in subrecords
+                    if subrecord.signature == selector_signature
+                ),
+                None,
+            )
+            if selected_value == selector:
+                entry = _catalog_entry(record, subrecords, source_order)
+                if entry is not None:
+                    traits.append(entry)
+        if record.signature == "SCPT":
+            editor_id = _catalog_text(subrecords, "EDID")
+            sources = [
+                value
+                for subrecord in subrecords
+                if subrecord.signature == "SCTX"
+                for value in [_safe_text(subrecord.data)]
+                if value is not None
+            ]
+            if editor_id and len(sources) == 1:
+                scripts[editor_id.casefold()] = (record.form_id, sources[0])
+        if record.signature == "IDLE":
+            editor_id = _catalog_text(subrecords, "EDID")
+            model_path = _catalog_text(subrecords, "MODL")
+            logical_path = None if model_path is None else _asset_path(model_path)
+            if editor_id and logical_path:
+                identity = editor_id.casefold()
+                if identity in idle_animations:
+                    raise ValueError(
+                        f"Owned opening idle animation is duplicated: {editor_id}"
+                    )
+                idle_animations[identity] = logical_path
+        if record.form_id in needed_form_ids:
+            needed[record.form_id] = {
+                "recordType": record.signature,
+                "formId": form_id_text(record.form_id),
+                "editorId": _catalog_text(subrecords, "EDID"),
+                "displayName": _catalog_text(subrecords, "FULL") or "",
+                "links": [
+                    {
+                        "signature": subrecord.signature,
+                        "formId": form_id_text(_subrecord_form_id(subrecord.data) or 0),
+                    }
+                    for subrecord in subrecords
+                    if subrecord.signature in {"NAME", "SCRI"}
+                    and _subrecord_form_id(subrecord.data)
+                ],
+            }
+    if set(needed_form_ids) != set(needed):
+        missing = sorted(form_id_text(value) for value in set(needed_form_ids) - set(needed))
+        raise ValueError("Owned opening scene-role bases are missing: " + ", ".join(missing))
+    return actor_values, traits, scripts, idle_animations, needed
+
+
+def _match_actor_values(
+    actor_values: list[dict[str, object]],
+    names: Iterable[str],
+) -> list[dict[str, object]]:
+    selected = []
+    used = set()
+    for source_name in dict.fromkeys(names):
+        requested = _normalized_identifier(source_name)
+        scored = []
+        for row in actor_values:
+            editor = _normalized_identifier(str(row["editorId"]))
+            editor_without_prefix = editor[2:] if editor.startswith("av") else editor
+            display = _normalized_identifier(str(row["name"]))
+            score = (
+                3
+                if requested in {editor_without_prefix, display}
+                else 2
+                if editor_without_prefix.startswith(requested)
+                or requested.startswith(editor_without_prefix)
+                else 0
+            )
+            if score:
+                scored.append((score, row))
+        best = max((score for score, _ in scored), default=0)
+        matches = [row for score, row in scored if score == best]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Owned actor value is ambiguous: {source_name} matches={len(matches)}"
+            )
+        match = matches[0]
+        if match["formId"] in used:
+            continue
+        used.add(match["formId"])
+        selected.append({**match, "sourceName": source_name})
+    selected.sort(key=lambda value: int(str(value["formId"]), FORM_ID_RADIX))
+    return selected
+
+
+def _deferred_stage_command(
+    source: str,
+    scripts: dict[str, tuple[int, str]],
+    target_quest_editor_id: str,
+) -> dict[str, object] | None:
+    event_match = re.search(
+        r"set\s+(\w+)\.nEvent\s+to\s+(\d+)", source, re.IGNORECASE
+    )
+    timer_match = re.search(
+        r"set\s+(\w+)\.fTimer\s+to\s+(-?\d+(?:\.\d+)?)",
+        source,
+        re.IGNORECASE,
+    )
+    if event_match is None or timer_match is None:
+        return None
+    timer_quest = event_match[1]
+    if timer_match[1].casefold() != timer_quest.casefold() or re.search(
+        rf"StartQuest\s+{re.escape(timer_quest)}\b", source, re.IGNORECASE
+    ) is None:
+        return None
+    script_row = scripts.get((timer_quest + "SCRIPT").casefold())
+    if script_row is None:
+        return None
+    event = int(event_match[2])
+    timer_source = "\n".join(_script_code_lines(script_row[1]))
+    transition = re.search(
+        rf"(?:if|elseif)\s*\(?\s*nEvent\s*==\s*{event}\b"
+        rf"(?:(?!elseif\s*\(?\s*nEvent).)*?SetStage\s+"
+        rf"{re.escape(target_quest_editor_id)}\s+(\d+)",
+        timer_source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if transition is None:
+        return None
+    return {
+        "kind": "deferredStage",
+        "questEditorId": target_quest_editor_id,
+        "stage": int(transition[1]),
+        "seconds": float(timer_match[2]),
+        "sourceQuestEditorId": timer_quest,
+        "sourceEvent": event,
+    }
+
+
+def _special_reaction_manifest(
+    quest_script_source: str,
+    special_values: list[dict[str, object]],
+) -> dict[str, object]:
+    average_matches = {
+        float(match[1])
+        for match in re.finditer(
+            r"fCurrentValue\s+to\s+fCurrentValue\s*-\s*(\d+(?:\.\d+)?)",
+            quest_script_source,
+            re.IGNORECASE,
+        )
+    }
+    threshold_match = re.search(
+        r"fMaxDeviation\s*>=\s*(\d+(?:\.\d+)?)\s*&&\s*bLow\s*==\s*0"
+        r".*?fMaxDeviation\s*>=\s*(\d+(?:\.\d+)?)\s*&&\s*bLow\s*==\s*1",
+        quest_script_source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if len(average_matches) != 1 or threshold_match is None:
+        raise ValueError("Owned Vigor reaction thresholds are ambiguous")
+    actor_rows = []
+    actor_pattern = re.compile(
+        r"set\s+fCurrentValue\s+to\s+Player\.GetActorValue\s+(\w+)"
+        r"(?P<body>.*?)(?=set\s+fCurrentValue\s+to\s+Player\.GetActorValue|"
+        r";\s*now choose)",
+        re.IGNORECASE | re.DOTALL,
+    )
+    by_display = {
+        _normalized_identifier(str(value["name"])): value
+        for value in special_values
+    }
+    for order, match in enumerate(actor_pattern.finditer(quest_script_source)):
+        code_match = re.search(
+            r"nMostExtremeStat\s+to\s+(\d+)",
+            match.group("body"),
+            re.IGNORECASE,
+        )
+        if code_match is None:
+            raise ValueError(f"Owned Vigor reaction code is absent: {match[1]}")
+        code = int(code_match[1])
+        reactions = [
+            int(value)
+            for value in re.findall(
+                rf"nMostExtremeStat\s*==\s*{code}\).*?nDocReaction\s+to\s+(\d+)",
+                quest_script_source,
+                re.IGNORECASE | re.DOTALL,
+            )
+        ]
+        if len(reactions) != 2:
+            raise ValueError(
+                f"Owned Vigor low/high reaction mapping is ambiguous: code={code}"
+            )
+        actor_value = by_display.get(_normalized_identifier(match[1]))
+        if actor_value is None:
+            raise ValueError(f"Owned Vigor actor value is absent: {match[1]}")
+        actor_rows.append(
+            {
+                "formId": actor_value["formId"],
+                "evaluationOrder": order,
+                "lowReaction": reactions[0],
+                "highReaction": reactions[1],
+            }
+        )
+    if len(actor_rows) != len(special_values):
+        raise ValueError("Owned Vigor reaction mapping does not cover every SPECIAL value")
+    return {
+        "averageValue": next(iter(average_matches)),
+        "highDeviationThreshold": float(threshold_match[1]),
+        "lowDeviationThreshold": float(threshold_match[2]),
+        "defaultReaction": 0,
+        "values": actor_rows,
+    }
+
+
+def _dialogue_info_manifest(
+    record: dict[str, object],
+    scripts: dict[str, tuple[int, str]],
+    quest_editor_id: str,
+) -> dict[str, object]:
+    sources = _record_text_values(record, "SCTX")
+    commands = [command for source in sources for command in _script_commands(source)]
+    for source in sources:
+        deferred = _deferred_stage_command(source, scripts, quest_editor_id)
+        if deferred is not None:
+            commands.append(deferred)
+    dialogue_data = record["dialogueData"]
+    if not isinstance(dialogue_data, dict):
+        raise ValueError(f"Owned INFO has no dialogue DATA: {record['formId']}")
+    flags = int(dialogue_data["flags"])
+    return {
+        "formId": record["formId"],
+        "sourceOrder": record["sourceOrder"],
+        "lines": [value for value in _record_text_values(record, "NAM1") if value],
+        "scripts": sources,
+        "commands": commands,
+        "conditions": record["conditions"],
+        "responseType": int(dialogue_data["responseType"]),
+        "flags": flags,
+        "goodbye": bool(flags & DIALOGUE_FLAG_GOODBYE),
+        "sayOnce": bool(flags & DIALOGUE_FLAG_SAY_ONCE),
+        "nextTopicFormIds": [
+            link["formId"]
+            for link in record["links"]
+            if link["signature"] == "TCLT"
+        ],
+    }
+
+
+def _compile_dialogue(
+    records: list[dict[str, object]],
+    programs: list[dict[str, object]],
+    flow: dict[str, object],
+    scripts: dict[str, tuple[int, str]],
+    quest_editor_id: str,
+) -> dict[str, object]:
+    topics_by_form = {
+        str(record["formId"]): record
+        for record in records
+        if record["recordType"] == "DIAL"
+    }
+    topics_by_editor = {
+        _record_editor_id_from_manifest(record).casefold(): record
+        for record in topics_by_form.values()
+        if _record_editor_id_from_manifest(record)
+    }
+    infos_by_topic: dict[str, list[dict[str, object]]] = defaultdict(list)
+    info_records = []
+    for record in records:
+        if record["recordType"] != "INFO":
+            continue
+        info_records.append(record)
+        for group in record["groups"]:
+            if int(group["type"]) == DIALOGUE_TOPIC_GROUP_TYPE:
+                infos_by_topic[str(group["label"])].append(record)
+
+    requested_editor_ids = {
+        str(command["topicEditorId"])
+        for program in programs
+        for command in program["commands"]
+        if command["kind"] == "sayTo"
+    }
+    requested_forms = set()
+    for editor_id in requested_editor_ids:
+        topic = topics_by_editor.get(editor_id.casefold())
+        if topic is None:
+            raise ValueError(f"Owned opening dialogue topic is missing: {editor_id}")
+        requested_forms.add(str(topic["formId"]))
+
+    discovery = dict(flow["dialogueDiscovery"])
+    psychology_variable = str(discovery["psychologyStartQuestVariable"])
+    psychology_start_stage = int(discovery["psychologyStartStage"])
+    if psychology_start_stage not in {int(program["stage"]) for program in programs}:
+        raise ValueError(
+            f"Owned psychology start stage is not authored: {psychology_start_stage}"
+        )
+    psychology_matches = [
+        record
+        for record in info_records
+        if any(
+            re.search(
+                rf"set\s+{re.escape(quest_editor_id)}\.{re.escape(psychology_variable)}"
+                r"\s+to\s+1\b",
+                source,
+                re.IGNORECASE,
+            )
+            for source in _record_text_values(record, "SCTX")
+        )
+        and any(link["signature"] == "TCLT" for link in record["links"])
+    ]
+    if len(psychology_matches) != 1:
+        raise ValueError(
+            "Owned psychology dialogue root is ambiguous: "
+            f"variable={psychology_variable} matches={len(psychology_matches)}"
+        )
+    psychology_root = _dialogue_info_manifest(
+        psychology_matches[0], scripts, quest_editor_id
+    )
+    requested_forms.update(psychology_root["nextTopicFormIds"])
+
+    outro_editor_id = str(discovery["outroTopicEditorId"])
+    outro = topics_by_editor.get(outro_editor_id.casefold())
+    if outro is None:
+        raise ValueError(f"Owned opening outro topic is absent: {outro_editor_id}")
+    requested_forms.add(str(outro["formId"]))
+
+    closure = set()
+    queue = deque(sorted(requested_forms))
+    while queue:
+        topic_form = queue.popleft()
+        if topic_form in closure:
+            continue
+        if topic_form not in topics_by_form:
+            raise ValueError(f"Owned linked dialogue topic is absent: {topic_form}")
+        closure.add(topic_form)
+        for info in infos_by_topic.get(topic_form, []):
+            queue.extend(
+                link["formId"]
+                for link in info["links"]
+                if link["signature"] == "TCLT"
+            )
+
+    topic_rows = []
+    for form_id in sorted(closure, key=lambda value: int(value, FORM_ID_RADIX)):
+        topic = topics_by_form[form_id]
+        topic_infos = sorted(
+            infos_by_topic.get(form_id, []),
+            key=lambda value: int(value["sourceOrder"]),
+        )
+        topic_rows.append(
+            {
+                "formId": form_id,
+                "editorId": _record_editor_id_from_manifest(topic),
+                "prompt": next(iter(_record_text_values(topic, "FULL")), ""),
+                "infos": [
+                    _dialogue_info_manifest(info, scripts, quest_editor_id)
+                    for info in topic_infos
+                ],
+            }
+        )
+    return {
+        "topics": topic_rows,
+        "psychologyRootInfo": psychology_root,
+        "psychologyStartStage": psychology_start_stage,
+        "outroTopicFormId": outro["formId"],
+    }
+
+
+def _resolve_actor_animation_commands(
+    programs: list[dict[str, object]],
+    dialogue: dict[str, object],
+    roles: list[dict[str, object]],
+    idle_animations: dict[str, str],
+) -> list[dict[str, object]]:
+    roles_by_editor = {
+        str(role["editorId"]).casefold(): role
+        for role in roles
+    }
+    commands = [
+        command
+        for program in programs
+        for command in program["commands"]
+    ]
+    commands.extend(
+        command
+        for topic in dialogue["topics"]
+        for info in topic["infos"]
+        for command in info["commands"]
+    )
+    commands.extend(dialogue["psychologyRootInfo"]["commands"])
+    paths_by_reference: dict[str, list[str]] = defaultdict(list)
+    for command in commands:
+        if command["kind"] != "playIdle":
+            continue
+        idle_editor_id = str(command["idleEditorId"])
+        logical_path = idle_animations.get(idle_editor_id.casefold())
+        if logical_path is None:
+            raise ValueError(
+                f"Owned opening idle animation is unresolved: {idle_editor_id}"
+            )
+        reference_editor_id = str(command["referenceEditorId"])
+        role = roles_by_editor.get(reference_editor_id.casefold())
+        if role is None or role["recordType"] not in {"ACHR", "ACRE"}:
+            raise ValueError(
+                "Owned opening idle target is not a compiled actor role: "
+                + reference_editor_id
+            )
+        command["animationLogicalPath"] = logical_path
+        reference_form_id = str(role["referenceFormId"])
+        if logical_path not in paths_by_reference[reference_form_id]:
+            paths_by_reference[reference_form_id].append(logical_path)
+    return [
+        {
+            "referenceFormId": reference_form_id,
+            "logicalPaths": paths,
+        }
+        for reference_form_id, paths in sorted(
+            paths_by_reference.items(),
+            key=lambda value: int(value[0], FORM_ID_RADIX),
+        )
+    ]
+
+
+def _interaction_from_script(
+    source: str,
+    script_editor_id: str,
+    role: str,
+    role_form_id: str,
+    quest_editor_id: str,
+    authored_stages: list[int],
+) -> dict[str, object]:
+    code = "\n".join(_script_code_lines(source))
+    targets = {
+        int(match[1])
+        for match in re.finditer(
+            rf"SetStage\s+{re.escape(quest_editor_id)}\s+(\d+)",
+            code,
+            re.IGNORECASE,
+        )
+    }
+    if len(targets) != 1:
+        raise ValueError(
+            f"Owned opening interaction target is ambiguous: {script_editor_id} {targets}"
+        )
+    target = next(iter(targets))
+    from_matches = {
+        int(match[1])
+        for match in re.finditer(
+            rf"GetStage\s+{re.escape(quest_editor_id)}\s*==\s*(\d+)",
+            code,
+            re.IGNORECASE,
+        )
+    }
+    if len(from_matches) > 1:
+        raise ValueError(
+            f"Owned opening interaction source is ambiguous: {script_editor_id} {from_matches}"
+        )
+    source_stage = (
+        next(iter(from_matches))
+        if from_matches
+        else max(stage for stage in authored_stages if stage < target)
+    )
+    event = (
+        "activate"
+        if re.search(r"BEGIN\s+OnActivate", code, re.IGNORECASE)
+        else "proximity"
+        if re.search(r"OnTriggerEnter", code, re.IGNORECASE)
+        else None
+    )
+    if event is None:
+        raise ValueError(f"Owned opening interaction event is unsupported: {script_editor_id}")
+    commands = _script_commands(source)
+    menu = next(
+        (command for command in commands if command["kind"] == "showMenu"),
+        None,
+    )
+    return {
+        "event": event,
+        "scriptEditorId": script_editor_id,
+        "targetRole": role,
+        "targetReferenceFormId": role_form_id,
+        "fromStage": source_stage,
+        "toStage": target,
+        "menu": menu,
+        "distancePolicy": "configured-player-activation-distance",
+    }
+
+
+def compile_new_game_flow(
+    master_path: Path,
+    records: list[dict[str, object]],
+    flow: dict[str, object],
+) -> tuple[dict[str, object], tuple[str, ...]]:
+    quest_editor_id = str(flow["questEditorId"])
+    quest = _unique_manifest_record(records, quest_editor_id, "QUST")
+    quest_script = _unique_manifest_record(
+        records, str(flow["questScriptEditorId"]), "SCPT"
+    )
+    quest_script_sources = _record_text_values(quest_script, "SCTX")
+    if len(quest_script_sources) != 1:
+        raise ValueError("Owned opening quest script source is ambiguous")
+    programs, timer_transitions, menu_close_transitions = _stage_programs(
+        quest, quest_script_sources[0]
+    )
+
+    roles = []
+    needed_forms = set()
+    for role, editor_id in dict(flow["sceneRoles"]).items():
+        record = _unique_manifest_record(records, str(editor_id))
+        base_links = [
+            link["formId"] for link in record["links"] if link["signature"] == "NAME"
+        ]
+        if len(base_links) != 1:
+            raise ValueError(f"Owned opening scene role has no unique base: {role}")
+        needed_forms.add(int(base_links[0], FORM_ID_RADIX))
+        roles.append(
+            {
+                "role": str(role),
+                "editorId": str(editor_id),
+                "recordType": record["recordType"],
+                "referenceFormId": record["formId"],
+                "baseFormId": base_links[0],
+            }
+        )
+    role_by_name = {row["role"]: row for row in roles}
+
+    character_rules = dict(flow["characterRules"])
+    actor_values, traits, scripts, idle_animations, needed = _scan_flow_sources(
+        master_path,
+        frozenset(needed_forms),
+        dict(character_rules["traits"]),
+    )
+    for role in roles:
+        base = needed[int(str(role["baseFormId"]), FORM_ID_RADIX)]
+        role["displayName"] = base["displayName"] or base["editorId"] or role["editorId"]
+    special_names = []
+    for match in re.finditer(
+        r"Player\.GetActorValue\s+(\w+)",
+        quest_script_sources[0],
+        re.IGNORECASE,
+    ):
+        special_names.append(match[1])
+    special_rules = dict(character_rules["special"])
+    special_icon_selector = str(special_rules["catalogIconPathContains"]).casefold()
+    special = _match_actor_values(
+        [
+            value
+            for value in actor_values
+            if special_icon_selector in str(value["iconLogicalPath"]).casefold()
+        ],
+        special_names,
+    )
+    skill_names_by_owner: dict[str, list[str]] = defaultdict(list)
+    for record in records:
+        if not any(
+            link["signature"] == "QSTI" and link["formId"] == quest["formId"]
+            for link in record["links"]
+        ):
+            continue
+        for source in _record_text_values(record, "SCTX"):
+            for match in re.finditer(
+                r"set\s+(\w+)\.n([A-Za-z]+)\s+to\s+\1\.n\2\s*\+",
+                source,
+                re.IGNORECASE,
+            ):
+                skill_names_by_owner[match[1].casefold()].append(match[2])
+    if not skill_names_by_owner:
+        raise ValueError("Owned opening psychology skill calculation is absent")
+    skill_owner, skill_names = max(
+        skill_names_by_owner.items(),
+        key=lambda value: len(set(name.casefold() for name in value[1])),
+    )
+    if sum(
+        len(set(name.casefold() for name in values))
+        == len(set(name.casefold() for name in skill_names))
+        for values in skill_names_by_owner.values()
+    ) != 1:
+        raise ValueError("Owned opening psychology skill owner is ambiguous")
+    tag_skill_rules = dict(character_rules["tagSkills"])
+    skill_icon_selector = str(tag_skill_rules["catalogIconPathContains"]).casefold()
+    skills = _match_actor_values(
+        [
+            value
+            for value in actor_values
+            if skill_icon_selector in str(value["iconLogicalPath"]).casefold()
+        ],
+        skill_names,
+    )
+    if not special or not skills or not traits:
+        raise ValueError(
+            "Owned opening character catalogs are incomplete: "
+            f"special={len(special)} skills={len(skills)} traits={len(traits)}"
+        )
+
+    interaction_rows = []
+    for script_editor_id, role in dict(flow["interactionBindings"]).items():
+        script = scripts.get(str(script_editor_id).casefold())
+        if script is None or role not in role_by_name:
+            raise ValueError(
+                f"Owned opening interaction binding is unresolved: {script_editor_id} -> {role}"
+            )
+        interaction_rows.append(
+            _interaction_from_script(
+                script[1],
+                str(script_editor_id),
+                str(role),
+                str(role_by_name[str(role)]["referenceFormId"]),
+                quest_editor_id,
+                [int(program["stage"]) for program in programs],
+            )
+        )
+    vigor = role_by_name["vigorTester"]
+    vigor_base = needed[int(str(vigor["baseFormId"]), FORM_ID_RADIX)]
+    vigor_scripts = [
+        link["formId"] for link in vigor_base["links"] if link["signature"] == "SCRI"
+    ]
+    if len(vigor_scripts) != 1:
+        raise ValueError("Owned Vigor tester base has no unique activation script")
+    vigor_script_form = int(vigor_scripts[0], FORM_ID_RADIX)
+    vigor_script = next(
+        (
+            (editor_id, row)
+            for editor_id, row in scripts.items()
+            if row[0] == vigor_script_form
+        ),
+        None,
+    )
+    if vigor_script is None:
+        raise ValueError("Owned Vigor tester activation script is absent")
+    interaction_rows.append(
+        _interaction_from_script(
+            vigor_script[1][1],
+            vigor_script[0],
+            "vigorTester",
+            str(vigor["referenceFormId"]),
+            quest_editor_id,
+            [int(program["stage"]) for program in programs],
+        )
+    )
+    interaction_rows.sort(key=lambda value: (int(value["fromStage"]), str(value["event"])))
+
+    dialogue = _compile_dialogue(
+        records,
+        programs,
+        flow,
+        scripts,
+        quest_editor_id,
+    )
+    actor_animations = _resolve_actor_animation_commands(
+        programs,
+        dialogue,
+        roles,
+        idle_animations,
+    )
+    outro_interactions = [
+        interaction
+        for interaction in interaction_rows
+        if interaction["targetRole"] == "exitDoor"
+    ]
+    if len(outro_interactions) != 1:
+        raise ValueError("Owned opening outro interaction is ambiguous")
+    dialogue["outroStartStage"] = outro_interactions[0]["toStage"]
+    sex_message = _unique_manifest_record(
+        records,
+        str(dict(flow["messageEditorIds"])["sex"]),
+        "MESG",
+    )
+    sex_choices = _record_text_values(sex_message, "ITXT")
+    sex_choice_indices = {
+        int(match[1])
+        for match in re.finditer(
+            r"nButton\s*==\s*(\d+)",
+            quest_script_sources[0],
+            re.IGNORECASE,
+        )
+    }
+    if len(sex_choices) != len(sex_choice_indices) or sex_choice_indices != set(
+        range(len(sex_choices))
+    ):
+        raise ValueError(
+            f"Owned opening sex message has an unexpected choice count: {len(sex_choices)}"
+        )
+    tag_menu_commands = [
+        command
+        for program in programs
+        for command in program["commands"]
+        if command["kind"] == "showMenu" and command["role"] == "tagSkills"
+    ]
+    special_menu_commands = [
+        interaction["menu"]
+        for interaction in interaction_rows
+        if interaction["menu"] is not None and interaction["menu"]["role"] == "special"
+    ]
+    if len(tag_menu_commands) != 1 or len(special_menu_commands) != 1:
+        raise ValueError("Owned opening character menu parameters are ambiguous")
+    completion_stages = [
+        int(program["stage"])
+        for program in programs
+        if re.search(
+            rf"StopQuest\s+{re.escape(quest_editor_id)}\b",
+            str(program["source"]),
+            re.IGNORECASE,
+        )
+    ]
+    if len(completion_stages) != 1:
+        raise ValueError("Owned opening completion stage is ambiguous")
+    icon_paths = tuple(
+        sorted(
+            {
+                str(row["iconLogicalPath"])
+                for row in [*special, *skills, *traits]
+                if row["iconLogicalPath"] is not None
+            }
+        )
+    )
+    return (
+        {
+            "schema": "opennv-owned-new-game-flow/v1",
+            "quest": {
+                "formId": quest["formId"],
+                "editorId": quest_editor_id,
+                "scriptFormId": quest_script["formId"],
+                "scriptEditorId": flow["questScriptEditorId"],
+                "objectives": quest["questObjectives"],
+                "stages": programs,
+                "timerTransitions": timer_transitions,
+                "menuCloseTransitions": menu_close_transitions,
+                "completionStage": completion_stages[0],
+            },
+            "sceneRoles": roles,
+            "actorAnimations": actor_animations,
+            "interactions": interaction_rows,
+            "dialogue": dialogue,
+            "character": {
+                "sex": {
+                    "messageFormId": sex_message["formId"],
+                    "title": next(iter(_record_text_values(sex_message, "FULL")), ""),
+                    "choices": sex_choices,
+                },
+                "special": {
+                    **{
+                        key: value
+                        for key, value in special_rules.items()
+                        if key != "catalogIconPathContains"
+                    },
+                    "totalPoints": int(special_menu_commands[0]["totalPoints"]),
+                    "docReaction": _special_reaction_manifest(
+                        quest_script_sources[0], special
+                    ),
+                    "values": special,
+                },
+                "tagSkills": {
+                    "psychologyOwnerEditorId": skill_owner,
+                    "maximumSelected": int(tag_menu_commands[0]["maximumSelected"]),
+                    "values": skills,
+                },
+                "traits": {
+                    "maximumSelected": int(dict(character_rules["traits"])["maximumSelected"]),
+                    "values": traits,
+                },
+            },
+        },
+        icon_paths,
+    )
+
+
+def _script_sources(record: dict[str, object]) -> Iterator[str]:
+    for value in record["text"]:
+        if value["signature"] == "SCTX":
+            yield str(value["value"])
+
+
+def _prepare_runtime_video(
+    source: Path,
+    cache_root: Path,
+    configuration: RuntimeConfiguration,
+) -> dict[str, object]:
+    legal_assets = configuration.document["legalAssets"]
+    if not isinstance(legal_assets, dict):
+        raise ValueError("OpenNV legal-assets configuration is invalid")
+    policy = legal_assets["videoImport"]
+    if not isinstance(policy, dict):
+        raise ValueError("OpenNV opening video-import configuration is invalid")
+    executable = shutil.which(str(policy["transcoderExecutable"]))
+    if executable is None:
+        raise FileNotFoundError(
+            f"Configured opening video transcoder is unavailable: {policy['transcoderExecutable']}"
+        )
+    source_sha256 = file_sha256(source)
+    identity = hashlib.sha256(
+        (
+            source_sha256
+            + ":"
+            + json.dumps(policy, sort_keys=True, separators=(",", ":"))
+        ).encode("utf-8")
+    ).hexdigest()[: configuration.content_compiler.asset_id_hex_characters]
+    extension = str(policy["outputExtension"])
+    if not extension.startswith("."):
+        raise ValueError("Opening video output extension must begin with a period")
+    output = cache_root / "generated" / "opening" / "video" / f"{identity}{extension}"
+    sidecar = output.with_suffix(output.suffix + ".json")
+    expected = {
+        "source": str(source.resolve()),
+        "sourceSha256": source_sha256,
+        "policy": policy,
+    }
+    if output.is_file() and sidecar.is_file():
+        existing = json.loads(sidecar.read_text(encoding="utf-8"))
+        existing_inputs = existing.get("inputs")
+        if (
+            isinstance(existing_inputs, dict)
+            and all(existing_inputs.get(key) == value for key, value in expected.items())
+            and existing.get("outputSha256") == file_sha256(output)
+        ):
+            if existing_inputs != expected:
+                existing["inputs"] = expected
+                atomic_json(sidecar, existing)
+            return existing
+
+    version_result = subprocess.run(
+        [executable, "-version"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if version_result.returncode != 0 or not version_result.stdout.strip():
+        raise RuntimeError("Opening video transcoder version probe failed")
+    temporary = output.with_name(output.stem + ".tmp" + output.suffix)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        executable,
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        str(policy["logLevel"]),
+        "-y",
+        "-fflags",
+        "+bitexact",
+        "-i",
+        str(source),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
+        "-map_metadata",
+        "-1",
+        "-c:v",
+        str(policy["videoCodec"]),
+        "-q:v",
+        str(policy["videoQuality"]),
+        "-pix_fmt",
+        str(policy["pixelFormat"]),
+        "-c:a",
+        str(policy["audioCodec"]),
+        "-q:a",
+        str(policy["audioQuality"]),
+        "-threads",
+        str(policy["threads"]),
+        "-flags:v",
+        "+bitexact",
+        "-flags:a",
+        "+bitexact",
+        "-f",
+        str(policy["containerFormat"]),
+        str(temporary),
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0 or not temporary.is_file() or not temporary.stat().st_size:
+        raise RuntimeError(
+            "Opening video transcoding failed: " + result.stderr.strip()
+        )
+    os.replace(temporary, output)
+    document = {
+        "schema": "opennv-owned-opening-video/v1",
+        "status": "deterministic-owned-video-transcode",
+        "inputs": expected,
+        "output": str(output.resolve()),
+        "outputBytes": output.stat().st_size,
+        "outputSha256": file_sha256(output),
+        "transcoder": {
+            "path": str(Path(executable).resolve()),
+            "sha256": file_sha256(Path(executable)),
+            "version": version_result.stdout.splitlines()[0],
+            "arguments": command[1:-1],
+        },
+    }
+    atomic_json(sidecar, document)
+    return document
+
+
+def video_manifest(
+    data_root: Path,
+    records: list[dict[str, object]],
+    video_directory_name: str,
+    entry_point: dict[str, object],
+    cache_root: Path,
+    configuration: RuntimeConfiguration,
+) -> list[dict[str, object]]:
+    entry_editor_id = str(entry_point["questEditorId"])
+    entry_stage = int(entry_point["stage"])
+    entry_records = [
+        record
+        for record in records
+        if any(
+            value["signature"] == "EDID"
+            and value["value"] == entry_editor_id
+            for value in record["text"]
+        )
+    ]
+    if len(entry_records) != 1:
+        raise ValueError("Owned opening entry quest does not resolve uniquely")
+    entry_sources = [
+        str(value["source"])
+        for value in entry_records[0]["questStageScripts"]
+        if int(value["stage"]) == entry_stage
+    ]
+    if len(entry_sources) != 1:
+        raise ValueError("Owned opening entry quest stage does not resolve uniquely")
+    required = {
+        match.group("path").casefold()
+        for source in entry_sources
+        for match in PLAY_BINK_PATTERN.finditer(
+            "\n".join(line.split(";", 1)[0] for line in source.splitlines())
+        )
+    }
+    requested = sorted(
+        {
+            match.group("path")
+            for record in records
+            for source in _script_sources(record)
+            for match in PLAY_BINK_PATTERN.finditer(
+                "\n".join(line.split(";", 1)[0] for line in source.splitlines())
+            )
+        },
+        key=str.casefold,
+    )
+    video_root = data_root / video_directory_name
+    available = {
+        path.name.casefold(): path
+        for path in video_root.iterdir()
+        if path.is_file()
+    }
+    rows = []
+    for logical_path in requested:
+        source = available.get(Path(logical_path).name.casefold())
+        required_at_entry = logical_path.casefold() in required
+        runtime = (
+            None
+            if source is None or not required_at_entry
+            else _prepare_runtime_video(source, cache_root, configuration)
+        )
+        rows.append(
+            {
+                "logicalPath": logical_path,
+                "requiredAtEntry": required_at_entry,
+                "source": None if source is None else str(source.resolve()),
+                "bytes": None if source is None else source.stat().st_size,
+                "sha256": None if source is None else file_sha256(source),
+                "runtime": runtime,
+                "status": (
+                    "missing-owned-entry-video"
+                    if source is None and required_at_entry
+                    else "authored-nonentry-video-not-installed"
+                    if source is None
+                    else "owned-loose-video"
+                ),
+            }
+        )
+    return rows
+
+
+def prepare_opening_manifest(
+    data_root: Path,
+    master_path: Path,
+    ui_archive_path: Path,
+    owned_archives: OwnedArchiveStack,
+    cache_root: Path,
+    recipe_path: Path,
+    configuration: RuntimeConfiguration,
+    video_directory_name: str,
+    master_sha256: str,
+    default_ini_path: Path,
+) -> dict[str, object]:
+    recipe = load_opening_recipe(recipe_path)
+    graph = dict(recipe["recordGraph"])
+    universal_link_signatures = frozenset(
+        str(value) for value in graph["universalFormLinkSubrecords"]
+    )
+    record_link_signatures = {
+        str(record_type): frozenset(str(value) for value in signatures)
+        for record_type, signatures in dict(
+            graph["formLinkSubrecordsByRecordType"]
+        ).items()
+    }
+    reverse_signatures = frozenset(
+        str(value) for value in graph["reverseFormLinkSubrecords"]
+    )
+    by_form, by_editor, group_children, reverse_links = index_records(
+        master_path,
+        universal_link_signatures,
+        record_link_signatures,
+    )
+    selected, blockers = record_graph_closure(
+        (str(value) for value in recipe["rootEditorIds"]),
+        by_form,
+        by_editor,
+        group_children,
+        reverse_links,
+        reverse_signatures,
+        frozenset(
+            int(str(value), FORM_ID_RADIX)
+            for value in dict(graph["engineForms"])
+        ),
+        frozenset(int(value) for value in graph["parentGroupTypes"]),
+        {
+            str(record_type): frozenset(int(value) for value in group_types)
+            for record_type, group_types in dict(
+                graph["childGroupTypesByRecordType"]
+            ).items()
+        },
+    )
+    missing_roots = [
+        root
+        for root in recipe["rootEditorIds"]
+        if len(by_editor.get(str(root).casefold(), ())) != 1
+    ]
+    if missing_roots:
+        raise ValueError(
+            "Owned opening graph roots are incomplete: "
+            + ", ".join(str(value) for value in missing_roots)
+        )
+    records = selected_record_manifest(master_path, selected)
+    flow_definition = dict(recipe["newGameFlow"])
+    new_game_flow, flow_texture_paths = compile_new_game_flow(
+        master_path,
+        records,
+        flow_definition,
+    )
+    ui = compile_ui(
+        data_root,
+        default_ini_path,
+        ui_archive_path,
+        owned_archives,
+        cache_root,
+        dict(recipe["ui"]),
+        flow_definition,
+        flow_texture_paths,
+        configuration,
+    )
+    videos = video_manifest(
+        data_root,
+        records,
+        video_directory_name,
+        dict(recipe["entryPoint"]),
+        cache_root,
+        configuration,
+    )
+    manifest = {
+        "schema": OPENING_MANIFEST_SCHEMA,
+        "status": OPENING_MANIFEST_STATUS,
+        "campaign": recipe["campaign"],
+        "recipe": {
+            "id": recipe["id"],
+            "sha256": file_sha256(recipe_path),
+        },
+        "configuration": configuration.manifest(),
+        "master": {
+            "file": master_path.name,
+            "bytes": master_path.stat().st_size,
+            "sha256": master_sha256,
+        },
+        "roots": list(recipe["rootEditorIds"]),
+        "entryPoint": recipe["entryPoint"],
+        "recordGraph": {
+            "recordCount": len(records),
+            "records": records,
+            "engineForms": graph["engineForms"],
+            "algorithm": "indexed-root-script-dialogue-and-parent-group-selection",
+            "complexity": "O(records+form-links+selected-group-children)",
+        },
+        "newGameFlow": new_game_flow,
+        "ui": ui,
+        "videos": videos,
+        "blockers": [
+            *({"reason": blocker} for blocker in blockers),
+            *ui["unresolvedIncludes"],
+            *ui["unresolvedAssets"],
+            *(
+                {"path": video["logicalPath"], "reason": video["status"]}
+                for video in videos
+                if video["source"] is None and video["requiredAtEntry"]
+            ),
+        ],
+    }
+    output = cache_root / "generated" / "opening" / "opening-manifest.json"
+    atomic_json(output, manifest)
+    return {"output": str(output.resolve()), "manifest": manifest}

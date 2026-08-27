@@ -1,0 +1,40 @@
+{
+  "schema": "opennv-cell-recipe/v1",
+  "id": "goodsprings-doc-mitchell-house-v1",
+  "exportStrict": false,
+  "textureAliases": {},
+  "master": {
+    "file": "FalloutNV.esm",
+    "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1"
+  },
+  "cellEditorId": "GSDocMitchellHouse",
+  "entryDoorReferenceFormId": "00103e61",
+  "spawnReferenceFormId": "00103e6b",
+  "portalProofDoorReferenceFormId": "00103e61",
+  "actorRecipes": [
+    "goodsprings-doc-mitchell-actor-v1"
+  ],
+  "linkedExteriorRecipe": "goodsprings-actor-review-background-v1",
+  "selection": {
+    "modelPrefixes": [],
+    "includeBaseRecordTypes": [
+      "ACTI",
+      "ALCH",
+      "ARMO",
+      "CONT",
+      "DOOR",
+      "FURN",
+      "MISC",
+      "MSTT",
+      "STAT",
+      "WEAP"
+    ],
+    "excludeBaseEditorIds": [
+      "AudioMarker",
+      "COCMarkerHeading",
+      "XMarker",
+      "XMarkerHeading"
+    ],
+    "excludeModelPrefixes": []
+  }
+}

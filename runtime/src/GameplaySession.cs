@@ -25,6 +25,7 @@ internal partial class GameplaySession : Node
     private string _entryDoorFormId = "";
     private RuntimeConfiguration _configuration = null!;
     private bool _useXrHud;
+    private bool _showHud = true;
     private string? _equippedWeaponFormId;
     private string? _weaponAmmoFormId;
     private int _weaponDamage;
@@ -59,20 +60,24 @@ internal partial class GameplaySession : Node
         string entryDoorFormId,
         RuntimeConfiguration configuration,
         string? configuredSavePath,
-        bool useXrHud = false)
+        bool useXrHud = false,
+        bool loadExistingSave = true,
+        bool showHud = true)
     {
         _configuration = configuration;
         Name = "GameplaySession";
         _cellFormId = cellFormId;
         _entryDoorFormId = entryDoorFormId;
         _useXrHud = useXrHud;
+        _showHud = showHud;
         _savePath = ResolvePath(configuredSavePath ?? configuration.Hud.DefaultSavePath);
-        Load(cellFormId);
+        if (loadExistingSave)
+            Load(cellFormId);
     }
 
     public override void _Ready()
     {
-        if (_useXrHud)
+        if (_useXrHud || !_showHud)
             return;
         var layer = new CanvasLayer { Name = "GameplayHud" };
         AddChild(layer);

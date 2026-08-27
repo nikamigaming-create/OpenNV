@@ -318,6 +318,7 @@ def prepare_actor(
     recipe_id: str,
     recipe_document: dict[str, object] | None = None,
     preparation_context: ActorPreparationContext | None = None,
+    runtime_animation_paths: Sequence[str] = (),
 ) -> dict[str, object]:
     recipe = load_recipe(recipe_id) if recipe_document is None else recipe_document
     if recipe.get("schema") != RECIPE_SCHEMA or not str(recipe.get("id", "")).strip():
@@ -366,6 +367,9 @@ def prepare_actor(
             sequence.logical_path for sequence in retail_presentation.animations
         )
         actor_animation_path = actor_animation_paths[0]
+    actor_animation_paths = tuple(
+        dict.fromkeys((*actor_animation_paths, *runtime_animation_paths))
+    )
     configured_origin = recipe.get("originGameUnits")
     if configured_origin is None:
         cell_recipe = load_spatial_recipe(str(recipe["cellRecipe"]))
@@ -830,10 +834,25 @@ def prepare_actor_set(
     data_root: Path,
     cache_root: Path,
     recipe_ids: list[str],
+    runtime_animation_paths_by_reference: dict[str, Sequence[str]] | None = None,
 ) -> dict[str, object]:
     if len(recipe_ids) < 1 or len(set(recipe_ids)) != len(recipe_ids):
         raise ValueError("Actor-set recipes must be non-empty and unique")
-    actors = [prepare_actor(data_root, cache_root, recipe_id) for recipe_id in recipe_ids]
+    runtime_animation_paths_by_reference = runtime_animation_paths_by_reference or {}
+    recipes = [load_recipe(recipe_id) for recipe_id in recipe_ids]
+    actors = [
+        prepare_actor(
+            data_root,
+            cache_root,
+            recipe_id,
+            recipe_document=recipe,
+            runtime_animation_paths=runtime_animation_paths_by_reference.get(
+                str(recipe["proofActorReferenceFormId"]).casefold(),
+                (),
+            ),
+        )
+        for recipe_id, recipe in zip(recipe_ids, recipes, strict=True)
+    ]
     reference_form_ids = {str(actor["reference"]["formId"]) for actor in actors}
     if len(reference_form_ids) != len(actors):
         raise ValueError("Actor-set members must use unique references")

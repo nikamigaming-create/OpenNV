@@ -439,6 +439,7 @@ def load_runtime_configuration() -> RuntimeConfiguration:
     legal_assets = _object(document, "legalAssets")
     owned_data = _object(legal_assets, "ownedData")
     for field in (
+        "defaultOpeningRecipe",
         "defaultCellRecipe",
         "defaultCacheRoot",
         "packagedCompilerName",
@@ -446,7 +447,18 @@ def load_runtime_configuration() -> RuntimeConfiguration:
     ):
         if not str(legal_assets.get(field, "")).strip():
             raise ValueError(f"OpenNV legalAssets.{field} is empty")
-    for field in ("masterFile", "meshesArchiveFile", "dataDirectoryName"):
+    source_content_tool = _object(legal_assets, "sourceContentTool")
+    for field in ("executable", "script", "compilerName"):
+        if not str(source_content_tool.get(field, "")).strip():
+            raise ValueError(f"OpenNV legalAssets.sourceContentTool.{field} is empty")
+    for field in (
+        "masterFile",
+        "defaultIniFile",
+        "meshesArchiveFile",
+        "uiArchiveFile",
+        "dataDirectoryName",
+        "videoDirectoryName",
+    ):
         if not str(owned_data.get(field, "")).strip():
             raise ValueError(f"OpenNV legalAssets.ownedData.{field} is empty")
     texture_archives = owned_data.get("textureArchiveFiles")
@@ -456,6 +468,21 @@ def load_runtime_configuration() -> RuntimeConfiguration:
         or any(not isinstance(value, str) or not value.strip() for value in texture_archives)
     ):
         raise ValueError("OpenNV legalAssets owned texture archives are invalid")
+    video_import = _object(legal_assets, "videoImport")
+    for field in (
+        "transcoderExecutable",
+        "outputExtension",
+        "containerFormat",
+        "videoCodec",
+        "audioCodec",
+        "pixelFormat",
+        "logLevel",
+    ):
+        if not str(video_import.get(field, "")).strip():
+            raise ValueError(f"OpenNV legalAssets.videoImport.{field} is empty")
+    for field in ("videoQuality", "audioQuality", "threads"):
+        if int(video_import.get(field, 0)) <= 0:
+            raise ValueError(f"OpenNV legalAssets.videoImport.{field} must be positive")
     _validate_fallout_image_space(_object(document, "falloutEnvironment"))
     gallery_capture = _object(_object(document, "capture"), "gallery")
     gallery_provenance = _object(gallery_capture, "provenance")
