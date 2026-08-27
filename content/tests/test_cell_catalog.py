@@ -150,6 +150,49 @@ def synthetic_plugin() -> bytes:
         subrecord("NAME", struct.pack("<I", 0x305))
         + subrecord("DATA", struct.pack("<6f", 20.0, 30.0, 40.0, 0.1, 0.2, 0.3)),
     )
+    navmesh = record(
+        "NAVM",
+        0x206,
+        subrecord("NVER", struct.pack("<I", 11))
+        + subrecord("DATA", struct.pack("<6I", 0x100, 4, 2, 0, 0, 0))
+        + subrecord(
+            "NVVX",
+            b"".join(
+                struct.pack("<3f", *value)
+                for value in (
+                    (0.0, 0.0, 30.0),
+                    (10.0, 0.0, 30.0),
+                    (10.0, 10.0, 30.0),
+                    (0.0, 10.0, 30.0),
+                )
+            ),
+        )
+        + subrecord(
+            "NVTR",
+            struct.pack("<3H3hI", 0, 1, 2, 0, -1, 1, 8)
+            + struct.pack("<3H3hI", 0, 2, 3, 0, -1, -1, 8),
+        )
+        + subrecord("NVEX", struct.pack("<IIH", 0, 0x207, 4))
+        + subrecord("NVDP", struct.pack("<II", 0x201, 1))
+        + subrecord(
+            "NVGD",
+            struct.pack(
+                "<I8f3H",
+                1,
+                10.0,
+                10.0,
+                0.0,
+                0.0,
+                30.0,
+                10.0,
+                10.0,
+                30.0,
+                2,
+                0,
+                1,
+            ),
+        ),
+    )
     children = group(
         struct.pack("<I", 0x100),
         6,
@@ -161,7 +204,8 @@ def synthetic_plugin() -> bytes:
             + light_reference
             + item_reference
             + container_reference
-            + weapon_reference,
+            + weapon_reference
+            + navmesh,
         ),
     )
     return (
@@ -272,6 +316,14 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(catalog.weapons[0x305].damage, 26)
         self.assertEqual(catalog.weapons[0x305].clip_size, 6)
         self.assertEqual(catalog.weapons[0x305].ammo_form_id, 0x306)
+        navmesh = catalog.navmeshes_for(cell.form_id)[0]
+        self.assertEqual(navmesh.form_id, 0x206)
+        self.assertEqual(navmesh.version, 11)
+        self.assertEqual(navmesh.vertices[2], (10.0, 10.0, 30.0))
+        self.assertEqual(navmesh.triangles[0].adjacent_triangles, (0, -1, 1))
+        self.assertEqual(navmesh.external_connections[0].navmesh_form_id, 0x207)
+        self.assertEqual(navmesh.door_portals[0].door_reference_form_id, 0x201)
+        self.assertEqual(navmesh.spatial_grid.triangle_segments, ((0, 1),))
         self.assertEqual(
             vr_smoke_loadout_manifest(
                 {

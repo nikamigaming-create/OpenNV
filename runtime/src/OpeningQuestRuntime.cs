@@ -81,6 +81,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private OpeningGuideLocomotionClip? _activeGuideLocomotion;
     private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
     private Vector3 _guideDestinationCellUnits;
+    private IReadOnlyList<Vector3> _guidePathCellUnits = Array.Empty<Vector3>();
+    private int _guidePathIndex;
     private OpeningGuideReference? _guideDestinationReference;
     private bool _guideMoving;
     private bool _guideLookAtPlayer;
@@ -289,6 +291,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         if (_guideDestinationReference is not { } destination)
         {
             _guideMoving = false;
+            _guidePathCellUnits = Array.Empty<Vector3>();
+            _guidePathIndex = 0;
             _activeGuideLocomotion = null;
             PlayGuidePackageIdle(package);
             return;
@@ -298,12 +302,31 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _activeGuideLocomotion = package.AlwaysRun
             ? _flow.GuideActorAi.Locomotion.Run
             : _flow.GuideActorAi.Locomotion.Walk;
-        _guideMoving = _guideActor.Placement.Position != _guideDestinationCellUnits;
-        if (!_guideMoving)
+        if (_guideActor.Placement.Position == _guideDestinationCellUnits)
         {
+            _guidePathCellUnits = Array.Empty<Vector3>();
+            _guidePathIndex = 0;
+            _guideMoving = false;
             FinishGuideTravel();
             return;
         }
+        _guidePathCellUnits = _loaded.MainContent.Navigation.FindPath(
+                _loaded.CellToGameUnits(_guideActor.Placement.Position),
+                destination.PositionGameUnits)
+            .Select(_loaded.GameToCellUnits)
+            .ToArray();
+        if (_guidePathCellUnits.Count == 0)
+            throw new InvalidOperationException(
+                "Owned opening guide navigation returned no waypoints.");
+        GD.Print(
+            $"OPENNV_NEW_GAME_GUIDE_PATH package={package.EditorId} " +
+            $"navmeshes={_loaded.MainContent.Navigation.NavMeshes} " +
+            $"vertices={_loaded.MainContent.Navigation.Vertices} " +
+            $"triangles={_loaded.MainContent.Navigation.Triangles} " +
+            $"waypoints={_guidePathCellUnits.Count}");
+        _guidePathIndex = 0;
+        _guideDestinationCellUnits = _guidePathCellUnits[_guidePathIndex];
+        _guideMoving = true;
         PlayGuideAnimation(
             _activeGuideLocomotion.LogicalPath,
             _activeGuideLocomotion.Sha256,
@@ -328,18 +351,31 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 locomotion.LogicalPath,
                 locomotion.Sha256,
                 restart: true);
-        var current = _guideActor.Placement.Position;
-        var offset = _guideDestinationCellUnits - current;
-        var distance = offset.Length();
-        var travel = locomotion.RootMotion.SpeedGameUnitsPerSecond * (float)delta;
-        if (travel >= distance)
+        var travelRemaining =
+            locomotion.RootMotion.SpeedGameUnitsPerSecond * (float)delta;
+        while (_guideMoving)
         {
+            var current = _guideActor.Placement.Position;
+            var offset = _guideDestinationCellUnits - current;
+            var distance = offset.Length();
+            if (travelRemaining < distance)
+            {
+                _guideActor.Placement.Position =
+                    current + offset / distance * travelRemaining;
+                FaceGuideTowardCellPosition(_guideDestinationCellUnits);
+                return;
+            }
             _guideActor.Placement.Position = _guideDestinationCellUnits;
-            FinishGuideTravel();
-            return;
+            travelRemaining -= distance;
+            _guidePathIndex++;
+            if (_guidePathIndex >= _guidePathCellUnits.Count)
+            {
+                FinishGuideTravel();
+                return;
+            }
+            _guideDestinationCellUnits = _guidePathCellUnits[_guidePathIndex];
+            FaceGuideTowardCellPosition(_guideDestinationCellUnits);
         }
-        _guideActor.Placement.Position = current + offset / distance * travel;
-        FaceGuideTowardCellPosition(_guideDestinationCellUnits);
     }
 
     private void FinishGuideTravel()

@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellContentLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v10";
+    private const string CellSceneSchema = "opennv-cell-scene/v11";
 
     internal static LoadedContent Load(
         string scenePath,
@@ -80,12 +80,19 @@ internal static class CellContentLoader
             var cell = source.GetProperty("cell");
             var formId = cell.GetProperty("formId").GetString()!;
             var editorId = cell.GetProperty("editorId").GetString()!;
+            var acceptedCellFormIds = cell.TryGetProperty("sourceCellFormIds", out var sourceCells)
+                ? sourceCells.EnumerateArray().Select(value => value.GetString()!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(new[] { formId }, StringComparer.OrdinalIgnoreCase);
             var root = new Node3D
             {
                 Name = $"CELL_{formId}_{editorId}",
                 Scale = Vector3.One * unitScale,
             };
             parent.AddChild(root);
+            var navigation = CellNavigationGraph.Load(
+                source.GetProperty("navigation"),
+                acceptedCellFormIds);
 
             var loadedReferences = 0;
             var sourceReferences = source.GetProperty("references")
@@ -411,9 +418,6 @@ internal static class CellContentLoader
             var proofDoor = source.GetProperty("proof").GetProperty("doorReferenceFormId").GetString()!;
             if (!doors.ContainsKey(proofDoor))
                 throw new InvalidOperationException($"Cell proof door was not loaded: {proofDoor}");
-            var acceptedCellFormIds = cell.TryGetProperty("sourceCellFormIds", out var sourceCells)
-                ? sourceCells.EnumerateArray().Select(value => value.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : new HashSet<string>(new[] { formId }, StringComparer.OrdinalIgnoreCase);
             var actors = new List<CellActorLoader.PlacedActor>();
             var actorPaths = actorScenesManifestPath is not null
                 ? CellActorLoader.LoadManifest(actorScenesManifestPath, acceptedCellFormIds)
@@ -491,6 +495,7 @@ internal static class CellContentLoader
                 containers,
                 pools,
                 actors,
+                navigation,
                 collisionMeshes,
                 surfaces,
                 vertices,
@@ -837,6 +842,7 @@ internal static class CellContentLoader
         IReadOnlyDictionary<string, ContainerInstance> Containers,
         IReadOnlyDictionary<string, PoolTableInstance> Pools,
         IReadOnlyList<CellActorLoader.PlacedActor> Actors,
+        CellNavigationGraph Navigation,
         int CollisionMeshes,
         int Surfaces,
         int Vertices,

@@ -12,6 +12,7 @@ from pathlib import Path
 from cell_catalog import (
     INITIALLY_DISABLED_RECORD_FLAG,
     BaseObject,
+    CellNavMesh,
     CellCatalog,
     PlacedReference,
     scan_cell_catalog,
@@ -29,9 +30,10 @@ from first_person_rig import prepare_first_person_rig
 from owned_archive_stack import OwnedArchiveStack
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v10"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v11"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 EXTERIOR_RECIPE_SCHEMA = "opennv-exterior-recipe/v1"
+CELL_NAVIGATION_SCHEMA = "opennv-owned-cell-navigation/v1"
 FORM_ID_RADIX = 16
 BYTE_CHANNEL_MAXIMUM = 255.0
 QUATERNION_COMPONENT_SCALE = 0.25
@@ -74,6 +76,47 @@ def godot_position(
 
 def godot_yaw_radians(game_yaw_radians: float) -> float:
     return -game_yaw_radians
+
+
+def navmesh_manifest(navmesh: CellNavMesh) -> dict[str, object]:
+    return {
+        "formId": form_id(navmesh.form_id),
+        "cellFormId": form_id(navmesh.cell_form_id),
+        "version": navmesh.version,
+        "dataTail": list(navmesh.data_tail),
+        "verticesGameUnits": [list(value) for value in navmesh.vertices],
+        "triangles": [
+            {
+                "vertexIndices": list(value.vertex_indices),
+                "adjacentTriangles": list(value.adjacent_triangles),
+                "flags": value.flags,
+            }
+            for value in navmesh.triangles
+        ],
+        "externalConnections": [
+            {
+                "unknown": value.unknown,
+                "navmeshFormId": form_id(value.navmesh_form_id),
+                "triangleIndex": value.triangle_index,
+            }
+            for value in navmesh.external_connections
+        ],
+        "doorPortals": [
+            {
+                "doorReferenceFormId": form_id(value.door_reference_form_id),
+                "unknown": value.unknown,
+            }
+            for value in navmesh.door_portals
+        ],
+        "coverTriangleIndices": list(navmesh.cover_triangle_indices),
+        "spatialGrid": {
+            "divisor": navmesh.spatial_grid.divisor,
+            "bounds": list(navmesh.spatial_grid.bounds),
+            "triangleSegments": [
+                list(value) for value in navmesh.spatial_grid.triangle_segments
+            ],
+        },
+    }
 
 
 def normalized_rgb(color: tuple[int, int, int]) -> list[float]:
@@ -274,6 +317,7 @@ def prepare_cell_scene(
     vr_loadout = vr_smoke_loadout_manifest(recipe, catalog)
     cell_form_id = _find_cell(catalog, str(recipe["cellEditorId"]))
     cell = catalog.cells[cell_form_id]
+    navmeshes = catalog.navmeshes_for(cell_form_id)
     entry_door = int(str(recipe["entryDoorReferenceFormId"]), FORM_ID_RADIX)
     configured_spawn = recipe.get("spawnReferenceFormId")
     if configured_spawn is None:
@@ -513,6 +557,13 @@ def prepare_cell_scene(
             else {}
         ),
         "poolGameplay": pool_gameplay,
+        "navigation": {
+            "schema": CELL_NAVIGATION_SCHEMA,
+            "navmeshes": [
+                navmesh_manifest(value)
+                for value in sorted(navmeshes, key=lambda item: item.form_id)
+            ],
+        },
         "lighting": {
             "ambientColor": normalized_rgb(cell.lighting.ambient_rgb),
             "directionalColor": normalized_rgb(cell.lighting.directional_rgb),
@@ -571,6 +622,9 @@ def prepare_cell_scene(
             "missingOptionalMaterialTextures": unresolved_texture_bindings,
             "materialBindings": sum(len(asset["materials"]) for asset in assets.values()),
             "authoredLights": len(lights),
+            "navmeshes": len(navmeshes),
+            "navmeshVertices": sum(len(value.vertices) for value in navmeshes),
+            "navmeshTriangles": sum(len(value.triangles) for value in navmeshes),
             "pickups": sum(
                 1
                 for reference in references

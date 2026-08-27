@@ -36,7 +36,9 @@ BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "TERM",
     "TREE",
 }
-CATALOG_RECORD_TYPES = frozenset(BASE_RECORD_TYPES | {"CELL", "LGTM", "REFR"})
+CATALOG_RECORD_TYPES = frozenset(
+    BASE_RECORD_TYPES | {"CELL", "LGTM", "NAVM", "REFR"}
+)
 
 REFERENCE_TRANSFORM_BYTES = 24
 REFERENCE_SCALE_BYTES = 4
@@ -90,6 +92,21 @@ WEAPON_DAMAGE_OFFSET = 12
 WEAPON_CLIP_SIZE_OFFSET = 14
 TELEPORT_DESTINATION_TRANSFORM_OFFSET = 4
 TELEPORT_DESTINATION_BYTES = 28
+NAVM_DATA_BYTES = 24
+NAVM_VERTEX = struct.Struct("<3f")
+NAVM_TRIANGLE = struct.Struct("<3H3hI")
+NAVM_TRIANGLE_VERTEX_SLICE = slice(0, 3)
+NAVM_TRIANGLE_ADJACENCY_SLICE = slice(3, 6)
+NAVM_TRIANGLE_FLAGS_INDEX = 6
+NAVM_DOOR_PORTAL = struct.Struct("<II")
+NAVM_EXTERNAL_CONNECTION = struct.Struct("<IIH")
+NAVM_COVER_TRIANGLE_BYTES = 2
+NAVM_VERSION_BYTES = 4
+NAVM_GRID_HEADER_BYTES = 36
+NAVM_GRID_BOUNDS_FLOATS = 8
+NAVM_GRID_SEGMENT_COUNT_BYTES = 2
+NAVM_NO_ADJACENT_TRIANGLE = -1
+NAVM_SHARED_EDGE_VERTEX_COUNT = 2
 
 
 @dataclass(frozen=True)
@@ -176,6 +193,47 @@ class WeaponObject:
 
 
 @dataclass(frozen=True)
+class NavMeshTriangle:
+    vertex_indices: tuple[int, int, int]
+    adjacent_triangles: tuple[int, int, int]
+    flags: int
+
+
+@dataclass(frozen=True)
+class NavMeshDoorPortal:
+    door_reference_form_id: int
+    unknown: int
+
+
+@dataclass(frozen=True)
+class NavMeshExternalConnection:
+    unknown: int
+    navmesh_form_id: int
+    triangle_index: int
+
+
+@dataclass(frozen=True)
+class NavMeshSpatialGrid:
+    divisor: int
+    bounds: tuple[float, float, float, float, float, float, float, float]
+    triangle_segments: tuple[tuple[int, ...], ...]
+
+
+@dataclass(frozen=True)
+class CellNavMesh:
+    form_id: int
+    cell_form_id: int
+    version: int
+    data_tail: tuple[int, int, int]
+    vertices: tuple[tuple[float, float, float], ...]
+    triangles: tuple[NavMeshTriangle, ...]
+    external_connections: tuple[NavMeshExternalConnection, ...]
+    door_portals: tuple[NavMeshDoorPortal, ...]
+    cover_triangle_indices: tuple[int, ...]
+    spatial_grid: NavMeshSpatialGrid
+
+
+@dataclass(frozen=True)
 class PlacedReference:
     form_id: int
     cell_form_id: int
@@ -195,10 +253,14 @@ class CellCatalog:
     lights: dict[int, LightObject]
     containers: dict[int, ContainerObject]
     weapons: dict[int, WeaponObject]
+    navmeshes: dict[int, list[CellNavMesh]]
     references: list[PlacedReference]
 
     def references_for(self, cell_form_id: int) -> list[PlacedReference]:
         return [reference for reference in self.references if reference.cell_form_id == cell_form_id]
+
+    def navmeshes_for(self, cell_form_id: int) -> list[CellNavMesh]:
+        return self.navmeshes.get(cell_form_id, [])
 
 
 def subrecords_by_signature(record: Record) -> dict[str, list[bytes]]:
@@ -376,6 +438,176 @@ def parse_light_object(
     )
 
 
+def parse_navmesh(record: Record) -> CellNavMesh:
+    values = subrecords_by_signature(record)
+
+    def one(signature: str) -> bytes:
+        matches = values.get(signature, [])
+        if len(matches) != 1:
+            raise ValueError(
+                f"NAVM {record.form_id:08x} must contain one {signature} subrecord"
+            )
+        return matches[0]
+
+    version_data = one("NVER")
+    data = one("DATA")
+    vertices_data = one("NVVX")
+    triangles_data = one("NVTR")
+    grid_data = one("NVGD")
+    if len(version_data) != NAVM_VERSION_BYTES:
+        raise ValueError(f"NAVM {record.form_id:08x} has malformed NVER")
+    if len(data) != NAVM_DATA_BYTES:
+        raise ValueError(f"NAVM {record.form_id:08x} has malformed DATA")
+    version = struct.unpack("<I", version_data)[0]
+    cell_form_id, vertex_count, triangle_count, *data_tail = struct.unpack(
+        "<6I", data
+    )
+    parent_cell = cell_parent_form_id(record)
+    if parent_cell is None or parent_cell != cell_form_id:
+        raise ValueError(
+            f"NAVM {record.form_id:08x} DATA CELL disagrees with its parent"
+        )
+    if len(vertices_data) != vertex_count * NAVM_VERTEX.size:
+        raise ValueError(
+            f"NAVM {record.form_id:08x} vertex count disagrees with NVVX"
+        )
+    if len(triangles_data) != triangle_count * NAVM_TRIANGLE.size:
+        raise ValueError(
+            f"NAVM {record.form_id:08x} triangle count disagrees with NVTR"
+        )
+    vertices = tuple(
+        NAVM_VERTEX.unpack_from(vertices_data, offset)
+        for offset in range(0, len(vertices_data), NAVM_VERTEX.size)
+    )
+    if not vertices or not all(
+        math.isfinite(component)
+        for vertex in vertices
+        for component in vertex
+    ):
+        raise ValueError(f"NAVM {record.form_id:08x} has invalid vertices")
+    triangles = []
+    for offset in range(0, len(triangles_data), NAVM_TRIANGLE.size):
+        raw = NAVM_TRIANGLE.unpack_from(triangles_data, offset)
+        vertex_indices = tuple(raw[NAVM_TRIANGLE_VERTEX_SLICE])
+        adjacent = tuple(raw[NAVM_TRIANGLE_ADJACENCY_SLICE])
+        if len(set(vertex_indices)) != len(vertex_indices) or any(
+            index >= vertex_count for index in vertex_indices
+        ):
+            raise ValueError(
+                f"NAVM {record.form_id:08x} triangle has invalid vertices"
+            )
+        if any(
+            index < NAVM_NO_ADJACENT_TRIANGLE
+            for index in adjacent
+        ):
+            raise ValueError(
+                f"NAVM {record.form_id:08x} triangle has invalid adjacency"
+            )
+        triangles.append(
+            NavMeshTriangle(vertex_indices, adjacent, raw[NAVM_TRIANGLE_FLAGS_INDEX])
+        )
+
+    external_data = values.get("NVEX", [])
+    if len(external_data) > 1 or (
+        external_data and len(external_data[0]) % NAVM_EXTERNAL_CONNECTION.size
+    ):
+        raise ValueError(f"NAVM {record.form_id:08x} has malformed NVEX")
+    external_connections = tuple(
+        NavMeshExternalConnection(
+            *NAVM_EXTERNAL_CONNECTION.unpack_from(external_data[0], offset)
+        )
+        for offset in range(
+            0,
+            len(external_data[0]),
+            NAVM_EXTERNAL_CONNECTION.size,
+        )
+    ) if external_data else ()
+    for triangle_index, triangle in enumerate(triangles):
+        source_vertices = set(triangle.vertex_indices)
+        for adjacent in triangle.adjacent_triangles:
+            if adjacent == NAVM_NO_ADJACENT_TRIANGLE:
+                continue
+            internal = (
+                adjacent != triangle_index
+                and adjacent < triangle_count
+                and len(
+                    source_vertices.intersection(
+                        triangles[adjacent].vertex_indices
+                    )
+                )
+                == NAVM_SHARED_EDGE_VERTEX_COUNT
+                and triangle_index in triangles[adjacent].adjacent_triangles
+            )
+            external = adjacent < len(external_connections)
+            if not internal and not external:
+                raise ValueError(
+                    f"NAVM {record.form_id:08x} adjacency cannot be resolved "
+                    "as an internal edge or external connection"
+                )
+
+    door_data = values.get("NVDP", [])
+    if len(door_data) > 1 or (
+        door_data and len(door_data[0]) % NAVM_DOOR_PORTAL.size
+    ):
+        raise ValueError(f"NAVM {record.form_id:08x} has malformed NVDP")
+    door_portals = tuple(
+        NavMeshDoorPortal(*NAVM_DOOR_PORTAL.unpack_from(door_data[0], offset))
+        for offset in range(0, len(door_data[0]), NAVM_DOOR_PORTAL.size)
+    ) if door_data else ()
+    cover_data = values.get("NVCA", [])
+    if len(cover_data) > 1 or (
+        cover_data and len(cover_data[0]) % NAVM_COVER_TRIANGLE_BYTES
+    ):
+        raise ValueError(f"NAVM {record.form_id:08x} has malformed NVCA")
+    cover_triangle_indices = tuple(
+        struct.unpack_from("<H", cover_data[0], offset)[0]
+        for offset in range(0, len(cover_data[0]), NAVM_COVER_TRIANGLE_BYTES)
+    ) if cover_data else ()
+    if any(index >= triangle_count for index in cover_triangle_indices):
+        raise ValueError(f"NAVM {record.form_id:08x} cover triangle is out of range")
+
+    if len(grid_data) < NAVM_GRID_HEADER_BYTES:
+        raise ValueError(f"NAVM {record.form_id:08x} has malformed NVGD")
+    divisor = struct.unpack_from("<I", grid_data)[0]
+    bounds = struct.unpack_from(
+        f"<{NAVM_GRID_BOUNDS_FLOATS}f",
+        grid_data,
+        NAVM_VERSION_BYTES,
+    )
+    if divisor == 0 or not all(math.isfinite(value) for value in bounds):
+        raise ValueError(f"NAVM {record.form_id:08x} has invalid NVGD bounds")
+    grid_offset = NAVM_GRID_HEADER_BYTES
+    segments = []
+    for _ in range(divisor * divisor):
+        if len(grid_data) - grid_offset < NAVM_GRID_SEGMENT_COUNT_BYTES:
+            raise ValueError(f"NAVM {record.form_id:08x} truncates an NVGD segment")
+        count = struct.unpack_from("<H", grid_data, grid_offset)[0]
+        grid_offset += NAVM_GRID_SEGMENT_COUNT_BYTES
+        segment_bytes = count * 2
+        if len(grid_data) - grid_offset < segment_bytes:
+            raise ValueError(f"NAVM {record.form_id:08x} truncates NVGD indices")
+        segment = struct.unpack_from(f"<{count}H", grid_data, grid_offset)
+        grid_offset += segment_bytes
+        if any(index >= triangle_count for index in segment):
+            raise ValueError(f"NAVM {record.form_id:08x} NVGD index is out of range")
+        segments.append(tuple(segment))
+    if grid_offset != len(grid_data):
+        raise ValueError(f"NAVM {record.form_id:08x} has trailing NVGD bytes")
+
+    return CellNavMesh(
+        record.form_id,
+        cell_form_id,
+        version,
+        tuple(data_tail),
+        vertices,
+        tuple(triangles),
+        external_connections,
+        door_portals,
+        cover_triangle_indices,
+        NavMeshSpatialGrid(divisor, bounds, tuple(segments)),
+    )
+
+
 def _container_object(record: Record, values: dict[str, list[bytes]]) -> ContainerObject:
     items = []
     for data in values.get("CNTO", []):
@@ -407,7 +639,7 @@ def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObje
 
 @cache
 def scan_cell_catalog(path: Path) -> CellCatalog:
-    catalog = CellCatalog({}, {}, {}, {}, {}, {}, [])
+    catalog = CellCatalog({}, {}, {}, {}, {}, {}, {}, [])
     for record in iter_plugin_records(path, CATALOG_RECORD_TYPES):
         if record.signature == "CELL":
             values = subrecords_by_signature(record)
@@ -471,6 +703,9 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 catalog.containers[record.form_id] = _container_object(record, values)
             elif record.signature == "WEAP":
                 catalog.weapons[record.form_id] = _weapon_object(record, values)
+        elif record.signature == "NAVM":
+            navmesh = parse_navmesh(record)
+            catalog.navmeshes.setdefault(navmesh.cell_form_id, []).append(navmesh)
         elif record.signature == "REFR":
             cell_form_id = cell_parent_form_id(record)
             if cell_form_id is None:

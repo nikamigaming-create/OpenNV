@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v10";
+    private const string CellSceneSchema = "opennv-cell-scene/v11";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -448,6 +448,11 @@ internal static class CellSceneLoader
             position.X - OriginGameUnits.X,
             position.Z - OriginGameUnits.Z,
             -(position.Y - OriginGameUnits.Y));
+
+        internal Vector3 CellToGameUnits(Vector3 position) => new(
+            position.X + OriginGameUnits.X,
+            -position.Z + OriginGameUnits.Y,
+            position.Y + OriginGameUnits.Z);
 
         internal Vector3 GameToWorld(Vector3 position) => Root.ToGlobal(GameToCellUnits(position));
     }

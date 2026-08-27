@@ -7,6 +7,7 @@ from pathlib import Path
 
 from cell_catalog import BaseObject, PlacedReference, scan_cell_catalog
 from cell_scene import (
+    CELL_NAVIGATION_SCHEMA,
     CELL_SCENE_SCHEMA,
     EXTERIOR_RECIPE_SCHEMA,
     _atomic_json,
@@ -14,6 +15,7 @@ from cell_scene import (
     godot_position,
     godot_rotation_quaternion,
     godot_yaw_radians,
+    navmesh_manifest,
     normalized_rgb,
 )
 from cell_catalog import INITIALLY_DISABLED_RECORD_FLAG
@@ -230,6 +232,22 @@ def prepare_exterior_scene(
         raise ValueError(f"Exterior loaded grid has missing source CELLs: {missing_grids}")
     loaded_cells = [cells_by_grid[grid] for grid in requested_grids]
     loaded_cell_form_ids = {candidate.form_id for candidate in loaded_cells}
+    navigation_source_cell_ids = {
+        *loaded_cell_form_ids,
+        persistent_cell_form_id,
+    }
+    navigation_navmeshes = sorted(
+        (
+            navmesh
+            for source_cell_form_id in navigation_source_cell_ids
+            for navmesh in catalog.navmeshes_for(source_cell_form_id)
+        ),
+        key=lambda value: value.form_id,
+    )
+    if len({navmesh.form_id for navmesh in navigation_navmeshes}) != len(
+        navigation_navmeshes
+    ):
+        raise ValueError("Exterior loaded grid selected duplicate NAVM records")
     loaded_grid_set = set(requested_grids)
     selection = recipe["selection"]
     included_record_types = {
@@ -827,6 +845,12 @@ def prepare_exterior_scene(
             "entryDoorReferenceFormId": form_id(entry_door),
             "reciprocalDoorReferenceFormId": form_id(reciprocal_door),
         },
+        "navigation": {
+            "schema": CELL_NAVIGATION_SCHEMA,
+            "navmeshes": [
+                navmesh_manifest(navmesh) for navmesh in navigation_navmeshes
+            ],
+        },
         "lighting": {
             "mode": environment["mode"],
             "ambientColor": environment["ambientColor"],
@@ -866,6 +890,13 @@ def prepare_exterior_scene(
             "sourceReferences": len(candidates),
             "loadedCells": len(loaded_cells),
             "loadedGridDiameter": loaded_grid_diameter,
+            "navmeshes": len(navigation_navmeshes),
+            "navmeshVertices": sum(
+                len(navmesh.vertices) for navmesh in navigation_navmeshes
+            ),
+            "navmeshTriangles": sum(
+                len(navmesh.triangles) for navmesh in navigation_navmeshes
+            ),
             "distantReferenceRadiusCells": distant_reference_radius,
             "distantReferenceTypes": sorted(distant_reference_types),
             "distantSourceCells": len(distant_source_cells),
