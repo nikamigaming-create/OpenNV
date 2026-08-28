@@ -17,16 +17,18 @@ internal partial class GameplaySession : Node
     private readonly Dictionary<string, PoolTableInstance> _pools = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PoolTableInstance.PoolState> _loadedPoolStates =
         new(StringComparer.OrdinalIgnoreCase);
-    private Label? _objectiveLabel;
-    private Label? _statusLabel;
-    private Label? _inventoryLabel;
-    private Label3D? _xrHudLabel;
+    private GameplayUiController? _uiController;
     private string _savePath = "";
     private string _cellFormId = "";
+    private string _cellEditorId = "";
     private string _entryDoorFormId = "";
     private RuntimeConfiguration _configuration = null!;
     private bool _useXrHud;
     private bool _showHud = true;
+    private string _lastStatus = "Ready";
+    private CellPlayer? _player;
+    private PlayerTransformState? _loadedPlayerTransform;
+    private IReadOnlyList<GameplayUiMapMarker> _mapMarkers = Array.Empty<GameplayUiMapMarker>();
     private string? _equippedWeaponFormId;
     private string? _weaponAmmoFormId;
     private int _weaponDamage;
@@ -44,10 +46,11 @@ internal partial class GameplaySession : Node
     internal int OpenDoorsCount => _doorStates.Count(entry => entry.Value);
     internal int ReserveAmmo =>
         _weaponAmmoFormId is null ? 0 : _inventory.GetValueOrDefault(_weaponAmmoFormId).Count;
-    internal bool HasXrHud => _xrHudLabel is not null;
-    internal bool HasDesktopHud => _objectiveLabel is not null && _statusLabel is not null &&
-        _inventoryLabel is not null;
-    internal float XrHudPixelSize => _xrHudLabel?.PixelSize ?? 0.0f;
+    internal bool HasXrHud => _uiController?.HasXrHud == true;
+    internal bool HasDesktopHud => _uiController?.HasDesktopHud == true;
+    internal bool HasPipBoy => _uiController?.HasPipBoy == true;
+    internal float XrHudPixelSize => _uiController?.XrHudPixelSize ?? 0.0f;
+    internal bool IsPipBoyOpen => _uiController?.IsPipBoyOpen == true;
     internal bool HasItem(string itemFormId) => _inventory.ContainsKey(itemFormId);
     internal OpeningCampaignState? OpeningState => _openingState;
     internal bool IsContainerEmptied(string referenceFormId) => _emptiedContainers.Contains(referenceFormId);
@@ -60,6 +63,7 @@ internal partial class GameplaySession : Node
 
     internal void Configure(
         string cellFormId,
+        string cellEditorId,
         string entryDoorFormId,
         RuntimeConfiguration configuration,
         string? configuredSavePath,
@@ -70,6 +74,7 @@ internal partial class GameplaySession : Node
         _configuration = configuration;
         Name = "GameplaySession";
         _cellFormId = cellFormId;
+        _cellEditorId = cellEditorId;
         _entryDoorFormId = entryDoorFormId;
         _useXrHud = useXrHud;
         _showHud = showHud;
@@ -80,65 +85,112 @@ internal partial class GameplaySession : Node
 
     public override void _Ready()
     {
-        if (_useXrHud || !_showHud)
-            return;
-        var layer = new CanvasLayer { Name = "GameplayHud" };
-        AddChild(layer);
-        var panel = new ColorRect
-        {
-            Position = _configuration.Hud.DesktopPanelPositionPixels.Vector2(),
-            Size = _configuration.Hud.DesktopPanelSizePixels.Vector2(),
-            Color = _configuration.Hud.DesktopPanelColorRgba.Color(),
-        };
-        layer.AddChild(panel);
-        var labels = new VBoxContainer
-        {
-            Position = _configuration.Hud.DesktopLabelsPositionPixels.Vector2(),
-            Size = _configuration.Hud.DesktopLabelsSizePixels.Vector2(),
-        };
-        layer.AddChild(labels);
-        _objectiveLabel = new Label();
-        _statusLabel = new Label();
-        _inventoryLabel = new Label();
-        foreach (var label in new[] { _objectiveLabel, _statusLabel, _inventoryLabel })
-        {
-            label.AddThemeColorOverride("font_color", _configuration.Hud.TextColorRgba.Color());
-            label.AddThemeFontSizeOverride("font_size", _configuration.Hud.DesktopFontSizePixels);
-            labels.AddChild(label);
-        }
-        var crosshair = new Label
-        {
-            Text = "+",
-            Position = _configuration.Hud.CrosshairPositionPixels.Vector2(),
-        };
-        crosshair.AddThemeColorOverride("font_color", Colors.White);
-        crosshair.AddThemeFontSizeOverride("font_size", _configuration.Hud.CrosshairFontSizePixels);
-        layer.AddChild(crosshair);
+        _uiController = new GameplayUiController();
+        AddChild(_uiController);
+        _uiController.Configure(this, _configuration, _useXrHud, _showHud);
         RefreshHud("WASD move • E activate • Left click use/fire • R reload/reset • F5 save");
     }
 
-    internal void AttachXrHud(Node3D leftHand)
+    internal void AttachXrHud(Node3D leftHand, Node3D aimSource)
     {
-        if (!_useXrHud)
-            throw new InvalidOperationException("Cannot attach an XR HUD to a desktop gameplay session.");
-        var mount = new Node3D
-        {
-            Name = "XrWristHud",
-            Position = _configuration.Hud.XrMountPositionMeters.Vector3(),
-            RotationDegrees = _configuration.Hud.XrMountRotationDegrees.Vector3(),
-        };
-        leftHand.AddChild(mount);
-        _xrHudLabel = new Label3D
-        {
-            Name = "XrObjectiveInventory",
-            FontSize = _configuration.Hud.XrFontSizePixels,
-            PixelSize = _configuration.Hud.XrPixelSizeMeters,
-            Modulate = _configuration.Hud.TextColorRgba.Color(),
-            OutlineSize = _configuration.Hud.XrOutlineSizePixels,
-            Text = "OPENNV XR HUD",
-        };
-        mount.AddChild(_xrHudLabel);
+        if (_uiController is null)
+            throw new InvalidOperationException("Gameplay UI is not ready for XR attachment.");
+        _uiController.AttachXrHud(leftHand, aimSource);
         RefreshHud("Left stick move • Right stick snap-turn • Grip activate • Trigger fire • B reload • X save");
+    }
+
+    internal void ConfigureWorldContext(
+        CellPlayer player,
+        IEnumerable<CellContentLoader.LoadedContent> contents)
+    {
+        _player = player;
+        _loadedPlayerTransform?.Apply(player);
+        _mapMarkers = contents
+            .SelectMany(content => content.PlacedReferences)
+            .Where(reference => !IsReferenceRemoved(reference.FormId))
+            .Select(reference => new GameplayUiMapMarker(
+                reference.FormId,
+                reference.BaseEditorId,
+                reference.Placement.GlobalPosition))
+            .OrderBy(marker => marker.FormId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _uiController?.Refresh();
+    }
+
+    internal void TogglePipBoy() => _uiController?.TogglePipBoy();
+
+    internal void ClosePipBoy() => _uiController?.ClosePipBoy();
+
+    internal GameplayUiSnapshot BuildUiSnapshot()
+    {
+        var objective = ObjectiveStage switch
+        {
+            SandboxObjectiveStage.EquipWeapon => _configuration.Hud.Copy.ObjectiveEquipWeapon,
+            SandboxObjectiveStage.FireWeapon => _configuration.Hud.Copy.ObjectiveFireWeapon,
+            SandboxObjectiveStage.TakeAid => _configuration.Hud.Copy.ObjectiveTakeAid,
+            SandboxObjectiveStage.OpenEntryDoor => _configuration.Hud.Copy.ObjectiveOpenEntryDoor,
+            _ => _configuration.Hud.Copy.ObjectiveComplete,
+        };
+        var opening = _openingState;
+        var equipped = _equippedWeaponFormId is not null &&
+            _inventory.TryGetValue(_equippedWeaponFormId, out var equippedItem)
+            ? equippedItem.EditorId
+            : "None";
+        var controls = _configuration.Player.DesktopInput;
+        return new GameplayUiSnapshot(
+            _cellFormId,
+            _cellEditorId,
+            _player?.GlobalPosition ?? Vector3.Zero,
+            _lastStatus,
+            objective,
+            opening?.PlayerName ?? "",
+            opening?.Completed == true,
+            ObjectiveStage,
+            _equippedWeaponFormId,
+            equipped,
+            _ammoInMagazine,
+            _weaponClipSize,
+            ReserveAmmo,
+            _inventory.Values
+                .OrderBy(item => item.EditorId, StringComparer.OrdinalIgnoreCase)
+                .Select(item => new GameplayUiInventoryItem(
+                    item.ItemFormId,
+                    item.EditorId,
+                    item.RecordType,
+                    item.Count,
+                    item.ItemFormId.Equals(_equippedWeaponFormId, StringComparison.OrdinalIgnoreCase)))
+                .ToArray(),
+            opening?.Quests
+                .OrderBy(quest => quest.EditorId, StringComparer.OrdinalIgnoreCase)
+                .Select(quest => new GameplayUiQuest(
+                    quest.FormId,
+                    quest.EditorId,
+                    quest.Stage,
+                    quest.Running,
+                    quest.Stopped))
+                .ToArray() ?? Array.Empty<GameplayUiQuest>(),
+            opening?.Objectives
+                .OrderBy(objective => objective.QuestEditorId, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(objective => objective.Index)
+                .Select(objective => new GameplayUiObjective(
+                    objective.QuestEditorId,
+                    objective.Index,
+                    objective.State,
+                    objective.Enabled,
+                    objective.Text))
+                .ToArray() ?? Array.Empty<GameplayUiObjective>(),
+            _mapMarkers,
+            [
+                new GameplayUiControl("Move", $"{controls.MoveForward.PhysicalKey}/{controls.MoveLeft.PhysicalKey}/" +
+                    $"{controls.MoveBackward.PhysicalKey}/{controls.MoveRight.PhysicalKey}"),
+                new GameplayUiControl("Activate", controls.Activate.PhysicalKey),
+                new GameplayUiControl("Use / fire", controls.Fire.Button),
+                new GameplayUiControl("Reload", controls.Reload.PhysicalKey),
+                new GameplayUiControl("Save", controls.Save.PhysicalKey),
+                new GameplayUiControl("Pip-Boy", controls.PipBoy.PhysicalKey),
+                new GameplayUiControl("Close", controls.Cancel.PhysicalKey),
+            ],
+            _savePath);
     }
 
     internal void PrepareStartingLoadout(StartingWeapon loadout)
@@ -308,6 +360,7 @@ internal partial class GameplaySession : Node
                 .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase),
             emptiedContainers = _emptiedContainers.Order(StringComparer.OrdinalIgnoreCase),
+            playerTransform = _player is null ? null : PlayerTransformState.Capture(_player),
             equippedWeaponFormId = _equippedWeaponFormId,
             weaponAmmoFormId = _weaponAmmoFormId,
             weaponDamage = _weaponDamage,
@@ -361,6 +414,8 @@ internal partial class GameplaySession : Node
         poolTables = _pools.Count,
         poolBalls = _pools.Values.Sum(table => table.BallCount),
         pocketedPoolBalls = _pools.Values.Sum(table => table.PocketedBallCount),
+        playerTransformRestored = _loadedPlayerTransform is not null,
+        playerPosition = _player is null ? null : Vector(_player.GlobalPosition),
         opening = _openingState is null
             ? null
             : new
@@ -437,6 +492,13 @@ internal partial class GameplaySession : Node
             root.TryGetProperty("opening", out var opening) &&
             opening.ValueKind == JsonValueKind.Object)
             _openingState = OpeningCampaignState.Parse(opening);
+        if (root.TryGetProperty("playerTransform", out var playerTransform))
+        {
+            if (playerTransform.ValueKind is not JsonValueKind.Object and not JsonValueKind.Null)
+                throw new InvalidOperationException("Saved player transform has an invalid shape.");
+            if (playerTransform.ValueKind == JsonValueKind.Object)
+                _loadedPlayerTransform = PlayerTransformState.Parse(playerTransform);
+        }
     }
 
     private void AddInventory(string itemFormId, string editorId, string recordType, int count)
@@ -449,49 +511,8 @@ internal partial class GameplaySession : Node
 
     private void RefreshHud(string status)
     {
-        var objective = ObjectiveStage switch
-        {
-            SandboxObjectiveStage.EquipWeapon => _configuration.Hud.Copy.ObjectiveEquipWeapon,
-            SandboxObjectiveStage.FireWeapon => _configuration.Hud.Copy.ObjectiveFireWeapon,
-            SandboxObjectiveStage.TakeAid => _configuration.Hud.Copy.ObjectiveTakeAid,
-            SandboxObjectiveStage.OpenEntryDoor => _configuration.Hud.Copy.ObjectiveOpenEntryDoor,
-            _ => _configuration.Hud.Copy.ObjectiveComplete,
-        };
-        var ammunition = _equippedWeaponFormId is null
-            ? "--/--"
-            : $"{_ammoInMagazine}/{_weaponClipSize}";
-        var statusLine = $"{WeaponLabel} {ammunition} +{ReserveAmmo}   {status}";
-        var inventory = _configuration.Hud.Copy.InventoryPrefix +
-            (_inventory.Count == 0
-                ? _configuration.Hud.Copy.EmptyInventory
-                : string.Join(
-                    " • ",
-                    _inventory.Values
-                        .OrderBy(item => item.EditorId, StringComparer.OrdinalIgnoreCase)
-                        .Select(item => $"{item.EditorId} x{item.Count}")));
-        if (_objectiveLabel is not null)
-        {
-            _objectiveLabel.Text = objective;
-            _statusLabel!.Text = statusLine;
-            _inventoryLabel!.Text = inventory;
-        }
-        if (_xrHudLabel is not null)
-        {
-            var xrObjective = ObjectiveStage switch
-            {
-                SandboxObjectiveStage.EquipWeapon => "OBJ Equip weapon",
-                SandboxObjectiveStage.FireWeapon => "OBJ Fire weapon",
-                SandboxObjectiveStage.TakeAid => "OBJ Take aid",
-                SandboxObjectiveStage.OpenEntryDoor => "OBJ Open entry door",
-                _ => "OBJ Complete",
-            };
-            var maximumStatusCharacters = _configuration.Hud.XrMaximumStatusCharacters;
-            var compactStatus = status.Length <= maximumStatusCharacters
-                ? status
-                : status[..maximumStatusCharacters];
-            _xrHudLabel.Text =
-                $"{xrObjective}\n{WeaponLabel} {ammunition} +{ReserveAmmo}\n{compactStatus}";
-        }
+        _lastStatus = status;
+        _uiController?.Refresh();
     }
 
     private static string ResolvePath(string path) =>
@@ -519,6 +540,58 @@ internal partial class GameplaySession : Node
         return new Quaternion(values[0], values[1], values[2], values[3]).Normalized();
     }
 
+    private sealed record PlayerTransformState(Vector3 Position, Quaternion Rotation)
+    {
+        internal static PlayerTransformState Capture(CellPlayer player)
+        {
+            var transform = player.GlobalTransform;
+            return new PlayerTransformState(
+                transform.Origin,
+                transform.Basis.GetRotationQuaternion().Normalized());
+        }
+
+        internal static PlayerTransformState Parse(JsonElement source)
+        {
+            var rotationValues = source.GetProperty("Rotation")
+                .EnumerateArray()
+                .Select(value => value.GetSingle())
+                .ToArray();
+            if (rotationValues.Length != 4)
+                throw new InvalidOperationException("Saved player transform rotation is malformed.");
+            var result = new PlayerTransformState(
+                ReadVector(source.GetProperty("Position")),
+                new Quaternion(
+                    rotationValues[0],
+                    rotationValues[1],
+                    rotationValues[2],
+                    rotationValues[3]));
+            result.Validate();
+            return result;
+        }
+
+        internal void Apply(CellPlayer player)
+        {
+            Validate();
+            var scale = player.GlobalTransform.Basis.Scale;
+            player.GlobalTransform = new Transform3D(
+                new Basis(Rotation).Scaled(scale),
+                Position);
+        }
+
+        private void Validate()
+        {
+            if (!float.IsFinite(Position.X) ||
+                !float.IsFinite(Position.Y) ||
+                !float.IsFinite(Position.Z) ||
+                !float.IsFinite(Rotation.X) ||
+                !float.IsFinite(Rotation.Y) ||
+                !float.IsFinite(Rotation.Z) ||
+                !float.IsFinite(Rotation.W) ||
+                !Rotation.IsNormalized())
+                throw new InvalidOperationException("Saved player transform is invalid.");
+        }
+    }
+
     private string WeaponLabel =>
         _equippedWeaponFormId is not null && _inventory.TryGetValue(_equippedWeaponFormId, out var weapon)
             ? weapon.EditorId
@@ -533,7 +606,7 @@ internal partial class GameplaySession : Node
         int ClipSize,
         int ReserveRounds);
 
-    private readonly record struct InventoryEntry(
+    internal readonly record struct InventoryEntry(
         string ItemFormId,
         string EditorId,
         string RecordType,

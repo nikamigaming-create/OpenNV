@@ -233,6 +233,10 @@ internal sealed record RuntimeConfiguration(
         RequireVector(Hud.CrosshairPositionPixels, 2, nameof(Hud.CrosshairPositionPixels));
         RequireVector(Hud.XrMountPositionMeters, 3, nameof(Hud.XrMountPositionMeters));
         RequireVector(Hud.XrMountRotationDegrees, 3, nameof(Hud.XrMountRotationDegrees));
+        RequireVector(Hud.PipBoyPanelPositionPixels, 2, nameof(Hud.PipBoyPanelPositionPixels));
+        RequireVector(Hud.PipBoyPanelSizePixels, 2, nameof(Hud.PipBoyPanelSizePixels));
+        if (Hud.PipBoyPanelSizePixels.Any(value => value <= 0.0f))
+            throw new InvalidOperationException("Pip-Boy panel size must be positive.");
         RequireColor(Renderer.BackgroundColorRgba, nameof(Renderer.BackgroundColorRgba));
         RequireColor(Renderer.NeutralNormalColorRgba, nameof(Renderer.NeutralNormalColorRgba));
         if (Renderer.NeutralNormalTextureSizePixels.Length != 2 ||
@@ -250,6 +254,8 @@ internal sealed record RuntimeConfiguration(
         RequireColor(Hud.TextColorRgba, nameof(Hud.TextColorRgba));
         foreach (var text in Hud.Copy.Values)
             RequireText(text, nameof(Hud.Copy));
+        foreach (var text in Hud.PipBoy.Values)
+            RequireText(text, nameof(Hud.PipBoy));
         RequireColor(DiagnosticPreview.BackgroundColorRgba, nameof(DiagnosticPreview.BackgroundColorRgba));
         RequireColor(DiagnosticPreview.AmbientColorRgba, nameof(DiagnosticPreview.AmbientColorRgba));
         RequirePositive(
@@ -690,6 +696,7 @@ internal sealed record DesktopInputConfiguration(
     DesktopKeyBindingConfiguration Reload,
     DesktopKeyBindingConfiguration Save,
     DesktopKeyBindingConfiguration Cancel,
+    DesktopKeyBindingConfiguration PipBoy,
     DesktopMouseBindingConfiguration Fire,
     DesktopMouseBindingConfiguration CaptureMouse,
     DesktopMouseBindingConfiguration PoolPowerUp,
@@ -708,6 +715,7 @@ internal sealed record DesktopInputConfiguration(
             yield return Reload;
             yield return Save;
             yield return Cancel;
+            yield return PipBoy;
         }
     }
 
@@ -885,8 +893,11 @@ internal sealed record HudConfiguration(
     float XrPixelSizeMeters,
     int XrOutlineSizePixels,
     int XrMaximumStatusCharacters,
+    float[] PipBoyPanelPositionPixels,
+    float[] PipBoyPanelSizePixels,
     string DefaultSavePath,
-    HudCopyConfiguration Copy);
+    HudCopyConfiguration Copy,
+    PipBoyCopyConfiguration PipBoy);
 
 internal sealed record HudCopyConfiguration(
     string ObjectiveEquipWeapon,
@@ -906,6 +917,33 @@ internal sealed record HudCopyConfiguration(
         ObjectiveComplete,
         InventoryPrefix,
         EmptyInventory,
+    ];
+}
+
+internal sealed record PipBoyCopyConfiguration(
+    string Title,
+    string StatusTab,
+    string ItemsTab,
+    string DataTab,
+    string MapTab,
+    string ControlsTab,
+    string EmptyInventory,
+    string EmptyQuests,
+    string EmptyMap,
+    string CloseHint)
+{
+    internal IEnumerable<string> Values =>
+    [
+        Title,
+        StatusTab,
+        ItemsTab,
+        DataTab,
+        MapTab,
+        ControlsTab,
+        EmptyInventory,
+        EmptyQuests,
+        EmptyMap,
+        CloseHint,
     ];
 }
 

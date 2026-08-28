@@ -16,7 +16,7 @@ XR_REPORT_SCHEMA = "opennv-openxr-rig/v3"
 XR_SIMULATOR_REPORT_SCHEMA = "opennv-openxr-simulator-acceptance/v1"
 FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v1"
 GAMEPLAY_REPORT_SCHEMA = "opennv-godot-playable-route/v1"
-SANDBOX_SAVE_SCHEMA = "opennv-sandbox-save/v2"
+CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v3"
 POOL_REPORT_SCHEMA = "opennv-pool-practice/v1"
 FLOAT_COMPARISON_TOLERANCE = 1.0e-6
 
@@ -89,7 +89,7 @@ def validate_xr_report(
         "XR physics rate differs",
     )
     _require(bool(report["worldSpaceHud"]), "XR world-space HUD is missing")
-    _require(save["schema"] == SANDBOX_SAVE_SCHEMA, "XR save schema differs")
+    _require(save["schema"] == CAMPAIGN_SAVE_SCHEMA, "XR save schema differs")
     _require(save["equippedWeaponFormId"] == loadout["weaponFormId"], "XR weapon identity differs")
     _require(save["weaponAmmoFormId"] == loadout["ammoFormId"], "XR ammunition identity differs")
     _require(int(save["weaponDamage"]) == int(loadout["damage"]), "XR weapon damage differs")
@@ -281,7 +281,7 @@ def validate_xr_simulator_report(
     _require(int(control["AcceptedFireActions"]) >= int(acceptance["minimumAcceptedFireActions"]), "XR fire was not accepted")
     _require(int(control["AcceptedReloadActions"]) >= int(acceptance["minimumAcceptedReloadActions"]), "XR reload was not accepted")
     _require(int(control["SaveEdges"]) >= int(acceptance["minimumSaveActions"]), "XR save was not accepted")
-    _require(gameplay["schema"] == SANDBOX_SAVE_SCHEMA, "XR simulator save schema differs")
+    _require(gameplay["schema"] == CAMPAIGN_SAVE_SCHEMA, "XR simulator save schema differs")
     _require(gameplay["equippedWeaponFormId"] == loadout["weaponFormId"], "XR simulator weapon differs")
     _require(int(gameplay["ammoInMagazine"]) == int(loadout["clipSize"]), "XR simulator reload outcome differs")
     _require(int(gameplay["reserveAmmo"]) == int(loadout["reserveRounds"]) - 1, "XR simulator reserve differs")
@@ -312,10 +312,28 @@ def validate_flat_controls_report(
     _require(report["visibleHandProvider"] == first_person["rig"]["provider"], "Flat hand provider differs")
     _require(bool(report["heldWeapon"]), "Flat held weapon is missing")
     _require(bool(report["desktopHud"]), "Flat HUD is missing")
+    pip_boy = report.get("pipBoy")
+    _require(isinstance(pip_boy, dict), "Flat Pip-Boy report is missing")
+    _require(
+        bool(pip_boy["available"])
+        and bool(pip_boy["opened"])
+        and bool(pip_boy["closed"]),
+        "Flat Pip-Boy did not open and close",
+    )
     _require(int(report["openDoors"]) >= 1, "Flat activate did not open a door")
     expected_keys = {
         str(desktop[name]["action"]): str(desktop[name]["physicalKey"])
-        for name in ("moveLeft", "moveRight", "moveForward", "moveBackward", "activate", "reload", "save", "cancel")
+        for name in (
+            "moveLeft",
+            "moveRight",
+            "moveForward",
+            "moveBackward",
+            "activate",
+            "reload",
+            "save",
+            "cancel",
+            "pipBoy",
+        )
     }
     actual_keys = {str(row["Action"]): str(row["PhysicalKey"]) for row in report["keyBindings"]}
     _require(actual_keys == expected_keys, "Flat key bindings differ from configuration")
@@ -325,7 +343,7 @@ def validate_flat_controls_report(
     }
     actual_mouse = {str(row["Action"]): str(row["Button"]) for row in report["mouseBindings"]}
     _require(actual_mouse == expected_mouse, "Flat mouse bindings differ from configuration")
-    _require(gameplay["schema"] == SANDBOX_SAVE_SCHEMA, "Flat save schema differs")
+    _require(gameplay["schema"] == CAMPAIGN_SAVE_SCHEMA, "Flat save schema differs")
     _require(gameplay["equippedWeaponFormId"] == loadout["weaponFormId"], "Flat weapon differs")
     _require(int(gameplay["ammoInMagazine"]) == int(loadout["clipSize"]), "Flat reload outcome differs")
     _require(int(gameplay["reserveAmmo"]) == int(loadout["reserveRounds"]) - 1, "Flat reserve differs")

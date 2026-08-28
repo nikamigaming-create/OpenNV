@@ -53,6 +53,7 @@ internal static class XrRigLayoutAcceptance
         session.Configure(
             proof.SessionId,
             proof.SessionId,
+            proof.SessionId,
             configuration,
             options.TryGetValue("save-path", out var savePath) ? savePath : null,
             true);
@@ -75,10 +76,9 @@ internal static class XrRigLayoutAcceptance
             session.ReserveAmmo != proof.ExpectedReserveRoundsAfterReload)
             throw new InvalidOperationException(
                 "OpenNV OpenXR ammunition outcome disagrees with configuration.");
-        var xrHud = player.LeftGrip!.FindChild("XrObjectiveInventory", true, false);
         if (!player.UsesXr || player.Camera is not XRCamera3D || player.XrOrigin is null ||
             player.LeftGrip is null || player.RightGrip is null ||
-            player.LeftAim is null || player.RightAim is null || xrHud is not Label3D ||
+            player.LeftAim is null || player.RightAim is null || !session.HasXrHud ||
             !Mathf.IsEqualApprox(player.XrOrigin.WorldScale, configuration.Xr.WorldScale))
             throw new InvalidOperationException("OpenNV OpenXR rig hierarchy is incomplete.");
 
@@ -111,7 +111,7 @@ internal static class XrRigLayoutAcceptance
             worldScale = player.XrOrigin.WorldScale,
             desiredEyeHeightMeters = player.DesiredEyeHeightMeters,
             physicsTicksPerSecond = Engine.PhysicsTicksPerSecond,
-            worldSpaceHud = xrHud is Label3D,
+            worldSpaceHud = session.HasXrHud,
             sharedSaveSchema = session.Report(),
         };
         if (options.TryGetValue("report", out var reportPath))

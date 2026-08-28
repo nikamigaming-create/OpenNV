@@ -80,6 +80,7 @@
       "reload": { "action": "flat_reload", "physicalKey": "R" },
       "save": { "action": "flat_save", "physicalKey": "F5" },
       "cancel": { "action": "flat_cancel", "physicalKey": "Escape" },
+      "pipBoy": { "action": "flat_pip_boy", "physicalKey": "Tab" },
       "fire": { "action": "flat_fire", "button": "Left" },
       "captureMouse": { "action": "flat_capture_mouse", "button": "Right" },
       "poolPowerUp": { "action": "flat_pool_power_up", "button": "WheelUp" },
@@ -258,6 +259,8 @@
     "xrPixelSizeMeters": 0.00032,
     "xrOutlineSizePixels": 4,
     "xrMaximumStatusCharacters": 38,
+    "pipBoyPanelPositionPixels": [260.0, 84.0],
+    "pipBoyPanelSizePixels": [760.0, 560.0],
     "defaultSavePath": "user://saves/goodsprings-sandbox-v1.json",
     "copy": {
       "objectiveEquipWeapon": "OBJECTIVE  Equip an authored weapon",
@@ -267,6 +270,18 @@
       "objectiveComplete": "OBJECTIVE COMPLETE  Authored sandbox route passed",
       "inventoryPrefix": "INVENTORY  ",
       "emptyInventory": "empty"
+    },
+    "pipBoy": {
+      "title": "PIP-BOY",
+      "statusTab": "STATUS",
+      "itemsTab": "ITEMS",
+      "dataTab": "DATA",
+      "mapTab": "MAP",
+      "controlsTab": "CONTROLS",
+      "emptyInventory": "No items",
+      "emptyQuests": "No authored quests are active",
+      "emptyMap": "No authored local map references are loaded",
+      "closeHint": "TAB / ESC close"
     }
   },
   "capture": {

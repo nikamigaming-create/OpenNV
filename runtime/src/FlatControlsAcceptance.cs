@@ -79,6 +79,14 @@ internal static class FlatControlsAcceptance
             await PulseKeyBinding(host, input.Save, input.Acceptance.SettleFrames);
             if (!File.Exists(loaded.Session.SavePath))
                 throw new InvalidOperationException("Configured desktop save input did not write the save file.");
+            var pipBoyOpened = false;
+            await PulseKeyBinding(host, input.PipBoy, input.Acceptance.SettleFrames);
+            if (!loaded.Session.HasPipBoy || !loaded.Session.IsPipBoyOpen)
+                throw new InvalidOperationException("Configured Pip-Boy input did not open the UI.");
+            pipBoyOpened = true;
+            await PulseKeyBinding(host, input.Cancel, input.Acceptance.SettleFrames);
+            if (loaded.Session.IsPipBoyOpen)
+                throw new InvalidOperationException("Configured cancel input did not close the Pip-Boy.");
             if (!loaded.Player.HasLeftHand || !loaded.Player.HasRightHand ||
                 !loaded.Player.HasHeldWeapon || !loaded.Player.HasMuzzleFeedback ||
                 !loaded.Session.HasDesktopHud)
@@ -121,6 +129,12 @@ internal static class FlatControlsAcceptance
                 visibleHandProvider = loaded.Player.HandProvider,
                 heldWeapon = loaded.Player.HasHeldWeapon,
                 desktopHud = loaded.Session.HasDesktopHud,
+                pipBoy = new
+                {
+                    available = loaded.Session.HasPipBoy,
+                    opened = pipBoyOpened,
+                    closed = !loaded.Session.IsPipBoyOpen,
+                },
                 openDoors = loaded.Session.OpenDoorsCount,
                 screenshot = screenshotPath,
                 keyBindings = input.KeyBindings.Select(binding => new

@@ -38,6 +38,7 @@ internal static class CellSceneLoader
         var session = new GameplaySession();
         session.Configure(
             cell.GetProperty("formId").GetString()!,
+            cell.GetProperty("editorId").GetString()!,
             proofDoorId,
             configuration,
             savePath,
@@ -148,6 +149,9 @@ internal static class CellSceneLoader
             configuration,
             useXr,
             applyCellEnvironment);
+        session.ConfigureWorldContext(
+            player,
+            new[] { main }.Concat(linkedCells.Select(value => value.Content)));
         player.CollisionMask = (1u << (linkedCells.Count + 1)) - 1u;
         if (enableFirstPersonPresentation)
         {

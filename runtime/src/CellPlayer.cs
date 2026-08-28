@@ -320,7 +320,7 @@ internal partial class CellPlayer : CharacterBody3D
         _xrOrigin.AddChild(_rightGrip);
         _xrOrigin.AddChild(_leftAim);
         _xrOrigin.AddChild(_rightAim);
-        _session!.AttachXrHud(_leftGrip);
+        _session!.AttachXrHud(_leftGrip, _leftAim);
     }
 
     internal void AttachFirstPersonRig(FirstPersonRig.Contract contract, float unitsToMeters)
@@ -404,7 +404,7 @@ internal partial class CellPlayer : CharacterBody3D
 
     private Vector2 ReadMovement()
     {
-        if (!_movementEnabled)
+        if (!_movementEnabled || _session?.IsPipBoyOpen == true)
             return Vector2.Zero;
         if (_useXr)
         {
@@ -422,6 +422,17 @@ internal partial class CellPlayer : CharacterBody3D
     private void PollDesktopActions()
     {
         var input = _configuration.Player.DesktopInput;
+        if (Input.IsActionJustPressed(input.PipBoy.Action))
+        {
+            _session!.TogglePipBoy();
+            return;
+        }
+        if (_session!.IsPipBoyOpen)
+        {
+            if (Input.IsActionJustPressed(input.Cancel.Action))
+                _session.ClosePipBoy();
+            return;
+        }
         if (_activationEnabled && Input.IsActionJustPressed(input.Activate.Action))
         {
             bool accepted;

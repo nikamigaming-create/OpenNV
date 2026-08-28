@@ -81,7 +81,11 @@ Use WASD and mouse-look, press E to pick up items, open containers, or operate a
 door, left-click to fire, R to reload, and F5 to save. Flat and XR both start
 with the owned-data 10mm equipped. The main door opens
 both reciprocal references and can be crossed without a loading screen. The HUD tracks the
-four-stage sandbox objective and inventory. Packaging proves the route and a
+four-stage sandbox objective and inventory. Press Tab to open the shared Pip-Boy view:
+Status, Items, Data, Map, and Controls all read the same campaign/session snapshot, and
+Escape closes it without advancing the world. The save also retains the ordinary player
+transform after the authored world context is loaded, so Continue restores the saved
+position as well as inventory, doors, and objectives. Packaging proves the route and a
 separate cold reload before accepting the build.
 
 The same sandbox has an experimental OpenXR mode. Choose **OpenXR mode** in the
@@ -90,8 +94,9 @@ launcher, or run `OpenNV.exe --xr-mode on -- --vr`. Oculus Touch and the OpenXR
 snap-turns, right grip activates, right trigger fires with haptics, B reloads,
 and X saves. VR starts with the owned master-record 10mm pistol profile equipped,
 one full magazine, and one reserve magazine. The tracked eye is calibrated once
-to 1.68 metres above the authored floor. The HUD is mounted in world space on the
-left hand. Legal `lefthand1st.nif` and `righthand1st.nif` assets provide the two
+to 1.68 metres above the authored floor. The wrist Pip-Boy screen is an actual OpenXR
+world-space pixel surface attached to the left hand; it consumes the same UI snapshot
+as flat mode. Legal `lefthand1st.nif` and `righthand1st.nif` assets provide the two
 visible skinned hands; grip poses own their transforms and aim poses own rays.
 The repo-local simulator passes tracking, both sticks, locomotion, snap turn,
 door activation, fire, reload, save, supported eye height, and native stereo
