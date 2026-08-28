@@ -331,6 +331,7 @@ internal sealed record Fo3OwnedProfile(
     string Path,
     string Sha256,
     string ProfileId,
+    Fo3BirthSliceContract BirthSlice,
     string QuestEditorId,
     string QuestFormId,
     string SexTitle,
@@ -371,6 +372,7 @@ internal sealed record Fo3OwnedProfile(
             !RequiredBoolean(capabilities, "cg00Stage65AppearanceContractReady") ||
             !RequiredBoolean(capabilities, "cg00Stage80ContractReady") ||
             !RequiredBoolean(capabilities, "cg00Stage85ContractReady") ||
+            !RequiredBoolean(capabilities, "vault101BirthGraphCompiled") ||
             !RequiredBoolean(capabilities, "mainMenuRuntimeReady") ||
             !RequiredBoolean(capabilities, "introVideoRuntimeReady") ||
             !RequiredBoolean(capabilities, "runtimeBootReady"))
@@ -381,6 +383,9 @@ internal sealed record Fo3OwnedProfile(
         VerifySourceFile(RequiredObject(install, "master"));
 
         var opening = RequiredObject(root, "opening");
+        var birthSlice = Fo3BirthSliceContract.Load(
+            RequiredObject(opening, "birthSlice"),
+            install);
         var selection = RequiredObject(opening, "characterSelection");
         var questEditorId = RequiredString(selection, "questEditorId");
         var name = RequiredObject(selection, "name");
@@ -459,6 +464,7 @@ internal sealed record Fo3OwnedProfile(
             fullPath,
             profileSha256,
             RequiredString(root, "profileId"),
+            birthSlice,
             questEditorId,
             questFormId,
             RequiredString(sex, "title"),
@@ -613,6 +619,13 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         }
         StartMenuMusic();
         ShowMainMenu();
+        GD.Print(
+            $"OPENNV_FO3_BIRTH_CONTRACT_READY profile={_profile.ProfileId} " +
+            $"schema={Fo3BirthSliceContract.ExpectedSchema} cell={_profile.BirthSlice.CellFormId} " +
+            $"playerSpawn={_profile.BirthSlice.PlayerSpawnReferenceFormId} " +
+            $"doctor={_profile.BirthSlice.DoctorActorReferenceFormId} " +
+            $"references={_profile.BirthSlice.ReferenceCount} " +
+            $"models={_profile.BirthSlice.CellModelResourceCount} rendered=0 interactive=0");
         GD.Print(
             $"OPENNV_FO3_FRONTEND_READY profile={_profile.ProfileId} " +
             $"quest={_profile.QuestEditorId} form={_profile.QuestFormId} " +
