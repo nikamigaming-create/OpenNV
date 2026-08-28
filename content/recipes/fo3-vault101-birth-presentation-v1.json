@@ -44,6 +44,9 @@
       0.72
     ],
     "proofAmbientEnergy": 1.0,
+    "proofFogNearGameUnits": 0.0,
+    "proofFogFarGameUnits": 100000.0,
+    "proofFogPower": 1.0,
     "proofBackgroundColor": [
       0.012,
       0.015,
@@ -53,7 +56,7 @@
   "unsupported": [
     "actors and creatures",
     "quest and package command execution",
-    "authored material textures and CELL lighting",
+    "CELL lighting and image-space effects",
     "collision and interaction",
     "camera and pixel parity",
     "OpenXR"

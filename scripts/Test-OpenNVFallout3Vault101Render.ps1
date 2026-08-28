@@ -67,7 +67,7 @@ $renderOutput = & $Godot --xr-mode off --path $runtimeRoot --windowed `
 $renderText = $renderOutput | Out-String
 $expected =
     "OPENNV_FO3_VAULT101_RENDER_PASS cell=00028138 entry=00039562 " +
-    "references=29 models=23 surfaces=148 actors=0 interactive=0"
+    "references=29 models=23 surfaces=148 textures=51 materials=118 actors=0 interactive=0"
 if ($LASTEXITCODE -ne 0 -or $renderText -notmatch [regex]::Escape($expected)) {
     throw "Fallout 3 Vault 101 native render proof failed:`n$renderText"
 }
@@ -75,13 +75,16 @@ if ($LASTEXITCODE -ne 0 -or $renderText -notmatch [regex]::Escape($expected)) {
 $reportPath = Join-Path $CaptureRoot "vault101-birth-native-render-proof.json"
 $framePath = Join-Path $CaptureRoot "vault101-birth-entry.png"
 $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json -Depth 100
-if ($report.status -ne "pass-rendered-owned-birth-room-no-actors-scripts-or-gameplay" -or
+if ($report.status -ne "pass-rendered-owned-textured-birth-room-no-actors-scripts-or-gameplay" -or
     -not $report.promotion.rendered -or
+    -not $report.promotion.texturesBound -or
     $report.promotion.interactive -or
     $report.promotion.actorsRendered -or
     $report.promotion.questCommandsExecuted -or
     $report.cell.loadedStaticReferences -ne 29 -or
     $report.cell.loadedUniqueModels -ne 23 -or
+    $report.materials.resolvedUniqueTextures -ne 51 -or
+    $report.materials.materialBindings -ne 118 -or
     -not (Test-Path -LiteralPath $framePath -PathType Leaf)) {
     throw "Fallout 3 Vault 101 render report promotion boundary is invalid."
 }

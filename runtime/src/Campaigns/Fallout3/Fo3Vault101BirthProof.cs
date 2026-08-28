@@ -53,7 +53,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
             {
                 schema = "opennv-fo3-vault101-birth-native-render-proof/v1",
                 status = failure is null
-                    ? "pass-rendered-owned-birth-room-no-actors-scripts-or-gameplay"
+                    ? "pass-rendered-owned-textured-birth-room-no-actors-scripts-or-gameplay"
                     : "fail-rendered-owned-birth-room",
                 campaign = "Fallout3",
                 slice = "Vault101BirthRoom",
@@ -95,8 +95,25 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     vertices = coverage.Vertices,
                     triangles = coverage.Triangles,
                     materialAuthority =
-                        "owned NIF factors only; authored textures are not yet bound",
+                        "owned NIF surface identities plus exact owned DDS bindings",
                     collisionConsumed = false,
+                },
+                materials = new
+                {
+                    authoredTextureBindingRequests =
+                        contract.AuthoredTextureBindingRequests,
+                    resolvedUniqueTextures = coverage.LoadedTextures,
+                    materialBindings = coverage.MaterialBindings,
+                    proofLitRetailMaterials = coverage.ProofLitRetailMaterials,
+                    authoredDdsTextures = coverage.AuthoredDdsTextures,
+                    authoredDdsMipChainTextures = coverage.AuthoredDdsMipChainTextures,
+                    decodedAuthoredBc1AlphaMipChainTextures =
+                        coverage.DecodedAuthoredBc1AlphaMipChainTextures,
+                    runtimeGeneratedMipTextures = coverage.RuntimeGeneratedMipTextures,
+                    unresolvedUniqueTextures = 0,
+                    texturesBound = coverage.LoadedTextures == contract.ResolvedUniqueTextures &&
+                        coverage.MaterialBindings > 0,
+                    lightingAuthority = "recipe proof only; retail CELL lighting remains absent",
                 },
                 frame = new
                 {
@@ -122,7 +139,9 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     questCommandsExecuted = false,
                     characterSelectionJoinedToScene = false,
                     collisionConsumed = false,
-                    texturesBound = false,
+                    texturesBound = failure is null &&
+                        coverage.LoadedTextures == contract.ResolvedUniqueTextures &&
+                        coverage.MaterialBindings > 0,
                     retailParityReviewed = false,
                     headsetAccepted = false,
                     launcherPlayable = false,
@@ -131,7 +150,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 {
                     "Dad, Doctor Li, Mom, player body, and all other actors",
                     "CG00 dialogue, packages, animation, quest triggers, and stage progression",
-                    "authored textures, CELL lighting, collision, interaction, audio, save, and OpenXR",
+                    "CELL lighting, image-space effects, collision, interaction, audio, save, and OpenXR",
                     "retail camera, material, lighting, animation, and pixel parity",
                 },
                 windowsAppControlUsed = false,
@@ -147,6 +166,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     $"OPENNV_FO3_VAULT101_RENDER_PASS cell={contract.CellFormId} " +
                     $"entry={contract.EntryReferenceFormId} references={coverage.PlacedReferences} " +
                     $"models={coverage.LoadedAssets} surfaces={coverage.Surfaces} " +
+                    $"textures={coverage.LoadedTextures} materials={coverage.MaterialBindings} " +
                     $"actors=0 interactive=0 output={output}");
             else
                 GD.PushError(

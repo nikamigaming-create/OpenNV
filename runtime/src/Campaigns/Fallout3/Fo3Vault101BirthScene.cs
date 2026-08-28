@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Godot;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
@@ -7,6 +8,13 @@ internal sealed record Fo3Vault101BirthSceneCoverage(
     Node3D CellRoot,
     Camera3D Camera,
     int LoadedAssets,
+    int LoadedTextures,
+    int AuthoredDdsTextures,
+    int AuthoredDdsMipChainTextures,
+    int DecodedAuthoredBc1AlphaMipChainTextures,
+    int RuntimeGeneratedMipTextures,
+    int MaterialBindings,
+    int ProofLitRetailMaterials,
     int PlacedReferences,
     int MeshInstances,
     int Surfaces,
@@ -19,8 +27,21 @@ internal static class Fo3Vault101BirthScene
         Node3D host,
         Fo3Vault101BirthPresentationContract contract)
     {
+        using var presentationDocument = JsonDocument.Parse(
+            File.ReadAllBytes(contract.ManifestPath));
+        var presentation = presentationDocument.RootElement;
+        var configuration = RuntimeConfiguration.Load();
+        configuration.VerifyCompiledConfiguration(presentation);
+        var textures = RuntimeMaterialLoader.LoadTextures(
+            presentation,
+            configuration.Renderer);
+        var assetRows = presentation.GetProperty("assets").EnumerateArray()
+            .ToDictionary(
+                value => value.GetProperty("id").GetString()!,
+                StringComparer.Ordinal);
         var prototypes = new Dictionary<string, VerifiedGltfLoader.LoadedGltf>(
             StringComparer.Ordinal);
+        var materialBindings = 0;
         try
         {
             foreach (var asset in contract.Assets.Values)
@@ -37,6 +58,15 @@ internal static class Fo3Vault101BirthScene
                 if (observedSurfaces != asset.Surfaces)
                     throw new InvalidOperationException(
                         $"Fallout 3 Vault 101 surface count differs: {asset.Id}");
+                if (!assetRows.TryGetValue(asset.Id, out var assetRow))
+                    throw new InvalidOperationException(
+                        $"Fallout 3 Vault 101 material row is absent: {asset.Id}");
+                materialBindings += RuntimeMaterialLoader.Apply(
+                    loaded.Scene,
+                    assetRow,
+                    textures,
+                    configuration.Renderer,
+                    configuration.ContentCompiler.RetailGrass);
                 prototypes.Add(asset.Id, loaded);
             }
 
@@ -85,6 +115,16 @@ internal static class Fo3Vault101BirthScene
                 }
             }
 
+            var proofLitRetailMaterials =
+                RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
+                    root,
+                    contract.ProofAmbientColor,
+                    contract.ProofBackgroundColor,
+                    contract.ProofFogNearGameUnits,
+                    contract.ProofFogFarGameUnits,
+                    contract.ProofFogPower,
+                    contract.UnitsToMeters);
+
             host.AddChild(new WorldEnvironment
             {
                 Name = "FO3_BIRTH_PROOF_ENVIRONMENT",
@@ -118,6 +158,13 @@ internal static class Fo3Vault101BirthScene
                 root,
                 camera,
                 prototypes.Count,
+                textures.TwoDimensional.Count,
+                textures.AuthoredDdsTextures,
+                textures.AuthoredDdsMipChainTextures,
+                textures.DecodedAuthoredBc1AlphaMipChainTextures,
+                textures.RuntimeGeneratedMipTextures,
+                materialBindings,
+                proofLitRetailMaterials,
                 contract.References.Count,
                 meshInstances,
                 surfaces,

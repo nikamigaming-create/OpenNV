@@ -40,16 +40,21 @@ internal sealed record Fo3Vault101BirthPresentationContract(
     Color ProofAmbientColor,
     float ProofAmbientEnergy,
     Color ProofBackgroundColor,
+    float ProofFogNearGameUnits,
+    float ProofFogFarGameUnits,
+    float ProofFogPower,
+    int AuthoredTextureBindingRequests,
+    int ResolvedUniqueTextures,
     IReadOnlyDictionary<string, Fo3Vault101BirthAsset> Assets,
     IReadOnlyList<Fo3Vault101BirthReference> References)
 {
     internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v1";
-    private const string ExpectedStatus = "prepared-owned-geometry-not-yet-rendered";
+    private const string ExpectedStatus = "prepared-owned-materials-not-yet-rendered";
     private const string ExpectedCellEditorId = "Vault101d";
     private const string ExpectedLightingAuthority =
         "recipe-proof-only-not-retail-CELL-lighting";
     private const string ExpectedMaterialAuthority =
-        "owned-NIF-geometry-and-material-factors-without-textures";
+        "owned-NIF-surface-identity-and-owned-DDS-bindings";
     private const string RequiredUnsupportedActors = "actors and creatures";
     private const string RequiredUnsupportedCommands = "quest and package command execution";
     private const int Sha256HexCharacters = 64;
@@ -120,6 +125,12 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         var ambient = ReadColor(presentation, "proofAmbientColor");
         var ambientEnergy = RequiredPositiveSingle(presentation, "proofAmbientEnergy");
         var background = ReadColor(presentation, "proofBackgroundColor");
+        var fogNear = RequiredFiniteSingle(presentation, "proofFogNearGameUnits");
+        var fogFar = RequiredFiniteSingle(presentation, "proofFogFarGameUnits");
+        var fogPower = RequiredPositiveSingle(presentation, "proofFogPower");
+        if (fogFar <= fogNear)
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 proof fog range is invalid.");
 
         var manifestDirectory = Path.GetDirectoryName(path)!;
         var assets = RequiredArray(root, "assets")
@@ -137,13 +148,27 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 presentation reference closure is incomplete.");
 
+        var cacheRoot = Path.GetFullPath(Path.Combine(manifestDirectory, "..", ".."));
+        var textureIds = RequiredArray(root, "textures").EnumerateArray()
+            .Select(value => VerifyTexture(value, cacheRoot))
+            .ToArray();
+        if (textureIds.Length == 0 ||
+            textureIds.Distinct(StringComparer.Ordinal).Count() != textureIds.Length ||
+            RequiredArray(root, "unresolvedTextureBindings").GetArrayLength() != 0)
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 owned-texture closure is incomplete.");
+
         var coverage = RequiredObject(root, "coverage");
         if (RequiredInteger(coverage, "sourceCellReferences") != birthSlice.ReferenceCount ||
             RequiredInteger(coverage, "renderableAssets") != assets.Count ||
             RequiredInteger(coverage, "renderableReferences") != references.Length ||
             RequiredInteger(coverage, "selectedReferences") != references.Length ||
             RequiredInteger(coverage, "selectedUniqueModels") != assets.Count ||
-            RequiredInteger(coverage, "nonPresentationAssets") != 0)
+            RequiredInteger(coverage, "nonPresentationAssets") != 0 ||
+            RequiredInteger(coverage, "resolvedUniqueTextures") != textureIds.Length ||
+            RequiredInteger(coverage, "unresolvedUniqueTextures") != 0 ||
+            RequiredPositiveInteger(coverage, "authoredTextureBindingRequests") <
+                textureIds.Length)
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 presentation coverage differs from its rows.");
         VerifyPromotion(RequiredObject(root, "promotion"));
@@ -171,6 +196,11 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             ambient,
             ambientEnergy,
             background,
+            fogNear,
+            fogFar,
+            fogPower,
+            RequiredPositiveInteger(coverage, "authoredTextureBindingRequests"),
+            textureIds.Length,
             assets,
             references);
     }
@@ -183,13 +213,29 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         var sidecarPath = Path.GetFullPath(RequiredString(source, "sidecar"));
         VerifyCacheLocalDerivative(manifestDirectory, modelPath);
         VerifyCacheLocalDerivative(manifestDirectory, sidecarPath);
+        var surfaces = RequiredPositiveInteger(source, "surfaces");
+        var materials = RequiredArray(source, "materials").EnumerateArray().ToArray();
+        if (materials.Length != surfaces || materials.Any(material =>
+                RequiredArray(material, "unresolvedTextureRoles").GetArrayLength() != 0))
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 material binding closure is incomplete.");
         return new Fo3Vault101BirthAsset(
             RequiredString(source, "id"),
             RequiredString(source, "logicalPath"),
             RequiredSha256(source, "sourceSha256"),
             modelPath,
             sidecarPath,
-            RequiredPositiveInteger(source, "surfaces"));
+            surfaces);
+    }
+
+    private static string VerifyTexture(JsonElement source, string cacheRoot)
+    {
+        var id = RequiredString(source, "id");
+        VerifyCacheLocalDerivative(cacheRoot, Path.GetFullPath(RequiredString(source, "dds")));
+        VerifyCacheLocalDerivative(cacheRoot, Path.GetFullPath(RequiredString(source, "png")));
+        _ = RequiredSha256(source, "ddsSha256");
+        _ = RequiredSha256(source, "pngSha256");
+        return id;
     }
 
     private static Fo3Vault101BirthReference ReadReference(JsonElement source)
@@ -225,11 +271,30 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             RequiredString(source, "birthSliceRecipeId") != birthSlice.RecipeId)
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 presentation differs from its owned birth slice.");
+        using var birthDocument = JsonDocument.Parse(File.ReadAllBytes(birthSlice.Path));
+        var birthSource = RequiredObject(birthDocument.RootElement, "source");
+        VerifyArchiveBinding(
+            RequiredObject(source, "texturesArchive"),
+            RequiredObject(birthSource, "texturesArchive"));
+    }
+
+    private static void VerifyArchiveBinding(JsonElement actual, JsonElement expected)
+    {
+        if (!RequiredString(actual, "file").Equals(
+                RequiredString(expected, "file"),
+                StringComparison.OrdinalIgnoreCase) ||
+            RequiredLong(actual, "bytes") != RequiredLong(expected, "bytes") ||
+            !RequiredSha256(actual, "sha256").Equals(
+                RequiredSha256(expected, "sha256"),
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 owned archive binding differs.");
     }
 
     private static void VerifyPromotion(JsonElement promotion)
     {
         if (!RequiredBoolean(promotion, "transported") ||
+            !RequiredBoolean(promotion, "texturesPrepared") ||
             RequiredBoolean(promotion, "runtimeManifestValidated") ||
             RequiredBoolean(promotion, "runtimeSceneConstructed") ||
             RequiredBoolean(promotion, "rendered") ||
@@ -347,6 +412,22 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         if (result <= 0)
             throw new InvalidOperationException(
                 $"Fallout 3 Vault 101 positive integer {name} is invalid.");
+        return result;
+    }
+
+    private static long RequiredLong(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) || !value.TryGetInt64(out var result) ||
+            result <= 0)
+            throw new InvalidOperationException($"Fallout 3 Vault 101 integer {name} is invalid.");
+        return result;
+    }
+
+    private static float RequiredFiniteSingle(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) || !value.TryGetSingle(out var result) ||
+            !float.IsFinite(result))
+            throw new InvalidOperationException($"Fallout 3 Vault 101 number {name} is invalid.");
         return result;
     }
 

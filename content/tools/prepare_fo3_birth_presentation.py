@@ -17,7 +17,9 @@ from export_static_nif_gltf import (
     NoStaticPresentationGeometryError,
     export_static_nif,
 )
+from material_contract import material_bindings, texture_binding_requests
 from runtime_configuration import load_runtime_configuration
+from texture_pipeline import TexturePipeline
 
 
 RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
@@ -134,6 +136,8 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
     install = _required_object(profile, "install")
     meshes_row = _archive(install, "meshes")
     meshes_path = _verify_source_file(meshes_row)
+    textures_row = _archive(install, "textures")
+    textures_path = _verify_source_file(textures_row)
 
     opening = _required_object(profile, "opening")
     birth_source = _required_object(opening, "birthSlice")
@@ -162,12 +166,19 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
 
     source = _required_object(birth, "source")
     source_meshes = _required_object(source, "meshesArchive")
+    source_textures = _required_object(source, "texturesArchive")
     if (
         source_meshes.get("file") != meshes_row.get("file")
         or int(source_meshes.get("bytes", 0)) != int(meshes_row.get("bytes", 0))
         or source_meshes.get("sha256") != meshes_row.get("sha256")
     ):
         raise ValueError("Fallout 3 birth slice and owned mesh archive differ")
+    if (
+        source_textures.get("file") != textures_row.get("file")
+        or int(source_textures.get("bytes", 0)) != int(textures_row.get("bytes", 0))
+        or source_textures.get("sha256") != textures_row.get("sha256")
+    ):
+        raise ValueError("Fallout 3 birth slice and owned texture archive differ")
 
     graph = _required_object(birth, "cellGraph")
     bases = {
@@ -252,6 +263,7 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
     asset_root = output_root / "assets"
     source_root = cache_root.resolve() / "source" / "fallout3"
     assets: dict[str, dict[str, object]] = {}
+    asset_sidecars: dict[str, dict[str, object]] = {}
     non_presentation: list[dict[str, object]] = []
     for model_path in sorted(selected_models):
         logical_path = canonical_member_path("meshes\\" + model_path)
@@ -304,9 +316,65 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
                 sidecar["coverage"]["collisionExported"]
             ),
         }
+        asset_sidecars[model_path] = sidecar
     retained = [row for row in selected if row[2] in assets]
     if not retained:
         raise ValueError("Fallout 3 birth presentation retained no renderable references")
+
+    binding_uses: dict[str, list[dict[str, str]]] = {}
+    for model_path, sidecar in asset_sidecars.items():
+        for surface_index, surface in enumerate(sidecar["surfaces"]):
+            for request in texture_binding_requests(surface):
+                binding_uses.setdefault(request["path"], []).append(
+                    {
+                        "modelPath": model_path,
+                        "surfaceIndex": str(surface_index),
+                        "surfaceName": str(surface["name"]),
+                        "role": request["role"],
+                        "missingOwnedMember": request["missingOwnedMember"],
+                    }
+                )
+    texture_pipeline = TexturePipeline(
+        [textures_path],
+        cache_root.resolve(),
+        {},
+        configuration.content_compiler,
+    )
+    texture_artifacts = {}
+    unresolved_texture_bindings: list[dict[str, object]] = []
+    for requested in sorted(binding_uses):
+        source_count = texture_pipeline.member_source_count(requested)
+        if source_count == 1:
+            texture_artifacts[requested] = texture_pipeline.prepare(requested)
+            continue
+        policies = {
+            use["missingOwnedMember"]
+            for use in binding_uses[requested]
+        }
+        if source_count == 0 and policies == {"unbound-no-substitution"}:
+            unresolved_texture_bindings.append(
+                {
+                    "requestedPath": requested,
+                    "ownedMemberSources": 0,
+                    "disposition": "unbound-no-substitution",
+                    "uses": binding_uses[requested],
+                }
+            )
+            continue
+        raise FileNotFoundError(
+            "Fallout 3 birth-room texture binding did not resolve uniquely: "
+            f"path={requested} sources={source_count} policies={sorted(policies)}"
+        )
+    texture_ids = {
+        requested: artifact.asset_id
+        for requested, artifact in texture_artifacts.items()
+    }
+    for model_path, asset in assets.items():
+        asset["materials"] = material_bindings(
+            asset_sidecars[model_path],
+            texture_ids,
+            configuration.content_compiler,
+        )
 
     origin = tuple(float(value) for value in entry_position)
     references: list[dict[str, object]] = []
@@ -336,7 +404,7 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
     )
     document: dict[str, object] = {
         "schema": OUTPUT_SCHEMA,
-        "status": "prepared-owned-geometry-not-yet-rendered",
+        "status": "prepared-owned-materials-not-yet-rendered",
         "recipe": {
             "id": _required_string(recipe, "id"),
             "path": str(recipe_path.resolve()),
@@ -353,7 +421,13 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
                 "bytes": meshes_path.stat().st_size,
                 "sha256": _sha256_file(meshes_path),
             },
+            "texturesArchive": {
+                "file": textures_path.name,
+                "bytes": textures_path.stat().st_size,
+                "sha256": _sha256_file(textures_path),
+            },
         },
+        "configuration": configuration.manifest(),
         "cell": {
             "formId": _required_string(cell, "formId"),
             "editorId": _required_string(cell, "editorId"),
@@ -379,11 +453,19 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
             "verticalFovDegrees": float(presentation["verticalFovDegrees"]),
             "proofAmbientColor": presentation["proofAmbientColor"],
             "proofAmbientEnergy": float(presentation["proofAmbientEnergy"]),
+            "proofFogNearGameUnits": float(presentation["proofFogNearGameUnits"]),
+            "proofFogFarGameUnits": float(presentation["proofFogFarGameUnits"]),
+            "proofFogPower": float(presentation["proofFogPower"]),
             "proofBackgroundColor": presentation["proofBackgroundColor"],
             "lightingAuthority": "recipe-proof-only-not-retail-CELL-lighting",
-            "materialAuthority": "owned-NIF-geometry-and-material-factors-without-textures",
+            "materialAuthority": "owned-NIF-surface-identity-and-owned-DDS-bindings",
         },
         "assets": sorted(assets.values(), key=lambda value: str(value["id"])),
+        "textures": sorted(
+            (artifact.manifest() for artifact in texture_artifacts.values()),
+            key=lambda value: str(value["id"]),
+        ),
+        "unresolvedTextureBindings": unresolved_texture_bindings,
         "references": sorted(references, key=lambda value: str(value["formId"])),
         "coverage": {
             "sourceCellReferences": len(_required_list(graph, "references")),
@@ -392,11 +474,15 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
             "selectedUniqueModels": len(selected_models),
             "renderableAssets": len(assets),
             "nonPresentationAssets": len(non_presentation),
+            "authoredTextureBindingRequests": sum(len(rows) for rows in binding_uses.values()),
+            "resolvedUniqueTextures": len(texture_artifacts),
+            "unresolvedUniqueTextures": len(unresolved_texture_bindings),
             "excludedReferencesByReason": dict(sorted(excluded.items())),
         },
         "nonPresentationAssets": non_presentation,
         "promotion": {
             "transported": True,
+            "texturesPrepared": True,
             "runtimeManifestValidated": False,
             "runtimeSceneConstructed": False,
             "rendered": False,
