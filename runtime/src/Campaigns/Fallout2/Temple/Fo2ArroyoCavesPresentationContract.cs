@@ -8,7 +8,8 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
     private const string SourceSchema = "opennv-fo2-owned-map-slice/v1";
     private const string ProfileSchema = "opennv-fo2-owned-profile/v1";
     private const int MapVersion = 20;
-    private const int TileEntryCount = Fo1HexMath.Width * Fo1HexMath.Height;
+    private const int TileEntryCount = Fo1HexMath.FloorWidth * Fo1HexMath.FloorHeight;
+    private const int HexEntryCount = Fo1HexMath.Width * Fo1HexMath.Height;
     internal const int MapIndex = 3;
     internal const int Elevation = 0;
     internal const int DefaultFloorTileId = 1;
@@ -251,7 +252,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
                 "exact Map 126 exit-grid instance values" ||
             incoming.GetProperty("mapIndex").GetInt32() != MapIndex ||
             incoming.GetProperty("elevation").GetInt32() != Elevation ||
-            arrivalTile is < 0 or >= TileEntryCount ||
+            arrivalTile is < 0 or >= HexEntryCount ||
             arrivalRotation is < 0 or >= Fo1HexMath.DirectionCount ||
             incoming.GetProperty("tileX").GetInt32() != arrivalTile % Fo1HexMath.Width ||
             incoming.GetProperty("tileY").GetInt32() != arrivalTile / Fo1HexMath.Width)
@@ -265,7 +266,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
             .Where(row => row.TopLevel && row.Elevation == Elevation && (row.Flags & 0x10) == 0)
             .Select(row => row.Tile)
             .ToHashSet();
-        var walkable = Enumerable.Range(0, TileEntryCount)
+        var walkable = Enumerable.Range(0, HexEntryCount)
             .Select(tile =>
                 floorIds[Fo1HexMath.FloorIndex(tile)] != DefaultFloorTileId &&
                 !blocked.Contains(tile))
@@ -321,7 +322,6 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
         var sha256 = Fo2TemplePresentationCatalog.RequiredHash(descriptor, "sha256");
         if (Fo2TemplePresentationCatalog.RequiredString(descriptor, "schema") !=
                 "opennv-fo2-temple-transitions/v1" ||
-            !path.Equals(transition.ManifestPath, StringComparison.OrdinalIgnoreCase) ||
             sha256 != transition.ManifestSha256 ||
             Fo2TemplePresentationCatalog.Sha256(
                 Fo2TemplePresentationCatalog.VerifyFile(

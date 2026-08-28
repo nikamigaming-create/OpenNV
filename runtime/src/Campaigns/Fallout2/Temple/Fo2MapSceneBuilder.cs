@@ -43,7 +43,7 @@ internal static class Fo2MapSceneBuilder
             elevation is < 0 or > 2 ||
             arrivalTile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height ||
             arrivalRotation is < 0 or >= Fo1HexMath.DirectionCount ||
-            tileEntries.Count != Fo1HexMath.Width * Fo1HexMath.Height)
+            tileEntries.Count != Fo1HexMath.FloorWidth * Fo1HexMath.FloorHeight)
             throw new InvalidOperationException("Fallout 2 map scene identity is invalid.");
 
         var floorIds = tileEntries.Select(entry => (int)(entry & FloorIdMask)).ToArray();
