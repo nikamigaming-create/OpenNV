@@ -11,7 +11,12 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
-from export_static_nif_gltf import compiler_provenance  # noqa: E402
+from export_static_nif_gltf import (  # noqa: E402
+    compiler_provenance,
+    compiler_provenance_source_paths,
+)
+from gltf_io import compiler_sources_sha256  # noqa: E402
+from runtime_configuration import configured_recipe_path  # noqa: E402
 from prepare_gallery_capture_shots import (  # noqa: E402
     CAPTURE_MANIFEST_SCHEMA,
     CAPTURE_SHOT_SCHEMA,
@@ -33,6 +38,33 @@ from prepare_wasteland_gallery import (  # noqa: E402
 
 
 class WastelandGalleryTest(unittest.TestCase):
+    def test_source_compiler_identity_binds_cell_and_actor_dependencies(self):
+        sources = compiler_provenance_source_paths()
+        source_names = {path.name for path in sources}
+        self.assertIn("cell_catalog.py", source_names)
+        self.assertIn("actor_catalog.py", source_names)
+        self.assertIn("scene_asset_pipeline.py", source_names)
+        self.assertEqual(
+            compiler_provenance()["sha256"],
+            compiler_sources_sha256(sources),
+        )
+        self.assertNotEqual(
+            compiler_sources_sha256(sources),
+            compiler_sources_sha256(
+                path for path in sources if path.name != "actor_catalog.py"
+            ),
+        )
+        resolved_sources = {path.resolve() for path in sources}
+        for contract_name in ("visualArchives", "audioArchives"):
+            contract = configured_recipe_path(contract_name).resolve()
+            self.assertIn(contract, resolved_sources)
+            self.assertNotEqual(
+                compiler_sources_sha256(sources),
+                compiler_sources_sha256(
+                    path for path in sources if path.resolve() != contract
+                ),
+            )
+
     def test_gallery_content_and_compiler_routing_are_declarative(self):
         recipe_path = (
             Path(__file__).resolve().parents[1]

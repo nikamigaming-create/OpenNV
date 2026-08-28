@@ -47,8 +47,8 @@ private cache directly. The player
 does not install Python or another engine. The retail input is read-only, and no
 commercial file or conversion output is committed or distributed. The verified
 cache remembers the selected installation and is reopened automatically on
-later launches. The current recipe-pinned proof opens the Goodsprings Prospector
-Saloon at the main entrance's data-defined XTEL target. Use WASD/mouse, E to
+later launches. The separate saloon diagnostic opens the Goodsprings Prospector
+Saloon at the main entrance's data-defined XTEL target. In that component, use WASD/mouse, E to
 activate, left-click to fire the initially equipped owned-data 10mm, R to
 reload, and F5 to save.
 Aim at the intact pool table or one of its balls and press E to enter practice
@@ -66,13 +66,17 @@ non-playable. TTW is an edition, not a fifth game button. On
 this development machine Fallout 1's generated V13ENT
 inputs and Fallout 3's owned GOTY profile are registered. New Vegas launches the
 owned menu, skippable intro, and Doc Mitchell route from the verified local
-cache. Its campaign state uses `user://saves/new-vegas-opening-v1.json`, kept
-separate from the older Goodsprings sandbox save. After the opening completes,
+cache. The launcher supplies a profile-owned Courier save path; the runtime's
+`user://saves/new-vegas-opening-v1.json` is only the direct-launch fallback.
+That campaign save remains separate from the older Goodsprings sandbox save. After the opening completes,
 its source-bound HUD/Pip-Boy runtime shell
 reads the same inventory, quest, map, and save state; complete tile interaction
 and retail UI parity remain pending. STATS currently shares the verified ITEMS
-frame while its remaining Gamebryo layout expressions are unsupported. The separate production Goodsprings active set includes the reciprocal
-Doc Mitchell house/exterior exit. The registered Fallout 3 development frontend opens its
+frame while its remaining Gamebryo layout expressions are unsupported. The
+default cache preloads the ordered Doc house, Goodsprings active exterior set,
+and saloon composite with both reciprocal XTEL pairs. Ordinary player-driven
+end-to-end travel, active-CELL restoration, and integrated-route OpenXR
+acceptance remain pending. The registered Fallout 3 development frontend opens its
 profile-backed menu, plays a locally
 converted and hash-verified copy of the owned intro, and converges through
 Escape or the Skip button on CG00 sex/name selection, a persistent stage-60

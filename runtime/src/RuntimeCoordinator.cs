@@ -42,6 +42,7 @@ public partial class RuntimeCoordinator : Node3D
     private LegalAssetSetupView? _setupView;
     private XRInterface? _openXr;
     private LoadingScreen? _loadingScreen;
+    private string? _acceptedOpeningMenuAction;
     private ulong _loadingStartedMilliseconds;
     private const double MinimumLoadingScreenSeconds = 0.85;
 
@@ -123,6 +124,18 @@ public partial class RuntimeCoordinator : Node3D
                         "without it, plus --report, --save-path, --opening-proof-name, and " +
                         "--opening-proof-timeout-seconds.");
             }
+            if (_options.TryGetValue("opening-menu-proof", out var openingMenuAction) &&
+                (openingMenuAction != "continue" ||
+                    !_options.ContainsKey("report") ||
+                    !_options.ContainsKey("save-path") ||
+                    _options.ContainsKey("cell-scene") ||
+                    _options.ContainsKey("new-game") ||
+                    _options.ContainsKey("opening-proof") ||
+                    _options.ContainsKey("portal-proof")))
+                throw new ArgumentException(
+                    "--opening-menu-proof continue requires --report and --save-path with a " +
+                    "completed prepared campaign cache, and cannot combine with a direct CELL " +
+                    "or another opening/portal proof.");
             if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
                 throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
             if ((_options.ContainsKey("classic-diorama") || _options.ContainsKey("classic-diorama-rig-proof")) &&
@@ -471,6 +484,13 @@ public partial class RuntimeCoordinator : Node3D
             {
                 if (action is "continue" or "load")
                 {
+                    if (options.TryGetValue("opening-menu-proof", out var acceptedAction))
+                    {
+                        if (!action.Equals(acceptedAction, StringComparison.Ordinal))
+                            throw new InvalidOperationException(
+                                $"Owned main-menu acceptance dispatched {action}, expected {acceptedAction}.");
+                        _acceptedOpeningMenuAction = action;
+                    }
                     opening.QueueFree();
                     LoadPreparedGameplay(prepared, options, useOpeningCampaign: true);
                     return;
@@ -481,6 +501,25 @@ public partial class RuntimeCoordinator : Node3D
             $"OPENNV_OWNED_OPENING_READY campaign={manifest.Campaign} " +
             $"quest={manifest.EntryQuestEditorId} stage={manifest.EntryStage} " +
             $"buttons={manifest.Buttons.Count} continue={canContinue}");
+        if (options.TryGetValue("opening-menu-proof", out var action))
+        {
+            if (!canContinue)
+                throw new InvalidOperationException(
+                    "Owned main-menu Continue acceptance requires a valid completed campaign save.");
+            Callable.From(() =>
+            {
+                try
+                {
+                    GD.Print($"OPENNV_OWNED_MENU_ACCEPTANCE action={action} transport=godot-button-signal");
+                    opening.PressActionForAcceptance(action);
+                }
+                catch (Exception exception)
+                {
+                    GD.PushError($"OPENNV_OWNED_MENU_ACCEPTANCE_FAIL {exception}");
+                    GetTree().Quit(1);
+                }
+            }).CallDeferred();
+        }
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
     }
@@ -512,6 +551,7 @@ public partial class RuntimeCoordinator : Node3D
 
     private static bool ShouldShowOpening(IReadOnlyDictionary<string, string> options) =>
         options.ContainsKey("opening-menu") ||
+        options.ContainsKey("opening-menu-proof") ||
         !options.Keys.Any(DirectPreparedContentOptions.Contains);
 
     private static string ResolveRuntimePath(string path) =>
@@ -585,7 +625,8 @@ public partial class RuntimeCoordinator : Node3D
 
     private void LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
     {
-        var runTraversalProof = options.ContainsKey("portal-proof");
+        var runTraversalProof = options.ContainsKey("portal-proof") ||
+            options.ContainsKey("opening-menu-proof");
         var useXrLayout = options.ContainsKey("vr") || options.ContainsKey("vr-layout-proof");
         var galleryContract = options.TryGetValue("gallery-shot", out var galleryShotPath)
             ? GalleryShotContract.Load(galleryShotPath, _configuration)
@@ -1101,7 +1142,7 @@ public partial class RuntimeCoordinator : Node3D
             var revolver = loaded.Pickups.Values.Single(
                 pickup => pickup.ItemFormId == route.WeaponPickupFormId);
             loaded.Session.Collect(revolver);
-            loaded.Session.Fire(loaded.Player.Camera);
+            loaded.Session.Fire(loaded.Player.Camera, loaded.Player.CollisionMask);
             var aid = loaded.Pickups.Values.First(
                 pickup => pickup.EditorId == route.AidPickupEditorId);
             loaded.Session.Collect(aid);
@@ -1209,70 +1250,28 @@ public partial class RuntimeCoordinator : Node3D
                     $"XTEL floor contract failed: hit={floor.Hit} y={floor.Y} " +
                     $"normal={floor.Normal} owned={floorOwnedByLoadedCell} " +
                     $"withinProbe={floorWithinProbe} collider={floor.ColliderPath}");
-            var ray = CellSceneLoader.BuildProofRay(loaded.ProofDoor, _configuration.Proof);
-            var closed = CellSceneLoader.CastProofRay(
-                GetWorld3D().DirectSpaceState,
-                loaded.ProofDoor,
-                ray,
-                _configuration.Player.CollisionMask);
-            loaded.ProofDoor.SetOpen(true);
-            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-            var opened = CellSceneLoader.CastProofRay(GetWorld3D().DirectSpaceState, loaded.ProofDoor, ray);
-            var portalDirection = (ray.To - ray.From).Normalized();
-            var portalCenter = (ray.From + ray.To) / 2.0f;
-            var projectileRay = new CellSceneLoader.DoorRay(
-                portalCenter - portalDirection * _configuration.Proof.ProjectileRayStartMeters,
-                portalCenter + portalDirection * _configuration.Proof.ProjectileRayEndMeters,
-                ray.LocalSize,
-                ray.LocalNormal);
-            var projectileHit = CellSceneLoader.CastProofRay(
-                GetWorld3D().DirectSpaceState,
-                loaded.ProofDoor,
-                projectileRay);
-            var projectileBlockedByDoor = projectileHit.HitProofDoor || loaded.PortalLinks.Any(portal =>
-                projectileHit.ColliderPath.StartsWith(portal.ToDoor.GetPath().ToString(), StringComparison.Ordinal));
-            portalCenter.Y = _configuration.Proof.PortalCapsuleCenterHeightMeters;
-            var portalMotion = portalDirection * _configuration.Proof.PortalCapsuleMotionMeters;
-            var forwardCollision = new KinematicCollision3D();
-            var walkForwardBlocked = loaded.PortalLinks.Count > 0 && loaded.Player.TestMove(
-                new Transform3D(Basis.Identity, portalCenter - portalMotion / 2.0f),
-                portalMotion,
-                forwardCollision);
-            var backwardCollision = new KinematicCollision3D();
-            var walkBackwardBlocked = loaded.PortalLinks.Count > 0 && loaded.Player.TestMove(
-                new Transform3D(Basis.Identity, portalCenter + portalMotion / 2.0f),
-                -portalMotion,
-                backwardCollision);
-            var forwardCollider = walkForwardBlocked
-                ? (forwardCollision.GetCollider() as Node)?.GetPath().ToString() ?? "unknown"
-                : "";
-            var backwardCollider = walkBackwardBlocked
-                ? (backwardCollision.GetCollider() as Node)?.GetPath().ToString() ?? "unknown"
-                : "";
-            var forwardNormal = walkForwardBlocked ? forwardCollision.GetNormal() : Vector3.Zero;
-            var backwardNormal = walkBackwardBlocked ? backwardCollision.GetNormal() : Vector3.Zero;
-            var linkedDoorBlocked = loaded.PortalLinks.Any(portal =>
-                opened.ColliderPath.StartsWith(portal.ToDoor.GetPath().ToString(), StringComparison.Ordinal));
-            var requiresEmptyOpenRay = loaded.PortalLinks.Count == 0;
-            if (!closed.Hit || !closed.HitProofDoor || opened.HitProofDoor || linkedDoorBlocked ||
-                (requiresEmptyOpenRay && opened.Hit) ||
-                projectileBlockedByDoor ||
-                walkForwardBlocked ||
-                (walkBackwardBlocked &&
-                    backwardNormal.Y < _configuration.Proof.WalkableSurfaceNormalYMinimum) ||
-                loaded.PortalLinks.Any(portal => !portal.FromDoor.IsOpen || !portal.ToDoor.IsOpen ||
-                    portal.AlignmentErrorMeters > _configuration.Proof.PortalAlignmentToleranceMeters))
+            var portalTraversals = new List<PortalTraversalProof>();
+            if (loaded.PortalLinks.Count == 0)
+                portalTraversals.Add(await ProvePortalPassage(loaded, loaded.ProofDoor, null));
+            else
+                foreach (var portal in loaded.PortalLinks)
+                    portalTraversals.Add(await ProvePortalPassage(
+                        loaded,
+                        portal.FromDoor,
+                        portal.ToDoor));
+            var failedPortal = portalTraversals.FirstOrDefault(value => !value.Passed);
+            if (failedPortal != default)
                 throw new InvalidOperationException(
-                    $"Door traversal contract failed: closedHit={closed.Hit} " +
-                    $"closedHitDoor={closed.HitProofDoor} closedCollider={closed.ColliderPath} " +
-                    $"openHit={opened.Hit} openCollider={opened.ColliderPath} " +
-                    $"projectileHit={projectileHit.Hit} projectileCollider={projectileHit.ColliderPath} " +
-                    $"projectileBlockedByDoor={projectileBlockedByDoor} " +
-                    $"walkForwardBlocked={walkForwardBlocked} forwardCollider={forwardCollider} " +
-                    $"forwardNormal={forwardNormal} walkBackwardBlocked={walkBackwardBlocked} " +
-                    $"backwardCollider={backwardCollider} backwardNormal={backwardNormal} " +
-                    $"linkedCells={loaded.LinkedCells.Count} portals={loaded.PortalLinks.Count} " +
-                    $"localSize={ray.LocalSize} localNormal={ray.LocalNormal} from={ray.From} to={ray.To}");
+                    $"Door traversal contract failed: {failedPortal.FromDoorReferenceFormId} -> " +
+                    $"{failedPortal.ToDoorReferenceFormId ?? "standalone"} " +
+                    $"closedHit={failedPortal.ClosedHit} " +
+                    $"closedHitDoor={failedPortal.ClosedHitDoor} " +
+                    $"openBlocked={failedPortal.OpenBlockedByPortalDoor} " +
+                    $"openClear={failedPortal.OpenRayPortalClear} " +
+                    $"projectileClear={failedPortal.ProjectilePortalClear} " +
+                    $"floorHit={failedPortal.FloorHit} floorY={failedPortal.FloorY} " +
+                    $"walkForward={failedPortal.CapsuleWalkForward} " +
+                    $"walkBackward={failedPortal.CapsuleWalkBackward}");
             CompleteCellLoad(
                 loaded with { ProofDoorOpen = true },
                 scenePath,
@@ -1285,21 +1284,19 @@ public partial class RuntimeCoordinator : Node3D
                     floorOwnedByLoadedCell,
                     floorWithinProbe,
                     floorWalkable,
-                    closed.Hit,
-                    closed.HitProofDoor,
-                    opened.Hit,
-                    opened.HitProofDoor || linkedDoorBlocked,
-                    !projectileBlockedByDoor,
-                    !walkForwardBlocked,
-                    !walkBackwardBlocked ||
-                        backwardNormal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum,
-                    !walkForwardBlocked &&
-                        (!walkBackwardBlocked ||
-                            backwardNormal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum),
+                    portalTraversals.All(value => value.ClosedHit),
+                    portalTraversals.All(value => value.ClosedHitDoor),
+                    portalTraversals.Any(value => !value.OpenRayPortalClear),
+                    portalTraversals.Any(value => value.OpenBlockedByPortalDoor),
+                    portalTraversals.All(value => value.ProjectilePortalClear),
+                    portalTraversals.All(value => value.CapsuleWalkForward),
+                    portalTraversals.All(value => value.CapsuleWalkBackward),
+                    portalTraversals.All(value => value.CapsuleWalkThrough),
                     loaded.LinkedCells.Count,
                     loaded.PortalLinks.Count == 0
                         ? null
-                        : loaded.PortalLinks.Max(portal => portal.AlignmentErrorMeters)));
+                        : loaded.PortalLinks.Max(portal => portal.AlignmentErrorMeters),
+                    portalTraversals));
             GetTree().Quit(0);
         }
         catch (Exception exception)
@@ -1307,6 +1304,100 @@ public partial class RuntimeCoordinator : Node3D
             GD.PushError($"OPENNV_GODOT_DOOR_TRAVERSAL_FAIL {exception.Message}");
             GetTree().Quit(1);
         }
+    }
+
+    private async Task<PortalTraversalProof> ProvePortalPassage(
+        CellSceneLoader.LoadedCell loaded,
+        DoorInstance fromDoor,
+        DoorInstance? toDoor)
+    {
+        fromDoor.SetOpen(false);
+        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        var ray = CellSceneLoader.BuildProofRay(fromDoor, _configuration.Proof);
+        var closed = CellSceneLoader.CastProofRay(
+            GetWorld3D().DirectSpaceState,
+            fromDoor,
+            ray,
+            loaded.Player.CollisionMask);
+        var closedHitDoor = closed.HitProofDoor ||
+            toDoor is not null && IsColliderUnder(closed.ColliderPath, toDoor);
+        fromDoor.SetOpen(true);
+        loaded.Session.DoorChanged(fromDoor);
+        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        var opened = CellSceneLoader.CastProofRay(
+            GetWorld3D().DirectSpaceState,
+            fromDoor,
+            ray,
+            loaded.Player.CollisionMask);
+        var openBlockedByDoor = opened.HitProofDoor ||
+            toDoor is not null && IsColliderUnder(opened.ColliderPath, toDoor);
+        var openRayPortalClear = !openBlockedByDoor && RayReachedPortalPlane(opened, ray);
+        var portalDirection = (ray.To - ray.From).Normalized();
+        var portalCenter = (ray.From + ray.To) / 2.0f;
+        var projectileRay = new CellSceneLoader.DoorRay(
+            portalCenter - portalDirection * _configuration.Proof.ProjectileRayStartMeters,
+            portalCenter + portalDirection * _configuration.Proof.ProjectileRayEndMeters,
+            ray.LocalSize,
+            ray.LocalNormal);
+        var projectile = CellSceneLoader.CastProofRay(
+            GetWorld3D().DirectSpaceState,
+            fromDoor,
+            projectileRay,
+            loaded.Player.CollisionMask);
+        var projectileBlockedByDoor = projectile.HitProofDoor ||
+            toDoor is not null && IsColliderUnder(projectile.ColliderPath, toDoor);
+        var projectilePortalClear = !projectileBlockedByDoor &&
+            RayReachedPortalPlane(projectile, projectileRay);
+        var portalFloor = CellSceneLoader.CastFloorAt(
+            GetWorld3D().DirectSpaceState,
+            _configuration.Proof,
+            loaded.Player.CollisionMask,
+            loaded.Player.GetRid(),
+            portalCenter);
+        var portalFloorWalkable = portalFloor.Hit &&
+            portalFloor.Normal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum;
+        if (portalFloor.Hit)
+            portalCenter.Y = portalFloor.Y + _configuration.Proof.PortalCapsuleCenterHeightMeters;
+        var portalMotion = portalDirection * _configuration.Proof.PortalCapsuleMotionMeters;
+        var forwardCollision = new KinematicCollision3D();
+        var walkForwardBlocked = toDoor is not null && loaded.Player.TestMove(
+            new Transform3D(Basis.Identity, portalCenter - portalMotion / 2.0f),
+            portalMotion,
+            forwardCollision);
+        var backwardCollision = new KinematicCollision3D();
+        var walkBackwardBlocked = toDoor is not null && loaded.Player.TestMove(
+            new Transform3D(Basis.Identity, portalCenter + portalMotion / 2.0f),
+            -portalMotion,
+            backwardCollision);
+        return new PortalTraversalProof(
+            fromDoor.ReferenceFormId,
+            toDoor?.ReferenceFormId,
+            closed.Hit,
+            closedHitDoor,
+            openBlockedByDoor,
+            openRayPortalClear,
+            projectilePortalClear,
+            portalFloor.Hit,
+            portalFloorWalkable,
+            portalFloor.Y,
+            !walkForwardBlocked,
+            !walkBackwardBlocked,
+            !walkForwardBlocked && !walkBackwardBlocked);
+    }
+
+    private static bool IsColliderUnder(string colliderPath, Node node) =>
+        colliderPath.StartsWith(node.GetPath().ToString(), StringComparison.Ordinal);
+
+    private static bool RayReachedPortalPlane(
+        CellSceneLoader.RayHit hit,
+        CellSceneLoader.DoorRay ray)
+    {
+        if (!hit.Hit)
+            return true;
+        var direction = (ray.To - ray.From).Normalized();
+        var center = (ray.From + ray.To) / 2.0f;
+        return (hit.Position - ray.From).Dot(direction) >
+            (center - ray.From).Dot(direction);
     }
 
     private void CompleteCellLoad(
@@ -1332,6 +1423,24 @@ public partial class RuntimeCoordinator : Node3D
             doors = loaded.Doors,
             authoredLights = loaded.AuthoredLights,
             actors = loaded.MainContent.Actors.Count,
+            actorPlacements = loaded.Actors.Select(actor => new
+            {
+                referenceFormId = actor.ReferenceFormId,
+                baseFormId = actor.BaseFormId,
+                initiallyDisabled = actor.InitiallyDisabled,
+                proofEnabled = actor.ProofEnabled,
+            }).ToArray(),
+            openingMenuProof = _acceptedOpeningMenuAction is null
+                ? null
+                : new
+                {
+                    action = _acceptedOpeningMenuAction,
+                    inputTransport = "godot-owned-button-signal",
+                    windowsAppControlUsed = false,
+                    foregroundInputInjected = false,
+                    restoredStage = loaded.Session.OpeningState?.Stage,
+                    restoredCompleted = loaded.Session.OpeningState?.Completed,
+                },
             poolTables = loaded.Pools.Values.Select(table => new
             {
                 referenceFormId = table.ReferenceFormId,
@@ -1433,6 +1542,22 @@ public partial class RuntimeCoordinator : Node3D
                     capsuleWalkThrough = traversalProof.Value.CapsuleWalkThrough,
                     linkedCells = traversalProof.Value.LinkedCells,
                     maximumPortalAlignmentErrorMeters = traversalProof.Value.MaximumPortalAlignmentErrorMeters,
+                    portals = traversalProof.Value.Portals.Select(portal => new
+                    {
+                        fromDoorReferenceFormId = portal.FromDoorReferenceFormId,
+                        toDoorReferenceFormId = portal.ToDoorReferenceFormId,
+                        closedHit = portal.ClosedHit,
+                        closedHitDoor = portal.ClosedHitDoor,
+                        openBlockedByPortalDoor = portal.OpenBlockedByPortalDoor,
+                        openRayPortalClear = portal.OpenRayPortalClear,
+                        projectilePortalClear = portal.ProjectilePortalClear,
+                        floorHit = portal.FloorHit,
+                        floorWalkable = portal.FloorWalkable,
+                        floorY = portal.FloorY,
+                        capsuleWalkForward = portal.CapsuleWalkForward,
+                        capsuleWalkBackward = portal.CapsuleWalkBackward,
+                        capsuleWalkThrough = portal.CapsuleWalkThrough,
+                    }).ToArray(),
                 },
         };
         if (options.TryGetValue("report", out var reportPath))
@@ -1941,5 +2066,34 @@ public partial class RuntimeCoordinator : Node3D
         bool CapsuleWalkBackward,
         bool CapsuleWalkThrough,
         int LinkedCells,
-        float? MaximumPortalAlignmentErrorMeters);
+        float? MaximumPortalAlignmentErrorMeters,
+        IReadOnlyList<PortalTraversalProof> Portals);
+
+    private readonly record struct PortalTraversalProof(
+        string FromDoorReferenceFormId,
+        string? ToDoorReferenceFormId,
+        bool ClosedHit,
+        bool ClosedHitDoor,
+        bool OpenBlockedByPortalDoor,
+        bool OpenRayPortalClear,
+        bool ProjectilePortalClear,
+        bool FloorHit,
+        bool FloorWalkable,
+        float FloorY,
+        bool CapsuleWalkForward,
+        bool CapsuleWalkBackward,
+        bool CapsuleWalkThrough)
+    {
+        internal bool Passed =>
+            ClosedHit &&
+            ClosedHitDoor &&
+            !OpenBlockedByPortalDoor &&
+            OpenRayPortalClear &&
+            ProjectilePortalClear &&
+            FloorHit &&
+            FloorWalkable &&
+            CapsuleWalkForward &&
+            CapsuleWalkBackward &&
+            CapsuleWalkThrough;
+    }
 }

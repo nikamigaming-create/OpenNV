@@ -1,5 +1,5 @@
 {
-  "schema": "opennv-cell-recipe/v1",
+  "schema": "opennv-cell-recipe/v2",
   "id": "goodsprings-doc-mitchell-house-v1",
   "exportStrict": false,
   "textureAliases": {},
@@ -14,7 +14,16 @@
   "actorRecipes": [
     "goodsprings-doc-mitchell-actor-v1"
   ],
-  "linkedExteriorRecipe": "goodsprings-doc-exterior-active-set-v1",
+  "linkedCellRecipes": [
+    {
+      "recipe": "goodsprings-doc-exterior-active-set-v1",
+      "fromDoorReferenceFormId": "00103e61"
+    },
+    {
+      "recipe": "goodsprings-saloon-structure-v1",
+      "fromDoorReferenceFormId": "0010636f"
+    }
+  ],
   "selection": {
     "modelPrefixes": [],
     "includeBaseRecordTypes": [

@@ -54,13 +54,14 @@ retail startup-logo and original-menu presentation remain absent.
    acceptance remain open. Fallout 1 OpenXR therefore stays disabled.
 4. Available now: the normal New Vegas menu and skippable intro enter the Doc
    opening, and the accepted checkpoint/reload path completes character setup,
-   farewell, and the stage-200 open-world-ready save. The production
-   Goodsprings active set separately loads its authored interior/exterior graph,
-   LAND, actors, and reciprocal Doc Mitchell house/exterior exit with shared
-   gameplay/save state. A source-bound HUD/STATS/ITEMS/DATA and Pip-Boy shell
+   farewell, and the stage-200 open-world-ready save. The default bounded
+   composite preloads the Doc house, Goodsprings exterior active set, saloon,
+   LAND, actors, and both reciprocal XTEL pairs with shared gameplay/save state.
+   A source-bound HUD/STATS/ITEMS/DATA and Pip-Boy shell
    now consumes that same state; STATS explicitly reuses the verified ITEMS
    frame until its remaining layout expressions execute. Complete tile
-   interaction and retail visual parity remain open.
+   interaction, ordinary player-driven end-to-end traversal, active-CELL
+   restoration, integrated-route OpenXR acceptance, and retail visual parity remain open.
    An uninterrupted whole-campaign route is not proven.
 5. Available now: `scripts/Register-OpenNVFallout2.ps1` validates the legally
    owned `master.dat`, `critter.dat`, and `patch000.dat` DAT2 archives and emits
@@ -98,8 +99,8 @@ retail startup-logo and original-menu presentation remain absent.
     runtime execution remain absent.
 
 Current result: a normal launcher starts either registered Fallout 1 view
-through its menu/creator/movie path, the bounded New Vegas menu/Doc route and
-production Goodsprings active set. Fallout 2 and Fallout 3 remain launcher-disabled;
+through its menu/creator/movie path and the bounded New Vegas menu/Doc/exterior/
+saloon composite. Fallout 2 and Fallout 3 remain launcher-disabled;
 Fallout 3 has a registered development menu/CG00 frontend but no playable
 presentation, while Fallout 2's exact source-bound Godot scene can be
 constructed headlessly, but no presentation is yet interactive or promoted.
@@ -176,7 +177,7 @@ is supported for the selected base profile.
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
 | Fallout 2 | Exact Temple/Arroyo Caves source transport, selective caches, Map 126 construction/topology, nonvisual movement, and owned exit state work headlessly; Godot Map 3 consumption, reciprocal runtime execution, INT, actors, rendered/player-controlled Hex, character creation, combat, shared gameplay/save state, FPS, and VR remain absent, so all modes stay disabled |
-| New Vegas first slice | Menu/intro/Doc house, the source-bound HUD/Pip-Boy runtime shell, and the production Goodsprings active set with its reciprocal Doc Mitchell house/exterior exit work; complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
+| New Vegas first slice | Menu/intro/Doc house, the source-bound HUD/Pip-Boy runtime shell, and the bounded Doc/exterior/saloon composite with both reciprocal XTEL pairs load and pass diagnostic portal checks; ordinary end-to-end travel, active-CELL restoration, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
 | Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance through stage 62 work; later state contracts validate, but FPS/Hex/VR, authored trigger execution, dialogue/KF, actors, and Vault 101 remain |
 | TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |
 | JAM | Dependency registrar plus bounded JVS sprint and JBT time-dilation semantics work; missing dependencies and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM semantics keep the launcher toggle disabled |

@@ -69,7 +69,7 @@ internal static class XrRigLayoutAcceptance
             proof.Damage,
             proof.ClipSize,
             proof.ReserveRounds));
-        if (!session.Fire(player.RightAim!) || !session.Reload())
+        if (!session.Fire(player.RightAim!, player.CollisionMask) || !session.Reload())
             throw new InvalidOperationException("OpenNV OpenXR fire/reload contract failed.");
         if (session.ShotsFired != proof.ExpectedShotsFired ||
             session.AmmoInMagazine != proof.ExpectedAmmoInMagazineAfterReload ||

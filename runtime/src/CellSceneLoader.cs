@@ -19,7 +19,7 @@ internal static class CellSceneLoaderNumericContracts
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v11";
+    private const string CellSceneSchema = "opennv-cell-scene/v12";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -117,7 +117,27 @@ internal static class CellSceneLoader
                     throw new InvalidOperationException("Linked CELL unit scales do not match.");
                 var fromDoorId = link.GetProperty("fromDoorReferenceFormId").GetString()!;
                 var toDoorId = link.GetProperty("toDoorReferenceFormId").GetString()!;
-                if (!main.Doors.TryGetValue(fromDoorId, out var fromDoor) ||
+                var sourceContent = linkedCells.Count == 0
+                    ? main
+                    : linkedCells[^1].Content;
+                if (!sourceContent.RecipeId.Equals(
+                        link.GetProperty("fromRecipe").GetString(),
+                        StringComparison.Ordinal) ||
+                    !sourceContent.FormId.Equals(
+                        link.GetProperty("fromCellFormId").GetString(),
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !linked.RecipeId.Equals(
+                        link.GetProperty("recipe").GetString(),
+                        StringComparison.Ordinal) ||
+                    !linked.FormId.Equals(
+                        link.GetProperty("cellFormId").GetString(),
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !linked.RecipeSha256.Equals(
+                        link.GetProperty("recipeSha256").GetString(),
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Linked CELL recipe or CELL identity differs from the ordered route.");
+                if (!sourceContent.Doors.TryGetValue(fromDoorId, out var fromDoor) ||
                     !linked.Doors.TryGetValue(toDoorId, out var toDoor))
                     throw new InvalidOperationException(
                         $"Linked CELL portal doors are missing: {fromDoorId} -> {toDoorId}");
@@ -467,12 +487,13 @@ internal static class CellSceneLoader
         query.CollisionMask = collisionMask;
         var hit = space.IntersectRay(query);
         if (hit.Count == 0)
-            return new RayHit(false, false, "");
+            return new RayHit(false, false, "", Vector3.Zero);
         var collider = hit["collider"].AsGodotObject() as Node;
         return new RayHit(
             true,
             collider is not null && door.IsAncestorOf(collider),
-            collider?.GetPath().ToString() ?? "unknown");
+            collider?.GetPath().ToString() ?? "unknown",
+            hit["position"].AsVector3());
     }
 
     internal static FloorHit CastSpawnFloor(
@@ -480,10 +501,18 @@ internal static class CellSceneLoader
         ProofConfiguration proof,
         uint collisionMask,
         Rid excludedBody)
+        => CastFloorAt(space, proof, collisionMask, excludedBody, Vector3.Zero);
+
+    internal static FloorHit CastFloorAt(
+        PhysicsDirectSpaceState3D space,
+        ProofConfiguration proof,
+        uint collisionMask,
+        Rid excludedBody,
+        Vector3 origin)
     {
         var query = PhysicsRayQueryParameters3D.Create(
-            Vector3.Up * proof.SpawnFloorRayStartMeters,
-            Vector3.Up * proof.SpawnFloorRayEndMeters,
+            origin + Vector3.Up * proof.SpawnFloorRayStartMeters,
+            origin + Vector3.Up * proof.SpawnFloorRayEndMeters,
             collisionMask);
         query.Exclude = new Godot.Collections.Array<Rid> { excludedBody };
         var hit = space.IntersectRay(query);
@@ -561,7 +590,11 @@ internal static class CellSceneLoader
 
     internal readonly record struct DoorRay(Vector3 From, Vector3 To, Vector3 LocalSize, Vector3 LocalNormal);
 
-    internal readonly record struct RayHit(bool Hit, bool HitProofDoor, string ColliderPath);
+    internal readonly record struct RayHit(
+        bool Hit,
+        bool HitProofDoor,
+        string ColliderPath,
+        Vector3 Position);
 
     internal readonly record struct FloorHit(
         bool Hit,

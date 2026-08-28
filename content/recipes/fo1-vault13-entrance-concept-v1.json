@@ -2,7 +2,7 @@
   "schema": "opennv-fo1-concept-composition/v1",
   "id": "fo1-vault13-entrance-concept-v1",
   "donor": {
-    "sceneSchema": "opennv-cell-scene/v11",
+    "sceneSchema": "opennv-cell-scene/v12",
     "recipe": "fo1-vault13-cave-donor-smoke-v1",
     "cellFormId": "00153159",
     "cellEditorId": "SLGoodspringsCaveINT",

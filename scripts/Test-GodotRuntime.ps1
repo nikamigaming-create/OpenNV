@@ -65,6 +65,7 @@ $RuntimeConfigurationJsonDepth = 100
 $runtimeConfiguration = Get-Content -Raw -LiteralPath $runtimeConfigurationPath |
     ConvertFrom-Json -Depth $RuntimeConfigurationJsonDepth
 $ownedData = $runtimeConfiguration.legalAssets.ownedData
+$defaultCellRecipe = [string]$runtimeConfiguration.legalAssets.defaultCellRecipe
 $linkedWorldCellRecipe = [string]$runtimeConfiguration.legalAssets.linkedWorldProofCellRecipe
 if ([string]::IsNullOrWhiteSpace($RetailLogicalPath)) {
     $RetailLogicalPath = [string]$runtimeConfiguration.legalAssets.smokeModelLogicalPath
@@ -422,6 +423,89 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     finally {
         foreach ($path in @($cellReport, $cellSave)) {
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+    }
+
+    $routeCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-cache-{0}" -f [guid]::NewGuid().ToString("N"))
+    $routeReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $routeSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $routeCheckpointReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-opening-checkpoint-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $routeResumeReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-opening-resume-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $routeMenuReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-menu-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $routeOpeningSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-opening-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    try {
+        & python $preparer --data-root $resolvedFalloutData --cache-root $routeCache `
+            --logical-model $RetailLogicalPath --cell-recipe $defaultCellRecipe
+        if ($LASTEXITCODE -ne 0) { throw "Default owned route preparation failed." }
+        $routeInstall = Join-Path $routeCache "install-manifest.json"
+        $preparedRoute = Get-Content -Raw -LiteralPath $routeInstall | ConvertFrom-Json
+        $routeOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+            --cell-scene ([string]$preparedRoute.outputs.cellScene) `
+            --actor-scenes ([string]$preparedRoute.outputs.actorScenes) `
+            --save-path $routeSave --report $routeReport --portal-proof 2>&1
+        $routeText = $routeOutput | Out-String
+        if ($LASTEXITCODE -ne 0 -or
+            $routeText -notmatch "OPENNV_GODOT_CELL_PASS" -or
+            $routeText -match "(?m)^ERROR:") {
+            throw "Default Doc-to-saloon route gate failed:`n$routeText"
+        }
+        & python $reportValidator --mode cell --report $routeReport `
+            --install-manifest $routeInstall
+        if ($LASTEXITCODE -ne 0) { throw "Default owned route report is invalid." }
+
+        $checkpointOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+            --cell-scene ([string]$preparedRoute.outputs.cellScene) `
+            --actor-scenes ([string]$preparedRoute.outputs.actorScenes) `
+            --opening-manifest ([string]$preparedRoute.outputs.openingManifest) `
+            --save-path $routeOpeningSave --new-game --opening-proof checkpoint `
+            --opening-proof-name NIKAMI --opening-proof-timeout-seconds 600 `
+            --report $routeCheckpointReport 2>&1
+        $checkpointText = $checkpointOutput | Out-String
+        if ($LASTEXITCODE -ne 0 -or
+            $checkpointText -notmatch "OPENNV_OPENING_ACCEPTANCE_PASS mode=checkpoint" -or
+            $checkpointText -match "(?m)^ERROR:") {
+            throw "Default route opening checkpoint failed:`n$checkpointText"
+        }
+        $resumeOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+            --cell-scene ([string]$preparedRoute.outputs.cellScene) `
+            --actor-scenes ([string]$preparedRoute.outputs.actorScenes) `
+            --opening-manifest ([string]$preparedRoute.outputs.openingManifest) `
+            --save-path $routeOpeningSave --opening-proof resume `
+            --opening-proof-name NIKAMI --opening-proof-timeout-seconds 600 `
+            --report $routeResumeReport 2>&1
+        $resumeText = $resumeOutput | Out-String
+        if ($LASTEXITCODE -ne 0 -or
+            $resumeText -notmatch "OPENNV_OPENING_ACCEPTANCE_PASS mode=resume" -or
+            $resumeText -match "(?m)^ERROR:") {
+            throw "Default route opening resume failed:`n$resumeText"
+        }
+        $menuOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+            --reuse-cache --cache-root $routeCache --save-path $routeOpeningSave `
+            --opening-menu-proof continue --report $routeMenuReport 2>&1
+        $menuText = $menuOutput | Out-String
+        if ($LASTEXITCODE -ne 0 -or
+            $menuText -notmatch "OPENNV_OWNED_MENU_ACCEPTANCE action=continue transport=godot-button-signal" -or
+            $menuText -notmatch "OPENNV_GODOT_CELL_PASS" -or
+            $menuText -match "(?m)^ERROR:") {
+            throw "Default route normal-menu Continue gate failed:`n$menuText"
+        }
+        & python $reportValidator --mode cell-menu-continue --report $routeMenuReport `
+            --install-manifest $routeInstall
+        if ($LASTEXITCODE -ne 0) { throw "Default route normal-menu report is invalid." }
+    }
+    finally {
+        foreach ($path in @(
+            $routeReport,
+            $routeSave,
+            $routeCheckpointReport,
+            $routeResumeReport,
+            $routeMenuReport,
+            $routeOpeningSave
+        )) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+        if (Test-Path -LiteralPath $routeCache) {
+            Remove-Item -LiteralPath $routeCache -Recurse -Force
         }
     }
 

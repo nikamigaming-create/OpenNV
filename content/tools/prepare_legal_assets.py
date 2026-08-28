@@ -141,31 +141,6 @@ def prepare(
             for archive in texture_archives
         ]
         cell_recipe_document = load_recipe(cell_recipe)
-        linked_recipe_document = None
-        if cell_recipe_document.get("linkedExteriorRecipe"):
-            linked_recipe_document = load_spatial_recipe(
-                str(cell_recipe_document["linkedExteriorRecipe"])
-            )
-            linked_scene = prepare_exterior_scene(
-                master,
-                meshes,
-                texture_archives,
-                texture_archive_rows,
-                cache_root,
-                linked_recipe_document,
-                master_hash,
-                owned_archives=visual_archives,
-            )
-            linked_cell_scenes.append(
-                {
-                    "recipe": linked_recipe_document["id"],
-                    "cellFormId": linked_recipe_document["cellFormId"],
-                    "scene": linked_scene["output"],
-                    "sha256": file_sha256(Path(str(linked_scene["output"]))),
-                    "fromDoorReferenceFormId": cell_recipe_document["entryDoorReferenceFormId"],
-                    "toDoorReferenceFormId": linked_recipe_document["entryDoorReferenceFormId"],
-                }
-            )
         cell_scene = prepare_cell_scene(
             master,
             meshes,
@@ -176,13 +151,103 @@ def prepare(
             master_hash,
             visual_archives,
         )
+        linked_recipe_documents: list[dict[str, object]] = []
+        configured_links = cell_recipe_document.get("linkedCellRecipes")
+        if configured_links is None and cell_recipe_document.get("linkedExteriorRecipe"):
+            configured_links = [
+                {
+                    "recipe": cell_recipe_document["linkedExteriorRecipe"],
+                    "fromDoorReferenceFormId": cell_recipe_document["entryDoorReferenceFormId"],
+                }
+            ]
+        if configured_links is not None:
+            if not isinstance(configured_links, list) or not configured_links:
+                raise ValueError("Linked CELL recipes must be a non-empty ordered list")
+            available_scenes = [
+                json.loads(Path(str(cell_scene["output"])).read_text(encoding="utf-8"))
+            ]
+            seen_recipes = {str(cell_recipe_document["id"])}
+            for configured_link in configured_links:
+                if not isinstance(configured_link, dict):
+                    raise ValueError("Linked CELL recipe row must be an object")
+                recipe_id = str(configured_link.get("recipe", ""))
+                from_door = str(configured_link.get("fromDoorReferenceFormId", "")).lower()
+                if not recipe_id or not from_door or recipe_id in seen_recipes:
+                    raise ValueError("Linked CELL recipe identity is missing or duplicated")
+                seen_recipes.add(recipe_id)
+                linked_recipe_document = load_spatial_recipe(recipe_id)
+                if linked_recipe_document["schema"] == "opennv-exterior-recipe/v1":
+                    linked_scene = prepare_exterior_scene(
+                        master,
+                        meshes,
+                        texture_archives,
+                        texture_archive_rows,
+                        cache_root,
+                        linked_recipe_document,
+                        master_hash,
+                        owned_archives=visual_archives,
+                    )
+                else:
+                    linked_scene = prepare_cell_scene(
+                        master,
+                        meshes,
+                        texture_archives,
+                        texture_archive_rows,
+                        cache_root,
+                        linked_recipe_document,
+                        master_hash,
+                        visual_archives,
+                    )
+                linked_document = json.loads(
+                    Path(str(linked_scene["output"])).read_text(encoding="utf-8")
+                )
+                to_door = str(linked_recipe_document["entryDoorReferenceFormId"]).lower()
+                source_doors = {
+                    str(reference["formId"]).lower()
+                    for reference in available_scenes[-1]["references"]
+                    if isinstance(reference.get("interaction"), dict)
+                    and reference["interaction"].get("type") == "door"
+                }
+                target_doors = {
+                    str(reference["formId"]).lower()
+                    for reference in linked_document["references"]
+                    if isinstance(reference.get("interaction"), dict)
+                    and reference["interaction"].get("type") == "door"
+                }
+                if from_door not in source_doors or to_door not in target_doors:
+                    raise ValueError(
+                        f"Linked CELL portal doors are absent: {from_door} -> {to_door}"
+                    )
+                spawn = linked_document["spawn"]
+                if (
+                    str(spawn.get("sourceDoorReferenceFormId", "")).lower() != from_door
+                    or str(spawn.get("targetDoorReferenceFormId", "")).lower() != to_door
+                ):
+                    raise ValueError(
+                        f"Linked CELL XTEL differs: {from_door} -> {to_door}"
+                    )
+                linked_cell_scenes.append(
+                    {
+                        "fromRecipe": available_scenes[-1]["recipe"],
+                        "fromCellFormId": available_scenes[-1]["cell"]["formId"],
+                        "recipe": linked_recipe_document["id"],
+                        "cellFormId": linked_document["cell"]["formId"],
+                        "recipeSha256": linked_document["recipeSha256"],
+                        "scene": linked_scene["output"],
+                        "sha256": file_sha256(Path(str(linked_scene["output"]))),
+                        "fromDoorReferenceFormId": from_door,
+                        "toDoorReferenceFormId": to_door,
+                    }
+                )
+                linked_recipe_documents.append(linked_recipe_document)
+                available_scenes.append(linked_document)
         if linked_cell_scenes:
             cell_scene_path = Path(str(cell_scene["output"]))
             primary_document = json.loads(cell_scene_path.read_text(encoding="utf-8"))
             primary_document["linkedCells"] = linked_cell_scenes
             atomic_text(cell_scene_path, primary_document)
         actor_recipe_ids = [str(value) for value in cell_recipe_document["actorRecipes"]]
-        if linked_recipe_document is not None:
+        for linked_recipe_document in linked_recipe_documents:
             actor_recipe_ids.extend(str(value) for value in linked_recipe_document["actorRecipes"])
         if actor_recipe_ids:
             actor_scenes = prepare_actor_set(

@@ -144,7 +144,7 @@ interchangeable.
 | Owned Fallout 1 menu/character/movie/V13ENT route | `interactive` in Hex/FPS; OpenXR simulator input passes, but launcher enablement and physical-headset acceptance remain open | [Multi-game first slices](multi-game-first-slices.md) |
 | Owned Fallout 2 Temple/Arroyo Caves source transport | `partial`; exact Map 126 and Map 3 graphs/caches, Temple topology/physics/nonvisual movement, and exit state pass, while the Godot Map 3 consumer, reciprocal runtime execution, INT, actors, controls, rendered presentation, character flow, gameplay, and save remain pending | [Multi-game first slices](multi-game-first-slices.md) |
 | Owned New Vegas menu, intro, character creation, and Doc Mitchell opening | `interactive`; checkpoint/resume reaches the stage-200 open-world-ready state, while uninterrupted full-campaign continuity and visual parity remain pending | [Owned opening campaign-state contract](evidence/fnv-owned-opening-campaign-state-contract.md) |
-| Production Doc Mitchell house/Goodsprings exterior active set and reciprocal exit | `interactive`; the bounded active set is promoted, not neighboring-world or whole-campaign streaming | [Architecture](architecture.md) |
+| Doc Mitchell house/Goodsprings exterior/saloon ordered route | `loaded and portal-validated` bounded composite; both reciprocal XTEL pairs and enabled Sunny load from owned data, while ordinary player-driven travel, active-CELL streaming persistence, integrated OpenXR acceptance, and Sunny behavior remain pending | [Normal-menu Goodsprings route](evidence/fnv-normal-menu-goodsprings-route-contract.md) |
 | Owned Fallout 3 menu, intro, and CG00 sex/name/appearance through persistent stage 62 | `interactive frontend`, not a playable presentation; later state contracts validate, while authored triggers, dialogue/KF, actors, Vault 101 scene compilation, and world play remain pending | [Multi-game first slices](multi-game-first-slices.md) |
 | Goodsprings saloon plus one exterior portal, gameplay, and cold reload | `interactive`, visual parity pending | [Goodsprings linked-world contract](evidence/fnv-goodsprings-linked-world-contract.md) |
 | Whole official CELL/child denominator and compile plan | inventory `proven`; runtime/parity `pending` | [Whole-game CELL parity](whole-game-cell-parity.md) |
@@ -167,8 +167,10 @@ Objective: prove one ordinary, uninterrupted campaign route without changing
 pipelines: launch at the real front end, choose New Game, complete the accepted
 Doc flow, expose the player's real post-opening inventory in the retail
 HUD/Pip-Boy, traverse Doc Mitchell's authored XTEL exit, stream the required
-Goodsprings exterior active set and LOD, save outside, restart, and Continue
-from that exact state.
+Goodsprings exterior active set and LOD, enter the saloon, observe authored
+enabled Sunny, save the active location, restart, and Continue from that exact
+state. The bounded preloaded two-hop route is now present; active-CELL save
+ownership and ordinary player-driven end-to-end travel remain blocking.
 
 Implementation order:
 

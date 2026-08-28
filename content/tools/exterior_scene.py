@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import hashlib
 from pathlib import Path
 
 from cell_catalog import BaseObject, PlacedReference, scan_cell_catalog
@@ -17,6 +18,7 @@ from cell_scene import (
     godot_yaw_radians,
     navmesh_manifest,
     normalized_rgb,
+    recipe_path,
 )
 from cell_catalog import INITIALLY_DISABLED_RECORD_FLAG
 from bsa_archive import BsaArchive
@@ -806,6 +808,10 @@ def prepare_exterior_scene(
         "schema": CELL_SCENE_SCHEMA,
         "status": "geometry-structure",
         "recipe": str(recipe["id"]),
+        "recipeSha256": hashlib.sha256(
+            recipe_path(str(recipe["id"])).read_bytes()
+        ).hexdigest(),
+        "actorRecipes": [str(value) for value in recipe["actorRecipes"]],
         "source": {
             "master": master_path.name,
             "masterSha256": master_sha256,

@@ -397,7 +397,7 @@ internal partial class CellPlayer : CharacterBody3D
     {
         var from = aimSource.GlobalPosition;
         var to = from - aimSource.GlobalBasis.Z * distance;
-        var query = PhysicsRayQueryParameters3D.Create(from, to, _configuration.Player.CollisionMask);
+        var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionMask);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         return hit.Count == 0 ? null : hit["collider"].AsGodotObject() as Node;
     }
@@ -668,7 +668,7 @@ internal partial class CellPlayer : CharacterBody3D
         {
             var accepted = _activePool is not null
                 ? _activePool.StrikeFlat(-_camera.GlobalBasis.Z)
-                : _session!.Fire(_camera);
+                : _session!.Fire(_camera, CollisionMask);
             if (accepted && _activePool is null)
                 _weaponFeedbackSeconds = _configuration.Xr.WeaponFeedbackSeconds;
             GD.Print($"OPENNV_FLAT_ACTION action=fire accepted={accepted}");
@@ -738,7 +738,7 @@ internal partial class CellPlayer : CharacterBody3D
             _rightGrip!.GetFloat("fire") >= _configuration.Xr.ActionThreshold;
         if (fire && !_xrFirePressed)
         {
-            var accepted = _activePool is null && _session!.Fire(_rightAim!);
+            var accepted = _activePool is null && _session!.Fire(_rightAim!, CollisionMask);
             _controlTelemetry.RecordFire(accepted);
             if (accepted)
             {

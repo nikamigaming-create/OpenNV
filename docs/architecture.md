@@ -12,8 +12,9 @@ MAP/PRO/FRM source graph and constructs its exact floor/object presentation in
 Godot's 3D hex space; no rendered, interactive, or launcher-ready Hex/FPS/VR mode exists.
 New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
 hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
-XML closures, and the production Goodsprings active set with the reciprocal Doc Mitchell
-house/exterior exit (`00103e61` ↔ `00103e69`); flat is
+XML closures, and the bounded ordered Doc house → Goodsprings exterior → saloon
+composite with reciprocal exits (`00103e61` ↔ `00103e69`, then
+`0010636f` ↔ `0010618e`) and normally enabled Sunny `00104e85`; flat is
 launchable and OpenXR remains experimental with no physical-headset acceptance.
 Fallout 3 owns its menu and persistent CG00 selection through stage 62; later
 Section 4 and stage-65/80/85 contracts validate but do not bypass unimplemented
@@ -95,6 +96,8 @@ flowchart TD
     CellRoot -->|1:1 reciprocal XTEL| ExteriorRoot[WastelandNV exterior root]
     ExteriorRoot --> Land[LAND height, color, texture layers]
     ExteriorRoot --> ExteriorActor[Easy Pete ACHR]
+    ExteriorRoot -->|1:1 reciprocal XTEL| SaloonRoot[Prospector Saloon interior]
+    SaloonRoot --> Sunny[Enabled Sunny ACHR]
 ```
 
 The actor data boundary is separate from model assembly and rendering:
@@ -432,15 +435,24 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
 
-Implemented in the separate saloon/exterior sandbox: direct owned
+Implemented in the independently playable saloon/exterior component: direct owned
 ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 504
 enabled interior/exterior references, 228 visible/held/terrain assets, 379 textures, 476
 materials, 97 saloon pickups, five containers, 27 authored lights, full converted item rotations,
 supported authored packed-triangle collision,
 movement, configured flat input, HUD, inventory, authored `.357` and 10mm
 damage/clip data, firing/reload, objectives,
-doors, atomic save, cold reload, and launcher-enabled sandbox play.
-The saloon door `0010618e` and exterior door `0010636f` are a reciprocal pair.
+doors, atomic save, cold reload, and sandbox play. The default Doc-house route
+reuses and preloads that exterior/saloon content, but its joined form is only
+loaded and programmatically portal-validated; the component gameplay and XR
+acceptance do not promote the complete joined route.
+The Doc door pair `00103e61`/`00103e69` and saloon pair
+`0010636f`/`0010618e` form a fail-closed ordered chain. Each target scene and
+recipe is hash-bound, each source door must belong to the immediately preceding
+scene, and a programmatic diagnostic gate proves closed/open ray, projectile,
+and two-way capsule behavior per hop. This is not yet ordinary player-driven
+end-to-end traversal or integrated OpenXR acceptance. The saloon door `0010618e`
+and exterior door `0010636f` are a reciprocal pair.
 Their visible planes align below `0.000001` metre, both states persist together,
 and the gate passes closed collision, open fire-ray clearance, and two-way player
 capsule traversal. The linked exterior includes LAND `000db010`; Sunny Smiles
@@ -534,7 +546,8 @@ lighting/HDR path, complete Havok behavior, and actor pixels remain open
 differential gates. The clean-room shader observations are recorded in
 `docs/evidence/fnv-retail-material-shader-contract.md`.
 
-The canonical next promotion is the normal-launch-menu-to-Goodsprings active slice in the
+The canonical next promotion continues the normal-launch-menu-to-Goodsprings active slice with
+active-CELL persistence, ordinary player-driven travel, and authored Sunny behavior in the
 [whole-game delivery plan](whole-game-delivery-plan.md). Later CELL, gameplay,
 actor, renderer, UI, compatibility, exhaustive-acceptance, and release work is
 ordered there so this architecture document cannot drift into a second roadmap.

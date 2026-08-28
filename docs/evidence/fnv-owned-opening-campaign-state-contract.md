@@ -60,9 +60,11 @@ restore path validates that vector and maps its movement, look,
 rollover-derived activation, and fighting bits through the same helper used by
 the live stage transition, preventing the prior silent combat re-enable.
 Pip-Boy visibility is restored separately; point-of-view and sneaking bits do
-not yet have runtime consumers. The existing two-process report proves the
-incomplete-save resume to completion, while a third completed-save cold load
-remains a dedicated acceptance gap. The acceptance report records source scene,
+not yet have runtime consumers. The two-process report proves the
+incomplete-save resume to completion. The 2026-08-28 normal-menu route acceptance
+adds a third completed-save cold load through the owned Continue button and
+restores stage 200 into the bounded Doc/exterior/saloon composite. It does not
+yet persist or restore an independently streamed active-CELL identity. The acceptance report records source scene,
 configuration identity, save SHA-256, initial/final state summaries, and that
 Windows app control and foreground input injection were not used. Generated
 cache, save, voice, LIP, and other commercial artifacts remain local and are not

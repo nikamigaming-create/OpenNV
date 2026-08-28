@@ -19,6 +19,8 @@ internal partial class RetailOpening : CanvasLayer
     private Action<string>? _menuActionRequested;
     private string _cancelAction = "";
     private bool _introCompleted;
+    private readonly Dictionary<string, Button> _buttonsByAction =
+        new(StringComparer.Ordinal);
 
     internal void Configure(
         OpeningManifest manifest,
@@ -88,6 +90,9 @@ internal partial class RetailOpening : CanvasLayer
                 button.Disabled = true;
             button.Pressed += () => Dispatch(authored.Action);
             _canvas.AddChild(button);
+            if (!_buttonsByAction.TryAdd(authored.Action, button))
+                throw new InvalidOperationException(
+                    $"Owned main menu duplicates action: {authored.Action}");
             if (initialFocus is null && !button.Disabled)
                 initialFocus = button;
             if (authored.Action == NewGameAction && !hasSave)
@@ -108,6 +113,14 @@ internal partial class RetailOpening : CanvasLayer
         ScaleReferenceCanvas();
         if (initialFocus is not null)
             Callable.From(initialFocus.GrabFocus).CallDeferred();
+    }
+
+    internal void PressActionForAcceptance(string action)
+    {
+        if (!_buttonsByAction.TryGetValue(action, out var button) || button.Disabled)
+            throw new InvalidOperationException(
+                $"Owned main-menu action is unavailable: {action}");
+        button.EmitSignal(Button.SignalName.Pressed);
     }
 
     public override void _Input(InputEvent @event)

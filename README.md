@@ -38,7 +38,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
 | Fallout 2 Hex/FPS/VR | Owned Map 126 Temple and Map 3 Arroyo Caves source graphs/caches, exact Temple topology, nonvisual movement, and exit state pass | The proof is headless/nonvisual; no Godot Map 3 consumer, reciprocal runtime transition, INT execution, actors, controls, gameplay, or saves exist, so all three modes stay disabled |
-| New Vegas | Owned menu, skippable intro, Doc Mitchell house/opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and the production Goodsprings active set with the reciprocal Doc Mitchell house/exterior exit; original flat and experimental OpenXR routes are launchable | The UI shell is not yet a complete Gamebryo tile interpreter or retail-pixel-parity result; equip/use/drop semantics, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
+| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; original flat and experimental OpenXR routes are launchable | Ordinary end-to-end player travel, active-CELL save restoration, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and persistent CG00 stage 62; exact later state contracts compile and validate | No first-person Vault 101 world or authored package/dialogue trigger execution exists, so FPS, Hex, and VR stay disabled |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
@@ -65,9 +65,12 @@ shared FPS / Hex / VR mode row and Play action below it, with unfinished modes
 visible but disabled. Select **New
 Vegas** and **Play** for the normal owned main menu;
 **New Game** plays the owned intro, and `Escape` skips into the same Doc Mitchell
-opening state as watching it through. The separately promoted production
-Goodsprings active set includes the reciprocal Doc Mitchell house/exterior
-exit. OpenNV now compiles the installed `hud_main_menu.xml`, `stats_menu.xml`,
+opening state as watching it through. The default owned-data cache now binds an
+ordered Doc house → Goodsprings exterior → saloon chain. It aligns and links
+`00103e61 ↔ 00103e69` and `0010636f ↔ 0010618e`, exercises ray/projectile/
+capsule continuity at each pair, and loads Sunny `00104e85` once in her authored
+enabled state without a proof override. OpenNV compiles the installed
+`hud_main_menu.xml`, `stats_menu.xml`,
 `inventory_menu.xml`, and `map_menu.xml` closures, their four selected owned
 bitmap fonts, and the owned Pip-Boy background into a hash-verified gameplay-UI
 contract. The HUD stays hidden until the authored Doc control policy enables
@@ -228,8 +231,9 @@ the shared V13ENT state but remains launcher-disabled. This route now begins at 
 OpenNV Fallout-style menu before the owned character picker. Fallout 1's retail
 startup logos and exact retail menu art/presentation are not implemented.
 
-Separate from the production Doc exit slice, the New Vegas saloon/exterior
-sandbox is playable, not only a renderer. Its hash-pinned retail baseline
+The New Vegas saloon/exterior component remains independently playable, not
+only a renderer, and its saloon interior is now also the second linked target
+of the default Doc route. Its hash-pinned retail baseline
 resolves 228 interior/exterior
 assets, 504 enabled placements, 379 textures, 476 materials, 97 authored saloon
 pickups, five containers, 27 lights, and a
@@ -263,9 +267,13 @@ completed cold-Continue path maps the saved movement, look, rollover-derived
 activation, and fighting bits back onto `CellPlayer`, including the authored
 disabled-combat state. Pip-Boy visibility is restored separately; saved POV and
 sneaking bits still lack runtime consumers. The
-production Goodsprings active set and reciprocal Doc Mitchell house/exterior
-exit are also interactive. An uninterrupted whole-campaign route remains
-unproven. See the
+bounded default cache joins the reciprocal Doc Mitchell house/exterior and
+Goodsprings exterior/saloon pairs in one preloaded bounded composite. A normal
+Continue restores the completed opening state before the programmatic ordered
+portal gate. Ordinary player-driven travel through the complete chain is not
+yet an acceptance claim.
+The current save does not yet restore an independently streamed active CELL, so
+an uninterrupted whole-campaign route remains unproven. See the
 [canonical whole-game delivery plan](docs/whole-game-delivery-plan.md),
 [multi-game first-slice plan](docs/multi-game-first-slices.md),
 [single-page architecture](docs/architecture.md),

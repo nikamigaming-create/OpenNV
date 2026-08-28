@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import sys
@@ -30,11 +31,13 @@ from first_person_rig import prepare_first_person_rig
 from owned_archive_stack import OwnedArchiveStack
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v11"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v12"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
+ORDERED_CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v2"
 EXTERIOR_RECIPE_SCHEMA = "opennv-exterior-recipe/v1"
 CELL_NAVIGATION_SCHEMA = "opennv-owned-cell-navigation/v1"
 FORM_ID_RADIX = 16
+FORM_ID_HEX_CHARACTERS = 8
 BYTE_CHANNEL_MAXIMUM = 255.0
 QUATERNION_COMPONENT_SCALE = 0.25
 POOL_CUE_TIP_ENDPOINTS = {"maximum-z", "minimum-z"}
@@ -48,8 +51,32 @@ def recipe_path(recipe_id: str) -> Path:
 
 def load_recipe(recipe_id: str) -> dict[str, object]:
     document = load_spatial_recipe(recipe_id)
-    if document.get("schema") != CELL_RECIPE_SCHEMA:
+    schema = document.get("schema")
+    if schema not in {CELL_RECIPE_SCHEMA, ORDERED_CELL_RECIPE_SCHEMA}:
         raise ValueError(f"OpenNV recipe is not an interior cell recipe: {recipe_path(recipe_id)}")
+    configured_links = document.get("linkedCellRecipes")
+    if schema == CELL_RECIPE_SCHEMA and configured_links is not None:
+        raise ValueError("Ordered linked CELL recipes require opennv-cell-recipe/v2")
+    if schema == ORDERED_CELL_RECIPE_SCHEMA:
+        if (
+            not isinstance(configured_links, list)
+            or not configured_links
+            or any(
+                not isinstance(row, dict)
+                or set(row) != {"recipe", "fromDoorReferenceFormId"}
+                or not isinstance(row["recipe"], str)
+                or not row["recipe"]
+                or not isinstance(row["fromDoorReferenceFormId"], str)
+                or len(row["fromDoorReferenceFormId"]) != FORM_ID_HEX_CHARACTERS
+                for row in configured_links
+            )
+        ):
+            raise ValueError("Ordered linked CELL recipe contract is invalid")
+        try:
+            for row in configured_links:
+                int(row["fromDoorReferenceFormId"], FORM_ID_RADIX)
+        except ValueError as exception:
+            raise ValueError("Ordered linked CELL door FormID is invalid") from exception
     return document
 
 
@@ -57,7 +84,11 @@ def load_spatial_recipe(recipe_id: str) -> dict[str, object]:
     path = recipe_path(recipe_id)
     document = json.loads(path.read_text(encoding="utf-8"))
     if (
-        document.get("schema") not in {CELL_RECIPE_SCHEMA, EXTERIOR_RECIPE_SCHEMA}
+        document.get("schema") not in {
+            CELL_RECIPE_SCHEMA,
+            ORDERED_CELL_RECIPE_SCHEMA,
+            EXTERIOR_RECIPE_SCHEMA,
+        }
         or document.get("id") != recipe_id
         or not isinstance(document.get("exportStrict"), bool)
         or not isinstance(document.get("textureAliases"), dict)
@@ -516,6 +547,10 @@ def prepare_cell_scene(
         "schema": CELL_SCENE_SCHEMA,
         "status": "geometry-structure",
         "recipe": str(recipe["id"]),
+        "recipeSha256": hashlib.sha256(
+            recipe_path(str(recipe["id"])).read_bytes()
+        ).hexdigest(),
+        "actorRecipes": [str(value) for value in recipe["actorRecipes"]],
         "source": {
             "master": master_path.name,
             "masterSha256": master_sha256,

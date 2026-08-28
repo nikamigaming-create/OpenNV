@@ -817,7 +817,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         var origin = _guideActor.Placement.GlobalPosition;
         var levelTarget = new Vector3(globalTarget.X, origin.Y, globalTarget.Z);
-        if ((levelTarget - origin).IsZeroApprox())
+        if (levelTarget.IsEqualApprox(origin))
             return;
         _guideActor.Placement.LookAt(levelTarget, Vector3.Up);
     }

@@ -608,30 +608,54 @@ def is_lod_landscape_surface(shape: object) -> bool:
     )
 
 
+def compiler_provenance_source_paths() -> list[Path]:
+    root = Path(__file__).resolve().parent
+    decoder_contract = configured_recipe_path("nifDecoder")
+    material_binding_contract = configured_recipe_path("materialBinding")
+    visual_archives_contract = configured_recipe_path("visualArchives")
+    audio_archives_contract = configured_recipe_path("audioArchives")
+    configuration = load_runtime_configuration()
+    recipes_root = root.parent / "recipes"
+    route_recipe_ids = [
+        str(configuration.document["legalAssets"]["defaultCellRecipe"]),
+        str(configuration.document["legalAssets"]["defaultOpeningRecipe"]),
+    ]
+    route_recipe_sources: list[Path] = []
+    seen_route_recipes: set[str] = set()
+    while route_recipe_ids:
+        recipe_id = route_recipe_ids.pop(0)
+        if recipe_id in seen_route_recipes:
+            continue
+        seen_route_recipes.add(recipe_id)
+        source = recipes_root / f"{recipe_id}.json"
+        if not source.is_file():
+            raise FileNotFoundError(f"Default legal route recipe is missing: {source}")
+        route_recipe_sources.append(source)
+        document = json.loads(source.read_text(encoding="utf-8"))
+        route_recipe_ids.extend(str(value) for value in document.get("actorRecipes", []))
+        if document.get("linkedExteriorRecipe"):
+            route_recipe_ids.append(str(document["linkedExteriorRecipe"]))
+        route_recipe_ids.extend(
+            str(value["recipe"])
+            for value in document.get("linkedCellRecipes", [])
+        )
+    return [
+        *sorted(root.glob("*.py"), key=lambda value: value.name),
+        decoder_contract,
+        material_binding_contract,
+        visual_archives_contract,
+        audio_archives_contract,
+        *route_recipe_sources,
+    ]
+
+
 def compiler_provenance() -> dict[str, str]:
     if getattr(sys, "frozen", False):
         executable = Path(sys.executable)
         return {"name": "OpenNV.Content packaged direct exporter v1", "sha256": sha256_bytes(executable.read_bytes())}
-    root = Path(__file__).resolve().parent
-    speedtree_source = root / "speedtree_spt.py"
-    decoder_source = root / "nif_decoder.py"
-    decoder_contract = configured_recipe_path("nifDecoder")
-    material_contract_source = root / "material_contract.py"
-    material_binding_contract = configured_recipe_path("materialBinding")
     return {
         "name": GENERATOR,
-        "sha256": compiler_sources_sha256(
-            [
-                Path(__file__),
-                root / "gltf_io.py",
-                root / "havok_collision_gltf.py",
-                decoder_source,
-                decoder_contract,
-                material_contract_source,
-                material_binding_contract,
-                *( [speedtree_source] if speedtree_source.exists() else [] ),
-            ]
-        ),
+        "sha256": compiler_sources_sha256(compiler_provenance_source_paths()),
     }
 
 

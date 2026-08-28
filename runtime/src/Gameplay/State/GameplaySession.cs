@@ -359,7 +359,7 @@ internal partial class GameplaySession : Node
         RefreshHud($"Door {door.ReferenceFormId}: {(door.IsOpen ? "open" : "closed")}");
     }
 
-    internal bool Fire(Node3D aimSource)
+    internal bool Fire(Node3D aimSource, uint collisionMask)
     {
         if (_equippedWeaponFormId is null)
         {
@@ -376,7 +376,7 @@ internal partial class GameplaySession : Node
         var from = aimSource.GlobalPosition;
         var to = from - aimSource.GlobalBasis.Z * _configuration.Player.FireRayDistanceMeters;
         var hit = aimSource.GetWorld3D().DirectSpaceState.IntersectRay(
-            PhysicsRayQueryParameters3D.Create(from, to, _configuration.Player.CollisionMask));
+            PhysicsRayQueryParameters3D.Create(from, to, collisionMask));
         Save();
         RefreshHud(
             hit.Count == 0

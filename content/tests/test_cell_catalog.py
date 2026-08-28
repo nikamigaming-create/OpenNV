@@ -477,6 +477,38 @@ class CellCatalogTest(unittest.TestCase):
             "selected",
         )
 
+        route_recipe = load_recipe("goodsprings-doc-mitchell-house-v1")
+        self.assertEqual(route_recipe["schema"], "opennv-cell-recipe/v2")
+        self.assertEqual(
+            route_recipe["linkedCellRecipes"],
+            [
+                {
+                    "recipe": "goodsprings-doc-exterior-active-set-v1",
+                    "fromDoorReferenceFormId": "00103e61",
+                },
+                {
+                    "recipe": "goodsprings-saloon-structure-v1",
+                    "fromDoorReferenceFormId": "0010636f",
+                },
+            ],
+        )
+        self.assertEqual(
+            [
+                *route_recipe["actorRecipes"],
+                *load_spatial_recipe("goodsprings-doc-exterior-active-set-v1")[
+                    "actorRecipes"
+                ],
+                *load_recipe("goodsprings-saloon-structure-v1")["actorRecipes"],
+            ],
+            [
+                "goodsprings-doc-mitchell-actor-v1",
+                "goodsprings-easy-pete-actor-v1",
+                "goodsprings-trudy-actor-v1",
+                "goodsprings-settler-04-actor-v1",
+                "goodsprings-sunny-smiles-actor-v1",
+            ],
+        )
+
     def test_fo1_vault13_donor_recipe_matches_current_cell_contract(self) -> None:
         recipe = load_recipe("fo1-vault13-cave-donor-smoke-v1")
 

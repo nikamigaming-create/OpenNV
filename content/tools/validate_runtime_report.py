@@ -119,8 +119,21 @@ def _active_references(scene: dict[str, object]) -> list[dict[str, object]]:
     return [row for row in scene["references"] if not bool(row["initiallyDisabled"])]
 
 
+def _enabled_actor_rows(
+    actors: dict[str, object], accepted_cells: set[str]
+) -> list[dict[str, object]]:
+    enabled = []
+    for row in actors["actors"]:
+        if str(row["cellFormId"]) not in accepted_cells:
+            continue
+        scene = _read(Path(str(row["scene"])))
+        if not bool(scene["reference"]["initiallyDisabled"]):
+            enabled.append(row)
+    return enabled
+
+
 def _actor_count(actors: dict[str, object], accepted_cells: set[str]) -> int:
-    return sum(1 for row in actors["actors"] if str(row["cellFormId"]) in accepted_cells)
+    return len(_enabled_actor_rows(actors, accepted_cells))
 
 
 def validate_cell_report(
@@ -129,6 +142,7 @@ def validate_cell_report(
     configuration: RuntimeConfiguration,
     *,
     require_traversal: bool,
+    require_opening_menu: bool = False,
 ) -> tuple[dict[str, object], dict[str, object]]:
     _verify_configuration(report, configuration)
     primary, linked, actors = _owned_documents(install_manifest_path)
@@ -176,7 +190,54 @@ def validate_cell_report(
             int(row["actors"]) == _actor_count(actors, accepted_cells),
             f"Linked actor count differs: {cell_id}",
         )
+    accepted_actor_cells = {primary_cell}
+    for scene in linked:
+        accepted_actor_cells.update(
+            str(value)
+            for value in scene["cell"].get(
+                "sourceCellFormIds", [scene["cell"]["formId"]]
+            )
+        )
+    expected_actors = sorted(
+        (
+            str(row["referenceFormId"]),
+            str(row["baseFormId"]),
+            False,
+            False,
+        )
+        for row in _enabled_actor_rows(actors, accepted_actor_cells)
+    )
+    actual_actors = sorted(
+        (
+            str(row["referenceFormId"]),
+            str(row["baseFormId"]),
+            bool(row["initiallyDisabled"]),
+            bool(row["proofEnabled"]),
+        )
+        for row in report.get("actorPlacements", [])
+    )
+    _require(actual_actors == expected_actors, "Loaded actor identities or enable states differ")
+    _require(
+        [str(row["recipe"]) for row in actors["actors"]]
+        == [
+            str(recipe)
+            for scene in scenes
+            for recipe in scene.get("actorRecipes", [])
+        ],
+        "Actor manifest recipe closure differs from the ordered CELL route",
+    )
     proof = configuration.document["proof"]
+    _require(
+        [
+            (row["fromDoorReferenceFormId"], row["toDoorReferenceFormId"])
+            for row in report["portals"]
+        ]
+        == [
+            (row["fromDoorReferenceFormId"], row["toDoorReferenceFormId"])
+            for row in primary.get("linkedCells", [])
+        ],
+        "Portal report order or identity differs from the owned route",
+    )
     for portal in report["portals"]:
         _require(bool(portal["reciprocal"]), "Portal link is not reciprocal")
         _require(
@@ -214,6 +275,43 @@ def validate_cell_report(
         _require(not bool(traversal["openHit"]), "Open door blocked the proof ray")
         _require(bool(traversal["projectilePortalClear"]), "Projectile did not clear the portal")
         _require(bool(traversal["capsuleWalkThrough"]), "Capsule did not traverse the portal")
+        traversed_portals = traversal.get("portals", [])
+        expected_portals = primary.get("linkedCells", [])
+        _require(
+            len(traversed_portals) == len(expected_portals),
+            "Per-hop traversal count differs from the owned route",
+        )
+        for actual, expected in zip(traversed_portals, expected_portals, strict=True):
+            _require(
+                actual["fromDoorReferenceFormId"] == expected["fromDoorReferenceFormId"]
+                and actual["toDoorReferenceFormId"] == expected["toDoorReferenceFormId"],
+                "Per-hop traversal order or identity differs",
+            )
+            _require(bool(actual["closedHitDoor"]), "Portal did not block while closed")
+            _require(
+                not bool(actual["openBlockedByPortalDoor"]),
+                "Portal door still blocked while open",
+            )
+            _require(bool(actual["openRayPortalClear"]), "Open ray did not cross portal")
+            _require(bool(actual["projectilePortalClear"]), "Projectile failed one portal hop")
+            _require(bool(actual["floorHit"]), "Portal floor probe did not hit")
+            _require(bool(actual["floorWalkable"]), "Portal floor is not walkable")
+            _require(bool(actual["capsuleWalkThrough"]), "Capsule failed one portal hop")
+    opening_menu = report.get("openingMenuProof")
+    if require_opening_menu:
+        _require(isinstance(opening_menu, dict), "Normal-menu Continue proof is missing")
+    if opening_menu is not None:
+        _require(opening_menu["action"] == "continue", "Normal-menu action differs")
+        _require(
+            opening_menu["inputTransport"] == "godot-owned-button-signal",
+            "Normal-menu action bypassed the owned button signal",
+        )
+        _require(not bool(opening_menu["windowsAppControlUsed"]), "Windows app control was used")
+        _require(
+            not bool(opening_menu["foregroundInputInjected"]),
+            "Foreground input was injected",
+        )
+        _require(bool(opening_menu["restoredCompleted"]), "Continue did not restore completion")
     return primary, actors
 
 
@@ -463,6 +561,7 @@ def main() -> int:
         choices=(
             "xr",
             "cell",
+            "cell-menu-continue",
             "vr-layout",
             "gameplay",
             "gameplay-reload",
@@ -485,6 +584,14 @@ def main() -> int:
             raise ValueError(f"{args.mode} validation requires --install-manifest")
         if args.mode == "cell":
             validate_cell_report(report, args.install_manifest, configuration, require_traversal=True)
+        elif args.mode == "cell-menu-continue":
+            validate_cell_report(
+                report,
+                args.install_manifest,
+                configuration,
+                require_traversal=True,
+                require_opening_menu=True,
+            )
         elif args.mode == "vr-layout":
             validate_vr_layout(report, args.install_manifest, configuration)
         elif args.mode == "gameplay":

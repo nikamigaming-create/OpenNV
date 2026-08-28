@@ -86,7 +86,7 @@
             "hex-tactical": { "ready": false, "status": "not-implemented" },
             "openxr": { "ready": true, "status": "experimental-headset-gate-pending" }
           },
-          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy runtime shell and playable Goodsprings route; complete Gamebryo tile interaction and retail UI parity remain pending.",
+          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy shell and an ordered Doc house to Goodsprings exterior to saloon composite. Both reciprocal XTEL pairs and normally enabled Sunny are source-bound; ordinary end-to-end travel, active-CELL persistence, integrated-route OpenXR acceptance, Sunny behavior, complete tile interaction, and retail UI parity remain pending.",
           "unavailableDlc": []
         },
         "jam": {
@@ -131,6 +131,7 @@
     "walk-and-fire-through-open-door",
     "interactive-doors-and-physical-fire-rays",
     "bounded-linked-cells-no-portal-culling",
+    "ordered-doc-exterior-saloon-portal-chain",
     "forward-plus-static-model-load",
     "artifact-provenance-validation",
     "authored-pickup-inventory-loop",

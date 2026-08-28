@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellContentLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v11";
+    private const string CellSceneSchema = "opennv-cell-scene/v12";
 
     internal static LoadedContent Load(
         string scenePath,
@@ -78,6 +78,8 @@ internal static class CellContentLoader
                 throw new InvalidOperationException("Prepared CELL unit scale disagrees with OpenNV configuration.");
             var originGameUnits = ReadVector(coordinates.GetProperty("originGameUnits"));
             var cell = source.GetProperty("cell");
+            var recipeId = source.GetProperty("recipe").GetString()!;
+            var recipeSha256 = source.GetProperty("recipeSha256").GetString()!;
             var formId = cell.GetProperty("formId").GetString()!;
             var editorId = cell.GetProperty("editorId").GetString()!;
             var acceptedCellFormIds = cell.TryGetProperty("sourceCellFormIds", out var sourceCells)
@@ -471,6 +473,8 @@ internal static class CellContentLoader
             var lighting = ReadLighting(source.GetProperty("lighting"));
             return new LoadedContent(
                 resolvedScenePath,
+                recipeId,
+                recipeSha256,
                 root,
                 formId,
                 editorId,
@@ -818,6 +822,8 @@ internal static class CellContentLoader
 
     internal readonly record struct LoadedContent(
         string ScenePath,
+        string RecipeId,
+        string RecipeSha256,
         Node3D Root,
         string FormId,
         string EditorId,
