@@ -43,6 +43,12 @@ MESSAGE_RECORD = "MESG"
 PLUGIN_HEADER_RECORD = "TES4"
 PACKAGE_RECORD = "PACK"
 IDLE_RECORD = "IDLE"
+GLOBAL_RECORD = "GLOB"
+ACTOR_REFERENCE_RECORD = "ACHR"
+ACTOR_BASE_RECORD = "NPC_"
+DIALOGUE_TOPIC_RECORD = "DIAL"
+DIALOGUE_INFO_RECORD = "INFO"
+VOICE_TYPE_RECORD = "VTYP"
 PLAY_BINK_PATTERN = re.compile(r'\bplayBink\s+"(?P<path>[^"]+\.bik)"', re.IGNORECASE)
 SEX_CHANGE_PATTERN = re.compile(
     r"\b(?:if|elseif)\s+button\s*==\s*(?P<index>\d+)\s+"
@@ -75,6 +81,31 @@ PACKAGE_IDLE_FLAG_BYTES = frozenset({1, 4})
 PACKAGE_IDLE_COUNT_BYTES = frozenset({1, 4})
 PACKAGE_IDLE_TIMER_BYTES = 4
 PACKAGE_EVENT_NAMES = {"POBA": "begin", "POEA": "end", "POCA": "change"}
+SET_STAGE_PATTERN = re.compile(
+    r"^setstage\s+(?P<quest>[A-Za-z_][A-Za-z0-9_]*)\s+(?P<stage>\d+)$",
+    re.IGNORECASE,
+)
+SET_REFERENCE_VARIABLE_PATTERN = re.compile(
+    r"^set\s+(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\."
+    r"(?P<variable>[A-Za-z_][A-Za-z0-9_]*)\s+to\s+(?P<value>-?\d+(?:\.\d+)?)$",
+    re.IGNORECASE,
+)
+REFERENCE_COMMAND_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\."
+    r"(?P<command>evp|enable)$",
+    re.IGNORECASE,
+)
+CONDITION_BYTES = 28
+CONDITION_FUNCTION_OFFSET = 8
+CONDITION_PARAMETER_1_OFFSET = 12
+CONDITION_PARAMETER_2_OFFSET = 16
+CONDITION_RUN_ON_OFFSET = 20
+CONDITION_REFERENCE_OFFSET = 24
+GET_IS_SEX_FUNCTION = 70
+GET_STAGE_FUNCTION = 58
+GET_IS_VOICE_TYPE_FUNCTION = 427
+DIALOGUE_CHILD_GROUP_TYPE = 7
+INITIALLY_DISABLED_RECORD_FLAG = 0x00000800
 RACE_DATA_BYTES = 36
 RACE_FLAGS_OFFSET = 32
 RACE_PLAYABLE_FLAG = 0x01
@@ -244,6 +275,460 @@ def _float_contract(values: tuple[float, ...], expected_count: int) -> dict[str,
     }
 
 
+def _interpolate_facegen_geometry(
+    current: tuple[float, ...],
+    source: tuple[float, ...],
+    percent: float,
+) -> tuple[float, ...]:
+    if len(current) != len(source) or not 0.0 <= percent <= 100.0:
+        raise ValueError("Fallout 3 MatchFaceGeometry inputs are invalid")
+    fraction = percent / 100.0
+    result = tuple(
+        current_value + (source_value - current_value) * fraction
+        for current_value, source_value in zip(current, source)
+    )
+    if not all(math.isfinite(value) for value in result):
+        raise ValueError("Fallout 3 MatchFaceGeometry produced a non-finite value")
+    return result
+
+
+def _stage65_command_pairs(
+    commands: list[dict[str, object]],
+) -> list[tuple[str, str]]:
+    subjects: list[str] = []
+    matches: dict[str, dict[str, object]] = {}
+    for command in commands:
+        kind = str(command["kind"])
+        subject = str(command["subject"])
+        key = subject.casefold()
+        if str(command["target"]).casefold() != "player":
+            raise ValueError("Fallout 3 CG00 stage 65 command target is unsupported")
+        pair = matches.setdefault(key, {"subject": subject})
+        if kind in pair or kind not in {"matchRace", "matchFaceGeometry"}:
+            raise ValueError("Fallout 3 CG00 stage 65 command pairing is ambiguous")
+        pair[kind] = command
+        if kind == "matchRace":
+            subjects.append(key)
+    if len(subjects) * 2 != len(commands) or len(subjects) != len(set(subjects)):
+        raise ValueError("Fallout 3 CG00 stage 65 commands are incomplete")
+    pairs = []
+    for key in subjects:
+        pair = matches[key]
+        if set(pair) != {"subject", "matchRace", "matchFaceGeometry"}:
+            raise ValueError("Fallout 3 CG00 stage 65 commands are incomplete")
+        face_command = dict(pair["matchFaceGeometry"])
+        pairs.append((str(pair["subject"]), str(face_command["template"])))
+    if len({template.casefold() for _, template in pairs}) != 1:
+        raise ValueError("Fallout 3 CG00 stage 65 match-percentage source is ambiguous")
+    return pairs
+
+
+def _compile_stage65_appearance_contract(
+    catalog: object,
+    records: list[object],
+    character_selection: dict[str, object],
+    races: list[dict[str, object]],
+) -> dict[str, object]:
+    transition = dict(character_selection["section4Transition"])
+    stage_result = dict(transition["nextStageResult"])
+    commands = [dict(command) for command in stage_result["commands"]]
+    command_pairs = _stage65_command_pairs(commands)
+    stage = int(stage_result["stage"])
+
+    records_by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            records_by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    percentage_editor_id = command_pairs[0][1]
+    percentage_records = [
+        record
+        for record in records_by_editor.get(percentage_editor_id.casefold(), [])
+        if record.signature == GLOBAL_RECORD
+    ]
+    if len(percentage_records) != 1:
+        raise ValueError("Fallout 3 CG00 MatchFaceGeometry global does not resolve uniquely")
+    percentage_record = percentage_records[0]
+    global_type = _single_subrecord(percentage_record, "FNAM")
+    global_value = _single_subrecord(percentage_record, "FLTV")
+    if len(global_type) != 1 or len(global_value) != 4:
+        raise ValueError("Fallout 3 CG00 MatchFaceGeometry global layout is unsupported")
+    percentage = struct.unpack("<f", global_value)[0]
+    if not math.isfinite(percentage) or not 0.0 <= percentage <= 100.0:
+        raise ValueError("Fallout 3 CG00 MatchFaceGeometry percentage is invalid")
+
+    parent_sources = []
+    for reference_editor_id, template_editor_id in command_pairs:
+        if template_editor_id.casefold() != percentage_editor_id.casefold():
+            raise ValueError("Fallout 3 CG00 MatchFaceGeometry global identity differs")
+        references = [
+            record
+            for record in records_by_editor.get(reference_editor_id.casefold(), [])
+            if record.signature == ACTOR_REFERENCE_RECORD
+        ]
+        if len(references) != 1:
+            raise ValueError(
+                f"Fallout 3 CG00 parent reference does not resolve: {reference_editor_id}"
+            )
+        reference = references[0]
+        base_form_id = struct.unpack("<I", _single_subrecord(reference, "NAME"))[0]
+        parent = catalog.actors.get(base_form_id)
+        if (
+            parent is None
+            or parent.female
+            or parent.race_form_id not in catalog.races
+            or len(parent.face_symmetric_geometry) != FACEGEN_SYMMETRIC_GEOMETRY_FLOATS
+            or len(parent.face_asymmetric_geometry) != FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS
+        ):
+            raise ValueError("Fallout 3 CG00 parent FaceGen identity is incomplete")
+        parent_sources.append(
+            {
+                "referenceFormId": _form_id(reference.form_id),
+                "referenceEditorId": reference_editor_id,
+                "referenceRecordSha256": hashlib.sha256(reference.data).hexdigest(),
+                "baseFormId": _form_id(parent.form_id),
+                "baseEditorId": parent.editor_id,
+                "baseRecordSha256": catalog.record_data_sha256["NPC_"][parent.form_id],
+                "originalRaceFormId": _form_id(parent.race_form_id),
+                "faceGenIdentity": {
+                    "symmetricGeometry": _float_contract(
+                        parent.face_symmetric_geometry,
+                        FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+                    ),
+                    "asymmetricGeometry": _float_contract(
+                        parent.face_asymmetric_geometry,
+                        FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+                    ),
+                },
+            }
+        )
+
+    selection_results = []
+    for race_row in races:
+        race_form_id = int(str(race_row["formId"]), FORM_ID_RADIX)
+        race = catalog.races.get(race_form_id)
+        if (
+            race is None
+            or len(race.male_face_symmetric_geometry)
+            != FACEGEN_SYMMETRIC_GEOMETRY_FLOATS
+            or len(race.male_face_asymmetric_geometry)
+            != FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS
+            or len(race.male_face_symmetric_texture)
+            != FACEGEN_SYMMETRIC_TEXTURE_FLOATS
+        ):
+            raise ValueError("Fallout 3 CG00 matched RACE FaceGen identity is incomplete")
+        race_sexes = dict(race_row["sex"])
+        for player_sex in ("male", "female"):
+            player_facegen = dict(dict(race_sexes[player_sex])["faceGenDefaults"])
+            player_symmetric = tuple(
+                float(value)
+                for value in dict(player_facegen["symmetricGeometry"])["values"]
+            )
+            player_asymmetric = tuple(
+                float(value)
+                for value in dict(player_facegen["asymmetricGeometry"])["values"]
+            )
+            parent_results = []
+            for parent_source in parent_sources:
+                parent = catalog.actors[int(str(parent_source["baseFormId"]), FORM_ID_RADIX)]
+                matched_race_symmetric = compose_facegen_coordinates(
+                    parent.face_symmetric_geometry,
+                    race.male_face_symmetric_geometry,
+                )
+                matched_race_asymmetric = compose_facegen_coordinates(
+                    parent.face_asymmetric_geometry,
+                    race.male_face_asymmetric_geometry,
+                )
+                parent_results.append(
+                    {
+                        "referenceFormId": parent_source["referenceFormId"],
+                        "referenceEditorId": parent_source["referenceEditorId"],
+                        "baseFormId": parent_source["baseFormId"],
+                        "raceFormId": race_row["formId"],
+                        "faceGen": {
+                            "preMatchSymmetricGeometry": _float_contract(
+                                matched_race_symmetric,
+                                FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+                            ),
+                            "preMatchAsymmetricGeometry": _float_contract(
+                                matched_race_asymmetric,
+                                FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+                            ),
+                            "symmetricGeometry": _float_contract(
+                                _interpolate_facegen_geometry(
+                                    matched_race_symmetric,
+                                    player_symmetric,
+                                    percentage,
+                                ),
+                                FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+                            ),
+                            "asymmetricGeometry": _float_contract(
+                                _interpolate_facegen_geometry(
+                                    matched_race_asymmetric,
+                                    player_asymmetric,
+                                    percentage,
+                                ),
+                                FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+                            ),
+                            "symmetricTexture": _float_contract(
+                                race.male_face_symmetric_texture,
+                                FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
+                            ),
+                            "texturePolicy": "matched-race-default-not-face-geometry-morphed",
+                        },
+                    }
+                )
+            selection_results.append(
+                {
+                    "playerRaceFormId": race_row["formId"],
+                    "playerSex": player_sex,
+                    "playerFaceGen": {
+                        "symmetricGeometrySha256": dict(
+                            player_facegen["symmetricGeometry"]
+                        )["sha256"],
+                        "asymmetricGeometrySha256": dict(
+                            player_facegen["asymmetricGeometry"]
+                        )["sha256"],
+                        "symmetricTextureSha256": dict(
+                            player_facegen["symmetricTexture"]
+                        )["sha256"],
+                    },
+                    "parents": parent_results,
+                }
+            )
+
+    contract = {
+        "schema": "opennv-fo3-cg00-stage-65-appearance/v1",
+        "status": "source-backed-command-application",
+        "sourceStage": int(transition["sourceStage"]),
+        "stage": stage,
+        "stageSourceSha256": stage_result["stageSourceSha256"],
+        "accountedCommandCount": len(commands),
+        "commands": commands,
+        "semantics": {
+            "matchRace": "target-race-equals-source-current-race-with-default-face-texture",
+            "matchFaceGeometry": "linear-current-to-source-geometry-percent",
+            "matchFaceTexture": "unchanged-by-match-face-geometry",
+        },
+        "matchPercentage": {
+            "formId": _form_id(percentage_record.form_id),
+            "editorId": percentage_editor_id,
+            "recordSha256": hashlib.sha256(percentage_record.data).hexdigest(),
+            "type": global_type.decode("ascii"),
+            "value": percentage,
+        },
+        "parentSources": parent_sources,
+        "selectionResults": selection_results,
+        "nextBoundary": "fo3-cg00-post-stage-65-dialogue-playback-not-implemented",
+    }
+    stage_result["runtimeReady"] = True
+    stage_result.pop("blocker", None)
+    stage_result["contractSchema"] = contract["schema"]
+    transition["nextStageResult"] = stage_result
+    character_selection["section4Transition"] = transition
+    return contract
+
+
+def _compile_stage80_transition(
+    catalog: object,
+    records: list[object],
+    character_selection: dict[str, object],
+) -> dict[str, object]:
+    dialogue = dict(character_selection["postStage65Dialogue"])
+    stage_result = dict(dialogue["stageResult"])
+    commands = [dict(command) for command in stage_result["commands"]]
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    package_commands = [command for command in commands if command["kind"] == "addScriptPackage"]
+    if len(package_commands) != 1:
+        raise ValueError("Fallout 3 CG00 stage 80 player package is ambiguous")
+    package_editor_id = str(package_commands[0]["packageEditorId"])
+    packages = [
+        record
+        for record in by_editor.get(package_editor_id.casefold(), [])
+        if record.signature == PACKAGE_RECORD
+    ]
+    if len(packages) != 1:
+        raise ValueError("Fallout 3 CG00 stage 80 player package does not resolve")
+    package = packages[0]
+    package_data = _single_subrecord(package, "PKDT")
+    location_data = _single_subrecord(package, "PLDT")
+    if len(package_data) != PACKAGE_DATA_BYTES or len(location_data) != PACKAGE_LOCATION_BYTES:
+        raise ValueError("Fallout 3 CG00 stage 80 player package layout is unsupported")
+    flags, package_type, _unused, procedure_flags, type_flags, _unknown = struct.unpack(
+        "<IBBHHH", package_data
+    )
+    location_type, location_form_id, radius = struct.unpack("<III", location_data)
+    idle_flags_data = _single_subrecord(package, "IDLF")
+    idle_count_data = _single_subrecord(package, "IDLC")
+    idle_timer_data = _single_subrecord(package, "IDLT")
+    if (
+        len(idle_flags_data) not in PACKAGE_IDLE_FLAG_BYTES
+        or len(idle_count_data) not in PACKAGE_IDLE_COUNT_BYTES
+        or len(idle_timer_data) != PACKAGE_IDLE_TIMER_BYTES
+    ):
+        raise ValueError("Fallout 3 CG00 stage 80 package idle layout is unsupported")
+    idle_count = int.from_bytes(idle_count_data, "little")
+    idle_form_ids = _form_id_list(package, "IDLA")
+    idle_timer = struct.unpack("<f", idle_timer_data)[0]
+    if idle_count != len(idle_form_ids) or idle_count == 0 or not math.isfinite(idle_timer):
+        raise ValueError("Fallout 3 CG00 stage 80 package idle selection differs")
+
+    def idle_row(form_id: int) -> dict[str, object]:
+        record = by_form.get(form_id)
+        if record is None or record.signature != IDLE_RECORD:
+            raise ValueError("Fallout 3 CG00 stage 80 package IDLE is absent")
+        models = _text_values(record, "MODL")
+        if len(models) != 1 or not models[0].casefold().endswith(".kf"):
+            raise ValueError("Fallout 3 CG00 stage 80 package IDLE model is unsupported")
+        return {
+            "formId": _form_id(record.form_id),
+            "editorId": _editor_id(record),
+            "modelPath": canonical_member_path(f"meshes\\{models[0]}"),
+            "recordSha256": hashlib.sha256(record.data).hexdigest(),
+        }
+
+    events: dict[str, dict[str, object] | None] = {}
+    pending_event: str | None = None
+    for subrecord in iter_subrecords(package):
+        if subrecord.signature in PACKAGE_EVENT_NAMES:
+            pending_event = PACKAGE_EVENT_NAMES[subrecord.signature]
+            if pending_event in events:
+                raise ValueError("Fallout 3 CG00 stage 80 package event is duplicated")
+        elif subrecord.signature == "INAM" and pending_event is not None:
+            if len(subrecord.data) != FORM_ID_BYTES:
+                raise ValueError("Fallout 3 CG00 stage 80 package event IDLE is invalid")
+            form_id = struct.unpack("<I", subrecord.data)[0]
+            events[pending_event] = idle_row(form_id) if form_id else None
+            pending_event = None
+    if pending_event is not None or set(events) != set(PACKAGE_EVENT_NAMES.values()):
+        raise ValueError("Fallout 3 CG00 stage 80 package events are incomplete")
+
+    def resolve_reference(editor_id: str) -> tuple[object, object]:
+        matches = [
+            record
+            for record in by_editor.get(editor_id.casefold(), [])
+            if record.signature == ACTOR_REFERENCE_RECORD
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"Fallout 3 CG00 stage 80 actor reference differs: {editor_id}")
+        reference = matches[0]
+        base_form_id = struct.unpack("<I", _single_subrecord(reference, "NAME"))[0]
+        actor = catalog.actors.get(base_form_id)
+        if actor is None:
+            raise ValueError("Fallout 3 CG00 stage 80 actor base is absent")
+        return reference, actor
+
+    resolved_commands = []
+    for index, command in enumerate(commands):
+        kind = str(command["kind"])
+        if kind == "addScriptPackage":
+            resolved_commands.append(
+                {
+                    "index": index,
+                    "kind": kind,
+                    "packageFormId": _form_id(package.form_id),
+                    "packageEditorId": package_editor_id,
+                }
+            )
+            continue
+        subject = str(command["subject"])
+        reference, actor = resolve_reference(subject)
+        resolved = {
+            "index": index,
+            "kind": kind,
+            "referenceFormId": _form_id(reference.form_id),
+            "referenceEditorId": subject,
+            "referenceRecordSha256": hashlib.sha256(reference.data).hexdigest(),
+            "baseFormId": _form_id(actor.form_id),
+            "baseEditorId": actor.editor_id,
+            "baseRecordSha256": catalog.record_data_sha256["NPC_"][actor.form_id],
+        }
+        if kind == "setScriptVariable":
+            base_record = by_form.get(actor.form_id)
+            if base_record is None or base_record.signature != ACTOR_BASE_RECORD:
+                raise ValueError("Fallout 3 CG00 stage 80 variable owner base differs")
+            script_form_id = struct.unpack("<I", _single_subrecord(base_record, "SCRI"))[0]
+            script = by_form.get(script_form_id)
+            if script is None or script.signature != SCRIPT_RECORD:
+                raise ValueError("Fallout 3 CG00 stage 80 variable script is absent")
+            variable_name = str(command["variable"])
+            declarations = [
+                match.group("type").casefold()
+                for match in re.finditer(
+                    rf"^\s*(?P<type>short|float)\s+{re.escape(variable_name)}\b",
+                    _script_source(script),
+                    re.IGNORECASE | re.MULTILINE,
+                )
+            ]
+            if len(declarations) != 1:
+                raise ValueError("Fallout 3 CG00 stage 80 script variable is ambiguous")
+            resolved.update(
+                {
+                    "scriptFormId": _form_id(script.form_id),
+                    "scriptEditorId": _editor_id(script),
+                    "scriptSourceSha256": hashlib.sha256(
+                        _script_source(script).encode("cp1252")
+                    ).hexdigest(),
+                    "variable": variable_name,
+                    "variableType": declarations[0],
+                    "value": command["value"],
+                }
+            )
+        elif kind == "enable":
+            if not reference.flags & INITIALLY_DISABLED_RECORD_FLAG:
+                raise ValueError("Fallout 3 CG00 stage 80 enable target is not initially disabled")
+            resolved["initiallyDisabled"] = True
+        elif kind != "evaluatePackage":
+            raise ValueError(f"Fallout 3 CG00 stage 80 command kind is unsupported: {kind}")
+        resolved_commands.append(resolved)
+
+    contract = {
+        "schema": "opennv-fo3-cg00-stage-80-transition/v1",
+        "status": "source-backed-stage-result-application",
+        "sourceStage": int(dialogue["sourceStage"]),
+        "stage": int(dialogue["targetStage"]),
+        "dialogueTriggerSchema": dialogue["schema"],
+        "stageSourceSha256": stage_result["stageSourceSha256"],
+        "accountedCommandCount": len(resolved_commands),
+        "commands": resolved_commands,
+        "addedPlayerPackage": {
+            "formId": _form_id(package.form_id),
+            "editorId": package_editor_id,
+            "recordSha256": hashlib.sha256(package.data).hexdigest(),
+            "flags": flags,
+            "type": package_type,
+            "procedureFlags": procedure_flags,
+            "typeSpecificFlags": type_flags,
+            "location": {
+                "type": location_type,
+                "referenceFormId": _form_id(location_form_id),
+                "radius": radius,
+            },
+            "idleSelection": {
+                "flags": int.from_bytes(idle_flags_data, "little"),
+                "count": idle_count,
+                "timerSeconds": idle_timer,
+                "idles": [idle_row(form_id) for form_id in idle_form_ids],
+            },
+            "events": events,
+        },
+        "nextBoundary": "fo3-cg00-post-stage-80-dialogue-playback-not-implemented",
+    }
+    stage_result["runtimeReady"] = True
+    stage_result.pop("blocker", None)
+    stage_result["contractSchema"] = contract["schema"]
+    dialogue["stageResult"] = stage_result
+    character_selection["postStage65Dialogue"] = dialogue
+    return contract
+
+
 def _extract_profile_texture(
     archive: BsaArchive,
     archive_sha256: str,
@@ -387,7 +872,24 @@ def _appearance_inventory(
     player = catalog.actors.get(player_form_id)
     if player is None or player.editor_id != player_editor_id:
         raise ValueError("Fallout 3 player appearance source identity differs")
-    records = list(iter_plugin_records(master, frozenset({"RACE", "HAIR", "EYES"})))
+    records = list(
+        iter_plugin_records(
+            master,
+            frozenset(
+                {
+                    "RACE",
+                    "HAIR",
+                    "EYES",
+                    GLOBAL_RECORD,
+                    ACTOR_REFERENCE_RECORD,
+                    ACTOR_BASE_RECORD,
+                    SCRIPT_RECORD,
+                    PACKAGE_RECORD,
+                    IDLE_RECORD,
+                }
+            ),
+        )
+    )
     record_by_form = {record.form_id: record for record in records}
     texture_cache: dict[str, dict[str, object]] = {}
 
@@ -537,6 +1039,17 @@ def _appearance_inventory(
         or male_default["defaultEyesFormId"] != _form_id(player.eyes_form_id or 0)
     ):
         raise ValueError("Fallout 3 source-order appearance defaults differ from Player NPC_")
+    character_selection["stage65Appearance"] = _compile_stage65_appearance_contract(
+        catalog,
+        records,
+        character_selection,
+        races,
+    )
+    character_selection["stage80Transition"] = _compile_stage80_transition(
+        catalog,
+        records,
+        character_selection,
+    )
     appearance = dict(character_selection["appearance"])
     return {
         **appearance,
@@ -576,6 +1089,351 @@ def _source_commands(source: str) -> list[str]:
         for raw_line in source.splitlines()
         if (command := raw_line.split(";", 1)[0].strip())
     ]
+
+
+def _dialogue_condition(data: bytes) -> dict[str, object]:
+    if len(data) != CONDITION_BYTES:
+        raise ValueError("Fallout 3 post-stage-65 dialogue condition layout is unsupported")
+    return {
+        "operatorFlags": data[0],
+        "comparisonValue": struct.unpack_from("<f", data, 4)[0],
+        "function": struct.unpack_from("<H", data, CONDITION_FUNCTION_OFFSET)[0],
+        "parameter1": struct.unpack_from("<I", data, CONDITION_PARAMETER_1_OFFSET)[0],
+        "parameter2": struct.unpack_from("<I", data, CONDITION_PARAMETER_2_OFFSET)[0],
+        "runOn": struct.unpack_from("<I", data, CONDITION_RUN_ON_OFFSET)[0],
+        "reference": struct.unpack_from("<I", data, CONDITION_REFERENCE_OFFSET)[0],
+    }
+
+
+def _parse_stage80_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := ADD_SCRIPT_PACKAGE_PATTERN.fullmatch(text):
+            commands.append(
+                {"kind": "addScriptPackage", "packageEditorId": match.group("package")}
+            )
+            continue
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            raw_value = match.group("value")
+            value: int | float = float(raw_value) if "." in raw_value else int(raw_value)
+            commands.append(
+                {
+                    "kind": "setScriptVariable",
+                    "subject": match.group("subject"),
+                    "variable": match.group("variable"),
+                    "value": value,
+                }
+            )
+            continue
+        if match := REFERENCE_COMMAND_PATTERN.fullmatch(text):
+            command = match.group("command").casefold()
+            commands.append(
+                {
+                    "kind": "evaluatePackage" if command == "evp" else "enable",
+                    "subject": match.group("subject"),
+                }
+            )
+            continue
+        raise ValueError(f"Fallout 3 CG00 stage 80 uses an unsupported command: {text}")
+    if not commands:
+        raise ValueError("Fallout 3 CG00 stage 80 result is empty")
+    return commands
+
+
+def _compile_post_stage65_dialogue(
+    records: tuple[object, ...],
+    selection: dict[str, object],
+    quest_form_id: int,
+    stage_sources: dict[int, list[str]],
+) -> dict[str, object]:
+    definition = dict(selection["postStage65Dialogue"])
+    topic_editor_id = str(definition["topicEditorId"])
+    topic_form_id = int(str(definition["topicFormId"]), FORM_ID_RADIX)
+    target_stage = int(definition["targetStage"])
+    expected_info_forms = {
+        int(str(value), FORM_ID_RADIX) for value in definition["resultInfoFormIds"]
+    }
+    by_form = {record.form_id: record for record in records}
+    topics = [
+        record
+        for record in records
+        if record.signature == DIALOGUE_TOPIC_RECORD
+        and (_editor_id(record) or "").casefold() == topic_editor_id.casefold()
+    ]
+    if len(topics) != 1 or topics[0].form_id != topic_form_id:
+        raise ValueError("Fallout 3 post-stage-65 dialogue topic identity differs")
+    topic = topics[0]
+    if struct.unpack("<I", _single_subrecord(topic, "QSTI"))[0] != quest_form_id:
+        raise ValueError("Fallout 3 post-stage-65 dialogue topic quest differs")
+
+    branch_rows = []
+    voice_form_ids = set()
+    for info_form_id in sorted(expected_info_forms):
+        info = by_form.get(info_form_id)
+        if info is None or info.signature != DIALOGUE_INFO_RECORD:
+            raise ValueError(
+                f"Fallout 3 post-stage-65 INFO is absent: {_form_id(info_form_id)}"
+            )
+        if not any(
+            group.group_type == DIALOGUE_CHILD_GROUP_TYPE
+            and group.label_u32 == topic.form_id
+            for group in info.groups
+        ):
+            raise ValueError("Fallout 3 post-stage-65 INFO topic ownership differs")
+        if struct.unpack("<I", _single_subrecord(info, "QSTI"))[0] != quest_form_id:
+            raise ValueError("Fallout 3 post-stage-65 INFO quest ownership differs")
+        source = _script_source(info)
+        source_commands = _source_commands(source)
+        if len(source_commands) != 1:
+            raise ValueError("Fallout 3 post-stage-65 INFO result is ambiguous")
+        stage_match = SET_STAGE_PATTERN.fullmatch(source_commands[0])
+        if (
+            stage_match is None
+            or stage_match.group("quest").casefold() != "cg00"
+            or int(stage_match.group("stage")) != target_stage
+        ):
+            raise ValueError("Fallout 3 post-stage-65 INFO stage result differs")
+
+        conditions = [
+            _dialogue_condition(subrecord.data)
+            for subrecord in iter_subrecords(info)
+            if subrecord.signature == "CTDA"
+        ]
+        if len(conditions) != 3:
+            raise ValueError("Fallout 3 post-stage-65 INFO conditions are incomplete")
+        by_function = {int(row["function"]): row for row in conditions}
+        if set(by_function) != {
+            GET_IS_SEX_FUNCTION,
+            GET_STAGE_FUNCTION,
+            GET_IS_VOICE_TYPE_FUNCTION,
+        }:
+            raise ValueError("Fallout 3 post-stage-65 INFO condition functions differ")
+        sex_condition = by_function[GET_IS_SEX_FUNCTION]
+        stage_condition = by_function[GET_STAGE_FUNCTION]
+        voice_condition = by_function[GET_IS_VOICE_TYPE_FUNCTION]
+        sex_value = int(sex_condition["parameter1"])
+        if (
+            sex_value not in {0, 1}
+            or sex_condition["operatorFlags"] != 0
+            or sex_condition["comparisonValue"] != 1.0
+            or sex_condition["runOn"] != 1
+            or sex_condition["parameter2"] != 0
+            or sex_condition["reference"] != 0
+        ):
+            raise ValueError("Fallout 3 post-stage-65 INFO sex condition differs")
+        if (
+            stage_condition["operatorFlags"] != 0x80
+            or stage_condition["comparisonValue"] != float(target_stage)
+            or stage_condition["parameter1"] != quest_form_id
+            or stage_condition["parameter2"] != 0
+            or stage_condition["runOn"] != 0
+            or stage_condition["reference"] != 0
+        ):
+            raise ValueError("Fallout 3 post-stage-65 INFO quest-stage condition differs")
+        voice_form_id = int(voice_condition["parameter1"])
+        voice = by_form.get(voice_form_id)
+        if (
+            voice is None
+            or voice.signature != VOICE_TYPE_RECORD
+            or voice_condition["operatorFlags"] != 0
+            or voice_condition["comparisonValue"] != 1.0
+            or voice_condition["parameter2"] != 0
+            or voice_condition["runOn"] != 0
+            or voice_condition["reference"] != 0
+        ):
+            raise ValueError("Fallout 3 post-stage-65 INFO voice condition differs")
+        voice_form_ids.add(voice_form_id)
+        branch_rows.append(
+            {
+                "engineSex": "female" if sex_value == 1 else "male",
+                "infoFormId": _form_id(info.form_id),
+                "recordSha256": hashlib.sha256(info.data).hexdigest(),
+                "resultSourceSha256": hashlib.sha256(source.encode("cp1252")).hexdigest(),
+                "targetStage": target_stage,
+                "conditions": [
+                    {
+                        **row,
+                        "parameter1": _form_id(int(row["parameter1"])),
+                        "reference": _form_id(int(row["reference"])),
+                    }
+                    for row in conditions
+                ],
+            }
+        )
+    if (
+        {row["engineSex"] for row in branch_rows} != {"male", "female"}
+        or len(voice_form_ids) != 1
+    ):
+        raise ValueError("Fallout 3 post-stage-65 dialogue branches are incomplete")
+    voice = by_form[voice_form_ids.pop()]
+
+    target_sources = stage_sources.get(target_stage, [])
+    if len(target_sources) != 1:
+        raise ValueError("Fallout 3 CG00 stage 80 result source is ambiguous")
+    target_source = target_sources[0]
+    return {
+        "schema": "opennv-fo3-cg00-post-stage-65-dialogue/v1",
+        "status": "source-backed-info-result-trigger",
+        "sourceStage": 65,
+        "topic": {
+            "formId": _form_id(topic.form_id),
+            "editorId": topic_editor_id,
+            "recordSha256": hashlib.sha256(topic.data).hexdigest(),
+            "questFormId": _form_id(quest_form_id),
+        },
+        "voiceType": {
+            "formId": _form_id(voice.form_id),
+            "editorId": _editor_id(voice),
+            "recordSha256": hashlib.sha256(voice.data).hexdigest(),
+        },
+        "branches": sorted(branch_rows, key=lambda row: str(row["engineSex"])),
+        "dialoguePlaybackImplemented": False,
+        "targetStage": target_stage,
+        "stageResult": {
+            "stageSourceSha256": hashlib.sha256(target_source.encode("cp1252")).hexdigest(),
+            "commands": _parse_stage80_commands(target_source),
+            "runtimeReady": False,
+            "blocker": "fo3-cg00-stage-80-state-commands-not-compiled",
+        },
+    }
+
+
+def _compile_post_stage80_dialogue(
+    records: tuple[object, ...],
+    selection: dict[str, object],
+    quest_form_id: int,
+    stage_sources: dict[int, list[str]],
+) -> tuple[dict[str, object], dict[str, object]]:
+    definition = dict(selection["postStage80Dialogue"])
+    source_stage = 80
+    target_stage = int(definition["targetStage"])
+    topic_form_id = int(str(definition["topicFormId"]), FORM_ID_RADIX)
+    info_form_id = int(str(definition["resultInfoFormId"]), FORM_ID_RADIX)
+    by_form = {record.form_id: record for record in records}
+    topic = by_form.get(topic_form_id)
+    if (
+        topic is None
+        or topic.signature != DIALOGUE_TOPIC_RECORD
+        or (_editor_id(topic) or "").casefold()
+        != str(definition["topicEditorId"]).casefold()
+        or struct.unpack("<I", _single_subrecord(topic, "QSTI"))[0] != quest_form_id
+    ):
+        raise ValueError("Fallout 3 post-stage-80 dialogue topic identity differs")
+    info = by_form.get(info_form_id)
+    if info is None or info.signature != DIALOGUE_INFO_RECORD:
+        raise ValueError("Fallout 3 post-stage-80 result INFO is absent")
+    if not any(
+        group.group_type == DIALOGUE_CHILD_GROUP_TYPE
+        and group.label_u32 == topic_form_id
+        for group in info.groups
+    ):
+        raise ValueError("Fallout 3 post-stage-80 INFO topic ownership differs")
+    if struct.unpack("<I", _single_subrecord(info, "QSTI"))[0] != quest_form_id:
+        raise ValueError("Fallout 3 post-stage-80 INFO quest ownership differs")
+    source = _script_source(info)
+    source_commands = _source_commands(source)
+    if len(source_commands) != 1:
+        raise ValueError("Fallout 3 post-stage-80 INFO result is ambiguous")
+    match = SET_STAGE_PATTERN.fullmatch(source_commands[0])
+    if (
+        match is None
+        or match.group("quest").casefold() != "cg00"
+        or int(match.group("stage")) != target_stage
+    ):
+        raise ValueError("Fallout 3 post-stage-80 INFO result differs")
+
+    conditions = [
+        _dialogue_condition(subrecord.data)
+        for subrecord in iter_subrecords(info)
+        if subrecord.signature == "CTDA"
+    ]
+    if len(conditions) != 2:
+        raise ValueError("Fallout 3 post-stage-80 INFO conditions are incomplete")
+    by_function = {int(row["function"]): row for row in conditions}
+    if set(by_function) != {GET_STAGE_FUNCTION, GET_IS_VOICE_TYPE_FUNCTION}:
+        raise ValueError("Fallout 3 post-stage-80 INFO condition functions differ")
+    stage_condition = by_function[GET_STAGE_FUNCTION]
+    if (
+        stage_condition["operatorFlags"] != 0x60
+        or stage_condition["comparisonValue"] != float(source_stage)
+        or stage_condition["parameter1"] != quest_form_id
+        or stage_condition["parameter2"] != 0
+        or stage_condition["runOn"] != 0
+        or stage_condition["reference"] != 0
+    ):
+        raise ValueError("Fallout 3 post-stage-80 INFO quest-stage condition differs")
+    voice_condition = by_function[GET_IS_VOICE_TYPE_FUNCTION]
+    voice_form_id = int(voice_condition["parameter1"])
+    voice = by_form.get(voice_form_id)
+    if (
+        voice is None
+        or voice.signature != VOICE_TYPE_RECORD
+        or voice_condition["operatorFlags"] != 0
+        or voice_condition["comparisonValue"] != 1.0
+        or voice_condition["parameter2"] != 0
+        or voice_condition["runOn"] != 0
+        or voice_condition["reference"] != 0
+    ):
+        raise ValueError("Fallout 3 post-stage-80 INFO voice condition differs")
+
+    target_sources = stage_sources.get(target_stage, [])
+    if len(target_sources) != 1:
+        raise ValueError("Fallout 3 CG00 stage 85 result source is ambiguous")
+    target_source = target_sources[0]
+    target_commands = _source_commands(target_source)
+    if target_commands:
+        raise ValueError("Fallout 3 CG00 stage 85 result unexpectedly contains commands")
+    transition_schema = "opennv-fo3-cg00-stage-85-transition/v1"
+    stage_source_sha256 = hashlib.sha256(target_source.encode("cp1252")).hexdigest()
+    dialogue = {
+        "schema": "opennv-fo3-cg00-post-stage-80-dialogue/v1",
+        "status": "source-backed-info-result-trigger",
+        "sourceStage": source_stage,
+        "topic": {
+            "formId": _form_id(topic.form_id),
+            "editorId": _editor_id(topic),
+            "recordSha256": hashlib.sha256(topic.data).hexdigest(),
+            "questFormId": _form_id(quest_form_id),
+        },
+        "voiceType": {
+            "formId": _form_id(voice.form_id),
+            "editorId": _editor_id(voice),
+            "recordSha256": hashlib.sha256(voice.data).hexdigest(),
+        },
+        "info": {
+            "formId": _form_id(info.form_id),
+            "recordSha256": hashlib.sha256(info.data).hexdigest(),
+            "resultSourceSha256": hashlib.sha256(source.encode("cp1252")).hexdigest(),
+            "conditions": [
+                {
+                    **row,
+                    "parameter1": _form_id(int(row["parameter1"])),
+                    "reference": _form_id(int(row["reference"])),
+                }
+                for row in conditions
+            ],
+        },
+        "dialoguePlaybackImplemented": False,
+        "targetStage": target_stage,
+        "stageResult": {
+            "stageSourceSha256": stage_source_sha256,
+            "commands": [],
+            "runtimeReady": True,
+            "contractSchema": transition_schema,
+        },
+    }
+    transition = {
+        "schema": transition_schema,
+        "status": "source-backed-empty-stage-result-application",
+        "sourceStage": source_stage,
+        "stage": target_stage,
+        "dialogueTriggerSchema": dialogue["schema"],
+        "stageSourceSha256": stage_source_sha256,
+        "accountedCommandCount": 0,
+        "commands": [],
+        "nextBoundary": "fo3-cg00-post-stage-85-dialogue-trigger-not-compiled",
+    }
+    return dialogue, transition
 
 
 def _compile_cg00_section4_transition(
@@ -777,8 +1635,9 @@ def _bind_cg00_package_animations(
     transition: dict[str, object],
     meshes_archive: BsaArchive,
     meshes_archive_sha256: str,
+    package_key: str = "package",
 ) -> None:
-    package = dict(transition["package"])
+    package = dict(transition[package_key])
     idle_selection = dict(package["idleSelection"])
     events = dict(package["events"])
     idle_rows = [
@@ -800,7 +1659,7 @@ def _bind_cg00_package_animations(
             "sourceSha256": member.sha256,
         }
     package["animationSources"] = list(assets.values())
-    transition["package"] = package
+    transition[package_key] = package
 
 
 def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dict[str, object]], dict[str, object]]:
@@ -815,6 +1674,9 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     PLUGIN_HEADER_RECORD,
                     PACKAGE_RECORD,
                     IDLE_RECORD,
+                    DIALOGUE_TOPIC_RECORD,
+                    DIALOGUE_INFO_RECORD,
+                    VOICE_TYPE_RECORD,
                 }
             ),
         )
@@ -970,6 +1832,26 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         accepted_source,
         stage_sources,
     )
+    selection_quest_form_id = int(
+        next(
+            str(row["formId"])
+            for row in quest_rows
+            if str(row["editorId"]).casefold() == selection_quest.casefold()
+        ),
+        FORM_ID_RADIX,
+    )
+    post_stage65_dialogue = _compile_post_stage65_dialogue(
+        records,
+        selection,
+        selection_quest_form_id,
+        stage_sources,
+    )
+    post_stage80_dialogue, stage85_transition = _compile_post_stage80_dialogue(
+        records,
+        selection,
+        selection_quest_form_id,
+        stage_sources,
+    )
 
     character_selection = {
         "questEditorId": selection_quest,
@@ -1002,6 +1884,9 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
             },
         },
         "section4Transition": transition,
+        "postStage65Dialogue": post_stage65_dialogue,
+        "postStage80Dialogue": post_stage80_dialogue,
+        "stage85Transition": stage85_transition,
     }
     return quest_rows, character_selection
 
@@ -1172,6 +2057,14 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         profile_root,
     )
     character_selection["appearance"] = appearance_contract
+    stage80_transition = dict(character_selection["stage80Transition"])
+    _bind_cg00_package_animations(
+        stage80_transition,
+        BsaArchive(meshes_archive_path),
+        next(str(row["sha256"]) for row in archives if row["role"] == meshes_role),
+        "addedPlayerPackage",
+    )
+    character_selection["stage80Transition"] = stage80_transition
     video_root = _case_insensitive_directory(resolved_data_root, str(opening["videoDirectoryName"]))
     if video_root is None:
         raise FileNotFoundError("Fallout 3 opening Video directory is absent")
@@ -1276,12 +2169,15 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "characterSelectionContractResolved": True,
             "cg00SexAndNameRuntimeReady": True,
             "cg00AppearanceRuntimeReady": True,
-            "cg00Section4PackageRuntimeReady": True,
+            "cg00Section4PackageContractReady": True,
+            "cg00Stage65AppearanceContractReady": True,
+            "cg00Stage80ContractReady": True,
+            "cg00Stage85ContractReady": True,
             "vault101BirthGraphCompiled": True,
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg00-stage-65-parent-race-face-runtime-not-implemented",
+            "fo3-cg00-post-stage-85-dialogue-trigger-not-compiled",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
         ],

@@ -2,7 +2,7 @@
 
 Mod compatibility is a post-gameplay promotion track. New Vegas has bounded
 opening and Goodsprings routes, while Fallout 3 stops at its owned menu/CG00
-stage-62 profile with no Vault 101 runtime. The current Godot runtime does not
+stage-62 profile with no playable Vault 101 runtime. The current Godot runtime does not
 claim any complete campaign, TTW, JAM, or native extender-plugin compatibility.
 
 When the base campaign route passes, a mod is promoted one behavior contract at
@@ -62,7 +62,9 @@ The desktop launcher auto-detects this default output path or accepts it through
 
 ## JAM and the xNVSE semantic layer
 
-JAM is dependency- and portable-semantic-gated, not runtime-supported today.
+JAM is dependency- and portable-semantic-gated. Two bounded desktop runtime
+semantics are transported below, but complete JAM runtime and launcher support
+are not promoted.
 
 The player obtains JAM and its declared prerequisites from their authors. There
 is now a local registrar for an existing JAM/MO2 profile. It resolves effective
@@ -104,17 +106,30 @@ The desktop launcher auto-detects the default manifest or accepts it through
 **Set up JAM**, verifies the recorded file sizes and hashes, and keeps the JAM
 toggle disabled while any dependency or portable semantic capability is absent.
 
-The current bounded transport is `jvs-forward-sprint-speed-v1`. The registrar
-reads the installed `SCPT`/`SCTX` and `GLOB` records, inventories their xNVSE and
-JIP command/event surface, and admits this capability only when the three
-authored JVS scripts and five authored settings are present. For the locally
-owned JAM 4.6 content those settings map DirectInput key 42 to physical Shift
+The current bounded transports are `jvs-forward-sprint-speed-v1` and
+`jbt-bullet-time-dilation-v1`. The registrar reads the installed `SCPT`/`SCTX`
+and `GLOB` records, inventories their xNVSE and JIP command/event surfaces, and
+admits each capability only when its exact authored scripts, settings, commands,
+and dispatched-event declaration are present. The recipe hash and canonical
+portable-capability hash are part
+of the profile/save identity; the launcher and runtime reject edited or stale
+capability metadata even when the source plugin hash itself is unchanged. For
+the locally owned JAM 4.6 content those settings map DirectInput key 42 to physical Shift
 and `JVSSpeedMult=75` to a 1.75 speed multiplier. Godot applies that exact value
 only while Shift is held and movement has a forward component. AP and hardcore
 drain, eligibility and crippled-limb checks, sounds, animations, forced
 holstering, controller button 64, and `JVSStateChange` dispatch remain
 unsupported. This is a real partial JVS behavior used by the desktop player,
-not a complete JAM claim; the launcher therefore remains disabled.
+not a complete JAM claim.
+
+The same owned plugin maps DirectInput key 45 to physical X, enables JBT toggle
+mode, and authors `JBTSlowMult=0.5` with `JBTSlowMultStanding=1`. The bounded
+desktop transport therefore toggles Godot world time between 1.0 and the exact
+effective 0.5 multiplier. It deliberately does not claim JBT's AP eligibility
+or drain, weapon AP costs, perks, image-space effects, body-part highlighting,
+sounds, FOV/sensitivity changes, controller path, or `JBTStateChange` dispatch.
+The launcher remains disabled until those missing semantics and dependencies
+are complete.
 
 An incomplete local registration is still useful evidence. Its status is
 `incomplete-local-dependency-profile`, its `missingDependencies` and
@@ -134,6 +149,11 @@ Current upstream entry points:
 - [Tale of Two Wastelands FAQ](https://thebestoftimes.moddinglinked.com/faq.html)
 - [JAM — Just Assorted Mods](https://www.nexusmods.com/newvegas/mods/66666)
 
-Those pages remain the authority for current downloads, prerequisites,
-versions, and author permissions. OpenNV documentation records the integration
-contract but does not freeze or republish third-party installers.
+Verified on 2026-08-28: the current TTW guide requires English Fallout 3 and
+New Vegas copies with all DLC, Windows 10 or later, roughly 40 GB free, and
+Nexus Mods plus MOD:PUB accounts. The current JAM page still identifies 4.6
+and lists xNVSE, JIP LN, JohnnyGuitar, kNVSE, lStewieAl's Tweaks, UIO, and the
+four main DLCs. Those account-backed author installers are not suitable for a
+silent OpenNV download. The pages remain the authority for current downloads,
+prerequisites, versions, and permissions; OpenNV records the integration
+contract but does not freeze, scrape, or republish them.

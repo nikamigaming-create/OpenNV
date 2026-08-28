@@ -341,6 +341,9 @@ internal sealed record Fo3OwnedProfile(
     string AppearanceCommand,
     Fo3AppearanceContract Appearance,
     Fo3PlayerPackageTransition Section4Transition,
+    Fo3Stage65AppearanceTransition Stage65Appearance,
+    Fo3Stage80Transition Stage80Transition,
+    Fo3Stage85Transition Stage85Transition,
     string MainMenuMusicPath,
     string IntroVideoPath,
     Color InterfaceColor)
@@ -364,7 +367,10 @@ internal sealed record Fo3OwnedProfile(
         if (!RequiredBoolean(capabilities, "characterSelectionContractResolved") ||
             !RequiredBoolean(capabilities, "cg00SexAndNameRuntimeReady") ||
             !RequiredBoolean(capabilities, "cg00AppearanceRuntimeReady") ||
-            !RequiredBoolean(capabilities, "cg00Section4PackageRuntimeReady") ||
+            !RequiredBoolean(capabilities, "cg00Section4PackageContractReady") ||
+            !RequiredBoolean(capabilities, "cg00Stage65AppearanceContractReady") ||
+            !RequiredBoolean(capabilities, "cg00Stage80ContractReady") ||
+            !RequiredBoolean(capabilities, "cg00Stage85ContractReady") ||
             !RequiredBoolean(capabilities, "mainMenuRuntimeReady") ||
             !RequiredBoolean(capabilities, "introVideoRuntimeReady") ||
             !RequiredBoolean(capabilities, "runtimeBootReady"))
@@ -384,6 +390,14 @@ internal sealed record Fo3OwnedProfile(
             RequiredObject(selection, "section4Transition"),
             appearanceContract.AcceptedStage,
             appearanceContract.AcceptedStageCommand);
+        var stage65Appearance = Fo3Stage65AppearanceTransition.Load(
+            RequiredObject(selection, "stage65Appearance"),
+            appearanceContract.AcceptedStage,
+            section4Transition.NextStage,
+            section4Transition.NextStageSourceSha256,
+            section4Transition.NextStageContractSchema,
+            appearanceContract.Races.Select(value => value.FormId).ToArray(),
+            section4Transition.NextCommandKinds);
         var nameStage = RequiredInteger(name, "stage");
         var appearanceStage = RequiredInteger(appearance, "stage");
         var quest = RequiredArray(opening, "quests")
@@ -396,6 +410,21 @@ internal sealed record Fo3OwnedProfile(
         if (!stages.Contains(nameStage) || !stages.Contains(appearanceStage))
             throw new InvalidOperationException(
                 "Fallout 3 character-selection stages do not join the owned CG00 quest.");
+        var stage80Transition = Fo3Stage80Transition.Load(
+            RequiredObject(selection, "postStage65Dialogue"),
+            RequiredObject(selection, "stage80Transition"),
+            stage65Appearance.Stage,
+            RequiredString(quest, "formId"));
+        var stage85Transition = Fo3Stage85Transition.Load(
+            RequiredObject(selection, "postStage80Dialogue"),
+            RequiredObject(selection, "stage85Transition"),
+            stage80Transition.Stage,
+            RequiredString(quest, "formId"));
+        if (!stages.Contains(stage65Appearance.Stage) ||
+            !stages.Contains(stage80Transition.Stage) ||
+            !stages.Contains(stage85Transition.Stage))
+            throw new InvalidOperationException(
+                "Fallout 3 compiled CG00 transitions do not join the owned quest stages.");
 
         var sex = RequiredObject(selection, "sex");
         var sexChoices = RequiredArray(sex, "choices")
@@ -440,6 +469,9 @@ internal sealed record Fo3OwnedProfile(
             RequiredString(appearance, "command"),
             appearanceContract,
             section4Transition,
+            stage65Appearance,
+            stage80Transition,
+            stage85Transition,
             RequiredString(mainMenuMusic, "source"),
             RequiredString(runtimeIntroVideo, "output"),
             interfaceColor);
@@ -834,12 +866,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 RequiredSaveString(faceGen, "symmetricTextureSha256") !=
                     selection.Sex.FaceGen.SymmetricTextureSha256)
                 throw new InvalidOperationException("Saved Fallout 3 FaceGen defaults differ from the profile.");
-            if (root.TryGetProperty("playerPackage", out var savedPackage))
-            {
-                _profile.Section4Transition.ValidateSavedState(savedPackage);
-                ShowSection4PackageActive(playerName, _selectedSex, selection);
-                return;
-            }
+            if (root.TryGetProperty("playerPackage", out _))
+                throw new InvalidOperationException(
+                    "Saved Fallout 3 state advanced through an unimplemented package trigger.");
             ShowAppearanceAccepted(playerName, _selectedSex, selection);
         }
         catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
@@ -955,17 +984,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"NEXT OWNED COMMAND: {_profile.Appearance.AcceptedStageCommand}",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         _content.AddChild(Label(
-            "The owned CG00 appearance choice is saved. The next action activates the exact " +
-            "Section 4 player package while keeping CG00 at stage 62.",
+            "The owned CG00 appearance choice is saved at stage 62. The Section 4 " +
+            "package and later stage contracts are compiled, but normal progression stops " +
+            "until the authored package/dialogue triggers execute in the Vault 101 world.",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        var activate = Button("CONTINUE CG00");
-        activate.Pressed += () =>
-        {
-            var package = _profile.Section4Transition.Activate();
-            PersistSection4Package(playerName, sex, selection, package);
-            ShowSection4PackageActive(playerName, sex, selection);
-        };
-        _content.AddChild(activate);
         var menu = Button("MAIN MENU");
         menu.Pressed += () =>
         {
@@ -977,7 +999,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"OPENNV_FO3_CG00_APPEARANCE_ACCEPTED profile={_profile.ProfileId} " +
             $"stage={_profile.Appearance.AcceptedStage} race={selection.Race.FormId} " +
             $"hair={selection.Hair.FormId} eyes={selection.Eyes.FormId} " +
-            $"next={_profile.Appearance.AcceptedStageCommand} packageRuntimeReady=1");
+            $"next={_profile.Appearance.AcceptedStageCommand} packageRuntimeReady=0");
     }
 
     private void ShowSection4PackageActive(
@@ -1003,9 +1025,20 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"NEXT OWNED COMMAND: {package.NextCommand}",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         _content.AddChild(Label(
-            $"Execution remains at stage {_profile.Appearance.AcceptedStage}. Stage {package.NextStage} " +
-            "requires the owned parent MatchRace/MatchFaceGeometry commands, which are not yet supported.",
+            $"Stage {package.NextStage} applies every owned MatchRace and MatchFaceGeometry " +
+            "command to the four source-resolved Dad references.",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var apply = Button($"APPLY STAGE {package.NextStage}");
+        apply.Pressed += () =>
+        {
+            var state = _profile.Stage65Appearance.Apply(
+                sex.EngineSex,
+                selection.Race.FormId,
+                selection.Sex.FaceGen);
+            PersistStage65Appearance(playerName, sex, selection, package, state);
+            ShowStage65AppearanceApplied(playerName, sex, selection, state);
+        };
+        _content.AddChild(apply);
         var menu = Button("MAIN MENU");
         menu.Pressed += () =>
         {
@@ -1017,7 +1050,168 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"OPENNV_FO3_CG00_SECTION4_ACTIVE profile={_profile.ProfileId} " +
             $"stage={_profile.Appearance.AcceptedStage} package={package.FormId} " +
             $"location={package.LocationReferenceFormId} nextStage={package.NextStage} " +
-            $"advanced=0 blocker={package.Blocker}");
+            "advanced=0 stage65ContractReady=1");
+    }
+
+    private void ShowStage65AppearanceApplied(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3Stage65AppearanceState state)
+    {
+        ClearContent();
+        _content.AddChild(Label(
+            $"{_profile.QuestEditorId}  •  STAGE {state.Stage}",
+            Fo3OpeningFlowNumericContracts.TitleFontPixels));
+        _content.AddChild(Label(
+            $"{playerName}  •  {sex.Label}  •  {selection.Race.Label}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"{state.AppliedCommandCount} OWNED COMMANDS APPLIED  •  " +
+            $"{state.Parents.Count} PARENT APPEARANCES RESOLVED",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            "The selected player race and FaceGen remain authoritative. Each Dad now uses that " +
+            "race, its default face texture, and the owned percentage geometry match.",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"NEXT BOUNDARY: {state.NextBoundary}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            "The owned post-stage-65 INFO conditions select one sex-specific result. " +
+            "Dialogue playback is not implemented; only its exact stage result can run here.",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var apply = Button($"APPLY OWNED INFO RESULT  •  STAGE {_profile.Stage80Transition.Stage}");
+        apply.Pressed += () =>
+        {
+            var stage80 = _profile.Stage80Transition.Apply(sex.EngineSex, state);
+            var package = _profile.Section4Transition.Activate();
+            PersistStage80Transition(playerName, sex, selection, package, state, stage80);
+            ShowStage80Applied(playerName, sex, selection, state, stage80);
+        };
+        _content.AddChild(apply);
+        var menu = Button("MAIN MENU");
+        menu.Pressed += () =>
+        {
+            StartMenuMusicAfterStop();
+            ShowMainMenu();
+        };
+        _content.AddChild(menu);
+        GD.Print(
+            $"OPENNV_FO3_CG00_STAGE65_APPLIED profile={_profile.ProfileId} " +
+            $"stage={state.Stage} commands={state.AppliedCommandCount} " +
+            $"parents={state.Parents.Count} playerRace={selection.Race.FormId} " +
+            $"nextBoundary={state.NextBoundary}");
+    }
+
+    private void ShowStage80Applied(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3Stage65AppearanceState stage65,
+        Fo3Stage80State state)
+    {
+        ClearContent();
+        _content.AddChild(Label(
+            $"{_profile.QuestEditorId}  •  STAGE {state.Stage}",
+            Fo3OpeningFlowNumericContracts.TitleFontPixels));
+        _content.AddChild(Label(
+            $"{playerName}  •  {sex.Label}  •  {selection.Race.Label}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"OWNED INFO RESULT: {state.AppliedInfoFormId}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"{state.AppliedCommandCount} OWNED COMMANDS APPLIED  •  " +
+            $"ADDED PACKAGE {state.AddedPlayerPackage.EditorId} " +
+            $"({state.AddedPlayerPackage.FormId})",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"SCRIPT VARIABLES: {state.ScriptVariables.Count}  •  " +
+            $"PACKAGE REEVALUATIONS: {state.EvaluatedPackageReferences.Count}  •  " +
+            $"ENABLED REFERENCES: {state.EnabledReferences.Count}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            "This is authoritative CG00 state only. Vault 101 world placement, actors, " +
+            "animation, and dialogue are not rendered by this transition.",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"NEXT BOUNDARY: {state.NextBoundary}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            "The next owned INFO result advances CG00 to an authored stage with no executable " +
+            "stage commands. Dialogue playback remains outside this slice.",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var apply = Button($"APPLY OWNED INFO RESULT  •  STAGE {_profile.Stage85Transition.Stage}");
+        apply.Pressed += () =>
+        {
+            var stage85 = _profile.Stage85Transition.Apply(state);
+            var package = _profile.Section4Transition.Activate();
+            PersistStage85Transition(
+                playerName,
+                sex,
+                selection,
+                package,
+                stage65,
+                state,
+                stage85);
+            ShowStage85Applied(playerName, sex, selection, stage85);
+        };
+        _content.AddChild(apply);
+        var menu = Button("MAIN MENU");
+        menu.Pressed += () =>
+        {
+            StartMenuMusicAfterStop();
+            ShowMainMenu();
+        };
+        _content.AddChild(menu);
+        GD.Print(
+            $"OPENNV_FO3_CG00_STAGE80_APPLIED profile={_profile.ProfileId} " +
+            $"sourceStage={stage65.Stage} stage={state.Stage} info={state.AppliedInfoFormId} " +
+            $"commands={state.AppliedCommandCount} package={state.AddedPlayerPackage.FormId} " +
+            $"variables={state.ScriptVariables.Count} evp={state.EvaluatedPackageReferences.Count} " +
+            $"enabled={state.EnabledReferences.Count} dialoguePlayback=0 worldRendered=0 " +
+            $"nextBoundary={state.NextBoundary}");
+    }
+
+    private void ShowStage85Applied(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3Stage85State state)
+    {
+        ClearContent();
+        _content.AddChild(Label(
+            $"{_profile.QuestEditorId}  •  STAGE {state.Stage}",
+            Fo3OpeningFlowNumericContracts.TitleFontPixels));
+        _content.AddChild(Label(
+            $"{playerName}  •  {sex.Label}  •  {selection.Race.Label}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"OWNED INFO RESULT: {state.AppliedInfoFormId}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"{state.AppliedCommandCount} OWNED STAGE COMMANDS  •  AUTHORITATIVE STATE SAVED",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            "The owned stage result contains comments only. No dialogue, animation, actors, " +
+            "or Vault 101 world scene are rendered here.",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"NEXT BOUNDARY: {state.NextBoundary}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var menu = Button("MAIN MENU");
+        menu.Pressed += () =>
+        {
+            StartMenuMusicAfterStop();
+            ShowMainMenu();
+        };
+        _content.AddChild(menu);
+        GD.Print(
+            $"OPENNV_FO3_CG00_STAGE85_APPLIED profile={_profile.ProfileId} " +
+            $"stage={state.Stage} info={state.AppliedInfoFormId} " +
+            $"commands={state.AppliedCommandCount} dialoguePlayback=0 worldRendered=0 " +
+            $"nextBoundary={state.NextBoundary}");
     }
 
     private void StartMenuMusicAfterStop()
@@ -1148,13 +1342,215 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 idleFormIds = package.IdleFormIds,
                 nextCommand = package.NextCommand,
                 nextStage = package.NextStage,
-                blocker = package.Blocker,
             },
             nextCommand = package.NextCommand,
             completed = false,
         };
         WriteState(state);
     }
+
+    private void PersistStage65Appearance(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3ActivePlayerPackage package,
+        Fo3Stage65AppearanceState stage65)
+    {
+        var state = new
+        {
+            schema = "opennv-fo3-opening-character/v2",
+            profileId = _profile.ProfileId,
+            profileSha256 = _profile.Sha256,
+            questEditorId = _profile.QuestEditorId,
+            questFormId = _profile.QuestFormId,
+            stage = stage65.Stage,
+            playerName,
+            sex = new { label = sex.Label, engineSex = sex.EngineSex },
+            appearance = new
+            {
+                sourceContract = Fo3AppearanceContract.ExpectedSchema,
+                adultRaceFormId = selection.Race.FormId,
+                childRaceFormId = selection.Race.ChildRaceFormId,
+                hairFormId = selection.Hair.FormId,
+                eyesFormId = selection.Eyes.FormId,
+                faceGen = new
+                {
+                    symmetricGeometrySha256 = selection.Sex.FaceGen.SymmetricGeometrySha256,
+                    asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
+                    symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
+                },
+            },
+            playerPackage = new
+            {
+                schema = "opennv-fo3-player-package-state/v1",
+                active = true,
+                formId = package.FormId,
+                editorId = package.EditorId,
+                locationReferenceFormId = package.LocationReferenceFormId,
+                idleFormIds = package.IdleFormIds,
+                nextCommand = package.NextCommand,
+                nextStage = package.NextStage,
+            },
+            stage65Appearance = new
+            {
+                schema = Fo3Stage65AppearanceTransition.ExpectedSchema,
+                stage = stage65.Stage,
+                appliedCommandCount = stage65.AppliedCommandCount,
+                playerFaceGen = new
+                {
+                    symmetricGeometrySha256 = stage65.PlayerSymmetricGeometrySha256,
+                    asymmetricGeometrySha256 = stage65.PlayerAsymmetricGeometrySha256,
+                    symmetricTextureSha256 = stage65.PlayerSymmetricTextureSha256,
+                },
+                parents = stage65.Parents.Select(parent => new
+                {
+                    referenceFormId = parent.ReferenceFormId,
+                    referenceEditorId = parent.ReferenceEditorId,
+                    baseFormId = parent.BaseFormId,
+                    raceFormId = parent.RaceFormId,
+                    symmetricGeometrySha256 = parent.SymmetricGeometrySha256,
+                    asymmetricGeometrySha256 = parent.AsymmetricGeometrySha256,
+                    symmetricTextureSha256 = parent.SymmetricTextureSha256,
+                }),
+                nextBoundary = stage65.NextBoundary,
+            },
+            completed = false,
+        };
+        WriteState(state);
+    }
+
+    private void PersistStage80Transition(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3ActivePlayerPackage section4Package,
+        Fo3Stage65AppearanceState stage65,
+        Fo3Stage80State stage80,
+        Fo3Stage85State? stage85 = null)
+    {
+        var state = new
+        {
+            schema = "opennv-fo3-opening-character/v2",
+            profileId = _profile.ProfileId,
+            profileSha256 = _profile.Sha256,
+            questEditorId = _profile.QuestEditorId,
+            questFormId = _profile.QuestFormId,
+            stage = stage85?.Stage ?? stage80.Stage,
+            playerName,
+            sex = new { label = sex.Label, engineSex = sex.EngineSex },
+            appearance = new
+            {
+                sourceContract = Fo3AppearanceContract.ExpectedSchema,
+                adultRaceFormId = selection.Race.FormId,
+                childRaceFormId = selection.Race.ChildRaceFormId,
+                hairFormId = selection.Hair.FormId,
+                eyesFormId = selection.Eyes.FormId,
+                faceGen = new
+                {
+                    symmetricGeometrySha256 = selection.Sex.FaceGen.SymmetricGeometrySha256,
+                    asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
+                    symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
+                },
+            },
+            playerPackage = new
+            {
+                schema = "opennv-fo3-player-package-state/v1",
+                active = true,
+                formId = section4Package.FormId,
+                editorId = section4Package.EditorId,
+                locationReferenceFormId = section4Package.LocationReferenceFormId,
+                idleFormIds = section4Package.IdleFormIds,
+                nextCommand = section4Package.NextCommand,
+                nextStage = section4Package.NextStage,
+            },
+            stage65Appearance = new
+            {
+                schema = Fo3Stage65AppearanceTransition.ExpectedSchema,
+                stage = stage65.Stage,
+                appliedCommandCount = stage65.AppliedCommandCount,
+                playerFaceGen = new
+                {
+                    symmetricGeometrySha256 = stage65.PlayerSymmetricGeometrySha256,
+                    asymmetricGeometrySha256 = stage65.PlayerAsymmetricGeometrySha256,
+                    symmetricTextureSha256 = stage65.PlayerSymmetricTextureSha256,
+                },
+                parents = stage65.Parents.Select(parent => new
+                {
+                    referenceFormId = parent.ReferenceFormId,
+                    referenceEditorId = parent.ReferenceEditorId,
+                    baseFormId = parent.BaseFormId,
+                    raceFormId = parent.RaceFormId,
+                    symmetricGeometrySha256 = parent.SymmetricGeometrySha256,
+                    asymmetricGeometrySha256 = parent.AsymmetricGeometrySha256,
+                    symmetricTextureSha256 = parent.SymmetricTextureSha256,
+                }),
+                nextBoundary = stage65.NextBoundary,
+            },
+            stage80Transition = new
+            {
+                schema = Fo3Stage80Transition.ExpectedSchema,
+                stage = stage80.Stage,
+                appliedInfoFormId = stage80.AppliedInfoFormId,
+                appliedCommandCount = stage80.AppliedCommandCount,
+                addedPlayerPackage = new
+                {
+                    active = true,
+                    formId = stage80.AddedPlayerPackage.FormId,
+                    editorId = stage80.AddedPlayerPackage.EditorId,
+                    locationReferenceFormId = stage80.AddedPlayerPackage.LocationReferenceFormId,
+                    idleFormIds = stage80.AddedPlayerPackage.IdleFormIds,
+                },
+                scriptVariables = stage80.ScriptVariables.Select(variable => new
+                {
+                    referenceFormId = variable.ReferenceFormId,
+                    referenceEditorId = variable.ReferenceEditorId,
+                    variable = variable.Variable,
+                    value = variable.Value,
+                }),
+                evaluatedPackageReferences = stage80.EvaluatedPackageReferences.Select(
+                    reference => new
+                    {
+                        formId = reference.FormId,
+                        editorId = reference.EditorId,
+                    }),
+                enabledReferences = stage80.EnabledReferences.Select(reference => new
+                {
+                    formId = reference.FormId,
+                    editorId = reference.EditorId,
+                }),
+                nextBoundary = stage80.NextBoundary,
+            },
+            stage85Transition = stage85 is null
+                ? null
+                : new
+                {
+                    schema = Fo3Stage85Transition.ExpectedSchema,
+                    stage = stage85.Stage,
+                    appliedInfoFormId = stage85.AppliedInfoFormId,
+                    appliedCommandCount = stage85.AppliedCommandCount,
+                    nextBoundary = stage85.NextBoundary,
+                },
+            completed = false,
+        };
+        WriteState(state);
+    }
+
+    private void PersistStage85Transition(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3ActivePlayerPackage section4Package,
+        Fo3Stage65AppearanceState stage65,
+        Fo3Stage80State stage80,
+        Fo3Stage85State stage85) =>
+        PersistStage80Transition(
+            playerName,
+            sex,
+            selection,
+            section4Package,
+            stage65,
+            stage80,
+            stage85);
 
     private void WriteState(object state)
     {

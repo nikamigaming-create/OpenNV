@@ -26,10 +26,10 @@
       <section class="route-console" aria-labelledby="selector-title">
         <h1 id="selector-title">Game</h1>
         <div id="campaigns" class="campaign-grid">
-          <button class="campaign-card route-fallout1 selected" type="button"><strong class="card-title">Fallout 1</strong><span class="card-detail">HEX · FPS · VR</span></button>
-          <button class="campaign-card route-fallout2" type="button"><strong class="card-title">Fallout 2</strong><span class="card-detail">HEX · FPS · VR</span></button>
-          <button class="campaign-card route-newvegas" type="button"><strong class="card-title">New Vegas</strong><span class="card-detail">ORIGINAL · VR · JAM</span></button>
-          <button class="campaign-card route-fallout3" type="button"><strong class="card-title">Fallout 3</strong><span class="card-detail">ORIGINAL · VR · TTW</span></button>
+          <button class="campaign-card route-fallout1 selected" type="button"><strong class="card-title">Fallout 1</strong><span class="card-detail">FPS · HEX · VR</span></button>
+          <button class="campaign-card route-fallout2" type="button"><strong class="card-title">Fallout 2</strong><span class="card-detail">FPS · HEX · VR</span></button>
+          <button class="campaign-card route-newvegas" type="button"><strong class="card-title">New Vegas</strong><span class="card-detail">FPS · HEX · VR</span></button>
+          <button class="campaign-card route-fallout3" type="button"><strong class="card-title">Fallout 3</strong><span class="card-detail">FPS · HEX · VR</span></button>
         </div>
       </section>
 
@@ -43,19 +43,14 @@
             <span>Edition</span>
             <select id="edition"></select>
           </label>
-          <div id="classic-presentation-row" class="presentation-select hidden">
+          <div id="presentation-row" class="presentation-select">
             <span>Mode</span>
-            <div id="classic-presentation" class="mode-picker" role="group" aria-label="Presentation mode"></div>
+            <div id="presentation" class="mode-picker" role="group" aria-label="Presentation mode"></div>
           </div>
           <button id="choose-fo1-profile" class="quiet-button hidden" type="button">Set up Fallout 1</button>
           <button id="choose-fo2-profile" class="quiet-button hidden" type="button">Set up Fallout 2</button>
           <button id="choose-ttw-profile" class="quiet-button hidden" type="button">Set up TTW</button>
           <button id="choose-jam-profile" class="quiet-button hidden" type="button">Set up JAM</button>
-          <label id="vr-toggle-row" class="jam-toggle">
-            <input id="vr-toggle" type="checkbox">
-            <span class="switch" aria-hidden="true"></span>
-            <span id="vr-label">VR</span>
-          </label>
           <label id="jam-toggle-row" class="jam-toggle">
             <input id="jam-toggle" type="checkbox">
             <span class="switch" aria-hidden="true"></span>

@@ -1,7 +1,7 @@
 # OpenNV architecture and code accountability
 
-Status: **launcher-routed bounded Fallout 1 V13ENT, New Vegas opening/
-Goodsprings, Fallout 3 CG00 character slices, and an asset-free Fallout 2
+Status: **launcher-routed bounded Fallout 1 V13ENT and New Vegas opening/
+Goodsprings slices, a non-playable Fallout 3 CG00 development frontend, and an asset-free Fallout 2
 Temple MAP/PRO/FRM source transport over registered DAT2 overlays
 profile; no full campaign**.
 
@@ -14,8 +14,9 @@ New Vegas owns its menu, skippable intro, Doc Mitchell house/state, and the
 production Goodsprings active set with the reciprocal Doc Mitchell
 house/exterior exit (`00103e61` ↔ `00103e69`); flat is
 launchable and OpenXR remains experimental with no physical-headset acceptance.
-Fallout 3 owns its menu and CG00 profile through stage 62 but has no Vault 101
-runtime. TTW runtime support is absent, and JAM remains dependency- and
+Fallout 3 owns its menu and persistent CG00 selection through stage 62; later
+Section 4 and stage-65/80/85 contracts validate but do not bypass unimplemented
+world triggers. It has no Vault 101 runtime. TTW runtime support is absent, and JAM remains dependency- and
 portable-semantic-gated. These routes consume the shared authoritative state in
 `runtime/src/Gameplay/State`; presentation does not fork inventory, quests,
 objectives, opening completion, or save identity.
@@ -310,6 +311,7 @@ retail data, or promotion verdict.
 | `goodsprings-saloon-structure-v1.json` | Exact proof target, hash, selection, entry, scale | Parsing logic |
 | `goodsprings-trudy-actor-v1.json` | Exact retail master/archives, ACHR, and CELL identity | Appearance guesses or rendering logic |
 | `runtime/config/open-nv-runtime-v1.json` | Single versioned non-retail policy boundary with provenance and parity status | Fallout-authored placement, identity, or item stats |
+| `runtime/config/jam-trusted-requirements-v1.json` | Shipped JAM recipe identity and exact known plugin-to-portable-capability binding | JAM assets, native DLL execution, or unverified semantic claims |
 | `runtime_configuration.py` / `RuntimeConfiguration.cs` | Strict typed load, validation, and SHA-256 identity for that boundary | Feature behavior |
 | `validate_runtime_report.py` | Join runtime proof reports to owned-data manifests and configuration | Rendering or gameplay implementation |
 | `audit_source_constants.py` | Production Python/C#/JavaScript/PowerShell literal accountability gate | Runtime defaults or content policy |
@@ -384,13 +386,25 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout1/Fo1HexDemo.cs` | Deterministic loading/player/door/movement/target/attack/turn video sequence and report | Host input injection, gameplay authority, or parity verdicts |
 | `runtime/src/Campaigns/Fallout1/Fo1HexVisuals.cs` | Procedural selection/path marker mesh and material primitives | Grid identity, pathfinding, or source art |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TemplePresentationContract.cs` | Full cache/source/profile/recipe and PNG identity validation for the admitted Map 126 presentation | DAT2 parsing, invented placements, gameplay, or runtime readiness |
-| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, and MAP-header entry marker in Godot's 3D hex coordinate space | Collision, scripts, character creation, interaction, or playability |
-| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference scene-construction report | Rendered-frame, interaction, parity, or launcher claims |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTopology.cs` | Source-derived floor support, central-hex blocker walk mask, connected wall shells, and bounded collision for Map 126 | Multihex footprint guessing, scripts, actors, gameplay, or parity |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleMovementConsumer.cs` | Hash-bound nonvisual adjacent-hex movement within the exact Map 126 entry component | Player actor, controls, AP, scripts, save state, or playability |
+| `content/tools/fo2_temple_transitions.py` | Asset-free owned Map 126 exit-grid, zero-door, MAP-script, INT, and destination identity manifest | INT interpretation, destination presentation, actors, or gameplay |
+| `content/tools/fo2_arroyo_caves_slice.py` | Exact owned Map 3 incoming placement, topology, reciprocal Map 126 exits, and source/resource identity manifest | Godot nodes, actors, INT execution, controls, or runtime readiness |
+| `content/tools/prepare_fo2_arroyo_caves_presentation.py` | Disposable selective FRM/PNG cache for the admitted Map 3 source graph | Runtime destination consumption, rendering acceptance, or gameplay |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionContract.cs` | Full source/cache/topology/transition identity join for the admitted Temple exits | Asset parsing, invented destinations, or runtime readiness |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionRuntime.cs` | Fail-closed nonvisual exit-grid destination-state application after exact component movement | Destination loading, doors, script execution, actors, or save state |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, MAP-header entry marker, and topology composition in Godot's 3D hex coordinate space | Scripts, character creation, interaction, or playability |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference construction plus exact floor/wall physics-ray report | Rendered-frame, interaction, parity, or launcher claims |
 | `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
+| `runtime/src/Compatibility/Jam/JamProfileContract.cs` | Shared hash-bound JAM profile/plugin identity and transported-capability admission | Native DLL loading, script interpretation, or complete compatibility |
 | `runtime/src/Compatibility/Jam/JamJvsSprintContract.cs` | Hash-bound transport and validation of JAM 4.6 JVS hold-to-sprint settings | Native DLL loading, xNVSE interpretation, or complete JAM compatibility |
+| `runtime/src/Compatibility/Jam/JamJbtBulletTimeContract.cs` | Hash-bound transport of JAM 4.6 JBT toggle and authored world-time multiplier | AP/effect/audio/UI/event semantics or complete JBT/JAM compatibility |
 | `prepare_fo3_profile.py` / `prepare_fo3_opening_slice.py` | Read-only Fallout 3 GOTY profile, CG00/Vault 101 source graph, playable race and sex-aware hair/eye inventory, Player-plus-RACE FaceGen defaults, and hash-bound local manifest generation | Godot nodes, runtime progression, 3D FaceGen rendering, or full-opening claims |
 | `runtime/src/Campaigns/Fallout3/Fallout3NamespaceBridge.cs` | Compile-time namespace join between the Fallout 3 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
-| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified intro playback/skip, CG00 sex/name/appearance UI, and atomic stage-60/stage-62 character plus active-package save | ESM/BSA parsing, KF playback, stage-65 race/face semantics, Vault 101 scene compilation, or world play |
+| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified intro playback/skip, CG00 sex/name/appearance UI, and atomic stage-60/62 save/resume | Later trigger bypass, dialogue/KF playback, 3D actor presentation, Vault 101 scene compilation, or world play |
+| `runtime/src/Campaigns/Fallout3/Fo3Stage65AppearanceTransition.cs` | Fail-closed validation/application contract for all owned stage-65 MatchRace and MatchFaceGeometry commands across the exact race/sex matrix | Ordinary-flow trigger execution, persistence, face rendering, animation, or Vault 101 play |
+| `runtime/src/Campaigns/Fallout3/Fo3Stage80Transition.cs` | Exact sex-conditional INFO result plus stage-80 package, variable, EVP, and enable-reference contract | Ordinary-flow trigger execution/persistence, dialogue/KF playback, package AI, actors, or world play |
+| `runtime/src/Campaigns/Fallout3/Fo3Stage85Transition.cs` | Exact post-stage-80 INFO trigger and zero-command stage-85 result contract | Ordinary-flow trigger execution/persistence, dialogue playback, later CG00 interpretation, actors, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3PlayerPackageTransition.cs` | Source-bound `CG00PlayerSection4` package, marker, idle/event animation identities, activation, and fail-closed stage-65 boundary | KF playback, package AI, `MatchRace`, `MatchFaceGeometry`, or stage advancement |
 | `ttw_profile.py` / `jam_profile.py` | Read-only installed-profile identity, dependency/master closure, hashes, save boundary, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |

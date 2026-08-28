@@ -19,6 +19,33 @@ function productConfigurationPath() {
     : path.join(here, "..", "..", "runtime", "config", "open-nv-runtime-v1.json");
 }
 
+function jamTrustedRequirementsPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "config", "jam-trusted-requirements-v1.json")
+    : path.join(here, "..", "..", "runtime", "config", "jam-trusted-requirements-v1.json");
+}
+
+function jamTrustedRequirements() {
+  const trusted = JSON.parse(readFileSync(jamTrustedRequirementsPath(), "utf8"));
+  if (trusted?.schema !== "opennv-jam-trusted-requirements/v1" ||
+      typeof trusted?.requirementsId !== "string" ||
+      !isSha256(trusted?.requirementsSha256) ||
+      !Array.isArray(trusted?.supportedPluginContracts) ||
+      trusted.supportedPluginContracts.length === 0) {
+    throw new Error("The shipped JAM requirements identity is invalid.");
+  }
+  const pluginHashes = new Set();
+  for (const contract of trusted.supportedPluginContracts) {
+    if (!isSha256(contract?.jamPluginSha256) ||
+        !isSha256(contract?.portableCapabilitiesSha256) ||
+        pluginHashes.has(contract.jamPluginSha256)) {
+      throw new Error("The shipped JAM plugin contract is invalid.");
+    }
+    pluginHashes.add(contract.jamPluginSha256);
+  }
+  return trusted;
+}
+
 function productConfiguration() {
   return JSON.parse(readFileSync(productConfigurationPath(), "utf8"));
 }
@@ -115,6 +142,31 @@ function sha256(filePath) {
   return digest.digest("hex");
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function jamProfileIdentity(profile) {
+  const rows = [...profile.files.gameRoot, ...profile.files.effectiveData];
+  const identity = {
+    present: rows.map((row) => [row.component, row.logicalPath, row.sha256]),
+    missing: profile.missingDependencies,
+    missingMasters: profile.missingPluginMasters,
+    requirementsSha256: profile.requirements.sha256,
+    portableCapabilitiesSha256: profile.portableCapabilitiesSha256
+  };
+  return createHash("sha256")
+    .update("opennv-jam-profile/v1\0", "utf8")
+    .update(canonicalJson(identity), "utf8")
+    .digest("hex")
+    .slice(0, 20);
+}
+
 function isSha256(value) {
   return typeof value === "string" &&
     value.length === SHA256_HEX_CHARACTERS && /^[0-9a-f]+$/u.test(value);
@@ -196,13 +248,48 @@ function readJamProfile(manifestOverride = null) {
   });
   try {
     const profile = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const knownStatus = new Set([
+      "validated-local-dependency-profile",
+      "incomplete-local-dependency-profile"
+    ]);
     if (profile?.schema !== "opennv-jam-profile/v1" ||
-        profile?.status !== "validated-local-dependency-profile" ||
+        !knownStatus.has(profile?.status) ||
         profile?.kind !== "jam" || typeof profile?.profileId !== "string" ||
         !Array.isArray(profile?.files?.gameRoot) ||
         !Array.isArray(profile?.files?.effectiveData) ||
+        !Array.isArray(profile?.missingDependencies) ||
+        !Array.isArray(profile?.missingPluginMasters) ||
+        !Array.isArray(profile?.portableCapabilities) ||
+        typeof profile?.portableCapabilitiesCanonical !== "string" ||
+        !isSha256(profile?.portableCapabilitiesSha256) ||
+        !isSha256(profile?.requirements?.sha256) ||
+        !isSha256(profile?.jamPlugin?.sha256) ||
         profile.runtimeCompatibility?.nativeDllLoading !== false) {
       return unavailable("The selected JAM manifest is not a safe validated local profile.", true);
+    }
+    const trustedRequirements = jamTrustedRequirements();
+    if (profile.requirements.id !== trustedRequirements.requirementsId ||
+        profile.requirements.sha256 !== trustedRequirements.requirementsSha256) {
+      return unavailable("The JAM profile was generated from another requirements contract.", true);
+    }
+    const trustedPluginContract = trustedRequirements.supportedPluginContracts.find(
+      (contract) => contract.jamPluginSha256 === profile.jamPlugin.sha256
+    );
+    if (!trustedPluginContract ||
+        trustedPluginContract.portableCapabilitiesSha256 !== profile.portableCapabilitiesSha256) {
+      return unavailable("The installed JAM plugin has no shipped portable capability contract.", true);
+    }
+    if (createHash("sha256").update(profile.portableCapabilitiesCanonical, "utf8").digest("hex") !==
+          profile.portableCapabilitiesSha256 ||
+        canonicalJson(JSON.parse(profile.portableCapabilitiesCanonical)) !==
+          canonicalJson(profile.portableCapabilities) ||
+        jamProfileIdentity(profile) !== profile.profileId ||
+        profile.saveCompatibilityId !== `fallout-new-vegas+jam:${profile.profileId}`) {
+      return unavailable("The selected JAM manifest identity changed; register it again.", true);
+    }
+    const jamRows = profile.files.effectiveData.filter((row) => row?.component === "jam");
+    if (jamRows.length !== 1 || jamRows[0]?.sha256 !== profile.jamPlugin.sha256) {
+      return unavailable("The JAM plugin identity is inconsistent.", true);
     }
     const rows = [...profile.files.gameRoot, ...profile.files.effectiveData];
     if (rows.length === 0) return unavailable("The selected JAM manifest contains no dependencies.", true);
@@ -212,7 +299,8 @@ function readJamProfile(manifestOverride = null) {
       }
       validateHashBoundFile(path.resolve(row.source), row, `JAM dependency ${row.logicalPath || row.source}`);
     }
-    const runtimeReady = profile?.runtimeCompatibility?.ready === true;
+    const dependenciesComplete = profile.status === "validated-local-dependency-profile";
+    const runtimeReady = dependenciesComplete && profile?.runtimeCompatibility?.ready === true;
     const reason = String(profile?.runtimeCompatibility?.reason || "JAM runtime compatibility is not ready.");
     return {
       ready: runtimeReady,
@@ -221,7 +309,9 @@ function readJamProfile(manifestOverride = null) {
       manifestDetected: true,
       message: runtimeReady
         ? "JAM profile and portable runtime compatibility are ready."
-        : "JAM profile registered; portable xNVSE/JAM support is still pending.",
+        : (dependenciesComplete
+          ? "JAM profile registered; portable xNVSE/JAM support is still pending."
+          : "JAM profile registered; local dependencies and complete portable semantics are still missing."),
       reason,
       path: manifestPath,
       profileId: profile.profileId,
@@ -604,6 +694,13 @@ function launch(request) {
   if (!runtimeVariant?.ready) {
     return { ok: false, code: "campaign-not-ready", message: runtimeVariant?.message || `${campaign.title} is not ready in this runtime.` };
   }
+  if (runtimeVariant.presentations?.[validatedRequest.presentation]?.ready !== true) {
+    return {
+      ok: false,
+      code: "presentation-not-ready",
+      message: `${campaign.title} ${validatedRequest.presentation} is not ready in this runtime.`
+    };
+  }
   if (enableJam && !runtimeCampaign?.variants?.jam?.ready) {
     return { ok: false, code: "jam-not-ready", message: runtimeCampaign?.variants?.jam?.message || "JAM is not ready in this runtime." };
   }
@@ -664,7 +761,12 @@ function launch(request) {
   const args = [...command.prefixArguments, ...runtimeArguments];
   const child = spawn(command.executable, args, { detached: true, stdio: "ignore", windowsHide: true });
   child.unref();
-  return { ok: true, message: `${campaign.title} ${enableVr ? "OpenXR" : "flat"} launch handed to the local OpenNV runtime.` };
+  const presentationLabel = {
+    "first-person": "FPS",
+    "hex-tactical": "Hex",
+    openxr: "VR"
+  }[validatedRequest.presentation] || validatedRequest.presentation;
+  return { ok: true, message: `${campaign.title} ${presentationLabel} launch handed to the local OpenNV runtime.` };
 }
 
 function createWindow() {

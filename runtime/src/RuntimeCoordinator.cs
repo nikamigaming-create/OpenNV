@@ -185,6 +185,9 @@ public partial class RuntimeCoordinator : Node3D
             if (_options.ContainsKey("fo2-temple-build-proof") && !hasFo2TemplePresentation)
                 throw new ArgumentException(
                     "--fo2-temple-build-proof requires --fo2-temple-cache.");
+            if (_options.ContainsKey("fo2-temple-transitions") && !hasFo2TemplePresentation)
+                throw new ArgumentException(
+                    "--fo2-temple-transitions requires --fo2-temple-cache.");
             if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) +
                     (hasStaticCellCompile ? 1 : 0) + (hasActorModel ? 1 : 0) +
                     (hasActorReviewScene ? 1 : 0) + (hasFo1HexScene ? 1 : 0) +
@@ -324,7 +327,10 @@ public partial class RuntimeCoordinator : Node3D
                 SetLoadingStatus("VERIFYING MAP 126 SOURCE AND PNG HASHES");
                 LoadFo2TemplePresentation(
                     RequireOption(_options, "fo2-temple-cache"),
-                    RequireOption(_options, "report"));
+                    RequireOption(_options, "report"),
+                    _options.TryGetValue("fo2-temple-transitions", out var transitions)
+                        ? transitions
+                        : null);
                 DismissLoadingScreen();
                 return;
             }
@@ -530,11 +536,17 @@ public partial class RuntimeCoordinator : Node3D
             GetTree().Quit(0);
     }
 
-    private void LoadFo2TemplePresentation(string cacheManifestPath, string reportPath)
+    private void LoadFo2TemplePresentation(
+        string cacheManifestPath,
+        string reportPath,
+        string? transitionManifestPath)
     {
         var catalog = Fo2TemplePresentationCatalog.Load(cacheManifestPath);
+        var transitions = transitionManifestPath is null
+            ? null
+            : Fo2TempleTransitionCatalog.Load(transitionManifestPath, catalog);
         var coverage = Fo2TempleScene.Build(catalog, this);
-        _ = Fo2TempleBuildProof.Run(this, coverage, reportPath);
+        _ = Fo2TempleBuildProof.Run(this, coverage, reportPath, transitions);
     }
 
     private void LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
@@ -567,14 +579,23 @@ public partial class RuntimeCoordinator : Node3D
             options.ContainsKey("classic-diorama"));
         if (options.TryGetValue("jam-profile", out var jamProfilePath))
         {
-            var sprint = JamJvsSprintContract.Load(jamProfilePath);
+            var jamProfile = JamProfileContract.Load(jamProfilePath);
+            var sprint = JamJvsSprintContract.Load(jamProfile);
+            var bulletTime = JamJbtBulletTimeContract.Load(jamProfile);
             DesktopInputMap.ConfigureJamSprint(sprint);
+            DesktopInputMap.ConfigureJamBulletTime(bulletTime);
             loaded.Player.ConfigureJamJvsSprint(sprint);
+            loaded.Player.ConfigureJamJbtBulletTime(bulletTime);
             GD.Print(
                 $"OPENNV_JAM_CAPABILITY id={JamJvsSprintContract.CapabilityId} " +
                 $"profile={sprint.ProfileId} key={sprint.DesktopPhysicalKey} " +
                 $"speedMultiplier={sprint.SpeedMultiplier:F2} " +
                 $"missingDependencies={sprint.MissingDependencyCount} completeJamReady=False");
+            GD.Print(
+                $"OPENNV_JAM_CAPABILITY id={JamJbtBulletTimeContract.CapabilityId} " +
+                $"profile={bulletTime.ProfileId} key={bulletTime.DesktopPhysicalKey} " +
+                $"timeMultiplier={bulletTime.EffectiveTimeMultiplier:F2} " +
+                $"missingDependencies={bulletTime.MissingDependencyCount} completeJamReady=False");
         }
         var startsNewGame = options.ContainsKey("new-game");
         var restoredOpening = startsNewGame ? null : loaded.Session.OpeningState;

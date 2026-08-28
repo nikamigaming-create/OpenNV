@@ -96,6 +96,18 @@
         "formId": "0006a818",
         "locationReferenceEditorId": "CG00PlayerStartMarker",
         "locationReferenceFormId": "00039562"
+      },
+      "postStage65Dialogue": {
+        "topicEditorId": "CG00DadSpeech",
+        "topicFormId": "0001f378",
+        "resultInfoFormIds": ["0001f37f", "0001f380"],
+        "targetStage": 80
+      },
+      "postStage80Dialogue": {
+        "topicEditorId": "CG00DadSpeech",
+        "topicFormId": "0001f378",
+        "resultInfoFormId": "0001f37b",
+        "targetStage": 85
       }
     },
     "appearanceUi": {

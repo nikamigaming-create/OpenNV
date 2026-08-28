@@ -1,0 +1,52 @@
+{
+  "schema": "opennv-fo2-temple-topology-runtime/v1",
+  "id": "fo2-temple-map-126-topology-v1",
+  "campaign": "Fallout2",
+  "map": {
+    "index": 126,
+    "name": "ARTEMPLE.MAP",
+    "sha256": "11fc44f3fad558f3cb9e12bf41018a023ef7de8def365d516a44336157fec050"
+  },
+  "sourceSemantics": {
+    "mode": "classic-fallout-map-floor-and-object-flags-v1",
+    "defaultFloorTileId": 1,
+    "objectNoBlockFlag": 16,
+    "objectMultihexFlag": 2048,
+    "multihexCoverage": "central-source-hex-only-unresolved"
+  },
+  "floorSupport": {
+    "mode": "non-default-source-floor-patches-v1",
+    "surfaceMeters": 0.0
+  },
+  "walkMask": {
+    "mode": "non-default-floor-art-minus-source-blocking-object-hexes-v1",
+    "overlayVisibleByDefault": false,
+    "overlayHeightMeters": 0.012,
+    "overlayRadiusScale": 0.72,
+    "overlayColor": [0.18, 0.82, 0.34, 0.34]
+  },
+  "wallGeometry": {
+    "mode": "source-wall-hex-union-v1",
+    "sourceObjectType": 3,
+    "collisionMode": "blocking-wall-hex-union-v1",
+    "cellRadiusScale": 1.0,
+    "heightMeters": 3.15,
+    "groundSinkMeters": 0.08,
+    "roughness": 0.94,
+    "metallic": 0.0,
+    "unresolvedSourceAlbedo": [0.22, 0.2, 0.17, 1.0],
+    "sideColorMultiplier": [0.74, 0.72, 0.68, 1.0],
+    "topColorMultiplier": [0.58, 0.56, 0.52, 1.0]
+  },
+  "promotion": {
+    "runtimeReady": false,
+    "collisionParity": false,
+    "walkabilityParity": false
+  },
+  "unsupported": [
+    "multihex footprint expansion beyond the stored central source hex",
+    "doors, MAP scripts, actors, character state, combat, and save state",
+    "retail collision or walkability parity",
+    "FPS and OpenXR interaction"
+  ]
+}

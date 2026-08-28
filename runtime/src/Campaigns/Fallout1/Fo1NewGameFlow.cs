@@ -458,7 +458,9 @@ internal static class Fo1NewGameFlow
         loaded.Session.SetCameraStatus(
             $"{profile.Name}  •  V13ENT  •  exact tile {loaded.EntryTile}  •  " +
             "P opens Pip-Boy 2000");
+        loaded.Session.TogglePipBoy();
         await WaitFrames(host, showcase.LandingHoldFrames);
+        loaded.Session.TogglePipBoy();
 
         var caveFacingYaw = loaded.Camera.TargetYawRadians;
         stage.Text = "02  LIVE FIRST-PERSON  •  TURN AROUND  •  OPEN VAULT 13 DOOR + CORRIDOR";
@@ -589,7 +591,7 @@ internal static class Fo1NewGameFlow
         loaded.Session.WeaponActionPointCost != 4 || loaded.Camera.ExplorationMode ||
         loaded.Camera.FirstPersonMode || !loaded.Session.PlayerToken.Visible ||
         !loaded.Door.Controller.IsOpen || !loaded.Session.ClassicInterfaceAttached ||
-        loaded.Session.PipBoy is null || loaded.Session.PipBoy.OpenedCount != 0 ||
+        loaded.Session.PipBoy is null || loaded.Session.PipBoy.OpenedCount != 1 ||
         loaded.Session.PipBoy.IsOpen)
             throw new InvalidOperationException(
                 "Fallout end-to-end new-game/equipment/combat gate failed.");
@@ -618,7 +620,7 @@ internal static class Fo1NewGameFlow
                 opening.Skipped ? "owned-original-overseer-mve-skipped" : "owned-original-overseer-mve",
                 "owned-frame-fade-to-exact-live-first-person-v13ent",
                 "owned-original-iface-frm-live-gameplay-hud",
-                "pip-boy-2000-attached-closed-and-player-invoked",
+                "pip-boy-2000-attached-opened-status-and-closed",
                 "first-person-open-vault-door-corridor-lookback",
                 "first-person-continuous-source-walk-mask-walk",
                 "first-person-pistol-ranged-rat-kill",

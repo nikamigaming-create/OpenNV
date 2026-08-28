@@ -80,9 +80,13 @@ export function mergeRuntimeState(
         ? ttwProfile
         : null;
     const profileReady = !profileRequired || Boolean(requiredProfile?.ready);
-    const ready = Boolean(selectedVariant.ready) && profileReady;
+    const runtimePresentations = selectedVariant.presentations ?? {};
+    const presentations = (campaign.presentations || []).filter(
+      (id) => runtimePresentations[id]?.ready === true);
+    const ready = Boolean(selectedVariant.ready) && profileReady && presentations.length > 0;
     return {
       ...campaign,
+      presentations,
       ready,
       readiness: ready
         ? "Ready in the installed runtime."
@@ -126,14 +130,16 @@ export function validateLaunchRequest(request) {
   if (request?.enableVr && !campaign.openXr) {
     throw new Error(CONTRACT.copy.openXrUnavailable);
   }
-  const presentation = String(request?.presentation || campaign.defaultPresentation || "flat");
+  const presentation = String(
+    request?.presentation ||
+    (request?.enableVr ? "openxr" : campaign.defaultPresentation || "flat"));
   if (Array.isArray(campaign.presentations) && !campaign.presentations.includes(presentation)) {
     throw new Error(CONTRACT.copy.invalidPresentation);
   }
   return {
     campaign,
     enableJam: Boolean(request?.enableJam),
-    enableVr: Boolean(request?.enableVr),
+    enableVr: presentation === "openxr",
     presentation
   };
 }

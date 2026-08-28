@@ -1,0 +1,11 @@
+{
+  "schema": "opennv-jam-trusted-requirements/v1",
+  "requirementsId": "jam-profile-v1",
+  "requirementsSha256": "7f2500954ea4f5a0b776915525adcc3d140635024c074aaf26f5d5c738944478",
+  "supportedPluginContracts": [
+    {
+      "jamPluginSha256": "cfdc2b1807a57c8861335858df96a2d08e546f93dfd8c390e8f5905f2694d8de",
+      "portableCapabilitiesSha256": "7abf6f9bb47fb04ebcb6dbe01e0302f0d3ae844cbaf528f92451247fb067b78c"
+    }
+  ]
+}

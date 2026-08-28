@@ -72,6 +72,8 @@ internal partial class CellPlayer : CharacterBody3D
     private Node3D? _navigationRoot;
     private Vector3 _navigationOriginGameUnits;
     private JamJvsSprintContract? _jamJvsSprint;
+    private JamJbtBulletTimeContract? _jamJbtBulletTime;
+    private bool _jamBulletTimeActive;
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
@@ -119,6 +121,15 @@ internal partial class CellPlayer : CharacterBody3D
             throw new InvalidOperationException(
                 "The bounded JVS sprint transport currently supports desktop first-person movement only.");
         _jamJvsSprint = sprint;
+    }
+
+    internal void ConfigureJamJbtBulletTime(JamJbtBulletTimeContract bulletTime)
+    {
+        if (_useXr || _useClassicDiorama)
+            throw new InvalidOperationException(
+                "The bounded JBT transport currently supports desktop first-person play only.");
+        _jamJbtBulletTime = bulletTime;
+        SetJamBulletTime(false);
     }
 
     internal void ConfigureOwnedNavigation(
@@ -222,6 +233,9 @@ internal partial class CellPlayer : CharacterBody3D
         }
         if (_useXr)
             UpdateXrCalibrationAndHealth();
+        if (_jamJbtBulletTime is not null &&
+            Input.IsActionJustPressed(JamJbtBulletTimeContract.InputAction))
+            SetJamBulletTime(!_jamBulletTimeActive);
         var input = ReadMovement();
         var forward = -_camera.GlobalBasis.Z;
         var right = _camera.GlobalBasis.X;
@@ -254,6 +268,23 @@ internal partial class CellPlayer : CharacterBody3D
         }
         else
             PollDesktopActions();
+    }
+
+    public override void _ExitTree()
+    {
+        if (_jamBulletTimeActive)
+            SetJamBulletTime(false);
+    }
+
+    private void SetJamBulletTime(bool active)
+    {
+        _jamBulletTimeActive = active;
+        Engine.TimeScale = active
+            ? _jamJbtBulletTime!.EffectiveTimeMultiplier
+            : 1.0;
+        GD.Print(
+            $"OPENNV_JAM_JBT active={active} timeScale={Engine.TimeScale:F2} " +
+            "completeJbtReady=False");
     }
 
     private void MoveOnOwnedNavigation(Vector3 horizontalVelocity, float delta)

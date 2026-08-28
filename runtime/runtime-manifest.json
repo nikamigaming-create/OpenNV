@@ -4,7 +4,7 @@
     "engine": "Godot",
     "engineVersion": "4.7.2",
     "status": "experimental",
-    "label": "Launcher-ready Fallout 1 V13ENT, New Vegas Goodsprings, and Fallout 3 CG00 slices; no full campaign.",
+    "label": "Launcher-ready Fallout 1 V13ENT and New Vegas Goodsprings slices; Fallout 3 CG00 frontend is not yet a playable presentation.",
     "canLaunch": true,
     "executables": {},
     "contentExecutables": {},
@@ -25,7 +25,7 @@
         "newGameSequence": "owned-original-style-creator -> owned-original-overseer-opening -> V13ENT tile 17690 rotation 2",
         "grid": "V13ENT 200x200 one-metre hexes",
         "floor": "one opaque owned cave mesh over 30196 exact source-backed movement hexes",
-        "gridOverlay": "optional opaque depth-tested mesh with 29127 walkable hexes and 92428 unique shared edges",
+        "gridOverlay": "optional opaque depth-tested mesh with 27519 walkable hexes and 86841 unique shared edges after 1608 presentation-footprint blockers",
         "cameraControls": [
           "middle-mouse-orbit-tilt",
           "right-mouse-drag-pan",
@@ -51,6 +51,11 @@
       "variants": {
         "vault13Concept": {
           "ready": true,
+          "presentations": {
+            "first-person": { "ready": true, "status": "bounded-v13ent-slice" },
+            "hex-tactical": { "ready": true, "status": "bounded-v13ent-slice" },
+            "openxr": { "ready": false, "status": "launcher-and-headset-gates-pending" }
+          },
           "requiresLauncherProfile": "opennv-launcher-fo1-profile/v1",
           "message": "Launcher-capable when the player registers generated local hex-scene.json and character-start.json inputs. The route has original-style character creation, the owned Overseer movie with Escape/skip convergence, and one shared V13ENT save across Hex Tactical and First Person. A diagnostic OpenXR adapter reaches that shared session but is not launcher-enabled: reload/save simulator input, XR door use, campaign-native hands/weapon/UI, and physical-headset acceptance remain open. Only 1 of 96 inventoried local maps is tactically playable; dialogue, quests, complete campaign simulation, and retail combat-formula parity are not connected."
         }
@@ -61,8 +66,13 @@
       "variants": {
         "arroyo": {
           "ready": false,
+          "presentations": {
+            "first-person": { "ready": false, "status": "no-player-runtime" },
+            "hex-tactical": { "ready": false, "status": "no-player-runtime" },
+            "openxr": { "ready": false, "status": "no-player-runtime" }
+          },
           "requiresProfile": "opennv-fo2-owned-profile/v1",
-          "message": "The owned Fallout 2 DAT2 install, exact Map 126 source graph, selective FRM cache, and headless Godot 3D scene construction are available. No rendered or interactive character/gameplay/save adapter is ready, so Hex, FPS, and OpenXR remain disabled."
+          "message": "The owned Fallout 2 Map 126 Temple and Map 3 Arroyo Caves graphs/caches, Temple construction/topology/physics, nonvisual movement, and exact exit state are available. No Godot Map 3 consumer, reciprocal runtime execution, INT, actors, controls, rendered interaction, character/gameplay/save state, FPS, or OpenXR exists, so every mode remains disabled."
         }
       }
     },
@@ -71,12 +81,17 @@
       "variants": {
         "vanilla": {
           "ready": true,
+          "presentations": {
+            "first-person": { "ready": true, "status": "bounded-goodsprings-slice" },
+            "hex-tactical": { "ready": false, "status": "not-implemented" },
+            "openxr": { "ready": true, "status": "experimental-headset-gate-pending" }
+          },
           "message": "Playable Goodsprings sandbox route",
           "unavailableDlc": []
         },
         "jam": {
           "ready": false,
-          "message": "JAM gameplay semantics are not promoted in the Godot sandbox."
+          "message": "The owned JAM 4.6 profile transports bounded desktop JVS sprint and JBT time dilation. Missing dependencies and remaining AP, UI, animation, audio, event, and save semantics keep complete JAM play disabled."
         }
       }
     },
@@ -84,9 +99,14 @@
       "id": "Fallout3",
       "variants": {
         "vanilla": {
-          "ready": true,
+          "ready": false,
+          "presentations": {
+            "first-person": { "ready": false, "status": "no-vault-world-or-first-person-runtime" },
+            "hex-tactical": { "ready": false, "status": "not-implemented" },
+            "openxr": { "ready": false, "status": "not-implemented" }
+          },
           "requiresProfile": "opennv-owned-game-profile/v1",
-          "message": "Launcher-capable with the locally registered Fallout 3 GOTY profile. This bounded route opens a profile-backed menu, plays the locally transcoded and hash-verified owned intro, converges Escape and Skip on the owned CG00 sex/name path, exposes source-backed playable race plus sex-aware hair/eye choices, persists the selected FaceGen defaults and activates the owned CG00PlayerSection4 package at stage 62. KF playback, stage-65 parent race/FaceGen commands, and Vault 101 world loading are not connected. The texture preview is not a 3D face render."
+          "message": "The registered Fallout 3 GOTY profile can run a bounded menu, owned intro, Escape/Skip convergence, CG00 sex/name flow, and source-backed appearance selection through persistent stage 62. Exact Section 4 and stage-65/80/85 contracts compile and validate, but normal progression stops before them because their authored package/dialogue triggers and Vault 101 world do not execute. FPS, Hex, and VR remain launcher-disabled. The texture preview is not a 3D face render."
         }
       }
     }

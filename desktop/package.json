@@ -38,6 +38,10 @@
       {
         "from": "../runtime/config/open-nv-runtime-v1.json",
         "to": "config/open-nv-runtime-v1.json"
+      },
+      {
+        "from": "../runtime/config/jam-trusted-requirements-v1.json",
+        "to": "config/jam-trusted-requirements-v1.json"
       }
     ],
     "directories": {

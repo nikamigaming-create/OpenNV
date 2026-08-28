@@ -11,10 +11,8 @@ const selectionTitle = document.querySelector("#selection-title");
 const selectionDetail = document.querySelector("#selection-detail");
 const jamRow = document.querySelector("#jam-toggle-row");
 const jamToggle = document.querySelector("#jam-toggle");
-const vrRow = document.querySelector("#vr-toggle-row");
-const vrToggle = document.querySelector("#vr-toggle");
-const classicPresentationRow = document.querySelector("#classic-presentation-row");
-const classicPresentation = document.querySelector("#classic-presentation");
+const presentationRow = document.querySelector("#presentation-row");
+const presentationPicker = document.querySelector("#presentation");
 const editionRow = document.querySelector("#edition-row");
 const edition = document.querySelector("#edition");
 const fo1ProfileButton = document.querySelector("#choose-fo1-profile");
@@ -88,7 +86,6 @@ function renderCampaigns() {
       selectedGameId = element.dataset.campaign;
       edition.innerHTML = "";
       jamToggle.checked = false;
-      vrToggle.checked = false;
       selectedPresentation = selectedGame().defaultPresentation || "flat";
       render();
     });
@@ -107,7 +104,6 @@ function renderLayers() {
 function render() {
   const campaign = selectedCampaign();
   const game = selectedGame();
-  const classicSelected = selectedGameId === "fallout1" || selectedGameId === "fallout2";
   const editionEligible = selectedGameId === "newvegas" || selectedGameId === "fallout3";
   if (editionEligible && edition.options.length === 0) {
     const ttw = state.profiles?.ttw;
@@ -128,7 +124,6 @@ function render() {
   if (!editionEligible) edition.innerHTML = "";
   editionRow.classList.toggle("hidden", !editionEligible);
   const jamAvailable = Boolean(campaign.jam && campaign.jamReady);
-  const vrAvailable = Boolean(campaign.openXr && campaign.ready && state.runtime.openXrLaunchable);
   statusElement.textContent = statusLabel(state.runtime);
   statusElement.dataset.status = state.runtime.status;
   selectionTitle.textContent = campaign.id === "ttw" ? `${game.title} — TTW` : game.title;
@@ -148,28 +143,29 @@ function render() {
           ? "JAM · registered, runtime pending"
           : "JAM · runtime update needed";
   if (!jamAvailable) jamToggle.checked = false;
-  vrRow.classList.toggle("hidden", classicSelected);
-  vrToggle.disabled = !vrAvailable;
-  document.querySelector("#vr-label").textContent = vrAvailable ? "VR" : "VR · in progress";
-  if (!vrAvailable) vrToggle.checked = false;
-  classicPresentationRow.classList.toggle("hidden", !classicSelected);
-  if (classicSelected) {
-    const available = new Set(game.presentations || []);
-    const modes = [
-      ["hex-tactical", "Hex"],
-      ["first-person", "FPS"],
-      ["openxr", "VR"]
-    ];
-    classicPresentation.innerHTML = modes.map(([id, label]) => `
-      <button class="mode-button ${selectedPresentation === id && available.has(id) ? "selected" : ""}" type="button" data-presentation="${id}" ${available.has(id) ? "" : "disabled"}>${label}</button>
-    `).join("");
-    classicPresentation.querySelectorAll("[data-presentation]").forEach((element) => {
-      element.addEventListener("click", () => {
-        selectedPresentation = element.dataset.presentation;
-        render();
-      });
+  presentationRow.classList.remove("hidden");
+  const available = new Set(campaign.presentations || []);
+  if (!campaign.ready) available.clear();
+  if (!campaign.openXr || !state.runtime.openXrLaunchable)
+    available.delete("openxr");
+  if (!available.has(selectedPresentation))
+    selectedPresentation = available.has(campaign.defaultPresentation)
+      ? campaign.defaultPresentation
+      : [...available][0] || campaign.defaultPresentation || "first-person";
+  const modes = [
+    ["first-person", "FPS"],
+    ["hex-tactical", "Hex"],
+    ["openxr", "VR"]
+  ];
+  presentationPicker.innerHTML = modes.map(([id, label]) => `
+    <button class="mode-button ${selectedPresentation === id && available.has(id) ? "selected" : ""}" type="button" data-presentation="${id}" ${available.has(id) ? "" : "disabled"}>${label}</button>
+  `).join("");
+  presentationPicker.querySelectorAll("[data-presentation]").forEach((element) => {
+    element.addEventListener("click", () => {
+      selectedPresentation = element.dataset.presentation;
+      render();
     });
-  }
+  });
   fo1ProfileButton.classList.toggle("hidden", selectedGameId !== "fallout1");
   fo1ProfileButton.textContent = state.profiles?.fallout1?.ready
     ? "Fallout 1 set up"
@@ -184,7 +180,8 @@ function render() {
   jamProfileButton.classList.toggle("hidden", !campaign.jam);
   jamProfileButton.textContent = modProfileLabel("jam");
   jamProfileButton.title = state.profiles?.jam?.message || "Choose a local JAM profile manifest.";
-  const routeLaunchable = Boolean(state.runtime.canLaunch && campaign.ready);
+  const routeLaunchable = Boolean(
+    state.runtime.canLaunch && campaign.ready && available.has(selectedPresentation));
   launchButton.disabled = !routeLaunchable;
   launchButton.textContent = routeLaunchable ? `Play ${campaign.title}` : "Not ready";
   launchButton.title = routeLaunchable ? "Launch this path" : (campaign.readiness || state.runtime.label);
@@ -194,19 +191,18 @@ function render() {
 }
 
 launchButton.addEventListener("click", async () => {
-  const classicSelected = selectedGameId === "fallout1" || selectedGameId === "fallout2";
   const result = await api.launch({
     campaign: selectedCampaign().id,
     enableJam: jamToggle.checked,
-    enableVr: vrToggle.checked,
-    presentation: classicSelected ? selectedPresentation : "flat"
+    enableVr: selectedPresentation === "openxr",
+    presentation: selectedPresentation
   });
   showToast(result.message, result.ok ? "success" : "warning");
 });
 
 edition.addEventListener("change", () => {
   jamToggle.checked = false;
-  vrToggle.checked = false;
+  selectedPresentation = selectedCampaign().defaultPresentation || "first-person";
   render();
 });
 

@@ -151,6 +151,32 @@
         "forced-holster", "controller-button-64", "JVSStateChange-dispatch"
       ],
       "desktopDirectInputKeyMap": { "42": "Shift" }
+    },
+    {
+      "id": "jbt-bullet-time-dilation-v1",
+      "module": "jbt",
+      "sourceScripts": ["JBTScript", "JBTOnKeyEventHandler", "JBTMainLoopEventHandler"],
+      "requiredGlobals": [
+        "JBTEnabled", "JBTKey", "JBTButton", "JBTToggle",
+        "JBTSlowMult", "JBTSlowMultStanding", "JBTAPDrain"
+      ],
+      "requiredXnvseCommands": ["DispatchEvent", "GetControl", "IsKeyPressed"],
+      "requiredJipCommands": [
+        "GetController", "IsButtonPressed", "SetGameMainLoopCallback",
+        "SetOnKeyDownEventHandler"
+      ],
+      "dispatchedEvents": ["JBTStateChange"],
+      "supportedSemantics": [
+        "toggle-bullet-time", "authored-world-time-multiplier",
+        "authored-standing-time-multiplier"
+      ],
+      "unsupportedSemantics": [
+        "action-point-eligibility-drain-and-regeneration",
+        "weapon-action-point-drain", "perk-and-image-space-effects",
+        "hit-body-part-highlighting", "sounds", "fov-and-sensitivity-adjustments",
+        "controller-button", "JBTStateChange-dispatch"
+      ],
+      "desktopDirectInputKeyMap": { "45": "X" }
     }
   ],
   "unsupportedSemantics": [

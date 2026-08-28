@@ -23,7 +23,8 @@ internal sealed record Fo2TempleSceneCoverage(
     int InventoryObjectsNotPlaced,
     float SourcePixelsPerMeter,
     int FloorMeshInstances,
-    int ObjectSpriteNodes);
+    int ObjectSpriteNodes,
+    Fo2TempleTopologyCoverage Topology);
 
 internal static class Fo2TempleScene
 {
@@ -122,6 +123,8 @@ internal static class Fo2TempleScene
         entryMarker.SetMeta("map_header_entry", true);
         root.AddChild(entryMarker);
 
+        var topology = Fo2TempleTopology.Build(root, catalog);
+
         return new Fo2TempleSceneCoverage(
             catalog.ManifestPath,
             catalog.ManifestSha256,
@@ -143,7 +146,8 @@ internal static class Fo2TempleScene
             catalog.InventoryObjects,
             sourcePixelsPerMeter,
             floorMeshes,
-            objectRoot.GetChildCount());
+            objectRoot.GetChildCount(),
+            topology);
     }
 
     private static (int Patches, int Meshes) BuildFloor(

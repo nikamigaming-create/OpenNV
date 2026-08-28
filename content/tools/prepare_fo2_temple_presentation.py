@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from dataclasses import asdict
 import hashlib
 import json
 import os
@@ -16,8 +17,8 @@ from typing import Any
 
 from corpus_io import atomic_json
 from fo1_frm import decode_frm_frame, palette_rgba_bytes
-from fo1_map_objects import Fo1ResourceResolver
-from fo1_profile import Fo1ProfileError
+from fo1_map_objects import Fo1ResourceResolver, parse_map_objects, parse_script_section
+from fo1_profile import Fo1ProfileError, map_layout_manifest, parse_map_layout
 from fo2_first_slice import (
     PROFILE_SCHEMA,
     RECIPE_SCHEMA,
@@ -37,6 +38,64 @@ TILE_ID_MASK = 0x0FFF
 ROOF_ID_SHIFT = 16
 ARTIFACT_ID_HEX_LENGTH = 24
 TILE_ENTRY_COUNT = 10000
+
+
+def _flatten_map_objects(objects: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    def add(value: dict[str, Any]) -> None:
+        rows.append(value)
+        for inventory in value["inventory"]:
+            add(inventory["object"])
+
+    for elevation in objects["elevations"]:
+        for value in elevation["objects"]:
+            add(value)
+    return rows
+
+
+def _derive_map_presentation_graph(
+    map_data: bytes,
+    resolver: Fo1ResourceResolver,
+) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
+    layout = parse_map_layout(map_data)
+    scripts, objects_offset = parse_script_section(map_data, layout.next_offset)
+    objects, end_offset = parse_map_objects(
+        map_data,
+        objects_offset,
+        layout.header.version,
+        resolver,
+    )
+    if end_offset != len(map_data):
+        raise Fo1ProfileError(
+            f"Fallout 2 MAP object graph leaves {len(map_data) - end_offset} trailing bytes"
+        )
+    flat_objects = _flatten_map_objects(objects)
+    placements: dict[str, list[dict[str, Any]]] = {}
+    for value in flat_objects:
+        logical_path = resolver.placed_idle_frm_path(int(value["fid"], 16))
+        placements.setdefault(logical_path.casefold(), []).append(
+            {
+                "serial": value["serial"],
+                "fid": value["fid"],
+                "frame": value["frame"],
+                "rotation": value["rotation"],
+                "elevation": value["elevation"],
+                "tile": value["tile"],
+            }
+        )
+    return (
+        {
+            "header": asdict(layout.header),
+            "layout": map_layout_manifest(layout),
+            "scriptLists": scripts,
+            "objectsOffset": objects_offset,
+            "endOffset": end_offset,
+            "objects": objects,
+            "allObjectCount": len(flat_objects),
+        },
+        placements,
+    )
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -68,7 +127,7 @@ def _save_admitted_frame(
     staging_path = staging / relative
     staging_path.parent.mkdir(parents=True, exist_ok=True)
     if staging_path.exists():
-        raise Fo1ProfileError(f"Fallout 2 Temple artifact identity collision: {artifact_id}")
+        raise Fo1ProfileError(f"Fallout 2 artifact identity collision: {artifact_id}")
     frame["image"].save(staging_path, format="PNG", optimize=False)
     return {
         "id": artifact_id,
@@ -89,17 +148,27 @@ def _save_admitted_frame(
     }
 
 
-def prepare_fo2_temple_presentation(
+def prepare_fo2_map_presentation(
     profile_path: Path,
     source_manifest_path: Path,
     output_root: Path,
     recipe_path: Path | None = None,
+    *,
+    source_schema: str = SOURCE_SCHEMA,
+    source_status: str = "transported-source-manifest",
+    source_slice: str = "TempleOfTrials",
+    cache_schema: str = CACHE_SCHEMA,
+    cache_manifest_name: str = CACHE_MANIFEST_NAME,
+    map_index: int = 126,
+    map_name: str = "ARTEMPLE.MAP",
+    map_logical_path: str = "maps\\artemple.map",
+    map_label: str = "Temple",
 ) -> dict[str, Any]:
     profile_path = profile_path.resolve()
     source_manifest_path = source_manifest_path.resolve()
     output_root = output_root.resolve()
     if output_root.exists():
-        raise Fo1ProfileError(f"refusing to overwrite Fallout 2 Temple cache: {output_root}")
+        raise Fo1ProfileError(f"refusing to overwrite Fallout 2 {map_label} cache: {output_root}")
     profile = _load_json(profile_path)
     recipe_path = (recipe_path or default_recipe_path()).resolve()
     recipe = _load_recipe(recipe_path)
@@ -107,48 +176,97 @@ def prepare_fo2_temple_presentation(
     if (
         profile.get("schema") != PROFILE_SCHEMA
         or recipe.get("schema") != RECIPE_SCHEMA
-        or source_manifest.get("schema") != SOURCE_SCHEMA
-        or source_manifest.get("status") != "transported-source-manifest"
+        or source_manifest.get("schema") != source_schema
+        or source_manifest.get("status") != source_status
         or source_manifest.get("campaign") != "Fallout2"
-        or source_manifest.get("slice") != "TempleOfTrials"
+        or source_manifest.get("slice") != source_slice
         or source_manifest.get("retailOrDerivedAssetsPackaged") is not False
         or source_manifest.get("generatedCaches") != []
         or source_manifest.get("promotion", {}).get("transported") is not True
         or source_manifest.get("runtimeCompatibility", {}).get("ready") is not False
     ):
-        raise Fo1ProfileError("Fallout 2 Temple source manifest is not the admitted source-only graph")
+        raise Fo1ProfileError(
+            f"Fallout 2 {map_label} source manifest is not the admitted source-only graph"
+        )
     source_profile = source_manifest.get("sourceProfile", {})
     if (
         source_profile.get("sourceProfileId") != profile.get("sourceProfileId")
         or source_profile.get("saveCompatibilityId") != profile.get("saveCompatibilityId")
         or source_profile.get("sha256") != file_sha256(profile_path)
     ):
-        raise Fo1ProfileError("Fallout 2 Temple source/profile binding drift")
+        raise Fo1ProfileError(f"Fallout 2 {map_label} source/profile binding drift")
     if source_manifest.get("overlayOrderHighToLow") != recipe["overlayOrderHighToLow"]:
-        raise Fo1ProfileError("Fallout 2 Temple source overlay order drift")
+        raise Fo1ProfileError(f"Fallout 2 {map_label} source overlay order drift")
+    source_map = source_manifest.get("map", {})
+    source_header = source_map.get("header", {})
+    if (
+        str(source_map.get("logicalPath", "")).casefold() != map_logical_path.casefold()
+        or int(source_header.get("mapIndex", -1)) != map_index
+        or str(source_header.get("name", "")).casefold() != map_name.casefold()
+    ):
+        raise Fo1ProfileError(
+            f"Fallout 2 {map_label} source MAP identity does not match Map {map_index}"
+        )
 
     install_root = Path(str(profile.get("install", {}).get("root", ""))).resolve()
     if output_root.is_relative_to(install_root):
-        raise Fo1ProfileError("Fallout 2 Temple cache must be outside the owned install")
+        raise Fo1ProfileError(f"Fallout 2 {map_label} cache must be outside the owned install")
     archive_paths = _archive_paths(profile, recipe)
     resolver = Fo1ResourceResolver(None, archive_paths[0], archive_paths[1:])
     output_root.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{output_root.name}-", dir=output_root.parent))
     try:
         with resolver.access_scope() as accessed:
+            map_resource = resolver.read(map_logical_path)
+            if (
+                source_map.get("source") != map_resource.source
+                or int(source_map.get("bytes", -1)) != len(map_resource.data)
+                or source_map.get("sha256") != map_resource.sha256
+            ):
+                raise Fo1ProfileError(
+                    f"Fallout 2 {map_label} source MAP identity drift: {map_logical_path}"
+                )
+            derived_map_graph, derived_placements = _derive_map_presentation_graph(
+                map_resource.data,
+                resolver,
+            )
+            source_map_graph = {
+                key: source_map.get(key)
+                for key in derived_map_graph
+            }
+            if source_map_graph != derived_map_graph:
+                raise Fo1ProfileError(
+                    f"Fallout 2 {map_label} source MAP graph differs from owned bytes"
+                )
+            manifest_placements: dict[str, list[dict[str, Any]]] = {}
+            for frm in source_manifest.get("frms", []):
+                logical_path = str(frm.get("logicalPath", "")).casefold()
+                if not logical_path or logical_path in manifest_placements:
+                    raise Fo1ProfileError(
+                        f"Fallout 2 {map_label} source FRM graph is invalid"
+                    )
+                manifest_placements[logical_path] = frm.get("placements")
+            if manifest_placements != derived_placements:
+                raise Fo1ProfileError(
+                    f"Fallout 2 {map_label} source FRM placements differ from owned MAP bytes"
+                )
             palette_resource = resolver.read(PALETTE_LOGICAL_PATH)
             colors = palette_rgba_bytes(palette_resource.data)
             tile_names = resolver.list_lines(TILE_LIST_LOGICAL_PATH)
 
             tile_usage: dict[int, dict[str, Any]] = {}
-            layout = source_manifest.get("map", {}).get("layout", {})
+            layout = source_map.get("layout", {})
             elevations = layout.get("elevations")
             if not isinstance(elevations, list) or not elevations:
-                raise Fo1ProfileError("Fallout 2 Temple source manifest has no elevation tiles")
+                raise Fo1ProfileError(
+                    f"Fallout 2 {map_label} source manifest has no elevation tiles"
+                )
             for elevation in elevations:
                 entries = elevation.get("rawEntries")
                 if not isinstance(entries, list) or len(entries) != TILE_ENTRY_COUNT:
-                    raise Fo1ProfileError("Fallout 2 Temple elevation must contain 10,000 tile entries")
+                    raise Fo1ProfileError(
+                        f"Fallout 2 {map_label} elevation must contain 10,000 tile entries"
+                    )
                 floor_counts = Counter(int(entry) & TILE_ID_MASK for entry in entries)
                 roof_counts = Counter((int(entry) >> ROOF_ID_SHIFT) & TILE_ID_MASK for entry in entries)
                 for role, counts in (("floor", floor_counts), ("roof", roof_counts)):
@@ -164,10 +282,14 @@ def prepare_fo2_temple_presentation(
 
             for tile_id in sorted(tile_usage):
                 if not 0 <= tile_id < len(tile_names):
-                    raise Fo1ProfileError(f"Fallout 2 Temple tile ID exceeds tiles.lst: {tile_id}")
+                    raise Fo1ProfileError(
+                        f"Fallout 2 {map_label} tile ID exceeds tiles.lst: {tile_id}"
+                    )
                 filename = tile_names[tile_id].split(" ", 1)[0].strip()
                 if not filename:
-                    raise Fo1ProfileError(f"Fallout 2 Temple tile ID has no FRM filename: {tile_id}")
+                    raise Fo1ProfileError(
+                        f"Fallout 2 {map_label} tile ID has no FRM filename: {tile_id}"
+                    )
                 logical_path = f"art\\tiles\\{filename}".casefold()
                 resource = resolver.read(logical_path)
                 artifact = _save_admitted_frame(
@@ -192,13 +314,17 @@ def prepare_fo2_temple_presentation(
                     or frm.get("bytes") != len(resource.data)
                     or frm.get("sha256") != resource.sha256
                 ):
-                    raise Fo1ProfileError(f"Fallout 2 Temple object FRM identity drift: {logical_path}")
+                    raise Fo1ProfileError(
+                        f"Fallout 2 {map_label} object FRM identity drift: {logical_path}"
+                    )
                 admitted: dict[tuple[int, int], list[dict[str, Any]]] = {}
                 for placement in frm.get("placements", []):
                     key = (int(placement["rotation"]), int(placement["frame"]))
                     admitted.setdefault(key, []).append(placement)
                 if not admitted:
-                    raise Fo1ProfileError(f"Fallout 2 Temple object FRM has no admitted frame: {logical_path}")
+                    raise Fo1ProfileError(
+                        f"Fallout 2 {map_label} object FRM has no admitted frame: {logical_path}"
+                    )
                 for (rotation, frame_index), placements in sorted(admitted.items()):
                     artifact = _save_admitted_frame(
                         kind="objects",
@@ -211,7 +337,9 @@ def prepare_fo2_temple_presentation(
                     )
                     existing = object_artifacts.setdefault(artifact["id"], artifact)
                     if existing != artifact:
-                        raise Fo1ProfileError("Fallout 2 Temple object artifact identity collision")
+                        raise Fo1ProfileError(
+                            f"Fallout 2 {map_label} object artifact identity collision"
+                        )
                     object_bindings.append(
                         {
                             "artifactId": artifact["id"],
@@ -226,10 +354,10 @@ def prepare_fo2_temple_presentation(
             object_artifacts[key] for key in sorted(object_artifacts)
         ]
         document = {
-            "schema": CACHE_SCHEMA,
+            "schema": cache_schema,
             "status": "decoded-disposable-local-cache",
             "campaign": "Fallout2",
-            "slice": "TempleOfTrials",
+            "slice": source_slice,
             "sourceProfile": {
                 "file": str(profile_path),
                 "sourceProfileId": profile["sourceProfileId"],
@@ -250,7 +378,10 @@ def prepare_fo2_temple_presentation(
                 "decodedColors": len(colors),
             },
             "admission": {
-                "tiles": "direction 0, frame 0 for each exact floor/roof tile ID in Map 126",
+                "tiles": (
+                    "direction 0, frame 0 for each exact floor/roof tile ID "
+                    f"in Map {map_index}"
+                ),
                 "objects": "only each rotation/frame pair referenced by the transported MAP object graph",
             },
             "tileBindings": [
@@ -287,8 +418,9 @@ def prepare_fo2_temple_presentation(
             "runtimeCompatibility": {
                 "ready": False,
                 "firstSliceBlocker": (
-                    "The exact Temple palette/FRM pixels are decoded into a disposable local cache, "
-                    "but no Godot consumer, character flow, gameplay, or save state exists."
+                    f"The exact {map_label} palette/FRM pixels are decoded into a disposable local "
+                    "cache, but no Godot destination consumer, character flow, gameplay, or save "
+                    "state exists."
                 ),
             },
             "cachePolicy": {
@@ -298,12 +430,26 @@ def prepare_fo2_temple_presentation(
             },
             "retailOrDerivedAssetsPackaged": False,
         }
-        atomic_json(staging / CACHE_MANIFEST_NAME, document)
+        atomic_json(staging / cache_manifest_name, document)
         os.replace(staging, output_root)
         return document
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
+
+
+def prepare_fo2_temple_presentation(
+    profile_path: Path,
+    source_manifest_path: Path,
+    output_root: Path,
+    recipe_path: Path | None = None,
+) -> dict[str, Any]:
+    return prepare_fo2_map_presentation(
+        profile_path,
+        source_manifest_path,
+        output_root,
+        recipe_path,
+    )
 
 
 def main() -> int:

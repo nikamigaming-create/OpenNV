@@ -14,8 +14,7 @@ internal sealed record Fo3ActivePlayerPackage(
     string LocationReferenceFormId,
     IReadOnlyList<string> IdleFormIds,
     string NextCommand,
-    int NextStage,
-    string Blocker);
+    int NextStage);
 
 internal sealed record Fo3PlayerPackageTransition(
     int SourceStage,
@@ -27,8 +26,9 @@ internal sealed record Fo3PlayerPackageTransition(
     IReadOnlyList<Fo3PackageAnimationSource> AnimationSources,
     string NextCommand,
     int NextStage,
-    IReadOnlyList<string> UnsupportedNextCommandKinds,
-    string Blocker)
+    string NextStageSourceSha256,
+    string NextStageContractSchema,
+    IReadOnlyList<string> NextCommandKinds)
 {
     private const string ExpectedSchema = "opennv-fo3-cg00-player-package-transition/v1";
     private const string ExpectedStatus = "source-backed-package-activation";
@@ -112,14 +112,15 @@ internal sealed record Fo3PlayerPackageTransition(
             throw new InvalidOperationException("Fallout 3 next CG00 stage is not forward-moving.");
 
         var result = RequiredObject(source, "nextStageResult");
-        if (RequiredInteger(result, "stage") != nextStage || RequiredBoolean(result, "runtimeReady"))
+        if (RequiredInteger(result, "stage") != nextStage || !RequiredBoolean(result, "runtimeReady"))
             throw new InvalidOperationException(
-                "Fallout 3 next CG00 stage must remain fail-closed.");
-        _ = RequiredSha256(result, "stageSourceSha256");
-        var unsupportedKinds = RequiredArray(result, "commands").EnumerateArray()
+                "Fallout 3 next CG00 stage is not runtime-ready.");
+        var nextStageSourceSha256 = RequiredSha256(result, "stageSourceSha256");
+        var nextStageContractSchema = RequiredString(result, "contractSchema");
+        var commandKinds = RequiredArray(result, "commands").EnumerateArray()
             .Select(value => RequiredString(value, "kind"))
             .ToArray();
-        if (unsupportedKinds.Length == 0 || unsupportedKinds.Any(value =>
+        if (commandKinds.Length == 0 || commandKinds.Any(value =>
                 value is not "matchRace" and not "matchFaceGeometry"))
             throw new InvalidOperationException(
                 "Fallout 3 next CG00 stage contains an unrecognized command.");
@@ -134,8 +135,9 @@ internal sealed record Fo3PlayerPackageTransition(
             animationSources,
             nextCommand,
             nextStage,
-            unsupportedKinds,
-            RequiredString(result, "blocker"));
+            nextStageSourceSha256,
+            nextStageContractSchema,
+            commandKinds);
     }
 
     internal Fo3ActivePlayerPackage Activate() =>
@@ -145,8 +147,7 @@ internal sealed record Fo3PlayerPackageTransition(
             LocationReferenceFormId,
             IdleFormIds,
             NextCommand,
-            NextStage,
-            Blocker);
+            NextStage);
 
     internal void ValidateSavedState(JsonElement source)
     {
@@ -156,8 +157,7 @@ internal sealed record Fo3PlayerPackageTransition(
             RequiredString(source, "editorId") != PackageEditorId ||
             RequiredFormId(source, "locationReferenceFormId") != LocationReferenceFormId ||
             RequiredString(source, "nextCommand") != NextCommand ||
-            RequiredInteger(source, "nextStage") != NextStage ||
-            RequiredString(source, "blocker") != Blocker)
+            RequiredInteger(source, "nextStage") != NextStage)
             throw new InvalidOperationException("Saved Fallout 3 player package differs from the profile.");
         var savedIdles = RequiredArray(source, "idleFormIds").EnumerateArray()
             .Select(value => value.GetString() ?? "").ToArray();

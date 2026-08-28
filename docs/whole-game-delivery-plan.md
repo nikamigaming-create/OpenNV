@@ -142,16 +142,16 @@ interchangeable.
 | --- | --- | --- |
 | Owned installation import and disposable cache | `partial` | [Architecture](architecture.md), [clean-room boundary](clean-room.md) |
 | Owned Fallout 1 menu/character/movie/V13ENT route | `interactive` in Hex/FPS; OpenXR simulator input passes, but launcher enablement and physical-headset acceptance remain open | [Multi-game first slices](multi-game-first-slices.md) |
-| Owned Fallout 2 Temple source transport | `partial`; the exact Map 126 graph, selective FRM cache, and headless Godot 3D scene construction pass, while rendered/interactive presentation, character flow, gameplay, and save remain pending | [Multi-game first slices](multi-game-first-slices.md) |
+| Owned Fallout 2 Temple/Arroyo Caves source transport | `partial`; exact Map 126 and Map 3 graphs/caches, Temple topology/physics/nonvisual movement, and exit state pass, while the Godot Map 3 consumer, reciprocal runtime execution, INT, actors, controls, rendered presentation, character flow, gameplay, and save remain pending | [Multi-game first slices](multi-game-first-slices.md) |
 | Owned New Vegas menu, intro, character creation, and Doc Mitchell opening | `interactive`; checkpoint/resume reaches the stage-200 open-world-ready state, while uninterrupted full-campaign continuity and visual parity remain pending | [Owned opening campaign-state contract](evidence/fnv-owned-opening-campaign-state-contract.md) |
 | Production Doc Mitchell house/Goodsprings exterior active set and reciprocal exit | `interactive`; the bounded active set is promoted, not neighboring-world or whole-campaign streaming | [Architecture](architecture.md) |
-| Owned Fallout 3 menu, intro, CG00 sex/name/appearance, and Section 4 package activation through stage 62 | `interactive`; KF playback, stage-65 race/face semantics, Vault 101 scene compilation, and world play remain pending | [Multi-game first slices](multi-game-first-slices.md) |
+| Owned Fallout 3 menu, intro, and CG00 sex/name/appearance through persistent stage 62 | `interactive frontend`, not a playable presentation; later state contracts validate, while authored triggers, dialogue/KF, actors, Vault 101 scene compilation, and world play remain pending | [Multi-game first slices](multi-game-first-slices.md) |
 | Goodsprings saloon plus one exterior portal, gameplay, and cold reload | `interactive`, visual parity pending | [Goodsprings linked-world contract](evidence/fnv-goodsprings-linked-world-contract.md) |
 | Whole official CELL/child denominator and compile plan | inventory `proven`; runtime/parity `pending` | [Whole-game CELL parity](whole-game-cell-parity.md) |
 | Whole official actor/creature denominator | inventory `proven`; runtime/parity `pending` | [Whole-game actor and creature parity](whole-game-actor-creature-parity.md) |
 | Materials, FaceGen/LIP, and bounded OpenXR paths | mixed `partial` | [Material contract](evidence/fnv-retail-material-shader-contract.md), [FaceGen animation contract](evidence/fnv-retail-facegen-animation-contract.md), [OpenXR contract](evidence/openxr-runtime-contract.md) |
 | Retail HUD/Pip-Boy and full campaigns | `pending` | This plan |
-| JAM and TTW | TTW runtime support is absent; JAM is dependency- and portable-semantic-gated with one bounded JVS sprint semantic transported, while both launcher routes remain disabled | [Mod policy](mods.md) |
+| JAM and TTW | TTW runtime support is absent; JAM is dependency- and portable-semantic-gated with bounded JVS sprint and JBT time-dilation semantics transported, while both launcher routes remain disabled | [Mod policy](mods.md) |
 | Public playable package | `pending` | [Release policy](nightlies.md) |
 
 The current source baseline is whatever commit `origin/main` resolves to. The

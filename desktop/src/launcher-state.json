@@ -14,7 +14,7 @@
       "runtimeVariant": "vault13Concept",
       "title": "Fallout 1",
       "eyebrow": "Classic 3D route",
-      "launcherSummary": "Hex · FPS · VR",
+      "launcherSummary": "FPS · Hex · VR",
       "launcherDetail": "Vault 13 entrance · one shared character and save",
       "character": "One Vault Dweller profile shared by its views",
       "detail": "Register the generated local cache, then launch the owned character creator, Overseer movie, and V13ENT in Hex Tactical or First Person.",
@@ -32,10 +32,10 @@
       "runtimeVariant": "arroyo",
       "title": "Fallout 2",
       "eyebrow": "Classic route",
-      "launcherSummary": "Hex · FPS · VR",
+      "launcherSummary": "FPS · Hex · VR",
       "launcherDetail": "Owned DAT2 install registered · Arroyo runtime pending",
       "character": "One Chosen One profile shared by its future views",
-      "detail": "The owned master, critter, and patch archives are registered. Hex, FPS, and VR remain disabled until an authored runtime slice exists.",
+      "detail": "The owned master, critter, and patch archives are registered. Hex, FPS, and VR remain disabled until a player-controlled runtime presentation exists.",
       "jam": false,
       "ttw": false,
       "openXr": false,
@@ -50,14 +50,17 @@
       "runtimeVariant": "vanilla",
       "title": "New Vegas",
       "eyebrow": "Standalone route",
-      "launcherSummary": "Original · VR · JAM",
+      "launcherSummary": "FPS · Hex · VR",
       "launcherDetail": "Original menu and intro · Doc Mitchell · Goodsprings",
       "character": "A separate Mojave character",
       "detail": "Use the base profile, then add JAM whenever you are ready.",
       "jam": true,
       "ttw": false,
       "openXr": true,
-      "assetRequirement": "Licensed New Vegas data"
+      "assetRequirement": "Licensed New Vegas data",
+      "defaultPresentation": "first-person",
+      "presentations": ["first-person", "openxr"],
+      "pendingPresentations": ["hex-tactical"]
     },
     {
       "id": "fallout3",
@@ -65,14 +68,17 @@
       "runtimeVariant": "vanilla",
       "title": "Fallout 3",
       "eyebrow": "Standalone route",
-      "launcherSummary": "Original · VR · TTW",
-      "launcherDetail": "Birth and Vault 101 opening · runtime work in progress",
+      "launcherSummary": "FPS · Hex · VR",
+      "launcherDetail": "Owned menu and CG00 through stage 62 · FPS world pending",
       "character": "A separate Capital Wasteland character",
-      "detail": "Use the vanilla standalone profile, or choose TTW now for a shared world path.",
+      "detail": "The owned frontend reaches persistent stage 62. FPS, Hex, and VR stay disabled until Vault 101 world progression exists.",
       "jam": false,
       "ttw": false,
       "openXr": false,
-      "assetRequirement": "Licensed Fallout 3 data"
+      "assetRequirement": "Licensed Fallout 3 data",
+      "defaultPresentation": "first-person",
+      "presentations": ["first-person"],
+      "pendingPresentations": ["hex-tactical", "openxr"]
     },
     {
       "id": "ttw",
@@ -87,7 +93,10 @@
       "jam": true,
       "ttw": true,
       "openXr": false,
-      "assetRequirement": "Licensed Fallout 3, New Vegas, DLC, and official TTW output"
+      "assetRequirement": "Licensed Fallout 3, New Vegas, DLC, and official TTW output",
+      "defaultPresentation": "first-person",
+      "presentations": ["first-person"],
+      "pendingPresentations": ["hex-tactical", "openxr"]
     }
   ],
   "extenderLayers": [
@@ -120,8 +129,8 @@
     {
       "id": "jam",
       "title": "Just Assorted Mods",
-      "status": "profile-registrar-ready",
-      "detail": "The local JAM dependency set can be hash-bound now; portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO semantics are still pending."
+      "status": "bounded-semantics-partial",
+      "detail": "Owned JAM 4.6 data transports desktop JVS sprint and JBT time dilation. Missing native prerequisites and remaining AP, UI, animation, audio, event, and save semantics keep complete JAM play disabled."
     },
     {
       "id": "benny-humbles",
@@ -136,9 +145,9 @@
     "portableShell": "Launcher shell ready; runtime export is not published for this platform",
     "runtimeConnected": "Connected to the local OpenNV Godot runtime",
     "fallout1ProfileUnavailable": "Register the generated Fallout 1 hex-scene.json and character-start.json to enable this route.",
-    "fallout2ProfileUnavailable": "Register the local Fallout 2 owned-install profile. Hex, FPS, and VR still require a real runtime slice.",
-    "fallout2RuntimeUnavailable": "Fallout 2 is source-registered, but no Hex, FPS, or VR runtime variant is ready yet.",
-    "fallout3ProfileUnavailable": "Register the local Fallout 3 GOTY profile to enable this route.",
+    "fallout2ProfileUnavailable": "Register the local Fallout 2 owned-install profile. Hex, FPS, and VR still require a player-controlled presentation and save.",
+    "fallout2RuntimeUnavailable": "Fallout 2 has bounded headless runtime proofs, but no player-controlled Hex, FPS, or VR presentation is ready yet.",
+    "fallout3ProfileUnavailable": "Register the local Fallout 3 GOTY profile to admit its development frontend; playable modes remain separately gated.",
     "ttwProfileUnavailable": "Register a locally generated TTW profile whose portable runtime compatibility is ready.",
     "jamProfileUnavailable": "Register a local JAM profile whose portable runtime compatibility is ready.",
     "invalidPresentation": "That presentation mode is not available for this game.",

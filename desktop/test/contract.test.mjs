@@ -24,6 +24,12 @@ test("the launcher has four top-level games while TTW remains an edition", () =>
     state.campaigns.find((campaign) => campaign.id === "fallout2").pendingPresentations,
     ["hex-tactical", "first-person", "openxr"]
   );
+  for (const id of ["fallout1", "fallout2", "newvegas", "fallout3"]) {
+    assert.match(
+      state.campaigns.find((campaign) => campaign.id === id).launcherSummary,
+      /FPS · Hex · VR/
+    );
+  }
   assert.deepEqual(state.campaigns.find((campaign) => campaign.id === "fallout2").presentations, []);
   assert.equal(state.campaigns.find((campaign) => campaign.id === "ttw").ttw, true);
   assert.match(state.campaignRule, /before creating a character/i);
@@ -64,7 +70,7 @@ test("Fallout 2 stays disabled with a registered owned profile and no runtime va
     () => createRuntimeArguments({ campaign: fallout2, presentation: "hex-tactical" }, {
       fallout2Profile: profile
     }),
-    /no Hex, FPS, or VR runtime/i
+    /no player-controlled Hex, FPS, or VR presentation/i
   );
 });
 
@@ -116,7 +122,10 @@ test("TTW and JAM remain disabled until both registered profiles report portable
     runtime: { status: "ready", label: "Godot runtime ready", canLaunch: true },
     campaigns: [{
       id: "TTW",
-      variants: { vanilla: { ready: true }, jam: { ready: true } }
+      variants: {
+        vanilla: { ready: true, presentations: { "first-person": { ready: true } } },
+        jam: { ready: true }
+      }
     }]
   };
   const withoutProfiles = mergeRuntimeState(createOfflineState({ platform: "win32" }), runtime);
@@ -156,7 +165,16 @@ test("a Godot runtime manifest augments rather than replaces product campaign ru
   const base = createOfflineState({ platform: "win32" });
   const merged = mergeRuntimeState(base, {
     runtime: { status: "ready", label: "Godot runtime ready", canLaunch: true },
-    campaigns: [{ id: "NewVegas", variants: { vanilla: { ready: true, unavailableDlc: [] } } }]
+    campaigns: [{
+      id: "NewVegas",
+      variants: {
+        vanilla: {
+          ready: true,
+          presentations: { "first-person": { ready: true } },
+          unavailableDlc: []
+        }
+      }
+    }]
   }, {
     newVegasProfile: { ready: true, message: "Registered" }
   });
@@ -182,7 +200,15 @@ test("an experimental runtime connects without claiming campaigns are playable",
 test("Fallout 1 becomes launcher-ready only when runtime capability and local profile are both present", () => {
   const runtime = {
     runtime: { status: "ready", label: "Godot runtime ready", canLaunch: true },
-    campaigns: [{ id: "Fallout1EtTu", variants: { vault13Concept: { ready: true } } }]
+    campaigns: [{
+      id: "Fallout1EtTu",
+      variants: {
+        vault13Concept: {
+          ready: true,
+          presentations: { "hex-tactical": { ready: true } }
+        }
+      }
+    }]
   };
   const withoutProfile = mergeRuntimeState(createOfflineState({ platform: "win32" }), runtime);
   assert.equal(withoutProfile.campaigns.find((campaign) => campaign.id === "fallout1").ready, false);
@@ -190,6 +216,10 @@ test("Fallout 1 becomes launcher-ready only when runtime capability and local pr
     fallout1Profile: { ready: true, message: "Registered" }
   });
   assert.equal(withProfile.campaigns.find((campaign) => campaign.id === "fallout1").ready, true);
+  assert.deepEqual(
+    withProfile.campaigns.find((campaign) => campaign.id === "fallout1").presentations,
+    ["hex-tactical"]
+  );
 });
 
 test("the checked-in runtime keeps owned-data routes profile-gated", () => {

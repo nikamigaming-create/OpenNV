@@ -28,15 +28,27 @@ internal sealed record Fo2TempleTileBinding(
 
 internal sealed record Fo2TempleObjectPlacement(
     int Serial,
+    int ObjectId,
     string Fid,
+    string Pid,
     int Tile,
     int Elevation,
     int Rotation,
     int Frame,
+    uint Flags,
+    int ObjectType,
+    int? PrototypeSubtype,
+    string? ArtFilename,
+    IReadOnlyList<int> InstanceValues,
+    string Sid,
+    int ScriptIndex,
     Vector2I PixelOffset,
     bool TopLevel,
     string ArtifactId,
-    string LogicalPath);
+    string LogicalPath)
+{
+    internal bool Blocking(uint noBlockFlag) => (Flags & noBlockFlag) == 0;
+}
 
 internal sealed class Fo2TemplePresentationCatalog
 {
@@ -369,13 +381,26 @@ internal sealed class Fo2TemplePresentationCatalog
             var serial = obj.GetProperty("serial").GetInt32();
             var row = new SourceObject(
                 serial,
+                obj.GetProperty("id").GetInt32(),
                 RequiredString(obj, "fid"),
+                RequiredString(obj, "pid"),
                 obj.GetProperty("tile").GetInt32(),
                 obj.GetProperty("elevation").GetInt32(),
                 obj.GetProperty("rotation").GetInt32(),
                 obj.GetProperty("frame").GetInt32(),
+                RequiredFlags(obj, "flags"),
+                obj.GetProperty("prototype").GetProperty("object_type").GetInt32(),
+                OptionalInt(obj.GetProperty("prototype"), "subtype"),
+                OptionalString(obj, "artFilename"),
+                obj.GetProperty("instanceValues").EnumerateArray()
+                    .Select(value => value.GetInt32()).ToArray(),
+                RequiredString(obj, "sid"),
+                obj.GetProperty("scriptIndex").GetInt32(),
                 ReadVector2I(obj.GetProperty("pixelOffset")),
                 topLevel);
+            if (row.ObjectType is < 0 or > 5)
+                throw new InvalidOperationException(
+                    $"Fallout 2 Temple object type is invalid: {serial}/{row.ObjectType}");
             if (!rows.TryAdd(serial, row))
                 throw new InvalidOperationException($"Duplicate Fallout 2 Temple object serial: {serial}");
             foreach (var inventory in obj.GetProperty("inventory").EnumerateArray())
@@ -424,11 +449,20 @@ internal sealed class Fo2TemplePresentationCatalog
                 if (sourceObject.TopLevel)
                     placements.Add(new Fo2TempleObjectPlacement(
                         serial,
+                        sourceObject.ObjectId,
                         sourceObject.Fid,
+                        sourceObject.Pid,
                         sourceObject.Tile,
                         sourceObject.Elevation,
                         sourceObject.Rotation,
                         sourceObject.Frame,
+                        sourceObject.Flags,
+                        sourceObject.ObjectType,
+                        sourceObject.PrototypeSubtype,
+                        sourceObject.ArtFilename,
+                        sourceObject.InstanceValues,
+                        sourceObject.Sid,
+                        sourceObject.ScriptIndex,
                         sourceObject.PixelOffset,
                         true,
                         artifactId,
@@ -515,6 +549,32 @@ internal sealed class Fo2TemplePresentationCatalog
         return value;
     }
 
+    private static uint RequiredFlags(JsonElement source, string property)
+    {
+        var value = RequiredString(source, property);
+        if (value.Length != 8 ||
+            !uint.TryParse(
+                value,
+                System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var flags))
+            throw new InvalidOperationException(
+                $"Fallout 2 Temple object flags are invalid: {property}");
+        return flags;
+    }
+
+    private static int? OptionalInt(JsonElement source, string property)
+    {
+        var value = source.GetProperty(property);
+        return value.ValueKind == JsonValueKind.Null ? null : value.GetInt32();
+    }
+
+    private static string? OptionalString(JsonElement source, string property)
+    {
+        var value = source.GetProperty(property);
+        return value.ValueKind == JsonValueKind.Null ? null : value.GetString();
+    }
+
     private static Vector2I ReadVector2I(JsonElement source)
     {
         var values = source.EnumerateArray().Select(row => row.GetInt32()).ToArray();
@@ -528,11 +588,20 @@ internal sealed class Fo2TemplePresentationCatalog
 
     private sealed record SourceObject(
         int Serial,
+        int ObjectId,
         string Fid,
+        string Pid,
         int Tile,
         int Elevation,
         int Rotation,
         int Frame,
+        uint Flags,
+        int ObjectType,
+        int? PrototypeSubtype,
+        string? ArtFilename,
+        IReadOnlyList<int> InstanceValues,
+        string Sid,
+        int ScriptIndex,
         Vector2I PixelOffset,
         bool TopLevel);
 }

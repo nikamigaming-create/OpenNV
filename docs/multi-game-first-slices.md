@@ -76,14 +76,29 @@ retail startup-logo and original-menu presentation remain absent.
    runtime readiness is implied.
 8. Available now: the Fallout 2 Temple runtime contract verifies the complete
    cache/source/profile/recipe chain and constructs all admitted non-default
-   floor patches and top-level object FRM planes in Godot's 3D hex space. Its
-   headless proof is scene construction only: no rendered frame, collision,
-   character, scripts, interaction, gameplay, save, FPS, or OpenXR claim.
+   floor patches and top-level object FRM planes in Godot's 3D hex space. It
+   derives exact floor support, a central-hex blocker walk mask, and connected
+   wall-shell collision from owned MAP fields; headless rays prove the floor and
+   wall colliders. A source-bound nonvisual cursor proves adjacent movement and
+   boundary rejection inside the exact entry component. Multihex footprints
+   and player controls are unresolved, with no rendered frame, character,
+   scripts, interaction, gameplay, save, FPS, or OpenXR claim.
+9. Available now: an asset-free transition compiler binds all 18 Map 126 exit
+   grids, the zero door-prototype count, `ARTemple.int`, and three live MAP
+   script records. The headless runtime moves to a reachable source exit and
+   applies only its owned Map 3 / tile 28707 destination state. It does not load
+   that destination or execute INT bytecode.
+10. Available now: a separate Map 3 `ARCAVES` compiler proves that incoming
+    tile/elevation/rotation, 24 reciprocal exits to Map 126, 18 reachable exits
+    in the 586-hex arrival component, 298 owned resource identities, and all 173
+    disposable presentation artifacts. A Godot Map 3 consumer and reciprocal
+    runtime execution remain absent.
 
 Current result: a normal launcher starts either registered Fallout 1 view
 through its menu/creator/movie path, the bounded New Vegas menu/Doc route and
-production Goodsprings active set, or the registered Fallout 3 menu/CG00 route.
-Fallout 2 remains launcher-disabled; its exact source-bound Godot scene can be
+production Goodsprings active set. Fallout 2 and Fallout 3 remain launcher-disabled;
+Fallout 3 has a registered development menu/CG00 frontend but no playable
+presentation, while Fallout 2's exact source-bound Godot scene can be
 constructed headlessly, but no presentation is yet interactive or promoted.
 
 ### P1 — Fallout 3 first slice
@@ -103,14 +118,18 @@ constructed headlessly, but no presentation is yet interactive or promoted.
    is the exact owned head/hair/eye source textures, not a 3D face render. The
    compiler also resolves the birth CELL,
    player marker, Doctor Li reference/base, 1,610 references, 401 bases, and
-   exact model/texture inputs. Implement the `CG00PlayerSection4` player-package
-   runtime and opening command interpreter, and compile the authored
+   exact model/texture inputs.
+4. Available now: the source-bound `CG00PlayerSection4` package, exact stage-65
+   parent race/FaceGen commands, stage-80 package/variable/reference commands,
+   and zero-command stage-85 result compile and validate fail-closed. The normal
+   UI does not apply or persist them because the authored package/dialogue
+   triggers and Vault 101 world are absent. Compile the authored
    birth/age/SPECIAL/tag/trait sequence,
    dialogue, packages, controls, Vault 101 cells, actors, scripts, inventory,
    collision, NAVM, doors, and save boundary into neutral versioned contracts.
-4. Prove the ordinary menu route through character creation and the first
+5. Prove the ordinary menu route through character creation and the first
    exterior handoff, then cold-reload the exact state in flat mode.
-5. Add OpenXR only through the shared gameplay state and run physical headset
+6. Add OpenXR only through the shared gameplay state and run physical headset
    acceptance separately.
 
 Exit: a launcher-created standalone Fallout 3 character completes the bounded
@@ -153,11 +172,11 @@ is supported for the selected base profile.
 | --- | --- |
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
-| Fallout 2 | Exact Temple source transport, selective FRM cache, and source-bound Godot Map 126 scene construction work; rendered/interactive Hex, character creation, scripts/collision/combat, shared Chosen One gameplay/save state, FPS, and VR remain absent, so all modes stay disabled |
+| Fallout 2 | Exact Temple/Arroyo Caves source transport, selective caches, Map 126 construction/topology, nonvisual movement, and owned exit state work headlessly; Godot Map 3 consumption, reciprocal runtime execution, INT, actors, rendered/player-controlled Hex, character creation, combat, shared gameplay/save state, FPS, and VR remain absent, so all modes stay disabled |
 | New Vegas first slice | Menu/intro/Doc house and the production Goodsprings active set with its reciprocal Doc Mitchell house/exterior exit work; uninterrupted campaign continuity, retail HUD/Pip-Boy, neighboring-world streaming, and visual gates remain |
-| Fallout 3 | Owned-profile menu/intro/Escape convergence, CG00 sex/name/appearance persistence, and source-backed `CG00PlayerSection4` activation at stage 62 work; KF playback, stage-65 parent race/FaceGen commands, Vault 101 scene compilation, and later interpretation remain |
+| Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance through stage 62 work; later state contracts validate, but FPS/Hex/VR, authored trigger execution, dialogue/KF, actors, and Vault 101 remain |
 | TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |
-| JAM | Dependency registrar and one bounded JVS semantic work; missing dependencies and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM semantics keep the launcher toggle disabled |
+| JAM | Dependency registrar plus bounded JVS sprint and JBT time-dilation semantics work; missing dependencies and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM semantics keep the launcher toggle disabled |
 
 The runtime manifest is the executable truth. Documentation may describe this
 sequence, but a route stays disabled until its direct gate passes.

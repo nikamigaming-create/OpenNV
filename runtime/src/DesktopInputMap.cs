@@ -30,18 +30,34 @@ internal static class DesktopInputMap
 
     internal static void ConfigureJamSprint(JamJvsSprintContract sprint)
     {
-        ResetAction(JamJvsSprintContract.InputAction);
-        InputMap.ActionAddEvent(
+        ConfigureJamAction(
             JamJvsSprintContract.InputAction,
-            new InputEventKey
-            {
-                PhysicalKeycode = ParseKey(sprint.DesktopPhysicalKey),
-            });
-        var events = InputMap.ActionGetEvents(JamJvsSprintContract.InputAction);
+            sprint.DesktopPhysicalKey,
+            "JVS sprint");
+    }
+
+    internal static void ConfigureJamBulletTime(JamJbtBulletTimeContract bulletTime)
+    {
+        ConfigureJamAction(
+            JamJbtBulletTimeContract.InputAction,
+            bulletTime.DesktopPhysicalKey,
+            "JBT Bullet Time");
+    }
+
+    private static void ConfigureJamAction(
+        string action,
+        string physicalKey,
+        string capability)
+    {
+        ResetAction(action);
+        InputMap.ActionAddEvent(
+            action,
+            new InputEventKey { PhysicalKeycode = ParseKey(physicalKey) });
+        var events = InputMap.ActionGetEvents(action);
         if (events.Count != 1 || events[0] is not InputEventKey key ||
-            key.PhysicalKeycode != ParseKey(sprint.DesktopPhysicalKey))
+            key.PhysicalKeycode != ParseKey(physicalKey))
             throw new InvalidOperationException(
-                "The authored JVS sprint key did not retain its physical binding.");
+                $"The authored {capability} key did not retain its physical binding.");
     }
 
     internal static InputEventKey CreateEvent(

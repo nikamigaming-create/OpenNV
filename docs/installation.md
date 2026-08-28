@@ -60,23 +60,26 @@ sweep the tracked cue through the cue ball, and B resets the table.
 The launcher shows four top-level game choices: Fallout 1, Fallout 2, New Vegas,
 and Fallout 3. Fallout 1 enables registered Hex/FPS while VR stays disabled;
 Fallout 2 visibly lists disabled Hex/FPS/VR choices; New Vegas enables original
-flat and experimental OpenXR while JAM stays disabled; and Fallout 3 enables
-only its bounded flat menu/CG00 profile while TTW, world FPS/Hex, and VR stay
-disabled. TTW is an edition, not a fifth game button. On
+flat and experimental OpenXR while JAM stays disabled; and Fallout 3 keeps
+FPS/Hex/VR disabled while its bounded menu/CG00 development frontend remains
+non-playable. TTW is an edition, not a fifth game button. On
 this development machine Fallout 1's generated V13ENT
 inputs and Fallout 3's owned GOTY profile are registered. New Vegas launches the
 owned menu, skippable intro, and Doc Mitchell route from the verified local
 cache. The separate production Goodsprings active set includes the reciprocal
-Doc Mitchell house/exterior exit. Registered Fallout 3 now opens its
+Doc Mitchell house/exterior exit. The registered Fallout 3 development frontend opens its
 profile-backed menu, plays a locally
 converted and hash-verified copy of the owned intro, and converges through
 Escape or the Skip button on CG00 sex/name selection, a persistent stage-60
 character, and source-backed race/hair/eye selection persisted at stage 62.
+Exact Section 4 and stage-65/80/85 contracts compile and validate, but normal
+progression stops at stage 62 until their authored package/dialogue triggers and
+Vault 101 world execute; it does not persist a synthetic later quest state.
 The current preview shows verified owned source textures rather than a 3D
 FaceGen actor. Fallout 1 OpenXR has a shared-state V13ENT simulator adapter that
 passes locomotion, snap turn, fire, reload, and save. XR door use,
 campaign-native hands/weapon/UI, launcher enablement, and physical-headset
-acceptance remain unpromoted. TTW, JAM runtime semantics, Fallout 3
+acceptance remain unpromoted. TTW, complete JAM runtime/launcher support, Fallout 3
 `CG00PlayerSection4` package execution and Vault 101 world play, and all complete
 campaigns also remain unpromoted.
 
@@ -99,9 +102,10 @@ gameplay/save state, and launcher-ready presentations remain unimplemented.
 source manifest's admitted tile and object frames into a disposable local PNG
 cache. The cache includes a provenance manifest, remains derived owned content,
 must not be distributed, and does not change runtime readiness.
-The bounded runtime can verify that cache and construct the exact admitted
-Map 126 floor/object scene in Godot, but the proof is headless and does not
-establish rendering, collision, interaction, or playability.
+The bounded runtime can verify that cache, construct the exact admitted Map 126
+floor/object scene, and prove its source-derived floor/wall colliders with
+physics rays. The proof remains headless and does not establish rendered parity,
+player interaction, or playability.
 
 The registered Fallout 1 route now opens an asset-free original-style menu;
 **New Game** enters the owned character picker and skippable owned Overseer

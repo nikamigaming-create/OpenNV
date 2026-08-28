@@ -37,11 +37,11 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 Hex | Registered-cache launcher route through the OpenNV menu, character picker, owned Overseer movie, and bounded Godot V13ENT/Vault 13 slice | Only V13ENT is playable; this is not the complete Fallout 1 campaign |
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
-| Fallout 2 Hex/FPS/VR | The owned DAT2 Map 126 graph now compiles into a hash-verified Godot 3D scene with exact floor patches and placed-object FRM planes | The proof is headless scene construction, not rendered or interactive play; character flow, collision, gameplay, and saves are absent, so all three modes stay disabled |
+| Fallout 2 Hex/FPS/VR | Owned Map 126 Temple and Map 3 Arroyo Caves source graphs/caches, exact Temple topology, nonvisual movement, and exit state pass | The proof is headless/nonvisual; no Godot Map 3 consumer, reciprocal runtime transition, INT execution, actors, controls, gameplay, or saves exist, so all three modes stay disabled |
 | New Vegas | Owned menu, skippable intro, Doc Mitchell house/opening state, and the production Goodsprings active set with the reciprocal Doc Mitchell house/exterior exit; original flat and experimental OpenXR routes are launchable | Hex is absent; OpenXR is software-gated but not physical-headset accepted; the uninterrupted full campaign is unproven |
-| Fallout 3 | Owned main menu, intro, and CG00 profile through stage-62 appearance persistence and source-backed `CG00PlayerSection4` package activation | KF playback and the stage-65 parent race/FaceGen commands remain blocked; no Vault 101 world runtime exists |
+| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and persistent CG00 stage 62; exact later state contracts compile and validate | No first-person Vault 101 world or authored package/dialogue trigger execution exists, so FPS, Hex, and VR stay disabled |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
-| JAM | Dependency/profile inspection plus one bounded JVS sprint semantic | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
+| JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
 
 “Local slice works” is not the same as “launcher-ready,” and “first slice” is
 not a whole-campaign claim. The runtime manifest is the authority used to keep
@@ -78,16 +78,25 @@ Fallout 3 registration is available separately and writes a local profile under
 ```
 
 That command resolves the owned menu, movies, quest chain, birth inputs, and
-Vault 101 resource graph. The launcher can boot the bounded CG00 sex/name flow,
+Vault 101 resource graph. The bounded development frontend can boot the CG00 sex/name flow,
 resume its stage-60 character, select from source-backed playable race and
 sex-aware hair/eye records, and persist the owned FaceGen defaults at stage 62.
 The preview is an exact owned-texture inspection surface, not a 3D face render.
-The owned `CG00PlayerSection4` package and marker now persist as active at stage
-62. KF playback and the stage-65 `MatchRace`/`MatchFaceGeometry` commands,
-compiled Godot Vault 101 scene, and remaining opening interpreter are active
-work. TTW and JAM
+The exact `CG00PlayerSection4`, stage-65 parent appearance, stage-80
+package/variable/reference, and empty stage-85 contracts compile and validate.
+The normal flow deliberately stops at stage 62 instead of bypassing their
+authored package and dialogue triggers; the launcher therefore keeps every
+Fallout 3 presentation disabled. Dialogue/KF playback, 3D FaceGen
+presentation, the Godot Vault 101 scene, and the remaining opening interpreter
+are active work. TTW and JAM
 registration are documented in [the mod policy](docs/mods.md);
 registration alone does not make either route runtime-playable.
+
+The owned JAM 4.6 plugin currently transports two narrow desktop behaviors:
+Shift-held forward sprint at its authored 1.75 multiplier and X-toggled Bullet
+Time at its authored 0.5 world-time multiplier. The five missing local native
+prerequisites and the unimplemented AP, UI, animation, audio, event, and cosave
+semantics keep the launcher JAM route disabled; OpenNV never loads those DLLs.
 
 Fallout 2 source registration is also available and writes only a small local
 manifest; it does not extract or copy the three owned DAT2 archives:
@@ -137,8 +146,21 @@ $Godot = '<path-to-Godot-4.7.2-Mono-console.exe>'
   --report "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\temple-runtime.json"
 ```
 
-That proof builds the exact admitted floor and top-level object planes but does
-not claim a rendered frame, collision, interaction, character flow, or playability.
+That proof builds the exact admitted floor and top-level object planes, derives
+floor support and the central-hex blocker walk mask from owned MAP values, molds
+the 45 source wall-object hexes into two connected shells, and proves the exact
+floor and wall colliders with headless physics rays. A nonvisual cursor consumes
+42 exact adjacent moves inside the 1,085-hex entry component, proving floor
+contact and fail-closed boundary rejection. Multihex footprint semantics,
+player controls, rendering, character flow, gameplay/save state, parity, and
+launcher readiness remain unimplemented. A separate asset-free transition
+contract proves that Map 126 has no door-prototype objects, moves through the
+same walk component to one of three exact exit grids, and changes only nonvisual
+state to owned Map 3 / tile 28707. Destination loading and `ARTemple.int`
+execution remain disabled. The destination compiler now independently binds
+Map 3 `ARCAVES`, that exact incoming placement, 24 reciprocal exits to Map 126,
+the 586-hex arrival component, and a 173-artifact disposable presentation cache.
+Godot does not consume that destination contract yet.
 
 ## Character path is a real choice
 
@@ -148,7 +170,7 @@ profile and save boundary.
 | Path | Character | JAM rule |
 | --- | --- | --- |
 | Fallout 1 | One Vault Dweller state shared by hex, FPS, and eventually VR presentations | Separate from the Gamebryo-family profiles. |
-| Fallout 2 | One future Chosen One state shared by hex, FPS, and VR presentations | Source registered separately; no runtime/save is promoted yet. |
+| Fallout 2 | One future Chosen One state shared by hex, FPS, and VR presentations | Bounded headless runtime proofs are promoted; no player-controlled presentation or save is promoted yet. |
 | New Vegas | Separate standalone Mojave character | Base route today; JAM remains disabled until its dependencies and portable semantics pass. |
 | Fallout 3 | Separate standalone Capital Wasteland character | Standalone CG00 profile today; TTW is a future separate path and is currently disabled. |
 | TTW | One future Capital Wasteland-to-Mojave character | Runtime support is absent. It cannot later adopt an existing standalone save. |

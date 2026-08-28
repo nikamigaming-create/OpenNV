@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import struct
 import sys
 import tempfile
@@ -49,42 +51,75 @@ def script_record(form_id: int, editor_id: str, source: str) -> bytes:
     )
 
 
-def plugin(*masters: str, with_jvs: bool = False) -> bytes:
+def plugin(
+    *masters: str,
+    with_jvs: bool = False,
+    with_jbt: bool = False,
+) -> bytes:
     data = subrecord("HEDR", struct.pack("<fII", 1.34, 0, 0))
     for master in masters:
         data += subrecord("MAST", master.encode("ascii") + b"\0")
         data += subrecord("DATA", bytes(8))
     content = record("TES4", 0, data)
-    if not with_jvs:
+    if not with_jvs and not with_jbt:
         return content
-    source = """
-        DispatchEvent "JVSStateChange"
-        GetControl
-        IsControlPressed
-        IsKeyPressed
-        GetController
-        IsButtonPressed
-        SetGameMainLoopCallback
-        SetNthPerkEntryValue1
-        SetOnKeyDownEventHandler
-        SetSpeedMult
-    """
-    for index, editor_id in enumerate(
-        ("JVSScript", "JVSOnKeyDownEventHandler", "JVSMainLoopEventHandler"),
-        start=1,
-    ):
-        content += script_record(0x100 + index, editor_id, source)
-    for index, (editor_id, value) in enumerate(
-        (
-            ("JVSEnabled", 1.0),
-            ("JVSKey", 42.0),
-            ("JVSButton", 64.0),
-            ("JVSToggle", 0.0),
-            ("JVSSpeedMult", 75.0),
-        ),
-        start=1,
-    ):
-        content += global_record(0x200 + index, editor_id, value)
+    if with_jvs:
+        source = """
+            DispatchEvent "JVSStateChange"
+            GetControl
+            IsControlPressed
+            IsKeyPressed
+            GetController
+            IsButtonPressed
+            SetGameMainLoopCallback
+            SetNthPerkEntryValue1
+            SetOnKeyDownEventHandler
+            SetSpeedMult
+        """
+        for index, editor_id in enumerate(
+            ("JVSScript", "JVSOnKeyDownEventHandler", "JVSMainLoopEventHandler"),
+            start=1,
+        ):
+            content += script_record(0x100 + index, editor_id, source)
+        for index, (editor_id, value) in enumerate(
+            (
+                ("JVSEnabled", 1.0),
+                ("JVSKey", 42.0),
+                ("JVSButton", 64.0),
+                ("JVSToggle", 0.0),
+                ("JVSSpeedMult", 75.0),
+            ),
+            start=1,
+        ):
+            content += global_record(0x200 + index, editor_id, value)
+    if with_jbt:
+        source = """
+            DispatchEvent "JBTStateChange"
+            GetControl
+            IsKeyPressed
+            GetController
+            IsButtonPressed
+            SetGameMainLoopCallback
+            SetOnKeyDownEventHandler
+        """
+        for index, editor_id in enumerate(
+            ("JBTScript", "JBTOnKeyEventHandler", "JBTMainLoopEventHandler"),
+            start=1,
+        ):
+            content += script_record(0x300 + index, editor_id, source)
+        for index, (editor_id, value) in enumerate(
+            (
+                ("JBTEnabled", 1.0),
+                ("JBTKey", 45.0),
+                ("JBTButton", 0.0),
+                ("JBTToggle", 1.0),
+                ("JBTSlowMult", 0.5),
+                ("JBTSlowMultStanding", 1.0),
+                ("JBTAPDrain", 10.0),
+            ),
+            start=1,
+        ):
+            content += global_record(0x400 + index, editor_id, value)
     return content
 
 
@@ -146,6 +181,16 @@ class JamProfileTest(unittest.TestCase):
             self.assertEqual(capability["runtime"]["desktopPhysicalKey"], "Shift")
             self.assertEqual(capability["runtime"]["speedMultiplier"], 1.75)
             self.assertEqual(
+                hashlib.sha256(
+                    document["portableCapabilitiesCanonical"].encode("utf-8")
+                ).hexdigest(),
+                document["portableCapabilitiesSha256"],
+            )
+            self.assertEqual(
+                json.loads(document["portableCapabilitiesCanonical"]),
+                document["portableCapabilities"],
+            )
+            self.assertEqual(
                 document["runtimeCompatibility"]["transportedCapabilities"],
                 ["jvs-forward-sprint-speed-v1"],
             )
@@ -187,6 +232,40 @@ class JamProfileTest(unittest.TestCase):
                 document["portableCapabilities"][0]["status"],
                 "transported-bounded-runtime-capability",
             )
+
+    def test_transports_authored_jbt_toggle_and_time_scale(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "game"
+            base = game / "Data"
+            jam = root / "JAM"
+            game.mkdir()
+            base.mkdir()
+            jam.mkdir()
+            for name in ("nvse_1_4.dll", "nvse_loader.exe", "nvse_steam_loader.dll"):
+                (game / name).write_bytes(name.encode("ascii"))
+            dlc = ("DeadMoney.esm", "HonestHearts.esm", "OldWorldBlues.esm", "LonesomeRoad.esm")
+            (base / "FalloutNV.esm").write_bytes(plugin())
+            for name in dlc:
+                (base / name).write_bytes(plugin())
+            (jam / "JustAssortedMods.esp").write_bytes(
+                plugin("FalloutNV.esm", *dlc, with_jvs=True, with_jbt=True)
+            )
+
+            document = inspect_jam_profile(game, [base, jam], "synthetic-4.6")
+
+            capability = next(
+                row for row in document["portableCapabilities"]
+                if row["id"] == "jbt-bullet-time-dilation-v1"
+            )
+            self.assertEqual(
+                capability["status"],
+                "transported-bounded-runtime-capability",
+            )
+            self.assertEqual(capability["runtime"]["desktopPhysicalKey"], "X")
+            self.assertTrue(capability["runtime"]["toggle"])
+            self.assertEqual(capability["runtime"]["effectiveTimeMultiplier"], 0.5)
+            self.assertEqual(capability["runtime"]["actionPointEntryCost"], 10.0)
 
 
 if __name__ == "__main__":

@@ -330,12 +330,7 @@ def _portable_capabilities(
             editor_id: globals_by_editor_id[editor_id]
             for editor_id in capability["requiredGlobals"]
         }
-        direct_input_key = int(source_globals["JVSKey"])
-        key_map = dict(capability["desktopDirectInputKeyMap"])
-        desktop_key = key_map.get(str(direct_input_key))
-        if desktop_key is None:
-            raise ValueError(f"JVS DirectInput key has no portable mapping: {direct_input_key}")
-        speed_percent = source_globals["JVSSpeedMult"]
+        runtime = _portable_runtime(capability, source_globals)
         result.append(
             {
                 "id": capability["id"],
@@ -350,19 +345,61 @@ def _portable_capabilities(
                     "jip-ln": capability["requiredJipCommands"],
                     "dispatchedEvents": capability["dispatchedEvents"],
                 },
-                "runtime": {
-                    "enabled": source_globals["JVSEnabled"] == 1,
-                    "desktopPhysicalKey": desktop_key,
-                    "controllerButton": int(source_globals["JVSButton"]),
-                    "toggle": source_globals["JVSToggle"] != 0,
-                    "speedBonusPercent": speed_percent,
-                    "speedMultiplier": 1.0 + speed_percent / PERCENT_SCALE,
-                },
+                "runtime": runtime,
                 "supportedSemantics": capability["supportedSemantics"],
                 "unsupportedSemantics": capability["unsupportedSemantics"],
             }
         )
     return result
+
+
+def _portable_runtime(
+    capability: dict[str, object],
+    source_globals: dict[str, float],
+) -> dict[str, object]:
+    capability_id = str(capability["id"])
+    if capability_id == "jvs-forward-sprint-speed-v1":
+        direct_input_key = int(source_globals["JVSKey"])
+        desktop_key = _desktop_key(capability, direct_input_key, "JVS")
+        speed_percent = source_globals["JVSSpeedMult"]
+        return {
+            "enabled": source_globals["JVSEnabled"] == 1,
+            "desktopPhysicalKey": desktop_key,
+            "controllerButton": int(source_globals["JVSButton"]),
+            "toggle": source_globals["JVSToggle"] != 0,
+            "speedBonusPercent": speed_percent,
+            "speedMultiplier": 1.0 + speed_percent / PERCENT_SCALE,
+        }
+    if capability_id == "jbt-bullet-time-dilation-v1":
+        direct_input_key = int(source_globals["JBTKey"])
+        desktop_key = _desktop_key(capability, direct_input_key, "JBT")
+        slow_multiplier = source_globals["JBTSlowMult"]
+        standing_multiplier = source_globals["JBTSlowMultStanding"]
+        return {
+            "enabled": source_globals["JBTEnabled"] == 1,
+            "desktopPhysicalKey": desktop_key,
+            "controllerButton": int(source_globals["JBTButton"]),
+            "toggle": source_globals["JBTToggle"] != 0,
+            "slowMultiplier": slow_multiplier,
+            "standingMultiplier": standing_multiplier,
+            "effectiveTimeMultiplier": slow_multiplier * standing_multiplier,
+            "actionPointEntryCost": source_globals["JBTAPDrain"],
+        }
+    raise ValueError(f"JAM portable capability has no runtime translator: {capability_id}")
+
+
+def _desktop_key(
+    capability: dict[str, object],
+    direct_input_key: int,
+    module_name: str,
+) -> str:
+    key_map = dict(capability["desktopDirectInputKeyMap"])
+    desktop_key = key_map.get(str(direct_input_key))
+    if desktop_key is None:
+        raise ValueError(
+            f"{module_name} DirectInput key has no portable mapping: {direct_input_key}"
+        )
+    return str(desktop_key)
 
 
 def inspect_jam_profile(
@@ -467,6 +504,15 @@ def inspect_jam_profile(
         modules,
         globals_by_editor_id,
     )
+    requirements_sha256 = file_sha256(requirements_path)
+    portable_capabilities_canonical = json.dumps(
+        portable_capabilities,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    portable_capabilities_sha256 = hashlib.sha256(
+        portable_capabilities_canonical.encode("utf-8")
+    ).hexdigest()
 
     identity = {
         "present": [
@@ -475,6 +521,8 @@ def inspect_jam_profile(
         ],
         "missing": missing_dependencies,
         "missingMasters": missing_masters,
+        "requirementsSha256": requirements_sha256,
+        "portableCapabilitiesSha256": portable_capabilities_sha256,
     }
     encoded_identity = json.dumps(
         identity, sort_keys=True, separators=(",", ":")
@@ -503,7 +551,7 @@ def inspect_jam_profile(
         "requirements": {
             "id": requirements["id"],
             "file": str(requirements_path),
-            "sha256": file_sha256(requirements_path),
+            "sha256": requirements_sha256,
         },
         "gameRoot": str(game_root),
         "sourceRoots": [str(root) for root in roots],
@@ -523,6 +571,8 @@ def inspect_jam_profile(
             "modules": modules,
         },
         "portableCapabilities": portable_capabilities,
+        "portableCapabilitiesCanonical": portable_capabilities_canonical,
+        "portableCapabilitiesSha256": portable_capabilities_sha256,
         "runtimeCompatibility": {
             "ready": False,
             "nativeDllLoading": False,
