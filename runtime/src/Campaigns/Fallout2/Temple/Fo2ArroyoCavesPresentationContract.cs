@@ -28,6 +28,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
         IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
         int verifiedResources,
+        bool[] walkable,
         string walkMaskSha256,
         int walkableHexes,
         int arrivalComponentHexes,
@@ -46,6 +47,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
         TileBindings = tileBindings;
         ObjectPlacements = objectPlacements;
         VerifiedResources = verifiedResources;
+        Walkable = walkable;
         WalkMaskSha256 = walkMaskSha256;
         WalkableHexes = walkableHexes;
         ArrivalComponentHexes = arrivalComponentHexes;
@@ -65,6 +67,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
     internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
     internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
     internal int VerifiedResources { get; }
+    internal IReadOnlyList<bool> Walkable { get; }
     internal string WalkMaskSha256 { get; }
     internal int WalkableHexes { get; }
     internal int ArrivalComponentHexes { get; }
@@ -302,6 +305,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
             tileBindings,
             objectPlacements,
             resources.Length,
+            walkable.ToArray(),
             walkMaskSha256,
             walkable.Count(row => row),
             arrivalComponentHexes,

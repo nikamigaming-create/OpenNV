@@ -2,7 +2,7 @@ using Godot;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
-public sealed partial class Fo2ArroyoCavesRenderProofHost : Node3D
+public sealed partial class Fo2ArroyoCavesPlayProofHost : Node3D
 {
     public override void _Ready()
     {
@@ -14,20 +14,22 @@ public sealed partial class Fo2ArroyoCavesRenderProofHost : Node3D
             var transition = Fo2TempleTransitionCatalog.Load(
                 Fo2ArroyoCavesProofOptions.Require(options, "fo2-temple-transitions"),
                 temple);
-            var arroyo = Fo2ArroyoCavesPresentationCatalog.Load(
+            var catalog = Fo2ArroyoCavesPresentationCatalog.Load(
                 Fo2ArroyoCavesProofOptions.Require(options, "fo2-arroyo-cache"),
                 transition);
-            var coverage = Fo2ArroyoCavesScene.Build(arroyo, this);
-            _ = Fo2ArroyoCavesRenderProof.Run(
+            var scene = Fo2ArroyoCavesScene.Build(catalog, this);
+            var runtime = Fo2ArroyoCavesPlayerRuntime.Build(catalog, scene);
+            _ = Fo2ArroyoCavesPlayProof.Run(
                 this,
-                coverage,
-                Fo2ArroyoCavesProofOptions.Require(options, "fo2-arroyo-render-proof"));
+                catalog,
+                scene,
+                runtime,
+                Fo2ArroyoCavesProofOptions.Require(options, "fo2-arroyo-player-proof"));
         }
         catch (Exception exception)
         {
-            GD.PushError($"OPENNV_FO2_ARROYO_RENDER_FAIL {exception}");
+            GD.PushError($"OPENNV_FO2_ARROYO_PLAYER_FAIL {exception}");
             GetTree().Quit(1);
         }
     }
-
 }

@@ -1,0 +1,77 @@
+{
+  "schema": "opennv-fo2-arroyo-player-runtime/v1",
+  "id": "fo2-arroyo-map-3-player-runtime-v1",
+  "campaign": "Fallout2",
+  "map": {
+    "index": 3,
+    "name": "ARCAVES.MAP",
+    "sha256": "ba35474b8ea67aec50b6a962a1bc767a87366449d4b631fd1b4ce241847b5bfe",
+    "elevation": 0
+  },
+  "arrival": {
+    "authority": "exact Map 126 exit-grid instance values",
+    "tile": 28707,
+    "rotation": 0
+  },
+  "sourceSemantics": {
+    "walkMaskMode": "non-default-floor-art-minus-central-source-blocking-object-hexes-v1",
+    "walkMaskSha256": "c54a57b56df5bf225d6a522f37afcb8981d1393eb7e2b29d80ef44d8726ccf9d",
+    "floorCollisionMode": "non-default-source-floor-patch-trimesh-v1",
+    "blockedMovementMode": "source-walk-mask-kinematic-gate-v1",
+    "multihexCoverage": "central-source-hex-only-unresolved"
+  },
+  "player": {
+    "capsuleRadiusMeters": 0.28,
+    "capsuleHeightMeters": 1.7,
+    "spawnCenterHeightMeters": 0.86,
+    "speedMetersPerSecond": 4.5,
+    "gravityMetersPerSecondSquared": 18.0,
+    "groundVelocityMetersPerSecond": -0.1,
+    "floorSnapLengthMeters": 0.3,
+    "safeMarginMeters": 0.01,
+    "maximumFloorAngleDegrees": 46.0
+  },
+  "camera": {
+    "projection": "orthographic-follow",
+    "sizeMeters": 18.0,
+    "offsetMeters": [-8.0, 10.0, 9.0],
+    "lookHeightMeters": 0.65,
+    "nearMeters": 0.05,
+    "farMeters": 180.0
+  },
+  "input": {
+    "moveLeft": { "action": "fo2_arroyo_move_left", "physicalKey": "A" },
+    "moveRight": { "action": "fo2_arroyo_move_right", "physicalKey": "D" },
+    "moveForward": { "action": "fo2_arroyo_move_forward", "physicalKey": "W" },
+    "moveBackward": { "action": "fo2_arroyo_move_backward", "physicalKey": "S" }
+  },
+  "acceptanceTrack": {
+    "physicalKey": "S",
+    "firstNeighborTile": 28907,
+    "lastWalkableTile": 31907,
+    "firstRejectedTile": 32107,
+    "blockingObjectSerial": 1784,
+    "blockingObjectFid": "02000015",
+    "coLocatedExitGridSerial": 1785,
+    "coLocatedExitGridObjectType": 5,
+    "coLocatedExitGridDestination": [126, 16486, 0, 0],
+    "groundHeightToleranceMeters": 0.02,
+    "minimumRejectedPhysicsFrames": 8,
+    "maximumPhysicsFrames": 420
+  },
+  "promotion": {
+    "runtimeReady": false,
+    "persistentInteraction": false,
+    "playerArtLoaded": false,
+    "playableCampaign": false,
+    "collisionParity": false,
+    "walkabilityParity": false
+  },
+  "unsupported": [
+    "Chosen One character art, animation, character creation, stats, inventory, combat, scripts, quests, audio, HUD, Pip-Boy, and save state",
+    "multihex footprint expansion beyond the stored central source hex",
+    "retail collision and walkability parity",
+    "FPS and OpenXR interaction",
+    "launcher playability"
+  ]
+}
