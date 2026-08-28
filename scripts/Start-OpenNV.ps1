@@ -96,6 +96,20 @@ if ($ValidateOnly) {
     return
 }
 
+if ($env:OS -eq "Windows_NT") {
+    $electronExecutable = [IO.Path]::GetFullPath(
+        (Join-Path $desktopRoot "node_modules\electron\dist\electron.exe"))
+    Get-Process -Name "electron" -ErrorAction SilentlyContinue |
+        Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_.Path) -and
+            [string]::Equals(
+                [IO.Path]::GetFullPath($_.Path),
+                $electronExecutable,
+                [StringComparison]::OrdinalIgnoreCase)
+        } |
+        Stop-Process -Force
+}
+
 Push-Location $desktopRoot
 try {
     & $npm.Source run dev

@@ -55,7 +55,14 @@ Acceptance is deliberately split across two Godot processes:
 
 The canonical local run passed from stage 55 to stage 200 and preserved the
 created character, quest lifecycle, globals, objectives, inventory/equipment,
-and achievement state. The acceptance report records source scene,
+achievement state, and seven-bit player-control vector. The completed-Continue
+restore path validates that vector and maps its movement, look,
+rollover-derived activation, and fighting bits through the same helper used by
+the live stage transition, preventing the prior silent combat re-enable.
+Pip-Boy visibility is restored separately; point-of-view and sneaking bits do
+not yet have runtime consumers. The existing two-process report proves the
+incomplete-save resume to completion, while a third completed-save cold load
+remains a dedicated acceptance gap. The acceptance report records source scene,
 configuration identity, save SHA-256, initial/final state summaries, and that
 Windows app control and foreground input injection were not used. Generated
 cache, save, voice, LIP, and other commercial artifacts remain local and are not

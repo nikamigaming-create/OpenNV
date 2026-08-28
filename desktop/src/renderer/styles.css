@@ -13,7 +13,7 @@
 * { box-sizing: border-box; }
 
 body {
-  min-width: 640px;
+  min-width: 600px;
   min-height: 100vh;
   margin: 0;
   color: var(--text);
@@ -148,9 +148,18 @@ button { color: inherit; }
 
 @media (max-width: 760px) {
   body { min-width: 0; }
+  .shell { width: calc(100% - 24px); padding: 10px 0 8px; }
+  .topbar { min-height: 40px; }
+  .route-console { margin-top: 12px; }
+  .route-console h1 { margin-bottom: 8px; font-size: 21px; }
   .campaign-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .launch-deck { grid-template-columns: 1fr; gap: 12px; }
-  .launch-options { justify-content: flex-start; }
-  .launch-button { width: 100%; }
+  .campaign-card { min-height: 76px; padding: 10px; }
+  .card-title { font-size: 18px; }
+  .card-footer { padding-top: 7px; }
+  .launch-deck { grid-template-columns: 1fr auto; gap: 8px 12px; margin-top: 10px; padding: 10px; }
+  .launch-options { grid-column: 1 / -1; justify-content: flex-start; }
+  .launch-button { grid-column: 2; grid-row: 1; min-width: 112px; }
+  .advanced { margin-top: 8px; }
+  .advanced summary { padding: 8px 2px; }
   .advanced-content { grid-template-columns: 1fr; }
 }

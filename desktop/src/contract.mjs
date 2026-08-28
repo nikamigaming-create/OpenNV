@@ -157,8 +157,13 @@ export function createRuntimeArguments(
 ) {
   if (campaign.id === "fallout1") {
     if (!fallout1Profile?.ready) throw new Error(CONTRACT.copy.fallout1ProfileUnavailable);
+    if (!["forward_plus", "mobile", "gl_compatibility"].includes(campaign.desktopRenderingMethod)) {
+      throw new Error("Fallout 1 has no valid desktop rendering method.");
+    }
     return [
-      "--xr-mode", "off", "--",
+      "--xr-mode", "off",
+      "--rendering-method", campaign.desktopRenderingMethod,
+      "--",
       "--fo1-hex-scene", fallout1Profile.hexScene,
       "--fo1-new-game",
       "--fo1-character-start", fallout1Profile.characterStart,

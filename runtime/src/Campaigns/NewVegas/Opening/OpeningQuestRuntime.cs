@@ -2433,6 +2433,23 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         state.PlayerControls.Count == PlayerControlCount &&
         state.PlayerControls[PipBoyControlIndex] == EnabledControlValue;
 
+    internal static void ApplyPlayerControlPolicy(
+        CellPlayer player,
+        IReadOnlyList<int> playerControls,
+        bool saveEnabled)
+    {
+        if (playerControls.Count != PlayerControlCount ||
+            playerControls.Any(value => value is not DisabledControlValue and not EnabledControlValue))
+            throw new InvalidOperationException("Owned player-control state is invalid.");
+        bool Enabled(int index) => playerControls[index] == EnabledControlValue;
+        player.SetControlPolicy(
+            Enabled(MovementControlIndex),
+            Enabled(LookingControlIndex),
+            Enabled(MovementControlIndex) && Enabled(RolloverTextControlIndex),
+            Enabled(FightingControlIndex),
+            saveEnabled);
+    }
+
     private static void ValidateStateForFlow(
         OpeningNewGameFlow flow,
         OpeningCampaignState state)
@@ -2691,12 +2708,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             return;
         }
         _loaded.Session.SetGameplayUiVisible(_playerControls[PipBoyControlIndex]);
-        _loaded.Player.SetControlPolicy(
-            _playerControls[MovementControlIndex],
-            _playerControls[LookingControlIndex],
-            _playerControls[MovementControlIndex] &&
-                _playerControls[RolloverTextControlIndex],
-            _playerControls[FightingControlIndex],
+        ApplyPlayerControlPolicy(
+            _loaded.Player,
+            _playerControls
+                .Select(value => value ? EnabledControlValue : DisabledControlValue)
+                .ToArray(),
             _stage == _flow.CompletionStage);
         if (!_loaded.Player.UsesXr && DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;

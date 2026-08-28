@@ -2,6 +2,15 @@ const api = window.openNevada;
 if (!api) throw new Error("Open Nevada launcher bridge did not load.");
 
 let state = await api.getState();
+const topLevelCampaignIds = state.campaigns
+  .filter((campaign) => campaign.id !== "ttw")
+  .map((campaign) => campaign.id);
+const expectedTopLevelCampaignIds = ["fallout1", "fallout2", "newvegas", "fallout3"];
+if (state.schema !== "opennv-launcher-state/v4" ||
+    topLevelCampaignIds.length !== expectedTopLevelCampaignIds.length ||
+    topLevelCampaignIds.some((id, index) => id !== expectedTopLevelCampaignIds[index])) {
+  throw new Error("Open Nevada launcher state is stale; restart the launcher.");
+}
 let selectedGameId = "fallout1";
 let selectedPresentation = "hex-tactical";
 

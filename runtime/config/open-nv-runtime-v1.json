@@ -721,10 +721,10 @@
       "source": "Independent launcher boot-window and notification presentation policy",
       "evidence": "docs/desktop-launcher.md"
     },
-    "mainWindowWidthPixels": 880,
-    "mainWindowHeightPixels": 560,
-    "mainWindowMinimumWidthPixels": 680,
-    "mainWindowMinimumHeightPixels": 500,
+    "mainWindowWidthPixels": 680,
+    "mainWindowHeightPixels": 480,
+    "mainWindowMinimumWidthPixels": 620,
+    "mainWindowMinimumHeightPixels": 450,
     "toastVisibilityMilliseconds": 5200
   },
   "legalAssets": {

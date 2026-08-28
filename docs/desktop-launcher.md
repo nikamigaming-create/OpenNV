@@ -30,6 +30,12 @@ both admit it; unfinished modes remain visible and disabled instead of moving
 to an unrelated toggle or disappearing. TTW stays in the Edition selector and
 JAM stays in the mod control.
 
+The Windows default is a compact 680x480 logical-pixel window. At that width the
+four game choices stay visible as one 2x2 grid, with the selected game's mode
+buttons and Play action immediately below; setup and compatibility details stay
+secondary. This avoids the near-full-screen result produced by the former
+880x560 default on a 175% DPI desktop.
+
 The portable contract is implemented in
 [`desktop/src/contract.mjs`](../desktop/src/contract.mjs). It is deliberately
 separate from the current Windows PowerShell bridge, so platform-specific
@@ -58,7 +64,14 @@ until the player uses **Set up Fallout 1** to select a generated
 `hex-scene.json` and `character-start.json`; the launcher validates their
 schemas and character-contract hash, stores only local paths under its user-data
 folder, and supplies the exact runtime arguments plus an isolated Vault Dweller
-save path. The Fallout 1 OpenXR adapter has simulator coverage but remains
+save path. The current desktop launch also selects Godot's GL compatibility
+renderer for this bounded route: the current Vulkan startup on the development
+machine stalls before its first frame, while the same contracts reach the
+Fallout menu, owned picker/movie, live first-person, shoulder, and Hex gameplay
+under GL. GL reports unsupported volumetric-fog features, so this is a
+functional bounded-route recovery path, not a claim that the supplied video's
+visually consistent high-fidelity cave is renderer-matched.
+The Fallout 1 OpenXR adapter has simulator coverage but remains
 launcher-disabled and has no physical-headset acceptance. Fallout 3's owned
 frontend reaches stage 62, but all three presentation buttons remain disabled
 because no Vault 101 world runtime or authored package/dialogue trigger execution

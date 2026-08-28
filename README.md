@@ -59,7 +59,11 @@ Pop-Location
 ```
 
 If Godot is not found automatically, pass the Godot 4.7.2 Mono executable with
-`-Godot`. Select **New Vegas** and **Launch** for the normal owned main menu;
+`-Godot`. The compact launcher always shows Fallout 1, Fallout 2, New Vegas,
+and Fallout 3 as its four top-level choices. Selecting a card exposes one
+shared FPS / Hex / VR mode row and Play action below it, with unfinished modes
+visible but disabled. Select **New
+Vegas** and **Play** for the normal owned main menu;
 **New Game** plays the owned intro, and `Escape` skips into the same Doc Mitchell
 opening state as watching it through. The separately promoted production
 Goodsprings active set includes the reciprocal Doc Mitchell house/exterior
@@ -75,11 +79,16 @@ uses verified ITEMS/DATA rectangles while STATS reuses the verified ITEMS frame
 because its root rectangle still depends on unsupported Gamebryo expressions.
 It does not yet interpret every tile expression or provide complete
 equip/use/drop behavior, so it is not described as retail HUD/Pip-Boy parity.
-For Fallout
-1, select **Register Fallout 1
-cache**, choose the generated `hex-scene.json` and then `character-start.json`,
+For Fallout 1, select **Set up Fallout 1**, choose the generated
+`hex-scene.json` and then `character-start.json`,
 choose Hex Tactical or First Person, and launch. Registration stores local paths
-and the character-start hash; it does not copy or package owned content.
+and the character-start hash; it does not copy or package owned content. The
+current launcher uses Godot's GL compatibility renderer for this bounded route
+because Vulkan currently stalls before its first visible frame on the
+development machine. GL reaches the Fallout menu, owned picker/movie, live
+first-person, shoulder, and Hex gameplay, but reports unsupported
+volumetric-fog features; it is a functional bounded-route recovery, not a match
+for the supplied video's visually consistent high-fidelity cave.
 
 Fallout 3 registration is available separately and writes a local profile under
 `%LOCALAPPDATA%\OpenNV\profiles\fallout3\vanilla` by default:
@@ -250,6 +259,10 @@ not require Python or another engine at runtime.
 The New Vegas owned front end and Doc Mitchell opening are implemented as a
 bounded campaign-state route. New Game plays the owned intro and Escape skips
 to the same opening state; Continue/Load use the canonical save owner. The
+completed cold-Continue path maps the saved movement, look, rollover-derived
+activation, and fighting bits back onto `CellPlayer`, including the authored
+disabled-combat state. Pip-Boy visibility is restored separately; saved POV and
+sneaking bits still lack runtime consumers. The
 production Goodsprings active set and reciprocal Doc Mitchell house/exterior
 exit are also interactive. An uninterrupted whole-campaign route remains
 unproven. See the

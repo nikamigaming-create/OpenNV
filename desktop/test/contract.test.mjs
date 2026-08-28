@@ -97,7 +97,7 @@ test("Fallout 1 launches the registered local contracts into the selected presen
   };
   const request = validateLaunchRequest({ campaign: "fallout1", presentation: "hex-tactical" });
   assert.deepEqual(createRuntimeArguments(request, { fallout1Profile: profile }), [
-    "--xr-mode", "off", "--",
+    "--xr-mode", "off", "--rendering-method", "gl_compatibility", "--",
     "--fo1-hex-scene", profile.hexScene,
     "--fo1-new-game",
     "--fo1-character-start", profile.characterStart,

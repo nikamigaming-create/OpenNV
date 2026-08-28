@@ -89,7 +89,12 @@ public partial class RuntimeCoordinator : Node3D
                 performanceReportPath);
             AddChild(performanceObserver);
             if (_options.ContainsKey("fo1-hex-scene"))
-                _loadingScreen?.SetTitle("FALLOUT 1  //  V13ENT HEX TACTICAL");
+            {
+                var presentation = _options.TryGetValue("fo1-start-presentation", out var selectedPresentation)
+                    ? selectedPresentation.Replace('-', ' ').ToUpperInvariant()
+                    : "V13ENT";
+                _loadingScreen?.SetTitle($"FALLOUT 1  //  {presentation}");
+            }
             if (_options.ContainsKey("fo1-campaign-transport"))
                 _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING ALL MAPS");
             if (_options.ContainsKey("fo1-campaign-presentation"))
@@ -643,6 +648,11 @@ public partial class RuntimeCoordinator : Node3D
              !loaded.Session.HasConsistentOpeningGameplayState()))
             throw new InvalidOperationException(
                 "Campaign Continue save does not match the prepared owned New Game flow.");
+        if (usesCampaignState && restoredOpening is { Completed: true } completedOpening)
+            OpeningQuestRuntime.ApplyPlayerControlPolicy(
+                loaded.Player,
+                completedOpening.PlayerControls,
+                true);
         if (usesCampaignState)
             loaded.Session.SetGameplayUiVisible(
                 restoredOpening is not null &&
@@ -1311,7 +1321,7 @@ public partial class RuntimeCoordinator : Node3D
             status = "pass",
             configurationSchema = RuntimeConfiguration.ExpectedSchema,
             configurationSha256 = _configuration.Sha256,
-            renderer = "forward_plus",
+            renderer = RenderingServer.GetCurrentRenderingMethod().ToString(),
             scene = scenePath,
             cellFormId = loaded.FormId,
             cellEditorId = loaded.EditorId,
@@ -1451,7 +1461,7 @@ public partial class RuntimeCoordinator : Node3D
         {
             schema = "opennv-fo1-hex-runtime/v1",
             status = "pass",
-            renderer = "forward_plus",
+            renderer = RenderingServer.GetCurrentRenderingMethod().ToString(),
             scene = loaded.ScenePath,
             sceneSha256 = loaded.SceneSha256,
             grid = new

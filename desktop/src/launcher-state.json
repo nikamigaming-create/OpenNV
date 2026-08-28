@@ -22,6 +22,7 @@
       "ttw": false,
       "openXr": false,
       "assetRequirement": "Licensed Fallout data",
+      "desktopRenderingMethod": "gl_compatibility",
       "defaultPresentation": "hex-tactical",
       "presentations": ["hex-tactical", "first-person"],
       "pendingPresentations": ["openxr"]

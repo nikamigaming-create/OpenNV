@@ -179,6 +179,49 @@ Private evidence: `fo1-complete-combat-showcase-20260827-r2`.
   `4cbd16c5dcff92e2f46de33f262c46f86214d1a68e4f19e81ceade2149fef282`
 - Windows app control, foreground activation, and injected input: all `false`
 
+## Current user-supplied visual baseline (2026-08-27)
+
+Private evidence: `Fallout1-3D-HUD-WEAPON-FIX-MOBILE.mp4`.
+
+- H.264 Main + stereo AAC-LC, 854x480, 30 fps, limited-range BT.709
+  `yuv420p`; 3,088 frames, 102.933333 seconds, 3,399,103 bytes
+- SHA-256:
+  `6a917fc1e10219527d1d16c5f67b723ec64b63dc3efc0986a4a7e29b5ca3f546`
+- visibly covers the NIKAMI character editor, live first-person cave traversal,
+  10mm and knife HUD states, third-person shoulder presentation, AP combat,
+  and the 3D hex-tactical grid in an apparently continuous sequence
+- it does not show the Pip-Boy open, so it is not Pip-Boy visual evidence even
+  though the deterministic demo reports one programmatic open/close
+
+This recording is the current visual regression baseline supplied by the user;
+it is not committed or packaged. Its source state/report identity has not been
+recovered, so its renderer is also unproven and it does not supersede the
+hash-bound `v6` promotion above.
+
+## GL launcher recovery acceptance (2026-08-28)
+
+The ordinary desktop launcher was visually followed through Fallout 1 Hex,
+the OpenNV Fallout menu, the owned Max Stone picker, the owned Overseer movie,
+the visible Skip action, the black-frame handoff, and live V13ENT Hex gameplay.
+The same registered cache was then run under an explicit
+`--rendering-method gl_compatibility` deterministic `v6` sequence:
+
+- exit code `0`; report schema/status `opennv-fo1-new-game-demo/v6` / `pass`
+- report/save SHA-256:
+  `9f973f37241b8c636f2046a51f0340de450b4926abf845474147b78de40dbd1e` /
+  `3b666ccfda629f7602556a63f6138f9a9492f09c3e55dc7e2e6986607315eb65`
+- exact sequence includes first-person Vault look-back and movement, FPS pistol
+  and knife kills, third-person shoulder movement, tactical pistol and knife
+  kills, one reload, and the wide tactical map tour
+- result: four kills, two FPS kills, three ranged attempts/two hits, four melee
+  attempts/four hits, one reload, player alive
+
+This closes functional Hex/FPS/shoulder admission for the compatibility
+renderer. Godot reports that volumetric fog and fog-volume shaders are
+unsupported under GL, so the recovery is not visual parity with the supplied
+baseline or the prior Forward+ captures. The transient report/save remained
+private and were removed after hashing.
+
 ## First-person final-frame handoff evidence
 
 Private evidence: `fo1-v13ent-first-person-opening-20260825-r10-watched`.
