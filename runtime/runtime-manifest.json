@@ -62,7 +62,7 @@
         "arroyo": {
           "ready": false,
           "requiresProfile": "opennv-fo2-owned-profile/v1",
-          "message": "The owned Fallout 2 DAT2 install can be registered, but no MAP/PRO/FRM character flow or Arroyo Temple of Trials runtime slice is transported. Hex, FPS, and OpenXR remain disabled."
+          "message": "The owned Fallout 2 DAT2 install, exact Map 126 source graph, selective FRM cache, and headless Godot 3D scene construction are available. No rendered or interactive character/gameplay/save adapter is ready, so Hex, FPS, and OpenXR remain disabled."
         }
       }
     },
@@ -86,7 +86,7 @@
         "vanilla": {
           "ready": true,
           "requiresProfile": "opennv-owned-game-profile/v1",
-          "message": "Launcher-capable with the locally registered Fallout 3 GOTY profile. This bounded route opens a profile-backed menu, plays the locally transcoded and hash-verified owned intro, converges Escape and Skip on the owned CG00 sex/name path, exposes source-backed playable race plus sex-aware hair/eye choices, persists the selected FaceGen defaults at stage 62, and stops before CG00PlayerSection4 because player-package execution and Vault 101 world loading are not connected. The texture preview is not a 3D face render."
+          "message": "Launcher-capable with the locally registered Fallout 3 GOTY profile. This bounded route opens a profile-backed menu, plays the locally transcoded and hash-verified owned intro, converges Escape and Skip on the owned CG00 sex/name path, exposes source-backed playable race plus sex-aware hair/eye choices, persists the selected FaceGen defaults and activates the owned CG00PlayerSection4 package at stage 62. KF playback, stage-65 parent race/FaceGen commands, and Vault 101 world loading are not connected. The texture preview is not a 3D face render."
         }
       }
     }

@@ -450,7 +450,24 @@ class CellCatalogTest(unittest.TestCase):
             "outside-recipe",
         )
 
-        exterior_recipe = load_spatial_recipe("goodsprings-actor-review-background-v1")
+        exterior_recipe = load_spatial_recipe("goodsprings-doc-exterior-active-set-v1")
+        self.assertEqual(exterior_recipe["editorId"], "Goodsprings")
+        self.assertEqual(exterior_recipe["cellFormId"], "000daebb")
+        self.assertEqual(exterior_recipe["entryDoorReferenceFormId"], "00103e69")
+        self.assertEqual(exterior_recipe["reciprocalDoorReferenceFormId"], "00103e61")
+        self.assertEqual(
+            exterior_recipe["streaming"],
+            {
+                "mode": "retail-ini",
+                "loadedGridDiameter": 5,
+                "source": {
+                    "file": "Fallout_default.ini",
+                    "sha256": "a701c3a96af26f83ba6399b4a579af59fa075868949519f4dec45bf47bf7f95d",
+                },
+                "section": "General",
+                "key": "uGridsToLoad",
+            },
+        )
         self.assertEqual(
             reference_selection_reason(
                 BaseObject(5, "SCOL", "SCOLgsHouse02", "scol\\scolgshouse02.nif"),

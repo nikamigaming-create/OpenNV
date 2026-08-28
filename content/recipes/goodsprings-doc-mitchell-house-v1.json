@@ -14,7 +14,7 @@
   "actorRecipes": [
     "goodsprings-doc-mitchell-actor-v1"
   ],
-  "linkedExteriorRecipe": "goodsprings-actor-review-background-v1",
+  "linkedExteriorRecipe": "goodsprings-doc-exterior-active-set-v1",
   "selection": {
     "modelPrefixes": [],
     "includeBaseRecordTypes": [

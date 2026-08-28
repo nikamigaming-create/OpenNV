@@ -37,20 +37,26 @@ capabilities, campaign readiness, launch eligibility, and platform executable.
 The launcher never infers playability from a folder name or a bridge script.
 
 The checked-in runtime declares the New Vegas owned menu/intro/Doc Mitchell
-route, the bounded Fallout 1 V13ENT Hex/FPS route, and the bounded Fallout 3
-owned-profile menu/intro/CG00 sex/name route. Fallout 2 is a fourth visible
-game card whose owned DAT2 installation can be registered, but Hex, FPS, and VR
-are all disabled because no Fallout 2 runtime variant exists. The Fallout 3
+house route plus its production Goodsprings active set and reciprocal Doc
+Mitchell house/exterior exit, the bounded Fallout 1 Vault 13/V13ENT Hex/FPS
+route, and the bounded Fallout 3 owned-profile menu/intro/CG00 route through
+stage 62. Fallout 2 is a
+fourth visible game card whose owned DAT2 installation and exact Map 126 source
+graph can be admitted, but Hex, FPS, and VR are all disabled because no Fallout
+2 rendered or interactive runtime presentation exists; the bounded exact Map
+126 Godot scene-construction proof is not a launcher-ready mode. The Fallout 3
 intro is converted locally to a hash-verified Theora cache during profile
 registration; Escape and the visible Skip action enter the same CG00 state.
-Fallout 1 remains disabled
+Fallout 1 Hex/FPS remain disabled
 until the player uses **Set up Fallout 1** to select a generated
 `hex-scene.json` and `character-start.json`; the launcher validates their
 schemas and character-contract hash, stores only local paths under its user-data
 folder, and supplies the exact runtime arguments plus an isolated Vault Dweller
-save path. Fallout 3 is enabled by its registered owned profile, while TTW,
-JAM, Fallout 1 OpenXR, Fallout 3 stage-60 appearance, and full-campaign
-readiness stay false.
+save path. The Fallout 1 OpenXR adapter has simulator coverage but remains
+launcher-disabled and has no physical-headset acceptance. Fallout 3 is enabled
+by its registered owned profile only through stage 62; no Vault 101 runtime is
+present. TTW runtime support is absent, JAM remains dependency- and
+portable-semantic-gated, and every full-campaign readiness claim stays false.
 
 Fallout 2 profiles are generated with `content/tools/fo2_profile.py` or
 `scripts/Register-OpenNVFallout2.ps1`. The profile hashes `master.dat`,
@@ -87,11 +93,13 @@ converge on the same next state; skipping may not bypass character or campaign
 initialization. Continue/Load restore the profile's canonical save. A proof-only
 command-line bypass does not make a route launcher-ready.
 
-Fallout 1 then selects hex-tactical or FPS presentation over one authoritative
-Vault Dweller state. Fallout 2 visibly lists Hex, FPS, and VR, but keeps every
-choice disabled until the first authored runtime slice exists. New Vegas and
-Fallout 3 use separate profiles. TTW uses a fifth combined-world profile and
-requires a new character.
+Fallout 1 selects Hex Tactical or FPS over one authoritative Vault Dweller
+state; its VR option remains disabled. Fallout 2 visibly lists Hex, FPS, and VR
+but keeps every choice disabled. New Vegas exposes its original flat route and
+an experimental software-gated OpenXR route; it has no Hex adapter and OpenXR
+is not physical-headset accepted. Fallout 3 currently exposes only the flat
+menu/CG00 profile and has no Vault 101 world FPS, Hex, or VR runtime. TTW's
+separate combined-world profile can be registered but cannot launch.
 
 Presentation is selected independently from campaign and mod profile. Flat mode
 launches Godot with `--xr-mode off`; experimental OpenXR mode launches with

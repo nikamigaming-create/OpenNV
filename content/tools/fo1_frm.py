@@ -37,8 +37,7 @@ FO1_FRM_FORMAT_CONTRACT_INTEGER_8 = 8
 
 
 
-def palette_rgba(path: Path) -> list[tuple[int, int, int, int]]:
-    data = path.read_bytes()
+def palette_rgba_bytes(data: bytes) -> list[tuple[int, int, int, int]]:
     if len(data) < FO1_FRM_FORMAT_CONTRACT_INTEGER_768:
         raise ValueError("Fallout palette requires at least 768 bytes")
     values = data[:FO1_FRM_FORMAT_CONTRACT_INTEGER_768]
@@ -55,6 +54,73 @@ def palette_rgba(path: Path) -> list[tuple[int, int, int, int]]:
             red, green, blue = 0, 0, 0
         colors.append((red, green, blue, 0 if index == 0 else FO1_FRM_FORMAT_CONTRACT_INTEGER_255))
     return colors
+
+
+def palette_rgba(path: Path) -> list[tuple[int, int, int, int]]:
+    return palette_rgba_bytes(path.read_bytes())
+
+
+def decode_frm_frame(
+    data: bytes,
+    colors: list[tuple[int, int, int, int]],
+    rotation: int,
+    frame_index: int,
+) -> dict[str, object]:
+    """Decode one explicitly admitted frame without materializing other frames."""
+    if len(colors) != FO1_FRM_FORMAT_CONTRACT_INTEGER_256:
+        raise ValueError("Fallout FRM decoding requires exactly 256 palette colors")
+    if len(data) < FO1_FRM_FORMAT_CONTRACT_HEX_3E:
+        raise ValueError("FRM header is truncated")
+    version, fps, action_frame, frame_count = struct.unpack_from(">IHHH", data, 0)
+    if version != 4 or frame_count <= 0:
+        raise ValueError(f"unsupported FRM header: version={version} frames={frame_count}")
+    if not 0 <= rotation < FO1_FRM_FORMAT_CONTRACT_INTEGER_6:
+        raise ValueError(f"FRM rotation is outside 0..5: {rotation}")
+    if not 0 <= frame_index < frame_count:
+        raise ValueError(f"FRM frame is outside 0..{frame_count - 1}: {frame_index}")
+    x_offsets = struct.unpack_from(">6h", data, FO1_FRM_FORMAT_CONTRACT_HEX_0A)
+    y_offsets = struct.unpack_from(">6h", data, FO1_FRM_FORMAT_CONTRACT_HEX_16)
+    data_offsets = struct.unpack_from(">6I", data, FO1_FRM_FORMAT_CONTRACT_HEX_22)
+    frame_area_size = struct.unpack_from(">I", data, FO1_FRM_FORMAT_CONTRACT_HEX_3A)[0]
+    frame_area_end = (
+        len(data)
+        if frame_area_size == 0
+        else min(len(data), FO1_FRM_FORMAT_CONTRACT_HEX_3E + frame_area_size)
+    )
+    cursor = FO1_FRM_FORMAT_CONTRACT_HEX_3E + data_offsets[rotation]
+    for current_index in range(frame_index + 1):
+        if cursor + FO1_FRM_FORMAT_CONTRACT_INTEGER_12 > frame_area_end:
+            raise ValueError("FRM frame header escapes frame area")
+        width, height, size, x, y = struct.unpack_from(">HHIhh", data, cursor)
+        cursor += FO1_FRM_FORMAT_CONTRACT_INTEGER_12
+        if width <= 0 or height <= 0 or size != width * height or cursor + size > frame_area_end:
+            raise ValueError("FRM frame dimensions or payload are invalid")
+        if current_index == frame_index:
+            indexes = data[cursor : cursor + size]
+            rgba = bytearray(size * 4)
+            for pixel_index, palette_index in enumerate(indexes):
+                rgba[pixel_index * 4 : pixel_index * 4 + 4] = bytes(colors[palette_index])
+            return {
+                "version": version,
+                "fps": fps or FO1_FRM_FORMAT_CONTRACT_INTEGER_10,
+                "storedFps": fps,
+                "actionFrame": action_frame,
+                "framesPerDirection": frame_count,
+                "frameAreaSize": frame_area_size,
+                "rotation": rotation,
+                "directionOffset": [x_offsets[rotation], y_offsets[rotation]],
+                "dataOffset": data_offsets[rotation],
+                "frame": {
+                    "index": frame_index,
+                    "width": width,
+                    "height": height,
+                    "x": x,
+                    "y": y,
+                    "image": Image.frombytes("RGBA", (width, height), bytes(rgba)),
+                },
+            }
+        cursor += size
+    raise AssertionError("admitted FRM frame loop did not return")
 
 
 def decode_frm(data: bytes, colors: list[tuple[int, int, int, int]]) -> dict[str, object]:

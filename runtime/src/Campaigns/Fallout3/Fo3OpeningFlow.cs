@@ -340,6 +340,7 @@ internal sealed record Fo3OwnedProfile(
     int AppearanceStage,
     string AppearanceCommand,
     Fo3AppearanceContract Appearance,
+    Fo3PlayerPackageTransition Section4Transition,
     string MainMenuMusicPath,
     string IntroVideoPath,
     Color InterfaceColor)
@@ -363,6 +364,7 @@ internal sealed record Fo3OwnedProfile(
         if (!RequiredBoolean(capabilities, "characterSelectionContractResolved") ||
             !RequiredBoolean(capabilities, "cg00SexAndNameRuntimeReady") ||
             !RequiredBoolean(capabilities, "cg00AppearanceRuntimeReady") ||
+            !RequiredBoolean(capabilities, "cg00Section4PackageRuntimeReady") ||
             !RequiredBoolean(capabilities, "mainMenuRuntimeReady") ||
             !RequiredBoolean(capabilities, "introVideoRuntimeReady") ||
             !RequiredBoolean(capabilities, "runtimeBootReady"))
@@ -378,6 +380,10 @@ internal sealed record Fo3OwnedProfile(
         var name = RequiredObject(selection, "name");
         var appearance = RequiredObject(selection, "appearance");
         var appearanceContract = Fo3AppearanceContract.Load(appearance);
+        var section4Transition = Fo3PlayerPackageTransition.Load(
+            RequiredObject(selection, "section4Transition"),
+            appearanceContract.AcceptedStage,
+            appearanceContract.AcceptedStageCommand);
         var nameStage = RequiredInteger(name, "stage");
         var appearanceStage = RequiredInteger(appearance, "stage");
         var quest = RequiredArray(opening, "quests")
@@ -433,6 +439,7 @@ internal sealed record Fo3OwnedProfile(
             appearanceStage,
             RequiredString(appearance, "command"),
             appearanceContract,
+            section4Transition,
             RequiredString(mainMenuMusic, "source"),
             RequiredString(runtimeIntroVideo, "output"),
             interfaceColor);
@@ -827,6 +834,12 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 RequiredSaveString(faceGen, "symmetricTextureSha256") !=
                     selection.Sex.FaceGen.SymmetricTextureSha256)
                 throw new InvalidOperationException("Saved Fallout 3 FaceGen defaults differ from the profile.");
+            if (root.TryGetProperty("playerPackage", out var savedPackage))
+            {
+                _profile.Section4Transition.ValidateSavedState(savedPackage);
+                ShowSection4PackageActive(playerName, _selectedSex, selection);
+                return;
+            }
             ShowAppearanceAccepted(playerName, _selectedSex, selection);
         }
         catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
@@ -942,9 +955,17 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"NEXT OWNED COMMAND: {_profile.Appearance.AcceptedStageCommand}",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         _content.AddChild(Label(
-            "The owned CG00 appearance choice is saved. Execution stops before the Section 4 " +
-            "player package because its package and scene runtime are not implemented.",
+            "The owned CG00 appearance choice is saved. The next action activates the exact " +
+            "Section 4 player package while keeping CG00 at stage 62.",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var activate = Button("CONTINUE CG00");
+        activate.Pressed += () =>
+        {
+            var package = _profile.Section4Transition.Activate();
+            PersistSection4Package(playerName, sex, selection, package);
+            ShowSection4PackageActive(playerName, sex, selection);
+        };
+        _content.AddChild(activate);
         var menu = Button("MAIN MENU");
         menu.Pressed += () =>
         {
@@ -956,7 +977,47 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"OPENNV_FO3_CG00_APPEARANCE_ACCEPTED profile={_profile.ProfileId} " +
             $"stage={_profile.Appearance.AcceptedStage} race={selection.Race.FormId} " +
             $"hair={selection.Hair.FormId} eyes={selection.Eyes.FormId} " +
-            $"next={_profile.Appearance.AcceptedStageCommand} packageRuntimeReady=0");
+            $"next={_profile.Appearance.AcceptedStageCommand} packageRuntimeReady=1");
+    }
+
+    private void ShowSection4PackageActive(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection)
+    {
+        var package = _profile.Section4Transition.Activate();
+        ClearContent();
+        _content.AddChild(Label(
+            $"{_profile.QuestEditorId}  •  STAGE {_profile.Appearance.AcceptedStage}",
+            Fo3OpeningFlowNumericContracts.TitleFontPixels));
+        _content.AddChild(Label(
+            $"{playerName}  •  {sex.Label}  •  {selection.Race.Label}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"ACTIVE PLAYER PACKAGE: {package.EditorId} ({package.FormId})",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"OWNED LOCATION REFERENCE: {package.LocationReferenceFormId}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"NEXT OWNED COMMAND: {package.NextCommand}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        _content.AddChild(Label(
+            $"Execution remains at stage {_profile.Appearance.AcceptedStage}. Stage {package.NextStage} " +
+            "requires the owned parent MatchRace/MatchFaceGeometry commands, which are not yet supported.",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var menu = Button("MAIN MENU");
+        menu.Pressed += () =>
+        {
+            StartMenuMusicAfterStop();
+            ShowMainMenu();
+        };
+        _content.AddChild(menu);
+        GD.Print(
+            $"OPENNV_FO3_CG00_SECTION4_ACTIVE profile={_profile.ProfileId} " +
+            $"stage={_profile.Appearance.AcceptedStage} package={package.FormId} " +
+            $"location={package.LocationReferenceFormId} nextStage={package.NextStage} " +
+            $"advanced=0 blocker={package.Blocker}");
     }
 
     private void StartMenuMusicAfterStop()
@@ -1042,6 +1103,54 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 },
             },
             nextCommand = _profile.Appearance.AcceptedStageCommand,
+            completed = false,
+        };
+        WriteState(state);
+    }
+
+    private void PersistSection4Package(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3ActivePlayerPackage package)
+    {
+        var state = new
+        {
+            schema = "opennv-fo3-opening-character/v2",
+            profileId = _profile.ProfileId,
+            profileSha256 = _profile.Sha256,
+            questEditorId = _profile.QuestEditorId,
+            questFormId = _profile.QuestFormId,
+            stage = _profile.Appearance.AcceptedStage,
+            playerName,
+            sex = new { label = sex.Label, engineSex = sex.EngineSex },
+            appearance = new
+            {
+                sourceContract = Fo3AppearanceContract.ExpectedSchema,
+                adultRaceFormId = selection.Race.FormId,
+                childRaceFormId = selection.Race.ChildRaceFormId,
+                hairFormId = selection.Hair.FormId,
+                eyesFormId = selection.Eyes.FormId,
+                faceGen = new
+                {
+                    symmetricGeometrySha256 = selection.Sex.FaceGen.SymmetricGeometrySha256,
+                    asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
+                    symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
+                },
+            },
+            playerPackage = new
+            {
+                schema = "opennv-fo3-player-package-state/v1",
+                active = true,
+                formId = package.FormId,
+                editorId = package.EditorId,
+                locationReferenceFormId = package.LocationReferenceFormId,
+                idleFormIds = package.IdleFormIds,
+                nextCommand = package.NextCommand,
+                nextStage = package.NextStage,
+                blocker = package.Blocker,
+            },
+            nextCommand = package.NextCommand,
             completed = false,
         };
         WriteState(state);

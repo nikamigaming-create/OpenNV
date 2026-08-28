@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Godot;
 
-namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
+namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record OpeningCampaignState(
     string Schema,

@@ -90,7 +90,13 @@
       "nameStage": 40,
       "appearanceStage": 60,
       "appearanceMenuEnteredStage": 61,
-      "appearanceAcceptedStage": 62
+      "appearanceAcceptedStage": 62,
+      "section4Package": {
+        "editorId": "CG00PlayerSection4",
+        "formId": "0006a818",
+        "locationReferenceEditorId": "CG00PlayerStartMarker",
+        "locationReferenceFormId": "00039562"
+      }
     },
     "appearanceUi": {
       "document": "menus\\chargen\\race_sex_menu.xml",

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Godot;
 
-namespace OpenNV.Runtime;
+namespace OpenNV.Runtime.Gameplay.State;
 
 internal partial class GameplaySession : Node
 {

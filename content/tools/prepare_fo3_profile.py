@@ -41,6 +41,8 @@ QUEST_RECORD = "QUST"
 SCRIPT_RECORD = "SCPT"
 MESSAGE_RECORD = "MESG"
 PLUGIN_HEADER_RECORD = "TES4"
+PACKAGE_RECORD = "PACK"
+IDLE_RECORD = "IDLE"
 PLAY_BINK_PATTERN = re.compile(r'\bplayBink\s+"(?P<path>[^"]+\.bik)"', re.IGNORECASE)
 SEX_CHANGE_PATTERN = re.compile(
     r"\b(?:if|elseif)\s+button\s*==\s*(?P<index>\d+)\s+"
@@ -51,6 +53,28 @@ ADD_SCRIPT_PACKAGE_PATTERN = re.compile(
     r"\bplayer\.addScriptPackage\s+(?P<package>[A-Za-z_][A-Za-z0-9_]*)\b",
     re.IGNORECASE,
 )
+CG00_NEXT_STAGE_PATTERN = re.compile(
+    r"\bif\s+getStage\s+CG00\s*>=\s*(?P<source>\d+)\s*&&\s*"
+    r"GetStageDone\s+CG00\s+(?P<target>\d+)\s*==\s*0\b"
+    r"(?P<body>.*?)\bendif\b",
+    re.IGNORECASE | re.DOTALL,
+)
+SET_CG00_STAGE_PATTERN = re.compile(r"\bsetstage\s+CG00\s+(?P<stage>\d+)\b", re.IGNORECASE)
+MATCH_RACE_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.MatchRace\s+player$",
+    re.IGNORECASE,
+)
+MATCH_FACE_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.MatchFaceGeometry\s+"
+    r"player\s+(?P<template>[A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+PACKAGE_DATA_BYTES = 12
+PACKAGE_LOCATION_BYTES = 12
+PACKAGE_IDLE_FLAG_BYTES = frozenset({1, 4})
+PACKAGE_IDLE_COUNT_BYTES = frozenset({1, 4})
+PACKAGE_IDLE_TIMER_BYTES = 4
+PACKAGE_EVENT_NAMES = {"POBA": "begin", "POEA": "end", "POCA": "change"}
 RACE_DATA_BYTES = 36
 RACE_FLAGS_OFFSET = 32
 RACE_PLAYABLE_FLAG = 0x01
@@ -546,11 +570,253 @@ def _script_source(record: object) -> str:
     return sources[0]
 
 
+def _source_commands(source: str) -> list[str]:
+    return [
+        command
+        for raw_line in source.splitlines()
+        if (command := raw_line.split(";", 1)[0].strip())
+    ]
+
+
+def _compile_cg00_section4_transition(
+    records: tuple[object, ...],
+    selection: dict[str, object],
+    accepted_stage: int,
+    accepted_source: str,
+    accepted_stage_sources: dict[int, list[str]],
+) -> dict[str, object]:
+    package_names = [
+        match.group("package")
+        for match in ADD_SCRIPT_PACKAGE_PATTERN.finditer(accepted_source)
+    ]
+    if len(package_names) != 1:
+        raise ValueError("Fallout 3 owned appearance acceptance package is ambiguous")
+    package_name = package_names[0]
+    package_recipe = dict(selection["section4Package"])
+    if package_name.casefold() != str(package_recipe["editorId"]).casefold():
+        raise ValueError("Fallout 3 CG00 Section 4 package identity differs")
+
+    package_records = [
+        record
+        for record in records
+        if record.signature == PACKAGE_RECORD
+        and (_editor_id(record) or "").casefold() == package_name.casefold()
+    ]
+    if len(package_records) != 1:
+        raise ValueError("Fallout 3 CG00 Section 4 package does not resolve uniquely")
+    package = package_records[0]
+    expected_package_form = int(str(package_recipe["formId"]), FORM_ID_RADIX)
+    if package.form_id != expected_package_form:
+        raise ValueError("Fallout 3 CG00 Section 4 package FormID differs")
+
+    package_data = _single_subrecord(package, "PKDT")
+    if len(package_data) != PACKAGE_DATA_BYTES:
+        raise ValueError("Fallout 3 CG00 Section 4 PKDT layout is unsupported")
+    flags, package_type, _unused, procedure_flags, type_flags, _unknown = struct.unpack(
+        "<IBBHHH", package_data
+    )
+    location_data = _single_subrecord(package, "PLDT")
+    if len(location_data) != PACKAGE_LOCATION_BYTES:
+        raise ValueError("Fallout 3 CG00 Section 4 PLDT layout is unsupported")
+    location_type, location_form_id, radius = struct.unpack("<III", location_data)
+    expected_location_form = int(
+        str(package_recipe["locationReferenceFormId"]), FORM_ID_RADIX
+    )
+    if location_form_id != expected_location_form:
+        raise ValueError("Fallout 3 CG00 Section 4 location reference differs")
+
+    idle_flags_data = _single_subrecord(package, "IDLF")
+    idle_count_data = _single_subrecord(package, "IDLC")
+    idle_timer_data = _single_subrecord(package, "IDLT")
+    if (
+        len(idle_flags_data) not in PACKAGE_IDLE_FLAG_BYTES
+        or len(idle_count_data) not in PACKAGE_IDLE_COUNT_BYTES
+        or len(idle_timer_data) != PACKAGE_IDLE_TIMER_BYTES
+    ):
+        raise ValueError("Fallout 3 CG00 Section 4 idle layout is unsupported")
+    idle_flags = int.from_bytes(idle_flags_data, "little")
+    idle_count = int.from_bytes(idle_count_data, "little")
+    idle_timer = struct.unpack("<f", idle_timer_data)[0]
+    if not math.isfinite(idle_timer):
+        raise ValueError("Fallout 3 CG00 Section 4 idle timer is invalid")
+    idle_form_ids = _form_id_list(package, "IDLA")
+    if idle_count != len(idle_form_ids) or idle_count == 0:
+        raise ValueError("Fallout 3 CG00 Section 4 idle count differs")
+
+    idle_records = {
+        record.form_id: record for record in records if record.signature == IDLE_RECORD
+    }
+
+    def idle_row(form_id: int) -> dict[str, object]:
+        idle = idle_records.get(form_id)
+        if idle is None:
+            raise ValueError(
+                f"Fallout 3 CG00 Section 4 IDLE does not resolve: {_form_id(form_id)}"
+            )
+        models = _text_values(idle, "MODL")
+        if len(models) != 1 or not models[0].casefold().endswith(".kf"):
+            raise ValueError("Fallout 3 CG00 Section 4 IDLE model is unsupported")
+        return {
+            "formId": _form_id(form_id),
+            "editorId": _editor_id(idle),
+            "modelPath": canonical_member_path(f"meshes\\{models[0]}"),
+            "recordSha256": hashlib.sha256(idle.data).hexdigest(),
+        }
+
+    events: dict[str, dict[str, object] | None] = {}
+    pending_event: str | None = None
+    for subrecord in iter_subrecords(package):
+        if subrecord.signature in PACKAGE_EVENT_NAMES:
+            pending_event = PACKAGE_EVENT_NAMES[subrecord.signature]
+            if pending_event in events:
+                raise ValueError("Fallout 3 CG00 Section 4 package event is duplicated")
+        elif subrecord.signature == "INAM" and pending_event is not None:
+            if len(subrecord.data) != FORM_ID_BYTES:
+                raise ValueError("Fallout 3 CG00 Section 4 package event IDLE is invalid")
+            event_form_id = struct.unpack("<I", subrecord.data)[0]
+            events[pending_event] = idle_row(event_form_id) if event_form_id else None
+            pending_event = None
+    if pending_event is not None or set(events) != set(PACKAGE_EVENT_NAMES.values()):
+        raise ValueError("Fallout 3 CG00 Section 4 package events are incomplete")
+
+    trigger_matches: list[tuple[object, re.Match[str]]] = []
+    trigger_threshold_stage = int(selection["appearanceStage"])
+    for script in (record for record in records if record.signature == SCRIPT_RECORD):
+        for match in CG00_NEXT_STAGE_PATTERN.finditer(_script_source(script)):
+            if int(match.group("source")) != trigger_threshold_stage:
+                continue
+            stage_commands = [
+                int(stage_match.group("stage"))
+                for stage_match in SET_CG00_STAGE_PATTERN.finditer(match.group("body"))
+            ]
+            if stage_commands == [int(match.group("target"))]:
+                trigger_matches.append((script, match))
+    if len(trigger_matches) != 1:
+        raise ValueError("Fallout 3 CG00 post-appearance stage trigger is ambiguous")
+    trigger_script, trigger = trigger_matches[0]
+    target_stage = int(trigger.group("target"))
+    target_sources = accepted_stage_sources.get(target_stage, [])
+    if not target_sources:
+        raise ValueError("Fallout 3 CG00 post-appearance stage result is absent")
+    target_source = "\n".join(target_sources)
+    unsupported_commands = []
+    for command in _source_commands(target_source):
+        if match := MATCH_RACE_PATTERN.fullmatch(command):
+            unsupported_commands.append(
+                {"kind": "matchRace", "subject": match.group("subject"), "target": "player"}
+            )
+            continue
+        if match := MATCH_FACE_PATTERN.fullmatch(command):
+            unsupported_commands.append(
+                {
+                    "kind": "matchFaceGeometry",
+                    "subject": match.group("subject"),
+                    "target": "player",
+                    "template": match.group("template"),
+                }
+            )
+            continue
+        raise ValueError(
+            f"Fallout 3 CG00 stage {target_stage} uses an unsupported command: {command}"
+        )
+    if not unsupported_commands:
+        raise ValueError("Fallout 3 CG00 post-appearance stage result is empty")
+
+    return {
+        "schema": "opennv-fo3-cg00-player-package-transition/v1",
+        "status": "source-backed-package-activation",
+        "sourceStage": accepted_stage,
+        "command": f"player.addScriptPackage {package_name}",
+        "package": {
+            "formId": _form_id(package.form_id),
+            "editorId": package_name,
+            "recordSha256": hashlib.sha256(package.data).hexdigest(),
+            "flags": flags,
+            "type": package_type,
+            "procedureFlags": procedure_flags,
+            "typeSpecificFlags": type_flags,
+            "location": {
+                "type": location_type,
+                "referenceFormId": _form_id(location_form_id),
+                "referenceEditorId": str(package_recipe["locationReferenceEditorId"]),
+                "radius": radius,
+            },
+            "idleSelection": {
+                "flags": idle_flags,
+                "count": idle_count,
+                "timerSeconds": idle_timer,
+                "idles": [idle_row(form_id) for form_id in idle_form_ids],
+            },
+            "events": events,
+        },
+        "nextStageTrigger": {
+            "scriptEditorId": _editor_id(trigger_script),
+            "scriptFormId": _form_id(trigger_script.form_id),
+            "scriptSourceSha256": hashlib.sha256(
+                _script_source(trigger_script).encode("cp1252")
+            ).hexdigest(),
+            "condition": (
+                f"getStage CG00 >= {trigger_threshold_stage} && "
+                f"GetStageDone CG00 {target_stage} == 0"
+            ),
+            "thresholdStage": trigger_threshold_stage,
+            "command": f"setstage CG00 {target_stage}",
+            "targetStage": target_stage,
+        },
+        "nextStageResult": {
+            "stage": target_stage,
+            "stageSourceSha256": hashlib.sha256(target_source.encode("cp1252")).hexdigest(),
+            "commands": unsupported_commands,
+            "runtimeReady": False,
+            "blocker": "fo3-cg00-stage-65-parent-race-face-runtime-not-implemented",
+        },
+    }
+
+
+def _bind_cg00_package_animations(
+    transition: dict[str, object],
+    meshes_archive: BsaArchive,
+    meshes_archive_sha256: str,
+) -> None:
+    package = dict(transition["package"])
+    idle_selection = dict(package["idleSelection"])
+    events = dict(package["events"])
+    idle_rows = [
+        *list(idle_selection["idles"]),
+        *(row for row in events.values() if row is not None),
+    ]
+    assets: dict[str, dict[str, object]] = {}
+    for row in idle_rows:
+        idle = dict(row)
+        form_id = str(idle["formId"])
+        if form_id in assets:
+            continue
+        member = meshes_archive.extract(str(idle["modelPath"]))
+        assets[form_id] = {
+            **idle,
+            "sourceArchive": meshes_archive.archive.name,
+            "sourceArchiveSha256": meshes_archive_sha256,
+            "sourceBytes": len(member.data),
+            "sourceSha256": member.sha256,
+        }
+    package["animationSources"] = list(assets.values())
+    transition["package"] = package
+
+
 def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dict[str, object]], dict[str, object]]:
     records = tuple(
         iter_plugin_records(
             master,
-            frozenset({QUEST_RECORD, SCRIPT_RECORD, MESSAGE_RECORD, PLUGIN_HEADER_RECORD}),
+            frozenset(
+                {
+                    QUEST_RECORD,
+                    SCRIPT_RECORD,
+                    MESSAGE_RECORD,
+                    PLUGIN_HEADER_RECORD,
+                    PACKAGE_RECORD,
+                    IDLE_RECORD,
+                }
+            ),
         )
     )
     by_form = {record.form_id: record for record in records}
@@ -697,12 +963,13 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
     ):
         raise ValueError("Fallout 3 owned appearance menu convergence stages are absent")
     accepted_source = "\n".join(stage_sources[appearance_accepted_stage])
-    packages = [
-        match.group("package")
-        for match in ADD_SCRIPT_PACKAGE_PATTERN.finditer(accepted_source)
-    ]
-    if len(packages) != 1:
-        raise ValueError("Fallout 3 owned appearance acceptance package is ambiguous")
+    transition = _compile_cg00_section4_transition(
+        records,
+        selection,
+        appearance_accepted_stage,
+        accepted_source,
+        stage_sources,
+    )
 
     character_selection = {
         "questEditorId": selection_quest,
@@ -722,7 +989,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
             "command": "ShowRaceMenu",
             "menuEnteredStage": appearance_entered_stage,
             "acceptedStage": appearance_accepted_stage,
-            "acceptedStageCommand": f"player.addScriptPackage {packages[0]}",
+            "acceptedStageCommand": str(transition["command"]),
             "stageSourceSha256": {
                 str(stage): hashlib.sha256(
                     "\n".join(stage_sources[stage]).encode("cp1252")
@@ -734,6 +1001,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                 )
             },
         },
+        "section4Transition": transition,
     }
     return quest_rows, character_selection
 
@@ -881,6 +1149,15 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
 
     opening = dict(recipe["opening"])
     quests, character_selection = _quest_inventory(master, opening)
+    meshes_role = "meshes"
+    meshes_archive_path = archive_by_role[meshes_role]
+    section4_transition = dict(character_selection["section4Transition"])
+    _bind_cg00_package_animations(
+        section4_transition,
+        BsaArchive(meshes_archive_path),
+        next(str(row["sha256"]) for row in archives if row["role"] == meshes_role),
+    )
+    character_selection["section4Transition"] = section4_transition
     appearance_contract = _appearance_inventory(
         master,
         recipe,
@@ -999,11 +1276,12 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "characterSelectionContractResolved": True,
             "cg00SexAndNameRuntimeReady": True,
             "cg00AppearanceRuntimeReady": True,
+            "cg00Section4PackageRuntimeReady": True,
             "vault101BirthGraphCompiled": True,
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg00-stage-62-player-package-runtime-not-implemented",
+            "fo3-cg00-stage-65-parent-race-face-runtime-not-implemented",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
         ],

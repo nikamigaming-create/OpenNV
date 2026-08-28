@@ -5,6 +5,21 @@ Goodsprings, Fallout 3 CG00 character slices, and an asset-free Fallout 2
 Temple MAP/PRO/FRM source transport over registered DAT2 overlays
 profile; no full campaign**.
 
+The compact launcher exposes four core game cards. Fallout 1 has a bounded
+Godot Vault 13/V13ENT opening slice in Hex and FPS; its OpenXR adapter is
+simulator-only and launcher-disabled. Fallout 2 admits the owned Map 126
+MAP/PRO/FRM source graph and constructs its exact floor/object presentation in
+Godot's 3D hex space; no rendered, interactive, or launcher-ready Hex/FPS/VR mode exists.
+New Vegas owns its menu, skippable intro, Doc Mitchell house/state, and the
+production Goodsprings active set with the reciprocal Doc Mitchell
+house/exterior exit (`00103e61` ↔ `00103e69`); flat is
+launchable and OpenXR remains experimental with no physical-headset acceptance.
+Fallout 3 owns its menu and CG00 profile through stage 62 but has no Vault 101
+runtime. TTW runtime support is absent, and JAM remains dependency- and
+portable-semantic-gated. These routes consume the shared authoritative state in
+`runtime/src/Gameplay/State`; presentation does not fork inventory, quests,
+objectives, opening completion, or save identity.
+
 The active priority, full product definition, milestone sequence, and
 publication rules live in the canonical
 [whole-game delivery plan](whole-game-delivery-plan.md). This document owns
@@ -20,6 +35,8 @@ whole-game visual pass are defined in
 [whole-game actor and creature parity](whole-game-actor-creature-parity.md).
 The official-stack CELL/child/portal denominator and exact meaning of a working
 CELL are defined in [whole-game CELL parity](whole-game-cell-parity.md).
+
+## New Vegas owned-data world path
 
 ```mermaid
 flowchart LR
@@ -277,6 +294,7 @@ retail data, or promotion verdict.
 | `dat2_archive.py` | Indexed Fallout DAT2 member lookup, decompression, and hash identity | MAP/PRO/FRM semantics |
 | `fo2_profile.py` | Read-only Fallout 2 root-archive DAT2/index identity and source-only launcher profile | Member extraction, caches, runtime readiness, or playability |
 | `fo2_first_slice.py` | Effective patch/critter/master overlay resolution and exact asset-free Temple MAP header/elevation, entry marker, placed-object, PRO, and FRM identity manifest | Character creation, new-game executable policy, Godot loading, gameplay, saves, runtime readiness, or playability |
+| `prepare_fo2_temple_presentation.py` | Deterministic disposable local PNG cache for exact Map 126 floor/roof tile frames and MAP-admitted object frame/rotation pairs, with owned-palette and artifact provenance | Source selection, 3D substitution, Godot loading, gameplay, packaging, runtime readiness, or playability |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
 | `havok_collision_gltf.py` | Bounded authored packed triangles plus convex/list dynamic body, shape, mass, friction, bounce, damping and filter export | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
@@ -316,7 +334,7 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs` | Flow/configuration/command-contract parsing and fail-closed runtime validation | Command execution or save state |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningManifest.cs` | Owned New Vegas front-end manifest identity, hash verification, and typed menu/media contract | Menu rendering, command execution, or source compilation |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningQuestRuntime.cs` | Data-driven opening command interpreter, authored UI/dialogue/AI progression, checkpoint capture, and completion handoff | ESM/BSA parsing or guessed content identities |
-| `runtime/src/Campaigns/NewVegas/Opening/OpeningCampaignState.cs` | Versioned opening character/quest/world state validation and transform serialization | Flow progression or file I/O |
+| `runtime/src/Gameplay/State/OpeningCampaignState.cs` | Shared versioned opening character/quest/objective/inventory snapshot validation and transform serialization | Flow progression or file I/O |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningUiTheme.cs` | Owned opening bitmap-font and authored UI style construction | Manifest parsing, progression, or shared runtime theming |
 | `runtime/src/Campaigns/NewVegas/Opening/RetailOpening.cs` | Owned New Vegas main-menu and intro playback/skip presentation | Manifest parsing, gameplay progression, or campaign state |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
@@ -336,7 +354,8 @@ retail data, or promotion verdict.
 | `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
 | `PoolBallInstance.cs` | One authored dynamic convex body and its persisted motion/pocket state | Table rules or input |
 | `PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
-| `GameplaySession.cs` | Shared inventory/world delta, campaign-state envelope, pool snapshots, and atomic save/reload | Asset parsing or opening progression |
+| `runtime/src/Gameplay/State/GameplayStateNamespaceBridge.cs` | Compile-time namespace join between shared authoritative state and its campaign, world, and presentation consumers | Runtime behavior or gameplay abstractions |
+| `runtime/src/Gameplay/State/GameplaySession.cs` | Shared authoritative inventory/world delta, objective state, opening-completion envelope, pool snapshots, and atomic save/reload | Asset parsing or opening progression |
 | `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
 | `DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
 | `FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |
@@ -364,11 +383,15 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout1/Fo1HexCapture.cs` | Native V13ENT UI/environment frames, metrics, hashes, and no-host-control record | Gameplay or parity verdicts |
 | `runtime/src/Campaigns/Fallout1/Fo1HexDemo.cs` | Deterministic loading/player/door/movement/target/attack/turn video sequence and report | Host input injection, gameplay authority, or parity verdicts |
 | `runtime/src/Campaigns/Fallout1/Fo1HexVisuals.cs` | Procedural selection/path marker mesh and material primitives | Grid identity, pathfinding, or source art |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TemplePresentationContract.cs` | Full cache/source/profile/recipe and PNG identity validation for the admitted Map 126 presentation | DAT2 parsing, invented placements, gameplay, or runtime readiness |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, and MAP-header entry marker in Godot's 3D hex coordinate space | Collision, scripts, character creation, interaction, or playability |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference scene-construction report | Rendered-frame, interaction, parity, or launcher claims |
 | `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
 | `runtime/src/Compatibility/Jam/JamJvsSprintContract.cs` | Hash-bound transport and validation of JAM 4.6 JVS hold-to-sprint settings | Native DLL loading, xNVSE interpretation, or complete JAM compatibility |
 | `prepare_fo3_profile.py` / `prepare_fo3_opening_slice.py` | Read-only Fallout 3 GOTY profile, CG00/Vault 101 source graph, playable race and sex-aware hair/eye inventory, Player-plus-RACE FaceGen defaults, and hash-bound local manifest generation | Godot nodes, runtime progression, 3D FaceGen rendering, or full-opening claims |
 | `runtime/src/Campaigns/Fallout3/Fallout3NamespaceBridge.cs` | Compile-time namespace join between the Fallout 3 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
-| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified local intro playback/skip, CG00 sex/name UI, source-texture appearance selector, and atomic UI-agnostic stage-60/stage-62 character save | ESM/BSA parsing, 3D FaceGen actor rendering, player-package execution, Vault 101 scene compilation, or post-stage-62 interpretation |
+| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified intro playback/skip, CG00 sex/name/appearance UI, and atomic stage-60/stage-62 character plus active-package save | ESM/BSA parsing, KF playback, stage-65 race/face semantics, Vault 101 scene compilation, or world play |
+| `runtime/src/Campaigns/Fallout3/Fo3PlayerPackageTransition.cs` | Source-bound `CG00PlayerSection4` package, marker, idle/event animation identities, activation, and fail-closed stage-65 boundary | KF playback, package AI, `MatchRace`, `MatchFaceGeometry`, or stage advancement |
 | `ttw_profile.py` / `jam_profile.py` | Read-only installed-profile identity, dependency/master closure, hashes, save boundary, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
@@ -389,7 +412,8 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
 
-Implemented: direct owned ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 504
+Implemented in the separate saloon/exterior sandbox: direct owned
+ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 504
 enabled interior/exterior references, 228 visible/held/terrain assets, 379 textures, 476
 materials, 97 saloon pickups, five containers, 27 authored lights, full converted item rotations,
 supported authored packed-triangle collision,

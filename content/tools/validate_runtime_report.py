@@ -191,9 +191,24 @@ def validate_cell_report(
         traversal = report["doorTraversal"]
         _require(traversal is not None and traversal["status"] == "pass", "Traversal proof is missing")
         _require(bool(traversal["floorHit"]), "Floor proof did not hit authored collision")
+        floor_y = float(traversal["floorY"])
+        floor_normal = traversal["floorNormal"]
         _require(
-            abs(float(traversal["floorY"])) <= float(proof["spawnFloorToleranceMeters"]),
-            "Floor proof elevation exceeds policy",
+            bool(traversal["floorOwnedCellCollision"]),
+            "Floor proof did not hit collision owned by a loaded CELL",
+        )
+        _require(bool(traversal["floorWithinProbe"]), "Floor proof escaped its configured probe")
+        _require(
+            float(proof["spawnFloorRayEndMeters"]) - float(proof["spawnFloorToleranceMeters"])
+            <= floor_y
+            <= float(proof["spawnFloorRayStartMeters"]) + float(proof["spawnFloorToleranceMeters"]),
+            "Floor proof elevation escaped its configured probe",
+        )
+        _require(
+            bool(traversal["floorWalkable"])
+            and len(floor_normal) == 3
+            and float(floor_normal[1]) >= float(proof["walkableSurfaceNormalYMinimum"]),
+            "Floor proof did not hit a walkable surface",
         )
         _require(bool(traversal["closedHitDoor"]), "Closed door did not block the proof ray")
         _require(not bool(traversal["openHit"]), "Open door blocked the proof ray")

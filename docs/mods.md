@@ -1,9 +1,9 @@
 # Mod compatibility policy
 
-Mod compatibility is a post-gameplay promotion track. The base New Vegas
-sandbox and bounded Fallout 3 opening are playable, but the current Godot
-runtime does not claim the complete Fallout 3 campaign, TTW, JAM, or native
-extender-plugin compatibility.
+Mod compatibility is a post-gameplay promotion track. New Vegas has bounded
+opening and Goodsprings routes, while Fallout 3 stops at its owned menu/CG00
+stage-62 profile with no Vault 101 runtime. The current Godot runtime does not
+claim any complete campaign, TTW, JAM, or native extender-plugin compatibility.
 
 When the base campaign route passes, a mod is promoted one behavior contract at
 a time:
@@ -31,9 +31,9 @@ version, plugin-stack ID, and a distinct save-compatibility ID. There is no TTW
 save-loading route yet; the separate identity prevents future TTW support from
 silently adopting a standalone Fallout 3 or New Vegas save.
 
-The inspector does not yet compile TTW records, BSA members, loose files,
-scripts, or world transitions into runtime contracts. No TTW output or derived
-cache enters Git or an OpenNV release.
+TTW runtime support is absent: the inspector does not compile TTW records, BSA
+members, loose files, scripts, or world transitions into runtime contracts. No
+TTW output or derived cache enters Git or an OpenNV release.
 
 The first concrete registration step is available now. Give the inspector the
 effective MO2 data layers in low-to-high precedence order and the profile's
@@ -61,6 +61,8 @@ The desktop launcher auto-detects this default output path or accepts it through
 **Set up TTW**. Registration is shown separately from runtime readiness.
 
 ## JAM and the xNVSE semantic layer
+
+JAM is dependency- and portable-semantic-gated, not runtime-supported today.
 
 The player obtains JAM and its declared prerequisites from their authors. There
 is now a local registrar for an existing JAM/MO2 profile. It resolves effective

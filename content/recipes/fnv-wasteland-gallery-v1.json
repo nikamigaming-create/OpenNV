@@ -13,7 +13,7 @@
     "exterior": {
       "compiler": "exterior",
       "locationClass": "exterior",
-      "templateRecipe": "goodsprings-actor-review-background-v1"
+      "templateRecipe": "goodsprings-doc-exterior-active-set-v1"
     }
   },
   "subjectProfiles": {

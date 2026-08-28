@@ -485,12 +485,14 @@ internal static class CellSceneLoader
         query.Exclude = new Godot.Collections.Array<Rid> { excludedBody };
         var hit = space.IntersectRay(query);
         if (hit.Count == 0)
-            return new FloorHit(false, float.NaN, "");
+            return new FloorHit(false, float.NaN, Vector3.Zero, "", null);
         var collider = hit["collider"].AsGodotObject() as Node;
         return new FloorHit(
             true,
             hit["position"].AsVector3().Y,
-            collider?.GetPath().ToString() ?? "unknown");
+            hit["normal"].AsVector3(),
+            collider?.GetPath().ToString() ?? "unknown",
+            collider);
     }
 
     private static IEnumerable<T> Descendants<T>(Node node)
@@ -558,5 +560,10 @@ internal static class CellSceneLoader
 
     internal readonly record struct RayHit(bool Hit, bool HitProofDoor, string ColliderPath);
 
-    internal readonly record struct FloorHit(bool Hit, float Y, string ColliderPath);
+    internal readonly record struct FloorHit(
+        bool Hit,
+        float Y,
+        Vector3 Normal,
+        string ColliderPath,
+        Node? Collider);
 }

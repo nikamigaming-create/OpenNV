@@ -1,7 +1,8 @@
 # Multi-game launcher and first-slice delivery
 
-Status: **New Vegas, registered Fallout 1 Hex/FPS, and the bounded registered
-Fallout 3 front end launch; TTW and JAM remain profile-only**.
+Status: **the compact four-game launcher exposes bounded Fallout 1 Hex/FPS,
+New Vegas opening/Goodsprings, Fallout 2 source-only, and Fallout 3 CG00 routes;
+TTW runtime is absent and JAM remains dependency-gated**.
 
 This plan coordinates the common launcher/boot surface across Fallout 1,
 Fallout 2, Fallout: New Vegas, Fallout 3, TTW, and JAM. It does not replace the canonical
@@ -48,13 +49,16 @@ retail startup-logo and original-menu presentation remain absent.
    to Godot.
 3. Available now: Fallout 1 Hex Tactical and First Person are two views of one
    Vault Dweller state. The V13ENT OpenXR adapter reaches that same state and
-   has simulator proof for tracking, locomotion, snap turn, and fire, but its
-   reload/save action gate, campaign-native hands/weapon/UI, and physical-headset
+   has simulator proof for tracking, locomotion, snap turn, fire, reload, and
+   save, but XR door use, campaign-native hands/weapon/UI, and physical-headset
    acceptance remain open. Fallout 1 OpenXR therefore stays disabled.
 4. Available now: the normal New Vegas menu and skippable intro enter the Doc
    opening, and the accepted checkpoint/reload path completes character setup,
-   farewell, and the stage-200 open-world-ready save. The authored exterior
-   handoff and full Goodsprings active set remain active work.
+   farewell, and the stage-200 open-world-ready save. The production
+   Goodsprings active set separately loads its authored interior/exterior graph,
+   LAND, actors, and reciprocal Doc Mitchell house/exterior exit with shared
+   gameplay/save state.
+   An uninterrupted whole-campaign route is not proven.
 5. Available now: `scripts/Register-OpenNVFallout2.ps1` validates the legally
    owned `master.dat`, `critter.dat`, and `patch000.dat` DAT2 archives and emits
    a hash-bound source-only profile. The launcher shows Fallout 2 as the fourth
@@ -65,10 +69,22 @@ retail startup-logo and original-menu presentation remain absent.
    objects (568 including inventory), 37 PRO identities, and 34 required FRM
    identities as an asset-free local manifest. It does not establish the
    executable-owned new-game selection policy or implement a runtime.
+7. Available now: `content/tools/prepare_fo2_temple_presentation.py` consumes
+   that exact graph and decodes only its floor/roof tile frame zero and exact
+   placed-object frame/rotation pairs using the owned palette. The generated
+   PNG cache is disposable, local-only, hash-bound, and non-distributable; no
+   runtime readiness is implied.
+8. Available now: the Fallout 2 Temple runtime contract verifies the complete
+   cache/source/profile/recipe chain and constructs all admitted non-default
+   floor patches and top-level object FRM planes in Godot's 3D hex space. Its
+   headless proof is scene construction only: no rendered frame, collision,
+   character, scripts, interaction, gameplay, save, FPS, or OpenXR claim.
 
 Current result: a normal launcher starts either registered Fallout 1 view
-through its menu/creator/movie path or the bounded New Vegas route through its
-owned menu/save contract.
+through its menu/creator/movie path, the bounded New Vegas menu/Doc route and
+production Goodsprings active set, or the registered Fallout 3 menu/CG00 route.
+Fallout 2 remains launcher-disabled; its exact source-bound Godot scene can be
+constructed headlessly, but no presentation is yet interactive or promoted.
 
 ### P1 — Fallout 3 first slice
 
@@ -136,12 +152,12 @@ is supported for the selected base profile.
 | Route | Blocking owner |
 | --- | --- |
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
-| Fallout 1 OpenXR | Shared-state V13ENT adapter exists; simulator reload/save action mapping, XR door use, campaign-native hands/weapon/UI, and physical-headset acceptance remain |
-| Fallout 2 | Exact owned Temple MAP/PRO/FRM source transport works; character creation, a Godot Temple loader, scripts/collision/combat, shared Chosen One gameplay/save state, and Hex/FPS/VR presentations are absent, so all modes remain disabled |
-| New Vegas first slice | Authored exterior handoff, retail HUD/Pip-Boy, full Goodsprings active-set streaming, exterior save/reload, visual gates |
-| Fallout 3 | Owned-profile menu/intro/Escape convergence, CG00 sex/name persistence, source-backed appearance selection, and stage-62 persistence work; 3D FaceGen preview, `CG00PlayerSection4`, Godot Vault 101 scene compilation, and later command interpretation remain |
-| TTW | Profile registration works; archive/loose-file/script/world-transition runtime compilation is absent |
-| JAM | Dependency registrar and unsupported-semantic inventory work; portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM implementations are absent |
+| Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
+| Fallout 2 | Exact Temple source transport, selective FRM cache, and source-bound Godot Map 126 scene construction work; rendered/interactive Hex, character creation, scripts/collision/combat, shared Chosen One gameplay/save state, FPS, and VR remain absent, so all modes stay disabled |
+| New Vegas first slice | Menu/intro/Doc house and the production Goodsprings active set with its reciprocal Doc Mitchell house/exterior exit work; uninterrupted campaign continuity, retail HUD/Pip-Boy, neighboring-world streaming, and visual gates remain |
+| Fallout 3 | Owned-profile menu/intro/Escape convergence, CG00 sex/name/appearance persistence, and source-backed `CG00PlayerSection4` activation at stage 62 work; KF playback, stage-65 parent race/FaceGen commands, Vault 101 scene compilation, and later interpretation remain |
+| TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |
+| JAM | Dependency registrar and one bounded JVS semantic work; missing dependencies and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM semantics keep the launcher toggle disabled |
 
 The runtime manifest is the executable truth. Documentation may describe this
 sequence, but a route stays disabled until its direct gate passes.

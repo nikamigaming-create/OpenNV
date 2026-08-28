@@ -91,6 +91,8 @@ public partial class RuntimeCoordinator : Node3D
                 _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING ALL MAPS");
             if (_options.ContainsKey("fo1-campaign-presentation"))
                 _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING CAMPAIGN ART");
+            if (_options.ContainsKey("fo2-temple-cache"))
+                _loadingScreen?.SetTitle("FALLOUT 2  //  VERIFYING TEMPLE MAP 126");
             if (_options.ContainsKey("fo3-profile"))
                 _loadingScreen?.SetTitle("FALLOUT 3  //  CG00 CHARACTER SELECTION");
             if (_options.ContainsKey("xr-simulator-proof") &&
@@ -152,6 +154,7 @@ public partial class RuntimeCoordinator : Node3D
             var hasFo1HexScene = _options.ContainsKey("fo1-hex-scene");
             var hasFo1Campaign = _options.ContainsKey("fo1-campaign-transport");
             var hasFo1CampaignPresentation = _options.ContainsKey("fo1-campaign-presentation");
+            var hasFo2TemplePresentation = _options.ContainsKey("fo2-temple-cache");
             var hasFo3Profile = _options.ContainsKey("fo3-profile");
             var hasJamProfile = _options.ContainsKey("jam-profile");
             if (hasJamProfile && (!hasDataRoot && !hasCellScene))
@@ -174,16 +177,24 @@ public partial class RuntimeCoordinator : Node3D
                 _options.ContainsKey("capture-root"))
                 throw new ArgumentException(
                     "Fallout campaign headless build proof and visual capture are separate gates.");
+            if (hasFo2TemplePresentation &&
+                (!_options.ContainsKey("fo2-temple-build-proof") ||
+                    !_options.ContainsKey("report")))
+                throw new ArgumentException(
+                    "--fo2-temple-cache requires --fo2-temple-build-proof and --report.");
+            if (_options.ContainsKey("fo2-temple-build-proof") && !hasFo2TemplePresentation)
+                throw new ArgumentException(
+                    "--fo2-temple-build-proof requires --fo2-temple-cache.");
             if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) +
                     (hasStaticCellCompile ? 1 : 0) + (hasActorModel ? 1 : 0) +
                     (hasActorReviewScene ? 1 : 0) + (hasFo1HexScene ? 1 : 0) +
                     (hasFo1Campaign ? 1 : 0) + (hasFo1CampaignPresentation ? 1 : 0) +
-                    (hasFo3Profile ? 1 : 0) > 1)
+                    (hasFo2TemplePresentation ? 1 : 0) + (hasFo3Profile ? 1 : 0) > 1)
                 throw new ArgumentException(
                     "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
                     "--static-cell-compile, --actor-model/--actor-sidecar, " +
                     "--actor-review-scene, --fo1-hex-scene, --fo1-campaign-transport, or " +
-                    "--fo1-campaign-presentation, or --fo3-profile.");
+                    "--fo1-campaign-presentation, --fo2-temple-cache, or --fo3-profile.");
             var startsFo1NewGame = _options.ContainsKey("fo1-new-game") ||
                 _options.ContainsKey("fo1-new-game-demo");
             if (startsFo1NewGame && !hasFo1HexScene)
@@ -304,6 +315,16 @@ public partial class RuntimeCoordinator : Node3D
                 LoadFo1CampaignPresentation(
                     RequireOption(_options, "fo1-campaign-presentation"),
                     _options);
+                DismissLoadingScreen();
+                return;
+            }
+
+            if (hasFo2TemplePresentation)
+            {
+                SetLoadingStatus("VERIFYING MAP 126 SOURCE AND PNG HASHES");
+                LoadFo2TemplePresentation(
+                    RequireOption(_options, "fo2-temple-cache"),
+                    RequireOption(_options, "report"));
                 DismissLoadingScreen();
                 return;
             }
@@ -507,6 +528,13 @@ public partial class RuntimeCoordinator : Node3D
         AddChild(opening);
         if (options.ContainsKey("quit-after-load") && !options.ContainsKey("fo3-appearance-proof"))
             GetTree().Quit(0);
+    }
+
+    private void LoadFo2TemplePresentation(string cacheManifestPath, string reportPath)
+    {
+        var catalog = Fo2TemplePresentationCatalog.Load(cacheManifestPath);
+        var coverage = Fo2TempleScene.Build(catalog, this);
+        _ = Fo2TempleBuildProof.Run(this, coverage, reportPath);
     }
 
     private void LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
@@ -1087,9 +1115,21 @@ public partial class RuntimeCoordinator : Node3D
                 _configuration.Proof,
                 loaded.Player.CollisionMask,
                 loaded.Player.GetRid());
-            if (!floor.Hit || MathF.Abs(floor.Y) > _configuration.Proof.SpawnFloorToleranceMeters)
+            var floorOwnedByLoadedCell = floor.Collider is not null &&
+                (loaded.MainContent.Root.IsAncestorOf(floor.Collider) ||
+                    loaded.LinkedCells.Any(linked => linked.Content.Root.IsAncestorOf(floor.Collider)));
+            var floorWithinProbe = floor.Hit &&
+                floor.Y <= _configuration.Proof.SpawnFloorRayStartMeters +
+                    _configuration.Proof.SpawnFloorToleranceMeters &&
+                floor.Y >= _configuration.Proof.SpawnFloorRayEndMeters -
+                    _configuration.Proof.SpawnFloorToleranceMeters;
+            var floorWalkable = floor.Hit &&
+                floor.Normal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum;
+            if (!floor.Hit || !floorOwnedByLoadedCell || !floorWithinProbe || !floorWalkable)
                 throw new InvalidOperationException(
-                    $"XTEL floor contract failed: hit={floor.Hit} y={floor.Y} collider={floor.ColliderPath}");
+                    $"XTEL floor contract failed: hit={floor.Hit} y={floor.Y} " +
+                    $"normal={floor.Normal} owned={floorOwnedByLoadedCell} " +
+                    $"withinProbe={floorWithinProbe} collider={floor.ColliderPath}");
             var ray = CellSceneLoader.BuildProofRay(loaded.ProofDoor, _configuration.Proof);
             var closed = CellSceneLoader.CastProofRay(
                 GetWorld3D().DirectSpaceState,
@@ -1161,7 +1201,11 @@ public partial class RuntimeCoordinator : Node3D
                 new DoorTraversalProof(
                     floor.Hit,
                     floor.Y,
+                    floor.Normal,
                     floor.ColliderPath,
+                    floorOwnedByLoadedCell,
+                    floorWithinProbe,
+                    floorWalkable,
                     closed.Hit,
                     closed.HitProofDoor,
                     opened.Hit,
@@ -1208,7 +1252,7 @@ public partial class RuntimeCoordinator : Node3D
             references = loaded.References,
             doors = loaded.Doors,
             authoredLights = loaded.AuthoredLights,
-            actors = loaded.Actors.Count,
+            actors = loaded.MainContent.Actors.Count,
             poolTables = loaded.Pools.Values.Select(table => new
             {
                 referenceFormId = table.ReferenceFormId,
@@ -1281,7 +1325,9 @@ public partial class RuntimeCoordinator : Node3D
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,
             spawnSource = "XTEL",
-            spawnAtFloorOrigin = true,
+            spawnAtFloorOrigin = traversalProof is not null &&
+                MathF.Abs(traversalProof.Value.FloorY) <=
+                    _configuration.Proof.SpawnFloorToleranceMeters,
             proofDoorFormId = loaded.ProofDoorFormId,
             proofDoorOpen = loaded.ProofDoorOpen,
             wholeCellVisible = true,
@@ -1293,7 +1339,11 @@ public partial class RuntimeCoordinator : Node3D
                     status = "pass",
                     floorHit = traversalProof.Value.FloorHit,
                     floorY = traversalProof.Value.FloorY,
+                    floorNormal = Vector(traversalProof.Value.FloorNormal),
                     floorCollider = traversalProof.Value.FloorCollider,
+                    floorOwnedCellCollision = traversalProof.Value.FloorOwnedCellCollision,
+                    floorWithinProbe = traversalProof.Value.FloorWithinProbe,
+                    floorWalkable = traversalProof.Value.FloorWalkable,
                     closedHit = traversalProof.Value.ClosedHit,
                     closedHitDoor = traversalProof.Value.ClosedHitDoor,
                     openHit = traversalProof.Value.OpenHit,
@@ -1798,7 +1848,11 @@ public partial class RuntimeCoordinator : Node3D
     private readonly record struct DoorTraversalProof(
         bool FloorHit,
         float FloorY,
+        Vector3 FloorNormal,
         string FloorCollider,
+        bool FloorOwnedCellCollision,
+        bool FloorWithinProbe,
+        bool FloorWalkable,
         bool ClosedHit,
         bool ClosedHitDoor,
         bool OpenHit,
