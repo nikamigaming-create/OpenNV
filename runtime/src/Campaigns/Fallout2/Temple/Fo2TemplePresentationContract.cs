@@ -4,7 +4,7 @@ using Godot;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
-internal sealed record Fo2TempleArtifact(
+internal sealed record Fo2MapArtifact(
     string Id,
     string Kind,
     string LogicalPath,
@@ -19,14 +19,14 @@ internal sealed record Fo2TempleArtifact(
     Vector2I DirectionOffset,
     Vector2I FrameOffset);
 
-internal sealed record Fo2TempleTileUse(int Elevation, string Role, int Count);
+internal sealed record Fo2MapTileUse(int Elevation, string Role, int Count);
 
-internal sealed record Fo2TempleTileBinding(
+internal sealed record Fo2MapTileBinding(
     int Id,
     string ArtifactId,
-    IReadOnlyList<Fo2TempleTileUse> Uses);
+    IReadOnlyList<Fo2MapTileUse> Uses);
 
-internal sealed record Fo2TempleObjectPlacement(
+internal sealed record Fo2MapObjectPlacement(
     int Serial,
     int ObjectId,
     string Fid,
@@ -74,9 +74,9 @@ internal sealed class Fo2TemplePresentationCatalog
         int entryElevation,
         int entryRotation,
         uint[] tileEntries,
-        IReadOnlyDictionary<string, Fo2TempleArtifact> artifacts,
-        IReadOnlyDictionary<int, Fo2TempleTileBinding> tileBindings,
-        IReadOnlyList<Fo2TempleObjectPlacement> objectPlacements,
+        IReadOnlyDictionary<string, Fo2MapArtifact> artifacts,
+        IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
+        IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
         int inventoryObjects,
         int verifiedResources)
     {
@@ -108,9 +108,9 @@ internal sealed class Fo2TemplePresentationCatalog
     internal int EntryRotation { get; }
     internal int DefaultFloorTileId => DefaultTileId;
     internal uint[] TileEntries { get; }
-    internal IReadOnlyDictionary<string, Fo2TempleArtifact> Artifacts { get; }
-    internal IReadOnlyDictionary<int, Fo2TempleTileBinding> TileBindings { get; }
-    internal IReadOnlyList<Fo2TempleObjectPlacement> ObjectPlacements { get; }
+    internal IReadOnlyDictionary<string, Fo2MapArtifact> Artifacts { get; }
+    internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
+    internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
     internal int InventoryObjects { get; }
     internal int VerifiedResources { get; }
 
@@ -235,7 +235,9 @@ internal sealed class Fo2TemplePresentationCatalog
 
         var artifacts = LoadArtifacts(cache.GetProperty("artifacts"), cacheRoot);
         var tileBindings = LoadTileBindings(cache.GetProperty("tileBindings"), artifacts);
-        VerifyTileBindings(tileEntries, tileBindings);
+        VerifyTileBindings(
+            new Dictionary<int, IReadOnlyList<uint>> { [0] = tileEntries },
+            tileBindings);
         var objectRows = FlattenObjects(map.GetProperty("objects"));
         var objectPlacements = LoadObjectPlacements(
             cache.GetProperty("objectBindings"),
@@ -275,11 +277,11 @@ internal sealed class Fo2TemplePresentationCatalog
             resources.Length);
     }
 
-    private static Dictionary<string, Fo2TempleArtifact> LoadArtifacts(
+    internal static Dictionary<string, Fo2MapArtifact> LoadArtifacts(
         JsonElement source,
         string cacheRoot)
     {
-        var artifacts = new Dictionary<string, Fo2TempleArtifact>(StringComparer.Ordinal);
+        var artifacts = new Dictionary<string, Fo2MapArtifact>(StringComparer.Ordinal);
         foreach (var row in source.EnumerateArray())
         {
             var id = RequiredString(row, "id");
@@ -294,7 +296,7 @@ internal sealed class Fo2TemplePresentationCatalog
                 throw new InvalidOperationException("Fallout 2 Temple PNG path escapes its cache.");
             var expectedBytes = row.GetProperty("pngBytes").GetInt64();
             VerifyFile(path, RequiredHash(row, "pngSha256"), expectedBytes, $"Fallout 2 Temple PNG {id}");
-            var artifact = new Fo2TempleArtifact(
+            var artifact = new Fo2MapArtifact(
                 id,
                 kind,
                 RequiredString(row, "logicalPath"),
@@ -315,11 +317,11 @@ internal sealed class Fo2TemplePresentationCatalog
         return artifacts;
     }
 
-    private static Dictionary<int, Fo2TempleTileBinding> LoadTileBindings(
+    internal static Dictionary<int, Fo2MapTileBinding> LoadTileBindings(
         JsonElement source,
-        IReadOnlyDictionary<string, Fo2TempleArtifact> artifacts)
+        IReadOnlyDictionary<string, Fo2MapArtifact> artifacts)
     {
-        var bindings = new Dictionary<int, Fo2TempleTileBinding>();
+        var bindings = new Dictionary<int, Fo2MapTileBinding>();
         foreach (var row in source.EnumerateArray())
         {
             var id = row.GetProperty("id").GetInt32();
@@ -327,13 +329,13 @@ internal sealed class Fo2TemplePresentationCatalog
             if (!artifacts.TryGetValue(artifactId, out var artifact) || artifact.Kind != "tiles")
                 throw new InvalidOperationException($"Fallout 2 Temple tile artifact is absent: {artifactId}");
             var uses = row.GetProperty("uses").EnumerateArray().Select(use =>
-                new Fo2TempleTileUse(
+                new Fo2MapTileUse(
                     use.GetProperty("elevation").GetInt32(),
                     RequiredString(use, "role"),
                     use.GetProperty("count").GetInt32())).ToArray();
             if (!bindings.TryAdd(
                     id,
-                    new Fo2TempleTileBinding(
+                    new Fo2MapTileBinding(
                         id,
                         artifactId,
                         uses)))
@@ -342,33 +344,34 @@ internal sealed class Fo2TemplePresentationCatalog
         return bindings;
     }
 
-    private static void VerifyTileBindings(
-        IReadOnlyList<uint> entries,
-        IReadOnlyDictionary<int, Fo2TempleTileBinding> bindings)
+    internal static void VerifyTileBindings(
+        IReadOnlyDictionary<int, IReadOnlyList<uint>> entriesByElevation,
+        IReadOnlyDictionary<int, Fo2MapTileBinding> bindings)
     {
-        var expected = new Dictionary<(int Id, string Role), int>();
-        foreach (var entry in entries)
-        {
-            Increment((int)(entry & TileIdMask), "floor");
-            Increment((int)((entry >> RoofIdShift) & TileIdMask), "roof");
-        }
+        var expected = new Dictionary<(int Elevation, int Id, string Role), int>();
+        foreach (var (elevation, entries) in entriesByElevation)
+            foreach (var entry in entries)
+            {
+                Increment(elevation, (int)(entry & TileIdMask), "floor");
+                Increment(elevation, (int)((entry >> RoofIdShift) & TileIdMask), "roof");
+            }
         var actual = bindings.Values.SelectMany(binding => binding.Uses.Select(use =>
-            (Key: (binding.Id, use.Role), use.Elevation, use.Count))).ToArray();
-        if (actual.Any(row => row.Elevation != 0 || row.Count <= 0 ||
+            (Key: (use.Elevation, binding.Id, use.Role), use.Count))).ToArray();
+        if (actual.Any(row => !entriesByElevation.ContainsKey(row.Key.Elevation) || row.Count <= 0 ||
                 row.Key.Role is not "floor" and not "roof") ||
             actual.Select(row => row.Key).Distinct().Count() != actual.Length ||
             expected.Count != actual.Length ||
             actual.Any(row => !expected.TryGetValue(row.Key, out var count) || count != row.Count))
             throw new InvalidOperationException("Fallout 2 Temple floor/roof tile binding drifted.");
 
-        void Increment(int id, string role)
+        void Increment(int elevation, int id, string role)
         {
-            var key = (id, role);
+            var key = (elevation, id, role);
             expected[key] = expected.GetValueOrDefault(key) + 1;
         }
     }
 
-    private static Dictionary<int, SourceObject> FlattenObjects(JsonElement source)
+    internal static Dictionary<int, SourceObject> FlattenObjects(JsonElement source)
     {
         var rows = new Dictionary<int, SourceObject>();
         foreach (var elevation in source.GetProperty("elevations").EnumerateArray())
@@ -408,10 +411,10 @@ internal sealed class Fo2TemplePresentationCatalog
         }
     }
 
-    private static List<Fo2TempleObjectPlacement> LoadObjectPlacements(
+    internal static List<Fo2MapObjectPlacement> LoadObjectPlacements(
         JsonElement cacheBindings,
         JsonElement sourceFrms,
-        IReadOnlyDictionary<string, Fo2TempleArtifact> artifacts,
+        IReadOnlyDictionary<string, Fo2MapArtifact> artifacts,
         IReadOnlyDictionary<int, SourceObject> sourceObjects)
     {
         var expected = new HashSet<string>(StringComparer.Ordinal);
@@ -422,7 +425,7 @@ internal sealed class Fo2TemplePresentationCatalog
                 expected.Add(PlacementIdentity(logicalPath, placement));
         }
         var actual = new HashSet<string>(StringComparer.Ordinal);
-        var placements = new List<Fo2TempleObjectPlacement>();
+        var placements = new List<Fo2MapObjectPlacement>();
         foreach (var binding in cacheBindings.EnumerateArray())
         {
             var artifactId = RequiredString(binding, "artifactId");
@@ -447,7 +450,7 @@ internal sealed class Fo2TemplePresentationCatalog
                     throw new InvalidOperationException(
                         $"Fallout 2 Temple source object binding drifted: {serial}");
                 if (sourceObject.TopLevel)
-                    placements.Add(new Fo2TempleObjectPlacement(
+                    placements.Add(new Fo2MapObjectPlacement(
                         serial,
                         sourceObject.ObjectId,
                         sourceObject.Fid,
@@ -485,11 +488,11 @@ internal sealed class Fo2TemplePresentationCatalog
             placement.GetProperty("rotation").GetInt32(),
             placement.GetProperty("frame").GetInt32());
 
-    private static void VerifyCounts(
+    internal static void VerifyCounts(
         JsonElement counts,
-        IReadOnlyDictionary<string, Fo2TempleArtifact> artifacts,
-        IReadOnlyDictionary<int, Fo2TempleTileBinding> tiles,
-        IReadOnlyList<Fo2TempleObjectPlacement> placements,
+        IReadOnlyDictionary<string, Fo2MapArtifact> artifacts,
+        IReadOnlyDictionary<int, Fo2MapTileBinding> tiles,
+        IReadOnlyList<Fo2MapObjectPlacement> placements,
         JsonElement source)
     {
         var tileArtifacts = artifacts.Values.Count(row => row.Kind == "tiles");
@@ -505,7 +508,7 @@ internal sealed class Fo2TemplePresentationCatalog
             throw new InvalidOperationException("Fallout 2 Temple cache count contract drifted.");
     }
 
-    private static byte[] VerifyFile(
+    internal static byte[] VerifyFile(
         string path,
         string expectedSha256,
         long? expectedBytes,
@@ -524,7 +527,7 @@ internal sealed class Fo2TemplePresentationCatalog
         return data;
     }
 
-    private static string ResolvePath(string path, string relativeRoot)
+    internal static string ResolvePath(string path, string relativeRoot)
     {
         if (path.StartsWith("res://", StringComparison.Ordinal) ||
             path.StartsWith("user://", StringComparison.Ordinal))
@@ -532,7 +535,7 @@ internal sealed class Fo2TemplePresentationCatalog
         return Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(relativeRoot, path));
     }
 
-    private static string RequiredString(JsonElement source, string property)
+    internal static string RequiredString(JsonElement source, string property)
     {
         var value = source.GetProperty(property).GetString();
         if (string.IsNullOrWhiteSpace(value))
@@ -540,7 +543,7 @@ internal sealed class Fo2TemplePresentationCatalog
         return value;
     }
 
-    private static string RequiredHash(JsonElement source, string property)
+    internal static string RequiredHash(JsonElement source, string property)
     {
         var value = RequiredString(source, property).ToLowerInvariant();
         if (value.Length != Sha256HexCharacters ||
@@ -549,7 +552,7 @@ internal sealed class Fo2TemplePresentationCatalog
         return value;
     }
 
-    private static uint RequiredFlags(JsonElement source, string property)
+    internal static uint RequiredFlags(JsonElement source, string property)
     {
         var value = RequiredString(source, property);
         if (value.Length != 8 ||
@@ -563,19 +566,19 @@ internal sealed class Fo2TemplePresentationCatalog
         return flags;
     }
 
-    private static int? OptionalInt(JsonElement source, string property)
+    internal static int? OptionalInt(JsonElement source, string property)
     {
         var value = source.GetProperty(property);
         return value.ValueKind == JsonValueKind.Null ? null : value.GetInt32();
     }
 
-    private static string? OptionalString(JsonElement source, string property)
+    internal static string? OptionalString(JsonElement source, string property)
     {
         var value = source.GetProperty(property);
         return value.ValueKind == JsonValueKind.Null ? null : value.GetString();
     }
 
-    private static Vector2I ReadVector2I(JsonElement source)
+    internal static Vector2I ReadVector2I(JsonElement source)
     {
         var values = source.EnumerateArray().Select(row => row.GetInt32()).ToArray();
         if (values.Length != 2)
@@ -583,10 +586,10 @@ internal sealed class Fo2TemplePresentationCatalog
         return new Vector2I(values[0], values[1]);
     }
 
-    private static string Sha256(ReadOnlySpan<byte> data) =>
+    internal static string Sha256(ReadOnlySpan<byte> data) =>
         Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
 
-    private sealed record SourceObject(
+    internal sealed record SourceObject(
         int Serial,
         int ObjectId,
         string Fid,
