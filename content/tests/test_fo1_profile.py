@@ -95,19 +95,21 @@ class Fo1ProfileTest(unittest.TestCase):
                 resolve_owned_path(root, "C:/escape.map")
 
     def test_donor_catalog_resolves_identity_and_counts(self) -> None:
-        cell = Cell(0x100, "SyntheticDonor", 1, None, None)
+        cell = Cell(0x100, "SyntheticDonor", 1, None, None, None, None, None, 0)
         cave = BaseObject(0x200, "STAT", "SyntheticCave", "dungeons\\caves\\room.nif")
         excluded = BaseObject(0x201, "STAT", "Excluded", "architecture\\urban\\wall.nif")
         catalog = CellCatalog(
             {cell.form_id: cell},
+            {},
             {cave.form_id: cave, excluded.form_id: excluded},
             {},
             {},
             {},
+            {},
             [
-                PlacedReference(0x300, 0x100, 0x200, 0, Transform((0, 0, 0), (0, 0, 0)), None, None),
-                PlacedReference(0x301, 0x100, 0x200, 0, Transform((1, 0, 0), (0, 0, 0)), None, None),
-                PlacedReference(0x302, 0x100, 0x201, 0, Transform((2, 0, 0), (0, 0, 0)), None, None),
+                PlacedReference(0x300, 0x100, 0x200, 0, Transform((0, 0, 0), (0, 0, 0)), 1.0, None, None),
+                PlacedReference(0x301, 0x100, 0x200, 0, Transform((1, 0, 0), (0, 0, 0)), 1.0, None, None),
+                PlacedReference(0x302, 0x100, 0x201, 0, Transform((2, 0, 0), (0, 0, 0)), 1.0, None, None),
             ],
         )
         recipe = {

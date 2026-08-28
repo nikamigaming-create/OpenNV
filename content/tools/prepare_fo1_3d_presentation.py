@@ -24,6 +24,7 @@ from cell_scene import environment_texture_paths
 from export_static_nif_gltf import export_static_nif
 from prepare_legal_assets import file_sha256, find_required_file
 from prepare_actor import prepare_actor
+from runtime_configuration import load_runtime_configuration
 from texture_pipeline import TexturePipeline
 
 
@@ -405,6 +406,7 @@ def _prepare_direct_cave_assets(
             member.logical_path,
             model_path,
             sidecar_path,
+            load_runtime_configuration().content_compiler,
             strict=False,
         )
         sidecars[asset_id] = sidecar

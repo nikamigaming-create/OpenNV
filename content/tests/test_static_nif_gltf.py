@@ -422,6 +422,7 @@ class StaticNifGltfTest(unittest.TestCase):
                 "meshes/open-nv-tests/opaque-triangle.nif",
                 directory / "filtered.gltf",
                 directory / "filtered.opennv.json",
+                load_runtime_configuration().content_compiler,
                 strict=False,
                 include_shape_prefixes=("Opaque",),
             )
@@ -433,6 +434,7 @@ class StaticNifGltfTest(unittest.TestCase):
                     "meshes/open-nv-tests/opaque-triangle.nif",
                     directory / "empty.gltf",
                     directory / "empty.opennv.json",
+                    load_runtime_configuration().content_compiler,
                     strict=False,
                     include_shape_prefixes=("Missing",),
                 )

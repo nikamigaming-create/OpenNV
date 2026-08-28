@@ -644,6 +644,7 @@ def export_static_nif(
     *,
     strict: bool = True,
     presentation_clip: dict[str, object] | None = None,
+    include_shape_prefixes: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     clip_rectangle: tuple[float, float, float, float] | None = None
     clip_coordinate_space = "source-world-game-units-before-scene-origin"
@@ -725,12 +726,33 @@ def export_static_nif(
         for shape in all_shapes
         if not is_editor_marker(shape.name) and not has_presentation_property(shape)
     ]
-    shapes = [
+    candidate_shapes = [
         shape
         for shape in all_shapes
         if not is_editor_marker(shape.name) and has_presentation_property(shape)
     ]
+    excluded_by_shape_filter: list[dict[str, object]] = []
+    if include_shape_prefixes is not None:
+        if not include_shape_prefixes or any(not prefix for prefix in include_shape_prefixes):
+            raise ValueError("Static NIF shape prefixes must be non-empty")
+        excluded_by_shape_filter = [
+            {
+                "sourceBlockIndex": block_index[id(shape)],
+                "name": decode_text(shape.name),
+            }
+            for shape in candidate_shapes
+            if not decode_text(shape.name).startswith(include_shape_prefixes)
+        ]
+        shapes = [
+            shape
+            for shape in candidate_shapes
+            if decode_text(shape.name).startswith(include_shape_prefixes)
+        ]
+    else:
+        shapes = candidate_shapes
     if not shapes:
+        if include_shape_prefixes is not None and candidate_shapes:
+            raise ValueError("Static NIF shape filter removed all supported geometry")
         classified_shape_count = len(excluded_editor_markers) + len(excluded_non_presentation)
         if all_shapes and classified_shape_count == len(all_shapes):
             raise NoStaticPresentationGeometryError(
@@ -913,9 +935,6 @@ def export_static_nif(
             struct.pack(f"<{len(indices)}{index_format}", *indices), component_type=index_component,
             count=len(indices), value_type="SCALAR", target=GL_ELEMENT_ARRAY_BUFFER,
         )
-        shape_index = block_index[id(shape)]
-        original_name = decode_text(shape.name)
-        surface_name = f"{original_name}@{shape_index}"
         material_index = len(materials)
         base_color = [float(value) for value in surface_material["baseColor"]]
         alpha = float(surface_material.get("alpha", 1.0))
@@ -925,7 +944,7 @@ def export_static_nif(
         specular = [float(value) for value in surface_material.get("specular", [0.0, 0.0, 0.0])]
         roughness, _roughness_source = nif_material_roughness(specular, glossiness, compiler)
         gltf_material: dict[str, object] = {
-            "name": f"{surface_name} material",
+            "name": f"{decode_text(shape.name)} material",
             "doubleSided": shape_double_sided(shape),
             "pbrMetallicRoughness": {
                 "baseColorFactor": [*base_color, alpha],
@@ -951,8 +970,7 @@ def export_static_nif(
         surface_rows.append({
             "stableId": stable_id,
             "sourceBlockIndex": shape_index,
-            "name": surface_name,
-            "originalName": original_name,
+            "name": decode_text(shape.name),
             "vertices": vertex_count,
             "triangles": len(triangles),
             "attributes": sorted(attributes),
@@ -1070,6 +1088,8 @@ def export_static_nif(
             "controllers": sorted(set(controllers)),
             "excludedEditorMarkerSurfaces": excluded_editor_markers,
             "excludedNonPresentationSurfaces": excluded_non_presentation,
+            "includedShapePrefixes": list(include_shape_prefixes or ()),
+            "excludedByShapeFilter": excluded_by_shape_filter,
             "presentationClip": presentation_clip_report,
             "presentationClipRemovedSurfaces": clipped_away_surfaces,
         },

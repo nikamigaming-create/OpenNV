@@ -4,10 +4,17 @@ namespace OpenNV.Runtime;
 
 internal partial class CellPlayer : CharacterBody3D
 {
+    internal const float DioramaInitialSizeMeters = 18.0f;
+    internal const float DioramaMinimumSizeMeters = 6.0f;
+    internal const float DioramaMaximumSizeMeters = 64.0f;
+    internal const float DioramaYawStepRadians = MathF.PI / 3.0f;
+    internal const float DioramaPanSpeedMetersPerSecond = 7.5f;
+
     private RuntimeConfiguration _configuration = null!;
     private Camera3D _camera = null!;
     private GameplaySession? _session;
     private XROrigin3D? _xrOrigin;
+    private Node3D? _dioramaOrbit;
     private XRController3D? _leftGrip;
     private XRController3D? _rightGrip;
     private XRController3D? _leftAim;
@@ -118,28 +125,39 @@ internal partial class CellPlayer : CharacterBody3D
         float yaw,
         GameplaySession session,
         RuntimeConfiguration configuration,
-        bool useXr = false)
+        bool useXr = false,
+        bool useClassicDiorama = false)
     {
+        if (useXr && useClassicDiorama)
+            throw new ArgumentException(
+                "Classic Diorama and OpenXR require separate presentation adapters.");
         _configuration = configuration;
         _session = session;
         _useXr = useXr;
         _useClassicDiorama = useClassicDiorama;
         Name = "Player";
-        Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters;
-        Rotation = new Vector3(0.0f, yaw, 0.0f);
-        CollisionLayer = configuration.Player.CollisionLayer;
-        CollisionMask = configuration.Player.CollisionMask;
-        AddChild(new CollisionShape3D
+        Position = Vector3.Up * (useClassicDiorama
+            ? 0.0f
+            : configuration.Player.SpawnCenterHeightMeters);
+        Rotation = new Vector3(0.0f, useClassicDiorama ? 0.0f : yaw, 0.0f);
+        CollisionLayer = useClassicDiorama ? 0u : configuration.Player.CollisionLayer;
+        CollisionMask = useClassicDiorama ? 0u : configuration.Player.CollisionMask;
+        if (!useClassicDiorama)
         {
-            Name = "Capsule",
-            Shape = new CapsuleShape3D
+            AddChild(new CollisionShape3D
             {
-                Radius = configuration.Player.CapsuleRadiusMeters,
-                Height = configuration.Player.CapsuleHeightMeters,
-            },
-        });
+                Name = "Capsule",
+                Shape = new CapsuleShape3D
+                {
+                    Radius = configuration.Player.CapsuleRadiusMeters,
+                    Height = configuration.Player.CapsuleHeightMeters,
+                },
+            });
+        }
         if (useXr)
             BuildXrRig();
+        else if (useClassicDiorama)
+            BuildClassicDioramaRig(yaw);
         else
             BuildDesktopRig();
     }
@@ -256,6 +274,11 @@ internal partial class CellPlayer : CharacterBody3D
     {
         if (_useXr)
             return;
+        if (_useClassicDiorama)
+        {
+            HandleClassicDioramaInput(inputEvent);
+            return;
+        }
         if (_lookEnabled &&
             inputEvent is InputEventMouseMotion motion &&
             Input.MouseMode == Input.MouseModeEnum.Captured)
@@ -328,6 +351,104 @@ internal partial class CellPlayer : CharacterBody3D
             Current = true,
         };
         AddChild(_camera);
+    }
+
+    private void BuildClassicDioramaRig(float yaw)
+    {
+        _dioramaTargetYawRadians = yaw + MathF.PI / 4.0f;
+        _dioramaTargetSizeMeters = DioramaInitialSizeMeters;
+        _dioramaOrbit = new Node3D
+        {
+            Name = "ClassicDioramaOrbit",
+            Rotation = new Vector3(0.0f, _dioramaTargetYawRadians, 0.0f),
+        };
+        AddChild(_dioramaOrbit);
+        _camera = new Camera3D
+        {
+            Name = "ClassicDioramaCamera",
+            Position = new Vector3(0.0f, 11.5f, 11.5f),
+            Projection = Camera3D.ProjectionType.Orthogonal,
+            KeepAspect = Camera3D.KeepAspectEnum.Height,
+            Size = DioramaInitialSizeMeters,
+            Near = _configuration.Player.CameraNearMeters,
+            Far = _configuration.Player.CameraFarMeters,
+            Current = true,
+        };
+        _dioramaOrbit.AddChild(_camera);
+        _camera.Rotation = new Vector3(-MathF.Atan2(11.05f, 11.5f), 0.0f, 0.0f);
+    }
+
+    internal void FrameClassicDiorama(Aabb worldBounds)
+    {
+        if (!_useClassicDiorama || _dioramaOrbit is null)
+            throw new InvalidOperationException(
+                "Classic Diorama framing requires its camera adapter.");
+        if (worldBounds.Size.X <= 0.0f || worldBounds.Size.Y <= 0.0f ||
+            worldBounds.Size.Z <= 0.0f)
+            throw new InvalidOperationException(
+                $"Classic Diorama received invalid world bounds: {worldBounds}");
+
+        _dioramaFramingBounds = worldBounds;
+        _dioramaHomePosition = worldBounds.GetCenter();
+        Position = _dioramaHomePosition;
+        var horizontalSpan = MathF.Max(worldBounds.Size.X, worldBounds.Size.Z);
+        _dioramaHomeSizeMeters = Math.Clamp(
+            MathF.Max(horizontalSpan * 0.48f, worldBounds.Size.Y * 0.80f + horizontalSpan * 0.22f),
+            DioramaInitialSizeMeters,
+            DioramaMaximumSizeMeters);
+        _dioramaTargetSizeMeters = _dioramaHomeSizeMeters;
+        _camera.Size = _dioramaHomeSizeMeters;
+        var cameraDistance = MathF.Max(18.0f, _dioramaHomeSizeMeters * 1.15f);
+        var cameraHeight = cameraDistance * 0.90f;
+        _camera.Position = new Vector3(0.0f, cameraHeight, cameraDistance);
+        _camera.Rotation = new Vector3(-MathF.Atan2(cameraHeight, cameraDistance), 0.0f, 0.0f);
+    }
+
+    private void HandleClassicDioramaInput(InputEvent inputEvent)
+    {
+        if (inputEvent is InputEventKey key && key.Pressed && !key.Echo)
+        {
+            if (key.PhysicalKeycode == Key.Q)
+                _dioramaTargetYawRadians += DioramaYawStepRadians;
+            else if (key.PhysicalKeycode == Key.E)
+                _dioramaTargetYawRadians -= DioramaYawStepRadians;
+            else if (key.PhysicalKeycode == Key.Home)
+            {
+                _dioramaTargetSizeMeters = _dioramaHomeSizeMeters;
+                Position = _dioramaHomePosition;
+            }
+            else if (key.PhysicalKeycode == Key.F5)
+                _session!.SaveAndNotify();
+        }
+        else if (inputEvent is InputEventMouseButton button && button.Pressed)
+        {
+            if (button.ButtonIndex == MouseButton.WheelUp)
+                SetClassicDioramaZoom(_dioramaTargetSizeMeters * 0.86f);
+            else if (button.ButtonIndex == MouseButton.WheelDown)
+                SetClassicDioramaZoom(_dioramaTargetSizeMeters / 0.86f);
+        }
+    }
+
+    private void SetClassicDioramaZoom(float sizeMeters)
+    {
+        _dioramaTargetSizeMeters = Math.Clamp(
+            sizeMeters,
+            DioramaMinimumSizeMeters,
+            DioramaMaximumSizeMeters);
+    }
+
+    private void UpdateClassicDioramaPan(float delta)
+    {
+        var input = ReadMovement();
+        var forward = -_camera.GlobalBasis.Z;
+        var right = _camera.GlobalBasis.X;
+        forward.Y = 0.0f;
+        right.Y = 0.0f;
+        forward = forward.Normalized();
+        right = right.Normalized();
+        var direction = (right * input.X + forward * input.Y).Normalized();
+        var zoomScale = _dioramaTargetSizeMeters / DioramaInitialSizeMeters;
+        Position += direction * DioramaPanSpeedMetersPerSecond * zoomScale * delta;
     }
 
     private void BuildXrRig()

@@ -27,6 +27,8 @@ internal partial class GameplaySession : Node
     private RuntimeConfiguration _configuration = null!;
     private bool _useXrHud;
     private bool _showHud = true;
+    private bool _useClassicDioramaHud;
+    private string? _objectiveOverride;
     private string? _equippedWeaponFormId;
     private string? _weaponAmmoFormId;
     private int _weaponDamage;
@@ -65,14 +67,21 @@ internal partial class GameplaySession : Node
         string? configuredSavePath,
         bool useXrHud = false,
         bool loadExistingSave = true,
-        bool showHud = true)
+        bool showHud = true,
+        bool useClassicDioramaHud = false,
+        string? objectiveOverride = null)
     {
+        if (useXrHud && useClassicDioramaHud)
+            throw new ArgumentException(
+                "Classic Diorama and OpenXR HUDs are separate presentation adapters.");
         _configuration = configuration;
         Name = "GameplaySession";
         _cellFormId = cellFormId;
         _entryDoorFormId = entryDoorFormId;
         _useXrHud = useXrHud;
         _showHud = showHud;
+        _useClassicDioramaHud = useClassicDioramaHud;
+        _objectiveOverride = objectiveOverride;
         _savePath = ResolvePath(configuredSavePath ?? configuration.Hud.DefaultSavePath);
         if (loadExistingSave)
             Load(cellFormId);
@@ -115,13 +124,19 @@ internal partial class GameplaySession : Node
         }
         if (!_useClassicDioramaHud)
         {
-            Text = "+",
-            Position = _configuration.Hud.CrosshairPositionPixels.Vector2(),
-        };
-        crosshair.AddThemeColorOverride("font_color", Colors.White);
-        crosshair.AddThemeFontSizeOverride("font_size", _configuration.Hud.CrosshairFontSizePixels);
-        layer.AddChild(crosshair);
-        RefreshHud("WASD move • E activate • Left click use/fire • R reload/reset • F5 save");
+            var crosshair = new Label
+            {
+                Text = "+",
+                Position = _configuration.Hud.CrosshairPositionPixels.Vector2(),
+            };
+            crosshair.AddThemeColorOverride("font_color", Colors.White);
+            crosshair.AddThemeFontSizeOverride("font_size", _configuration.Hud.CrosshairFontSizePixels);
+            layer.AddChild(crosshair);
+        }
+        RefreshHud(
+            _useClassicDioramaHud
+                ? "WASD pan • Wheel zoom • Q/E rotate 60° • Home reset • F5 save"
+                : "WASD move • E activate • Left click use/fire • R reload/reset • F5 save");
     }
 
     internal void AttachXrHud(Node3D leftHand)
@@ -463,7 +478,7 @@ internal partial class GameplaySession : Node
             SandboxObjectiveStage.TakeAid => _configuration.Hud.Copy.ObjectiveTakeAid,
             SandboxObjectiveStage.OpenEntryDoor => _configuration.Hud.Copy.ObjectiveOpenEntryDoor,
             _ => _configuration.Hud.Copy.ObjectiveComplete,
-        };
+        });
         var ammunition = _equippedWeaponFormId is null
             ? "--/--"
             : $"{_ammoInMagazine}/{_weaponClipSize}";

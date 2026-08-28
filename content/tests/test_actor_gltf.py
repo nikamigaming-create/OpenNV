@@ -592,12 +592,11 @@ class ActorGltfTest(unittest.TestCase):
             values,
         )
 
-    def test_bip01_locomotion_translation_is_relative_to_skeleton_rest(self):
+    def test_bip01_locomotion_translation_is_removed_from_accumulation_root(self):
         values = [(0.0, 0.0, 0.0), (0.5, 0.0, -0.25)]
-        rest = (0.0, 67.771, -0.657)
         self.assertEqual(
-            actor_animation_translations("Bip01", values, rest),
-            [(0.0, 67.771, -0.657), (0.5, 67.771, -0.907)],
+            actor_animation_translations("Bip01", values, "Bip01", "Bip01 NonAccum"),
+            [(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)],
         )
 
     def test_baked_shape_transform_is_removed_from_skin_bind(self):

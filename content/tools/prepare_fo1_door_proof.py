@@ -16,6 +16,7 @@ from cell_catalog import scan_cell_catalog
 from cell_scene import environment_texture_paths
 from export_static_nif_gltf import export_static_nif
 from fo1_profile import Fo1ProfileError, parse_form_id, sha256_path
+from runtime_configuration import load_runtime_configuration
 from texture_pipeline import TexturePipeline
 
 
@@ -109,6 +110,7 @@ def build(
             member.logical_path,
             model,
             sidecar,
+            load_runtime_configuration().content_compiler,
             strict=False,
             include_shape_prefixes=tuple(recipe["staticPoseShapePrefixes"]),
         )

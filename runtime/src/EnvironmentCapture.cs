@@ -43,7 +43,14 @@ internal static class EnvironmentCapture
             var hud = loaded.Session.GetNodeOrNull<CanvasLayer>("GameplayHud");
             if (loaded.Player.UsesClassicDiorama)
             {
-                await CaptureClassicDiorama(host, loaded, output, scenePath, reportPath, hud);
+                await CaptureClassicDiorama(
+                    host,
+                    loaded,
+                    configuration,
+                    output,
+                    scenePath,
+                    reportPath,
+                    hud);
                 return;
             }
             if (hud is not null)
@@ -256,6 +263,82 @@ internal static class EnvironmentCapture
             GD.PushError($"OPENNV_GODOT_ENVIRONMENT_CAPTURE_FAIL {exception.Message}");
             host.GetTree().Quit(1);
         }
+    }
+
+    private static async Task CaptureClassicDiorama(
+        Node3D host,
+        CellSceneLoader.LoadedCell loaded,
+        RuntimeConfiguration configuration,
+        string output,
+        string scenePath,
+        string? reportPath,
+        CanvasLayer? hud)
+    {
+        await WaitForRenderedFrames(host, configuration.Capture.RenderedFramesBeforeCapture);
+        var withHud = SaveViewportPng(
+            host,
+            output,
+            "classic-diorama-ui.png",
+            0.035,
+            configuration.Capture);
+        if (hud is not null)
+            hud.Visible = false;
+        await WaitForRenderedFrames(host, configuration.Capture.RenderedFramesBeforeCapture);
+        var environment = SaveViewportPng(
+            host,
+            output,
+            "classic-diorama-environment.png",
+            0.035,
+            configuration.Capture);
+        var visualQualityPassed = withHud.Passed && environment.Passed;
+        var camera = loaded.Player.Camera;
+        var captureReport = new
+        {
+            schema = "opennv-classic-diorama-capture/v1",
+            status = visualQualityPassed ? "pass" : "fail",
+            renderer = "forward_plus",
+            scene = scenePath,
+            sceneSha256 = FileSha256(VerifiedGltfLoader.ResolvePath(scenePath)),
+            cellFormId = loaded.FormId,
+            cellEditorId = loaded.EditorId,
+            presentation = "classic-diorama",
+            projection = "orthogonal",
+            cameraName = camera.Name.ToString(),
+            cameraPosition = Vector(camera.GlobalPosition),
+            cameraRotationDegrees = Vector(camera.GlobalRotationDegrees),
+            orthographicSizeMeters = camera.Size,
+            framingBoundsPosition = loaded.Player.DioramaFramingBounds is Aabb bounds
+                ? Vector(bounds.Position)
+                : null,
+            framingBoundsSize = loaded.Player.DioramaFramingBounds is Aabb framing
+                ? Vector(framing.Size)
+                : null,
+            cameraFill = camera.FindChild(
+                "ClassicDioramaCameraFill",
+                true,
+                false) is DirectionalLight3D,
+            assets = loaded.Assets,
+            textures = loaded.Textures,
+            materialBindings = loaded.MaterialBindings,
+            references = loaded.References,
+            authoredLights = loaded.AuthoredLights,
+            collisionMeshes = loaded.CollisionMeshes,
+            windowsAppControlUsed = false,
+            foregroundActivationUsed = false,
+            foregroundInputInjected = false,
+            turnSimulationConnected = false,
+            visualTarget = "manual concept reference; not a retail acceptance oracle",
+            files = new[] { withHud.Evidence, environment.Evidence },
+        };
+        WriteReport(Path.Combine(output, "classic-diorama-capture-report.json"), captureReport);
+        if (reportPath is not null)
+            WriteReport(reportPath, captureReport);
+        if (visualQualityPassed)
+            GD.Print($"OPENNV_CLASSIC_DIORAMA_CAPTURE_PASS output={output} files=2");
+        else
+            GD.PushError(
+                $"OPENNV_CLASSIC_DIORAMA_CAPTURE_VISUAL_FAIL output={output} files=2");
+        host.GetTree().Quit(visualQualityPassed ? 0 : 1);
     }
 
     internal static async Task WaitForRenderedFrames(Node host, int count)

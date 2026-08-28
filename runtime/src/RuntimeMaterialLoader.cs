@@ -30,6 +30,12 @@ internal static class RuntimeMaterialLoader
     internal const string RetailActorUnshadedMaterialResourceName =
         "OpenNV_RetailActorUnshaded";
 
+    internal static LoadedTextures LoadTextures(JsonElement scene)
+    {
+        var configuration = RuntimeConfiguration.Load();
+        return LoadTextures(scene, configuration.Renderer);
+    }
+
     private static int LandscapeWeightMapCount(int layerCount) =>
         layerCount == 0
             ? 0
@@ -471,6 +477,20 @@ internal static class RuntimeMaterialLoader
             surface.Mesh.SetSurfaceOverrideMaterial(surface.Surface, material);
         }
         return bindings.Length;
+    }
+
+    internal static int Apply(
+        Node3D scene,
+        JsonElement asset,
+        LoadedTextures textures)
+    {
+        var configuration = RuntimeConfiguration.Load();
+        return Apply(
+            scene,
+            asset,
+            textures,
+            configuration.Renderer,
+            configuration.ContentCompiler.RetailGrass);
     }
 
     internal static int ApplyRetailAmbientDirectionalLighting(

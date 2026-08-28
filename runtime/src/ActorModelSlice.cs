@@ -14,6 +14,21 @@ internal static class ActorModelSlice
     internal static LoadedActor Load(
         string modelPath,
         string sidecarPath,
+        Node3D parent)
+    {
+        var configuration = RuntimeConfiguration.Load();
+        return Load(
+            modelPath,
+            sidecarPath,
+            parent,
+            configuration,
+            true,
+            BoundsContract.AnyActor);
+    }
+
+    internal static LoadedActor Load(
+        string modelPath,
+        string sidecarPath,
         Node3D parent,
         RuntimeConfiguration configuration,
         bool scaleToMeters = true,

@@ -9,7 +9,10 @@ internal static class StaticModelSlice
         string modelPath,
         string sidecarPath,
         Node3D parent,
-        RuntimeConfiguration configuration)
+        RuntimeConfiguration configuration,
+        string? materialManifestPath = null,
+        string? materialManifestSha256 = null,
+        bool classicDiorama = false)
     {
         var loaded = VerifiedGltfLoader.Load(modelPath, sidecarPath);
         loaded.CollisionScene?.Free();
@@ -28,19 +31,53 @@ internal static class StaticModelSlice
         if (surfaces == 0 || vertices == 0)
             throw new InvalidOperationException("Imported glTF contains no renderable surfaces or vertices.");
 
-        BuildReferenceView(
+        var materialBindings = 0;
+        if (materialManifestPath is not null)
+        {
+            if (materialManifestSha256 is null)
+                throw new InvalidOperationException(
+                    "Static material manifest requires its SHA-256.");
+            var manifestPath = VerifiedGltfLoader.ResolvePath(materialManifestPath);
+            VerifiedGltfLoader.VerifyHash(manifestPath, materialManifestSha256);
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var materialManifest = document.RootElement;
+            if (materialManifest.GetProperty("schema").GetString() !=
+                "opennv-static-material-manifest/v1")
+                throw new InvalidOperationException(
+                    $"Unexpected static material manifest: {manifestPath}");
+            var textures = RuntimeMaterialLoader.LoadTextures(
+                materialManifest,
+                configuration.Renderer);
+            materialBindings = RuntimeMaterialLoader.Apply(
+                model,
+                materialManifest.GetProperty("asset"),
+                textures,
+                configuration.Renderer,
+                configuration.ContentCompiler.RetailGrass);
+        }
+
+        var view = BuildReferenceView(
             parent,
-            meshes[0],
+            model,
             configuration.DiagnosticPreview,
-            configuration.Renderer);
-        return new LoadedStaticModel(loaded.SourceSha256, meshes.Length, surfaces, vertices);
+            configuration.Renderer,
+            classicDiorama);
+        return new LoadedStaticModel(
+            loaded.SourceSha256,
+            meshes.Length,
+            surfaces,
+            vertices,
+            materialBindings,
+            view.Projection,
+            view.Bounds);
     }
 
-    private static void BuildReferenceView(
+    private static ReferenceView BuildReferenceView(
         Node3D parent,
-        MeshInstance3D referenceMesh,
+        Node3D model,
         DiagnosticPreviewConfiguration configuration,
-        RendererConfiguration renderer)
+        RendererConfiguration renderer,
+        bool classicDiorama)
     {
         var bounds = WorldBounds(model);
         var center = bounds.GetCenter();
@@ -81,10 +118,16 @@ internal static class StaticModelSlice
         }
         var camera = new Camera3D
         {
-            Position = center + new Vector3(
-                extent * configuration.CameraOffsetExtentMultipliers[0],
-                extent * configuration.CameraOffsetExtentMultipliers[1],
-                extent * configuration.CameraOffsetExtentMultipliers[2]),
+            Position = classicDiorama
+                ? cameraPosition
+                : center + new Vector3(
+                    extent * configuration.CameraOffsetExtentMultipliers[0],
+                    extent * configuration.CameraOffsetExtentMultipliers[1],
+                    extent * configuration.CameraOffsetExtentMultipliers[2]),
+            Projection = classicDiorama
+                ? Camera3D.ProjectionType.Orthogonal
+                : Camera3D.ProjectionType.Perspective,
+            Size = cameraSize,
             Near = MathF.Max(configuration.MinimumNearMeters, extent / configuration.NearExtentDivisor),
             Far = MathF.Max(configuration.MinimumFarMeters, extent * configuration.FarExtentMultiplier),
             Current = true,
