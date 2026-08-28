@@ -210,13 +210,27 @@ def prepare_exterior_scene(
     ):
         raise ValueError("Exterior recipe CELL/worldspace relationship is invalid")
     streaming = recipe.get("streaming")
-    if not isinstance(streaming, dict) or set(streaming) != {
+    streaming_fields = set(streaming) if isinstance(streaming, dict) else set()
+    bounded_proof_fields = {"mode", "loadedGridDiameter"}
+    retail_ini_fields = {
         "mode",
         "loadedGridDiameter",
         "source",
         "section",
         "key",
-    }:
+    }
+    if (
+        not isinstance(streaming, dict)
+        or (
+            streaming.get("mode") == "bounded-proof"
+            and streaming_fields != bounded_proof_fields
+        )
+        or (
+            streaming.get("mode") == "retail-ini"
+            and streaming_fields != retail_ini_fields
+        )
+        or streaming.get("mode") not in {"bounded-proof", "retail-ini"}
+    ):
         raise ValueError("Exterior recipe requires one declared streaming contract")
     loaded_grid_diameter = int(streaming["loadedGridDiameter"])
     requested_grids = loaded_grid_coordinates(cell.coordinates, loaded_grid_diameter)
@@ -254,15 +268,19 @@ def prepare_exterior_scene(
         str(value) for value in selection["includeBaseRecordTypes"]
     }
     lod_configuration = recipe.get("distantReferences")
-    if not isinstance(lod_configuration, dict) or set(lod_configuration) != {
-        "distantReferenceRadiusCells",
-        "distantReferenceTypes",
-    }:
-        raise ValueError("Exterior distant-reference contract must be complete")
-    distant_reference_radius = int(lod_configuration["distantReferenceRadiusCells"])
-    distant_reference_types = {
-        str(value) for value in lod_configuration["distantReferenceTypes"]
-    }
+    if lod_configuration is None and streaming["mode"] == "bounded-proof":
+        distant_reference_radius = 0
+        distant_reference_types: set[str] = set()
+    else:
+        if not isinstance(lod_configuration, dict) or set(lod_configuration) != {
+            "distantReferenceRadiusCells",
+            "distantReferenceTypes",
+        }:
+            raise ValueError("Exterior distant-reference contract must be complete")
+        distant_reference_radius = int(lod_configuration["distantReferenceRadiusCells"])
+        distant_reference_types = {
+            str(value) for value in lod_configuration["distantReferenceTypes"]
+        }
     if distant_reference_radius < 0:
         raise ValueError("Exterior distant reference radius cannot be negative")
     if distant_reference_radius and not distant_reference_types:

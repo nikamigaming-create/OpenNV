@@ -65,7 +65,7 @@ $RuntimeConfigurationJsonDepth = 100
 $runtimeConfiguration = Get-Content -Raw -LiteralPath $runtimeConfigurationPath |
     ConvertFrom-Json -Depth $RuntimeConfigurationJsonDepth
 $ownedData = $runtimeConfiguration.legalAssets.ownedData
-$cellRecipe = [string]$runtimeConfiguration.legalAssets.defaultCellRecipe
+$linkedWorldCellRecipe = [string]$runtimeConfiguration.legalAssets.linkedWorldProofCellRecipe
 if ([string]::IsNullOrWhiteSpace($RetailLogicalPath)) {
     $RetailLogicalPath = [string]$runtimeConfiguration.legalAssets.smokeModelLogicalPath
 }
@@ -390,7 +390,7 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         "--data-root", $resolvedFalloutData,
         "--cache-root", $temporaryCache,
         "--logical-model", $RetailLogicalPath,
-        "--cell-recipe", $cellRecipe
+        "--cell-recipe", $linkedWorldCellRecipe
     )
     if (-not [string]::IsNullOrWhiteSpace($ExpectedMeshesBsaSha256)) {
         $prepareArguments += @("--expected-meshes-bsa-sha256", $ExpectedMeshesBsaSha256)

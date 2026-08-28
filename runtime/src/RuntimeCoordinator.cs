@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Diagnostics.Performance;
 
 namespace OpenNV.Runtime;
 
@@ -72,12 +73,26 @@ public partial class RuntimeCoordinator : Node3D
             RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
             Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
             _options = ParseOptions(OS.GetCmdlineUserArgs());
+            var performanceReportPath = _options.TryGetValue(
+                "perf-report",
+                out var configuredPerformanceReportPath)
+                ? ValidatePerformanceReportPath(configuredPerformanceReportPath)
+                : null;
+            var performanceObserver = new RuntimePerformanceObserver();
+            performanceObserver.Configure(
+                _configuration.Performance,
+                RuntimeConfiguration.ExpectedSchema,
+                _configuration.Sha256,
+                performanceReportPath);
+            AddChild(performanceObserver);
             if (_options.ContainsKey("fo1-hex-scene"))
                 _loadingScreen?.SetTitle("FALLOUT 1  //  V13ENT HEX TACTICAL");
             if (_options.ContainsKey("fo1-campaign-transport"))
                 _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING ALL MAPS");
             if (_options.ContainsKey("fo1-campaign-presentation"))
                 _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING CAMPAIGN ART");
+            if (_options.ContainsKey("fo3-profile"))
+                _loadingScreen?.SetTitle("FALLOUT 3  //  CG00 CHARACTER SELECTION");
             if (_options.ContainsKey("xr-simulator-proof") &&
                 (!_options.ContainsKey("vr") || !_options.ContainsKey("report")))
                 throw new ArgumentException("--xr-simulator-proof requires --vr and --report.");
@@ -111,6 +126,11 @@ public partial class RuntimeCoordinator : Node3D
                 (!_options.ContainsKey("fo1-hex-scene") || !_options.ContainsKey("vr")))
                 throw new ArgumentException(
                     "The Fallout 1 OpenXR simulator preview requires --fo1-hex-scene and --vr.");
+            if (_options.ContainsKey("fo1-xr-controls-proof") &&
+                (!_options.ContainsKey("fo1-xr-simulator-preview") ||
+                    !_options.ContainsKey("report") || !_options.ContainsKey("save-path")))
+                throw new ArgumentException(
+                    "The Fallout 1 OpenXR controls proof requires the simulator preview, report, and isolated save path.");
             if (_options.ContainsKey("vr"))
                 EnableOpenXr();
             if (_options.ContainsKey("xr-rig-proof"))
@@ -132,6 +152,16 @@ public partial class RuntimeCoordinator : Node3D
             var hasFo1HexScene = _options.ContainsKey("fo1-hex-scene");
             var hasFo1Campaign = _options.ContainsKey("fo1-campaign-transport");
             var hasFo1CampaignPresentation = _options.ContainsKey("fo1-campaign-presentation");
+            var hasFo3Profile = _options.ContainsKey("fo3-profile");
+            var hasJamProfile = _options.ContainsKey("jam-profile");
+            if (hasJamProfile && (!hasDataRoot && !hasCellScene))
+                throw new ArgumentException(
+                    "--jam-profile requires --data-root or --cell-scene.");
+            if (hasJamProfile &&
+                (_options.ContainsKey("vr") || _options.ContainsKey("vr-layout-proof") ||
+                    _options.ContainsKey("classic-diorama")))
+                throw new ArgumentException(
+                    "The bounded JVS sprint transport currently supports desktop first-person movement only.");
             if ((_options.ContainsKey("fo1-map") || _options.ContainsKey("fo1-elevation")) &&
                 !hasFo1CampaignPresentation)
                 throw new ArgumentException(
@@ -147,12 +177,13 @@ public partial class RuntimeCoordinator : Node3D
             if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) +
                     (hasStaticCellCompile ? 1 : 0) + (hasActorModel ? 1 : 0) +
                     (hasActorReviewScene ? 1 : 0) + (hasFo1HexScene ? 1 : 0) +
-                    (hasFo1Campaign ? 1 : 0) + (hasFo1CampaignPresentation ? 1 : 0) > 1)
+                    (hasFo1Campaign ? 1 : 0) + (hasFo1CampaignPresentation ? 1 : 0) +
+                    (hasFo3Profile ? 1 : 0) > 1)
                 throw new ArgumentException(
                     "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
                     "--static-cell-compile, --actor-model/--actor-sidecar, " +
                     "--actor-review-scene, --fo1-hex-scene, --fo1-campaign-transport, or " +
-                    "--fo1-campaign-presentation.");
+                    "--fo1-campaign-presentation, or --fo3-profile.");
             var startsFo1NewGame = _options.ContainsKey("fo1-new-game") ||
                 _options.ContainsKey("fo1-new-game-demo");
             if (startsFo1NewGame && !hasFo1HexScene)
@@ -162,6 +193,11 @@ public partial class RuntimeCoordinator : Node3D
                     !_options.ContainsKey("fo1-character-start-sha256")))
                 throw new ArgumentException(
                     "Fallout new game requires --fo1-character-start and --fo1-character-start-sha256.");
+            if (_options.TryGetValue("fo1-start-presentation", out var fo1StartPresentation) &&
+                (!startsFo1NewGame ||
+                    fo1StartPresentation is not "hex-tactical" and not "first-person"))
+                throw new ArgumentException(
+                    "--fo1-start-presentation requires Fallout new game and must be hex-tactical or first-person.");
             if (_options.ContainsKey("fo1-new-game-demo") && !_options.ContainsKey("demo-report"))
                 throw new ArgumentException("Fallout new-game demo requires --demo-report.");
             if (_options.ContainsKey("fo1-new-game-demo") && _options.ContainsKey("fo1-gameplay-demo"))
@@ -277,6 +313,14 @@ public partial class RuntimeCoordinator : Node3D
                 LoadActorReviewScene(
                     RequireOption(_options, "actor-review-scene"),
                     _options);
+                return;
+            }
+
+            if (hasFo3Profile)
+            {
+                SetLoadingStatus("VERIFYING OWNED FALLOUT 3 CG00 CONTRACT");
+                LoadFo3Opening(RequireOption(_options, "fo3-profile"), _options);
+                DismissLoadingScreen();
                 return;
             }
 
@@ -430,6 +474,41 @@ public partial class RuntimeCoordinator : Node3D
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
 
+    private static string ValidatePerformanceReportPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path == "true")
+            throw new ArgumentException("--perf-report requires an explicit JSON output path.");
+        string resolved;
+        try
+        {
+            resolved = ResolveRuntimePath(path);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            throw new ArgumentException("--perf-report path syntax is invalid.", exception);
+        }
+        if (!string.Equals(Path.GetExtension(resolved), ".json", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(resolved)))
+            throw new ArgumentException("--perf-report requires a .json output file.");
+        return resolved;
+    }
+
+    private void LoadFo3Opening(
+        string profilePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var profile = Fo3OwnedProfile.Load(profilePath);
+        var savePath = options.TryGetValue("save-path", out var configuredSavePath)
+            ? ResolveRuntimePath(configuredSavePath)
+            : ResolveRuntimePath("user://profiles/fallout3/cg00-character-v2.json");
+        var opening = new Fo3OpeningFlow();
+        opening.Configure(profile, savePath, options.ContainsKey("fo3-appearance-proof"));
+        AddChild(opening);
+        if (options.ContainsKey("quit-after-load") && !options.ContainsKey("fo3-appearance-proof"))
+            GetTree().Quit(0);
+    }
+
     private void LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
     {
         var runTraversalProof = options.ContainsKey("portal-proof");
@@ -458,6 +537,17 @@ public partial class RuntimeCoordinator : Node3D
             !options.ContainsKey("new-game"),
             !usesCampaignState,
             options.ContainsKey("classic-diorama"));
+        if (options.TryGetValue("jam-profile", out var jamProfilePath))
+        {
+            var sprint = JamJvsSprintContract.Load(jamProfilePath);
+            DesktopInputMap.ConfigureJamSprint(sprint);
+            loaded.Player.ConfigureJamJvsSprint(sprint);
+            GD.Print(
+                $"OPENNV_JAM_CAPABILITY id={JamJvsSprintContract.CapabilityId} " +
+                $"profile={sprint.ProfileId} key={sprint.DesktopPhysicalKey} " +
+                $"speedMultiplier={sprint.SpeedMultiplier:F2} " +
+                $"missingDependencies={sprint.MissingDependencyCount} completeJamReady=False");
+        }
         var startsNewGame = options.ContainsKey("new-game");
         var restoredOpening = startsNewGame ? null : loaded.Session.OpeningState;
         OpeningQuestRuntime? openingFlow = null;
@@ -1318,7 +1408,7 @@ public partial class RuntimeCoordinator : Node3D
             $"walkable={loaded.WalkableHexes} sprites={loaded.SpritePlacements}");
         if (options.ContainsKey("fo1-xr-simulator-preview"))
         {
-            _ = Fo1XrSimulatorPreview.Run(this, loaded, options);
+            _ = Fo1XrSimulatorPreview.Run(this, loaded, options, _configuration);
             return;
         }
         if (options.ContainsKey("fo1-new-game") || options.ContainsKey("fo1-new-game-demo"))
@@ -1335,7 +1425,13 @@ public partial class RuntimeCoordinator : Node3D
                     options.ContainsKey("fo1-demo-fast-opening"),
                     options.ContainsKey("fo1-demo-skip-opening"));
             else
-                Fo1NewGameFlow.StartInteractive(this, loaded, characterStart);
+                Fo1NewGameFlow.StartInteractive(
+                    this,
+                    loaded,
+                    characterStart,
+                    options.TryGetValue("fo1-start-presentation", out var startPresentation)
+                        ? startPresentation
+                        : "first-person");
             return;
         }
         if (options.ContainsKey("fo1-tactical-proof"))

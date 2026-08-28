@@ -118,6 +118,12 @@ class Dat2Archive:
         if cursor != len(tree):
             raise ValueError(f"DAT2 directory has {len(tree) - cursor} trailing bytes")
         self.entries = entries
+        self.file_size = file_size
+        self.data_base = data_base
+        self.data_size = data_size
+        self.tree_offset = tree_offset
+        self.tree_size = tree_size
+        self.tree_sha256 = hashlib.sha256(tree).hexdigest()
 
     def extract(self, logical_path: str) -> Dat2Member:
         canonical = canonical_dat2_path(logical_path)
@@ -142,4 +148,3 @@ class Dat2Archive:
             entry.stored_offset,
             entry.stored_size,
         )
-

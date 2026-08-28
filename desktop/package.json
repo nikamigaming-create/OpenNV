@@ -14,7 +14,7 @@
   "main": "src/main.mjs",
   "scripts": {
     "dev": "electron .",
-    "check": "node --check src/contract.mjs && node --check src/main.mjs && node --check src/preload.mjs && node --check src/renderer/app.mjs",
+    "check": "node --check src/contract.mjs && node --check src/main.mjs && node --check src/preload.cjs && node --check src/renderer/app.mjs",
     "test": "node --test",
     "package": "electron-builder"
   },

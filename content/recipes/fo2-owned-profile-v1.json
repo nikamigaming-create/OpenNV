@@ -1,0 +1,40 @@
+{
+  "schema": "opennv-fo2-owned-profile-recipe/v1",
+  "id": "fo2-owned-profile-v1",
+  "campaign": "Fallout2",
+  "archives": [
+    {
+      "file": "master.dat",
+      "role": "master-resources",
+      "format": "fallout-dat2"
+    },
+    {
+      "file": "critter.dat",
+      "role": "critter-resources",
+      "format": "fallout-dat2"
+    },
+    {
+      "file": "patch000.dat",
+      "role": "retail-patch-overlay",
+      "format": "fallout-dat2"
+    }
+  ],
+  "presentations": [
+    {
+      "id": "hex-tactical",
+      "label": "Hex",
+      "ready": false
+    },
+    {
+      "id": "first-person",
+      "label": "FPS",
+      "ready": false
+    },
+    {
+      "id": "openxr",
+      "label": "VR",
+      "ready": false
+    }
+  ],
+  "firstSliceBlocker": "The registered archives can emit the exact asset-free Temple MAP/PRO/FRM source graph, but no Godot runtime consumes it and character creation, script execution, gameplay, and save state are absent."
+}

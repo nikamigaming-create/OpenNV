@@ -71,6 +71,7 @@ internal partial class CellPlayer : CharacterBody3D
     private CellNavigationGraph? _navigation;
     private Node3D? _navigationRoot;
     private Vector3 _navigationOriginGameUnits;
+    private JamJvsSprintContract? _jamJvsSprint;
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
@@ -111,6 +112,14 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal void SetExternalActivationHandler(Func<Node?, bool>? handler) =>
         _externalActivationHandler = handler;
+
+    internal void ConfigureJamJvsSprint(JamJvsSprintContract sprint)
+    {
+        if (_useXr || _useClassicDiorama)
+            throw new InvalidOperationException(
+                "The bounded JVS sprint transport currently supports desktop first-person movement only.");
+        _jamJvsSprint = sprint;
+    }
 
     internal void ConfigureOwnedNavigation(
         CellNavigationGraph navigation,
@@ -224,7 +233,12 @@ internal partial class CellPlayer : CharacterBody3D
         direction.Y = 0.0f;
         direction = direction.Normalized();
 
-        var horizontalVelocity = direction * _configuration.Player.MoveSpeedMetersPerSecond;
+        var movementSpeed = _jamJvsSprint?.MovementSpeed(
+            _configuration.Player.MoveSpeedMetersPerSecond,
+            input,
+            Input.IsActionPressed(JamJvsSprintContract.InputAction)) ??
+            _configuration.Player.MoveSpeedMetersPerSecond;
+        var horizontalVelocity = direction * movementSpeed;
         if (!_movementEnabled)
             Velocity = Vector3.Zero;
         else if (_navigation is not null)

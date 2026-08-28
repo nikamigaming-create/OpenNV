@@ -378,7 +378,7 @@ try {
         throw "Fallout OpenXR preview failed. $(Get-Content -LiteralPath $stderrPath -Raw)"
     }
     $engineReport = Get-Content -LiteralPath $engineReportPath -Raw | ConvertFrom-Json -Depth $JsonDepth
-    if ($engineReport.schema -ne "opennv-fo1-xr-simulator-preview/v1" -or
+    if ($engineReport.schema -ne "opennv-fo1-xr-simulator-preview/v2" -or
         $engineReport.status -ne "pass" -or
         [bool]$engineReport.hardwareHeadsetValidated) {
         throw "The engine report is not a bounded simulator-only pass."

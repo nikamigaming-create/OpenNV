@@ -12,6 +12,25 @@ python -m pip install -r content/requirements.txt
 .\scripts\Test-GodotRuntime.ps1
 ```
 
+To start the source launcher against the checked-in runtime on this computer,
+install the launcher's dependencies once with `npm install` from `desktop`, then
+run:
+
+```powershell
+.\scripts\Start-OpenNV.ps1
+```
+
+The script finds the local Godot 4.7.2 Mono build, sets
+`OPENNV_RUNTIME_ROOT` to the repository runtime, and sets `OPENNV_GODOT` before
+starting Electron. On another checkout, supply Godot explicitly:
+
+```powershell
+.\scripts\Start-OpenNV.ps1 -Godot 'C:\Path\To\Godot_v4.7.2-stable_mono_win64_console.exe'
+```
+
+This start command neither reads retail data nor creates a content cache. Game
+inputs remain selected or registered inside the launcher.
+
 An optional owned-data check starts from the player's legal game installation.
 It hashes the master and meshes archive, extracts the model directly, prepares a
 temporary cache, loads it in Godot, and removes the cache afterward:
@@ -38,8 +57,44 @@ configured power, R resets every ball to its authored Saloon transform, and E
 or Escape returns to the weapon. In OpenXR, grip enters/exits, hold trigger and
 sweep the tracked cue through the cue ball, and B resets the table.
 
-The New Vegas launcher path is enabled only for this sandbox. Fallout 3, TTW,
-JAM, and the full New Vegas campaign remain disabled until their own gates pass.
+The launcher shows four top-level game choices: Fallout 1, Fallout 2, New Vegas,
+and Fallout 3. Fallout 1 exposes Hex/FPS, Fallout 2 visibly lists disabled
+Hex/FPS/VR choices, New Vegas exposes its original/VR/JAM options, and Fallout 3
+exposes standalone/TTW choices; TTW is an edition, not a fifth game button. On
+this development machine Fallout 1's generated V13ENT
+inputs and Fallout 3's owned GOTY profile are registered. New Vegas launches the
+owned menu, skippable intro, and Doc Mitchell route from the verified local
+cache. Registered Fallout 3 now opens its profile-backed menu, plays a locally
+converted and hash-verified copy of the owned intro, and converges through
+Escape or the Skip button on CG00 sex/name selection, a persistent stage-60
+character, and source-backed race/hair/eye selection persisted at stage 62.
+The current preview shows verified owned source textures rather than a 3D
+FaceGen actor. Fallout 1 OpenXR has a shared-state V13ENT simulator adapter, but its
+reload/save input gate, campaign-native hands/weapon/UI, and physical-headset
+acceptance remain unpromoted. TTW, JAM runtime semantics, Fallout 3
+`CG00PlayerSection4` package execution and Vault 101 world play, and all complete
+campaigns also remain unpromoted.
+
+The legally owned Fallout 2 install can be registered without producing a
+content cache:
+
+```powershell
+.\scripts\Register-OpenNVFallout2.ps1 `
+  -Fallout2Root 'D:\SteamLibrary\steamapps\common\Fallout 2'
+```
+
+This validates and hashes `master.dat`, `critter.dat`, and `patch000.dat`, plus
+their DAT2 directory identities. It does not copy any member. The registered
+profile can be passed to `content/tools/fo2_first_slice.py` to emit an
+asset-free, hash-bound Temple MAP/PRO/FRM source manifest. Registration and
+source transport do not make Fallout 2 playable: character creation, Godot
+scene loading, scripts, gameplay/save state, and all presentations remain
+unimplemented.
+
+The registered Fallout 1 route now opens an asset-free original-style menu;
+**New Game** enters the owned character picker and skippable owned Overseer
+movie before releasing the selected Hex/FPS view in V13ENT. Its original retail
+startup logos and exact retail main-menu presentation are not implemented.
 The launcher also exposes an experimental OpenXR toggle. Meta/Oculus Touch and
 the OpenXR generic-controller fallback are declared. A repo-local simulator
 passes two retail hands, both sticks, locomotion, snap turn, door/fire/reload/

@@ -2,9 +2,9 @@
 
 Date: 2026-08-25
 
-This promotes one uninterrupted private local route: the owned original
-three-premade-plus-Custom picker, complete character creation, the owned
-original Overseer briefing, a fade into live first-person control at the
+This promotes one uninterrupted private local route: a functional asset-free
+OpenNV main-menu adaptation, the owned original three-premade-plus-Custom
+picker, complete character creation, the owned original Overseer briefing, a fade into live first-person control at the
 authored V13ENT first-run state, a first-person Vault look-back, continuous FPS
 movement/shooting over the source walk mask, shoulder orbit with exact
 centered-hex commands, and tactical movement with two turn-based giant-rat
@@ -261,6 +261,8 @@ Source-bound and functionally matched: original picker/premade records and
 portraits, creator background, creation constraints used by this profile,
 Pip-Boy 2000 chrome, original opening images/audio, first-run entry
 tile/rotation, map hexes, and the selected character's live derived values.
+The preceding New Game/Exit menu is an asset-free OpenNV adaptation and is not
+claimed as the original Fallout menu or startup-logo presentation.
 
 The gameplay HUD is now source-composed and no longer uses Godot labels.
 Retail pixel/timing parity is still not claimed for character-creator and

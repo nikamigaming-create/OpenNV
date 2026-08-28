@@ -226,6 +226,28 @@ promotion, and OpenXR acceptance remain `0/96`; the bounded local V13ENT FPS
 slice is independently proven above. Inventory SHA-256:
 `2be8a280087c2b428f1df73526a650cda9758bf0a7902a576884fdbe338e5a44`.
 
+## Bounded OpenXR shared-state gate
+
+`Fo1XrSimulatorPreview` now attaches real `left_hand`/`right_hand` grip and aim
+nodes to V13ENT and routes the existing OpenXR actions into the authoritative
+`Fo1TacticalSession`. HMD-relative locomotion calls the same source-mask
+first-person movement owner; fire, reload, and save call the same combat and
+save owners used by flat first person. Snap turn rotates the XR origin around
+the flattened HMD pivot.
+
+The focused 2026-08-28 run with the locally installed durable OpenXR simulator
+established both Touch profiles and tracked controllers, 1.360 m locomotion,
+two 30-degree snap turns with 0 m maximum horizontal pivot error, and one
+accepted authoritative fire edge. The `opennv-fo1-xr-simulator-preview/v2`
+report correctly remained `fail`: that simulator exposes the trigger, sticks,
+and poses, but does not map actions named `reload` or `save` to its B/X button
+state, so both required edges remained zero.
+
+This is not a Fallout 1 VR promotion. V13ENT has no supported XR door-use
+contract and no source-bound first-person hand, grip-mounted weapon, or
+campaign-native wrist-UI contract. Those report fields remain false, physical
+headset acceptance remains false, and the launcher route remains disabled.
+
 ## Orientation and spawn review
 
 Private comparison: `fo1-v13ent-orientation-review-20260823-r5`.
@@ -268,8 +290,8 @@ Private comparison: `fo1-v13ent-orientation-review-20260823-r5`.
   animated chase/melee proof, not full retail to-hit/critical/damage formulas,
   sound, path scheduling, or all AI-packet behaviors.
 - Dialogue, quests, broader inventory/equipment behavior, complete retail
-  to-hit/critical/armor semantics, OpenXR, and Fallout save-format parity are
-  not connected. The bounded V13ENT route does provide shared FPS/tactical
+  to-hit/critical/armor semantics, promoted OpenXR play, and Fallout save-format
+  parity are not connected. The bounded V13ENT route does provide shared FPS/tactical
   pistol ammunition and reload, ranged and knife attacks, animation, impacts,
   ricochets, grounded casings, deaths, continuous walk-mask FPS movement, and a
   local JSON save contract.

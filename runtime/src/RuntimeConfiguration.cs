@@ -17,6 +17,7 @@ internal sealed record RuntimeConfiguration(
     HudConfiguration Hud,
     CaptureConfiguration Capture,
     ProofConfiguration Proof,
+    RuntimePerformanceConfiguration Performance,
     DiagnosticPreviewConfiguration DiagnosticPreview,
     ActorReviewConfiguration ActorReview,
     ExteriorEnvironmentConfiguration ExteriorEnvironment,
@@ -94,6 +95,7 @@ internal sealed record RuntimeConfiguration(
             Capture.Gallery.Video.Provenance,
             Proof.Provenance,
             Proof.GameplayRoute.Provenance,
+            Performance.Provenance,
             DiagnosticPreview.Provenance,
             ActorReview.Provenance,
             ExteriorEnvironment.Provenance,
@@ -117,6 +119,7 @@ internal sealed record RuntimeConfiguration(
         RequirePositive(World.GameUnitsToMeters, nameof(World.GameUnitsToMeters));
         RequirePositive(Simulation.PhysicsTicksPerSecond, nameof(Simulation.PhysicsTicksPerSecond));
         RequirePositive(Simulation.GravityMetersPerSecondSquared, nameof(Simulation.GravityMetersPerSecondSquared));
+        RequirePositive(Performance.SampleIntervalSeconds, nameof(Performance.SampleIntervalSeconds));
         RequirePositive(Player.CapsuleRadiusMeters, nameof(Player.CapsuleRadiusMeters));
         RequirePositive(Player.CapsuleHeightMeters, nameof(Player.CapsuleHeightMeters));
         RequirePositive(Player.MoveSpeedMetersPerSecond, nameof(Player.MoveSpeedMetersPerSecond));
@@ -487,6 +490,9 @@ internal sealed record RuntimeConfiguration(
             throw new InvalidOperationException("Desktop launcher minimum dimensions exceed startup dimensions.");
         RequireText(LegalAssets.DefaultOpeningRecipe, nameof(LegalAssets.DefaultOpeningRecipe));
         RequireText(LegalAssets.DefaultCellRecipe, nameof(LegalAssets.DefaultCellRecipe));
+        RequireText(
+            LegalAssets.LinkedWorldProofCellRecipe,
+            nameof(LegalAssets.LinkedWorldProofCellRecipe));
         RequireText(LegalAssets.DefaultCacheRoot, nameof(LegalAssets.DefaultCacheRoot));
         RequireText(LegalAssets.PackagedCompilerName, nameof(LegalAssets.PackagedCompilerName));
         RequireText(
@@ -647,6 +653,10 @@ internal sealed record SimulationConfiguration(
     ConfigurationProvenance Provenance,
     int PhysicsTicksPerSecond,
     float GravityMetersPerSecondSquared);
+
+internal sealed record RuntimePerformanceConfiguration(
+    ConfigurationProvenance Provenance,
+    double SampleIntervalSeconds);
 
 internal sealed record RendererConfiguration(
     ConfigurationProvenance Provenance,
@@ -1356,6 +1366,7 @@ internal sealed record LegalAssetsConfiguration(
     ConfigurationProvenance Provenance,
     string DefaultOpeningRecipe,
     string DefaultCellRecipe,
+    string LinkedWorldProofCellRecipe,
     string DefaultCacheRoot,
     string PackagedCompilerName,
     SourceContentToolConfiguration SourceContentTool,

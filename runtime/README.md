@@ -107,6 +107,29 @@ implemented yet.
 Add `-FalloutNewVegasData <path>` to the build command for a local end-to-end
 gate of the exported executable, packaged helper, legal cache, and Godot load.
 
+The bounded Fallout 3 front end launches from a locally registered owned GOTY
+profile:
+
+```powershell
+.\scripts\Register-OpenNVFallout3.ps1 `
+  -Fallout3Root 'D:\SteamLibrary\steamapps\common\Fallout 3 goty'
+
+Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
+  --fo3-profile "$env:LOCALAPPDATA\OpenNV\profiles\fallout3\vanilla\fallout3-profile.json"
+```
+
+Registration hashes the owned master, archives, menu inputs, music, quest
+graph, and movies, and converts the owned intro into a disposable local Theora
+cache. The runtime verifies that complete source/output join before showing the
+menu. **New Game** plays the intro; Escape and **Skip** enter the same owned CG00
+sex/name path. The resulting profile-bound character save can be continued at
+stage 60. The source-backed appearance route exposes the owned playable races,
+sex-aware hair and eye lists, and Player-plus-RACE FaceGen defaults, then saves
+the accepted choice at stage 62. Its deterministic preview shows the exact
+owned head/hair/eye source textures; it is not yet a 3D FaceGen actor render.
+Execution stops before `player.addScriptPackage CG00PlayerSection4`; the package
+runtime and Vault 101 world are not playable from this route.
+
 The private Fallout 1 tactical slice launches from a prepared, ignored owned
 cache with:
 
@@ -116,13 +139,17 @@ Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
 ```
 
 The bounded Fallout 1 new-game route adds the hash-pinned owned character/opening
-cache. It begins on the owned original picker with Max Stone, Natalia, Albert,
-and Custom; Take selects a premade, while Modify loads it into the complete
+cache. It begins at a functional asset-free, original-style menu whose **New
+Game** action opens the owned original picker with Max Stone, Natalia, Albert,
+and Custom; **Exit** quits, and the picker's Back action returns to that menu.
+Take selects a premade, while Modify loads it into the complete
 SPECIAL/skills/traits editor. It then shows the complete Overseer briefing before
 entering the same tactical session. The movie's **SKIP** button or `Escape`
 converges on the same final-frame fade into live first-person control at exact
-V13ENT tile `17690`, rotation `2`. The door remains open as a labeled
-presentation adaptation for the Vault 13 corridor look-back:
+V13ENT tile `17690`, rotation `2`. The menu itself is an OpenNV adaptation; the
+picker, creator chrome, and movie are verified owned Fallout data. The door
+remains open as a labeled presentation adaptation for the Vault 13 corridor
+look-back:
 
 ```powershell
 Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
@@ -130,8 +157,13 @@ Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
   --fo1-new-game `
   --fo1-character-start <start-cache>\character-start.json `
   --fo1-character-start-sha256 <manifest-sha256> `
+  --fo1-start-presentation hex-tactical `
   --save-path <cache>\v13ent-new-game-save.json
 ```
+
+`--fo1-start-presentation` accepts `hex-tactical` or `first-person`. Both enter
+through the same verified movie-to-live first-person seam and then release
+control in the selected view over the same save/session state.
 
 First-person uses captured mouse look, Escape to release the cursor, click to
 recapture/fire, and continuous WASD/arrows movement constrained by the source
@@ -173,6 +205,28 @@ and owned donor audio, while third person/tactical mode displays the equipped
 weapon. Rat activation is local (six exact hexes), not whole-cave aggro. It is a
 playable `V13ENT` combat vertical slice, not a full Fallout campaign, complete
 retail critical/armor/AI parity, or an OpenXR claim.
+
+The bounded V13ENT OpenXR adapter can be exercised directly without enabling
+the launcher route:
+
+```powershell
+.\scripts\Test-Fo1XrSimulatorControls.ps1 `
+  -Godot <Godot-4.7.2-Mono-console.exe> `
+  -Scene <hex-cache>\hex-scene.json `
+  -SimulatorRuntimeManifest <simulator>\openxr_simulator.json `
+  -OutputDirectory <new-empty-proof-directory>
+```
+
+It reads Oculus Touch/generic grip, aim, move, turn, fire, reload, and save
+actions and publishes accepted changes through the same `Fo1TacticalSession`
+used by flat first person. The 2026-08-28 durable-simulator run proved both
+tracked controllers, 1.360 m of source-mask locomotion, two 30-degree snap
+turns with 0 m horizontal HMD-pivot error, and authoritative fire. Its blocking
+gate stayed failed because the installed simulator did not map actions named
+`reload` and `save` to its B/X state. V13ENT also has no supported XR door-use,
+visible first-person hand, grip-mounted weapon, or campaign-native wrist-UI
+contract, and no physical headset was accepted. This is a truthful shared-state
+adapter and diagnostic gate, not a launchable Fallout 1 VR mode.
 
 The scene cache embeds a hash-pinned `opennv-fo1-runtime-profile-recipe/v1`.
 `Fo1RuntimeProfile` parses it once and supplies typed camera, atmosphere,

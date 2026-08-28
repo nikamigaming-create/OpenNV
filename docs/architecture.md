@@ -1,6 +1,9 @@
 # OpenNV architecture and code accountability
 
-Status: **playable experimental Goodsprings sandbox; not a full campaign**.
+Status: **launcher-routed bounded Fallout 1 V13ENT, New Vegas opening/
+Goodsprings, Fallout 3 CG00 character slices, and an asset-free Fallout 2
+Temple MAP/PRO/FRM source transport over registered DAT2 overlays
+profile; no full campaign**.
 
 The active priority, full product definition, milestone sequence, and
 publication rules live in the canonical
@@ -220,6 +223,17 @@ velocities, and pocket state. The software gate requires an actual ball-to-ball
 contact in both adapters. Physical headset pose, grip comfort, and haptics still
 require a headset session.
 
+## Performance observation
+
+`RuntimePerformanceObserver` passively samples Godot's own FPS, process and
+physics-process time, node and orphan-node counts, static memory, and rendered
+object and primitive monitors at the interval owned by the versioned runtime
+configuration. It retains sample count plus minimum, maximum, and arithmetic
+mean for every metric. An explicit `--perf-report <path>.json` writes one atomic
+report when the runtime exits; without that option it performs no file I/O.
+This is observation only: the report contains no guessed pass/fail threshold,
+retail data, or promotion verdict.
+
 ## Source ownership
 
 | File | Sole responsibility | Must not own |
@@ -261,6 +275,8 @@ require a headset session.
 | `render_actor_preview.py` | Native Godot preview/capture orchestration for one prepared actor | Actor export, desktop control, or parity approval |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `dat2_archive.py` | Indexed Fallout DAT2 member lookup, decompression, and hash identity | MAP/PRO/FRM semantics |
+| `fo2_profile.py` | Read-only Fallout 2 root-archive DAT2/index identity and source-only launcher profile | Member extraction, caches, runtime readiness, or playability |
+| `fo2_first_slice.py` | Effective patch/critter/master overlay resolution and exact asset-free Temple MAP header/elevation, entry marker, placed-object, PRO, and FRM identity manifest | Character creation, new-game executable policy, Godot loading, gameplay, saves, runtime readiness, or playability |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
 | `havok_collision_gltf.py` | Bounded authored packed triangles plus convex/list dynamic body, shape, mass, friction, bounce, damping and filter export | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
@@ -296,9 +312,13 @@ require a headset session.
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, and versioned flow contract | Runtime state or Godot UI |
-| `OpeningFlowManifest.cs` | Flow/configuration/command-contract parsing and fail-closed runtime validation | Command execution or save state |
-| `OpeningQuestRuntime.cs` | Data-driven opening command interpreter, authored UI/dialogue/AI progression, checkpoint capture, and completion handoff | ESM/BSA parsing or guessed content identities |
-| `OpeningCampaignState.cs` | Versioned opening character/quest/world state validation and transform serialization | Flow progression or file I/O |
+| `runtime/src/Campaigns/NewVegas/Opening/NewVegasOpeningNamespaceBridge.cs` | Compile-time namespace join between the New Vegas opening campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs` | Flow/configuration/command-contract parsing and fail-closed runtime validation | Command execution or save state |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningManifest.cs` | Owned New Vegas front-end manifest identity, hash verification, and typed menu/media contract | Menu rendering, command execution, or source compilation |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningQuestRuntime.cs` | Data-driven opening command interpreter, authored UI/dialogue/AI progression, checkpoint capture, and completion handoff | ESM/BSA parsing or guessed content identities |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningCampaignState.cs` | Versioned opening character/quest/world state validation and transform serialization | Flow progression or file I/O |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningUiTheme.cs` | Owned opening bitmap-font and authored UI style construction | Manifest parsing, progression, or shared runtime theming |
+| `runtime/src/Campaigns/NewVegas/Opening/RetailOpening.cs` | Owned New Vegas main-menu and intro playback/skip presentation | Manifest parsing, gameplay progression, or campaign state |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
 | `CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
 | `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal and proof queries | Binary parsing |
@@ -321,26 +341,35 @@ require a headset session.
 | `DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
 | `FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |
 | `PlayerControlTelemetry.cs` | Simulator-only pose, locomotion, floor-height, snap-pivot, and action acceptance measurements | Input synthesis or gameplay mutation |
-| `XrSimulatorAcceptance.cs` | Time-bounded simulator observation and evidence report for tracked hands, sticks, locomotion, interactions, weapon, save, and floor height | Input synthesis or headset claims |
+| `runtime/src/Presentation/OpenXR/XrSimulatorAcceptance.cs` | Time-bounded simulator observation and evidence report for tracked hands, sticks, locomotion, interactions, weapon, save, and floor height | Input synthesis or headset claims |
 | `FlatControlsAcceptance.cs` | Configured Godot keyboard/mouse event acceptance over the shared gameplay path | Windows input injection or gameplay rules |
-| `XrRigLayoutAcceptance.cs` | Headless OpenXR action-map, node hierarchy, HUD, and shared weapon-state layout gate | Simulator or headset claims |
+| `runtime/src/Presentation/OpenXR/OpenXrNamespaceBridge.cs` | Compile-time namespace join between OpenXR acceptance and shared runtime composition | Runtime behavior, input translation, or presentation abstractions |
+| `runtime/src/Presentation/OpenXR/XrRigLayoutAcceptance.cs` | Headless OpenXR action-map, node hierarchy, HUD, and shared weapon-state layout gate | Simulator or headset claims |
 | `RuntimeCoordinator.cs` | Startup option routing, composition, shared report writing, and shutdown ownership | Feature-specific acceptance logic, UI construction, or file-format parsing |
+| `runtime/src/Diagnostics/Performance/RuntimePerformanceObserver.cs` | Allocation-free periodic sampling and optional threshold-free JSON summary of Godot performance monitors | Gameplay behavior, acceptance thresholds, proprietary data, or subsystem management |
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
 | `StaticModelSlice.cs` | Hash-verified one-model material binding, bounds, and reference view | Cell relationships or controller playback |
 | `StaticModelCapture.cs` | Native hash-recorded one-model visual gate | Cell placement, interaction, or retail parity |
-| `Fo1HexMath.cs` | Fallout 200×200 tile IDs, retail even-column-offset world conversion, direction/neighbor/distance/corner math | Rendering, AP, or source parsing |
-| `Fo1RuntimeProfile.cs` | Strict typed ownership of the embedded versioned 3D adaptation profile | Fallout source authority or fallback tuning |
-| `Fo1HexSceneLoader.cs` | Verified V13ENT floor/sprite/door manifests, diagnostic overlays, and ordinary Godot presentation nodes | MAP parsing, camera input, or gameplay rules |
-| `Fo1TacticalSession.cs` | V13ENT player hex, BFS movement, selected target, bounded attack/rat turn, HP/AP HUD, and atomic proof save | Camera transforms, MAP parsing, or full AI formulas |
-| `Fo1Mob.cs` | One source critter's PID/serial/tile, MAP runtime state, PRO combat values, grounded 2D/3D presentation and depth-safe markers, HP/AP, and proof movement | Turn ordering, pathfinding, or asset extraction |
-| `Fo1CreatureModel.cs` | Hash-verified owned creature glTF binding, animation selection, and intact-state gore-cap visibility | Source critter identity or combat rules |
-| `Fo1OwnedCaveKit.cs` | Exact-source-topology continuous floor construction and verified owned cave-kit instantiation from the presentation manifest | Fallout 1 topology derivation or camera policy |
-| `Fo1CaveCutaway.cs` | Camera-to-focus occluder visibility for registered cave instances | Asset placement, gameplay state, or source parsing |
-| `Fo1TacticalCamera.cs` | Orthographic orbit/pan/cursor-zoom/edge/focus input adapter | Hex state, AP, or content preparation |
-| `Fo1HexProof.cs` | Headless mouse-camera, one-hex/one-AP, end-turn, and save gate | Production input or visual approval |
-| `Fo1HexCapture.cs` | Native V13ENT UI/environment frames, metrics, hashes, and no-host-control record | Gameplay or parity verdicts |
-| `Fo1HexDemo.cs` | Deterministic loading/player/door/movement/target/attack/turn video sequence and report | Host input injection, gameplay authority, or parity verdicts |
-| `Fo1HexVisuals.cs` | Procedural selection/path marker mesh and material primitives | Grid identity, pathfinding, or source art |
+| `runtime/src/Campaigns/Fallout1/Fallout1NamespaceBridge.cs` | Compile-time namespace join between the Fallout 1 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
+| `runtime/src/Campaigns/Fallout1/Fo1HexMath.cs` | Fallout 200×200 tile IDs, retail even-column-offset world conversion, direction/neighbor/distance/corner math | Rendering, AP, or source parsing |
+| `runtime/src/Campaigns/Fallout1/Fo1RuntimeProfile.cs` | Strict typed ownership of the embedded versioned 3D adaptation profile | Fallout source authority or fallback tuning |
+| `runtime/src/Campaigns/Fallout1/Fo1HexSceneLoader.cs` | Verified V13ENT floor/sprite/door manifests, diagnostic overlays, and ordinary Godot presentation nodes | MAP parsing, camera input, or gameplay rules |
+| `runtime/src/Campaigns/Fallout1/Fo1TacticalSession.cs` | V13ENT player hex, BFS movement, selected target, bounded attack/rat turn, HP/AP HUD, and atomic proof save | Camera transforms, MAP parsing, or full AI formulas |
+| `runtime/src/Campaigns/Fallout1/Fo1Mob.cs` | One source critter's PID/serial/tile, MAP runtime state, PRO combat values, grounded 2D/3D presentation and depth-safe markers, HP/AP, and proof movement | Turn ordering, pathfinding, or asset extraction |
+| `runtime/src/Campaigns/Fallout1/Fo1CreatureModel.cs` | Hash-verified owned creature glTF binding, animation selection, and intact-state gore-cap visibility | Source critter identity or combat rules |
+| `runtime/src/Campaigns/Fallout1/Fo1OwnedCaveKit.cs` | Exact-source-topology continuous floor construction and verified owned cave-kit instantiation from the presentation manifest | Fallout 1 topology derivation or camera policy |
+| `runtime/src/Campaigns/Fallout1/Fo1CaveCutaway.cs` | Camera-to-focus occluder visibility for registered cave instances | Asset placement, gameplay state, or source parsing |
+| `runtime/src/Campaigns/Fallout1/Fo1TacticalCamera.cs` | Orthographic orbit/pan/cursor-zoom/edge/focus input adapter | Hex state, AP, or content preparation |
+| `runtime/src/Campaigns/Fallout1/Fo1HexProof.cs` | Headless mouse-camera, one-hex/one-AP, end-turn, and save gate | Production input or visual approval |
+| `runtime/src/Campaigns/Fallout1/Fo1HexCapture.cs` | Native V13ENT UI/environment frames, metrics, hashes, and no-host-control record | Gameplay or parity verdicts |
+| `runtime/src/Campaigns/Fallout1/Fo1HexDemo.cs` | Deterministic loading/player/door/movement/target/attack/turn video sequence and report | Host input injection, gameplay authority, or parity verdicts |
+| `runtime/src/Campaigns/Fallout1/Fo1HexVisuals.cs` | Procedural selection/path marker mesh and material primitives | Grid identity, pathfinding, or source art |
+| `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
+| `runtime/src/Compatibility/Jam/JamJvsSprintContract.cs` | Hash-bound transport and validation of JAM 4.6 JVS hold-to-sprint settings | Native DLL loading, xNVSE interpretation, or complete JAM compatibility |
+| `prepare_fo3_profile.py` / `prepare_fo3_opening_slice.py` | Read-only Fallout 3 GOTY profile, CG00/Vault 101 source graph, playable race and sex-aware hair/eye inventory, Player-plus-RACE FaceGen defaults, and hash-bound local manifest generation | Godot nodes, runtime progression, 3D FaceGen rendering, or full-opening claims |
+| `runtime/src/Campaigns/Fallout3/Fallout3NamespaceBridge.cs` | Compile-time namespace join between the Fallout 3 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
+| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified local intro playback/skip, CG00 sex/name UI, source-texture appearance selector, and atomic UI-agnostic stage-60/stage-62 character save | ESM/BSA parsing, 3D FaceGen actor rendering, player-package execution, Vault 101 scene compilation, or post-stage-62 interpretation |
+| `ttw_profile.py` / `jam_profile.py` | Read-only installed-profile identity, dependency/master closure, hashes, save boundary, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
 | `Test-GodotRuntime.ps1` | Source, synthetic, retail-opt-in, format, and analyzer gates | Packaging state |

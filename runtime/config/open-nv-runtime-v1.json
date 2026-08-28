@@ -440,6 +440,15 @@
       "expectedContainerReferenceFormId": "0010873e"
     }
   },
+  "performance": {
+    "provenance": {
+      "classification": "diagnostic-only",
+      "status": "observational-no-thresholds",
+      "source": "OpenNV passive Godot runtime monitor cadence",
+      "evidence": "docs/architecture.md#performance-observation"
+    },
+    "sampleIntervalSeconds": 1.0
+  },
   "diagnosticPreview": {
     "provenance": {
       "classification": "diagnostic-only",
@@ -712,10 +721,10 @@
       "source": "Independent launcher boot-window and notification presentation policy",
       "evidence": "docs/desktop-launcher.md"
     },
-    "mainWindowWidthPixels": 1380,
-    "mainWindowHeightPixels": 900,
-    "mainWindowMinimumWidthPixels": 1040,
-    "mainWindowMinimumHeightPixels": 720,
+    "mainWindowWidthPixels": 880,
+    "mainWindowHeightPixels": 560,
+    "mainWindowMinimumWidthPixels": 680,
+    "mainWindowMinimumHeightPixels": 500,
     "toastVisibilityMilliseconds": 5200
   },
   "legalAssets": {
@@ -727,6 +736,7 @@
     },
     "defaultOpeningRecipe": "fnv-new-game-opening-v1",
     "defaultCellRecipe": "goodsprings-doc-mitchell-house-v1",
+    "linkedWorldProofCellRecipe": "goodsprings-saloon-structure-v1",
     "defaultCacheRoot": "user://cache/legal-assets-v1",
     "packagedCompilerName": "OpenNV.Content packaged direct exporter v1",
     "sourceContentTool": {

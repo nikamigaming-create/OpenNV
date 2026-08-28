@@ -366,6 +366,9 @@ internal partial class GameplaySession : Node
     internal void Save()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_savePath)!);
+        var capturedPlayerTransform = _player is null
+            ? null
+            : PlayerTransformState.Capture(_player);
         var document = new
         {
             schema = SaveSchemaV3,
@@ -377,7 +380,13 @@ internal partial class GameplaySession : Node
                 .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase),
             emptiedContainers = _emptiedContainers.Order(StringComparer.OrdinalIgnoreCase),
-            playerTransform = _player is null ? null : PlayerTransformState.Capture(_player),
+            playerTransform = capturedPlayerTransform is null
+                ? null
+                : new
+                {
+                    Position = Vector(capturedPlayerTransform.Position),
+                    Rotation = Quaternion(capturedPlayerTransform.Rotation),
+                },
             equippedWeaponFormId = _equippedWeaponFormId,
             weaponAmmoFormId = _weaponAmmoFormId,
             weaponDamage = _weaponDamage,
@@ -514,7 +523,16 @@ internal partial class GameplaySession : Node
             if (playerTransform.ValueKind is not JsonValueKind.Object and not JsonValueKind.Null)
                 throw new InvalidOperationException("Saved player transform has an invalid shape.");
             if (playerTransform.ValueKind == JsonValueKind.Object)
-                _loadedPlayerTransform = PlayerTransformState.Parse(playerTransform);
+            {
+                var hasPosition = playerTransform.TryGetProperty("Position", out var position) &&
+                    position.ValueKind == JsonValueKind.Array;
+                var hasRotation = playerTransform.TryGetProperty("Rotation", out var rotation) &&
+                    rotation.ValueKind == JsonValueKind.Array;
+                if (hasPosition && hasRotation)
+                    _loadedPlayerTransform = PlayerTransformState.Parse(playerTransform);
+                else if (_openingState is null)
+                    throw new InvalidOperationException("Saved player transform is malformed.");
+            }
         }
     }
 

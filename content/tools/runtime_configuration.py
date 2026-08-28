@@ -42,6 +42,7 @@ CONFIGURATION_SECTIONS = (
     "hud",
     "capture",
     "proof",
+    "performance",
     "diagnosticPreview",
     "actorReview",
     "exteriorEnvironment",
@@ -483,6 +484,15 @@ def load_runtime_configuration() -> RuntimeConfiguration:
                 raise ValueError(
                     f"OpenNV runtime configuration {section_name}.provenance.{field} is empty"
                 )
+    performance = _object(document, "performance")
+    sample_interval = performance.get("sampleIntervalSeconds")
+    if (
+        not isinstance(sample_interval, (int, float))
+        or isinstance(sample_interval, bool)
+        or not math.isfinite(float(sample_interval))
+        or float(sample_interval) <= 0.0
+    ):
+        raise ValueError("OpenNV performance sample interval must be positive and finite")
     tooling_recipes = _object(_object(document, "tooling"), "recipeFiles")
     if (
         not tooling_recipes
@@ -500,6 +510,7 @@ def load_runtime_configuration() -> RuntimeConfiguration:
     for field in (
         "defaultOpeningRecipe",
         "defaultCellRecipe",
+        "linkedWorldProofCellRecipe",
         "defaultCacheRoot",
         "packagedCompilerName",
         "smokeModelLogicalPath",

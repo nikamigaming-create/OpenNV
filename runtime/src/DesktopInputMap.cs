@@ -28,6 +28,22 @@ internal static class DesktopInputMap
         }
     }
 
+    internal static void ConfigureJamSprint(JamJvsSprintContract sprint)
+    {
+        ResetAction(JamJvsSprintContract.InputAction);
+        InputMap.ActionAddEvent(
+            JamJvsSprintContract.InputAction,
+            new InputEventKey
+            {
+                PhysicalKeycode = ParseKey(sprint.DesktopPhysicalKey),
+            });
+        var events = InputMap.ActionGetEvents(JamJvsSprintContract.InputAction);
+        if (events.Count != 1 || events[0] is not InputEventKey key ||
+            key.PhysicalKeycode != ParseKey(sprint.DesktopPhysicalKey))
+            throw new InvalidOperationException(
+                "The authored JVS sprint key did not retain its physical binding.");
+    }
+
     internal static InputEventKey CreateEvent(
         DesktopKeyBindingConfiguration binding,
         bool pressed) => new()

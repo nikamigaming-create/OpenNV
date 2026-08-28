@@ -1,0 +1,10 @@
+{
+  "schema": "opennv-ttw-profile-requirements/v1",
+  "id": "ttw-generated-profile-requirements-v1",
+  "requiredActivePlugins": [
+    "FalloutNV.esm",
+    "Fallout3.esm",
+    "TaleOfTwoWastelands.esm",
+    "YUPTTW.esm"
+  ]
+}

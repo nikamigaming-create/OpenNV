@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 RECIPES = ROOT / "content" / "recipes"
-RUNTIME = ROOT / "runtime" / "src"
+RUNTIME = ROOT / "runtime" / "src" / "Campaigns" / "Fallout1"
 
 
 class Fo1RuntimeProfileTest(unittest.TestCase):

@@ -170,10 +170,11 @@ owned-data manifests and this configuration.
 | `renderer` | Honest parity-failing Godot adapter; raw authored XCLL/material inputs remain available. |
 | `door` | Explicit non-parity OpenNV interaction angle; it is never represented as a decoded retail controller track. |
 | `capture`, `proof`, `retailActorState`, `actorParity` | Diagnostic-only gates, never world or actor authoring data. |
+| `performance` | Diagnostic-only passive sampling interval for Godot's built-in runtime monitors; it defines no pass/fail threshold. |
 | `diagnosticPreview`, `setupView` | Diagnostic/setup presentation only. |
 | `desktopLauncher` | Independently packaged launcher boot-window and notification presentation, copied from this same file at package time. |
 | `exteriorEnvironment` | Honest parity-failing clear-day adapter until climate/weather/time evaluation exists. |
-| `legalAssets` | Asset-free local-import/cache policy plus the configured owned master/archive names. |
+| `legalAssets` | Asset-free local-import/cache policy plus the configured owned master/archive names, ordinary opening CELL recipe, and separate linked-world proof recipe. The acceptance gate may not silently reuse a different product route's spawn assumptions. |
 | `tooling` | The single recipe-file registry used by first-party compilers, corpora, capture plans, and gallery preparation. |
 | `contentCompiler` | Deterministic output, authored-animation sampling, material translation, LAND layering, retail-grass reconstruction, and explicit SpeedTree billboard policy. Remaining renderer gaps stay parity-failing. |
 | `actorCompiler` | Record-type animation, rigid-attachment, FaceGen material, and FaceGen LIP/TRI format/binding profiles. Actor identity, meshes, textures, morph bytes, voice/LIP pairs, placement, and KF bytes come from the owned graph; unresolved head-controller and expression/mood behavior remains explicitly unbound. |

@@ -1,44 +1,92 @@
 {
-  "schema": "opennv-launcher-state/v2",
+  "schema": "opennv-launcher-state/v4",
   "product": {
     "name": "Open Nevada",
     "codeName": "OpenNV",
     "tagline": "Choose a world. Keep the save path clean."
   },
-  "campaignRule": "Choose New Vegas, standalone Fallout 3, or TTW before creating a character. TTW is a separate combined-world choice and never merges existing standalone saves.",
+  "campaignRule": "Choose Fallout 1, Fallout 2, New Vegas, or Fallout 3 before creating a character. Every game has an isolated profile and save identity; TTW remains an edition shared by Fallout 3 and New Vegas and never merges existing standalone saves.",
   "jamRule": "JAM is modular for New Vegas and TTW. You can add it later, but saves created with JAM must keep it enabled.",
   "campaigns": [
     {
+      "id": "fallout1",
+      "engineCampaign": "Fallout1EtTu",
+      "runtimeVariant": "vault13Concept",
+      "title": "Fallout 1",
+      "eyebrow": "Classic 3D route",
+      "launcherSummary": "Hex · FPS · VR",
+      "launcherDetail": "Vault 13 entrance · one shared character and save",
+      "character": "One Vault Dweller profile shared by its views",
+      "detail": "Register the generated local cache, then launch the owned character creator, Overseer movie, and V13ENT in Hex Tactical or First Person.",
+      "jam": false,
+      "ttw": false,
+      "openXr": false,
+      "assetRequirement": "Licensed Fallout data",
+      "defaultPresentation": "hex-tactical",
+      "presentations": ["hex-tactical", "first-person"],
+      "pendingPresentations": ["openxr"]
+    },
+    {
+      "id": "fallout2",
+      "engineCampaign": "Fallout2",
+      "runtimeVariant": "arroyo",
+      "title": "Fallout 2",
+      "eyebrow": "Classic route",
+      "launcherSummary": "Hex · FPS · VR",
+      "launcherDetail": "Owned DAT2 install registered · Arroyo runtime pending",
+      "character": "One Chosen One profile shared by its future views",
+      "detail": "The owned master, critter, and patch archives are registered. Hex, FPS, and VR remain disabled until an authored runtime slice exists.",
+      "jam": false,
+      "ttw": false,
+      "openXr": false,
+      "assetRequirement": "Licensed Fallout 2 data",
+      "defaultPresentation": "hex-tactical",
+      "presentations": [],
+      "pendingPresentations": ["hex-tactical", "first-person", "openxr"]
+    },
+    {
       "id": "newvegas",
       "engineCampaign": "NewVegas",
+      "runtimeVariant": "vanilla",
       "title": "New Vegas",
       "eyebrow": "Standalone route",
+      "launcherSummary": "Original · VR · JAM",
+      "launcherDetail": "Original menu and intro · Doc Mitchell · Goodsprings",
       "character": "A separate Mojave character",
       "detail": "Use the base profile, then add JAM whenever you are ready.",
       "jam": true,
       "ttw": false,
+      "openXr": true,
       "assetRequirement": "Licensed New Vegas data"
     },
     {
       "id": "fallout3",
       "engineCampaign": "Fallout3",
+      "runtimeVariant": "vanilla",
       "title": "Fallout 3",
       "eyebrow": "Standalone route",
+      "launcherSummary": "Original · VR · TTW",
+      "launcherDetail": "Birth and Vault 101 opening · runtime work in progress",
       "character": "A separate Capital Wasteland character",
       "detail": "Use the vanilla standalone profile, or choose TTW now for a shared world path.",
       "jam": false,
       "ttw": false,
+      "openXr": false,
       "assetRequirement": "Licensed Fallout 3 data"
     },
     {
       "id": "ttw",
       "engineCampaign": "TTW",
+      "runtimeVariant": "vanilla",
       "title": "TTW",
       "eyebrow": "Combined route",
+      "launcherSummary": "Fallout 3 + New Vegas",
+      "launcherDetail": "One character across both games · TTW install required",
       "character": "One Capital Wasteland-to-Mojave character",
       "detail": "This is the TTW choice at character creation. Start base or add JAM later.",
       "jam": true,
       "ttw": true,
+      "openXr": false,
       "assetRequirement": "Licensed Fallout 3, New Vegas, DLC, and official TTW output"
     }
   ],
@@ -64,10 +112,16 @@
   ],
   "mods": [
     {
+      "id": "ttw",
+      "title": "Tale of Two Wastelands",
+      "status": "profile-registrar-ready",
+      "detail": "The local TTW output can be hash-bound now; record, script, archive, and world-transition runtime compilation is still pending."
+    },
+    {
       "id": "jam",
       "title": "Just Assorted Mods",
-      "status": "available-when-registered",
-      "detail": "Profile module for New Vegas and TTW; it can be added after character creation."
+      "status": "profile-registrar-ready",
+      "detail": "The local JAM dependency set can be hash-bound now; portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO semantics are still pending."
     },
     {
       "id": "benny-humbles",
@@ -81,6 +135,14 @@
     "runtimeSearching": "Choose a local OpenNV Godot runtime folder",
     "portableShell": "Launcher shell ready; runtime export is not published for this platform",
     "runtimeConnected": "Connected to the local OpenNV Godot runtime",
+    "fallout1ProfileUnavailable": "Register the generated Fallout 1 hex-scene.json and character-start.json to enable this route.",
+    "fallout2ProfileUnavailable": "Register the local Fallout 2 owned-install profile. Hex, FPS, and VR still require a real runtime slice.",
+    "fallout2RuntimeUnavailable": "Fallout 2 is source-registered, but no Hex, FPS, or VR runtime variant is ready yet.",
+    "fallout3ProfileUnavailable": "Register the local Fallout 3 GOTY profile to enable this route.",
+    "ttwProfileUnavailable": "Register a locally generated TTW profile whose portable runtime compatibility is ready.",
+    "jamProfileUnavailable": "Register a local JAM profile whose portable runtime compatibility is ready.",
+    "invalidPresentation": "That presentation mode is not available for this game.",
+    "openXrUnavailable": "OpenXR is not available for this campaign yet.",
     "invalidCampaign": "Choose a valid world path before launching.",
     "jamUnavailable": "JAM is available for New Vegas and TTW, not standalone Fallout 3."
   }

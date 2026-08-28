@@ -1,0 +1,202 @@
+using Godot;
+
+namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
+
+internal partial class RetailOpening : CanvasLayer
+{
+    private const string ContinueAction = "continue";
+    private const string LoadAction = "load";
+    private const string NewGameAction = "new-game";
+    private const string QuitAction = "quit";
+
+    private OpeningManifest _manifest = null!;
+    private Control _viewport = null!;
+    private Control _canvas = null!;
+    private AudioStreamPlayer _music = null!;
+    private VideoStreamPlayer? _video;
+    private Action? _introFinished;
+    private Action<string>? _menuActionRequested;
+    private string _cancelAction = "";
+    private bool _introCompleted;
+
+    internal void Configure(
+        OpeningManifest manifest,
+        bool hasSave,
+        string cancelAction,
+        Action introFinished,
+        Action<string> menuActionRequested)
+    {
+        _manifest = manifest;
+        _introFinished = introFinished;
+        _menuActionRequested = menuActionRequested;
+        _cancelAction = cancelAction;
+        Name = "RetailOpening";
+
+        _viewport = new Control { Name = "Viewport" };
+        _viewport.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _viewport.Resized += ScaleReferenceCanvas;
+        AddChild(_viewport);
+
+        var letterbox = new ColorRect
+        {
+            Name = "Letterbox",
+            Color = Colors.Black,
+        };
+        letterbox.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        letterbox.MouseFilter = Control.MouseFilterEnum.Ignore;
+        _viewport.AddChild(letterbox);
+
+        _canvas = new Control
+        {
+            Name = "RetailCanvas",
+            Size = manifest.CanvasSize,
+        };
+        _viewport.AddChild(_canvas);
+
+        var background = new TextureRect
+        {
+            Name = "MainMenuBackground",
+            Position = Vector2.Zero,
+            Size = manifest.CanvasSize,
+            Texture = OpeningUiTheme.LoadTexture(manifest.BackgroundTexturePath),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _canvas.AddChild(background);
+
+        var title = new TextureRect
+        {
+            Name = "MainMenuTitle",
+            Position = manifest.TitleRect.Position,
+            Size = manifest.TitleRect.Size,
+            Texture = OpeningUiTheme.LoadTexture(manifest.TitleTexturePath),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            Modulate = manifest.MainMenuColor,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _canvas.AddChild(title);
+
+        var font = OpeningUiTheme.BuildFont(manifest.Font);
+        Button? initialFocus = null;
+        foreach (var authored in manifest.Buttons)
+        {
+            var button = BuildButton(authored, font);
+            if (!hasSave && authored.Action is ContinueAction or LoadAction)
+                button.Disabled = true;
+            button.Pressed += () => Dispatch(authored.Action);
+            _canvas.AddChild(button);
+            if (initialFocus is null && !button.Disabled)
+                initialFocus = button;
+            if (authored.Action == NewGameAction && !hasSave)
+                initialFocus = button;
+        }
+
+        _music = new AudioStreamPlayer
+        {
+            Name = "MainTitleMusic",
+            Stream = AudioStreamMP3.LoadFromFile(manifest.MainMenuMusicPath),
+            VolumeLinear = manifest.MainMenuMusicVolume,
+        };
+        if (_music.Stream is AudioStreamMP3 mp3)
+            mp3.Loop = true;
+        AddChild(_music);
+        _music.Play();
+        Input.MouseMode = Input.MouseModeEnum.Visible;
+        ScaleReferenceCanvas();
+        if (initialFocus is not null)
+            Callable.From(initialFocus.GrabFocus).CallDeferred();
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        if (_video is null)
+            return;
+        var configuredCancel = !string.IsNullOrWhiteSpace(_cancelAction) &&
+            @event.IsActionPressed(_cancelAction);
+        var escape = @event is InputEventKey key &&
+            key.Pressed &&
+            !key.Echo &&
+            (key.PhysicalKeycode == Key.Escape || key.Keycode == Key.Escape);
+        if (!configuredCancel && !escape)
+            return;
+        GetViewport().SetInputAsHandled();
+        CompleteIntro();
+    }
+
+    private void Dispatch(string action)
+    {
+        if (action == NewGameAction)
+        {
+            PlayIntro();
+            return;
+        }
+        if (action == QuitAction)
+        {
+            GetTree().Quit();
+            return;
+        }
+        _menuActionRequested?.Invoke(action);
+    }
+
+    private void PlayIntro()
+    {
+        if (_video is not null)
+            return;
+        _music.Stop();
+        _canvas.Visible = false;
+        _video = new VideoStreamPlayer
+        {
+            Name = "FNVIntro",
+            Stream = new VideoStreamTheora { File = _manifest.IntroVideoPath },
+            Expand = true,
+            Loop = false,
+        };
+        _video.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _video.Finished += CompleteIntro;
+        _viewport.AddChild(_video);
+        _video.Play();
+    }
+
+    private void CompleteIntro()
+    {
+        if (_introCompleted)
+            return;
+        _introCompleted = true;
+        _video?.Stop();
+        _music.Stop();
+        _introFinished?.Invoke();
+        QueueFree();
+    }
+
+    private void ScaleReferenceCanvas()
+    {
+        if (_canvas is null || _manifest is null)
+            return;
+        var viewportSize = _viewport.Size;
+        var scale = Mathf.Min(
+            viewportSize.X / _manifest.CanvasSize.X,
+            viewportSize.Y / _manifest.CanvasSize.Y);
+        _canvas.Scale = Vector2.One * scale;
+        _canvas.Position =
+            (viewportSize - _manifest.CanvasSize * scale) * OpeningUiTheme.CenteringFactor;
+    }
+
+    private Button BuildButton(OpeningMenuButton authored, FontFile font)
+    {
+        var button = new Button
+        {
+            Name = authored.Tile,
+            Text = authored.Label,
+            Position = authored.Rect.Position,
+            Size = authored.Rect.Size,
+            Flat = false,
+            Alignment = HorizontalAlignment.Center,
+            FocusMode = Control.FocusModeEnum.All,
+            MouseDefaultCursorShape = Control.CursorShape.PointingHand,
+        };
+        OpeningUiTheme.ApplyButton(button, font, _manifest);
+        return button;
+    }
+}

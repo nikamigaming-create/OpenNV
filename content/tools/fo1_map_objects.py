@@ -35,6 +35,7 @@ FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_100 = 100
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_10000 = 10000
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_100000 = 100000
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_11 = 11
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_12 = 12
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_15 = 15
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16 = 16
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_1600 = 1600
@@ -42,6 +43,7 @@ FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_18 = 18
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_19 = 19
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_200 = 200
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24 = 24
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_28 = 28
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_2400 = 2400
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_3100 = 3100
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_40000 = 40000
@@ -53,6 +55,7 @@ FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_68 = 68
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_7 = 7
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_72 = 72
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_8 = 8
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_07 = 0x07
 FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_84 = 84
 
 
@@ -118,18 +121,22 @@ class Prototype:
 class Fo1ResourceResolver:
     def __init__(
         self,
-        ettu_root: Path,
+        ettu_root: Path | None,
         master_dat: Path,
         additional_archives: list[Path] | None = None,
     ):
-        self.override_root = (ettu_root / "mods" / "fo1_base").resolve()
-        if not self.override_root.is_dir():
+        self.override_root = (
+            None
+            if ettu_root is None
+            else (ettu_root / "mods" / "fo1_base").resolve()
+        )
+        if self.override_root is not None and not self.override_root.is_dir():
             raise Fo1ProfileError(f"Et Tu fo1_base override root is missing: {self.override_root}")
         self.master_dat = master_dat.resolve()
         self.archives = [Dat2Archive(self.master_dat)] + [
             Dat2Archive(path.resolve()) for path in additional_archives or []
         ]
-        self.loose_files = {
+        self.loose_files = {} if self.override_root is None else {
             canonical_dat2_path(str(path.relative_to(self.override_root))): path
             for path in self.override_root.rglob("*")
             if path.is_file()
@@ -275,6 +282,38 @@ class Fo1ResourceResolver:
                 f"Fallout FID {fid:08x} art index {art_index} exceeds art {directory}.lst ({len(lines)})"
             )
         return lines[art_index].split(" ", 1)[0].strip() or None
+
+    def placed_idle_frm_path(self, fid: int) -> str:
+        """Resolve the authored idle FRM used by a statically placed MAP object.
+
+        Critter art-list entries are animation bases rather than filenames.  The
+        weapon nibble in a critter FID selects the retail single-letter weapon
+        suffix and animation zero selects the ``a`` idle suffix.  This bounded
+        resolver deliberately rejects other critter animations instead of
+        inventing a presentation frame.
+        """
+        object_type = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F
+        art_filename = self.art_filename(fid)
+        if object_type not in TYPE_DIRECTORIES or art_filename is None:
+            raise Fo1ProfileError(f"Fallout FID has no supported art identity: {fid:08x}")
+        directory = TYPE_DIRECTORIES[object_type]
+        if object_type != 1:
+            return canonical_dat2_path(f"art\\{directory}\\{art_filename}")
+
+        animation = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF
+        weapon = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_12) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F
+        packed_rotation = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_28) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_07
+        weapon_suffixes = "adefghij"
+        if animation != 0 or packed_rotation != 0 or weapon >= len(weapon_suffixes):
+            raise Fo1ProfileError(
+                f"unsupported placed critter FID for idle FRM transport: {fid:08x}"
+            )
+        art_base = art_filename.split(",", 1)[0].strip()
+        if not art_base:
+            raise Fo1ProfileError(f"empty critter art base for FID {fid:08x}")
+        return canonical_dat2_path(
+            f"art\\critters\\{art_base}{weapon_suffixes[weapon]}a.frm"
+        )
 
 
 def _read_i32(data: bytes, offset: int, label: str) -> tuple[int, int]:

@@ -17,6 +17,19 @@
     "mode": "bounded-proof",
     "loadedGridDiameter": 1
   },
+  "lod": {
+    "mode": "owned-worldspace-object-and-terrain-blocks",
+    "objectArchiveRoot": "meshes\\landscape\\lod\\wastelandnv\\blocks",
+    "terrainArchiveRoot": "meshes\\landscape\\lod\\wastelandnv",
+    "filePrefix": "wastelandnv",
+    "level": 4,
+    "selectionRadiusCells": 8,
+    "preferHigh": true
+  },
+  "distantReferences": {
+    "distantReferenceRadiusCells": 0,
+    "distantReferenceTypes": []
+  },
   "skyModels": {
     "atmosphere": {
       "path": "sky\\atmosphere.nif",

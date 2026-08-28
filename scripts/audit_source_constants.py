@@ -335,11 +335,12 @@ def production_sources(repository: Path) -> list[tuple[Path, str]]:
     sources.append((repository / "scripts" / "audit_source_constants.py", "python"))
     sources.extend(
         (path, "csharp")
-        for path in sorted((repository / "runtime" / "src").glob("*.cs"))
+        for path in sorted((repository / "runtime" / "src").rglob("*.cs"))
     )
     sources.extend(
         (path, "javascript")
-        for path in sorted((repository / "desktop" / "src").rglob("*.mjs"))
+        for path in sorted((repository / "desktop" / "src").rglob("*"))
+        if path.is_file() and path.suffix.casefold() in {".cjs", ".mjs"}
     )
     sources.extend(
         (path, "powershell")
@@ -352,7 +353,7 @@ def unsupported_source_violations(repository: Path) -> list[Violation]:
     roots = {
         repository / "content" / "hooks": {".py"},
         repository / "content" / "tools": {".py"},
-        repository / "desktop" / "src": {".css", ".html", ".json", ".mjs"},
+        repository / "desktop" / "src": {".cjs", ".css", ".html", ".json", ".mjs"},
         repository / "runtime" / "src": {".cs", ".uid"},
         repository / "scripts": {".ps1", ".py"},
     }

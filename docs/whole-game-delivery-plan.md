@@ -3,9 +3,9 @@
 Status: **active; the complete product is not yet delivered**.
 
 This is the canonical execution plan for turning OpenNV into one asset-free,
-data-driven Godot implementation of a legally owned Fallout: New Vegas
-installation. It owns priority, milestone state, evidence requirements, and the
-active slice. Detailed subsystem truth remains in the linked architecture,
+data-driven Godot implementation of legally owned Fallout 1, Fallout 2,
+Fallout 3, and Fallout: New Vegas installations. It owns priority, milestone state, evidence
+requirements, and the active slice. Detailed subsystem truth remains in the linked architecture,
 whole-game CELL, actor/creature, compatibility, and evidence contracts.
 
 The plan is durable by rule:
@@ -19,17 +19,47 @@ The plan is durable by rule:
 
 ## Product success definition
 
-OpenNV is complete only when a player can select a legally owned installation,
-choose the standalone New Vegas or declared TTW character path, start from the
-retail-faithful front end, create a character, finish Doc Mitchell's opening,
-and play the intended campaign with persistent gameplay, UI, world, actors,
-audio, rendering, and supported compatibility behavior in flat and OpenXR
-modes. The source/build distribution must remain asset-free.
+OpenNV is complete only when a player can select legally owned installations;
+choose Fallout 1, Fallout 2, Fallout: New Vegas, standalone Fallout 3, or the
+declared TTW character path; use the retail-faithful front end and character
+flow; finish each authored opening; and play the intended campaigns with persistent menus,
+HUD/Pip-Boy, people, quests/dialogue, combat, crafting, loot/inventory, world,
+audio, rendering, saves, and supported compatibility behavior in flat and
+OpenXR modes. The source/build distribution must remain asset-free.
+
+Each campaign owns one authoritative gameplay/save state and three presentation
+adapters: Hex Tactical, First Person, and OpenXR. Fallout 1/2 consume their
+owned DAT/MAP/PRO/FRM sources directly; Fallout 3/New Vegas consume their owned
+ESM/BSA/NIF/DDS/KF sources directly. A Hex presentation of a Gamebryo world is
+the real compiled 3D cell under tactical hex movement/camera rules, not an
+invented FRM substitute. Optional derived sprites are disposable presentation
+caches and never become gameplay authority.
+
+The Hex adapter uses one locally sourced classic Fallout 1/2-style HUD and
+Pip-Boy shell across campaigns. It displays each campaign's authoritative
+stats, inventory, equipment, quests, crafting, map, and save state; it does not
+translate that data into Fallout 1 rules. FPS and OpenXR use the selected
+campaign's native-style HUD/Pip-Boy adapters over the same state.
+
+Fallout 4 and Skyrim are stretch profiles, not part of the current
+launcher-ready denominator. The locally owned Fallout 4 VR installation provides the base
+master/DLC/BA2 graph plus a separate VR master and VR-specific archives; those
+overrides remain a build/profile adapter instead of being assumed identical to
+flat Fallout 4. The locally owned Skyrim VR installation likewise provides the
+base game, Update, all three official DLC masters, `SkyrimVR.esm`, and its VR
+archive as a distinct adapter input. Oblivion is tracked as a sibling
+Gamebryo-family port, not as a Fallout campaign or save path.
 
 “Complete” requires every row in **Product completion matrix** to have direct,
 retained evidence. A green representative scene, parsed record inventory,
 gallery, screenshot, video, or narrow vertical slice cannot substitute for that
 scope.
+
+The end-game presentation artifact is a scripted engine capture, not proof by
+itself: each game moves from front end and character opening into the same live
+slice in Hex, FPS, and a short OpenXR view. Produce a 16:9 master with center-safe
+titles and action so it remains readable on mobile; unsupported modes never
+appear as staged or composited stand-ins.
 
 ## Non-negotiable execution contract
 
@@ -111,12 +141,16 @@ interchangeable.
 | Surface | Current evidence state | Authority |
 | --- | --- | --- |
 | Owned installation import and disposable cache | `partial` | [Architecture](architecture.md), [clean-room boundary](clean-room.md) |
+| Owned Fallout 1 menu/character/movie/V13ENT route | `interactive` in Hex/FPS; OpenXR software-input and physical-headset gates remain open | [Multi-game first slices](multi-game-first-slices.md) |
+| Owned Fallout 2 Temple source transport | `partial`; three DAT2 archives and the exact Map 126 MAP/PRO/FRM graph are hash-bound, while character creation and the Godot runtime are pending | [Multi-game first slices](multi-game-first-slices.md) |
 | Owned New Game character creation and Doc Mitchell opening through world handoff | `interactive`; normal front-end acceptance and visual parity pending | [Owned opening campaign-state contract](evidence/fnv-owned-opening-campaign-state-contract.md) |
+| Owned Fallout 3 menu, intro, CG00 sex/name, and source-backed appearance through stage 62 | `interactive`; 3D FaceGen, player-package execution, and Vault 101 world play pending | [Multi-game first slices](multi-game-first-slices.md) |
 | Goodsprings saloon plus one exterior portal, gameplay, and cold reload | `interactive`, visual parity pending | [Goodsprings linked-world contract](evidence/fnv-goodsprings-linked-world-contract.md) |
 | Whole official CELL/child denominator and compile plan | inventory `proven`; runtime/parity `pending` | [Whole-game CELL parity](whole-game-cell-parity.md) |
 | Whole official actor/creature denominator | inventory `proven`; runtime/parity `pending` | [Whole-game actor and creature parity](whole-game-actor-creature-parity.md) |
 | Materials, FaceGen/LIP, and bounded OpenXR paths | mixed `partial` | [Material contract](evidence/fnv-retail-material-shader-contract.md), [FaceGen animation contract](evidence/fnv-retail-facegen-animation-contract.md), [OpenXR contract](evidence/openxr-runtime-contract.md) |
-| Retail HUD/Pip-Boy, full campaign, JAM, and TTW | `pending` | This plan and [mod policy](mods.md) |
+| Retail HUD/Pip-Boy and full campaigns | `pending` | This plan |
+| JAM and TTW | Profile registration is `partial`; one JAM JVS sprint semantic is transported, while both complete runtimes remain `pending` | [Mod policy](mods.md) |
 | Public playable package | `pending` | [Release policy](nightlies.md) |
 
 The current source baseline is whatever commit `origin/main` resolves to. The

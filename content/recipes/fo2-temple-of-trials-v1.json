@@ -1,0 +1,44 @@
+{
+  "schema": "opennv-fo2-first-slice-recipe/v1",
+  "id": "fo2-temple-of-trials-v1",
+  "campaign": "Fallout2",
+  "sourceProfileSchema": "opennv-fo2-owned-profile/v1",
+  "overlayOrderHighToLow": [
+    "patch000.dat",
+    "critter.dat",
+    "master.dat"
+  ],
+  "mapRegistry": {
+    "logicalPath": "data\\maps.txt",
+    "section": "Map 126",
+    "lookupName": "Arroyo Temple",
+    "mapName": "artemple"
+  },
+  "map": {
+    "logicalPath": "maps\\artemple.map",
+    "sha256": "11fc44f3fad558f3cb9e12bf41018a023ef7de8def365d516a44336157fec050",
+    "header": {
+      "version": 20,
+      "name": "ARTEMPLE.MAP",
+      "enteringTile": 18492,
+      "enteringElevation": 0,
+      "enteringRotation": 0,
+      "localVariables": 0,
+      "scriptIndex": 745,
+      "flags": 12,
+      "darkness": 1,
+      "globalVariables": 0,
+      "mapIndex": 126,
+      "lastVisitTime": 0
+    },
+    "presentElevations": [0]
+  },
+  "declaredRole": "new-game Temple of Trials source slice",
+  "unsupported": [
+    "executable-owned new-game map-selection policy",
+    "character creation and Chosen One state construction",
+    "MAP script execution, doors, collision, combat, and save/reload",
+    "Godot Hex, FPS, or OpenXR rendering",
+    "retail parity or playability"
+  ]
+}

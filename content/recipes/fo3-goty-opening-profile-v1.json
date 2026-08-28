@@ -1,0 +1,106 @@
+{
+  "schema": "opennv-fo3-owned-profile-recipe/v1",
+  "id": "fo3-goty-opening-profile-v1",
+  "campaign": "Fallout3",
+  "provenance": {
+    "classification": "owned-data-profile-selection",
+    "status": "opening-input-inventory",
+    "source": "Fallout3.esm, Fallout_default.ini, official base archives, optional GOTY DLC, and loose opening videos",
+    "evidence": "The profile registrar resolves the authored CG00-CG04 quest chain, character-selection commands, main-menu resources, and age-transition movies directly from the selected installation."
+  },
+  "install": {
+    "dataDirectoryName": "Data",
+    "defaultIniFile": "Fallout_default.ini",
+    "masterFile": "Fallout3.esm",
+    "requiredArchives": [
+      { "role": "textures", "file": "Fallout - Textures.bsa" },
+      { "role": "meshes", "file": "Fallout - Meshes.bsa" },
+      { "role": "voices", "file": "Fallout - Voices.bsa" },
+      { "role": "sound", "file": "Fallout - Sound.bsa" },
+      { "role": "menuVoices", "file": "Fallout - MenuVoices.bsa" },
+      { "role": "uiAndMisc", "file": "Fallout - Misc.bsa" }
+    ],
+    "optionalDlc": [
+      {
+        "id": "anchorage",
+        "plugin": "Anchorage.esm",
+        "archives": ["Anchorage - Main.bsa", "Anchorage - Sounds.bsa"]
+      },
+      {
+        "id": "the-pitt",
+        "plugin": "ThePitt.esm",
+        "archives": ["ThePitt - Main.bsa", "ThePitt - Sounds.bsa"]
+      },
+      {
+        "id": "broken-steel",
+        "plugin": "BrokenSteel.esm",
+        "archives": ["BrokenSteel - Main.bsa", "BrokenSteel - Sounds.bsa"]
+      },
+      {
+        "id": "point-lookout",
+        "plugin": "PointLookout.esm",
+        "archives": ["PointLookout - Main.bsa", "PointLookout - Sounds.bsa"]
+      },
+      {
+        "id": "mothership-zeta",
+        "plugin": "Zeta.esm",
+        "archives": ["Zeta - Main.bsa", "Zeta - Sounds.bsa"]
+      }
+    ]
+  },
+  "mainMenu": {
+    "uiArchiveRole": "uiAndMisc",
+    "textureArchiveRole": "textures",
+    "requiredMembers": [
+      "menus\\options\\main_menu.xml",
+      "menus\\message_menu.xml",
+      "menus\\dialog\\texteditmenu.xml",
+      "menus\\chargen\\race_sex_menu.xml",
+      "menus\\chargen\\specialbookmenu.xml"
+    ],
+    "requiredTextureMembers": [
+      "textures\\interface\\shared\\title.dds",
+      "textures\\interface\\main\\main_background.dds"
+    ],
+    "musicSetting": { "section": "General", "key": "SMainMenuMusicTrack" },
+    "musicDirectoryName": "Music",
+    "iniSettings": [
+      { "section": "General", "key": "SMainMenuMusicTrack" },
+      { "section": "Loading", "key": "sMainMenuBackground" },
+      { "section": "Interface", "key": "iSystemColorMainMenuRed" },
+      { "section": "Interface", "key": "iSystemColorMainMenuGreen" },
+      { "section": "Interface", "key": "iSystemColorMainMenuBlue" }
+    ]
+  },
+  "opening": {
+    "videoDirectoryName": "Video",
+    "introVideo": "Fallout INTRO Vsk.bik",
+    "quests": [
+      { "editorId": "CG00", "formId": "0001f388", "nextQuest": "CG01" },
+      { "editorId": "CG01", "formId": "00014e83", "nextQuest": "CG02", "transitionVideo": "1 year later.bik" },
+      { "editorId": "CG02", "formId": "00014e84", "nextQuest": "CG03", "transitionVideo": "9 years later.bik" },
+      { "editorId": "CG03", "formId": "00014e85", "nextQuest": "CG04", "transitionVideo": "6 years later.bik" },
+      { "editorId": "CG04", "formId": "00014e86", "transitionVideo": "3 years later.bik" }
+    ],
+    "characterSelection": {
+      "questEditorId": "CG00",
+      "sexMessageEditorId": "CG00ChooseSexMessage",
+      "playerBaseFormId": "00000007",
+      "playerEditorId": "Player",
+      "nameStage": 40,
+      "appearanceStage": 60,
+      "appearanceMenuEnteredStage": 61,
+      "appearanceAcceptedStage": 62
+    },
+    "appearanceUi": {
+      "document": "menus\\chargen\\race_sex_menu.xml",
+      "menuName": "RaceSexMenu",
+      "panelName": "NOGLOW_BRANCH",
+      "panelWidth": 340,
+      "panelHeight": 500,
+      "listItemWidth": 320,
+      "listItemHeight": 36,
+      "backgroundTexture": "textures\\interface\\shared\\background\\pipboy.dds"
+    }
+  }
+}

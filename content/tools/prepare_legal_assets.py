@@ -19,6 +19,10 @@ from owned_archive_stack import (
     load_owned_archive_stack,
 )
 from prepare_actor import prepare_actor_set
+from prepare_fo3_profile import (
+    default_recipe_path as default_fo3_profile_recipe_path,
+    prepare_profile as prepare_fo3_profile,
+)
 from runtime_configuration import configured_recipe_path, load_runtime_configuration
 
 
@@ -253,6 +257,11 @@ def main() -> int:
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--cache-root", type=Path)
     parser.add_argument(
+        "--campaign",
+        choices=("NewVegas", "Fallout3"),
+        default="NewVegas",
+    )
+    parser.add_argument(
         "--logical-model",
     )
     parser.add_argument("--expected-meshes-bsa-sha256", default="")
@@ -267,6 +276,26 @@ def main() -> int:
     if args.data_root is None or args.cache_root is None:
         parser.error("--data-root and --cache-root are required unless --compiler-identity is used")
     try:
+        if args.campaign == "Fallout3":
+            result = prepare_fo3_profile(
+                args.data_root.resolve(),
+                args.cache_root.resolve(),
+                default_fo3_profile_recipe_path(),
+            )
+            manifest = result["manifest"]
+            print(
+                "OPENNV_FO3_PROFILE "
+                + json.dumps(
+                    {
+                        "profile": result["output"],
+                        "profileId": manifest["profileId"],
+                        "runtimeBootReady": manifest["capabilities"]["runtimeBootReady"],
+                        "blockers": manifest["blockers"],
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
         result = prepare(
             args.data_root.resolve(),
             args.cache_root.resolve(),
