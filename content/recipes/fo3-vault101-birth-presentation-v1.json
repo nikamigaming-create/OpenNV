@@ -1,0 +1,61 @@
+{
+  "schema": "opennv-fo3-birth-presentation-recipe/v1",
+  "id": "fo3-vault101-birth-presentation-v1",
+  "source": {
+    "birthSliceSchema": "opennv-fo3-opening-slice/v1",
+    "birthSliceRecipeId": "fo3-vault101-cg00-birth-v1",
+    "birthSliceRecipeSha256": "523d579556260f8405416eaa161ebd1b10310ed14f2b9e8e5e7c3a37b6d0799d",
+    "cellFormId": "00028138",
+    "entryReferenceFormId": "00039562"
+  },
+  "selection": {
+    "maximumDistanceFromEntryGameUnits": 1200.0,
+    "expectedSelectedReferences": 29,
+    "expectedSelectedUniqueModels": 23,
+    "includeReferenceRecordTypes": [
+      "REFR"
+    ],
+    "includeBaseRecordTypes": [
+      "ACTI",
+      "CONT",
+      "DOOR",
+      "FURN",
+      "MSTT",
+      "STAT",
+      "TACT",
+      "TERM"
+    ],
+    "includeModelPrefixes": [
+      "architecture\\",
+      "clutter\\",
+      "dungeons\\",
+      "furniture\\",
+      "terminals\\"
+    ],
+    "requireInitiallyEnabled": true,
+    "requireSingleMainModel": true
+  },
+  "presentation": {
+    "exportStrict": false,
+    "verticalFovDegrees": 75.0,
+    "proofAmbientColor": [
+      0.72,
+      0.72,
+      0.72
+    ],
+    "proofAmbientEnergy": 1.0,
+    "proofBackgroundColor": [
+      0.012,
+      0.015,
+      0.018
+    ]
+  },
+  "unsupported": [
+    "actors and creatures",
+    "quest and package command execution",
+    "authored material textures and CELL lighting",
+    "collision and interaction",
+    "camera and pixel parity",
+    "OpenXR"
+  ]
+}

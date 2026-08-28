@@ -1,0 +1,437 @@
+#!/usr/bin/env python3
+"""Prepare a bounded Vault 101 birth-room presentation from an owned FO3 profile."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import sys
+from pathlib import Path
+
+from bsa_archive import BsaArchive, canonical_member_path
+from cell_scene import godot_position, godot_rotation_quaternion, godot_yaw_radians
+from export_static_nif_gltf import (
+    NoStaticPresentationGeometryError,
+    export_static_nif,
+)
+from runtime_configuration import load_runtime_configuration
+
+
+RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
+OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v1"
+PROFILE_SCHEMA = "opennv-owned-game-profile/v1"
+OUTPUT_NAME = "fo3-vault101-birth-presentation.json"
+SHA256_HEX_CHARACTERS = 64
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def _read_json(path: Path) -> tuple[dict[str, object], bytes]:
+    payload = path.read_bytes()
+    document = json.loads(payload)
+    if not isinstance(document, dict):
+        raise ValueError(f"Expected a JSON object: {path}")
+    return document, payload
+
+
+def _required_object(source: dict[str, object], name: str) -> dict[str, object]:
+    value = source.get(name)
+    if not isinstance(value, dict):
+        raise ValueError(f"Required object is absent: {name}")
+    return value
+
+
+def _required_list(source: dict[str, object], name: str) -> list[object]:
+    value = source.get(name)
+    if not isinstance(value, list):
+        raise ValueError(f"Required array is absent: {name}")
+    return value
+
+
+def _required_string(source: dict[str, object], name: str) -> str:
+    value = source.get(name)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"Required string is absent: {name}")
+    return value
+
+
+def _required_sha256(source: dict[str, object], name: str) -> str:
+    value = _required_string(source, name).lower()
+    if len(value) != SHA256_HEX_CHARACTERS or any(
+        character not in "0123456789abcdef" for character in value
+    ):
+        raise ValueError(f"SHA-256 field is invalid: {name}")
+    return value
+
+
+def _atomic_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_bytes(payload)
+    os.replace(temporary, path)
+
+
+def _atomic_json(path: Path, document: dict[str, object]) -> None:
+    _atomic_bytes(
+        path,
+        (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+    )
+
+
+def _default_recipe_path() -> Path:
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    return root / "recipes" / "fo3-vault101-birth-presentation-v1.json"
+
+
+def _archive(install: dict[str, object], role: str) -> dict[str, object]:
+    matches = [
+        row
+        for row in _required_list(install, "archives")
+        if isinstance(row, dict) and row.get("role") == role
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"Owned Fallout 3 archive role is ambiguous: {role}")
+    return matches[0]
+
+
+def _verify_source_file(row: dict[str, object]) -> Path:
+    path = Path(_required_string(row, "source")).resolve()
+    expected_bytes = int(row.get("bytes", 0))
+    if not path.is_file() or path.stat().st_size != expected_bytes:
+        raise ValueError(f"Owned source is absent or changed: {path}")
+    actual_sha256 = _sha256_file(path)
+    if actual_sha256 != _required_sha256(row, "sha256"):
+        raise ValueError(f"Owned source hash differs: {path}")
+    return path
+
+
+def _distance(first: list[object], second: list[object]) -> float:
+    if len(first) != 3 or len(second) != 3:
+        raise ValueError("Fallout 3 reference position must contain three values")
+    return math.sqrt(
+        sum((float(first[index]) - float(second[index])) ** 2 for index in range(3))
+    )
+
+
+def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
+    profile, _profile_payload = _read_json(profile_path.resolve())
+    if (
+        profile.get("schema") != PROFILE_SCHEMA
+        or profile.get("campaign") != "Fallout3"
+        or profile.get("status") != "registered-owned-profile"
+    ):
+        raise ValueError("Fallout 3 owned profile identity is unsupported")
+    install = _required_object(profile, "install")
+    meshes_row = _archive(install, "meshes")
+    meshes_path = _verify_source_file(meshes_row)
+
+    opening = _required_object(profile, "opening")
+    birth_source = _required_object(opening, "birthSlice")
+    birth_path = Path(_required_string(birth_source, "output")).resolve()
+    birth, birth_payload = _read_json(birth_path)
+    birth_sha256 = _sha256_bytes(birth_payload)
+    if birth_sha256 != _required_sha256(birth_source, "sha256"):
+        raise ValueError("Fallout 3 birth-slice manifest hash differs from its profile")
+
+    recipe, recipe_payload = _read_json(recipe_path.resolve())
+    if recipe.get("schema") != RECIPE_SCHEMA:
+        raise ValueError("Fallout 3 birth-presentation recipe schema is unsupported")
+    recipe_source = _required_object(recipe, "source")
+    birth_recipe = _required_object(birth, "recipe")
+    cell = _required_object(birth, "cell")
+    start_graph = _required_object(birth, "startGraph")
+    entry = _required_object(start_graph, "playerSpawn")
+    if (
+        birth.get("schema") != recipe_source.get("birthSliceSchema")
+        or birth_recipe.get("id") != recipe_source.get("birthSliceRecipeId")
+        or birth_recipe.get("sha256") != recipe_source.get("birthSliceRecipeSha256")
+        or cell.get("formId") != recipe_source.get("cellFormId")
+        or entry.get("formId") != recipe_source.get("entryReferenceFormId")
+    ):
+        raise ValueError("Fallout 3 birth-presentation recipe does not bind the owned slice")
+
+    source = _required_object(birth, "source")
+    source_meshes = _required_object(source, "meshesArchive")
+    if (
+        source_meshes.get("file") != meshes_row.get("file")
+        or int(source_meshes.get("bytes", 0)) != int(meshes_row.get("bytes", 0))
+        or source_meshes.get("sha256") != meshes_row.get("sha256")
+    ):
+        raise ValueError("Fallout 3 birth slice and owned mesh archive differ")
+
+    graph = _required_object(birth, "cellGraph")
+    bases = {
+        _required_string(row, "formId"): row
+        for row in _required_list(graph, "bases")
+        if isinstance(row, dict)
+    }
+    resources = {
+        canonical_member_path(_required_string(row, "logicalPath")): row
+        for row in _required_list(graph, "modelResources")
+        if isinstance(row, dict)
+    }
+    selection = _required_object(recipe, "selection")
+    allowed_reference_types = set(_required_list(selection, "includeReferenceRecordTypes"))
+    allowed_base_types = set(_required_list(selection, "includeBaseRecordTypes"))
+    allowed_prefixes = tuple(
+        canonical_member_path(str(value)) + "\\"
+        for value in _required_list(selection, "includeModelPrefixes")
+    )
+    maximum_distance = float(selection.get("maximumDistanceFromEntryGameUnits", 0.0))
+    if maximum_distance <= 0.0:
+        raise ValueError("Fallout 3 birth-presentation radius must be positive")
+    require_enabled = selection.get("requireInitiallyEnabled") is True
+    require_single = selection.get("requireSingleMainModel") is True
+    if not require_enabled or not require_single:
+        raise ValueError("Fallout 3 birth presentation must fail closed on enable/model identity")
+
+    entry_transform = _required_object(entry, "transform")
+    entry_position = _required_list(entry_transform, "positionGameUnits")
+    selected: list[tuple[dict[str, object], dict[str, object], str]] = []
+    excluded: dict[str, int] = {}
+    for value in _required_list(graph, "references"):
+        if not isinstance(value, dict):
+            raise ValueError("Fallout 3 CELL reference row is malformed")
+        reason = "selected"
+        base = bases.get(_required_string(value, "baseFormId"))
+        if base is None:
+            reason = "unresolved-base"
+        elif value.get("recordType") not in allowed_reference_types:
+            reason = "reference-type"
+        elif base.get("recordType") not in allowed_base_types:
+            reason = "base-type"
+        elif bool(value.get("initiallyDisabled")):
+            reason = "initially-disabled"
+        else:
+            models = _required_list(base, "models")
+            if len(models) != 1 or not isinstance(models[0], dict) or models[0].get("field") != "MODL":
+                reason = "single-main-model"
+            else:
+                model_path = canonical_member_path(_required_string(models[0], "path"))
+                if not model_path.startswith(allowed_prefixes):
+                    reason = "model-prefix"
+                else:
+                    transform = _required_object(value, "transform")
+                    position = _required_list(transform, "positionGameUnits")
+                    if _distance(position, entry_position) > maximum_distance:
+                        reason = "outside-birth-radius"
+        if reason != "selected":
+            excluded[reason] = excluded.get(reason, 0) + 1
+            continue
+        selected.append((value, base, model_path))
+    if not selected:
+        raise ValueError("Fallout 3 birth-presentation recipe selected no references")
+    selected_models = {row[2] for row in selected}
+    if (
+        len(selected) != int(selection.get("expectedSelectedReferences", -1))
+        or len(selected_models)
+        != int(selection.get("expectedSelectedUniqueModels", -1))
+    ):
+        raise ValueError(
+            "Fallout 3 birth-presentation selection coverage differs: "
+            f"references={len(selected)} models={len(selected_models)}"
+        )
+
+    archive = BsaArchive(meshes_path)
+    configuration = load_runtime_configuration()
+    presentation = _required_object(recipe, "presentation")
+    export_strict = presentation.get("exportStrict")
+    if not isinstance(export_strict, bool):
+        raise ValueError("Fallout 3 birth-presentation strict-export policy is absent")
+    output_root = cache_root.resolve() / "generated" / str(recipe["id"])
+    asset_root = output_root / "assets"
+    source_root = cache_root.resolve() / "source" / "fallout3"
+    assets: dict[str, dict[str, object]] = {}
+    non_presentation: list[dict[str, object]] = []
+    for model_path in sorted(selected_models):
+        logical_path = canonical_member_path("meshes\\" + model_path)
+        resource = resources.get(logical_path)
+        if resource is None:
+            raise ValueError(f"Selected model is absent from transported resources: {logical_path}")
+        member = archive.extract(logical_path)
+        if (
+            len(member.data) != int(resource.get("bytes", 0))
+            or member.sha256 != _required_sha256(resource, "sha256")
+            or resource.get("sourceArchive") != meshes_path.name
+        ):
+            raise ValueError(f"Owned model differs from transported resource: {logical_path}")
+        asset_id = hashlib.sha256(logical_path.encode("utf-8")).hexdigest()[
+            : configuration.content_compiler.asset_id_hex_characters
+        ]
+        source_path = source_root / Path(logical_path.replace("\\", "/"))
+        _atomic_bytes(source_path, member.data)
+        gltf_path = asset_root / f"{asset_id}.gltf"
+        sidecar_path = asset_root / f"{asset_id}.opennv.json"
+        try:
+            sidecar = export_static_nif(
+                source_path,
+                logical_path,
+                gltf_path,
+                sidecar_path,
+                configuration.content_compiler,
+                strict=export_strict,
+            )
+        except NoStaticPresentationGeometryError as error:
+            _atomic_json(sidecar_path, error.evidence)
+            non_presentation.append(
+                {
+                    "logicalPath": logical_path,
+                    "sourceSha256": member.sha256,
+                    "classification": error.evidence["classification"],
+                    "sidecar": str(sidecar_path.resolve()),
+                }
+            )
+            continue
+        assets[model_path] = {
+            "id": asset_id,
+            "logicalPath": logical_path,
+            "sourceBytes": len(member.data),
+            "sourceSha256": member.sha256,
+            "model": str(gltf_path.resolve()),
+            "sidecar": str(sidecar_path.resolve()),
+            "surfaces": int(sidecar["coverage"]["surfaces"]),
+            "collisionExportedButNotConsumed": bool(
+                sidecar["coverage"]["collisionExported"]
+            ),
+        }
+    retained = [row for row in selected if row[2] in assets]
+    if not retained:
+        raise ValueError("Fallout 3 birth presentation retained no renderable references")
+
+    origin = tuple(float(value) for value in entry_position)
+    references: list[dict[str, object]] = []
+    for reference, base, model_path in retained:
+        transform = _required_object(reference, "transform")
+        position = tuple(float(value) for value in _required_list(transform, "positionGameUnits"))
+        rotation = tuple(float(value) for value in _required_list(transform, "rotationRadians"))
+        references.append(
+            {
+                "formId": _required_string(reference, "formId"),
+                "baseFormId": _required_string(reference, "baseFormId"),
+                "baseRecordType": _required_string(base, "recordType"),
+                "baseEditorId": _required_string(base, "editorId"),
+                "assetId": assets[model_path]["id"],
+                "positionGameUnits": list(position),
+                "positionGodotGameUnits": godot_position(position, origin),
+                "rotationRadians": list(rotation),
+                "rotationGodotQuaternion": godot_rotation_quaternion(rotation),
+                "yawGodotRadians": godot_yaw_radians(rotation[2]),
+                "scale": float(transform.get("scale", 1.0)),
+                "initiallyDisabled": False,
+            }
+        )
+
+    entry_rotation = tuple(
+        float(value) for value in _required_list(entry_transform, "rotationRadians")
+    )
+    document: dict[str, object] = {
+        "schema": OUTPUT_SCHEMA,
+        "status": "prepared-owned-geometry-not-yet-rendered",
+        "recipe": {
+            "id": _required_string(recipe, "id"),
+            "path": str(recipe_path.resolve()),
+            "sha256": _sha256_bytes(recipe_payload),
+        },
+        "source": {
+            "profile": str(profile_path.resolve()),
+            "birthSlice": str(birth_path),
+            "birthSliceSha256": birth_sha256,
+            "birthSliceRecipeId": _required_string(birth_recipe, "id"),
+            "birthSliceRecipeSha256": _required_sha256(birth_recipe, "sha256"),
+            "meshesArchive": {
+                "file": meshes_path.name,
+                "bytes": meshes_path.stat().st_size,
+                "sha256": _sha256_file(meshes_path),
+            },
+        },
+        "cell": {
+            "formId": _required_string(cell, "formId"),
+            "editorId": _required_string(cell, "editorId"),
+            "name": _required_string(cell, "name"),
+            "interior": cell.get("interior") is True,
+        },
+        "coordinates": {
+            "source": "Gamebryo X-right/Y-forward/Z-up, radians",
+            "target": "Godot X-right/Y-up/-Z-forward",
+            "unitsToMeters": configuration.world_units_to_meters,
+            "originGameUnits": list(origin),
+        },
+        "entry": {
+            "source": "owned-player-start-marker-transform",
+            "referenceFormId": _required_string(entry, "formId"),
+            "positionGameUnits": list(origin),
+            "positionGodotGameUnits": [0.0, 0.0, 0.0],
+            "rotationRadians": list(entry_rotation),
+            "rotationGodotQuaternion": godot_rotation_quaternion(entry_rotation),
+            "yawGodotRadians": godot_yaw_radians(entry_rotation[2]),
+        },
+        "presentation": {
+            "verticalFovDegrees": float(presentation["verticalFovDegrees"]),
+            "proofAmbientColor": presentation["proofAmbientColor"],
+            "proofAmbientEnergy": float(presentation["proofAmbientEnergy"]),
+            "proofBackgroundColor": presentation["proofBackgroundColor"],
+            "lightingAuthority": "recipe-proof-only-not-retail-CELL-lighting",
+            "materialAuthority": "owned-NIF-geometry-and-material-factors-without-textures",
+        },
+        "assets": sorted(assets.values(), key=lambda value: str(value["id"])),
+        "references": sorted(references, key=lambda value: str(value["formId"])),
+        "coverage": {
+            "sourceCellReferences": len(_required_list(graph, "references")),
+            "selectedReferences": len(selected),
+            "renderableReferences": len(references),
+            "selectedUniqueModels": len(selected_models),
+            "renderableAssets": len(assets),
+            "nonPresentationAssets": len(non_presentation),
+            "excludedReferencesByReason": dict(sorted(excluded.items())),
+        },
+        "nonPresentationAssets": non_presentation,
+        "promotion": {
+            "transported": True,
+            "runtimeManifestValidated": False,
+            "runtimeSceneConstructed": False,
+            "rendered": False,
+            "interactive": False,
+            "actorsRendered": False,
+            "questCommandsExecuted": False,
+            "parityReviewed": False,
+            "headsetAccepted": False,
+        },
+        "unsupported": _required_list(recipe, "unsupported"),
+    }
+    output = output_root / OUTPUT_NAME
+    _atomic_json(output, document)
+    return output
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--profile", type=Path, required=True)
+    parser.add_argument("--cache-root", type=Path, required=True)
+    parser.add_argument("--recipe", type=Path, default=_default_recipe_path())
+    arguments = parser.parse_args()
+    output = prepare(arguments.profile, arguments.cache_root, arguments.recipe)
+    print(
+        json.dumps(
+            {
+                "schema": OUTPUT_SCHEMA,
+                "output": str(output.resolve()),
+                "sha256": _sha256_file(output),
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

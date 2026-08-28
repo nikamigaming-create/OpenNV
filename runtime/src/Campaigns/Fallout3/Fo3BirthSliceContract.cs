@@ -9,6 +9,8 @@ internal sealed record Fo3BirthSliceContract(
     string RecipeId,
     string CellFormId,
     string PlayerSpawnReferenceFormId,
+    IReadOnlyList<float> PlayerSpawnPositionGameUnits,
+    IReadOnlyList<float> PlayerSpawnRotationRadians,
     string DoctorActorReferenceFormId,
     int ReferenceCount,
     int ResolvedBaseRecordCount,
@@ -59,9 +61,15 @@ internal sealed record Fo3BirthSliceContract(
         VerifyBlockers(RequiredArray(root, "blockers"));
 
         var cellFormId = RequiredFormId(RequiredObject(root, "cell"), "formId");
-        var playerSpawnReferenceFormId = RequiredFormId(
-            RequiredObject(RequiredObject(root, "startGraph"), "playerSpawn"),
-            "formId");
+        var playerSpawn = RequiredObject(RequiredObject(root, "startGraph"), "playerSpawn");
+        var playerSpawnReferenceFormId = RequiredFormId(playerSpawn, "formId");
+        var playerSpawnTransform = RequiredObject(playerSpawn, "transform");
+        var playerSpawnPositionGameUnits = RequiredFloatVector3(
+            playerSpawnTransform,
+            "positionGameUnits");
+        var playerSpawnRotationRadians = RequiredFloatVector3(
+            playerSpawnTransform,
+            "rotationRadians");
         var doctorActorReferenceFormId = RequiredFormId(
             RequiredObject(RequiredObject(root, "doctorActor"), "reference"),
             "formId");
@@ -97,6 +105,8 @@ internal sealed record Fo3BirthSliceContract(
             recipeId,
             cellFormId,
             playerSpawnReferenceFormId,
+            playerSpawnPositionGameUnits,
+            playerSpawnRotationRadians,
             doctorActorReferenceFormId,
             references.Length,
             bases,
@@ -219,6 +229,16 @@ internal sealed record Fo3BirthSliceContract(
             value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             throw new InvalidOperationException($"Fallout 3 birth-slice field {name} is invalid.");
         return value.GetBoolean();
+    }
+
+    private static IReadOnlyList<float> RequiredFloatVector3(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException($"Fallout 3 birth-slice vector {name} is absent.");
+        var result = value.EnumerateArray().Select(component => component.GetSingle()).ToArray();
+        if (result.Length != 3 || result.Any(component => !float.IsFinite(component)))
+            throw new InvalidOperationException($"Fallout 3 birth-slice vector {name} is invalid.");
+        return result;
     }
 
     private static bool ValidHex(string value, int characters) =>

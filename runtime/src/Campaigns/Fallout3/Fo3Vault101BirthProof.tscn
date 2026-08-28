@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource path="res://src/Campaigns/Fallout3/Fo3Vault101BirthProof.cs" type="Script" id="1"]
+
+[node name="Fo3Vault101BirthProof" type="Node3D"]
+script = ExtResource("1")
