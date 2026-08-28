@@ -6,7 +6,7 @@ namespace OpenNV.Runtime;
 
 internal static class Fo1CreatureModel
 {
-    private const string ActorSchema = "opennv-actor-gltf/v1";
+    private const string ActorSchema = "opennv-actor-gltf/v4";
 
     internal static Template Load(JsonElement source, Node3D measurementParent)
     {
@@ -37,22 +37,49 @@ internal static class Fo1CreatureModel
             ?? throw new InvalidOperationException($"Godot generated no Fallout creature scene: {modelPath}");
         prototype.Name = $"CREATURE_{source.GetProperty("formId").GetString()}_{source.GetProperty("editorId").GetString()}";
         prototype.Scale = Vector3.One * source.GetProperty("unitsToMeters").GetSingle();
-        var meshes = Descendants<MeshInstance3D>(prototype).Count(mesh => mesh.Mesh is not null);
+        var prototypeMeshes = Descendants<MeshInstance3D>(prototype)
+            .Where(mesh => mesh.Mesh is not null)
+            .ToArray();
+        var meshes = prototypeMeshes.Length;
         var skeletons = Descendants<Skeleton3D>(prototype).Count();
         var players = Descendants<AnimationPlayer>(prototype).ToArray();
         if (meshes != sidecar.GetProperty("coverage").GetProperty("surfaces").GetInt32() ||
             skeletons < 1 || players.Length != 1)
             throw new InvalidOperationException(
                 $"Fallout creature import is incomplete: meshes={meshes} skeletons={skeletons} players={players.Length}");
+        var sourceShapesByRuntimeNodeName = sidecar.GetProperty("surfaces")
+            .EnumerateArray()
+            .ToDictionary(
+                row => row.GetProperty("runtimeNodeName").GetString()!,
+                row => row.GetProperty("sourceShape").GetString()!,
+                StringComparer.Ordinal);
+        if (sourceShapesByRuntimeNodeName.Count != prototypeMeshes.Length ||
+            prototypeMeshes.Any(mesh => !sourceShapesByRuntimeNodeName.ContainsKey(mesh.Name.ToString())))
+            throw new InvalidOperationException(
+                $"Fallout creature source-shape identity drift: {sidecarPath}");
         var availableAnimations = players[0].GetAnimationList()
             .Select(name => name.ToString())
             .Where(name => name != "RESET")
-            .ToHashSet(StringComparer.Ordinal);
+            .ToArray();
+        var normalizedAnimations = availableAnimations
+            .GroupBy(ActorModelSlice.NormalizeAnimationPath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Single(),
+                StringComparer.OrdinalIgnoreCase);
         var roles = source.GetProperty("animations").EnumerateArray().ToDictionary(
             row => row.GetProperty("role").GetString()!,
-            row => row.GetProperty("name").GetString()!,
+            row =>
+            {
+                var logicalPath = row.GetProperty("logicalPath").GetString()!;
+                var expected = ActorModelSlice.NormalizeAnimationPath(logicalPath);
+                return normalizedAnimations.TryGetValue(expected, out var runtimeName)
+                    ? runtimeName
+                    : throw new InvalidOperationException(
+                        $"Fallout creature animation {logicalPath} is absent from the Godot import.");
+            },
             StringComparer.Ordinal);
-        if (roles.Count < 5 || roles.Values.Any(name => !availableAnimations.Contains(name)))
+        if (roles.Count < 5)
             throw new InvalidOperationException(
                 $"Fallout creature animation identity drift: available={string.Join(",", availableAnimations)}");
         foreach (var role in new[] { "idle", "move", "turn" })
@@ -75,10 +102,11 @@ internal static class Fo1CreatureModel
             source.GetProperty("formId").GetString()!,
             source.GetProperty("editorId").GetString()!,
             roles,
+            sourceShapesByRuntimeNodeName,
             bounds,
             meshes,
             skeletons,
-            availableAnimations.Count);
+            availableAnimations.Length);
     }
 
     private static void VerifyHash(string path, string expected)
@@ -129,6 +157,7 @@ internal static class Fo1CreatureModel
         string FormId,
         string EditorId,
         IReadOnlyDictionary<string, string> AnimationRoles,
+        IReadOnlyDictionary<string, string> SourceShapesByRuntimeNodeName,
         Aabb Bounds,
         int Meshes,
         int Skeletons,
@@ -141,7 +170,12 @@ internal static class Fo1CreatureModel
             var players = Descendants<AnimationPlayer>(root).ToArray();
             if (players.Length != 1)
                 throw new InvalidOperationException("Duplicated Fallout creature lost its AnimationPlayer.");
-            return new Instance(root, players[0], AnimationRoles, Bounds);
+            return new Instance(
+                root,
+                players[0],
+                AnimationRoles,
+                SourceShapesByRuntimeNodeName,
+                Bounds);
         }
     }
 
@@ -149,5 +183,6 @@ internal static class Fo1CreatureModel
         Node3D Root,
         AnimationPlayer Player,
         IReadOnlyDictionary<string, string> AnimationRoles,
+        IReadOnlyDictionary<string, string> SourceShapesByRuntimeNodeName,
         Aabb Bounds);
 }

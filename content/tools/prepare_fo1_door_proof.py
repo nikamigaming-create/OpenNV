@@ -127,7 +127,12 @@ def build(
                 if texture
             }
         )
-        texture_pipeline = TexturePipeline(texture_paths, staging, {})
+        texture_pipeline = TexturePipeline(
+            texture_paths,
+            staging,
+            {},
+            load_runtime_configuration().content_compiler,
+        )
         texture_artifacts = {
             requested: texture_pipeline.prepare(requested) for requested in requested_textures
         }

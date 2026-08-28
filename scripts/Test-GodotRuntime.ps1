@@ -4,7 +4,8 @@ param(
     [string]$Godot,
     [string]$FalloutNewVegasData = "",
     [string]$ExpectedMeshesBsaSha256 = "",
-    [string]$RetailLogicalPath = ""
+    [string]$RetailLogicalPath = "",
+    [string]$Fo1HexScene = ""
 )
 
 $ErrorActionPreference = "Stop"

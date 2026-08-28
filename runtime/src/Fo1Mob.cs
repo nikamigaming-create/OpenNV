@@ -171,7 +171,8 @@ internal partial class Fo1Mob : Node3D
             _animationRoles = creature.AnimationRoles;
             _creatureHiddenGoreMeshes = ConfigureIntactCreatureVisibility(
                 _creatureRoot,
-                runtimeProfile.Mob.IntactHiddenMeshNameFragments);
+                runtimeProfile.Mob.IntactHiddenMeshNameFragments,
+                creature.SourceShapesByRuntimeNodeName);
             if (_creatureHiddenGoreMeshes != runtimeProfile.Mob.ExpectedIntactHiddenMeshes)
                 throw new InvalidOperationException(
                     $"Fallout intact giant-rat gore-cap coverage drift: {_creatureHiddenGoreMeshes}");
@@ -485,12 +486,16 @@ internal partial class Fo1Mob : Node3D
 
     private static int ConfigureIntactCreatureVisibility(
         Node3D creatureRoot,
-        IReadOnlyList<string> hiddenNameFragments)
+        IReadOnlyList<string> hiddenNameFragments,
+        IReadOnlyDictionary<string, string> sourceShapesByRuntimeNodeName)
     {
         var hidden = 0;
         foreach (var mesh in Descendants<MeshInstance3D>(creatureRoot))
         {
-            var name = mesh.Name.ToString();
+            var runtimeName = mesh.Name.ToString();
+            if (!sourceShapesByRuntimeNodeName.TryGetValue(runtimeName, out var name))
+                throw new InvalidOperationException(
+                    $"Fallout creature surface has no source-shape identity: {runtimeName}");
             var goreCap = hiddenNameFragments.Any(fragment =>
                 name.Contains(fragment, StringComparison.OrdinalIgnoreCase));
             mesh.Visible = !goreCap;

@@ -474,6 +474,8 @@ internal static class RuntimeMaterialLoader
                 }
                 material = standard;
             }
+            if (string.IsNullOrWhiteSpace(material.ResourceName))
+                material.ResourceName = expectedName;
             surface.Mesh.SetSurfaceOverrideMaterial(surface.Surface, material);
         }
         return bindings.Length;

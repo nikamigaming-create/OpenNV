@@ -1065,7 +1065,9 @@ internal static class Fo1OwnedCaveKit
             .ToHashSet(StringComparer.Ordinal);
         if (!dressing.HiddenSurfaceIdentities.IsSubsetOf(prototypeSurfaceIdentities))
             throw new InvalidOperationException(
-                "Fallout cave-wall hidden surface identity drifted from the owned prototype.");
+                "Fallout cave-wall hidden surface identity drifted from the owned prototype: " +
+                $"expected=[{string.Join(",", dressing.HiddenSurfaceIdentities)}] " +
+                $"actual=[{string.Join(",", prototypeSurfaceIdentities.Order())}]");
 
         var relief = composition.GetProperty("frmRelief");
         var artifacts = relief.GetProperty("artifacts").EnumerateArray()

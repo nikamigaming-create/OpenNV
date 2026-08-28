@@ -81,6 +81,7 @@ RUNTIME_GEOMETRY_NONIDENTITY_TOKENS = frozenset(
 NIF_PARENT_EXTRA_DATA_NAME = "prn"
 NIF_LINEAR_INTERPOLATION = 1
 NIF_QUADRATIC_INTERPOLATION = 2
+NIF_TBC_INTERPOLATION = 3
 NIF_XYZ_ROTATION_INTERPOLATION = 4
 SLERP_LINEAR_DOT_THRESHOLD = 0.9995
 NORMALIZATION_EPSILON = 1.0e-12
@@ -102,6 +103,7 @@ class ActorComponent:
     tri_payload: bytes | None = None
     bake_shape_transform: bool = False
     selected_shape: str | None = None
+    excluded_shape_prefixes: tuple[str, ...] = ()
     diffuse_override: str | None = None
     normal_override: str | None = None
     generated_diffuse: Image.Image | None = None
@@ -283,6 +285,7 @@ class ActorGltfInput:
     skeleton_root_node: str
     rigid_attachment_node: str
     biped_head_node: str
+    include_dismember_cap_shapes: bool = False
     additional_animations: tuple[ActorAnimation, ...] = ()
     retail_render_parts: tuple[RetailRenderPart, ...] = ()
 
@@ -399,6 +402,7 @@ def export_actor_gltf(
     nodes: list[dict[str, object]] = [{"name": f"ACTOR_{source.actor_form_id}_{source.actor_name}", "children": []}]
     node_by_name: dict[str, int] = {}
     _append_skeleton_nodes(skeleton_root, 0, nodes, node_by_name)
+    inverse_bind_by_name = gltf_skeleton_inverse_binds(nodes, node_by_name)
     nonaccumulation_root_nodes = [
         name
         for name in node_by_name
@@ -476,9 +480,10 @@ def export_actor_gltf(
                 for shape in authored_shapes
                 if _text(shape.name) == component.selected_shape
             ]
-        authored_shapes = [
-            shape for shape in authored_shapes if not _is_dismember_cap_shape(shape)
-        ]
+        if not source.include_dismember_cap_shapes:
+            authored_shapes = [
+                shape for shape in authored_shapes if not _is_dismember_cap_shape(shape)
+            ]
         marker_shapes = [
             shape
             for shape in authored_shapes
@@ -507,6 +512,27 @@ def export_actor_gltf(
             )
         marker_ids = {id(shape) for shape in marker_shapes}
         shapes = [shape for shape in authored_shapes if id(shape) not in marker_ids]
+        excluded_by_prefix = [
+            shape
+            for shape in shapes
+            if any(
+                _text(shape.name).startswith(prefix)
+                for prefix in component.excluded_shape_prefixes
+            )
+        ]
+        for shape in excluded_by_prefix:
+            omitted_surfaces.append(
+                {
+                    "role": component.role,
+                    "modelPath": component.model_path,
+                    "modelSha256": hashlib.sha256(component.model_payload).hexdigest(),
+                    "shape": _text(shape.name),
+                    "disposition": "omit-configured-shape-prefix",
+                    "authority": "actor recipe excludedShapePrefixes",
+                }
+            )
+        excluded_by_prefix_ids = {id(shape) for shape in excluded_by_prefix}
+        shapes = [shape for shape in shapes if id(shape) not in excluded_by_prefix_ids]
         if source.retail_render_parts and component.role.startswith("creature-model-"):
             visible_runtime_names = _visible_creature_geometry_names(
                 component,
@@ -609,6 +635,7 @@ def export_actor_gltf(
             animation, channels, animation_origin = _build_animation(
                 animation_source.payload,
                 node_by_name,
+                nodes,
                 builder,
                 compiler,
                 source.skeleton_root_node,
@@ -733,6 +760,7 @@ def export_actor_gltf(
             "components": len(source.components),
             "surfaces": len(surfaces),
             "omittedSurfaces": len(omitted_surfaces),
+            "dismemberCapShapesIncluded": source.include_dismember_cap_shapes,
             "skins": len(skins),
             "inverseBindContract": "inverse of exact emitted glTF skeleton rest-global matrix",
             "textures": len(textures.rows),
@@ -1976,7 +2004,11 @@ def _sample_transform_interpolator(
                         f"on {node_name}"
                     )
             if int(data.num_rotation_keys) > 0:
-                if int(data.rotation_type) == NIF_LINEAR_INTERPOLATION:
+                if int(data.rotation_type) in {
+                    NIF_LINEAR_INTERPOLATION,
+                    NIF_QUADRATIC_INTERPOLATION,
+                    NIF_TBC_INTERPOLATION,
+                }:
                     quaternion_keys = list(data.quaternion_keys)
                     rotations = [
                         _converted_nif_quaternion(

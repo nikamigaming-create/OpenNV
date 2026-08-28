@@ -361,7 +361,11 @@ def _relocated_texture_manifest(
     artifact: object, staging: Path, output_root: Path
 ) -> dict[str, object]:
     row = artifact.manifest()
-    row["png"] = str((output_root / Path(row["png"]).relative_to(staging)).resolve())
+    for field in ("dds", "png", "rgba8MipChain"):
+        if field in row:
+            row[field] = str(
+                (output_root / Path(str(row[field])).relative_to(staging)).resolve()
+            )
     if "cubeFaces" in row:
         row["cubeFaces"] = [
             {
@@ -424,7 +428,12 @@ def _prepare_direct_cave_assets(
             if texture
         }
     )
-    pipeline = TexturePipeline(texture_archive_paths, staging, {})
+    pipeline = TexturePipeline(
+        texture_archive_paths,
+        staging,
+        {},
+        load_runtime_configuration().content_compiler,
+    )
     generated_texture_rows = []
     for texture in requested:
         if texture in textures_by_requested:
@@ -598,6 +607,9 @@ def prepare(
     recipe = _read_json(recipe_path)
     if recipe.get("schema") != RECIPE_SCHEMA:
         raise ValueError(f"Unexpected Fallout 3D presentation recipe: {recipe_path}")
+    configuration = load_runtime_configuration()
+    compiler = configuration.content_compiler
+    creature_rig = configuration.actor_rig.profiles["CREA"]
     source = recipe["source"]
     required = [
         source["master"],
@@ -658,6 +670,12 @@ def prepare(
                 ),
                 idle_animation_path=clips[0].logical_path,
                 idle_animation_payload=clips[0].data,
+                skeleton_root_node=creature_rig.skeleton_root_node,
+                rigid_attachment_node=creature_rig.unparented_rigid_node,
+                biped_head_node=configuration.actor_rig.biped_head_node,
+                include_dismember_cap_shapes=bool(
+                    creature["includeDismemberCapShapes"]
+                ),
                 additional_animations=tuple(
                     ActorAnimation(clip.logical_path, clip.data) for clip in clips[1:]
                 ),
@@ -665,6 +683,7 @@ def prepare(
             texture_archives,
             model_path,
             sidecar_path,
+            compiler,
         )
         expected = creature["expected"]
         actual = sidecar["coverage"]
@@ -683,7 +702,7 @@ def prepare(
         player_expected = player_recipe["expected"]
         if (
             player_scene["reference"]["baseFormId"] != player_expected["sourceActorBaseFormId"]
-            or player_scene["actor"]["outfitFormId"] != player_expected["outfitFormId"]
+            or player_scene["actor"]["outfitFormIds"] != [player_expected["outfitFormId"]]
             or bool(player_scene["actor"]["female"]) != bool(player_expected["female"])
         ):
             raise ValueError("Vault Dweller owned actor identity drift")
@@ -780,7 +799,7 @@ def prepare(
                     "female": player_scene["actor"]["female"],
                 },
                 "outfit": {
-                    "formId": player_scene["actor"]["outfitFormId"],
+                    "formId": player_scene["actor"]["outfitFormIds"][0],
                     "identity": "owned Classic Pack Vault 13 armored-jumpsuit model",
                 },
                 "coverage": player_scene["coverage"],

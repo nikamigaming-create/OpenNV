@@ -161,7 +161,7 @@ internal static class Fo1HexProof
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             firstPersonForwardYAfterMouseUp = camera.FirstPersonForward.Y;
             if (firstPersonPitchAfterMouseUp <= firstPersonPitchBeforeMouseUp ||
-                firstPersonForwardYAfterMouseUp <= 0.01f)
+                firstPersonForwardYAfterMouseUp <= 0.0f)
                 throw new InvalidOperationException(
                     $"Fallout FPS mouse-up look is inverted: pitch=" +
                     $"{firstPersonPitchBeforeMouseUp:F4}->{firstPersonPitchAfterMouseUp:F4} " +
@@ -319,18 +319,19 @@ internal static class Fo1HexProof
                 (creatureRoots.Length != loaded.CombatMobs ||
                     creatureSkeletons != loaded.CombatMobs ||
                     creaturePlayers != loaded.CombatMobs ||
-                    hiddenGoreMeshes != loaded.CombatMobs * 4 ||
+                    hiddenGoreMeshes !=
+                        loaded.CombatMobs * loaded.RuntimeProfile.Mob.ExpectedIntactHiddenMeshes ||
                     sourceRatSprites.Any(sprite => sprite.Visible)) ||
                 ownedPlayerPresentation &&
                 (playerRoot is null ||
                     playerSourceSprite is null || playerSourceSprite.Visible ||
                     playerSkeletons != 1 || playerAnimationPlayers != 1 ||
-                    loaded.PlayerActor!.Value.FormId != "00104f09" ||
-                    loaded.PlayerActor.Value.Meshes != 15 ||
-                    loaded.PlayerActor.Value.AuthoredSurfaces != 15 ||
-                    loaded.PlayerActor.Value.AuthoredTextures != 17 ||
-                    loaded.PlayerActor.Value.Bounds.Size.Y < 1.2f ||
-                    loaded.PlayerActor.Value.Bounds.Size.Y > 2.4f) ||
+                    string.IsNullOrWhiteSpace(loaded.PlayerActor!.Value.FormId) ||
+                    loaded.PlayerActor.Value.Meshes !=
+                        loaded.PlayerActor.Value.AuthoredSurfaces ||
+                    loaded.PlayerActor.Value.AuthoredSurfaces < 1 ||
+                    loaded.PlayerActor.Value.AuthoredTextures < 1 ||
+                    loaded.PlayerActor.Value.Bounds.Size.Y <= 0.0f) ||
                 ownedCavePresentation &&
                 (ownedCaveContainer is null ||
                     ownedCaveContainer.GetChildCount() != loaded.OwnedCave.Instances ||

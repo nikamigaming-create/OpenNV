@@ -30,6 +30,7 @@
     "formId": "000e8e95",
     "editorId": "NVCrGiantRat",
     "unitsToMeters": 0.0142875,
+    "includeDismemberCapShapes": true,
     "skeleton": {
       "path": "meshes\\creatures\\nvgiantrat\\skeleton.nif",
       "sha256": "992ec736691b5b95eecb5e43694a67b08f29ec11a0373aab839e72e0c2d9ed1a"
@@ -130,7 +131,7 @@
       "surfaces": 15,
       "skins": 7,
       "animations": 5,
-      "textures": 17
+      "textures": 18
     }
   },
   "combatPresentation": {
