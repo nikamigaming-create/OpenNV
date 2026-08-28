@@ -2,7 +2,7 @@
   "schema": "opennv-runtime-manifest/v1",
   "runtime": {
     "engine": "Godot",
-    "engineVersion": "4.7.1",
+    "engineVersion": "4.7.2",
     "status": "experimental",
     "label": "Playable experimental Goodsprings sandbox with a launchable OpenXR path; full campaigns are not ready.",
     "canLaunch": true,
@@ -12,6 +12,27 @@
       "flat": {
         "launchable": true,
         "status": "playable-sandbox"
+      },
+      "classicDiorama": {
+        "launchable": true,
+        "status": "presentation-proof-turn-simulation-not-connected",
+        "projection": "orthogonal",
+        "cameraControls": ["pan", "zoom", "rotate-60-degrees"]
+      },
+      "fo1HexTactical": {
+        "launchable": true,
+        "status": "playable-character-opening-v13ent-3d-slice-full-campaign-not-connected",
+        "newGameSequence": "owned-original-style-creator -> owned-original-overseer-opening -> V13ENT tile 17690 rotation 2",
+        "grid": "V13ENT 200x200 one-metre hexes",
+        "floor": "one opaque owned cave mesh over 30196 exact source-backed movement hexes",
+        "gridOverlay": "optional opaque depth-tested mesh with 29127 walkable hexes and 92428 unique shared edges",
+        "cameraControls": [
+          "middle-mouse-orbit-tilt",
+          "right-mouse-drag-pan",
+          "wheel-cursor-zoom",
+          "wasd-arrow-and-edge-pan",
+          "player-focus-and-route-reset"
+        ]
       },
       "openxr": {
         "launchable": true,
@@ -25,6 +46,15 @@
     }
   },
   "campaigns": [
+    {
+      "id": "Fallout1EtTu",
+      "variants": {
+        "vault13Concept": {
+          "ready": false,
+          "message": "The private local route now has original-style character creation bound to live derived stats, the owned original Overseer movie/audio, Pip-Boy 2000, exact V13ENT tile 17690 rotation 2, reversed-X floor/object/hex authority, an owned 3D presentation, continuous FPS movement, exact-center shoulder movement, and turn-based tactical movement. FPS and tactical modes share V13-script/PRO-derived starting inventory, pistol ammunition/capacity/reload, knife and pistol attacks, HP/death state, save state, and a full four-kill native ranged-and-melee showcase with impacts, ricochets, grounded casings, held weapons, animation, and owned donor audio. Only 1 of 96 inventoried local maps is tactically playable; dialogue, quests, broader inventory/equipment semantics, full campaign simulation, retail combat-formula parity, and OpenXR are not connected."
+        }
+      }
+    },
     {
       "id": "NewVegas",
       "variants": {

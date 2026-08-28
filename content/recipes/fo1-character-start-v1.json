@@ -1,0 +1,428 @@
+{
+  "schema": "opennv-fo1-character-start-recipe/v1",
+  "id": "fo1-character-start-v1",
+  "source": {
+    "falloutMasterSha256": "a79090e035e33c178aee23fe72f7ef0a5f3be76f733c252522983aad22f87364",
+    "manualSha256": "9a93ba6c8a430e7d8cfffa59acd3aa8677eb9b591d0e1653d5030280bb6dd330",
+    "palette": {
+      "logicalPath": "COLOR.PAL",
+      "sha256": "315e06106c42646067117bc84cfdb11c992a5a3a5e058fcaaf24d5c0531a5df9"
+    },
+    "creatorChrome": {
+      "logicalPath": "ART/INTRFACE/EDTRCRTE.FRM",
+      "sha256": "48657057b1e40674a7882623ce7b8726d42e03a59bdbe50c9da95810bdc12258",
+      "width": 640,
+      "height": 480
+    },
+    "creatorNumbers": {
+      "logicalPath": "ART/INTRFACE/BIGNUM.FRM",
+      "sha256": "b0fbe9f9b6782dfeda06af0c43a7732ddd6b619788e6054816979aca6697ab3e",
+      "width": 336,
+      "height": 24,
+      "digitWidth": 14,
+      "specialDigitStride": 18,
+      "whiteOffsetX": 0,
+      "layout": {
+        "special": [
+          { "x": 55, "y": 38 },
+          { "x": 55, "y": 71 },
+          { "x": 55, "y": 104 },
+          { "x": 55, "y": 137 },
+          { "x": 55, "y": 170 },
+          { "x": 55, "y": 203 },
+          { "x": 55, "y": 236 }
+        ],
+        "specialIncrease": [
+          { "x": 151, "y": 38, "width": 14, "height": 12 },
+          { "x": 151, "y": 71, "width": 14, "height": 12 },
+          { "x": 151, "y": 104, "width": 14, "height": 12 },
+          { "x": 151, "y": 137, "width": 14, "height": 12 },
+          { "x": 151, "y": 170, "width": 14, "height": 12 },
+          { "x": 151, "y": 203, "width": 14, "height": 12 },
+          { "x": 151, "y": 236, "width": 14, "height": 12 }
+        ],
+        "specialDecrease": [
+          { "x": 151, "y": 51, "width": 14, "height": 12 },
+          { "x": 151, "y": 84, "width": 14, "height": 12 },
+          { "x": 151, "y": 117, "width": 14, "height": 12 },
+          { "x": 151, "y": 150, "width": 14, "height": 12 },
+          { "x": 151, "y": 183, "width": 14, "height": 12 },
+          { "x": 151, "y": 216, "width": 14, "height": 12 },
+          { "x": 151, "y": 249, "width": 14, "height": 12 }
+        ],
+        "characterPoints": [
+          { "x": 126, "y": 282 },
+          { "x": 140, "y": 282 }
+        ]
+      }
+    },
+    "characterPicker": {
+      "logicalPath": "ART/INTRFACE/PICKCHAR.FRM",
+      "sha256": "d6c10612a915c4d55f0e72c961341339ffa0d56bc03d87e2e156379946cd80dd",
+      "width": 640,
+      "height": 480
+    },
+    "interfaceHud": {
+      "main": {
+        "logicalPath": "ART/INTRFACE/IFACE.FRM",
+        "sha256": "44efbdeb6813f1d37434ea1991ec21b40234f86c53ad78ed13337475f4fbf6a6",
+        "width": 640,
+        "height": 100
+      },
+      "numbers": {
+        "logicalPath": "ART/INTRFACE/NUMBERS.FRM",
+        "sha256": "be47aaaf4161536251b0d6998fbea652e37def80dfd93cafc8732749773ee58e",
+        "width": 360,
+        "height": 17
+      },
+      "actionPointGreen": {
+        "logicalPath": "ART/INTRFACE/HLGRN.FRM",
+        "sha256": "97b6262623fca69151b7bcf777c0be5212848bbb4b9d9b5b4badc1b3bd65f871",
+        "width": 5,
+        "height": 5
+      },
+      "actionPointYellow": {
+        "logicalPath": "ART/INTRFACE/HLYEL.FRM",
+        "sha256": "5a157077b7deb1108854811722b615e19f72cb568f62a8147e09afbd929c49ee",
+        "width": 5,
+        "height": 5
+      },
+      "actionPointRed": {
+        "logicalPath": "ART/INTRFACE/HLRED.FRM",
+        "sha256": "5f2f677553deff89c7e2d2481e1e5f50b8a3f485433d2091092405cc98516bf9",
+        "width": 5,
+        "height": 5
+      },
+      "endWindow": {
+        "logicalPath": "ART/INTRFACE/ENDANIM.FRM",
+        "sha256": "c8d15d5d23d65867225d7c24e5b6506954e6ad94357549c389c0aa9d114e56b9",
+        "width": 57,
+        "height": 58,
+        "frameIndex": 4
+      },
+      "endTurn": {
+        "logicalPath": "ART/INTRFACE/ENDTURNU.FRM",
+        "sha256": "937868595a2d71142365a7ced76644ec4261381ef72430948512140c5f4d28cd",
+        "width": 38,
+        "height": 22
+      },
+      "endCombat": {
+        "logicalPath": "ART/INTRFACE/ENDCMBTU.FRM",
+        "sha256": "3105d15de39e1b92265cb47cb24101a778157713c6600980acbf44ebecc7033f",
+        "width": 38,
+        "height": 22
+      },
+      "endLightGreen": {
+        "logicalPath": "ART/INTRFACE/ENDLTGRN.FRM",
+        "sha256": "69d32e0bd14ee03221dbcd4b7cd714ed5588a5339136a1c37dddefadc3033848",
+        "width": 57,
+        "height": 58
+      },
+      "endLightRed": {
+        "logicalPath": "ART/INTRFACE/ENDLTRED.FRM",
+        "sha256": "c04d0c4e4cd9713cb6906f0cdede29cddbe8cb512b27d9b5ca938889922f0025",
+        "width": 57,
+        "height": 58
+      },
+      "itemPanel": {
+        "logicalPath": "ART/INTRFACE/SATTKBUP.FRM",
+        "sha256": "1cfa5833b284e2e5ea1fe0337be6f35842d2e275990b6289c121945981fd43f2",
+        "width": 188,
+        "height": 67
+      },
+      "singleAttack": {
+        "logicalPath": "ART/INTRFACE/SINGLE.FRM",
+        "sha256": "cad109d6e96dbffbf8b7348acf7e00e8c98f48dee24cb6caa9306da08fad4284",
+        "width": 52,
+        "height": 11
+      },
+      "movePoints": {
+        "logicalPath": "ART/INTRFACE/MVEPNT.FRM",
+        "sha256": "0ef7d7caa8833cd98ff6a4bc5df4f1a6192d995751b5bdb08b7d175c6e1161b9",
+        "width": 17,
+        "height": 12
+      },
+      "moveNumbers": {
+        "logicalPath": "ART/INTRFACE/MVENUM.FRM",
+        "sha256": "b6aa5227a0bcc0f90cd9ba9b219ebcd50538159cb3b6634fd4734295b1e571dd",
+        "width": 99,
+        "height": 12
+      },
+      "weaponInventoryBySymbol": {
+        "PID_10MM_PISTOL": {
+          "logicalPath": "ART/INVEN/PISTOL.FRM",
+          "sha256": "5b429346d20453b0fd057929e25b23287dd27e4f09ad4145b8ac5dea64525e34",
+          "width": 70,
+          "height": 63
+        },
+        "PID_KNIFE": {
+          "logicalPath": "ART/INVEN/KNIFE.FRM",
+          "sha256": "851e2fec667c7ab91782706414b3975283349f5be05db065e52fa041e1e9aee1",
+          "width": 94,
+          "height": 60
+        }
+      },
+      "inventoryButton": {
+        "logicalPath": "ART/INTRFACE/INVBUTUP.FRM",
+        "sha256": "c975758c0ebac525da0044d89650fb5d7c4c7081a93c8480e0a9d201e5d1a23b",
+        "width": 32,
+        "height": 21
+      },
+      "optionsButton": {
+        "logicalPath": "ART/INTRFACE/OPTIUP.FRM",
+        "sha256": "3a5cde7758a0b98a4d118db664198263577ea1b2fd6516791ca6e57a9bf5fab5",
+        "width": 34,
+        "height": 34
+      },
+      "redButton": {
+        "logicalPath": "ART/INTRFACE/BIGREDUP.FRM",
+        "sha256": "fde9c6ed624ea6d9855ef03c54b6ab7a463add954331f2fda1df4850bcd065dd",
+        "width": 22,
+        "height": 21
+      },
+      "automapButton": {
+        "logicalPath": "ART/INTRFACE/MAPUP.FRM",
+        "sha256": "c43d9f7a4609ed208b383821e5612229657dc5d7a9a60cc1f6f87ec36eef5004",
+        "width": 41,
+        "height": 19
+      },
+      "characterButton": {
+        "logicalPath": "ART/INTRFACE/CHAUP.FRM",
+        "sha256": "e88d72c15742245eef415ef212d9d24605a7fc5810ebb845a4ddd99297eb5a3b",
+        "width": 41,
+        "height": 19
+      },
+      "pipBoyButton": {
+        "logicalPath": "ART/INTRFACE/PIPUP.FRM",
+        "sha256": "53f9e35c1661ef12eba24c2acf21558f707faa11cacbccf374a90ba79b0584df",
+        "width": 41,
+        "height": 19
+      },
+      "messageFont": {
+        "logicalPath": "FONT1.AAF",
+        "sha256": "fc731999d879d1cba4e33d70afc7771a5acd571687d7d8e0ec5a99b26aecba54",
+        "colorTableIndex": 992
+      },
+      "layout": {
+        "canvas": { "width": 640, "height": 100 },
+        "message": {
+          "x": 23,
+          "y": 24,
+          "width": 167,
+          "height": 60,
+          "maximumLines": 6,
+          "lineIndent": 1,
+          "prefixCodePoint": 149
+        },
+        "hitPoints": { "x": 473, "y": 40 },
+        "armorClass": { "x": 473, "y": 75 },
+        "numbers": {
+          "digitWidth": 9,
+          "signWidth": 6,
+          "height": 17,
+          "minusX": 108,
+          "plusX": 114,
+          "whiteOffset": 0,
+          "yellowOffset": 120,
+          "redOffset": 240
+        },
+        "actionPoints": {
+          "x": 316,
+          "y": 14,
+          "width": 90,
+          "height": 5,
+          "slots": 10,
+          "stride": 9
+        },
+        "itemPanel": {
+          "x": 267,
+          "y": 26,
+          "width": 188,
+          "height": 67,
+          "singleX": 129,
+          "singleY": 7,
+          "movePointsX": 7,
+          "movePointsY": 48,
+          "moveNumberX": 31,
+          "moveNumberY": 48,
+          "weaponX": 59,
+          "weaponY": 2,
+          "weaponSlotWidth": 70,
+          "weaponSlotHeight": 63,
+          "moveDigitWidth": 10
+        },
+        "combat": {
+          "window": { "x": 580, "y": 38, "width": 57, "height": 58 },
+          "endTurn": { "x": 590, "y": 43 },
+          "endCombat": { "x": 590, "y": 65 }
+        },
+        "buttons": {
+          "swapHands": { "x": 218, "y": 6 },
+          "inventory": { "x": 211, "y": 41 },
+          "options": { "x": 210, "y": 62 },
+          "skilldex": { "x": 523, "y": 7 },
+          "automap": { "x": 526, "y": 40 },
+          "character": { "x": 526, "y": 59 },
+          "pipBoy": { "x": 526, "y": 78, "width": 41, "height": 19 }
+        }
+      }
+    },
+    "premadeCharacters": [
+      {
+        "id": "max-stone",
+        "role": "combat",
+        "gcd": {
+          "logicalPath": "PREMADE/COMBAT.GCD",
+          "sha256": "31b9416a1f75e78860a510bca7c40fc02e8123145bf219c35eeb2c8394725ce1"
+        },
+        "bio": {
+          "logicalPath": "PREMADE/COMBAT.BIO",
+          "sha256": "585489b8b8b1690e43e0b1384f015a47a5804fd8a7a23d7860e8dea71d846134"
+        },
+        "portrait": {
+          "logicalPath": "ART/INTRFACE/COMBAT.FRM",
+          "sha256": "8b705441f20b9163e09a990a30c5af05c4a6f771f6f7d5606f2b1096b5c032db",
+          "width": 212,
+          "height": 187
+        }
+      },
+      {
+        "id": "natalia",
+        "role": "stealth",
+        "gcd": {
+          "logicalPath": "PREMADE/STEALTH.GCD",
+          "sha256": "516062ae8e12615a0f65af441c23d3ec2b44e8a89e7c94081542be388fc4d5a2"
+        },
+        "bio": {
+          "logicalPath": "PREMADE/STEALTH.BIO",
+          "sha256": "36f8349e33d68c293d548ed3f253621c645d95f7d8820258b53163d48fec8c4e"
+        },
+        "portrait": {
+          "logicalPath": "ART/INTRFACE/STEALTH.FRM",
+          "sha256": "54cf6ecba1c81be714f850278e2ec0d5b1264876a32ceb2afdb47ed2500eb6e8",
+          "width": 212,
+          "height": 187
+        }
+      },
+      {
+        "id": "albert",
+        "role": "diplomat",
+        "gcd": {
+          "logicalPath": "PREMADE/DIPLOMAT.GCD",
+          "sha256": "5abd44aae8befda02ab69d68646ec7179642355bb0e062f6ca1f3f92d5f4340e"
+        },
+        "bio": {
+          "logicalPath": "PREMADE/DIPLOMAT.BIO",
+          "sha256": "4b280ad2721eef71f6b30978293ad62ea341baf2f9f24514ba9b85c0b9fcd715"
+        },
+        "portrait": {
+          "logicalPath": "ART/INTRFACE/DIPLOMAT.FRM",
+          "sha256": "f519860f589421904533e783b9926c260b6ca8962dce6d02c2cfcfc9841fcdf1",
+          "width": 212,
+          "height": 187
+        }
+      }
+    ],
+    "pipBoy": {
+      "main": {
+        "logicalPath": "ART/INTRFACE/PIP.FRM",
+        "sha256": "332ba72b181f854d529b38e7e76fd9414ad9e9cb317dbb859176b2c3cdfca006",
+        "width": 640,
+        "height": 480
+      },
+      "sidePanel": {
+        "logicalPath": "ART/INTRFACE/PIP2.FRM",
+        "sha256": "b3e06034b6a23c6467e88f483012e15223654b0d49d30965c1dca9a903cdee7c",
+        "width": 148,
+        "height": 227
+      },
+      "upButton": {
+        "logicalPath": "ART/INTRFACE/PIPUP.FRM",
+        "sha256": "53f9e35c1661ef12eba24c2acf21558f707faa11cacbccf374a90ba79b0584df",
+        "width": 41,
+        "height": 19
+      },
+      "downButton": {
+        "logicalPath": "ART/INTRFACE/PIPDN.FRM",
+        "sha256": "b748dcca29866a41ea4af9b65f26cdf17640d05d7861ba065d9a22211b36d95b",
+        "width": 41,
+        "height": 19
+      },
+      "screensaver": {
+        "logicalPath": "ART/INTRFACE/PIPX.FRM",
+        "sha256": "0bf191e673fb220c765c4cac767a4d6c1ab6c225dc826eb86f2e698f267559cc",
+        "width": 204,
+        "height": 141
+      },
+      "messages": {
+        "logicalPath": "TEXT/ENGLISH/GAME/PIPBOY.MSG",
+        "sha256": "cfc4477b22b3feeaca256f0c31cd56ef2da0401a52c02a1d685b8ad56224e9b0"
+      }
+    },
+    "overseerMovie": {
+      "logicalPath": "ART/CUTS/OVRINTRO.MVE",
+      "sha256": "feb5c0a35687de321519602f6b62c132dbee8b9b59b3031c491666933e6ad3c3"
+    },
+    "overseerText": {
+      "logicalPath": "TEXT/ENGLISH/CUTS/OVRINTRO.TXT",
+      "sha256": "b8f4c7b1c31e9ccea83ece47821ce62be5ff3c0b5d7f266f68ea473e017eda80"
+    },
+    "overseerTiming": {
+      "logicalPath": "TEXT/ENGLISH/CUTS/OVRINTRO.SVE",
+      "sha256": "5151c422828b30062c4e2acab042ed639d492bd338d95b18f4c856f2c5d46e09",
+      "unitsPerSecond": 10
+    },
+    "playbackRepair": {
+      "framesPerSecond": 15,
+      "repeatPreviousFrameRanges": [[1348, 1353]],
+      "reason": "The local FFmpeg Interplay decoder reports one damaged motion-offset packet; repeat the last clean decoded frame for the six affected 15-fps derivatives. The owned MVE remains unchanged and hash-pinned."
+    }
+  },
+  "creation": {
+    "special": ["Strength", "Perception", "Endurance", "Charisma", "Intelligence", "Agility", "Luck"],
+    "initialSpecial": 5,
+    "freeSpecialPoints": 5,
+    "minimumSpecial": 1,
+    "maximumSpecial": 10,
+    "minimumAge": 16,
+    "maximumAge": 35,
+    "sexes": ["Male", "Female"],
+    "taggedSkillCount": 3,
+    "tagBonus": 20,
+    "maximumTraits": 2,
+    "skills": [
+      "Small Guns", "Big Guns", "Energy Weapons", "Unarmed", "Melee Weapons", "Throwing",
+      "First Aid", "Doctor", "Sneak", "Lockpick", "Steal", "Traps", "Science", "Repair",
+      "Speech", "Barter", "Gambling", "Outdoorsman"
+    ],
+    "traits": [
+      "Fast Metabolism", "Bruiser", "Small Frame", "One Hander", "Finesse", "Kamikaze",
+      "Heavy Handed", "Fast Shot", "Bloody Mess", "Jinxed", "Good Natured", "Chem Reliant",
+      "Chem Resistant", "Night Person", "Skilled", "Gifted"
+    ],
+    "doneRequiresAllPointsSpent": true,
+    "doneRequiresThreeTags": true
+  },
+  "handoff": {
+    "sequence": ["character-creation", "overseer-briefing", "v13ent"],
+    "map": "V13ENT",
+    "tile": 17690,
+    "elevation": 0,
+    "rotation": 2
+  },
+  "supported": [
+    "original Fallout 1 three-premade character picker and Custom route from owned MASTER.DAT records and interface art",
+    "original Fallout 1 640x480 character-creator chrome from the owned MASTER.DAT",
+    "name, age, sex, seven SPECIAL values, exactly three tag skills, and zero-to-two traits",
+    "manual-derived HP, AP, AC, sequence, carry weight, resistances, healing, critical chance, and base skills",
+    "original owned Overseer MVE video/audio and source subtitle timing",
+    "authored briefing-to-V13ENT tile 17690 rotation 2 handoff",
+    "original owned Fallout 1 640x100 gameplay HUD composed at source-pixel coordinates with live HP, AP, AC, item art, bitmap message font, combat curtain, and PIP access",
+    "original owned Fallout 1 Pip-Boy 2000 chrome with live bounded character, status, automap, and archive pages"
+  ],
+  "unsupported": [
+    "retail cursor sprites, click sounds, button-down animation, and per-control timing parity",
+    "complete downstream runtime effects for every selectable trait",
+    "retail combat to-hit, critical tables, inventory, perks, and leveling"
+  ]
+}

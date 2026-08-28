@@ -2,12 +2,36 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class CellPlayerNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point22f = 0.22f;
+    internal const float PresentationFloat0Point48f = 0.48f;
+    internal const float PresentationFloat0Point80f = 0.80f;
+    internal const float PresentationFloat0Point86f = 0.86f;
+    internal const float PresentationFloat0Point90f = 0.90f;
+    internal const float PresentationFloat1Point15f = 1.15f;
+    internal const float PresentationFloat10Point0f = 10.0f;
+    internal const float PresentationFloat11Point05f = 11.05f;
+    internal const float PresentationFloat11Point5f = 11.5f;
+    internal const float PresentationFloat18Point0f = 18.0f;
+    internal const float PresentationFloat8Point0f = 8.0f;
+}
+
 internal partial class CellPlayer : CharacterBody3D
 {
+    internal const float DioramaInitialSizeMeters = 18.0f;
+    internal const float DioramaMinimumSizeMeters = 6.0f;
+    internal const float DioramaMaximumSizeMeters = 64.0f;
+    internal const float DioramaYawStepRadians = MathF.PI / 3.0f;
+    internal const float DioramaPanSpeedMetersPerSecond = 7.5f;
+
     private RuntimeConfiguration _configuration = null!;
     private Camera3D _camera = null!;
     private GameplaySession? _session;
     private XROrigin3D? _xrOrigin;
+    private Node3D? _dioramaOrbit;
     private XRController3D? _leftGrip;
     private XRController3D? _rightGrip;
     private XRController3D? _leftAim;
@@ -23,6 +47,12 @@ internal partial class CellPlayer : CharacterBody3D
     private Vector3 _weaponRestPosition;
     private float _weaponFeedbackSeconds;
     private bool _useXr;
+    private bool _useClassicDiorama;
+    private float _dioramaTargetYawRadians;
+    private float _dioramaTargetSizeMeters = DioramaInitialSizeMeters;
+    private Vector3 _dioramaHomePosition;
+    private float _dioramaHomeSizeMeters = DioramaInitialSizeMeters;
+    private Aabb? _dioramaFramingBounds;
     private bool _xrActivatePressed;
     private bool _xrFirePressed;
     private bool _xrSavePressed;
@@ -44,6 +74,11 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
+    internal bool UsesClassicDiorama => _useClassicDiorama;
+    internal Node3D? DioramaOrbit => _dioramaOrbit;
+    internal float DioramaTargetYawRadians => _dioramaTargetYawRadians;
+    internal float DioramaTargetSizeMeters => _dioramaTargetSizeMeters;
+    internal Aabb? DioramaFramingBounds => _dioramaFramingBounds;
     internal XROrigin3D? XrOrigin => _xrOrigin;
     internal XRController3D? LeftGrip => _leftGrip;
     internal XRController3D? RightGrip => _rightGrip;
@@ -107,39 +142,75 @@ internal partial class CellPlayer : CharacterBody3D
         float yaw,
         GameplaySession session,
         RuntimeConfiguration configuration,
-        bool useXr = false)
+        bool useXr = false,
+        bool useClassicDiorama = false)
     {
+        if (useXr && useClassicDiorama)
+            throw new ArgumentException(
+                "Classic Diorama and OpenXR require separate presentation adapters.");
         _configuration = configuration;
         _session = session;
         _useXr = useXr;
+        _useClassicDiorama = useClassicDiorama;
         Name = "Player";
-        Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters;
-        Rotation = new Vector3(0.0f, yaw, 0.0f);
-        CollisionLayer = configuration.Player.CollisionLayer;
-        CollisionMask = configuration.Player.CollisionMask;
-        AddChild(new CollisionShape3D
+        Position = Vector3.Up * (useClassicDiorama
+            ? 0.0f
+            : configuration.Player.SpawnCenterHeightMeters);
+        Rotation = new Vector3(0.0f, useClassicDiorama ? 0.0f : yaw, 0.0f);
+        CollisionLayer = useClassicDiorama ? 0u : configuration.Player.CollisionLayer;
+        CollisionMask = useClassicDiorama ? 0u : configuration.Player.CollisionMask;
+        if (!useClassicDiorama)
         {
-            Name = "Capsule",
-            Shape = new CapsuleShape3D
+            AddChild(new CollisionShape3D
             {
-                Radius = configuration.Player.CapsuleRadiusMeters,
-                Height = configuration.Player.CapsuleHeightMeters,
-            },
-        });
+                Name = "Capsule",
+                Shape = new CapsuleShape3D
+                {
+                    Radius = configuration.Player.CapsuleRadiusMeters,
+                    Height = configuration.Player.CapsuleHeightMeters,
+                },
+            });
+        }
         if (useXr)
             BuildXrRig();
+        else if (useClassicDiorama)
+            BuildClassicDioramaRig(yaw);
         else
             BuildDesktopRig();
     }
 
     public override void _Ready()
     {
-        if (!_useXr && DisplayServer.GetName() != "headless")
+        if (!_useXr && !_useClassicDiorama && DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;
+        else if (_useClassicDiorama)
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!_useClassicDiorama)
+            return;
+        _dioramaOrbit!.Rotation = new Vector3(
+            0.0f,
+            Mathf.LerpAngle(
+                _dioramaOrbit.Rotation.Y,
+                _dioramaTargetYawRadians,
+                Math.Clamp((float)delta * CellPlayerNumericContracts.PresentationFloat8Point0f, 0.0f, 1.0f)),
+            0.0f);
+        _camera.Size = Mathf.Lerp(
+            _camera.Size,
+            _dioramaTargetSizeMeters,
+            Math.Clamp((float)delta * CellPlayerNumericContracts.PresentationFloat10Point0f, 0.0f, 1.0f));
     }
 
     public override void _PhysicsProcess(double delta)
     {
+        if (_useClassicDiorama)
+        {
+            UpdateClassicDioramaPan((float)delta);
+            return;
+        }
         if (_useXr)
             UpdateXrCalibrationAndHealth();
         var input = ReadMovement();
@@ -220,6 +291,11 @@ internal partial class CellPlayer : CharacterBody3D
     {
         if (_useXr)
             return;
+        if (_useClassicDiorama)
+        {
+            HandleClassicDioramaInput(inputEvent);
+            return;
+        }
         if (_lookEnabled &&
             inputEvent is InputEventMouseMotion motion &&
             Input.MouseMode == Input.MouseModeEnum.Captured)
@@ -292,6 +368,104 @@ internal partial class CellPlayer : CharacterBody3D
             Current = true,
         };
         AddChild(_camera);
+    }
+
+    private void BuildClassicDioramaRig(float yaw)
+    {
+        _dioramaTargetYawRadians = yaw + MathF.PI / 4.0f;
+        _dioramaTargetSizeMeters = DioramaInitialSizeMeters;
+        _dioramaOrbit = new Node3D
+        {
+            Name = "ClassicDioramaOrbit",
+            Rotation = new Vector3(0.0f, _dioramaTargetYawRadians, 0.0f),
+        };
+        AddChild(_dioramaOrbit);
+        _camera = new Camera3D
+        {
+            Name = "ClassicDioramaCamera",
+            Position = new Vector3(0.0f, CellPlayerNumericContracts.PresentationFloat11Point5f, CellPlayerNumericContracts.PresentationFloat11Point5f),
+            Projection = Camera3D.ProjectionType.Orthogonal,
+            KeepAspect = Camera3D.KeepAspectEnum.Height,
+            Size = DioramaInitialSizeMeters,
+            Near = _configuration.Player.CameraNearMeters,
+            Far = _configuration.Player.CameraFarMeters,
+            Current = true,
+        };
+        _dioramaOrbit.AddChild(_camera);
+        _camera.Rotation = new Vector3(-MathF.Atan2(CellPlayerNumericContracts.PresentationFloat11Point05f, CellPlayerNumericContracts.PresentationFloat11Point5f), 0.0f, 0.0f);
+    }
+
+    internal void FrameClassicDiorama(Aabb worldBounds)
+    {
+        if (!_useClassicDiorama || _dioramaOrbit is null)
+            throw new InvalidOperationException(
+                "Classic Diorama framing requires its camera adapter.");
+        if (worldBounds.Size.X <= 0.0f || worldBounds.Size.Y <= 0.0f ||
+            worldBounds.Size.Z <= 0.0f)
+            throw new InvalidOperationException(
+                $"Classic Diorama received invalid world bounds: {worldBounds}");
+
+        _dioramaFramingBounds = worldBounds;
+        _dioramaHomePosition = worldBounds.GetCenter();
+        Position = _dioramaHomePosition;
+        var horizontalSpan = MathF.Max(worldBounds.Size.X, worldBounds.Size.Z);
+        _dioramaHomeSizeMeters = Math.Clamp(
+            MathF.Max(horizontalSpan * CellPlayerNumericContracts.PresentationFloat0Point48f, worldBounds.Size.Y * CellPlayerNumericContracts.PresentationFloat0Point80f + horizontalSpan * CellPlayerNumericContracts.PresentationFloat0Point22f),
+            DioramaInitialSizeMeters,
+            DioramaMaximumSizeMeters);
+        _dioramaTargetSizeMeters = _dioramaHomeSizeMeters;
+        _camera.Size = _dioramaHomeSizeMeters;
+        var cameraDistance = MathF.Max(CellPlayerNumericContracts.PresentationFloat18Point0f, _dioramaHomeSizeMeters * CellPlayerNumericContracts.PresentationFloat1Point15f);
+        var cameraHeight = cameraDistance * CellPlayerNumericContracts.PresentationFloat0Point90f;
+        _camera.Position = new Vector3(0.0f, cameraHeight, cameraDistance);
+        _camera.Rotation = new Vector3(-MathF.Atan2(cameraHeight, cameraDistance), 0.0f, 0.0f);
+    }
+
+    private void HandleClassicDioramaInput(InputEvent inputEvent)
+    {
+        if (inputEvent is InputEventKey key && key.Pressed && !key.Echo)
+        {
+            if (key.PhysicalKeycode == Key.Q)
+                _dioramaTargetYawRadians += DioramaYawStepRadians;
+            else if (key.PhysicalKeycode == Key.E)
+                _dioramaTargetYawRadians -= DioramaYawStepRadians;
+            else if (key.PhysicalKeycode == Key.Home)
+            {
+                _dioramaTargetSizeMeters = _dioramaHomeSizeMeters;
+                Position = _dioramaHomePosition;
+            }
+            else if (key.PhysicalKeycode == Key.F5)
+                _session!.SaveAndNotify();
+        }
+        else if (inputEvent is InputEventMouseButton button && button.Pressed)
+        {
+            if (button.ButtonIndex == MouseButton.WheelUp)
+                SetClassicDioramaZoom(_dioramaTargetSizeMeters * CellPlayerNumericContracts.PresentationFloat0Point86f);
+            else if (button.ButtonIndex == MouseButton.WheelDown)
+                SetClassicDioramaZoom(_dioramaTargetSizeMeters / CellPlayerNumericContracts.PresentationFloat0Point86f);
+        }
+    }
+
+    private void SetClassicDioramaZoom(float sizeMeters)
+    {
+        _dioramaTargetSizeMeters = Math.Clamp(
+            sizeMeters,
+            DioramaMinimumSizeMeters,
+            DioramaMaximumSizeMeters);
+    }
+
+    private void UpdateClassicDioramaPan(float delta)
+    {
+        var input = ReadMovement();
+        var forward = -_camera.GlobalBasis.Z;
+        var right = _camera.GlobalBasis.X;
+        forward.Y = 0.0f;
+        right.Y = 0.0f;
+        forward = forward.Normalized();
+        right = right.Normalized();
+        var direction = (right * input.X + forward * input.Y).Normalized();
+        var zoomScale = _dioramaTargetSizeMeters / DioramaInitialSizeMeters;
+        Position += direction * DioramaPanSpeedMetersPerSecond * zoomScale * delta;
     }
 
     private void BuildXrRig()

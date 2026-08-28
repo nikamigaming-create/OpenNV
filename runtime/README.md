@@ -106,3 +106,76 @@ implemented yet.
 
 Add `-FalloutNewVegasData <path>` to the build command for a local end-to-end
 gate of the exported executable, packaged helper, legal cache, and Godot load.
+
+The private Fallout 1 tactical slice launches from a prepared, ignored owned
+cache with:
+
+```powershell
+Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
+  --fo1-hex-scene <cache>\hex-scene.json --save-path <cache>\v13ent-hex-save.json
+```
+
+The bounded Fallout 1 new-game route adds the hash-pinned owned character/opening
+cache. It begins on the owned original picker with Max Stone, Natalia, Albert,
+and Custom; Take selects a premade, while Modify loads it into the complete
+SPECIAL/skills/traits editor. It then shows the complete Overseer briefing before
+entering the same tactical session. The movie's **SKIP** button or `Escape`
+converges on the same final-frame fade into live first-person control at exact
+V13ENT tile `17690`, rotation `2`. The door remains open as a labeled
+presentation adaptation for the Vault 13 corridor look-back:
+
+```powershell
+Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
+  --fo1-hex-scene <hex-cache>\hex-scene.json `
+  --fo1-new-game `
+  --fo1-character-start <start-cache>\character-start.json `
+  --fo1-character-start-sha256 <manifest-sha256> `
+  --save-path <cache>\v13ent-new-game-save.json
+```
+
+First-person uses captured mouse look, Escape to release the cursor, click to
+recapture/fire, and continuous WASD/arrows movement constrained by the source
+walk mask. `C` cycles
+first-person → tactical → third-person → first-person. Tactical uses MMB
+orbit/tilt, RMB drag-pan, wheel zoom and WASD/arrows/edge pan. `F` focuses the
+player, `Home` resets the entry-to-door route,
+left-click path movement/target selection, `Tab` hostile cycle and auto-frame,
+double-click or `X` attack, `G` exact walkable-hex overlay, `V` source
+floor/scenery, `B` experimental 3D topology blockout, `Space` end turn/rat
+turn, and `F5` save. `P` opens the owned Fallout 1 Pip-Boy 2000 with live
+Status, Automaps, and Archives pages. The default view uses one opaque continuous floor over all
+30,196 source-backed movement hexes, a locally imported animated 3D Vault
+13-suited player, twenty regrounded animated 3D giant rats, and 311 source-driven
+owned cave/Vault/corpse instances, including the source-axis cave-to-Vault
+threshold frame. A shader-driven camera melt opens sightlines
+to the player and selected rat. Tactical projection removes the enclosure and
+Vault corridor above the floor; the presentation-footprint gate excludes 1,608
+otherwise floor-backed hexes, leaving 27,519 legal grid hexes and 86,841 unique
+depth-tested edges. `V` swaps to the cleaned source floor/sprite reference in
+tactical mode; first-person always suppresses those 2.5D cards and retains the
+owned continuous floor. `B` exposes the rough topology diagnostic. None of
+these diagnostics changes gameplay authority.
+
+On this development machine the verified one-click launcher is
+`dist/fo1-v13ent-playable-20260826-r7/Play-Fallout1-New-Game-3D.cmd`.
+It hash-checks scene `da6e7221...47cc83db`, the embedded runtime profile, and the character-start contract before
+launching; it contains no retail assets and is not a portable release package.
+
+This route uses the owned original creator/opening, scripted first-run spawn,
+exact Fallout 1 hex/object and
+rat-combat authority, plus owned New Vegas assets only as a private 3D
+presentation layer. The bounded route decodes its starting knife, 10mm Pistol,
+magazine/reserve ammunition, stimpaks, and flares from the owned V13 script and
+PRO records. FPS and tactical views share weapon, ammunition, reload, HP, death,
+and save state; both ranged and melee attacks can kill source rats. Ranged
+presentation includes tracers, impacts, ricochets, physically grounded casings,
+and owned donor audio, while third person/tactical mode displays the equipped
+weapon. Rat activation is local (six exact hexes), not whole-cave aggro. It is a
+playable `V13ENT` combat vertical slice, not a full Fallout campaign, complete
+retail critical/armor/AI parity, or an OpenXR claim.
+
+The scene cache embeds a hash-pinned `opennv-fo1-runtime-profile-recipe/v1`.
+`Fo1RuntimeProfile` parses it once and supplies typed camera, atmosphere,
+gameplay-adaptation, mob-presentation, cutaway, and showcase contracts to the
+runtime. Missing or invalid values stop loading; these systems do not silently
+fall back to V13ENT tuning compiled into C#.

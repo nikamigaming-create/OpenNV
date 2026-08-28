@@ -258,7 +258,7 @@ class ActorPreparationContext:
     source_contract: tuple[tuple[Path, str], ...]
     master: Path
     catalog: ActorCatalog
-    meshes: BsaArchive
+    mesh_archives: tuple[BsaArchive, ...]
     texture_archives: tuple[BsaArchive, ...]
 
 
@@ -269,6 +269,7 @@ def _actor_source_contract(
     rows = (
         recipe["master"],
         recipe["meshesArchive"],
+        *recipe.get("additionalMeshesArchives", []),
         *recipe["textureArchives"],
     )
     return tuple(
@@ -302,13 +303,20 @@ def create_actor_preparation_context(
                     f"expected={expected_hash} actual={actual}"
                 )
     master = source_contract[0][0]
+    mesh_archive_count = 1 + len(recipe.get("additionalMeshesArchives", []))
     return ActorPreparationContext(
         load_runtime_configuration(),
         source_contract,
         master,
         scan_actor_catalog(master),
-        BsaArchive(source_contract[1][0]),
-        tuple(BsaArchive(path) for path, _source_hash in source_contract[2:]),
+        tuple(
+            BsaArchive(path)
+            for path, _source_hash in source_contract[1 : 1 + mesh_archive_count]
+        ),
+        tuple(
+            BsaArchive(path)
+            for path, _source_hash in source_contract[1 + mesh_archive_count :]
+        ),
     )
 
 
@@ -368,7 +376,13 @@ def prepare_actor(
         )
         actor_animation_path = actor_animation_paths[0]
     actor_animation_paths = tuple(
-        dict.fromkeys((*actor_animation_paths, *runtime_animation_paths))
+        dict.fromkeys(
+            (
+                *actor_animation_paths,
+                *runtime_animation_paths,
+                *(str(row["path"]) for row in recipe.get("additionalAnimations", [])),
+            )
+        )
     )
     configured_origin = recipe.get("originGameUnits")
     if configured_origin is None:
@@ -423,32 +437,52 @@ def prepare_actor(
         raise ValueError("Proof actor has incomplete hair or eye records")
     if any(part is None for part in head_parts):
         raise ValueError("Proof actor has an unresolved head-part record")
-    outfit_forms = list(resolve_actor_outfit_form_ids(catalog, actor))
-    outfits = [catalog.armor.get(value) for value in outfit_forms]
-    if not outfits or any(outfit is None for outfit in outfits):
-        raise ValueError(f"Proof actor has unresolved outfit armor: {outfit_forms}")
-    outfit_models = [
-        outfit.female_model_path if actor.female else outfit.male_model_path
-        for outfit in outfits
-    ]
+    explicit_outfit_models = [str(value) for value in recipe.get("outfitModelPaths", [])]
+    if explicit_outfit_models:
+        outfit_models = explicit_outfit_models
+        outfit_forms = [
+            form_id(str(value)) for value in recipe.get("outfitIdentityFormIds", [])
+        ]
+        if len(outfit_forms) != len(outfit_models):
+            raise ValueError("Explicit actor outfit models require one identity FormID each")
+        outfits = []
+    else:
+        outfit_forms = list(resolve_actor_outfit_form_ids(catalog, actor))
+        outfits = [catalog.armor.get(value) for value in outfit_forms]
+        if not outfits or any(outfit is None for outfit in outfits):
+            raise ValueError(f"Proof actor has unresolved outfit armor: {outfit_forms}")
+        outfit_models = [
+            outfit.female_model_path if actor.female else outfit.male_model_path
+            for outfit in outfits
+        ]
     if any(path is None for path in outfit_models):
         raise ValueError("Proof actor outfit lacks a sex-specific model")
 
-    meshes = context.meshes
+    mesh_archives = context.mesh_archives
     texture_archives = context.texture_archives
 
     def mesh(path: str) -> bytes:
         canonical = canonical_member_path(path)
         logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
-        return meshes.extract(logical_path).data
+        matches = [archive for archive in mesh_archives if logical_path in archive.members]
+        if len(matches) != 1:
+            raise FileNotFoundError(
+                f"Expected one actor mesh {logical_path!r}, found {len(matches)}"
+            )
+        return matches[0].extract(logical_path).data
 
     def facegen_tri(path: str) -> dict[str, object]:
         companion = model_companion(path, ".tri")
         canonical = canonical_member_path(companion)
         logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
-        if logical_path not in meshes.members:
+        matches = [archive for archive in mesh_archives if logical_path in archive.members]
+        if not matches:
             return {}
-        return {"tri_path": logical_path, "tri_payload": meshes.extract(logical_path).data}
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected one actor TRI {logical_path!r}, found {len(matches)}"
+            )
+        return {"tri_path": logical_path, "tri_payload": matches[0].extract(logical_path).data}
 
     outfit_payloads = [
         (str(outfit_model), mesh(str(outfit_model)))
@@ -545,6 +579,10 @@ def prepare_actor(
                     f"outfit-{index}",
                     outfit_model,
                     outfit_payload,
+                    excluded_shape_prefixes=tuple(
+                        str(value)
+                        for value in recipe.get("excludeOutfitShapePrefixes", [])
+                    ),
                     generated_diffuse_by_source=generated_skin,
                 )
             )
@@ -636,7 +674,11 @@ def prepare_actor(
     hair_shape = (
         retail_hair_shape(retail_presentation.appearance)
         if retail_presentation is not None
-        else "Hat" if any(outfit.hides_hair for outfit in outfits) else "NoHat"
+        else str(recipe["hairShape"])
+        if "hairShape" in recipe
+        else "Hat"
+        if any(outfit.hides_hair for outfit in outfits)
+        else "NoHat"
     )
     hair_egm = model_companion(hair.model_path, f"{hair_shape.lower()}.egm")
     hair_identity = (
@@ -706,6 +748,14 @@ def prepare_actor(
     output_root = cache_root / "generated" / "actors" / recipe_id
     gltf_path = output_root / "actor.gltf"
     sidecar_path = output_root / "actor.opennv.json"
+    for row in recipe.get("additionalAnimations", []):
+        payload = mesh(str(row["path"]))
+        actual_hash = hashlib.sha256(payload).hexdigest()
+        if actual_hash != str(row["sha256"]):
+            raise ValueError(
+                f"Actor animation hash mismatch: {row['path']} "
+                f"expected={row['sha256']} actual={actual_hash}"
+            )
     sidecar = export_actor_gltf(
         ActorGltfInput(
             f"{actor.form_id:08x}",
@@ -761,7 +811,7 @@ def prepare_actor(
             "hairFormId": f"{actor.hair_form_id:08x}",
             "eyesFormId": f"{actor.eyes_form_id:08x}",
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
-            "outfitFormIds": [f"{outfit.form_id:08x}" for outfit in outfits],
+            "outfitFormIds": [f"{outfit_form:08x}" for outfit_form in outfit_forms],
             "recordType": "NPC_",
         },
         "idleAnimation": actor_animation_path,

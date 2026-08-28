@@ -644,6 +644,7 @@ def export_static_nif(
     *,
     strict: bool = True,
     presentation_clip: dict[str, object] | None = None,
+    include_shape_prefixes: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     clip_rectangle: tuple[float, float, float, float] | None = None
     clip_coordinate_space = "source-world-game-units-before-scene-origin"
@@ -725,12 +726,33 @@ def export_static_nif(
         for shape in all_shapes
         if not is_editor_marker(shape.name) and not has_presentation_property(shape)
     ]
-    shapes = [
+    candidate_shapes = [
         shape
         for shape in all_shapes
         if not is_editor_marker(shape.name) and has_presentation_property(shape)
     ]
+    excluded_by_shape_filter: list[dict[str, object]] = []
+    if include_shape_prefixes is not None:
+        if not include_shape_prefixes or any(not prefix for prefix in include_shape_prefixes):
+            raise ValueError("Static NIF shape prefixes must be non-empty")
+        excluded_by_shape_filter = [
+            {
+                "sourceBlockIndex": block_index[id(shape)],
+                "name": decode_text(shape.name),
+            }
+            for shape in candidate_shapes
+            if not decode_text(shape.name).startswith(include_shape_prefixes)
+        ]
+        shapes = [
+            shape
+            for shape in candidate_shapes
+            if decode_text(shape.name).startswith(include_shape_prefixes)
+        ]
+    else:
+        shapes = candidate_shapes
     if not shapes:
+        if include_shape_prefixes is not None and candidate_shapes:
+            raise ValueError("Static NIF shape filter removed all supported geometry")
         classified_shape_count = len(excluded_editor_markers) + len(excluded_non_presentation)
         if all_shapes and classified_shape_count == len(all_shapes):
             raise NoStaticPresentationGeometryError(
@@ -1066,6 +1088,8 @@ def export_static_nif(
             "controllers": sorted(set(controllers)),
             "excludedEditorMarkerSurfaces": excluded_editor_markers,
             "excludedNonPresentationSurfaces": excluded_non_presentation,
+            "includedShapePrefixes": list(include_shape_prefixes or ()),
+            "excludedByShapeFilter": excluded_by_shape_filter,
             "presentationClip": presentation_clip_report,
             "presentationClipRemovedSurfaces": clipped_away_surfaces,
         },
@@ -1084,6 +1108,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sidecar", type=Path, required=True)
     parser.add_argument("--allow-synthetic-minimal", action="store_true")
+    parser.add_argument("--include-shape-prefix", action="append")
     args = parser.parse_args()
     compiler = load_runtime_configuration().content_compiler
     result = export_static_nif(
@@ -1093,6 +1118,9 @@ def main() -> int:
         args.sidecar,
         compiler,
         strict=not args.allow_synthetic_minimal,
+        include_shape_prefixes=(
+            tuple(args.include_shape_prefix) if args.include_shape_prefix is not None else None
+        ),
     )
     print("OPENNV_STATIC_NIF_GLTF " + json.dumps({
         "source": result["source"]["sha256"],

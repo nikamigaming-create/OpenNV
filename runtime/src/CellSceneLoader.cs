@@ -3,6 +3,19 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class CellSceneLoaderNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point20f = 0.20f;
+    internal const float PresentationFloat0Point35f = 0.35f;
+    internal const float PresentationFloat0Point48f = 0.48f;
+    internal const float PresentationFloat0Point50f = 0.50f;
+    internal const float PresentationFloat1Point15f = 1.15f;
+    internal const float PresentationFloat1Point20f = 1.20f;
+    internal const float PresentationFloat1Point25f = 1.25f;
+}
+
 internal static class CellSceneLoader
 {
     private const string CellSceneSchema = "opennv-cell-scene/v11";
@@ -22,7 +35,8 @@ internal static class CellSceneLoader
         bool buildCollision = true,
         bool applyCellEnvironment = true,
         bool loadExistingSave = true,
-        bool showGameplayHud = true)
+        bool showGameplayHud = true,
+        bool useClassicDiorama = false)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -35,6 +49,10 @@ internal static class CellSceneLoader
         var cell = source.GetProperty("cell");
         var proofDoorId = proofDoorOverride ??
             source.GetProperty("proof").GetProperty("doorReferenceFormId").GetString()!;
+        var objectiveOverride = source.TryGetProperty("concept", out var concept) &&
+            concept.TryGetProperty("hudObjective", out var hudObjective)
+                ? hudObjective.GetString()
+                : null;
         var session = new GameplaySession();
         session.Configure(
             cell.GetProperty("formId").GetString()!,
@@ -44,7 +62,9 @@ internal static class CellSceneLoader
             savePath,
             useXr,
             loadExistingSave,
-            showGameplayHud);
+            showGameplayHud,
+            useClassicDiorama,
+            objectiveOverride);
         parent.AddChild(session);
         var main = CellContentLoader.Load(
             resolvedScenePath,
@@ -141,6 +161,10 @@ internal static class CellSceneLoader
             proofDoor.SetOpen(true);
 
         var spawn = source.GetProperty("spawn");
+        var renderBounds = useClassicDiorama
+            ? WorldRenderBounds(
+                new[] { main.Root }.Concat(linkedCells.Select(value => value.Content.Root)))
+            : (Aabb?)null;
         var player = BuildView(
             parent,
             spawn.GetProperty("yawGodotRadians").GetSingle(),
@@ -148,7 +172,9 @@ internal static class CellSceneLoader
             session,
             configuration,
             useXr,
-            applyCellEnvironment);
+            applyCellEnvironment,
+            useClassicDiorama,
+            renderBounds);
         session.ConfigureWorldContext(
             player,
             new[] { main }.Concat(linkedCells.Select(value => value.Content)));
@@ -220,12 +246,15 @@ internal static class CellSceneLoader
         GameplaySession session,
         RuntimeConfiguration configuration,
         bool useXr,
-        bool applyCellEnvironment)
+        bool applyCellEnvironment,
+        bool useClassicDiorama,
+        Aabb? renderBounds)
     {
         var lighting = main.Lighting;
+        Godot.Environment? environment = null;
         if (applyCellEnvironment)
         {
-            var environment = new Godot.Environment
+            environment = new Godot.Environment
             {
                 BackgroundMode = Godot.Environment.BGMode.Color,
                 BackgroundColor = configuration.Renderer.BackgroundColorRgba.Color(),
@@ -246,9 +275,65 @@ internal static class CellSceneLoader
         }
         AddCellLights(parent, main, configuration, 1u, true, applyCellEnvironment);
         var player = new CellPlayer();
-        player.Configure(yaw, session, configuration, useXr);
+        player.Configure(yaw, session, configuration, useXr, useClassicDiorama);
         parent.AddChild(player);
+        if (useClassicDiorama)
+        {
+            if (renderBounds is not Aabb bounds || environment is null)
+                throw new InvalidOperationException(
+                    "Classic Diorama requires render bounds and the CELL environment.");
+            player.FrameClassicDiorama(bounds);
+            environment.AmbientLightEnergy *= CellSceneLoaderNumericContracts.PresentationFloat1Point25f;
+            player.Camera.AddChild(new DirectionalLight3D
+            {
+                Name = "ClassicDioramaCameraFill",
+                LightColor = environment.AmbientLightColor.Lerp(Colors.White, CellSceneLoaderNumericContracts.PresentationFloat0Point20f),
+                LightEnergy = Math.Clamp(environment.AmbientLightEnergy * CellSceneLoaderNumericContracts.PresentationFloat0Point50f, CellSceneLoaderNumericContracts.PresentationFloat0Point35f, CellSceneLoaderNumericContracts.PresentationFloat1Point20f),
+                ShadowEnabled = false,
+            });
+            var cameraDistance = player.Camera.Position.Length();
+            var cellSpan = MathF.Max(bounds.Size.X, bounds.Size.Z);
+            environment.FogDepthBegin = MathF.Max(environment.FogDepthBegin, cameraDistance * CellSceneLoaderNumericContracts.PresentationFloat0Point48f);
+            environment.FogDepthEnd = MathF.Max(
+                environment.FogDepthEnd,
+                cameraDistance + cellSpan * CellSceneLoaderNumericContracts.PresentationFloat1Point15f);
+        }
         return player;
+    }
+
+    private static Aabb WorldRenderBounds(IEnumerable<Node3D> roots)
+    {
+        var minimum = new Vector3(
+            float.PositiveInfinity,
+            float.PositiveInfinity,
+            float.PositiveInfinity);
+        var maximum = new Vector3(
+            float.NegativeInfinity,
+            float.NegativeInfinity,
+            float.NegativeInfinity);
+        var meshCount = 0;
+        foreach (var root in roots)
+        {
+            foreach (var mesh in Descendants<MeshInstance3D>(root))
+            {
+                var bounds = mesh.GetAabb();
+                if (bounds.Size.LengthSquared() <= 0.0f)
+                    continue;
+                foreach (var x in new[] { bounds.Position.X, bounds.End.X })
+                    foreach (var y in new[] { bounds.Position.Y, bounds.End.Y })
+                        foreach (var z in new[] { bounds.Position.Z, bounds.End.Z })
+                        {
+                            var point = mesh.ToGlobal(new Vector3(x, y, z));
+                            minimum = minimum.Min(point);
+                            maximum = maximum.Max(point);
+                        }
+                meshCount++;
+            }
+        }
+        if (meshCount == 0)
+            throw new InvalidOperationException(
+                "CELL has no renderable bounds for Classic Diorama framing.");
+        return new Aabb(minimum, maximum - minimum);
     }
 
     private static void AddCellLights(

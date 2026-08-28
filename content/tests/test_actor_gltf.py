@@ -28,6 +28,7 @@ from actor_gltf import (  # noqa: E402
     _uses_retail_biped_head_basis,
     _visible_creature_geometry_names,
     actor_animation_translations,
+    gltf_skeleton_inverse_binds,
 )
 from facegen_animation import (  # noqa: E402
     FaceGenDifferentialMorph,
@@ -589,6 +590,13 @@ class ActorGltfTest(unittest.TestCase):
                 "Bip01 NonAccum",
             ),
             values,
+        )
+
+    def test_bip01_locomotion_translation_is_removed_from_accumulation_root(self):
+        values = [(0.0, 0.0, 0.0), (0.5, 0.0, -0.25)]
+        self.assertEqual(
+            actor_animation_translations("Bip01", values, "Bip01", "Bip01 NonAccum"),
+            [(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)],
         )
 
     def test_baked_shape_transform_is_removed_from_skin_bind(self):

@@ -25,6 +25,8 @@ internal partial class GameplaySession : Node
     private RuntimeConfiguration _configuration = null!;
     private bool _useXrHud;
     private bool _showHud = true;
+    private bool _useClassicDioramaHud;
+    private string? _objectiveOverride;
     private string _lastStatus = "Ready";
     private CellPlayer? _player;
     private PlayerTransformState? _loadedPlayerTransform;
@@ -69,8 +71,13 @@ internal partial class GameplaySession : Node
         string? configuredSavePath,
         bool useXrHud = false,
         bool loadExistingSave = true,
-        bool showHud = true)
+        bool showHud = true,
+        bool useClassicDioramaHud = false,
+        string? objectiveOverride = null)
     {
+        if (useXrHud && useClassicDioramaHud)
+            throw new ArgumentException(
+                "Classic Diorama and OpenXR HUDs are separate presentation adapters.");
         _configuration = configuration;
         Name = "GameplaySession";
         _cellFormId = cellFormId;
@@ -78,6 +85,8 @@ internal partial class GameplaySession : Node
         _entryDoorFormId = entryDoorFormId;
         _useXrHud = useXrHud;
         _showHud = showHud;
+        _useClassicDioramaHud = useClassicDioramaHud;
+        _objectiveOverride = objectiveOverride;
         _savePath = ResolvePath(configuredSavePath ?? configuration.Hud.DefaultSavePath);
         if (loadExistingSave)
             Load(cellFormId);
@@ -87,8 +96,16 @@ internal partial class GameplaySession : Node
     {
         _uiController = new GameplayUiController();
         AddChild(_uiController);
-        _uiController.Configure(this, _configuration, _useXrHud, _showHud);
-        RefreshHud("WASD move • E activate • Left click use/fire • R reload/reset • F5 save");
+        _uiController.Configure(
+            this,
+            _configuration,
+            _useXrHud,
+            _showHud,
+            _useClassicDioramaHud);
+        RefreshHud(
+            _useClassicDioramaHud
+                ? "WASD pan • Wheel zoom • Q/E rotate 60° • Home reset • F5 save"
+                : "WASD move • E activate • Left click use/fire • R reload/reset • F5 save");
     }
 
     internal void AttachXrHud(Node3D leftHand, Node3D aimSource)
@@ -123,14 +140,14 @@ internal partial class GameplaySession : Node
 
     internal GameplayUiSnapshot BuildUiSnapshot()
     {
-        var objective = ObjectiveStage switch
+        var objective = _objectiveOverride ?? (ObjectiveStage switch
         {
             SandboxObjectiveStage.EquipWeapon => _configuration.Hud.Copy.ObjectiveEquipWeapon,
             SandboxObjectiveStage.FireWeapon => _configuration.Hud.Copy.ObjectiveFireWeapon,
             SandboxObjectiveStage.TakeAid => _configuration.Hud.Copy.ObjectiveTakeAid,
             SandboxObjectiveStage.OpenEntryDoor => _configuration.Hud.Copy.ObjectiveOpenEntryDoor,
             _ => _configuration.Hud.Copy.ObjectiveComplete,
-        };
+        });
         var opening = _openingState;
         var equipped = _equippedWeaponFormId is not null &&
             _inventory.TryGetValue(_equippedWeaponFormId, out var equippedItem)

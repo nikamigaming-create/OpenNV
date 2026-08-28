@@ -25,6 +25,7 @@ internal partial class GameplayUiController : CanvasLayer
     private RuntimeConfiguration _configuration = null!;
     private bool _useXr;
     private bool _showHud;
+    private bool _useClassicDiorama;
     private GameplayUiPanel _activePanel = GameplayUiPanel.Status;
     private Panel? _desktopHud;
     private Label? _desktopObjective;
@@ -51,12 +52,14 @@ internal partial class GameplayUiController : CanvasLayer
         GameplaySession session,
         RuntimeConfiguration configuration,
         bool useXr,
-        bool showHud)
+        bool showHud,
+        bool useClassicDiorama)
     {
         _session = session;
         _configuration = configuration;
         _useXr = useXr;
         _showHud = showHud;
+        _useClassicDiorama = useClassicDiorama;
         Name = "GameplayUi";
         if (_showHud && !_useXr)
             BuildDesktopHud();
@@ -210,12 +213,20 @@ internal partial class GameplayUiController : CanvasLayer
             Size = _configuration.Hud.DesktopLabelsSizePixels.Vector2(),
         };
         _desktopHud.AddChild(labels);
+        if (_useClassicDiorama)
+        {
+            var presentation = BuildLabel();
+            presentation.Text = "CLASSIC DIORAMA  •  PRESENTATION PROOF";
+            labels.AddChild(presentation);
+        }
         _desktopObjective = BuildLabel();
         _desktopStatus = BuildLabel();
         _desktopInventory = BuildLabel();
         labels.AddChild(_desktopObjective);
         labels.AddChild(_desktopStatus);
         labels.AddChild(_desktopInventory);
+        if (_useClassicDiorama)
+            return;
         var crosshair = new Label
         {
             Text = "+",

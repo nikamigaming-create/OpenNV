@@ -5,6 +5,13 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class RuntimeCoordinatorNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const double PresentationDouble1000Point0 = 1000.0;
+}
+
 public partial class RuntimeCoordinator : Node3D
 {
     private static readonly HashSet<string> DirectPreparedContentOptions = new(
@@ -30,10 +37,27 @@ public partial class RuntimeCoordinator : Node3D
     private RuntimeConfiguration _configuration = null!;
     private LegalAssetSetupView? _setupView;
     private XRInterface? _openXr;
+    private LoadingScreen? _loadingScreen;
+    private ulong _loadingStartedMilliseconds;
+    private const double MinimumLoadingScreenSeconds = 0.85;
 
     public override void _Ready()
     {
-        Callable.From(StartRuntime).CallDeferred();
+        if (DisplayServer.GetName() != "headless")
+        {
+            _loadingScreen = new LoadingScreen();
+            _loadingScreen.Configure("STARTING VERIFIED RUNTIME");
+            AddChild(_loadingScreen);
+            _loadingStartedMilliseconds = Time.GetTicksMsec();
+        }
+        Callable.From(StartRuntimeAfterLoadingFrame).CallDeferred();
+    }
+
+    private async void StartRuntimeAfterLoadingFrame()
+    {
+        if (_loadingScreen is not null)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        StartRuntime();
     }
 
     private void StartRuntime()
@@ -48,6 +72,12 @@ public partial class RuntimeCoordinator : Node3D
             RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
             Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
             _options = ParseOptions(OS.GetCmdlineUserArgs());
+            if (_options.ContainsKey("fo1-hex-scene"))
+                _loadingScreen?.SetTitle("FALLOUT 1  //  V13ENT HEX TACTICAL");
+            if (_options.ContainsKey("fo1-campaign-transport"))
+                _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING ALL MAPS");
+            if (_options.ContainsKey("fo1-campaign-presentation"))
+                _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING CAMPAIGN ART");
             if (_options.ContainsKey("xr-simulator-proof") &&
                 (!_options.ContainsKey("vr") || !_options.ContainsKey("report")))
                 throw new ArgumentException("--xr-simulator-proof requires --vr and --report.");
@@ -70,11 +100,27 @@ public partial class RuntimeCoordinator : Node3D
             }
             if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
                 throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
+            if ((_options.ContainsKey("classic-diorama") || _options.ContainsKey("classic-diorama-rig-proof")) &&
+                (_options.ContainsKey("vr") || _options.ContainsKey("vr-layout-proof") ||
+                    _options.ContainsKey("xr-rig-proof")))
+                throw new ArgumentException("Classic Diorama and OpenXR require separate presentation adapters.");
+            if (_options.ContainsKey("fo1-hex-scene") && _options.ContainsKey("vr") &&
+                !_options.ContainsKey("fo1-xr-simulator-preview"))
+                throw new ArgumentException("The Fallout 1 tactical hex slice has not passed its OpenXR gate.");
+            if (_options.ContainsKey("fo1-xr-simulator-preview") &&
+                (!_options.ContainsKey("fo1-hex-scene") || !_options.ContainsKey("vr")))
+                throw new ArgumentException(
+                    "The Fallout 1 OpenXR simulator preview requires --fo1-hex-scene and --vr.");
             if (_options.ContainsKey("vr"))
                 EnableOpenXr();
             if (_options.ContainsKey("xr-rig-proof"))
             {
                 CompleteXrRigProof(_options);
+                return;
+            }
+            if (_options.ContainsKey("classic-diorama-rig-proof"))
+            {
+                CompleteClassicDioramaRigProof(_options);
                 return;
             }
             var hasDataRoot = _options.TryGetValue("data-root", out var dataRoot);
@@ -83,15 +129,49 @@ public partial class RuntimeCoordinator : Node3D
             var hasStaticCellCompile = _options.ContainsKey("static-cell-compile");
             var hasActorModel = _options.ContainsKey("actor-model");
             var hasActorReviewScene = _options.ContainsKey("actor-review-scene");
+            var hasFo1HexScene = _options.ContainsKey("fo1-hex-scene");
+            var hasFo1Campaign = _options.ContainsKey("fo1-campaign-transport");
+            var hasFo1CampaignPresentation = _options.ContainsKey("fo1-campaign-presentation");
+            if ((_options.ContainsKey("fo1-map") || _options.ContainsKey("fo1-elevation")) &&
+                !hasFo1CampaignPresentation)
+                throw new ArgumentException(
+                    "--fo1-map and --fo1-elevation require --fo1-campaign-presentation.");
+            if (_options.ContainsKey("fo1-campaign-build-proof") &&
+                (!hasFo1CampaignPresentation || !_options.ContainsKey("report")))
+                throw new ArgumentException(
+                    "--fo1-campaign-build-proof requires --fo1-campaign-presentation and --report.");
+            if (_options.ContainsKey("fo1-campaign-build-proof") &&
+                _options.ContainsKey("capture-root"))
+                throw new ArgumentException(
+                    "Fallout campaign headless build proof and visual capture are separate gates.");
             if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) +
                     (hasStaticCellCompile ? 1 : 0) + (hasActorModel ? 1 : 0) +
-                    (hasActorReviewScene ? 1 : 0) > 1)
+                    (hasActorReviewScene ? 1 : 0) + (hasFo1HexScene ? 1 : 0) +
+                    (hasFo1Campaign ? 1 : 0) + (hasFo1CampaignPresentation ? 1 : 0) > 1)
                 throw new ArgumentException(
                     "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
-                    "--static-cell-compile, --actor-model/--actor-sidecar, or " +
-                    "--actor-review-scene.");
+                    "--static-cell-compile, --actor-model/--actor-sidecar, " +
+                    "--actor-review-scene, --fo1-hex-scene, --fo1-campaign-transport, or " +
+                    "--fo1-campaign-presentation.");
+            var startsFo1NewGame = _options.ContainsKey("fo1-new-game") ||
+                _options.ContainsKey("fo1-new-game-demo");
+            if (startsFo1NewGame && !hasFo1HexScene)
+                throw new ArgumentException("Fallout new game requires --fo1-hex-scene.");
+            if (startsFo1NewGame &&
+                (!_options.ContainsKey("fo1-character-start") ||
+                    !_options.ContainsKey("fo1-character-start-sha256")))
+                throw new ArgumentException(
+                    "Fallout new game requires --fo1-character-start and --fo1-character-start-sha256.");
+            if (_options.ContainsKey("fo1-new-game-demo") && !_options.ContainsKey("demo-report"))
+                throw new ArgumentException("Fallout new-game demo requires --demo-report.");
+            if (_options.ContainsKey("fo1-new-game-demo") && _options.ContainsKey("fo1-gameplay-demo"))
+                throw new ArgumentException("Use only one Fallout gameplay demo mode.");
             if (!hasModel && _options.ContainsKey("sidecar"))
                 throw new ArgumentException("--sidecar requires --model.");
+            if (_options.ContainsKey("material-manifest") != _options.ContainsKey("material-manifest-sha256"))
+                throw new ArgumentException("Use --material-manifest together with --material-manifest-sha256.");
+            if (!hasModel && _options.ContainsKey("material-manifest"))
+                throw new ArgumentException("--material-manifest requires --model.");
             if (!hasActorModel && _options.ContainsKey("actor-sidecar"))
                 throw new ArgumentException("--actor-sidecar requires --actor-model.");
             if (hasActorReviewScene && !_options.ContainsKey("capture-root"))
@@ -119,18 +199,29 @@ public partial class RuntimeCoordinator : Node3D
             {
                 var prepared = LegalAssetPreparer.Prepare(dataRoot!, _options, _configuration);
                 LoadPrepared(prepared, _options);
+                DismissLoadingScreen();
                 return;
             }
 
             if (hasModel)
             {
+                SetLoadingStatus(
+                    _options.ContainsKey("classic-diorama")
+                        ? "LOADING CLASSIC DIORAMA MODEL"
+                        : "VERIFYING HASHED 3D MODEL");
                 LoadModel(RequireOption(_options, "model"), RequireOption(_options, "sidecar"), _options);
+                DismissLoadingScreen();
                 return;
             }
 
             if (hasCellScene)
             {
+                SetLoadingStatus(
+                    _options.ContainsKey("classic-diorama")
+                        ? "LOADING CLASSIC DIORAMA CELL"
+                        : "LOADING VERIFIED 3D CELL");
                 LoadCellScene(RequireOption(_options, "cell-scene"), _options);
+                DismissLoadingScreen();
                 return;
             }
 
@@ -144,10 +235,40 @@ public partial class RuntimeCoordinator : Node3D
 
             if (hasActorModel)
             {
+                SetLoadingStatus("VERIFYING HASHED ACTOR MODEL");
                 LoadActorModel(
                     RequireOption(_options, "actor-model"),
                     RequireOption(_options, "actor-sidecar"),
                     _options);
+                DismissLoadingScreen();
+                return;
+            }
+
+            if (hasFo1HexScene)
+            {
+                SetLoadingStatus("LOADING V13ENT 200×200 HEX MAP");
+                LoadFo1HexScene(RequireOption(_options, "fo1-hex-scene"), _options);
+                DismissLoadingScreen();
+                return;
+            }
+
+            if (hasFo1Campaign)
+            {
+                SetLoadingStatus("HASHING AND VALIDATING 96 MAP CONTRACTS");
+                LoadFo1CampaignTransport(
+                    RequireOption(_options, "fo1-campaign-transport"),
+                    _options);
+                DismissLoadingScreen();
+                return;
+            }
+
+            if (hasFo1CampaignPresentation)
+            {
+                SetLoadingStatus("VERIFYING ALL MAPS AND SOURCE ARTIFACTS");
+                LoadFo1CampaignPresentation(
+                    RequireOption(_options, "fo1-campaign-presentation"),
+                    _options);
+                DismissLoadingScreen();
                 return;
             }
 
@@ -168,6 +289,7 @@ public partial class RuntimeCoordinator : Node3D
                         out var restoreError))
                     throw new InvalidOperationException(restoreError ?? "No prepared legal-asset cache exists.");
                 LoadPrepared(restored, _options);
+                DismissLoadingScreen();
                 return;
             }
 
@@ -181,15 +303,46 @@ public partial class RuntimeCoordinator : Node3D
                          _configuration,
                          out var restored,
                          out var restoreError))
+            {
                 LoadPrepared(restored, _options);
+                DismissLoadingScreen();
+            }
             else
+            {
+                DismissLoadingScreen();
                 ShowExperimentalStatus(restoreError);
+            }
         }
         catch (Exception exception)
         {
             GD.PushError($"OPENNV_GODOT_RUNTIME_FAIL {exception}");
             GetTree().Quit(1);
         }
+    }
+
+    private void SetLoadingStatus(string status)
+    {
+        _loadingScreen?.SetStatus(status);
+    }
+
+    private void DismissLoadingScreen()
+    {
+        var loading = _loadingScreen;
+        _loadingScreen = null;
+        if (loading is null)
+            return;
+        var elapsedSeconds = (Time.GetTicksMsec() - _loadingStartedMilliseconds) / RuntimeCoordinatorNumericContracts.PresentationDouble1000Point0;
+        var remainingSeconds = _options.ContainsKey("fo1-gameplay-demo") ||
+            _options.ContainsKey("fo1-new-game-demo")
+            ? 1.0
+            : MinimumLoadingScreenSeconds - elapsedSeconds;
+        if (remainingSeconds <= 0.0 || _options.ContainsKey("capture-root"))
+        {
+            loading.QueueFree();
+            return;
+        }
+        var timer = GetTree().CreateTimer(remainingSeconds);
+        timer.Timeout += loading.QueueFree;
     }
 
     private void LoadPrepared(
@@ -303,7 +456,8 @@ public partial class RuntimeCoordinator : Node3D
             !options.ContainsKey("capture-root") || options.ContainsKey("gallery-shot"),
             applyCellEnvironment,
             !options.ContainsKey("new-game"),
-            !usesCampaignState);
+            !usesCampaignState,
+            options.ContainsKey("classic-diorama"));
         var startsNewGame = options.ContainsKey("new-game");
         var restoredOpening = startsNewGame ? null : loaded.Session.OpeningState;
         OpeningQuestRuntime? openingFlow = null;
@@ -661,6 +815,82 @@ public partial class RuntimeCoordinator : Node3D
         GetTree().Quit(0);
     }
 
+    private void CompleteClassicDioramaRigProof(IReadOnlyDictionary<string, string> options)
+    {
+        var session = new GameplaySession();
+        session.Configure(
+            "classic-diorama-rig-proof",
+            "ClassicDioramaRigProof",
+            "classic-diorama-proof-door",
+            _configuration,
+            options.TryGetValue("save-path", out var savePath) ? savePath : null,
+            false,
+            false,
+            true,
+            true,
+            "CLASSIC DIORAMA  •  PRESENTATION PROOF");
+        AddChild(session);
+        var player = new CellPlayer();
+        player.Configure(0.0f, session, _configuration, false, true);
+        AddChild(player);
+
+        if (!player.UsesClassicDiorama || player.UsesXr || player.Camera is XRCamera3D ||
+            player.Camera.Projection != Camera3D.ProjectionType.Orthogonal ||
+            player.DioramaOrbit is null ||
+            !Mathf.IsEqualApprox(player.Camera.Size, CellPlayer.DioramaInitialSizeMeters))
+            throw new InvalidOperationException("Classic Diorama camera hierarchy or projection is invalid.");
+
+        var initialYaw = player.DioramaTargetYawRadians;
+        var initialSize = player.DioramaTargetSizeMeters;
+        player._UnhandledInput(new InputEventKey
+        {
+            PhysicalKeycode = Key.E,
+            Pressed = true,
+        });
+        player._UnhandledInput(new InputEventMouseButton
+        {
+            ButtonIndex = MouseButton.WheelUp,
+            Pressed = true,
+        });
+        var expectedYaw = initialYaw - CellPlayer.DioramaYawStepRadians;
+        if (!Mathf.IsEqualApprox(player.DioramaTargetYawRadians, expectedYaw) ||
+            player.DioramaTargetSizeMeters >= initialSize ||
+            player.DioramaTargetSizeMeters < CellPlayer.DioramaMinimumSizeMeters)
+            throw new InvalidOperationException("Classic Diorama rotation or zoom input contract failed.");
+
+        var report = new
+        {
+            schema = "opennv-classic-diorama-rig/v1",
+            status = "pass",
+            presentation = "classic-diorama",
+            simulation = "shared-gameplay-session",
+            cameraType = player.Camera.GetType().Name,
+            cameraName = player.Camera.Name.ToString(),
+            orbitName = player.DioramaOrbit.Name.ToString(),
+            projection = "orthogonal",
+            initialSizeMeters = CellPlayer.DioramaInitialSizeMeters,
+            minimumSizeMeters = CellPlayer.DioramaMinimumSizeMeters,
+            maximumSizeMeters = CellPlayer.DioramaMaximumSizeMeters,
+            zoomedSizeMeters = player.DioramaTargetSizeMeters,
+            yawStepDegrees = Mathf.RadToDeg(CellPlayer.DioramaYawStepRadians),
+            targetYawAfterProofDegrees = Mathf.RadToDeg(player.DioramaTargetYawRadians),
+            panSpeedMetersPerSecond = CellPlayer.DioramaPanSpeedMetersPerSecond,
+            panKeys = new[] { "W", "A", "S", "D" },
+            rotationKeys = new[] { "Q", "E" },
+            zoomInput = "mouse-wheel",
+            resetKey = "Home",
+            gameplaySession = session.Report(),
+            turnSimulationConnected = false,
+            noRetailData = true,
+        };
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, report);
+        GD.Print(
+            $"OPENNV_CLASSIC_DIORAMA_RIG_PASS projection=orthogonal " +
+            $"size={CellPlayer.DioramaInitialSizeMeters:F1} yawStep=60 panKeys=WASD");
+        GetTree().Quit(0);
+    }
+
     private async Task RunGameplayProof(
         CellSceneLoader.LoadedCell loaded,
         string scenePath,
@@ -934,6 +1164,29 @@ public partial class RuntimeCoordinator : Node3D
                     wristHudPixelSize = loaded.Session.XrHudPixelSize,
                     startingLoadout = loaded.Session.Report(),
                 },
+            classicDioramaPresentation = !loaded.Player.UsesClassicDiorama
+                ? null
+                : new
+                {
+                    projection = "orthogonal",
+                    cameraName = loaded.Player.Camera.Name.ToString(),
+                    orbitName = loaded.Player.DioramaOrbit!.Name.ToString(),
+                    sizeMeters = loaded.Player.Camera.Size,
+                    targetSizeMeters = loaded.Player.DioramaTargetSizeMeters,
+                    yawStepDegrees = Mathf.RadToDeg(CellPlayer.DioramaYawStepRadians),
+                    panSpeedMetersPerSecond = CellPlayer.DioramaPanSpeedMetersPerSecond,
+                    framingBoundsPosition = loaded.Player.DioramaFramingBounds is Aabb bounds
+                        ? new[] { bounds.Position.X, bounds.Position.Y, bounds.Position.Z }
+                        : null,
+                    framingBoundsSize = loaded.Player.DioramaFramingBounds is Aabb framing
+                        ? new[] { framing.Size.X, framing.Size.Y, framing.Size.Z }
+                        : null,
+                    cameraFill = loaded.Player.Camera.FindChild(
+                        "ClassicDioramaCameraFill",
+                        true,
+                        false) is DirectionalLight3D,
+                    turnSimulationConnected = false,
+                },
             collisionMeshes = loaded.CollisionMeshes,
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,
@@ -977,12 +1230,251 @@ public partial class RuntimeCoordinator : Node3D
             GetTree().Quit(0);
     }
 
+    private void LoadFo1HexScene(
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var loaded = Fo1HexSceneLoader.Load(
+            scenePath,
+            this,
+            options.TryGetValue("save-path", out var savePath) ? savePath : null);
+        var report = new
+        {
+            schema = "opennv-fo1-hex-runtime/v1",
+            status = "pass",
+            renderer = "forward_plus",
+            scene = loaded.ScenePath,
+            sceneSha256 = loaded.SceneSha256,
+            grid = new
+            {
+                width = Fo1HexMath.Width,
+                height = Fo1HexMath.Height,
+                flatToFlatMeters = Fo1HexMath.FlatToFlatMeters,
+                layout = "fallout-even-column-offset-flat-v1",
+            },
+            floorEntries = loaded.FloorEntries,
+            floorTextures = loaded.FloorTextures,
+            renderedFloorTiles = loaded.RenderedFloorTiles,
+            provisionalWalkableHexes = loaded.WalkableHexes,
+            spriteArtifacts = loaded.SpriteArtifacts,
+            spritePlacements = loaded.SpritePlacements,
+            combatMobs = loaded.CombatMobs,
+            cave3d = new
+            {
+                boundaryEdges = loaded.CaveBoundaryEdges,
+                obstacles = loaded.CaveObstacles,
+                triangles = loaded.CaveTriangles,
+                sourceStaticSpriteOverlayVisible = loaded.OwnedCave.Instances == 0,
+                ownedManifestSha256 = loaded.OwnedCave.ManifestSha256,
+                ownedAssets = loaded.OwnedCave.Assets,
+                ownedInstances = loaded.OwnedCave.Instances,
+                ownedMeshInstances = loaded.OwnedCave.MeshInstances,
+                ownedSurfaceInstances = loaded.OwnedCave.SurfaceInstances,
+                ownedMaterialBindings = loaded.OwnedCave.MaterialBindings,
+                ownedRoles = loaded.OwnedCave.Roles,
+                continuousFloorHexes = loaded.OwnedCave.ContinuousFloorHexes,
+                continuousFloorTriangles = loaded.OwnedCave.ContinuousFloorTriangles,
+                continuousFloorMeshInstances = loaded.OwnedCave.ContinuousFloorMeshInstances,
+            },
+            entryTile = loaded.EntryTile,
+            entryWorldMeters = Vector(Fo1HexMath.Center(loaded.EntryTile)),
+            doorTile = loaded.DoorTile,
+            doorWorldMeters = Vector(Fo1HexMath.Center(loaded.DoorTile)),
+            doorRotation = loaded.DoorRotation,
+            doorMaterialBindings = loaded.Door.MaterialBindings,
+            doorBoundsPosition = Vector(loaded.Door.Bounds.Position),
+            doorBoundsSize = Vector(loaded.Door.Bounds.Size),
+            sourceFrameMeters = new[]
+            {
+                loaded.Door.FrameWidthMeters,
+                loaded.Door.FrameHeightMeters,
+            },
+            topLevelObjects = loaded.TopLevelObjects,
+            sourceDoors = loaded.SourceDoors,
+            camera = new
+            {
+                type = loaded.Camera.Camera.GetType().Name,
+                projection = "orthogonal",
+                middleMouseOrbit = true,
+                controlKeyOrbit = true,
+                rightMousePan = true,
+                wheelZoomTowardCursor = true,
+                edgePan = true,
+                keyboardPan = new[] { "W", "A", "S", "D", "arrows" },
+                playerFocusKey = "F",
+                routeResetKey = "Home",
+            },
+            tactical = loaded.Session.Report(),
+            turnSimulation = "bounded-movement-attack-rat-turn-proof",
+            collision = "floor-art-presence-minus-MAP-OBJECT_NO_BLOCK-central-hex",
+            windowsAppControlUsed = false,
+            foregroundInputInjected = false,
+        };
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, report);
+        GD.Print(
+            $"OPENNV_FO1_HEX_PASS scene={loaded.SceneSha256} entry={loaded.EntryTile} " +
+            $"door={loaded.DoorTile} floor={loaded.RenderedFloorTiles} " +
+            $"walkable={loaded.WalkableHexes} sprites={loaded.SpritePlacements}");
+        if (options.ContainsKey("fo1-xr-simulator-preview"))
+        {
+            _ = Fo1XrSimulatorPreview.Run(this, loaded, options);
+            return;
+        }
+        if (options.ContainsKey("fo1-new-game") || options.ContainsKey("fo1-new-game-demo"))
+        {
+            var characterStart = Fo1CharacterStartContract.Load(
+                RequireOption(options, "fo1-character-start"),
+                RequireOption(options, "fo1-character-start-sha256"));
+            if (options.ContainsKey("fo1-new-game-demo"))
+                _ = Fo1NewGameFlow.RunDemo(
+                    this,
+                    loaded,
+                    characterStart,
+                    RequireOption(options, "demo-report"),
+                    options.ContainsKey("fo1-demo-fast-opening"),
+                    options.ContainsKey("fo1-demo-skip-opening"));
+            else
+                Fo1NewGameFlow.StartInteractive(this, loaded, characterStart);
+            return;
+        }
+        if (options.ContainsKey("fo1-tactical-proof"))
+        {
+            _ = Fo1HexProof.Run(this, loaded, RequireOption(options, "report"));
+            return;
+        }
+        if (options.ContainsKey("fo1-gameplay-demo"))
+        {
+            _ = Fo1HexDemo.Run(this, loaded, RequireOption(options, "demo-report"));
+            return;
+        }
+        if (options.TryGetValue("capture-root", out var captureRoot))
+        {
+            _ = Fo1HexCapture.Run(this, loaded, captureRoot, report);
+            return;
+        }
+        if (options.ContainsKey("quit-after-load"))
+            GetTree().Quit(0);
+    }
+
+    private void LoadFo1CampaignTransport(
+        string campaignPath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var coverage = Fo1CampaignTransportContract.Load(campaignPath);
+        if (options.TryGetValue("report", out var reportPath))
+            WriteReport(reportPath, coverage.Report());
+        GD.Print(
+            $"OPENNV_FO1_CAMPAIGN_TRANSPORT_PASS maps={coverage.MapCoverage.Count} " +
+            $"elevations={coverage.Elevations} objects={coverage.TopLevelObjects} " +
+            $"doors={coverage.Doors} resources={coverage.Resources}");
+        if (DisplayServer.GetName() == "headless" || options.ContainsKey("quit-after-load"))
+            GetTree().Quit(0);
+    }
+
+    private void LoadFo1CampaignPresentation(
+        string campaignPath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var catalog = Fo1CampaignPresentationContract.Load(campaignPath);
+        Fo1CampaignMapViewCoverage? viewCoverage = null;
+        Fo1CampaignPresentationViewer? viewer = null;
+        if (DisplayServer.GetName() != "headless" || options.ContainsKey("fo1-map") ||
+            options.ContainsKey("fo1-campaign-build-proof"))
+        {
+            int? elevation = null;
+            if (options.TryGetValue("fo1-elevation", out var requestedElevation))
+            {
+                if (!int.TryParse(requestedElevation, out var parsedElevation) ||
+                    parsedElevation is < 0 or > 2)
+                    throw new ArgumentException(
+                        $"Fallout campaign elevation must be 0, 1, or 2: {requestedElevation}");
+                elevation = parsedElevation;
+            }
+            viewer = new Fo1CampaignPresentationViewer();
+            AddChild(viewer);
+            viewCoverage = viewer.Configure(
+                catalog,
+                options.TryGetValue("fo1-map", out var requestedMap) ? requestedMap : null,
+                elevation);
+            GD.Print(
+                $"OPENNV_FO1_CAMPAIGN_MAP_VIEW_PASS map={viewCoverage.MapId} " +
+                $"elevation={viewCoverage.Elevation} " +
+                $"floor={viewCoverage.RenderedFloorPatches} " +
+                $"placements={viewCoverage.SpritePlacements} mobs={viewCoverage.Mobs} " +
+                $"doors={viewCoverage.Doors}");
+        }
+        if (options.TryGetValue("report", out var reportPath) &&
+            !options.ContainsKey("fo1-campaign-build-proof") &&
+            !options.ContainsKey("capture-root"))
+            WriteReport(
+                reportPath,
+                viewCoverage is null
+                    ? catalog.Report()
+                    : new
+                    {
+                        schema = "opennv-fo1-campaign-map-view-runtime-proof/v1",
+                        status = "pass-selected-connected-wall-topology-view-built",
+                        campaign = catalog.Report(),
+                        selectedMap = viewCoverage,
+                        promotion = new
+                        {
+                            runtimeValidatedMaps = catalog.Maps.Count,
+                            selectedMapViewBuilt = true,
+                            renderedMaps = 0,
+                            interactiveGameplayMaps = 0,
+                            questExecutableMaps = 0,
+                            firstPersonReadyMaps = 0,
+                            openXrAcceptedMaps = 0,
+                        },
+                    });
+        GD.Print(
+            $"OPENNV_FO1_CAMPAIGN_PRESENTATION_PASS maps={catalog.Maps.Count} " +
+            $"elevations={catalog.MapCoverage.Sum(row => row.Elevations)} " +
+            $"placements={catalog.MapCoverage.Sum(row => row.SpritePlacements)} " +
+            $"tiles={catalog.TileArtifacts.Count} sprites={catalog.SpriteArtifacts.Count}");
+        if (options.ContainsKey("fo1-campaign-build-proof"))
+        {
+            _ = Fo1CampaignBuildProof.Run(
+                this,
+                catalog,
+                viewer ?? throw new InvalidOperationException(
+                    "Fallout campaign build proof has no viewer."),
+                RequireOption(options, "report"));
+            return;
+        }
+        if (options.TryGetValue("capture-root", out var captureRoot))
+        {
+            _ = Fo1CampaignPresentationCapture.Run(
+                this,
+                catalog,
+                viewer ?? throw new InvalidOperationException(
+                    "Fallout campaign visual capture has no viewer."),
+                viewCoverage ?? throw new InvalidOperationException(
+                    "Fallout campaign visual capture has no selected map."),
+                captureRoot,
+                options.TryGetValue("report", out var captureReport) ? captureReport : null);
+            return;
+        }
+        if (DisplayServer.GetName() == "headless" || options.ContainsKey("quit-after-load"))
+            GetTree().Quit(0);
+    }
+
     private void LoadModel(
         string modelPath,
         string sidecarPath,
         IReadOnlyDictionary<string, string> options)
     {
-        var loaded = StaticModelSlice.Load(modelPath, sidecarPath, this, _configuration);
+        var loaded = StaticModelSlice.Load(
+            modelPath,
+            sidecarPath,
+            this,
+            _configuration,
+            options.TryGetValue("material-manifest", out var materials) ? materials : null,
+            options.TryGetValue("material-manifest-sha256", out var materialsHash)
+                ? materialsHash
+                : null,
+            options.ContainsKey("classic-diorama"));
         var report = new
         {
             schema = "opennv-godot-static-model/v1",
@@ -994,12 +1486,28 @@ public partial class RuntimeCoordinator : Node3D
             meshes = loaded.Meshes,
             surfaces = loaded.Surfaces,
             vertices = loaded.Vertices,
+            materialBindings = loaded.MaterialBindings,
+            presentation = options.ContainsKey("classic-diorama") ? "classic-diorama" : "reference",
+            projection = loaded.Projection,
+            boundsPosition = new[] { loaded.Bounds.Position.X, loaded.Bounds.Position.Y, loaded.Bounds.Position.Z },
+            boundsSize = new[] { loaded.Bounds.Size.X, loaded.Bounds.Size.Y, loaded.Bounds.Size.Z },
         };
         if (options.TryGetValue("report", out var reportPath))
             WriteReport(reportPath, report);
         GD.Print(
             $"OPENNV_GODOT_STATIC_MODEL_PASS source={loaded.SourceSha256} " +
-            $"meshes={loaded.Meshes} surfaces={loaded.Surfaces} vertices={loaded.Vertices}");
+            $"meshes={loaded.Meshes} surfaces={loaded.Surfaces} vertices={loaded.Vertices} " +
+            $"materials={loaded.MaterialBindings} projection={loaded.Projection}");
+        if (options.TryGetValue("capture-root", out var captureRoot))
+        {
+            _ = StaticModelCapture.Run(
+                this,
+                loaded,
+                modelPath,
+                captureRoot,
+                options.TryGetValue("report", out var captureReport) ? captureReport : null);
+            return;
+        }
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
     }
@@ -1188,6 +1696,8 @@ public partial class RuntimeCoordinator : Node3D
         options.TryGetValue(name, out var value)
             ? value
             : throw new ArgumentException($"Missing required --{name} option.");
+
+    private static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
 
     private readonly record struct DoorTraversalProof(
         bool FloorHit,
