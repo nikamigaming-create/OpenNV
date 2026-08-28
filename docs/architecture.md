@@ -10,8 +10,9 @@ Godot Vault 13/V13ENT opening slice in Hex and FPS; its OpenXR adapter is
 simulator-only and launcher-disabled. Fallout 2 admits the owned Map 126
 MAP/PRO/FRM source graph and constructs its exact floor/object presentation in
 Godot's 3D hex space; no rendered, interactive, or launcher-ready Hex/FPS/VR mode exists.
-New Vegas owns its menu, skippable intro, Doc Mitchell house/state, and the
-production Goodsprings active set with the reciprocal Doc Mitchell
+New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
+hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
+XML closures, and the production Goodsprings active set with the reciprocal Doc Mitchell
 house/exterior exit (`00103e61` ↔ `00103e69`); flat is
 launchable and OpenXR remains experimental with no physical-headset acceptance.
 Fallout 3 owns its menu and persistent CG00 selection through stage 62; later
@@ -84,7 +85,9 @@ flowchart TD
     Pickup --> Session[GameplaySession]
     Container --> Session
     Door --> Session
-    Session --> Hud[Objective / inventory / ammo HUD]
+    Session --> UiModel[Authoritative status / inventory / quest / map snapshot]
+    UiModel --> Hud[Owned-contract flat HUD / Pip-Boy shell]
+    UiModel --> Wrist[Shared-state OpenXR wrist surface]
     Session --> Save[Atomic sandbox save]
     CellRoot -->|0:N actor manifests| ActorPlacement[ACHR placement]
     ActorPlacement -->|exactly 1| ActorModel[Verified skinned glTF actor]
@@ -331,14 +334,17 @@ retail data, or promotion verdict.
 | `test_fo1_campaign_inventory.py` | Synthetic all-map inventory, identity, and monotonic-promotion regressions | Retail bytes or campaign-readiness claims |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
-| `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, and versioned flow contract | Runtime state or Godot UI |
+| `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, versioned flow contract, and hash-bound HUD/STATS/ITEMS/DATA XML/font/texture contract | Runtime state, Gamebryo tile execution, or Godot UI |
 | `runtime/src/Campaigns/NewVegas/Opening/NewVegasOpeningNamespaceBridge.cs` | Compile-time namespace join between the New Vegas opening campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs` | Flow/configuration/command-contract parsing and fail-closed runtime validation | Command execution or save state |
-| `runtime/src/Campaigns/NewVegas/Opening/OpeningManifest.cs` | Owned New Vegas front-end manifest identity, hash verification, and typed menu/media contract | Menu rendering, command execution, or source compilation |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningManifest.cs` | Owned New Vegas front-end manifest identity, hash verification, and typed menu/media/gameplay-UI contract loading | Menu rendering, command execution, or source compilation |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningQuestRuntime.cs` | Data-driven opening command interpreter, authored UI/dialogue/AI progression, checkpoint capture, and completion handoff | ESM/BSA parsing or guessed content identities |
 | `runtime/src/Gameplay/State/OpeningCampaignState.cs` | Shared versioned opening character/quest/objective/inventory snapshot validation and transform serialization | Flow progression or file I/O |
-| `runtime/src/Campaigns/NewVegas/Opening/OpeningUiTheme.cs` | Owned opening bitmap-font and authored UI style construction | Manifest parsing, progression, or shared runtime theming |
+| `runtime/src/Presentation/Ui/OwnedUiContracts.cs` | Campaign-neutral owned texture, bitmap-font, style, role, and gameplay-presentation value contracts | Parsing, extraction, state mutation, or UI nodes |
+| `runtime/src/Presentation/Ui/OwnedUiTheme.cs` | Owned bitmap-font, texture, and UI-style construction shared by opening and gameplay presentation | Manifest parsing, progression, or UI state |
 | `runtime/src/Campaigns/NewVegas/Opening/RetailOpening.cs` | Owned New Vegas main-menu and intro playback/skip presentation | Manifest parsing, gameplay progression, or campaign state |
+| `runtime/src/Presentation/Ui/GameplayUiModel.cs` | One read-only inventory/equipment/quest/objective/map/control snapshot over authoritative gameplay state | Mutation, save ownership, or presentation layout |
+| `runtime/src/Presentation/Ui/GameplayUiController.cs` | Flat HUD/Pip-Boy and status-only shared-state wrist presentation; New Vegas flat UI consumes the owned XML/font/texture/rectangle role contract, STATS explicitly reuses the verified ITEMS frame, and the wrist consumes its owned font/theme path | Campaign state, asset extraction, native STATS rectangle evaluation, ITEMS/DATA wrist navigation, full Gamebryo tile execution, or retail-parity claims |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
 | `CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
 | `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal and proof queries | Binary parsing |

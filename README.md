@@ -38,7 +38,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
 | Fallout 2 Hex/FPS/VR | Owned Map 126 Temple and Map 3 Arroyo Caves source graphs/caches, exact Temple topology, nonvisual movement, and exit state pass | The proof is headless/nonvisual; no Godot Map 3 consumer, reciprocal runtime transition, INT execution, actors, controls, gameplay, or saves exist, so all three modes stay disabled |
-| New Vegas | Owned menu, skippable intro, Doc Mitchell house/opening state, and the production Goodsprings active set with the reciprocal Doc Mitchell house/exterior exit; original flat and experimental OpenXR routes are launchable | Hex is absent; OpenXR is software-gated but not physical-headset accepted; the uninterrupted full campaign is unproven |
+| New Vegas | Owned menu, skippable intro, Doc Mitchell house/opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and the production Goodsprings active set with the reciprocal Doc Mitchell house/exterior exit; original flat and experimental OpenXR routes are launchable | The UI shell is not yet a complete Gamebryo tile interpreter or retail-pixel-parity result; equip/use/drop semantics, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and persistent CG00 stage 62; exact later state contracts compile and validate | No first-person Vault 101 world or authored package/dialogue trigger execution exists, so FPS, Hex, and VR stay disabled |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
@@ -63,7 +63,19 @@ If Godot is not found automatically, pass the Godot 4.7.2 Mono executable with
 **New Game** plays the owned intro, and `Escape` skips into the same Doc Mitchell
 opening state as watching it through. The separately promoted production
 Goodsprings active set includes the reciprocal Doc Mitchell house/exterior
-exit. For Fallout
+exit. OpenNV now compiles the installed `hud_main_menu.xml`, `stats_menu.xml`,
+`inventory_menu.xml`, and `map_menu.xml` closures, their four selected owned
+bitmap fonts, and the owned Pip-Boy background into a hash-verified gameplay-UI
+contract. The HUD stays hidden until the authored Doc control policy enables
+the Pip-Boy, and `Tab` then opens the authoritative
+inventory/quest/map snapshot in flat mode. OpenXR consumes that same snapshot
+through a status-only wrist surface and owned font/theme path; ITEMS/DATA
+navigation and its full Pip-Boy input contract remain explicit headset gates. The current shell
+uses verified ITEMS/DATA rectangles while STATS reuses the verified ITEMS frame
+because its root rectangle still depends on unsupported Gamebryo expressions.
+It does not yet interpret every tile expression or provide complete
+equip/use/drop behavior, so it is not described as retail HUD/Pip-Boy parity.
+For Fallout
 1, select **Register Fallout 1
 cache**, choose the generated `hex-scene.json` and then `character-start.json`,
 choose Hex Tactical or First Person, and launch. Registration stores local paths

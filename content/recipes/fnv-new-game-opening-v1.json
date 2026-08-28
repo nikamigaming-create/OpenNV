@@ -112,6 +112,47 @@
       "main_settings": "settings",
       "main_crew": "credits",
       "main_quit": "quit"
+    },
+    "gameplayPresentation": {
+      "referenceCanvasSize": [1024, 768],
+      "backgroundAsset": "textures\\interface\\shared\\background\\pipboy.dds",
+      "roles": {
+        "hud": {
+          "document": "menus\\main\\hud_main_menu.xml",
+          "menuName": "HUDMainMenu",
+          "bodyFontId": 7,
+          "titleFontId": 8,
+          "layoutTiles": [
+            "ActionPoints",
+            "HitPoints",
+            "ReticleCenter",
+            "QuestReminder",
+            "Messages",
+            "Info"
+          ]
+        },
+        "status": {
+          "document": "menus\\main\\stats_menu.xml",
+          "menuName": "StatsMenu",
+          "bodyFontId": 2,
+          "titleFontId": 4,
+          "layoutTiles": []
+        },
+        "items": {
+          "document": "menus\\main\\inventory_menu.xml",
+          "menuName": "InventoryMenu",
+          "bodyFontId": 2,
+          "titleFontId": 4,
+          "layoutTiles": ["IM_MainRect"]
+        },
+        "data": {
+          "document": "menus\\main\\map_menu.xml",
+          "menuName": "MapMenu",
+          "bodyFontId": 2,
+          "titleFontId": 4,
+          "layoutTiles": ["MM_MainRect"]
+        }
+      }
     }
   },
   "newGameFlow": {

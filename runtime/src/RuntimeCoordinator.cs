@@ -15,6 +15,9 @@ internal static class RuntimeCoordinatorNumericContracts
 
 public partial class RuntimeCoordinator : Node3D
 {
+    private const string DefaultNewVegasOpeningSavePath =
+        "user://saves/new-vegas-opening-v1.json";
+
     private static readonly HashSet<string> DirectPreparedContentOptions = new(
         new[]
         {
@@ -425,7 +428,10 @@ public partial class RuntimeCoordinator : Node3D
             ShowOpening(prepared, options);
             return;
         }
-        LoadPreparedGameplay(prepared, options);
+        LoadPreparedGameplay(
+            prepared,
+            options,
+            options.ContainsKey("new-game") || options.ContainsKey("opening-proof"));
     }
 
     private void ShowOpening(
@@ -435,12 +441,17 @@ public partial class RuntimeCoordinator : Node3D
         var manifest = OpeningManifest.Load(prepared.OpeningManifestPath, _configuration);
         var savePath = options.TryGetValue("save-path", out var configuredSavePath)
             ? ResolveRuntimePath(configuredSavePath)
-            : ResolveRuntimePath(_configuration.Hud.DefaultSavePath);
+            : ResolveRuntimePath(DefaultNewVegasOpeningSavePath);
+        var expectedCellFormId = ReadPreparedCellFormId(prepared.CellScenePath);
+        var canContinue = GameplaySession.CanContinueOpening(
+            savePath,
+            expectedCellFormId,
+            state => OpeningQuestRuntime.MatchesFlow(manifest.NewGameFlow, state));
         var opening = new RetailOpening();
         AddChild(opening);
         opening.Configure(
             manifest,
-            File.Exists(savePath),
+            canContinue,
             _configuration.Player.DesktopInput.Cancel.Action,
             () =>
             {
@@ -449,14 +460,14 @@ public partial class RuntimeCoordinator : Node3D
                     pair => pair.Value,
                     StringComparer.OrdinalIgnoreCase);
                 newGameOptions["new-game"] = "";
-                LoadPreparedGameplay(prepared, newGameOptions);
+                LoadPreparedGameplay(prepared, newGameOptions, useOpeningCampaign: true);
             },
             action =>
             {
                 if (action is "continue" or "load")
                 {
                     opening.QueueFree();
-                    LoadPreparedGameplay(prepared, options);
+                    LoadPreparedGameplay(prepared, options, useOpeningCampaign: true);
                     return;
                 }
                 GD.Print($"OPENNV_OWNED_MENU_ACTION action={action} status=ui-route-pending");
@@ -464,14 +475,15 @@ public partial class RuntimeCoordinator : Node3D
         GD.Print(
             $"OPENNV_OWNED_OPENING_READY campaign={manifest.Campaign} " +
             $"quest={manifest.EntryQuestEditorId} stage={manifest.EntryStage} " +
-            $"buttons={manifest.Buttons.Count}");
+            $"buttons={manifest.Buttons.Count} continue={canContinue}");
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
     }
 
     private void LoadPreparedGameplay(
         LegalAssetPreparer.PreparedContent prepared,
-        IReadOnlyDictionary<string, string> options)
+        IReadOnlyDictionary<string, string> options,
+        bool useOpeningCampaign)
     {
         if (prepared.CellScenePath is not null)
         {
@@ -483,8 +495,10 @@ public partial class RuntimeCoordinator : Node3D
                 !preparedOptions.ContainsKey("actor-scene") &&
                 !preparedOptions.ContainsKey("actor-scenes"))
                 preparedOptions["actor-scenes"] = prepared.ActorScenesPath;
-            if (!preparedOptions.ContainsKey("opening-manifest"))
+            if (useOpeningCampaign && !preparedOptions.ContainsKey("opening-manifest"))
                 preparedOptions["opening-manifest"] = prepared.OpeningManifestPath;
+            if (useOpeningCampaign && !preparedOptions.ContainsKey("save-path"))
+                preparedOptions["save-path"] = DefaultNewVegasOpeningSavePath;
             LoadCellScene(prepared.CellScenePath, preparedOptions);
         }
         else
@@ -500,6 +514,21 @@ public partial class RuntimeCoordinator : Node3D
         path.StartsWith("user://", StringComparison.Ordinal)
             ? ProjectSettings.GlobalizePath(path)
             : Path.GetFullPath(path);
+
+    private static string ReadPreparedCellFormId(string? scenePath)
+    {
+        if (scenePath is null)
+            throw new InvalidOperationException(
+                "Owned opening menu requires a prepared campaign CELL scene.");
+        using var document = JsonDocument.Parse(File.ReadAllText(scenePath));
+        var formId = document.RootElement
+            .GetProperty("cell")
+            .GetProperty("formId")
+            .GetString();
+        return string.IsNullOrWhiteSpace(formId)
+            ? throw new InvalidOperationException("Prepared campaign CELL has no FormID.")
+            : formId;
+    }
 
     private static string ValidatePerformanceReportPath(string path)
     {
@@ -557,6 +586,11 @@ public partial class RuntimeCoordinator : Node3D
             ? GalleryShotContract.Load(galleryShotPath, _configuration)
             : null;
         var usesCampaignState = options.ContainsKey("opening-manifest");
+        var openingManifest = usesCampaignState
+            ? OpeningManifest.Load(
+                RequireOption(options, "opening-manifest"),
+                _configuration)
+            : null;
         var applyCellEnvironment = galleryContract?.LocationClass != "exterior";
         if (galleryContract is not null)
             GD.Print($"OPENNV_GALLERY_STAGE id={galleryContract.Id} stage=cell-load-start");
@@ -575,8 +609,9 @@ public partial class RuntimeCoordinator : Node3D
             !options.ContainsKey("capture-root") || options.ContainsKey("gallery-shot"),
             applyCellEnvironment,
             !options.ContainsKey("new-game"),
-            !usesCampaignState,
-            options.ContainsKey("classic-diorama"));
+            true,
+            options.ContainsKey("classic-diorama"),
+            openingManifest?.GameplayUi);
         if (options.TryGetValue("jam-profile", out var jamProfilePath))
         {
             var jamProfile = JamProfileContract.Load(jamProfilePath);
@@ -599,12 +634,25 @@ public partial class RuntimeCoordinator : Node3D
         }
         var startsNewGame = options.ContainsKey("new-game");
         var restoredOpening = startsNewGame ? null : loaded.Session.OpeningState;
+        if (usesCampaignState && !startsNewGame && restoredOpening is null)
+            throw new InvalidOperationException(
+                "Campaign Continue requires a valid v3 opening save; choose New Game instead.");
+        if (usesCampaignState && restoredOpening is not null &&
+            (openingManifest is null ||
+             !OpeningQuestRuntime.MatchesFlow(openingManifest.NewGameFlow, restoredOpening) ||
+             !loaded.Session.HasConsistentOpeningGameplayState()))
+            throw new InvalidOperationException(
+                "Campaign Continue save does not match the prepared owned New Game flow.");
+        if (usesCampaignState)
+            loaded.Session.SetGameplayUiVisible(
+                restoredOpening is not null &&
+                OpeningQuestRuntime.GameplayUiEnabled(restoredOpening));
         OpeningQuestRuntime? openingFlow = null;
         if (startsNewGame || restoredOpening is { Completed: false })
         {
-            var openingManifest = OpeningManifest.Load(
-                RequireOption(options, "opening-manifest"),
-                _configuration);
+            if (openingManifest is null)
+                throw new InvalidOperationException(
+                    "Opening campaign state requires an owned opening manifest.");
             openingFlow = new OpeningQuestRuntime();
             AddChild(openingFlow);
             openingFlow.Configure(

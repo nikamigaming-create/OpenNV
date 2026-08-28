@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -70,7 +71,7 @@ internal sealed record OpeningNewGameFlow(
     internal static OpeningNewGameFlow Load(
         JsonElement source,
         JsonElement uiFlow,
-        IReadOnlyDictionary<string, OpeningTexture> textures)
+        IReadOnlyDictionary<string, OwnedUiTexture> textures)
     {
         if (source.GetProperty("schema").GetString() != ExpectedSchema)
             throw new InvalidOperationException("Owned New Game flow has an unexpected contract.");
@@ -521,7 +522,7 @@ internal sealed record OpeningNewGameFlow(
 
     private static OpeningCharacterCreation ParseCharacter(
         JsonElement value,
-        IReadOnlyDictionary<string, OpeningTexture> textures)
+        IReadOnlyDictionary<string, OwnedUiTexture> textures)
     {
         var sex = value.GetProperty("sex");
         var special = value.GetProperty("special");
@@ -560,7 +561,7 @@ internal sealed record OpeningNewGameFlow(
 
     private static IReadOnlyList<OpeningCharacterValue> ParseCharacterValues(
         JsonElement values,
-        IReadOnlyDictionary<string, OpeningTexture> textures) =>
+        IReadOnlyDictionary<string, OwnedUiTexture> textures) =>
         values.EnumerateArray().Select(value =>
         {
             var logicalPath = OptionalString(value, "iconLogicalPath");

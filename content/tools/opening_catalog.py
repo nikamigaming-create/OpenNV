@@ -899,7 +899,7 @@ def _gamebryo_font_manifest(
         if width < 0.0 or height < 0.0:
             raise ValueError(f"Owned Gamebryo font glyph is negative: {codepoint}")
         advance = width + advance_extra
-        if width == 0.0 and height == 0.0 and advance == 0.0:
+        if advance <= 0.0:
             continue
         u0 = values[FONT_GLYPH_U0_INDEX]
         v0 = values[FONT_GLYPH_V0_INDEX]
@@ -962,6 +962,43 @@ def _text_width(label: str, font: dict[str, object]) -> float:
             + ", ".join(sorted(set(missing)))
         )
     return sum(advances[ord(character)] for character in label)
+
+
+def _compile_gamebryo_font(
+    font_id: int,
+    ini: dict[str, dict[str, str]],
+    fonts_settings: dict[str, object],
+    owned_archives: OwnedArchiveStack,
+    cache_root: Path,
+    texture_pipeline: OwnedTexturePipeline,
+) -> tuple[dict[str, object], dict[str, object]]:
+    font_key = str(fonts_settings["keyTemplate"]).replace("{id}", str(font_id))
+    font_logical = canonical_member_path(
+        _ini_setting(ini, fonts_settings["section"], font_key)
+    )
+    font_member = owned_archives.extract(font_logical)
+    font_source = cache_root / "source" / "fonts" / Path(
+        font_logical.replace("\\", "/")
+    )
+    atomic_bytes(font_source, font_member.data)
+    atlas_name = font_member.data[
+        GAMEBRYO_FONT_ATLAS_NAME_OFFSET:GAMEBRYO_FONT_HEADER_BYTES
+    ].split(b"\0", 1)[0].decode(MENU_TEXT_ENCODING)
+    atlas_logical = canonical_member_path(
+        str(Path(font_logical.replace("\\", "/")).parent / f"{atlas_name}.dds")
+    )
+    atlas = texture_pipeline.prepare(atlas_logical).manifest()
+    return (
+        _gamebryo_font_manifest(
+            font_logical,
+            font_member.data,
+            font_source,
+            font_member.source_archive,
+            font_member.source_archive_sha256,
+            atlas,
+        ),
+        atlas,
+    )
 
 
 def _compile_engine_presentation(
@@ -1048,29 +1085,13 @@ def _compile_engine_presentation(
         raise ValueError("Owned opening button font id is ambiguous")
     font_id = int(_direct_number(font_nodes[0]))
     fonts_settings = dict(settings["fonts"])
-    font_key = str(fonts_settings["keyTemplate"]).replace("{id}", str(font_id))
-    font_logical = canonical_member_path(
-        _ini_setting(ini, fonts_settings["section"], font_key)
-    )
-    font_member = owned_archives.extract(font_logical)
-    font_source = cache_root / "source" / "fonts" / Path(
-        font_logical.replace("\\", "/")
-    )
-    atomic_bytes(font_source, font_member.data)
-    atlas_name = font_member.data[
-        GAMEBRYO_FONT_ATLAS_NAME_OFFSET:GAMEBRYO_FONT_HEADER_BYTES
-    ].split(b"\0", 1)[0].decode(MENU_TEXT_ENCODING)
-    atlas_logical = canonical_member_path(
-        str(Path(font_logical.replace("\\", "/")).parent / f"{atlas_name}.dds")
-    )
-    atlas = texture_pipeline.prepare(atlas_logical).manifest()
-    font = _gamebryo_font_manifest(
-        font_logical,
-        font_member.data,
-        font_source,
-        font_member.source_archive,
-        font_member.source_archive_sha256,
-        atlas,
+    font, atlas = _compile_gamebryo_font(
+        font_id,
+        ini,
+        fonts_settings,
+        owned_archives,
+        cache_root,
+        texture_pipeline,
     )
 
     width_nodes = [node for node in prefab.children if node.tag == "width"]
@@ -1416,6 +1437,105 @@ def _flow_menu_contract(
     return rows, frozenset(closure), canvas, strings
 
 
+def _gameplay_ui_contract(
+    recipe_ui: dict[str, object],
+    trees: dict[str, TileNode],
+    documents: dict[str, dict[str, object]],
+    resolved_includes: dict[str, list[str]],
+) -> tuple[dict[str, object], frozenset[str], frozenset[int]]:
+    configured = dict(recipe_ui["gameplayPresentation"])
+    canvas = [float(value) for value in configured["referenceCanvasSize"]]
+    if len(canvas) != 2 or any(value <= 0.0 for value in canvas):
+        raise ValueError("Owned gameplay UI reference canvas is invalid")
+    roles = dict(configured["roles"])
+    if set(roles) != {"hud", "status", "items", "data"}:
+        raise ValueError("Owned gameplay UI roles are incomplete")
+
+    rows = []
+    full_closure: set[str] = set()
+    font_ids: set[int] = set()
+    for role, raw in roles.items():
+        definition = dict(raw)
+        document = canonical_ui_path(str(definition["document"]))
+        if document not in trees:
+            raise ValueError(f"Owned gameplay UI document is absent: {role}={document}")
+        expected_menu = str(definition["menuName"])
+        if documents[document]["menuName"] != expected_menu:
+            raise ValueError(
+                f"Owned gameplay UI menu identity differs: {role}={document}"
+            )
+        closure: set[str] = set()
+        queue = deque([document])
+        while queue:
+            current = queue.popleft()
+            if current in closure:
+                continue
+            closure.add(current)
+            queue.extend(resolved_includes[current])
+        full_closure.update(closure)
+
+        available_font_ids = {
+            int(value)
+            for member in closure
+            for node in trees[member].walk()
+            if node.tag in {"font", "_font"}
+            for value in [_direct_number(node)]
+            if value is not None and float(value).is_integer() and value > 0
+        }
+        body_font_id = int(definition["bodyFontId"])
+        title_font_id = int(definition["titleFontId"])
+        if body_font_id not in available_font_ids or title_font_id not in available_font_ids:
+            raise ValueError(f"Owned gameplay UI configured fonts are absent: {role}")
+        font_ids.update((body_font_id, title_font_id))
+
+        tree = trees[document]
+        parents = _tile_parent_index(tree)
+        screen = {"width": canvas[0], "height": canvas[1]}
+        layout = []
+        for tile_name in definition["layoutTiles"]:
+            tile = _named_tile(tree, str(tile_name))
+            layout.append(
+                {
+                    "tile": str(tile_name),
+                    "rect": [
+                        _layout_trait(tile, trait, tree, parents, screen)
+                        for trait in ("x", "y", "width", "height")
+                    ],
+                }
+            )
+        rows.append(
+            {
+                "role": role,
+                "document": document,
+                "source": documents[document]["source"],
+                "sha256": documents[document]["sha256"],
+                "menuName": expected_menu,
+                "menuClassEntity": documents[document]["menuClassEntity"],
+                "bodyFontId": body_font_id,
+                "titleFontId": title_font_id,
+                "documentClosure": sorted(closure),
+                "layout": layout,
+            }
+        )
+
+    background = _asset_path(str(configured["backgroundAsset"]))
+    if background is None or not any(
+        background in documents[member]["assetReferences"]
+        for member in full_closure
+    ):
+        raise ValueError("Owned gameplay UI background is not referenced by its menu graph")
+    return (
+        {
+            "schema": "opennv-owned-gameplay-ui/v1",
+            "referenceCanvasSize": canvas,
+            "backgroundAsset": background,
+            "roles": sorted(rows, key=lambda value: str(value["role"])),
+        },
+        frozenset(full_closure),
+        frozenset(font_ids),
+    )
+
+
 def compile_ui(
     data_root: Path,
     default_ini_path: Path,
@@ -1488,6 +1608,12 @@ def compile_ui(
         documents,
         resolved_includes,
     )
+    gameplay, gameplay_closure, gameplay_font_ids = _gameplay_ui_contract(
+        recipe_ui,
+        trees,
+        documents,
+        resolved_includes,
+    )
     boot_closure = set()
     queue = deque([boot_document, confirmation_document])
     while queue:
@@ -1497,13 +1623,14 @@ def compile_ui(
         boot_closure.add(current)
         queue.extend(resolved_includes[current])
 
-    prepared_closure = boot_closure | set(flow_closure)
+    prepared_closure = boot_closure | set(flow_closure) | set(gameplay_closure)
     requested_assets = sorted(
         {
             str(asset)
             for member in prepared_closure
             for asset in documents[member]["initiallyVisibleAssetReferences"]
         }
+        | {str(gameplay["backgroundAsset"])}
         | {str(value) for value in additional_texture_paths}
     )
     texture_pipeline = OwnedTexturePipeline(
@@ -1561,10 +1688,30 @@ def compile_ui(
         trees,
         texture_pipeline,
     )
+    ini = _ini_index(default_ini_path)
+    fonts_settings = dict(dict(recipe_ui["engineSettings"])["fonts"])
+    gameplay_fonts = []
+    gameplay_font_textures = []
+    for font_id in sorted(gameplay_font_ids):
+        font, atlas = _compile_gamebryo_font(
+            font_id,
+            ini,
+            fonts_settings,
+            owned_archives,
+            cache_root,
+            texture_pipeline,
+        )
+        gameplay_fonts.append({"fontId": font_id, **font})
+        gameplay_font_textures.append(atlas)
     textures_by_path = {
         str(value["requestedPath"]): value
-        for value in [*texture_rows, *engine_textures]
+        for value in [*texture_rows, *engine_textures, *gameplay_font_textures]
     }
+    background_asset = str(gameplay["backgroundAsset"])
+    if background_asset not in textures_by_path:
+        raise ValueError("Owned gameplay UI background texture was not prepared")
+    gameplay["background"] = textures_by_path[background_asset]
+    gameplay["fonts"] = gameplay_fonts
     texture_rows = [textures_by_path[key] for key in sorted(textures_by_path)]
     title_tile = str(recipe_ui["titleTile"])
     title_nodes = [node for node in tree.walk() if node.name == title_tile]
@@ -1596,6 +1743,7 @@ def compile_ui(
         "documentCount": len(documents),
         "unresolvedIncludes": unresolved_includes,
         "enginePresentation": engine_presentation,
+        "gameplayPresentation": gameplay,
         "flow": {
             "referenceCanvasSize": flow_canvas,
             "menus": flow_menus,

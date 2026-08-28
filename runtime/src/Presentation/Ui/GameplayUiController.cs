@@ -23,15 +23,22 @@ internal partial class GameplayUiController : CanvasLayer
 
     private GameplaySession _session = null!;
     private RuntimeConfiguration _configuration = null!;
+    private OwnedGameplayUiPresentation? _ownedPresentation;
+    private FontFile? _ownedBodyFont;
+    private FontFile? _ownedTitleFont;
+    private FontFile? _ownedHudFont;
     private bool _useXr;
     private bool _showHud;
     private bool _useClassicDiorama;
+    private bool _gameplayEnabled = true;
     private GameplayUiPanel _activePanel = GameplayUiPanel.Status;
     private Panel? _desktopHud;
     private Label? _desktopObjective;
     private Label? _desktopStatus;
     private Label? _desktopInventory;
     private Control? _pipBoyPanel;
+    private Control? _ownedPipBoyCanvas;
+    private Control? _ownedPipBoyScreen;
     private Label? _pipBoyContent;
     private Label? _pipBoyFooter;
     private Label? _xrContent;
@@ -46,26 +53,51 @@ internal partial class GameplayUiController : CanvasLayer
     internal bool HasXrHud => _xrScreen is not null && _xrContent is not null;
     internal bool HasPipBoy => _pipBoyPanel is not null;
     internal float XrHudPixelSize => _xrScreen?.PixelSize ?? 0.0f;
-    internal bool IsPipBoyOpen => _pipBoyPanel?.Visible == true;
+    internal bool IsPipBoyOpen =>
+        _gameplayEnabled && !_useXr && _pipBoyPanel?.Visible == true;
 
     internal void Configure(
         GameplaySession session,
         RuntimeConfiguration configuration,
         bool useXr,
         bool showHud,
-        bool useClassicDiorama)
+        bool useClassicDiorama,
+        OwnedGameplayUiPresentation? ownedPresentation)
     {
         _session = session;
         _configuration = configuration;
         _useXr = useXr;
         _showHud = showHud;
         _useClassicDiorama = useClassicDiorama;
+        _ownedPresentation = ownedPresentation;
+        if (_ownedPresentation is not null)
+        {
+            var hud = _ownedPresentation.Role("hud");
+            var status = _ownedPresentation.Role("status");
+            _ownedHudFont = OwnedUiTheme.BuildFont(_ownedPresentation.Font(hud.BodyFontId));
+            _ownedBodyFont = OwnedUiTheme.BuildFont(_ownedPresentation.Font(status.BodyFontId));
+            _ownedTitleFont = OwnedUiTheme.BuildFont(_ownedPresentation.Font(status.TitleFontId));
+        }
         Name = "GameplayUi";
         if (_showHud && !_useXr)
-            BuildDesktopHud();
+        {
+            if (_ownedPresentation is null || _useClassicDiorama)
+                BuildDesktopHud();
+            else
+                BuildOwnedDesktopHud();
+        }
         if (_showHud)
-            BuildPipBoy();
+        {
+            if (_ownedPresentation is null || _useClassicDiorama)
+                BuildPipBoy();
+            else
+                BuildOwnedPipBoy();
+        }
         Refresh();
+        if (_ownedPresentation is not null)
+            GD.Print(
+                $"OPENNV_OWNED_GAMEPLAY_UI_READY roles={_ownedPresentation.Roles.Count} " +
+                $"fonts={_ownedPresentation.Fonts.Count} canvas={_ownedPresentation.CanvasSize}");
     }
 
     internal void AttachXrHud(Node3D leftHand, Node3D aimSource)
@@ -116,6 +148,7 @@ internal partial class GameplayUiController : CanvasLayer
             NoDepthTest = true,
             Shaded = false,
             Position = Vector3.Zero,
+            Visible = _gameplayEnabled && Visible,
         };
         mount.AddChild(_xrScreen);
         SetWristState(WristUiState.Active, "attached");
@@ -124,6 +157,20 @@ internal partial class GameplayUiController : CanvasLayer
 
     internal void TogglePipBoy()
     {
+        if (!_gameplayEnabled)
+            return;
+        if (_useXr)
+        {
+            if (_xrScreen is null)
+                return;
+            _xrScreen.Visible = !_xrScreen.Visible;
+            if (_xrScreen.Visible)
+            {
+                _activePanel = GameplayUiPanel.Status;
+                Refresh();
+            }
+            return;
+        }
         if (_pipBoyPanel is null)
             return;
         _pipBoyPanel.Visible = !_pipBoyPanel.Visible;
@@ -141,11 +188,27 @@ internal partial class GameplayUiController : CanvasLayer
 
     internal void ClosePipBoy()
     {
+        if (_useXr)
+        {
+            if (_xrScreen is not null)
+                _xrScreen.Visible = false;
+            return;
+        }
         if (_pipBoyPanel?.Visible != true)
             return;
         _pipBoyPanel.Visible = false;
         if (!_useXr && DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;
+    }
+
+    internal void SetGameplayVisible(bool visible)
+    {
+        _gameplayEnabled = visible;
+        if (!visible)
+            ClosePipBoy();
+        Visible = visible;
+        if (_useXr && _xrScreen is not null)
+            _xrScreen.Visible = visible;
     }
 
     internal void Refresh()
@@ -162,14 +225,16 @@ internal partial class GameplayUiController : CanvasLayer
         if (_pipBoyContent is not null)
             _pipBoyContent.Text = FormatPanel(snapshot, _activePanel);
         if (_pipBoyFooter is not null)
-            _pipBoyFooter.Text = _configuration.Hud.PipBoy.CloseHint;
+            _pipBoyFooter.Text = _ownedPresentation is null
+                ? _configuration.Hud.PipBoy.CloseHint
+                : $"TAB CLOSE   F5 SAVE   {snapshot.SavePath}";
         if (_xrContent is not null)
             _xrContent.Text = FormatWrist(snapshot);
     }
 
     public override void _Process(double delta)
     {
-        if (_xrScreen is null || _xrAim is null || !_xrAim.IsInsideTree())
+        if (!_gameplayEnabled || _xrScreen is null || _xrAim is null || !_xrAim.IsInsideTree())
             return;
         var pointer = ResolveWristPointer(_xrScreen, _xrAim);
         if (pointer.HasValue)
@@ -192,6 +257,271 @@ internal partial class GameplayUiController : CanvasLayer
             _xrCursor.Visible = false;
         if (_wristState is WristUiState.Candidate or WristUiState.Focused)
             SetWristState(WristUiState.Active, "aim-left-screen");
+    }
+
+    private void BuildOwnedDesktopHud()
+    {
+        var presentation = _ownedPresentation
+            ?? throw new InvalidOperationException("Owned gameplay UI presentation is unavailable.");
+        var hud = presentation.Role("hud");
+        _desktopHud = new Panel
+        {
+            Name = "OwnedNewVegasHud",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _desktopHud.AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+        AddChild(_desktopHud);
+        _desktopHud.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        var canvas = new Control
+        {
+            Name = "OwnedNewVegasHudCanvas",
+            Size = presentation.CanvasSize,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _desktopHud.AddChild(canvas);
+        _desktopHud.Resized += () => ScaleOwnedCanvas(_desktopHud, canvas, presentation.CanvasSize);
+        ScaleOwnedCanvas(_desktopHud, canvas, presentation.CanvasSize);
+
+        _desktopObjective = BuildOwnedLabel(_ownedHudFont!);
+        _desktopObjective.Name = "QuestReminder";
+        PlaceOwnedCanvasRect(_desktopObjective, hud.Layout["QuestReminder"]);
+        canvas.AddChild(_desktopObjective);
+
+        _desktopStatus = BuildOwnedLabel(_ownedHudFont!);
+        _desktopStatus.Name = "Messages";
+        PlaceOwnedCanvasRect(_desktopStatus, hud.Layout["Messages"]);
+        canvas.AddChild(_desktopStatus);
+
+        _desktopInventory = BuildOwnedLabel(_ownedHudFont!);
+        _desktopInventory.Name = "Info";
+        _desktopInventory.HorizontalAlignment = HorizontalAlignment.Right;
+        PlaceOwnedCanvasRect(_desktopInventory, hud.Layout["Info"]);
+        canvas.AddChild(_desktopInventory);
+
+        var crosshair = BuildOwnedLabel(_ownedHudFont!);
+        crosshair.Name = "ReticleCenter";
+        crosshair.Text = "+";
+        crosshair.HorizontalAlignment = HorizontalAlignment.Center;
+        crosshair.VerticalAlignment = VerticalAlignment.Center;
+        PlaceOwnedCanvasRect(crosshair, hud.Layout["ReticleCenter"]);
+        canvas.AddChild(crosshair);
+    }
+
+    private void BuildOwnedPipBoy()
+    {
+        var presentation = _ownedPresentation
+            ?? throw new InvalidOperationException("Owned gameplay UI presentation is unavailable.");
+        _pipBoyPanel = new Panel
+        {
+            Name = "OwnedNewVegasPipBoy",
+            Visible = false,
+        };
+        _pipBoyPanel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = Colors.Black,
+        });
+        AddChild(_pipBoyPanel);
+        _pipBoyPanel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _ownedPipBoyCanvas = new Control
+        {
+            Name = "OwnedNewVegasPipBoyCanvas",
+            Size = presentation.CanvasSize,
+        };
+        _pipBoyPanel.AddChild(_ownedPipBoyCanvas);
+        _pipBoyPanel.Resized += ScaleOwnedPipBoyCanvas;
+        ScaleOwnedPipBoyCanvas();
+
+        var background = new TextureRect
+        {
+            Name = "OwnedPipBoyBackground",
+            Texture = OwnedUiTheme.LoadTexture(presentation.Background.Path),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Modulate = new Color(
+                presentation.SystemColor.R,
+                presentation.SystemColor.G,
+                presentation.SystemColor.B,
+                1.0f),
+        };
+        background.Position = Vector2.Zero;
+        background.Size = presentation.CanvasSize;
+        _ownedPipBoyCanvas.AddChild(background);
+
+        var screen = new Panel
+        {
+            Name = "OwnedPipBoyMainRect",
+        };
+        screen.AddThemeStyleboxOverride("panel", BuildOwnedFrameStyle());
+        _ownedPipBoyScreen = screen;
+        _ownedPipBoyCanvas.AddChild(screen);
+
+        var tabs = new HBoxContainer
+        {
+            Name = "OwnedPipBoyTabs",
+            AnchorRight = 1.0f,
+            OffsetBottom = TabBarHeightPixels,
+        };
+        screen.AddChild(tabs);
+        AddOwnedTab(tabs, "STATS", GameplayUiPanel.Status);
+        AddOwnedTab(tabs, "ITEMS", GameplayUiPanel.Items);
+        AddOwnedTab(tabs, "DATA", GameplayUiPanel.Data);
+        var save = new Button
+        {
+            Name = "SaveGame",
+            Text = "SAVE",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        ApplyOwnedButton(save);
+        save.Pressed += _session.SaveAndNotify;
+        tabs.AddChild(save);
+
+        var content = new VBoxContainer
+        {
+            Name = "OwnedPipBoyContent",
+            AnchorRight = 1.0f,
+            AnchorBottom = 1.0f,
+            OffsetTop = TabBarHeightPixels + ScreenMarginPixels,
+            OffsetBottom = -FooterBaselineOffsetPixels,
+        };
+        screen.AddChild(content);
+        _pipBoyContent = BuildOwnedLabel(_ownedBodyFont!);
+        _pipBoyContent.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _pipBoyContent.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _pipBoyContent.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        content.AddChild(_pipBoyContent);
+
+        _pipBoyFooter = BuildOwnedLabel(_ownedBodyFont!);
+        _pipBoyFooter.Name = "OwnedPipBoyFooter";
+        _pipBoyFooter.AnchorTop = 1.0f;
+        _pipBoyFooter.AnchorRight = 1.0f;
+        _pipBoyFooter.AnchorBottom = 1.0f;
+        _pipBoyFooter.OffsetTop = -FooterBaselineOffsetPixels;
+        _pipBoyFooter.HorizontalAlignment = HorizontalAlignment.Right;
+        screen.AddChild(_pipBoyFooter);
+        ApplyOwnedPipBoyRole();
+    }
+
+    private Label BuildOwnedLabel(FontFile font)
+    {
+        var presentation = _ownedPresentation
+            ?? throw new InvalidOperationException("Owned gameplay UI presentation is unavailable.");
+        var label = new Label
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        label.AddThemeFontOverride("font", font);
+        label.AddThemeFontSizeOverride("font_size", font.FixedSize);
+        label.AddThemeColorOverride(
+            "font_color",
+            OwnedUiTheme.Brightness(
+                presentation.SystemColor,
+                presentation.Style.TextBrightness));
+        label.AddThemeColorOverride("font_shadow_color", Colors.Black);
+        label.AddThemeConstantOverride("shadow_offset_x", 1);
+        label.AddThemeConstantOverride("shadow_offset_y", 1);
+        return label;
+    }
+
+    private void ApplyOwnedButton(Button button)
+    {
+        var presentation = _ownedPresentation
+            ?? throw new InvalidOperationException("Owned gameplay UI presentation is unavailable.");
+        button.AddThemeFontOverride("font", _ownedTitleFont!);
+        button.AddThemeFontSizeOverride("font_size", _ownedTitleFont!.FixedSize);
+        button.AddThemeColorOverride(
+            "font_color",
+            OwnedUiTheme.Brightness(
+                presentation.SystemColor,
+                presentation.Style.TextBrightness));
+        button.AddThemeColorOverride(
+            "font_hover_color",
+            OwnedUiTheme.Brightness(
+                presentation.SystemColor,
+                presentation.Style.TextBrightness));
+        button.AddThemeStyleboxOverride("normal", new StyleBoxEmpty());
+        button.AddThemeStyleboxOverride("focus", BuildOwnedFrameStyle());
+        button.AddThemeStyleboxOverride("hover", BuildOwnedFrameStyle());
+        button.AddThemeStyleboxOverride("pressed", BuildOwnedFrameStyle());
+    }
+
+    private StyleBoxFlat BuildOwnedFrameStyle()
+    {
+        var presentation = _ownedPresentation
+            ?? throw new InvalidOperationException("Owned gameplay UI presentation is unavailable.");
+        var lineWidth = Mathf.Max(1, Mathf.RoundToInt(presentation.Style.LineThicknessPixels));
+        return new StyleBoxFlat
+        {
+            BgColor = OwnedUiTheme.Brightness(
+                presentation.SystemColor,
+                presentation.Style.BackgroundFillBrightness,
+                presentation.Style.BackgroundFillAlpha),
+            BorderColor = OwnedUiTheme.Brightness(
+                presentation.SystemColor,
+                presentation.Style.LineBrightness),
+            BorderWidthLeft = lineWidth,
+            BorderWidthTop = lineWidth,
+            BorderWidthRight = lineWidth,
+            BorderWidthBottom = lineWidth,
+        };
+    }
+
+    private void AddOwnedTab(HBoxContainer parent, string label, GameplayUiPanel panel)
+    {
+        var button = new Button
+        {
+            Text = label,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        ApplyOwnedButton(button);
+        button.Pressed += () =>
+        {
+            _activePanel = panel;
+            ApplyOwnedPipBoyRole();
+            Refresh();
+        };
+        parent.AddChild(button);
+    }
+
+    private static void PlaceOwnedCanvasRect(Control control, Rect2 source)
+    {
+        control.Position = source.Position;
+        control.Size = source.Size;
+    }
+
+    private void ApplyOwnedPipBoyRole()
+    {
+        if (_ownedPresentation is null || _ownedPipBoyScreen is null || _pipBoyContent is null)
+            return;
+        var (roleId, layoutRoleId, layoutTile) = _activePanel switch
+        {
+            GameplayUiPanel.Status => ("status", "items", "IM_MainRect"),
+            GameplayUiPanel.Items => ("items", "items", "IM_MainRect"),
+            GameplayUiPanel.Data or GameplayUiPanel.Map => ("data", "data", "MM_MainRect"),
+            _ => ("status", "items", "IM_MainRect"),
+        };
+        var role = _ownedPresentation.Role(roleId);
+        var layoutRole = _ownedPresentation.Role(layoutRoleId);
+        PlaceOwnedCanvasRect(_ownedPipBoyScreen, layoutRole.Layout[layoutTile]);
+        var font = OwnedUiTheme.BuildFont(_ownedPresentation.Font(role.BodyFontId));
+        _pipBoyContent.AddThemeFontOverride("font", font);
+        _pipBoyContent.AddThemeFontSizeOverride("font_size", font.FixedSize);
+    }
+
+    private void ScaleOwnedPipBoyCanvas()
+    {
+        if (_pipBoyPanel is null || _ownedPipBoyCanvas is null || _ownedPresentation is null)
+            return;
+        ScaleOwnedCanvas(_pipBoyPanel, _ownedPipBoyCanvas, _ownedPresentation.CanvasSize);
+    }
+
+    private static void ScaleOwnedCanvas(Control viewport, Control canvas, Vector2 authoredSize)
+    {
+        if (viewport.Size.X <= 0.0f || viewport.Size.Y <= 0.0f)
+            return;
+        var scale = Mathf.Min(viewport.Size.X / authoredSize.X, viewport.Size.Y / authoredSize.Y);
+        canvas.Scale = Vector2.One * scale;
+        canvas.Position = (viewport.Size - authoredSize * scale) * OwnedUiTheme.CenteringFactor;
     }
 
     private void BuildDesktopHud()
@@ -287,7 +617,9 @@ internal partial class GameplayUiController : CanvasLayer
         var title = new Label
         {
             Name = "PipBoyTitle",
-            Text = _configuration.Hud.PipBoy.Title,
+            Text = _ownedPresentation is null
+                ? _configuration.Hud.PipBoy.Title
+                : "STATS  •  ITEMS  •  DATA",
             Position = new Vector2(ScreenMarginPixels, ScreenTitleOffsetPixels),
         };
         ApplyTheme(title);
@@ -323,6 +655,17 @@ internal partial class GameplayUiController : CanvasLayer
 
     private void ApplyTheme(Label label)
     {
+        if (_ownedPresentation is not null)
+        {
+            label.AddThemeFontOverride("font", _ownedBodyFont!);
+            label.AddThemeFontSizeOverride("font_size", _ownedBodyFont!.FixedSize);
+            label.AddThemeColorOverride(
+                "font_color",
+                OwnedUiTheme.Brightness(
+                    _ownedPresentation.SystemColor,
+                    _ownedPresentation.Style.TextBrightness));
+            return;
+        }
         label.AddThemeColorOverride("font_color", _configuration.Hud.TextColorRgba.Color());
         label.AddThemeFontSizeOverride("font_size", _configuration.Hud.DesktopFontSizePixels);
     }
@@ -403,7 +746,7 @@ internal partial class GameplayUiController : CanvasLayer
                 "\n",
                 snapshot.Objectives.Where(objective => objective.Enabled).Select(objective =>
                     $"[{objective.State}] {objective.Text}"));
-        return $"QUESTS\n{quests}\n\nOBJECTIVES\n{objectives}";
+        return $"QUESTS\n{quests}\n\nOBJECTIVES\n{objectives}\n\nMAP\n{FormatMap(snapshot)}";
     }
 
     private string FormatMap(GameplayUiSnapshot snapshot)
@@ -442,7 +785,7 @@ internal partial class GameplayUiController : CanvasLayer
 
     private string FormatWrist(GameplayUiSnapshot snapshot) => string.Join(
         "\n",
-        _configuration.Hud.PipBoy.Title,
+        _ownedPresentation is null ? _configuration.Hud.PipBoy.Title : "STATS",
         FormatPanel(snapshot, _activePanel));
 
     private static string FormatVector(Vector3 value) =>

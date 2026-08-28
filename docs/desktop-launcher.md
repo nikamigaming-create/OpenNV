@@ -43,7 +43,7 @@ capabilities, campaign readiness, launch eligibility, and platform executable.
 The launcher never infers playability from a folder name or a bridge script.
 
 The checked-in runtime declares the New Vegas owned menu/intro/Doc Mitchell
-house route plus its production Goodsprings active set and reciprocal Doc
+house route, its source-bound HUD/Pip-Boy runtime shell, plus its production Goodsprings active set and reciprocal Doc
 Mitchell house/exterior exit, the bounded Fallout 1 Vault 13/V13ENT Hex/FPS
 route, and the bounded Fallout 3 owned-profile menu/intro/CG00 source route
 through persistent stage 62. Fallout 2 is a
@@ -64,6 +64,12 @@ frontend reaches stage 62, but all three presentation buttons remain disabled
 because no Vault 101 world runtime or authored package/dialogue trigger execution
 is present. TTW runtime support is absent, JAM remains dependency- and
 portable-semantic-gated, and every full-campaign readiness claim stays false.
+The New Vegas UI shell binds the installed HUD/STATS/ITEMS/DATA XML graph,
+selected owned bitmap fonts and textures, and the authoritative campaign
+snapshot. Flat HUD, ITEMS, and DATA use selected source rectangles; STATS uses
+the verified ITEMS frame until its remaining Gamebryo rectangle expressions are
+implemented. Complete tile interaction and retail-pixel parity remain unpromoted
+and do not change the route readiness flags.
 
 Fallout 2 profiles are generated with `content/tools/fo2_profile.py` or
 `scripts/Register-OpenNVFallout2.ps1`. The profile hashes `master.dat`,

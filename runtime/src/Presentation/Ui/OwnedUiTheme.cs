@@ -1,8 +1,8 @@
 using Godot;
 
-namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
+namespace OpenNV.Runtime.Presentation.Ui;
 
-internal static class OpeningUiTheme
+internal static class OwnedUiTheme
 {
     private const float ByteChannelMaximum = 255.0f;
     private const int FontCacheIndex = 0;
@@ -10,13 +10,13 @@ internal static class OpeningUiTheme
     private const int FontTextureIndex = 0;
     internal const float CenteringFactor = 0.5f;
 
-    internal static FontFile BuildFont(OpeningBitmapFont authored)
+    internal static FontFile BuildFont(OwnedBitmapFont authored)
     {
         var fontSize = Mathf.RoundToInt(authored.LineHeightPixels);
         var cacheSize = new Vector2I(fontSize, FontOutlineSizePixels);
         var atlas = Image.LoadFromFile(authored.Atlas.Path);
         if (atlas is null || atlas.IsEmpty())
-            throw new InvalidOperationException("Owned opening font atlas could not be decoded.");
+            throw new InvalidOperationException("Owned UI font atlas could not be decoded.");
         var font = new FontFile
         {
             FontName = authored.LogicalPath,
@@ -57,36 +57,27 @@ internal static class OpeningUiTheme
     {
         var image = Image.LoadFromFile(path);
         if (image is null || image.IsEmpty())
-            throw new InvalidOperationException($"Owned opening texture could not be decoded: {path}");
+            throw new InvalidOperationException($"Owned UI texture could not be decoded: {path}");
         return ImageTexture.CreateFromImage(image);
     }
 
     internal static void ApplyButton(
         Button button,
         FontFile font,
-        OpeningManifest manifest)
+        Color systemColor,
+        OwnedUiStyle style)
     {
         button.AddThemeFontOverride("font", font);
-        button.AddThemeFontSizeOverride(
-            "font_size",
-            Mathf.RoundToInt(manifest.Font.LineHeightPixels));
-        button.AddThemeColorOverride(
-            "font_color",
-            Brightness(manifest.MainMenuColor, manifest.Style.TextBrightness));
-        button.AddThemeColorOverride(
-            "font_hover_color",
-            Brightness(manifest.MainMenuColor, manifest.Style.TextBrightness));
-        button.AddThemeColorOverride(
-            "font_focus_color",
-            Brightness(manifest.MainMenuColor, manifest.Style.TextBrightness));
-        button.AddThemeColorOverride(
-            "font_pressed_color",
-            Brightness(manifest.MainMenuColor, manifest.Style.TextBrightness));
+        button.AddThemeFontSizeOverride("font_size", font.FixedSize);
+        button.AddThemeColorOverride("font_color", Brightness(systemColor, style.TextBrightness));
+        button.AddThemeColorOverride("font_hover_color", Brightness(systemColor, style.TextBrightness));
+        button.AddThemeColorOverride("font_focus_color", Brightness(systemColor, style.TextBrightness));
+        button.AddThemeColorOverride("font_pressed_color", Brightness(systemColor, style.TextBrightness));
         button.AddThemeColorOverride(
             "font_disabled_color",
-            Brightness(manifest.MainMenuColor, manifest.Style.DisabledTextBrightness));
+            Brightness(systemColor, style.DisabledTextBrightness));
         var empty = new StyleBoxEmpty();
-        var highlighted = HighlightedStyle(manifest);
+        var highlighted = HighlightedStyle(systemColor, style);
         button.AddThemeStyleboxOverride("normal", empty);
         button.AddThemeStyleboxOverride("disabled", empty);
         button.AddThemeStyleboxOverride("hover", highlighted);
@@ -94,18 +85,16 @@ internal static class OpeningUiTheme
         button.AddThemeStyleboxOverride("focus", highlighted);
     }
 
-    internal static StyleBoxFlat HighlightedStyle(OpeningManifest manifest)
+    internal static StyleBoxFlat HighlightedStyle(Color systemColor, OwnedUiStyle style)
     {
-        var lineWidth = Mathf.RoundToInt(manifest.Style.LineThicknessPixels);
+        var lineWidth = Mathf.RoundToInt(style.LineThicknessPixels);
         return new StyleBoxFlat
         {
             BgColor = Brightness(
-                manifest.MainMenuColor,
-                manifest.Style.BackgroundFillBrightness,
-                manifest.Style.BackgroundFillAlpha),
-            BorderColor = Brightness(
-                manifest.MainMenuColor,
-                manifest.Style.LineBrightness),
+                systemColor,
+                style.BackgroundFillBrightness,
+                style.BackgroundFillAlpha),
+            BorderColor = Brightness(systemColor, style.LineBrightness),
             BorderWidthLeft = lineWidth,
             BorderWidthTop = lineWidth,
             BorderWidthRight = lineWidth,

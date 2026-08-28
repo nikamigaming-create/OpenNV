@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime;
 
@@ -36,7 +37,8 @@ internal static class CellSceneLoader
         bool applyCellEnvironment = true,
         bool loadExistingSave = true,
         bool showGameplayHud = true,
-        bool useClassicDiorama = false)
+        bool useClassicDiorama = false,
+        OwnedGameplayUiPresentation? gameplayUi = null)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -64,7 +66,8 @@ internal static class CellSceneLoader
             loadExistingSave,
             showGameplayHud,
             useClassicDiorama,
-            objectiveOverride);
+            objectiveOverride,
+            gameplayUi);
         parent.AddChild(session);
         var main = CellContentLoader.Load(
             resolvedScenePath,

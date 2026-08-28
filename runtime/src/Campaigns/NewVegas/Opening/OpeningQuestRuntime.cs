@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -152,7 +153,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 }
                 if (completeAfterResume && saved is { Completed: true })
                 {
-                    ValidateCompletedState(saved);
+                    ValidateCompletedState(_flow, saved);
                     return saved;
                 }
                 var elapsedSeconds =
@@ -352,22 +353,42 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 "Opening autosave did not preserve the authored checkpoint state.");
     }
 
-    private void ValidateCompletedState(OpeningCampaignState state)
+    private static void ValidateCompletedState(
+        OpeningNewGameFlow flow,
+        OpeningCampaignState state)
     {
-        if (state.Stage != _flow.CompletionStage || !state.Completed ||
+        var completionInfos = flow.TopicsByFormId[flow.OutroTopicFormId].Infos
+            .Where(info =>
+                info.Goodbye &&
+                info.Commands.Any(command =>
+                    command.Kind == "deferredStage" &&
+                    command.Stage == flow.CompletionStage))
+            .ToArray();
+        var completionControls = completionInfos
+            .SelectMany(info => info.Commands)
+            .Where(command => command.Kind == "playerControls")
+            .ToArray();
+        if (completionInfos.Length != 1 || completionControls.Length != 1 ||
+            !string.Equals(
+                completionControls[0].Operation,
+                "enable",
+                StringComparison.OrdinalIgnoreCase) ||
+            completionControls[0].ControlValues.Count != PlayerControlCount ||
+            !state.PlayerControls.SequenceEqual(completionControls[0].ControlValues) ||
+            state.Stage != flow.CompletionStage || !state.Completed ||
             string.IsNullOrWhiteSpace(state.PlayerName) ||
-            state.SpecialValues.Values.Sum() != _flow.Character.SpecialTotalPoints ||
-            state.TagSkillFormIds.Count != _flow.Character.TagSkillMaximumSelected ||
-            state.TraitFormIds.Count > _flow.Character.TraitMaximumSelected)
+            state.SpecialValues.Values.Sum() != flow.Character.SpecialTotalPoints ||
+            state.TagSkillFormIds.Count != flow.Character.TagSkillMaximumSelected ||
+            state.TraitFormIds.Count > flow.Character.TraitMaximumSelected)
             throw new InvalidOperationException(
-                "Opening completion did not preserve character creation.");
+                "Opening completion did not preserve the authored final state.");
         var quests = state.Quests.ToDictionary(
             value => value.FormId,
             StringComparer.OrdinalIgnoreCase);
         var globals = state.Globals.ToDictionary(
             value => value.FormId,
             StringComparer.OrdinalIgnoreCase);
-        var completionCommands = _flow.Stages[_flow.CompletionStage].Commands;
+        var completionCommands = flow.Stages[flow.CompletionStage].Commands;
         foreach (var command in completionCommands)
         {
             switch (command.Kind)
@@ -423,7 +444,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _loaded.MainContent.Navigation,
             _loaded.Root,
             _loaded.OriginGameUnits);
-        _font = OpeningUiTheme.BuildFont(opening.Font);
+        _font = OwnedUiTheme.BuildFont(opening.Font);
         Name = "OwnedNewGameFlow";
 
         _dialogueVoice = new AudioStreamPlayer { Name = "OwnedDialogueVoice" };
@@ -1806,7 +1827,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         {
             parent.AddChild(new TextureRect
             {
-                Texture = OpeningUiTheme.LoadTexture(value.IconPath),
+                Texture = OwnedUiTheme.LoadTexture(value.IconPath),
                 ExpandMode = TextureRect.ExpandModeEnum.KeepSize,
                 StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
                 MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -2393,40 +2414,78 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         OpeningTransformState.Capture(_loaded.Player),
         OpeningTransformState.Capture(_guideActor.Placement));
 
-    private void RestoreState(OpeningCampaignState state)
+    internal static bool MatchesFlow(
+        OpeningNewGameFlow flow,
+        OpeningCampaignState state)
+    {
+        try
+        {
+            ValidateStateForFlow(flow, state);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    internal static bool GameplayUiEnabled(OpeningCampaignState state) =>
+        state.PlayerControls.Count == PlayerControlCount &&
+        state.PlayerControls[PipBoyControlIndex] == EnabledControlValue;
+
+    private static void ValidateStateForFlow(
+        OpeningNewGameFlow flow,
+        OpeningCampaignState state)
     {
         state.Validate();
-        var expectedSpecial = _flow.Character.SpecialValues
+        var expectedSpecial = flow.Character.SpecialValues
             .Select(value => value.FormId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var expectedSkills = _flow.Character.SkillValues
+        var expectedSkills = flow.Character.SkillValues
             .Select(value => value.FormId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var expectedTraits = _flow.Character.TraitValues
+        var expectedTraits = flow.Character.TraitValues
             .Select(value => value.FormId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var specialTotal = state.SpecialValues.Values.Sum();
         var initialSpecialTotal =
-            _flow.Character.SpecialInitial * _flow.Character.SpecialValues.Count;
-        if (!state.QuestFormId.Equals(_flow.QuestFormId, StringComparison.OrdinalIgnoreCase) ||
-            !state.QuestEditorId.Equals(_flow.QuestEditorId, StringComparison.OrdinalIgnoreCase) ||
-            !_flow.Stages.ContainsKey(state.Stage) || state.Completed ||
+            flow.Character.SpecialInitial * flow.Character.SpecialValues.Count;
+        var primaryQuest = state.Quests.SingleOrDefault(value =>
+            value.FormId.Equals(flow.QuestFormId, StringComparison.OrdinalIgnoreCase));
+        var validStage = state.Completed
+            ? state.Stage == flow.CompletionStage
+            : state.Stage != flow.CompletionStage && flow.Stages.ContainsKey(state.Stage);
+        if (!state.QuestFormId.Equals(flow.QuestFormId, StringComparison.OrdinalIgnoreCase) ||
+            !state.QuestEditorId.Equals(flow.QuestEditorId, StringComparison.OrdinalIgnoreCase) ||
+            !validStage ||
+            primaryQuest is null ||
+            !primaryQuest.EditorId.Equals(flow.QuestEditorId, StringComparison.OrdinalIgnoreCase) ||
+            primaryQuest.Stage != state.Stage ||
+            state.Completed && (!primaryQuest.Stopped || primaryQuest.Running) ||
+            !state.Completed && primaryQuest.Stopped ||
             string.IsNullOrWhiteSpace(state.PlayerName) ||
-            state.SexIndex >= _flow.Character.SexChoices.Count ||
+            state.SexIndex >= flow.Character.SexChoices.Count ||
             !state.SpecialValues.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
                 .SetEquals(expectedSpecial) ||
             state.SpecialValues.Values.Any(value =>
-                value < _flow.Character.SpecialMinimum ||
-                value > _flow.Character.SpecialMaximum) ||
+                value < flow.Character.SpecialMinimum ||
+                value > flow.Character.SpecialMaximum) ||
             specialTotal != initialSpecialTotal &&
-                specialTotal != _flow.Character.SpecialTotalPoints ||
+                specialTotal != flow.Character.SpecialTotalPoints ||
             !state.TagSkillFormIds.All(expectedSkills.Contains) ||
-            state.TagSkillFormIds.Count > _flow.Character.TagSkillMaximumSelected ||
+            state.TagSkillFormIds.Count > flow.Character.TagSkillMaximumSelected ||
             !state.TraitFormIds.All(expectedTraits.Contains) ||
-            state.TraitFormIds.Count > _flow.Character.TraitMaximumSelected ||
+            state.TraitFormIds.Count > flow.Character.TraitMaximumSelected ||
             state.PlayerControls.Count != PlayerControlCount)
             throw new InvalidOperationException(
                 "Saved opening state does not match the owned New Game flow.");
+        if (state.Completed)
+            ValidateCompletedState(flow, state);
+    }
+
+    private void RestoreState(OpeningCampaignState state)
+    {
+        ValidateStateForFlow(_flow, state);
 
         _playerName = state.PlayerName;
         _sexIndex = state.SexIndex;
@@ -2505,7 +2564,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         ApplyStageControlPolicy();
         var state = CaptureState(true);
         _loaded.Session.StoreOpeningState(state);
+        _loaded.Player.SetExternalActivationHandler(null);
         _loaded.Player.ClearOwnedNavigation();
+        _viewport.MouseFilter = Control.MouseFilterEnum.Ignore;
+        _viewport.Visible = false;
+        SetProcess(false);
         GD.Print(
             $"OPENNV_NEW_GAME_OPEN_WORLD_READY quest={_flow.QuestEditorId} " +
             $"stage={_stage} name={_playerName} inventory={_inventory.Count} " +
@@ -2530,7 +2593,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             Size = rect.Size,
             MouseFilter = Control.MouseFilterEnum.Stop,
         };
-        panel.AddThemeStyleboxOverride("panel", OpeningUiTheme.HighlightedStyle(_opening));
+        panel.AddThemeStyleboxOverride(
+            "panel",
+            OwnedUiTheme.HighlightedStyle(_opening.MainMenuColor, _opening.Style));
         root.AddChild(panel);
         var margins = new MarginContainer();
         margins.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
@@ -2583,7 +2648,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             FocusMode = Control.FocusModeEnum.All,
             MouseDefaultCursorShape = Control.CursorShape.PointingHand,
         };
-        OpeningUiTheme.ApplyButton(button, _font, _opening);
+        OwnedUiTheme.ApplyButton(
+            button,
+            _font,
+            _opening.MainMenuColor,
+            _opening.Style);
         return button;
     }
 
@@ -2595,7 +2664,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             Mathf.RoundToInt(_opening.Font.LineHeightPixels));
         control.AddThemeColorOverride(
             "font_color",
-            OpeningUiTheme.Brightness(
+            OwnedUiTheme.Brightness(
                 _opening.MainMenuColor,
                 _opening.Style.TextBrightness));
     }
@@ -2617,9 +2686,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         if (_activeModal is not null)
         {
+            _loaded.Session.SetGameplayUiVisible(false);
             _loaded.Player.SetControlPolicy(false, false, false, false, false);
             return;
         }
+        _loaded.Session.SetGameplayUiVisible(_playerControls[PipBoyControlIndex]);
         _loaded.Player.SetControlPolicy(
             _playerControls[MovementControlIndex],
             _playerControls[LookingControlIndex],
@@ -2643,7 +2714,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             viewportSize.Y / _flow.ReferenceCanvasSize.Y);
         _canvas.Scale = Vector2.One * scale;
         _canvas.Position =
-            (viewportSize - _flow.ReferenceCanvasSize * scale) * OpeningUiTheme.CenteringFactor;
+            (viewportSize - _flow.ReferenceCanvasSize * scale) * OwnedUiTheme.CenteringFactor;
     }
 
     private sealed class ActiveImageSpaceModifier(OpeningImageSpaceModifier modifier)

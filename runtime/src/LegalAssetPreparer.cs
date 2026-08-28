@@ -202,6 +202,34 @@ internal static class LegalAssetPreparer
         configuration.VerifyCompiledConfigurationDescriptor(root.GetProperty("configuration"));
         if (root.GetProperty("blockers").GetArrayLength() != 0)
             throw new InvalidOperationException("Prepared opening manifest contains unresolved entry blockers.");
+        var ui = root.GetProperty("ui");
+        if (!ui.TryGetProperty("gameplayPresentation", out var gameplayPresentation) ||
+            gameplayPresentation.ValueKind != JsonValueKind.Object ||
+            !gameplayPresentation.TryGetProperty("schema", out var gameplaySchema) ||
+            gameplaySchema.GetString() != "opennv-owned-gameplay-ui/v1")
+            throw new InvalidOperationException(
+                "Prepared opening manifest lacks the current owned gameplay UI contract.");
+        var requiredLayoutTiles = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["hud"] = ["QuestReminder", "Messages", "Info", "ReticleCenter"],
+            ["status"] = [],
+            ["items"] = ["IM_MainRect"],
+            ["data"] = ["MM_MainRect"],
+        };
+        var roles = gameplayPresentation.GetProperty("roles")
+            .EnumerateArray()
+            .ToDictionary(
+                role => role.GetProperty("role").GetString()!,
+                role => role.GetProperty("layout")
+                    .EnumerateArray()
+                    .Select(tile => tile.GetProperty("tile").GetString()!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase);
+        if (requiredLayoutTiles.Any(required =>
+            !roles.TryGetValue(required.Key, out var tiles) ||
+            required.Value.Any(tile => !tiles.Contains(tile))))
+            throw new InvalidOperationException(
+                "Prepared opening manifest lacks required owned gameplay UI layout tiles.");
     }
 
     private static ContentToolInvocation? ResolveContentTool(

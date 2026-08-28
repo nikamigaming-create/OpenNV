@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -16,8 +17,9 @@ internal sealed record OpeningManifest(
     string MainMenuMusicPath,
     float MainMenuMusicVolume,
     Color MainMenuColor,
-    OpeningBitmapFont Font,
-    OpeningMenuStyle Style,
+    OwnedBitmapFont Font,
+    OwnedUiStyle Style,
+    OwnedGameplayUiPresentation GameplayUi,
     string IntroVideoPath,
     IReadOnlyList<OpeningMenuButton> Buttons,
     OpeningNewGameFlow NewGameFlow)
@@ -67,6 +69,18 @@ internal sealed record OpeningManifest(
         VerifyHash(musicPath, music.GetProperty("sha256").GetString()!);
         var font = ParseFont(presentation.GetProperty("font"));
         var style = ParseStyle(presentation);
+        var mainMenuColor = ReadRgb(presentation.GetProperty("mainMenuColorRgb"));
+        var uiDocuments = ui.GetProperty("documents")
+            .EnumerateArray()
+            .ToDictionary(
+                value => value.GetProperty("path").GetString()!,
+                value => value,
+                StringComparer.OrdinalIgnoreCase);
+        var gameplayUi = ParseGameplayUi(
+            ui.GetProperty("gameplayPresentation"),
+            mainMenuColor,
+            style,
+            uiDocuments);
 
         var buttons = layout.GetProperty("buttons")
             .EnumerateArray()
@@ -113,9 +127,10 @@ internal sealed record OpeningManifest(
             background.Path,
             System.IO.Path.GetFullPath(musicPath),
             music.GetProperty("volume").GetSingle(),
-            ReadRgb(presentation.GetProperty("mainMenuColorRgb")),
+            mainMenuColor,
             font,
             style,
+            gameplayUi,
             System.IO.Path.GetFullPath(introVideoPath),
             buttons,
             newGameFlow);
@@ -132,11 +147,93 @@ internal sealed record OpeningManifest(
         return result;
     }
 
-    private static OpeningTexture ParseTexture(JsonElement source)
+    private static OwnedGameplayUiPresentation ParseGameplayUi(
+        JsonElement source,
+        Color systemColor,
+        OwnedUiStyle style,
+        IReadOnlyDictionary<string, JsonElement> documents)
+    {
+        if (source.GetProperty("schema").GetString() != "opennv-owned-gameplay-ui/v1")
+            throw new InvalidOperationException("Owned gameplay UI has an unexpected contract.");
+        var fonts = source.GetProperty("fonts")
+            .EnumerateArray()
+            .ToDictionary(
+                value => value.GetProperty("fontId").GetInt32(),
+                ParseFont);
+        var roles = source.GetProperty("roles")
+            .EnumerateArray()
+            .Select(value =>
+            {
+                var documentPath = value.GetProperty("source").GetString()!;
+                VerifyHash(documentPath, value.GetProperty("sha256").GetString()!);
+                var document = value.GetProperty("document").GetString()!;
+                var closure = value.GetProperty("documentClosure")
+                    .EnumerateArray()
+                    .Select(member => member.GetString()!)
+                    .ToArray();
+                if (!closure.Contains(document, StringComparer.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Owned gameplay UI document closure excludes its root.");
+                foreach (var member in closure)
+                {
+                    if (!documents.TryGetValue(member, out var ownedDocument))
+                        throw new InvalidOperationException(
+                            $"Owned gameplay UI closure document is absent: {member}");
+                    VerifyHash(
+                        ownedDocument.GetProperty("source").GetString()!,
+                        ownedDocument.GetProperty("sha256").GetString()!);
+                }
+                var layout = value.GetProperty("layout")
+                    .EnumerateArray()
+                    .ToDictionary(
+                        tile => tile.GetProperty("tile").GetString()!,
+                        tile => ReadRect(tile.GetProperty("rect")),
+                        StringComparer.OrdinalIgnoreCase);
+                return new OwnedGameplayUiRole(
+                    value.GetProperty("role").GetString()!,
+                    document,
+                    value.GetProperty("menuName").GetString()!,
+                    value.GetProperty("bodyFontId").GetInt32(),
+                    value.GetProperty("titleFontId").GetInt32(),
+                    layout);
+            })
+            .ToDictionary(value => value.Role, StringComparer.OrdinalIgnoreCase);
+        var result = new OwnedGameplayUiPresentation(
+            ReadVector(source.GetProperty("referenceCanvasSize")),
+            ParseTexture(source.GetProperty("background")),
+            systemColor,
+            style,
+            roles,
+            fonts);
+        var requiredRoles = new[] { "hud", "status", "items", "data" };
+        var requiredLayoutTiles = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["hud"] = ["QuestReminder", "Messages", "Info", "ReticleCenter"],
+            ["status"] = [],
+            ["items"] = ["IM_MainRect"],
+            ["data"] = ["MM_MainRect"],
+        };
+        if (result.CanvasSize.X <= 0.0f ||
+            result.CanvasSize.Y <= 0.0f ||
+            result.Roles.Count != requiredRoles.Length ||
+            requiredRoles.Any(role => !result.Roles.ContainsKey(role)) ||
+            requiredLayoutTiles.Any(required =>
+                !result.Roles.TryGetValue(required.Key, out var role) ||
+                required.Value.Any(tile => !role.Layout.ContainsKey(tile))) ||
+            result.Roles.Values.Any(role =>
+                string.IsNullOrWhiteSpace(role.Document) ||
+                string.IsNullOrWhiteSpace(role.MenuName) ||
+                !result.Fonts.ContainsKey(role.BodyFontId) ||
+                !result.Fonts.ContainsKey(role.TitleFontId)))
+            throw new InvalidOperationException("Owned gameplay UI presentation is incomplete.");
+        return result;
+    }
+
+    private static OwnedUiTexture ParseTexture(JsonElement source)
     {
         var path = source.GetProperty("png").GetString()!;
         VerifyHash(path, source.GetProperty("pngSha256").GetString()!);
-        var result = new OpeningTexture(
+        var result = new OwnedUiTexture(
             System.IO.Path.GetFullPath(path),
             new Vector2I(
                 source.GetProperty("width").GetInt32(),
@@ -146,7 +243,7 @@ internal sealed record OpeningManifest(
         return result;
     }
 
-    private static OpeningBitmapFont ParseFont(JsonElement source)
+    private static OwnedBitmapFont ParseFont(JsonElement source)
     {
         if (source.GetProperty("schema").GetString() != "opennv-owned-gamebryo-bitmap-font/v1")
             throw new InvalidOperationException("Owned opening font has an unexpected contract.");
@@ -155,7 +252,7 @@ internal sealed record OpeningManifest(
             source.GetProperty("sha256").GetString()!);
         var glyphs = source.GetProperty("glyphs")
             .EnumerateArray()
-            .Select(value => new OpeningGlyph(
+            .Select(value => new OwnedUiGlyph(
                 value.GetProperty("codepoint").GetInt32(),
                 ReadRect(value.GetProperty("uvRectPixels")),
                 ReadVector(value.GetProperty("sizePixels")),
@@ -163,7 +260,7 @@ internal sealed record OpeningManifest(
                 value.GetProperty("verticalBearingPixels").GetSingle(),
                 value.GetProperty("advancePixels").GetSingle()))
             .ToArray();
-        var result = new OpeningBitmapFont(
+        var result = new OwnedBitmapFont(
             source.GetProperty("logicalPath").GetString()!,
             source.GetProperty("lineHeightPixels").GetSingle(),
             source.GetProperty("ascentPixels").GetSingle(),
@@ -187,11 +284,11 @@ internal sealed record OpeningManifest(
         return result;
     }
 
-    private static OpeningMenuStyle ParseStyle(JsonElement presentation)
+    private static OwnedUiStyle ParseStyle(JsonElement presentation)
     {
         var button = presentation.GetProperty("buttonStyle");
         var globals = presentation.GetProperty("globalStyleTraits");
-        var result = new OpeningMenuStyle(
+        var result = new OwnedUiStyle(
             button.GetProperty("horizontalPaddingPixels").GetSingle(),
             button.GetProperty("verticalPaddingPixels").GetSingle(),
             button.GetProperty("textOffsetYPixels").GetSingle(),
@@ -256,33 +353,3 @@ internal sealed record OpeningMenuButton(
     string Action,
     string Label,
     Rect2 Rect);
-
-internal sealed record OpeningTexture(string Path, Vector2I Size);
-
-internal sealed record OpeningBitmapFont(
-    string LogicalPath,
-    float LineHeightPixels,
-    float AscentPixels,
-    float DescentPixels,
-    OpeningTexture Atlas,
-    IReadOnlyList<OpeningGlyph> Glyphs);
-
-internal sealed record OpeningGlyph(
-    int Codepoint,
-    Rect2 UvRect,
-    Vector2 Size,
-    float HorizontalOffsetPixels,
-    float VerticalBearingPixels,
-    float AdvancePixels);
-
-internal sealed record OpeningMenuStyle(
-    float HorizontalPaddingPixels,
-    float VerticalPaddingPixels,
-    float TextOffsetYPixels,
-    float LineThicknessPixels,
-    float LineBrightness,
-    float DisabledLineBrightness,
-    float TextBrightness,
-    float DisabledTextBrightness,
-    float BackgroundFillAlpha,
-    float BackgroundFillBrightness);

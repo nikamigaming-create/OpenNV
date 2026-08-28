@@ -86,7 +86,7 @@
             "hex-tactical": { "ready": false, "status": "not-implemented" },
             "openxr": { "ready": true, "status": "experimental-headset-gate-pending" }
           },
-          "message": "Playable Goodsprings sandbox route",
+          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy runtime shell and playable Goodsprings route; complete Gamebryo tile interaction and retail UI parity remain pending.",
           "unavailableDlc": []
         },
         "jam": {

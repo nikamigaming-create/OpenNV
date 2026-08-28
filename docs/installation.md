@@ -66,7 +66,12 @@ non-playable. TTW is an edition, not a fifth game button. On
 this development machine Fallout 1's generated V13ENT
 inputs and Fallout 3's owned GOTY profile are registered. New Vegas launches the
 owned menu, skippable intro, and Doc Mitchell route from the verified local
-cache. The separate production Goodsprings active set includes the reciprocal
+cache. Its campaign state uses `user://saves/new-vegas-opening-v1.json`, kept
+separate from the older Goodsprings sandbox save. After the opening completes,
+its source-bound HUD/Pip-Boy runtime shell
+reads the same inventory, quest, map, and save state; complete tile interaction
+and retail UI parity remain pending. STATS currently shares the verified ITEMS
+frame while its remaining Gamebryo layout expressions are unsupported. The separate production Goodsprings active set includes the reciprocal
 Doc Mitchell house/exterior exit. The registered Fallout 3 development frontend opens its
 profile-backed menu, plays a locally
 converted and hash-verified copy of the owned intro, and converges through

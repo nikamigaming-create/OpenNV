@@ -32,6 +32,8 @@ internal sealed record OpeningCampaignState(
 {
     internal const string ExpectedSchema = "opennv-opening-campaign-state/v1";
 
+    internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
+
     internal static OpeningCampaignState Parse(JsonElement source)
     {
         var result = new OpeningCampaignState(
@@ -71,7 +73,13 @@ internal sealed record OpeningCampaignState(
                 .Select(value => value.GetInt32())
                 .ToArray(),
             OpeningTransformState.Parse(source.GetProperty(nameof(PlayerTransform))),
-            OpeningTransformState.Parse(source.GetProperty(nameof(GuideTransform))));
+            OpeningTransformState.Parse(source.GetProperty(nameof(GuideTransform))))
+        {
+            EquippedWeapon = source.TryGetProperty(nameof(EquippedWeapon), out var weapon) &&
+                weapon.ValueKind == JsonValueKind.Object
+                ? OpeningEquippedWeaponState.Parse(weapon)
+                : null,
+        };
         result.Validate();
         return result;
     }
@@ -97,6 +105,9 @@ internal sealed record OpeningCampaignState(
                 Globals.Count ||
             Inventory.Select(value => value.FormId).Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
                 Inventory.Count ||
+            EquippedItemFormIds.Any(formId =>
+                !Inventory.Any(item =>
+                    item.FormId.Equals(formId, StringComparison.OrdinalIgnoreCase))) ||
             Objectives.Select(value => (value.QuestFormId, value.Index)).Distinct().Count() !=
                 Objectives.Count ||
             !PsychologyScores.Values.All(value => value >= 0) ||
@@ -111,6 +122,14 @@ internal sealed record OpeningCampaignState(
             objective.Validate();
         foreach (var item in Inventory)
             item.Validate();
+        EquippedWeapon?.Validate();
+        if (EquippedWeapon is { } weapon &&
+            (!EquippedItemFormIds.Contains(weapon.WeaponFormId, StringComparer.OrdinalIgnoreCase) ||
+             !Inventory.Any(item =>
+                 item.FormId.Equals(weapon.WeaponFormId, StringComparison.OrdinalIgnoreCase) &&
+                 item.RecordType == "WEAP")))
+            throw new InvalidOperationException(
+                "Saved opening equipped weapon is absent from authoritative inventory state.");
         PlayerTransform.Validate();
         GuideTransform.Validate();
     }
@@ -139,6 +158,31 @@ internal sealed record OpeningCampaignState(
 
     private static IReadOnlyList<string> ReadStrings(JsonElement source) =>
         source.EnumerateArray().Select(value => value.GetString()!).ToArray();
+}
+
+internal sealed record OpeningEquippedWeaponState(
+    string WeaponFormId,
+    string? AmmoFormId,
+    int Damage,
+    int ClipSize,
+    int AmmoInMagazine)
+{
+    internal static OpeningEquippedWeaponState Parse(JsonElement source) => new(
+        source.GetProperty(nameof(WeaponFormId)).GetString()!,
+        source.GetProperty(nameof(AmmoFormId)).ValueKind == JsonValueKind.String
+            ? source.GetProperty(nameof(AmmoFormId)).GetString()
+            : null,
+        source.GetProperty(nameof(Damage)).GetInt32(),
+        source.GetProperty(nameof(ClipSize)).GetInt32(),
+        source.GetProperty(nameof(AmmoInMagazine)).GetInt32());
+
+    internal void Validate()
+    {
+        if (FalloutFormId.Normalize(WeaponFormId) != WeaponFormId ||
+            AmmoFormId is not null && FalloutFormId.Normalize(AmmoFormId) != AmmoFormId ||
+            Damage <= 0 || ClipSize <= 0 || AmmoInMagazine < 0 || AmmoInMagazine > ClipSize)
+            throw new InvalidOperationException("Saved opening weapon state is invalid.");
+    }
 }
 
 internal sealed record OpeningQuestState(

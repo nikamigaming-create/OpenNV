@@ -150,7 +150,8 @@ interchangeable.
 | Whole official CELL/child denominator and compile plan | inventory `proven`; runtime/parity `pending` | [Whole-game CELL parity](whole-game-cell-parity.md) |
 | Whole official actor/creature denominator | inventory `proven`; runtime/parity `pending` | [Whole-game actor and creature parity](whole-game-actor-creature-parity.md) |
 | Materials, FaceGen/LIP, and bounded OpenXR paths | mixed `partial` | [Material contract](evidence/fnv-retail-material-shader-contract.md), [FaceGen animation contract](evidence/fnv-retail-facegen-animation-contract.md), [OpenXR contract](evidence/openxr-runtime-contract.md) |
-| Retail HUD/Pip-Boy and full campaigns | `pending` | This plan |
+| Retail HUD/Pip-Boy | source contract/runtime shell `partial`; complete tile behavior and parity `pending` | This plan |
+| Full campaigns | `pending` | This plan |
 | JAM and TTW | TTW runtime support is absent; JAM is dependency- and portable-semantic-gated with bounded JVS sprint and JBT time-dilation semantics transported, while both launcher routes remain disabled | [Mod policy](mods.md) |
 | Public playable package | `pending` | [Release policy](nightlies.md) |
 
@@ -173,14 +174,27 @@ Implementation order:
 
 1. Promote the normal front-end route. New Game must enter the authored opening;
    Continue/Load must reflect and restore the canonical save. The end-to-end
-   proof may not use `--new-game` to bypass the menu.
-2. Compile the owned HUD/Pip-Boy menu, XML, font, image, inventory, equipment,
+   proof may not use `--new-game` to bypass the menu. Campaign admission now
+   joins the nested opening inventory, equipment/weapon metadata, and player
+   transform to the ordinary gameplay fields before enabling Continue; later
+   completed-campaign saves update both representations from the live session.
+2. **Partial:** compile the owned HUD/Pip-Boy menu, XML, font, image, inventory, equipment,
    quest, map, and control sources into neutral versioned UI contracts. Preserve
    the owned XML input format for stock/JAM/TTW compatibility; do not bake a
-   Doc-specific Godot layout.
-3. Add one generic UI model/controller over authoritative campaign state. It
+   Doc-specific Godot layout. The current contract binds HUD/STATS/ITEMS/DATA
+   document closures, exact XML hashes, selected owned fonts and prepared
+   textures, the Pip-Boy background, and selected HUD/ITEMS/DATA source
+   rectangles. STATS currently reuses the verified ITEMS frame because its
+   source rectangle depends on unsupported Gamebryo expressions; the remaining
+   tile/data-binding semantics are still open.
+3. **Partial:** add one generic UI model/controller over authoritative campaign state. It
    must support the stock HUD plus Pip-Boy status, items, data/quests, and local
-   map surfaces; flat and wrist presentation consume the same model.
+   map surfaces; flat and wrist presentation consume the same model. The current
+   controller reads that one snapshot, gates the gameplay UI from the authored
+   Pip-Boy control state, and renders the owned fonts/background and selected
+   reference-canvas rectangles in flat mode. The wrist currently shows only a
+   status view from that shared snapshot; complete stock interaction and pixel
+   parity remain pending.
 4. Join the stage-200 inventory/equipment FormIDs to the ordinary gameplay
    inventory and visible first-person presentation. Equip, holster, use, drop,
    and save/reload operate through one item state path.

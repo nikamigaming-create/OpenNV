@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
@@ -38,6 +39,7 @@ internal partial class GameplaySession : Node
     private int _ammoInMagazine;
     private int _shotsFired;
     private OpeningCampaignState? _openingState;
+    private OwnedGameplayUiPresentation? _gameplayUi;
 
     internal bool ObjectiveComplete => ObjectiveStage == SandboxObjectiveStage.Complete;
     internal string SavePath => _savePath;
@@ -63,6 +65,35 @@ internal partial class GameplaySession : Node
         !_doorStates.GetValueOrDefault(_entryDoorFormId) ? SandboxObjectiveStage.OpenEntryDoor :
         SandboxObjectiveStage.Complete;
 
+    internal static bool CanContinueOpening(
+        string savePath,
+        string expectedCellFormId,
+        Func<OpeningCampaignState, bool> acceptsOpeningState)
+    {
+        if (!File.Exists(savePath))
+            return false;
+        GameplaySession? probe = null;
+        try
+        {
+            probe = new GameplaySession
+            {
+                _savePath = savePath,
+            };
+            probe.Load(expectedCellFormId);
+            return probe._openingState is not null &&
+                acceptsOpeningState(probe._openingState) &&
+                probe.HasConsistentOpeningGameplayState();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+        finally
+        {
+            probe?.Free();
+        }
+    }
+
     internal void Configure(
         string cellFormId,
         string cellEditorId,
@@ -73,7 +104,8 @@ internal partial class GameplaySession : Node
         bool loadExistingSave = true,
         bool showHud = true,
         bool useClassicDioramaHud = false,
-        string? objectiveOverride = null)
+        string? objectiveOverride = null,
+        OwnedGameplayUiPresentation? gameplayUi = null)
     {
         if (useXrHud && useClassicDioramaHud)
             throw new ArgumentException(
@@ -87,6 +119,7 @@ internal partial class GameplaySession : Node
         _showHud = showHud;
         _useClassicDioramaHud = useClassicDioramaHud;
         _objectiveOverride = objectiveOverride;
+        _gameplayUi = gameplayUi;
         _savePath = ResolvePath(configuredSavePath ?? configuration.Hud.DefaultSavePath);
         if (loadExistingSave)
             Load(cellFormId);
@@ -101,7 +134,8 @@ internal partial class GameplaySession : Node
             _configuration,
             _useXrHud,
             _showHud,
-            _useClassicDioramaHud);
+            _useClassicDioramaHud,
+            _gameplayUi);
         RefreshHud(
             _useClassicDioramaHud
                 ? "WASD pan • Wheel zoom • Q/E rotate 60° • Home reset • F5 save"
@@ -137,6 +171,9 @@ internal partial class GameplaySession : Node
     internal void TogglePipBoy() => _uiController?.TogglePipBoy();
 
     internal void ClosePipBoy() => _uiController?.ClosePipBoy();
+
+    internal void SetGameplayUiVisible(bool visible) =>
+        _uiController?.SetGameplayVisible(visible);
 
     internal GameplayUiSnapshot BuildUiSnapshot()
     {
@@ -288,6 +325,19 @@ internal partial class GameplaySession : Node
                 item.EditorId,
                 item.RecordType,
                 item.Count);
+        if (_equippedWeaponFormId is not null &&
+            (!_inventory.TryGetValue(_equippedWeaponFormId, out var equipped) ||
+                equipped.RecordType != "WEAP" ||
+                _weaponAmmoFormId is null ||
+                _weaponDamage <= 0 ||
+                _weaponClipSize <= 0))
+        {
+            _equippedWeaponFormId = null;
+            _weaponAmmoFormId = null;
+            _weaponDamage = 0;
+            _weaponClipSize = 0;
+            _ammoInMagazine = 0;
+        }
         Save();
     }
 
@@ -366,6 +416,7 @@ internal partial class GameplaySession : Node
     internal void Save()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_savePath)!);
+        SynchronizeOpeningGameplayState();
         var capturedPlayerTransform = _player is null
             ? null
             : PlayerTransformState.Capture(_player);
@@ -534,6 +585,86 @@ internal partial class GameplaySession : Node
                     throw new InvalidOperationException("Saved player transform is malformed.");
             }
         }
+        if (_openingState is not null && _loadedPlayerTransform is null)
+            _loadedPlayerTransform = PlayerTransformState.FromOpening(_openingState.PlayerTransform);
+    }
+
+    internal bool HasConsistentOpeningGameplayState()
+    {
+        if (_openingState is null || _inventory.Count != _openingState.Inventory.Count)
+            return false;
+        foreach (var expected in _openingState.Inventory)
+        {
+            if (!_inventory.TryGetValue(expected.FormId, out var actual) ||
+                !actual.EditorId.Equals(expected.EditorId, StringComparison.OrdinalIgnoreCase) ||
+                !actual.RecordType.Equals(expected.RecordType, StringComparison.Ordinal) ||
+                actual.Count != expected.Count)
+                return false;
+        }
+        if (_loadedPlayerTransform is null ||
+            !_loadedPlayerTransform.Matches(_openingState.PlayerTransform))
+            return false;
+        var weapon = _openingState.EquippedWeapon;
+        if (weapon is null)
+            return _equippedWeaponFormId is null && _weaponAmmoFormId is null &&
+                _weaponDamage == 0 && _weaponClipSize == 0 && _ammoInMagazine == 0;
+        return string.Equals(
+                _equippedWeaponFormId,
+                weapon.WeaponFormId,
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                _weaponAmmoFormId,
+                weapon.AmmoFormId,
+                StringComparison.OrdinalIgnoreCase) &&
+            _weaponDamage == weapon.Damage &&
+            _weaponClipSize == weapon.ClipSize &&
+            _ammoInMagazine == weapon.AmmoInMagazine;
+    }
+
+    private void SynchronizeOpeningGameplayState()
+    {
+        if (_openingState is not { Completed: true } opening)
+            return;
+        var inventory = _inventory.Values
+            .OrderBy(entry => entry.ItemFormId, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => new OpeningInventoryState(
+                entry.ItemFormId,
+                entry.EditorId,
+                entry.RecordType,
+                entry.Count))
+            .ToArray();
+        var equipped = opening.EquippedItemFormIds
+            .Where(formId =>
+                _inventory.TryGetValue(formId, out var item) && item.RecordType != "WEAP")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        OpeningEquippedWeaponState? weapon = null;
+        if (_equippedWeaponFormId is not null)
+        {
+            if (!_inventory.TryGetValue(_equippedWeaponFormId, out var item) ||
+                item.RecordType != "WEAP" || _weaponDamage <= 0 || _weaponClipSize <= 0 ||
+                _ammoInMagazine < 0 || _ammoInMagazine > _weaponClipSize)
+                throw new InvalidOperationException(
+                    "Equipped weapon state cannot be joined to authoritative campaign inventory.");
+            equipped.Add(_equippedWeaponFormId);
+            weapon = new OpeningEquippedWeaponState(
+                _equippedWeaponFormId,
+                _weaponAmmoFormId,
+                _weaponDamage,
+                _weaponClipSize,
+                _ammoInMagazine);
+        }
+        _openingState = opening with
+        {
+            Inventory = inventory,
+            EquippedItemFormIds = equipped
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            PlayerTransform = _player is null
+                ? opening.PlayerTransform
+                : OpeningTransformState.Capture(_player),
+            EquippedWeapon = weapon,
+        };
+        _openingState.Validate();
     }
 
     private void AddInventory(string itemFormId, string editorId, string recordType, int count)
@@ -602,6 +733,30 @@ internal partial class GameplaySession : Node
                     rotationValues[3]));
             result.Validate();
             return result;
+        }
+
+        internal static PlayerTransformState FromOpening(OpeningTransformState source)
+        {
+            source.Validate();
+            return new PlayerTransformState(
+                new Vector3(source.Position[0], source.Position[1], source.Position[2]),
+                new Quaternion(
+                    source.Rotation[0],
+                    source.Rotation[1],
+                    source.Rotation[2],
+                    source.Rotation[3]));
+        }
+
+        internal bool Matches(OpeningTransformState source)
+        {
+            source.Validate();
+            return Position.X == source.Position[0] &&
+                Position.Y == source.Position[1] &&
+                Position.Z == source.Position[2] &&
+                Rotation.X == source.Rotation[0] &&
+                Rotation.Y == source.Rotation[1] &&
+                Rotation.Z == source.Rotation[2] &&
+                Rotation.W == source.Rotation[3];
         }
 
         internal void Apply(CellPlayer player)

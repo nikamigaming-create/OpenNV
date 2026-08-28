@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -58,7 +59,7 @@ internal partial class RetailOpening : CanvasLayer
             Name = "MainMenuBackground",
             Position = Vector2.Zero,
             Size = manifest.CanvasSize,
-            Texture = OpeningUiTheme.LoadTexture(manifest.BackgroundTexturePath),
+            Texture = OwnedUiTheme.LoadTexture(manifest.BackgroundTexturePath),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale,
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -70,7 +71,7 @@ internal partial class RetailOpening : CanvasLayer
             Name = "MainMenuTitle",
             Position = manifest.TitleRect.Position,
             Size = manifest.TitleRect.Size,
-            Texture = OpeningUiTheme.LoadTexture(manifest.TitleTexturePath),
+            Texture = OwnedUiTheme.LoadTexture(manifest.TitleTexturePath),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale,
             Modulate = manifest.MainMenuColor,
@@ -78,7 +79,7 @@ internal partial class RetailOpening : CanvasLayer
         };
         _canvas.AddChild(title);
 
-        var font = OpeningUiTheme.BuildFont(manifest.Font);
+        var font = OwnedUiTheme.BuildFont(manifest.Font);
         Button? initialFocus = null;
         foreach (var authored in manifest.Buttons)
         {
@@ -180,7 +181,7 @@ internal partial class RetailOpening : CanvasLayer
             viewportSize.Y / _manifest.CanvasSize.Y);
         _canvas.Scale = Vector2.One * scale;
         _canvas.Position =
-            (viewportSize - _manifest.CanvasSize * scale) * OpeningUiTheme.CenteringFactor;
+            (viewportSize - _manifest.CanvasSize * scale) * OwnedUiTheme.CenteringFactor;
     }
 
     private Button BuildButton(OpeningMenuButton authored, FontFile font)
@@ -196,7 +197,11 @@ internal partial class RetailOpening : CanvasLayer
             FocusMode = Control.FocusModeEnum.All,
             MouseDefaultCursorShape = Control.CursorShape.PointingHand,
         };
-        OpeningUiTheme.ApplyButton(button, font, _manifest);
+        OwnedUiTheme.ApplyButton(
+            button,
+            font,
+            _manifest.MainMenuColor,
+            _manifest.Style);
         return button;
     }
 }
