@@ -9,7 +9,7 @@
     "mapRelativePath": "mods/fo1_base/maps/V13ENT.MAP",
     "mapSha256": "02b6987038a0c94c8226aa4df048f49bfcb59dfd9339a4a6a3b48da622b2a2d7",
     "floorGridSha256": "5ddcdaaf9cbe23247183c6424e55c77bc1c9a97d6c18ee389977d04fd4957336",
-    "objectContractSha256": "6c29b67fdb317f6f1a1efbcb95028c4b1fcc477927b0d912a6377135723b38ab",
+    "objectContractSha256": "d0cc7425cecf4c80b8743d2945561562b642774312a037391bf017a90e15b382",
     "fallout2MasterSha256": "9b096d3035edafd4077deeb8ee7877a803b9db98497aa4596624b5c058a84711",
     "fallout2CritterSha256": "da83d615967c0bac41fbc50e6b86b3088401ff69ed9d8b2e5be1d6ac0c125bcd",
     "paletteRelativePath": "mods/fo1_base/color.pal",
@@ -97,7 +97,7 @@
     "artFilename": "v13secr2.frm",
     "frameSerial": 130,
     "frameArtFilename": "v13secr3.frm",
-    "proofSha256": "4e0ce6237ae2d2f2c82117b3eec288cbbf8a52f7738594acd2e5e1f06e8f91ac",
+    "proofSha256": "d5dcc0477bafee98506abc7b13d55f616805143e9d9e63a8a825a778cab16136",
     "targetUnitsToMeters": 0.0142875
   },
   "tacticalProof": {

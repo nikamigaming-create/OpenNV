@@ -113,6 +113,22 @@ internal partial class Fo1CaveCutaway : Node
             mesh.MaterialOverride = null;
             for (var surface = 0; surface < count; surface++)
             {
+                if (activeMaterials[surface] is ShaderMaterial retailSource &&
+                    retailSource.ResourceName.Equals(
+                        RuntimeMaterialLoader.RetailAmbientDirectionalLambertResourceName,
+                        StringComparison.Ordinal))
+                {
+                    var retailMelt = PrepareRetailMeltMaterial(
+                        retailSource,
+                        entry.Root.Name,
+                        surface,
+                        radius,
+                        tacticalCutHeight,
+                        profile);
+                    mesh.SetSurfaceOverrideMaterial(surface, retailMelt);
+                    yield return retailMelt;
+                    continue;
+                }
                 if (activeMaterials[surface] is not StandardMaterial3D source ||
                     source.Transparency is not (
                         BaseMaterial3D.TransparencyEnum.Disabled or
@@ -173,6 +189,114 @@ internal partial class Fo1CaveCutaway : Node
             }
         }
     }
+
+    private static ShaderMaterial PrepareRetailMeltMaterial(
+        ShaderMaterial source,
+        string instanceName,
+        int surface,
+        float radius,
+        float tacticalCutHeight,
+        Fo1CutawayProfile profile)
+    {
+        const string vertexMarker = "void vertex() {";
+        const string fragmentMarker = "void fragment() {";
+        var sourceShader = source.Shader ?? throw new InvalidOperationException(
+            "Fallout retail cave material has no shader.");
+        var code = sourceShader.Code;
+        if (code.IndexOf(vertexMarker, StringComparison.Ordinal) < 0 ||
+            code.IndexOf(vertexMarker, StringComparison.Ordinal) !=
+                code.LastIndexOf(vertexMarker, StringComparison.Ordinal) ||
+            code.IndexOf(fragmentMarker, StringComparison.Ordinal) < 0 ||
+            code.IndexOf(fragmentMarker, StringComparison.Ordinal) !=
+                code.LastIndexOf(fragmentMarker, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Fallout retail cave shader lacks unique vertex/fragment injection points.");
+
+        code = code.Replace(
+            vertexMarker,
+            RetailMeltDeclarations + "\n" + vertexMarker +
+                "\n    opennv_melt_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;",
+            StringComparison.Ordinal);
+        code = code.Replace(
+            fragmentMarker,
+            fragmentMarker + "\n" + RetailMeltFragment,
+            StringComparison.Ordinal);
+
+        var material = source.Duplicate(true) as ShaderMaterial
+            ?? throw new InvalidOperationException(
+                "Could not duplicate a Fallout retail cave material.");
+        var meltShader = sourceShader.Duplicate(true) as Shader
+            ?? throw new InvalidOperationException(
+                "Could not duplicate a Fallout retail cave shader.");
+        meltShader.Code = code;
+        material.Shader = meltShader;
+        material.ResourceName = $"FO1 retail cave camera melt {instanceName} {surface}";
+        material.SetShaderParameter("melt_radius", radius);
+        material.SetShaderParameter("melt_edge", profile.MeltEdgeMeters);
+        material.SetShaderParameter("tactical_cut_height", tacticalCutHeight);
+        material.SetShaderParameter("melt_enabled", true);
+        material.SetShaderParameter("melt_tactical", true);
+        return material;
+    }
+
+    private const string RetailMeltDeclarations = """
+        uniform bool melt_enabled = true;
+        uniform bool melt_tactical = true;
+        uniform vec3 melt_camera;
+        uniform vec3 melt_target_a;
+        uniform vec3 melt_target_b;
+        uniform float melt_radius = 2.0;
+        uniform float melt_edge = 0.07;
+        uniform float tactical_cut_height = -100.0;
+        varying vec3 opennv_melt_world_position;
+
+        float opennv_ordered_dither(vec2 pixel) {
+            vec2 cell = mod(floor(pixel), 4.0);
+            float row0 = cell.x < 1.0 ? 0.0 : cell.x < 2.0 ? 8.0 : cell.x < 3.0 ? 2.0 : 10.0;
+            float row1 = cell.x < 1.0 ? 12.0 : cell.x < 2.0 ? 4.0 : cell.x < 3.0 ? 14.0 : 6.0;
+            float row2 = cell.x < 1.0 ? 3.0 : cell.x < 2.0 ? 11.0 : cell.x < 3.0 ? 1.0 : 9.0;
+            float row3 = cell.x < 1.0 ? 15.0 : cell.x < 2.0 ? 7.0 : cell.x < 3.0 ? 13.0 : 5.0;
+            float value = cell.y < 1.0 ? row0 : cell.y < 2.0 ? row1 : cell.y < 3.0 ? row2 : row3;
+            return (value + 0.5) / 16.0;
+        }
+
+        float opennv_segment_distance(vec3 point, vec3 start, vec3 finish) {
+            vec3 segment = finish - start;
+            float position = clamp(
+                dot(point - start, segment) / max(dot(segment, segment), 0.0001),
+                0.0,
+                1.0);
+            return length(point - (start + segment * position));
+        }
+
+        float opennv_target_melt(vec3 point, vec3 target) {
+            float tunnel = opennv_segment_distance(point, melt_camera, target);
+            float bubble = length(point - target);
+            float distance_to_opening = min(tunnel, bubble);
+            return 1.0 - smoothstep(
+                max(0.05, melt_radius - melt_edge),
+                melt_radius + melt_edge,
+                distance_to_opening);
+        }
+        """;
+
+    private const string RetailMeltFragment = """
+            if (melt_enabled) {
+                float melt = max(
+                    opennv_target_melt(opennv_melt_world_position, melt_target_a),
+                    opennv_target_melt(opennv_melt_world_position, melt_target_b));
+                if (melt_tactical && tactical_cut_height > -99.0) {
+                    float roof_slice = smoothstep(
+                        tactical_cut_height - 0.06,
+                        tactical_cut_height + 0.06,
+                        opennv_melt_world_position.y);
+                    melt = max(melt, roof_slice);
+                }
+                if (melt > opennv_ordered_dither(FRAGCOORD.xy)) {
+                    discard;
+                }
+            }
+        """;
 
     private static string Role(Node3D root) => root.HasMeta("fo1_asset_role")
         ? root.GetMeta("fo1_asset_role").AsString()

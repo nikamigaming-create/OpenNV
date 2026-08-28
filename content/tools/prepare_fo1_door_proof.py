@@ -198,12 +198,18 @@ def build(
 
         def relocated_texture(artifact: object) -> dict[str, object]:
             row = artifact.manifest()
-            row["png"] = str((cache_root / artifact.png_path.relative_to(staging)).resolve())
+            for field in ("dds", "png", "rgba8MipChain"):
+                if field in row:
+                    row[field] = str(
+                        (cache_root / Path(str(row[field])).relative_to(staging)).resolve()
+                    )
             if "cubeFaces" in row:
                 row["cubeFaces"] = [
                     {
                         **face,
-                        "png": str((cache_root / Path(face["png"]).relative_to(staging)).resolve()),
+                        "png": str(
+                            (cache_root / Path(str(face["png"])).relative_to(staging)).resolve()
+                        ),
                     }
                     for face in row["cubeFaces"]
                 ]

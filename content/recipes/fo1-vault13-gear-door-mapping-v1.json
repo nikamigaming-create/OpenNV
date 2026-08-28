@@ -1,7 +1,7 @@
 {
   "schema": "opennv-fo1-object-presentation-map/v1",
   "id": "fo1-vault13-gear-door-mapping-v1",
-  "sourceObjectContractSha256": "6c29b67fdb317f6f1a1efbcb95028c4b1fcc477927b0d912a6377135723b38ab",
+  "sourceObjectContractSha256": "d0cc7425cecf4c80b8743d2945561562b642774312a037391bf017a90e15b382",
   "sourceDoor": {
     "serial": 129,
     "id": 152,

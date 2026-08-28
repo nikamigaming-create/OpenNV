@@ -180,17 +180,18 @@ def prepare(
         actor_recipe_ids = [str(value) for value in cell_recipe_document["actorRecipes"]]
         if linked_recipe_document is not None:
             actor_recipe_ids.extend(str(value) for value in linked_recipe_document["actorRecipes"])
-        actor_scenes = prepare_actor_set(
-            data_root,
-            cache_root,
-            actor_recipe_ids,
-            {
-                str(row["referenceFormId"]).casefold(): tuple(
-                    str(path) for path in row["logicalPaths"]
-                )
-                for row in opening["manifest"]["newGameFlow"]["actorAnimations"]
-            },
-        )
+        if actor_recipe_ids:
+            actor_scenes = prepare_actor_set(
+                data_root,
+                cache_root,
+                actor_recipe_ids,
+                {
+                    str(row["referenceFormId"]).casefold(): tuple(
+                        str(path) for path in row["logicalPaths"]
+                    )
+                    for row in opening["manifest"]["newGameFlow"]["actorAnimations"]
+                },
+            )
     manifest = {
         "schema": SCHEMA,
         "status": "prepared-legal-assets",

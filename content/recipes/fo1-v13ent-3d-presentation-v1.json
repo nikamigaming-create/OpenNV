@@ -511,7 +511,7 @@
         "uniformScaleJitterFraction": 0.04,
         "verticalScaleJitterFraction": 0.06,
         "hiddenSurfaceIdentities": [
-          "CaveRoomWall01:8@30"
+          "CaveRoomWall01:8"
         ]
       }
     },

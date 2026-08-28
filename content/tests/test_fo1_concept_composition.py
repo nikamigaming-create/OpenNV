@@ -104,7 +104,7 @@ class Fo1ConceptCompositionTest(unittest.TestCase):
             write_json(
                 donor,
                 {
-                    "schema": "opennv-cell-scene/v6",
+                    "schema": "opennv-cell-scene/v11",
                     "recipe": "donor",
                     "compiler": compiler,
                     "cell": {"formId": "00000020", "editorId": "DonorCell"},
@@ -138,7 +138,7 @@ class Fo1ConceptCompositionTest(unittest.TestCase):
                     "schema": "opennv-fo1-concept-composition/v1",
                     "id": "concept",
                     "donor": {
-                        "sceneSchema": "opennv-cell-scene/v6",
+                        "sceneSchema": "opennv-cell-scene/v11",
                         "recipe": "donor",
                         "cellFormId": "00000020",
                         "cellEditorId": "DonorCell",

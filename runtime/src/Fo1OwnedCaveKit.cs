@@ -722,9 +722,11 @@ internal static class Fo1OwnedCaveKit
         {
             for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
             {
+                var importedIdentity = RuntimeMaterialLoader.SourceSurfaceIdentity(mesh, surface);
                 var activeIdentity = mesh.GetActiveMaterial(surface)?.ResourceName;
                 var sourceIdentity = mesh.Mesh!.SurfaceGetMaterial(surface)?.ResourceName;
-                if (!string.Equals(activeIdentity, floorMaterialIdentity, StringComparison.Ordinal) &&
+                if (!string.Equals(importedIdentity, floorMaterialIdentity, StringComparison.Ordinal) &&
+                    !string.Equals(activeIdentity, floorMaterialIdentity, StringComparison.Ordinal) &&
                     !string.Equals(sourceIdentity, floorMaterialIdentity, StringComparison.Ordinal))
                     continue;
                 mesh.SetSurfaceOverrideMaterial(surface, new StandardMaterial3D
@@ -754,10 +756,13 @@ internal static class Fo1OwnedCaveKit
         {
             for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
             {
+                var importedIdentity = RuntimeMaterialLoader.SourceSurfaceIdentity(mesh, surface);
                 var activeIdentity = mesh.GetActiveMaterial(surface)?.ResourceName;
                 var sourceIdentity = mesh.Mesh!.SurfaceGetMaterial(surface)?.ResourceName;
-                var identity = identities.Contains(activeIdentity ?? string.Empty)
-                    ? activeIdentity
+                var identity = identities.Contains(importedIdentity ?? string.Empty)
+                    ? importedIdentity
+                    : identities.Contains(activeIdentity ?? string.Empty)
+                        ? activeIdentity
                     : identities.Contains(sourceIdentity ?? string.Empty)
                         ? sourceIdentity
                         : null;
@@ -1185,7 +1190,8 @@ internal static class Fo1OwnedCaveKit
                 "Fallout owned cave-wall dressing values are invalid.");
         var prototypeSurfaceIdentities = Descendants<MeshInstance3D>(dressing.Prototype!.Root)
             .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh?.GetSurfaceCount() ?? 0)
-                .Select(surface => mesh.GetActiveMaterial(surface)?.ResourceName ??
+                .Select(surface => RuntimeMaterialLoader.SourceSurfaceIdentity(mesh, surface) ??
+                    mesh.GetActiveMaterial(surface)?.ResourceName ??
                     mesh.Mesh!.SurfaceGetMaterial(surface)?.ResourceName ?? string.Empty))
             .ToHashSet(StringComparer.Ordinal);
         if (!dressing.HiddenSurfaceIdentities.IsSubsetOf(prototypeSurfaceIdentities))

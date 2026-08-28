@@ -20,7 +20,7 @@ from actor_gltf import (
     export_actor_gltf,
 )
 from bsa_archive import BsaArchive
-from cell_scene import environment_texture_paths
+from cell_scene import CELL_SCENE_SCHEMA, environment_texture_paths
 from export_static_nif_gltf import export_static_nif
 from prepare_legal_assets import file_sha256, find_required_file
 from prepare_actor import prepare_actor
@@ -115,7 +115,7 @@ def _static_gltf_bounds(model_path: Path, units_to_meters: float) -> dict[str, l
 def _select_cave_kit(
     donor: dict[str, object], recipe: dict[str, object]
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    if donor.get("schema") != "opennv-cell-scene/v6":
+    if donor.get("schema") != CELL_SCENE_SCHEMA:
         raise ValueError("Unexpected donor cave scene schema")
     cave_recipe = recipe["caveKit"]
     if donor.get("recipe") != cave_recipe["donorRecipe"]:
@@ -208,14 +208,14 @@ def _player_attachment_transform(
 def _select_player_weapon(
     donor: dict[str, object], recipe: dict[str, object], player_model_path: Path
 ) -> dict[str, object]:
-    if donor.get("schema") != "opennv-cell-scene/v6":
+    if donor.get("schema") != CELL_SCENE_SCHEMA:
         raise ValueError("Unexpected donor weapon scene schema")
     weapon_recipe = recipe["player"]["thirdPersonWeapon"]
     if weapon_recipe.get("schema") != (
         "opennv-fo1-third-person-held-weapon-recipe/v1"
     ):
         raise ValueError("Unexpected third-person weapon recipe schema")
-    loadout = donor.get("vr", {}).get("startingLoadout", {})
+    loadout = donor.get("firstPerson", {}).get("startingLoadout", {})
     expected_model_path = _texture_key(str(weapon_recipe["path"]))
     loadout_model_path = _texture_key(str(loadout.get("modelPath", "")))
     if not loadout_model_path.startswith("meshes\\"):

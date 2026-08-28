@@ -21,7 +21,7 @@ internal static class RuntimeMaterialLoader
         "OpenNV_RetailLandscapeWeightedAmbientDirectionalLambert";
     private const string RetailLightingContractSchema = "opennv-retail-material-lighting/v1";
     private const string RetailAmbientDirectionalLambertModel = "ambient-plus-directional-lambert";
-    private const string RetailAmbientDirectionalLambertResourceName =
+    internal const string RetailAmbientDirectionalLambertResourceName =
         "OpenNV_RetailAmbientDirectionalLambert";
     private const string RetailGrassMaterialResourceName =
         "OpenNV_RetailGrass23x002";
@@ -29,6 +29,17 @@ internal static class RuntimeMaterialLoader
         "OpenNV_RetailActorAmbientDirectionalLambert";
     internal const string RetailActorUnshadedMaterialResourceName =
         "OpenNV_RetailActorUnshaded";
+    private const string SourceSurfaceIdentityMetadataPrefix =
+        "opennv_source_surface_identity_";
+
+    internal static string? SourceSurfaceIdentity(MeshInstance3D mesh, int surface)
+    {
+        var key = SourceSurfaceIdentityMetadataPrefix + surface;
+        if (!mesh.HasMeta(key))
+            return null;
+        var identity = mesh.GetMeta(key).AsString();
+        return string.IsNullOrWhiteSpace(identity) ? null : identity;
+    }
 
     internal static LoadedTextures LoadTextures(JsonElement scene)
     {
@@ -339,6 +350,15 @@ internal static class RuntimeMaterialLoader
                     $"Imported glTF has no material surface named {expectedName} for asset " +
                     assetId);
             var surface = matches.Dequeue();
+            var identityKey = SourceSurfaceIdentityMetadataPrefix + surface.Surface;
+            if (surface.Mesh.HasMeta(identityKey) &&
+                !surface.Mesh.GetMeta(identityKey).AsString().Equals(
+                    expectedName,
+                    StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Imported glTF source surface identity changed for asset {assetId}: " +
+                    $"{surface.Mesh.Name}[{surface.Surface}]");
+            surface.Mesh.SetMeta(identityKey, expectedName);
             Material material;
             if (binding.TryGetProperty("retailGrassContract", out var retailGrassContract) &&
                 retailGrassContract.ValueKind != JsonValueKind.Null)

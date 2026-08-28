@@ -460,6 +460,13 @@ class CellCatalogTest(unittest.TestCase):
             "selected",
         )
 
+    def test_fo1_vault13_donor_recipe_matches_current_cell_contract(self) -> None:
+        recipe = load_recipe("fo1-vault13-cave-donor-smoke-v1")
+
+        self.assertEqual(recipe["id"], "fo1-vault13-cave-donor-smoke-v1")
+        self.assertIs(recipe["exportStrict"], False)
+        self.assertEqual(recipe["textureAliases"], {})
+
 
 if __name__ == "__main__":
     unittest.main()
