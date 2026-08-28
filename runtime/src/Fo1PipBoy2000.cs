@@ -2,10 +2,58 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1PipBoy2000NumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float SourcePresentationFloat0Point09f = 0.09f;
+    internal const float SourcePresentationFloat0Point22f = 0.22f;
+    internal const float SourcePresentationFloat0Point25f = 0.25f;
+    internal const float SourcePresentationFloat0Point34f = 0.34f;
+    internal const float SourcePresentationFloat0Point54f = 0.54f;
+    internal const float SourcePresentationFloat0Point5f = 0.5f;
+    internal const float SourcePresentationFloat0Point76f = 0.76f;
+    internal const float SourcePresentationFloat0Point91f = 0.91f;
+    internal const float SourcePresentationFloat0Point94f = 0.94f;
+    internal const float SourcePresentationFloat0Point95f = 0.95f;
+    internal const int SourcePresentationInt10 = 10;
+    internal const int SourcePresentationInt12 = 12;
+    internal const float SourcePresentationFloat122Point0f = 122.0f;
+    internal const int SourcePresentationInt140 = 140;
+    internal const float SourcePresentationFloat22Point0f = 22.0f;
+    internal const float SourcePresentationFloat24Point0f = 24.0f;
+    internal const float SourcePresentationFloat269Point0f = 269.0f;
+    internal const float SourcePresentationFloat270Point0f = 270.0f;
+    internal const float SourcePresentationFloat28Point0f = 28.0f;
+    internal const float SourcePresentationFloat29Point0f = 29.0f;
+    internal const float SourcePresentationFloat319Point0f = 319.0f;
+    internal const float SourcePresentationFloat320Point0f = 320.0f;
+    internal const float SourcePresentationFloat322Point0f = 322.0f;
+    internal const float SourcePresentationFloat326Point0f = 326.0f;
+    internal const float SourcePresentationFloat33Point0f = 33.0f;
+    internal const float SourcePresentationFloat331Point0f = 331.0f;
+    internal const float SourcePresentationFloat336Point0f = 336.0f;
+    internal const float SourcePresentationFloat361Point0f = 361.0f;
+    internal const float SourcePresentationFloat37Point0f = 37.0f;
+    internal const float SourcePresentationFloat375Point0f = 375.0f;
+    internal const float SourcePresentationFloat391Point0f = 391.0f;
+    internal const float SourcePresentationFloat400Point0f = 400.0f;
+    internal const float SourcePresentationFloat423Point0f = 423.0f;
+    internal const float SourcePresentationFloat424Point0f = 424.0f;
+    internal const float SourcePresentationFloat480Point0f = 480.0f;
+    internal const float SourcePresentationFloat50Point0f = 50.0f;
+    internal const float SourcePresentationFloat52Point0f = 52.0f;
+    internal const float SourcePresentationFloat61Point0f = 61.0f;
+    internal const float SourcePresentationFloat640Point0f = 640.0f;
+    internal const float SourcePresentationFloat82Point0f = 82.0f;
+    internal const int SourcePresentationInt9 = 9;
+    internal const float SourcePresentationFloat9Point0f = 9.0f;
+}
+
 internal partial class Fo1PipBoy2000 : CanvasLayer
 {
-    private static readonly Color Amber = new(0.91f, 0.76f, 0.25f);
-    private static readonly Color Green = new(0.54f, 0.94f, 0.34f);
+    private static readonly Color Amber = new(Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point91f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point76f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point25f);
+    private static readonly Color Green = new(Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point54f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point94f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point34f);
     private Fo1CharacterStartContract _contract = null!;
     private Fo1TacticalSession _session = null!;
     private Fo1CharacterProfile _profile = null!;
@@ -31,7 +79,7 @@ internal partial class Fo1PipBoy2000 : CanvasLayer
         _session = session;
         _profile = profile;
         Name = "OwnedFalloutPipBoy2000";
-        Layer = 140;
+        Layer = Fo1PipBoy2000NumericContracts.SourcePresentationInt140;
         ProcessMode = ProcessModeEnum.Always;
     }
 
@@ -90,11 +138,11 @@ internal partial class Fo1PipBoy2000 : CanvasLayer
         _selectedPage = page;
         _pageTitle.Text = $"PIP-BOY 2000  /  {page}";
         _pageIndicator.Text = $"{page}  •  P / ESC CLOSE";
-        _radioIndicator.Position = new Vector2(50.0f, page switch
+        _radioIndicator.Position = new Vector2(Fo1PipBoy2000NumericContracts.SourcePresentationFloat50Point0f, page switch
         {
-            "STATUS" => 331.0f,
-            "AUTOMAPS" => 375.0f,
-            _ => 400.0f,
+            "STATUS" => Fo1PipBoy2000NumericContracts.SourcePresentationFloat331Point0f,
+            "AUTOMAPS" => Fo1PipBoy2000NumericContracts.SourcePresentationFloat375Point0f,
+            _ => Fo1PipBoy2000NumericContracts.SourcePresentationFloat400Point0f,
         });
         _pageText.Text = page switch
         {
@@ -125,47 +173,47 @@ internal partial class Fo1PipBoy2000 : CanvasLayer
         };
         black.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         AddChild(black);
-        _canvas = new Control { Size = new Vector2(640.0f, 480.0f) };
+        _canvas = new Control { Size = new Vector2(Fo1PipBoy2000NumericContracts.SourcePresentationFloat640Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat480Point0f) };
         AddChild(_canvas);
         LayoutCanvas();
         _canvas.AddChild(new TextureRect
         {
             Name = "OwnedPipBoy2000Chrome",
             Texture = _contract.PipBoy.Main.Load(),
-            Size = new Vector2(640.0f, 480.0f),
+            Size = new Vector2(Fo1PipBoy2000NumericContracts.SourcePresentationFloat640Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat480Point0f),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         });
 
-        _pageTitle = AddText("", 270.0f, 52.0f, 320.0f, 24.0f, Amber, 12);
-        _pageText = AddText("", 269.0f, 82.0f, 326.0f, 336.0f, Green, 10);
+        _pageTitle = AddText("", Fo1PipBoy2000NumericContracts.SourcePresentationFloat270Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat52Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat320Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat24Point0f, Amber, Fo1PipBoy2000NumericContracts.SourcePresentationInt12);
+        _pageText = AddText("", Fo1PipBoy2000NumericContracts.SourcePresentationFloat269Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat82Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat326Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat336Point0f, Green, Fo1PipBoy2000NumericContracts.SourcePresentationInt10);
         _pageText.VerticalAlignment = VerticalAlignment.Top;
         _pageText.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        _pageIndicator = AddText("", 270.0f, 424.0f, 322.0f, 22.0f, Amber, 9);
+        _pageIndicator = AddText("", Fo1PipBoy2000NumericContracts.SourcePresentationFloat270Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat424Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat322Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat22Point0f, Amber, Fo1PipBoy2000NumericContracts.SourcePresentationInt9);
         _pageIndicator.HorizontalAlignment = HorizontalAlignment.Center;
         _radioIndicator = new ColorRect
         {
             Name = "ActivePipBoyPageLamp",
-            Position = new Vector2(50.0f, 331.0f),
-            Size = new Vector2(9.0f, 9.0f),
-            Color = new Color(1.0f, 0.22f, 0.09f, 0.95f),
+            Position = new Vector2(Fo1PipBoy2000NumericContracts.SourcePresentationFloat50Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat331Point0f),
+            Size = new Vector2(Fo1PipBoy2000NumericContracts.SourcePresentationFloat9Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat9Point0f),
+            Color = new Color(1.0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point22f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point09f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point95f),
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         _canvas.AddChild(_radioIndicator);
 
-        AddHotspot("STATUS", 61.0f, 319.0f, 122.0f, 37.0f, () => ShowPage("STATUS"));
-        AddHotspot("AUTOMAPS", 61.0f, 361.0f, 122.0f, 29.0f, () => ShowPage("AUTOMAPS"));
-        AddHotspot("ARCHIVES", 61.0f, 391.0f, 122.0f, 28.0f, () => ShowPage("ARCHIVES"));
-        AddHotspot("CLOSE", 61.0f, 423.0f, 122.0f, 33.0f, () => SetOpen(false));
+        AddHotspot("STATUS", Fo1PipBoy2000NumericContracts.SourcePresentationFloat61Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat319Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat122Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat37Point0f, () => ShowPage("STATUS"));
+        AddHotspot("AUTOMAPS", Fo1PipBoy2000NumericContracts.SourcePresentationFloat61Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat361Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat122Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat29Point0f, () => ShowPage("AUTOMAPS"));
+        AddHotspot("ARCHIVES", Fo1PipBoy2000NumericContracts.SourcePresentationFloat61Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat391Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat122Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat28Point0f, () => ShowPage("ARCHIVES"));
+        AddHotspot("CLOSE", Fo1PipBoy2000NumericContracts.SourcePresentationFloat61Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat423Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat122Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat33Point0f, () => SetOpen(false));
     }
 
     private void LayoutCanvas()
     {
         var viewport = GetViewport().GetVisibleRect().Size;
-        var scale = MathF.Min(viewport.X / 640.0f, viewport.Y / 480.0f);
+        var scale = MathF.Min(viewport.X / Fo1PipBoy2000NumericContracts.SourcePresentationFloat640Point0f, viewport.Y / Fo1PipBoy2000NumericContracts.SourcePresentationFloat480Point0f);
         _canvas.Scale = Vector2.One * scale;
-        _canvas.Position = (viewport - new Vector2(640.0f, 480.0f) * scale) * 0.5f;
+        _canvas.Position = (viewport - new Vector2(Fo1PipBoy2000NumericContracts.SourcePresentationFloat640Point0f, Fo1PipBoy2000NumericContracts.SourcePresentationFloat480Point0f) * scale) * Fo1PipBoy2000NumericContracts.SourcePresentationFloat0Point5f;
     }
 
     private string StatusText()

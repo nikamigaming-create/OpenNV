@@ -4,6 +4,15 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1CampaignPresentationCaptureNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const double AcceptanceDouble0Point0722 = 0.0722;
+    internal const double AcceptanceDouble0Point2126 = 0.2126;
+    internal const double AcceptanceDouble0Point7152 = 0.7152;
+}
+
 internal static class Fo1CampaignPresentationCapture
 {
     internal static async Task Run(
@@ -103,7 +112,7 @@ internal static class Fo1CampaignPresentationCapture
         for (var offset = 0; offset < data.Length; offset += 4)
         {
             var value =
-                (0.2126 * data[offset] + 0.7152 * data[offset + 1] + 0.0722 * data[offset + 2]) /
+                (Fo1CampaignPresentationCaptureNumericContracts.AcceptanceDouble0Point2126 * data[offset] + Fo1CampaignPresentationCaptureNumericContracts.AcceptanceDouble0Point7152 * data[offset + 1] + Fo1CampaignPresentationCaptureNumericContracts.AcceptanceDouble0Point0722 * data[offset + 2]) /
                 byte.MaxValue;
             luminance += value;
             luminanceSquared += value * value;

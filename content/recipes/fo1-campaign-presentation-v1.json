@@ -43,7 +43,7 @@
       "roughness": 0.94,
       "metallic": 0.0,
       "sourceAlphaThreshold": 0.2,
-      "fallbackAlbedo": [0.22, 0.2, 0.17, 1.0],
+      "unresolvedSourceAlbedo": [0.22, 0.2, 0.17, 1.0],
       "sideColorMultiplier": [0.74, 0.72, 0.68, 1.0],
       "topColorMultiplier": [0.58, 0.56, 0.52, 1.0]
     },

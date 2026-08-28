@@ -4,6 +4,16 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1CombatPresentationNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point0001f = 0.0001f;
+    internal const float PresentationFloat0Point5f = 0.5f;
+    internal const int PresentationInt32 = 32;
+    internal const int PresentationInt64 = 64;
+}
+
 internal partial class Fo1CombatPresentation : Node3D
 {
     private const string Schema = "opennv-fo1-combat-presentation/v1";
@@ -36,7 +46,7 @@ internal partial class Fo1CombatPresentation : Node3D
         _casingUnitsToMeters = source.GetProperty("unitsToMeters").GetSingle();
         if (_casingUnitsToMeters <= 0.0f)
             throw new InvalidOperationException("Fallout casing scale is invalid.");
-        if (profile.CasingCollisionLayer is < 1 or > 32)
+        if (profile.CasingCollisionLayer is < 1 or > Fo1CombatPresentationNumericContracts.PresentationInt32)
             throw new InvalidOperationException("Fallout casing collision layer is invalid.");
         AttachCasingGround();
 
@@ -62,7 +72,7 @@ internal partial class Fo1CombatPresentation : Node3D
 
         var audio = source.GetProperty("audio");
         var archiveHash = RequiredString(audio, "archiveSha256");
-        if (archiveHash.Length != 64)
+        if (archiveHash.Length != Fo1CombatPresentationNumericContracts.PresentationInt64)
             throw new InvalidOperationException("Fallout combat-audio archive hash is invalid.");
         foreach (var row in audio.GetProperty("events").EnumerateArray())
         {
@@ -176,6 +186,22 @@ internal partial class Fo1CombatPresentation : Node3D
         audioRoles = _audio.Keys.Order(StringComparer.Ordinal).ToArray(),
     };
 
+    internal void ClearTransientEffects()
+    {
+        foreach (var row in _timedNodes)
+        {
+            if (GodotObject.IsInstanceValid(row.Node) && !row.Node.IsQueuedForDeletion())
+                row.Node.QueueFree();
+        }
+        _timedNodes.Clear();
+        foreach (var player in Descendants<AudioStreamPlayer3D>(this))
+        {
+            if (!player.IsQueuedForDeletion())
+                player.QueueFree();
+        }
+        _audio.Clear();
+    }
+
     private void Impact(Vector3 position, Color color)
     {
         var node = new MeshInstance3D
@@ -253,7 +279,7 @@ internal partial class Fo1CombatPresentation : Node3D
             Position = new Vector3(
                 _profile.CasingGroundHalfExtentMeters,
                 _profile.CasingGroundHeightMeters -
-                    _profile.CasingGroundThicknessMeters * 0.5f,
+                    _profile.CasingGroundThicknessMeters * Fo1CombatPresentationNumericContracts.PresentationFloat0Point5f,
                 _profile.CasingGroundHalfExtentMeters),
         };
         ground.AddChild(new CollisionShape3D
@@ -280,7 +306,7 @@ internal partial class Fo1CombatPresentation : Node3D
     {
         var delta = endpoint - origin;
         var length = delta.Length();
-        if (length <= 0.0001f)
+        if (length <= Fo1CombatPresentationNumericContracts.PresentationFloat0Point0001f)
             return;
         var node = new MeshInstance3D
         {
@@ -295,7 +321,7 @@ internal partial class Fo1CombatPresentation : Node3D
             MaterialOverride = Material(color, _profile.TracerEmissionEnergy),
         };
         AddChild(node);
-        node.GlobalPosition = (origin + endpoint) * 0.5f;
+        node.GlobalPosition = (origin + endpoint) * Fo1CombatPresentationNumericContracts.PresentationFloat0Point5f;
         node.Quaternion = new Quaternion(Vector3.Up, delta.Normalized());
         _timedNodes.Add(new TimedNode(node, lifetime));
     }

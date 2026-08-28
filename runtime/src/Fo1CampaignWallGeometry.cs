@@ -29,7 +29,7 @@ internal static class Fo1CampaignWallGeometry
         var cellColors = ResolveConnectedColors(
             topology.Cells,
             sourceColors,
-            profile.FallbackAlbedo);
+            profile.UnresolvedSourceAlbedo);
         var renderMesh = BuildUnionMesh(
             topology.Cells,
             profile,
@@ -91,7 +91,7 @@ internal static class Fo1CampaignWallGeometry
     private static Dictionary<int, Color> ResolveConnectedColors(
         IReadOnlyCollection<Fo1CampaignWallCell> cells,
         IReadOnlyDictionary<int, Color> sourceColors,
-        Color fallback)
+        Color unresolvedColor)
     {
         var byTile = cells.ToDictionary(row => row.Tile);
         var direct = cells.ToDictionary(
@@ -122,7 +122,7 @@ internal static class Fo1CampaignWallGeometry
             }
             var componentColor = Average(
                 component.Where(tile => direct[tile].HasValue)
-                    .Select(tile => direct[tile]!.Value)) ?? fallback;
+                    .Select(tile => direct[tile]!.Value)) ?? unresolvedColor;
             foreach (var tile in component)
                 result.Add(tile, direct[tile] ?? componentColor);
         }

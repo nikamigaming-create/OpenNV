@@ -4,6 +4,60 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1CharacterStartContractNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const int SourcePresentationInt10 = 10;
+    internal const int SourcePresentationInt100 = 100;
+    internal const double SourcePresentationDouble100Point0 = 100.0;
+    internal const int SourcePresentationInt11 = 11;
+    internal const int SourcePresentationInt12 = 12;
+    internal const double SourcePresentationDouble130Point0 = 130.0;
+    internal const int SourcePresentationInt14 = 14;
+    internal const int SourcePresentationInt15 = 15;
+    internal const int SourcePresentationInt16 = 16;
+    internal const int SourcePresentationInt17 = 17;
+    internal const int SourcePresentationInt18 = 18;
+    internal const int SourcePresentationInt187 = 187;
+    internal const int SourcePresentationInt188 = 188;
+    internal const int SourcePresentationInt19 = 19;
+    internal const int SourcePresentationInt1500 = 1_500;
+    internal const int SourcePresentationInt2048 = 2048;
+    internal const int SourcePresentationInt21 = 21;
+    internal const int SourcePresentationInt212 = 212;
+    internal const int SourcePresentationInt22 = 22;
+    internal const int SourcePresentationInt24 = 24;
+    internal const int SourcePresentationInt248 = 248;
+    internal const int SourcePresentationInt255 = 255;
+    internal const float SourcePresentationFloat255Point0f = 255.0f;
+    internal const int SourcePresentationInt256 = 256;
+    internal const int SourcePresentationInt32 = 32;
+    internal const int SourcePresentationInt320 = 320;
+    internal const int SourcePresentationInt336 = 336;
+    internal const int SourcePresentationInt34 = 34;
+    internal const int SourcePresentationInt360 = 360;
+    internal const int SourcePresentationInt38 = 38;
+    internal const int SourcePresentationInt41 = 41;
+    internal const int SourcePresentationInt428 = 428;
+    internal const int SourcePresentationInt432 = 432;
+    internal const int SourcePresentationInt480 = 480;
+    internal const int SourcePresentationInt5 = 5;
+    internal const int SourcePresentationInt52 = 52;
+    internal const int SourcePresentationInt57 = 57;
+    internal const int SourcePresentationInt58 = 58;
+    internal const int SourcePresentationInt6 = 6;
+    internal const int SourcePresentationInt60 = 60;
+    internal const int SourcePresentationInt64 = 64;
+    internal const int SourcePresentationInt640 = 640;
+    internal const int SourcePresentationInt67 = 67;
+    internal const int SourcePresentationInt7 = 7;
+    internal const int SourcePresentationInt80 = 80;
+    internal const int SourcePresentationInt9 = 9;
+    internal const int SourcePresentationInt99 = 99;
+    internal const int SourcePresentationInt992 = 992;
+}
+
 internal sealed record Fo1OwnedUiTexture(
     string Id,
     string Path,
@@ -327,8 +381,8 @@ internal sealed record Fo1CharacterStartContract(
             throw new InvalidOperationException("Unexpected Fallout character-start manifest.");
 
         var creator = root.GetProperty("creator");
-        if (creator.GetProperty("width").GetInt32() != 640 ||
-            creator.GetProperty("height").GetInt32() != 480)
+        if (creator.GetProperty("width").GetInt32() != Fo1CharacterStartContractNumericContracts.SourcePresentationInt640 ||
+            creator.GetProperty("height").GetInt32() != Fo1CharacterStartContractNumericContracts.SourcePresentationInt480)
             throw new InvalidOperationException(
                 "Fallout character creator must use the original 640x480 chrome.");
         var chromePath = VerifiedGltfLoader.ResolvePath(creator.GetProperty("chromePng").GetString()!);
@@ -357,23 +411,23 @@ internal sealed record Fo1CharacterStartContract(
                     .Select(ReadRect).ToArray(),
                 creatorNumberLayoutRow.GetProperty("characterPoints").EnumerateArray()
                     .Select(row => ReadPoint(row)).ToArray()));
-        if (creatorNumbers.Atlas.Height != 24 || creatorNumbers.Atlas.Width != 336 ||
-            creatorNumbers.DigitWidth != 14 || creatorNumbers.SpecialDigitStride != 18 ||
+        if (creatorNumbers.Atlas.Height != Fo1CharacterStartContractNumericContracts.SourcePresentationInt24 || creatorNumbers.Atlas.Width != Fo1CharacterStartContractNumericContracts.SourcePresentationInt336 ||
+            creatorNumbers.DigitWidth != Fo1CharacterStartContractNumericContracts.SourcePresentationInt14 || creatorNumbers.SpecialDigitStride != Fo1CharacterStartContractNumericContracts.SourcePresentationInt18 ||
             creatorNumbers.WhiteOffsetX < 0 ||
-            creatorNumbers.WhiteOffsetX + creatorNumbers.DigitWidth * 10 >
-                creatorNumbers.Atlas.Width || creatorNumbers.Layout.Special.Count != 7 ||
-            creatorNumbers.Layout.SpecialIncrease.Count != 7 ||
-            creatorNumbers.Layout.SpecialDecrease.Count != 7 ||
+            creatorNumbers.WhiteOffsetX + creatorNumbers.DigitWidth * Fo1CharacterStartContractNumericContracts.SourcePresentationInt10 >
+                creatorNumbers.Atlas.Width || creatorNumbers.Layout.Special.Count != Fo1CharacterStartContractNumericContracts.SourcePresentationInt7 ||
+            creatorNumbers.Layout.SpecialIncrease.Count != Fo1CharacterStartContractNumericContracts.SourcePresentationInt7 ||
+            creatorNumbers.Layout.SpecialDecrease.Count != Fo1CharacterStartContractNumericContracts.SourcePresentationInt7 ||
             creatorNumbers.Layout.CharacterPoints.Count != 2 ||
             creatorNumbers.Layout.Special.Any(point =>
                 !new Fo1HudRect(point.X, point.Y,
                     creatorNumbers.SpecialDigitStride + creatorNumbers.DigitWidth,
-                    creatorNumbers.Atlas.Height).Fits(640, 480)) ||
+                    creatorNumbers.Atlas.Height).Fits(Fo1CharacterStartContractNumericContracts.SourcePresentationInt640, Fo1CharacterStartContractNumericContracts.SourcePresentationInt480)) ||
             creatorNumbers.Layout.CharacterPoints.Any(point =>
                 !new Fo1HudRect(point.X, point.Y, creatorNumbers.DigitWidth,
-                    creatorNumbers.Atlas.Height).Fits(640, 480)) ||
-            creatorNumbers.Layout.SpecialIncrease.Any(rect => !rect.Fits(640, 480)) ||
-            creatorNumbers.Layout.SpecialDecrease.Any(rect => !rect.Fits(640, 480)))
+                    creatorNumbers.Atlas.Height).Fits(Fo1CharacterStartContractNumericContracts.SourcePresentationInt640, Fo1CharacterStartContractNumericContracts.SourcePresentationInt480)) ||
+            creatorNumbers.Layout.SpecialIncrease.Any(rect => !rect.Fits(Fo1CharacterStartContractNumericContracts.SourcePresentationInt640, Fo1CharacterStartContractNumericContracts.SourcePresentationInt480)) ||
+            creatorNumbers.Layout.SpecialDecrease.Any(rect => !rect.Fits(Fo1CharacterStartContractNumericContracts.SourcePresentationInt640, Fo1CharacterStartContractNumericContracts.SourcePresentationInt480)))
             throw new InvalidOperationException(
                 "Fallout creator BIGNUM source-layout contract drifted.");
 
@@ -385,7 +439,7 @@ internal sealed record Fo1CharacterStartContract(
             "width",
             "height",
             root.GetProperty("source").GetProperty("characterPickerFrmSha256").GetString()!);
-        if (picker.Width != 640 || picker.Height != 480)
+        if (picker.Width != Fo1CharacterStartContractNumericContracts.SourcePresentationInt640 || picker.Height != Fo1CharacterStartContractNumericContracts.SourcePresentationInt480)
             throw new InvalidOperationException("Fallout character picker must be the owned 640x480 screen.");
 
         var premades = new List<Fo1PremadeCharacter>();
@@ -395,7 +449,7 @@ internal sealed record Fo1CharacterStartContract(
             var profileRow = row.GetProperty("profile");
             var special = profileRow.GetProperty("allocatedSpecial")
                 .EnumerateArray().Select(value => value.GetInt32()).ToArray();
-            if (special.Length != 7)
+            if (special.Length != Fo1CharacterStartContractNumericContracts.SourcePresentationInt7)
                 throw new InvalidOperationException("Fallout premade SPECIAL coverage is invalid.");
             var profile = new Fo1CharacterProfile(
                 profileRow.GetProperty("name").GetString()!,
@@ -406,8 +460,8 @@ internal sealed record Fo1CharacterStartContract(
                 special[2],
                 special[3],
                 special[4],
-                special[5],
-                special[6],
+                special[Fo1CharacterStartContractNumericContracts.SourcePresentationInt5],
+                special[Fo1CharacterStartContractNumericContracts.SourcePresentationInt6],
                 profileRow.GetProperty("taggedSkills").EnumerateArray()
                     .Select(value => value.GetString()!).ToArray(),
                 profileRow.GetProperty("traits").EnumerateArray()
@@ -417,13 +471,13 @@ internal sealed record Fo1CharacterStartContract(
             var gcdPath = VerifiedGltfLoader.ResolvePath(row.GetProperty("gcd").GetString()!);
             var gcdSha256 = row.GetProperty("gcdSha256").GetString()!;
             VerifiedGltfLoader.VerifyHash(gcdPath, gcdSha256);
-            if (new FileInfo(gcdPath).Length != 428)
+            if (new FileInfo(gcdPath).Length != Fo1CharacterStartContractNumericContracts.SourcePresentationInt428)
                 throw new InvalidOperationException($"Fallout premade GCD size drifted: {gcdPath}");
             var bioPath = VerifiedGltfLoader.ResolvePath(row.GetProperty("bio").GetString()!);
             var bioSha256 = row.GetProperty("bioSha256").GetString()!;
             VerifiedGltfLoader.VerifyHash(bioPath, bioSha256);
             var biography = row.GetProperty("bioText").GetString()!;
-            if (biography.Length < 80)
+            if (biography.Length < Fo1CharacterStartContractNumericContracts.SourcePresentationInt80)
                 throw new InvalidOperationException("Fallout premade biography coverage is invalid.");
             var portrait = ReadTexture(
                 $"premade-{row.GetProperty("id").GetString()}",
@@ -433,7 +487,7 @@ internal sealed record Fo1CharacterStartContract(
                 "portraitWidth",
                 "portraitHeight",
                 row.GetProperty("sourcePortraitFrmSha256").GetString()!);
-            if (portrait.Width != 212 || portrait.Height != 187)
+            if (portrait.Width != Fo1CharacterStartContractNumericContracts.SourcePresentationInt212 || portrait.Height != Fo1CharacterStartContractNumericContracts.SourcePresentationInt187)
                 throw new InvalidOperationException("Fallout premade portrait dimensions drifted.");
             premades.Add(new Fo1PremadeCharacter(
                 row.GetProperty("id").GetString()!,
@@ -455,26 +509,26 @@ internal sealed record Fo1CharacterStartContract(
         var interfaceAssets = interfaceRow.GetProperty("assets");
         var expectedInterfaceDimensions = new Dictionary<string, (int Width, int Height)>
         {
-            ["main"] = (640, 100),
-            ["numbers"] = (360, 17),
-            ["actionPointGreen"] = (5, 5),
-            ["actionPointYellow"] = (5, 5),
-            ["actionPointRed"] = (5, 5),
-            ["endWindow"] = (57, 58),
-            ["endTurn"] = (38, 22),
-            ["endCombat"] = (38, 22),
-            ["endLightGreen"] = (57, 58),
-            ["endLightRed"] = (57, 58),
-            ["itemPanel"] = (188, 67),
-            ["singleAttack"] = (52, 11),
-            ["movePoints"] = (17, 12),
-            ["moveNumbers"] = (99, 12),
-            ["inventoryButton"] = (32, 21),
-            ["optionsButton"] = (34, 34),
-            ["redButton"] = (22, 21),
-            ["automapButton"] = (41, 19),
-            ["characterButton"] = (41, 19),
-            ["pipBoyButton"] = (41, 19),
+            ["main"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt640, Fo1CharacterStartContractNumericContracts.SourcePresentationInt100),
+            ["numbers"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt360, Fo1CharacterStartContractNumericContracts.SourcePresentationInt17),
+            ["actionPointGreen"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt5, Fo1CharacterStartContractNumericContracts.SourcePresentationInt5),
+            ["actionPointYellow"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt5, Fo1CharacterStartContractNumericContracts.SourcePresentationInt5),
+            ["actionPointRed"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt5, Fo1CharacterStartContractNumericContracts.SourcePresentationInt5),
+            ["endWindow"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt57, Fo1CharacterStartContractNumericContracts.SourcePresentationInt58),
+            ["endTurn"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt38, Fo1CharacterStartContractNumericContracts.SourcePresentationInt22),
+            ["endCombat"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt38, Fo1CharacterStartContractNumericContracts.SourcePresentationInt22),
+            ["endLightGreen"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt57, Fo1CharacterStartContractNumericContracts.SourcePresentationInt58),
+            ["endLightRed"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt57, Fo1CharacterStartContractNumericContracts.SourcePresentationInt58),
+            ["itemPanel"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt188, Fo1CharacterStartContractNumericContracts.SourcePresentationInt67),
+            ["singleAttack"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt52, Fo1CharacterStartContractNumericContracts.SourcePresentationInt11),
+            ["movePoints"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt17, Fo1CharacterStartContractNumericContracts.SourcePresentationInt12),
+            ["moveNumbers"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt99, Fo1CharacterStartContractNumericContracts.SourcePresentationInt12),
+            ["inventoryButton"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt32, Fo1CharacterStartContractNumericContracts.SourcePresentationInt21),
+            ["optionsButton"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt34, Fo1CharacterStartContractNumericContracts.SourcePresentationInt34),
+            ["redButton"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt22, Fo1CharacterStartContractNumericContracts.SourcePresentationInt21),
+            ["automapButton"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt41, Fo1CharacterStartContractNumericContracts.SourcePresentationInt19),
+            ["characterButton"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt41, Fo1CharacterStartContractNumericContracts.SourcePresentationInt19),
+            ["pipBoyButton"] = (Fo1CharacterStartContractNumericContracts.SourcePresentationInt41, Fo1CharacterStartContractNumericContracts.SourcePresentationInt19),
         };
         if (interfaceAssets.EnumerateObject().Count() != expectedInterfaceDimensions.Count)
             throw new InvalidOperationException("Fallout gameplay HUD asset coverage drifted.");
@@ -545,11 +599,11 @@ internal sealed record Fo1CharacterStartContract(
         var openingFramesPerSecond = opening.GetProperty("framesPerSecond").GetInt32();
         var openingFrameCount = opening.GetProperty("frameCount").GetInt32();
         var openingDurationSeconds = opening.GetProperty("playbackDurationSeconds").GetDouble();
-        if (openingWidth != 432 || openingHeight != 320 || openingFramesPerSecond != 15 ||
-            openingFrameCount < 1_500 || openingDurationSeconds is < 100.0 or > 130.0)
+        if (openingWidth != Fo1CharacterStartContractNumericContracts.SourcePresentationInt432 || openingHeight != Fo1CharacterStartContractNumericContracts.SourcePresentationInt320 || openingFramesPerSecond != Fo1CharacterStartContractNumericContracts.SourcePresentationInt15 ||
+            openingFrameCount < Fo1CharacterStartContractNumericContracts.SourcePresentationInt1500 || openingDurationSeconds is < Fo1CharacterStartContractNumericContracts.SourcePresentationDouble100Point0 or > Fo1CharacterStartContractNumericContracts.SourcePresentationDouble130Point0)
             throw new InvalidOperationException("Fallout Overseer deterministic playback contract is invalid.");
         var rows = opening.GetProperty("timingRows");
-        if (rows.GetArrayLength() < 10 ||
+        if (rows.GetArrayLength() < Fo1CharacterStartContractNumericContracts.SourcePresentationInt10 ||
             rows.EnumerateArray().Any(row => row.GetProperty("seconds").GetDouble() < 0.0))
             throw new InvalidOperationException("Fallout Overseer timing contract is invalid.");
 
@@ -587,7 +641,7 @@ internal sealed record Fo1CharacterStartContract(
     internal Texture2D LoadChrome()
     {
         var image = Image.LoadFromFile(ChromePath);
-        if (image is null || image.IsEmpty() || image.GetWidth() != 640 || image.GetHeight() != 480)
+        if (image is null || image.IsEmpty() || image.GetWidth() != Fo1CharacterStartContractNumericContracts.SourcePresentationInt640 || image.GetHeight() != Fo1CharacterStartContractNumericContracts.SourcePresentationInt480)
             throw new InvalidOperationException("Prepared Fallout creator chrome failed image validation.");
         return ImageTexture.CreateFromImage(image);
     }
@@ -641,17 +695,17 @@ internal sealed record Fo1CharacterStartContract(
         var cellWidth = row.GetProperty("cellWidth").GetInt32();
         var maximumHeight = row.GetProperty("maximumHeight").GetInt32();
         var sourceSha256 = row.GetProperty("sourceAafSha256").GetString()!;
-        if (widths.Length != 256 || heights.Length != 256 || tint.Length != 3 ||
+        if (widths.Length != Fo1CharacterStartContractNumericContracts.SourcePresentationInt256 || heights.Length != Fo1CharacterStartContractNumericContracts.SourcePresentationInt256 || tint.Length != 3 ||
             widths.Any(value => value < 0 || value > cellWidth) ||
             heights.Any(value => value < 0 || value > maximumHeight) ||
-            cellWidth <= 0 || maximumHeight != 9 || atlasWidth != cellWidth * 16 ||
-            atlasHeight != maximumHeight * 16 ||
+            cellWidth <= 0 || maximumHeight != Fo1CharacterStartContractNumericContracts.SourcePresentationInt9 || atlasWidth != cellWidth * Fo1CharacterStartContractNumericContracts.SourcePresentationInt16 ||
+            atlasHeight != maximumHeight * Fo1CharacterStartContractNumericContracts.SourcePresentationInt16 ||
             row.GetProperty("letterSpacing").GetInt32() != 1 ||
             row.GetProperty("wordSpacing").GetInt32() != 4 ||
             row.GetProperty("lineSpacing").GetInt32() != 1 ||
-            row.GetProperty("colorTableIndex").GetInt32() != 992 ||
-            !tint.SequenceEqual(new[] { 60, 248, 0 }) ||
-            sourceSha256.Length != 64)
+            row.GetProperty("colorTableIndex").GetInt32() != Fo1CharacterStartContractNumericContracts.SourcePresentationInt992 ||
+            !tint.SequenceEqual(new[] { Fo1CharacterStartContractNumericContracts.SourcePresentationInt60, Fo1CharacterStartContractNumericContracts.SourcePresentationInt248, 0 }) ||
+            sourceSha256.Length != Fo1CharacterStartContractNumericContracts.SourcePresentationInt64)
             throw new InvalidOperationException("Fallout FONT1.AAF atlas contract drifted.");
         return new Fo1OwnedBitmapFont(
             atlasPath,
@@ -666,8 +720,8 @@ internal sealed record Fo1CharacterStartContract(
             1,
             widths,
             heights,
-            new Color(tint[0] / 255.0f, tint[1] / 255.0f, tint[2] / 255.0f),
-            992);
+            new Color(tint[0] / Fo1CharacterStartContractNumericContracts.SourcePresentationFloat255Point0f, tint[1] / Fo1CharacterStartContractNumericContracts.SourcePresentationFloat255Point0f, tint[2] / Fo1CharacterStartContractNumericContracts.SourcePresentationFloat255Point0f),
+            Fo1CharacterStartContractNumericContracts.SourcePresentationInt992);
     }
 
     private static Fo1ClassicHudLayout ReadHudLayout(JsonElement row)
@@ -744,14 +798,14 @@ internal sealed record Fo1CharacterStartContract(
         IReadOnlyDictionary<string, Fo1OwnedUiTexture> weaponInventoryTextures,
         Fo1OwnedBitmapFont font)
     {
-        if (layout.Width != 640 || layout.Height != 100 ||
+        if (layout.Width != Fo1CharacterStartContractNumericContracts.SourcePresentationInt640 || layout.Height != Fo1CharacterStartContractNumericContracts.SourcePresentationInt100 ||
             !layout.Message.Bounds.Fits(layout.Width, layout.Height) ||
-            layout.Message.MaximumLines != 6 || layout.Message.LineIndent != 1 ||
-            layout.Message.PrefixCodePoint is < 0 or > 255 ||
+            layout.Message.MaximumLines != Fo1CharacterStartContractNumericContracts.SourcePresentationInt6 || layout.Message.LineIndent != 1 ||
+            layout.Message.PrefixCodePoint is < 0 or > Fo1CharacterStartContractNumericContracts.SourcePresentationInt255 ||
             layout.Message.MaximumLines * (font.MaximumHeight + font.LineSpacing) >
                 layout.Message.Bounds.Height ||
             !layout.ActionPoints.Bounds.Fits(layout.Width, layout.Height) ||
-            layout.ActionPoints.Slots != 10 || layout.ActionPoints.Stride <= 0 ||
+            layout.ActionPoints.Slots != Fo1CharacterStartContractNumericContracts.SourcePresentationInt10 || layout.ActionPoints.Stride <= 0 ||
             layout.ActionPoints.Bounds.Width <
                 (layout.ActionPoints.Slots - 1) * layout.ActionPoints.Stride +
                 textures["actionPointGreen"].Width ||
@@ -855,7 +909,7 @@ internal sealed record Fo1CharacterStartContract(
         var texturePath = VerifyFile(row, pathProperty, hashProperty);
         var width = row.GetProperty(widthProperty).GetInt32();
         var height = row.GetProperty(heightProperty).GetInt32();
-        if (width <= 0 || height <= 0 || width > 2048 || height > 2048)
+        if (width <= 0 || height <= 0 || width > Fo1CharacterStartContractNumericContracts.SourcePresentationInt2048 || height > Fo1CharacterStartContractNumericContracts.SourcePresentationInt2048)
             throw new InvalidOperationException($"Fallout UI texture dimensions are invalid: {id}.");
         return new Fo1OwnedUiTexture(
             id,

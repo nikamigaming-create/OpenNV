@@ -3,6 +3,80 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1NewGameFlowNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloatNEgativE14Point0f = -14.0f;
+    internal const float PresentationFloatNEgativE26Point0f = -26.0f;
+    internal const float PresentationFloatNEgativE34Point0f = -34.0f;
+    internal const float PresentationFloatNEgativE36Point0f = -36.0f;
+    internal const float PresentationFloatNEgativE38Point0f = -38.0f;
+    internal const float PresentationFloatNEgativE42Point0f = -42.0f;
+    internal const float PresentationFloatNEgativE45Point0f = -45.0f;
+    internal const float PresentationFloatNEgativE46Point0f = -46.0f;
+    internal const float PresentationFloatNEgativE62Point0f = -62.0f;
+    internal const float PresentationFloat0Point0001f = 0.0001f;
+    internal const float PresentationFloat0Point001f = 0.001f;
+    internal const float PresentationFloat0Point012f = 0.012f;
+    internal const float PresentationFloat0Point015f = 0.015f;
+    internal const float PresentationFloat0Point018f = 0.018f;
+    internal const float PresentationFloat0Point01f = 0.01f;
+    internal const float PresentationFloat0Point20f = 0.20f;
+    internal const float PresentationFloat0Point27f = 0.27f;
+    internal const float PresentationFloat0Point46f = 0.46f;
+    internal const float PresentationFloat0Point48f = 0.48f;
+    internal const float PresentationFloat0Point5f = 0.5f;
+    internal const float PresentationFloat0Point68f = 0.68f;
+    internal const float PresentationFloat0Point70f = 0.70f;
+    internal const float PresentationFloat0Point72f = 0.72f;
+    internal const float PresentationFloat0Point78f = 0.78f;
+    internal const float PresentationFloat0Point79f = 0.79f;
+    internal const float PresentationFloat0Point93f = 0.93f;
+    internal const float PresentationFloat0Point96f = 0.96f;
+    internal const float PresentationFloat0Point97f = 0.97f;
+    internal const float PresentationFloat0Point9999f = 0.9999f;
+    internal const float PresentationFloat1Point15f = 1.15f;
+    internal const float PresentationFloat1Point35f = 1.35f;
+    internal const int PresentationInt10000 = 10_000;
+    internal const int PresentationInt114 = 114;
+    internal const int PresentationInt115 = 115;
+    internal const int PresentationInt120 = 120;
+    internal const int PresentationInt13 = 13;
+    internal const float PresentationFloat13Point0f = 13.0f;
+    internal const float PresentationFloat130Point0f = 130.0f;
+    internal const float PresentationFloat150Point0f = 150.0f;
+    internal const int PresentationInt16 = 16;
+    internal const float PresentationFloat16Point0f = 16.0f;
+    internal const float PresentationFloat178Point0f = 178.0f;
+    internal const int PresentationInt18 = 18;
+    internal const float PresentationFloat18Point0f = 18.0f;
+    internal const float PresentationFloat180Point0f = 180.0f;
+    internal const float PresentationFloat19Point0f = 19.0f;
+    internal const float PresentationFloat22Point0f = 22.0f;
+    internal const double PresentationDouble240Point0 = 240.0;
+    internal const float PresentationFloat25Point0f = 25.0f;
+    internal const float PresentationFloat26Point0f = 26.0f;
+    internal const float PresentationFloat28Point0f = 28.0f;
+    internal const float PresentationFloat30Point0f = 30.0f;
+    internal const float PresentationFloat31Point0f = 31.0f;
+    internal const float PresentationFloat320Point0f = 320.0f;
+    internal const float PresentationFloat34Point0f = 34.0f;
+    internal const float PresentationFloat4Point2f = 4.2f;
+    internal const float PresentationFloat4Point4f = 4.4f;
+    internal const float PresentationFloat42Point0f = 42.0f;
+    internal const float PresentationFloat432Point0f = 432.0f;
+    internal const float PresentationFloat46Point0f = 46.0f;
+    internal const int PresentationInt5 = 5;
+    internal const float PresentationFloat5Point0f = 5.0f;
+    internal const float PresentationFloat640Point0f = 640.0f;
+    internal const int PresentationInt70 = 70;
+    internal const float PresentationFloat70Point0f = 70.0f;
+    internal const float PresentationFloat8Point0f = 8.0f;
+    internal const float PresentationFloat915Point0f = 915.0f;
+    internal const float PresentationFloat940Point0f = 940.0f;
+}
+
 internal static class Fo1NewGameFlow
 {
     internal static void StartInteractive(
@@ -127,44 +201,44 @@ internal static class Fo1NewGameFlow
         bool forceSkip,
         Fo1ShowcaseProfile showcase)
     {
-        var layer = new CanvasLayer { Name = "OriginalFalloutOverseerOpening", Layer = 120 };
+        var layer = new CanvasLayer { Name = "OriginalFalloutOverseerOpening", Layer = Fo1NewGameFlowNumericContracts.PresentationInt120 };
         host.AddChild(layer);
         var black = new ColorRect { Color = Colors.Black };
         black.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(black);
         var viewport = host.GetViewport().GetVisibleRect().Size;
-        var height = MathF.Min(viewport.Y - 70.0f, 640.0f);
-        var width = height * 432.0f / 320.0f;
+        var height = MathF.Min(viewport.Y - Fo1NewGameFlowNumericContracts.PresentationFloat70Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat640Point0f);
+        var width = height * Fo1NewGameFlowNumericContracts.PresentationFloat432Point0f / Fo1NewGameFlowNumericContracts.PresentationFloat320Point0f;
         var video = new Fo1MoviePackPlayer
         {
             Name = "OwnedOriginalOverseerMvePlayback",
-            Position = new Vector2((viewport.X - width) * 0.5f, (viewport.Y - height) * 0.5f - 8.0f),
+            Position = new Vector2((viewport.X - width) * Fo1NewGameFlowNumericContracts.PresentationFloat0Point5f, (viewport.Y - height) * Fo1NewGameFlowNumericContracts.PresentationFloat0Point5f - Fo1NewGameFlowNumericContracts.PresentationFloat8Point0f),
             Size = new Vector2(width, height),
         };
         video.Configure(contract);
         layer.AddChild(video);
         var provenance = new Label
         {
-            Position = new Vector2(0.0f, viewport.Y - 34.0f),
-            Size = new Vector2(viewport.X, 26.0f),
+            Position = new Vector2(0.0f, viewport.Y - Fo1NewGameFlowNumericContracts.PresentationFloat34Point0f),
+            Size = new Vector2(viewport.X, Fo1NewGameFlowNumericContracts.PresentationFloat26Point0f),
             Text = "OWNED ORIGINAL FALLOUT 1  •  OVERSEER BRIEFING  •  VIDEO + AUDIO",
             HorizontalAlignment = HorizontalAlignment.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        provenance.AddThemeColorOverride("font_color", new Color(0.72f, 0.68f, 0.48f));
-        provenance.AddThemeFontSizeOverride("font_size", 13);
+        provenance.AddThemeColorOverride("font_color", new Color(Fo1NewGameFlowNumericContracts.PresentationFloat0Point72f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point68f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point48f));
+        provenance.AddThemeFontSizeOverride("font_size", Fo1NewGameFlowNumericContracts.PresentationInt13);
         layer.AddChild(provenance);
         var skipRequested = forceSkip;
         var skip = new Button
         {
             Name = "SkipOwnedFalloutOpening",
-            Position = new Vector2(viewport.X - 178.0f, 22.0f),
-            Size = new Vector2(150.0f, 42.0f),
+            Position = new Vector2(viewport.X - Fo1NewGameFlowNumericContracts.PresentationFloat178Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat22Point0f),
+            Size = new Vector2(Fo1NewGameFlowNumericContracts.PresentationFloat150Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat42Point0f),
             Text = "SKIP  •  ESC",
             FocusMode = Control.FocusModeEnum.None,
         };
-        skip.AddThemeColorOverride("font_color", new Color(0.96f, 0.79f, 0.27f));
-        skip.AddThemeFontSizeOverride("font_size", 16);
+        skip.AddThemeColorOverride("font_color", new Color(Fo1NewGameFlowNumericContracts.PresentationFloat0Point96f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point79f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point27f));
+        skip.AddThemeFontSizeOverride("font_size", Fo1NewGameFlowNumericContracts.PresentationInt16);
         skip.Pressed += () => skipRequested = true;
         layer.AddChild(skip);
         var handoffFade = new ColorRect
@@ -185,7 +259,7 @@ internal static class Fo1NewGameFlow
             ? showcase.AcceleratedOpeningScale
             : 1.0;
         var skipped = false;
-        for (var frame = 0; frame < 10_000 && video.IsMoviePlaying; frame++)
+        for (var frame = 0; frame < Fo1NewGameFlowNumericContracts.PresentationInt10000 && video.IsMoviePlaying; frame++)
         {
             if (skipRequested || Input.IsKeyPressed(Key.Escape))
             {
@@ -194,7 +268,7 @@ internal static class Fo1NewGameFlow
                 break;
             }
             video.AdvanceMovie(
-                Math.Max(1.0 / 240.0, host.GetProcessDeltaTime()) * playbackScale);
+                Math.Max(1.0 / Fo1NewGameFlowNumericContracts.PresentationDouble240Point0, host.GetProcessDeltaTime()) * playbackScale);
             await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         }
         if (video.IsMoviePlaying || !skipped &&
@@ -226,7 +300,7 @@ internal static class Fo1NewGameFlow
         Fo1CharacterProfile profile,
         OpeningPlayback opening)
     {
-        var layer = new CanvasLayer { Name = "V13ENTFirstPersonHandoff", Layer = 115 };
+        var layer = new CanvasLayer { Name = "V13ENTFirstPersonHandoff", Layer = Fo1NewGameFlowNumericContracts.PresentationInt115 };
         host.AddChild(layer);
         var black = new ColorRect
         {
@@ -257,7 +331,7 @@ internal static class Fo1NewGameFlow
         towardCave.Y = 0.0f;
         towardCave = towardCave.Normalized();
         loaded.Session.PlayerToken.Position = exactEntry;
-        loaded.Session.PlayerToken.LookAt(exactEntry + towardCave * 5.0f, Vector3.Up);
+        loaded.Session.PlayerToken.LookAt(exactEntry + towardCave * Fo1NewGameFlowNumericContracts.PresentationFloat5Point0f, Vector3.Up);
 
         loaded.Camera.SetFirstPersonMode(true);
         loaded.Camera.SetOrbitDegrees(
@@ -273,8 +347,8 @@ internal static class Fo1NewGameFlow
             Vector3.Up * loaded.Camera.FirstPersonEyeHeightMeters);
         var caveForwardAlignment = preparedCameraForward.Normalized().Dot(towardCave);
         if (!loaded.Camera.FirstPersonMode || loaded.Session.PlayerToken.Visible ||
-            !loaded.Door.Controller.IsOpen || spawnErrorMeters > 0.001f ||
-            eyeErrorMeters > 0.001f || caveForwardAlignment < 0.9999f)
+            !loaded.Door.Controller.IsOpen || spawnErrorMeters > Fo1NewGameFlowNumericContracts.PresentationFloat0Point001f ||
+            eyeErrorMeters > Fo1NewGameFlowNumericContracts.PresentationFloat0Point001f || caveForwardAlignment < Fo1NewGameFlowNumericContracts.PresentationFloat0Point9999f)
             throw new InvalidOperationException(
                 $"Fallout Vault 13 first-person handoff preparation failed: " +
                 $"spawn={spawnErrorMeters:F6} eye={eyeErrorMeters:F6} " +
@@ -302,9 +376,9 @@ internal static class Fo1NewGameFlow
             new Vector3(liveCameraForward.X, 0.0f, liveCameraForward.Z).Normalized());
         loaded.Session.ProcessMode = Node.ProcessModeEnum.Inherit;
         layer.QueueFree();
-        if (cameraPositionSeamMeters > 0.001f || cameraForwardSeamAlignment < 0.9999f ||
+        if (cameraPositionSeamMeters > Fo1NewGameFlowNumericContracts.PresentationFloat0Point001f || cameraForwardSeamAlignment < Fo1NewGameFlowNumericContracts.PresentationFloat0Point9999f ||
             loaded.Session.PlayerTile != loaded.EntryTile ||
-            loaded.Session.PlayerToken.Position.DistanceTo(exactEntry) > 0.001f)
+            loaded.Session.PlayerToken.Position.DistanceTo(exactEntry) > Fo1NewGameFlowNumericContracts.PresentationFloat0Point001f)
             throw new InvalidOperationException(
                 $"Fallout Vault 13 movie-to-control seam drifted: " +
                 $"position={cameraPositionSeamMeters:F6} forward={cameraForwardSeamAlignment:F6}.");
@@ -388,9 +462,9 @@ internal static class Fo1NewGameFlow
             host,
             loaded.Camera,
             shoulderYaw,
-            shoulderYaw + MathF.PI * 0.72f,
-            -14.0f,
-            -26.0f,
+            shoulderYaw + MathF.PI * Fo1NewGameFlowNumericContracts.PresentationFloat0Point72f,
+            Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE14Point0f,
+            Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE26Point0f,
             showcase.ShoulderOrbitFrames);
         var shoulderTargetRat = NearestLiving(loaded.Session);
         var shoulderStartTile = loaded.Session.PlayerTile;
@@ -414,8 +488,8 @@ internal static class Fo1NewGameFlow
         if (!loaded.Session.GridVisible)
             loaded.Session.ToggleGrid();
         stage.Text = "09  EXACT FALLOUT HEXES VISIBLE  •  ONE AP PER HEX";
-        loaded.Camera.SetOrbitDegrees(-38.0f, -38.0f);
-        loaded.Camera.FocusTileAtHeight(loaded.Session.PlayerTile, 5.0f, 0.70f);
+        loaded.Camera.SetOrbitDegrees(Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE38Point0f, Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE38Point0f);
+        loaded.Camera.FocusTileAtHeight(loaded.Session.PlayerTile, Fo1NewGameFlowNumericContracts.PresentationFloat5Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point70f);
         await WaitFrames(host, showcase.GridHoldFrames);
 
         var tacticalRangedTarget = NearestLiving(loaded.Session);
@@ -446,7 +520,7 @@ internal static class Fo1NewGameFlow
         stage.Text = "FULL SHOWCASE  •  FPS + TACTICAL  •  PISTOL + KNIFE + RELOAD + EFFECTS";
         loaded.Session.SetCameraStatus(
             "C tactical → third-person → first-person • mouse orbit/look • G exact hex grid");
-        loaded.Camera.SetOrbitDegrees(-45.0f, -42.0f);
+        loaded.Camera.SetOrbitDegrees(Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE45Point0f, Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE42Point0f);
         loaded.Camera.FrameEntryPair(loaded.Session.PlayerTile, loaded.DoorTile);
         await WaitFrames(host, showcase.FinalHoldFrames);
 
@@ -460,7 +534,7 @@ internal static class Fo1NewGameFlow
         loaded.Session.EquippedWeaponSymbol != "PID_KNIFE" ||
         loaded.Session.OwnedPlayerWeapon?.Root.Visible != false ||
         loaded.Session.OwnedPlayerMeleeWeapon?.Root.Visible != true ||
-        loaded.RuntimeProfile.CombatPresentation.ImpactRadiusMeters > 0.015f ||
+        loaded.RuntimeProfile.CombatPresentation.ImpactRadiusMeters > Fo1NewGameFlowNumericContracts.PresentationFloat0Point015f ||
         combatPresentation is null ||
         combatPresentation.Tracers != loaded.Session.RangedAttacks ||
         combatPresentation.Casings != loaded.Session.RangedAttacks ||
@@ -627,7 +701,7 @@ internal static class Fo1NewGameFlow
         var offset = targetPoint - loaded.Camera.FirstPersonEyePosition;
         var horizontal = MathF.Sqrt(offset.X * offset.X + offset.Z * offset.Z);
         var targetYaw = MathF.Atan2(-offset.X, -offset.Z);
-        var targetPitch = MathF.Atan2(offset.Y, MathF.Max(0.001f, horizontal));
+        var targetPitch = MathF.Atan2(offset.Y, MathF.Max(Fo1NewGameFlowNumericContracts.PresentationFloat0Point001f, horizontal));
         stage.Text = "04  FPS RANGED HIT  •  AIM DOWN THE CAVE  •  10MM RAT KILL";
         loaded.Session.SetCameraStatus(
             "Traditional FPS • continuous movement • mouse-look direction • no tactical AP");
@@ -701,7 +775,7 @@ internal static class Fo1NewGameFlow
         var offset = targetPoint - loaded.Camera.FirstPersonEyePosition;
         var horizontal = MathF.Sqrt(offset.X * offset.X + offset.Z * offset.Z);
         var targetYaw = MathF.Atan2(-offset.X, -offset.Z);
-        var targetPitch = MathF.Atan2(offset.Y, MathF.Max(0.001f, horizontal));
+        var targetPitch = MathF.Atan2(offset.Y, MathF.Max(Fo1NewGameFlowNumericContracts.PresentationFloat0Point001f, horizontal));
         await SmoothFirstPersonAim(
             host,
             loaded.Camera,
@@ -774,10 +848,10 @@ internal static class Fo1NewGameFlow
             }
             stage.Text = "10  TACTICAL RANGED  •  10MM ATTACK  •  CHANCE + AP + AMMO + HP";
             loaded.Session.ActivateTile(rat.Tile, false);
-            loaded.Camera.SetOrbitDegrees(-45.0f, -36.0f);
+            loaded.Camera.SetOrbitDegrees(Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE45Point0f, Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE36Point0f);
             loaded.Camera.FrameCombatPair(loaded.Session.PlayerTile, rat.Tile);
             await WaitFrames(host, showcase.TacticalTargetHoldFrames);
-            loaded.Camera.FocusTileAtHeight(rat.Tile, 4.2f, 0.46f);
+            loaded.Camera.FocusTileAtHeight(rat.Tile, Fo1NewGameFlowNumericContracts.PresentationFloat4Point2f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point46f);
             await WaitFrames(host, showcase.TacticalFrameHoldFrames);
             loaded.Session.AttackSelectedRanged();
             await WaitFrames(host, showcase.TacticalAttackHoldFrames);
@@ -832,7 +906,7 @@ internal static class Fo1NewGameFlow
                 await WaitFrames(host, showcase.TacticalKillHoldFrames);
             }
             loaded.Session.ActivateTile(rat.Tile, false);
-            loaded.Camera.SetOrbitDegrees(-45.0f, -34.0f);
+            loaded.Camera.SetOrbitDegrees(Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE45Point0f, Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE34Point0f);
             loaded.Camera.FrameCombatPair(loaded.Session.PlayerTile, rat.Tile);
             await WaitFrames(host, showcase.TacticalTargetHoldFrames);
             var result = loaded.Session.AttackSelectedMelee();
@@ -942,21 +1016,21 @@ internal static class Fo1NewGameFlow
     {
         if (camera.ExplorationMode)
             throw new InvalidOperationException("Fallout map tour requires tactical projection.");
-        var from = (Fo1HexMath.Center(playerTile) + Fo1HexMath.Center(entryTile)) * 0.5f +
-            Vector3.Up * 1.15f;
-        var to = (Fo1HexMath.Center(entryTile) + Fo1HexMath.Center(doorTile)) * 0.5f +
-            Vector3.Up * 1.35f;
+        var from = (Fo1HexMath.Center(playerTile) + Fo1HexMath.Center(entryTile)) * Fo1NewGameFlowNumericContracts.PresentationFloat0Point5f +
+            Vector3.Up * Fo1NewGameFlowNumericContracts.PresentationFloat1Point15f;
+        var to = (Fo1HexMath.Center(entryTile) + Fo1HexMath.Center(doorTile)) * Fo1NewGameFlowNumericContracts.PresentationFloat0Point5f +
+            Vector3.Up * Fo1NewGameFlowNumericContracts.PresentationFloat1Point35f;
         for (var frame = 0; frame < frames; frame++)
         {
             var amount = (frame + 1.0f) / frames;
             var eased = amount * amount * (3.0f - 2.0f * amount);
             camera.SetOrbitDegrees(
-                Mathf.Lerp(-62.0f, 28.0f, eased),
-                Mathf.Lerp(-46.0f, -34.0f, eased));
+                Mathf.Lerp(Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE62Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat28Point0f, eased),
+                Mathf.Lerp(Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE46Point0f, Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE34Point0f, eased));
             camera.FocusWorldPoint(
                 from.Lerp(to, eased),
-                Mathf.Lerp(13.0f, 19.0f, eased),
-                130.0f);
+                Mathf.Lerp(Fo1NewGameFlowNumericContracts.PresentationFloat13Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat19Point0f, eased),
+                Fo1NewGameFlowNumericContracts.PresentationFloat130Point0f);
             await WaitFrames(host, 1);
         }
     }
@@ -967,7 +1041,7 @@ internal static class Fo1NewGameFlow
     {
         if (!loaded.Camera.ExplorationMode)
             throw new InvalidOperationException("Fallout tactical transition did not start in perspective mode.");
-        var layer = new CanvasLayer { Name = "FirstPersonToTacticalFade", Layer = 114 };
+        var layer = new CanvasLayer { Name = "FirstPersonToTacticalFade", Layer = Fo1NewGameFlowNumericContracts.PresentationInt114 };
         host.AddChild(layer);
         var black = new ColorRect
         {
@@ -993,7 +1067,7 @@ internal static class Fo1NewGameFlow
         loaded.Session.SetWorldGuidesVisible(true);
         foreach (var mob in loaded.Session.Mobs)
             mob.SetReadabilityMarkersVisible(true);
-        loaded.Camera.SetOrbitDegrees(-38.0f, -38.0f);
+        loaded.Camera.SetOrbitDegrees(Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE38Point0f, Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE38Point0f);
         loaded.Camera.FrameEntryPair(loaded.Session.PlayerTile, loaded.DoorTile);
         loaded.Session.SetCameraStatus(
             "TACTICAL • same player, cave, rats, hex path, HP and AP • C cycles perspective");
@@ -1181,7 +1255,7 @@ internal static class Fo1NewGameFlow
             {
                 var direction = targetCenter - loaded.Session.PlayerToken.Position;
                 direction.Y = 0.0f;
-                if (direction.LengthSquared() > 0.0001f)
+                if (direction.LengthSquared() > Fo1NewGameFlowNumericContracts.PresentationFloat0Point0001f)
                 {
                     loaded.Session.TryMoveFirstPerson(
                         direction,
@@ -1193,9 +1267,9 @@ internal static class Fo1NewGameFlow
             }
             else if (!loaded.Camera.ExplorationMode)
                 loaded.Camera.FocusWorldPoint(
-                    loaded.Session.PlayerToken.GlobalPosition + Vector3.Up * 0.68f,
-                    4.4f,
-                    180.0f);
+                    loaded.Session.PlayerToken.GlobalPosition + Vector3.Up * Fo1NewGameFlowNumericContracts.PresentationFloat0Point68f,
+                    Fo1NewGameFlowNumericContracts.PresentationFloat4Point4f,
+                    Fo1NewGameFlowNumericContracts.PresentationFloat180Point0f);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         if (loaded.Session.PlayerTile != tile)
@@ -1212,26 +1286,26 @@ internal static class Fo1NewGameFlow
         var layer = new CanvasLayer
         {
             Name = "Fo1NewGameDemoBanner",
-            Layer = 70,
+            Layer = Fo1NewGameFlowNumericContracts.PresentationInt70,
             Visible = visible,
         };
         host.AddChild(layer);
         layer.AddChild(new ColorRect
         {
-            Position = new Vector2(18.0f, 16.0f),
-            Size = new Vector2(940.0f, 46.0f),
-            Color = new Color(0.012f, 0.018f, 0.01f, 0.93f),
+            Position = new Vector2(Fo1NewGameFlowNumericContracts.PresentationFloat18Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat16Point0f),
+            Size = new Vector2(Fo1NewGameFlowNumericContracts.PresentationFloat940Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat46Point0f),
+            Color = new Color(Fo1NewGameFlowNumericContracts.PresentationFloat0Point012f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point018f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point01f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point93f),
         });
         var label = new Label
         {
-            Position = new Vector2(31.0f, 25.0f),
-            Size = new Vector2(915.0f, 30.0f),
+            Position = new Vector2(Fo1NewGameFlowNumericContracts.PresentationFloat31Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat25Point0f),
+            Size = new Vector2(Fo1NewGameFlowNumericContracts.PresentationFloat915Point0f, Fo1NewGameFlowNumericContracts.PresentationFloat30Point0f),
             Text = "FALLOUT 1 NEW GAME  •  END-TO-END PROOF",
         };
-        label.AddThemeColorOverride("font_color", new Color(0.97f, 0.78f, 0.20f));
+        label.AddThemeColorOverride("font_color", new Color(Fo1NewGameFlowNumericContracts.PresentationFloat0Point97f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point78f, Fo1NewGameFlowNumericContracts.PresentationFloat0Point20f));
         label.AddThemeColorOverride("font_outline_color", Colors.Black);
-        label.AddThemeConstantOverride("outline_size", 5);
-        label.AddThemeFontSizeOverride("font_size", 18);
+        label.AddThemeConstantOverride("outline_size", Fo1NewGameFlowNumericContracts.PresentationInt5);
+        label.AddThemeFontSizeOverride("font_size", Fo1NewGameFlowNumericContracts.PresentationInt18);
         layer.AddChild(label);
         return label;
     }

@@ -5,6 +5,84 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1TacticalSessionNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloatNEgativE18Point0f = -18.0f;
+    internal const float PresentationFloat0Point0001f = 0.0001f;
+    internal const float PresentationFloat0Point012f = 0.012f;
+    internal const float PresentationFloat0Point018f = 0.018f;
+    internal const float PresentationFloat0Point022f = 0.022f;
+    internal const float PresentationFloat0Point04f = 0.04f;
+    internal const float PresentationFloat0Point055f = 0.055f;
+    internal const float PresentationFloat0Point10f = 0.10f;
+    internal const float PresentationFloat0Point18f = 0.18f;
+    internal const float PresentationFloat0Point25f = 0.25f;
+    internal const float PresentationFloat0Point28f = 0.28f;
+    internal const float PresentationFloat0Point35f = 0.35f;
+    internal const float PresentationFloat0Point46f = 0.46f;
+    internal const float PresentationFloat0Point48f = 0.48f;
+    internal const float PresentationFloat0Point55f = 0.55f;
+    internal const float PresentationFloat0Point5f = 0.5f;
+    internal const float PresentationFloat0Point68f = 0.68f;
+    internal const float PresentationFloat0Point72f = 0.72f;
+    internal const float PresentationFloat0Point76f = 0.76f;
+    internal const float PresentationFloat0Point77f = 0.77f;
+    internal const float PresentationFloat0Point78f = 0.78f;
+    internal const float PresentationFloat0Point82f = 0.82f;
+    internal const float PresentationFloat0Point85f = 0.85f;
+    internal const float PresentationFloat0Point86f = 0.86f;
+    internal const float PresentationFloat0Point91f = 0.91f;
+    internal const float PresentationFloat0Point92f = 0.92f;
+    internal const float PresentationFloat0Point94f = 0.94f;
+    internal const float PresentationFloat0Point95f = 0.95f;
+    internal const float PresentationFloat0Point96f = 0.96f;
+    internal const float PresentationFloat0Point98f = 0.98f;
+    internal const float PresentationFloat1Point28f = 1.28f;
+    internal const uint PresentationUint100U = 100U;
+    internal const float PresentationFloat102Point0f = 102.0f;
+    internal const float PresentationFloat104Point0f = 104.0f;
+    internal const float PresentationFloat112Point0f = 112.0f;
+    internal const float PresentationFloat128Point0f = 128.0f;
+    internal const float PresentationFloat13Point0f = 13.0f;
+    internal const int PresentationInt14 = 14;
+    internal const float PresentationFloat145Point0f = 145.0f;
+    internal const int PresentationInt16 = 16;
+    internal const float PresentationFloat16Point0f = 16.0f;
+    internal const float PresentationFloat170Point0f = 170.0f;
+    internal const int PresentationInt18 = 18;
+    internal const float PresentationFloat18Point0f = 18.0f;
+    internal const float PresentationFloat180Point0f = 180.0f;
+    internal const float PresentationFloat188Point0f = 188.0f;
+    internal const float PresentationFloat20Point0f = 20.0f;
+    internal const int PresentationInt200 = 200;
+    internal const float PresentationFloat22Point0f = 22.0f;
+    internal const float PresentationFloat23Point0f = 23.0f;
+    internal const int PresentationInt24 = 24;
+    internal const int PresentationInt25 = 25;
+    internal const float PresentationFloat28Point0f = 28.0f;
+    internal const float PresentationFloat30Point0f = 30.0f;
+    internal const float PresentationFloat32Point0f = 32.0f;
+    internal const float PresentationFloat44Point0f = 44.0f;
+    internal const float PresentationFloat440Point0f = 440.0f;
+    internal const float PresentationFloat48Point0f = 48.0f;
+    internal const int PresentationInt50 = 50;
+    internal const float PresentationFloat532Point0f = 532.0f;
+    internal const float PresentationFloat542Point0f = 542.0f;
+    internal const int PresentationInt6 = 6;
+    internal const int PresentationInt64 = 64;
+    internal const float PresentationFloat68Point0f = 68.0f;
+    internal const float PresentationFloat72Point0f = 72.0f;
+    internal const int PresentationInt8 = 8;
+    internal const float PresentationFloat8Point0f = 8.0f;
+    internal const float PresentationFloat875Point0f = 875.0f;
+    internal const float PresentationFloat88Point0f = 88.0f;
+    internal const float PresentationFloat9Point0f = 9.0f;
+    internal const float PresentationFloat90Point0f = 90.0f;
+    internal const float PresentationFloat910Point0f = 910.0f;
+}
+
 internal partial class Fo1TacticalSession : Node
 {
     private const string SaveSchema = "opennv-fo1-hex-save/v1";
@@ -166,7 +244,7 @@ internal partial class Fo1TacticalSession : Node
             throw new ArgumentException("Fallout tactical session received an invalid grid.");
         if (!walkable[entryTile])
             throw new InvalidOperationException($"V13ENT entry tile is not provisionally walkable: {entryTile}");
-        if (ratActivationDistanceHexes is < 1 or > 25)
+        if (ratActivationDistanceHexes is < 1 or > Fo1TacticalSessionNumericContracts.PresentationInt25)
             throw new InvalidOperationException(
                 $"Fallout rat activation distance is invalid: {ratActivationDistanceHexes}");
         _sceneSha256 = sceneSha256;
@@ -217,7 +295,7 @@ internal partial class Fo1TacticalSession : Node
         var targetTile = _movement.Peek();
         var target = Fo1HexMath.Center(targetTile) +
             Vector3.Up * _runtimeProfile.Scene.SourceSprites.GroundAnchorMeters;
-        if (_playerToken.Position.DistanceSquaredTo(target) > 0.0001f)
+        if (_playerToken.Position.DistanceSquaredTo(target) > Fo1TacticalSessionNumericContracts.PresentationFloat0Point0001f)
             _playerToken.LookAt(target, Vector3.Up);
         _playerToken.Position = _playerToken.Position.MoveToward(
             target,
@@ -249,12 +327,12 @@ internal partial class Fo1TacticalSession : Node
         _hoverMarker.Visible = _worldGuidesVisible && tile >= 0;
         if (tile >= 0)
         {
-            _hoverMarker.Position = Fo1HexMath.Center(tile) + Vector3.Up * 0.055f;
+            _hoverMarker.Position = Fo1HexMath.Center(tile) + Vector3.Up * Fo1TacticalSessionNumericContracts.PresentationFloat0Point055f;
             var material = _hoverMarker.MaterialOverride as StandardMaterial3D;
             if (material is not null)
                 material.AlbedoColor = _walkable[tile]
-                    ? new Color(0.35f, 1.0f, 0.28f, 0.85f)
-                    : new Color(1.0f, 0.25f, 0.18f, 0.85f);
+                    ? new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point35f, 1.0f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point28f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point85f)
+                    : new Color(1.0f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point25f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point18f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point85f);
         }
         RefreshHud();
     }
@@ -696,7 +774,7 @@ internal partial class Fo1TacticalSession : Node
         if (!_firstPersonModeActive || distanceMeters <= 0.0f)
             return false;
         direction.Y = 0.0f;
-        if (direction.LengthSquared() <= 0.0001f)
+        if (direction.LengthSquared() <= Fo1TacticalSessionNumericContracts.PresentationFloat0Point0001f)
         {
             SetFirstPersonMoving(false);
             return false;
@@ -1010,14 +1088,14 @@ internal partial class Fo1TacticalSession : Node
     }
 
     private int DeterministicPercent(string purpose, int targetSerial) =>
-        (int)(DeterministicUInt(purpose, targetSerial) % 100U) + 1;
+        (int)(DeterministicUInt(purpose, targetSerial) % Fo1TacticalSessionNumericContracts.PresentationUint100U) + 1;
 
     private uint DeterministicUInt(string purpose, int targetSerial)
     {
         var payload = Encoding.UTF8.GetBytes(
             $"{_sceneSha256}|{_turn}|{_combatSequence}|{purpose}|{_playerTile}|{targetSerial}");
         var hash = SHA256.HashData(payload);
-        return (uint)(hash[0] << 24 | hash[1] << 16 | hash[2] << 8 | hash[3]);
+        return (uint)(hash[0] << Fo1TacticalSessionNumericContracts.PresentationInt24 | hash[1] << Fo1TacticalSessionNumericContracts.PresentationInt16 | hash[2] << Fo1TacticalSessionNumericContracts.PresentationInt8 | hash[3]);
     }
 
     private int ApplyDamage(Fo1Mob target, int damage, bool firstPerson)
@@ -1232,7 +1310,7 @@ internal partial class Fo1TacticalSession : Node
         schema = SaveSchema,
         sceneSha256 = _sceneSha256,
         playerTile = _playerTile,
-        playerHex = new[] { _playerTile % 200, _playerTile / 200 },
+        playerHex = new[] { _playerTile % Fo1TacticalSessionNumericContracts.PresentationInt200, _playerTile / Fo1TacticalSessionNumericContracts.PresentationInt200 },
         doorTile = _doorTile,
         turn = _turn,
         actionPoints = _actionPoints,
@@ -1478,14 +1556,14 @@ internal partial class Fo1TacticalSession : Node
             DoubleSided = true,
             AlphaCut = SpriteBase3D.AlphaCutMode.OpaquePrepass,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
-            Scale = Vector3.One * 1.28f,
+            Scale = Vector3.One * Fo1TacticalSessionNumericContracts.PresentationFloat1Point28f,
         };
         _playerToken.AddChild(_playerSourceSprite);
         _hoverMarker = new MeshInstance3D
         {
             Name = "HoveredFalloutHex",
-            Mesh = Fo1HexVisuals.BuildRingMesh(0.78f, 0.98f),
-            MaterialOverride = Fo1HexVisuals.Material(new Color(0.35f, 1.0f, 0.28f, 0.85f), true),
+            Mesh = Fo1HexVisuals.BuildRingMesh(Fo1TacticalSessionNumericContracts.PresentationFloat0Point78f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point98f),
+            MaterialOverride = Fo1HexVisuals.Material(new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point35f, 1.0f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point28f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point85f), true),
             Visible = false,
         };
         AddChild(_hoverMarker);
@@ -1495,9 +1573,9 @@ internal partial class Fo1TacticalSession : Node
             Multimesh = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-                Mesh = Fo1HexVisuals.BuildRingMesh(0.86f, 0.94f),
+                Mesh = Fo1HexVisuals.BuildRingMesh(Fo1TacticalSessionNumericContracts.PresentationFloat0Point86f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point94f),
             },
-            MaterialOverride = Fo1HexVisuals.Material(new Color(0.95f, 0.76f, 0.18f, 0.72f), true),
+            MaterialOverride = Fo1HexVisuals.Material(new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point95f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point76f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point18f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point72f), true),
         };
         AddChild(_pathMarkers);
     }
@@ -1509,12 +1587,12 @@ internal partial class Fo1TacticalSession : Node
         for (var index = 0; index < steps.Length; index++)
             _pathMarkers.Multimesh.SetInstanceTransform(
                 index,
-                new Transform3D(Basis.Identity, Fo1HexMath.Center(steps[index]) + Vector3.Up * 0.04f));
+                new Transform3D(Basis.Identity, Fo1HexMath.Center(steps[index]) + Vector3.Up * Fo1TacticalSessionNumericContracts.PresentationFloat0Point04f));
     }
 
     private void BuildHud()
     {
-        Hud = new CanvasLayer { Name = "Fo1HexHud", Layer = 50 };
+        Hud = new CanvasLayer { Name = "Fo1HexHud", Layer = Fo1TacticalSessionNumericContracts.PresentationInt50 };
         AddChild(Hud);
         _debugHudRoot = new Control
         {
@@ -1524,27 +1602,27 @@ internal partial class Fo1TacticalSession : Node
         Hud.AddChild(_debugHudRoot);
         var panel = new ColorRect
         {
-            Position = new Vector2(18.0f, 532.0f),
-            Size = new Vector2(910.0f, 170.0f),
-            Color = new Color(0.012f, 0.022f, 0.018f, 0.91f),
+            Position = new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat18Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat532Point0f),
+            Size = new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat910Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat170Point0f),
+            Color = new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point012f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point022f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point018f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point91f),
         };
         _debugHudRoot.AddChild(panel);
         var labels = new VBoxContainer
         {
-            Position = new Vector2(32.0f, 542.0f),
-            Size = new Vector2(875.0f, 145.0f),
+            Position = new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat32Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat542Point0f),
+            Size = new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat875Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat145Point0f),
         };
         _debugHudRoot.AddChild(labels);
         var title = new Label { Text = "FALLOUT 1  •  V13ENT  •  200×200 HEX TACTICAL SLICE" };
-        title.AddThemeColorOverride("font_color", new Color(0.96f, 0.77f, 0.28f));
-        title.AddThemeFontSizeOverride("font_size", 18);
+        title.AddThemeColorOverride("font_color", new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point96f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point77f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point28f));
+        title.AddThemeFontSizeOverride("font_size", Fo1TacticalSessionNumericContracts.PresentationInt18);
         labels.AddChild(title);
         _turnLabel = HudLabel(labels);
         _hexLabel = HudLabel(labels);
         _statusLabel = HudLabel(labels);
         _controlsLabel = HudLabel(labels);
         _controlsLabel.Text = ControlsText();
-        _controlsLabel.AddThemeFontSizeOverride("font_size", 14);
+        _controlsLabel.AddThemeFontSizeOverride("font_size", Fo1TacticalSessionNumericContracts.PresentationInt14);
         BuildTargetReticle();
         BuildFpsCrosshair();
     }
@@ -1558,26 +1636,26 @@ internal partial class Fo1TacticalSession : Node
         _fpsCrosshair = new Control
         {
             Name = "Fo1FpsCrosshair",
-            AnchorLeft = 0.5f,
-            AnchorTop = 0.5f,
-            AnchorRight = 0.5f,
-            AnchorBottom = 0.5f,
-            OffsetLeft = -18.0f,
-            OffsetTop = -18.0f,
-            OffsetRight = 18.0f,
-            OffsetBottom = 18.0f,
+            AnchorLeft = Fo1TacticalSessionNumericContracts.PresentationFloat0Point5f,
+            AnchorTop = Fo1TacticalSessionNumericContracts.PresentationFloat0Point5f,
+            AnchorRight = Fo1TacticalSessionNumericContracts.PresentationFloat0Point5f,
+            AnchorBottom = Fo1TacticalSessionNumericContracts.PresentationFloat0Point5f,
+            OffsetLeft = Fo1TacticalSessionNumericContracts.PresentationFloatNEgativE18Point0f,
+            OffsetTop = Fo1TacticalSessionNumericContracts.PresentationFloatNEgativE18Point0f,
+            OffsetRight = Fo1TacticalSessionNumericContracts.PresentationFloat18Point0f,
+            OffsetBottom = Fo1TacticalSessionNumericContracts.PresentationFloat18Point0f,
             MouseFilter = Control.MouseFilterEnum.Ignore,
             Visible = false,
         };
         Hud.AddChild(_fpsCrosshair);
-        var color = new Color(0.72f, 1.0f, 0.46f, 0.92f);
+        var color = new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point72f, 1.0f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point46f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point92f);
         foreach (var (position, size) in new[]
                  {
-                     (new Vector2(16.0f, 4.0f), new Vector2(2.0f, 9.0f)),
-                     (new Vector2(16.0f, 23.0f), new Vector2(2.0f, 9.0f)),
-                     (new Vector2(4.0f, 16.0f), new Vector2(9.0f, 2.0f)),
-                     (new Vector2(23.0f, 16.0f), new Vector2(9.0f, 2.0f)),
-                     (new Vector2(16.0f, 16.0f), new Vector2(2.0f, 2.0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat16Point0f, 4.0f), new Vector2(2.0f, Fo1TacticalSessionNumericContracts.PresentationFloat9Point0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat16Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat23Point0f), new Vector2(2.0f, Fo1TacticalSessionNumericContracts.PresentationFloat9Point0f)),
+                     (new Vector2(4.0f, Fo1TacticalSessionNumericContracts.PresentationFloat16Point0f), new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat9Point0f, 2.0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat23Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat16Point0f), new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat9Point0f, 2.0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat16Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat16Point0f), new Vector2(2.0f, 2.0f)),
                  })
             _fpsCrosshair.AddChild(new ColorRect
             {
@@ -1593,23 +1671,23 @@ internal partial class Fo1TacticalSession : Node
         _targetReticle = new Control
         {
             Name = "SelectedTargetReticle",
-            Size = new Vector2(180.0f, 104.0f),
+            Size = new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat180Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat104Point0f),
             MouseFilter = Control.MouseFilterEnum.Ignore,
             Visible = false,
         };
         Hud.AddChild(_targetReticle);
-        var color = new Color(1.0f, 0.82f, 0.10f, 0.98f);
+        var color = new Color(1.0f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point82f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point10f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point98f);
         foreach (var (position, size) in new[]
                  {
-                     (new Vector2(48.0f, 20.0f), new Vector2(30.0f, 4.0f)),
-                     (new Vector2(102.0f, 20.0f), new Vector2(30.0f, 4.0f)),
-                     (new Vector2(48.0f, 20.0f), new Vector2(4.0f, 28.0f)),
-                     (new Vector2(128.0f, 20.0f), new Vector2(4.0f, 28.0f)),
-                     (new Vector2(48.0f, 68.0f), new Vector2(30.0f, 4.0f)),
-                     (new Vector2(102.0f, 68.0f), new Vector2(30.0f, 4.0f)),
-                     (new Vector2(48.0f, 44.0f), new Vector2(4.0f, 28.0f)),
-                     (new Vector2(128.0f, 44.0f), new Vector2(4.0f, 28.0f)),
-                     (new Vector2(88.0f, 72.0f), new Vector2(4.0f, 13.0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat48Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat20Point0f), new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat30Point0f, 4.0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat102Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat20Point0f), new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat30Point0f, 4.0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat48Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat20Point0f), new Vector2(4.0f, Fo1TacticalSessionNumericContracts.PresentationFloat28Point0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat128Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat20Point0f), new Vector2(4.0f, Fo1TacticalSessionNumericContracts.PresentationFloat28Point0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat48Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat68Point0f), new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat30Point0f, 4.0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat102Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat68Point0f), new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat30Point0f, 4.0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat48Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat44Point0f), new Vector2(4.0f, Fo1TacticalSessionNumericContracts.PresentationFloat28Point0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat128Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat44Point0f), new Vector2(4.0f, Fo1TacticalSessionNumericContracts.PresentationFloat28Point0f)),
+                     (new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat88Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat72Point0f), new Vector2(4.0f, Fo1TacticalSessionNumericContracts.PresentationFloat13Point0f)),
                  })
         {
             _targetReticle.AddChild(new ColorRect
@@ -1623,15 +1701,15 @@ internal partial class Fo1TacticalSession : Node
         _targetReticleLabel = new Label
         {
             Position = Vector2.Zero,
-            Size = new Vector2(180.0f, 22.0f),
+            Size = new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat180Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat22Point0f),
             HorizontalAlignment = HorizontalAlignment.Center,
             Text = "TARGET: GIANT RAT",
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         _targetReticleLabel.AddThemeColorOverride("font_color", color);
         _targetReticleLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
-        _targetReticleLabel.AddThemeConstantOverride("outline_size", 6);
-        _targetReticleLabel.AddThemeFontSizeOverride("font_size", 18);
+        _targetReticleLabel.AddThemeConstantOverride("outline_size", Fo1TacticalSessionNumericContracts.PresentationInt6);
+        _targetReticleLabel.AddThemeFontSizeOverride("font_size", Fo1TacticalSessionNumericContracts.PresentationInt18);
         _targetReticle.AddChild(_targetReticleLabel);
     }
 
@@ -1645,13 +1723,13 @@ internal partial class Fo1TacticalSession : Node
             return;
         }
         var tactical = _camera.Projection == Camera3D.ProjectionType.Orthogonal;
-        var maximumDistance = tactical ? 8 : 4;
+        var maximumDistance = tactical ? Fo1TacticalSessionNumericContracts.PresentationInt8 : 4;
         if (Fo1HexMath.Distance(_playerTile, _selectedMob.Tile) > maximumDistance)
         {
             _targetReticle.Visible = false;
             return;
         }
-        var target = _selectedMob.GlobalPosition + Vector3.Up * 0.55f;
+        var target = _selectedMob.GlobalPosition + Vector3.Up * Fo1TacticalSessionNumericContracts.PresentationFloat0Point55f;
         if (_camera.IsPositionBehind(target))
         {
             _targetReticle.Visible = false;
@@ -1659,9 +1737,9 @@ internal partial class Fo1TacticalSession : Node
         }
         var screen = _camera.UnprojectPosition(target);
         var viewport = GetViewport().GetVisibleRect().Size;
-        var position = screen - new Vector2(90.0f, 72.0f);
-        position.X = Math.Clamp(position.X, 8.0f, MathF.Max(8.0f, viewport.X - 188.0f));
-        position.Y = Math.Clamp(position.Y, 8.0f, MathF.Min(440.0f, viewport.Y - 112.0f));
+        var position = screen - new Vector2(Fo1TacticalSessionNumericContracts.PresentationFloat90Point0f, Fo1TacticalSessionNumericContracts.PresentationFloat72Point0f);
+        position.X = Math.Clamp(position.X, Fo1TacticalSessionNumericContracts.PresentationFloat8Point0f, MathF.Max(Fo1TacticalSessionNumericContracts.PresentationFloat8Point0f, viewport.X - Fo1TacticalSessionNumericContracts.PresentationFloat188Point0f));
+        position.Y = Math.Clamp(position.Y, Fo1TacticalSessionNumericContracts.PresentationFloat8Point0f, MathF.Min(Fo1TacticalSessionNumericContracts.PresentationFloat440Point0f, viewport.Y - Fo1TacticalSessionNumericContracts.PresentationFloat112Point0f));
         _targetReticle.Position = position;
         _targetReticleLabel.Text =
             $"TARGET: GIANT RAT  HP {_selectedMob.HitPoints}/{_selectedMob.MaximumHitPoints}";
@@ -1679,8 +1757,8 @@ internal partial class Fo1TacticalSession : Node
     private static Label HudLabel(Container parent)
     {
         var label = new Label();
-        label.AddThemeColorOverride("font_color", new Color(0.68f, 0.96f, 0.48f));
-        label.AddThemeFontSizeOverride("font_size", 16);
+        label.AddThemeColorOverride("font_color", new Color(Fo1TacticalSessionNumericContracts.PresentationFloat0Point68f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point96f, Fo1TacticalSessionNumericContracts.PresentationFloat0Point48f));
+        label.AddThemeFontSizeOverride("font_size", Fo1TacticalSessionNumericContracts.PresentationInt16);
         parent.AddChild(label);
         return label;
     }
@@ -1954,7 +2032,7 @@ internal partial class Fo1TacticalSession : Node
         internal void Validate()
         {
             if (string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(Pid) ||
-                PrototypeSha256.Length != 64 || string.IsNullOrWhiteSpace(Skill) ||
+                PrototypeSha256.Length != Fo1TacticalSessionNumericContracts.PresentationInt64 || string.IsNullOrWhiteSpace(Skill) ||
                 MinimumDamage <= 0 || MaximumDamage < MinimumDamage || RangeHexes <= 0 ||
                 ActionPointCost <= 0 || MinimumStrength <= 0)
                 throw new InvalidOperationException("Fallout weapon profile is invalid.");

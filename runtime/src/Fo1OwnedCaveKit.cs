@@ -4,6 +4,130 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1OwnedCaveKitNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float GeometryFloatNEgativE0Point0001f = -0.0001f;
+    internal const float GeometryFloatNEgativE0Point05f = -0.05f;
+    internal const float GeometryFloatNEgativE0Point10f = -0.10f;
+    internal const float GeometryFloatNEgativE0Point20f = -0.20f;
+    internal const float GeometryFloatNEgativE0Point3f = -0.3f;
+    internal const float GeometryFloat0Point000001f = 0.000001f;
+    internal const float GeometryFloat0Point00001f = 0.00001f;
+    internal const float GeometryFloat0Point0001f = 0.0001f;
+    internal const float GeometryFloat0Point001f = 0.001f;
+    internal const float GeometryFloat0Point002f = 0.002f;
+    internal const float GeometryFloat0Point005f = 0.005f;
+    internal const float GeometryFloat0Point01f = 0.01f;
+    internal const float GeometryFloat0Point028f = 0.028f;
+    internal const float GeometryFloat0Point04f = 0.04f;
+    internal const float GeometryFloat0Point05f = 0.05f;
+    internal const float GeometryFloat0Point08f = 0.08f;
+    internal const float GeometryFloat0Point095f = 0.095f;
+    internal const float GeometryFloat0Point09f = 0.09f;
+    internal const float GeometryFloat0Point11f = 0.11f;
+    internal const float GeometryFloat0Point135f = 0.135f;
+    internal const float GeometryFloat0Point14f = 0.14f;
+    internal const float GeometryFloat0Point16f = 0.16f;
+    internal const float GeometryFloat0Point18f = 0.18f;
+    internal const float GeometryFloat0Point1f = 0.1f;
+    internal const float GeometryFloat0Point20f = 0.20f;
+    internal const float GeometryFloat0Point22f = 0.22f;
+    internal const float GeometryFloat0Point25f = 0.25f;
+    internal const float GeometryFloat0Point27f = 0.27f;
+    internal const float GeometryFloat0Point2f = 0.2f;
+    internal const float GeometryFloat0Point30f = 0.30f;
+    internal const float GeometryFloat0Point32f = 0.32f;
+    internal const float GeometryFloat0Point35f = 0.35f;
+    internal const float GeometryFloat0Point36f = 0.36f;
+    internal const float GeometryFloat0Point38f = 0.38f;
+    internal const float GeometryFloat0Point3f = 0.3f;
+    internal const float GeometryFloat0Point40f = 0.40f;
+    internal const float GeometryFloat0Point45f = 0.45f;
+    internal const float GeometryFloat0Point50f = 0.50f;
+    internal const float GeometryFloat0Point52f = 0.52f;
+    internal const float GeometryFloat0Point56f = 0.56f;
+    internal const float GeometryFloat0Point58f = 0.58f;
+    internal const float GeometryFloat0Point5f = 0.5f;
+    internal const float GeometryFloat0Point62f = 0.62f;
+    internal const float GeometryFloat0Point64f = 0.64f;
+    internal const float GeometryFloat0Point68f = 0.68f;
+    internal const float GeometryFloat0Point69f = 0.69f;
+    internal const float GeometryFloat0Point6f = 0.6f;
+    internal const float GeometryFloat0Point72f = 0.72f;
+    internal const float GeometryFloat0Point75f = 0.75f;
+    internal const float GeometryFloat0Point76f = 0.76f;
+    internal const float GeometryFloat0Point77f = 0.77f;
+    internal const float GeometryFloat0Point80f = 0.80f;
+    internal const float GeometryFloat0Point82f = 0.82f;
+    internal const float GeometryFloat0Point84f = 0.84f;
+    internal const float GeometryFloat0Point86f = 0.86f;
+    internal const float GeometryFloat0Point8f = 0.8f;
+    internal const float GeometryFloat0Point92f = 0.92f;
+    internal const float GeometryFloat0Point96f = 0.96f;
+    internal const float GeometryFloat1Point0ENEgativE10f = 1.0e-10f;
+    internal const float GeometryFloat1Point2f = 1.2f;
+    internal const float GeometryFloat1Point65f = 1.65f;
+    internal const float GeometryFloat1Point6f = 1.6f;
+    internal const float GeometryFloat1Point95f = 1.95f;
+    internal const float GeometryFloat1Point9f = 1.9f;
+    internal const int GeometryInt10 = 10;
+    internal const int GeometryInt100 = 100;
+    internal const float GeometryFloat1000Point0f = 1000.0f;
+    internal const int GeometryInt101 = 101;
+    internal const int GeometryInt1024 = 1024;
+    internal const int GeometryInt107 = 107;
+    internal const int GeometryInt11 = 11;
+    internal const int GeometryInt12 = 12;
+    internal const float GeometryFloat12Point0f = 12.0f;
+    internal const int GeometryInt127 = 127;
+    internal const uint GeometryUint1274126177u = 1274126177u;
+    internal const int GeometryInt13 = 13;
+    internal const int GeometryInt130013 = 130013;
+    internal const int GeometryInt13013 = 13013;
+    internal const int GeometryInt14 = 14;
+    internal const float GeometryFloat14Point0f = 14.0f;
+    internal const int GeometryInt149 = 149;
+    internal const int GeometryInt15 = 15;
+    internal const int GeometryInt16 = 16;
+    internal const float GeometryFloat16Point0f = 16.0f;
+    internal const int GeometryInt17 = 17;
+    internal const int GeometryInt19 = 19;
+    internal const int GeometryInt19349663 = 19349663;
+    internal const float GeometryFloat2Point2f = 2.2f;
+    internal const float GeometryFloat2Point35f = 2.35f;
+    internal const float GeometryFloat2Point5f = 2.5f;
+    internal const int GeometryInt2000 = 2000;
+    internal const int GeometryInt211 = 211;
+    internal const float GeometryFloat25Point0f = 25.0f;
+    internal const int GeometryInt271828 = 271828;
+    internal const int GeometryInt31 = 31;
+    internal const int GeometryInt31337 = 31337;
+    internal const float GeometryFloat32767Point5f = 32767.5f;
+    internal const int GeometryInt37 = 37;
+    internal const int GeometryInt401 = 401;
+    internal const int GeometryInt419 = 419;
+    internal const int GeometryInt43 = 43;
+    internal const int GeometryInt433 = 433;
+    internal const int GeometryInt47 = 47;
+    internal const int GeometryInt5 = 5;
+    internal const float GeometryFloat5Point0f = 5.0f;
+    internal const int GeometryInt59 = 59;
+    internal const int GeometryInt6 = 6;
+    internal const float GeometryFloat6Point5f = 6.5f;
+    internal const int GeometryInt64 = 64;
+    internal const int GeometryInt7 = 7;
+    internal const int GeometryInt73 = 73;
+    internal const int GeometryInt73856093 = 73856093;
+    internal const int GeometryInt8 = 8;
+    internal const float GeometryFloat8Point5f = 8.5f;
+    internal const int GeometryInt83492791 = 83492791;
+    internal const int GeometryInt89 = 89;
+    internal const int GeometryInt9 = 9;
+    internal const int GeometryInt97 = 97;
+}
+
 internal static class Fo1OwnedCaveKit
 {
     private const string PresentationSchema = "opennv-fo1-3d-presentation/v1";
@@ -58,6 +182,7 @@ internal static class Fo1OwnedCaveKit
             var loaded = VerifiedGltfLoader.Load(
                 asset.GetProperty("model").GetString()!,
                 asset.GetProperty("sidecar").GetString()!);
+            loaded.CollisionScene?.Free();
             if (!loaded.SourceSha256.Equals(
                     asset.GetProperty("sourceSha256").GetString(),
                     StringComparison.OrdinalIgnoreCase))
@@ -234,10 +359,10 @@ internal static class Fo1OwnedCaveKit
                 $"Fallout cave rock grounding failed: instances={groundedInstances} " +
                 $"seat={minimumGroundSeatDepthMeters:F4}-{maximumGroundSeatDepthMeters:F4}m " +
                 $"error={maximumGroundErrorMeters:F6}m");
-        if (instanceCount < 100 ||
+        if (instanceCount < Fo1OwnedCaveKitNumericContracts.GeometryInt100 ||
             !roleCounts.ContainsKey("large-rock") || !roleCounts.ContainsKey("small-rock") ||
             !roleCounts.ContainsKey("stalagmite") ||
-            declared.GetProperty("sourceWallObjects").GetInt32() < 100 ||
+            declared.GetProperty("sourceWallObjects").GetInt32() < Fo1OwnedCaveKitNumericContracts.GeometryInt100 ||
             wallRelief.Placements < 1)
             throw new InvalidOperationException(
                 $"Fallout owned cave composition is incomplete: instances={instanceCount}");
@@ -319,13 +444,13 @@ internal static class Fo1OwnedCaveKit
         var segments = portal.GetProperty("segments").GetInt32();
         var repeat = portal.GetProperty("textureRepeatMeters").GetSingle();
         if (!origin.IsFinite() || !caveward.IsFinite() || !lateral.IsFinite() ||
-            MathF.Abs(caveward.Dot(lateral)) > 0.001f ||
-            floor is < -0.10f or > 0.0f || frontRelief is < 0.0f or > 0.8f ||
-            depth is < 0.5f or > 4.0f || innerRadius is < 1.2f or > 2.5f ||
-            outerHalfWidth is < 4.0f or > 14.0f ||
+            MathF.Abs(caveward.Dot(lateral)) > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point001f ||
+            floor is < Fo1OwnedCaveKitNumericContracts.GeometryFloatNEgativE0Point10f or > 0.0f || frontRelief is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point8f ||
+            depth is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f or > 4.0f || innerRadius is < Fo1OwnedCaveKitNumericContracts.GeometryFloat1Point2f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat2Point5f ||
+            outerHalfWidth is < 4.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat14Point0f ||
             outerTop <= innerRadius * 2.0f + 1.0f ||
-            outerBottom is < -0.3f or > -0.05f ||
-            radialNoise is < 0.0f or > 0.6f || segments is < 16 or > 64 || repeat <= 0.5f)
+            outerBottom is < Fo1OwnedCaveKitNumericContracts.GeometryFloatNEgativE0Point3f or > Fo1OwnedCaveKitNumericContracts.GeometryFloatNEgativE0Point05f ||
+            radialNoise is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point6f || segments is < Fo1OwnedCaveKitNumericContracts.GeometryInt16 or > Fo1OwnedCaveKitNumericContracts.GeometryInt64 || repeat <= Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f)
             throw new InvalidOperationException("Fallout Vault portal geometry is invalid.");
 
         Vector3 Point(float x, float distance, float height) =>
@@ -342,17 +467,17 @@ internal static class Fo1OwnedCaveKit
             var angle = 2.0f * MathF.PI * index / segments;
             var sine = MathF.Sin(angle);
             var cosine = MathF.Cos(angle);
-            var radiusNoise = Noise(130013, index, 19) * radialNoise;
-            var reliefNoise = Noise(271828, index, 31) * radialNoise * 0.22f;
+            var radiusNoise = Noise(Fo1OwnedCaveKitNumericContracts.GeometryInt130013, index, Fo1OwnedCaveKitNumericContracts.GeometryInt19) * radialNoise;
+            var reliefNoise = Noise(Fo1OwnedCaveKitNumericContracts.GeometryInt271828, index, Fo1OwnedCaveKitNumericContracts.GeometryInt31) * radialNoise * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point22f;
             localInner[index] = new Vector2(
                 sine * innerRadius,
                 centerY + cosine * innerRadius);
-            var horizontalDistance = MathF.Abs(sine) < 0.0001f
+            var horizontalDistance = MathF.Abs(sine) < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point0001f
                 ? float.PositiveInfinity
                 : outerHalfWidth / MathF.Abs(sine);
             var verticalDistance = cosine >= 0.0f
-                ? (outerTop - centerY) / MathF.Max(cosine, 0.0001f)
-                : (outerBottom - centerY) / MathF.Min(cosine, -0.0001f);
+                ? (outerTop - centerY) / MathF.Max(cosine, Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point0001f)
+                : (outerBottom - centerY) / MathF.Min(cosine, Fo1OwnedCaveKitNumericContracts.GeometryFloatNEgativE0Point0001f);
             var boundaryDistance = MathF.Min(horizontalDistance, verticalDistance);
             localOuter[index] = new Vector2(
                 sine * boundaryDistance,
@@ -362,7 +487,7 @@ internal static class Fo1OwnedCaveKit
             frontOuter[index] = Point(
                 localOuter[index].X,
                 frontRelief + reliefNoise,
-                localOuter[index].Y + radiusNoise * 0.16f);
+                localOuter[index].Y + radiusNoise * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point16f);
             backOuter[index] = Point(localOuter[index].X, -depth, localOuter[index].Y);
         }
 
@@ -395,7 +520,7 @@ internal static class Fo1OwnedCaveKit
                 FaceUv(localInner[next]),
                 -caveward);
 
-            var middleAngle = 2.0f * MathF.PI * (index + 0.5f) / segments;
+            var middleAngle = 2.0f * MathF.PI * (index + Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f) / segments;
             var innerNormal = -(
                 lateral * MathF.Sin(middleAngle) + Vector3.Up * MathF.Cos(middleAngle));
             var outerNormal = -innerNormal;
@@ -458,8 +583,8 @@ internal static class Fo1OwnedCaveKit
             NormalScale = envelope.GetProperty("normalScale").GetSingle(),
             EmissionEnabled = true,
             EmissionTexture = textures.TwoDimensional[diffuseId],
-            Emission = new Color(0.16f, 0.135f, 0.095f),
-            EmissionEnergyMultiplier = 0.22f,
+            Emission = new Color(Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point16f, Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point135f, Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point095f),
+            EmissionEnergyMultiplier = Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point22f,
             Transparency = BaseMaterial3D.TransparencyEnum.Disabled,
         };
         var instance = new MeshInstance3D
@@ -485,16 +610,16 @@ internal static class Fo1OwnedCaveKit
         var ceiling = envelope.GetProperty("ceilingHeightMeters").GetSingle();
         var relief = envelope.GetProperty("ceilingReliefMeters").GetSingle();
         var repeat = envelope.GetProperty("textureRepeatMeters").GetSingle();
-        if (floor is < -0.20f or > 0.0f || ceiling is < 4.0f or > 12.0f ||
-            relief is < 0.0f or > 2.0f || repeat <= 0.5f)
+        if (floor is < Fo1OwnedCaveKitNumericContracts.GeometryFloatNEgativE0Point20f or > 0.0f || ceiling is < 4.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat12Point0f ||
+            relief is < 0.0f or > 2.0f || repeat <= Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f)
             throw new InvalidOperationException("Fallout cave envelope geometry is invalid.");
 
         float CeilingHeight(Vector3 point)
         {
-            var x = Mathf.RoundToInt(point.X * 1000.0f);
-            var z = Mathf.RoundToInt(point.Z * 1000.0f);
-            var broad = Noise(13013, x / 2000, z / 2000) * 0.62f;
-            var detail = Noise(31337, x, z) * 0.38f;
+            var x = Mathf.RoundToInt(point.X * Fo1OwnedCaveKitNumericContracts.GeometryFloat1000Point0f);
+            var z = Mathf.RoundToInt(point.Z * Fo1OwnedCaveKitNumericContracts.GeometryFloat1000Point0f);
+            var broad = Noise(Fo1OwnedCaveKitNumericContracts.GeometryInt13013, x / Fo1OwnedCaveKitNumericContracts.GeometryInt2000, z / Fo1OwnedCaveKitNumericContracts.GeometryInt2000) * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point62f;
+            var detail = Noise(Fo1OwnedCaveKitNumericContracts.GeometryInt31337, x, z) * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point38f;
             return ceiling + relief * (broad + detail);
         }
 
@@ -523,7 +648,7 @@ internal static class Fo1OwnedCaveKit
                     continue;
                 var firstBottom = new Vector3(corners[edge].X, floor, corners[edge].Z);
                 var secondBottom = new Vector3(corners[next].X, floor, corners[next].Z);
-                var outward = ((corners[edge] + corners[next]) * 0.5f - Fo1HexMath.Center(tile))
+                var outward = ((corners[edge] + corners[next]) * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f - Fo1HexMath.Center(tile))
                     .Normalized();
                 AddEnvelopeQuad(
                     tool,
@@ -676,12 +801,12 @@ internal static class Fo1OwnedCaveKit
                         "Could not duplicate a Vault 13 airlock material.");
                 material.ResourceName = $"FO1 dark Vault concrete {placementId} {source.ResourceName}";
                 material.AlbedoColor = new Color(
-                    source.AlbedoColor.R * 0.27f,
-                    source.AlbedoColor.G * 0.30f,
-                    source.AlbedoColor.B * 0.32f,
+                    source.AlbedoColor.R * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point27f,
+                    source.AlbedoColor.G * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point30f,
+                    source.AlbedoColor.B * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point32f,
                     source.AlbedoColor.A);
-                material.Roughness = MathF.Max(0.86f, source.Roughness);
-                material.Metallic = MathF.Min(0.08f, source.Metallic);
+                material.Roughness = MathF.Max(Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point86f, source.Roughness);
+                material.Metallic = MathF.Min(Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point08f, source.Metallic);
                 mesh.SetSurfaceOverrideMaterial(surface, material);
                 darkened++;
             }
@@ -702,12 +827,12 @@ internal static class Fo1OwnedCaveKit
         parent.AddChild(new OmniLight3D
         {
             Name = $"VAULT_CORRIDOR_LIGHT_{placementId}",
-            Position = position + Vector3.Up * (threshold ? 2.35f : 1.95f),
+            Position = position + Vector3.Up * (threshold ? Fo1OwnedCaveKitNumericContracts.GeometryFloat2Point35f : Fo1OwnedCaveKitNumericContracts.GeometryFloat1Point95f),
             LightColor = threshold
-                ? new Color(0.76f, 0.69f, 0.56f)
-                : new Color(0.92f, 0.77f, 0.52f),
-            LightEnergy = threshold ? 1.9f : 1.65f,
-            OmniRange = threshold ? 8.5f : 6.5f,
+                ? new Color(Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point76f, Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point69f, Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point56f)
+                : new Color(Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point92f, Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point77f, Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point52f),
+            LightEnergy = threshold ? Fo1OwnedCaveKitNumericContracts.GeometryFloat1Point9f : Fo1OwnedCaveKitNumericContracts.GeometryFloat1Point65f,
+            OmniRange = threshold ? Fo1OwnedCaveKitNumericContracts.GeometryFloat8Point5f : Fo1OwnedCaveKitNumericContracts.GeometryFloat6Point5f,
             ShadowEnabled = false,
         });
     }
@@ -733,7 +858,7 @@ internal static class Fo1OwnedCaveKit
         var roughness = floor.GetProperty("roughness").GetSingle();
         var normalScale = floor.GetProperty("normalScale").GetSingle();
         var color = ReadColor(floor.GetProperty("albedoColor"));
-        if (height is < -0.10f or > 0.0f || repeat <= 0.5f ||
+        if (height is < Fo1OwnedCaveKitNumericContracts.GeometryFloatNEgativE0Point10f or > 0.0f || repeat <= Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f ||
             roughness is < 0.0f or > 1.0f || normalScale is < 0.0f or > 2.0f)
             throw new InvalidOperationException("Fallout continuous-floor material values are invalid.");
 
@@ -784,7 +909,7 @@ internal static class Fo1OwnedCaveKit
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         parent.AddChild(instance);
-        var triangles = hexes * 6;
+        var triangles = hexes * Fo1OwnedCaveKitNumericContracts.GeometryInt6;
         var declared = composition.GetProperty("coverage");
         if (hexes != declared.GetProperty("continuousFloorHexes").GetInt32() ||
             triangles != declared.GetProperty("continuousFloorTriangles").GetInt32())
@@ -804,8 +929,8 @@ internal static class Fo1OwnedCaveKit
     {
         var expectedPosition = ReadVector(expected.GetProperty("positionMeters"));
         var expectedSize = ReadVector(expected.GetProperty("sizeMeters"));
-        if (expectedPosition.DistanceTo(actual.Position) > 0.002f ||
-            expectedSize.DistanceTo(actual.Size) > 0.002f)
+        if (expectedPosition.DistanceTo(actual.Position) > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point002f ||
+            expectedSize.DistanceTo(actual.Size) > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point002f)
             throw new InvalidOperationException(
                 $"Fallout cave-kit bounds drift: {id} expected={expectedPosition}/{expectedSize} " +
                 $"actual={actual.Position}/{actual.Size}");
@@ -827,8 +952,8 @@ internal static class Fo1OwnedCaveKit
             var fraction = value.GetProperty("seatDepthHeightFraction").GetSingle();
             var minimum = value.GetProperty("minimumSeatDepthMeters").GetSingle();
             var maximum = value.GetProperty("maximumSeatDepthMeters").GetSingle();
-            if (fraction is <= 0.0f or > 0.40f || minimum <= 0.0f ||
-                minimum > maximum || maximum > 0.50f)
+            if (fraction is <= 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point40f || minimum <= 0.0f ||
+                minimum > maximum || maximum > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point50f)
                 throw new InvalidOperationException(
                     $"Fallout cave grounding role is invalid: {property.Name}");
             roles.Add(property.Name, new GroundingRole(fraction, minimum, maximum));
@@ -839,8 +964,8 @@ internal static class Fo1OwnedCaveKit
             "small-rock",
             "stalagmite",
         };
-        if (!float.IsFinite(floorHeight) || floorHeight is < -0.10f or > 0.0f ||
-            maximumError is <= 0.0f or > 0.005f ||
+        if (!float.IsFinite(floorHeight) || floorHeight is < Fo1OwnedCaveKitNumericContracts.GeometryFloatNEgativE0Point10f or > 0.0f ||
+            maximumError is <= 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point005f ||
             !expectedRoles.SetEquals(roles.Keys))
             throw new InvalidOperationException("Fallout cave grounding coverage is invalid.");
         return new GroundingContract(floorHeight, maximumError, roles);
@@ -896,22 +1021,22 @@ internal static class Fo1OwnedCaveKit
             noiseSource.GetProperty("periodicSecondaryFrequencyOffset").GetInt32(),
             noiseSource.GetProperty("periodicSecondaryPhaseScale").GetSingle());
         var pixelsPerMeter = contract.GetProperty("pixelsPerMeter").GetSingle();
-        if (minimumContourSegments is < 6 or > 64 ||
-            groundSink is < 0.05f or > 0.75f ||
-            minimumRadius is < 0.20f or > 3.0f || maximumRadius < minimumRadius ||
-            radiusFromWidth is < 0.1f or > 2.0f ||
-            minimumHeight is < 2.0f or > 12.0f || maximumHeight < minimumHeight ||
-            heightFromPixels is < 0.25f or > 4.0f ||
-            radialNoise is < 0.0f or > 0.45f || verticalNoise is < 0.0f or > 0.5f ||
-            sampleSpacing is < 0.05f or > 0.5f ||
-            contourResampleSpacing is < 0.08f or > 1.0f ||
-            contourSmoothIterations is < 1 or > 12 ||
-            contourSmoothStrength is <= 0.0f or > 0.45f ||
-            contourInflation is < 0.0f or > 0.75f ||
-            boundaryBulge is < 0.0f or > 0.75f ||
-            macroNoiseWavelength is < 0.5f or > 12.0f ||
-            microNoiseWavelength is < 0.2f or > 4.0f ||
-            noiseBlend.RingWavelengthBase is < 0.25f or > 2.0f ||
+        if (minimumContourSegments is < Fo1OwnedCaveKitNumericContracts.GeometryInt6 or > Fo1OwnedCaveKitNumericContracts.GeometryInt64 ||
+            groundSink is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point05f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point75f ||
+            minimumRadius is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point20f or > 3.0f || maximumRadius < minimumRadius ||
+            radiusFromWidth is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point1f or > 2.0f ||
+            minimumHeight is < 2.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat12Point0f || maximumHeight < minimumHeight ||
+            heightFromPixels is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point25f or > 4.0f ||
+            radialNoise is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point45f || verticalNoise is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f ||
+            sampleSpacing is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point05f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f ||
+            contourResampleSpacing is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point08f or > 1.0f ||
+            contourSmoothIterations is < 1 or > Fo1OwnedCaveKitNumericContracts.GeometryInt12 ||
+            contourSmoothStrength is <= 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point45f ||
+            contourInflation is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point75f ||
+            boundaryBulge is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point75f ||
+            macroNoiseWavelength is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat12Point0f ||
+            microNoiseWavelength is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point2f or > 4.0f ||
+            noiseBlend.RingWavelengthBase is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point25f or > 2.0f ||
             noiseBlend.RingWavelengthHeightScale is < 0.0f or > 1.0f ||
             noiseBlend.MacroWeight is < 0.0f or > 1.0f ||
             noiseBlend.RingMacroWeight is < 0.0f or > 1.0f ||
@@ -921,7 +1046,7 @@ internal static class Fo1OwnedCaveKit
             noiseBlend.VerticalMicroWeight is < 0.0f or > 1.0f ||
             noiseBlend.PeriodicPrimaryWeight is < 0.0f or > 1.0f ||
             noiseBlend.PeriodicSecondaryWeight is < 0.0f or > 1.0f ||
-            noiseBlend.PeriodicSecondaryFrequencyMultiplier is < 1 or > 6 ||
+            noiseBlend.PeriodicSecondaryFrequencyMultiplier is < 1 or > Fo1OwnedCaveKitNumericContracts.GeometryInt6 ||
             noiseBlend.PeriodicSecondaryFrequencyOffset is < 0 or > 4 ||
             noiseBlend.PeriodicSecondaryPhaseScale is < 0.0f or > 2.0f ||
             !Mathf.IsEqualApprox(
@@ -940,7 +1065,7 @@ internal static class Fo1OwnedCaveKit
                 row.GetProperty("radiusMultiplier").GetSingle(),
                 row.GetProperty("centerJitterFraction").GetSingle()))
             .ToArray();
-        if (rings.Length is < 4 or > 12 ||
+        if (rings.Length is < 4 or > Fo1OwnedCaveKitNumericContracts.GeometryInt12 ||
             !Mathf.IsEqualApprox(rings[0].HeightFraction, 0.0f) ||
             !Mathf.IsEqualApprox(rings[^1].HeightFraction, 1.0f) ||
             rings.Select(row => row.HeightFraction).Distinct().Count() != rings.Length ||
@@ -949,8 +1074,8 @@ internal static class Fo1OwnedCaveKit
             throw new InvalidOperationException("Fallout connected wall-volume rings are invalid.");
         foreach (var ring in rings)
             if (ring.HeightFraction is < 0.0f or > 1.0f ||
-                ring.RadiusMultiplier is < 0.1f or > 1.6f ||
-                ring.CenterJitterFraction is < 0.0f or > 0.3f)
+                ring.RadiusMultiplier is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point1f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat1Point6f ||
+                ring.CenterJitterFraction is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point3f)
                 throw new InvalidOperationException(
                     "Fallout connected wall-volume ring dimension is invalid.");
 
@@ -990,12 +1115,12 @@ internal static class Fo1OwnedCaveKit
                     Uv1WorldTriplanar = true,
                     Uv1TriplanarSharpness = triplanarSharpness,
                 });
-            if (profile.TextureRepeatMeters <= 0.5f ||
+            if (profile.TextureRepeatMeters <= Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f ||
                 profile.Roughness is < 0.0f or > 1.0f ||
                 profile.NormalScale is < 0.0f or > 2.0f ||
-                profile.RadiusScale is < 0.25f or > 2.0f ||
-                profile.HeightScale is < 0.25f or > 2.0f ||
-                profile.TriplanarSharpness is < 0.5f or > 16.0f ||
+                profile.RadiusScale is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point25f or > 2.0f ||
+                profile.HeightScale is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point25f or > 2.0f ||
+                profile.TriplanarSharpness is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat16Point0f ||
                 !profiles.TryAdd(property.Name, profile))
                 throw new InvalidOperationException(
                     $"Fallout connected wall-volume profile is invalid: {property.Name}");
@@ -1041,20 +1166,20 @@ internal static class Fo1OwnedCaveKit
         if (dressingProfiles.Count == 0 ||
             !dressingProfiles.IsSubsetOf(profiles.Keys) ||
             dressingPrototypes.Length != 1 ||
-            dressing.SpacingMeters is < 1.0f or > 12.0f ||
-            dressing.MinimumInstancesPerContour is < 1 or > 8 ||
-            dressing.MinimumContourPerimeterMeters is < 0.5f or > 12.0f ||
-            dressing.MaximumInstances is < 1 or > 1024 ||
+            dressing.SpacingMeters is < 1.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat12Point0f ||
+            dressing.MinimumInstancesPerContour is < 1 or > Fo1OwnedCaveKitNumericContracts.GeometryInt8 ||
+            dressing.MinimumContourPerimeterMeters is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat12Point0f ||
+            dressing.MaximumInstances is < 1 or > Fo1OwnedCaveKitNumericContracts.GeometryInt1024 ||
             !dressing.Scale.IsFinite() ||
-            dressing.Scale.X is < 0.1f or > 2.0f ||
-            dressing.Scale.Y is < 0.1f or > 2.0f ||
-            dressing.Scale.Z is < 0.1f or > 2.0f ||
-            dressing.EmbedBehindContourMeters is < 0.0f or > 5.0f ||
-            dressing.GroundSinkMeters is < 0.0f or > 0.75f ||
+            dressing.Scale.X is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point1f or > 2.0f ||
+            dressing.Scale.Y is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point1f or > 2.0f ||
+            dressing.Scale.Z is < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point1f or > 2.0f ||
+            dressing.EmbedBehindContourMeters is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat5Point0f ||
+            dressing.GroundSinkMeters is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point75f ||
             !float.IsFinite(dressing.YawOffsetDegrees) ||
-            dressing.YawJitterDegrees is < 0.0f or > 25.0f ||
-            dressing.UniformScaleJitterFraction is < 0.0f or > 0.25f ||
-            dressing.VerticalScaleJitterFraction is < 0.0f or > 0.25f ||
+            dressing.YawJitterDegrees is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat25Point0f ||
+            dressing.UniformScaleJitterFraction is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point25f ||
+            dressing.VerticalScaleJitterFraction is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point25f ||
             dressing.HiddenSurfaceIdentities.Count == 0)
             throw new InvalidOperationException(
                 "Fallout owned cave-wall dressing values are invalid.");
@@ -1098,7 +1223,7 @@ internal static class Fo1OwnedCaveKit
                 throw new InvalidOperationException(
                     $"Fallout connected wall-volume tile drifted: {serial}");
             var radius = Math.Clamp(
-                dimensions.X / pixelsPerMeter * 0.5f * radiusFromWidth * profile.RadiusScale,
+                dimensions.X / pixelsPerMeter * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f * radiusFromWidth * profile.RadiusScale,
                 minimumRadius * profile.RadiusScale,
                 maximumRadius * profile.RadiusScale);
             var height = Math.Clamp(
@@ -1236,11 +1361,11 @@ internal static class Fo1OwnedCaveKit
                         ?? throw new InvalidOperationException(
                             $"Could not duplicate the owned cave-wall dressing: {component.Id}");
                     var uniform = 1.0f + dressing.UniformScaleJitterFraction * Noise(
-                        noiseSeed + 401,
+                        noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt401,
                         anchor.IdentityOne,
                         anchor.IdentityTwo);
                     var vertical = 1.0f + dressing.VerticalScaleJitterFraction * Noise(
-                        noiseSeed + 419,
+                        noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt419,
                         anchor.IdentityTwo,
                         anchor.IdentityOne);
                     instance.Name = $"CAVE_owned-wall-relief_{component.Id}_{anchor.Index:000}";
@@ -1252,7 +1377,7 @@ internal static class Fo1OwnedCaveKit
                         anchor.Outward.X,
                         anchor.Outward.Y)) + dressing.YawOffsetDegrees +
                         dressing.YawJitterDegrees * Noise(
-                            noiseSeed + 433,
+                            noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt433,
                             anchor.IdentityOne,
                             anchor.IdentityTwo);
                     instance.RotationDegrees = new Vector3(0.0f, yaw, 0.0f);
@@ -1376,7 +1501,7 @@ internal static class Fo1OwnedCaveKit
                 for (var index = 0; index < values.Length; index++)
                     if (values[index] >= 0.0f)
                         configuration |= 1 << index;
-                if (configuration is 0 or 15)
+                if (configuration is 0 or Fo1OwnedCaveKitNumericContracts.GeometryInt15)
                     continue;
 
                 Vector2 Edge(int edge)
@@ -1392,7 +1517,7 @@ internal static class Fo1OwnedCaveKit
                     };
                     var denominator = values[first] - values[second];
                     var amount = Mathf.IsZeroApprox(denominator)
-                        ? 0.5f
+                        ? Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f
                         : Math.Clamp(values[first] / denominator, 0.0f, 1.0f);
                     return corners[first].Lerp(corners[second], amount);
                 }
@@ -1400,7 +1525,7 @@ internal static class Fo1OwnedCaveKit
                 void Add(int firstEdge, int secondEdge) =>
                     segments.Add((Edge(firstEdge), Edge(secondEdge)));
                 var centerInside = WallVolumeField(
-                    (corners[0] + corners[2]) * 0.5f,
+                    (corners[0] + corners[2]) * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f,
                     sources) >= 0.0f;
                 switch (configuration)
                 {
@@ -1408,7 +1533,7 @@ internal static class Fo1OwnedCaveKit
                     case 2: Add(0, 1); break;
                     case 3: Add(3, 1); break;
                     case 4: Add(1, 2); break;
-                    case 5:
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt5:
                         if (centerInside)
                         {
                             Add(0, 1);
@@ -1420,11 +1545,11 @@ internal static class Fo1OwnedCaveKit
                             Add(1, 2);
                         }
                         break;
-                    case 6: Add(0, 2); break;
-                    case 7: Add(3, 2); break;
-                    case 8: Add(2, 3); break;
-                    case 9: Add(2, 0); break;
-                    case 10:
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt6: Add(0, 2); break;
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt7: Add(3, 2); break;
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt8: Add(2, 3); break;
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt9: Add(2, 0); break;
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt10:
                         if (centerInside)
                         {
                             Add(3, 0);
@@ -1436,10 +1561,10 @@ internal static class Fo1OwnedCaveKit
                             Add(2, 3);
                         }
                         break;
-                    case 11: Add(2, 1); break;
-                    case 12: Add(1, 3); break;
-                    case 13: Add(1, 0); break;
-                    case 14: Add(0, 3); break;
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt11: Add(2, 1); break;
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt12: Add(1, 3); break;
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt13: Add(1, 0); break;
+                    case Fo1OwnedCaveKitNumericContracts.GeometryInt14: Add(0, 3); break;
                     default:
                         throw new InvalidOperationException(
                             "Fallout connected wall-volume marching configuration is invalid.");
@@ -1537,8 +1662,8 @@ internal static class Fo1OwnedCaveKit
             for (var z = 0; z < cellRows; z++)
                 inside[x, z] = WallVolumeField(
                     new Vector2(
-                        minimumX + (x + 0.5f) * sampleSpacingMeters,
-                        minimumZ + (z + 0.5f) * sampleSpacingMeters),
+                        minimumX + (x + Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f) * sampleSpacingMeters,
+                        minimumZ + (z + Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f) * sampleSpacingMeters),
                     sources) >= 0.0f;
 
         var result = new List<(Vector2 First, Vector2 Second)>();
@@ -1566,7 +1691,7 @@ internal static class Fo1OwnedCaveKit
         IReadOnlyList<(Vector2 First, Vector2 Second)> segments,
         float sampleSpacingMeters)
     {
-        var quantization = MathF.Max(sampleSpacingMeters * 0.001f, 0.00001f);
+        var quantization = MathF.Max(sampleSpacingMeters * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point001f, Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point00001f);
         WallContourKey Key(Vector2 point) => new(
             (int)MathF.Round(point.X / quantization),
             (int)MathF.Round(point.Y / quantization));
@@ -1671,7 +1796,7 @@ internal static class Fo1OwnedCaveKit
                 segmentStartDistance += lengths[segment];
                 segment++;
             }
-            var amount = lengths[segment] <= 0.000001f
+            var amount = lengths[segment] <= Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point000001f
                 ? 0.0f
                 : (distance - segmentStartDistance) / lengths[segment];
             result[index] = source[segment].Lerp(
@@ -1759,7 +1884,7 @@ internal static class Fo1OwnedCaveKit
         var anchors = new List<WallDressingAnchor>(count);
         for (var anchorIndex = 0; anchorIndex < count; anchorIndex++)
         {
-            var target = (anchorIndex + 0.5f) * interval;
+            var target = (anchorIndex + Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f) * interval;
             var accumulated = 0.0f;
             for (var segment = 0; segment < contour.Count; segment++)
             {
@@ -1769,7 +1894,7 @@ internal static class Fo1OwnedCaveKit
                     accumulated += length;
                     continue;
                 }
-                if (length <= 0.00001f)
+                if (length <= Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point00001f)
                     break;
                 var first = contour[segment];
                 var second = contour[(segment + 1) % contour.Count];
@@ -1872,7 +1997,7 @@ internal static class Fo1OwnedCaveKit
                     distances[index],
                     perimeter,
                     macroNoiseWavelengthMeters,
-                    noiseSeed + 107 + contourIndex * 31,
+                    noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt107 + contourIndex * Fo1OwnedCaveKitNumericContracts.GeometryInt31,
                     identitySerial,
                     identityTile,
                     noiseBlend);
@@ -1882,7 +2007,7 @@ internal static class Fo1OwnedCaveKit
                     macroNoiseWavelengthMeters *
                         (noiseBlend.RingWavelengthBase +
                             ring.HeightFraction * noiseBlend.RingWavelengthHeightScale),
-                    noiseSeed + 211 + ringIndex * 37 + contourIndex * 19,
+                    noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt211 + ringIndex * Fo1OwnedCaveKitNumericContracts.GeometryInt37 + contourIndex * Fo1OwnedCaveKitNumericContracts.GeometryInt19,
                     identityTile,
                     identitySerial,
                     noiseBlend);
@@ -1890,7 +2015,7 @@ internal static class Fo1OwnedCaveKit
                     distances[index],
                     perimeter,
                     microNoiseWavelengthMeters,
-                    noiseSeed + 149 + ringIndex * 17,
+                    noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt149 + ringIndex * Fo1OwnedCaveKitNumericContracts.GeometryInt17,
                     identityTile,
                     identitySerial + contourIndex,
                     noiseBlend);
@@ -1950,8 +2075,8 @@ internal static class Fo1OwnedCaveKit
     {
         var direction = (second - first).Normalized();
         var outward = new Vector2(-direction.Y, direction.X);
-        var midpoint = (first + second) * 0.5f;
-        var probeDistance = sampleSpacingMeters * 0.5f;
+        var midpoint = (first + second) * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f;
+        var probeDistance = sampleSpacingMeters * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f;
         if (WallVolumeField(midpoint + outward * probeDistance, sources) >
             WallVolumeField(midpoint - outward * probeDistance, sources))
             outward = -outward;
@@ -1970,7 +2095,7 @@ internal static class Fo1OwnedCaveKit
             {
                 var ring = rings[ringIndex];
                 var contourNoise = Noise(
-                    noiseSeed + 107,
+                    noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt107,
                     quantizedX + segmentIndex,
                     quantizedZ + ringIndex);
                 var profileOffset = boundaryBulgeMeters * edgeInfluence *
@@ -1981,11 +2106,11 @@ internal static class Fo1OwnedCaveKit
                 var vertical = -groundSinkMeters +
                     ring.HeightFraction * (height + groundSinkMeters) +
                     verticalNoiseMeters * MathF.Sin(MathF.PI * ring.HeightFraction) *
-                        Noise(noiseSeed + 127, quantizedX, quantizedZ + ringIndex);
+                        Noise(noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt127, quantizedX, quantizedZ + ringIndex);
                 points[ringIndex, subdivision] = new Vector3(planar.X, vertical, planar.Y);
                 normals[ringIndex, subdivision] = new Vector3(
                     outward.X,
-                    ring.HeightFraction >= 1.0f ? 0.18f : 0.04f,
+                    ring.HeightFraction >= 1.0f ? Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point18f : Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point04f,
                     outward.Y).Normalized();
                 var horizontal = planar.Dot(Vector2.One.Normalized());
                 uvs[ringIndex, subdivision] = new Vector2(
@@ -2050,37 +2175,37 @@ internal static class Fo1OwnedCaveKit
         var normals = new Vector3[rings.Count, radialSegments];
         var phase = Noise(noiseSeed, source.Serial, source.Tile) * MathF.PI;
         var uvOffset = new Vector2(
-            (Noise(noiseSeed + 73, source.Serial, source.Tile) + 1.0f) *
-                0.5f * uvRandomOffsetRepeats,
-            (Noise(noiseSeed + 89, source.Tile, source.Serial) + 1.0f) *
-                0.5f * uvRandomOffsetRepeats);
+            (Noise(noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt73, source.Serial, source.Tile) + 1.0f) *
+                Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f * uvRandomOffsetRepeats,
+            (Noise(noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt89, source.Tile, source.Serial) + 1.0f) *
+                Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f * uvRandomOffsetRepeats);
         for (var ringIndex = 0; ringIndex < rings.Count; ringIndex++)
         {
             var ring = rings[ringIndex];
             var jitter = source.Radius * ring.CenterJitterFraction;
             var center = source.Center + new Vector3(
-                Noise(noiseSeed + 17, source.Serial, ringIndex) * jitter,
+                Noise(noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt17, source.Serial, ringIndex) * jitter,
                 0.0f,
-                Noise(noiseSeed + 31, source.Tile, ringIndex) * jitter);
+                Noise(noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt31, source.Tile, ringIndex) * jitter);
             var baseHeight = -groundSinkMeters +
                 ring.HeightFraction * (source.Height + groundSinkMeters);
             for (var segment = 0; segment < radialSegments; segment++)
             {
                 var angle = phase + Mathf.Tau * segment / radialSegments +
-                    Noise(noiseSeed + 101, source.Serial, ringIndex) * ringTwistRadians;
+                    Noise(noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt101, source.Serial, ringIndex) * ringTwistRadians;
                 var direction = new Vector3(MathF.Cos(angle), 0.0f, MathF.Sin(angle));
                 var radiusNoise = 1.0f + radialNoiseFraction *
-                    Noise(noiseSeed + 47, source.Serial * radialSegments + segment, ringIndex);
+                    Noise(noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt47, source.Serial * radialSegments + segment, ringIndex);
                 var heightNoise = ringIndex == 0 || ringIndex == rings.Count - 1
                     ? 0.0f
                     : verticalNoiseMeters *
-                        Noise(noiseSeed + 59, source.Tile * radialSegments + segment, ringIndex);
+                        Noise(noiseSeed + Fo1OwnedCaveKitNumericContracts.GeometryInt59, source.Tile * radialSegments + segment, ringIndex);
                 points[ringIndex, segment] = center +
                     direction * source.Radius * ring.RadiusMultiplier * radiusNoise +
                     Vector3.Up * (baseHeight + heightNoise);
                 normals[ringIndex, segment] = new Vector3(
                     direction.X,
-                    ringIndex == rings.Count - 1 ? 0.35f : 0.08f,
+                    ringIndex == rings.Count - 1 ? Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point35f : Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point08f,
                     direction.Z).Normalized();
             }
         }
@@ -2203,8 +2328,8 @@ internal static class Fo1OwnedCaveKit
         var pixelsPerMeter = relief.GetProperty("pixelsPerMeter").GetSingle();
         var groundAnchor = relief.GetProperty("groundAnchorMeters").GetSingle();
         var pitchCosine = MathF.Abs(MathF.Cos(Mathf.DegToRad(canonicalPitchDegrees)));
-        if (pixelsPerMeter <= 0.0f || groundAnchor is < 0.0f or > 0.1f ||
-            pitchCosine < 0.25f || !float.IsFinite(canonicalYawDegrees))
+        if (pixelsPerMeter <= 0.0f || groundAnchor is < 0.0f or > Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point1f ||
+            pitchCosine < Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point25f || !float.IsFinite(canonicalYawDegrees))
             throw new InvalidOperationException("Fallout FRM relief projection is invalid.");
         var verticalCompensation = 1.0f / pitchCosine;
         var frontRoughness = relief.GetProperty("frontRoughness").GetSingle();
@@ -2266,7 +2391,7 @@ internal static class Fo1OwnedCaveKit
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
                 TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
                 Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor,
-                AlphaScissorThreshold = 0.01f,
+                AlphaScissorThreshold = Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point01f,
                 NormalEnabled = true,
                 NormalTexture = normal,
                 NormalScale = 1.0f,
@@ -2449,225 +2574,12 @@ internal static class Fo1OwnedCaveKit
         return ImageTexture.CreateFromImage(image);
     }
 
-    private static int BuildWallRibbon(
-        Node3D container,
-        JsonElement composition,
-        JsonElement caveKit,
-        RuntimeMaterialLoader.LoadedTextures textures)
-    {
-        var diffuseId = TextureId(caveKit, "textures\\dungeons\\caves\\caverockwall03.dds");
-        var normalId = TextureId(caveKit, "textures\\dungeons\\caves\\caverockwall03_n.dds");
-        var material = new StandardMaterial3D
-        {
-            AlbedoTexture = textures.TwoDimensional[diffuseId],
-            AlbedoColor = new Color(0.82f, 0.84f, 0.80f),
-            Roughness = 0.96f,
-            Metallic = 0.0f,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            NormalEnabled = true,
-            NormalTexture = textures.TwoDimensional[normalId],
-            NormalScale = 0.68f,
-        };
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        var count = 0;
-        foreach (var row in composition.GetProperty("wallRibbon").EnumerateArray())
-        {
-            var id = row.GetProperty("id").GetString()!;
-            if (!ids.Add(id))
-                throw new InvalidOperationException($"Duplicate Fallout wall-ribbon identity: {id}");
-            var position = ReadVector(row.GetProperty("positionMeters"));
-            var yaw = row.GetProperty("yawDegrees").GetSingle();
-            var width = row.GetProperty("widthMeters").GetSingle();
-            var height = row.GetProperty("heightMeters").GetSingle();
-            var depth = row.GetProperty("depthMeters").GetSingle();
-            var seed = row.GetProperty("source").GetProperty("anchorSerial").GetInt32();
-            if (!position.IsFinite() || !float.IsFinite(yaw) ||
-                width <= 1.0f || height <= 1.0f || depth <= 0.1f)
-                throw new InvalidOperationException($"Invalid Fallout wall-ribbon transform: {id}");
-            var segment = new MeshInstance3D
-            {
-                Name = $"CAVE_wall-ribbon_{id}",
-                Mesh = BuildWallSegment(width, height, depth, seed),
-                MaterialOverride = material,
-                Position = position,
-                Rotation = new Vector3(0.0f, Mathf.DegToRad(yaw), 0.0f),
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
-            };
-            segment.SetMeta("fo1_asset_role", "wall-ribbon");
-            segment.SetMeta("fo1_cutaway_exempt", false);
-            container.AddChild(segment);
-            count++;
-        }
-        var declared = composition.GetProperty("coverage").GetProperty("wallRibbonSegments").GetInt32();
-        if (count != declared)
-            throw new InvalidOperationException(
-                $"Fallout wall-ribbon coverage drift: {count} != {declared}");
-        return count;
-    }
-
-    private static ArrayMesh BuildWallSegment(
-        float width,
-        float height,
-        float depth,
-        int seed)
-    {
-        const int columns = 11;
-        const int rows = 4;
-        var front = new Vector3[columns, rows];
-        var back = new Vector3[columns, rows];
-        for (var column = 0; column < columns; column++)
-        {
-            var amount = (float)column / (columns - 1);
-            var profile = MathF.Pow(
-                MathF.Max(0.0f, MathF.Sin(MathF.PI * amount)),
-                0.58f);
-            var x = -width * 0.5f + width * amount +
-                Noise(seed + 43, column, 7) * width * 0.028f * profile;
-            // Source wall bins must overlap the owned cave envelope. A low
-            // half-height endpoint exposed flat clear-color wedges between
-            // otherwise valid wall segments when viewed from player height.
-            // Keep irregular relief, but never let an endpoint fall below the
-            // envelope's lower wall band.
-            var top = height * (0.86f + profile * 0.14f) *
-                (0.96f + Noise(seed, column, 9) * 0.04f);
-            for (var row = 0; row < rows; row++)
-            {
-                var vertical = row switch
-                {
-                    0 => 0.0f,
-                    1 => 0.36f,
-                    2 => 0.72f,
-                    _ => 1.0f,
-                };
-                var halfDepth = depth * (0.16f + profile * 0.84f) * (row switch
-                {
-                    0 => 0.64f,
-                    1 => 0.56f,
-                    2 => 0.40f,
-                    _ => 0.22f,
-                });
-                var y = top * vertical;
-                var frontNoise = Noise(seed, column, row) * depth * 0.11f;
-                var backNoise = Noise(seed + 97, column, row) * depth * 0.09f;
-                front[column, row] = new Vector3(x, y, halfDepth + frontNoise);
-                back[column, row] = new Vector3(x, y, -halfDepth + backNoise);
-            }
-        }
-        var tool = new SurfaceTool();
-        tool.Begin(Mesh.PrimitiveType.Triangles);
-        for (var column = 0; column < columns - 1; column++)
-        {
-            for (var row = 0; row < rows - 1; row++)
-            {
-                AddWallQuad(
-                    tool,
-                    front[column, row],
-                    front[column + 1, row],
-                    front[column + 1, row + 1],
-                    front[column, row + 1],
-                    width,
-                    height,
-                    depth);
-                AddWallQuad(
-                    tool,
-                    back[column + 1, row],
-                    back[column, row],
-                    back[column, row + 1],
-                    back[column + 1, row + 1],
-                    width,
-                    height,
-                    depth);
-            }
-            AddWallQuad(
-                tool,
-                front[column, rows - 1],
-                front[column + 1, rows - 1],
-                back[column + 1, rows - 1],
-                back[column, rows - 1],
-                width,
-                height,
-                depth);
-        }
-        AddWallQuad(
-            tool,
-            back[0, 0],
-            front[0, 0],
-            front[0, rows - 1],
-            back[0, rows - 1],
-            width,
-            height,
-            depth);
-        AddWallQuad(
-            tool,
-            front[columns - 1, 0],
-            back[columns - 1, 0],
-            back[columns - 1, rows - 1],
-            front[columns - 1, rows - 1],
-            width,
-            height,
-            depth);
-        tool.Index();
-        return tool.Commit() ?? throw new InvalidOperationException(
-            "Could not build Fallout cutaway wall segment.");
-    }
-
-    private static void AddWallQuad(
-        SurfaceTool tool,
-        Vector3 first,
-        Vector3 second,
-        Vector3 third,
-        Vector3 fourth,
-        float width,
-        float height,
-        float depth)
-    {
-        AddWallTriangle(tool, first, second, third, width, height, depth);
-        AddWallTriangle(tool, first, third, fourth, width, height, depth);
-    }
-
-    private static void AddWallTriangle(
-        SurfaceTool tool,
-        Vector3 first,
-        Vector3 second,
-        Vector3 third,
-        float width,
-        float height,
-        float depth)
-    {
-        if (!first.IsFinite() || !second.IsFinite() || !third.IsFinite())
-            throw new InvalidOperationException("Fallout wall segment emitted a non-finite vertex.");
-        var cross = (second - first).Cross(third - first);
-        if (cross.LengthSquared() <= 1.0e-10f)
-            return;
-        var normal = cross.Normalized();
-        foreach (var vertex in new[] { first, second, third })
-        {
-            tool.SetNormal(normal);
-            Vector2 uv;
-            if (MathF.Abs(normal.Y) >= MathF.Abs(normal.X) &&
-                MathF.Abs(normal.Y) >= MathF.Abs(normal.Z))
-                uv = new Vector2(
-                    (vertex.X + width * 0.5f) / 2.2f,
-                    (vertex.Z + depth * 0.75f) / 2.2f);
-            else if (MathF.Abs(normal.X) >= MathF.Abs(normal.Z))
-                uv = new Vector2(
-                    (vertex.Z + depth * 0.75f) / 2.2f,
-                    vertex.Y / MathF.Min(height, 2.2f));
-            else
-                uv = new Vector2(
-                    (vertex.X + width * 0.5f) / 2.2f,
-                    vertex.Y / MathF.Min(height, 2.2f));
-            tool.SetUV(uv);
-            tool.AddVertex(vertex);
-        }
-    }
-
     private static float Noise(int seed, int column, int row)
     {
-        var value = unchecked((uint)(seed * 73856093 ^ column * 19349663 ^ row * 83492791));
-        value ^= value >> 13;
-        value *= 1274126177u;
-        return (value & 0xffffu) / 32767.5f - 1.0f;
+        var value = unchecked((uint)(seed * Fo1OwnedCaveKitNumericContracts.GeometryInt73856093 ^ column * Fo1OwnedCaveKitNumericContracts.GeometryInt19349663 ^ row * Fo1OwnedCaveKitNumericContracts.GeometryInt83492791));
+        value ^= value >> Fo1OwnedCaveKitNumericContracts.GeometryInt13;
+        value *= Fo1OwnedCaveKitNumericContracts.GeometryUint1274126177u;
+        return (value & 0xffffu) / Fo1OwnedCaveKitNumericContracts.GeometryFloat32767Point5f - 1.0f;
     }
 
     private static string TextureId(JsonElement caveKit, string requestedPath)

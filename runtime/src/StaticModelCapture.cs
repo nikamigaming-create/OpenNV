@@ -4,6 +4,23 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class StaticModelCaptureNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const double AcceptanceDouble0Point03 = 0.03;
+    internal const double AcceptanceDouble0Point04 = 0.04;
+    internal const double AcceptanceDouble0Point05 = 0.05;
+    internal const double AcceptanceDouble0Point0722 = 0.0722;
+    internal const double AcceptanceDouble0Point2126 = 0.2126;
+    internal const double AcceptanceDouble0Point65 = 0.65;
+    internal const double AcceptanceDouble0Point7152 = 0.7152;
+    internal const int AcceptanceInt1280 = 1280;
+    internal const double AcceptanceDouble255Point0 = 255.0;
+    internal const int AcceptanceInt5 = 5;
+    internal const int AcceptanceInt720 = 720;
+}
+
 internal static class StaticModelCapture
 {
     internal static async Task Run(
@@ -19,7 +36,7 @@ internal static class StaticModelCapture
             if (Directory.Exists(output) || File.Exists(output))
                 throw new InvalidOperationException($"Refusing to overwrite static capture: {output}");
             Directory.CreateDirectory(output);
-            for (var index = 0; index < 5; index++)
+            for (var index = 0; index < StaticModelCaptureNumericContracts.AcceptanceInt5; index++)
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             var framePath = Path.Combine(output, "static-model.png");
             var image = host.GetViewport().GetTexture().GetImage();
@@ -31,22 +48,22 @@ internal static class StaticModelCapture
             var darkPixels = 0;
             for (var offset = 0; offset < data.Length; offset += 4)
             {
-                var value = (0.2126 * data[offset] + 0.7152 * data[offset + 1] + 0.0722 * data[offset + 2]) / 255.0;
+                var value = (StaticModelCaptureNumericContracts.AcceptanceDouble0Point2126 * data[offset] + StaticModelCaptureNumericContracts.AcceptanceDouble0Point7152 * data[offset + 1] + StaticModelCaptureNumericContracts.AcceptanceDouble0Point0722 * data[offset + 2]) / StaticModelCaptureNumericContracts.AcceptanceDouble255Point0;
                 luminance += value;
                 luminanceSquared += value * value;
-                if (value < 0.03)
+                if (value < StaticModelCaptureNumericContracts.AcceptanceDouble0Point03)
                     darkPixels++;
             }
             var mean = luminance / pixels;
             var deviation = Math.Sqrt(Math.Max(0.0, luminanceSquared / pixels - mean * mean));
             var darkFraction = (double)darkPixels / pixels;
-            var failure = image.GetWidth() != 1280 || image.GetHeight() != 720
+            var failure = image.GetWidth() != StaticModelCaptureNumericContracts.AcceptanceInt1280 || image.GetHeight() != StaticModelCaptureNumericContracts.AcceptanceInt720
                 ? "unexpected-size"
-                : mean < 0.04
+                : mean < StaticModelCaptureNumericContracts.AcceptanceDouble0Point04
                     ? "mean-luminance"
-                    : deviation < 0.05
+                    : deviation < StaticModelCaptureNumericContracts.AcceptanceDouble0Point05
                         ? "luminance-deviation"
-                        : darkFraction > 0.65
+                        : darkFraction > StaticModelCaptureNumericContracts.AcceptanceDouble0Point65
                             ? "dark-fraction"
                             : null;
             var error = image.SavePng(framePath);

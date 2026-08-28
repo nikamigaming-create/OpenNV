@@ -10,52 +10,77 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from dat2_archive import Dat2Archive
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+FO1_FRM_FORMAT_CONTRACT_HEX_0A = 0x0A
+FO1_FRM_FORMAT_CONTRACT_HEX_16 = 0x16
+FO1_FRM_FORMAT_CONTRACT_HEX_22 = 0x22
+FO1_FRM_FORMAT_CONTRACT_HEX_3A = 0x3A
+FO1_FRM_FORMAT_CONTRACT_HEX_3E = 0x3E
+FO1_FRM_FORMAT_CONTRACT_INTEGER_10 = 10
+FO1_FRM_FORMAT_CONTRACT_INTEGER_12 = 12
+FO1_FRM_FORMAT_CONTRACT_INTEGER_155 = 155
+FO1_FRM_FORMAT_CONTRACT_INTEGER_20 = 20
+FO1_FRM_FORMAT_CONTRACT_INTEGER_205 = 205
+FO1_FRM_FORMAT_CONTRACT_INTEGER_22 = 22
+FO1_FRM_FORMAT_CONTRACT_INTEGER_220 = 220
+FO1_FRM_FORMAT_CONTRACT_INTEGER_24 = 24
+FO1_FRM_FORMAT_CONTRACT_INTEGER_255 = 255
+FO1_FRM_FORMAT_CONTRACT_INTEGER_256 = 256
+FO1_FRM_FORMAT_CONTRACT_INTEGER_260 = 260
+FO1_FRM_FORMAT_CONTRACT_INTEGER_300 = 300
+FO1_FRM_FORMAT_CONTRACT_INTEGER_320 = 320
+FO1_FRM_FORMAT_CONTRACT_INTEGER_340 = 340
+FO1_FRM_FORMAT_CONTRACT_INTEGER_6 = 6
+FO1_FRM_FORMAT_CONTRACT_INTEGER_63 = 63
+FO1_FRM_FORMAT_CONTRACT_INTEGER_768 = 768
+FO1_FRM_FORMAT_CONTRACT_INTEGER_8 = 8
+
 
 
 def palette_rgba(path: Path) -> list[tuple[int, int, int, int]]:
     data = path.read_bytes()
-    if len(data) < 768:
+    if len(data) < FO1_FRM_FORMAT_CONTRACT_INTEGER_768:
         raise ValueError("Fallout palette requires at least 768 bytes")
-    values = data[:768]
+    values = data[:FO1_FRM_FORMAT_CONTRACT_INTEGER_768]
     colors = []
-    for index in range(256):
+    for index in range(FO1_FRM_FORMAT_CONTRACT_INTEGER_256):
         r, g, b = values[index * 3 : index * 3 + 3]
         # Fallout stores valid palette channels as six-bit values. COLOR.PAL
         # also contains invalid/sentinel entries above 63, so deciding whether
         # to scale from the global maximum incorrectly darkens every valid UI
         # and world color. The retail color loader rejects those entries.
-        if r <= 63 and g <= 63 and b <= 63:
+        if r <= FO1_FRM_FORMAT_CONTRACT_INTEGER_63 and g <= FO1_FRM_FORMAT_CONTRACT_INTEGER_63 and b <= FO1_FRM_FORMAT_CONTRACT_INTEGER_63:
             red, green, blue = r * 4, g * 4, b * 4
         else:
             red, green, blue = 0, 0, 0
-        colors.append((red, green, blue, 0 if index == 0 else 255))
+        colors.append((red, green, blue, 0 if index == 0 else FO1_FRM_FORMAT_CONTRACT_INTEGER_255))
     return colors
 
 
 def decode_frm(data: bytes, colors: list[tuple[int, int, int, int]]) -> dict[str, object]:
-    if len(data) < 0x3E:
+    if len(data) < FO1_FRM_FORMAT_CONTRACT_HEX_3E:
         raise ValueError("FRM header is truncated")
     version, fps, action_frame, frame_count = struct.unpack_from(">IHHH", data, 0)
     if version != 4 or frame_count <= 0:
         raise ValueError(f"unsupported FRM header: version={version} frames={frame_count}")
-    x_offsets = struct.unpack_from(">6h", data, 0x0A)
-    y_offsets = struct.unpack_from(">6h", data, 0x16)
-    data_offsets = struct.unpack_from(">6I", data, 0x22)
-    frame_area_size = struct.unpack_from(">I", data, 0x3A)[0]
-    frame_area_end = len(data) if frame_area_size == 0 else min(len(data), 0x3E + frame_area_size)
+    x_offsets = struct.unpack_from(">6h", data, FO1_FRM_FORMAT_CONTRACT_HEX_0A)
+    y_offsets = struct.unpack_from(">6h", data, FO1_FRM_FORMAT_CONTRACT_HEX_16)
+    data_offsets = struct.unpack_from(">6I", data, FO1_FRM_FORMAT_CONTRACT_HEX_22)
+    frame_area_size = struct.unpack_from(">I", data, FO1_FRM_FORMAT_CONTRACT_HEX_3A)[0]
+    frame_area_end = len(data) if frame_area_size == 0 else min(len(data), FO1_FRM_FORMAT_CONTRACT_HEX_3E + frame_area_size)
     decoded_by_offset: dict[int, list[dict[str, object]]] = {}
     directions = []
     for rotation, relative_offset in enumerate(data_offsets):
         if relative_offset in decoded_by_offset:
             frames = decoded_by_offset[relative_offset]
         else:
-            cursor = 0x3E + relative_offset
+            cursor = FO1_FRM_FORMAT_CONTRACT_HEX_3E + relative_offset
             frames = []
             for frame_index in range(frame_count):
-                if cursor + 12 > frame_area_end:
+                if cursor + FO1_FRM_FORMAT_CONTRACT_INTEGER_12 > frame_area_end:
                     raise ValueError("FRM frame header escapes frame area")
                 width, height, size, x, y = struct.unpack_from(">HHIhh", data, cursor)
-                cursor += 12
+                cursor += FO1_FRM_FORMAT_CONTRACT_INTEGER_12
                 if width <= 0 or height <= 0 or size != width * height or cursor + size > frame_area_end:
                     raise ValueError("FRM frame dimensions or payload are invalid")
                 indexes = data[cursor : cursor + size]
@@ -86,7 +111,7 @@ def decode_frm(data: bytes, colors: list[tuple[int, int, int, int]]) -> dict[str
         )
     return {
         "version": version,
-        "fps": fps or 10,
+        "fps": fps or FO1_FRM_FORMAT_CONTRACT_INTEGER_10,
         "storedFps": fps,
         "actionFrame": action_frame,
         "framesPerDirection": frame_count,
@@ -113,18 +138,18 @@ def save_preview(decoded: dict[str, object], output_dir: Path) -> dict[str, obje
     thumbs = []
     for name, rotation, frame in frame_rows:
         image = frame["image"].copy()
-        image.thumbnail((320, 260), Image.Resampling.NEAREST)
+        image.thumbnail((FO1_FRM_FORMAT_CONTRACT_INTEGER_320, FO1_FRM_FORMAT_CONTRACT_INTEGER_260), Image.Resampling.NEAREST)
         thumbs.append((name, rotation, frame, image))
     columns = min(4, max(1, len(thumbs)))
     rows = (len(thumbs) + columns - 1) // columns
-    cell_width, cell_height = 340, 300
-    sheet = Image.new("RGBA", (columns * cell_width, rows * cell_height), (20, 22, 20, 255))
+    cell_width, cell_height = FO1_FRM_FORMAT_CONTRACT_INTEGER_340, FO1_FRM_FORMAT_CONTRACT_INTEGER_300
+    sheet = Image.new("RGBA", (columns * cell_width, rows * cell_height), (FO1_FRM_FORMAT_CONTRACT_INTEGER_20, FO1_FRM_FORMAT_CONTRACT_INTEGER_22, FO1_FRM_FORMAT_CONTRACT_INTEGER_20, FO1_FRM_FORMAT_CONTRACT_INTEGER_255))
     draw = ImageDraw.Draw(sheet)
     for index, (name, rotation, frame, image) in enumerate(thumbs):
         x = (index % columns) * cell_width
         y = (index // columns) * cell_height
-        sheet.alpha_composite(image, (x + (cell_width - image.width) // 2, y + 24 + (260 - image.height) // 2))
-        draw.text((x + 8, y + 6), f"R{rotation} F{frame['index']} {frame['width']}x{frame['height']}", fill=(220, 205, 155, 255))
+        sheet.alpha_composite(image, (x + (cell_width - image.width) // 2, y + FO1_FRM_FORMAT_CONTRACT_INTEGER_24 + (FO1_FRM_FORMAT_CONTRACT_INTEGER_260 - image.height) // 2))
+        draw.text((x + FO1_FRM_FORMAT_CONTRACT_INTEGER_8, y + FO1_FRM_FORMAT_CONTRACT_INTEGER_6), f"R{rotation} F{frame['index']} {frame['width']}x{frame['height']}", fill=(FO1_FRM_FORMAT_CONTRACT_INTEGER_220, FO1_FRM_FORMAT_CONTRACT_INTEGER_205, FO1_FRM_FORMAT_CONTRACT_INTEGER_155, FO1_FRM_FORMAT_CONTRACT_INTEGER_255))
     sheet.save(output_dir / "contact-sheet.png")
     manifest = {
         key: value

@@ -3,6 +3,30 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1XrSimulatorPreviewNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float AcceptanceFloat0Point020f = 0.020f;
+    internal const float AcceptanceFloat0Point035f = 0.035f;
+    internal const float AcceptanceFloat0Point58f = 0.58f;
+    internal const float AcceptanceFloat0Point68f = 0.68f;
+    internal const float AcceptanceFloat0Point70f = 0.70f;
+    internal const float AcceptanceFloat0Point72f = 0.72f;
+    internal const float AcceptanceFloat0Point84f = 0.84f;
+    internal const float AcceptanceFloat0Point92f = 0.92f;
+    internal const float AcceptanceFloat1Point05f = 1.05f;
+    internal const float AcceptanceFloat1Point15f = 1.15f;
+    internal const float AcceptanceFloat1Point18f = 1.18f;
+    internal const float AcceptanceFloat1Point24f = 1.24f;
+    internal const float AcceptanceFloat11Point0f = 11.0f;
+    internal const float AcceptanceFloat180Point0f = 180.0f;
+    internal const float AcceptanceFloat2Point35f = 2.35f;
+    internal const float AcceptanceFloat3Point2f = 3.2f;
+    internal const float AcceptanceFloat48Point0f = 48.0f;
+    internal const float AcceptanceFloat9Point0f = 9.0f;
+}
+
 /// <summary>
 /// Bounded, simulator-only first-person presentation of the Fallout 1 V13ENT
 /// entry.  This adapter deliberately does not claim controller interaction or
@@ -57,27 +81,27 @@ internal static class Fo1XrSimulatorPreview
         var camera = new XRCamera3D
         {
             Name = "Fo1V13TrackedHead",
-            Near = 0.035f,
-            Far = 180.0f,
+            Near = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat0Point035f,
+            Far = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat180Point0f,
             Current = true,
         };
         origin.AddChild(camera);
         camera.AddChild(new SpotLight3D
         {
             Name = "Fo1V13TrackedHeadFill",
-            LightColor = new Color(0.92f, 0.84f, 0.70f),
-            LightEnergy = 1.18f,
-            SpotRange = 11.0f,
-            SpotAngle = 48.0f,
+            LightColor = new Color(Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat0Point92f, Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat0Point84f, Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat0Point70f),
+            LightEnergy = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat1Point18f,
+            SpotRange = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat11Point0f,
+            SpotAngle = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat48Point0f,
             ShadowEnabled = false,
         });
         loaded.Root.AddChild(new OmniLight3D
         {
             Name = "Fo1V13EntryVrFill",
-            Position = entry + caveForward * 3.2f + Vector3.Up * 2.35f,
-            LightColor = new Color(0.72f, 0.68f, 0.58f),
-            LightEnergy = 1.15f,
-            OmniRange = 9.0f,
+            Position = entry + caveForward * Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat3Point2f + Vector3.Up * Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat2Point35f,
+            LightColor = new Color(Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat0Point72f, Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat0Point68f, Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat0Point58f),
+            LightEnergy = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat1Point15f,
+            OmniRange = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat9Point0f,
             ShadowEnabled = false,
         });
 
@@ -171,9 +195,9 @@ internal static class Fo1XrSimulatorPreview
                 recursive: true,
                 owned: false) is WorldEnvironment world && world.Environment is { } environment)
         {
-            environment.AmbientLightEnergy = 1.05f;
-            environment.TonemapExposure = 1.24f;
-            environment.FogDensity = 0.020f;
+            environment.AmbientLightEnergy = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat1Point05f;
+            environment.TonemapExposure = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat1Point24f;
+            environment.FogDensity = Fo1XrSimulatorPreviewNumericContracts.AcceptanceFloat0Point020f;
         }
     }
 

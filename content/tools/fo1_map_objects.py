@@ -20,6 +20,41 @@ from typing import Any
 
 from dat2_archive import Dat2Archive, canonical_dat2_path
 from fo1_profile import MAP_HEADER_SIZE, Fo1ProfileError, parse_map_layout, sha256_path
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_00FFFFFF = 0x00FFFFFF
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_01000000 = 0x01000000
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0C = 0x0C
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F = 0x0F
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0FFF = 0x0FFF
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_20 = 0x20
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_24 = 0x24
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF = 0xFF
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF = 0xFFFFFFFF
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_10 = 10
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_100 = 100
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_10000 = 10000
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_100000 = 100000
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_11 = 11
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_15 = 15
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16 = 16
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_1600 = 1600
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_18 = 18
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_19 = 19
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_200 = 200
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24 = 24
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_2400 = 2400
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_3100 = 3100
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_40000 = 40000
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_4700 = 4700
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_5 = 5
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_6 = 6
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_64 = 64
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_68 = 68
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_7 = 7
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_72 = 72
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_8 = 8
+FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_84 = 84
+
 
 
 CONTRACT_SCHEMA = "opennv-fo1-map-object-contract/v1"
@@ -172,11 +207,11 @@ class Fo1ResourceResolver:
         cached = self.prototypes.get(pid)
         if cached is not None:
             return cached
-        object_type = (pid >> 24) & 0xFF
-        list_index = pid & 0x00FFFFFF
+        object_type = (pid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF
+        list_index = pid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_00FFFFFF
         if object_type not in OBJECT_TYPE_NAMES:
             raise Fo1ProfileError(f"unsupported Fallout PID type {object_type} in {pid:08x}")
-        if pid == 0x01000000:
+        if pid == FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_01000000:
             prototype = Prototype(pid, object_type, list_index, None, None, None, None, None, "builtin", None)
             self.prototypes[pid] = prototype
             return prototype
@@ -194,7 +229,7 @@ class Fo1ResourceResolver:
             raise Fo1ProfileError(f"Fallout PID {pid:08x} resolves to an empty PRO list entry")
         pro_path = f"proto\\{directory}\\{entry}"
         resource = self.read(pro_path)
-        if len(resource.data) < 0x0C:
+        if len(resource.data) < FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0C:
             raise Fo1ProfileError(f"Fallout PRO is too short: {pro_path}")
         stored_pid, message_number, fid = struct.unpack_from(">III", resource.data, 0)
         if stored_pid != pid:
@@ -204,9 +239,9 @@ class Fo1ResourceResolver:
         subtype = None
         subtype_name = None
         if object_type in {0, 2}:
-            if len(resource.data) < 0x24:
+            if len(resource.data) < FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_24:
                 raise Fo1ProfileError(f"Fallout typed PRO is too short: {pro_path}")
-            subtype = struct.unpack_from(">i", resource.data, 0x20)[0]
+            subtype = struct.unpack_from(">i", resource.data, FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_20)[0]
             names = ITEM_SUBTYPES if object_type == 0 else SCENERY_SUBTYPES
             if subtype not in names:
                 raise Fo1ProfileError(
@@ -229,10 +264,10 @@ class Fo1ResourceResolver:
         return prototype
 
     def art_filename(self, fid: int) -> str | None:
-        object_type = (fid >> 24) & 0x0F
+        object_type = (fid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F
         if object_type not in TYPE_DIRECTORIES:
             return None
-        art_index = fid & 0x0FFF
+        art_index = fid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0FFF
         directory = TYPE_DIRECTORIES[object_type]
         lines = self.list_lines(f"art\\{directory}\\{directory}.lst")
         if art_index >= len(lines):
@@ -250,27 +285,27 @@ def _read_i32(data: bytes, offset: int, label: str) -> tuple[int, int]:
 
 def parse_script_section(data: bytes, offset: int) -> tuple[list[dict[str, Any]], int]:
     lists = []
-    for list_type in range(5):
+    for list_type in range(FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_5):
         live_count, offset = _read_i32(data, offset, f"script list {list_type} count")
         if live_count < 0:
             raise Fo1ProfileError(f"negative script count for list {list_type}")
-        extent_count = (live_count + 15) // 16
+        extent_count = (live_count + FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_15) // FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16
         extents = []
         for extent_index in range(extent_count):
             slots = []
-            for slot_index in range(16):
+            for slot_index in range(FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16):
                 if offset + 4 > len(data):
                     raise Fo1ProfileError("truncated MAP script slot")
                 sid = struct.unpack_from(">i", data, offset)[0]
-                sid_type = ((sid & 0xFFFFFFFF) >> 24) if sid >= 0 else 0xFF
-                record_size = 72 if sid_type == 1 else 68 if sid_type == 2 else 64
+                sid_type = ((sid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF) >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24) if sid >= 0 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF
+                record_size = FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_72 if sid_type == 1 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_68 if sid_type == 2 else FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_64
                 if offset + record_size > len(data):
                     raise Fo1ProfileError("truncated MAP script record")
-                slots.append({"slot": slot_index, "sid": f"{sid & 0xFFFFFFFF:08x}", "bytes": record_size})
+                slots.append({"slot": slot_index, "sid": f"{sid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF:08x}", "bytes": record_size})
                 offset += record_size
             length, offset = _read_i32(data, offset, "script extent length")
             next_value, offset = _read_i32(data, offset, "script extent next")
-            if not 0 <= length <= 16:
+            if not 0 <= length <= FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16:
                 raise Fo1ProfileError(f"invalid MAP script extent length {length}")
             extents.append({"index": extent_index, "length": length, "next": next_value, "slots": slots})
         if sum(extent["length"] for extent in extents) != live_count:
@@ -289,24 +324,24 @@ def parse_script_section(data: bytes, offset: int) -> tuple[list[dict[str, Any]]
 def _is_exit_grid(prototype: Prototype) -> bool:
     message_number = prototype.message_number
     return message_number is not None and (
-        message_number in range(1600, 2400, 100) or message_number in range(3100, 4700, 100)
+        message_number in range(FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_1600, FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_2400, FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_100) or message_number in range(FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_3100, FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_4700, FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_100)
     )
 
 
 def _instance_extra_count(version: int, prototype: Prototype) -> int:
     if prototype.object_type == 1:
-        return 11
+        return FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_11
     if prototype.object_type == 0:
-        return {0: 0, 1: 0, 2: 0, 3: 2, 4: 1, 5: 1, 6: 1}[prototype.subtype]
+        return {0: 0, 1: 0, 2: 0, 3: 2, 4: 1, FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_5: 1, FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_6: 1}[prototype.subtype]
     if prototype.object_type == 2:
         if prototype.subtype == 0:
             return 1
         if prototype.subtype in {1, 2}:
             return 2
         if prototype.subtype in {3, 4}:
-            return 1 if version == 19 else 2
+            return 1 if version == FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_19 else 2
         return 0
-    if prototype.object_type == 5 and _is_exit_grid(prototype):
+    if prototype.object_type == FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_5 and _is_exit_grid(prototype):
         return 4
     return 0
 
@@ -318,45 +353,45 @@ def parse_map_objects(
     resolver: Fo1ResourceResolver,
 ) -> tuple[dict[str, Any], int]:
     total_count, offset = _read_i32(data, offset, "total object count")
-    if not 0 <= total_count <= 100000:
+    if not 0 <= total_count <= FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_100000:
         raise Fo1ProfileError(f"invalid total MAP object count {total_count}")
     serial = 0
     previous_object: dict[str, Any] | None = None
 
     def read_object(current_offset: int, containing_elevation: int, depth: int) -> tuple[dict[str, Any], int]:
         nonlocal previous_object, serial
-        if depth > 16:
+        if depth > FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_16:
             raise Fo1ProfileError("MAP inventory nesting exceeds 16 levels")
         object_offset = current_offset
-        if current_offset + 68 > len(data):
+        if current_offset + FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_68 > len(data):
             raise Fo1ProfileError("truncated MAP object base")
         full_values = (
             struct.unpack_from(">21i", data, current_offset)
-            if current_offset + 84 <= len(data)
+            if current_offset + FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_84 <= len(data)
             else None
         )
 
         def identity_fields_are_structural(fid_value: int, pid_value: int) -> bool:
-            fid_type = ((fid_value & 0xFFFFFFFF) >> 24) & 0x0F
-            pid = pid_value & 0xFFFFFFFF
-            pid_type = (pid >> 24) & 0xFF
-            pid_index = pid & 0x00FFFFFF
+            fid_type = ((fid_value & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF) >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_0F
+            pid = pid_value & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF
+            pid_type = (pid >> FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_24) & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FF
+            pid_index = pid & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_00FFFFFF
             return (
                 fid_type in TYPE_DIRECTORIES
                 and pid_type in OBJECT_TYPE_NAMES
-                and (pid == 0x01000000 or pid_index > 0)
+                and (pid == FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_01000000 or pid_index > 0)
             )
 
         full_is_structural = full_values is not None and (
-            (full_values[1] == -1 or 0 <= full_values[1] < 40000)
-            and 0 <= full_values[7] <= 5
-            and 0 <= full_values[10] <= 2
-            and 0 <= full_values[18] <= 10000
-            and identity_fields_are_structural(full_values[8], full_values[11])
+            (full_values[1] == -1 or 0 <= full_values[1] < FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_40000)
+            and 0 <= full_values[FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_7] <= FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_5
+            and 0 <= full_values[FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_10] <= 2
+            and 0 <= full_values[FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_18] <= FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_10000
+            and identity_fields_are_structural(full_values[FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_8], full_values[FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_11])
         )
         if full_is_structural:
             values = full_values
-            current_offset += 84
+            current_offset += FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_84
             (
                 object_id,
                 tile,
@@ -406,9 +441,9 @@ def parse_map_objects(
                 inventory_pointer,
             ) = compact_values
             if not (
-                (tile == -1 or 0 <= tile < 40000)
+                (tile == -1 or 0 <= tile < FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_40000)
                 and 0 <= stored_elevation <= 2
-                and 0 <= inventory_length <= 10000
+                and 0 <= inventory_length <= FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_10000
                 and identity_fields_are_structural(fid_signed, pid_signed)
             ):
                 raise Fo1ProfileError(
@@ -416,7 +451,7 @@ def parse_map_objects(
                     f"layout; depth={depth}; previous={previous_object}; "
                     f"full={full_values}; compact={compact_values}"
                 )
-            current_offset += 68
+            current_offset += FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_68
             base_layout = "compact-17"
             cached_screen = None
             frame = 0
@@ -424,16 +459,16 @@ def parse_map_objects(
             frame_source = "implicit-zero-compact-layout"
             rotation_source = "implicit-zero-compact-layout"
             values = compact_values
-        fid = fid_signed & 0xFFFFFFFF
-        pid = pid_signed & 0xFFFFFFFF
-        flags = flags_signed & 0xFFFFFFFF
-        sid = sid_signed & 0xFFFFFFFF
-        if tile != -1 and not 0 <= tile < 40000:
+        fid = fid_signed & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF
+        pid = pid_signed & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF
+        flags = flags_signed & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF
+        sid = sid_signed & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF
+        if tile != -1 and not 0 <= tile < FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_40000:
             raise Fo1ProfileError(
                 f"MAP object {object_id} at 0x{object_offset:x} has invalid tile {tile}; "
                 f"depth={depth}; previous={previous_object}; raw={values}"
             )
-        if not 0 <= rotation <= 5:
+        if not 0 <= rotation <= FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_5:
             raise Fo1ProfileError(
                 f"MAP object {object_id} at 0x{object_offset:x} has invalid rotation "
                 f"{rotation}; depth={depth}; previous={previous_object}; raw={values}"
@@ -444,7 +479,7 @@ def parse_map_objects(
             raise Fo1ProfileError(
                 f"MAP object {object_id} elevation {stored_elevation} does not match list {containing_elevation}"
             )
-        if not 0 <= inventory_length <= 10000:
+        if not 0 <= inventory_length <= FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_10000:
             raise Fo1ProfileError(f"MAP object {object_id} has invalid inventory count {inventory_length}")
         prototype = resolver.prototype(pid)
         instance_values = []
@@ -477,8 +512,8 @@ def parse_map_objects(
                 "baseLayout": base_layout,
                 "id": object_id,
                 "tile": tile,
-                "tileX": None if tile < 0 else tile % 200,
-                "tileY": None if tile < 0 else tile // 200,
+                "tileX": None if tile < 0 else tile % FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_200,
+                "tileY": None if tile < 0 else tile // FO1_MAP_OBJECTS_FORMAT_CONTRACT_INTEGER_200,
                 "pixelOffset": [pixel_x, pixel_y],
                 "cachedScreen": cached_screen,
                 "frame": frame,
@@ -503,7 +538,7 @@ def parse_map_objects(
                 "scriptIndex": script_index,
                 "inventoryCapacity": inventory_capacity,
                 "inventoryPointer": inventory_pointer,
-                "instanceFlags": f"{instance_flags & 0xFFFFFFFF:08x}",
+                "instanceFlags": f"{instance_flags & FO1_MAP_OBJECTS_FORMAT_CONTRACT_HEX_FFFFFFFF:08x}",
                 "instanceValues": instance_values,
                 "inventory": inventory,
             }

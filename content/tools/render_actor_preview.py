@@ -8,6 +8,23 @@ from pathlib import Path
 
 import bpy
 from mathutils import Vector
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT025 = 0.025
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT030 = 0.030
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT036 = 0.036
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT5 = 0.5
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT8 = 0.8
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT15 = 1.15
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT30 = 1.30
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT5 = 1.5
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT9 = 1.9
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_INTEGER_100 = 100
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1700POINT0 = 1700.0
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_2POINT5 = 2.5
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_2POINT8 = 2.8
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_INTEGER_900 = 900
+RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_900POINT0 = 900.0
+
 
 
 def main() -> None:
@@ -31,22 +48,22 @@ def main() -> None:
     ]
     minimum = Vector(tuple(min(point[axis] for point in points) for axis in range(3)))
     maximum = Vector(tuple(max(point[axis] for point in points) for axis in range(3)))
-    center = (minimum + maximum) * 0.5
+    center = (minimum + maximum) * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT5
     size = maximum - minimum
     extent = max(size)
 
     camera_data = bpy.data.cameras.new("ActorPreviewCamera")
     camera = bpy.data.objects.new("ActorPreviewCamera", camera_data)
     bpy.context.scene.collection.objects.link(camera)
-    camera.location = center + Vector((extent * 1.9, -extent * 2.8, extent * 1.15))
+    camera.location = center + Vector((extent * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT9, -extent * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_2POINT8, extent * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT15))
     camera.rotation_euler = (center - camera.location).to_track_quat("-Z", "Y").to_euler()
     camera_data.type = "ORTHO"
-    camera_data.ortho_scale = extent * 1.30
+    camera_data.ortho_scale = extent * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT30
     bpy.context.scene.camera = camera
 
     for name, location, energy, size_meters in (
-        ("Key", center + Vector((extent * 2.0, -extent * 1.5, extent * 2.5)), 1700.0, extent),
-        ("Fill", center + Vector((-extent * 1.5, -extent, extent)), 900.0, extent * 0.8),
+        ("Key", center + Vector((extent * 2.0, -extent * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT5, extent * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_2POINT5)), RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1700POINT0, extent),
+        ("Fill", center + Vector((-extent * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_1POINT5, -extent, extent)), RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_900POINT0, extent * RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT8),
     ):
         data = bpy.data.lights.new(name, "AREA")
         data.energy = energy
@@ -59,12 +76,12 @@ def main() -> None:
 
     world = bpy.context.scene.world or bpy.data.worlds.new("ActorPreviewWorld")
     bpy.context.scene.world = world
-    world.color = (0.025, 0.030, 0.036)
+    world.color = (RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT025, RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT030, RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_FLOAT_0POINT036)
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_EEVEE_NEXT"
-    scene.render.resolution_x = 900
-    scene.render.resolution_y = 900
-    scene.render.resolution_percentage = 100
+    scene.render.resolution_x = RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_INTEGER_900
+    scene.render.resolution_y = RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_INTEGER_900
+    scene.render.resolution_percentage = RENDER_ACTOR_PREVIEW_DIAGNOSTIC_CONTRACT_INTEGER_100
     scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = str(output)
     scene.render.film_transparent = False

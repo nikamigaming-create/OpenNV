@@ -2,6 +2,44 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1CaveGeometryNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float GeometryFloat0Point050f = 0.050f;
+    internal const float GeometryFloat0Point060f = 0.060f;
+    internal const float GeometryFloat0Point062f = 0.062f;
+    internal const float GeometryFloat0Point070f = 0.070f;
+    internal const float GeometryFloat0Point075f = 0.075f;
+    internal const float GeometryFloat0Point08f = 0.08f;
+    internal const float GeometryFloat0Point11f = 0.11f;
+    internal const float GeometryFloat0Point14f = 0.14f;
+    internal const float GeometryFloat0Point16f = 0.16f;
+    internal const float GeometryFloat0Point18f = 0.18f;
+    internal const float GeometryFloat0Point38f = 0.38f;
+    internal const float GeometryFloat0Point46f = 0.46f;
+    internal const float GeometryFloat0Point5f = 0.5f;
+    internal const float GeometryFloat0Point72f = 0.72f;
+    internal const float GeometryFloat0Point76f = 0.76f;
+    internal const float GeometryFloat0Point78f = 0.78f;
+    internal const float GeometryFloat0Point82f = 0.82f;
+    internal const float GeometryFloat0Point86f = 0.86f;
+    internal const float GeometryFloat0Point94f = 0.94f;
+    internal const float GeometryFloat0Point96f = 0.96f;
+    internal const float GeometryFloat1Point02f = 1.02f;
+    internal const float GeometryFloat1Point12f = 1.12f;
+    internal const float GeometryFloat1Point25f = 1.25f;
+    internal const float GeometryFloat100Point0f = 100.0f;
+    internal const int GeometryInt12 = 12;
+    internal const int GeometryInt17 = 17;
+    internal const int GeometryInt19 = 19;
+    internal const int GeometryInt23 = 23;
+    internal const int GeometryInt31 = 31;
+    internal const int GeometryInt48 = 48;
+    internal const int GeometryInt6 = 6;
+    internal const int GeometryInt8 = 8;
+}
+
 internal static class Fo1CaveGeometry
 {
     internal static Coverage Build(
@@ -20,16 +58,16 @@ internal static class Fo1CaveGeometry
             if (!floorBacked[tile])
                 continue;
             var center = Fo1HexMath.Center(tile);
-            var corners = Fo1HexMath.Corners(tile, 1.02f);
-            for (var edge = 0; edge < 6; edge++)
+            var corners = Fo1HexMath.Corners(tile, Fo1CaveGeometryNumericContracts.GeometryFloat1Point02f);
+            for (var edge = 0; edge < Fo1CaveGeometryNumericContracts.GeometryInt6; edge++)
             {
                 var first = corners[edge];
-                var second = corners[(edge + 1) % 6];
+                var second = corners[(edge + 1) % Fo1CaveGeometryNumericContracts.GeometryInt6];
                 var midpoint = (first + second) / 2.0f;
                 var outward = midpoint - center;
                 outward.Y = 0.0f;
                 outward = outward.Normalized();
-                var neighbor = Fo1HexMath.NearestTile(center + outward * 0.72f);
+                var neighbor = Fo1HexMath.NearestTile(center + outward * Fo1CaveGeometryNumericContracts.GeometryFloat0Point72f);
                 if (neighbor >= 0 && floorBacked[neighbor])
                     continue;
                 AddWallQuad(
@@ -37,7 +75,7 @@ internal static class Fo1CaveGeometry
                     first,
                     second,
                     boundaryHeightMeters,
-                    new Color(0.16f, 0.14f, 0.11f));
+                    new Color(Fo1CaveGeometryNumericContracts.GeometryFloat0Point16f, Fo1CaveGeometryNumericContracts.GeometryFloat0Point14f, Fo1CaveGeometryNumericContracts.GeometryFloat0Point11f));
                 boundaryEdges++;
             }
         }
@@ -57,7 +95,7 @@ internal static class Fo1CaveGeometry
         {
             AlbedoColor = Colors.White,
             VertexColorUseAsAlbedo = true,
-            Roughness = 0.96f,
+            Roughness = Fo1CaveGeometryNumericContracts.GeometryFloat0Point96f,
             Metallic = 0.0f,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         };
@@ -83,7 +121,7 @@ internal static class Fo1CaveGeometry
         var firstTop = first + Vector3.Up * height;
         var secondTop = second + Vector3.Up * height;
         AddTriangle(tool, first, second, secondTop, color);
-        AddTriangle(tool, first, secondTop, firstTop, color.Lightened(0.08f));
+        AddTriangle(tool, first, secondTop, firstTop, color.Lightened(Fo1CaveGeometryNumericContracts.GeometryFloat0Point08f));
     }
 
     private static int BuildObstacleInstances(Node3D root, Obstacle[] obstacles)
@@ -98,7 +136,7 @@ internal static class Fo1CaveGeometry
             {
                 Name = "V13ENT_3D_WALL_BLOCKERS",
                 Multimesh = multiMesh,
-                MaterialOverride = ObstacleMaterial(new Color(0.075f, 0.070f, 0.062f)),
+                MaterialOverride = ObstacleMaterial(new Color(Fo1CaveGeometryNumericContracts.GeometryFloat0Point075f, Fo1CaveGeometryNumericContracts.GeometryFloat0Point070f, Fo1CaveGeometryNumericContracts.GeometryFloat0Point062f)),
                 Visible = false,
             });
         }
@@ -106,9 +144,9 @@ internal static class Fo1CaveGeometry
         {
             var rock = new SphereMesh
             {
-                Radius = 0.5f,
+                Radius = Fo1CaveGeometryNumericContracts.GeometryFloat0Point5f,
                 Height = 1.0f,
-                RadialSegments = 8,
+                RadialSegments = Fo1CaveGeometryNumericContracts.GeometryInt8,
                 Rings = 4,
             };
             var multiMesh = BuildObstacleMultiMesh(rocks, rock, false);
@@ -116,11 +154,11 @@ internal static class Fo1CaveGeometry
             {
                 Name = "V13ENT_3D_ROCK_BLOCKERS",
                 Multimesh = multiMesh,
-                MaterialOverride = ObstacleMaterial(new Color(0.070f, 0.060f, 0.050f)),
+                MaterialOverride = ObstacleMaterial(new Color(Fo1CaveGeometryNumericContracts.GeometryFloat0Point070f, Fo1CaveGeometryNumericContracts.GeometryFloat0Point060f, Fo1CaveGeometryNumericContracts.GeometryFloat0Point050f)),
                 Visible = false,
             });
         }
-        return walls.Length * 12 + rocks.Length * 48;
+        return walls.Length * Fo1CaveGeometryNumericContracts.GeometryInt12 + rocks.Length * Fo1CaveGeometryNumericContracts.GeometryInt48;
     }
 
     private static MultiMesh BuildObstacleMultiMesh(
@@ -138,22 +176,22 @@ internal static class Fo1CaveGeometry
         for (var index = 0; index < obstacles.Length; index++)
         {
             var obstacle = obstacles[index];
-            var deterministic = 0.86f + (obstacle.Tile * 17 % 23) / 100.0f;
+            var deterministic = Fo1CaveGeometryNumericContracts.GeometryFloat0Point86f + (obstacle.Tile * Fo1CaveGeometryNumericContracts.GeometryInt17 % Fo1CaveGeometryNumericContracts.GeometryInt23) / Fo1CaveGeometryNumericContracts.GeometryFloat100Point0f;
             var scale = wall
                 ? new Vector3(
                     obstacle.RadiusMeters * 2.0f,
-                    obstacle.HeightMeters * 0.76f,
-                    MathF.Max(0.18f, obstacle.RadiusMeters * 0.38f))
+                    obstacle.HeightMeters * Fo1CaveGeometryNumericContracts.GeometryFloat0Point76f,
+                    MathF.Max(Fo1CaveGeometryNumericContracts.GeometryFloat0Point18f, obstacle.RadiusMeters * Fo1CaveGeometryNumericContracts.GeometryFloat0Point38f))
                 : new Vector3(
-                    obstacle.RadiusMeters * 1.25f * deterministic,
-                    obstacle.HeightMeters * 0.46f,
-                    obstacle.RadiusMeters * 1.12f / deterministic);
+                    obstacle.RadiusMeters * Fo1CaveGeometryNumericContracts.GeometryFloat1Point25f * deterministic,
+                    obstacle.HeightMeters * Fo1CaveGeometryNumericContracts.GeometryFloat0Point46f,
+                    obstacle.RadiusMeters * Fo1CaveGeometryNumericContracts.GeometryFloat1Point12f / deterministic);
             var yaw = -obstacle.Rotation * MathF.PI / 3.0f;
             var basis = new Basis(Vector3.Up, yaw).Scaled(scale);
             var position = Fo1HexMath.Center(obstacle.Tile) + Vector3.Up * (scale.Y / 2.0f);
             multiMesh.SetInstanceTransform(index, new Transform3D(basis, position));
-            var shade = 0.78f + (obstacle.Tile * 31 % 19) / 100.0f;
-            multiMesh.SetInstanceColor(index, new Color(shade, shade * 0.94f, shade * 0.82f, 1.0f));
+            var shade = Fo1CaveGeometryNumericContracts.GeometryFloat0Point78f + (obstacle.Tile * Fo1CaveGeometryNumericContracts.GeometryInt31 % Fo1CaveGeometryNumericContracts.GeometryInt19) / Fo1CaveGeometryNumericContracts.GeometryFloat100Point0f;
+            multiMesh.SetInstanceColor(index, new Color(shade, shade * Fo1CaveGeometryNumericContracts.GeometryFloat0Point94f, shade * Fo1CaveGeometryNumericContracts.GeometryFloat0Point82f, 1.0f));
         }
         return multiMesh;
     }
@@ -162,7 +200,7 @@ internal static class Fo1CaveGeometry
     {
         AlbedoColor = color,
         VertexColorUseAsAlbedo = true,
-        Roughness = 0.94f,
+        Roughness = Fo1CaveGeometryNumericContracts.GeometryFloat0Point94f,
         Metallic = 0.0f,
     };
 

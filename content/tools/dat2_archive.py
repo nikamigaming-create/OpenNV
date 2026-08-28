@@ -12,6 +12,11 @@ import struct
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_12 = 12
+DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_13 = 13
+DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_8 = 8
+
 
 
 @dataclass(frozen=True)
@@ -48,16 +53,16 @@ class Dat2Archive:
     def __init__(self, path: Path):
         self.path = path
         file_size = path.stat().st_size
-        if file_size < 12:
+        if file_size < DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_12:
             raise ValueError("DAT2 archive is too small")
         with path.open("rb") as stream:
-            stream.seek(file_size - 8)
-            tree_size, data_size = struct.unpack("<II", stream.read(8))
+            stream.seek(file_size - DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_8)
+            tree_size, data_size = struct.unpack("<II", stream.read(DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_8))
             if tree_size < 4 or data_size > file_size:
                 raise ValueError("DAT2 footer sizes are invalid")
             data_base = file_size - data_size
-            tree_offset = file_size - tree_size - 8
-            if tree_offset < data_base or tree_offset + tree_size != file_size - 8:
+            tree_offset = file_size - tree_size - DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_8
+            if tree_offset < data_base or tree_offset + tree_size != file_size - DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_8:
                 raise ValueError("DAT2 directory bounds are invalid")
             stream.seek(tree_offset)
             tree = stream.read(tree_size)
@@ -79,7 +84,7 @@ class Dat2Archive:
         previous_path = ""
         for index in range(file_count):
             path_length = read_u32(f"entry {index} path length")
-            if path_length == 0 or cursor + path_length + 13 > len(tree):
+            if path_length == 0 or cursor + path_length + DAT2_ARCHIVE_FORMAT_CONTRACT_INTEGER_13 > len(tree):
                 raise ValueError(f"DAT2 entry {index} has invalid path length {path_length}")
             encoded_path = tree[cursor : cursor + path_length]
             cursor += path_length

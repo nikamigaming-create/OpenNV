@@ -3,6 +3,16 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class GameplaySessionNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point38f = 0.38f;
+    internal const float PresentationFloat0Point78f = 0.78f;
+    internal const float PresentationFloat0Point94f = 0.94f;
+    internal const int PresentationInt17 = 17;
+}
+
 internal partial class GameplaySession : Node
 {
     private const string SaveSchemaV1 = "opennv-sandbox-save/v1";
@@ -109,8 +119,8 @@ internal partial class GameplaySession : Node
         if (_useClassicDioramaHud)
         {
             var presentation = new Label { Text = "CLASSIC DIORAMA  •  PRESENTATION PROOF" };
-            presentation.AddThemeColorOverride("font_color", new Color(0.94f, 0.78f, 0.38f));
-            presentation.AddThemeFontSizeOverride("font_size", 17);
+            presentation.AddThemeColorOverride("font_color", new Color(GameplaySessionNumericContracts.PresentationFloat0Point94f, GameplaySessionNumericContracts.PresentationFloat0Point78f, GameplaySessionNumericContracts.PresentationFloat0Point38f));
+            presentation.AddThemeFontSizeOverride("font_size", GameplaySessionNumericContracts.PresentationInt17);
             labels.AddChild(presentation);
         }
         _objectiveLabel = new Label();

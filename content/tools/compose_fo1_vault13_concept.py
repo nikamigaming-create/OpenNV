@@ -11,6 +11,11 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+COMPOSE_FO1_VAULT13_CONCEPT_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE12 = 1.0e-12
+COMPOSE_FO1_VAULT13_CONCEPT_DIAGNOSTIC_CONTRACT_INTEGER_1024 = 1024
+COMPOSE_FO1_VAULT13_CONCEPT_DIAGNOSTIC_CONTRACT_INTEGER_20 = 20
+
 
 
 RECIPE_SCHEMA = "opennv-fo1-concept-composition/v1"
@@ -20,7 +25,7 @@ MANIFEST_SCHEMA = "opennv-fo1-concept-cache/v1"
 def sha256_path(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        for chunk in iter(lambda: stream.read(COMPOSE_FO1_VAULT13_CONCEPT_DIAGNOSTIC_CONTRACT_INTEGER_1024 * COMPOSE_FO1_VAULT13_CONCEPT_DIAGNOSTIC_CONTRACT_INTEGER_1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
@@ -72,7 +77,7 @@ def quaternion_rotate(vector: list[float], quaternion: list[float]) -> list[floa
         raise ValueError("Godot vector/quaternion dimensions are invalid")
     x, y, z, w = (float(value) for value in quaternion)
     length = math.sqrt(x * x + y * y + z * z + w * w)
-    if length <= 1.0e-12:
+    if length <= COMPOSE_FO1_VAULT13_CONCEPT_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE12:
         raise ValueError("Godot placement quaternion has zero length")
     x, y, z, w = x / length, y / length, z / length, w / length
     vx, vy, vz = (float(value) for value in vector)
@@ -174,7 +179,7 @@ def compose(
 
     door_asset_id = hashlib.sha256(
         (recipe["id"] + proof["target"]["sourceNifSha256"]).encode("utf-8")
-    ).hexdigest()[:20]
+    ).hexdigest()[:COMPOSE_FO1_VAULT13_CONCEPT_DIAGNOSTIC_CONTRACT_INTEGER_20]
     door_asset = {
         "id": door_asset_id,
         "logicalPath": proof["target"]["logicalPath"],

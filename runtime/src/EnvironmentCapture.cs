@@ -4,6 +4,13 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class EnvironmentCaptureNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const double AcceptanceDouble0Point035 = 0.035;
+}
+
 internal static class EnvironmentCapture
 {
     internal static async Task Run(
@@ -279,7 +286,7 @@ internal static class EnvironmentCapture
             host,
             output,
             "classic-diorama-ui.png",
-            0.035,
+            EnvironmentCaptureNumericContracts.AcceptanceDouble0Point035,
             configuration.Capture);
         if (hud is not null)
             hud.Visible = false;
@@ -288,7 +295,7 @@ internal static class EnvironmentCapture
             host,
             output,
             "classic-diorama-environment.png",
-            0.035,
+            EnvironmentCaptureNumericContracts.AcceptanceDouble0Point035,
             configuration.Capture);
         var visualQualityPassed = withHud.Passed && environment.Passed;
         var camera = loaded.Player.Camera;

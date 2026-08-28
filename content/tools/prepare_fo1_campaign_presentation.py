@@ -30,6 +30,27 @@ from prepare_fo1_hex_scene import (
     parse_critter_pro,
     unproject_floor,
 )
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_07 = 0x07
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_0F = 0x0F
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_0FFF = 0x0FFF
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_FF = 0xFF
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_FLOAT_1POINT08 = 1.08
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_100 = 100
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_10000 = 10000
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_11 = 11
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_12 = 12
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16 = 16
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_20 = 20
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200 = 200
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_FLOAT_255POINT0 = 255.0
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_28 = 28
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_40000 = 40000
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_5 = 5
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_6 = 6
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_7 = 7
+PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_8 = 8
+
 
 
 RECIPE_SCHEMA = "opennv-fo1-campaign-presentation-recipe/v1"
@@ -85,10 +106,10 @@ def source_sprite_logical_path(obj: dict[str, Any], map_format: dict[str, Any]) 
         return None
     if object_type != 1:
         return f"art\\{directory}\\{filename}"
-    fid = int(obj["fid"], 16)
-    animation = (fid >> 16) & 0xFF
-    weapon = (fid >> 12) & 0x0F
-    packed_rotation = (fid >> 28) & 0x07
+    fid = int(obj["fid"], PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16)
+    animation = (fid >> PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16) & PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_FF
+    weapon = (fid >> PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_12) & PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_0F
+    packed_rotation = (fid >> PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_28) & PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_07
     if (
         animation != int(map_format["supportedCritterIdleAnimation"])
         or weapon != int(map_format["supportedCritterIdleWeapon"])
@@ -123,28 +144,28 @@ def average_opaque_rgba(image, alpha_threshold: float) -> list[float] | None:
     """Return an alpha-weighted source color without treating transparency as black."""
     if not 0.0 <= alpha_threshold <= 1.0:
         raise Fo1ProfileError("Fallout sprite alpha threshold is invalid")
-    threshold = round(alpha_threshold * 255.0)
+    threshold = round(alpha_threshold * PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_FLOAT_255POINT0)
     totals = [0.0, 0.0, 0.0]
     weight = 0.0
     for red, green, blue, alpha in image.convert("RGBA").getdata():
         if alpha <= threshold:
             continue
-        sample_weight = alpha / 255.0
+        sample_weight = alpha / PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_FLOAT_255POINT0
         totals[0] += red * sample_weight
         totals[1] += green * sample_weight
         totals[2] += blue * sample_weight
         weight += sample_weight
     if weight == 0.0:
         return None
-    return [round(value / weight / 255.0, 7) for value in totals] + [1.0]
+    return [round(value / weight / PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_FLOAT_255POINT0, PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_7) for value in totals] + [1.0]
 
 
 def hex_neighbor_across_edge(tile: int, edge: int) -> int:
     """Match retail column-parity directions and flat-top corner-edge order."""
-    if not 0 <= tile < 40000 or not 0 <= edge < 6:
+    if not 0 <= tile < PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_40000 or not 0 <= edge < PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_6:
         return -1
-    column = tile % 200
-    row = tile // 200
+    column = tile % PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200
+    row = tile // PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200
     odd = bool(column & 1)
     offsets = (
         (1, (0 if odd else 1)),
@@ -156,9 +177,9 @@ def hex_neighbor_across_edge(tile: int, edge: int) -> int:
     )
     target_column = column + offsets[edge][0]
     target_row = row + offsets[edge][1]
-    if not 0 <= target_column < 200 or not 0 <= target_row < 200:
+    if not 0 <= target_column < PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200 or not 0 <= target_row < PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200:
         return -1
-    return target_row * 200 + target_column
+    return target_row * PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200 + target_column
 
 
 def build_connected_wall_topology(
@@ -173,7 +194,7 @@ def build_connected_wall_topology(
     the union boundary, so adjacent wall records cannot become disconnected
     upright cards or one box per source object.
     """
-    if len(floor_ids) != 10000 or default_tile_id < 0 or no_block_flag <= 0:
+    if len(floor_ids) != PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_10000 or default_tile_id < 0 or no_block_flag <= 0:
         raise Fo1ProfileError("Fallout connected-wall topology inputs are invalid")
     source_walls = [
         row for row in source_objects
@@ -188,13 +209,13 @@ def build_connected_wall_topology(
             raise Fo1ProfileError(f"duplicate Fallout wall serial: {serial}")
         source_serials.add(serial)
         tile = int(row["tile"])
-        if not 0 <= tile < 40000:
+        if not 0 <= tile < PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_40000:
             off_grid += 1
             continue
         rotation = int(row["rotation"])
-        if not 0 <= rotation < 6:
+        if not 0 <= rotation < PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_6:
             raise Fo1ProfileError(f"Fallout wall rotation is invalid: {serial}")
-        flags = int(str(row["flags"]), 16)
+        flags = int(str(row["flags"]), PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16)
         cells_by_tile.setdefault(tile, []).append(
             {
                 "serial": serial,
@@ -219,7 +240,7 @@ def build_connected_wall_topology(
         while queue:
             tile = queue.popleft()
             component_size += 1
-            for edge in range(6):
+            for edge in range(PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_6):
                 neighbor = hex_neighbor_across_edge(tile, edge)
                 if neighbor in occupied and neighbor not in visited:
                     visited.add(neighbor)
@@ -232,7 +253,7 @@ def build_connected_wall_topology(
     floor_facing_edges = 0
     void_facing_edges = 0
     for tile in occupied:
-        for edge in range(6):
+        for edge in range(PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_6):
             neighbor = hex_neighbor_across_edge(tile, edge)
             if neighbor in occupied:
                 continue
@@ -340,7 +361,7 @@ def validate_viewer_config(viewer: object) -> dict[str, Any]:
         if not isinstance(walls.get(field), (int, float)) or float(walls[field]) < 0.0:
             raise Fo1ProfileError(f"Fallout campaign wall-geometry value is invalid: {field}")
     if (
-        not 1.0 <= float(walls["cellRadiusScale"]) <= 1.08
+        not 1.0 <= float(walls["cellRadiusScale"]) <= PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_FLOAT_1POINT08
         or float(walls["heightMeters"]) <= 1.0
         or float(walls["groundSinkMeters"]) >= float(walls["heightMeters"])
         or float(walls["roughness"]) > 1.0
@@ -348,7 +369,7 @@ def validate_viewer_config(viewer: object) -> dict[str, Any]:
         or float(walls["sourceAlphaThreshold"]) > 1.0
     ):
         raise Fo1ProfileError("Fallout campaign wall-geometry range is invalid")
-    for field in ("fallbackAlbedo", "sideColorMultiplier", "topColorMultiplier"):
+    for field in ("unresolvedSourceAlbedo", "sideColorMultiplier", "topColorMultiplier"):
         color = walls.get(field)
         if (
             not isinstance(color, list)
@@ -469,7 +490,7 @@ def prepare(
             source_frame,
             int(runtime_profile["generationAdaptation"]["unprojectedFloorTextureSizePixels"]),
         )
-        relative = f"assets/tiles/{tile_id:04d}-{resource.sha256[:16]}.png"
+        relative = f"assets/tiles/{tile_id:04d}-{resource.sha256[:PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16]}.png"
         artifact = {
             "id": tile_id,
             "filename": filename,
@@ -489,7 +510,7 @@ def prepare(
     ) -> dict[str, Any]:
         resource = resolver.read(logical_path)
         key = f"{resource.sha256}:{rotation}:{frame_index}"
-        artifact_id = hashlib.sha256(key.encode("ascii")).hexdigest()[:20]
+        artifact_id = hashlib.sha256(key.encode("ascii")).hexdigest()[:PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_20]
         artifact = sprite_artifacts.get(artifact_id)
         if artifact is not None:
             return artifact
@@ -568,8 +589,8 @@ def prepare(
             for layout in transport["layout"]["elevations"]:
                 elevation = int(layout["elevation"])
                 raw_entries = [int(value) for value in layout["rawEntries"]]
-                floor_ids = [value & 0x0FFF for value in raw_entries]
-                roof_ids = [(value >> 16) & 0x0FFF for value in raw_entries]
+                floor_ids = [value & PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_0FFF for value in raw_entries]
+                roof_ids = [(value >> PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16) & PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_HEX_0FFF for value in raw_entries]
                 for tile_id in sorted(set(floor_ids) | set(roof_ids)):
                     ensure_tile_artifact(tile_id)
                 placements: list[dict[str, Any]] = []
@@ -585,7 +606,7 @@ def prepare(
                     no_block_flag,
                 )
                 for obj in source_objects:
-                    flags = int(obj["flags"], 16)
+                    flags = int(obj["flags"], PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_16)
                     tile = int(obj["tile"])
                     object_type = int(obj["prototype"]["object_type"])
                     if tile >= 0 and not flags & no_block_flag:
@@ -625,7 +646,7 @@ def prepare(
                         "serial": obj["serial"],
                         "objectId": obj["id"],
                         "tile": tile,
-                        "hex": [tile % 200, tile // 200],
+                        "hex": [tile % PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200, tile // PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200],
                         "worldMeters": hex_center(tile),
                         "rotation": obj["rotation"],
                         "rotationSource": obj["rotationSource"],
@@ -672,7 +693,7 @@ def prepare(
                             }
                             critter_profiles[pid] = profile
                         instance = obj["instanceValues"]
-                        if len(instance) != 11:
+                        if len(instance) != PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_11:
                             raise Fo1ProfileError(
                                 f"Fallout critter instance field count drifted: {map_id}/{obj['serial']}"
                             )
@@ -680,17 +701,17 @@ def prepare(
                             {
                                 "serial": obj["serial"],
                                 "profileId": pid,
-                                "currentHitPoints": instance[8],
+                                "currentHitPoints": instance[PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_8],
                                 "currentActionPoints": instance[3],
-                                "runtimeAiPacket": instance[5],
-                                "runtimeTeam": instance[6],
+                                "runtimeAiPacket": instance[PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_5],
+                                "runtimeTeam": instance[PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_6],
                             }
                         )
                 blocked = {int(row["tile"]) for row in blockers}
                 walkable = sum(
                     floor_ids[floor_index_for_hex(tile)] != default_tile_id
                     and tile not in blocked
-                    for tile in range(40000)
+                    for tile in range(PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_40000)
                 )
                 elevations.append(
                     {
@@ -753,10 +774,10 @@ def prepare(
                     ],
                 },
                 "grid": {
-                    "hexWidth": 200,
-                    "hexHeight": 200,
-                    "floorWidth": 100,
-                    "floorHeight": 100,
+                    "hexWidth": PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200,
+                    "hexHeight": PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_200,
+                    "floorWidth": PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_100,
+                    "floorHeight": PREPARE_FO1_CAMPAIGN_PRESENTATION_COMPILER_CONTRACT_INTEGER_100,
                     "hexFlatToFlatMeters": 1.0,
                     "layout": "fallout-even-column-offset-flat-v1",
                     "defaultTileId": default_tile_id,

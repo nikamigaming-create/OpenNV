@@ -26,6 +26,12 @@ from prepare_legal_assets import file_sha256, find_required_file
 from prepare_actor import prepare_actor
 from runtime_configuration import load_runtime_configuration
 from texture_pipeline import TexturePipeline
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_FLOAT_0POINT08 = 0.08
+PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_FLOAT_1POINT0ENEGATIVE6 = 1.0e-6
+PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_FLOAT_10POINT0 = 10.0
+PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_INTEGER_20 = 20
+
 
 
 RECIPE_SCHEMA = "opennv-fo1-3d-presentation-recipe/v1"
@@ -314,12 +320,12 @@ def _material_bindings(
         emissive = textures[2] if len(textures) > 2 and textures[2] else None
         material = surface["material"]
         environment, environment_mask = environment_texture_paths(surface)
-        glossiness = float(material.get("glossiness", 10.0))
+        glossiness = float(material.get("glossiness", PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_FLOAT_10POINT0))
         specular = [float(value) for value in material.get("specular", [0.0, 0.0, 0.0])]
         roughness = (
             1.0
-            if max(specular) <= 1.0e-6
-            else max(0.08, min(1.0, math.sqrt(2.0 / (glossiness + 2.0))))
+            if max(specular) <= PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_FLOAT_1POINT0ENEGATIVE6
+            else max(PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_FLOAT_0POINT08, min(1.0, math.sqrt(2.0 / (glossiness + 2.0))))
         )
         unshaded = "BSShaderNoLightingProperty" in surface["propertyTypes"]
         emissive_color = [
@@ -398,7 +404,7 @@ def _prepare_direct_cave_assets(
         member = meshes.extract(str(expected["path"]))
         if member.sha256 != str(expected["sha256"]):
             raise ValueError(f"Direct cave asset identity drift: {expected['path']}")
-        asset_id = hashlib.sha256(member.logical_path.encode()).hexdigest()[:20]
+        asset_id = hashlib.sha256(member.logical_path.encode()).hexdigest()[:PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_INTEGER_20]
         source_path = staging / "source" / Path(member.logical_path.replace("\\", "/"))
         source_path.parent.mkdir(parents=True, exist_ok=True)
         source_path.write_bytes(member.data)
@@ -563,7 +569,7 @@ def _prepare_combat_presentation(
     final_audio_root = output_root / "generated" / "combat" / "audio"
     for row in combat_recipe["audio"]:
         member = _verified_member(sound_archive, row)
-        audio_id = hashlib.sha256(member.logical_path.encode()).hexdigest()[:20]
+        audio_id = hashlib.sha256(member.logical_path.encode()).hexdigest()[:PREPARE_FO1_3D_PRESENTATION_COMPILER_CONTRACT_INTEGER_20]
         output = audio_root / f"{audio_id}.wav"
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(member.data)

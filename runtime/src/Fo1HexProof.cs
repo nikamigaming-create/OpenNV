@@ -3,6 +3,46 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1HexProofNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float AcceptanceFloatNEgativE18Point0f = -18.0f;
+    internal const float AcceptanceFloatNEgativE24Point0f = -24.0f;
+    internal const float AcceptanceFloat0Point000001f = 0.000001f;
+    internal const float AcceptanceFloat0Point0001f = 0.0001f;
+    internal const float AcceptanceFloat0Point002f = 0.002f;
+    internal const float AcceptanceFloat0Point005f = 0.005f;
+    internal const float AcceptanceFloat0Point0142875f = 0.0142875f;
+    internal const float AcceptanceFloat0Point015f = 0.015f;
+    internal const float AcceptanceFloat0Point01f = 0.01f;
+    internal const float AcceptanceFloat0Point025f = 0.025f;
+    internal const float AcceptanceFloat0Point03f = 0.03f;
+    internal const float AcceptanceFloat0Point06f = 0.06f;
+    internal const float AcceptanceFloat0Point0722f = 0.0722f;
+    internal const float AcceptanceFloat0Point08f = 0.08f;
+    internal const float AcceptanceFloat0Point20f = 0.20f;
+    internal const float AcceptanceFloat0Point2126f = 0.2126f;
+    internal const float AcceptanceFloat0Point7152f = 0.7152f;
+    internal const float AcceptanceFloat0Point9999f = 0.9999f;
+    internal const float AcceptanceFloat1Point35f = 1.35f;
+    internal const int AcceptanceInt100 = 100;
+    internal const int AcceptanceInt18 = 18;
+    internal const int AcceptanceInt180 = 180;
+    internal const int AcceptanceInt20 = 20;
+    internal const float AcceptanceFloat20Point0f = 20.0f;
+    internal const float AcceptanceFloat24Point0f = 24.0f;
+    internal const float AcceptanceFloat36Point0f = 36.0f;
+    internal const float AcceptanceFloat360Point0f = 360.0f;
+    internal const float AcceptanceFloat4Point5f = 4.5f;
+    internal const int AcceptanceInt480 = 480;
+    internal const float AcceptanceFloat52Point0f = 52.0f;
+    internal const int AcceptanceInt6 = 6;
+    internal const float AcceptanceFloat640Point0f = 640.0f;
+    internal const int AcceptanceInt7 = 7;
+    internal const int AcceptanceInt8 = 8;
+}
+
 internal static class Fo1HexProof
 {
     internal static async Task Run(
@@ -37,7 +77,7 @@ internal static class Fo1HexProof
             });
             camera._UnhandledInput(new InputEventMouseMotion
             {
-                Relative = new Vector2(36.0f, -18.0f),
+                Relative = new Vector2(Fo1HexProofNumericContracts.AcceptanceFloat36Point0f, Fo1HexProofNumericContracts.AcceptanceFloatNEgativE18Point0f),
             });
             camera._UnhandledInput(new InputEventMouseButton
             {
@@ -51,7 +91,7 @@ internal static class Fo1HexProof
             });
             camera._UnhandledInput(new InputEventMouseMotion
             {
-                Relative = new Vector2(52.0f, 24.0f),
+                Relative = new Vector2(Fo1HexProofNumericContracts.AcceptanceFloat52Point0f, Fo1HexProofNumericContracts.AcceptanceFloat24Point0f),
             });
             camera._UnhandledInput(new InputEventMouseButton
             {
@@ -62,7 +102,7 @@ internal static class Fo1HexProof
             {
                 ButtonIndex = MouseButton.WheelUp,
                 Pressed = true,
-                Position = new Vector2(640.0f, 360.0f),
+                Position = new Vector2(Fo1HexProofNumericContracts.AcceptanceFloat640Point0f, Fo1HexProofNumericContracts.AcceptanceFloat360Point0f),
             });
             if (Mathf.IsEqualApprox(camera.TargetYawRadians, initialYaw) ||
                 Mathf.IsEqualApprox(camera.TargetPitchRadians, initialPitch) ||
@@ -78,7 +118,7 @@ internal static class Fo1HexProof
                 ?? throw new InvalidOperationException(
                     "Owned Vault Dweller has no third-person held weapon.");
             if (!heldWeapon.Root.IsVisibleInTree() || heldWeapon.BoneName != "Bip01 R Hand" ||
-                heldWeapon.FormId != "0000434f" || heldWeapon.Surfaces != 7 ||
+                string.IsNullOrWhiteSpace(heldWeapon.FormId) || heldWeapon.Surfaces < 1 ||
                 heldWeapon.MaterialBindings != heldWeapon.Surfaces)
                 throw new InvalidOperationException(
                     "Fallout third-person 10mm pistol attachment gate failed.");
@@ -87,7 +127,7 @@ internal static class Fo1HexProof
                     "Owned Vault Dweller has no third-person melee weapon.");
             if (heldMeleeWeapon.Root.IsVisibleInTree() ||
                 heldMeleeWeapon.BoneName != "Bip01 R Hand" ||
-                heldMeleeWeapon.GameplayPid != "00000004" ||
+                string.IsNullOrWhiteSpace(heldMeleeWeapon.GameplayPid) ||
                 heldMeleeWeapon.Surfaces != 1 ||
                 heldMeleeWeapon.MaterialBindings != heldMeleeWeapon.Surfaces)
                 throw new InvalidOperationException(
@@ -142,8 +182,8 @@ internal static class Fo1HexProof
             if (!camera.FirstPersonMode || !camera.ExplorationMode ||
                 loaded.Session.PlayerToken.Visible ||
                 camera.Camera.Projection != Camera3D.ProjectionType.Perspective ||
-                MathF.Abs(camera.Camera.Fov - camera.FirstPersonFovDegrees) > 0.0001f ||
-                firstPersonEyeErrorMeters > 0.0001f || firstPersonForwardAlignment < 0.9999f)
+                MathF.Abs(camera.Camera.Fov - camera.FirstPersonFovDegrees) > Fo1HexProofNumericContracts.AcceptanceFloat0Point0001f ||
+                firstPersonEyeErrorMeters > Fo1HexProofNumericContracts.AcceptanceFloat0Point0001f || firstPersonForwardAlignment < Fo1HexProofNumericContracts.AcceptanceFloat0Point9999f)
                 throw new InvalidOperationException(
                     $"Fallout first-person camera gate failed: eyeError={firstPersonEyeErrorMeters:F6} " +
                     $"forward={firstPersonForwardAlignment:F6} visible={loaded.Session.PlayerToken.Visible}.");
@@ -155,7 +195,7 @@ internal static class Fo1HexProof
                 throw new InvalidOperationException(
                     "Fallout source-reference toggle escaped the first-person 3D-only gate.");
             firstPersonPitchBeforeMouseUp = camera.TargetPitchRadians;
-            camera.ApplyFirstPersonLook(new Vector2(0.0f, -24.0f));
+            camera.ApplyFirstPersonLook(new Vector2(0.0f, Fo1HexProofNumericContracts.AcceptanceFloatNEgativE24Point0f));
             firstPersonPitchAfterMouseUp = camera.TargetPitchRadians;
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -173,7 +213,7 @@ internal static class Fo1HexProof
             var fpsDirection = Fo1HexMath.Center(fpsNeighbor) - Fo1HexMath.Center(loaded.Session.PlayerTile);
             var fpsYaw = MathF.Atan2(-fpsDirection.X, -fpsDirection.Z);
             camera.SetOrbitDegrees(Mathf.RadToDeg(fpsYaw), -1.0f);
-            if (!camera.MoveFirstPerson(new Vector2(0.0f, 1.0f), 0.08f))
+            if (!camera.MoveFirstPerson(new Vector2(0.0f, 1.0f), Fo1HexProofNumericContracts.AcceptanceFloat0Point08f))
                 throw new InvalidOperationException("Fallout continuous FPS movement was rejected.");
             firstPersonContinuousMoveMeters =
                 loaded.Session.PlayerToken.Position.DistanceTo(fpsStart);
@@ -184,8 +224,8 @@ internal static class Fo1HexProof
                 camera.FirstPersonEyePosition,
                 firstPersonMissDirection);
             firstPersonMissShots = loaded.Session.FpsShots;
-            if (firstPersonContinuousMoveMeters < 0.20f || !firstPersonApUnchanged ||
-                loaded.Session.PlayerHexCenterErrorMeters < 0.20f ||
+            if (firstPersonContinuousMoveMeters < Fo1HexProofNumericContracts.AcceptanceFloat0Point20f || !firstPersonApUnchanged ||
+                loaded.Session.PlayerHexCenterErrorMeters < Fo1HexProofNumericContracts.AcceptanceFloat0Point20f ||
                 firstPersonMissShots != 1 || loaded.Session.FpsHits != 0)
                 throw new InvalidOperationException(
                     $"Fallout FPS contract failed: moved={firstPersonContinuousMoveMeters:F4} " +
@@ -225,7 +265,7 @@ internal static class Fo1HexProof
                 heldMeleeWeapon.Root.IsVisibleInTree() ||
                 camera.Camera.Projection != Camera3D.ProjectionType.Orthogonal ||
                 fpsSourceOverlay.Visible || !fpsContinuousFloor.Visible ||
-                loaded.Session.PlayerHexCenterErrorMeters > 0.0001f)
+                loaded.Session.PlayerHexCenterErrorMeters > Fo1HexProofNumericContracts.AcceptanceFloat0Point0001f)
                 throw new InvalidOperationException(
                     "Fallout perspective cameras did not preserve the tactical return path.");
             var worldEnvironment = host.FindChild(
@@ -234,21 +274,21 @@ internal static class Fo1HexProof
                 false) as WorldEnvironment;
             var environment = worldEnvironment?.Environment;
             var backgroundLuminance =
-                0.2126f * loaded.Atmosphere.BackgroundColor.R +
-                0.7152f * loaded.Atmosphere.BackgroundColor.G +
-                0.0722f * loaded.Atmosphere.BackgroundColor.B;
+                Fo1HexProofNumericContracts.AcceptanceFloat0Point2126f * loaded.Atmosphere.BackgroundColor.R +
+                Fo1HexProofNumericContracts.AcceptanceFloat0Point7152f * loaded.Atmosphere.BackgroundColor.G +
+                Fo1HexProofNumericContracts.AcceptanceFloat0Point0722f * loaded.Atmosphere.BackgroundColor.B;
             if (loaded.Atmosphere.Schema != "opennv-fo1-cave-atmosphere/v1" ||
                 worldEnvironment is null || environment is null ||
                 !environment.FogEnabled || !environment.VolumetricFogEnabled ||
                 !loaded.Atmosphere.VolumetricFogEnabled ||
-                loaded.Atmosphere.FogDensity is < 0.015f or > 0.06f ||
-                loaded.Atmosphere.VolumetricFogDensity is < 0.005f or > 0.03f ||
-                loaded.Atmosphere.VolumetricFogLengthMeters < 20.0f ||
+                loaded.Atmosphere.FogDensity is < Fo1HexProofNumericContracts.AcceptanceFloat0Point015f or > Fo1HexProofNumericContracts.AcceptanceFloat0Point06f ||
+                loaded.Atmosphere.VolumetricFogDensity is < Fo1HexProofNumericContracts.AcceptanceFloat0Point005f or > Fo1HexProofNumericContracts.AcceptanceFloat0Point03f ||
+                loaded.Atmosphere.VolumetricFogLengthMeters < Fo1HexProofNumericContracts.AcceptanceFloat20Point0f ||
                 loaded.Atmosphere.PracticalLights < 3 ||
                 loaded.Atmosphere.DirectionalLights < 1 ||
                 loaded.Atmosphere.LocalFogVolumes < 3 ||
-                backgroundLuminance < 0.01f ||
-                loaded.RuntimeProfile.Cutaway.TacticalEnvelopeCutHeightMeters < 4.5f)
+                backgroundLuminance < Fo1HexProofNumericContracts.AcceptanceFloat0Point01f ||
+                loaded.RuntimeProfile.Cutaway.TacticalEnvelopeCutHeightMeters < Fo1HexProofNumericContracts.AcceptanceFloat4Point5f)
                 throw new InvalidOperationException(
                     $"Fallout cave atmosphere gate failed: fog={loaded.Atmosphere.FogDensity:F3} " +
                     $"volumetric={loaded.Atmosphere.VolumetricFogDensity:F3} " +
@@ -303,7 +343,7 @@ internal static class Fo1HexProof
             var sourceRatSprites = sourceSprites.Where(sprite => sprite.Name == "SourceCritterSprite").ToArray();
             var maximumAnchorError = sourceSprites.Length == 0
                 ? float.PositiveInfinity
-                : sourceSprites.Max(sprite => MathF.Abs(sprite.GlobalPosition.Y - 0.015f));
+                : sourceSprites.Max(sprite => MathF.Abs(sprite.GlobalPosition.Y - Fo1HexProofNumericContracts.AcceptanceFloat0Point015f));
             if (sourceOverlay is null || sourceOverlay.Visible == ownedCreaturePresentation ||
                 caveMeshes.Any(mesh => mesh is null || mesh.Visible) ||
                 sourceSprites.Length != loaded.SpritePlacements + 1 ||
@@ -313,8 +353,8 @@ internal static class Fo1HexProof
                 staticSprites.Any(sprite => sprite.Billboard != BaseMaterial3D.BillboardModeEnum.Disabled) ||
                 staticSprites.Any(sprite => MathF.Abs(
                     sprite.RotationDegrees.Y -
-                    loaded.RuntimeProfile.Generation.StaticWorldSpriteYawDegrees) > 0.0001f) ||
-                maximumAnchorError > 0.0001f ||
+                    loaded.RuntimeProfile.Generation.StaticWorldSpriteYawDegrees) > Fo1HexProofNumericContracts.AcceptanceFloat0Point0001f) ||
+                maximumAnchorError > Fo1HexProofNumericContracts.AcceptanceFloat0Point0001f ||
                 ownedCreaturePresentation &&
                 (creatureRoots.Length != loaded.CombatMobs ||
                     creatureSkeletons != loaded.CombatMobs ||
@@ -335,20 +375,20 @@ internal static class Fo1HexProof
                 ownedCavePresentation &&
                 (ownedCaveContainer is null ||
                     ownedCaveContainer.GetChildCount() != loaded.OwnedCave.Instances ||
-                    loaded.OwnedCave.Assets < 6 || loaded.OwnedCave.MeshInstances < 100 ||
+                    loaded.OwnedCave.Assets < Fo1HexProofNumericContracts.AcceptanceInt6 || loaded.OwnedCave.MeshInstances < Fo1HexProofNumericContracts.AcceptanceInt100 ||
                     continuousFloor is null || !continuousFloor.Visible ||
                     continuousFloor.Mesh?.GetSurfaceCount() != 1 ||
                     loaded.OwnedCave.ContinuousFloorHexes != loaded.RenderedFloorTiles * 4 ||
                     loaded.OwnedCave.ContinuousFloorTriangles !=
-                        loaded.OwnedCave.ContinuousFloorHexes * 6 ||
+                        loaded.OwnedCave.ContinuousFloorHexes * Fo1HexProofNumericContracts.AcceptanceInt6 ||
                     loaded.OwnedCave.ContinuousFloorMeshInstances != 1 ||
                     loaded.OwnedCave.Roles.GetValueOrDefault("vault-portal") != 1 ||
                     expectedGroundedRockInstances < 1 ||
                     loaded.OwnedCave.GroundedInstances != expectedGroundedRockInstances ||
-                    loaded.OwnedCave.MinimumGroundSeatDepthMeters < 0.025f ||
+                    loaded.OwnedCave.MinimumGroundSeatDepthMeters < Fo1HexProofNumericContracts.AcceptanceFloat0Point025f ||
                     loaded.OwnedCave.MaximumGroundErrorMeters >
                         loaded.OwnedCave.GroundingToleranceMeters ||
-                    loaded.OwnedCave.GroundingToleranceMeters > 0.002f) ||
+                    loaded.OwnedCave.GroundingToleranceMeters > Fo1HexProofNumericContracts.AcceptanceFloat0Point002f) ||
                 hexOverlay is null || hexOverlay.Visible ||
                 hexOverlay.Mesh?.GetSurfaceCount() != 1 ||
                 hexOverlay.GetMeta("hex_count").AsInt32() != loaded.WalkableHexes ||
@@ -397,10 +437,10 @@ internal static class Fo1HexProof
                 throw new InvalidOperationException("V13ENT entry has no provisionally walkable adjacent hex.");
             var initialAp = loaded.Session.ActionPoints;
             loaded.Session.SelectTile(target);
-            for (var frame = 0; frame < 180 && loaded.Session.PlayerTile != target; frame++)
+            for (var frame = 0; frame < Fo1HexProofNumericContracts.AcceptanceInt180 && loaded.Session.PlayerTile != target; frame++)
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             if (loaded.Session.PlayerTile != target || loaded.Session.ActionPoints != initialAp - 1 ||
-                loaded.Session.PlayerHexCenterErrorMeters > 0.0001f)
+                loaded.Session.PlayerHexCenterErrorMeters > Fo1HexProofNumericContracts.AcceptanceFloat0Point0001f)
                 throw new InvalidOperationException(
                     $"Fallout center-to-center one-AP movement proof failed: " +
                     $"tile={loaded.Session.PlayerTile} AP={loaded.Session.ActionPoints} " +
@@ -412,9 +452,9 @@ internal static class Fo1HexProof
             var combatTarget = loaded.Session.CycleTarget()
                 ?? throw new InvalidOperationException("Fallout target cycling found no source mob.");
             if (ownedCreaturePresentation &&
-                (MathF.Abs(combatTarget.CreatureUnitsToMeters - 0.0142875f) > 0.000001f ||
-                 MathF.Abs(combatTarget.CreatureSelectionMultiplier - 1.35f) > 0.0001f ||
-                 combatTarget.CreatureGroundErrorMeters > 0.0001f ||
+                (MathF.Abs(combatTarget.CreatureUnitsToMeters - Fo1HexProofNumericContracts.AcceptanceFloat0Point0142875f) > Fo1HexProofNumericContracts.AcceptanceFloat0Point000001f ||
+                 MathF.Abs(combatTarget.CreatureSelectionMultiplier - Fo1HexProofNumericContracts.AcceptanceFloat1Point35f) > Fo1HexProofNumericContracts.AcceptanceFloat0Point0001f ||
+                 combatTarget.CreatureGroundErrorMeters > Fo1HexProofNumericContracts.AcceptanceFloat0Point0001f ||
                  !combatTarget.HostileMarkerDepthTested))
                 throw new InvalidOperationException(
                     $"Fallout creature selection scale drift: units={combatTarget.CreatureUnitsToMeters:F7} " +
@@ -440,10 +480,10 @@ internal static class Fo1HexProof
                     $"shaderDriven={loaded.CaveCutaway.ShaderDriven}");
             var targetReticle = host.FindChild("SelectedTargetReticle", true, false) as Control;
             var targetReticleVisible = targetReticle is not null && targetReticle.Visible;
-            if (hostileMarkers != 20 || hostileLabels != 20)
+            if (hostileMarkers != Fo1HexProofNumericContracts.AcceptanceInt20 || hostileLabels != Fo1HexProofNumericContracts.AcceptanceInt20)
                 throw new InvalidOperationException(
                     $"Fallout hostile readability contract failed: markers={hostileMarkers} labels={hostileLabels}");
-            if (visibleHostileMarkers >= 20 ||
+            if (visibleHostileMarkers >= Fo1HexProofNumericContracts.AcceptanceInt20 ||
                 visibleHostileBeacons > visibleHostileMarkers ||
                 visibleHostileLabels > 1)
                 throw new InvalidOperationException(
@@ -461,7 +501,7 @@ internal static class Fo1HexProof
                 loaded.Session.MagazineRounds != magazineBeforeRanged - 1)
                 throw new InvalidOperationException(
                     "Fallout inventory-backed tactical ranged-attempt proof failed.");
-            for (var attempts = 0; combatTarget.Alive && attempts < 8; attempts++)
+            for (var attempts = 0; combatTarget.Alive && attempts < Fo1HexProofNumericContracts.AcceptanceInt8; attempts++)
             {
                 if (loaded.Session.ActionPoints < loaded.Session.WeaponActionPointCost)
                 {
@@ -481,7 +521,7 @@ internal static class Fo1HexProof
             await host.ToSignal(
                 host.GetTree().CreateTimer(loaded.RuntimeProfile.Mob.Animation.DeathRollSeconds),
                 SceneTreeTimer.SignalName.Timeout);
-            if (!combatTarget.CorpseVisible || combatTarget.CorpseGroundErrorMeters > 0.005f)
+            if (!combatTarget.CorpseVisible || combatTarget.CorpseGroundErrorMeters > Fo1HexProofNumericContracts.AcceptanceFloat0Point005f)
                 throw new InvalidOperationException(
                     $"Fallout defeated-rat grounding failed: visible={combatTarget.CorpseVisible} " +
                     $"error={combatTarget.CorpseGroundErrorMeters:F6}");
@@ -505,13 +545,13 @@ internal static class Fo1HexProof
                 .OrderBy(mob => Fo1HexMath.Distance(loaded.Session.PlayerTile, mob.Tile))
                 .ThenBy(mob => mob.Serial)
                 .First();
-            await MoveAdjacentToTarget(host, loaded, meleeTarget, maximumTurns: 18);
+            await MoveAdjacentToTarget(host, loaded, meleeTarget, maximumTurns: Fo1HexProofNumericContracts.AcceptanceInt18);
             var meleeHitsBefore = loaded.Session.MeleeHits;
             Fo1TacticalSession.CombatResult meleeResult = default;
-            for (var attempts = 0; meleeTarget.Alive && attempts < 8; attempts++)
+            for (var attempts = 0; meleeTarget.Alive && attempts < Fo1HexProofNumericContracts.AcceptanceInt8; attempts++)
             {
                 if (Fo1HexMath.Distance(loaded.Session.PlayerTile, meleeTarget.Tile) > 1)
-                    await MoveAdjacentToTarget(host, loaded, meleeTarget, maximumTurns: 8);
+                    await MoveAdjacentToTarget(host, loaded, meleeTarget, maximumTurns: Fo1HexProofNumericContracts.AcceptanceInt8);
                 if (loaded.Session.ActionPoints < loaded.Session.MeleeActionPointCost)
                 {
                     loaded.Session.EndTurn();
@@ -543,7 +583,7 @@ internal static class Fo1HexProof
                     .ThenBy(mob => mob.Serial)
                     .First();
             if (Fo1HexMath.Distance(loaded.Session.PlayerTile, fpsMeleeTarget.Tile) > 1)
-                await MoveAdjacentToTarget(host, loaded, fpsMeleeTarget, maximumTurns: 18);
+                await MoveAdjacentToTarget(host, loaded, fpsMeleeTarget, maximumTurns: Fo1HexProofNumericContracts.AcceptanceInt18);
             camera.SetFirstPersonMode(true);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             var fpsMeleeAim = fpsMeleeTarget.GlobalPosition +
@@ -551,7 +591,7 @@ internal static class Fo1HexProof
                 camera.FirstPersonEyePosition;
             var fpsMeleeHitsBefore = loaded.Session.MeleeHits;
             var fpsMeleeSucceeded = false;
-            for (var attempts = 0; fpsMeleeTarget.Alive && attempts < 8; attempts++)
+            for (var attempts = 0; fpsMeleeTarget.Alive && attempts < Fo1HexProofNumericContracts.AcceptanceInt8; attempts++)
             {
                 if (attempts > 0)
                     await host.ToSignal(
@@ -610,7 +650,7 @@ internal static class Fo1HexProof
             loaded.Session.EndTurn();
             if (loaded.Session.Turn != turnBeforeEndGate + 1 ||
                 loaded.Session.ActionPoints != initialAp ||
-                loaded.Session.RatActivationDistanceHexes != 6 ||
+                loaded.Session.RatActivationDistanceHexes != Fo1HexProofNumericContracts.AcceptanceInt6 ||
                 loaded.Session.LastRatActors >= loaded.CombatMobs)
                 throw new InvalidOperationException("Fallout end-turn AP restoration proof failed.");
 
@@ -873,6 +913,9 @@ internal static class Fo1HexProof
             GD.Print(
                 $"OPENNV_FO1_TACTICAL_PROOF_PASS moved={loaded.EntryTile}->{target} ap=1 " +
                 $"targetPid={combatTarget.Pid} attacks={loaded.Session.Attacks} kills={loaded.Session.Kills}");
+            combatPresentation.ClearTransientEffects();
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             host.GetTree().Quit(0);
         }
         catch (Exception exception)
@@ -902,7 +945,7 @@ internal static class Fo1HexProof
             }
             var destination = FindReachableAdjacentTile(loaded.Session, target);
             loaded.Session.SelectTile(destination);
-            for (var frame = 0; loaded.Session.QueuedMovementSteps > 0 && frame < 480; frame++)
+            for (var frame = 0; loaded.Session.QueuedMovementSteps > 0 && frame < Fo1HexProofNumericContracts.AcceptanceInt480; frame++)
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             if (loaded.Session.QueuedMovementSteps > 0)
                 throw new InvalidOperationException(

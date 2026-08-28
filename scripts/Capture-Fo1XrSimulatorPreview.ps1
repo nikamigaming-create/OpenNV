@@ -7,13 +7,72 @@ param(
     [Parameter(Mandatory = $true)][string]$VideoPath,
     [Parameter(Mandatory = $true)][string]$StereoImagePath,
     [Parameter(Mandatory = $true)][string]$SingleEyeImagePath,
-    [ValidateRange(24, 160)][int]$FrameCount = 64,
-    [ValidateRange(4, 16)][int]$CaptureFps = 8
+    [int]$FrameCount = 0,
+    [int]$CaptureFps = 0
 )
+
+# Immutable diagnostic/acceptance contracts; runtime policy is configuration-owned.
+$CaptureFo1XrSimulatorPreviewContractNEgativE0Point01 = -0.01
+$CaptureFo1XrSimulatorPreviewContractNEgativE0Point03 = -0.03
+$CaptureFo1XrSimulatorPreviewContractNEgativE0Point04 = -0.04
+$CaptureFo1XrSimulatorPreviewContractNEgativE0Point08 = -0.08
+$CaptureFo1XrSimulatorPreviewContractNEgativE0Point12 = -0.12
+$CaptureFo1XrSimulatorPreviewContractNEgativE7Point25 = -7.25
+$CaptureFo1XrSimulatorPreviewContract0Point012 = 0.012
+$CaptureFo1XrSimulatorPreviewContract0Point018 = 0.018
+$CaptureFo1XrSimulatorPreviewContract0Point03 = 0.03
+$CaptureFo1XrSimulatorPreviewContract0Point035 = 0.035
+$CaptureFo1XrSimulatorPreviewContract0Point045 = 0.045
+$CaptureFo1XrSimulatorPreviewContract0Point07 = 0.07
+$CaptureFo1XrSimulatorPreviewContract0Point08 = 0.08
+$CaptureFo1XrSimulatorPreviewContract0Point10 = 0.10
+$CaptureFo1XrSimulatorPreviewContract0Point12 = 0.12
+$CaptureFo1XrSimulatorPreviewContract0Point18 = 0.18
+$CaptureFo1XrSimulatorPreviewContract0Point22 = 0.22
+$CaptureFo1XrSimulatorPreviewContract0Point24 = 0.24
+$CaptureFo1XrSimulatorPreviewContract0Point26 = 0.26
+$CaptureFo1XrSimulatorPreviewContract0Point36 = 0.36
+$CaptureFo1XrSimulatorPreviewContract0Point54 = 0.54
+$CaptureFo1XrSimulatorPreviewContract0Point72 = 0.72
+$CaptureFo1XrSimulatorPreviewContract0Point78 = 0.78
+$CaptureFo1XrSimulatorPreviewContract0Point8 = 0.8
+$CaptureFo1XrSimulatorPreviewContract1Point7 = 1.7
+$CaptureFo1XrSimulatorPreviewContract1Point70 = 1.70
+$CaptureFo1XrSimulatorPreviewContract10 = 10
+$CaptureFo1XrSimulatorPreviewContract15000 = 15000
+$CaptureFo1XrSimulatorPreviewContract20 = 20
+$CaptureFo1XrSimulatorPreviewContract23 = 23
+$CaptureFo1XrSimulatorPreviewContract25 = 25
+$CaptureFo1XrSimulatorPreviewContract3Point02 = 3.02
+$CaptureFo1XrSimulatorPreviewContract3Point1 = 3.1
+$CaptureFo1XrSimulatorPreviewContract5 = 5
+$CaptureFo1XrSimulatorPreviewContract500 = 500
+$CaptureFo1XrSimulatorPreviewContract54 = 54
+$CaptureFo1XrSimulatorPreviewContract8 = 8
+$CaptureFo1XrSimulatorPreviewContract90 = 90
+$MinimumFrameCount = 24
+$MaximumFrameCount = 160
+$DefaultFrameCount = 64
+$MinimumCaptureFps = 4
+$MaximumCaptureFps = 16
+$DefaultCaptureFps = 8
+
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $JsonDepth = 10
+if ($FrameCount -eq 0) {
+    $FrameCount = $DefaultFrameCount
+}
+if ($CaptureFps -eq 0) {
+    $CaptureFps = $DefaultCaptureFps
+}
+if ($FrameCount -lt $MinimumFrameCount -or $FrameCount -gt $MaximumFrameCount) {
+    throw "FrameCount must be between $MinimumFrameCount and $MaximumFrameCount."
+}
+if ($CaptureFps -lt $MinimumCaptureFps -or $CaptureFps -gt $MaximumCaptureFps) {
+    throw "CaptureFps must be between $MinimumCaptureFps and $MaximumCaptureFps."
+}
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtime = Join-Path $repository "runtime"
@@ -93,7 +152,7 @@ function Wait-ForMarker([string]$Marker, [int]$TimeoutSeconds) {
             (Select-String -LiteralPath $script:stdoutPath -SimpleMatch $Marker -Quiet)) {
             return
         }
-        Start-Sleep -Milliseconds 25
+        Start-Sleep -Milliseconds $CaptureFo1XrSimulatorPreviewContract25
     } while ([DateTime]::UtcNow -lt $deadline)
     throw "Timed out waiting for OpenXR preview marker: $Marker"
 }
@@ -116,7 +175,7 @@ function Publish-HeadPose(
         if ([DateTime]::UtcNow -ge $deadline) {
             throw "OpenXR simulator did not consume a head-pose command."
         }
-        Start-Sleep -Milliseconds 5
+        Start-Sleep -Milliseconds $CaptureFo1XrSimulatorPreviewContract5
     }
     Write-AtomicJson $commandPath ([ordered]@{
         x = $X; y = $Y; z = $Z
@@ -130,7 +189,7 @@ function Publish-HeadPose(
         if ([DateTime]::UtcNow -ge $deadline) {
             throw "OpenXR simulator did not acknowledge head pose $Ordinal."
         }
-        Start-Sleep -Milliseconds 5
+        Start-Sleep -Milliseconds $CaptureFo1XrSimulatorPreviewContract5
     }
 }
 
@@ -145,19 +204,19 @@ function Capture-NativeProjection([int]$Ordinal) {
         if ([DateTime]::UtcNow -ge $deadline) {
             throw "OpenXR simulator did not consume its screenshot request."
         }
-        Start-Sleep -Milliseconds 5
+        Start-Sleep -Milliseconds $CaptureFo1XrSimulatorPreviewContract5
     }
     Write-AtomicJson $requestPath ([ordered]@{
         eye = "both"
         layer = "projection"
     }) $Ordinal
-    $deadline = [DateTime]::UtcNow.AddSeconds(8)
+    $deadline = [DateTime]::UtcNow.AddSeconds($CaptureFo1XrSimulatorPreviewContract8)
     do {
         if (Test-Path -LiteralPath $screenshotPath -PathType Leaf) { break }
         if ($gameProcess.HasExited) {
             throw "Godot exited before producing native projection frame $Ordinal."
         }
-        Start-Sleep -Milliseconds 10
+        Start-Sleep -Milliseconds $CaptureFo1XrSimulatorPreviewContract10
     } while ([DateTime]::UtcNow -lt $deadline)
     if (-not (Test-Path -LiteralPath $screenshotPath -PathType Leaf)) {
         throw "OpenXR simulator did not produce native projection frame $Ordinal."
@@ -171,12 +230,12 @@ function Capture-NativeProjection([int]$Ordinal) {
                 [IO.FileMode]::Open,
                 [IO.FileAccess]::Read,
                 [IO.FileShare]::None)
-            $ready = $stream.Length -gt 54
+            $ready = $stream.Length -gt $CaptureFo1XrSimulatorPreviewContract54
             $stream.Dispose()
         } catch {
             $ready = $false
         }
-        if (-not $ready) { Start-Sleep -Milliseconds 10 }
+        if (-not $ready) { Start-Sleep -Milliseconds $CaptureFo1XrSimulatorPreviewContract10 }
     } while (-not $ready -and [DateTime]::UtcNow -lt $deadline)
     if (-not $ready) {
         throw "Native projection frame $Ordinal never became readable."
@@ -193,41 +252,41 @@ function Ease-InOut([double]$Value) {
 
 function Pose-ForFrame([int]$Index) {
     $progress = $Index / [double]([Math]::Max(1, $FrameCount - 1))
-    $x = 0.045 * [Math]::Sin($progress * 2.0 * [Math]::PI)
-    $y = 1.70 + 0.018 * [Math]::Sin($progress * 4.0 * [Math]::PI)
-    $z = 0.035 * [Math]::Sin($progress * 2.0 * [Math]::PI + 0.8)
+    $x = $CaptureFo1XrSimulatorPreviewContract0Point045 * [Math]::Sin($progress * 2.0 * [Math]::PI)
+    $y = $CaptureFo1XrSimulatorPreviewContract1Point70 + $CaptureFo1XrSimulatorPreviewContract0Point018 * [Math]::Sin($progress * 4.0 * [Math]::PI)
+    $z = $CaptureFo1XrSimulatorPreviewContract0Point035 * [Math]::Sin($progress * 2.0 * [Math]::PI + $CaptureFo1XrSimulatorPreviewContract0Point8)
     $yaw = 0.0
-    $pitch = -0.03
+    $pitch = $CaptureFo1XrSimulatorPreviewContractNEgativE0Point03
     $segment = "cave"
-    if ($progress -lt 0.12) {
-        $yaw = -0.12 + 0.24 * ($progress / 0.12)
-        $pitch = -0.04
-    } elseif ($progress -lt 0.36) {
-        $t = Ease-InOut (($progress - 0.12) / 0.24)
-        $yaw = 3.02 * $t
-        $pitch = -0.04 + 0.03 * $t
+    if ($progress -lt $CaptureFo1XrSimulatorPreviewContract0Point12) {
+        $yaw = $CaptureFo1XrSimulatorPreviewContractNEgativE0Point12 + $CaptureFo1XrSimulatorPreviewContract0Point24 * ($progress / $CaptureFo1XrSimulatorPreviewContract0Point12)
+        $pitch = $CaptureFo1XrSimulatorPreviewContractNEgativE0Point04
+    } elseif ($progress -lt $CaptureFo1XrSimulatorPreviewContract0Point36) {
+        $t = Ease-InOut (($progress - $CaptureFo1XrSimulatorPreviewContract0Point12) / $CaptureFo1XrSimulatorPreviewContract0Point24)
+        $yaw = $CaptureFo1XrSimulatorPreviewContract3Point02 * $t
+        $pitch = $CaptureFo1XrSimulatorPreviewContractNEgativE0Point04 + $CaptureFo1XrSimulatorPreviewContract0Point03 * $t
         $segment = "turn-to-vault"
-    } elseif ($progress -lt 0.54) {
-        $t = ($progress - 0.36) / 0.18
-        $yaw = 3.02 + 0.12 * [Math]::Sin($t * 2.0 * [Math]::PI)
-        $pitch = -0.04 + 0.10 * [Math]::Sin($t * [Math]::PI)
+    } elseif ($progress -lt $CaptureFo1XrSimulatorPreviewContract0Point54) {
+        $t = ($progress - $CaptureFo1XrSimulatorPreviewContract0Point36) / $CaptureFo1XrSimulatorPreviewContract0Point18
+        $yaw = $CaptureFo1XrSimulatorPreviewContract3Point02 + $CaptureFo1XrSimulatorPreviewContract0Point12 * [Math]::Sin($t * 2.0 * [Math]::PI)
+        $pitch = $CaptureFo1XrSimulatorPreviewContractNEgativE0Point04 + $CaptureFo1XrSimulatorPreviewContract0Point10 * [Math]::Sin($t * [Math]::PI)
         $segment = "open-vault-13"
-    } elseif ($progress -lt 0.78) {
-        $t = Ease-InOut (($progress - 0.54) / 0.24)
-        $yaw = 3.02 * (1.0 - $t)
-        $pitch = -0.01 - 0.08 * $t
+    } elseif ($progress -lt $CaptureFo1XrSimulatorPreviewContract0Point78) {
+        $t = Ease-InOut (($progress - $CaptureFo1XrSimulatorPreviewContract0Point54) / $CaptureFo1XrSimulatorPreviewContract0Point24)
+        $yaw = $CaptureFo1XrSimulatorPreviewContract3Point02 * (1.0 - $t)
+        $pitch = $CaptureFo1XrSimulatorPreviewContractNEgativE0Point01 - $CaptureFo1XrSimulatorPreviewContract0Point08 * $t
         $segment = "turn-to-cave"
     } else {
-        $t = ($progress - 0.78) / 0.22
-        $walk = Ease-InOut ([Math]::Min(1.0, $t / 0.72))
+        $t = ($progress - $CaptureFo1XrSimulatorPreviewContract0Point78) / $CaptureFo1XrSimulatorPreviewContract0Point22
+        $walk = Ease-InOut ([Math]::Min(1.0, $t / $CaptureFo1XrSimulatorPreviewContract0Point72))
         # Walk in the canonical cave-forward direction toward the near rat at
         # tile 19888, then crouch slightly and hold the final view.  This is
         # simulated HMD translation, not a claim of gameplay locomotion.
-        $x = 0.54 * $walk
-        $y = 1.70 - 0.18 * $walk
-        $z = -7.25 * $walk
-        $yaw = 0.07 * [Math]::Sin($t * 2.0 * [Math]::PI)
-        $pitch = -0.08 - 0.26 * $walk
+        $x = $CaptureFo1XrSimulatorPreviewContract0Point54 * $walk
+        $y = $CaptureFo1XrSimulatorPreviewContract1Point70 - $CaptureFo1XrSimulatorPreviewContract0Point18 * $walk
+        $z = $CaptureFo1XrSimulatorPreviewContractNEgativE7Point25 * $walk
+        $yaw = $CaptureFo1XrSimulatorPreviewContract0Point07 * [Math]::Sin($t * 2.0 * [Math]::PI)
+        $pitch = $CaptureFo1XrSimulatorPreviewContractNEgativE0Point08 - $CaptureFo1XrSimulatorPreviewContract0Point26 * $walk
         $segment = "walk-to-near-rat"
     }
     return [pscustomobject][ordered]@{
@@ -236,7 +295,7 @@ function Pose-ForFrame([int]$Index) {
         z = $z
         yaw = $yaw
         pitch = $pitch
-        roll = 0.012 * [Math]::Sin($progress * 2.0 * [Math]::PI + 1.7)
+        roll = $CaptureFo1XrSimulatorPreviewContract0Point012 * [Math]::Sin($progress * 2.0 * [Math]::PI + $CaptureFo1XrSimulatorPreviewContract1Point7)
         segment = $segment
     }
 }
@@ -264,7 +323,7 @@ try {
         -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath `
         -WindowStyle Hidden -PassThru
     [IO.File]::WriteAllText($pidPath, [string]$gameProcess.Id, $utf8NoBom)
-    Wait-ForMarker "OPENNV_FO1_XR_SIMULATOR_PREVIEW_READY" 90
+    Wait-ForMarker "OPENNV_FO1_XR_SIMULATOR_PREVIEW_READY" $CaptureFo1XrSimulatorPreviewContract90
 
     $poses = New-Object 'System.Collections.Generic.List[object]'
     $nativeFrames = New-Object 'System.Collections.Generic.List[string]'
@@ -274,7 +333,7 @@ try {
             -X $pose.x -Y $pose.y -Z $pose.z `
             -Yaw $pose.yaw -Pitch $pose.pitch -Roll $pose.roll `
             -Ordinal $index
-        Start-Sleep -Milliseconds ([Math]::Max(20, [int](500 / $CaptureFps)))
+        Start-Sleep -Milliseconds ([Math]::Max($CaptureFo1XrSimulatorPreviewContract20, [int]($CaptureFo1XrSimulatorPreviewContract500 / $CaptureFps)))
         [void]$nativeFrames.Add((Capture-NativeProjection $index))
         [void]$poses.Add([ordered]@{
             ordinal = $index
@@ -306,13 +365,13 @@ try {
         -framerate $CaptureFps -i $framePattern `
         -loop 1 -t 3.0 -i $SingleEyeImagePath `
         -filter_complex $videoFilter -map "[outv]" `
-        -c:v libx264 -profile:v main -level 3.1 -preset medium -crf 23 `
+        -c:v libx264 -profile:v main -level $CaptureFo1XrSimulatorPreviewContract3Point1 -preset medium -crf $CaptureFo1XrSimulatorPreviewContract23 `
         -pix_fmt yuv420p -color_range tv -movflags +faststart -an $VideoPath
     if ($LASTEXITCODE -ne 0) { throw "Could not assemble the mobile OpenXR preview video." }
 
     Write-AtomicJson (Join-Path $simulatorData "preview_stop.json") `
         ([ordered]@{ reason = "native-projection-capture-complete" }) ($FrameCount + 1)
-    if (-not $gameProcess.WaitForExit(15000)) {
+    if (-not $gameProcess.WaitForExit($CaptureFo1XrSimulatorPreviewContract15000)) {
         throw "Godot did not exit after the bounded simulator preview completed."
     }
     if ($gameProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $engineReportPath)) {

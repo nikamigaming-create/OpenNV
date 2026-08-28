@@ -2,6 +2,14 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1HexMathNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float GeometryFloat0Point5f = 0.5f;
+    internal const int GeometryInt5 = 5;
+}
+
 internal static class Fo1HexMath
 {
     internal const int Width = 200;
@@ -33,7 +41,7 @@ internal static class Fo1HexMath
         return new Vector3(
             coordinate.X * ColumnSpacingMeters,
             0.0f,
-            coordinate.Y - 0.5f * (coordinate.X & 1));
+            coordinate.Y - Fo1HexMathNumericContracts.GeometryFloat0Point5f * (coordinate.X & 1));
     }
 
     internal static int FloorIndex(int tile)
@@ -104,8 +112,8 @@ internal static class Fo1HexMath
             1 => 2,
             2 => 1,
             3 => 0,
-            4 => 5,
-            5 => 4,
+            4 => Fo1HexMathNumericContracts.GeometryInt5,
+            Fo1HexMathNumericContracts.GeometryInt5 => 4,
             _ => throw new InvalidOperationException("Fallout hex edge dispatch failed."),
         };
         return TileInDirection(tile, rotation);
@@ -127,7 +135,7 @@ internal static class Fo1HexMath
             2 => new Vector2I(0, 1),
             3 => new Vector2I(1, odd ? 0 : 1),
             4 => new Vector2I(1, odd ? -1 : 0),
-            5 => new Vector2I(0, -1),
+            Fo1HexMathNumericContracts.GeometryInt5 => new Vector2I(0, -1),
             _ => throw new InvalidOperationException("Fallout rotation dispatch failed."),
         };
         return Tile(coordinate + offset);

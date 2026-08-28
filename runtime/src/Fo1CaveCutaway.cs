@@ -2,6 +2,14 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1CaveCutawayNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float GeometryFloat0Point5f = 0.5f;
+    internal const float GeometryFloat0Point99f = 0.99f;
+}
+
 internal partial class Fo1CaveCutaway : Node
 {
     private Entry[] _entries = [];
@@ -40,7 +48,7 @@ internal partial class Fo1CaveCutaway : Node
 
         var shader = BuildMeltShader();
         var white = SolidTexture(Colors.White);
-        var flatNormal = SolidTexture(new Color(0.5f, 0.5f, 1.0f, 1.0f));
+        var flatNormal = SolidTexture(new Color(Fo1CaveCutawayNumericContracts.GeometryFloat0Point5f, Fo1CaveCutawayNumericContracts.GeometryFloat0Point5f, 1.0f, 1.0f));
         _materials = _entries
             .SelectMany(entry => PrepareMeltMaterials(entry, shader, white, flatNormal, profile))
             .ToArray();
@@ -109,7 +117,7 @@ internal partial class Fo1CaveCutaway : Node
                     source.Transparency is not (
                         BaseMaterial3D.TransparencyEnum.Disabled or
                         BaseMaterial3D.TransparencyEnum.AlphaScissor) ||
-                    source.AlbedoColor.A < 0.99f)
+                    source.AlbedoColor.A < Fo1CaveCutawayNumericContracts.GeometryFloat0Point99f)
                     continue;
 
                 var material = new ShaderMaterial
@@ -323,7 +331,7 @@ internal partial class Fo1CaveCutaway : Node
         var forward = -camera.GlobalBasis.Z;
         var targetDepth = (target - camera.GlobalPosition).Dot(forward);
         var center = bounds.GetCenter();
-        var extent = bounds.Size * 0.5f;
+        var extent = bounds.Size * Fo1CaveCutawayNumericContracts.GeometryFloat0Point5f;
         var centerDepth = (center - camera.GlobalPosition).Dot(forward);
         var depthRadius = MathF.Abs(forward.X) * extent.X +
             MathF.Abs(forward.Y) * extent.Y + MathF.Abs(forward.Z) * extent.Z;

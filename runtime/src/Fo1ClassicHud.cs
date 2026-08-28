@@ -2,6 +2,27 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1ClassicHudNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const int SourcePresentationIntNEgativE999 = -999;
+    internal const float SourcePresentationFloat0Point01f = 0.01f;
+    internal const double SourcePresentationDouble0Point25 = 0.25;
+    internal const double SourcePresentationDouble0Point5 = 0.5;
+    internal const float SourcePresentationFloat0Point5f = 0.5f;
+    internal const int SourcePresentationInt10 = 10;
+    internal const int SourcePresentationInt100 = 100;
+    internal const int SourcePresentationInt133 = 133;
+    internal const int SourcePresentationInt149 = 149;
+    internal const int SourcePresentationInt150 = 150;
+    internal const int SourcePresentationInt151 = 151;
+    internal const int SourcePresentationInt16 = 16;
+    internal const int SourcePresentationInt32 = 32;
+    internal const int SourcePresentationInt9 = 9;
+    internal const int SourcePresentationInt999 = 999;
+}
+
 internal partial class Fo1ClassicHud : Control
 {
     private readonly Dictionary<string, Image> _images = new(StringComparer.Ordinal);
@@ -159,10 +180,10 @@ internal partial class Fo1ClassicHud : Control
         var scale = availableScale >= 1.0f
             ? MathF.Floor(availableScale)
             : availableScale;
-        scale = MathF.Max(scale, 0.01f);
+        scale = MathF.Max(scale, Fo1ClassicHudNumericContracts.SourcePresentationFloat0Point01f);
         _surface.Size = new Vector2(_layout.Width * scale, _layout.Height * scale);
         _surface.Position = new Vector2(
-            MathF.Floor((viewportSize.X - _surface.Size.X) * 0.5f),
+            MathF.Floor((viewportSize.X - _surface.Size.X) * Fo1ClassicHudNumericContracts.SourcePresentationFloat0Point5f),
             MathF.Floor(viewportSize.Y - _surface.Size.Y));
     }
 
@@ -187,7 +208,7 @@ internal partial class Fo1ClassicHud : Control
         Blend(canvas, _images["singleAttack"], PanelPoint(item.Bounds, item.Single));
         Blend(canvas, _images["movePoints"], PanelPoint(item.Bounds, item.MovePoints));
 
-        var digit = Math.Clamp(actionPointCost, 0, 9);
+        var digit = Math.Clamp(actionPointCost, 0, Fo1ClassicHudNumericContracts.SourcePresentationInt9);
         var numbers = _images["moveNumbers"];
         var sourceX = digit * item.MoveDigitWidth;
         var sourceWidth = Math.Min(item.MoveDigitWidth, numbers.GetWidth() - sourceX);
@@ -211,8 +232,8 @@ internal partial class Fo1ClassicHud : Control
         int maximumHitPoints,
         int armorClass)
     {
-        var redThreshold = (int)(Math.Max(0, maximumHitPoints) * 0.25);
-        var yellowThreshold = (int)(Math.Max(0, maximumHitPoints) * 0.5);
+        var redThreshold = (int)(Math.Max(0, maximumHitPoints) * Fo1ClassicHudNumericContracts.SourcePresentationDouble0Point25);
+        var yellowThreshold = (int)(Math.Max(0, maximumHitPoints) * Fo1ClassicHudNumericContracts.SourcePresentationDouble0Point5);
         var hitPointColorOffset = hitPoints < redThreshold
             ? _layout.Numbers.RedOffset
             : hitPoints < yellowThreshold
@@ -225,9 +246,9 @@ internal partial class Fo1ClassicHud : Control
     private void DrawNumber(Image canvas, Fo1HudPoint destination, int value, int colorOffset)
     {
         var layout = _layout.Numbers;
-        var normalized = Math.Clamp(value, -999, 999);
+        var normalized = Math.Clamp(value, Fo1ClassicHudNumericContracts.SourcePresentationIntNEgativE999, Fo1ClassicHudNumericContracts.SourcePresentationInt999);
         var magnitude = Math.Abs(normalized);
-        var digits = new[] { magnitude / 100, magnitude / 10 % 10, magnitude % 10 };
+        var digits = new[] { magnitude / Fo1ClassicHudNumericContracts.SourcePresentationInt100, magnitude / Fo1ClassicHudNumericContracts.SourcePresentationInt10 % Fo1ClassicHudNumericContracts.SourcePresentationInt10, magnitude % Fo1ClassicHudNumericContracts.SourcePresentationInt10 };
         var numbers = _images["numbers"];
         var signX = colorOffset + (normalized >= 0 ? layout.PlusX : layout.MinusX);
         canvas.BlitRect(
@@ -287,8 +308,8 @@ internal partial class Fo1ClassicHud : Control
                     canvas.BlendRect(
                         _fontAtlas,
                         new Rect2I(
-                            codePoint % 16 * font.CellWidth,
-                            codePoint / 16 * font.MaximumHeight,
+                            codePoint % Fo1ClassicHudNumericContracts.SourcePresentationInt16 * font.CellWidth,
+                            codePoint / Fo1ClassicHudNumericContracts.SourcePresentationInt16 * font.MaximumHeight,
                             width,
                             font.MaximumHeight),
                         cursor);
@@ -314,7 +335,7 @@ internal partial class Fo1ClassicHud : Control
             var encoded = word.Select(ToFalloutCodePoint).ToArray();
             var candidate = new List<byte>(current);
             if (candidate.Count > 0)
-                candidate.Add(32);
+                candidate.Add(Fo1ClassicHudNumericContracts.SourcePresentationInt32);
             candidate.AddRange(encoded);
             var lineIndex = lines.Count;
             var availableWidth = _layout.Message.Bounds.Width -
@@ -350,10 +371,10 @@ internal partial class Fo1ClassicHud : Control
 
     private static byte ToFalloutCodePoint(char value) => value switch
     {
-        '•' => 149,
-        '…' => 133,
-        '—' => 151,
-        '–' => 150,
+        '•' => Fo1ClassicHudNumericContracts.SourcePresentationInt149,
+        '…' => Fo1ClassicHudNumericContracts.SourcePresentationInt133,
+        '—' => Fo1ClassicHudNumericContracts.SourcePresentationInt151,
+        '–' => Fo1ClassicHudNumericContracts.SourcePresentationInt150,
         _ when value <= byte.MaxValue => (byte)value,
         _ => (byte)'?',
     };

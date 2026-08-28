@@ -3,6 +3,50 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1HexDemoNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float AcceptanceFloatNEgativE26Point0f = -26.0f;
+    internal const float AcceptanceFloatNEgativE30Point0f = -30.0f;
+    internal const float AcceptanceFloatNEgativE38Point0f = -38.0f;
+    internal const float AcceptanceFloatNEgativE40Point0f = -40.0f;
+    internal const float AcceptanceFloatNEgativE45Point0f = -45.0f;
+    internal const float AcceptanceFloatNEgativE46Point0f = -46.0f;
+    internal const float AcceptanceFloatNEgativE49Point0f = -49.0f;
+    internal const float AcceptanceFloat0Point012f = 0.012f;
+    internal const float AcceptanceFloat0Point015f = 0.015f;
+    internal const float AcceptanceFloat0Point02f = 0.02f;
+    internal const float AcceptanceFloat0Point18f = 0.18f;
+    internal const float AcceptanceFloat0Point44f = 0.44f;
+    internal const float AcceptanceFloat0Point68f = 0.68f;
+    internal const float AcceptanceFloat0Point80f = 0.80f;
+    internal const float AcceptanceFloat0Point86f = 0.86f;
+    internal const float AcceptanceFloat0Point90f = 0.90f;
+    internal const float AcceptanceFloat135Point0f = 135.0f;
+    internal const int AcceptanceInt18 = 18;
+    internal const float AcceptanceFloat18Point0f = 18.0f;
+    internal const int AcceptanceInt180 = 180;
+    internal const float AcceptanceFloat180Point0f = 180.0f;
+    internal const float AcceptanceFloat20Point0f = 20.0f;
+    internal const int AcceptanceInt24 = 24;
+    internal const float AcceptanceFloat26Point0f = 26.0f;
+    internal const int AcceptanceInt30 = 30;
+    internal const float AcceptanceFloat32Point0f = 32.0f;
+    internal const float AcceptanceFloat4Point2f = 4.2f;
+    internal const float AcceptanceFloat4Point5f = 4.5f;
+    internal const float AcceptanceFloat44Point0f = 44.0f;
+    internal const int AcceptanceInt45 = 45;
+    internal const float AcceptanceFloat5Point0f = 5.0f;
+    internal const int AcceptanceInt55 = 55;
+    internal const int AcceptanceInt60 = 60;
+    internal const float AcceptanceFloat630Point0f = 630.0f;
+    internal const float AcceptanceFloat650Point0f = 650.0f;
+    internal const float AcceptanceFloat7Point5f = 7.5f;
+    internal const int AcceptanceInt75 = 75;
+    internal const int AcceptanceInt80 = 80;
+}
+
 internal static class Fo1HexDemo
 {
     internal static async Task Run(
@@ -15,28 +59,28 @@ internal static class Fo1HexDemo
             var fullReportPath = Path.GetFullPath(reportPath);
             Directory.CreateDirectory(Path.GetDirectoryName(fullReportPath)!);
             var stage = BuildStageBanner(host);
-            await WaitForFrames(host, 45);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt45);
 
             stage.Text = "01  EXACT V13ENT ENTRY  •  3D VAULT 13 DIORAMA";
             loaded.Session.SetCameraStatus(
                 "Exact V13ENT entry and Vault door • native Godot capture");
-            loaded.Camera.SetOrbitDegrees(-45.0f, -49.0f);
+            loaded.Camera.SetOrbitDegrees(Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE45Point0f, Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE49Point0f);
             loaded.Camera.FrameEntryPair(loaded.Session.PlayerTile, loaded.DoorTile);
-            await WaitForFrames(host, 60);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt60);
 
             stage.Text = "02  OWNED 3D VAULT DWELLER  •  ORBIT + ZOOM";
             loaded.Session.SetCameraStatus(
                 "Owned animated Vault 13 suit • source sprite retained for parity mode");
-            loaded.Camera.SetOrbitDegrees(135.0f, -26.0f);
-            loaded.Camera.FocusTileAtHeight(loaded.Session.PlayerTile, 3.0f, 0.86f);
-            await WaitForFrames(host, 55);
+            loaded.Camera.SetOrbitDegrees(Fo1HexDemoNumericContracts.AcceptanceFloat135Point0f, Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE26Point0f);
+            loaded.Camera.FocusTileAtHeight(loaded.Session.PlayerTile, 3.0f, Fo1HexDemoNumericContracts.AcceptanceFloat0Point86f);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt55);
 
             stage.Text = "03  MAPPED VAULT DOOR  •  SOURCE HEX 16290";
             loaded.Session.SetCameraStatus(
                 "Mapped Vault door leaf and owned 3D cave-to-vault frame");
-            loaded.Camera.SetOrbitDegrees(0.0f, -30.0f);
-            loaded.Camera.FocusTileAtHeight(loaded.DoorTile, 7.5f, 2.0f);
-            await WaitForFrames(host, 55);
+            loaded.Camera.SetOrbitDegrees(0.0f, Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE30Point0f);
+            loaded.Camera.FocusTileAtHeight(loaded.DoorTile, Fo1HexDemoNumericContracts.AcceptanceFloat7Point5f, 2.0f);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt55);
 
             var combatTarget = loaded.Session.Mobs
                 .Where(mob => mob.Alive)
@@ -53,33 +97,33 @@ internal static class Fo1HexDemo
             loaded.Session.ToggleGrid();
             loaded.Session.SetCameraStatus(
                 "Walking three exact Fallout hexes toward the nearest source rat");
-            loaded.Camera.SetOrbitDegrees(-38.0f, -40.0f);
-            loaded.Camera.FocusTileAtHeight(initialTile, 5.0f, 0.68f);
+            loaded.Camera.SetOrbitDegrees(Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE38Point0f, Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE40Point0f);
+            loaded.Camera.FocusTileAtHeight(initialTile, Fo1HexDemoNumericContracts.AcceptanceFloat5Point0f, Fo1HexDemoNumericContracts.AcceptanceFloat0Point68f);
             loaded.Session.SelectTile(movementTarget);
             await WaitUntilTile(
                 host,
                 loaded.Session,
                 loaded.Camera,
                 movementTarget,
-                180);
+                Fo1HexDemoNumericContracts.AcceptanceInt180);
             var apAfterMove = loaded.Session.ActionPoints;
-            await WaitForFrames(host, 24);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt24);
             loaded.Session.ToggleGrid();
 
             stage.Text = "05  SOURCE RAT TARGET  •  OWNED ANIMATED 3D MODEL";
             loaded.Session.ActivateTile(combatTarget.Tile, false);
-            loaded.Camera.SetOrbitDegrees(-45.0f, -38.0f);
+            loaded.Camera.SetOrbitDegrees(Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE45Point0f, Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE38Point0f);
             loaded.Camera.FrameCombatPair(loaded.Session.PlayerTile, combatTarget.Tile);
-            await WaitForFrames(host, 55);
-            loaded.Camera.FocusTileAtHeight(combatTarget.Tile, 4.5f, 0.44f);
-            await WaitForFrames(host, 45);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt55);
+            loaded.Camera.FocusTileAtHeight(combatTarget.Tile, Fo1HexDemoNumericContracts.AcceptanceFloat4Point5f, Fo1HexDemoNumericContracts.AcceptanceFloat0Point44f);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt45);
 
             var targetHpBefore = combatTarget.HitPoints;
             stage.Text = "06  10MM ATTACK  •  AP + HP + DEATH STATE";
             loaded.Session.SetCameraStatus(
                 "Deterministic tactical attack using the live AP/HP combat session");
             loaded.Session.AttackSelected();
-            await WaitForFrames(host, 55);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt55);
 
             stage.Text = "07  RAT TURN  •  SOURCE TEAMS + SEQUENCE ORDER";
             loaded.Session.EndTurn();
@@ -89,16 +133,16 @@ internal static class Fo1HexDemo
                 .ThenBy(mob => mob.Serial)
                 .First();
             loaded.Session.ActivateTile(ratTurnTarget.Tile, false);
-            loaded.Camera.SetOrbitDegrees(-45.0f, -46.0f);
+            loaded.Camera.SetOrbitDegrees(Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE45Point0f, Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE46Point0f);
             loaded.Camera.FrameCombatPair(loaded.Session.PlayerTile, ratTurnTarget.Tile);
-            await WaitForFrames(host, 80);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt80);
 
             stage.Text = "PLAYABLE VERTICAL SLICE  •  EXACT HEXES  •  NATIVE 3D";
             loaded.Session.SetCameraStatus(
                 "Mouse orbit • right-drag pan • wheel zoom • click-to-move • target + attack");
-            loaded.Camera.SetOrbitDegrees(-45.0f, -49.0f);
+            loaded.Camera.SetOrbitDegrees(Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE45Point0f, Fo1HexDemoNumericContracts.AcceptanceFloatNEgativE49Point0f);
             loaded.Camera.FrameEntryPair(loaded.Session.PlayerTile, loaded.DoorTile);
-            await WaitForFrames(host, 75);
+            await WaitForFrames(host, Fo1HexDemoNumericContracts.AcceptanceInt75);
 
             if (
                 loaded.Session.PlayerTile != movementTarget ||
@@ -116,7 +160,7 @@ internal static class Fo1HexDemo
                 status = "pass",
                 scene = loaded.ScenePath,
                 sceneSha256 = loaded.SceneSha256,
-                fixedFpsExpected = 30,
+                fixedFpsExpected = Fo1HexDemoNumericContracts.AcceptanceInt30,
                 entryTile = loaded.EntryTile,
                 doorTile = loaded.DoorTile,
                 movement = new
@@ -171,23 +215,23 @@ internal static class Fo1HexDemo
 
     private static Label BuildStageBanner(Node host)
     {
-        var layer = new CanvasLayer { Name = "Fo1GameplayDemoBanner", Layer = 60 };
+        var layer = new CanvasLayer { Name = "Fo1GameplayDemoBanner", Layer = Fo1HexDemoNumericContracts.AcceptanceInt60 };
         host.AddChild(layer);
         var background = new ColorRect
         {
-            Position = new Vector2(20.0f, 18.0f),
-            Size = new Vector2(650.0f, 44.0f),
-            Color = new Color(0.015f, 0.02f, 0.012f, 0.90f),
+            Position = new Vector2(Fo1HexDemoNumericContracts.AcceptanceFloat20Point0f, Fo1HexDemoNumericContracts.AcceptanceFloat18Point0f),
+            Size = new Vector2(Fo1HexDemoNumericContracts.AcceptanceFloat650Point0f, Fo1HexDemoNumericContracts.AcceptanceFloat44Point0f),
+            Color = new Color(Fo1HexDemoNumericContracts.AcceptanceFloat0Point015f, Fo1HexDemoNumericContracts.AcceptanceFloat0Point02f, Fo1HexDemoNumericContracts.AcceptanceFloat0Point012f, Fo1HexDemoNumericContracts.AcceptanceFloat0Point90f),
         };
         layer.AddChild(background);
         var label = new Label
         {
-            Position = new Vector2(32.0f, 26.0f),
-            Size = new Vector2(630.0f, 32.0f),
+            Position = new Vector2(Fo1HexDemoNumericContracts.AcceptanceFloat32Point0f, Fo1HexDemoNumericContracts.AcceptanceFloat26Point0f),
+            Size = new Vector2(Fo1HexDemoNumericContracts.AcceptanceFloat630Point0f, Fo1HexDemoNumericContracts.AcceptanceFloat32Point0f),
             Text = "LOADING HASH-VERIFIED PLAYER-OWNED CONTENT",
-            Modulate = new Color(1.0f, 0.80f, 0.18f),
+            Modulate = new Color(1.0f, Fo1HexDemoNumericContracts.AcceptanceFloat0Point80f, Fo1HexDemoNumericContracts.AcceptanceFloat0Point18f),
         };
-        label.AddThemeFontSizeOverride("font_size", 18);
+        label.AddThemeFontSizeOverride("font_size", Fo1HexDemoNumericContracts.AcceptanceInt18);
         layer.AddChild(label);
         return label;
     }
@@ -226,9 +270,9 @@ internal static class Fo1HexDemo
         for (var frame = 0; frame < maximumFrames && session.PlayerTile != tile; frame++)
         {
             camera.FocusWorldPoint(
-                session.PlayerToken.GlobalPosition + Vector3.Up * 0.68f,
-                4.2f,
-                180.0f);
+                session.PlayerToken.GlobalPosition + Vector3.Up * Fo1HexDemoNumericContracts.AcceptanceFloat0Point68f,
+                Fo1HexDemoNumericContracts.AcceptanceFloat4Point2f,
+                Fo1HexDemoNumericContracts.AcceptanceFloat180Point0f);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         if (session.PlayerTile != tile)

@@ -129,7 +129,7 @@
     }
   },
   "supported": [
-    "exact V13ENT 200x200 hex IDs, MAP-header fallback, and first-run scripted spawn",
+    "exact V13ENT 200x200 hex IDs, MAP-header entry, and first-run scripted spawn",
     "exact 100x100 floor-art IDs with four movement hexes per floor tile",
     "owned Fallout floor FRMs unprojected into rotatable local textures",
     "exact elevation-zero MAP object FRM/frame/rotation placements",

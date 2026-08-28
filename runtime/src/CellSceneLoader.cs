@@ -3,6 +3,19 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class CellSceneLoaderNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point20f = 0.20f;
+    internal const float PresentationFloat0Point35f = 0.35f;
+    internal const float PresentationFloat0Point48f = 0.48f;
+    internal const float PresentationFloat0Point50f = 0.50f;
+    internal const float PresentationFloat1Point15f = 1.15f;
+    internal const float PresentationFloat1Point20f = 1.20f;
+    internal const float PresentationFloat1Point25f = 1.25f;
+}
+
 internal static class CellSceneLoader
 {
     private const string CellSceneSchema = "opennv-cell-scene/v11";
@@ -266,20 +279,20 @@ internal static class CellSceneLoader
                 throw new InvalidOperationException(
                     "Classic Diorama requires render bounds and the CELL environment.");
             player.FrameClassicDiorama(bounds);
-            environment.AmbientLightEnergy *= 1.25f;
+            environment.AmbientLightEnergy *= CellSceneLoaderNumericContracts.PresentationFloat1Point25f;
             player.Camera.AddChild(new DirectionalLight3D
             {
                 Name = "ClassicDioramaCameraFill",
-                LightColor = environment.AmbientLightColor.Lerp(Colors.White, 0.20f),
-                LightEnergy = Math.Clamp(environment.AmbientLightEnergy * 0.50f, 0.35f, 1.20f),
+                LightColor = environment.AmbientLightColor.Lerp(Colors.White, CellSceneLoaderNumericContracts.PresentationFloat0Point20f),
+                LightEnergy = Math.Clamp(environment.AmbientLightEnergy * CellSceneLoaderNumericContracts.PresentationFloat0Point50f, CellSceneLoaderNumericContracts.PresentationFloat0Point35f, CellSceneLoaderNumericContracts.PresentationFloat1Point20f),
                 ShadowEnabled = false,
             });
             var cameraDistance = player.Camera.Position.Length();
             var cellSpan = MathF.Max(bounds.Size.X, bounds.Size.Z);
-            environment.FogDepthBegin = MathF.Max(environment.FogDepthBegin, cameraDistance * 0.48f);
+            environment.FogDepthBegin = MathF.Max(environment.FogDepthBegin, cameraDistance * CellSceneLoaderNumericContracts.PresentationFloat0Point48f);
             environment.FogDepthEnd = MathF.Max(
                 environment.FogDepthEnd,
-                cameraDistance + cellSpan * 1.15f);
+                cameraDistance + cellSpan * CellSceneLoaderNumericContracts.PresentationFloat1Point15f);
         }
         return player;
     }

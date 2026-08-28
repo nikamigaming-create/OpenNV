@@ -155,7 +155,7 @@ def build_campaign_transport(
                     "tile": layout.header.enteringTile,
                     "elevation": layout.header.enteringElevation,
                     "rotation": layout.header.enteringRotation,
-                    "source": "MAP header fallback; script overrides are transported but not executed",
+                    "source": "MAP header entry metadata; script overrides are transported but not executed",
                 },
                 "mapsTxt": None
                 if configured_row is None

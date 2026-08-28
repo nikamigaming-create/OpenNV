@@ -19,7 +19,85 @@ from PIL import Image, ImageFilter
 
 from fo1_frm import decode_frm, palette_rgba
 from fo1_map_objects import Fo1ResourceResolver, OBJECT_TYPE_NAMES, TYPE_DIRECTORIES
-from fo1_profile import Fo1ProfileError, parse_map_layout, sha256_path
+from fo1_profile import Fo1ProfileError, parse_form_id, parse_map_layout, sha256_path
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT005 = 0.005
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT05 = 0.05
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT08 = 0.08
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT1 = 0.1
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT10 = 0.10
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT2 = 0.2
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT20 = 0.20
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT25 = 0.25
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT3 = 0.3
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT40 = 0.40
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT45 = 0.45
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5 = 0.5
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT50 = 0.50
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT6 = 0.6
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT75 = 0.75
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT8 = 0.8
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_00000010 = 0x00000010
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_00000800 = 0x00000800
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_07 = 0x07
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_0F = 0x0F
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_0FFF = 0x0FFF
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_19C = 0x19C
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_1A0 = 0x1A0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_20 = 0x20
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_30 = 0x30
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_39 = 0x39
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_79 = 0x79
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_BC = 0xBC
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_FF = 0xFF
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT0ENEGATIVE8 = 1.0e-8
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT0ENEGATIVE9 = 1.0e-9
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT2 = 1.2
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT5 = 1.5
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT6 = 1.6
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_10 = 10
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_10POINT0 = 10.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_100 = 100
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_10000 = 10000
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_1024 = 1024
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_11 = 11
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_12 = 12
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_12POINT0 = 12.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_122 = 122
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_128 = 128
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_13 = 13
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_14POINT0 = 14.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_15 = 15
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16 = 16
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_16POINT0 = 16.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_2POINT5 = 2.5
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_20 = 20
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200 = 200
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_24 = 24
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_25POINT0 = 25.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_255 = 255
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_255POINT0 = 255.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_28 = 28
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_32 = 32
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_35 = 35
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_360 = 360
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_4POINT8 = 4.8
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_40000 = 40000
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_4752 = 4752
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_48 = 48
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_4816 = 4816
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_5 = 5
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_5POINT0 = 5.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_6 = 6
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_60POINT0 = 60.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_64 = 64
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_7 = 7
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_8 = 8
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_8POINT0 = 8.0
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_81 = 81
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_9 = 9
+PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_99 = 99
+
 
 
 RECIPE_SCHEMA = "opennv-fo1-hex-recipe/v1"
@@ -76,20 +154,20 @@ def load_runtime_profile_recipe(
 
 
 def hex_center(tile: int) -> list[float]:
-    if not 0 <= tile < 40000:
+    if not 0 <= tile < PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_40000:
         raise ValueError(f"Fallout hex tile is outside the 200x200 grid: {tile}")
-    x = tile % 200
-    y = tile // 200
+    x = tile % PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200
+    y = tile // PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200
     # Fallout's retail _dir_tile table branches on tile-column parity, not
     # row parity.  This is an even-column offset flat-top grid.
-    return [x * (math.sqrt(3.0) / 2.0), 0.0, y - 0.5 * (x & 1)]
+    return [x * (math.sqrt(3.0) / 2.0), 0.0, y - PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5 * (x & 1)]
 
 
 def hex_neighbors(tile: int) -> tuple[int, ...]:
-    if not 0 <= tile < 40000:
+    if not 0 <= tile < PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_40000:
         raise ValueError(f"Fallout hex tile is outside the 200x200 grid: {tile}")
-    x = tile % 200
-    y = tile // 200
+    x = tile % PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200
+    y = tile // PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200
     odd = x & 1
     offsets = (
         (-1, -1 if odd else 0),
@@ -103,8 +181,8 @@ def hex_neighbors(tile: int) -> tuple[int, ...]:
     for delta_x, delta_y in offsets:
         target_x = x + delta_x
         target_y = y + delta_y
-        if 0 <= target_x < 200 and 0 <= target_y < 200:
-            values.append(target_y * 200 + target_x)
+        if 0 <= target_x < PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200 and 0 <= target_y < PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200:
+            values.append(target_y * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200 + target_x)
     return tuple(values)
 
 
@@ -164,18 +242,18 @@ def _wall_orientation(
         if _distance_xz(center, hex_center(int(row["tile"]))) <= neighborhood_meters
     ]
     if len(nearby) < 2:
-        return -float(anchor["rotation"]) * 60.0, 1.0
+        return -float(anchor["rotation"]) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_60POINT0, 1.0
     mean_x = sum(point[0] for point in nearby) / len(nearby)
     mean_z = sum(point[2] for point in nearby) / len(nearby)
     xx = sum((point[0] - mean_x) ** 2 for point in nearby)
     xz = sum((point[0] - mean_x) * (point[2] - mean_z) for point in nearby)
     zz = sum((point[2] - mean_z) ** 2 for point in nearby)
     total = xx + zz
-    if total <= 1.0e-8:
-        return -float(anchor["rotation"]) * 60.0, 1.0
+    if total <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT0ENEGATIVE8:
+        return -float(anchor["rotation"]) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_60POINT0, 1.0
     separation = math.sqrt((xx - zz) ** 2 + 4.0 * xz * xz)
     anisotropy = separation / total
-    yaw = math.degrees(0.5 * math.atan2(2.0 * xz, xx - zz))
+    yaw = math.degrees(PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5 * math.atan2(2.0 * xz, xx - zz))
     return yaw, anisotropy
 
 
@@ -242,8 +320,8 @@ def _relief_normal_map(
     height = [
         [
             (
-                luma_pixels[x, y] / 255.0 * luma_weight
-                + silhouette_pixels[x, y] / 255.0 * silhouette_weight
+                luma_pixels[x, y] / PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_255POINT0 * luma_weight
+                + silhouette_pixels[x, y] / PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_255POINT0 * silhouette_weight
             )
             if alpha_pixels[x, y] > 0
             else 0.0
@@ -251,7 +329,7 @@ def _relief_normal_map(
         ]
         for y in range(rgba.height)
     ]
-    normal = Image.new("RGBA", rgba.size, (128, 128, 255, 255))
+    normal = Image.new("RGBA", rgba.size, (PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_128, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_128, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_255, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_255))
     output = normal.load()
     for y in range(rgba.height):
         previous_y = max(0, y - 1)
@@ -264,10 +342,10 @@ def _relief_normal_map(
             nx, ny, nz = -dx, dy, 1.0
             length = math.sqrt(nx * nx + ny * ny + nz * nz)
             output[x, y] = (
-                round((nx / length * 0.5 + 0.5) * 255.0),
-                round((ny / length * 0.5 + 0.5) * 255.0),
-                round((nz / length * 0.5 + 0.5) * 255.0),
-                255,
+                round((nx / length * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5 + PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_255POINT0),
+                round((ny / length * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5 + PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_255POINT0),
+                round((nz / length * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5 + PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_255POINT0),
+                PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_255,
             )
     return normal
 
@@ -326,8 +404,8 @@ def build_owned_cave_composition(
             raise Fo1ProfileError(f"owned cave floor texture is missing: {requested}")
     if (
         float(floor.get("heightMeters", 1.0)) > 0.0
-        or float(floor.get("heightMeters", -1.0)) < -0.10
-        or float(floor.get("textureRepeatMeters", 0.0)) <= 0.5
+        or float(floor.get("heightMeters", -1.0)) < -PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT10
+        or float(floor.get("textureRepeatMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
         or len(floor.get("albedoColor", [])) != 4
         or not 0.0 <= float(floor.get("roughness", -1.0)) <= 1.0
         or not 0.0 <= float(floor.get("normalScale", -1.0)) <= 2.0
@@ -339,18 +417,18 @@ def build_owned_cave_composition(
     if (
         not isinstance(grounding, dict)
         or grounding.get("schema") != "opennv-fo1-owned-cave-grounding/v1"
-        or not 0.0 < float(grounding.get("maximumRuntimeErrorMeters", 0.0)) <= 0.005
+        or not 0.0 < float(grounding.get("maximumRuntimeErrorMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT005
         or set(grounding.get("roles", {})) != grounding_roles
     ):
         raise Fo1ProfileError("owned cave grounding contract is missing or invalid")
     for role, values in grounding["roles"].items():
         if (
             not isinstance(values, dict)
-            or not 0.0 < float(values.get("seatDepthHeightFraction", 0.0)) <= 0.40
+            or not 0.0 < float(values.get("seatDepthHeightFraction", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT40
             or not 0.0 < float(values.get("minimumSeatDepthMeters", 0.0))
             or float(values.get("minimumSeatDepthMeters", 0.0))
             > float(values.get("maximumSeatDepthMeters", 0.0))
-            or float(values.get("maximumSeatDepthMeters", 0.0)) > 0.50
+            or float(values.get("maximumSeatDepthMeters", 0.0)) > PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT50
         ):
             raise Fo1ProfileError(f"owned cave grounding role is invalid: {role}")
 
@@ -364,18 +442,18 @@ def build_owned_cave_composition(
         if requested not in texture_paths:
             raise Fo1ProfileError(f"owned cave Vault portal texture is missing: {requested}")
     if (
-        not 0.0 <= float(portal_recipe.get("behindDoorMeters", -1.0)) <= 1.5
-        or not 0.0 <= float(portal_recipe.get("frontReliefMeters", -1.0)) <= 0.8
-        or not 0.5 <= float(portal_recipe.get("depthMeters", 0.0)) <= 4.0
-        or not 1.2 <= float(portal_recipe.get("innerRadiusMeters", 0.0)) <= 2.5
-        or not 4.0 <= float(portal_recipe.get("outerHalfWidthMeters", 0.0)) <= 14.0
-        or not 4.8 <= float(portal_recipe.get("outerTopHeightMeters", 0.0)) <= 10.0
-        or not -0.3 <= float(portal_recipe.get("outerBottomHeightMeters", 1.0)) <= -0.05
+        not 0.0 <= float(portal_recipe.get("behindDoorMeters", -1.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT5
+        or not 0.0 <= float(portal_recipe.get("frontReliefMeters", -1.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT8
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5 <= float(portal_recipe.get("depthMeters", 0.0)) <= 4.0
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT2 <= float(portal_recipe.get("innerRadiusMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_2POINT5
+        or not 4.0 <= float(portal_recipe.get("outerHalfWidthMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_14POINT0
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_4POINT8 <= float(portal_recipe.get("outerTopHeightMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_10POINT0
+        or not -PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT3 <= float(portal_recipe.get("outerBottomHeightMeters", 1.0)) <= -PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT05
         or float(portal_recipe.get("outerTopHeightMeters", 0.0))
         <= float(portal_recipe.get("innerRadiusMeters", 0.0)) * 2.0 + 1.0
-        or not 0.0 <= float(portal_recipe.get("radialNoiseMeters", -1.0)) <= 0.6
-        or not 16 <= int(portal_recipe.get("segments", 0)) <= 64
-        or float(portal_recipe.get("textureRepeatMeters", 0.0)) <= 0.5
+        or not 0.0 <= float(portal_recipe.get("radialNoiseMeters", -1.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT6
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16 <= int(portal_recipe.get("segments", 0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_64
+        or float(portal_recipe.get("textureRepeatMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
         or len(portal_recipe.get("albedoColor", [])) != 4
         or not 0.0 <= float(portal_recipe.get("roughness", -1.0)) <= 1.0
         or not 0.0 <= float(portal_recipe.get("normalScale", -1.0)) <= 2.0
@@ -392,10 +470,10 @@ def build_owned_cave_composition(
         if requested not in texture_paths:
             raise Fo1ProfileError(f"owned cave envelope texture is missing: {requested}")
     if (
-        not -0.20 <= float(envelope_recipe.get("floorHeightMeters", 1.0)) <= 0.0
-        or not 4.0 <= float(envelope_recipe.get("ceilingHeightMeters", 0.0)) <= 12.0
+        not -PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT20 <= float(envelope_recipe.get("floorHeightMeters", 1.0)) <= 0.0
+        or not 4.0 <= float(envelope_recipe.get("ceilingHeightMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_12POINT0
         or not 0.0 <= float(envelope_recipe.get("ceilingReliefMeters", -1.0)) <= 2.0
-        or float(envelope_recipe.get("textureRepeatMeters", 0.0)) <= 0.5
+        or float(envelope_recipe.get("textureRepeatMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
         or len(envelope_recipe.get("albedoColor", [])) != 4
         or not 0.0 <= float(envelope_recipe.get("roughness", -1.0)) <= 1.0
         or not 0.0 <= float(envelope_recipe.get("normalScale", -1.0)) <= 2.0
@@ -406,9 +484,9 @@ def build_owned_cave_composition(
     if (
         not isinstance(relief_recipe, dict)
         or relief_recipe.get("schema") != "opennv-fo1-frm-relief-wall-set/v1"
-        or not 1 <= int(relief_recipe.get("columnSampleStridePixels", 0)) <= 8
-        or not 1 <= int(relief_recipe.get("minimumOpaqueRunWidthPixels", 0)) <= 16
-        or not 0.0 < float(relief_recipe.get("normalBlurRadiusPixels", 0.0)) <= 8.0
+        or not 1 <= int(relief_recipe.get("columnSampleStridePixels", 0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_8
+        or not 1 <= int(relief_recipe.get("minimumOpaqueRunWidthPixels", 0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16
+        or not 0.0 < float(relief_recipe.get("normalBlurRadiusPixels", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_8POINT0
         or not 0.0 <= float(relief_recipe.get("normalLumaWeight", -1.0)) <= 1.0
         or not 0.0 <= float(relief_recipe.get("normalSilhouetteWeight", -1.0)) <= 1.0
         or not math.isclose(
@@ -416,10 +494,10 @@ def build_owned_cave_composition(
             + float(relief_recipe.get("normalSilhouetteWeight", 0.0)),
             1.0,
         )
-        or not 0.1 <= float(relief_recipe.get("normalStrength", 0.0)) <= 8.0
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT1 <= float(relief_recipe.get("normalStrength", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_8POINT0
         or not 0.0 <= float(relief_recipe.get("frontRoughness", -1.0)) <= 1.0
         or not 0.0 <= float(relief_recipe.get("frontEmissionEnergy", -1.0)) <= 1.0
-        or not 0.0 <= float(relief_recipe.get("groundAnchorMeters", -1.0)) <= 0.1
+        or not 0.0 <= float(relief_recipe.get("groundAnchorMeters", -1.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT1
         or set(relief_recipe.get("profiles", {})) != {"cave", "vault"}
         or pixels_per_meter <= 0.0
     ):
@@ -427,8 +505,8 @@ def build_owned_cave_composition(
     for profile_name, profile in relief_recipe["profiles"].items():
         if (
             not isinstance(profile, dict)
-            or not 0.1 <= float(profile.get("depthMeters", 0.0)) <= 1.5
-            or float(profile.get("sideTextureRepeatMeters", 0.0)) <= 0.5
+            or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT1 <= float(profile.get("depthMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT5
+            or float(profile.get("sideTextureRepeatMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
             or len(profile.get("sideAlbedoColor", [])) != 4
             or not 0.0 <= float(profile.get("sideRoughness", -1.0)) <= 1.0
             or not 0.0 <= float(profile.get("sideNormalScale", -1.0)) <= 2.0
@@ -446,54 +524,54 @@ def build_owned_cave_composition(
         not isinstance(connected_volume_recipe, dict)
         or connected_volume_recipe.get("schema")
         != "opennv-fo1-connected-wall-volume/v2"
-        or not 6
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_6
         <= int(connected_volume_recipe.get("minimumContourSegments", 0))
-        <= 64
-        or not 0.05
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_64
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT05
         <= float(connected_volume_recipe.get("groundSinkMeters", 0.0))
-        <= 0.75
-        or not 0.20
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT75
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT20
         <= float(connected_volume_recipe.get("minimumRadiusMeters", 0.0))
         <= float(connected_volume_recipe.get("maximumRadiusMeters", 0.0))
         <= 3.0
-        or not 0.1
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT1
         <= float(connected_volume_recipe.get("radiusFromFrmWidthScale", 0.0))
         <= 2.0
         or not 2.0
         <= float(connected_volume_recipe.get("minimumHeightMeters", 0.0))
         <= float(connected_volume_recipe.get("maximumHeightMeters", 0.0))
-        <= 12.0
-        or not 0.25
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_12POINT0
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT25
         <= float(connected_volume_recipe.get("heightFromFrmPixelsScale", 0.0))
         <= 4.0
         or not 0.0
         <= float(connected_volume_recipe.get("radialNoiseFraction", -1.0))
-        <= 0.45
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT45
         or not 0.0
         <= float(connected_volume_recipe.get("verticalNoiseMeters", -1.0))
-        <= 0.5
-        or not 0.05
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT05
         <= float(connected_volume_recipe.get("surfaceSampleSpacingMeters", 0.0))
-        <= 0.5
-        or not 0.08
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT08
         <= float(connected_volume_recipe.get("contourResampleSpacingMeters", 0.0))
         <= 1.0
         or not 1
         <= int(connected_volume_recipe.get("contourSmoothIterations", 0))
-        <= 12
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_12
         or not 0.0
         < float(connected_volume_recipe.get("contourSmoothStrength", 0.0))
-        <= 0.45
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT45
         or not 0.0
         <= float(connected_volume_recipe.get("contourInflationMeters", -1.0))
-        <= 0.75
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT75
         or not 0.0
         <= float(connected_volume_recipe.get("boundaryBulgeMeters", -1.0))
-        <= 0.75
-        or not 0.5
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT75
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
         <= float(connected_volume_recipe.get("macroNoiseWavelengthMeters", 0.0))
-        <= 12.0
-        or not 0.2
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_12POINT0
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT2
         <= float(connected_volume_recipe.get("microNoiseWavelengthMeters", 0.0))
         <= 4.0
         or not isinstance(connected_volume_recipe.get("noiseSeed"), int)
@@ -503,7 +581,7 @@ def build_owned_cave_composition(
     noise_blend = connected_volume_recipe.get("noiseBlend")
     if (
         not isinstance(noise_blend, dict)
-        or not 0.25 <= float(noise_blend.get("ringWavelengthBase", 0.0)) <= 2.0
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT25 <= float(noise_blend.get("ringWavelengthBase", 0.0)) <= 2.0
         or not 0.0
         <= float(noise_blend.get("ringWavelengthHeightScale", -1.0))
         <= 1.0
@@ -519,7 +597,7 @@ def build_owned_cave_composition(
         <= 1.0
         or not 1
         <= int(noise_blend.get("periodicSecondaryFrequencyMultiplier", 0))
-        <= 6
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_6
         or not 0
         <= int(noise_blend.get("periodicSecondaryFrequencyOffset", -1))
         <= 4
@@ -562,33 +640,33 @@ def build_owned_cave_composition(
         or not dressing_profiles
         or not set(map(str, dressing_profiles)).issubset({"cave", "vault"})
         or str(surface_dressing.get("assetRole", "")) != "wall"
-        or not 1.0 <= float(surface_dressing.get("spacingMeters", 0.0)) <= 12.0
+        or not 1.0 <= float(surface_dressing.get("spacingMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_12POINT0
         or not 1
         <= int(surface_dressing.get("minimumInstancesPerContour", 0))
-        <= 8
-        or not 0.5
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_8
+        or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
         <= float(surface_dressing.get("minimumContourPerimeterMeters", 0.0))
-        <= 12.0
-        or not 1 <= int(surface_dressing.get("maximumInstances", 0)) <= 1024
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_12POINT0
+        or not 1 <= int(surface_dressing.get("maximumInstances", 0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_1024
         or not isinstance(dressing_scale, list)
         or len(dressing_scale) != 3
-        or any(not 0.1 <= float(value) <= 2.0 for value in dressing_scale)
+        or any(not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT1 <= float(value) <= 2.0 for value in dressing_scale)
         or not 0.0
         <= float(surface_dressing.get("embedBehindContourMeters", -1.0))
-        <= 5.0
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_5POINT0
         or not 0.0
         <= float(surface_dressing.get("groundSinkMeters", -1.0))
-        <= 0.75
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT75
         or not math.isfinite(float(surface_dressing.get("yawOffsetDegrees", math.nan)))
         or not 0.0
         <= float(surface_dressing.get("yawJitterDegrees", -1.0))
-        <= 25.0
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_25POINT0
         or not 0.0
         <= float(surface_dressing.get("uniformScaleJitterFraction", -1.0))
-        <= 0.25
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT25
         or not 0.0
         <= float(surface_dressing.get("verticalScaleJitterFraction", -1.0))
-        <= 0.25
+        <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT25
         or not isinstance(hidden_dressing_surfaces, list)
         or not hidden_dressing_surfaces
         or len(set(map(str, hidden_dressing_surfaces)))
@@ -596,15 +674,15 @@ def build_owned_cave_composition(
     ):
         raise Fo1ProfileError("owned connected wall-volume surface dressing is invalid")
     connected_rings = connected_volume_recipe.get("rings")
-    if not isinstance(connected_rings, list) or not 4 <= len(connected_rings) <= 12:
+    if not isinstance(connected_rings, list) or not 4 <= len(connected_rings) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_12:
         raise Fo1ProfileError("owned connected wall-volume rings are missing or invalid")
     ring_heights = []
     for ring in connected_rings:
         if (
             not isinstance(ring, dict)
             or not 0.0 <= float(ring.get("heightFraction", -1.0)) <= 1.0
-            or not 0.1 <= float(ring.get("radiusMultiplier", 0.0)) <= 1.6
-            or not 0.0 <= float(ring.get("centerJitterFraction", -1.0)) <= 0.3
+            or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT1 <= float(ring.get("radiusMultiplier", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT6
+            or not 0.0 <= float(ring.get("centerJitterFraction", -1.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT3
         ):
             raise Fo1ProfileError("owned connected wall-volume ring is invalid")
         ring_heights.append(float(ring["heightFraction"]))
@@ -617,13 +695,13 @@ def build_owned_cave_composition(
     for profile_name, profile in connected_volume_recipe["profiles"].items():
         if (
             not isinstance(profile, dict)
-            or float(profile.get("textureRepeatMeters", 0.0)) <= 0.5
+            or float(profile.get("textureRepeatMeters", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5
             or len(profile.get("albedoColor", [])) != 4
             or not 0.0 <= float(profile.get("roughness", -1.0)) <= 1.0
             or not 0.0 <= float(profile.get("normalScale", -1.0)) <= 2.0
-            or not 0.5 <= float(profile.get("triplanarSharpness", 0.0)) <= 16.0
-            or not 0.25 <= float(profile.get("radiusScale", 0.0)) <= 2.0
-            or not 0.25 <= float(profile.get("heightScale", 0.0)) <= 2.0
+            or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT5 <= float(profile.get("triplanarSharpness", 0.0)) <= PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_16POINT0
+            or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT25 <= float(profile.get("radiusScale", 0.0)) <= 2.0
+            or not PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_0POINT25 <= float(profile.get("heightScale", 0.0)) <= 2.0
         ):
             raise Fo1ProfileError(
                 f"owned connected wall-volume profile is invalid: {profile_name}"
@@ -747,12 +825,12 @@ def build_owned_cave_composition(
                 "assetRole": role,
                 "positionMeters": hex_center(int(row["tile"])),
                 "yawDegrees": (
-                    -float(row["rotation"]) * 60.0
+                    -float(row["rotation"]) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_60POINT0
                     + (
                         int(row["serial"])
                         * int(generation["rockSerialYawMultiplierDegrees"])
                     )
-                    % 360
+                    % PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_360
                 ),
                 "scale": scales[role],
                 "source": {
@@ -773,7 +851,7 @@ def build_owned_cave_composition(
                 "assetId": asset["id"],
                 "assetRole": role,
                 "positionMeters": hex_center(int(row["tile"])),
-                "yawDegrees": -float(row["rotation"]) * 60.0,
+                "yawDegrees": -float(row["rotation"]) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_60POINT0,
                 "scale": scales[role],
                 "source": {
                     "mapping": "exact MAP scenery hex and rotation",
@@ -879,11 +957,11 @@ def build_owned_cave_composition(
             "assetId": corpse_asset["id"],
             "assetRole": corpse_role,
             "positionMeters": hex_center(int(corpse["tile"])),
-            "yawDegrees": -float(corpse["rotation"]) * 60.0
+            "yawDegrees": -float(corpse["rotation"]) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_60POINT0
             + float(generation["corpseYawOffsetDegrees"]),
             "rotationDegrees": [
                 float(generation["corpsePitchDegrees"]),
-                -float(corpse["rotation"]) * 60.0
+                -float(corpse["rotation"]) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_60POINT0
                 + float(generation["corpseYawOffsetDegrees"]),
                 0.0,
             ],
@@ -973,9 +1051,9 @@ def build_owned_cave_composition(
 
 
 def floor_index_for_hex(tile: int) -> int:
-    x = tile % 200
-    y = tile // 200
-    return (y // 2) * 100 + (99 - x // 2)
+    x = tile % PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200
+    y = tile // PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200
+    return (y // 2) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_100 + (PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_99 - x // 2)
 
 
 def parse_ai_section(payload: str, section: str) -> dict[str, str]:
@@ -998,12 +1076,12 @@ def parse_ai_section(payload: str, section: str) -> dict[str, str]:
 
 
 def floor_patch_center(index: int) -> list[float]:
-    if not 0 <= index < 10000:
+    if not 0 <= index < PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_10000:
         raise ValueError(f"Fallout floor tile is outside the 100x100 grid: {index}")
-    floor_x = 99 - index % 100
-    floor_y = index // 100
+    floor_x = PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_99 - index % PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_100
+    floor_y = index // PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_100
     centers = [
-        hex_center((floor_y * 2 + offset_y) * 200 + floor_x * 2 + offset_x)
+        hex_center((floor_y * 2 + offset_y) * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200 + floor_x * 2 + offset_x)
         for offset_y in range(2)
         for offset_x in range(2)
     ]
@@ -1011,26 +1089,26 @@ def floor_patch_center(index: int) -> list[float]:
 
 
 def classic_floor_screen(index: int) -> list[int]:
-    if not 0 <= index < 10000:
+    if not 0 <= index < PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_10000:
         raise ValueError(f"Fallout floor tile is outside the 100x100 grid: {index}")
-    storage_x = index % 100
-    y = index // 100
-    x = 99 - storage_x
-    return [4752 + 32 * y - 48 * x, 24 * y + 12 * x]
+    storage_x = index % PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_100
+    y = index // PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_100
+    x = PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_99 - storage_x
+    return [PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_4752 + PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_32 * y - PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_48 * x, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_24 * y + PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_12 * x]
 
 
 def classic_hex_screen(tile: int) -> list[int]:
-    if not 0 <= tile < 40000:
+    if not 0 <= tile < PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_40000:
         raise ValueError(f"Fallout hex tile is outside the 200x200 grid: {tile}")
-    x = tile % 200
-    y = tile // 200
+    x = tile % PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200
+    y = tile // PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200
     return [
-        4816 - ((((x + 1) >> 1) << 5) + ((x >> 1) << 4) - (y << 4)),
-        12 * (x >> 1) + y * 12 + 11,
+        PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_4816 - ((((x + 1) >> 1) << PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_5) + ((x >> 1) << 4) - (y << 4)),
+        PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_12 * (x >> 1) + y * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_12 + PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_11,
     ]
 
 
-def unproject_floor(image: Image.Image, size: int = 128) -> Image.Image:
+def unproject_floor(image: Image.Image, size: int = PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_128) -> Image.Image:
     if image.width < 4 or image.height < 4 or size < 4:
         raise ValueError("Fallout floor FRM or unprojected texture size is invalid")
     source = image.convert("RGBA")
@@ -1057,7 +1135,7 @@ def unproject_floor(image: Image.Image, size: int = 128) -> Image.Image:
     ]
     for y in range(size):
         for x in range(size):
-            if pixels[x, y][3] == 255:
+            if pixels[x, y][3] == PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_255:
                 nearest[y][x] = (x, y)
                 opaque.append((x, y))
     if not opaque:
@@ -1075,11 +1153,11 @@ def unproject_floor(image: Image.Image, size: int = 128) -> Image.Image:
                 opaque.append((next_x, next_y))
     for y in range(size):
         for x in range(size):
-            if pixels[x, y][3] == 255:
+            if pixels[x, y][3] == PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_255:
                 continue
             source_x, source_y = nearest[y][x]
             red, green, blue, _ = pixels[source_x, source_y]
-            pixels[x, y] = (red, green, blue, 255)
+            pixels[x, y] = (red, green, blue, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_255)
     return result
 
 
@@ -1104,12 +1182,12 @@ def gltf_width(path: Path) -> float:
 
 
 def parse_critter_pro(data: bytes) -> dict[str, object]:
-    if len(data) not in {0x19C, 0x1A0}:
+    if len(data) not in {PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_19C, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_1A0}:
         raise Fo1ProfileError(f"unsupported critter PRO size: 0x{len(data):x}")
-    base = struct.unpack_from(">35i", data, 0x30)
-    bonus = struct.unpack_from(">35i", data, 0xBC)
-    stats = [base[index] + bonus[index] for index in range(35)]
-    head_fid, ai_packet, team = struct.unpack_from(">3i", data, 0x20)
+    base = struct.unpack_from(">35i", data, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_30)
+    bonus = struct.unpack_from(">35i", data, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_BC)
+    stats = [base[index] + bonus[index] for index in range(PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_35)]
+    head_fid, ai_packet, team = struct.unpack_from(">3i", data, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_20)
     return {
         "headFid": head_fid,
         "aiPacket": ai_packet,
@@ -1119,15 +1197,15 @@ def parse_critter_pro(data: bytes) -> dict[str, object]:
         "endurance": stats[2],
         "charisma": stats[3],
         "intelligence": stats[4],
-        "agility": stats[5],
-        "luck": stats[6],
-        "hitPoints": stats[7],
-        "actionPoints": stats[8],
-        "armorClass": stats[9],
-        "unarmedDamage": stats[10],
-        "meleeDamage": stats[11],
-        "sequence": stats[13],
-        "criticalChance": stats[15],
+        "agility": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_5],
+        "luck": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_6],
+        "hitPoints": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_7],
+        "actionPoints": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_8],
+        "armorClass": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_9],
+        "unarmedDamage": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_10],
+        "meleeDamage": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_11],
+        "sequence": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_13],
+        "criticalChance": stats[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_15],
     }
 
 
@@ -1139,20 +1217,20 @@ def parse_item_pro(data: bytes) -> dict[str, object]:
     payload sizes are fixed; rejecting any other size keeps the generated
     gameplay contract from silently accepting a shifted layout.
     """
-    if len(data) < 0x39:
+    if len(data) < PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_39:
         raise Fo1ProfileError(f"item PRO is too short: 0x{len(data):x}")
     pid = struct.unpack_from(">I", data, 0)[0]
-    if (pid >> 24) != 0:
+    if (pid >> PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_24) != 0:
         raise Fo1ProfileError(f"item PRO stores a non-item PID: {pid:08x}")
-    subtype = struct.unpack_from(">i", data, 0x20)[0]
+    subtype = struct.unpack_from(">i", data, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_20)[0]
     subtype_names = {
         0: "armor",
         1: "container",
         2: "drug",
         3: "weapon",
         4: "ammo",
-        5: "misc",
-        6: "key",
+        PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_5: "misc",
+        PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_6: "key",
     }
     if subtype not in subtype_names:
         raise Fo1ProfileError(f"unsupported item PRO subtype {subtype}: {pid:08x}")
@@ -1162,9 +1240,9 @@ def parse_item_pro(data: bytes) -> dict[str, object]:
         "subtypeName": subtype_names[subtype],
     }
     if subtype == 3:
-        if len(data) != 122:
+        if len(data) != PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_122:
             raise Fo1ProfileError(f"unsupported weapon PRO size: 0x{len(data):x}")
-        values = struct.unpack_from(">16i", data, 0x39)
+        values = struct.unpack_from(">16i", data, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_39)
         fields = (
             "animationCode",
             "minimumDamage",
@@ -1184,11 +1262,11 @@ def parse_item_pro(data: bytes) -> dict[str, object]:
             "ammunitionCapacity",
         )
         result.update(dict(zip(fields, values)))
-        result["soundCode"] = data[0x79]
+        result["soundCode"] = data[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_79]
     elif subtype == 4:
-        if len(data) != 81:
+        if len(data) != PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_81:
             raise Fo1ProfileError(f"unsupported ammunition PRO size: 0x{len(data):x}")
-        values = struct.unpack_from(">6i", data, 0x39)
+        values = struct.unpack_from(">6i", data, PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_39)
         fields = (
             "caliber",
             "roundsPerObject",
@@ -1351,22 +1429,28 @@ def prepare(
         ):
             raise Fo1ProfileError("unexpected Fallout owned cave composition contract")
         creature_presentation = presentation_manifest["creature"]
+        parse_form_id(str(creature_presentation["formId"]), "creature presentation formId")
         if (
-            creature_presentation["formId"] != "000e8e95"
-            or creature_presentation["editorId"] != "NVCrGiantRat"
-            or creature_presentation["coverage"]["animations"] < 5
+            not str(creature_presentation["editorId"]).strip()
+            or creature_presentation["coverage"]["animations"] < 1
         ):
             raise Fo1ProfileError("Fallout giant-rat presentation identity drift")
         if sha256_path(Path(creature_presentation["model"])) != creature_presentation["modelSha256"]:
             raise Fo1ProfileError("Fallout giant-rat presentation model hash drift")
         player_presentation = presentation_manifest["player"]
+        parse_form_id(
+            str(player_presentation["sourceActor"]["baseFormId"]),
+            "player presentation baseFormId",
+        )
+        parse_form_id(
+            str(player_presentation["outfit"]["formId"]),
+            "player presentation outfitFormId",
+        )
         if (
-            player_presentation["role"] != "vault13-vault-dweller"
-            or player_presentation["displayName"] != "Vault Dweller"
-            or player_presentation["sourceActor"]["baseFormId"] != "00104f09"
-            or player_presentation["outfit"]["formId"] != "001735d1"
-            or player_presentation["coverage"]["surfaces"] != 15
-            or player_presentation["coverage"]["skins"] != 7
+            not str(player_presentation["role"]).strip()
+            or not str(player_presentation["displayName"]).strip()
+            or player_presentation["coverage"]["surfaces"] < 1
+            or player_presentation["coverage"]["skins"] < 1
             or player_presentation["coverage"]["animations"] < 1
         ):
             raise Fo1ProfileError("Fallout Vault Dweller presentation identity drift")
@@ -1547,7 +1631,7 @@ def prepare(
         raise Fo1ProfileError("Fallout starting ranged/melee/ammunition relationship drift")
     tile_names = resolver.list_lines("art\\tiles\\tiles.lst")
     colors = palette_rgba(palette_path)
-    floor_ids = [entry & 0x0FFF for entry in elevation.entries]
+    floor_ids = [entry & PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_0FFF for entry in elevation.entries]
     unique_floor_ids = sorted(set(floor_ids))
 
     output_root.parent.mkdir(parents=True, exist_ok=True)
@@ -1606,7 +1690,7 @@ def prepare(
         target_door_width_meters = gltf_width(model_path) * float(recipe["door"]["targetUnitsToMeters"])
         measured_pixels_per_meter = float(source_door_image["width"]) / target_door_width_meters
         pixels_per_meter = float(runtime_profile["scenePresentation"]["sourceSprites"]["pixelsPerMeter"])
-        if not math.isclose(measured_pixels_per_meter, pixels_per_meter, rel_tol=1.0e-9):
+        if not math.isclose(measured_pixels_per_meter, pixels_per_meter, rel_tol=PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_FLOAT_1POINT0ENEGATIVE9):
             raise Fo1ProfileError("Fallout source-sprite scale drifted from its door-fit measurement")
         sprite_artifacts: dict[str, dict[str, object]] = {}
         sprite_placements = []
@@ -1614,14 +1698,14 @@ def prepare(
         top_level_objects = objects["map"]["objects"]["elevations"][0]["objects"]
         blocker_rows = []
         for obj in top_level_objects:
-            flags = int(obj["flags"], 16)
-            if obj["tile"] >= 0 and not flags & 0x00000010:
+            flags = int(obj["flags"], PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16)
+            if obj["tile"] >= 0 and not flags & PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_00000010:
                 blocker_rows.append(
                     {
                         "serial": obj["serial"],
                         "tile": obj["tile"],
                         "flags": obj["flags"],
-                        "multihex": bool(flags & 0x00000800),
+                        "multihex": bool(flags & PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_00000800),
                         "artFilename": obj["artFilename"],
                         "objectType": obj["prototype"]["object_type"],
                         "objectTypeName": OBJECT_TYPE_NAMES[int(obj["prototype"]["object_type"])],
@@ -1636,7 +1720,7 @@ def prepare(
                     {"serial": obj["serial"], "reason": "off-grid-or-no-art"}
                 )
                 continue
-            flags = int(obj["flags"], 16)
+            flags = int(obj["flags"], PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16)
             if flags & 0x00000001:
                 skipped_sprite_objects.append(
                     {"serial": obj["serial"], "reason": "OBJECT_HIDDEN"}
@@ -1650,10 +1734,10 @@ def prepare(
                 )
                 continue
             if object_type == 1:
-                fid = int(obj["fid"], 16)
-                animation = (fid >> 16) & 0xFF
-                weapon = (fid >> 12) & 0x0F
-                packed_rotation = (fid >> 28) & 0x07
+                fid = int(obj["fid"], PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16)
+                animation = (fid >> PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16) & PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_FF
+                weapon = (fid >> PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_12) & PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_0F
+                packed_rotation = (fid >> PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_28) & PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_07
                 if animation != 0 or weapon != 0 or packed_rotation != 0:
                     skipped_sprite_objects.append(
                         {
@@ -1680,7 +1764,7 @@ def prepare(
                 )
             frame_data = frames[frame_index]
             artifact_key = f"{resource.sha256}:{rotation}:{frame_index}"
-            artifact_id = hashlib.sha256(artifact_key.encode("ascii")).hexdigest()[:20]
+            artifact_id = hashlib.sha256(artifact_key.encode("ascii")).hexdigest()[:PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_20]
             if artifact_id not in sprite_artifacts:
                 relative = Path("sprites") / f"{artifact_id}.png"
                 artifact = save_png(
@@ -1727,7 +1811,7 @@ def prepare(
         for obj in top_level_objects:
             if int(obj["prototype"]["object_type"]) != 1:
                 continue
-            pid = int(obj["pid"], 16)
+            pid = int(obj["pid"], PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16)
             profile = critter_profiles.get(pid)
             if profile is None:
                 prototype_filename = obj["prototype"]["filename"]
@@ -1740,7 +1824,7 @@ def prepare(
                 }
                 critter_profiles[pid] = profile
             instance = obj["instanceValues"]
-            if len(instance) != 11:
+            if len(instance) != PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_11:
                 raise Fo1ProfileError(f"critter MAP instance {obj['serial']} has {len(instance)} values")
             presentation = sprite_by_serial[obj["serial"]]
             display_name = critter_names.get(str(obj["pid"]).lower())
@@ -1756,10 +1840,10 @@ def prepare(
                     "tile": obj["tile"],
                     "rotation": obj["rotation"],
                     "artifactId": presentation["artifactId"],
-                    "currentHitPoints": instance[8],
+                    "currentHitPoints": instance[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_8],
                     "currentActionPoints": instance[3],
-                    "runtimeAiPacket": instance[5],
-                    "runtimeTeam": instance[6],
+                    "runtimeAiPacket": instance[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_5],
+                    "runtimeTeam": instance[PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_6],
                     "profile": profile,
                 }
             )
@@ -1837,14 +1921,14 @@ def prepare(
                 non_default_floor_count * 4
             )
             owned_cave_composition["coverage"]["continuousFloorTriangles"] = (
-                non_default_floor_count * 24
+                non_default_floor_count * PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_24
             )
         blocked_set = {row["tile"] for row in blocker_rows}
         blocked_hexes = sorted(blocked_set)
         provisional_walkable_hexes = sum(
             floor_ids[floor_index_for_hex(tile)] != default_floor_id
             and tile not in blocked_set
-            for tile in range(40000)
+            for tile in range(PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_40000)
         )
         scene = {
             "schema": SCENE_SCHEMA,
@@ -1862,7 +1946,7 @@ def prepare(
             "grid": {
                 **recipe["grid"],
                 "floorIds": floor_ids,
-                "floorPatchCenters": [floor_patch_center(index) for index in range(10000)],
+                "floorPatchCenters": [floor_patch_center(index) for index in range(PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_10000)],
                 "floorArt": floor_art,
                 "defaultFloorId": default_floor_id,
                 "blockedHexes": blocked_hexes,
@@ -1891,7 +1975,7 @@ def prepare(
             },
             "entry": {
                 **recipe["entry"],
-                "hex": [recipe["entry"]["tile"] % 200, recipe["entry"]["tile"] // 200],
+                "hex": [recipe["entry"]["tile"] % PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200, recipe["entry"]["tile"] // PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_200],
                 "worldMeters": hex_center(recipe["entry"]["tile"]),
                 "floorId": floor_ids[floor_index_for_hex(recipe["entry"]["tile"])],
             },

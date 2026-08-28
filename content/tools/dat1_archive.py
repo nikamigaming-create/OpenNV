@@ -12,6 +12,17 @@ import hashlib
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+DAT1_ARCHIVE_FORMAT_CONTRACT_HEX_0F = 0x0F
+DAT1_ARCHIVE_FORMAT_CONTRACT_HEX_F0 = 0xF0
+DAT1_ARCHIVE_FORMAT_CONTRACT_HEX_FFF = 0xFFF
+DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_16 = 16
+DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_18 = 18
+DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_1000000 = 1_000_000
+DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_4096 = 4096
+DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_65535 = 65535
+DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_8 = 8
+
 
 
 STORED_FLAG = 0x20
@@ -51,8 +62,8 @@ def canonical_dat1_path(value: str) -> str:
 def _decode_lzss_blocks(payload: bytes, expected_size: int) -> bytes:
     cursor = 0
     output = bytearray()
-    dictionary = bytearray(b" " * 4096)
-    write_cursor = 4096 - 18
+    dictionary = bytearray(b" " * DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_4096)
+    write_cursor = DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_4096 - DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_18
     terminated = False
 
     while cursor + 2 <= len(payload):
@@ -74,7 +85,7 @@ def _decode_lzss_blocks(payload: bytes, expected_size: int) -> bytes:
             while block_cursor < len(block):
                 flags = block[block_cursor]
                 block_cursor += 1
-                for bit in range(8):
+                for bit in range(DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_8):
                     if block_cursor >= len(block):
                         break
                     if flags & (1 << bit):
@@ -82,21 +93,21 @@ def _decode_lzss_blocks(payload: bytes, expected_size: int) -> bytes:
                         block_cursor += 1
                         output.append(value)
                         dictionary[write_cursor] = value
-                        write_cursor = (write_cursor + 1) & 0xFFF
+                        write_cursor = (write_cursor + 1) & DAT1_ARCHIVE_FORMAT_CONTRACT_HEX_FFF
                     else:
                         if block_cursor + 2 > len(block):
                             raise ValueError("DAT1 LZSS back-reference is truncated")
                         low = block[block_cursor]
                         high = block[block_cursor + 1]
                         block_cursor += 2
-                        read_cursor = low | ((high & 0xF0) << 4)
-                        length = (high & 0x0F) + 3
+                        read_cursor = low | ((high & DAT1_ARCHIVE_FORMAT_CONTRACT_HEX_F0) << 4)
+                        length = (high & DAT1_ARCHIVE_FORMAT_CONTRACT_HEX_0F) + 3
                         for _ in range(length):
                             value = dictionary[read_cursor]
-                            read_cursor = (read_cursor + 1) & 0xFFF
+                            read_cursor = (read_cursor + 1) & DAT1_ARCHIVE_FORMAT_CONTRACT_HEX_FFF
                             output.append(value)
                             dictionary[write_cursor] = value
-                            write_cursor = (write_cursor + 1) & 0xFFF
+                            write_cursor = (write_cursor + 1) & DAT1_ARCHIVE_FORMAT_CONTRACT_HEX_FFF
                     if len(output) > expected_size:
                         raise ValueError("DAT1 LZSS output exceeds the declared size")
 
@@ -115,7 +126,7 @@ class Dat1Archive:
     def __init__(self, path: Path):
         self.path = path
         file_size = path.stat().st_size
-        if file_size < 16:
+        if file_size < DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_16:
             raise ValueError("DAT1 archive is too small")
         directory = path.read_bytes()
         cursor = 0
@@ -144,7 +155,7 @@ class Dat1Archive:
                 raise ValueError(f"DAT1 {label} is not ASCII") from error
 
         folder_count = read_u32("folder count")
-        if folder_count == 0 or folder_count > 65535:
+        if folder_count == 0 or folder_count > DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_65535:
             raise ValueError(f"DAT1 folder count is invalid: {folder_count}")
         header_values = [read_u32(f"header value {index}") for index in range(3)]
         folders = [read_pstring(f"folder {index}") for index in range(folder_count)]
@@ -152,7 +163,7 @@ class Dat1Archive:
         entries: dict[str, Dat1Entry] = {}
         for folder_index, folder in enumerate(folders):
             file_count = read_u32(f"folder {folder_index} file count")
-            if file_count > 1_000_000:
+            if file_count > DAT1_ARCHIVE_FORMAT_CONTRACT_INTEGER_1000000:
                 raise ValueError(f"DAT1 folder {folder!r} has invalid file count {file_count}")
             _ = [read_u32(f"folder {folder_index} metadata {index}") for index in range(3)]
             previous_filename = ""

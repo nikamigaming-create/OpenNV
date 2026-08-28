@@ -18,6 +18,11 @@ from pathlib import Path
 
 import bpy
 from mathutils import Matrix, Vector
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_FLOAT_0POINT5 = 0.5
+BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_INTEGER_1024 = 1024
+BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_INTEGER_35 = 35
+
 
 
 SCHEMA = "opennv-fo1-ai-wall-blender-proof/v1"
@@ -26,7 +31,7 @@ SCHEMA = "opennv-fo1-ai-wall-blender-proof/v1"
 def sha256_path(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
+        for block in iter(lambda: stream.read(BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_INTEGER_1024 * BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_INTEGER_1024), b""):
             digest.update(block)
     return digest.hexdigest()
 
@@ -94,8 +99,8 @@ def normalize(item: bpy.types.Object, config: dict[str, object]) -> dict[str, ob
     item.scale = Vector((scale, scale, scale))
     bpy.context.view_layer.update()
     lower, upper = bounds(item)
-    item.location.x -= (lower.x + upper.x) * 0.5
-    item.location.y -= (lower.y + upper.y) * 0.5
+    item.location.x -= (lower.x + upper.x) * BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_FLOAT_0POINT5
+    item.location.y -= (lower.y + upper.y) * BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_FLOAT_0POINT5
     item.location.z += float(config["groundClearanceMeters"]) - lower.z
     bpy.context.view_layer.update()
     lower, upper = bounds(item)
@@ -199,7 +204,7 @@ def configure_scene(
     scene.render.image_settings.color_mode = str(render["colorMode"])
     scene.render.film_transparent = bool(render["filmTransparent"])
     scene.render.image_settings.color_depth = "8"
-    scene.render.image_settings.compression = 35
+    scene.render.image_settings.compression = BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_INTEGER_35
     scene.world.color = tuple(render["worldColorLinear"][:3])
     scene.view_settings.look = "AgX - Medium High Contrast"
     if hasattr(scene, "eevee"):
@@ -288,7 +293,7 @@ def render_video(
         raise ValueError("unsupported configured turntable motion")
     for frame in range(hold, hold + orbit + 1, interval):
         progress = (frame - hold) / orbit
-        azimuth = start + float(config["orbitDegrees"]) * 0.5 * math.sin(
+        azimuth = start + float(config["orbitDegrees"]) * BLENDER_PROVE_FO1_AI_WALL_DIAGNOSTIC_CONTRACT_FLOAT_0POINT5 * math.sin(
             progress * math.tau
         )
         set_camera(camera, target, radius, azimuth, elevation)

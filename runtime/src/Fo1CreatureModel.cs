@@ -4,6 +4,16 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1CreatureModelNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point25f = 0.25f;
+    internal const float PresentationFloat0Point35f = 0.35f;
+    internal const float PresentationFloat1Point8f = 1.8f;
+    internal const int PresentationInt5 = 5;
+}
+
 internal static class Fo1CreatureModel
 {
     private const string ActorSchema = "opennv-actor-gltf/v4";
@@ -79,7 +89,7 @@ internal static class Fo1CreatureModel
                         $"Fallout creature animation {logicalPath} is absent from the Godot import.");
             },
             StringComparer.Ordinal);
-        if (roles.Count < 5)
+        if (roles.Count < Fo1CreatureModelNumericContracts.PresentationInt5)
             throw new InvalidOperationException(
                 $"Fallout creature animation identity drift: available={string.Join(",", availableAnimations)}");
         foreach (var role in new[] { "idle", "move", "turn" })
@@ -94,7 +104,7 @@ internal static class Fo1CreatureModel
         prototype.Visible = true;
         var horizontalLong = MathF.Max(bounds.Size.X, bounds.Size.Z);
         var horizontalShort = MathF.Min(bounds.Size.X, bounds.Size.Z);
-        if (bounds.Size.Y is < 0.35f or > 1.8f || horizontalLong < 1.0f || horizontalShort < 0.25f)
+        if (bounds.Size.Y is < Fo1CreatureModelNumericContracts.PresentationFloat0Point35f or > Fo1CreatureModelNumericContracts.PresentationFloat1Point8f || horizontalLong < 1.0f || horizontalShort < Fo1CreatureModelNumericContracts.PresentationFloat0Point25f)
             throw new InvalidOperationException(
                 $"Fallout giant-rat bounds are implausible: position={bounds.Position} size={bounds.Size}");
         return new Template(

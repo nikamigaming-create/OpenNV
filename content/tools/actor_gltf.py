@@ -11,6 +11,11 @@ import struct
 import time
 from dataclasses import dataclass
 from pathlib import Path
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+ACTOR_GLTF_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE12 = 1.0e-12
+ACTOR_GLTF_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE5 = 1.0e-5
+ACTOR_GLTF_DIAGNOSTIC_CONTRACT_INTEGER_8 = 8
+
 
 if not hasattr(time, "clock"):
     time.clock = time.perf_counter
@@ -2426,7 +2431,7 @@ def _trs_matrix(node: dict[str, object]) -> list[list[float]]:
         raise ValueError(f"Actor glTF node has invalid TRS: {node.get('name')}")
     x, y, z, w = rotation
     length = math.sqrt(x * x + y * y + z * z + w * w)
-    if length <= 1.0e-12 or min(scale) <= 0.0:
+    if length <= ACTOR_GLTF_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE12 or min(scale) <= 0.0:
         raise ValueError(f"Actor glTF node has non-invertible TRS: {node.get('name')}")
     x, y, z, w = (value / length for value in (x, y, z, w))
     matrix = [
@@ -2451,7 +2456,7 @@ def _inverse_matrix(matrix: list[list[float]]) -> list[list[float]]:
     ]
     for column in range(4):
         pivot = max(range(column, 4), key=lambda row: abs(augmented[row][column]))
-        if abs(augmented[pivot][column]) <= 1.0e-12:
+        if abs(augmented[pivot][column]) <= ACTOR_GLTF_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE12:
             raise ValueError("Actor skeleton rest matrix is singular")
         augmented[column], augmented[pivot] = augmented[pivot], augmented[column]
         divisor = augmented[column][column]
@@ -2462,7 +2467,7 @@ def _inverse_matrix(matrix: list[list[float]]) -> list[list[float]]:
             factor = augmented[row][column]
             augmented[row] = [
                 augmented[row][index] - factor * augmented[column][index]
-                for index in range(8)
+                for index in range(ACTOR_GLTF_DIAGNOSTIC_CONTRACT_INTEGER_8)
             ]
     return [row[4:] for row in augmented]
 
@@ -2502,7 +2507,7 @@ def gltf_skeleton_inverse_binds(
         )
         for name, inverse in result.items()
     )
-    if worst > 1.0e-5:
+    if worst > ACTOR_GLTF_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE5:
         raise ValueError(f"Actor inverse-bind rest residual is too large: {worst}")
     return result
 

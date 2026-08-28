@@ -3,6 +3,15 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1ThirdPersonWeaponNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point000001f = 0.000001f;
+    internal const float PresentationFloat0Point999f = 0.999f;
+    internal const float PresentationFloat1Point001f = 1.001f;
+}
+
 internal static class Fo1ThirdPersonWeapon
 {
     private const string Schema = "opennv-fo1-third-person-held-weapon/v1";
@@ -17,7 +26,7 @@ internal static class Fo1ThirdPersonWeapon
             throw new InvalidOperationException("Unexpected Fallout third-person weapon contract.");
         var unitsToMeters = source.GetProperty("unitsToMeters").GetSingle();
         if (unitsToMeters <= 0.0f ||
-            MathF.Abs(actor.Root.Scale.X - unitsToMeters) > 0.000001f ||
+            MathF.Abs(actor.Root.Scale.X - unitsToMeters) > Fo1ThirdPersonWeaponNumericContracts.PresentationFloat0Point000001f ||
             !Mathf.IsEqualApprox(actor.Root.Scale.X, actor.Root.Scale.Y) ||
             !Mathf.IsEqualApprox(actor.Root.Scale.X, actor.Root.Scale.Z))
             throw new InvalidOperationException(
@@ -137,7 +146,7 @@ internal static class Fo1ThirdPersonWeapon
         if (values.Length != 4 || values.Any(value => !float.IsFinite(value)))
             throw new InvalidOperationException("Fallout held weapon requires a finite quaternion.");
         var result = new Quaternion(values[0], values[1], values[2], values[3]);
-        if (result.LengthSquared() < 0.999f || result.LengthSquared() > 1.001f)
+        if (result.LengthSquared() < Fo1ThirdPersonWeaponNumericContracts.PresentationFloat0Point999f || result.LengthSquared() > Fo1ThirdPersonWeaponNumericContracts.PresentationFloat1Point001f)
             throw new InvalidOperationException("Fallout held-weapon quaternion is not normalized.");
         return result;
     }

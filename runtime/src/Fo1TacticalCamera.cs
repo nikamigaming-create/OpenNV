@@ -2,6 +2,16 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1TacticalCameraNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point0001f = 0.0001f;
+    internal const float PresentationFloat0Point001f = 0.001f;
+    internal const float PresentationFloat0Point5f = 0.5f;
+    internal const float PresentationFloat1Point0ENEgativE5f = 1.0e-5f;
+}
+
 internal partial class Fo1TacticalCamera : Node3D
 {
     private Fo1TacticalSession _session = null!;
@@ -496,7 +506,7 @@ internal partial class Fo1TacticalCamera : Node3D
 
     internal bool MoveFirstPerson(Vector2 input, float deltaSeconds)
     {
-        if (!_firstPersonMode || input.LengthSquared() <= 0.0001f || deltaSeconds <= 0.0f)
+        if (!_firstPersonMode || input.LengthSquared() <= Fo1TacticalCameraNumericContracts.PresentationFloat0Point0001f || deltaSeconds <= 0.0f)
         {
             _session.SetFirstPersonMoving(false);
             return false;
@@ -505,7 +515,7 @@ internal partial class Fo1TacticalCamera : Node3D
         var right = _camera.GlobalBasis.X;
         forward.Y = 0.0f;
         right.Y = 0.0f;
-        if (forward.LengthSquared() <= 0.001f || right.LengthSquared() <= 0.001f)
+        if (forward.LengthSquared() <= Fo1TacticalCameraNumericContracts.PresentationFloat0Point001f || right.LengthSquared() <= Fo1TacticalCameraNumericContracts.PresentationFloat0Point001f)
             return false;
         var desired = (
             right.Normalized() * input.X +
@@ -541,7 +551,7 @@ internal partial class Fo1TacticalCamera : Node3D
         var right = _camera.GlobalBasis.X;
         forward.Y = 0.0f;
         right.Y = 0.0f;
-        if (forward.LengthSquared() <= 0.001f || right.LengthSquared() <= 0.001f)
+        if (forward.LengthSquared() <= Fo1TacticalCameraNumericContracts.PresentationFloat0Point001f || right.LengthSquared() <= Fo1TacticalCameraNumericContracts.PresentationFloat0Point001f)
             return false;
         var desired = (
             right.Normalized() * input.X -
@@ -570,7 +580,7 @@ internal partial class Fo1TacticalCamera : Node3D
     {
         var behind = _session.PlayerToken.GlobalBasis.Z;
         behind.Y = 0.0f;
-        if (behind.LengthSquared() <= 0.001f)
+        if (behind.LengthSquared() <= Fo1TacticalCameraNumericContracts.PresentationFloat0Point001f)
             return _targetYaw;
         behind = behind.Normalized();
         return MathF.Atan2(behind.X, behind.Z);
@@ -603,9 +613,9 @@ internal partial class Fo1TacticalCamera : Node3D
         var screenUp = _camera.GlobalBasis.Y;
         screenUp.Y = 0.0f;
         var viewportHeight = MathF.Max(1.0f, GetViewport().GetVisibleRect().Size.Y);
-        if (screenUp.LengthSquared() > 0.0001f)
+        if (screenUp.LengthSquared() > Fo1TacticalCameraNumericContracts.PresentationFloat0Point0001f)
         {
-            var viewOffset = _targetSize * framing.ReservedHudPixels * 0.5f / viewportHeight;
+            var viewOffset = _targetSize * framing.ReservedHudPixels * Fo1TacticalCameraNumericContracts.PresentationFloat0Point5f / viewportHeight;
             Position -= screenUp.Normalized() * (viewOffset / screenUp.Length());
         }
     }
@@ -631,10 +641,10 @@ internal partial class Fo1TacticalCamera : Node3D
         _camera.Size = _targetSize;
         var screenUp = _camera.GlobalBasis.Y;
         screenUp.Y = 0.0f;
-        if (reservedHudPixels > 0.0f && screenUp.LengthSquared() > 0.0001f)
+        if (reservedHudPixels > 0.0f && screenUp.LengthSquared() > Fo1TacticalCameraNumericContracts.PresentationFloat0Point0001f)
         {
             var viewportHeight = MathF.Max(1.0f, GetViewport().GetVisibleRect().Size.Y);
-            var viewOffset = _targetSize * reservedHudPixels * 0.5f / viewportHeight;
+            var viewOffset = _targetSize * reservedHudPixels * Fo1TacticalCameraNumericContracts.PresentationFloat0Point5f / viewportHeight;
             Position -= screenUp.Normalized() * (viewOffset / screenUp.Length());
         }
     }
@@ -765,7 +775,7 @@ internal partial class Fo1TacticalCamera : Node3D
     {
         var origin = _camera.ProjectRayOrigin(screenPosition);
         var direction = _camera.ProjectRayNormal(screenPosition);
-        if (MathF.Abs(direction.Y) <= 1.0e-5f)
+        if (MathF.Abs(direction.Y) <= Fo1TacticalCameraNumericContracts.PresentationFloat1Point0ENEgativE5f)
         {
             point = default;
             return false;

@@ -4,6 +4,16 @@ using System.Text.Json;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1CampaignTransportContractNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const int PresentationInt16 = 16;
+    internal const int PresentationInt5 = 5;
+    internal const int PresentationInt64 = 64;
+    internal const int PresentationInt8 = 8;
+}
+
 internal static class Fo1CampaignTransportContract
 {
     private const string CampaignSchema = "opennv-fo1-campaign-transport/v1";
@@ -150,7 +160,7 @@ internal static class Fo1CampaignTransportContract
 
         var objectGraph = root.GetProperty("objectGraph");
         var scriptRows = objectGraph.GetProperty("scriptLists").EnumerateArray().ToArray();
-        if (scriptRows.Length != 5)
+        if (scriptRows.Length != Fo1CampaignTransportContractNumericContracts.PresentationInt5)
             throw new InvalidOperationException(
                 $"Fallout campaign script-list coverage is invalid: {expectedId}");
         var liveScripts = scriptRows.Sum(row => row.GetProperty("liveCount").GetInt32());
@@ -218,7 +228,7 @@ internal static class Fo1CampaignTransportContract
             hash.AppendData(encoded);
             if ((value & 0x0FFF) != 1)
                 nonDefaultFloors++;
-            if (((value >> 16) & 0x0FFF) != 1)
+            if (((value >> Fo1CampaignTransportContractNumericContracts.PresentationInt16) & 0x0FFF) != 1)
                 nonDefaultRoofs++;
         }
         var actualRawSha256 = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
@@ -302,7 +312,7 @@ internal static class Fo1CampaignTransportContract
     private static string Hash(JsonElement source, string name)
     {
         var value = RequiredString(source, name);
-        if (value.Length != 64 || value.Any(character => !Uri.IsHexDigit(character)))
+        if (value.Length != Fo1CampaignTransportContractNumericContracts.PresentationInt64 || value.Any(character => !Uri.IsHexDigit(character)))
             throw new InvalidOperationException(
                 $"Fallout campaign SHA-256 is invalid: {name}");
         return value.ToLowerInvariant();
@@ -311,7 +321,7 @@ internal static class Fo1CampaignTransportContract
     private static string HashLikeId(JsonElement source, string name)
     {
         var value = RequiredString(source, name);
-        if (value.Length != 8 || value.Any(character => !Uri.IsHexDigit(character)))
+        if (value.Length != Fo1CampaignTransportContractNumericContracts.PresentationInt8 || value.Any(character => !Uri.IsHexDigit(character)))
             throw new InvalidOperationException(
                 $"Fallout campaign object ID is invalid: {name}");
         return value.ToLowerInvariant();

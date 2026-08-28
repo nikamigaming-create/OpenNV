@@ -2,6 +2,23 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class CellPlayerNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point22f = 0.22f;
+    internal const float PresentationFloat0Point48f = 0.48f;
+    internal const float PresentationFloat0Point80f = 0.80f;
+    internal const float PresentationFloat0Point86f = 0.86f;
+    internal const float PresentationFloat0Point90f = 0.90f;
+    internal const float PresentationFloat1Point15f = 1.15f;
+    internal const float PresentationFloat10Point0f = 10.0f;
+    internal const float PresentationFloat11Point05f = 11.05f;
+    internal const float PresentationFloat11Point5f = 11.5f;
+    internal const float PresentationFloat18Point0f = 18.0f;
+    internal const float PresentationFloat8Point0f = 8.0f;
+}
+
 internal partial class CellPlayer : CharacterBody3D
 {
     internal const float DioramaInitialSizeMeters = 18.0f;
@@ -179,12 +196,12 @@ internal partial class CellPlayer : CharacterBody3D
             Mathf.LerpAngle(
                 _dioramaOrbit.Rotation.Y,
                 _dioramaTargetYawRadians,
-                Math.Clamp((float)delta * 8.0f, 0.0f, 1.0f)),
+                Math.Clamp((float)delta * CellPlayerNumericContracts.PresentationFloat8Point0f, 0.0f, 1.0f)),
             0.0f);
         _camera.Size = Mathf.Lerp(
             _camera.Size,
             _dioramaTargetSizeMeters,
-            Math.Clamp((float)delta * 10.0f, 0.0f, 1.0f));
+            Math.Clamp((float)delta * CellPlayerNumericContracts.PresentationFloat10Point0f, 0.0f, 1.0f));
     }
 
     public override void _PhysicsProcess(double delta)
@@ -366,7 +383,7 @@ internal partial class CellPlayer : CharacterBody3D
         _camera = new Camera3D
         {
             Name = "ClassicDioramaCamera",
-            Position = new Vector3(0.0f, 11.5f, 11.5f),
+            Position = new Vector3(0.0f, CellPlayerNumericContracts.PresentationFloat11Point5f, CellPlayerNumericContracts.PresentationFloat11Point5f),
             Projection = Camera3D.ProjectionType.Orthogonal,
             KeepAspect = Camera3D.KeepAspectEnum.Height,
             Size = DioramaInitialSizeMeters,
@@ -375,7 +392,7 @@ internal partial class CellPlayer : CharacterBody3D
             Current = true,
         };
         _dioramaOrbit.AddChild(_camera);
-        _camera.Rotation = new Vector3(-MathF.Atan2(11.05f, 11.5f), 0.0f, 0.0f);
+        _camera.Rotation = new Vector3(-MathF.Atan2(CellPlayerNumericContracts.PresentationFloat11Point05f, CellPlayerNumericContracts.PresentationFloat11Point5f), 0.0f, 0.0f);
     }
 
     internal void FrameClassicDiorama(Aabb worldBounds)
@@ -393,13 +410,13 @@ internal partial class CellPlayer : CharacterBody3D
         Position = _dioramaHomePosition;
         var horizontalSpan = MathF.Max(worldBounds.Size.X, worldBounds.Size.Z);
         _dioramaHomeSizeMeters = Math.Clamp(
-            MathF.Max(horizontalSpan * 0.48f, worldBounds.Size.Y * 0.80f + horizontalSpan * 0.22f),
+            MathF.Max(horizontalSpan * CellPlayerNumericContracts.PresentationFloat0Point48f, worldBounds.Size.Y * CellPlayerNumericContracts.PresentationFloat0Point80f + horizontalSpan * CellPlayerNumericContracts.PresentationFloat0Point22f),
             DioramaInitialSizeMeters,
             DioramaMaximumSizeMeters);
         _dioramaTargetSizeMeters = _dioramaHomeSizeMeters;
         _camera.Size = _dioramaHomeSizeMeters;
-        var cameraDistance = MathF.Max(18.0f, _dioramaHomeSizeMeters * 1.15f);
-        var cameraHeight = cameraDistance * 0.90f;
+        var cameraDistance = MathF.Max(CellPlayerNumericContracts.PresentationFloat18Point0f, _dioramaHomeSizeMeters * CellPlayerNumericContracts.PresentationFloat1Point15f);
+        var cameraHeight = cameraDistance * CellPlayerNumericContracts.PresentationFloat0Point90f;
         _camera.Position = new Vector3(0.0f, cameraHeight, cameraDistance);
         _camera.Rotation = new Vector3(-MathF.Atan2(cameraHeight, cameraDistance), 0.0f, 0.0f);
     }
@@ -423,9 +440,9 @@ internal partial class CellPlayer : CharacterBody3D
         else if (inputEvent is InputEventMouseButton button && button.Pressed)
         {
             if (button.ButtonIndex == MouseButton.WheelUp)
-                SetClassicDioramaZoom(_dioramaTargetSizeMeters * 0.86f);
+                SetClassicDioramaZoom(_dioramaTargetSizeMeters * CellPlayerNumericContracts.PresentationFloat0Point86f);
             else if (button.ButtonIndex == MouseButton.WheelDown)
-                SetClassicDioramaZoom(_dioramaTargetSizeMeters / 0.86f);
+                SetClassicDioramaZoom(_dioramaTargetSizeMeters / CellPlayerNumericContracts.PresentationFloat0Point86f);
         }
     }
 

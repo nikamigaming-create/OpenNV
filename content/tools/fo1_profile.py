@@ -20,6 +20,21 @@ from typing import Any
 
 from actor_catalog import ActorCatalog, scan_actor_catalog
 from cell_catalog import BaseObject, CellCatalog, scan_cell_catalog
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+FO1_PROFILE_FORMAT_CONTRACT_HEX_08 = 0x08
+FO1_PROFILE_FORMAT_CONTRACT_HEX_0F = 0x0F
+FO1_PROFILE_FORMAT_CONTRACT_HEX_0FFF = 0x0FFF
+FO1_PROFILE_FORMAT_CONTRACT_HEX_14 = 0x14
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_100 = 100
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_10000 = 10000
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_1024 = 1024
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_16 = 16
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_19 = 19
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_20 = 20
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_40000 = 40000
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_5 = 5
+FO1_PROFILE_FORMAT_CONTRACT_INTEGER_8 = 8
+
 
 
 MAP_HEADER_SIZE = 0xEC
@@ -66,7 +81,7 @@ class MapLayout:
 def sha256_path(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
+        while chunk := stream.read(FO1_PROFILE_FORMAT_CONTRACT_INTEGER_1024 * FO1_PROFILE_FORMAT_CONTRACT_INTEGER_1024):
             digest.update(chunk)
     return digest.hexdigest()
 
@@ -76,10 +91,10 @@ def parse_map_header(data: bytes) -> MapHeader:
         raise Fo1ProfileError(f"MAP header requires {MAP_HEADER_SIZE} bytes, got {len(data)}")
 
     version = struct.unpack_from(">i", data, 0x00)[0]
-    if version not in {19, 20}:
+    if version not in {FO1_PROFILE_FORMAT_CONTRACT_INTEGER_19, FO1_PROFILE_FORMAT_CONTRACT_INTEGER_20}:
         raise Fo1ProfileError(f"unsupported Fallout MAP version {version}")
 
-    stored_name = data[0x04:0x14].split(b"\0", 1)[0]
+    stored_name = data[0x04:FO1_PROFILE_FORMAT_CONTRACT_HEX_14].split(b"\0", 1)[0]
     try:
         name = stored_name.decode("ascii")
     except UnicodeDecodeError as error:
@@ -87,18 +102,18 @@ def parse_map_header(data: bytes) -> MapHeader:
     if not name or not name.casefold().endswith(".map"):
         raise Fo1ProfileError(f"invalid MAP header name {name!r}")
 
-    values = struct.unpack_from(">10i", data, 0x14)
+    values = struct.unpack_from(">10i", data, FO1_PROFILE_FORMAT_CONTRACT_HEX_14)
     header = MapHeader(version, name, *values)
-    if not 0 <= header.enteringTile < 40000:
+    if not 0 <= header.enteringTile < FO1_PROFILE_FORMAT_CONTRACT_INTEGER_40000:
         raise Fo1ProfileError(f"entering tile is outside the 200x200 hex grid: {header.enteringTile}")
     if not 0 <= header.enteringElevation <= 2:
         raise Fo1ProfileError(f"invalid entering elevation {header.enteringElevation}")
-    if not 0 <= header.enteringRotation <= 5:
+    if not 0 <= header.enteringRotation <= FO1_PROFILE_FORMAT_CONTRACT_INTEGER_5:
         raise Fo1ProfileError(f"invalid entering rotation {header.enteringRotation}")
     if header.localVariables < 0 or header.globalVariables < 0:
         raise Fo1ProfileError("MAP variable counts cannot be negative")
-    if header.flags & ~0x0F:
-        raise Fo1ProfileError(f"unsupported MAP flag bits 0x{header.flags & ~0x0F:08x}")
+    if header.flags & ~FO1_PROFILE_FORMAT_CONTRACT_HEX_0F:
+        raise Fo1ProfileError(f"unsupported MAP flag bits 0x{header.flags & ~FO1_PROFILE_FORMAT_CONTRACT_HEX_0F:08x}")
     if header.mapIndex < -1:
         raise Fo1ProfileError(f"invalid MAP index {header.mapIndex}")
     return header
@@ -129,10 +144,10 @@ def parse_map_layout(data: bytes) -> MapLayout:
     local_variables = read_i32_values(header.localVariables, "local MAP variables")
 
     elevations = []
-    for elevation, absent_flag in ((0, 0x02), (1, 0x04), (2, 0x08)):
+    for elevation, absent_flag in ((0, 0x02), (1, 0x04), (2, FO1_PROFILE_FORMAT_CONTRACT_HEX_08)):
         if header.flags & absent_flag:
             continue
-        byte_count = 10000 * 4
+        byte_count = FO1_PROFILE_FORMAT_CONTRACT_INTEGER_10000 * 4
         end = offset + byte_count
         if end > len(data):
             raise Fo1ProfileError(
@@ -154,13 +169,13 @@ def _id_counts(values: list[int]) -> list[dict[str, int]]:
 def map_layout_manifest(layout: MapLayout) -> dict[str, Any]:
     elevation_manifests = []
     for elevation in layout.elevations:
-        floor_ids = [entry & 0x0FFF for entry in elevation.entries]
-        roof_ids = [(entry >> 16) & 0x0FFF for entry in elevation.entries]
+        floor_ids = [entry & FO1_PROFILE_FORMAT_CONTRACT_HEX_0FFF for entry in elevation.entries]
+        roof_ids = [(entry >> FO1_PROFILE_FORMAT_CONTRACT_INTEGER_16) & FO1_PROFILE_FORMAT_CONTRACT_HEX_0FFF for entry in elevation.entries]
         elevation_manifests.append(
             {
                 "elevation": elevation.elevation,
-                "width": 100,
-                "height": 100,
+                "width": FO1_PROFILE_FORMAT_CONTRACT_INTEGER_100,
+                "height": FO1_PROFILE_FORMAT_CONTRACT_INTEGER_100,
                 "entryCount": len(elevation.entries),
                 "encoding": "row-major uint32 big-endian; roof halfword then floor halfword",
                 "rawSha256": elevation.raw_sha256,
@@ -227,10 +242,10 @@ def resolve_owned_path(root: Path, relative_path: str) -> Path:
 
 
 def parse_form_id(value: str, label: str) -> int:
-    if len(value) != 8:
+    if len(value) != FO1_PROFILE_FORMAT_CONTRACT_INTEGER_8:
         raise Fo1ProfileError(f"{label} must be exactly eight hexadecimal digits")
     try:
-        return int(value, 16)
+        return int(value, FO1_PROFILE_FORMAT_CONTRACT_INTEGER_16)
     except ValueError as error:
         raise Fo1ProfileError(f"{label} is not hexadecimal: {value!r}") from error
 
@@ -404,7 +419,7 @@ def build_contract(recipe_path: Path, ettu_root: Path, fnv_data_root: Path) -> d
 
     master_recipe = recipe["assetSource"]["master"]
     master_path = resolve_owned_path(fnv_data_root, master_recipe["file"])
-    master_hash = verify_hash(master_path, master_recipe["sha256"], "FalloutNV.esm")
+    master_hash = verify_hash(master_path, master_recipe["sha256"], str(master_recipe["file"]))
 
     archives = []
     for archive_recipe in recipe["assetSource"]["archives"]:

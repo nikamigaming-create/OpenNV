@@ -4,6 +4,21 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1HexSceneLoaderNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point001f = 0.001f;
+    internal const float PresentationFloat0Point1f = 0.1f;
+    internal const float PresentationFloat0Point5f = 0.5f;
+    internal const int PresentationInt10 = 10;
+    internal const float PresentationFloat10000Point0f = 10000.0f;
+    internal const int PresentationInt32 = 32;
+    internal const int PresentationInt5 = 5;
+    internal const int PresentationInt6 = 6;
+    internal const int PresentationInt8 = 8;
+}
+
 internal static class Fo1HexSceneLoader
 {
     private const string Schema = "opennv-fo1-hex-scene/v1";
@@ -421,7 +436,7 @@ internal static class Fo1HexSceneLoader
         var door = Fo1HexMath.Center(doorTile);
         var towardCave = Fo1HexMath.Center(entryTile) - door;
         towardCave.Y = 0.0f;
-        if (towardCave.LengthSquared() <= 0.001f)
+        if (towardCave.LengthSquared() <= Fo1HexSceneLoaderNumericContracts.PresentationFloat0Point001f)
             throw new InvalidOperationException("Fallout Vault threshold mask has no source axis.");
         towardCave = towardCave.Normalized();
         var lateral = new Vector3(towardCave.Z, 0.0f, -towardCave.X);
@@ -456,8 +471,8 @@ internal static class Fo1HexSceneLoader
             {
                 var first = corners[index];
                 var second = corners[(index + 1) % corners.Length];
-                var firstKey = (Mathf.RoundToInt(first.X * 10000.0f), Mathf.RoundToInt(first.Z * 10000.0f));
-                var secondKey = (Mathf.RoundToInt(second.X * 10000.0f), Mathf.RoundToInt(second.Z * 10000.0f));
+                var firstKey = (Mathf.RoundToInt(first.X * Fo1HexSceneLoaderNumericContracts.PresentationFloat10000Point0f), Mathf.RoundToInt(first.Z * Fo1HexSceneLoaderNumericContracts.PresentationFloat10000Point0f));
+                var secondKey = (Mathf.RoundToInt(second.X * Fo1HexSceneLoaderNumericContracts.PresentationFloat10000Point0f), Mathf.RoundToInt(second.Z * Fo1HexSceneLoaderNumericContracts.PresentationFloat10000Point0f));
                 var key = firstKey.CompareTo(secondKey) <= 0
                     ? (firstKey.Item1, firstKey.Item2, secondKey.Item1, secondKey.Item2)
                     : (secondKey.Item1, secondKey.Item2, firstKey.Item1, firstKey.Item2);
@@ -494,7 +509,7 @@ internal static class Fo1HexSceneLoader
         float width)
     {
         var direction = (second - first).Normalized();
-        var perpendicular = new Vector3(-direction.Z, 0.0f, direction.X) * (width * 0.5f);
+        var perpendicular = new Vector3(-direction.Z, 0.0f, direction.X) * (width * Fo1HexSceneLoaderNumericContracts.PresentationFloat0Point5f);
         var firstOuter = first + perpendicular;
         var secondOuter = second + perpendicular;
         var secondInner = second - perpendicular;
@@ -609,7 +624,7 @@ internal static class Fo1HexSceneLoader
         var doorObject = source.GetProperty("source");
         var tile = doorObject.GetProperty("tile").GetInt32();
         var rotation = doorObject.GetProperty("rotation").GetInt32();
-        if (rotation is < 0 or > 5)
+        if (rotation is < 0 or > Fo1HexSceneLoaderNumericContracts.PresentationInt5)
             throw new InvalidOperationException($"Fallout door rotation is invalid: {rotation}");
         var target = source.GetProperty("target");
         var loaded = VerifiedGltfLoader.Load(
@@ -644,7 +659,7 @@ internal static class Fo1HexSceneLoader
         var sourceArt = source.GetProperty("sourceArt").EnumerateArray().ToArray();
         var doorArt = sourceArt.Single(row => row.GetProperty("role").GetString() == "door");
         var frameArt = sourceArt.Single(row => row.GetProperty("role").GetString() == "frame");
-        var targetWidth = MathF.Max(bounds.Size.X, 0.1f);
+        var targetWidth = MathF.Max(bounds.Size.X, Fo1HexSceneLoaderNumericContracts.PresentationFloat0Point1f);
         var pixelsPerMeter = doorArt.GetProperty("width").GetSingle() / targetWidth;
         var frameWidth = frameArt.GetProperty("width").GetSingle() / pixelsPerMeter;
         var frameHeight = frameArt.GetProperty("height").GetSingle() / pixelsPerMeter;
@@ -679,10 +694,10 @@ internal static class Fo1HexSceneLoader
             Text = $"VAULT 13  •  DOOR HEX {tile}",
             Position = Fo1HexMath.Center(tile) + Vector3.Up *
                 (MathF.Max(frameHeight, bounds.End.Y) + profile.IdentityLabelHeightMeters),
-            FontSize = 32,
+            FontSize = Fo1HexSceneLoaderNumericContracts.PresentationInt32,
             PixelSize = profile.IdentityLabelPixelSize,
             Modulate = profile.IdentityLabelColor,
-            OutlineSize = 6,
+            OutlineSize = Fo1HexSceneLoaderNumericContracts.PresentationInt6,
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             Visible = sourceReferenceVisible,
         };
@@ -694,7 +709,7 @@ internal static class Fo1HexSceneLoader
             FontSize = profile.DoorNumberFontSize,
             PixelSize = profile.DoorNumberPixelSize,
             Modulate = profile.DoorNumberColor,
-            OutlineSize = 8,
+            OutlineSize = Fo1HexSceneLoaderNumericContracts.PresentationInt8,
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             NoDepthTest = false,
         };
@@ -725,7 +740,7 @@ internal static class Fo1HexSceneLoader
         var door = Fo1HexMath.Center(doorTile);
         var towardCave = Fo1HexMath.Center(entryTile) - door;
         towardCave.Y = 0.0f;
-        if (towardCave.LengthSquared() <= 0.001f)
+        if (towardCave.LengthSquared() <= Fo1HexSceneLoaderNumericContracts.PresentationFloat0Point001f)
             throw new InvalidOperationException("Vault 13 corridor presentation has no threshold axis.");
         towardCave = towardCave.Normalized();
         var corridorEndPosition = door - towardCave * profile.CorridorNumberBehindDoorMeters +
@@ -739,7 +754,7 @@ internal static class Fo1HexSceneLoader
             FontSize = profile.CorridorNumberFontSize,
             PixelSize = profile.CorridorNumberPixelSize,
             Modulate = profile.CorridorNumberColor,
-            OutlineSize = 10,
+            OutlineSize = Fo1HexSceneLoaderNumericContracts.PresentationInt10,
             NoDepthTest = false,
         });
         root.AddChild(new OmniLight3D
@@ -815,7 +830,7 @@ internal static class Fo1HexSceneLoader
         var entry = Fo1HexMath.Center(entryTile);
         var caveward = entry - door;
         caveward.Y = 0.0f;
-        if (caveward.LengthSquared() <= 0.001f)
+        if (caveward.LengthSquared() <= Fo1HexSceneLoaderNumericContracts.PresentationFloat0Point001f)
             throw new InvalidOperationException("Fallout cave atmosphere has no door-to-entry axis.");
         caveward = caveward.Normalized();
         var lateral = new Vector3(-caveward.Z, 0.0f, caveward.X);

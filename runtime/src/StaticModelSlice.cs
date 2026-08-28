@@ -3,6 +3,23 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class StaticModelSliceNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point04f = 0.04f;
+    internal const float PresentationFloat0Point08f = 0.08f;
+    internal const float PresentationFloat0Point12f = 0.12f;
+    internal const float PresentationFloat0Point1f = 0.1f;
+    internal const float PresentationFloat0Point65f = 0.65f;
+    internal const float PresentationFloat1Point18f = 1.18f;
+    internal const float PresentationFloat1Point2f = 1.2f;
+    internal const float PresentationFloat1Point8f = 1.8f;
+    internal const float PresentationFloat16Point0f = 16.0f;
+    internal const float PresentationFloat2Point2f = 2.2f;
+    internal const float PresentationFloat9Point0f = 9.0f;
+}
+
 internal static class StaticModelSlice
 {
     internal static LoadedStaticModel Load(
@@ -101,20 +118,20 @@ internal static class StaticModelSlice
             ShadowEnabled = true,
         });
         var cameraTarget = center;
-        var cameraPosition = center + new Vector3(extent * 1.2f, extent * 0.65f, extent * 1.8f);
+        var cameraPosition = center + new Vector3(extent * StaticModelSliceNumericContracts.PresentationFloat1Point2f, extent * StaticModelSliceNumericContracts.PresentationFloat0Point65f, extent * StaticModelSliceNumericContracts.PresentationFloat1Point8f);
         var cameraSize = 1.0f;
         if (classicDiorama)
         {
             var viewportSize = parent.GetViewport().GetVisibleRect().Size;
-            var aspect = viewportSize.Y > 0.0f ? viewportSize.X / viewportSize.Y : 16.0f / 9.0f;
-            var framingHeight = MathF.Max(bounds.Size.Y, bounds.Size.X / MathF.Max(aspect, 0.1f));
-            var frontZ = bounds.Position.Z + MathF.Min(bounds.Size.Z * 0.08f, framingHeight * 0.12f);
+            var aspect = viewportSize.Y > 0.0f ? viewportSize.X / viewportSize.Y : StaticModelSliceNumericContracts.PresentationFloat16Point0f / StaticModelSliceNumericContracts.PresentationFloat9Point0f;
+            var framingHeight = MathF.Max(bounds.Size.Y, bounds.Size.X / MathF.Max(aspect, StaticModelSliceNumericContracts.PresentationFloat0Point1f));
+            var frontZ = bounds.Position.Z + MathF.Min(bounds.Size.Z * StaticModelSliceNumericContracts.PresentationFloat0Point08f, framingHeight * StaticModelSliceNumericContracts.PresentationFloat0Point12f);
             cameraTarget = new Vector3(center.X, center.Y, frontZ);
             cameraPosition = cameraTarget + new Vector3(
-                framingHeight * 0.08f,
-                framingHeight * 0.04f,
-                -framingHeight * 2.2f);
-            cameraSize = framingHeight * 1.18f;
+                framingHeight * StaticModelSliceNumericContracts.PresentationFloat0Point08f,
+                framingHeight * StaticModelSliceNumericContracts.PresentationFloat0Point04f,
+                -framingHeight * StaticModelSliceNumericContracts.PresentationFloat2Point2f);
+            cameraSize = framingHeight * StaticModelSliceNumericContracts.PresentationFloat1Point18f;
         }
         var camera = new Camera3D
         {

@@ -14,6 +14,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fo1_profile import Fo1ProfileError, parse_map_layout, sha256_path
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+FO1_CAMPAIGN_INVENTORY_FORMAT_CONTRACT_HEX_0FFF = 0x0FFF
+FO1_CAMPAIGN_INVENTORY_FORMAT_CONTRACT_INTEGER_16 = 16
+
 
 
 SCHEMA = "opennv-fo1-campaign-inventory/v1"
@@ -92,8 +96,8 @@ def build_inventory(
         configured_row = configured.get(layout.header.mapIndex)
         elevations = []
         for elevation in layout.elevations:
-            floor_ids = [entry & 0x0FFF for entry in elevation.entries]
-            roof_ids = [(entry >> 16) & 0x0FFF for entry in elevation.entries]
+            floor_ids = [entry & FO1_CAMPAIGN_INVENTORY_FORMAT_CONTRACT_HEX_0FFF for entry in elevation.entries]
+            roof_ids = [(entry >> FO1_CAMPAIGN_INVENTORY_FORMAT_CONTRACT_INTEGER_16) & FO1_CAMPAIGN_INVENTORY_FORMAT_CONTRACT_HEX_0FFF for entry in elevation.entries]
             floor_count = sum(value != 1 for value in floor_ids)
             roof_count = sum(value != 1 for value in roof_ids)
             total_non_default_floor += floor_count

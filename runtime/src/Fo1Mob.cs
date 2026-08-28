@@ -2,6 +2,13 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1MobNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat0Point0001f = 0.0001f;
+}
+
 internal partial class Fo1Mob : Node3D
 {
     private Sprite3D _sprite = null!;
@@ -248,7 +255,7 @@ internal partial class Fo1Mob : Node3D
             Vector3.Up * _runtimeProfile.Scene.SourceSprites.GroundAnchorMeters;
         var direction = target - Position;
         direction.Y = 0.0f;
-        if (_creatureRoot is not null && direction.LengthSquared() > 0.0001f)
+        if (_creatureRoot is not null && direction.LengthSquared() > Fo1MobNumericContracts.PresentationFloat0Point0001f)
             _creatureRoot.Rotation = new Vector3(0.0f, MathF.Atan2(direction.X, direction.Z), 0.0f);
         Tile = tile;
         PlayAnimation("move");

@@ -5,6 +5,27 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1CampaignPresentationContractNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float PresentationFloat1Point08f = 1.08f;
+    internal const int PresentationInt10 = 10;
+    internal const int PresentationInt12 = 12;
+    internal const int PresentationInt13 = 13;
+    internal const int PresentationInt137 = 137;
+    internal const int PresentationInt16 = 16;
+    internal const int PresentationInt20 = 20;
+    internal const int PresentationInt24 = 24;
+    internal const int PresentationInt26 = 26;
+    internal const int PresentationInt6 = 6;
+    internal const int PresentationInt64 = 64;
+    internal const int PresentationInt71 = 71;
+    internal const int PresentationInt78 = 78;
+    internal const int PresentationInt8 = 8;
+    internal const int PresentationInt80 = 80;
+}
+
 internal static class Fo1CampaignPresentationContract
 {
     private const string CampaignSchema = "opennv-fo1-campaign-presentation/v1";
@@ -238,7 +259,7 @@ internal static class Fo1CampaignPresentationContract
         var artifactId = RequiredString(source, "artifactId");
         if (tile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height ||
             rotation is < 0 or >= Fo1HexMath.DirectionCount ||
-            objectType is < 0 or > 6 ||
+            objectType is < 0 or > Fo1CampaignPresentationContractNumericContracts.PresentationInt6 ||
             !catalog.SpriteArtifacts.ContainsKey(artifactId))
             throw new InvalidOperationException(
                 $"Fallout campaign placement is invalid: {mapId}/{elevation}/{serial}");
@@ -317,7 +338,7 @@ internal static class Fo1CampaignPresentationContract
             sourceWallObjects != onGridSourceObjects + offGridSourceObjects ||
             onGridSourceObjects != cells.Sum(row => row.SourceObjects.Count) ||
             Fo1CampaignWallTopologyMath.OccupiedHexSha256(cells) !=
-                HexString(source, "occupiedHexesSha256", 64))
+                HexString(source, "occupiedHexesSha256", Fo1CampaignPresentationContractNumericContracts.PresentationInt64))
             throw new InvalidOperationException(
                 $"Fallout connected-wall source coverage drifted: {mapId}/{elevation}");
         var actual = Fo1CampaignWallTopologyMath.Analyze(cells, floorIds, defaultTileId);
@@ -347,7 +368,7 @@ internal static class Fo1CampaignPresentationContract
         var tile = source.GetProperty("tile").GetInt32();
         if (tile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height)
             throw new InvalidOperationException($"Fallout blocker tile is invalid: {mapId}/{elevation}");
-        _ = HexString(source, "flags", 8);
+        _ = HexString(source, "flags", Fo1CampaignPresentationContractNumericContracts.PresentationInt8);
         return new Fo1CampaignBlocker(
             source.GetProperty("serial").GetInt32(),
             tile,
@@ -389,7 +410,7 @@ internal static class Fo1CampaignPresentationContract
             throw new InvalidOperationException($"Fallout door state is empty: {mapId}/{elevation}/{serial}");
         return new Fo1CampaignDoor(
             serial,
-            HexString(source, "instanceFlags", 8),
+            HexString(source, "instanceFlags", Fo1CampaignPresentationContractNumericContracts.PresentationInt8),
             instanceValues);
     }
 
@@ -419,7 +440,7 @@ internal static class Fo1CampaignPresentationContract
         if (id is < 0 or > 0x0FFF)
             throw new InvalidOperationException($"Fallout tile-art ID is invalid: {id}");
         var file = ValidatePngArtifact(root, source);
-        _ = HexString(source, "sourceSha256", 64);
+        _ = HexString(source, "sourceSha256", Fo1CampaignPresentationContractNumericContracts.PresentationInt64);
         return new Fo1CampaignTileArtifact(
             id,
             RequiredString(source, "filename"),
@@ -432,14 +453,14 @@ internal static class Fo1CampaignPresentationContract
     private static Fo1CampaignSpriteArtifact ReadSpriteArtifact(string root, JsonElement source)
     {
         var id = RequiredString(source, "id");
-        if (id.Length != 20 || id.Any(character => !Uri.IsHexDigit(character)))
+        if (id.Length != Fo1CampaignPresentationContractNumericContracts.PresentationInt20 || id.Any(character => !Uri.IsHexDigit(character)))
             throw new InvalidOperationException($"Fallout sprite-artifact ID is invalid: {id}");
         var file = ValidatePngArtifact(root, source);
         var rotation = source.GetProperty("rotation").GetInt32();
         var frame = source.GetProperty("frame").GetInt32();
         if (rotation is < 0 or >= Fo1HexMath.DirectionCount || frame < 0)
             throw new InvalidOperationException($"Fallout sprite frame is invalid: {id}");
-        _ = HexString(source, "sourceSha256", 64);
+        _ = HexString(source, "sourceSha256", Fo1CampaignPresentationContractNumericContracts.PresentationInt64);
         var averageSource = source.GetProperty("averageOpaqueColor");
         var averageOpaqueColor = averageSource.ValueKind == JsonValueKind.Null
             ? (Color?)null
@@ -459,8 +480,8 @@ internal static class Fo1CampaignPresentationContract
 
     private static Fo1CampaignCritterProfile ReadCritterProfile(JsonElement source)
     {
-        var pid = HexString(source, "pid", 8);
-        _ = HexString(source, "prototypeSha256", 64);
+        var pid = HexString(source, "pid", Fo1CampaignPresentationContractNumericContracts.PresentationInt8);
+        _ = HexString(source, "prototypeSha256", Fo1CampaignPresentationContractNumericContracts.PresentationInt64);
         return new Fo1CampaignCritterProfile(
             pid,
             source.GetProperty("displayName").ValueKind == JsonValueKind.Null
@@ -484,7 +505,7 @@ internal static class Fo1CampaignPresentationContract
             id,
             RequiredString(source, "file"),
             ResolveChildPath(root, RequiredString(source, "path")),
-            HexString(source, "sha256", 64),
+            HexString(source, "sha256", Fo1CampaignPresentationContractNumericContracts.PresentationInt64),
             source.GetProperty("elevations").GetInt32(),
             source.GetProperty("spritePlacements").GetInt32(),
             source.GetProperty("skippedSpriteObjects").GetInt32(),
@@ -500,14 +521,14 @@ internal static class Fo1CampaignPresentationContract
     private static PngArtifact ValidatePngArtifact(string root, JsonElement source)
     {
         var path = ResolveChildPath(root, RequiredString(source, "path"));
-        var expectedSha256 = HexString(source, "sha256", 64);
+        var expectedSha256 = HexString(source, "sha256", Fo1CampaignPresentationContractNumericContracts.PresentationInt64);
         var bytes = File.ReadAllBytes(path);
-        if (Sha256(bytes) != expectedSha256 || bytes.Length < 24 ||
-            !bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) ||
-            !bytes.AsSpan(12, 4).SequenceEqual("IHDR"u8))
+        if (Sha256(bytes) != expectedSha256 || bytes.Length < Fo1CampaignPresentationContractNumericContracts.PresentationInt24 ||
+            !bytes.AsSpan(0, Fo1CampaignPresentationContractNumericContracts.PresentationInt8).SequenceEqual(new byte[] { Fo1CampaignPresentationContractNumericContracts.PresentationInt137, Fo1CampaignPresentationContractNumericContracts.PresentationInt80, Fo1CampaignPresentationContractNumericContracts.PresentationInt78, Fo1CampaignPresentationContractNumericContracts.PresentationInt71, Fo1CampaignPresentationContractNumericContracts.PresentationInt13, Fo1CampaignPresentationContractNumericContracts.PresentationInt10, Fo1CampaignPresentationContractNumericContracts.PresentationInt26, Fo1CampaignPresentationContractNumericContracts.PresentationInt10 }) ||
+            !bytes.AsSpan(Fo1CampaignPresentationContractNumericContracts.PresentationInt12, 4).SequenceEqual("IHDR"u8))
             throw new InvalidOperationException($"Fallout prepared PNG is invalid: {path}");
-        var width = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16, 4));
-        var height = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20, 4));
+        var width = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(Fo1CampaignPresentationContractNumericContracts.PresentationInt16, 4));
+        var height = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(Fo1CampaignPresentationContractNumericContracts.PresentationInt20, 4));
         if (width <= 0 || height <= 0 ||
             source.GetProperty("width").GetInt32() != width ||
             source.GetProperty("height").GetInt32() != height)
@@ -526,12 +547,12 @@ internal static class Fo1CampaignPresentationContract
         Span<byte> encoded = stackalloc byte[sizeof(uint)];
         for (var index = 0; index < floors.Count; index++)
         {
-            var value = (uint)(floors[index] | roofs[index] << 16);
+            var value = (uint)(floors[index] | roofs[index] << Fo1CampaignPresentationContractNumericContracts.PresentationInt16);
             BinaryPrimitives.WriteUInt32BigEndian(encoded, value);
             hash.AppendData(encoded);
         }
         var actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
-        if (actual != HexString(source, "rawGridSha256", 64))
+        if (actual != HexString(source, "rawGridSha256", Fo1CampaignPresentationContractNumericContracts.PresentationInt64))
             throw new InvalidOperationException(
                 $"Fallout campaign raw grid hash drifted: {mapId}/{elevation}");
     }
@@ -683,13 +704,13 @@ internal static class Fo1CampaignPresentationContract
             Unit(wall, "roughness"),
             Unit(wall, "metallic"),
             Unit(wall, "sourceAlphaThreshold"),
-            ReadColor(wall.GetProperty("fallbackAlbedo"), "wall fallback"),
+            ReadColor(wall.GetProperty("unresolvedSourceAlbedo"), "unresolved wall source"),
             ReadColor(wall.GetProperty("sideColorMultiplier"), "wall side multiplier"),
             ReadColor(wall.GetProperty("topColorMultiplier"), "wall top multiplier"));
         if (wallProfile.Mode != "source-wall-hex-union-v1" ||
             wallProfile.SourceObjectType != 3 ||
             wallProfile.CollisionMode != "blocking-wall-hex-union-v1" ||
-            wallProfile.CellRadiusScale is < 1.0f or > 1.08f ||
+            wallProfile.CellRadiusScale is < 1.0f or > Fo1CampaignPresentationContractNumericContracts.PresentationFloat1Point08f ||
             wallProfile.HeightMeters <= 1.0f || wallProfile.GroundSinkMeters < 0.0f ||
             wallProfile.GroundSinkMeters >= wallProfile.HeightMeters)
             throw new InvalidOperationException("Fallout campaign wall-geometry profile drifted.");
@@ -912,7 +933,7 @@ internal sealed record Fo1CampaignWallGeometryProfile(
     float Roughness,
     float Metallic,
     float SourceAlphaThreshold,
-    Color FallbackAlbedo,
+    Color UnresolvedSourceAlbedo,
     Color SideColorMultiplier,
     Color TopColorMultiplier);
 

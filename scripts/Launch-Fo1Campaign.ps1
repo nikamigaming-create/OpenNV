@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
-    [string]$Godot = "D:\code\gd\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe",
-    [string]$CampaignPresentation = "",
-    [string]$ExpectedPresentationSha256 = "61965ae5fe3971618904d63719c190178595110a2b750de30572e2e90234eca7",
+    [Parameter(Mandatory = $true)][string]$Godot,
+    [Parameter(Mandatory = $true)][string]$CampaignPresentation,
+    [Parameter(Mandatory = $true)][string]$ExpectedPresentationSha256,
     [string]$Map = "",
     [Nullable[int]]$Elevation = $null,
     [switch]$Smoke
@@ -13,10 +13,6 @@ Set-StrictMode -Version Latest
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtimeRoot = Join-Path $repoRoot "runtime"
-if ([string]::IsNullOrWhiteSpace($CampaignPresentation)) {
-    $CampaignPresentation = Join-Path $repoRoot `
-        "dist\fo1-campaign-presentation-20260826-r5\campaign-presentation.json"
-}
 $CampaignPresentation = [IO.Path]::GetFullPath($CampaignPresentation)
 foreach ($path in @($Godot, $CampaignPresentation, (Join-Path $runtimeRoot "project.godot"))) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {

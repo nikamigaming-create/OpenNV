@@ -19,6 +19,13 @@ from PIL import Image
 
 from fo1_profile import sha256_path
 from prepare_fo1_hex_scene import classic_hex_screen
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_HEX_00000008 = 0x00000008
+PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_16 = 16
+PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_200 = 200
+PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_256 = 256
+PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_40000 = 40000
+
 
 
 RECIPE_SCHEMA = "opennv-fo1-ai-wall-reconstruction-recipe/v1"
@@ -38,9 +45,9 @@ def write_json(path: Path, document: object) -> None:
 
 
 def coordinate(tile: int) -> tuple[int, int]:
-    if not 0 <= tile < 40000:
+    if not 0 <= tile < PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_40000:
         raise ValueError(f"Fallout wall tile escapes the 200x200 grid: {tile}")
-    return tile % 200, tile // 200
+    return tile % PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_200, tile // PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_200
 
 
 def neighbors(tile: int) -> tuple[int, ...]:
@@ -58,8 +65,8 @@ def neighbors(tile: int) -> tuple[int, ...]:
     for delta_x, delta_y in offsets:
         target_x = x + delta_x
         target_y = y + delta_y
-        if 0 <= target_x < 200 and 0 <= target_y < 200:
-            values.append(target_y * 200 + target_x)
+        if 0 <= target_x < PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_200 and 0 <= target_y < PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_200:
+            values.append(target_y * PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_200 + target_x)
     return tuple(values)
 
 
@@ -136,7 +143,7 @@ def prepare(
         minimum < 2
         or maximum < minimum
         or padding < 0
-        or target_long_edge < 256
+        or target_long_edge < PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_256
         or composite_recipe["resampling"] != "nearest"
         or composite_recipe["background"] != "transparent"
         or composite_recipe["preserveOriginalAlpha"] is not True
@@ -193,10 +200,10 @@ def prepare(
             screen[0] - image.width // 2 + int(pixel[0]) + int(frame[0]),
             screen[1] - image.height + int(pixel[1]) + int(frame[1]),
         )
-        flags = int(sprite["flags"], 16)
+        flags = int(sprite["flags"], PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_INTEGER_16)
         draw_rows.append(
             (
-                0 if flags & 0x00000008 else 1,
+                0 if flags & PREPARE_FO1_AI_WALL_SECTION_COMPILER_CONTRACT_HEX_00000008 else 1,
                 screen[1],
                 screen[0],
                 serial,

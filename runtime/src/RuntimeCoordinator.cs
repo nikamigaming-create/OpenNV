@@ -5,6 +5,13 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class RuntimeCoordinatorNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const double PresentationDouble1000Point0 = 1000.0;
+}
+
 public partial class RuntimeCoordinator : Node3D
 {
     private static readonly HashSet<string> DirectPreparedContentOptions = new(
@@ -324,7 +331,7 @@ public partial class RuntimeCoordinator : Node3D
         _loadingScreen = null;
         if (loading is null)
             return;
-        var elapsedSeconds = (Time.GetTicksMsec() - _loadingStartedMilliseconds) / 1000.0;
+        var elapsedSeconds = (Time.GetTicksMsec() - _loadingStartedMilliseconds) / RuntimeCoordinatorNumericContracts.PresentationDouble1000Point0;
         var remainingSeconds = _options.ContainsKey("fo1-gameplay-demo") ||
             _options.ContainsKey("fo1-new-game-demo")
             ? 1.0

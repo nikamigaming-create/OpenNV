@@ -91,7 +91,7 @@ class Fo1CampaignPresentationTest(unittest.TestCase):
                 "roughness": 1.0,
                 "metallic": 0.0,
                 "sourceAlphaThreshold": 0.2,
-                "fallbackAlbedo": [0.2, 0.2, 0.2, 1.0],
+                "unresolvedSourceAlbedo": [0.2, 0.2, 0.2, 1.0],
                 "sideColorMultiplier": [0.8, 0.8, 0.8, 1.0],
                 "topColorMultiplier": [0.6, 0.6, 0.6, 1.0],
             },

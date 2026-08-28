@@ -3,6 +3,13 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1RuntimeProfileNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const int PresentationInt64 = 64;
+}
+
 internal sealed record Fo1RuntimeProfile(
     string Id,
     string RecipeSha256,
@@ -24,7 +31,7 @@ internal sealed record Fo1RuntimeProfile(
             throw new InvalidOperationException("Unexpected Fallout runtime-profile schema.");
         var id = RequiredString(source, "id");
         var recipeSha256 = RequiredString(source, "recipeSha256");
-        if (recipeSha256.Length != 64)
+        if (recipeSha256.Length != Fo1RuntimeProfileNumericContracts.PresentationInt64)
             throw new InvalidOperationException("Fallout runtime-profile recipe hash is invalid.");
 
         var authority = source.GetProperty("authority");

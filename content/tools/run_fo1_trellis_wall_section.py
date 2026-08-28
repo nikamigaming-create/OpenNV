@@ -14,6 +14,11 @@ import uuid
 from pathlib import Path
 
 from fo1_profile import sha256_path
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_INTEGER_16 = 16
+RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_FLOAT_30POINT0 = 30.0
+RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_INTEGER_8 = 8
+
 
 
 RECIPE_SCHEMA = "opennv-fo1-ai-wall-reconstruction-recipe/v1"
@@ -37,7 +42,7 @@ def request_json(
     url: str,
     method: str = "GET",
     document: object | None = None,
-    timeout: float = 30.0,
+    timeout: float = RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_FLOAT_30POINT0,
 ) -> dict[str, object]:
     data = None
     headers = {}
@@ -219,7 +224,7 @@ def run(
         raise ValueError(f"ComfyUI is missing Fallout TRELLIS nodes: {missing}")
 
     input_hash = sha256_path(conditioned_image_path)
-    input_name = f"fo1-v13ent-entry-wall-{input_hash[:16]}.png"
+    input_name = f"fo1-v13ent-entry-wall-{input_hash[:RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_INTEGER_16]}.png"
     comfy_input = comfy_root / "input" / input_name
     comfy_input.parent.mkdir(parents=True, exist_ok=True)
     if comfy_input.exists() and sha256_path(comfy_input) != input_hash:
@@ -228,7 +233,7 @@ def run(
         shutil.copyfile(conditioned_image_path, comfy_input)
 
     recipe_hash = sha256_path(recipe_path)
-    output_prefix = f"fo1-v13ent/entry-wall-{input_hash[:16]}-{recipe_hash[:8]}"
+    output_prefix = f"fo1-v13ent/entry-wall-{input_hash[:RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_INTEGER_16]}-{recipe_hash[:RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_INTEGER_8]}"
     prompt = build_prompt(generation, input_name, output_prefix)
     client_id = str(uuid.uuid4())
     submitted = request_json(
@@ -254,7 +259,7 @@ def run(
     generated_root = comfy_root / "output" / "fo1-v13ent"
     candidates = sorted(
         generated_root.glob(
-            f"entry-wall-{input_hash[:16]}-{recipe_hash[:8]}*.{generation['exportFormat']}"
+            f"entry-wall-{input_hash[:RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_INTEGER_16]}-{recipe_hash[:RUN_FO1_TRELLIS_WALL_SECTION_DIAGNOSTIC_CONTRACT_INTEGER_8]}*.{generation['exportFormat']}"
         )
     )
     if len(candidates) != 1:

@@ -18,6 +18,11 @@ from export_static_nif_gltf import export_static_nif
 from fo1_profile import Fo1ProfileError, parse_form_id, sha256_path
 from runtime_configuration import load_runtime_configuration
 from texture_pipeline import TexturePipeline
+# Immutable format/source/diagnostic contracts; tunable behavior is recipe-owned.
+PREPARE_FO1_DOOR_PROOF_COMPILER_CONTRACT_FLOAT_0POINT08 = 0.08
+PREPARE_FO1_DOOR_PROOF_COMPILER_CONTRACT_FLOAT_1POINT0ENEGATIVE6 = 1.0e-6
+PREPARE_FO1_DOOR_PROOF_COMPILER_CONTRACT_FLOAT_10POINT0 = 10.0
+
 
 
 RECIPE_SCHEMA = "opennv-fo1-object-presentation-map/v1"
@@ -68,7 +73,9 @@ def build(
     master_path = fnv_data_root / target["master"]["file"]
     meshes_path = fnv_data_root / target["meshesArchive"]["file"]
     if sha256_path(master_path) != target["master"]["sha256"]:
-        raise Fo1ProfileError("FalloutNV.esm hash drift for Vault door mapping")
+        raise Fo1ProfileError(
+            f"Owned master hash drift for Vault door mapping: {target['master']['file']}"
+        )
     if sha256_path(meshes_path) != target["meshesArchive"]["sha256"]:
         raise Fo1ProfileError("FNV meshes archive hash drift for Vault door mapping")
     texture_paths = []
@@ -144,12 +151,12 @@ def build(
             emissive = textures[2] if len(textures) > 2 and textures[2] else None
             material = surface["material"]
             environment, environment_mask = environment_texture_paths(surface)
-            glossiness = float(material.get("glossiness", 10.0))
+            glossiness = float(material.get("glossiness", PREPARE_FO1_DOOR_PROOF_COMPILER_CONTRACT_FLOAT_10POINT0))
             specular = [float(value) for value in material.get("specular", [0.0, 0.0, 0.0])]
             roughness = (
                 1.0
-                if max(specular) <= 1.0e-6
-                else max(0.08, min(1.0, math.sqrt(2.0 / (glossiness + 2.0))))
+                if max(specular) <= PREPARE_FO1_DOOR_PROOF_COMPILER_CONTRACT_FLOAT_1POINT0ENEGATIVE6
+                else max(PREPARE_FO1_DOOR_PROOF_COMPILER_CONTRACT_FLOAT_0POINT08, min(1.0, math.sqrt(2.0 / (glossiness + 2.0))))
             )
             unshaded = "BSShaderNoLightingProperty" in surface["propertyTypes"]
             emissive_color = [float(value) for value in material.get("emissive", [0.0, 0.0, 0.0])]

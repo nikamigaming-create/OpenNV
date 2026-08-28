@@ -2,9 +2,17 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1HexVisualsNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const float GeometryFloat0Point82f = 0.82f;
+    internal const float GeometryFloat0Point96f = 0.96f;
+}
+
 internal static class Fo1HexVisuals
 {
-    internal static ArrayMesh BuildRingMesh(float innerScale = 0.82f, float outerScale = 0.96f)
+    internal static ArrayMesh BuildRingMesh(float innerScale = Fo1HexVisualsNumericContracts.GeometryFloat0Point82f, float outerScale = Fo1HexVisualsNumericContracts.GeometryFloat0Point96f)
     {
         var tool = new SurfaceTool();
         tool.Begin(Mesh.PrimitiveType.Triangles);

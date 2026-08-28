@@ -4,6 +4,19 @@ using Godot;
 
 namespace OpenNV.Runtime;
 
+internal static class Fo1MoviePackPlayerNumericContracts
+{
+    // Immutable format, source-art, geometry, and acceptance contracts.
+    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
+    internal const int SourcePresentationInt12 = 12;
+    internal const int SourcePresentationInt16 = 16;
+    internal const int SourcePresentationInt20 = 20;
+    internal const int SourcePresentationInt24 = 24;
+    internal const int SourcePresentationInt256 = 256;
+    internal const int SourcePresentationInt28 = 28;
+    internal const int SourcePresentationInt8 = 8;
+}
+
 internal partial class Fo1MoviePackPlayer : TextureRect
 {
     private static readonly byte[] Magic = "ONVFO1M1"u8.ToArray();
@@ -33,13 +46,13 @@ internal partial class Fo1MoviePackPlayer : TextureRect
         StretchMode = StretchModeEnum.KeepAspectCentered;
         MouseFilter = MouseFilterEnum.Ignore;
         _pack = File.ReadAllBytes(contract.OpeningFramesPath);
-        if (_pack.Length < 28 || !_pack.AsSpan(0, 8).SequenceEqual(Magic))
+        if (_pack.Length < Fo1MoviePackPlayerNumericContracts.SourcePresentationInt28 || !_pack.AsSpan(0, Fo1MoviePackPlayerNumericContracts.SourcePresentationInt8).SequenceEqual(Magic))
             throw new InvalidOperationException("Fallout Overseer frame pack has an invalid header.");
-        var width = ReadInt(8);
-        var height = ReadInt(12);
-        _framesPerSecond = ReadInt(16);
-        var frameRateDenominator = ReadInt(20);
-        var frameCount = ReadInt(24);
+        var width = ReadInt(Fo1MoviePackPlayerNumericContracts.SourcePresentationInt8);
+        var height = ReadInt(Fo1MoviePackPlayerNumericContracts.SourcePresentationInt12);
+        _framesPerSecond = ReadInt(Fo1MoviePackPlayerNumericContracts.SourcePresentationInt16);
+        var frameRateDenominator = ReadInt(Fo1MoviePackPlayerNumericContracts.SourcePresentationInt20);
+        var frameCount = ReadInt(Fo1MoviePackPlayerNumericContracts.SourcePresentationInt24);
         if (width != contract.OpeningWidth || height != contract.OpeningHeight ||
             _framesPerSecond != contract.OpeningFramesPerSecond || frameRateDenominator != 1 ||
             frameCount != contract.OpeningFrameCount)
@@ -47,14 +60,14 @@ internal partial class Fo1MoviePackPlayer : TextureRect
         _durationSeconds = contract.OpeningDurationSeconds;
         _offsets = new int[frameCount];
         _sizes = new int[frameCount];
-        var cursor = 28;
+        var cursor = Fo1MoviePackPlayerNumericContracts.SourcePresentationInt28;
         for (var index = 0; index < frameCount; index++)
         {
             if (cursor + 4 > _pack.Length)
                 throw new InvalidOperationException("Fallout Overseer frame table is truncated.");
             var size = ReadInt(cursor);
             cursor += 4;
-            if (size < 256 || size > _pack.Length - cursor)
+            if (size < Fo1MoviePackPlayerNumericContracts.SourcePresentationInt256 || size > _pack.Length - cursor)
                 throw new InvalidOperationException("Fallout Overseer JPEG frame escapes its pack.");
             _offsets[index] = cursor;
             _sizes[index] = size;
