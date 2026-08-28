@@ -440,7 +440,12 @@ def prepare_actor(
     def mesh(path: str) -> bytes:
         canonical = canonical_member_path(path)
         logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
-        return meshes.extract(logical_path).data
+        matches = [archive for archive in mesh_archives if logical_path in archive.members]
+        if len(matches) != 1:
+            raise FileNotFoundError(
+                f"Expected one actor mesh {logical_path!r}, found {len(matches)}"
+            )
+        return matches[0].extract(logical_path).data
 
     def facegen_tri(path: str) -> dict[str, object]:
         companion = model_companion(path, ".tri")
@@ -706,6 +711,16 @@ def prepare_actor(
     output_root = cache_root / "generated" / "actors" / recipe_id
     gltf_path = output_root / "actor.gltf"
     sidecar_path = output_root / "actor.opennv.json"
+    additional_animations = []
+    for row in recipe.get("additionalAnimations", []):
+        payload = mesh(str(row["path"]))
+        actual_hash = hashlib.sha256(payload).hexdigest()
+        if actual_hash != str(row["sha256"]):
+            raise ValueError(
+                f"Actor animation hash mismatch: {row['path']} "
+                f"expected={row['sha256']} actual={actual_hash}"
+            )
+        additional_animations.append(ActorAnimation(str(row["path"]), payload))
     sidecar = export_actor_gltf(
         ActorGltfInput(
             f"{actor.form_id:08x}",

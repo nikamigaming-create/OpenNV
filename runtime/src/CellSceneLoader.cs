@@ -244,6 +244,24 @@ internal static class CellSceneLoader
         var player = new CellPlayer();
         player.Configure(yaw, session, configuration, useXr);
         parent.AddChild(player);
+        if (useClassicDiorama)
+        {
+            player.FrameClassicDiorama(renderBounds);
+            environment.AmbientLightEnergy *= 1.25f;
+            player.Camera.AddChild(new DirectionalLight3D
+            {
+                Name = "ClassicDioramaCameraFill",
+                LightColor = environment.AmbientLightColor.Lerp(Colors.White, 0.20f),
+                LightEnergy = Math.Clamp(environment.AmbientLightEnergy * 0.50f, 0.35f, 1.20f),
+                ShadowEnabled = false,
+            });
+            var cameraDistance = player.Camera.Position.Length();
+            var cellSpan = MathF.Max(renderBounds.Size.X, renderBounds.Size.Z);
+            environment.FogDepthBegin = MathF.Max(environment.FogDepthBegin, cameraDistance * 0.48f);
+            environment.FogDepthEnd = MathF.Max(
+                environment.FogDepthEnd,
+                cameraDistance + cellSpan * 1.15f);
+        }
         return player;
     }
 

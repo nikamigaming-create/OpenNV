@@ -1,6 +1,6 @@
 # Runtime dependencies
 
-OpenNV experimental Windows packages contain the official Godot Engine 4.7.1
+OpenNV experimental Windows packages contain the official Godot Engine 4.7.2
 Mono export runtime and the .NET 8 runtime needed by the C# game assembly.
 Godot and .NET are distributed under the MIT license. Their license texts are
 included in the package's `licenses` directory.

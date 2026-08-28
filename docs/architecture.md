@@ -258,7 +258,9 @@ require a headset session.
 | `first_person_rig.py` | Hash-verified legal left/right first-person hand artifacts plus skeleton/pose/frame contract | Runtime tracking or weapon behavior |
 | `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, alpha, and separate FaceGen sampler contracts | Geometry, records, or runtime lighting |
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
+| `render_actor_preview.py` | Native Godot preview/capture orchestration for one prepared actor | Actor export, desktop control, or parity approval |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
+| `dat2_archive.py` | Indexed Fallout DAT2 member lookup, decompression, and hash identity | MAP/PRO/FRM semantics |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
 | `havok_collision_gltf.py` | Bounded authored packed triangles plus convex/list dynamic body, shape, mass, friction, bounce, damping and filter export | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
@@ -284,6 +286,13 @@ require a headset session.
 | `test_facegen.py` | Synthetic geometry, texture-mode, skin, and body composition regressions | Retail actor selection |
 | `test_actor_gltf.py` | Bethesda material, alpha, vertex-color, and non-accumulating idle translation regressions | Retail visual approval |
 | `test_static_nif_gltf.py` | Synthetic BSA/NIF geometry regressions | Runtime orchestration |
+| `test_dat2_archive.py` | Synthetic DAT2 index/member/decompression regressions | Retail bytes |
+| `test_fo1_map_objects.py` | Synthetic Fallout MAP object/script-layout regressions | Cross-game mapping or rendering |
+| `test_fo1_frm.py` | Synthetic palette, shared-direction FRM, preview, and truncation regressions | Retail bytes or 3D substitution |
+| `test_fo1_concept_composition.py` | Synthetic bounded composition, door replacement, offset, light, and overwrite regressions | Retail visual approval |
+| `test_fo1_hex_scene.py` | One-metre topology, reversed floor-X projection, four-hex mapping, unprojection, critter PRO, crop, and bounds regressions | Retail bytes or runtime input |
+| `test_fo1_runtime_profile.py` | Runtime-profile hash/path/schema/provenance and adaptation-leak regressions | Visual approval or campaign-promotion claims |
+| `test_fo1_campaign_inventory.py` | Synthetic all-map inventory, identity, and monotonic-promotion regressions | Retail bytes or campaign-readiness claims |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, and versioned flow contract | Runtime state or Godot UI |
@@ -317,7 +326,21 @@ require a headset session.
 | `XrRigLayoutAcceptance.cs` | Headless OpenXR action-map, node hierarchy, HUD, and shared weapon-state layout gate | Simulator or headset claims |
 | `RuntimeCoordinator.cs` | Startup option routing, composition, shared report writing, and shutdown ownership | Feature-specific acceptance logic, UI construction, or file-format parsing |
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
-| `StaticModelSlice.cs` | Legacy one-model proof view | Cell relationships |
+| `StaticModelSlice.cs` | Hash-verified one-model material binding, bounds, and reference view | Cell relationships or controller playback |
+| `StaticModelCapture.cs` | Native hash-recorded one-model visual gate | Cell placement, interaction, or retail parity |
+| `Fo1HexMath.cs` | Fallout 200×200 tile IDs, retail even-column-offset world conversion, direction/neighbor/distance/corner math | Rendering, AP, or source parsing |
+| `Fo1RuntimeProfile.cs` | Strict typed ownership of the embedded versioned 3D adaptation profile | Fallout source authority or fallback tuning |
+| `Fo1HexSceneLoader.cs` | Verified V13ENT floor/sprite/door manifests, diagnostic overlays, and ordinary Godot presentation nodes | MAP parsing, camera input, or gameplay rules |
+| `Fo1TacticalSession.cs` | V13ENT player hex, BFS movement, selected target, bounded attack/rat turn, HP/AP HUD, and atomic proof save | Camera transforms, MAP parsing, or full AI formulas |
+| `Fo1Mob.cs` | One source critter's PID/serial/tile, MAP runtime state, PRO combat values, grounded 2D/3D presentation and depth-safe markers, HP/AP, and proof movement | Turn ordering, pathfinding, or asset extraction |
+| `Fo1CreatureModel.cs` | Hash-verified owned creature glTF binding, animation selection, and intact-state gore-cap visibility | Source critter identity or combat rules |
+| `Fo1OwnedCaveKit.cs` | Exact-source-topology continuous floor construction and verified owned cave-kit instantiation from the presentation manifest | Fallout 1 topology derivation or camera policy |
+| `Fo1CaveCutaway.cs` | Camera-to-focus occluder visibility for registered cave instances | Asset placement, gameplay state, or source parsing |
+| `Fo1TacticalCamera.cs` | Orthographic orbit/pan/cursor-zoom/edge/focus input adapter | Hex state, AP, or content preparation |
+| `Fo1HexProof.cs` | Headless mouse-camera, one-hex/one-AP, end-turn, and save gate | Production input or visual approval |
+| `Fo1HexCapture.cs` | Native V13ENT UI/environment frames, metrics, hashes, and no-host-control record | Gameplay or parity verdicts |
+| `Fo1HexDemo.cs` | Deterministic loading/player/door/movement/target/attack/turn video sequence and report | Host input injection, gameplay authority, or parity verdicts |
+| `Fo1HexVisuals.cs` | Procedural selection/path marker mesh and material primitives | Grid identity, pathfinding, or source art |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
 | `Test-GodotRuntime.ps1` | Source, synthetic, retail-opt-in, format, and analyzer gates | Packaging state |

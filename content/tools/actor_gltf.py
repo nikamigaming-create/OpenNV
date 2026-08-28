@@ -550,6 +550,7 @@ def export_actor_gltf(
                 component_root,
                 shape,
                 node_by_name,
+                inverse_bind_by_name,
                 builder,
                 meshes,
                 skins,
@@ -733,6 +734,7 @@ def export_actor_gltf(
             "surfaces": len(surfaces),
             "omittedSurfaces": len(omitted_surfaces),
             "skins": len(skins),
+            "inverseBindContract": "inverse of exact emitted glTF skeleton rest-global matrix",
             "textures": len(textures.rows),
             "animations": len(animations),
             "animationChannels": animation_channels,
@@ -1138,6 +1140,7 @@ def _append_shape(
     component_root: object,
     shape: object,
     node_by_name: dict[str, int],
+    inverse_bind_by_name: dict[str, list[list[float]]],
     builder: BufferBuilder,
     meshes: list[dict[str, object]],
     skins: list[dict[str, object]],
@@ -1297,6 +1300,7 @@ def _append_shape(
             component.role,
             shape,
             node_by_name,
+            inverse_bind_by_name,
             builder,
             attributes,
             skins,
@@ -1519,6 +1523,7 @@ def _append_skin(
     role: str,
     shape: object,
     node_by_name: dict[str, int],
+    inverse_bind_by_name: dict[str, list[list[float]]],
     builder: BufferBuilder,
     attributes: dict[str, int],
     skins: list[dict[str, object]],
@@ -1554,12 +1559,10 @@ def _append_skin(
         pack_floats(weight_rows), component_type=GL_FLOAT, count=len(weight_rows), value_type="VEC4", target=GL_ARRAY_BUFFER
     )
     inverse_bind_rows = []
-    for data in instance.data.bone_list:
-        inverse_bind = _compensated_inverse_bind(
-            data.get_transform(),
-            baked_shape_transform,
-        )
-        inverse_bind_rows.append(_gltf_matrix(inverse_bind))
+    if len(instance.data.bone_list) != len(bone_names):
+        raise ValueError(f"Actor skin bone data count drift: {_text(shape.name)}")
+    for name in bone_names:
+        inverse_bind_rows.append(_gltf_matrix(inverse_bind_by_name[name]))
     inverse_bind = builder.add(
         pack_floats(inverse_bind_rows),
         component_type=GL_FLOAT,
@@ -1663,6 +1666,7 @@ def _hardware_vertex_weights(shape: object) -> list[list[tuple[int, float]]]:
 def _build_animation(
     payload: bytes,
     node_by_name: dict[str, int],
+    nodes: list[dict[str, object]],
     builder: BufferBuilder,
     compiler: ContentCompilerConfiguration,
     accumulation_root_node: str,
@@ -2166,6 +2170,51 @@ def _slerp_keys(keys: list[object], time_value: float) -> tuple[float, float, fl
     raise ValueError("Actor rotation key interval was not found")
 
 
+def _scalar_keys(group: object, time_value: float) -> float:
+    keys = list(group.keys)
+    if not keys:
+        raise ValueError("Actor scalar animation key group is empty")
+    if time_value <= float(keys[0].time):
+        return float(keys[0].value)
+    if time_value >= float(keys[-1].time):
+        return float(keys[-1].value)
+    for first, second in zip(keys, keys[1:]):
+        first_time, second_time = float(first.time), float(second.time)
+        if first_time <= time_value <= second_time:
+            amount = (time_value - first_time) / (second_time - first_time)
+            first_value, second_value = float(first.value), float(second.value)
+            if int(group.interpolation) == 2:
+                duration = second_time - first_time
+                first_tangent = float(first.forward)
+                second_tangent = float(second.backward)
+                squared = amount * amount
+                cubed = squared * amount
+                return (
+                    (2.0 * cubed - 3.0 * squared + 1.0) * first_value
+                    + (cubed - 2.0 * squared + amount) * duration * first_tangent
+                    + (-2.0 * cubed + 3.0 * squared) * second_value
+                    + (cubed - squared) * duration * second_tangent
+                )
+            return first_value + amount * (second_value - first_value)
+    raise ValueError("Actor scalar key interval was not found")
+
+
+def _euler_xyz_quaternion(
+    angles: tuple[float, float, float],
+) -> tuple[float, float, float, float]:
+    half_x, half_y, half_z = (angle / 2.0 for angle in angles)
+    cx, cy, cz = math.cos(half_x), math.cos(half_y), math.cos(half_z)
+    sx, sy, sz = math.sin(half_x), math.sin(half_y), math.sin(half_z)
+    return _normalize_quaternion(
+        (
+            cx * cy * cz - sx * sy * sz,
+            sx * cy * cz + cx * sy * sz,
+            cx * sy * cz - sx * cy * sz,
+            cx * cy * sz + sx * sy * cz,
+        )
+    )
+
+
 def _slerp(
     first: tuple[float, float, float, float],
     second: tuple[float, float, float, float],
@@ -2335,6 +2384,95 @@ def _converted_matrix(value: object) -> list[list[float]]:
     ]
     inverse = [[conversion[column_index][row_index] for column_index in range(4)] for row_index in range(4)]
     return _multiply(conversion, _multiply(column, inverse))
+
+
+def _trs_matrix(node: dict[str, object]) -> list[list[float]]:
+    translation = [float(value) for value in node.get("translation", [0.0, 0.0, 0.0])]
+    rotation = [float(value) for value in node.get("rotation", [0.0, 0.0, 0.0, 1.0])]
+    scale = [float(value) for value in node.get("scale", [1.0, 1.0, 1.0])]
+    if len(translation) != 3 or len(rotation) != 4 or len(scale) != 3:
+        raise ValueError(f"Actor glTF node has invalid TRS: {node.get('name')}")
+    x, y, z, w = rotation
+    length = math.sqrt(x * x + y * y + z * z + w * w)
+    if length <= 1.0e-12 or min(scale) <= 0.0:
+        raise ValueError(f"Actor glTF node has non-invertible TRS: {node.get('name')}")
+    x, y, z, w = (value / length for value in (x, y, z, w))
+    matrix = [
+        [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w), translation[0]],
+        [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w), translation[1]],
+        [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y), translation[2]],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    for row in range(3):
+        for column in range(3):
+            matrix[row][column] *= scale[column]
+    return matrix
+
+
+def _inverse_matrix(matrix: list[list[float]]) -> list[list[float]]:
+    if len(matrix) != 4 or any(len(row) != 4 for row in matrix):
+        raise ValueError("Actor inverse-bind matrix must be 4x4")
+    augmented = [
+        [float(value) for value in matrix[row]]
+        + [1.0 if row == column else 0.0 for column in range(4)]
+        for row in range(4)
+    ]
+    for column in range(4):
+        pivot = max(range(column, 4), key=lambda row: abs(augmented[row][column]))
+        if abs(augmented[pivot][column]) <= 1.0e-12:
+            raise ValueError("Actor skeleton rest matrix is singular")
+        augmented[column], augmented[pivot] = augmented[pivot], augmented[column]
+        divisor = augmented[column][column]
+        augmented[column] = [value / divisor for value in augmented[column]]
+        for row in range(4):
+            if row == column:
+                continue
+            factor = augmented[row][column]
+            augmented[row] = [
+                augmented[row][index] - factor * augmented[column][index]
+                for index in range(8)
+            ]
+    return [row[4:] for row in augmented]
+
+
+def gltf_skeleton_inverse_binds(
+    nodes: list[dict[str, object]],
+    node_by_name: dict[str, int],
+) -> dict[str, list[list[float]]]:
+    parents = {
+        int(child): parent
+        for parent, node in enumerate(nodes)
+        for child in node.get("children", [])
+    }
+    globals_by_index: dict[int, list[list[float]]] = {}
+
+    def global_matrix(index: int) -> list[list[float]]:
+        if index in globals_by_index:
+            return globals_by_index[index]
+        local = _trs_matrix(nodes[index])
+        result = (
+            _multiply(global_matrix(parents[index]), local)
+            if index in parents
+            else local
+        )
+        globals_by_index[index] = result
+        return result
+
+    result = {
+        name: _inverse_matrix(global_matrix(index))
+        for name, index in node_by_name.items()
+    }
+    worst = max(
+        max(
+            abs(value - (1.0 if row == column else 0.0))
+            for row, values in enumerate(_multiply(global_matrix(node_by_name[name]), inverse))
+            for column, value in enumerate(values)
+        )
+        for name, inverse in result.items()
+    )
+    if worst > 1.0e-5:
+        raise ValueError(f"Actor inverse-bind rest residual is too large: {worst}")
+    return result
 
 
 def _compensated_inverse_bind(

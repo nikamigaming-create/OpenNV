@@ -97,6 +97,13 @@ internal partial class GameplaySession : Node
             Size = _configuration.Hud.DesktopLabelsSizePixels.Vector2(),
         };
         layer.AddChild(labels);
+        if (_useClassicDioramaHud)
+        {
+            var presentation = new Label { Text = "CLASSIC DIORAMA  •  PRESENTATION PROOF" };
+            presentation.AddThemeColorOverride("font_color", new Color(0.94f, 0.78f, 0.38f));
+            presentation.AddThemeFontSizeOverride("font_size", 17);
+            labels.AddChild(presentation);
+        }
         _objectiveLabel = new Label();
         _statusLabel = new Label();
         _inventoryLabel = new Label();
@@ -106,7 +113,7 @@ internal partial class GameplaySession : Node
             label.AddThemeFontSizeOverride("font_size", _configuration.Hud.DesktopFontSizePixels);
             labels.AddChild(label);
         }
-        var crosshair = new Label
+        if (!_useClassicDioramaHud)
         {
             Text = "+",
             Position = _configuration.Hud.CrosshairPositionPixels.Vector2(),
@@ -449,7 +456,7 @@ internal partial class GameplaySession : Node
 
     private void RefreshHud(string status)
     {
-        var objective = ObjectiveStage switch
+        var objective = _objectiveOverride ?? (ObjectiveStage switch
         {
             SandboxObjectiveStage.EquipWeapon => _configuration.Hud.Copy.ObjectiveEquipWeapon,
             SandboxObjectiveStage.FireWeapon => _configuration.Hud.Copy.ObjectiveFireWeapon,

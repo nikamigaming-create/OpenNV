@@ -913,6 +913,9 @@ def export_static_nif(
             struct.pack(f"<{len(indices)}{index_format}", *indices), component_type=index_component,
             count=len(indices), value_type="SCALAR", target=GL_ELEMENT_ARRAY_BUFFER,
         )
+        shape_index = block_index[id(shape)]
+        original_name = decode_text(shape.name)
+        surface_name = f"{original_name}@{shape_index}"
         material_index = len(materials)
         base_color = [float(value) for value in surface_material["baseColor"]]
         alpha = float(surface_material.get("alpha", 1.0))
@@ -922,7 +925,7 @@ def export_static_nif(
         specular = [float(value) for value in surface_material.get("specular", [0.0, 0.0, 0.0])]
         roughness, _roughness_source = nif_material_roughness(specular, glossiness, compiler)
         gltf_material: dict[str, object] = {
-            "name": f"{decode_text(shape.name)} material",
+            "name": f"{surface_name} material",
             "doubleSided": shape_double_sided(shape),
             "pbrMetallicRoughness": {
                 "baseColorFactor": [*base_color, alpha],
@@ -948,7 +951,8 @@ def export_static_nif(
         surface_rows.append({
             "stableId": stable_id,
             "sourceBlockIndex": shape_index,
-            "name": decode_text(shape.name),
+            "name": surface_name,
+            "originalName": original_name,
             "vertices": vertex_count,
             "triangles": len(triangles),
             "attributes": sorted(attributes),
@@ -1084,6 +1088,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sidecar", type=Path, required=True)
     parser.add_argument("--allow-synthetic-minimal", action="store_true")
+    parser.add_argument("--include-shape-prefix", action="append")
     args = parser.parse_args()
     compiler = load_runtime_configuration().content_compiler
     result = export_static_nif(
@@ -1093,6 +1098,9 @@ def main() -> int:
         args.sidecar,
         compiler,
         strict=not args.allow_synthetic_minimal,
+        include_shape_prefixes=(
+            tuple(args.include_shape_prefix) if args.include_shape_prefix is not None else None
+        ),
     )
     print("OPENNV_STATIC_NIF_GLTF " + json.dumps({
         "source": result["source"]["sha256"],

@@ -5,7 +5,7 @@ runtime. The checked-in Windows slice is a playable experimental Goodsprings
 sandbox; no full-campaign package is published yet.
 
 Developers can validate the asset-free synthetic slice on Windows with Godot
-4.7.1 Mono, .NET 9, and Python 3.11.9:
+4.7.2 Mono, .NET 9, and Python 3.11.9:
 
 ```powershell
 python -m pip install -r content/requirements.txt

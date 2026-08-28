@@ -41,6 +41,11 @@ internal static class EnvironmentCapture
             loaded.Player.ProcessMode = Node.ProcessModeEnum.Disabled;
             var camera = loaded.Player.Camera;
             var hud = loaded.Session.GetNodeOrNull<CanvasLayer>("GameplayHud");
+            if (loaded.Player.UsesClassicDiorama)
+            {
+                await CaptureClassicDiorama(host, loaded, output, scenePath, reportPath, hud);
+                return;
+            }
             if (hud is not null)
                 hud.Visible = false;
             await WaitForRenderedFrames(host, configuration.Capture.RenderedFramesBeforeCapture);

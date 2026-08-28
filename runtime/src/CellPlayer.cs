@@ -23,6 +23,12 @@ internal partial class CellPlayer : CharacterBody3D
     private Vector3 _weaponRestPosition;
     private float _weaponFeedbackSeconds;
     private bool _useXr;
+    private bool _useClassicDiorama;
+    private float _dioramaTargetYawRadians;
+    private float _dioramaTargetSizeMeters = DioramaInitialSizeMeters;
+    private Vector3 _dioramaHomePosition;
+    private float _dioramaHomeSizeMeters = DioramaInitialSizeMeters;
+    private Aabb? _dioramaFramingBounds;
     private bool _xrActivatePressed;
     private bool _xrFirePressed;
     private bool _xrSavePressed;
@@ -44,6 +50,11 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
+    internal bool UsesClassicDiorama => _useClassicDiorama;
+    internal Node3D? DioramaOrbit => _dioramaOrbit;
+    internal float DioramaTargetYawRadians => _dioramaTargetYawRadians;
+    internal float DioramaTargetSizeMeters => _dioramaTargetSizeMeters;
+    internal Aabb? DioramaFramingBounds => _dioramaFramingBounds;
     internal XROrigin3D? XrOrigin => _xrOrigin;
     internal XRController3D? LeftGrip => _leftGrip;
     internal XRController3D? RightGrip => _rightGrip;
@@ -112,6 +123,7 @@ internal partial class CellPlayer : CharacterBody3D
         _configuration = configuration;
         _session = session;
         _useXr = useXr;
+        _useClassicDiorama = useClassicDiorama;
         Name = "Player";
         Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters;
         Rotation = new Vector3(0.0f, yaw, 0.0f);
@@ -134,12 +146,36 @@ internal partial class CellPlayer : CharacterBody3D
 
     public override void _Ready()
     {
-        if (!_useXr && DisplayServer.GetName() != "headless")
+        if (!_useXr && !_useClassicDiorama && DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;
+        else if (_useClassicDiorama)
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!_useClassicDiorama)
+            return;
+        _dioramaOrbit!.Rotation = new Vector3(
+            0.0f,
+            Mathf.LerpAngle(
+                _dioramaOrbit.Rotation.Y,
+                _dioramaTargetYawRadians,
+                Math.Clamp((float)delta * 8.0f, 0.0f, 1.0f)),
+            0.0f);
+        _camera.Size = Mathf.Lerp(
+            _camera.Size,
+            _dioramaTargetSizeMeters,
+            Math.Clamp((float)delta * 10.0f, 0.0f, 1.0f));
     }
 
     public override void _PhysicsProcess(double delta)
     {
+        if (_useClassicDiorama)
+        {
+            UpdateClassicDioramaPan((float)delta);
+            return;
+        }
         if (_useXr)
             UpdateXrCalibrationAndHealth();
         var input = ReadMovement();

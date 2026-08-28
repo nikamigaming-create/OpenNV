@@ -49,6 +49,7 @@
     "authored-pickup-inventory-loop",
     "persistent-sandbox-cold-reload",
     "openxr-rig-action-map-package-gate",
-    "shared-flat-openxr-save-contract"
+    "shared-flat-openxr-save-contract",
+    "classic-diorama-presentation-software-gate"
   ]
 }
