@@ -87,6 +87,7 @@ Fallout: New Vegas installation folder or its `Data` folder directly; it does
 not require Python or another engine at runtime.
 
 This is a playable experimental sandbox, not the full New Vegas campaign. See the
+[canonical whole-game delivery plan](docs/whole-game-delivery-plan.md),
 [single-page architecture](docs/architecture.md),
 [data and configuration accountability contract](docs/data-and-configuration-accountability.md),
 [installation status](docs/installation.md), [clean implementation boundary](docs/clean-room.md),

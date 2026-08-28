@@ -2,6 +2,11 @@
 
 Status: **playable experimental Goodsprings sandbox; not a full campaign**.
 
+The active priority, full product definition, milestone sequence, and
+publication rules live in the canonical
+[whole-game delivery plan](whole-game-delivery-plan.md). This document owns
+architecture and current implementation truth, not a competing roadmap.
+
 OpenNV is a clean first-party runtime. The retail installation is a read-only
 input, the generated cache is disposable, every cross-boundary artifact has a
 schema and hashes, and no OpenMW runtime or source code participates.
@@ -433,21 +438,10 @@ lighting/HDR path, complete Havok behavior, and actor pixels remain open
 differential gates. The clean-room shader observations are recorded in
 `docs/evidence/fnv-retail-material-shader-contract.md`.
 
-Next promotion order:
-
-1. resolve the remaining partial/default LAND layout classes and close the
-   explicitly blocked REFR subrecords;
-2. add NAVM, actor/creature, XTEL/door, enable-state, and streamed neighboring
-   CELL capabilities through the same plan/artifact/validator path;
-3. close fixed-camera material, lighting, weather, effect, and actor-pixel gates;
-4. package the same streamed route and rerun physical OpenXR acceptance;
-5. promote authored packages/dialogue plus jukebox interaction/audio;
-6. extend Havok body/filter/dynamic behavior beyond the promoted pool slice;
-7. add damageable targets, authored flat/VR weapon presentation,
-   ballistics/projectiles,
-   creatures and raiders; and
-8. promote VATS only after the same combat route passes deterministic recording,
-   flat/VR presentation, and cold-reload gates.
+The canonical next promotion is the normal-launch-menu-to-Goodsprings active slice in the
+[whole-game delivery plan](whole-game-delivery-plan.md). Later CELL, gameplay,
+actor, renderer, UI, compatibility, exhaustive-acceptance, and release work is
+ordered there so this architecture document cannot drift into a second roadmap.
 
 The asset distribution follows the four-surface model described in
 [Shipping an asset-free Godot XR port](https://github.com/Brobert-in-aus/guides/blob/main/vr/shipping-an-asset-free-godot-xr-port.md): public source, asset-free build,
