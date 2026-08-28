@@ -47,9 +47,14 @@ internal static class ActorModelSlice
         if (meshes < 1 || skeletons.Length < 1 || animations < 1)
             throw new InvalidOperationException(
                 $"Actor import is incomplete: meshes={meshes} skeletons={skeletons.Length} animations={animations}");
+        var idleName = root.GetProperty("animation").GetProperty("name").GetString()
+            ?? throw new InvalidOperationException("Actor sidecar has no idle animation name.");
         var animationName = players
             .SelectMany(player => player.GetAnimationList().Select(name => (Player: player, Name: name)))
-            .First(row => row.Name != "RESET");
+            .FirstOrDefault(row => row.Name.ToString() == idleName);
+        if (animationName.Player is null)
+            throw new InvalidOperationException(
+                $"Actor runtime is missing sidecar idle animation {idleName}.");
         animationName.Player.Play(animationName.Name);
         var bounds = Bounds(scene);
         var animation = root.GetProperty("animation");

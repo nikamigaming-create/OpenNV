@@ -8,13 +8,13 @@ internal static class Fo1HexVisuals
     {
         var tool = new SurfaceTool();
         tool.Begin(Mesh.PrimitiveType.Triangles);
-        for (var index = 0; index < 6; index++)
+        for (var index = 0; index < Fo1HexMath.DirectionCount; index++)
         {
-            var next = (index + 1) % 6;
-            var outerFirst = Corner(index, outerScale);
-            var outerSecond = Corner(next, outerScale);
-            var innerFirst = Corner(index, innerScale);
-            var innerSecond = Corner(next, innerScale);
+            var next = (index + 1) % Fo1HexMath.DirectionCount;
+            var outerFirst = Fo1HexMath.CornerOffset(index, outerScale);
+            var outerSecond = Fo1HexMath.CornerOffset(next, outerScale);
+            var innerFirst = Fo1HexMath.CornerOffset(index, innerScale);
+            var innerSecond = Fo1HexMath.CornerOffset(next, innerScale);
             Add(tool, outerFirst);
             Add(tool, outerSecond);
             Add(tool, innerSecond);
@@ -35,13 +35,6 @@ internal static class Fo1HexVisuals
         CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         NoDepthTest = false,
     };
-
-    private static Vector3 Corner(int index, float scale)
-    {
-        var angle = Mathf.DegToRad(60.0f * index - 30.0f);
-        var radius = Fo1HexMath.CircumradiusMeters * scale;
-        return new Vector3(MathF.Cos(angle) * radius, 0.0f, MathF.Sin(angle) * radius);
-    }
 
     private static void Add(SurfaceTool tool, Vector3 vertex)
     {

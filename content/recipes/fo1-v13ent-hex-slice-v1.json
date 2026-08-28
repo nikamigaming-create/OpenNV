@@ -1,6 +1,10 @@
 {
   "schema": "opennv-fo1-hex-recipe/v1",
   "id": "fo1-v13ent-hex-slice-v1",
+  "runtimeProfile": {
+    "path": "fo1-classic-3d-runtime-v1.json",
+    "sha256": "cecd9da290682b28a6b9559f6695eb2db8517269b9c030e27dae6668d007860d"
+  },
   "source": {
     "mapRelativePath": "mods/fo1_base/maps/V13ENT.MAP",
     "mapSha256": "02b6987038a0c94c8226aa4df048f49bfcb59dfd9339a4a6a3b48da622b2a2d7",
@@ -16,8 +20,9 @@
     "hexHeight": 200,
     "floorWidth": 100,
     "floorHeight": 100,
+    "defaultFloorId": 1,
     "hexFlatToFlatMeters": 1.0,
-    "layout": "odd-row-offset-pointy",
+    "layout": "fallout-even-column-offset-flat-v1",
     "floorMapping": "floorIndex=(hexY/2)*100+(99-hexX/2)",
     "walkability": "non-default-floor-art minus MAP objects without OBJECT_NO_BLOCK"
   },
@@ -34,6 +39,57 @@
     "elevation": 0,
     "rotation": 2
   },
+  "startingInventory": {
+    "source": "Fallout1in2 V13CAVE base_inventory and TagInven procedures",
+    "sourceRelativePath": "Fallout2/Fallout1in2/Mapper/source/scripts/99map/V13CAVE.ssl",
+    "sourceSha256": "02c84efeed93c78bd6077efc81586d55f2d81448e386868ab7370cfe6e1c5d65",
+    "pidHeaderRelativePath": "Fallout2/Fallout1in2/Mapper/source/scripts/headers/itempid.h",
+    "pidHeaderSha256": "58dcbea8022b133123497d447f8c63c337496ccd1e6a5cb7c62584070f1bd8c9",
+    "baseProcedure": "base_inventory",
+    "tagProcedure": "TagInven",
+    "newWeaponMagazinePolicy": "prototype-ammunition-capacity",
+    "equippedRangedSymbol": "PID_10MM_PISTOL",
+    "equippedMeleeSymbol": "PID_KNIFE",
+    "ammunitionSymbol": "PID_10MM_JHP",
+    "skillNamesBySymbol": {
+      "SKILL_LOCKPICK": "Lockpick",
+      "SKILL_UNARMED_COMBAT": "Unarmed",
+      "SKILL_FIRST_AID": "First Aid",
+      "SKILL_DOCTOR": "Doctor",
+      "SKILL_SMALL_GUNS": "Small Guns",
+      "SKILL_THROWING": "Throwing",
+      "SKILL_REPAIR": "Repair",
+      "SKILL_OUTDOORSMAN": "Outdoorsman",
+      "SKILL_SCIENCE": "Science"
+    },
+    "displayNamesBySymbol": {
+      "PID_KNIFE": "Knife",
+      "PID_10MM_PISTOL": "10mm Pistol",
+      "PID_10MM_JHP": "10mm JHP",
+      "PID_STIMPAK": "Stimpak",
+      "PID_FLARE": "Flare",
+      "PID_LOCKPICKS": "Lockpicks",
+      "PID_BRASS_KNUCKLES": "Brass Knuckles",
+      "PID_FIRST_AID_KIT": "First Aid Kit",
+      "PID_THROWING_KNIFE": "Throwing Knife",
+      "PID_MULTI_TOOL": "Multi-Tool",
+      "PID_WATER_FLASK": "Water Flask",
+      "PID_MENTATS": "Mentats",
+      "PID_BUFFOUT": "Buffout"
+    }
+  },
+  "ratAi": {
+    "source": "Fo1in2 fo1_base Ai.txt [Rats] packet",
+    "sourceRelativePath": "Fallout2/Fallout1in2/mods/fo1_base/data/Ai.txt",
+    "sourceSha256": "09bf86467a85f64964baa7b52db5cb48fdd4153b65a29c8cf2f14c4ca7b17ac5",
+    "section": "Rats",
+    "packetNumber": 12,
+    "aggression": 80,
+    "maximumDistanceHexes": 6
+  },
+  "critterDisplayNamesByPid": {
+    "01000030": "Giant Rat"
+  },
   "door": {
     "serial": 129,
     "tile": 16290,
@@ -46,7 +102,31 @@
   },
   "tacticalProof": {
     "actionPointsPerTurn": 10,
-    "movementCostPerHex": 1
+    "movementCostPerHex": 1,
+    "player": {
+      "name": "Vault Dweller",
+      "stats": {
+        "source": "provisional tactical proof profile; replaced by selected GCD character before live play",
+        "hitPoints": 30,
+        "armorClass": 5,
+        "sequence": 10,
+        "strength": 5,
+        "perception": 5,
+        "meleeDamage": 1,
+        "skills": {
+          "Small Guns": 65,
+          "Melee Weapons": 70
+        }
+      },
+      "weapon": {
+        "name": "10mm Pistol",
+        "source": "legacy proof expectation; generated scene values are replaced and verified from owned item PRO records",
+        "minimumDamage": 5,
+        "maximumDamage": 12,
+        "rangeHexes": 25,
+        "actionPointCost": 5
+      }
+    }
   },
   "supported": [
     "exact V13ENT 200x200 hex IDs, MAP-header fallback, and first-run scripted spawn",
@@ -56,15 +136,17 @@
     "fixed 3D cave shell and obstacle geometry derived from exact floor/blocker hexes",
     "exact mapped Vault door and source frame at tile 16290",
     "click pathfinding and one-AP-per-hex tactical movement proof",
-    "source rat entities, target cycling, readable combat markers, and bounded deterministic turn proof",
+    "source rat entities, packet-12 local activation, target cycling, readable combat markers, and bounded deterministic turn proof",
+    "V13CAVE-scripted starting inventory plus owned 10mm pistol, 10mm JHP, and knife PRO combat records",
+    "shared inventory-backed ranged, melee, reload, HP, and death state across tactical and continuous FPS modes",
     "Kenshi-style tactical camera presentation"
   ],
   "unsupported": [
     "Fallout floor walk masks and complete OBJECT_MULTIHEX footprints",
-    "roof art, animated wall cutaways, sprite direction switching while orbiting, inventories, and scripts",
+    "roof art, animated wall cutaways, sprite direction switching while orbiting, and general map scripts beyond this bounded V13CAVE transport",
     "authored 3D equivalents for every source wall, rock, and clutter identity",
     "retail critter animation playback and script-driven encounter behavior",
-    "retail character statistics, sequence, AI turns, combat RNG, attacks, or damage",
+    "complete retail critical tables, aimed attacks, burst fire, armor resistance, and all AI packet behavior",
     "door controller playback and Et Tu script state",
     "retail visual parity, package promotion, or headset acceptance"
   ]

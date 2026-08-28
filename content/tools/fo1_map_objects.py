@@ -8,6 +8,7 @@ archive, matching the bounded source profile's effective resource intent.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -101,9 +102,23 @@ class Fo1ResourceResolver:
         self.resources: dict[str, ResourceBytes] = {}
         self.prototypes: dict[int, Prototype] = {}
         self.lists: dict[str, list[str]] = {}
+        self._access_scopes: list[set[str]] = []
+
+    @contextmanager
+    def access_scope(self):
+        accessed: set[str] = set()
+        self._access_scopes.append(accessed)
+        try:
+            yield accessed
+        finally:
+            popped = self._access_scopes.pop()
+            if popped is not accessed:
+                raise RuntimeError("Fallout resource access scope stack drifted")
 
     def read(self, logical_path: str) -> ResourceBytes:
         canonical = canonical_dat2_path(logical_path)
+        for scope in self._access_scopes:
+            scope.add(canonical)
         cached = self.resources.get(canonical)
         if cached is not None:
             return cached
@@ -306,46 +321,123 @@ def parse_map_objects(
     if not 0 <= total_count <= 100000:
         raise Fo1ProfileError(f"invalid total MAP object count {total_count}")
     serial = 0
+    previous_object: dict[str, Any] | None = None
 
     def read_object(current_offset: int, containing_elevation: int, depth: int) -> tuple[dict[str, Any], int]:
-        nonlocal serial
+        nonlocal previous_object, serial
         if depth > 16:
             raise Fo1ProfileError("MAP inventory nesting exceeds 16 levels")
-        if current_offset + 84 > len(data):
+        object_offset = current_offset
+        if current_offset + 68 > len(data):
             raise Fo1ProfileError("truncated MAP object base")
-        values = struct.unpack_from(">21i", data, current_offset)
-        current_offset += 84
-        (
-            object_id,
-            tile,
-            pixel_x,
-            pixel_y,
-            screen_x,
-            screen_y,
-            frame,
-            rotation,
-            fid_signed,
-            flags_signed,
-            stored_elevation,
-            pid_signed,
-            combat_id,
-            light_distance,
-            light_intensity,
-            outline,
-            sid_signed,
-            script_index,
-            inventory_length,
-            inventory_capacity,
-            inventory_pointer,
-        ) = values
+        full_values = (
+            struct.unpack_from(">21i", data, current_offset)
+            if current_offset + 84 <= len(data)
+            else None
+        )
+
+        def identity_fields_are_structural(fid_value: int, pid_value: int) -> bool:
+            fid_type = ((fid_value & 0xFFFFFFFF) >> 24) & 0x0F
+            pid = pid_value & 0xFFFFFFFF
+            pid_type = (pid >> 24) & 0xFF
+            pid_index = pid & 0x00FFFFFF
+            return (
+                fid_type in TYPE_DIRECTORIES
+                and pid_type in OBJECT_TYPE_NAMES
+                and (pid == 0x01000000 or pid_index > 0)
+            )
+
+        full_is_structural = full_values is not None and (
+            (full_values[1] == -1 or 0 <= full_values[1] < 40000)
+            and 0 <= full_values[7] <= 5
+            and 0 <= full_values[10] <= 2
+            and 0 <= full_values[18] <= 10000
+            and identity_fields_are_structural(full_values[8], full_values[11])
+        )
+        if full_is_structural:
+            values = full_values
+            current_offset += 84
+            (
+                object_id,
+                tile,
+                pixel_x,
+                pixel_y,
+                screen_x,
+                screen_y,
+                frame,
+                rotation,
+                fid_signed,
+                flags_signed,
+                stored_elevation,
+                pid_signed,
+                combat_id,
+                light_distance,
+                light_intensity,
+                outline,
+                sid_signed,
+                script_index,
+                inventory_length,
+                inventory_capacity,
+                inventory_pointer,
+            ) = values
+            base_layout = "full-21"
+            cached_screen: list[int] | None = [screen_x, screen_y]
+            frame_source = "stored"
+            rotation_source = "stored"
+        else:
+            compact_values = struct.unpack_from(">17i", data, current_offset)
+            (
+                object_id,
+                tile,
+                pixel_x,
+                pixel_y,
+                fid_signed,
+                flags_signed,
+                stored_elevation,
+                pid_signed,
+                combat_id,
+                light_distance,
+                light_intensity,
+                outline,
+                sid_signed,
+                script_index,
+                inventory_length,
+                inventory_capacity,
+                inventory_pointer,
+            ) = compact_values
+            if not (
+                (tile == -1 or 0 <= tile < 40000)
+                and 0 <= stored_elevation <= 2
+                and 0 <= inventory_length <= 10000
+                and identity_fields_are_structural(fid_signed, pid_signed)
+            ):
+                raise Fo1ProfileError(
+                    f"MAP object base at 0x{object_offset:x} matches neither supported "
+                    f"layout; depth={depth}; previous={previous_object}; "
+                    f"full={full_values}; compact={compact_values}"
+                )
+            current_offset += 68
+            base_layout = "compact-17"
+            cached_screen = None
+            frame = 0
+            rotation = 0
+            frame_source = "implicit-zero-compact-layout"
+            rotation_source = "implicit-zero-compact-layout"
+            values = compact_values
         fid = fid_signed & 0xFFFFFFFF
         pid = pid_signed & 0xFFFFFFFF
         flags = flags_signed & 0xFFFFFFFF
         sid = sid_signed & 0xFFFFFFFF
         if tile != -1 and not 0 <= tile < 40000:
-            raise Fo1ProfileError(f"MAP object {object_id} has invalid tile {tile}")
+            raise Fo1ProfileError(
+                f"MAP object {object_id} at 0x{object_offset:x} has invalid tile {tile}; "
+                f"depth={depth}; previous={previous_object}; raw={values}"
+            )
         if not 0 <= rotation <= 5:
-            raise Fo1ProfileError(f"MAP object {object_id} has invalid rotation {rotation}")
+            raise Fo1ProfileError(
+                f"MAP object {object_id} at 0x{object_offset:x} has invalid rotation "
+                f"{rotation}; depth={depth}; previous={previous_object}; raw={values}"
+            )
         if not 0 <= stored_elevation <= 2:
             raise Fo1ProfileError(f"MAP object {object_id} has invalid elevation {stored_elevation}")
         if depth == 0 and stored_elevation != containing_elevation:
@@ -379,17 +471,20 @@ def parse_map_objects(
             inventory.append({"index": inventory_index, "quantity": quantity, "object": nested})
 
         serial += 1
-        return (
-            {
+        result = {
                 "serial": serial,
+                "sourceOffset": object_offset,
+                "baseLayout": base_layout,
                 "id": object_id,
                 "tile": tile,
                 "tileX": None if tile < 0 else tile % 200,
                 "tileY": None if tile < 0 else tile // 200,
                 "pixelOffset": [pixel_x, pixel_y],
-                "cachedScreen": [screen_x, screen_y],
+                "cachedScreen": cached_screen,
                 "frame": frame,
+                "frameSource": frame_source,
                 "rotation": rotation,
+                "rotationSource": rotation_source,
                 "fid": f"{fid:08x}",
                 "artFilename": resolver.art_filename(fid),
                 "flags": f"{flags:08x}",
@@ -411,9 +506,20 @@ def parse_map_objects(
                 "instanceFlags": f"{instance_flags & 0xFFFFFFFF:08x}",
                 "instanceValues": instance_values,
                 "inventory": inventory,
-            },
-            current_offset,
-        )
+            }
+        previous_object = {
+            "serial": result["serial"],
+            "objectId": result["id"],
+            "offset": object_offset,
+            "endOffset": current_offset,
+            "pid": result["pid"],
+            "prototype": result["prototype"]["filename"],
+            "objectType": result["prototype"]["object_type"],
+            "subtype": result["prototype"]["subtype_name"],
+            "instanceExtraValues": len(instance_values),
+            "inventoryLength": len(inventory),
+        }
+        return result, current_offset
 
     elevation_rows = []
     top_level_objects = []
@@ -434,14 +540,32 @@ def parse_map_objects(
     return {"totalTopLevelObjects": total_count, "elevations": elevation_rows}, offset
 
 
-def build_contract(map_path: Path, ettu_root: Path, master_dat: Path) -> dict[str, Any]:
+def build_contract(
+    map_path: Path,
+    ettu_root: Path,
+    master_dat: Path,
+    resolver: Fo1ResourceResolver | None = None,
+) -> dict[str, Any]:
     map_path = map_path.resolve()
     master_dat = master_dat.resolve()
     data = map_path.read_bytes()
     layout = parse_map_layout(data)
-    resolver = Fo1ResourceResolver(ettu_root.resolve(), master_dat)
-    scripts, object_offset = parse_script_section(data, layout.next_offset)
-    objects, end_offset = parse_map_objects(data, object_offset, layout.header.version, resolver)
+    expected_override_root = (ettu_root.resolve() / "mods" / "fo1_base").resolve()
+    if resolver is None:
+        resolver = Fo1ResourceResolver(ettu_root.resolve(), master_dat)
+    elif (
+        resolver.override_root != expected_override_root
+        or resolver.master_dat != master_dat
+    ):
+        raise Fo1ProfileError("shared Fallout resource resolver does not match the map inputs")
+    with resolver.access_scope() as accessed_resources:
+        scripts, object_offset = parse_script_section(data, layout.next_offset)
+        objects, end_offset = parse_map_objects(
+            data,
+            object_offset,
+            layout.header.version,
+            resolver,
+        )
     if end_offset != len(data):
         raise Fo1ProfileError(f"MAP object graph leaves {len(data) - end_offset} trailing bytes")
     top_level = [obj for elevation in objects["elevations"] for obj in elevation["objects"]]
@@ -473,7 +597,9 @@ def build_contract(map_path: Path, ettu_root: Path, master_dat: Path) -> dict[st
                 "sha256": resource.sha256,
                 "bytes": len(resource.data),
             }
-            for resource in sorted(resolver.resources.values(), key=lambda item: item.logical_path)
+            for resource in (
+                resolver.resources[path] for path in sorted(accessed_resources)
+            )
         ],
         "promotion": {
             "state": "transported",

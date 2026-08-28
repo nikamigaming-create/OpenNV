@@ -31,10 +31,12 @@ class Fo1FrmTest(unittest.TestCase):
             palette = root / "color.pal"
             values = bytearray(768)
             values[3:6] = bytes((1, 2, 3))
+            values[255 * 3 : 255 * 3 + 3] = bytes((255, 255, 255))
             palette.write_bytes(values)
             colors = palette_rgba(palette)
             self.assertEqual(colors[0], (0, 0, 0, 0))
             self.assertEqual(colors[1], (4, 8, 12, 255))
+            self.assertEqual(colors[255], (0, 0, 0, 255))
 
             decoded = decode_frm(synthetic_frm(), colors)
             self.assertEqual(decoded["version"], 4)

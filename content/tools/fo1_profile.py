@@ -99,7 +99,7 @@ def parse_map_header(data: bytes) -> MapHeader:
         raise Fo1ProfileError("MAP variable counts cannot be negative")
     if header.flags & ~0x0F:
         raise Fo1ProfileError(f"unsupported MAP flag bits 0x{header.flags & ~0x0F:08x}")
-    if header.mapIndex < 0:
+    if header.mapIndex < -1:
         raise Fo1ProfileError(f"invalid MAP index {header.mapIndex}")
     return header
 

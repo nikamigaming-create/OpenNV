@@ -80,7 +80,7 @@ flowchart LR
 placement/enable state; `facegen.py` owns only deterministic FaceGen math. This
 keeps record parsing independent from `prepare_actor.py`, which resolves one
 hash-pinned recipe, and `actor_gltf.py`, which owns only the skinned glTF,
-material-flag, alpha, bind, and animation translation. None of those files
+material-flag, alpha, bind, and multi-animation translation. None of those files
 creates a Godot node or claims that a rendered actor matches retail.
 
 ## Runtime states
@@ -139,13 +139,35 @@ Et Tu turns, AP, hex selection, actors, and combat are not connected yet and
 must not be inferred from the camera mode.
 
 The Fallout 1 profile owns a separate tactical adapter over the original
-`V13ENT.MAP` coordinate namespace. `Fo1HexMath` is the sole 200×200 odd-row
-hex conversion owner; `Fo1HexSceneLoader` binds the original 100×100 floor-art
-grid, exact MAP sprite placements, blocking flags, entry hex, and mapped door;
-`Fo1TacticalSession` owns movement/AP/turn/save state; and
-`Fo1TacticalCamera` owns only the Kenshi-style input/view translation. The
-earlier FNV donor cave remains an asset/presentation smoke and is not a Fallout
-1 layout source.
+`V13ENT.MAP` coordinate namespace. `Fo1HexMath` is the sole owner of the retail
+200×200 even-column-offset flat-top hex conversion; `Fo1HexSceneLoader` binds the original 100×100 floor-art
+grid, exact MAP sprite placements, blocking flags, entry hex, mapped door, and
+the optional unique-shared-edge grid diagnostic; `Fo1TacticalSession` owns
+movement/AP/turn/save state; and `Fo1TacticalCamera` owns only the Kenshi-style
+input/view translation. `Fo1OwnedCaveKit` triangulates one opaque continuous
+floor from the exact source-backed movement-hex set before instantiating the
+owned cave kit. That floor, the Vault-suited humanoid, and the giant-rat rig are
+private presentation mappings placed from Fallout 1 authority; they are not
+Fallout 1 layout sources or retail-parity references. `Fo1CaveCutaway` owns
+only shader-driven camera occlusion and tactical roof/enclosure slicing.
+`Fo1TacticalCamera` can present the same `Fo1TacticalSession` orthographically
+or over the shoulder, where commands terminate on exact hex centers. Its
+first-person adapter uses conventional mouse look, continuous source-walk-mask
+locomotion without tactical AP, and bounded hitscan fire while retaining the
+same session, actors, health, and save state. First-person also suppresses the
+2.5D source-reference cards. The owned 3D footprint masks grid/movement under
+obstacles and the Vault-side threshold without changing the source floor
+contract. The earlier FNV donor cave remains an
+asset/presentation smoke and is not a Fallout 1 layout source.
+
+The Fallout 1 runtime adaptation is versioned separately from map/source data.
+Each map recipe hash-pins `fo1-classic-3d-runtime-v1.json`; the content preparer
+embeds that validated profile in the immutable scene cache, and
+`Fo1RuntimeProfile` is the only C# schema owner. Core consumers receive typed
+subprofiles rather than owning camera, lighting, fog, cutaway, mob-readability,
+or FPS/tactical tuning literals. The authority boundary, literal policy,
+complexity bounds, and current 1-of-96 promotion limit are recorded in
+[`fo1-data-driven-runtime-contract.md`](evidence/fo1-data-driven-runtime-contract.md).
 
 The software OpenXR gate now proves the action map loads, the rig contains its
 required node hierarchy, world scale is one metre, physics runs at 90 Hz, the
@@ -163,9 +185,10 @@ input translation and presentation differ.
 | `cell_catalog.py` | CELL, base, REFR, DATA, XTEL relationships | BSA/NIF/Godot behavior |
 | `actor_catalog.py` | ACHR/ACRE, NPC_/CREA, RACE, HAIR, EYES, HDPT, ARMO, FaceGen and placement relationships | Mesh assembly or rendering |
 | `facegen.py` | Pure EGM/EGT morph and retail skin/body texture composition primitives | Record selection or runtime nodes |
-| `actor_gltf.py` | One actor skeleton/skin/mesh/idle assembly to glTF plus provenance | Record selection, placement, or runtime behavior |
+| `actor_gltf.py` | One actor skeleton/skin/mesh/multi-animation assembly to glTF plus provenance | Record selection, placement, or runtime behavior |
 | `actor_material.py` | Bethesda actor shader, tint, vertex-color, specular, and alpha flag translation | Geometry, records, or runtime lighting |
 | `prepare_actor.py` | Hash-pinned retail actor recipe resolution and atomic disposable cache output | Godot loading or parity verdicts |
+| `render_actor_preview.py` | Native Godot preview/capture orchestration for one prepared actor | Actor export, desktop control, or parity approval |
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `dat2_archive.py` | Indexed Fallout DAT2 member lookup, decompression, and hash identity | MAP/PRO/FRM semantics |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
@@ -174,6 +197,9 @@ input translation and presentation differ.
 | `prepare_fo1_door_proof.py` | Exact Et Tu door-to-owned-FNV identity validation and filtered static leaf cache | Cave placement, animation, or parity |
 | `compose_fo1_vault13_concept.py` | Bounded donor-cave/door-leaf composition, explicit concept offset/light, and atomic manifest | Fallout 1 placement parity or turn simulation |
 | `prepare_fo1_hex_scene.py` | Exact V13ENT floor/hex/object-art cache, first-run spawn, owned FRM unprojection, MAP blockers, critter PRO state, player art, and mapped door inputs | Godot nodes or full combat rules |
+| `fo1-classic-3d-runtime-v1.json` | Versioned generation, scene, camera, gameplay-adaptation, mob, cutaway, and proof-presentation values | Fallout source identity, topology, statistics, or quest state |
+| `prepare_fo1_3d_presentation.py` | Hash-pinned local Vault-suited actor, giant-rat, cave-kit, and source-driven placement cache | Fallout 1 topology/gameplay authority or redistributable assets |
+| `fo1_campaign_inventory.py` | Asset-free inventory and monotonic promotion ledger for locally present Fallout 1 MAP files | Quest execution, runtime promotion, or retail-byte output |
 | `render_fo1_source_map.py` | Deterministic owned MAP/FRM source reconstruction, matched crop, and orientation/spawn side-by-side evidence | Executable capture or automatic parity approval |
 | `cell_scene.py` | Recipe selection, XTEL origin, Gamebryo-to-Godot coordinate/yaw conversion, asset/reference/material manifest | Godot nodes or input |
 | `texture_pipeline.py` | Embedded-name texture-BSA lookup and DDS-to-PNG cache | Runtime material policy |
@@ -190,6 +216,8 @@ input translation and presentation differ.
 | `test_fo1_frm.py` | Synthetic palette, shared-direction FRM, preview, and truncation regressions | Retail bytes or 3D substitution |
 | `test_fo1_concept_composition.py` | Synthetic bounded composition, door replacement, offset, light, and overwrite regressions | Retail visual approval |
 | `test_fo1_hex_scene.py` | One-metre topology, reversed floor-X projection, four-hex mapping, unprojection, critter PRO, crop, and bounds regressions | Retail bytes or runtime input |
+| `test_fo1_runtime_profile.py` | Runtime-profile hash/path/schema/provenance and adaptation-leak regressions | Visual approval or campaign-promotion claims |
+| `test_fo1_campaign_inventory.py` | Synthetic all-map inventory, identity, and monotonic-promotion regressions | Retail bytes or campaign-readiness claims |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
@@ -210,14 +238,19 @@ input translation and presentation differ.
 | `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
 | `StaticModelSlice.cs` | Hash-verified one-model material binding, bounds, and reference view | Cell relationships or controller playback |
 | `StaticModelCapture.cs` | Native hash-recorded one-model visual gate | Cell placement, interaction, or retail parity |
-| `Fo1HexMath.cs` | Fallout 200×200 tile IDs, odd-row world conversion, neighbor/distance/corner math | Rendering, AP, or source parsing |
-| `Fo1HexSceneLoader.cs` | Verified V13ENT floor/sprite/door manifests and ordinary Godot presentation nodes | MAP parsing, camera input, or gameplay rules |
+| `Fo1HexMath.cs` | Fallout 200×200 tile IDs, retail even-column-offset world conversion, direction/neighbor/distance/corner math | Rendering, AP, or source parsing |
+| `Fo1RuntimeProfile.cs` | Strict typed ownership of the embedded versioned 3D adaptation profile | Fallout source authority or fallback tuning |
+| `Fo1HexSceneLoader.cs` | Verified V13ENT floor/sprite/door manifests, diagnostic overlays, and ordinary Godot presentation nodes | MAP parsing, camera input, or gameplay rules |
 | `Fo1TacticalSession.cs` | V13ENT player hex, BFS movement, selected target, bounded attack/rat turn, HP/AP HUD, and atomic proof save | Camera transforms, MAP parsing, or full AI formulas |
-| `Fo1Mob.cs` | One source critter's PID/serial/tile, MAP runtime state, PRO combat values, sprite, HP/AP, and proof movement | Turn ordering, pathfinding, or asset extraction |
+| `Fo1Mob.cs` | One source critter's PID/serial/tile, MAP runtime state, PRO combat values, grounded 2D/3D presentation and depth-safe markers, HP/AP, and proof movement | Turn ordering, pathfinding, or asset extraction |
+| `Fo1CreatureModel.cs` | Hash-verified owned creature glTF binding, animation selection, and intact-state gore-cap visibility | Source critter identity or combat rules |
+| `Fo1OwnedCaveKit.cs` | Exact-source-topology continuous floor construction and verified owned cave-kit instantiation from the presentation manifest | Fallout 1 topology derivation or camera policy |
+| `Fo1CaveCutaway.cs` | Camera-to-focus occluder visibility for registered cave instances | Asset placement, gameplay state, or source parsing |
 | `Fo1TacticalCamera.cs` | Orthographic orbit/pan/cursor-zoom/edge/focus input adapter | Hex state, AP, or content preparation |
 | `Fo1HexProof.cs` | Headless mouse-camera, one-hex/one-AP, end-turn, and save gate | Production input or visual approval |
 | `Fo1HexCapture.cs` | Native V13ENT UI/environment frames, metrics, hashes, and no-host-control record | Gameplay or parity verdicts |
-| `Fo1HexVisuals.cs` | Procedural proof-only hex ring mesh/material primitives | Grid identity, pathfinding, or source art |
+| `Fo1HexDemo.cs` | Deterministic loading/player/door/movement/target/attack/turn video sequence and report | Host input injection, gameplay authority, or parity verdicts |
+| `Fo1HexVisuals.cs` | Procedural selection/path marker mesh and material primitives | Grid identity, pathfinding, or source art |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
 | `Test-GodotRuntime.ps1` | Source, synthetic, retail-opt-in, format, and analyzer gates | Packaging state |
@@ -279,10 +312,23 @@ The private Fallout 1 route now loads the actual `V13ENT.MAP` elevation-zero
 topology: 10,000 floor entries, a 200×200 one-metre hex grid, 1,493 exact source
 sprite placements, scripted first-run spawn `17690`, MAP-header fallback
 `20090`, door hex `16290`, MAP-flag central-hex blocking, and a mapped 3D gear
-leaf. Mouse camera, source player/rat sprites, BFS movement, 1 AP per adjacent
-hex, source rat HP/AP/AC/melee/sequence/team/AI state, one bounded attack/rat
-turn, combat HUD, end turn, and proof save are interactive. This is not yet a
-campaign or retail combat simulation.
+leaf. Its default presentation is one opaque, normal-mapped floor mesh over all
+30,196 exact floor-backed movement hexes, a hash-pinned animated Vault
+13-suited actor, twenty animated giant rats, and 312 cave/Vault instances with
+camera cutaway. Source floor/scenery remains a parity toggle; a second toggle
+shows the 27,519 currently legal hexes as one depth-tested,
+86,841-unique-edge mesh.
+Selected rats are regrounded after highlight scaling and their hostile markers
+respect scene depth. Mouse camera, BFS movement, 1 AP per adjacent hex, source
+rat HP/AP/AC/melee/sequence/team/AI state, one bounded attack/rat turn, combat
+HUD, animation, end turn, and proof save are interactive. Continuous
+first-person walk-mask locomotion and bounded hitscan rat combat share that
+session without consuming tactical AP; shoulder commands return to exact hex
+centers. A deterministic 72.9-second native showcase exercises character setup,
+the opening, Pip-Boy 2000, FPS, shoulder, tactical combat, and a wide map tour.
+The asset-free campaign inventory sees 96
+local maps and deliberately promotes only `V13ENT`; this is not yet a campaign
+or retail combat simulation.
 
 Not implemented: environment-map light fade and external-emittance color, authored
 bhk collision, non-item arbitrary rotation promotion, visible first-person

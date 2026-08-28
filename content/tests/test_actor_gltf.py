@@ -6,11 +6,15 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from actor_gltf import (  # noqa: E402
+    ActorAnimation,
+    ActorGltfInput,
     NifFormat,
     _compensated_inverse_bind,
     _converted_matrix,
+    _euler_xyz_quaternion,
     _multiply,
     actor_animation_translations,
+    gltf_skeleton_inverse_binds,
 )
 from actor_material import (  # noqa: E402
     actor_alpha_contract,
@@ -21,6 +25,31 @@ from actor_material import (  # noqa: E402
 
 
 class ActorGltfTest(unittest.TestCase):
+    def test_xyz_animation_quaternion_identity_and_single_axis(self):
+        identity = _euler_xyz_quaternion((0.0, 0.0, 0.0))
+        self.assertEqual(identity, (1.0, 0.0, 0.0, 0.0))
+        quarter_turn = _euler_xyz_quaternion((0.0, 0.0, 3.141592653589793 / 2.0))
+        self.assertAlmostEqual(quarter_turn[0], 2**-0.5)
+        self.assertAlmostEqual(quarter_turn[3], 2**-0.5)
+
+    def test_actor_input_keeps_idle_only_callers_source_compatible(self):
+        source = ActorGltfInput(
+            actor_form_id="00000001",
+            actor_name="Synthetic",
+            skeleton_path="skeleton.nif",
+            skeleton_payload=b"skeleton",
+            symmetric_geometry=(),
+            asymmetric_geometry=(),
+            components=(),
+            idle_animation_path="mtidle.kf",
+            idle_animation_payload=b"idle",
+        )
+        self.assertEqual(source.additional_animations, ())
+        self.assertEqual(
+            ActorAnimation("mtforward.kf", b"forward").logical_path,
+            "mtforward.kf",
+        )
+
     def test_bethesda_shader_does_not_multiply_textures_by_legacy_black_diffuse(self):
         material = NifFormat.NiMaterialProperty()
         material.diffuse_color.r = 0.0
@@ -67,6 +96,14 @@ class ActorGltfTest(unittest.TestCase):
         )
         self.assertIs(actor_animation_translations("Bip01 Head", values), values)
 
+    def test_bip01_locomotion_translation_is_relative_to_skeleton_rest(self):
+        values = [(0.0, 0.0, 0.0), (0.5, 0.0, -0.25)]
+        rest = (0.0, 67.771, -0.657)
+        self.assertEqual(
+            actor_animation_translations("Bip01", values, rest),
+            [(0.0, 67.771, -0.657), (0.5, 67.771, -0.907)],
+        )
+
     def test_baked_shape_transform_is_removed_from_skin_bind(self):
         inverse_bind = NifFormat.Matrix44()
         inverse_bind.set_identity()
@@ -79,6 +116,52 @@ class ActorGltfTest(unittest.TestCase):
         for row in range(4):
             for column in range(4):
                 self.assertAlmostEqual(product[row][column], 1.0 if row == column else 0.0)
+
+    def test_emitted_skeleton_inverse_binds_reconstruct_rest_identity(self):
+        nodes = [
+            {"name": "ACTOR", "children": [1]},
+            {
+                "name": "Bip01",
+                "translation": [2.0, 3.0, 4.0],
+                "rotation": [0.0, 0.0, 0.0, 1.0],
+                "scale": [1.0, 1.0, 1.0],
+                "children": [2],
+            },
+            {
+                "name": "Bip01 Child",
+                "translation": [5.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 2**-0.5, 2**-0.5],
+                "scale": [2.0, 1.0, 1.0],
+                "children": [],
+            },
+        ]
+        inverse_binds = gltf_skeleton_inverse_binds(
+            nodes,
+            {"Bip01": 1, "Bip01 Child": 2},
+        )
+        root_global = [
+            [1.0, 0.0, 0.0, 2.0],
+            [0.0, 1.0, 0.0, 3.0],
+            [0.0, 0.0, 1.0, 4.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+        child_local = [
+            [0.0, -1.0, 0.0, 5.0],
+            [2.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+        for global_matrix, name in (
+            (root_global, "Bip01"),
+            (_multiply(root_global, child_local), "Bip01 Child"),
+        ):
+            product = _multiply(global_matrix, inverse_binds[name])
+            for row in range(4):
+                for column in range(4):
+                    self.assertAlmostEqual(
+                        product[row][column],
+                        1.0 if row == column else 0.0,
+                    )
 
 
 if __name__ == "__main__":

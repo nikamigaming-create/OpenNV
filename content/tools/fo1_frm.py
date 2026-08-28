@@ -17,11 +17,18 @@ def palette_rgba(path: Path) -> list[tuple[int, int, int, int]]:
     if len(data) < 768:
         raise ValueError("Fallout palette requires at least 768 bytes")
     values = data[:768]
-    scale = 4 if max(values) <= 63 else 1
     colors = []
     for index in range(256):
         r, g, b = values[index * 3 : index * 3 + 3]
-        colors.append((min(255, r * scale), min(255, g * scale), min(255, b * scale), 0 if index == 0 else 255))
+        # Fallout stores valid palette channels as six-bit values. COLOR.PAL
+        # also contains invalid/sentinel entries above 63, so deciding whether
+        # to scale from the global maximum incorrectly darkens every valid UI
+        # and world color. The retail color loader rejects those entries.
+        if r <= 63 and g <= 63 and b <= 63:
+            red, green, blue = r * 4, g * 4, b * 4
+        else:
+            red, green, blue = 0, 0, 0
+        colors.append((red, green, blue, 0 if index == 0 else 255))
     return colors
 
 

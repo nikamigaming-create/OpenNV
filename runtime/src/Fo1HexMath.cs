@@ -6,8 +6,11 @@ internal static class Fo1HexMath
 {
     internal const int Width = 200;
     internal const int Height = 200;
+    internal const int FloorWidth = Width / 2;
+    internal const int FloorHeight = Height / 2;
+    internal const int DirectionCount = 6;
     internal const float FlatToFlatMeters = 1.0f;
-    internal const float RowSpacingMeters = 0.8660254037844386f;
+    internal const float ColumnSpacingMeters = 0.8660254037844386f;
     internal const float CircumradiusMeters = 0.5773502691896258f;
 
     internal static Vector2I Coordinate(int tile)
@@ -28,21 +31,40 @@ internal static class Fo1HexMath
     {
         var coordinate = Coordinate(tile);
         return new Vector3(
-            coordinate.X + 0.5f * (coordinate.Y & 1),
+            coordinate.X * ColumnSpacingMeters,
             0.0f,
-            coordinate.Y * RowSpacingMeters);
+            coordinate.Y - 0.5f * (coordinate.X & 1));
     }
 
     internal static int FloorIndex(int tile)
     {
         var coordinate = Coordinate(tile);
-        return (coordinate.Y / 2) * 100 + (99 - coordinate.X / 2);
+        return (coordinate.Y / 2) * FloorWidth +
+            (FloorWidth - 1 - coordinate.X / 2);
+    }
+
+    internal static Vector3 FloorPatchCenter(int index)
+    {
+        if (index is < 0 or >= FloorWidth * FloorHeight)
+            throw new ArgumentOutOfRangeException(
+                nameof(index),
+                index,
+                "Fallout floor tile must be in the 100x100 grid.");
+        var floorX = FloorWidth - 1 - index % FloorWidth;
+        var floorY = index / FloorWidth;
+        var center = Vector3.Zero;
+        for (var offsetY = 0; offsetY < 2; offsetY++)
+            for (var offsetX = 0; offsetX < 2; offsetX++)
+                center += Center(
+                    (floorY * 2 + offsetY) * Width +
+                    floorX * 2 + offsetX);
+        return center / 4.0f;
     }
 
     internal static int NearestTile(Vector3 world)
     {
-        var fractionalR = world.Z / RowSpacingMeters;
-        var fractionalQ = world.X - fractionalR / 2.0f;
+        var fractionalQ = world.X / ColumnSpacingMeters;
+        var fractionalR = world.Z - fractionalQ / 2.0f;
         var cubeX = fractionalQ;
         var cubeZ = fractionalR;
         var cubeY = -cubeX - cubeZ;
@@ -58,32 +80,57 @@ internal static class Fo1HexMath
             roundedY = -roundedX - roundedZ;
         else
             roundedZ = -roundedX - roundedY;
-        var row = (int)roundedZ;
-        var column = (int)roundedX + (row - (row & 1)) / 2;
+        var column = (int)roundedX;
+        var axialRow = (int)roundedZ;
+        var row = axialRow + (column + (column & 1)) / 2;
         return Tile(new Vector2I(column, row));
     }
 
     internal static int[] Neighbors(int tile)
     {
-        var coordinate = Coordinate(tile);
-        var odd = (coordinate.Y & 1) != 0;
-        var offsets = odd
-            ? new[]
-            {
-                new Vector2I(0, -1), new Vector2I(1, -1),
-                new Vector2I(-1, 0), new Vector2I(1, 0),
-                new Vector2I(0, 1), new Vector2I(1, 1),
-            }
-            : new[]
-            {
-                new Vector2I(-1, -1), new Vector2I(0, -1),
-                new Vector2I(-1, 0), new Vector2I(1, 0),
-                new Vector2I(-1, 1), new Vector2I(0, 1),
-            };
-        return offsets
-            .Select(offset => Tile(coordinate + offset))
-            .Where(candidate => candidate >= 0)
+        return Enumerable.Range(0, DirectionCount)
+            .Select(edge => NeighborAcrossEdge(tile, edge))
+            .Where(neighbor => neighbor >= 0)
             .ToArray();
+    }
+
+    internal static int NeighborAcrossEdge(int tile, int edge)
+    {
+        if (edge is < 0 or >= DirectionCount)
+            throw new ArgumentOutOfRangeException(nameof(edge), edge, "Fallout hex edge is invalid.");
+        var rotation = edge switch
+        {
+            0 => 3,
+            1 => 2,
+            2 => 1,
+            3 => 0,
+            4 => 5,
+            5 => 4,
+            _ => throw new InvalidOperationException("Fallout hex edge dispatch failed."),
+        };
+        return TileInDirection(tile, rotation);
+    }
+
+    internal static int TileInDirection(int tile, int rotation)
+    {
+        var coordinate = Coordinate(tile);
+        if (rotation is < 0 or >= DirectionCount)
+            throw new ArgumentOutOfRangeException(
+                nameof(rotation),
+                rotation,
+                "Fallout rotation is invalid.");
+        var odd = (coordinate.X & 1) != 0;
+        var offset = rotation switch
+        {
+            0 => new Vector2I(-1, odd ? -1 : 0),
+            1 => new Vector2I(-1, odd ? 0 : 1),
+            2 => new Vector2I(0, 1),
+            3 => new Vector2I(1, odd ? 0 : 1),
+            4 => new Vector2I(1, odd ? -1 : 0),
+            5 => new Vector2I(0, -1),
+            _ => throw new InvalidOperationException("Fallout rotation dispatch failed."),
+        };
+        return Tile(coordinate + offset);
     }
 
     internal static int Distance(int firstTile, int secondTile)
@@ -98,21 +145,31 @@ internal static class Fo1HexMath
     internal static Vector3[] Corners(int tile, float radiusScale = 1.0f)
     {
         var center = Center(tile);
-        var radius = CircumradiusMeters * radiusScale;
-        return Enumerable.Range(0, 6)
-            .Select(index =>
-            {
-                var angle = Mathf.DegToRad(60.0f * index - 30.0f);
-                return center + new Vector3(MathF.Cos(angle) * radius, 0.0f, MathF.Sin(angle) * radius);
-            })
+        return Enumerable.Range(0, DirectionCount)
+            .Select(index => center + CornerOffset(index, radiusScale))
             .ToArray();
+    }
+
+    internal static Vector3 CornerOffset(int index, float radiusScale = 1.0f)
+    {
+        if (index is < 0 or >= DirectionCount)
+            throw new ArgumentOutOfRangeException(
+                nameof(index),
+                index,
+                "Fallout hex corner is invalid.");
+        var angle = Mathf.Tau * index / DirectionCount;
+        var radius = CircumradiusMeters * radiusScale;
+        return new Vector3(
+            MathF.Cos(angle) * radius,
+            0.0f,
+            MathF.Sin(angle) * radius);
     }
 
     private static Vector3I Cube(int tile)
     {
         var coordinate = Coordinate(tile);
-        var q = coordinate.X - (coordinate.Y - (coordinate.Y & 1)) / 2;
-        var r = coordinate.Y;
+        var q = coordinate.X;
+        var r = coordinate.Y - (coordinate.X + (coordinate.X & 1)) / 2;
         return new Vector3I(q, -q - r, r);
     }
 }

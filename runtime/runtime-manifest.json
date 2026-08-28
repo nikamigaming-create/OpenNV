@@ -21,8 +21,11 @@
       },
       "fo1HexTactical": {
         "launchable": true,
-        "status": "interactive-movement-proof-full-simulation-not-connected",
+        "status": "playable-character-opening-v13ent-3d-slice-full-campaign-not-connected",
+        "newGameSequence": "owned-original-style-creator -> owned-original-overseer-opening -> V13ENT tile 17690 rotation 2",
         "grid": "V13ENT 200x200 one-metre hexes",
+        "floor": "one opaque owned cave mesh over 30196 exact source-backed movement hexes",
+        "gridOverlay": "optional opaque depth-tested mesh with 29127 walkable hexes and 92428 unique shared edges",
         "cameraControls": [
           "middle-mouse-orbit-tilt",
           "right-mouse-drag-pan",
@@ -48,7 +51,7 @@
       "variants": {
         "vault13Concept": {
           "ready": false,
-          "message": "V13ENT now has the corrected reversed-X floor transform, scripted first-run spawn, owned player/rat art, source rat combat fields, tactical camera, movement/attack/rat-turn proof, combat HUD, and mapped 3D Vault door; full Fallout 1 simulation is not connected."
+          "message": "The private local route now has original-style character creation bound to live derived stats, the owned original Overseer movie/audio, Pip-Boy 2000, exact V13ENT tile 17690 rotation 2, reversed-X floor/object/hex authority, an owned 3D presentation, continuous FPS movement, exact-center shoulder movement, and turn-based tactical movement. FPS and tactical modes share V13-script/PRO-derived starting inventory, pistol ammunition/capacity/reload, knife and pistol attacks, HP/death state, save state, and a full four-kill native ranged-and-melee showcase with impacts, ricochets, grounded casings, held weapons, animation, and owned donor audio. Only 1 of 96 inventoried local maps is tactically playable; dialogue, quests, broader inventory/equipment semantics, full campaign simulation, retail combat-formula parity, and OpenXR are not connected."
         }
       }
     },
@@ -108,9 +111,25 @@
     "fo1-kenshi-style-tactical-camera",
     "fo1-reversed-floor-x-source-projection",
     "fo1-scripted-first-run-spawn",
-    "fo1-source-player-and-rat-presentation",
+    "fo1-owned-3d-player-rat-and-cave-presentation",
+    "fo1-source-topology-continuous-owned-cave-floor",
+    "fo1-optional-single-edge-depth-tested-hex-overlay",
+    "fo1-grounded-depth-safe-owned-rats",
+    "fo1-animated-full-body-hex-locomotion",
+    "fo1-camera-driven-cave-cutaway",
+    "fo1-conventional-first-person-mouse-look",
+    "fo1-continuous-first-person-walk-mask-locomotion",
+    "fo1-first-person-hitscan-rat-combat",
+    "fo1-first-person-suppressed-source-reference-cards",
+    "fo1-third-person-center-hex-command-movement",
     "fo1-source-rat-combat-state",
     "fo1-bounded-attack-rat-turn-combat-hud",
-    "fo1-source-vs-godot-orientation-review"
+    "fo1-source-vs-godot-orientation-review",
+    "fo1-deterministic-native-gameplay-video",
+    "fo1-owned-original-dat1-character-creator-chrome",
+    "fo1-special-tag-trait-derived-session-profile",
+    "fo1-owned-original-overseer-video-audio-playback",
+    "fo1-character-opening-pip-boy-fps-shoulder-tactical-showcase",
+    "fo1-all-map-asset-free-coverage-inventory"
   ]
 }

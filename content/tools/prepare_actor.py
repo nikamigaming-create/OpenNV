@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from actor_catalog import ActorCatalog, ActorReference, HumanoidActor, scan_actor_catalog
-from actor_gltf import ActorComponent, ActorGltfInput, export_actor_gltf
+from actor_gltf import ActorAnimation, ActorComponent, ActorGltfInput, export_actor_gltf
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_catalog import scan_cell_catalog
 from cell_scene import (
@@ -106,10 +106,17 @@ def prepare_actor(
     recipe = load_recipe(recipe_id)
     master = data_root / recipe["master"]["file"]
     meshes_path = data_root / recipe["meshesArchive"]["file"]
+    additional_mesh_paths = [
+        data_root / row["file"] for row in recipe.get("additionalMeshesArchives", [])
+    ]
     texture_paths = [data_root / row["file"] for row in recipe["textureArchives"]]
     expected = [
         (master, recipe["master"]["sha256"]),
         (meshes_path, recipe["meshesArchive"]["sha256"]),
+        *((path, row["sha256"]) for path, row in zip(
+            additional_mesh_paths,
+            recipe.get("additionalMeshesArchives", []),
+        )),
         *((path, row["sha256"]) for path, row in zip(texture_paths, recipe["textureArchives"])),
     ]
     for path, expected_hash in expected:
@@ -171,27 +178,41 @@ def prepare_actor(
         raise ValueError("Proof actor has incomplete hair or eye records")
     if any(part is None for part in head_parts):
         raise ValueError("Proof actor has an unresolved head-part record")
-    recipe_outfits = [form_id(value) for value in recipe.get("outfitArmorFormIds", [])]
-    outfit_forms = recipe_outfits or [
-        item.form_id for item in actor.inventory if item.form_id in catalog.armor
-    ]
-    outfits = [catalog.armor.get(value) for value in outfit_forms]
-    if not outfits or any(outfit is None for outfit in outfits):
-        raise ValueError(f"Proof actor has unresolved outfit armor: {outfit_forms}")
-    outfit_models = [
-        outfit.female_model_path if actor.female else outfit.male_model_path
-        for outfit in outfits
-    ]
+    explicit_outfit_models = [str(value) for value in recipe.get("outfitModelPaths", [])]
+    if explicit_outfit_models:
+        outfit_models = explicit_outfit_models
+        outfit_forms = [
+            form_id(value) for value in recipe.get("outfitIdentityFormIds", [])
+        ]
+        if len(outfit_forms) != len(outfit_models):
+            raise ValueError("Explicit actor outfit models require one identity FormID each")
+    else:
+        recipe_outfits = [form_id(value) for value in recipe.get("outfitArmorFormIds", [])]
+        outfit_forms = recipe_outfits or [
+            item.form_id for item in actor.inventory if item.form_id in catalog.armor
+        ]
+        outfits = [catalog.armor.get(value) for value in outfit_forms]
+        if not outfits or any(outfit is None for outfit in outfits):
+            raise ValueError(f"Proof actor has unresolved outfit armor: {outfit_forms}")
+        outfit_models = [
+            outfit.female_model_path if actor.female else outfit.male_model_path
+            for outfit in outfits
+        ]
     if any(path is None for path in outfit_models):
         raise ValueError("Proof actor outfit lacks a sex-specific model")
 
-    meshes = BsaArchive(meshes_path)
+    mesh_archives = [BsaArchive(path) for path in [meshes_path, *additional_mesh_paths]]
     texture_archives = [BsaArchive(path) for path in texture_paths]
 
     def mesh(path: str) -> bytes:
         canonical = canonical_member_path(path)
         logical_path = canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
-        return meshes.extract(logical_path).data
+        matches = [archive for archive in mesh_archives if logical_path in archive.members]
+        if len(matches) != 1:
+            raise FileNotFoundError(
+                f"Expected one actor mesh {logical_path!r}, found {len(matches)}"
+            )
+        return matches[0].extract(logical_path).data
 
     head_model = head_models[0]
     head_texture = head_textures[0]
@@ -284,6 +305,7 @@ def prepare_actor(
             egm_path=head_egm,
             egm_payload=mesh(head_egm),
             generated_diffuse=generated_head,
+            bake_shape_transform=True,
         ),
     ])
     roles = {2: "mouth", 3: "teeth-lower", 4: "teeth-upper", 5: "tongue", 6: "eye-left", 7: "eye-right"}
@@ -331,6 +353,16 @@ def prepare_actor(
     output_root = cache_root / "generated" / "actors" / recipe_id
     gltf_path = output_root / "actor.gltf"
     sidecar_path = output_root / "actor.opennv.json"
+    additional_animations = []
+    for row in recipe.get("additionalAnimations", []):
+        payload = mesh(str(row["path"]))
+        actual_hash = hashlib.sha256(payload).hexdigest()
+        if actual_hash != str(row["sha256"]):
+            raise ValueError(
+                f"Actor animation hash mismatch: {row['path']} "
+                f"expected={row['sha256']} actual={actual_hash}"
+            )
+        additional_animations.append(ActorAnimation(str(row["path"]), payload))
     sidecar = export_actor_gltf(
         ActorGltfInput(
             f"{actor.form_id:08x}",
@@ -342,6 +374,7 @@ def prepare_actor(
             tuple(components),
             str(recipe["idleAnimation"]),
             mesh(str(recipe["idleAnimation"])),
+            additional_animations=tuple(additional_animations),
         ),
         texture_archives,
         gltf_path,
@@ -370,9 +403,10 @@ def prepare_actor(
             "hairFormId": f"{actor.hair_form_id:08x}",
             "eyesFormId": f"{actor.eyes_form_id:08x}",
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
-            "outfitFormId": f"{outfits[0].form_id:08x}",
+            "outfitFormId": f"{outfit_forms[0]:08x}",
         },
         "idleAnimation": recipe["idleAnimation"],
+        "additionalAnimations": recipe.get("additionalAnimations", []),
         "faceDetailSource": face_detail_source,
         "faceDetailLogicalPath": face_mod_path if face_detail_source == "retail-precomputed" else head_egt,
         "bodyModLogicalPath": body_mod_path,

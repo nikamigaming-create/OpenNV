@@ -61,6 +61,11 @@ class Fo1ProfileTest(unittest.TestCase):
         with self.assertRaises(Fo1ProfileError):
             parse_map_header(bytes(data))
 
+    def test_unassigned_template_map_index_is_valid(self) -> None:
+        data = bytearray(synthetic_map_header())
+        struct.pack_into(">i", data, 0x34, -1)
+        self.assertEqual(parse_map_header(bytes(data)).mapIndex, -1)
+
     def test_map_layout_transports_variables_and_present_elevation(self) -> None:
         layout = parse_map_layout(synthetic_map())
         self.assertEqual(layout.global_variables, (1, 2, 3, 4, 5, 6, 7, 8))

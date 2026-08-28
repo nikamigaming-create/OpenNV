@@ -115,6 +115,7 @@ internal static class RuntimeMaterialLoader
                     asset.GetProperty("id").GetString());
             var material = new StandardMaterial3D
             {
+                ResourceName = expectedName,
                 Metallic = 0.0f,
                 Roughness = binding.GetProperty("roughness").GetSingle(),
                 AlbedoColor = ReadColor(binding.GetProperty("baseColorFactor"), 4),
