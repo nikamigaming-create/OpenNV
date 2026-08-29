@@ -146,6 +146,11 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         if (Runtime is not null &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
         {
+            if (TempleConfrontation?.CloseInventoryIfOpen() == true)
+            {
+                GetViewport().SetInputAsHandled();
+                return;
+            }
             if (_persistenceEnabled)
                 PersistCurrentState();
             GetTree().Quit();
@@ -262,6 +267,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             Runtime.Player,
             SelectedCharacter ?? throw new InvalidOperationException(
                 "Fallout 2 Temple confrontation has no selected character."),
+            _characterStart.Inventory,
             restoredConfrontation);
         if (_persistenceEnabled)
             TempleConfrontation.StateChanged += OnTempleConfrontationStateChanged;

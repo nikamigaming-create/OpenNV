@@ -499,7 +499,7 @@ internal sealed record Fo2CharacterStartSaveState(
             RequiredString(value, "MouthStyleId"),
             RequiredString(value, "PortraitGeneratorId"),
             RequiredString(value, "AppearanceRecipeId"),
-            RequiredString(value, "AppearanceRecipeSha256"),
+            value.GetProperty("AppearanceRecipeSha256").GetString() ?? "",
             value.GetProperty("GeneratedPortraitPath").GetString() ?? "",
             value.GetProperty("GeneratedPortraitSha256").GetString() ?? "",
             value.GetProperty("GeneratedPortraitWidth").GetInt32(),

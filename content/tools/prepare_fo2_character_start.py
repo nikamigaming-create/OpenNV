@@ -95,6 +95,7 @@ def _load_recipe(path: Path) -> dict[str, Any]:
     premades = recipe.get("premades")
     female = recipe.get("femalePresentation")
     presentation = recipe.get("presentation")
+    inventory = recipe.get("inventory")
     if (
         recipe.get("schema") != RECIPE_SCHEMA
         or recipe.get("id") != path.stem
@@ -105,6 +106,15 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         or not isinstance(premades, list)
         or [(row.get("id"), row.get("name")) for row in premades]
         != [("combat", "Narg"), ("stealth", "Mingan"), ("diplomat", "Chitsa")]
+        or not isinstance(inventory, dict)
+        or inventory.get("logicalPath") != "art\\intrface\\invbox.frm"
+        or not isinstance(inventory.get("sha256"), str)
+        or len(inventory["sha256"]) != 64
+        or not isinstance(inventory.get("width"), int)
+        or inventory["width"] <= 0
+        or not isinstance(inventory.get("height"), int)
+        or inventory["height"] <= 0
+        or inventory.get("frame") != 0
         or not isinstance(female, dict)
         or female.get("artIndex") != 61
         or female.get("artListEntry") != "hfprim,11,1"
@@ -268,6 +278,14 @@ def prepare_fo2_character_start(
                 staging=staging,
                 opaque=True,
             )
+            inventory = _save_ui_frame(
+                asset_id="inventory",
+                resource=_verified(resolver, recipe["inventory"]),
+                descriptor=recipe["inventory"],
+                colors=colors,
+                staging=staging,
+                opaque=True,
+            )
             characters = []
             for descriptor in recipe["premades"]:
                 gcd = _verified(resolver, descriptor["gcd"])
@@ -422,6 +440,7 @@ def prepare_fo2_character_start(
             },
             "presentation": recipe["presentation"],
             "picker": picker,
+            "inventory": inventory,
             "characters": characters,
             "femalePresentation": {
                 "fid": female["fid"],
@@ -464,7 +483,7 @@ def prepare_fo2_character_start(
             "resources": resources,
             "counts": {
                 "premades": len(characters),
-                "uiPngs": 1 + len(characters),
+                "uiPngs": 2 + len(characters),
                 "femaleDirectionPngs": len(female_artifacts),
                 "femaleWalkFramePngs": len(female_walk_artifacts),
                 "sourceResources": len(resources),
@@ -479,8 +498,9 @@ def prepare_fo2_character_start(
             "runtimeCompatibility": {
                 "ready": False,
                 "firstSliceBlocker": (
-                    "The three owned premades plus female idle and AB walk art are decoded, "
-                    "but selection, handoff, and persistence are runtime responsibilities."
+                    "The three owned premades, inventory background, and female idle/AB walk "
+                    "art are decoded, but selection, handoff, and persistence are runtime "
+                    "responsibilities."
                 ),
             },
             "cachePolicy": {

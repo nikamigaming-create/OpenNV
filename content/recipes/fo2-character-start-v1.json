@@ -19,6 +19,13 @@
     "height": 480,
     "frame": 0
   },
+  "inventory": {
+    "logicalPath": "art\\intrface\\invbox.frm",
+    "sha256": "ae347b83f24d00fbf5806f80a9084855d6ae275f31388cfabee90b700903a657",
+    "width": 499,
+    "height": 377,
+    "frame": 0
+  },
   "premades": [
     {
       "id": "combat",

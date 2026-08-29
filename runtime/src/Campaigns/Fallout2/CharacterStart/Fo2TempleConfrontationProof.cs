@@ -103,6 +103,54 @@ internal static class Fo2TempleConfrontationProof
             if (confrontation.State.TargetHitPoints != 0 || !confrontation.Loot())
                 throw new InvalidOperationException(
                     "Fallout 2 confrontation did not reach exact defeat-to-loot state.");
+            var stateBeforeInventory = confrontation.State;
+            var saveBeforeInventory = host.CurrentSave ?? throw new InvalidOperationException(
+                "Fallout 2 inventory proof has no saved post-loot state.");
+            if (!InputMap.HasAction(confrontation.InventoryAction) ||
+                !InputMap.ActionGetEvents(confrontation.InventoryAction)
+                    .OfType<InputEventKey>()
+                    .Any(row => row.PhysicalKeycode == confrontation.InventoryPhysicalKey))
+                throw new InvalidOperationException(
+                    "Fallout 2 inventory action is not configured from the runtime profile.");
+            Input.ActionPress(confrontation.InventoryAction);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Input.ActionRelease(confrontation.InventoryAction);
+            if (!confrontation.InventoryVisible)
+                throw new InvalidOperationException(
+                    "Fallout 2 configured inventory action did not open the screen.");
+            if (confrontation.InventorySourceLogicalPath !=
+                    "art\\intrface\\invbox.frm" ||
+                confrontation.InventorySourceSha256 !=
+                    "ae347b83f24d00fbf5806f80a9084855d6ae275f31388cfabee90b700903a657")
+                throw new InvalidOperationException(
+                    "Fallout 2 inventory screen lost its owned INVBOX FRM identity.");
+            if (!confrontation.InventoryCharacterText.Contains(
+                    host.SelectedCharacter?.Profile.Name ?? "",
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Fallout 2 inventory screen did not show the selected character.");
+            if (!confrontation.InventoryItemText.Contains(
+                    $"{host.Temple.Confrontation.DefeatLoot.Quantity} × SPEAR",
+                    StringComparison.Ordinal) ||
+                !confrontation.InventoryItemText.Contains(
+                    $"PID {host.Temple.Confrontation.DefeatLoot.Pid}",
+                    StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Fallout 2 inventory screen did not show the exact Spear stack: " +
+                    confrontation.InventoryItemText.Replace('\n', '|'));
+            var escape = new InputEventKey
+            {
+                Keycode = Key.Escape,
+                PhysicalKeycode = Key.Escape,
+                Pressed = true,
+            };
+            host._UnhandledKeyInput(escape);
+            if (confrontation.InventoryVisible || confrontation.State != stateBeforeInventory ||
+                host.CurrentSave?.Sha256 != saveBeforeInventory.Sha256 ||
+                host.CurrentSave?.TempleConfrontation != saveBeforeInventory.TempleConfrontation)
+                throw new InvalidOperationException(
+                    "Fallout 2 inventory open/close changed gameplay or save state.");
             var saved = host.PersistCurrentState();
             var passed = saved.MapIndex == Fo2TemplePresentationCatalog.MapIndex &&
                 saved.TempleConfrontation == confrontation.State &&
@@ -126,6 +174,19 @@ internal static class Fo2TempleConfrontationProof
                         customPortraitGenerated = false,
                     },
                     state = confrontation.State,
+                    inventory = new
+                    {
+                        action = confrontation.InventoryAction,
+                        physicalKey = confrontation.InventoryPhysicalKey.ToString(),
+                        sourceLogicalPath = confrontation.InventorySourceLogicalPath,
+                        sourceSha256 = confrontation.InventorySourceSha256,
+                        character = confrontation.InventoryCharacterText,
+                        items = confrontation.InventoryItemText,
+                        closedByEscape = !confrontation.InventoryVisible,
+                        gameplayStateUnchanged = confrontation.State == stateBeforeInventory,
+                        saveSha256Unchanged = saveBeforeInventory.Sha256 ==
+                            host.CurrentSave?.Sha256,
+                    },
                     player = new
                     {
                         mapIndex = player.CurrentMapIndex,

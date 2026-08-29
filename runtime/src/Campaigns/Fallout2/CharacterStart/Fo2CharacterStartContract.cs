@@ -228,6 +228,7 @@ internal sealed class Fo2CharacterStartCatalog
         string sourceProfileId,
         string recipeSha256,
         Fo2CharacterStartAsset picker,
+        Fo2CharacterStartAsset inventory,
         IReadOnlyList<Fo2PremadeCharacter> characters,
         Fo2ArroyoPlayerPresentationSource femalePresentation,
         int verifiedResources)
@@ -237,6 +238,7 @@ internal sealed class Fo2CharacterStartCatalog
         SourceProfileId = sourceProfileId;
         RecipeSha256 = recipeSha256;
         Picker = picker;
+        Inventory = inventory;
         Characters = characters;
         FemalePresentation = femalePresentation;
         VerifiedResources = verifiedResources;
@@ -247,6 +249,7 @@ internal sealed class Fo2CharacterStartCatalog
     internal string SourceProfileId { get; }
     internal string RecipeSha256 { get; }
     internal Fo2CharacterStartAsset Picker { get; }
+    internal Fo2CharacterStartAsset Inventory { get; }
     internal IReadOnlyList<Fo2PremadeCharacter> Characters { get; }
     internal Fo2ArroyoPlayerPresentationSource FemalePresentation { get; }
     internal int VerifiedResources { get; }
@@ -306,6 +309,11 @@ internal sealed class Fo2CharacterStartCatalog
             recipe.GetProperty("picker"),
             cacheRoot,
             "picker");
+        var inventory = LoadAsset(
+            cache.GetProperty("inventory"),
+            recipe.GetProperty("inventory"),
+            cacheRoot,
+            "inventory");
         var recipeRows = recipe.GetProperty("premades").EnumerateArray().ToArray();
         var cacheRows = cache.GetProperty("characters").EnumerateArray().ToArray();
         if (recipeRows.Length != 3 || cacheRows.Length != 3)
@@ -378,6 +386,7 @@ internal sealed class Fo2CharacterStartCatalog
                 $"{character.Panel.LogicalPath}|{character.Panel.SourceSha256}",
             })
             .Append($"{picker.LogicalPath}|{picker.SourceSha256}")
+            .Append($"{inventory.LogicalPath}|{inventory.SourceSha256}")
             .Append($"{female.LogicalPath}|{female.SourceSha256}")
             .Append($"{female.Walk.LogicalPath}|{female.Walk.SourceSha256}")
             .Append(
@@ -396,7 +405,7 @@ internal sealed class Fo2CharacterStartCatalog
                 "Fallout 2 character-start resource identity closure failed.");
         var counts = cache.GetProperty("counts");
         if (counts.GetProperty("premades").GetInt32() != characters.Count ||
-            counts.GetProperty("uiPngs").GetInt32() != 1 + characters.Count ||
+            counts.GetProperty("uiPngs").GetInt32() != 2 + characters.Count ||
             counts.GetProperty("femaleDirectionPngs").GetInt32() !=
                 female.Directions.Count ||
             counts.GetProperty("femaleWalkFramePngs").GetInt32() !=
@@ -411,6 +420,7 @@ internal sealed class Fo2CharacterStartCatalog
             expectedSourceProfileId,
             Fo2TemplePresentationCatalog.RequiredHash(cache.GetProperty("recipe"), "sha256"),
             picker,
+            inventory,
             characters,
             female,
             resources.Length);

@@ -66,7 +66,7 @@ class Fo2CharacterStartTest(unittest.TestCase):
                 ),
                 ("proto\\critters\\00000002.pro", female_prototype, False),
             ]
-            for asset in ("pickchar", "combat", "stealth", "diplomat"):
+            for asset in ("pickchar", "invbox", "combat", "stealth", "diplomat"):
                 master_members.append((f"art\\intrface\\{asset}.frm", frm, True))
             for identity, data in profiles.items():
                 master_members.extend(
@@ -149,6 +149,13 @@ class Fo2CharacterStartTest(unittest.TestCase):
                             "height": 1,
                             "frame": 0,
                         },
+                        "inventory": {
+                            "logicalPath": "art\\intrface\\invbox.frm",
+                            "sha256": hashlib.sha256(frm).hexdigest(),
+                            "width": 1,
+                            "height": 1,
+                            "frame": 0,
+                        },
                         "premades": premades,
                         "femalePresentation": {
                             "critterListLogicalPath": "art\\critters\\critters.lst",
@@ -202,6 +209,8 @@ class Fo2CharacterStartTest(unittest.TestCase):
             self.assertEqual(first["femalePresentation"]["prototype"]["fid"], "0100003d")
             self.assertEqual(first["femalePresentation"]["walkArt"]["fps"], 10)
             self.assertEqual(first["femalePresentation"]["walkArt"]["framesPerDirection"], 8)
+            self.assertEqual(first["inventory"]["logicalPath"], "art\\intrface\\invbox.frm")
+            self.assertEqual(first["counts"]["uiPngs"], 5)
             self.assertEqual(
                 len(first["femalePresentation"]["walkArt"]["directions"]),
                 48,

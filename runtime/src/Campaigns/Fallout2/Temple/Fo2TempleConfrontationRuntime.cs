@@ -205,15 +205,21 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     private readonly int _playerMeleeDamage;
     private readonly Label _vitals;
     private readonly Label _status;
-    private readonly Label _inventory;
+    private readonly Fo2TempleInventoryScreen _inventory;
     private Fo2TempleConfrontationState _state;
-    private bool _inventoryExpanded;
 
     internal event Action? StateChanged;
     internal Fo2TempleConfrontationState State => _state;
     internal int MaximumPlayerActionPoints => _maximumPlayerActionPoints;
     internal int MaximumPlayerHitPoints => _maximumPlayerHitPoints;
     internal bool TargetVisible => _targetSprite.Visible;
+    internal bool InventoryVisible => _inventory.IsOpen;
+    internal string InventoryCharacterText => _inventory.CharacterText;
+    internal string InventoryItemText => _inventory.ItemText;
+    internal string InventorySourceLogicalPath => _inventory.SourceLogicalPath;
+    internal string InventorySourceSha256 => _inventory.SourceSha256;
+    internal string InventoryAction => _profile.Inventory.Action;
+    internal Key InventoryPhysicalKey => _profile.Inventory.PhysicalKey;
 
     private Fo2TempleConfrontationRuntime(
         Fo2TempleConfrontationContract contract,
@@ -221,6 +227,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         Fo2ArroyoCavesPlayerBody player,
         Sprite3D targetSprite,
         Fo2CharacterSelection character,
+        Fo2CharacterStartAsset inventorySource,
         Fo2TempleConfrontationState? restored)
     {
         _contract = contract;
@@ -252,11 +259,16 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         _status = Label(profile.Boundary);
         _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         content.AddChild(_status);
-        _inventory = Label("");
-        content.AddChild(_inventory);
+        content.AddChild(Label("Inventory: press I / controller Y"));
         content.AddChild(Label(
             "C/X: Combat   Space/A: Attack   Enter/Start: End Turn   E/B: Loot   I/Y: Inventory"));
         AddChild(panel);
+        _inventory = new Fo2TempleInventoryScreen(
+            inventorySource,
+            character,
+            contract.DefeatLoot,
+            profile.FontSizePixels);
+        AddChild(_inventory);
         RefreshPresentation();
     }
 
@@ -265,6 +277,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         Fo2TempleSceneCoverage scene,
         Fo2ArroyoCavesPlayerBody player,
         Fo2CharacterSelection character,
+        Fo2CharacterStartAsset inventorySource,
         Fo2TempleConfrontationState? restored = null)
     {
         if (player.CurrentMapIndex != Fo2TemplePresentationCatalog.MapIndex ||
@@ -288,6 +301,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             player,
             targets[0],
             character,
+            inventorySource,
             restored);
         scene.Root.AddChild(runtime);
         return runtime;
@@ -296,6 +310,13 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     public override void _Process(double delta)
     {
         _ = delta;
+        if (Input.IsActionJustPressed(_profile.Inventory.Action))
+        {
+            ToggleInventory();
+            return;
+        }
+        if (_inventory.IsOpen)
+            return;
         if (Input.IsActionJustPressed(_profile.Combat.Action))
             ToggleCombat();
         if (Input.IsActionJustPressed(_profile.Attack.Action))
@@ -304,11 +325,26 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             EndTurn();
         if (Input.IsActionJustPressed(_profile.Loot.Action))
             Loot();
-        if (Input.IsActionJustPressed(_profile.Inventory.Action))
+    }
+
+    internal void ToggleInventory()
+    {
+        if (_inventory.Close())
         {
-            _inventoryExpanded = !_inventoryExpanded;
-            RefreshPresentation();
+            _player.SetPhysicsProcess(true);
+            return;
         }
+        _player.Presentation.StopWalking();
+        _player.SetPhysicsProcess(false);
+        _inventory.Open(_state.SpearLooted);
+    }
+
+    internal bool CloseInventoryIfOpen()
+    {
+        if (!_inventory.Close())
+            return false;
+        _player.SetPhysicsProcess(true);
+        return true;
     }
 
     internal bool ToggleCombat()
@@ -382,8 +418,9 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             return false;
         }
         _state = _state with { SpearLooted = true };
-        _inventoryExpanded = true;
-        SetStatus($"Looted {_contract.DefeatLoot.Quantity} × {_contract.DefeatLoot.DisplayName}.");
+        SetStatus(
+            $"Looted {_contract.DefeatLoot.Quantity} × {_contract.DefeatLoot.DisplayName}. " +
+            "Open Inventory to inspect the exact stack.");
         Changed();
         return true;
     }
@@ -448,15 +485,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             $"{_contract.Critter.DisplayName} HP {_state.TargetHitPoints}/" +
             $"{_contract.Critter.CurrentHitPoints}   " +
             $"Combat {(_state.CombatActive ? "ON" : "OFF")}";
-        _inventory.Text = _inventoryExpanded
-            ? _state.SpearLooted
-                ? $"INVENTORY\n{_contract.DefeatLoot.Quantity} × " +
-                  $"{_contract.DefeatLoot.DisplayName} " +
-                  $"({_contract.DefeatLoot.Weapon.MinimumDamage}–" +
-                  $"{_contract.DefeatLoot.Weapon.MaximumDamage} damage, " +
-                  $"{_contract.DefeatLoot.Weapon.ActionPointCostPrimary} AP primary)"
-                : "INVENTORY\n(empty in this bounded slice)"
-            : "Inventory hidden";
+        _inventory.Refresh(_state.SpearLooted);
     }
 
     private Label Label(string text)
