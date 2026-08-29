@@ -109,9 +109,19 @@ TTW and JAM manifests are auto-detected from
 `%LOCALAPPDATA%\OpenNV\profiles\jam-profile.json`, or selected with the small
 setup buttons beside their edition/module controls. The launcher verifies their
 hash-bound inputs and reports not installed, changed, registered/runtime
-pending, or ready. It passes only manifest paths and never executes an extender
-DLL. A mod route remains disabled until both its generated profile and the
-runtime manifest explicitly report compatible semantics.
+pending, or ready. It passes only verified contract paths and identities and
+never executes an extender DLL. A mod route remains disabled until both its
+generated profile and the runtime manifest explicitly report compatible
+semantics.
+
+The bounded TTW Fallout 3 opening contract is separately auto-detected as
+`ttw-fo3-opening-profile.json` beside the registered TTW profile, with
+`OPENNV_TTW_FO3_OPENING_PROFILE` as a development override. The launcher
+revalidates its exact effective-source namespace, plugin/save identity, intro
+movies, and dedicated cache identity. It also reserves distinct TTW cache and
+FO3-opening save paths for the future runtime handoff. This validation does not
+enable TTW: the checked-in runtime manifest keeps every TTW presentation false
+until the CG00-to-CG01 interpreter and Vault 101 world transition execute.
 
 Packaged builds prefer the executable declared by `runtime-manifest.json`.
 Source development can set `OPENNV_GODOT` to a local Godot 4.7.2 executable and

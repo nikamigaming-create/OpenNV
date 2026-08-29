@@ -86,7 +86,7 @@
             "hex-tactical": { "ready": false, "status": "not-implemented" },
             "openxr": { "ready": true, "status": "experimental-headset-gate-pending" }
           },
-          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy shell and a bounded eagerly instantiated Doc house to Goodsprings exterior to saloon composite. Campaign save v6 persists source-derived Level/HP/AP/XP, saloon CELL 00106185, opened-container remaining counts, and the player transform. A fresh four-family cache admits exact controller-door articulation, mass-zero target-local convex collision, and current-plus-neighbor resource suspension. Current configured-input acceptance passes the Doc portal, animated Goodsprings gate, and saloon stair transition, then fails closed against authored Prospector Saloon collision during the strict final approach; no current first-run report or cold-Continue pair exists. Player deposits, reverse traversal, neighboring exterior-grid streaming, integrated-route OpenXR acceptance, Sunny behavior, complete tile interaction, and retail UI parity remain pending.",
+          "message": "Owned menu, skippable intro, source-ordered Doc opening beats, character creation, source-bound HUD/Pip-Boy shell, and a bounded eagerly instantiated Doc house to Goodsprings exterior to saloon composite. Campaign save v6 persists source-derived Level/HP/AP/XP, saloon CELL 00106185, opened-container remaining counts, and the player transform. The admitted four-family cache supports exact controller-door articulation, mass-zero target-local convex collision, authoritative current-CELL-only render/collision activation with linked CELLs hidden and frozen as preload state, and one-time source-collision actor grounding. Current configured-input first-run and cold-Continue acceptance cross both ordered XTEL transitions and restore the saloon with zero replayed transitions. The exact startup player-root/camera, complete population/package AI, player deposits, reverse traversal, neighboring exterior-grid streaming, integrated-route OpenXR acceptance, complete tile interaction, and retail UI parity remain pending.",
           "unavailableDlc": []
         },
         "jam": {
@@ -106,7 +106,36 @@
             "openxr": { "ready": false, "status": "not-implemented" }
           },
           "requiresProfile": "opennv-owned-game-profile/v1",
-          "message": "The registered Fallout 3 GOTY profile runs the bounded menu, owned intro, Escape/Skip convergence, CG00 sex/name/appearance selection, and owned Vault 101 birth-room flow through persistent stage 100. Exact stage-65 Dad cue, stage-80/85 INFO results, stage-90 INFO 0001f379 white-fade/sound, and seven of eight exact stage-100 commands through SetPCYoung 1 execute and cold-restore without replaying one-shot effects. CG01 stage 0, general package/dialogue/KF AI, the eighth stage-100 command, and freely playable Vault 101 remain absent, so FPS, Hex, and VR stay launcher-disabled."
+          "message": "The registered Fallout 3 GOTY profile runs the bounded menu, owned intro, Escape/Skip convergence, CG00 sex/name/appearance selection, and owned Vault 101 birth-room flow through persistent stage 100. Exact stage-65 Dad cue, stage-80/85 INFO results, stage-90 INFO 0001f379 white-fade/sound, and seven of eight exact stage-100 commands through SetPCYoung 1 execute and cold-restore without replaying one-shot effects. A fresh pinned-Theora profile compiles both movies and the exact CG01 stage-0/stage-5/Dad-speech-to-stage-10 contracts, but native stage-10 apply/restore is blocked by non-portable actor paths in the prior presentation cache. General package/dialogue/KF AI, the eighth stage-100 command, and freely playable Vault 101 remain absent, so FPS, Hex, and VR stay launcher-disabled."
+        }
+      }
+    },
+    {
+      "id": "TTW",
+      "variants": {
+        "vanilla": {
+          "ready": false,
+          "presentations": {
+            "first-person": {
+              "ready": false,
+              "status": "cg00-cg01-command-contract-runtime-unapplied"
+            },
+            "hex-tactical": {
+              "ready": false,
+              "status": "not-implemented"
+            },
+            "openxr": {
+              "ready": false,
+              "status": "not-implemented"
+            }
+          },
+          "requiresProfile": "opennv-ttw-profile/v1",
+          "requiresOpeningProfile": "opennv-ttw-fo3-opening-profile/v1",
+          "message": "The strict TTW source namespace and bounded CG00-to-CG01-stage-5 command contract can be launcher-validated with dedicated cache and save identities. No TTW command interpreter, Vault 101 world presentation, save runtime, xNVSE execution, or JAM runtime is connected, so every TTW presentation remains disabled."
+        },
+        "jam": {
+          "ready": false,
+          "message": "JAM native plugin execution and complete portable semantics are not connected for TTW."
         }
       }
     }

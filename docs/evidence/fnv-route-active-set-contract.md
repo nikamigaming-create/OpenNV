@@ -1,7 +1,7 @@
 # Fallout: New Vegas bounded route active-set contract
 
-Status: **initial native lifecycle for the prepared three-CELL route; ordered
-transition and cold-restore acceptance remain pending**.
+Status: **current-CELL-only lifecycle accepted across the prepared three-CELL
+forward route and cold Continue**.
 
 ## Source boundary
 
@@ -15,20 +15,22 @@ The admitted route is the existing hash-bound XTEL graph:
 00106185 Prospector Saloon
 ```
 
-The runtime does not invent adjacency. `CellActiveSet` derives each neighbor
-relationship from the reciprocal portal links already validated by
-`CellSceneLoader`. A CELL is active when it is the authoritative current CELL or
-is directly connected to it by one of those prepared links.
+The runtime does not invent adjacency. `CellActiveSet` validates the reciprocal
+portal links already admitted by `CellSceneLoader`, but only the authoritative
+current CELL is active. Linked CELLs remain instantiated and hash-bound while
+their roots, processing, collision, rigid bodies, and lights stay suspended.
 
-| Current CELL | Active prepared spaces | Suspended prepared space |
+| Current CELL | Active prepared space | Suspended prepared spaces |
 | --- | --- | --- |
-| `00103df9` | Doc house, exterior | saloon |
-| `000daebb` | Doc house, exterior, saloon | none |
-| `00106185` | exterior, saloon | Doc house |
+| `00103df9` | Doc house | exterior, saloon |
+| `000daebb` | Goodsprings exterior | Doc house, saloon |
+| `00106185` | saloon | Doc house, exterior |
 
-This preserves the directly adjacent space needed for an open-door view and
-portal arrival while preventing a distant prepared interior from continuing to
-render, process, collide, or illuminate the current space.
+The bounded route has no source-proven portal clipping or room-visibility
+contract. Rendering adjacent spaces wholesale mixed interior shells with the
+Goodsprings exterior and allowed inactive collision to occlude the player.
+Portal travel therefore changes the authoritative CELL and its collision mask
+atomically instead of depending on a simultaneously visible neighboring shell.
 
 ## Runtime ownership
 
@@ -50,29 +52,33 @@ authoritative space.
 
 ## Native evidence
 
-The direct Godot load used the separate, previously prepared v4 route cache only
-after its model, sidecar, cell-scene, actor-scene, and opening-manifest hashes
-matched that cache's install manifest. It did not invoke the content compiler or
-write to the cache.
+The normal owned menu/Continue path reused the admitted four-family cache at
+`D:\Builds\OpenNV-fnv-articulated-convex-cache-20260829-r1`; it did not invoke
+the compiler or write to that cache. Configured Godot input crossed both ordered
+XTEL pairs, saved in the saloon, and a separate headless process cold-restored
+the same CELL with zero replayed transitions. Both reports pass the existing
+manifest-backed validators.
 
-This was a direct `--cell-scene` lifecycle proof, not normal prepared-runtime
-acceptance. The scene's embedded compiler identity predates the active source
-compiler, so normal cache restore correctly rejects it. The proof establishes
-the initial resource lifecycle against hash-closed owned content; it does not
-establish launcher entry, ordered portal traversal, or cold restore under the
-current compiler identity.
+The accepted private evidence is
+`D:\Builds\OpenNV-fnv-current-cell-route-acceptance-20260829-r1`:
 
-- report: `D:\Builds\OpenNV-active-cell-route-20260829-r1\initial-active-set-report-r2.json`
-- report SHA-256: `851459f2a9c37a5f05f597b6875c682e459a9e25c844386ea6945a0c730d2057`
-- Godot result: `OPENNV_GODOT_CELL_PASS`
-- loaded scope: 4,239 references, 31 doors, 57 authored lights, 3,104 collision
-  meshes, two reciprocal portals
-- authoritative current CELL: `00103df9`
-- active: `000daebb`, `00103df9`
-- suspended: `00106185`
-- suspended saloon state: zero visible roots, zero processing roots, zero enabled
-  collision objects, all four dynamic pool-ball bodies frozen, and zero visible
-  lights
+- first-run report SHA-256:
+  `c29244494ae4962ac82dbffcc47795084c56e72c4bac3af86136324ea8fff6db`;
+- cold-Continue report SHA-256:
+  `9f3f46a533db0629473b681bb9cfea1c369041616c7f5f9ce5083475b6e5aa06`;
+- resulting save SHA-256:
+  `289891ae3eb36024fe165b37ce9376c8c27e908a070c5d661c78b936aa1a6d03`;
+- first-run console SHA-256:
+  `cd48e8f5c9b9cbd37f5c83192edb9ed6eb0f9360089e6b3e2a72487549a951de`;
+- cold-Continue console SHA-256:
+  `3cecad629a8cd074f2a7508bb6508394416dd36849295acbb459941bdc8a65db`.
+
+The first-run active-set updates are exactly Doc house only, exterior only, and
+saloon only. The same run records authored-collision support corrections for Doc
+`00104c0f`, Easy Pete `00104c80`, saloon actor `00104f08`, and Sunny
+`00104e85`. Those corrections remove the systemic floating-root defect for the
+currently admitted actors; they do not establish AI, population completeness,
+animation, or visual parity.
 
 No owned or derived media is committed by this evidence record.
 
@@ -88,8 +94,7 @@ change does not invalidate unchanged world output.
 ## Remaining boundary
 
 All three prepared spaces are still instantiated eagerly before the lifecycle
-owner suspends the distant one. This slice does **not** claim demand loading,
-unloading, neighboring exterior-grid streaming, CELL-specific environment or
-weather switching, ordered or reverse-route input acceptance, cold-restore
-acceptance, Sunny behavior, launcher acceptance, or retail parity. Those remain
-separate promotion gates.
+owner suspends the two noncurrent spaces. This slice does **not** claim demand
+loading/unloading, open-door portal views, neighboring exterior-grid streaming,
+reverse traversal, integrated OpenXR acceptance, complete actor population or
+behavior, or retail visual parity. Those remain separate promotion gates.

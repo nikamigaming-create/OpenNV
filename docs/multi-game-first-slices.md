@@ -64,10 +64,11 @@ retail startup-logo and original-menu presentation remain absent.
    stage-200 Continue, configured flat input traverses both forward XTEL links;
    campaign save v6 persists source-derived Level/HP/AP/XP plus saloon CELL
    `00106185`, and a fresh owned-menu Continue restores the unchanged save and
-   player transform there. The current-plus-direct-neighbors active set suspends
-   distant resources. The current r25 pair uses the admitted four-family cache,
-   binds activation to the exact selected source door, and passes first-run plus
-   cold-Continue validation. Complete tile
+   player transform there. Only the authoritative current CELL renders,
+   processes, collides, emits lights, and advances actor grounding; linked CELLs
+   remain hidden, frozen preload state. The current pair uses the admitted
+   four-family cache, binds activation to the exact selected source door, and
+   passes first-run plus cold-Continue validation. Complete tile
    interaction, reverse traversal, neighboring exterior-grid streaming,
    integrated-route OpenXR acceptance, and retail visual parity remain open.
    An uninterrupted whole-campaign route is not proven.
@@ -156,7 +157,12 @@ with a registered development menu/CG00 frontend but no playable presentation.
    birth room, plays the Dad cue, applies those results plus the owned stage-90
    white fade/sound, executes seven of eight exact stage-100 commands through
    `SetPCYoung 1`, and cold-restores stage 100 without replaying one-shot
-   effects. Compile CG01 stage 0, the eighth stage-100 command, and the remaining
+   effects. A fresh profile now compiles both opening movies without decode
+   errors plus the exact CG01 stage-0/stage-5 tree and sex-specific two-line
+   Dad-speech transition into stage 10. Its bounded runtime/save adapter is
+   implemented, but native apply/restore remains blocked because the existing
+   Vault 101 presentation manifest contains actor-derivative paths from another
+   local cache root. Compile the eighth stage-100 command and the remaining
    authored birth/age/SPECIAL/tag/trait sequence,
    dialogue, packages, controls, Vault 101 cells, actors, scripts, inventory,
    collision, NAVM, doors, and save boundary into neutral versioned contracts.
@@ -206,9 +212,9 @@ is supported for the selected base profile.
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
 | Fallout 2 | The launcher enables the bounded Hex premade-or-custom-to-Arroyo slice when all owned-profile/cache identities match; exact Map 3 exit serial 1738 loads ARTEMPLE Map 126 and cold-restores. Tag/trait editing, campaign-wide persistence, remaining exits, INT, actors, combat, inventory, full campaign, FPS, VR, and parity remain absent |
-| New Vegas first slice | Menu/intro/Doc house, source-derived Level/HP/AP/XP, the source-bound HUD/Pip-Boy runtime shell, and the bounded eagerly instantiated Doc/exterior/saloon composite load; the r25 configured-input route and cold Continue pass against the admitted four-family cache. Active-CELL WorldEnvironment/sky switching now restores interior XCLL background/fog and renders the owned configured clear-day WTHR atmosphere/cloud pair outside. Exterior surface/directional lighting remains provisional, while dynamic time/weather, reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual parity remain |
-| Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance enter the bounded Vault 101 birth room and reach/cold-restore stage 100 through seven of eight exact stage-100 commands; FPS/Hex/VR, general package/dialogue/KF AI, CG01 stage 0, the eighth command, and freely playable Vault 101 remain |
-| TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |
+| New Vegas first slice | Menu/intro/Doc house, source-ordered Doc speech/quest beats, source-derived Level/HP/AP/XP, the source-bound HUD/Pip-Boy runtime shell, and the bounded eagerly instantiated Doc/exterior/saloon composite load; the current configured-input route and cold Continue pass against the admitted four-family cache. Current-CELL-only render/collision activation prevents linked interior/exterior shells from presenting together, and one-time source-collision grounding reports actor corrections. The [source package audit](evidence/fnv-goodsprings-actor-package-contract.md) now pins Doc, Pete, Trudy, settler, Sunny, and Cheyenne schedules and conditions, but those generic package/quest executors are not implemented. The exact startup player-root/camera, complete population/package AI, exterior surface/directional lighting, dynamic time/weather, reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual parity remain |
+| Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance enter the bounded Vault 101 birth room and reach/cold-restore stage 100 through seven of eight exact stage-100 commands. A fresh pinned-Theora profile compiles the CG01 stage-0/stage-5 and Dad-speech → stage-10 contracts; native stage-10 apply/restore is still blocked by non-portable actor paths in the prior presentation cache. FPS/Hex/VR, general package/dialogue/KF AI, the eighth stage-100 command, and freely playable Vault 101 remain |
+| TTW | The strict profile/effective-source namespace and bounded FO3 CG00→CG01-stage-5 command/movie contract compile and validate against the installed stack; the launcher binds dedicated TTW cache/save identities but keeps the route disabled because command execution, Vault 101 presentation/transition, xNVSE, JAM, and save runtime are absent |
 | JAM | Dependency registrar plus bounded JVS sprint and JBT time-dilation semantics work; missing dependencies and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM semantics keep the launcher toggle disabled |
 
 The runtime manifest is the executable truth. Documentation may describe this

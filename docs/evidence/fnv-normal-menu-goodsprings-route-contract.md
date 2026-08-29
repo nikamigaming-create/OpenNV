@@ -34,10 +34,12 @@ process emits the owned Continue button again and must restore the unchanged sav
 active saloon identity, and equivalent transform without replaying a transition.
 Neither phase uses Windows app control or injected foreground input.
 
-This evidence proves only the bounded eagerly instantiated forward flat route
-from a completed save. A later direct native proof establishes current-plus-
-neighbor resource suspension, and the current-source r25 pair reaccepts the
-normal route and cold Continue. It does **not**
+This page retains the historical r25 route evidence. It is superseded for
+active-set policy and actor grounding by the
+[current-CELL route contract](fnv-route-active-set-contract.md), which reuses the
+same admitted cache and proves first-run plus cold Continue with only the
+authoritative CELL active. This evidence proves only the bounded eagerly
+instantiated forward flat route from a completed save. It does **not**
 prove reverse traversal, neighboring exterior-grid streaming/load-unload,
 an uninterrupted New Game-to-saloon run, Sunny dialogue/package AI, visual
 parity, integrated OpenXR acceptance, or a complete campaign.

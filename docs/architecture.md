@@ -29,8 +29,9 @@ against a fresh compiler-family cache. The earlier forward flat-route proof
 used configured input through both XTEL links and cold-restored saloon CELL
 `00106185`, but it predates the current compiler-family and source-controller
 door contracts and is not current route acceptance. The
-source-portal active set keeps the current CELL plus direct neighbors active and
-suspends distant resources. Current code bounds NAVM replanning, activates the
+source-portal active set keeps only the authoritative current CELL visible,
+processing, and collidable; linked spaces remain loaded but suspended until an
+XTEL transition. Current code bounds NAVM replanning, activates the
 actual blocking authored door, and preserves controller-owned Open/Close
 articulation for joined moving visuals and collision. Mass-zero authored convex
 door bodies now remain target-local and produce deterministic runtime convex
@@ -41,11 +42,15 @@ proximity. Portal frames and linked-space alignment sample articulated doors at
 their synchronous closed terminal instead of an in-flight close tween. Normal
 activation rejects a non-door collision; an empty ray can select only one facing
 portal and records the exact selected source door for the acceptance gate. The
-current r25 configured-input run crosses the Doc portal and animated Goodsprings
+current configured-input run crosses the Doc portal and animated Goodsprings
 gate, climbs the saloon porch, resolves exterior door `0010636f`, enters saloon
 CELL `00106185`, saves, and cold-restores that state without replaying a
-transition. The earlier r20 result is superseded because it did not record the
-selected portal identity and allowed a non-door hit to reach facing fallback.
+transition. Only the authoritative current CELL renders, processes, collides,
+emits lights, or advances actor physics; linked CELLs remain instantiated as
+hidden, frozen preload state. One-time actor grounding aligns posed support
+bounds to authored collision and reports each correction. Earlier r20/r25
+results are retained as historical evidence but are superseded by the
+current-CELL proof.
 OpenXR remains experimental with no physical-headset acceptance.
 Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
 Pip-Boy surface through Godot's input-event path. The accepted surface uses the
@@ -56,17 +61,23 @@ room progression through stage 100. The ordinary route plays the exact stage-65
 Dad cue, applies stage-80/85 results and stage-90 INFO `0001f379`, presents the
 owned white fade/sound, then applies seven of the eight exact stage-100 commands
 through `SetPCYoung 1` and cold-restores that state without replaying the cue.
-The profile producer compiles the exact four-command CG01 stage-0 result and
-its synchronously nested thirteen-command stage-5 result with source-bound
-references, transforms, script variables, control masks, sound, and movie
-operands. CG01 stage 0 remains an explicit runtime-unapplied boundary. It has no freely playable
+The profile producer compiles the exact four-command CG01 stage-0 result, its
+synchronously nested thirteen-command stage-5 result, and the sex-specific
+two-line Dad-speech transition into stage 10 with source-bound references,
+transforms, script variables, controls, objectives, audio/LIP, and movie
+operands. The bounded stage-10 runtime/save adapter is implemented, but a fresh
+native apply/restore is blocked before execution by non-portable absolute actor
+paths in the previous Vault 101 presentation cache. There is no freely playable
 Vault 101 route or general package/dialogue runtime.
-TTW runtime support is absent. Flattened installer outputs can now derive a
-strict all-active plugin order from unique increasing plugin modification times,
-and the registered base-plus-generated profile can emit a neutral effective
-top-level source namespace. BSA members, nested loose files, override-marker
-semantics, records, scripts, world transitions, and runtime behavior remain
-uncompiled. JAM remains dependency- and portable-semantic-gated. These routes
+TTW runtime support is absent. Flattened installer outputs can derive a strict
+all-active plugin order from unique increasing plugin modification times, and
+the registered base-plus-generated profile emits a neutral effective top-level
+source namespace. A bounded compiler now resolves the effective TTW/FO3
+CG00→CG01-stage-5 record/command/movie closure and the launcher revalidates that
+contract with dedicated TTW cache and save identities. General BSA-member and
+nested loose-file precedence, override-member semantics, command execution,
+world presentation/transition, xNVSE, JAM, and save runtime remain uncompiled or
+unapplied. JAM remains dependency- and portable-semantic-gated. These routes
 consume the shared authoritative state in
 `runtime/src/Gameplay/State`; presentation does not fork inventory, quests,
 objectives, opening completion, or save identity.
@@ -450,7 +461,8 @@ retail data, or promotion verdict.
 | `runtime/src/Gameplay/Containers/` | Source-named two-column container view plus authoritative per-reference remaining counts and transfer operations | Player-to-container deposits, barter, or retail-pixel parity |
 | `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
 | `runtime/src/World/Portals/CellPortalTravel.cs` | Production reciprocal-XTEL activation, owned arrival transform, active collision layer, and authoritative CELL transition | Input synthesis, save serialization, or content parsing |
-| `runtime/src/World/Streaming/CellActiveSet.cs` | Prepared-route current-CELL-plus-direct-neighbor visibility, processing, collision, rigid-body, and light lifecycle | CELL compilation, demand loading/unloading, environment switching, or adjacency invention |
+| `runtime/src/World/Streaming/CellActiveSet.cs` | Authoritative-current-CELL visibility, processing, collision, rigid-body, and light lifecycle for an eagerly preloaded source-portal route | CELL compilation, demand loading/unloading, portal clipping, environment switching, or adjacency invention |
+| `runtime/src/World/Actors/GameplayActorGrounding.cs` | One-time source-actor support alignment against the active CELL's authored collision, plus package-path preservation of that source-derived offset | Actor admission, AI/package selection, navmesh placement invention, or retail parity |
 | `DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
 | `FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |
 | `PlayerControlTelemetry.cs` | Simulator-only pose, locomotion, floor-height, snap-pivot, and action acceptance measurements | Input synthesis or gameplay mutation |
@@ -497,7 +509,8 @@ retail data, or promotion verdict.
 | `runtime/src/Compatibility/Jam/JamJbtBulletTimeContract.cs` | Hash-bound transport of JAM 4.6 JBT toggle and authored world-time multiplier | AP/effect/audio/UI/event semantics or complete JBT/JAM compatibility |
 | `prepare_fo3_profile.py` / `prepare_fo3_opening_slice.py` | Read-only Fallout 3 GOTY profile, CG00/Vault 101 source graph, playable race and sex-aware hair/eye inventory, Player-plus-RACE FaceGen defaults, and hash-bound local manifest generation | Godot nodes, runtime progression, 3D FaceGen rendering, or full-opening claims |
 | `runtime/src/Campaigns/Fallout3/Fallout3NamespaceBridge.cs` | Compile-time namespace join between the Fallout 3 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
-| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified intro playback/skip, CG00 sex/name/appearance UI, and atomic stage-60/62 save/resume | Later trigger bypass, dialogue/KF playback, 3D actor presentation, Vault 101 scene compilation, or world play |
+| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified intro playback/skip, CG00 sex/name/appearance UI, stage-100 flow, and bounded CG01 stage-5 Dad-dialogue dispatch/save wiring | General dialogue/KF/package AI, portable presentation-cache publication, full Vault 101 play, or parity |
+| `runtime/src/Campaigns/Fallout3/Fo3Cg01Stage10Transition.cs` | Fail-closed sex-specific two-INFO Dad dialogue and exact stage-10 objective/timer/control/autosave state plus cold-restore contract | Native apply evidence, LIP animation, toddler interaction, general dialogue/package AI, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage65AppearanceTransition.cs` | Fail-closed validation/application contract for all owned stage-65 MatchRace and MatchFaceGeometry commands across the exact race/sex matrix | Ordinary-flow trigger execution, persistence, face rendering, animation, or Vault 101 play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage80Transition.cs` | Exact sex-conditional INFO result plus stage-80 package, variable, EVP, and enable-reference contract | Ordinary-flow trigger execution/persistence, dialogue/KF playback, package AI, actors, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage85Transition.cs` | Exact post-stage-80 INFO trigger and zero-command stage-85 result contract | Ordinary-flow trigger execution/persistence, dialogue playback, later CG00 interpretation, actors, or world play |
@@ -549,10 +562,10 @@ movement, configured flat input, HUD, inventory, authored `.357` and 10mm
 damage/clip data, firing/reload, objectives,
 doors, atomic save, cold reload, and sandbox play. The default Doc-house route
 reuses and eagerly instantiates that exterior/saloon content. A source-portal-
-derived active set keeps the authoritative current CELL and its direct neighbors
-live while suspending distant prepared roots, processing, collision layers,
-rigid bodies, and lights. Historical evidence completed one bounded forward
-route and cold restore. The current-source r25 first process reaches the
+derived active set keeps only the authoritative current CELL live while
+suspending every linked noncurrent CELL's roots, processing, collision layers,
+rigid bodies, and lights. Current evidence completes one bounded forward route
+and cold restore. The current-source first process reaches the
 exterior, activates the exact source-articulated gate, completes the vertically
 bounded saloon-porch route, resolves the exact exterior portal door, enters
 saloon CELL `00106185`, and saves. A fresh process cold-restores that saloon/
@@ -568,10 +581,11 @@ provisional compiled adapter; this is source-backed sky presentation, not a
 complete WTHR lighting application, dynamic weather, or retail parity.
 Campaign save v6 owns saloon CELL `00106185`, container remaining counts, and
 the player transform.
-The lifecycle is not demand streaming or unloading: all three
-prepared spaces still instantiate before the distant one is suspended. This
-does not promote reverse traversal, neighboring exterior-grid streaming, Sunny
-behavior, or the joined OpenXR route.
+The lifecycle is not demand streaming or unloading: all three prepared spaces
+still instantiate as preload state, while only the authoritative current CELL
+is visible, processing, collidable, and lit. This does not promote reverse
+traversal, neighboring exterior-grid streaming, Sunny behavior, complete
+population/package AI, or the joined OpenXR route.
 The Doc door pair `00103e61`/`00103e69` and saloon pair
 `0010636f`/`0010618e` form a fail-closed ordered chain. Each target scene and
 recipe is hash-bound, each source door must belong to the immediately preceding
@@ -673,7 +687,8 @@ differential gates. The clean-room shader observations are recorded in
 `docs/evidence/fnv-retail-material-shader-contract.md`.
 
 The canonical next promotion continues the normal-launch-menu-to-Goodsprings
-active slice with neighboring active-set streaming and authored Sunny behavior;
+active slice with the exact startup player-root/camera contract, source-bound
+population/package behavior, and later neighboring exterior-grid streaming;
 reverse traversal and integrated OpenXR also remain open in the
 [whole-game delivery plan](whole-game-delivery-plan.md). Later CELL, gameplay,
 actor, renderer, UI, compatibility, exhaustive-acceptance, and release work is

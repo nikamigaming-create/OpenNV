@@ -38,9 +38,9 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
 | Fallout 2 Hex | Registered-profile launcher route into the owned Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL; Take enters Map 3 at tile 28707 with PRO-linked sex-correct HMWARR/HFPRIM AA idle and directional AB walking. Ordinary grounded movement can follow the exact 13-step source path to exit serial 1738, enter owned ARTEMPLE Map 126 at tile 16486, save as v3, and cold-restore the same grounded position/facing. The non-source opaque wall proxy is removed while all 45 owned wall FRMs and source-derived collision remain | Tag/trait editing, other animations, remaining exits, scripts, actors, combat, inventory, campaign-wide persistence, full campaign, and parity remain absent; classic fixed-Y sprite composition is still visibly incomplete; FPS and OpenXR stay disabled |
-| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. A fresh four-family cache admits controller-door articulation, target-local static convex collision, current-plus-neighbor suspension, current-CELL WorldEnvironment switching, the owned clear-day atmosphere/cloud pair, and a manifest-validated configured-input first-run/cold-Continue pair through the saloon door | Exterior surface/directional lighting remains the provisional compiled adapter; player deposits, Pip-Boy tab navigation, dynamic clock/weather/global state, reverse traversal, neighboring exterior-grid streaming, Sunny AI/dialogue, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven |
-| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and normal persistent CG00 progression into the owned Vault 101 birth room through stage 100. The bounded route plays the stage-65 Dad cue, applies stage-80/85 and stage-90 INFO `0001f379`, then executes seven of eight exact stage-100 commands through `SetPCYoung 1`; cold Continue restores without replaying one-shot cue/effects. The profile producer now emits the exact typed four-command CG01 stage-0 result with its synchronously nested thirteen-command stage-5 result, source transforms, and operand identities | No freely playable first-person Vault 101 route or general package/dialogue interpreter exists; runtime application of CG01 stage 0, the eighth stage-100 command, lip/idle/package AI, Mom/player presentation, Hex, VR, and retail parity remain absent |
-| TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
+| New Vegas | Owned menu, skippable intro, source-ordered Doc Mitchell speech/quest beats, stage-36 character selection, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. The admitted four-family cache supports controller-door articulation, target-local static convex collision, current-CELL-only render/collision activation with linked CELLs preloaded, current-CELL WorldEnvironment switching, the owned clear-day atmosphere/cloud pair, one-time source-collision actor grounding, and a manifest-validated configured-input first-run/cold-Continue pair through the saloon door | The exact startup player-root/camera transform, complete saloon population/package AI, exterior surface/directional lighting, player deposits, Pip-Boy tab navigation, dynamic clock/weather/global state, reverse traversal, neighboring exterior-grid streaming, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven; the [Goodsprings actor/package audit](docs/evidence/fnv-goodsprings-actor-package-contract.md) records the next source contract |
+| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and normal persistent CG00 progression into the owned Vault 101 birth room through stage 100. The bounded route plays the stage-65 Dad cue, applies stage-80/85 and stage-90 INFO `0001f379`, then executes seven of eight exact stage-100 commands through `SetPCYoung 1`; cold Continue restores without replaying one-shot cue/effects. A fresh pinned-Theora profile now compiles both movies plus the exact CG01 stage-0/stage-5 tree and the sex-specific two-line Dad-speech → stage-10 contract | The stage-10 runtime/save adapter is implemented but not native-proven: the fresh run correctly stops on stale absolute actor-derivative paths in the existing Vault 101 presentation cache. No freely playable first-person Vault 101 route, general package/dialogue interpreter, lip playback, Mom/player presentation, Hex, VR, or retail parity exists |
+| TTW | Strict local profile/effective-source registration plus a launcher-validated, source-bound Fallout 3 CG00→CG01-stage-5 command/movie contract with dedicated TTW cache and save identities | No TTW command interpreter, Vault 101 world presentation, save runtime, xNVSE execution, or JAM runtime exists; every TTW presentation remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
 
 “Local slice works” is not the same as “launcher-ready,” and “first slice” is
@@ -74,8 +74,10 @@ save v6 records saloon CELL `00106185`
 and the player transform, and also persists the source-derived Level 1,
 HP 200/200, AP 80/80, and XP 0/200 state used by the Pip-Boy. The current
 source-portal lifecycle eagerly instantiates all three prepared spaces, keeps
-the authoritative CELL plus direct neighbors active, and suspends distant
-presentation/physics resources. One current-CELL WorldEnvironment/sky owner restores
+only the authoritative current CELL active, and suspends every linked
+noncurrent CELL's presentation/physics resources. Admitted actors are aligned
+once to the active CELL's authored collision instead of retaining a floating
+visual root. One current-CELL WorldEnvironment/sky owner restores
 interior XCLL background/fog on interior transitions and, in the configured bounded clear-day
 mode, resolves exterior `000daebb` through its owned WRLD/CLMT to unconditional
 `NVWastelandClear` `000ffc88` at the exact day sample. The normal route now
@@ -143,12 +145,15 @@ applies INFO `0001f379`, sets timer `2.2` and `runTimer=1`, presents the owned
 white fade and sound, then executes seven of eight exact stage-100 commands
 through `SetPCYoung 1`. Cold Continue restores stage 100 without replaying those
 one-shot effects. The owned-profile producer also compiles the exact CG01
-stage-0 command tree through its synchronous stage-5 result, but the runtime does
-not apply it yet. This remains a deterministic bounded room/front-end
+stage-0 command tree through its synchronous stage-5 result and the sex-specific
+two-line Dad-speech transition into stage 10. The bounded runtime/save adapter
+for that transition is implemented, but its fresh native proof currently stops
+on stale absolute actor-derivative paths in the existing Vault 101 presentation
+cache. This remains a deterministic bounded room/front-end
 route, not retail camera, lighting, material, animation, lip, package, timing,
 or freely playable first-person parity; the launcher therefore keeps every
-Fallout 3 presentation disabled. General package/KF execution, CG01 stage-0
-runtime/save application, the eighth stage-100 command, Mom/player presentation, and the remaining opening
+Fallout 3 presentation disabled. General package/KF execution, a portable fresh
+Vault 101 presentation cache, the eighth stage-100 command, Mom/player presentation, and the remaining opening
 interpreter are active work. TTW and JAM
 registration are documented in [the mod policy](docs/mods.md);
 registration alone does not make either route runtime-playable.
@@ -333,8 +338,8 @@ Doc route. A fresh four-family cache and current runtime pass the first portal,
 the exact animated Goodsprings gate, the source-backed Prospector Saloon porch,
 and `0010636f` → `0010618e`. The saved saloon CELL and player transform then
 cold-restore without replaying a transition. All three spaces remain instantiated, but
-only the current CELL and its direct portal neighbors remain active for
-visibility, processing, physics, and lights. Remaining work includes reverse
+only the authoritative current CELL remains active for visibility, processing,
+physics, and lights; linked CELLs stay preloaded and suspended. Remaining work includes reverse
 traversal, dynamic time/weather, neighboring exterior-grid streaming, integrated-route
 OpenXR, Sunny behavior, and an uninterrupted whole campaign. See the
 [canonical whole-game delivery plan](docs/whole-game-delivery-plan.md),

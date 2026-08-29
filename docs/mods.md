@@ -32,9 +32,12 @@ version, plugin-stack ID, and a distinct save-compatibility ID. There is no TTW
 save-loading route yet; the separate identity prevents future TTW support from
 silently adopting a standalone Fallout 3 or New Vegas save.
 
-TTW runtime support is absent: the inspector does not compile TTW records, BSA
-members, loose files, scripts, or world transitions into runtime contracts. No
-TTW output or derived cache enters Git or an OpenNV release.
+TTW runtime support is absent. The bounded opening compiler resolves only the
+effective CG00→CG01-stage-5 record, command, and owned-movie closure described
+below. It does not implement general archive/loose-file precedence, execute the
+commands, present or transition the Vault 101 world, load/save TTW gameplay, or
+execute xNVSE/JAM plugins. No TTW output or derived cache enters Git or an
+OpenNV release.
 
 The first concrete registration step is available now. Give the inspector the
 effective MO2 data layers in low-to-high precedence order and the profile's
@@ -93,6 +96,21 @@ That neutral contract validates BSA v104 headers and zero-byte `.override`
 markers without interpreting archive-member precedence, nested loose files, or
 override-member semantics. It remains non-playable and reports
 `runtimeCompatibility.ready=false`.
+
+The next bounded compiler consumes that exact profile/namespace pair and emits
+the source-bound Fallout 3 CG00→CG01-stage-5 command/movie contract beside them:
+
+```powershell
+python content/tools/ttw_fo3_opening.py `
+  --ttw-profile "$env:LOCALAPPDATA\OpenNV\profiles\ttw-profile.json" `
+  --source-namespace "$env:LOCALAPPDATA\OpenNV\profiles\ttw-effective-source.json" `
+  --output "$env:LOCALAPPDATA\OpenNV\profiles\ttw-fo3-opening-profile.json"
+```
+
+The launcher revalidates the exact plugin stack, effective-source namespace,
+owned movies, save identity, and dedicated cache identity. It prepares an
+isolated future runtime handoff but remains disabled because the profile
+truthfully reports `runtimeCompatibility.ready=false`.
 
 ## JAM and the xNVSE semantic layer
 

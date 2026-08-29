@@ -81,8 +81,9 @@ but no commercial content. On first launch, select a legal Fallout: New Vegas
 `Data` folder; OpenNV prepares its private cache and enters the owned New Vegas
 menu, whose New Game/Continue route begins in Doc Mitchell's house with the
 Goodsprings exterior and saloon eagerly instantiated as a bounded composite.
-The source-portal active set keeps only the current CELL and direct neighbors
-active. Python and
+The source-portal active set keeps only the authoritative current CELL active;
+linked CELLs stay loaded but hidden, nonprocessing, and noncollidable until a
+source portal transition. Python and
 OpenMW are not required on the player's machine. Later
 launches reopen that verified cache automatically.
 
@@ -141,11 +142,14 @@ sex-aware hair and eye lists, and Player-plus-RACE FaceGen defaults, then saves
 the accepted choice at stage 62. Its deterministic preview shows the exact
 owned head/hair/eye source textures; it is not yet a 3D FaceGen actor render.
 The bounded normal route now enters the owned Vault 101 birth room, plays the
-exact stage-65 Dad cue, applies stages 80 and 85, and reaches stage 90 INFO
-`0001f379` with its four commands, owned white fade, and sound. Cold Continue
-restores stage 90 without replaying the one-shot cue/effects. This does not
-implement general package/KF/dialogue AI, the timer-to-stage-100 boundary, or a
-freely playable Vault 101 world.
+exact stage-65 Dad cue, applies stages 80 and 85, reaches stage 90 INFO
+`0001f379`, and advances through seven exact stage-100 commands with cold
+restore. A fresh pinned-Theora profile also compiles the exact CG01 stage-0 and
+stage-5 results plus the sex-specific two-line Dad dialogue into stage 10. The
+stage-10 runtime/save adapter is implemented, but native apply/restore remains
+blocked before execution because the existing Vault 101 presentation manifest
+contains actor-derivative paths from another local cache root. This does not
+implement general package/KF/dialogue AI or a freely playable Vault 101 world.
 
 The private Fallout 1 tactical slice launches from a prepared, ignored owned
 cache with:
