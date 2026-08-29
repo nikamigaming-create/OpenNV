@@ -1570,11 +1570,15 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void ShowNameMenu(Action completed)
     {
-        var content = OpenPanel(MenuRect("name"));
+        var content = OpenPanel(MenuRect("name"), "name");
         var prompt = NewLabel(_flow.Strings["namePrompt"]);
         prompt.HorizontalAlignment = HorizontalAlignment.Center;
         content.AddChild(prompt);
-        var input = new LineEdit { Text = _playerName };
+        var input = new LineEdit
+        {
+            Text = _playerName,
+            Alignment = HorizontalAlignment.Center,
+        };
         ApplyTextTheme(input);
         content.AddChild(input);
         var accept = NewButton(_flow.Strings["ok"]);
@@ -1595,7 +1599,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void ShowAppearanceMenu(Action completed)
     {
-        var content = OpenPanel(MenuRect("appearance"));
+        var content = OpenPanel(MenuRect("appearance"), "appearance");
         var title = NewLabel(_flow.Character.SexTitle);
         title.HorizontalAlignment = HorizontalAlignment.Center;
         content.AddChild(title);
@@ -2598,7 +2602,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             $"quests={state.Quests.Count} achievements={state.Achievements.Count}");
     }
 
-    private VBoxContainer OpenPanel(Rect2 rect)
+    private VBoxContainer OpenPanel(Rect2 rect, string? menuRole = null)
     {
         CloseModal(false);
         var root = new Control
@@ -2606,6 +2610,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             Name = "OwnedMenu",
             Position = Vector2.Zero,
             Size = _flow.ReferenceCanvasSize,
+            ZIndex = 1,
             MouseFilter = Control.MouseFilterEnum.Stop,
         };
         _canvas.AddChild(root);
@@ -2619,6 +2624,22 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         panel.AddThemeStyleboxOverride(
             "panel",
             OwnedUiTheme.HighlightedStyle(_opening.MainMenuColor, _opening.Style));
+        if (menuRole is not null &&
+            _flow.Menus.TryGetValue(menuRole, out var menu) &&
+            menu.Background is { } background)
+        {
+            var backgroundTexture = new TextureRect
+            {
+                Name = $"Owned{menu.MenuName}Background",
+                Texture = OwnedUiTheme.LoadTexture(background.Path),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.Scale,
+                Position = rect.Position,
+                Size = rect.Size,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            root.AddChild(backgroundTexture);
+        }
         root.AddChild(panel);
         var margins = new MarginContainer();
         margins.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);

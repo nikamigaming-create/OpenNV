@@ -65,7 +65,7 @@ internal sealed class CellNavigationGraph
             else
                 result.Add(ExternalSharedEdgeMidpoint(pair.First, pair.Second));
         }
-        result.Add(destinationGameUnits);
+        result.Add(destination.Point);
         return result;
     }
 

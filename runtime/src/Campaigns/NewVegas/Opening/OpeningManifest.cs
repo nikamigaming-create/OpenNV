@@ -114,7 +114,8 @@ internal sealed record OpeningManifest(
         var newGameFlow = OpeningNewGameFlow.Load(
             root.GetProperty("newGameFlow"),
             ui.GetProperty("flow"),
-            textures);
+            textures,
+            uiDocuments);
         var result = new OpeningManifest(
             resolved,
             root.GetProperty("campaign").GetString()!,

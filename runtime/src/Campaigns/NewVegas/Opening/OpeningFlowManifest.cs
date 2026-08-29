@@ -71,13 +71,14 @@ internal sealed record OpeningNewGameFlow(
     internal static OpeningNewGameFlow Load(
         JsonElement source,
         JsonElement uiFlow,
-        IReadOnlyDictionary<string, OwnedUiTexture> textures)
+        IReadOnlyDictionary<string, OwnedUiTexture> textures,
+        IReadOnlyDictionary<string, JsonElement> uiDocuments)
     {
         if (source.GetProperty("schema").GetString() != ExpectedSchema)
             throw new InvalidOperationException("Owned New Game flow has an unexpected contract.");
 
         var menus = uiFlow.GetProperty("menus").EnumerateArray()
-            .Select(ParseMenu)
+            .Select(value => ParseMenu(value, textures, uiDocuments))
             .ToDictionary(value => value.Role, StringComparer.OrdinalIgnoreCase);
         var referenceCanvas = OpeningManifest.ReadVector(
             uiFlow.GetProperty("referenceCanvasSize"));
@@ -179,18 +180,51 @@ internal sealed record OpeningNewGameFlow(
         source.GetProperty("allEmittedKindsRuntimeBlocking").GetBoolean(),
         source.GetProperty("allDeclaredRecordReferencesResolved").GetBoolean());
 
-    private static OpeningFlowMenu ParseMenu(JsonElement value)
+    private static OpeningFlowMenu ParseMenu(
+        JsonElement value,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures,
+        IReadOnlyDictionary<string, JsonElement> uiDocuments)
     {
         var source = value.GetProperty("source").GetString()!;
         OpeningManifest.VerifyHash(source, value.GetProperty("sha256").GetString()!);
+        var document = value.GetProperty("document").GetString()!;
+        if (!uiDocuments.TryGetValue(document, out var documentContract))
+            throw new InvalidOperationException(
+                $"Owned flow menu document contract is absent: {document}");
+        if (!documentContract.GetProperty("sha256").GetString()!.Equals(
+                value.GetProperty("sha256").GetString(),
+                StringComparison.OrdinalIgnoreCase) ||
+            !System.IO.Path.GetFullPath(
+                documentContract.GetProperty("source").GetString()!).Equals(
+                System.IO.Path.GetFullPath(source),
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Owned flow menu document identity differs: {document}");
+        var backgroundAssets = documentContract
+            .GetProperty("initiallyVisibleAssetReferences")
+            .EnumerateArray()
+            .Select(asset => asset.GetString()!)
+            .Where(asset => asset.Contains(
+                "\\background\\",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (backgroundAssets.Length > 1)
+            throw new InvalidOperationException(
+                $"Owned flow menu background is ambiguous: {document}");
+        OwnedUiTexture? background = null;
+        if (backgroundAssets.Length == 1 &&
+            !textures.TryGetValue(backgroundAssets[0], out background))
+            throw new InvalidOperationException(
+                $"Owned flow menu background is unavailable: {backgroundAssets[0]}");
         return new OpeningFlowMenu(
             value.GetProperty("role").GetString()!,
-            value.GetProperty("document").GetString()!,
+            document,
             value.GetProperty("menuName").GetString()!,
             System.IO.Path.GetFullPath(source),
             value.TryGetProperty("rect", out var rect)
                 ? OpeningManifest.ReadRect(rect)
-                : null);
+                : null,
+            background);
     }
 
     private static OpeningStageProgram ParseStage(JsonElement value) => new(
@@ -866,7 +900,8 @@ internal sealed record OpeningFlowMenu(
     string Document,
     string MenuName,
     string SourcePath,
-    Rect2? Rect);
+    Rect2? Rect,
+    OwnedUiTexture? Background);
 
 internal sealed record OpeningStageProgram(
     int Stage,
