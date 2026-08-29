@@ -34,9 +34,33 @@ internal sealed record OpeningNewGameFlow(
     private const string ExpectedCommandContractSchema =
         "opennv-owned-opening-command-contract/v1";
     private const string ExpectedGuideActorAiSchema =
-        "opennv-owned-guide-actor-ai/v2";
+        "opennv-owned-guide-actor-ai/v3";
+    private const string ExpectedGuideFurnitureOccupancySchema =
+        "opennv-owned-guide-furniture-occupancy/v2";
+    private const string ExpectedGuideFurnitureHeadingDeltaEditorId =
+        "fFurnitureMarker14HeadingDelta";
+    private const string ExpectedGuideFurniturePlacementSemantics =
+        "replace-marker-offset-for-actor-placement";
+    private const string ExpectedGuideFurniturePlacementXEditorId =
+        "fFurnitureMarker14DeltaX";
+    private const string ExpectedGuideFurniturePlacementYEditorId =
+        "fFurnitureMarker14DeltaY";
+    private const string ExpectedGuideFurniturePlacementZEditorId =
+        "fFurnitureMarker14DeltaZ";
+    private const string ExpectedOwnedGameSettingSourceKind = "owned-master-gmst";
+    private const string ExpectedPlayerAppearanceSchema =
+        "opennv-owned-player-appearance/v1";
+    private const string ExpectedPlayerAppearanceStatus =
+        "source-backed-interactive-selection";
     private const string ExpectedPlayerAnimationSchema =
         "opennv-owned-player-animation-graph/v1";
+    private const int GuideConditionGreaterOrEqual = 0x60;
+    private const int DocInitialChairMarkerId = 14;
+    private const int DocInitialChairMarkerOrientation = 3141;
+    private const float FurnitureMarkerOrientationUnitsPerRadian = 1000.0f;
+    private const int FaceGenSymmetricGeometryCount = 50;
+    private const int FaceGenAsymmetricGeometryCount = 30;
+    private const int FaceGenSymmetricTextureCount = 50;
     private static readonly HashSet<string> RuntimeCommandKinds = new(
         new[]
         {
@@ -377,6 +401,8 @@ internal sealed record OpeningNewGameFlow(
                 .Select(value => value.GetString()!)
                 .ToArray(),
             packages,
+            ParseGuideFurnitureOccupancy(
+                source.GetProperty("furnitureOccupancy")),
             source.GetProperty("animationObjects").EnumerateArray()
                 .Select(ParseGuideAnimationObject)
                 .ToArray(),
@@ -384,6 +410,104 @@ internal sealed record OpeningNewGameFlow(
                 ParseGuideLocomotionClip(locomotion.GetProperty("walk")),
                 ParseGuideLocomotionClip(locomotion.GetProperty("run"))));
     }
+
+    private static OpeningGuideFurnitureOccupancy ParseGuideFurnitureOccupancy(
+        JsonElement source)
+    {
+        if (source.GetProperty("schema").GetString() !=
+            ExpectedGuideFurnitureOccupancySchema)
+            throw new InvalidOperationException(
+                "Owned guide furniture occupancy has an unexpected contract.");
+        var furniture = source.GetProperty("furniture");
+        var marker = furniture.GetProperty("marker");
+        var placementOffset = marker.GetProperty(
+            "actorPlacementOffsetGameSettings");
+        var headingDelta = marker.GetProperty(
+            "actorForwardHeadingDeltaGameSetting");
+        return new OpeningGuideFurnitureOccupancy(
+            source.GetProperty("initialPackageFormId").GetString()!,
+            source.GetProperty("referenceFormId").GetString()!,
+            source.GetProperty("markerId").GetInt32(),
+            source.GetProperty("markerDisposition").GetString()!,
+            new OpeningGuideFurnitureSource(
+                furniture.GetProperty("referenceFormId").GetString()!,
+                furniture.GetProperty("referenceRecordSha256").GetString()!,
+                furniture.GetProperty("baseFormId").GetString()!,
+                furniture.GetProperty("editorId").GetString()!,
+                furniture.GetProperty("recordType").GetString()!,
+                furniture.GetProperty("recordSha256").GetString()!,
+                furniture.GetProperty("modelLogicalPath").GetString()!,
+                furniture.GetProperty("modelBytes").GetInt64(),
+                furniture.GetProperty("modelSha256").GetString()!,
+                furniture.GetProperty("sourceArchive").GetString()!,
+                furniture.GetProperty("sourceArchiveSha256").GetString()!,
+                new OpeningGuideFurnitureMarker(
+                    marker.GetProperty("extraDataName").GetString()!,
+                    marker.GetProperty("index").GetInt32(),
+                    marker.GetProperty("positionRef1").GetInt32(),
+                    marker.GetProperty("positionRef2").GetInt32(),
+                    ReadVector3(marker.GetProperty("offsetNifGameUnits")),
+                    ReadVector3(marker.GetProperty("offsetGodotGameUnits")),
+                    marker.GetProperty("orientation").GetInt32(),
+                    marker.GetProperty("orientationRadians").GetSingle(),
+                    marker.GetProperty("heading").GetSingle(),
+                    marker.GetProperty("animationType").GetInt32(),
+                    ReadQuaternion(marker.GetProperty("rotationGodotQuaternion")),
+                    new OpeningGuideFurniturePlacementOffset(
+                        placementOffset.GetProperty("semantics").GetString()!,
+                        ParseFurniturePlacementGameSetting(
+                            placementOffset.GetProperty("x")),
+                        ParseFurniturePlacementGameSetting(
+                            placementOffset.GetProperty("y")),
+                        ParseFurniturePlacementGameSetting(
+                            placementOffset.GetProperty("z")),
+                        ReadVector3(placementOffset.GetProperty(
+                            "offsetNifGameUnits")),
+                        ReadVector3(placementOffset.GetProperty(
+                            "offsetGodotGameUnits"))),
+                    new OpeningGuideFurnitureHeadingDelta(
+                        headingDelta.GetProperty("formId").GetString()!,
+                        headingDelta.GetProperty("editorId").GetString()!,
+                        headingDelta.GetProperty("recordSha256").GetString()!,
+                        headingDelta.GetProperty("sourceKind").GetString()!,
+                        headingDelta.GetProperty("value").GetSingle(),
+                        ReadQuaternion(headingDelta.GetProperty(
+                            "rotationGodotQuaternion"))))),
+            source.GetProperty("releaseStage").GetInt32(),
+            source.GetProperty("releasePackageFormId").GetString()!,
+            source.GetProperty("animationObjectIdleFormId").GetString()!,
+            ParseGuideFurnitureAnimation(source.GetProperty("seatedLoop")),
+            ParseGuideFurnitureAnimation(source.GetProperty("exit")));
+    }
+
+    private static OpeningGuideFurniturePlacementGameSetting
+        ParseFurniturePlacementGameSetting(JsonElement source) => new(
+            source.GetProperty("formId").GetString()!,
+            source.GetProperty("editorId").GetString()!,
+            source.GetProperty("recordSha256").GetString()!,
+            source.GetProperty("sourceKind").GetString()!,
+            source.GetProperty("value").GetSingle());
+
+    private static OpeningGuideFurnitureAnimation ParseGuideFurnitureAnimation(
+        JsonElement source) => new(
+        source.GetProperty("role").GetString()!,
+        source.GetProperty("formId").GetString()!,
+        source.GetProperty("editorId").GetString()!,
+        source.GetProperty("recordType").GetString()!,
+        source.GetProperty("recordSha256").GetString()!,
+        source.GetProperty("logicalPath").GetString()!,
+        source.GetProperty("bytes").GetInt64(),
+        source.GetProperty("sha256").GetString()!,
+        source.GetProperty("sourceArchive").GetString()!,
+        source.GetProperty("sourceArchiveSha256").GetString()!,
+            source.GetProperty("sequenceName").GetString()!,
+            source.GetProperty("startSeconds").GetSingle(),
+            source.GetProperty("stopSeconds").GetSingle(),
+            source.GetProperty("cycleType").GetInt32(),
+            source.GetProperty("controlledBlocks").GetInt32(),
+            source.TryGetProperty("rootMotion", out var rootMotion)
+                ? ParseGuideRootMotion(rootMotion)
+                : null);
 
     private static OpeningGuideAnimationObject ParseGuideAnimationObject(
         JsonElement source) => new(
@@ -463,15 +587,17 @@ internal sealed record OpeningNewGameFlow(
         return new OpeningGuideLocomotionClip(
             source.GetProperty("logicalPath").GetString()!,
             source.GetProperty("sha256").GetString()!,
-            new OpeningGuideRootMotion(
-                rootMotion.GetProperty("sequenceName").GetString()!,
-                rootMotion.GetProperty("targetNode").GetString()!,
-                rootMotion.GetProperty("startSeconds").GetSingle(),
-                rootMotion.GetProperty("stopSeconds").GetSingle(),
-                rootMotion.GetProperty("cycleType").GetInt32(),
-                ReadVector3(rootMotion.GetProperty("displacementGodotGameUnits")),
-                rootMotion.GetProperty("speedGameUnitsPerSecond").GetSingle()));
+            ParseGuideRootMotion(rootMotion));
     }
+
+    private static OpeningGuideRootMotion ParseGuideRootMotion(JsonElement source) => new(
+        source.GetProperty("sequenceName").GetString()!,
+        source.GetProperty("targetNode").GetString()!,
+        source.GetProperty("startSeconds").GetSingle(),
+        source.GetProperty("stopSeconds").GetSingle(),
+        source.GetProperty("cycleType").GetInt32(),
+        ReadVector3(source.GetProperty("displacementGodotGameUnits")),
+        source.GetProperty("speedGameUnitsPerSecond").GetSingle());
 
     private static OpeningPlayerAnimationGraph ParsePlayerAnimation(JsonElement source)
     {
@@ -589,6 +715,7 @@ internal sealed record OpeningNewGameFlow(
             sex.GetProperty("choices").EnumerateArray()
                 .Select(choice => choice.GetString()!)
                 .ToArray(),
+            ParsePlayerAppearance(value.GetProperty("appearance"), textures),
             special.GetProperty("minimumValue").GetInt32(),
             special.GetProperty("initialValue").GetInt32(),
             special.GetProperty("maximumValue").GetInt32(),
@@ -600,6 +727,84 @@ internal sealed record OpeningNewGameFlow(
             traits.GetProperty("maximumSelected").GetInt32(),
             ParseCharacterValues(traits.GetProperty("values"), textures),
             OpeningGameplayVitalsContract.Parse(value.GetProperty("vitals")));
+    }
+
+    private static OpeningPlayerAppearance ParsePlayerAppearance(
+        JsonElement source,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures) => new(
+            source.GetProperty("schema").GetString()!,
+            source.GetProperty("status").GetString()!,
+            source.GetProperty("player").GetProperty("formId").GetString()!,
+            source.GetProperty("player").GetProperty("recordSha256").GetString()!,
+            source.GetProperty("player").GetProperty("defaultRaceFormId").GetString()!,
+            source.GetProperty("player").GetProperty("defaultHairFormId").GetString()!,
+            source.GetProperty("player").GetProperty("defaultEyesFormId").GetString()!,
+            ParseAppearanceFaceGen(
+                source.GetProperty("player").GetProperty("faceGen")),
+            source.GetProperty("sexEngineValues").EnumerateArray()
+                .Select(value => value.GetString()!)
+                .ToArray(),
+            source.GetProperty("races").EnumerateArray()
+                .Select(value => ParseAppearanceRace(value, textures))
+                .ToArray(),
+            source.GetProperty("preview").GetString()!);
+
+    private static OpeningAppearanceFaceGen ParseAppearanceFaceGen(
+        JsonElement source) => new(
+            source.GetProperty("symmetricGeometry").GetProperty("count").GetInt32(),
+            source.GetProperty("symmetricGeometry").GetProperty("sha256").GetString()!,
+            source.GetProperty("asymmetricGeometry").GetProperty("count").GetInt32(),
+            source.GetProperty("asymmetricGeometry").GetProperty("sha256").GetString()!,
+            source.GetProperty("symmetricTexture").GetProperty("count").GetInt32(),
+            source.GetProperty("symmetricTexture").GetProperty("sha256").GetString()!);
+
+    private static OpeningAppearanceRace ParseAppearanceRace(
+        JsonElement source,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures)
+    {
+        var sexes = source.GetProperty("sex").EnumerateObject()
+            .ToDictionary(
+                value => value.Name,
+                value => ParseAppearanceSex(value.Value, textures),
+                StringComparer.Ordinal);
+        return new OpeningAppearanceRace(
+            source.GetProperty("formId").GetString()!,
+            source.GetProperty("editorId").GetString()!,
+            source.GetProperty("label").GetString()!,
+            source.GetProperty("recordSha256").GetString()!,
+            sexes);
+    }
+
+    private static OpeningAppearanceSex ParseAppearanceSex(
+        JsonElement source,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures) => new(
+            source.GetProperty("defaultHairFormId").GetString()!,
+            source.GetProperty("defaultEyesFormId").GetString()!,
+            source.GetProperty("hairOptions").EnumerateArray()
+                .Select(value => ParseAppearanceOption(value, textures))
+                .ToArray(),
+            source.GetProperty("eyeOptions").EnumerateArray()
+                .Select(value => ParseAppearanceOption(value, textures))
+                .ToArray());
+
+    private static OpeningAppearanceOption ParseAppearanceOption(
+        JsonElement source,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures)
+    {
+        var texturePath = source.GetProperty("textureLogicalPath").GetString()!;
+        if (!textures.TryGetValue(texturePath, out var texture))
+            throw new InvalidOperationException(
+                $"Owned appearance preview texture is absent: {texturePath}");
+        return new OpeningAppearanceOption(
+            source.GetProperty("formId").GetString()!,
+            source.GetProperty("recordType").GetString()!,
+            source.GetProperty("editorId").GetString()!,
+            source.GetProperty("label").GetString()!,
+            source.GetProperty("recordSha256").GetString()!,
+            source.GetProperty("modelLogicalPath").ValueKind == JsonValueKind.String
+                ? source.GetProperty("modelLogicalPath").GetString()
+                : null,
+            texture);
     }
 
     private static OpeningDocReaction ParseDocReaction(JsonElement value) => new(
@@ -749,6 +954,7 @@ internal sealed record OpeningNewGameFlow(
             throw new InvalidOperationException(
                 "Owned dialogue response, voice, or lip graph is incomplete.");
         var guide = flow.GuideActorAi;
+        var furniture = guide.FurnitureOccupancy;
         var guideIdleAnimations = guide.Packages.Values
             .SelectMany(package => package.IdleAnimationFormIds.Zip(
                 package.IdleAnimationLogicalPaths))
@@ -772,6 +978,112 @@ internal sealed record OpeningNewGameFlow(
                         !destination.RotationGodot.IsNormalized()) ||
                 package.IdleAnimationFormIds.Count !=
                     package.IdleAnimationLogicalPaths.Count) ||
+            furniture.MarkerId != DocInitialChairMarkerId ||
+            !furniture.MarkerDisposition.Equals(
+                "compose-owned-furniture-reference-gmst-replacement-offset-and-heading-delta",
+                StringComparison.Ordinal) ||
+            !furniture.Furniture.ReferenceFormId.Equals(
+                furniture.ReferenceFormId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !furniture.Furniture.RecordType.Equals("FURN", StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(furniture.Furniture.ReferenceRecordSha256) ||
+            string.IsNullOrWhiteSpace(furniture.Furniture.BaseFormId) ||
+            string.IsNullOrWhiteSpace(furniture.Furniture.EditorId) ||
+            string.IsNullOrWhiteSpace(furniture.Furniture.RecordSha256) ||
+            string.IsNullOrWhiteSpace(furniture.Furniture.ModelLogicalPath) ||
+            furniture.Furniture.ModelBytes <= 0 ||
+            string.IsNullOrWhiteSpace(furniture.Furniture.ModelSha256) ||
+            string.IsNullOrWhiteSpace(furniture.Furniture.SourceArchive) ||
+            string.IsNullOrWhiteSpace(furniture.Furniture.SourceArchiveSha256) ||
+            furniture.Furniture.Marker.ExtraDataName != "FRN" ||
+            furniture.Furniture.Marker.Index != 2 ||
+            furniture.Furniture.Marker.PositionRef1 != furniture.MarkerId ||
+            furniture.Furniture.Marker.PositionRef2 != furniture.MarkerId ||
+            furniture.Furniture.Marker.Orientation !=
+                DocInitialChairMarkerOrientation ||
+            !Mathf.IsEqualApprox(
+                furniture.Furniture.Marker.OrientationRadians,
+                furniture.Furniture.Marker.Orientation /
+                FurnitureMarkerOrientationUnitsPerRadian) ||
+            furniture.Furniture.Marker.AnimationType != 1 ||
+            !furniture.Furniture.Marker.OffsetNifGameUnits.IsFinite() ||
+            !furniture.Furniture.Marker.OffsetGodotGameUnits.IsFinite() ||
+            !furniture.Furniture.Marker.OffsetGodotGameUnits.IsEqualApprox(
+                new Vector3(
+                    furniture.Furniture.Marker.OffsetNifGameUnits.X,
+                    furniture.Furniture.Marker.OffsetNifGameUnits.Z,
+                    -furniture.Furniture.Marker.OffsetNifGameUnits.Y)) ||
+            !furniture.Furniture.Marker.RotationGodot.IsNormalized() ||
+            furniture.Furniture.Marker.ActorPlacementOffset.Semantics !=
+                ExpectedGuideFurniturePlacementSemantics ||
+            !FurniturePlacementGameSettingIsValid(
+                furniture.Furniture.Marker.ActorPlacementOffset.X,
+                ExpectedGuideFurniturePlacementXEditorId) ||
+            !FurniturePlacementGameSettingIsValid(
+                furniture.Furniture.Marker.ActorPlacementOffset.Y,
+                ExpectedGuideFurniturePlacementYEditorId) ||
+            !FurniturePlacementGameSettingIsValid(
+                furniture.Furniture.Marker.ActorPlacementOffset.Z,
+                ExpectedGuideFurniturePlacementZEditorId) ||
+            !furniture.Furniture.Marker.ActorPlacementOffset.OffsetNifGameUnits
+                .IsEqualApprox(new Vector3(
+                    furniture.Furniture.Marker.ActorPlacementOffset.X.ValueGameUnits,
+                    furniture.Furniture.Marker.ActorPlacementOffset.Y.ValueGameUnits,
+                    furniture.Furniture.Marker.ActorPlacementOffset.Z.ValueGameUnits)) ||
+            !furniture.Furniture.Marker.ActorPlacementOffset.OffsetGodotGameUnits
+                .IsEqualApprox(new Vector3(
+                    furniture.Furniture.Marker.ActorPlacementOffset.X.ValueGameUnits,
+                    furniture.Furniture.Marker.ActorPlacementOffset.Z.ValueGameUnits,
+                    -furniture.Furniture.Marker.ActorPlacementOffset.Y.ValueGameUnits)) ||
+            string.IsNullOrWhiteSpace(
+                furniture.Furniture.Marker.ActorForwardHeadingDelta.FormId) ||
+            furniture.Furniture.Marker.ActorForwardHeadingDelta.EditorId !=
+                ExpectedGuideFurnitureHeadingDeltaEditorId ||
+            string.IsNullOrWhiteSpace(
+                furniture.Furniture.Marker.ActorForwardHeadingDelta.RecordSha256) ||
+            furniture.Furniture.Marker.ActorForwardHeadingDelta.SourceKind !=
+                ExpectedOwnedGameSettingSourceKind ||
+            !float.IsFinite(
+                furniture.Furniture.Marker.ActorForwardHeadingDelta.ValueRadians) ||
+            !furniture.Furniture.Marker.ActorForwardHeadingDelta.RotationGodot
+                .IsNormalized() ||
+            !new Basis(
+                furniture.Furniture.Marker.ActorForwardHeadingDelta.RotationGodot)
+                .IsEqualApprox(new Basis(new Quaternion(
+                    Vector3.Up,
+                    -furniture.Furniture.Marker.ActorForwardHeadingDelta.ValueRadians))) ||
+            !flow.Stages.ContainsKey(furniture.ReleaseStage) ||
+            !guide.Packages.TryGetValue(
+                furniture.InitialPackageFormId,
+                out var initialFurniturePackage) ||
+            initialFurniturePackage.Location?.FormId.Equals(
+                furniture.ReferenceFormId,
+                StringComparison.OrdinalIgnoreCase) != true ||
+            !initialFurniturePackage.IdleAnimationFormIds.Contains(
+                furniture.AnimationObjectIdleFormId,
+                StringComparer.OrdinalIgnoreCase) ||
+            !guide.Packages.TryGetValue(
+                furniture.ReleasePackageFormId,
+                out var releaseFurniturePackage) ||
+            !releaseFurniturePackage.Conditions.Any(condition =>
+                condition.FunctionName.Equals(
+                    "getStage",
+                    StringComparison.OrdinalIgnoreCase) &&
+                condition.Parameter1.Equals(
+                    flow.QuestFormId,
+                    StringComparison.OrdinalIgnoreCase) &&
+                condition.OperatorFlags == GuideConditionGreaterOrEqual &&
+                condition.ComparisonValue == furniture.ReleaseStage) ||
+            !ValidGuideFurnitureAnimation(
+                furniture.SeatedLoop,
+                "seatedLoop",
+                0,
+                requireRootMotion: false) ||
+            !ValidGuideFurnitureAnimation(
+                furniture.Exit,
+                "exit",
+                2,
+                requireRootMotion: true) ||
             guide.AnimationObjects.Select(value => value.FormId)
                 .Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
                 guide.AnimationObjects.Count ||
@@ -826,6 +1138,7 @@ internal sealed record OpeningNewGameFlow(
                 "Owned player animation or image-space command graph is incomplete.");
         var character = flow.Character;
         if (character.SexChoices.Count == 0 ||
+            !ValidPlayerAppearance(character) ||
             character.SpecialValues.Count == 0 ||
             character.SkillValues.Count == 0 ||
             character.TraitValues.Count == 0 ||
@@ -840,6 +1153,60 @@ internal sealed record OpeningNewGameFlow(
             character.TraitMaximumSelected > character.TraitValues.Count)
             throw new InvalidOperationException("Owned character-creation contract is invalid.");
     }
+
+    private static bool ValidPlayerAppearance(OpeningCharacterCreation character)
+    {
+        var appearance = character.Appearance;
+        var sexValues = appearance.SexEngineValues.ToHashSet(StringComparer.Ordinal);
+        if (appearance.Schema != ExpectedPlayerAppearanceSchema ||
+            appearance.Status != ExpectedPlayerAppearanceStatus ||
+            appearance.SexEngineValues.Count != character.SexChoices.Count ||
+            !sexValues.SetEquals(["male", "female"]) ||
+            appearance.Races.Count == 0 ||
+            appearance.Races.Select(value => value.FormId)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                appearance.Races.Count ||
+            !appearance.Races.Any(value => value.FormId.Equals(
+                appearance.DefaultRaceFormId,
+                StringComparison.OrdinalIgnoreCase)) ||
+            appearance.FaceGen.SymmetricGeometryCount != FaceGenSymmetricGeometryCount ||
+            appearance.FaceGen.AsymmetricGeometryCount != FaceGenAsymmetricGeometryCount ||
+            appearance.FaceGen.SymmetricTextureCount != FaceGenSymmetricTextureCount ||
+            string.IsNullOrWhiteSpace(appearance.FaceGen.SymmetricGeometrySha256) ||
+            string.IsNullOrWhiteSpace(appearance.FaceGen.AsymmetricGeometrySha256) ||
+            string.IsNullOrWhiteSpace(appearance.FaceGen.SymmetricTextureSha256))
+            return false;
+        return appearance.Races.All(race =>
+            ValidIdentity(race.EditorId, race.FormId, "RACE", "RACE") &&
+            !string.IsNullOrWhiteSpace(race.Label) &&
+            !string.IsNullOrWhiteSpace(race.RecordSha256) &&
+            race.Sex.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(sexValues) &&
+            race.Sex.Values.All(sex =>
+                sex.HairOptions.Count > 0 &&
+                sex.EyeOptions.Count > 0 &&
+                sex.HairOptions.Any(value => value.FormId.Equals(
+                    sex.DefaultHairFormId,
+                    StringComparison.OrdinalIgnoreCase)) &&
+                sex.EyeOptions.Any(value => value.FormId.Equals(
+                    sex.DefaultEyesFormId,
+                    StringComparison.OrdinalIgnoreCase)) &&
+                sex.HairOptions.All(value => ValidAppearanceOption(value, "HAIR")) &&
+                sex.EyeOptions.All(value => ValidAppearanceOption(value, "EYES"))));
+    }
+
+    private static bool ValidAppearanceOption(
+        OpeningAppearanceOption option,
+        string expectedRecordType) =>
+        ValidIdentity(
+            option.EditorId,
+            option.FormId,
+            option.RecordType,
+            expectedRecordType) &&
+        !string.IsNullOrWhiteSpace(option.Label) &&
+        !string.IsNullOrWhiteSpace(option.RecordSha256) &&
+        (expectedRecordType != "HAIR" ||
+            !string.IsNullOrWhiteSpace(option.ModelLogicalPath)) &&
+        !string.IsNullOrWhiteSpace(option.Texture.Path);
 
     private static void ValidateCommandContract(
         OpeningCommandContract contract,
@@ -929,14 +1296,57 @@ internal sealed record OpeningNewGameFlow(
     private static bool ValidGuideLocomotionClip(OpeningGuideLocomotionClip clip) =>
         !string.IsNullOrWhiteSpace(clip.LogicalPath) &&
         !string.IsNullOrWhiteSpace(clip.Sha256) &&
-        !string.IsNullOrWhiteSpace(clip.RootMotion.SequenceName) &&
-        !string.IsNullOrWhiteSpace(clip.RootMotion.TargetNode) &&
-        float.IsFinite(clip.RootMotion.StartSeconds) &&
-        float.IsFinite(clip.RootMotion.StopSeconds) &&
-        float.IsFinite(clip.RootMotion.SpeedGameUnitsPerSecond) &&
-        clip.RootMotion.StopSeconds > clip.RootMotion.StartSeconds &&
-        clip.RootMotion.SpeedGameUnitsPerSecond > 0.0f &&
-        clip.RootMotion.DisplacementGodotGameUnits.IsFinite();
+        ValidGuideRootMotion(clip.RootMotion);
+
+    private static bool ValidGuideRootMotion(OpeningGuideRootMotion rootMotion) =>
+        !string.IsNullOrWhiteSpace(rootMotion.SequenceName) &&
+        !string.IsNullOrWhiteSpace(rootMotion.TargetNode) &&
+        float.IsFinite(rootMotion.StartSeconds) &&
+        float.IsFinite(rootMotion.StopSeconds) &&
+        float.IsFinite(rootMotion.SpeedGameUnitsPerSecond) &&
+        rootMotion.StopSeconds > rootMotion.StartSeconds &&
+        rootMotion.SpeedGameUnitsPerSecond > 0.0f &&
+        rootMotion.DisplacementGodotGameUnits.IsFinite();
+
+    private static bool FurniturePlacementGameSettingIsValid(
+        OpeningGuideFurniturePlacementGameSetting setting,
+        string expectedEditorId) =>
+        !string.IsNullOrWhiteSpace(setting.FormId) &&
+        setting.EditorId == expectedEditorId &&
+        !string.IsNullOrWhiteSpace(setting.RecordSha256) &&
+        setting.SourceKind == ExpectedOwnedGameSettingSourceKind &&
+        float.IsFinite(setting.ValueGameUnits);
+
+    private static bool ValidGuideFurnitureAnimation(
+        OpeningGuideFurnitureAnimation animation,
+        string role,
+        int cycleType,
+        bool requireRootMotion) =>
+        animation.Role.Equals(role, StringComparison.Ordinal) &&
+        animation.RecordType.Equals("IDLE", StringComparison.Ordinal) &&
+        !string.IsNullOrWhiteSpace(animation.FormId) &&
+        !string.IsNullOrWhiteSpace(animation.EditorId) &&
+        !string.IsNullOrWhiteSpace(animation.RecordSha256) &&
+        !string.IsNullOrWhiteSpace(animation.LogicalPath) &&
+        animation.Bytes > 0 &&
+        !string.IsNullOrWhiteSpace(animation.Sha256) &&
+        !string.IsNullOrWhiteSpace(animation.SourceArchive) &&
+        !string.IsNullOrWhiteSpace(animation.SourceArchiveSha256) &&
+        !string.IsNullOrWhiteSpace(animation.SequenceName) &&
+        animation.StartSeconds == 0.0f &&
+        animation.StopSeconds > animation.StartSeconds &&
+        animation.CycleType == cycleType &&
+        animation.ControlledBlocks > 0 &&
+        (requireRootMotion
+            ? animation.RootMotion is { } rootMotion &&
+                ValidGuideRootMotion(rootMotion) &&
+                rootMotion.SequenceName.Equals(
+                    animation.SequenceName,
+                    StringComparison.Ordinal) &&
+                rootMotion.StartSeconds == animation.StartSeconds &&
+                rootMotion.StopSeconds == animation.StopSeconds &&
+                rootMotion.CycleType == animation.CycleType
+            : animation.RootMotion is null);
 
     private static bool ValidDialogueAsset(OpeningDialogueAsset asset) =>
         !string.IsNullOrWhiteSpace(asset.LogicalPath) &&
@@ -1091,8 +1501,91 @@ internal sealed record OpeningGuideActorAi(
     string QuestFormId,
     IReadOnlyList<string> PackagePriority,
     IReadOnlyDictionary<string, OpeningGuidePackage> Packages,
+    OpeningGuideFurnitureOccupancy FurnitureOccupancy,
     IReadOnlyList<OpeningGuideAnimationObject> AnimationObjects,
     OpeningGuideLocomotion Locomotion);
+
+internal sealed record OpeningGuideFurnitureOccupancy(
+    string InitialPackageFormId,
+    string ReferenceFormId,
+    int MarkerId,
+    string MarkerDisposition,
+    OpeningGuideFurnitureSource Furniture,
+    int ReleaseStage,
+    string ReleasePackageFormId,
+    string AnimationObjectIdleFormId,
+    OpeningGuideFurnitureAnimation SeatedLoop,
+    OpeningGuideFurnitureAnimation Exit);
+
+internal sealed record OpeningGuideFurnitureSource(
+    string ReferenceFormId,
+    string ReferenceRecordSha256,
+    string BaseFormId,
+    string EditorId,
+    string RecordType,
+    string RecordSha256,
+    string ModelLogicalPath,
+    long ModelBytes,
+    string ModelSha256,
+    string SourceArchive,
+    string SourceArchiveSha256,
+    OpeningGuideFurnitureMarker Marker);
+
+internal sealed record OpeningGuideFurnitureMarker(
+    string ExtraDataName,
+    int Index,
+    int PositionRef1,
+    int PositionRef2,
+    Vector3 OffsetNifGameUnits,
+    Vector3 OffsetGodotGameUnits,
+    int Orientation,
+    float OrientationRadians,
+    float Heading,
+    int AnimationType,
+    Quaternion RotationGodot,
+    OpeningGuideFurniturePlacementOffset ActorPlacementOffset,
+    OpeningGuideFurnitureHeadingDelta ActorForwardHeadingDelta);
+
+internal sealed record OpeningGuideFurniturePlacementOffset(
+    string Semantics,
+    OpeningGuideFurniturePlacementGameSetting X,
+    OpeningGuideFurniturePlacementGameSetting Y,
+    OpeningGuideFurniturePlacementGameSetting Z,
+    Vector3 OffsetNifGameUnits,
+    Vector3 OffsetGodotGameUnits);
+
+internal sealed record OpeningGuideFurniturePlacementGameSetting(
+    string FormId,
+    string EditorId,
+    string RecordSha256,
+    string SourceKind,
+    float ValueGameUnits);
+
+internal sealed record OpeningGuideFurnitureHeadingDelta(
+    string FormId,
+    string EditorId,
+    string RecordSha256,
+    string SourceKind,
+    float ValueRadians,
+    Quaternion RotationGodot);
+
+internal sealed record OpeningGuideFurnitureAnimation(
+    string Role,
+    string FormId,
+    string EditorId,
+    string RecordType,
+    string RecordSha256,
+    string LogicalPath,
+    long Bytes,
+    string Sha256,
+    string SourceArchive,
+    string SourceArchiveSha256,
+    string SequenceName,
+    float StartSeconds,
+    float StopSeconds,
+    int CycleType,
+    int ControlledBlocks,
+    OpeningGuideRootMotion? RootMotion);
 
 internal sealed record OpeningGuideAnimationObject(
     string ComponentRole,
@@ -1241,6 +1734,7 @@ internal sealed record OpeningImageSpaceFadeKey(float Time, Color Color)
 internal sealed record OpeningCharacterCreation(
     string SexTitle,
     IReadOnlyList<string> SexChoices,
+    OpeningPlayerAppearance Appearance,
     int SpecialMinimum,
     int SpecialInitial,
     int SpecialMaximum,
@@ -1252,6 +1746,49 @@ internal sealed record OpeningCharacterCreation(
     int TraitMaximumSelected,
     IReadOnlyList<OpeningCharacterValue> TraitValues,
     OpeningGameplayVitalsContract Vitals);
+
+internal sealed record OpeningPlayerAppearance(
+    string Schema,
+    string Status,
+    string PlayerFormId,
+    string PlayerRecordSha256,
+    string DefaultRaceFormId,
+    string DefaultHairFormId,
+    string DefaultEyesFormId,
+    OpeningAppearanceFaceGen FaceGen,
+    IReadOnlyList<string> SexEngineValues,
+    IReadOnlyList<OpeningAppearanceRace> Races,
+    string PreviewDisposition);
+
+internal sealed record OpeningAppearanceFaceGen(
+    int SymmetricGeometryCount,
+    string SymmetricGeometrySha256,
+    int AsymmetricGeometryCount,
+    string AsymmetricGeometrySha256,
+    int SymmetricTextureCount,
+    string SymmetricTextureSha256);
+
+internal sealed record OpeningAppearanceRace(
+    string FormId,
+    string EditorId,
+    string Label,
+    string RecordSha256,
+    IReadOnlyDictionary<string, OpeningAppearanceSex> Sex);
+
+internal sealed record OpeningAppearanceSex(
+    string DefaultHairFormId,
+    string DefaultEyesFormId,
+    IReadOnlyList<OpeningAppearanceOption> HairOptions,
+    IReadOnlyList<OpeningAppearanceOption> EyeOptions);
+
+internal sealed record OpeningAppearanceOption(
+    string FormId,
+    string RecordType,
+    string EditorId,
+    string Label,
+    string RecordSha256,
+    string? ModelLogicalPath,
+    OwnedUiTexture Texture);
 
 internal sealed record OpeningGameplayVitalsContract(
     string Schema,

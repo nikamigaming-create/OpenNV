@@ -15,6 +15,8 @@ from pathlib import Path
 ACTOR_GLTF_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE12 = 1.0e-12
 ACTOR_GLTF_DIAGNOSTIC_CONTRACT_FLOAT_1POINT0ENEGATIVE5 = 1.0e-5
 ACTOR_GLTF_DIAGNOSTIC_CONTRACT_INTEGER_8 = 8
+FURNITURE_MARKER_ORIENTATION_UNITS_PER_RADIAN = 1000.0
+ACCUMULATION_ROOT_ZERO_TRANSLATION = (0.0, 0.0, 0.0)
 
 
 if not hasattr(time, "clock"):
@@ -88,6 +90,7 @@ NIF_LINEAR_INTERPOLATION = 1
 NIF_QUADRATIC_INTERPOLATION = 2
 NIF_TBC_INTERPOLATION = 3
 NIF_XYZ_ROTATION_INTERPOLATION = 4
+NIF_INVALID_TRANSFORM_COMPONENT_MAGNITUDE = 3.0e38
 SLERP_LINEAR_DOT_THRESHOLD = 0.9995
 NORMALIZATION_EPSILON = 1.0e-12
 GLTF_PRIMARY_SKIN_INFLUENCES = 4
@@ -127,6 +130,7 @@ class ActorComponent:
 class ActorAnimation:
     logical_path: str
     payload: bytes
+    retain_accumulation_root_translation: bool = False
 
 
 @dataclass(frozen=True)
@@ -197,6 +201,76 @@ class SampledRootMotion:
             ),
             "speedGameUnitsPerSecond": self.speed_game_units_per_second,
         }
+
+
+def animation_sequence_manifest(payload: bytes) -> dict[str, object]:
+    """Return the authored playback identity of one owned KF sequence."""
+
+    document = _read_nif(payload)
+    if len(document.roots) != 1 or not isinstance(
+        document.roots[0], NifFormat.NiControllerSequence
+    ):
+        raise ValueError("Actor animation is not one NiControllerSequence")
+    sequence = document.roots[0]
+    start = float(sequence.start_time)
+    stop = float(sequence.stop_time)
+    if start != 0.0 or stop <= start:
+        raise ValueError(
+            f"Actor animation has an unexpected time range: {start}..{stop}"
+        )
+    return {
+        "sequenceName": _text(sequence.name),
+        "startSeconds": start,
+        "stopSeconds": stop,
+        "cycleType": int(sequence.cycle_type),
+        "controlledBlocks": len(sequence.controlled_blocks),
+    }
+
+
+def furniture_marker_manifest(payload: bytes, marker_id: int) -> dict[str, object]:
+    """Decode one exact owned BSFurnitureMarker entry without placement policy."""
+
+    document = _read_nif(payload)
+    markers = [
+        value
+        for value in document.get_global_iterator()
+        if isinstance(value, NifFormat.BSFurnitureMarker)
+    ]
+    if len(markers) != 1:
+        raise ValueError(
+            f"Furniture NIF must contain one BSFurnitureMarker, found {len(markers)}"
+        )
+    marker = markers[0]
+    matches = [
+        (index, position)
+        for index, position in enumerate(marker.positions)
+        if int(position.position_ref_1) == marker_id
+        and int(position.position_ref_2) == marker_id
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Furniture NIF marker {marker_id} is absent or ambiguous: {len(matches)}"
+        )
+    index, position = matches[0]
+    offset_nif = _nif_vector(position.offset)
+    offset_godot = _convert_vector(offset_nif)
+    if not all(math.isfinite(value) for value in (*offset_nif, *offset_godot)):
+        raise ValueError(f"Furniture NIF marker {marker_id} has a non-finite offset")
+    return {
+        "extraDataName": _text(marker.name),
+        "index": index,
+        "positionRef1": int(position.position_ref_1),
+        "positionRef2": int(position.position_ref_2),
+        "offsetNifGameUnits": list(offset_nif),
+        "offsetGodotGameUnits": list(offset_godot),
+        "orientation": int(position.orientation),
+        "orientationRadians": (
+            int(position.orientation) /
+            FURNITURE_MARKER_ORIENTATION_UNITS_PER_RADIAN
+        ),
+        "heading": float(position.heading),
+        "animationType": int(position.animation_type),
+    }
 
 
 @dataclass(frozen=True)
@@ -407,6 +481,11 @@ def export_actor_gltf(
     nodes: list[dict[str, object]] = [{"name": f"ACTOR_{source.actor_form_id}_{source.actor_name}", "children": []}]
     node_by_name: dict[str, int] = {}
     _append_skeleton_nodes(skeleton_root, 0, nodes, node_by_name)
+    accumulation_root_source_translation = _accumulation_root_source_translation(
+        nodes,
+        node_by_name,
+        source.skeleton_root_node,
+    )
     nonaccumulation_root_nodes = [
         name
         for name in node_by_name
@@ -644,6 +723,7 @@ def export_actor_gltf(
                 source.skeleton_root_node,
                 nonaccumulation_root_node,
                 animation_source.logical_path if use_path_names else None,
+                animation_source.retain_accumulation_root_translation,
             )
         except Exception as error:
             raise ValueError(
@@ -659,6 +739,11 @@ def export_actor_gltf(
                 "logicalPath": animation_source.logical_path,
                 "sha256": hashlib.sha256(animation_source.payload).hexdigest(),
                 "channels": channels,
+                "accumulationRootTranslationDisposition": (
+                    "preserve-hash-bound-owned-clip-root-curve"
+                    if animation_source.retain_accumulation_root_translation
+                    else "owned-world-root-authoritative-zero-local-translation"
+                ),
                 "nonAccumOriginGodotUnits": (
                     list(animation_origin) if animation_origin else None
                 ),
@@ -721,8 +806,11 @@ def export_actor_gltf(
             ),
             "animationTranslationPolicy": {
                 "accumulationRootNode": source.skeleton_root_node,
+                "accumulationRootSourceTranslationGodotGameUnits": list(
+                    accumulation_root_source_translation
+                ),
                 "accumulationRootTranslation": (
-                    "owned-world-root-authoritative-zero-local-translation"
+                    "per-animation-hash-bound-disposition"
                 ),
                 "nonAccumulationRootNode": nonaccumulation_root_node,
                 "nonAccumulationRootTranslation": (
@@ -984,6 +1072,44 @@ def _append_skeleton_nodes(
     for child in getattr(node, "children", []):
         if isinstance(child, NifFormat.NiNode):
             _append_skeleton_nodes(child, node_index, nodes, node_by_name)
+
+
+def _accumulation_root_source_translation(
+    nodes: list[dict[str, object]],
+    node_by_name: dict[str, int],
+    accumulation_root_node: str,
+) -> tuple[float, float, float]:
+    if accumulation_root_node not in node_by_name:
+        raise ValueError(
+            "Actor skeleton has no configured accumulation-root node: "
+            f"{accumulation_root_node}"
+        )
+    row = nodes[node_by_name[accumulation_root_node]]
+    source = row.get("translation")
+    if (
+        not isinstance(source, list)
+        or len(source) != len(ACCUMULATION_ROOT_ZERO_TRANSLATION)
+        or not all(isinstance(value, float) and math.isfinite(value) for value in source)
+    ):
+        raise ValueError(
+            "Actor accumulation-root source translation is invalid: "
+            f"{accumulation_root_node}"
+        )
+    return tuple(source)
+
+
+def _world_authoritative_accumulation_root_translations(
+    authored: bool,
+    retain_owned_curve: bool,
+    sample_count: int,
+) -> list[tuple[float, float, float]]:
+    if authored:
+        return []
+    if retain_owned_curve:
+        raise ValueError(
+            "Hash-bound retained accumulation-root clip has no authored root curve"
+        )
+    return [ACCUMULATION_ROOT_ZERO_TRANSLATION for _ in range(sample_count)]
 
 
 def _rigid_attachment(
@@ -1403,6 +1529,9 @@ def _append_shape(
             float(shape_transform.m_42),
             float(shape_transform.m_43),
         ],
+        "sourceShapeTransformGodotMatrix": list(
+            _gltf_matrix(_converted_matrix(shape_transform))
+        ),
         "vertices": vertex_count,
         "triangles": len(triangles),
         "uvSets": len(mesh.uv_sets),
@@ -1730,6 +1859,7 @@ def _build_animation(
     accumulation_root_node: str,
     nonaccumulation_root_node: str | None,
     animation_name: str | None = None,
+    retain_accumulation_root_translation: bool = False,
 ) -> tuple[dict[str, object] | None, int, tuple[float, float, float] | None]:
     document = _read_nif(payload)
     sequence = document.roots[0]
@@ -1756,6 +1886,7 @@ def _build_animation(
     samplers = []
     channels = []
     nonaccum_origin = None
+    accumulation_root_translation_authored = False
     for controlled in sequence.controlled_blocks:
         node_name = _text(controlled.get_node_name())
         if node_name not in node_by_name or _text(controlled.get_controller_type()) != "NiTransformController":
@@ -1769,6 +1900,8 @@ def _build_animation(
         )
 
         if translations:
+            if node_name == accumulation_root_node:
+                accumulation_root_translation_authored = True
             if node_name == nonaccumulation_root_node:
                 nonaccum_origin = translations[0]
             translations = actor_animation_translations(
@@ -1776,6 +1909,7 @@ def _build_animation(
                 translations,
                 accumulation_root_node,
                 nonaccumulation_root_node,
+                retain_accumulation_root_translation,
             )
             output = builder.add(
                 pack_floats(translations),
@@ -1799,6 +1933,36 @@ def _build_animation(
             sampler = len(samplers)
             samplers.append({"input": time_accessor, "output": output, "interpolation": "LINEAR"})
             channels.append({"sampler": sampler, "target": {"node": node_by_name[node_name], "path": "rotation"}})
+    root_world_translation = _world_authoritative_accumulation_root_translations(
+        accumulation_root_translation_authored,
+        retain_accumulation_root_translation,
+        len(times),
+    )
+    if root_world_translation:
+        output = builder.add(
+            pack_floats(root_world_translation),
+            component_type=GL_FLOAT,
+            count=len(root_world_translation),
+            value_type="VEC3",
+            target=None,
+        )
+        sampler = len(samplers)
+        samplers.append(
+            {
+                "input": time_accessor,
+                "output": output,
+                "interpolation": "LINEAR",
+            }
+        )
+        channels.append(
+            {
+                "sampler": sampler,
+                "target": {
+                    "node": node_by_name[accumulation_root_node],
+                    "path": "translation",
+                },
+            }
+        )
     if not channels:
         return None, 0, nonaccum_origin
     return (
@@ -2056,12 +2220,54 @@ def _sample_transform_interpolator(
                         "Actor animation uses unsupported rotation interpolation "
                         f"on {node_name}"
                     )
+        if not translations:
+            source_translation = _valid_constant_transform_components(
+                _nif_vector(interpolator.translation),
+                node_name,
+                "translation",
+            )
+            if source_translation is not None:
+                translation = _convert_vector(source_translation)
+                translations = [translation for _time in times]
+        if not rotations:
+            rotation = _valid_constant_transform_components(
+                _nif_quaternion(interpolator.rotation),
+                node_name,
+                "rotation",
+            )
+            if rotation is not None:
+                converted = _converted_nif_quaternion(
+                    _normalize_quaternion(rotation)
+                )
+                rotations = [converted for _time in times]
     else:
         raise ValueError(
             "Actor animation uses unsupported transform interpolator: "
             f"{type(interpolator).__name__}"
         )
     return translations, rotations
+
+
+def _valid_constant_transform_components(
+    values: tuple[float, ...],
+    node_name: str,
+    role: str,
+) -> tuple[float, ...] | None:
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError(
+            f"Actor animation has a non-finite constant {role} on {node_name}"
+        )
+    invalid = tuple(
+        abs(value) >= NIF_INVALID_TRANSFORM_COMPONENT_MAGNITUDE
+        for value in values
+    )
+    if all(invalid):
+        return None
+    if any(invalid):
+        raise ValueError(
+            f"Actor animation has a partial invalid constant {role} on {node_name}"
+        )
+    return values
 
 
 def _uniform_cubic(
@@ -2104,11 +2310,18 @@ def actor_animation_translations(
     values: list[tuple[float, float, float]],
     accumulation_root_node: str,
     nonaccumulation_root_node: str | None,
+    retain_accumulation_root_translation: bool = False,
 ) -> list[tuple[float, float, float]]:
     if not values:
         return values
     if node_name == accumulation_root_node:
-        return [(0.0, 0.0, 0.0) for _ in values]
+        if not retain_accumulation_root_translation:
+            return [(0.0, 0.0, 0.0) for _ in values]
+        origin = values[0]
+        return [
+            tuple(value[axis] - origin[axis] for axis in range(3))
+            for value in values
+        ]
     if node_name != nonaccumulation_root_node:
         return values
     return values

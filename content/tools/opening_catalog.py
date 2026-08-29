@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -16,7 +17,9 @@ from pathlib import Path
 from typing import Iterable, Iterator
 
 from actor_gltf import (
+    animation_sequence_manifest,
     authored_rigid_attachment_node,
+    furniture_marker_manifest,
     sample_root_motion,
     sample_transform_animation,
 )
@@ -41,6 +44,16 @@ PLAYER_BASE_LEVEL_OFFSET = 8
 PLAYER_BASE_HEALTH_OFFSET = 0
 PLAYER_BASE_ACBS_BYTES = 24
 PLAYER_BASE_DATA_MINIMUM_BYTES = 11
+RACE_DATA_BYTES = 36
+RACE_FLAGS_OFFSET = 32
+RACE_PLAYABLE_FLAG = 0x01
+APPEARANCE_PART_DATA_BYTES = 1
+APPEARANCE_PART_PLAYABLE_FLAG = 0x01
+HAIR_FEMALE_FLAG = 0x02
+HAIR_MALE_FLAG = 0x04
+FACEGEN_SYMMETRIC_GEOMETRY_FLOATS = 50
+FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS = 30
+FACEGEN_SYMMETRIC_TEXTURE_FLOATS = 50
 FNV_ENGINE_BUILD = "1.4.0.525"
 FNV_ENGINE_DEFAULT_XP_BASE_EVIDENCE = "fnv-1.4.0.525-gmst-ixpbase-v1"
 # FalloutNV.exe owns this default; FalloutNV.esm intentionally has no GMST override.
@@ -140,6 +153,12 @@ PACKAGE_IDLE_FORM_BYTES = 4
 PACKAGE_LOCATION_BYTES = 12
 PACKAGE_TARGET_BYTES = 16
 REFERENCE_TRANSFORM_BYTES = 24
+DOC_INITIAL_CHAIR_MARKER_ID = 14
+FURNITURE_MARKER_PLACEMENT_SEMANTICS = (
+    "replace-marker-offset-for-actor-placement"
+)
+FURNITURE_MARKER_PLACEMENT_AXES = ("x", "y", "z")
+CONDITION_OPERATOR_GREATER_OR_EQUAL = 0x60
 PLAYER_CONTROL_ARGUMENTS = (
     "movement",
     "pipBoy",
@@ -208,6 +227,7 @@ class IdleAnimationSource:
     form_id: int
     editor_id: str
     logical_path: str
+    record_sha256: str = ""
 
 
 @dataclass(frozen=True)
@@ -226,6 +246,8 @@ class ReferenceTransformSource:
     record_type: str
     position_game_units: tuple[float, float, float]
     rotation_radians: tuple[float, float, float]
+    base_form_id: int | None = None
+    record_sha256: str = ""
 
     def manifest(self) -> dict[str, object]:
         return {
@@ -259,6 +281,8 @@ class FlowSourceCatalog:
     ] = field(default_factory=dict)
     game_settings_by_editor: dict[str, Record] = field(default_factory=dict)
     player_base: Record | None = None
+    furniture_by_form: dict[int, Record] = field(default_factory=dict)
+    appearance_records_by_form: dict[int, Record] = field(default_factory=dict)
 
 
 @dataclass
@@ -2726,6 +2750,8 @@ def _scan_flow_sources(
     image_space_modifiers_by_editor: dict[str, Record] = {}
     game_settings_by_editor: dict[str, Record] = {}
     player_base: Record | None = None
+    furniture_by_form: dict[int, Record] = {}
+    appearance_records_by_form: dict[int, Record] = {}
     needed: dict[int, dict[str, object]] = {}
     selector_type = str(trait_rules["recordType"])
     selector_signature = str(trait_rules["selectorSubrecord"])
@@ -2740,7 +2766,10 @@ def _scan_flow_sources(
                 actor_values.append(entry)
         if record.signature == "GMST":
             editor_id = _catalog_text(subrecords, "EDID")
-            if editor_id in REQUIRED_VITAL_GAME_SETTINGS:
+            if (
+                editor_id in REQUIRED_VITAL_GAME_SETTINGS
+                or record.form_id in needed_form_ids
+            ):
                 identity = editor_id.casefold()
                 if identity in game_settings_by_editor:
                     raise ValueError(
@@ -2753,6 +2782,8 @@ def _scan_flow_sources(
                 if player_base is not None:
                     raise ValueError("Owned player base is duplicated")
                 player_base = record
+        if record.signature in {"RACE", "HAIR", "EYES"}:
+            appearance_records_by_form[record.form_id] = record
         if record.signature == selector_type:
             selected_value = next(
                 (
@@ -2787,7 +2818,12 @@ def _scan_flow_sources(
                     raise ValueError(
                         f"Owned opening idle animation is duplicated: {editor_id}"
                     )
-                source = IdleAnimationSource(record.form_id, editor_id, logical_path)
+                source = IdleAnimationSource(
+                    record.form_id,
+                    editor_id,
+                    logical_path,
+                    hashlib.sha256(record.data).hexdigest(),
+                )
                 idle_animations_by_editor[identity] = source
                 idle_animations_by_form[record.form_id] = source
         if record.signature == "ANIO":
@@ -2832,6 +2868,12 @@ def _scan_flow_sources(
                     f"Owned opening actor base is duplicated: {record.form_id:08x}"
                 )
             actors_by_form[record.form_id] = record
+        if record.signature == "FURN":
+            if record.form_id in furniture_by_form:
+                raise ValueError(
+                    f"Owned opening furniture is duplicated: {record.form_id:08x}"
+                )
+            furniture_by_form[record.form_id] = record
         if record.signature == "VTYP":
             editor_id = _catalog_text(subrecords, "EDID")
             if not editor_id:
@@ -2857,6 +2899,15 @@ def _scan_flow_sources(
                     record.signature,
                     tuple(values[:3]),
                     tuple(values[3:]),
+                    next(
+                        (
+                            _subrecord_form_id(subrecord.data)
+                            for subrecord in subrecords
+                            if subrecord.signature == "NAME"
+                        ),
+                        None,
+                    ),
+                    hashlib.sha256(record.data).hexdigest(),
                 )
         if record.signature == "IMAD":
             editor_id = _catalog_text(subrecords, "EDID")
@@ -2905,6 +2956,8 @@ def _scan_flow_sources(
         },
         game_settings_by_editor=game_settings_by_editor,
         player_base=player_base,
+        furniture_by_form=furniture_by_form,
+        appearance_records_by_form=appearance_records_by_form,
     )
 
 
@@ -3055,6 +3108,186 @@ def _compile_gameplay_vitals(sources: FlowSourceCatalog) -> dict[str, object]:
             ),
         },
     }
+
+
+def _appearance_form_ids(record: Record, signature: str) -> tuple[int, ...]:
+    payload = _single_subrecord(record, signature)
+    if not payload or len(payload) % FORM_ID_BYTES:
+        raise ValueError(
+            f"Owned {record.signature} {form_id_text(record.form_id)} has an "
+            f"invalid {signature} appearance list"
+        )
+    return struct.unpack(f"<{len(payload) // FORM_ID_BYTES}I", payload)
+
+
+def _appearance_option(record: Record) -> dict[str, object]:
+    subrecords = list(iter_subrecords(record))
+    data = _single_subrecord(record, "DATA")
+    if len(data) != APPEARANCE_PART_DATA_BYTES:
+        raise ValueError(
+            f"Owned {record.signature} {form_id_text(record.form_id)} has an "
+            "unsupported appearance flag layout"
+        )
+    texture = _asset_path(_catalog_text(subrecords, "ICON") or "")
+    model = _asset_path(_catalog_text(subrecords, "MODL") or "")
+    if texture is None or (record.signature == "HAIR" and model is None):
+        raise ValueError(
+            f"Owned {record.signature} {form_id_text(record.form_id)} has no "
+            "model/texture preview identity"
+        )
+    return {
+        "formId": form_id_text(record.form_id),
+        "recordType": record.signature,
+        "editorId": _catalog_text(subrecords, "EDID"),
+        "label": _catalog_text(subrecords, "FULL"),
+        "recordSha256": hashlib.sha256(record.data).hexdigest(),
+        "flags": data[0],
+        "modelLogicalPath": model,
+        "textureLogicalPath": texture,
+    }
+
+
+def _compile_player_appearance(
+    sources: FlowSourceCatalog,
+    quest_script_source: str,
+) -> tuple[dict[str, object], tuple[str, ...]]:
+    if sources.player_base is None:
+        raise ValueError("Owned opening player base is absent")
+    player = sources.player_base
+    player_subrecords = list(iter_subrecords(player))
+    default_race = _subrecord_form_id(_single_subrecord(player, "RNAM"))
+    default_hair = _subrecord_form_id(_single_subrecord(player, "HNAM"))
+    default_eyes = _subrecord_form_id(_single_subrecord(player, "ENAM"))
+    if default_race is None or default_hair is None or default_eyes is None:
+        raise ValueError("Owned opening player appearance defaults are incomplete")
+    facegen = {}
+    for role, signature, expected_count in (
+        ("symmetricGeometry", "FGGS", FACEGEN_SYMMETRIC_GEOMETRY_FLOATS),
+        ("asymmetricGeometry", "FGGA", FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS),
+        ("symmetricTexture", "FGTS", FACEGEN_SYMMETRIC_TEXTURE_FLOATS),
+    ):
+        payload = _single_subrecord(player, signature)
+        if len(payload) != expected_count * 4:
+            raise ValueError(f"Owned opening player {signature} is incomplete")
+        values = struct.unpack(f"<{expected_count}f", payload)
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError(f"Owned opening player {signature} is non-finite")
+        facegen[role] = {
+            "count": expected_count,
+            "values": list(values),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }
+
+    sex_mapping = {
+        int(index): engine_sex.casefold()
+        for index, engine_sex in re.findall(
+            r"nButton\s*==\s*(\d+)\s*\r?\n\s*player\.sexChange\s+(male|female)\s+1",
+            quest_script_source,
+            re.IGNORECASE,
+        )
+    }
+    if sex_mapping != {0: "male", 1: "female"}:
+        raise ValueError("Owned opening sex-change command mapping differs")
+
+    records = sources.appearance_records_by_form
+    races = []
+    texture_paths: set[str] = set()
+    for race_record in sorted(
+        (record for record in records.values() if record.signature == "RACE"),
+        key=lambda record: record.form_id,
+    ):
+        subrecords = list(iter_subrecords(race_record))
+        data = _single_subrecord(race_record, "DATA")
+        if len(data) != RACE_DATA_BYTES:
+            raise ValueError(
+                f"Owned RACE {form_id_text(race_record.form_id)} DATA layout differs"
+            )
+        flags = struct.unpack_from("<I", data, RACE_FLAGS_OFFSET)[0]
+        if not flags & RACE_PLAYABLE_FLAG:
+            continue
+        hair_form_ids = _appearance_form_ids(race_record, "HNAM")
+        eye_form_ids = _appearance_form_ids(race_record, "ENAM")
+        sex_rows = {}
+        for engine_sex, sex_flag in (
+            ("male", HAIR_MALE_FLAG),
+            ("female", HAIR_FEMALE_FLAG),
+        ):
+            hair_options = []
+            for form_id in hair_form_ids:
+                record = records.get(form_id)
+                if record is None or record.signature != "HAIR":
+                    raise ValueError("Owned playable RACE hair list does not resolve")
+                option = _appearance_option(record)
+                if int(option["flags"]) & APPEARANCE_PART_PLAYABLE_FLAG and int(
+                    option["flags"]
+                ) & sex_flag:
+                    hair_options.append(option)
+                    texture_paths.add(str(option["textureLogicalPath"]))
+            eye_options = []
+            for form_id in eye_form_ids:
+                record = records.get(form_id)
+                if record is None or record.signature != "EYES":
+                    raise ValueError("Owned playable RACE eye list does not resolve")
+                option = _appearance_option(record)
+                if int(option["flags"]) & APPEARANCE_PART_PLAYABLE_FLAG:
+                    eye_options.append(option)
+                    texture_paths.add(str(option["textureLogicalPath"]))
+            if not hair_options or not eye_options:
+                raise ValueError("Owned playable RACE has no sex-aware hair/eye options")
+            sex_rows[engine_sex] = {
+                "hairOptions": hair_options,
+                "eyeOptions": eye_options,
+                "defaultHairFormId": (
+                    form_id_text(default_hair)
+                    if race_record.form_id == default_race and any(
+                        int(str(option["formId"]), FORM_ID_RADIX) == default_hair
+                        for option in hair_options
+                    )
+                    else str(hair_options[0]["formId"])
+                ),
+                "defaultEyesFormId": (
+                    form_id_text(default_eyes)
+                    if race_record.form_id == default_race and any(
+                        int(str(option["formId"]), FORM_ID_RADIX) == default_eyes
+                        for option in eye_options
+                    )
+                    else str(eye_options[0]["formId"])
+                ),
+            }
+        races.append(
+            {
+                "formId": form_id_text(race_record.form_id),
+                "recordType": "RACE",
+                "editorId": _catalog_text(subrecords, "EDID"),
+                "label": _catalog_text(subrecords, "FULL"),
+                "recordSha256": hashlib.sha256(race_record.data).hexdigest(),
+                "flags": flags,
+                "sex": sex_rows,
+            }
+        )
+    if not races or default_race not in {
+        int(str(row["formId"]), FORM_ID_RADIX) for row in races
+    }:
+        raise ValueError("Owned opening player default race is not playable")
+    return (
+        {
+            "schema": "opennv-owned-player-appearance/v1",
+            "status": "source-backed-interactive-selection",
+            "player": {
+                "formId": form_id_text(player.form_id),
+                "editorId": _catalog_text(player_subrecords, "EDID"),
+                "recordSha256": hashlib.sha256(player.data).hexdigest(),
+                "defaultRaceFormId": form_id_text(default_race),
+                "defaultHairFormId": form_id_text(default_hair),
+                "defaultEyesFormId": form_id_text(default_eyes),
+                "faceGen": facegen,
+            },
+            "sexEngineValues": [sex_mapping[index] for index in sorted(sex_mapping)],
+            "races": races,
+            "preview": "owned-hair-and-eye-source-textures-live-selection-not-3d-face-render",
+        },
+        tuple(sorted(texture_paths)),
+    )
 
 
 def compile_gameplay_vitals_from_master(master_path: Path) -> dict[str, object]:
@@ -4046,6 +4279,364 @@ def _compile_guide_animation_objects(
     return animation_objects
 
 
+def _compile_guide_furniture_animation(
+    role: str,
+    expected: dict[str, object],
+    sources: FlowSourceCatalog,
+    owned_archives: OwnedArchiveStack,
+    root_motion_node: str | None = None,
+    animation_samples_per_second: float | None = None,
+) -> dict[str, object]:
+    form_id = int(str(expected["formId"]), FORM_ID_RADIX)
+    source = sources.idle_animations_by_form.get(form_id)
+    if source is None:
+        raise ValueError(
+            f"Owned guide furniture {role} IDLE is absent: {form_id:08x}"
+        )
+    logical_path = canonical_member_path(str(expected["logicalPath"]))
+    expected_identity = {
+        "editorId": str(expected["editorId"]),
+        "logicalPath": logical_path,
+        "recordSha256": str(expected["recordSha256"]).casefold(),
+    }
+    actual_identity = {
+        "editorId": source.editor_id,
+        "logicalPath": canonical_member_path(source.logical_path),
+        "recordSha256": source.record_sha256.casefold(),
+    }
+    if actual_identity != expected_identity:
+        raise ValueError(
+            f"Owned guide furniture {role} IDLE differs from the strict recipe: "
+            f"expected={expected_identity} actual={actual_identity}"
+        )
+    member = owned_archives.extract(logical_path)
+    expected_sha256 = str(expected["sha256"]).casefold()
+    if member.sha256 != expected_sha256:
+        raise ValueError(
+            f"Owned guide furniture {role} KF hash differs: "
+            f"expected={expected_sha256} actual={member.sha256}"
+        )
+    playback = animation_sequence_manifest(member.data)
+    expected_playback = {
+        "sequenceName": str(expected["sequenceName"]),
+        "cycleType": int(expected["cycleType"]),
+    }
+    actual_playback = {
+        "sequenceName": playback["sequenceName"],
+        "cycleType": playback["cycleType"],
+    }
+    if actual_playback != expected_playback:
+        raise ValueError(
+            f"Owned guide furniture {role} playback differs from the strict recipe: "
+            f"expected={expected_playback} actual={actual_playback}"
+        )
+    result = {
+        "role": role,
+        "formId": form_id_text(source.form_id),
+        "editorId": source.editor_id,
+        "recordType": "IDLE",
+        "recordSha256": source.record_sha256,
+        "logicalPath": logical_path,
+        "bytes": len(member.data),
+        "sha256": member.sha256,
+        "sourceArchive": member.source_archive,
+        "sourceArchiveSha256": member.source_archive_sha256,
+        **playback,
+    }
+    if (root_motion_node is None) != (animation_samples_per_second is None):
+        raise ValueError(
+            f"Owned guide furniture {role} root-motion sampling is incomplete"
+        )
+    if root_motion_node is not None and animation_samples_per_second is not None:
+        root_motion = sample_root_motion(
+            member.data,
+            root_motion_node,
+            animation_samples_per_second,
+        ).manifest()
+        if {
+            "sequenceName": root_motion["sequenceName"],
+            "startSeconds": root_motion["startSeconds"],
+            "stopSeconds": root_motion["stopSeconds"],
+            "cycleType": root_motion["cycleType"],
+        } != {
+            "sequenceName": playback["sequenceName"],
+            "startSeconds": playback["startSeconds"],
+            "stopSeconds": playback["stopSeconds"],
+            "cycleType": playback["cycleType"],
+        }:
+            raise ValueError(
+                f"Owned guide furniture {role} root motion differs from playback"
+            )
+        result["rootMotion"] = root_motion
+    return result
+
+
+def _compile_guide_furniture_occupancy(
+    contract: dict[str, object],
+    packages: list[dict[str, object]],
+    sources: FlowSourceCatalog,
+    owned_archives: OwnedArchiveStack,
+    quest_form_id: str,
+    root_motion_node: str,
+    animation_samples_per_second: float,
+) -> tuple[dict[str, object], tuple[str, ...]]:
+    source = dict(contract["furnitureOccupancy"])
+    initial_package_form_id = str(source["initialPackageFormId"]).casefold()
+    release_package_form_id = str(source["releasePackageFormId"]).casefold()
+    reference_form_id = str(source["referenceFormId"]).casefold()
+    release_stage = int(source["releaseStage"])
+    marker_id = int(source["markerId"])
+    animation_object_idle_form_id = str(
+        source["animationObjectIdleFormId"]
+    ).casefold()
+    if marker_id != DOC_INITIAL_CHAIR_MARKER_ID:
+        raise ValueError(
+            "Owned initial guide furniture marker differs from the strict marker-14 evidence"
+        )
+    initial = next(
+        (
+            package
+            for package in packages
+            if str(package["formId"]).casefold() == initial_package_form_id
+        ),
+        None,
+    )
+    release = next(
+        (
+            package
+            for package in packages
+            if str(package["formId"]).casefold() == release_package_form_id
+        ),
+        None,
+    )
+    if initial is None or release is None:
+        raise ValueError("Owned guide furniture packages are absent")
+    reference = sources.references_by_form.get(int(reference_form_id, FORM_ID_RADIX))
+    furniture_source = dict(source["furniture"])
+    expected_base_form_id = int(str(furniture_source["baseFormId"]), FORM_ID_RADIX)
+    if (
+        reference is None
+        or reference.record_type != "REFR"
+        or reference.base_form_id != expected_base_form_id
+        or reference.record_sha256.casefold()
+        != str(furniture_source["referenceRecordSha256"]).casefold()
+    ):
+        raise ValueError(
+            "Owned initial guide furniture reference/base differs from the strict recipe"
+        )
+    furniture_record = sources.furniture_by_form.get(expected_base_form_id)
+    if furniture_record is None:
+        raise ValueError("Owned initial guide FURN base is absent")
+    furniture_subrecords = list(iter_subrecords(furniture_record))
+    model_paths = [
+        value
+        for value in (
+            _catalog_text(furniture_subrecords, "MODL"),
+        )
+        if value is not None
+    ]
+    if len(model_paths) != 1:
+        raise ValueError("Owned initial guide FURN has no unique model")
+    model_path = canonical_member_path(_asset_path(model_paths[0]) or "")
+    expected_furniture_identity = {
+        "editorId": str(furniture_source["editorId"]),
+        "recordSha256": str(furniture_source["recordSha256"]).casefold(),
+        "modelLogicalPath": canonical_member_path(
+            str(furniture_source["modelLogicalPath"])
+        ),
+    }
+    actual_furniture_identity = {
+        "editorId": _catalog_text(furniture_subrecords, "EDID"),
+        "recordSha256": hashlib.sha256(furniture_record.data).hexdigest(),
+        "modelLogicalPath": model_path,
+    }
+    if actual_furniture_identity != expected_furniture_identity:
+        raise ValueError(
+            "Owned initial guide FURN differs from the strict recipe: "
+            f"expected={expected_furniture_identity} actual={actual_furniture_identity}"
+        )
+    furniture_member = owned_archives.extract(model_path)
+    expected_model_sha256 = str(furniture_source["modelSha256"]).casefold()
+    if furniture_member.sha256 != expected_model_sha256:
+        raise ValueError(
+            "Owned initial guide furniture NIF hash differs: "
+            f"expected={expected_model_sha256} actual={furniture_member.sha256}"
+        )
+    marker = furniture_marker_manifest(furniture_member.data, marker_id)
+    expected_marker = dict(furniture_source["marker"])
+    expected_marker_identity = {
+        "extraDataName": str(expected_marker["extraDataName"]),
+        "index": int(expected_marker["index"]),
+        "positionRef1": int(expected_marker["positionRef1"]),
+        "positionRef2": int(expected_marker["positionRef2"]),
+        "offsetNifGameUnits": [
+            float(value) for value in expected_marker["offsetNifGameUnits"]
+        ],
+        "orientation": int(expected_marker["orientation"]),
+        "animationType": int(expected_marker["animationType"]),
+    }
+    actual_marker_identity = {
+        key: marker[key] for key in expected_marker_identity
+    }
+    if actual_marker_identity != expected_marker_identity:
+        raise ValueError(
+            "Owned initial guide furniture marker differs from the strict recipe: "
+            f"expected={expected_marker_identity} actual={actual_marker_identity}"
+        )
+    marker["rotationGodotQuaternion"] = godot_rotation_quaternion(
+        (0.0, 0.0, float(marker["orientationRadians"]))
+    )
+    expected_placement = dict(
+        expected_marker["actorPlacementOffsetGameSettings"]
+    )
+    placement_semantics = str(expected_placement["semantics"])
+    if placement_semantics != FURNITURE_MARKER_PLACEMENT_SEMANTICS:
+        raise ValueError(
+            "Owned furniture marker actor-placement semantics are unsupported"
+        )
+    placement_settings: dict[str, object] = {
+        "semantics": placement_semantics,
+    }
+    placement_values: list[float] = []
+    for axis in FURNITURE_MARKER_PLACEMENT_AXES:
+        expected_axis = dict(expected_placement[axis])
+        form_id = int(str(expected_axis["formId"]), FORM_ID_RADIX)
+        editor_id = str(expected_axis["editorId"])
+        record = sources.game_settings_by_editor.get(editor_id.casefold())
+        if record is None or record.form_id != form_id:
+            raise ValueError(
+                f"Owned furniture marker actor-placement {axis} setting is absent"
+            )
+        setting = _game_setting_manifest(record)
+        expected_identity = {
+            "formId": form_id_text(form_id),
+            "editorId": editor_id,
+            "recordSha256": str(expected_axis["recordSha256"]).casefold(),
+            "value": float(expected_axis["valueGameUnits"]),
+        }
+        actual_identity = {key: setting[key] for key in expected_identity}
+        if actual_identity != expected_identity:
+            raise ValueError(
+                f"Owned furniture marker actor-placement {axis} differs from "
+                "the strict recipe"
+            )
+        placement_settings[axis] = setting
+        placement_values.append(float(setting["value"]))
+    placement_settings["offsetNifGameUnits"] = placement_values
+    placement_settings["offsetGodotGameUnits"] = [
+        placement_values[0],
+        placement_values[2],
+        -placement_values[1],
+    ]
+    marker["actorPlacementOffsetGameSettings"] = placement_settings
+    expected_heading_delta = dict(
+        expected_marker["actorForwardHeadingDeltaGameSetting"]
+    )
+    heading_delta_form_id = int(
+        str(expected_heading_delta["formId"]), FORM_ID_RADIX
+    )
+    heading_delta_editor_id = str(expected_heading_delta["editorId"])
+    heading_delta_record = sources.game_settings_by_editor.get(
+        heading_delta_editor_id.casefold()
+    )
+    if heading_delta_record is None or heading_delta_record.form_id != heading_delta_form_id:
+        raise ValueError(
+            "Owned furniture marker actor-forward heading delta is absent"
+        )
+    heading_delta = _game_setting_manifest(heading_delta_record)
+    expected_heading_delta_identity = {
+        "formId": form_id_text(heading_delta_form_id),
+        "editorId": heading_delta_editor_id,
+        "recordSha256": str(expected_heading_delta["recordSha256"]).casefold(),
+        "value": float(expected_heading_delta["valueRadians"]),
+    }
+    actual_heading_delta_identity = {
+        key: heading_delta[key] for key in expected_heading_delta_identity
+    }
+    if actual_heading_delta_identity != expected_heading_delta_identity:
+        raise ValueError(
+            "Owned furniture marker actor-forward heading delta differs from "
+            "the strict recipe"
+        )
+    heading_delta["rotationGodotQuaternion"] = godot_rotation_quaternion(
+        (0.0, 0.0, float(heading_delta["value"]))
+    )
+    marker["actorForwardHeadingDeltaGameSetting"] = heading_delta
+    initial_location = initial.get("location")
+    if not isinstance(initial_location, dict) or str(
+        initial_location["formId"]
+    ).casefold() != reference_form_id:
+        raise ValueError(
+            "Owned initial guide furniture package does not target the strict reference"
+        )
+    if animation_object_idle_form_id not in {
+        str(value).casefold() for value in initial["idleAnimationFormIds"]
+    }:
+        raise ValueError(
+            "Owned initial guide furniture package does not own the animation object idle"
+        )
+    release_conditions = release["conditions"]
+    if not isinstance(release_conditions, list) or not any(
+        str(condition["functionName"]).casefold() == "getstage"
+        and str(condition["parameter1"]).casefold() == quest_form_id.casefold()
+        and int(condition["operatorFlags"]) == CONDITION_OPERATOR_GREATER_OR_EQUAL
+        and float(condition["comparisonValue"]) == float(release_stage)
+        for condition in release_conditions
+    ):
+        raise ValueError(
+            "Owned guide furniture release package lacks the strict stage condition"
+        )
+    seated_loop = _compile_guide_furniture_animation(
+        "seatedLoop",
+        dict(source["seatedLoop"]),
+        sources,
+        owned_archives,
+    )
+    exit_animation = _compile_guide_furniture_animation(
+        "exit",
+        dict(source["exit"]),
+        sources,
+        owned_archives,
+        root_motion_node,
+        animation_samples_per_second,
+    )
+    if int(seated_loop["cycleType"]) != 0 or int(exit_animation["cycleType"]) != 2:
+        raise ValueError(
+            "Owned guide furniture loop/exit cycles are not loop/clamp"
+        )
+    return (
+        {
+            "schema": "opennv-owned-guide-furniture-occupancy/v2",
+            "initialPackageFormId": initial_package_form_id,
+            "referenceFormId": reference_form_id,
+            "markerId": marker_id,
+            "markerDisposition": (
+                "compose-owned-furniture-reference-gmst-replacement-offset-and-heading-delta"
+            ),
+            "furniture": {
+                "referenceFormId": reference_form_id,
+                "referenceRecordSha256": reference.record_sha256,
+                "baseFormId": form_id_text(expected_base_form_id),
+                "editorId": actual_furniture_identity["editorId"],
+                "recordType": "FURN",
+                "recordSha256": actual_furniture_identity["recordSha256"],
+                "modelLogicalPath": model_path,
+                "modelBytes": len(furniture_member.data),
+                "modelSha256": furniture_member.sha256,
+                "sourceArchive": furniture_member.source_archive,
+                "sourceArchiveSha256": furniture_member.source_archive_sha256,
+                "marker": marker,
+            },
+            "releaseStage": release_stage,
+            "releasePackageFormId": release_package_form_id,
+            "animationObjectIdleFormId": animation_object_idle_form_id,
+            "seatedLoop": seated_loop,
+            "exit": exit_animation,
+        },
+        (str(seated_loop["logicalPath"]), str(exit_animation["logicalPath"])),
+    )
+
+
 def _compile_guide_actor_ai(
     flow: dict[str, object],
     roles: list[dict[str, object]],
@@ -4090,6 +4681,20 @@ def _compile_guide_actor_ai(
             int(value, FORM_ID_RADIX)
             for value in package["idleAnimationFormIds"]
         )
+    locomotion_contract = dict(contract["locomotion"])
+    root_node = str(locomotion_contract["rootNode"])
+    furniture_occupancy, furniture_animation_paths = (
+        _compile_guide_furniture_occupancy(
+            contract,
+            packages,
+            sources,
+            owned_archives,
+            quest_form_id,
+            root_node,
+            configuration.content_compiler.animation_samples_per_second,
+        )
+    )
+    animation_paths.extend(furniture_animation_paths)
     animation_objects = _compile_guide_animation_objects(
         idle_form_ids,
         sources,
@@ -4110,8 +4715,6 @@ def _compile_guide_actor_ai(
             f"actual={[form_id_text(value) for value in actual_animation_objects]}"
         )
 
-    locomotion_contract = dict(contract["locomotion"])
-    root_node = str(locomotion_contract["rootNode"])
     locomotion = {}
     for mode, field in (("walk", "walkLogicalPath"), ("run", "runLogicalPath")):
         logical_path = canonical_member_path(str(locomotion_contract[field]))
@@ -4131,13 +4734,14 @@ def _compile_guide_actor_ai(
         animation_paths.append(logical_path)
     return (
         {
-            "schema": "opennv-owned-guide-actor-ai/v2",
+            "schema": "opennv-owned-guide-actor-ai/v3",
             "role": role_name,
             "referenceFormId": role["referenceFormId"],
             "baseFormId": role["baseFormId"],
             "questFormId": quest_form_id,
             "packagePriority": [form_id_text(value) for value in package_form_ids],
             "packages": packages,
+            "furnitureOccupancy": furniture_occupancy,
             "animationObjects": animation_objects,
             "locomotion": locomotion,
         },
@@ -4302,6 +4906,24 @@ def compile_new_game_flow(
                 "referenceFormId": record["formId"],
                 "baseFormId": base_links[0],
             }
+        )
+    furniture_marker = dict(
+        dict(
+            dict(flow["guideActorAi"])["furnitureOccupancy"]
+        )["furniture"]
+    )["marker"]
+    heading_delta_setting = dict(
+        dict(furniture_marker)["actorForwardHeadingDeltaGameSetting"]
+    )
+    needed_forms.add(
+        int(str(heading_delta_setting["formId"]), FORM_ID_RADIX)
+    )
+    placement_settings = dict(
+        dict(furniture_marker)["actorPlacementOffsetGameSettings"]
+    )
+    for axis in FURNITURE_MARKER_PLACEMENT_AXES:
+        needed_forms.add(
+            int(str(dict(placement_settings[axis])["formId"]), FORM_ID_RADIX)
         )
     role_by_name = {row["role"]: row for row in roles}
 
@@ -4496,6 +5118,10 @@ def compile_new_game_flow(
         raise ValueError(
             f"Owned opening sex message has an unexpected choice count: {len(sex_choices)}"
         )
+    appearance, appearance_texture_paths = _compile_player_appearance(
+        sources,
+        quest_script_sources[0],
+    )
     tag_menu_commands = [
         command
         for program in programs
@@ -4552,6 +5178,7 @@ def compile_new_game_flow(
             "interactions": interaction_rows,
             "dialogue": dialogue,
             "character": {
+                "appearance": appearance,
                 "vitals": _compile_gameplay_vitals(sources),
                 "sex": {
                     "messageFormId": sex_message["formId"],
@@ -4581,7 +5208,7 @@ def compile_new_game_flow(
                 },
             },
         },
-        icon_paths,
+        tuple(sorted(set(icon_paths) | set(appearance_texture_paths))),
     )
 
 

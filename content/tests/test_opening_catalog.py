@@ -20,8 +20,10 @@ from opening_catalog import (  # noqa: E402
     _compile_dialogue_voice,
     _compile_gameplay_vitals,
     _compile_guide_animation_objects,
+    _compile_guide_furniture_occupancy,
     _compile_guide_package,
     _compile_player_package,
+    _compile_player_appearance,
     _resolve_command_record_identities,
     _resolve_actor_animation_commands,
     _script_commands,
@@ -69,6 +71,111 @@ def subrecord(signature: str, data: bytes = b"") -> bytes:
 
 
 class OpeningCatalogTest(unittest.TestCase):
+    def test_player_appearance_joins_playable_race_sex_hair_eye_and_facegen(self):
+        race_form = 0x19
+        hair_male_form = 0x20
+        hair_female_form = 0x21
+        eyes_form = 0x22
+        player = Record(
+            "NPC_",
+            0x07,
+            0,
+            b"".join(
+                (
+                    subrecord("EDID", b"Player\0"),
+                    subrecord("RNAM", struct.pack("<I", race_form)),
+                    subrecord("HNAM", struct.pack("<I", hair_male_form)),
+                    subrecord("ENAM", struct.pack("<I", eyes_form)),
+                    subrecord("FGGS", struct.pack("<50f", *([0.1] * 50))),
+                    subrecord("FGGA", struct.pack("<30f", *([0.0] * 30))),
+                    subrecord("FGTS", struct.pack("<50f", *([0.2] * 50))),
+                )
+            ),
+            (),
+        )
+        race_data = bytearray(36)
+        struct.pack_into("<I", race_data, 32, 1)
+        race = Record(
+            "RACE",
+            race_form,
+            0,
+            b"".join(
+                (
+                    subrecord("EDID", b"SyntheticRace\0"),
+                    subrecord("FULL", b"Synthetic Race\0"),
+                    subrecord("DATA", bytes(race_data)),
+                    subrecord(
+                        "HNAM",
+                        struct.pack("<2I", hair_male_form, hair_female_form),
+                    ),
+                    subrecord("ENAM", struct.pack("<I", eyes_form)),
+                )
+            ),
+            (),
+        )
+
+        def part(record_type, form_id, editor, label, flags):
+            return Record(
+                record_type,
+                form_id,
+                0,
+                b"".join(
+                    (
+                        subrecord("EDID", editor.encode("ascii") + b"\0"),
+                        subrecord("FULL", label.encode("ascii") + b"\0"),
+                        subrecord("MODL", f"characters\\{editor}.nif\0".encode()),
+                        subrecord("ICON", f"characters\\{editor}.dds\0".encode()),
+                        subrecord("DATA", bytes([flags])),
+                    )
+                ),
+                (),
+            )
+
+        records = {
+            race_form: race,
+            hair_male_form: part(
+                "HAIR", hair_male_form, "MaleHair", "Male Hair", 0x05
+            ),
+            hair_female_form: part(
+                "HAIR", hair_female_form, "FemaleHair", "Female Hair", 0x03
+            ),
+            eyes_form: part("EYES", eyes_form, "Eyes", "Eyes", 0x01),
+        }
+        result, textures = _compile_player_appearance(
+            FlowSourceCatalog(
+                actor_values=[],
+                traits=[],
+                scripts={},
+                idle_animations_by_editor={},
+                idle_animations_by_form={},
+                packages_by_editor={},
+                packages_by_form={},
+                actors_by_form={},
+                voice_types_by_form={},
+                references_by_form={},
+                image_space_modifiers_by_editor={},
+                needed={},
+                player_base=player,
+                appearance_records_by_form=records,
+            ),
+            "if nButton== 0\r\n player.sexChange male 1\r\n"
+            "elseif nButton== 1\r\n player.sexChange female 1",
+        )
+
+        self.assertEqual(result["player"]["defaultRaceFormId"], "00000019")
+        self.assertEqual(result["sexEngineValues"], ["male", "female"])
+        self.assertEqual(len(result["races"]), 1)
+        self.assertEqual(
+            result["races"][0]["sex"]["male"]["defaultHairFormId"],
+            "00000020",
+        )
+        self.assertEqual(
+            result["races"][0]["sex"]["female"]["defaultHairFormId"],
+            "00000021",
+        )
+        self.assertEqual(result["player"]["faceGen"]["symmetricGeometry"]["count"], 50)
+        self.assertEqual(len(textures), 3)
+
     def test_gameplay_vitals_join_player_actor_values_and_owned_settings(self):
         player_acbs = bytearray(24)
         struct.pack_into("<h", player_acbs, 8, 1)
@@ -412,6 +519,286 @@ class OpeningCatalogTest(unittest.TestCase):
         self.assertEqual(result[0]["modelLogicalPath"], logical_path)
         self.assertEqual(result[0]["sha256"], hashlib.sha256(payload).hexdigest())
         self.assertEqual(result[0]["attachmentNode"], "Bip01 R Hand")
+
+    def test_guide_furniture_occupancy_admits_strict_loop_and_exit(self):
+        seated_payload = b"owned-seated-loop"
+        exit_payload = b"owned-chair-exit"
+        seated_path = "meshes\\characters\\_male\\idleanims\\seat.kf"
+        exit_path = "meshes\\characters\\_male\\idleanims\\exit.kf"
+        seated_form = 0x31
+        exit_form = 0x32
+        initial_package = 0x41
+        release_package = 0x42
+        furniture_reference = 0x43
+        object_idle = 0x44
+        quest_form = "00000045"
+        furniture_base = 0x46
+        heading_delta_form = 0x47
+        heading_delta_editor = "fFurnitureMarker14HeadingDelta"
+        heading_delta_value = 3.1415998935699463
+        placement_settings = {
+            "x": (0x48, "fFurnitureMarker14DeltaX", 2.5),
+            "y": (0x49, "fFurnitureMarker14DeltaY", 57.0),
+            "z": (0x4A, "fFurnitureMarker14DeltaZ", -29.0),
+        }
+        furniture_path = "meshes\\furniture\\synthetic-chair.nif"
+        furniture_payload = b"owned-furniture-nif"
+        furniture_record = Record(
+            "FURN",
+            furniture_base,
+            0,
+            subrecord("EDID", b"SyntheticChair\0")
+            + subrecord("MODL", b"furniture\\synthetic-chair.nif\0"),
+            (),
+        )
+        heading_delta_record = Record(
+            "GMST",
+            heading_delta_form,
+            0,
+            subrecord("EDID", heading_delta_editor.encode("ascii") + b"\0")
+            + subrecord("DATA", struct.pack("<f", heading_delta_value)),
+            (),
+        )
+        placement_records = {
+            axis: Record(
+                "GMST",
+                form_id,
+                0,
+                subrecord("EDID", editor_id.encode("ascii") + b"\0")
+                + subrecord("DATA", struct.pack("<f", value)),
+                (),
+            )
+            for axis, (form_id, editor_id, value) in placement_settings.items()
+        }
+        sources = FlowSourceCatalog(
+            actor_values=[],
+            traits=[],
+            scripts={},
+            idle_animations_by_editor={},
+            idle_animations_by_form={
+                seated_form: IdleAnimationSource(
+                    seated_form,
+                    "SyntheticChairLoop",
+                    seated_path,
+                    "seated-record-sha256",
+                ),
+                exit_form: IdleAnimationSource(
+                    exit_form,
+                    "SyntheticChairExit",
+                    exit_path,
+                    "exit-record-sha256",
+                ),
+            },
+            packages_by_editor={},
+            packages_by_form={},
+            actors_by_form={},
+            voice_types_by_form={},
+            references_by_form={
+                furniture_reference: ReferenceTransformSource(
+                    furniture_reference,
+                    "SyntheticChairRef",
+                    "REFR",
+                    (1.0, 2.0, 3.0),
+                    (0.0, 0.0, 0.0),
+                    furniture_base,
+                    "furniture-reference-record-sha256",
+                )
+            },
+            image_space_modifiers_by_editor={},
+            needed={},
+            game_settings_by_editor={
+                heading_delta_editor.casefold(): heading_delta_record,
+                **{
+                    editor_id.casefold(): placement_records[axis]
+                    for axis, (_form_id, editor_id, _value) in placement_settings.items()
+                },
+            },
+            furniture_by_form={furniture_base: furniture_record},
+        )
+        packages = [
+            {
+                "formId": f"{initial_package:08x}",
+                "location": {"formId": f"{furniture_reference:08x}"},
+                "idleAnimationFormIds": [f"{object_idle:08x}"],
+                "conditions": [],
+            },
+            {
+                "formId": f"{release_package:08x}",
+                "location": {"formId": "00000046"},
+                "idleAnimationFormIds": [f"{object_idle:08x}"],
+                "conditions": [
+                    {
+                        "functionName": "getStage",
+                        "parameter1": quest_form,
+                        "operatorFlags": 0x60,
+                        "comparisonValue": 40.0,
+                    }
+                ],
+            },
+        ]
+        contract = {
+            "furnitureOccupancy": {
+                "initialPackageFormId": f"{initial_package:08x}",
+                "releasePackageFormId": f"{release_package:08x}",
+                "referenceFormId": f"{furniture_reference:08x}",
+                "releaseStage": 40,
+                "markerId": 14,
+                "animationObjectIdleFormId": f"{object_idle:08x}",
+                "furniture": {
+                    "referenceRecordSha256": "furniture-reference-record-sha256",
+                    "baseFormId": f"{furniture_base:08x}",
+                    "editorId": "SyntheticChair",
+                    "recordSha256": hashlib.sha256(furniture_record.data).hexdigest(),
+                    "modelLogicalPath": furniture_path,
+                    "modelSha256": hashlib.sha256(furniture_payload).hexdigest(),
+                    "marker": {
+                        "extraDataName": "FRN",
+                        "index": 2,
+                        "positionRef1": 14,
+                        "positionRef2": 14,
+                        "offsetNifGameUnits": [-0.25, 50.0, -25.0],
+                        "orientation": 3141,
+                        "animationType": 1,
+                        "actorPlacementOffsetGameSettings": {
+                            "semantics": "replace-marker-offset-for-actor-placement",
+                            **{
+                                axis: {
+                                    "formId": f"{form_id:08x}",
+                                    "editorId": editor_id,
+                                    "recordSha256": hashlib.sha256(
+                                        placement_records[axis].data
+                                    ).hexdigest(),
+                                    "valueGameUnits": value,
+                                }
+                                for axis, (form_id, editor_id, value) in placement_settings.items()
+                            },
+                        },
+                        "actorForwardHeadingDeltaGameSetting": {
+                            "formId": f"{heading_delta_form:08x}",
+                            "editorId": heading_delta_editor,
+                            "recordSha256": hashlib.sha256(
+                                heading_delta_record.data
+                            ).hexdigest(),
+                            "valueRadians": heading_delta_value,
+                        },
+                    },
+                },
+                "seatedLoop": {
+                    "formId": f"{seated_form:08x}",
+                    "editorId": "SyntheticChairLoop",
+                    "recordSha256": "seated-record-sha256",
+                    "logicalPath": seated_path,
+                    "sha256": hashlib.sha256(seated_payload).hexdigest(),
+                    "sequenceName": "SyntheticChairLoopSequence",
+                    "cycleType": 0,
+                },
+                "exit": {
+                    "formId": f"{exit_form:08x}",
+                    "editorId": "SyntheticChairExit",
+                    "recordSha256": "exit-record-sha256",
+                    "logicalPath": exit_path,
+                    "sha256": hashlib.sha256(exit_payload).hexdigest(),
+                    "sequenceName": "SyntheticChairExitSequence",
+                    "cycleType": 2,
+                },
+            }
+        }
+        archives = SyntheticAudioArchives(
+            {
+                seated_path: seated_payload,
+                exit_path: exit_payload,
+                furniture_path: furniture_payload,
+            }
+        )
+
+        exit_playback = {
+            "sequenceName": "SyntheticChairExitSequence",
+            "startSeconds": 0.0,
+            "stopSeconds": 1.0,
+            "cycleType": 2,
+            "controlledBlocks": 4,
+        }
+        exit_root_motion = {
+            "sequenceName": exit_playback["sequenceName"],
+            "targetNode": "Bip01",
+            "startSeconds": exit_playback["startSeconds"],
+            "stopSeconds": exit_playback["stopSeconds"],
+            "cycleType": exit_playback["cycleType"],
+            "displacementGodotGameUnits": [1.0, 0.0, 0.0],
+            "speedGameUnitsPerSecond": 1.0,
+        }
+        with patch(
+            "opening_catalog.furniture_marker_manifest",
+            return_value={
+                "extraDataName": "FRN",
+                "index": 2,
+                "positionRef1": 14,
+                "positionRef2": 14,
+                "offsetNifGameUnits": [-0.25, 50.0, -25.0],
+                "offsetGodotGameUnits": [-0.25, -25.0, -50.0],
+                "orientation": 3141,
+                "orientationRadians": 3.141,
+                "heading": 0.0,
+                "animationType": 1,
+            },
+        ), patch(
+            "opening_catalog.animation_sequence_manifest",
+            side_effect=(
+                {
+                    "sequenceName": "SyntheticChairLoopSequence",
+                    "startSeconds": 0.0,
+                    "stopSeconds": 2.0,
+                    "cycleType": 0,
+                    "controlledBlocks": 3,
+                },
+                exit_playback,
+            ),
+        ), patch("opening_catalog.sample_root_motion") as root_motion:
+            root_motion.return_value.manifest.return_value = exit_root_motion
+            result, paths = _compile_guide_furniture_occupancy(
+                contract,
+                packages,
+                sources,
+                archives,  # type: ignore[arg-type]
+                quest_form,
+                "Bip01",
+                30.0,
+            )
+
+        self.assertEqual(
+            result["markerDisposition"],
+            "compose-owned-furniture-reference-gmst-replacement-offset-and-heading-delta",
+        )
+        self.assertEqual(
+            result["furniture"]["marker"]["offsetGodotGameUnits"],
+            [-0.25, -25.0, -50.0],
+        )
+        heading_delta = result["furniture"]["marker"][
+            "actorForwardHeadingDeltaGameSetting"
+        ]
+        self.assertEqual(heading_delta["formId"], f"{heading_delta_form:08x}")
+        self.assertEqual(heading_delta["editorId"], heading_delta_editor)
+        self.assertEqual(heading_delta["value"], heading_delta_value)
+        self.assertEqual(len(heading_delta["rotationGodotQuaternion"]), 4)
+        placement = result["furniture"]["marker"][
+            "actorPlacementOffsetGameSettings"
+        ]
+        self.assertEqual(
+            placement["semantics"],
+            "replace-marker-offset-for-actor-placement",
+        )
+        self.assertEqual(placement["offsetNifGameUnits"], [2.5, 57.0, -29.0])
+        self.assertEqual(placement["offsetGodotGameUnits"], [2.5, -29.0, -57.0])
+        for axis, (form_id, editor_id, value) in placement_settings.items():
+            self.assertEqual(placement[axis]["formId"], f"{form_id:08x}")
+            self.assertEqual(placement[axis]["editorId"], editor_id)
+            self.assertEqual(placement[axis]["value"], value)
+        self.assertEqual(result["seatedLoop"]["formId"], f"{seated_form:08x}")
+        self.assertEqual(result["seatedLoop"]["cycleType"], 0)
+        self.assertEqual(result["exit"]["formId"], f"{exit_form:08x}")
+        self.assertEqual(result["exit"]["cycleType"], 2)
+        self.assertEqual(result["exit"]["rootMotion"], exit_root_motion)
+        self.assertEqual(paths, (seated_path, exit_path))
 
     def test_play_idle_runtime_binding_carries_source_idle_form_id(self):
         command = {

@@ -43,9 +43,10 @@ internal sealed partial class GameplayActorGrounding : Node3D
             (float)actor.Placement.GetMeta(GroundOffsetMetadata).AsDouble();
     }
 
-    internal void PreserveAuthoredFurnitureOccupancy(
+    internal void RegisterOwnedFurnitureMarkerOccupancy(
         CellActorLoader.PlacedActor actor,
-        Node3D furniture)
+        Node3D furniture,
+        Vector3 markerCellPosition)
     {
         if (!_spaces.SelectMany(space => space.Actors).Any(value =>
                 value.ReferenceFormId.Equals(
@@ -56,6 +57,11 @@ internal sealed partial class GameplayActorGrounding : Node3D
                 actor.ReferenceFormId);
         if (!_groundedReferences.Add(actor.ReferenceFormId))
             return;
+        if (!markerCellPosition.IsFinite() ||
+            !actor.Placement.Position.IsEqualApprox(markerCellPosition))
+            throw new InvalidOperationException(
+                "Furniture occupant is not composed at the owned marker: " +
+                actor.ReferenceFormId);
         actor.Placement.SetMeta(GroundOffsetMetadata, 0.0f);
         _results.Add(new Result(
             actor.ReferenceFormId,
@@ -69,10 +75,11 @@ internal sealed partial class GameplayActorGrounding : Node3D
             0.0f,
             actor.Placement.GlobalPosition,
             furniture.GetPath().ToString(),
-            "owned-furn-initial-occupancy-preserves-authored-achr-transform"));
+            "owned-furniture-marker-occupancy-excludes-generic-grounding"));
         GD.Print(
             $"OPENNV_GAMEPLAY_ACTOR_FURNITURE_OCCUPANCY " +
-            $"reference={actor.ReferenceFormId} support={furniture.GetPath()}");
+            $"reference={actor.ReferenceFormId} support={furniture.GetPath()} " +
+            $"markerCell={markerCellPosition}");
     }
 
     public override void _PhysicsProcess(double delta)

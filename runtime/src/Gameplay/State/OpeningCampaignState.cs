@@ -11,6 +11,7 @@ internal sealed record OpeningCampaignState(
     bool Completed,
     string PlayerName,
     int SexIndex,
+    OpeningCharacterAppearanceState Appearance,
     int DocReaction,
     IReadOnlyDictionary<string, int> SpecialValues,
     IReadOnlyList<string> TagSkillFormIds,
@@ -30,7 +31,7 @@ internal sealed record OpeningCampaignState(
     OpeningTransformState PlayerTransform,
     OpeningTransformState GuideTransform)
 {
-    internal const string ExpectedSchema = "opennv-opening-campaign-state/v1";
+    internal const string ExpectedSchema = "opennv-opening-campaign-state/v2";
 
     internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
 
@@ -44,6 +45,8 @@ internal sealed record OpeningCampaignState(
             source.GetProperty(nameof(Completed)).GetBoolean(),
             source.GetProperty(nameof(PlayerName)).GetString()!,
             source.GetProperty(nameof(SexIndex)).GetInt32(),
+            OpeningCharacterAppearanceState.Parse(
+                source.GetProperty(nameof(Appearance))),
             source.GetProperty(nameof(DocReaction)).GetInt32(),
             ReadIntDictionary(source.GetProperty(nameof(SpecialValues))),
             ReadStrings(source.GetProperty(nameof(TagSkillFormIds))),
@@ -114,6 +117,7 @@ internal sealed record OpeningCampaignState(
             !QuestVariables.Values.All(float.IsFinite) ||
             Achievements.Distinct().Count() != Achievements.Count)
             throw new InvalidOperationException("Saved opening campaign state is invalid.");
+        Appearance.Validate();
         foreach (var quest in Quests)
             quest.Validate();
         foreach (var global in Globals)
@@ -158,6 +162,40 @@ internal sealed record OpeningCampaignState(
 
     private static IReadOnlyList<string> ReadStrings(JsonElement source) =>
         source.EnumerateArray().Select(value => value.GetString()!).ToArray();
+}
+
+internal sealed record OpeningCharacterAppearanceState(
+    string RaceFormId,
+    string HairFormId,
+    string EyesFormId,
+    string FaceSymmetricGeometrySha256,
+    string FaceAsymmetricGeometrySha256,
+    string FaceSymmetricTextureSha256)
+{
+    private const int Sha256HexCharacters = 64;
+    internal static OpeningCharacterAppearanceState Parse(JsonElement source) => new(
+        source.GetProperty(nameof(RaceFormId)).GetString()!,
+        source.GetProperty(nameof(HairFormId)).GetString()!,
+        source.GetProperty(nameof(EyesFormId)).GetString()!,
+        source.GetProperty(nameof(FaceSymmetricGeometrySha256)).GetString()!,
+        source.GetProperty(nameof(FaceAsymmetricGeometrySha256)).GetString()!,
+        source.GetProperty(nameof(FaceSymmetricTextureSha256)).GetString()!);
+
+    internal void Validate()
+    {
+        if (FalloutFormId.Normalize(RaceFormId) != RaceFormId ||
+            FalloutFormId.Normalize(HairFormId) != HairFormId ||
+            FalloutFormId.Normalize(EyesFormId) != EyesFormId ||
+            !ValidSha256(FaceSymmetricGeometrySha256) ||
+            !ValidSha256(FaceAsymmetricGeometrySha256) ||
+            !ValidSha256(FaceSymmetricTextureSha256))
+            throw new InvalidOperationException(
+                "Saved opening character appearance state is invalid.");
+    }
+
+    private static bool ValidSha256(string value) =>
+        value.Length == Sha256HexCharacters && value.All(character =>
+            character is >= '0' and <= '9' or >= 'a' and <= 'f');
 }
 
 internal sealed record OpeningEquippedWeaponState(

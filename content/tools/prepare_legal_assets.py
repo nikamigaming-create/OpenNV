@@ -515,6 +515,19 @@ def prepare(
                             ]["animationObjects"]
                         )
                     },
+                    {
+                        str(opening["manifest"]["newGameFlow"]["guideActorAi"][
+                            "referenceFormId"
+                        ]).casefold(): {
+                            str(opening["manifest"]["newGameFlow"]["guideActorAi"][
+                                "furnitureOccupancy"
+                            ]["exit"]["logicalPath"]): str(
+                                opening["manifest"]["newGameFlow"]["guideActorAi"][
+                                    "furnitureOccupancy"
+                                ]["exit"]["sha256"]
+                            )
+                        }
+                    },
                     identities["families"]["actor"],
                 )
     manifest = {

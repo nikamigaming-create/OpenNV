@@ -653,6 +653,7 @@ def prepare_actor(
     preparation_context: ActorPreparationContext | None = None,
     runtime_animation_paths: Sequence[str] = (),
     runtime_animation_objects: Sequence[dict[str, object]] = (),
+    runtime_accumulation_root_animations: dict[str, str] | None = None,
     family_compiler: dict[str, str] | None = None,
 ) -> dict[str, object]:
     recipe = load_recipe(recipe_id) if recipe_document is None else recipe_document
@@ -667,6 +668,10 @@ def prepare_actor(
     )
     base_record_type = str(recipe.get("baseRecordType", HUMANOID_BASE_RECORD_TYPE))
     if reference_record_type == CREATURE_REFERENCE_RECORD_TYPE:
+        if runtime_accumulation_root_animations:
+            raise ValueError(
+                "Creature runtime accumulation-root retention is unsupported"
+            )
         return _prepare_creature_actor(
             cache_root,
             recipe,
@@ -731,6 +736,17 @@ def prepare_actor(
             )
         )
     )
+    retained_root_animations = {
+        _mesh_logical_path(path).casefold(): sha256.casefold()
+        for path, sha256 in (runtime_accumulation_root_animations or {}).items()
+    }
+    retained_paths = {
+        _mesh_logical_path(path).casefold() for path in actor_animation_paths[1:]
+    }
+    if not set(retained_root_animations).issubset(retained_paths):
+        raise ValueError(
+            "Runtime accumulation-root retention names an absent additional animation"
+        )
     configured_origin = recipe.get("originGameUnits")
     if configured_origin is None:
         cell_recipe = load_spatial_recipe(str(recipe["cellRecipe"]))
@@ -1149,6 +1165,7 @@ def prepare_actor(
                 role,
                 model_path,
                 payload,
+                bake_shape_transform=True,
                 source_form_id=form_id_text,
             )
         )
@@ -1179,7 +1196,11 @@ def prepare_actor(
             rigid_attachment_node=rig_profile.unparented_rigid_node,
             biped_head_node=actor_rig.biped_head_node,
             additional_animations=tuple(
-                ActorAnimation(path, mesh(path))
+                _actor_animation(
+                    path,
+                    mesh(path),
+                    retained_root_animations,
+                )
                 for path in actor_animation_paths[1:]
             ),
             retail_render_parts=(
@@ -1295,6 +1316,27 @@ def _atomic_json(path: Path, value: object) -> None:
     os.replace(temporary, path)
 
 
+def _actor_animation(
+    logical_path: str,
+    payload: bytes,
+    retained_root_animations: dict[str, str],
+) -> ActorAnimation:
+    canonical = _mesh_logical_path(logical_path)
+    expected_sha256 = retained_root_animations.get(canonical.casefold())
+    if expected_sha256 is not None:
+        actual_sha256 = hashlib.sha256(payload).hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise ValueError(
+                "Runtime accumulation-root animation hash mismatch: "
+                f"{canonical} expected={expected_sha256} actual={actual_sha256}"
+            )
+    return ActorAnimation(
+        canonical,
+        payload,
+        retain_accumulation_root_translation=expected_sha256 is not None,
+    )
+
+
 def prepare_actor_set(
     data_root: Path,
     cache_root: Path,
@@ -1303,6 +1345,9 @@ def prepare_actor_set(
     runtime_animation_objects_by_reference: dict[
         str, Sequence[dict[str, object]]
     ] | None = None,
+    runtime_accumulation_root_animations_by_reference: dict[
+        str, dict[str, str]
+    ] | None = None,
     family_compiler: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if len(recipe_ids) < 1 or len(set(recipe_ids)) != len(recipe_ids):
@@ -1310,6 +1355,9 @@ def prepare_actor_set(
     runtime_animation_paths_by_reference = runtime_animation_paths_by_reference or {}
     runtime_animation_objects_by_reference = (
         runtime_animation_objects_by_reference or {}
+    )
+    runtime_accumulation_root_animations_by_reference = (
+        runtime_accumulation_root_animations_by_reference or {}
     )
     recipes = [load_recipe(recipe_id) for recipe_id in recipe_ids]
     actors = [
@@ -1325,6 +1373,12 @@ def prepare_actor_set(
             runtime_animation_objects=runtime_animation_objects_by_reference.get(
                 str(recipe["proofActorReferenceFormId"]).casefold(),
                 (),
+            ),
+            runtime_accumulation_root_animations=(
+                runtime_accumulation_root_animations_by_reference.get(
+                    str(recipe["proofActorReferenceFormId"]).casefold(),
+                    {},
+                )
             ),
             family_compiler=family_compiler,
         )

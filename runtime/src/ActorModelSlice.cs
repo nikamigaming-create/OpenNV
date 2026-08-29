@@ -11,6 +11,7 @@ internal static class ActorModelSlice
     private const string AnimationObjectSurfaceRolePrefix = "animation-object-";
     private const string AuthoredPrnRootMarkerDisposition =
         "omit-authored-prn-root-marker";
+    private const int TransformMatrixComponentCount = 16;
 
     internal static LoadedActor Load(
         string modelPath,
@@ -176,6 +177,16 @@ internal static class ActorModelSlice
     {
         var logicalPath = RequireAnimationText(source, "logicalPath", sidecarPath);
         var sha256 = RequireAnimationText(source, "sha256", sidecarPath);
+        var rootDisposition = RequireAnimationText(
+            source,
+            "accumulationRootTranslationDisposition",
+            sidecarPath);
+        if (rootDisposition is not
+            ("owned-world-root-authoritative-zero-local-translation" or
+            "preserve-hash-bound-owned-clip-root-curve"))
+            throw new InvalidOperationException(
+                $"Actor animation {logicalPath} has an unsupported root disposition " +
+                $"in {sidecarPath}: {rootDisposition}.");
         var channels = source.GetProperty("channels").GetInt32();
         if (channels < 1)
             throw new InvalidOperationException(
@@ -183,6 +194,7 @@ internal static class ActorModelSlice
         return new LoadedAnimation(
             logicalPath,
             sha256,
+            rootDisposition,
             channels,
             runtime.Name,
             runtime.Player);
@@ -263,6 +275,18 @@ internal static class ActorModelSlice
                 : RequireSurfaceText(surface, "attachmentNode", sidecarPath);
             var sourceFormId = OptionalSurfaceText(surface, "sourceFormId", sidecarPath);
             var sourceSlot = OptionalSurfaceUInt32(surface, "sourceSlot", sidecarPath);
+            var rigidShapeTransformBaked = surface.GetProperty(
+                "rigidShapeTransformBaked").GetBoolean();
+            var sourceShapeTransformGodotMatrix = surface.GetProperty(
+                    "sourceShapeTransformGodotMatrix")
+                .EnumerateArray()
+                .Select(value => value.GetSingle())
+                .ToArray();
+            if (sourceShapeTransformGodotMatrix.Length != TransformMatrixComponentCount ||
+                sourceShapeTransformGodotMatrix.Any(value => !float.IsFinite(value)))
+                throw new InvalidOperationException(
+                    $"Actor surface has an invalid source-shape transform: " +
+                    $"{role}/{shape} in {sidecarPath}.");
             var retailGeometryName = skinned
                 ? null
                 : OptionalSurfaceText(surface, "retailGeometryName", sidecarPath);
@@ -297,6 +321,10 @@ internal static class ActorModelSlice
                     AnimationObjectSurfaceRolePrefix,
                     StringComparison.OrdinalIgnoreCase))
             {
+                if (!rigidShapeTransformBaked)
+                    throw new InvalidOperationException(
+                        $"Actor animation object did not bake its exact owned " +
+                        $"shape transform: {role}/{shape} in {sidecarPath}.");
                 matches[0].Visible = false;
                 GD.Print(
                     $"OPENNV_ACTOR_ANIMATION_OBJECT_DEFAULT_HIDDEN role={role} " +
@@ -319,7 +347,9 @@ internal static class ActorModelSlice
                 sourceSlot,
                 retailGeometryName,
                 retailVisualNodePath,
-                declaredMorphTargets));
+                declaredMorphTargets,
+                rigidShapeTransformBaked,
+                sourceShapeTransformGodotMatrix));
         }
         if (declaredRuntimeNames.Count != importedByName.Count)
             throw new InvalidOperationException(
@@ -682,6 +712,7 @@ internal static class ActorModelSlice
     internal readonly record struct LoadedAnimation(
         string LogicalPath,
         string SourceSha256,
+        string AccumulationRootTranslationDisposition,
         int Channels,
         string RuntimeName,
         AnimationPlayer Player);
@@ -697,7 +728,9 @@ internal static class ActorModelSlice
         uint? SourceSlot,
         string? RetailGeometryName,
         string? RetailVisualNodePath,
-        IReadOnlyList<string> FaceGenMorphTargets);
+        IReadOnlyList<string> FaceGenMorphTargets,
+        bool RigidShapeTransformBaked,
+        IReadOnlyList<float> SourceShapeTransformGodotMatrix);
 
     internal readonly record struct OmittedSurface(
         string Role,

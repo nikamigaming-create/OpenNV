@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -25,10 +26,14 @@ from actor_gltf import (  # noqa: E402
     _quadratic_vector_keys,
     _rigid_attachment,
     _resolve_retail_rigid_part,
+    _sample_transform_interpolator,
     _unsupported_actor_geometry,
     _uses_retail_biped_head_basis,
     _visible_creature_geometry_names,
     actor_animation_translations,
+    furniture_marker_manifest,
+    _accumulation_root_source_translation,
+    _world_authoritative_accumulation_root_translations,
     gltf_skeleton_inverse_binds,
 )
 from facegen_animation import (  # noqa: E402
@@ -207,6 +212,23 @@ class ActorGltfTest(unittest.TestCase):
                 component,
                 rigid=True,
                 retail_bound=True,
+            )
+        )
+
+    def test_animation_object_bakes_exact_owned_shape_transform(self):
+        component = ActorComponent(
+            "animation-object-00083519",
+            "meshes/animobjects/aocigarette.nif",
+            b"nif",
+            bake_shape_transform=True,
+            source_form_id="00083519",
+        )
+
+        self.assertTrue(
+            _bake_actor_shape_transform(
+                component,
+                rigid=True,
+                retail_bound=False,
             )
         )
 
@@ -593,12 +615,122 @@ class ActorGltfTest(unittest.TestCase):
             values,
         )
 
+    def test_constant_transform_interpolator_publishes_owned_nonaccum_pose(self):
+        interpolator = NifFormat.NiTransformInterpolator()
+        interpolator.translation.x = 0.0
+        interpolator.translation.y = 0.0
+        interpolator.translation.z = 36.85
+        interpolator.rotation.w = 1.0
+        interpolator.rotation.x = 0.0
+        interpolator.rotation.y = 0.0
+        interpolator.rotation.z = 0.0
+
+        translations, rotations = _sample_transform_interpolator(
+            interpolator,
+            [0.0, 1.0],
+            0.0,
+            1.0,
+            "Bip01 NonAccum",
+        )
+
+        self.assertEqual(translations, [(0.0, 36.85, -0.0)] * 2)
+        self.assertEqual(rotations, [(0.0, 0.0, 0.0, 1.0)] * 2)
+
+    def test_invalid_transform_sentinel_does_not_publish_constant_channels(self):
+        interpolator = NifFormat.NiTransformInterpolator()
+        sentinel = -3.4028234663852886e38
+        interpolator.translation.x = sentinel
+        interpolator.translation.y = sentinel
+        interpolator.translation.z = sentinel
+        interpolator.rotation.w = sentinel
+        interpolator.rotation.x = sentinel
+        interpolator.rotation.y = sentinel
+        interpolator.rotation.z = sentinel
+
+        translations, rotations = _sample_transform_interpolator(
+            interpolator,
+            [0.0, 1.0],
+            0.0,
+            1.0,
+            "Bip01 Spine",
+        )
+
+        self.assertEqual(translations, [])
+        self.assertEqual(rotations, [])
+
+    def test_furniture_marker_manifest_preserves_exact_owned_marker(self):
+        marker = NifFormat.BSFurnitureMarker()
+        marker.name = "FRN"
+        marker.num_positions = 1
+        marker.positions.update_size()
+        position = marker.positions[0]
+        position.offset.x = -0.25
+        position.offset.y = 50.0
+        position.offset.z = -25.0
+        position.orientation = 3141
+        position.position_ref_1 = 14
+        position.position_ref_2 = 14
+        position.heading = 0.0
+        position.animation_type = 1
+
+        class Document:
+            @staticmethod
+            def get_global_iterator():
+                return iter((marker,))
+
+        with patch("actor_gltf._read_nif", return_value=Document()):
+            result = furniture_marker_manifest(b"owned-chair", 14)
+
+        self.assertEqual(result["index"], 0)
+        self.assertEqual(result["positionRef1"], 14)
+        self.assertEqual(result["positionRef2"], 14)
+        self.assertEqual(result["offsetNifGameUnits"], [-0.25, 50.0, -25.0])
+        self.assertEqual(result["offsetGodotGameUnits"], [-0.25, -25.0, -50.0])
+        self.assertEqual(result["orientation"], 3141)
+        self.assertEqual(result["orientationRadians"], 3.141)
+
     def test_bip01_locomotion_translation_is_removed_from_accumulation_root(self):
         values = [(0.0, 0.0, 0.0), (0.5, 0.0, -0.25)]
         self.assertEqual(
             actor_animation_translations("Bip01", values, "Bip01", "Bip01 NonAccum"),
             [(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)],
         )
+
+    def test_hash_bound_clip_can_retain_owned_accumulation_root_curve(self):
+        values = [(10.0, 0.0, 5.0), (10.5, 0.0, 4.75)]
+        self.assertEqual(
+            actor_animation_translations(
+                "Bip01",
+                values,
+                "Bip01",
+                "Bip01 NonAccum",
+                retain_accumulation_root_translation=True,
+            ),
+            [(0.0, 0.0, 0.0), (0.5, 0.0, -0.25)],
+        )
+
+    def test_skeleton_rest_is_evidence_without_mutating_skin_bind_space(self):
+        nodes = [
+            {"name": "actor-root"},
+            {"name": "Bip01", "translation": [1.0, 67.0, -0.5]},
+        ]
+        source = _accumulation_root_source_translation(
+            nodes,
+            {"Bip01": 1},
+            "Bip01",
+        )
+        self.assertEqual(source, (1.0, 67.0, -0.5))
+        self.assertEqual(nodes[1]["translation"], [1.0, 67.0, -0.5])
+
+    def test_zero_root_clip_without_authored_root_gets_zero_track(self):
+        self.assertEqual(
+            _world_authoritative_accumulation_root_translations(False, False, 2),
+            [(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)],
+        )
+
+    def test_retained_root_clip_requires_authored_curve(self):
+        with self.assertRaisesRegex(ValueError, "no authored root curve"):
+            _world_authoritative_accumulation_root_translations(False, True, 2)
 
     def test_baked_shape_transform_is_removed_from_skin_bind(self):
         inverse_bind = NifFormat.Matrix44()

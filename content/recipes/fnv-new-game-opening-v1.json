@@ -252,6 +252,80 @@
       "requiredAnimationObjectFormIds": [
         "00083519"
       ],
+      "furnitureOccupancy": {
+        "initialPackageFormId": "00104c1d",
+        "referenceFormId": "001059b0",
+        "markerId": 14,
+        "releaseStage": 40,
+        "releasePackageFormId": "00107238",
+        "animationObjectIdleFormId": "00071ee3",
+        "furniture": {
+          "referenceRecordSha256": "788cf134b52d1e37da64a02c41ed4274dff505169f0cbb796240e307c32adc54",
+          "baseFormId": "000157f2",
+          "editorId": "Chair01F",
+          "recordSha256": "072fd8939988b65839249e44e67ee522361114e5b0d8f01c5ff8303ddd2b0435",
+          "modelLogicalPath": "meshes\\furniture\\chair01.nif",
+          "modelSha256": "6e45d90b14cce19c7845180d8d3e5a07ad0b7177df0487989ea8ca9d29076f45",
+          "marker": {
+            "extraDataName": "FRN",
+            "index": 2,
+            "positionRef1": 14,
+            "positionRef2": 14,
+            "offsetNifGameUnits": [
+              -0.288818359375,
+              54.563453674316406,
+              -25.975013732910156
+            ],
+            "orientation": 3141,
+            "animationType": 1,
+            "actorPlacementOffsetGameSettings": {
+              "semantics": "replace-marker-offset-for-actor-placement",
+              "x": {
+                "formId": "00003f10",
+                "editorId": "fFurnitureMarker14DeltaX",
+                "recordSha256": "785d1f7e0b80b6503be331bfeb4dbeec50d09d277ffe986a07c25d7c629cf52f",
+                "valueGameUnits": 2.4809000492095947
+              },
+              "y": {
+                "formId": "00003f11",
+                "editorId": "fFurnitureMarker14DeltaY",
+                "recordSha256": "53df789c44de5bc4a4fab79dce92c11fabf0eaf6ef9ad779908f2d376a3c70d0",
+                "valueGameUnits": 57.357200622558594
+              },
+              "z": {
+                "formId": "00003f12",
+                "editorId": "fFurnitureMarker14DeltaZ",
+                "recordSha256": "aaefa7b7ca363de0369d702165ab65cc2fafa6730145fd2ba51b35386d89f118",
+                "valueGameUnits": -28.947999954223633
+              }
+            },
+            "actorForwardHeadingDeltaGameSetting": {
+              "formId": "00003f13",
+              "editorId": "fFurnitureMarker14HeadingDelta",
+              "recordSha256": "3bd0ab7c8d4860425e1e243d7ad27252425d967894bafdcf3264d6de01492b03",
+              "valueRadians": 3.1415998935699463
+            }
+          }
+        },
+        "seatedLoop": {
+          "formId": "00003bcb",
+          "editorId": "ChairDynamicIdle",
+          "recordSha256": "669113335d3c70dbbab661d1d18bdb2213383c7969017cddd5e0ac5ee78ab79f",
+          "logicalPath": "meshes\\characters\\_male\\idleanims\\dynamicidle_chairsit.kf",
+          "sha256": "871058bf56001a69bcc6ad770a6a018991a6674f20ccd0bb141ec4dde6cc2d4a",
+          "sequenceName": "DynamicIdle_ChairSit",
+          "cycleType": 0
+        },
+        "exit": {
+          "formId": "00169cde",
+          "editorId": "NVchairStandDoc",
+          "recordSha256": "e8a56c5ff9b2294a8f6839117148ef4fe07613bb34f2c0e3c5e88b7a115da7f8",
+          "logicalPath": "meshes\\characters\\_male\\idleanims\\specialidle_nvdocchairfrontexit.kf",
+          "sha256": "bdb1d8c157941d5180a0ac7f880a6b576e7bd5bcb42e4708843251fa65351ebb",
+          "sequenceName": "SpecialIdle_DocSitLeftExit",
+          "cycleType": 2
+        }
+      },
       "packageTypeNames": {
         "6": "travel",
         "12": "sandbox",
