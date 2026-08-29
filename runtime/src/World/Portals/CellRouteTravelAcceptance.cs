@@ -252,24 +252,27 @@ internal static class CellRouteTravelAcceptance
             if (player.Camera.GlobalPosition.DistanceTo(center) <=
                 configuration.Player.ActivationDistanceMeters)
                 return;
-            await OpenBlockingDoorForReplan(
-                host,
-                player,
-                content,
-                lastStall.Value,
-                input,
-                configuration);
             if (replan < MaximumOwnedNavigationReplans)
+            {
+                await HandleRouteStallForReplan(
+                    host,
+                    player,
+                    content,
+                    lastStall.Value,
+                    input,
+                    configuration);
                 GD.Print(
                     $"OPENNV_FLAT_ROUTE_NAVM_STALL " +
                     $"waypoint={lastStall.Value.WaypointIndex + 1}/" +
                     $"{lastStall.Value.WaypointCount} " +
                     $"remaining={lastStall.Value.RemainingMeters:F3} " +
                     $"replan={replan + 1}/{MaximumOwnedNavigationReplans}");
+            }
         }
 
         var stalled = lastStall ?? throw new InvalidOperationException(
             "Owned NAVM route exhausted replans without a recorded stall.");
+        var finalSweep = CapsuleSweep(player, stalled.Target);
         throw new InvalidOperationException(
             $"Configured movement exhausted {MaximumOwnedNavigationReplans} owned NAVM replans " +
             $"at waypoint {stalled.WaypointIndex + 1}/{stalled.WaypointCount}: " +
@@ -278,7 +281,8 @@ internal static class CellRouteTravelAcceptance
             $"player={player.GlobalPosition} target={stalled.Target} " +
             $"step={player.LastStepAttempt} movement={player.LastMovementState} " +
             $"motionCollision={player.LastMovementCollision} " +
-            $"collision={DescribeSlideCollisions(player)} metres.");
+            $"collision={DescribeSlideCollisions(player)} " +
+            $"sweep={DescribeSweepCollision(finalSweep)} metres.");
     }
 
     private static async Task<NavigationStall?> WalkNavigationPath(
@@ -350,7 +354,7 @@ internal static class CellRouteTravelAcceptance
         return null;
     }
 
-    private static async Task OpenBlockingDoorForReplan(
+    private static async Task HandleRouteStallForReplan(
         RuntimeCoordinator host,
         CellPlayer player,
         CellContentLoader.LoadedContent content,
@@ -358,10 +362,24 @@ internal static class CellRouteTravelAcceptance
         DesktopInputConfiguration input,
         RuntimeConfiguration configuration)
     {
-        var door = Ancestor<DoorInstance>(player.LastBlockingCollider);
+        var blockingCollider = player.LastBlockingCollider;
+        var door = Ancestor<DoorInstance>(blockingCollider);
         if (door is null)
-            throw new InvalidOperationException(
-                "Configured route stall did not resolve to an authored door collider.");
+        {
+            var colliderTransform = blockingCollider is Node3D blockingNode
+                ? blockingNode.GlobalTransform.ToString()
+                : "not-node3d";
+            GD.Print(
+                $"OPENNV_FLAT_ROUTE_NON_DOOR_STALL " +
+                $"collider={blockingCollider?.GetPath().ToString() ?? "unknown"} " +
+                $"colliderTransform={colliderTransform} " +
+                $"blockingPosition={player.LastBlockingPosition?.ToString() ?? "unknown"} " +
+                $"blockingNormal={player.LastBlockingNormal} " +
+                $"player={player.GlobalTransform} target={stall.Target} " +
+                $"waypoint={stall.WaypointIndex + 1}/{stall.WaypointCount} " +
+                $"sweep={DescribeSweepCollision(CapsuleSweep(player, stall.Target))}");
+            return;
+        }
         if (!content.Doors.TryGetValue(door.ReferenceFormId, out var activeDoor) ||
             !ReferenceEquals(activeDoor, door))
             throw new InvalidOperationException(
@@ -369,9 +387,6 @@ internal static class CellRouteTravelAcceptance
         if (door.Destination is not null || door.LinkedDoor is not null)
             throw new InvalidOperationException(
                 "Configured route stall resolved to an XTEL door outside the ordered portal step.");
-        if (door.IsOpen)
-            throw new InvalidOperationException(
-                "Configured route remained blocked by an already-open authored door.");
         var blockingPosition = player.LastBlockingPosition ?? throw new InvalidOperationException(
             "Configured route door blocker has no physics impact position.");
         var distance = player.Camera.GlobalPosition.DistanceTo(blockingPosition);
@@ -380,26 +395,35 @@ internal static class CellRouteTravelAcceptance
                 $"Configured route door blocker is outside activation distance: " +
                 $"distance={distance:F3} limit={configuration.Player.ActivationDistanceMeters:F3}.");
 
-        FlatControlsAcceptance.ApplyMouseLook(
-            player,
-            blockingPosition,
-            configuration.Player);
-        await FlatControlsAcceptance.WaitPhysicsFrames(host, input.Acceptance.SettleFrames);
-        await FlatControlsAcceptance.PulseKeyBinding(
-            host,
-            input.Activate,
-            input.Acceptance.SettleFrames);
-        if (!door.IsOpen)
+        var wasAlreadyOpen = door.IsOpen;
+        if (!wasAlreadyOpen)
+        {
+            FlatControlsAcceptance.ApplyMouseLook(
+                player,
+                blockingPosition,
+                configuration.Player);
+            await FlatControlsAcceptance.WaitPhysicsFrames(host, input.Acceptance.SettleFrames);
+            await FlatControlsAcceptance.PulseKeyBinding(
+                host,
+                input.Activate,
+                input.Acceptance.SettleFrames);
+            if (!door.IsOpen)
+                throw new InvalidOperationException(
+                    $"Configured activation did not open blocking door {door.ReferenceFormId}: " +
+                    $"collider={player.LastActivationCollider}.");
+        }
+        await door.WaitForArticulation();
+        if (door.HasSourceArticulation && !door.SourceOpenTerminalApplied)
             throw new InvalidOperationException(
-                $"Configured activation did not open blocking door {door.ReferenceFormId}: " +
-                $"collider={player.LastActivationCollider}.");
-        if (!CanAdvanceCapsule(player, stall.Target))
-            throw new InvalidOperationException(
-                $"Blocking door {door.ReferenceFormId} opened but its collision did not clear " +
-                $"the owned NAVM waypoint.");
+                $"Blocking door {door.ReferenceFormId} did not apply its source open terminal: " +
+                $"player={player.GlobalTransform} door={door.GlobalTransform}.");
+        var immediateCollision = CapsuleSweep(player, stall.Target);
         GD.Print(
             $"OPENNV_FLAT_ROUTE_BLOCKING_DOOR_OPEN form={door.ReferenceFormId} " +
-            $"distance={distance:F3} waypoint={stall.WaypointIndex + 1}/{stall.WaypointCount}");
+            $"alreadyOpen={wasAlreadyOpen} distance={distance:F3} " +
+            $"waypoint={stall.WaypointIndex + 1}/{stall.WaypointCount} " +
+            $"player={player.GlobalTransform} target={stall.Target} door={door.GlobalTransform} " +
+            $"immediateSweep={DescribeSweepCollision(immediateCollision)}");
     }
 
     private static async Task<bool> WalkToWaypoint(
@@ -596,8 +620,42 @@ internal static class CellRouteTravelAcceptance
         return delta.Length();
     }
 
-    private static bool CanAdvanceCapsule(CellPlayer player, Vector3 target) =>
-        player.CanSweepTo(new Vector3(target.X, player.GlobalPosition.Y, target.Z));
+    private static bool CanAdvanceCapsule(CellPlayer player, Vector3 target)
+    {
+        var collision = CapsuleSweep(player, target);
+        if (collision is null)
+            return true;
+        var remainder = collision.GetRemainder();
+        return new Vector3(remainder.X, 0.0f, remainder.Z).IsZeroApprox();
+    }
+
+    private static KinematicCollision3D? CapsuleSweep(CellPlayer player, Vector3 target)
+    {
+        var horizontalTarget = new Vector3(target.X, player.GlobalPosition.Y, target.Z);
+        var motion = horizontalTarget - player.GlobalPosition;
+        if (motion.IsZeroApprox())
+            return null;
+        return player.MoveAndCollide(
+            motion,
+            testOnly: true,
+            safeMargin: player.SafeMargin,
+            recoveryAsCollision: true);
+    }
+
+    private static string DescribeSweepCollision(KinematicCollision3D? collision)
+    {
+        if (collision is null)
+            return "clear";
+        var collider = collision.GetCollider() as Node;
+        var transform = collider is Node3D node
+            ? node.GlobalTransform.ToString()
+            : "not-node3d";
+        return $"collider={collider?.GetPath().ToString() ?? "unknown"} " +
+            $"colliderTransform={transform} colliderShape={collision.GetColliderShape()} " +
+            $"localShape={collision.GetLocalShape()} position={collision.GetPosition()} " +
+            $"normal={collision.GetNormal()} travel={collision.GetTravel()} " +
+            $"remainder={collision.GetRemainder()}";
+    }
 
     private static T? Ancestor<T>(Node? node)
         where T : Node

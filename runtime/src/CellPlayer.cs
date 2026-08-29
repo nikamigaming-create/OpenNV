@@ -161,20 +161,6 @@ internal partial class CellPlayer : CharacterBody3D
     internal void ConfigurePortalTravel(CellPortalTravel portalTravel) =>
         _portalTravel = portalTravel;
 
-    internal bool CanSweepTo(Vector3 target)
-    {
-        if (_useXr || _useClassicDiorama)
-            return false;
-        var motion = target - GlobalPosition;
-        if (motion.IsZeroApprox())
-            return true;
-        return MoveAndCollide(
-            motion,
-            testOnly: true,
-            safeMargin: SafeMargin,
-            recoveryAsCollision: true) is null;
-    }
-
     internal void ApplyPortalArrival(
         Node3D targetRoot,
         Vector3 targetOriginGameUnits,

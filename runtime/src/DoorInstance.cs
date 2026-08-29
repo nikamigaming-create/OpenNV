@@ -18,6 +18,11 @@ internal partial class DoorInstance : Node3D
     internal DoorInstance? LinkedDoor { get; private set; }
     internal bool HasSourceArticulation => _articulationTarget is not null;
     internal bool ArticulationMoving => _articulationTween?.IsRunning() == true;
+    internal bool SourceOpenTerminalApplied =>
+        _articulationTarget is not null &&
+        IsOpen &&
+        !ArticulationMoving &&
+        TransformsMatch(_articulationTarget.Transform, _openArticulation.Terminal);
 
     internal void Configure(
         string referenceFormId,
