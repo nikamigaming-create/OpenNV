@@ -1,0 +1,27 @@
+{
+  "schema": "opennv-sneak-peek-video-policy/v1",
+  "landscape": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "mobile": {
+    "width": 1080,
+    "height": 1920
+  },
+  "maximumShotSeconds": 15.0,
+  "fadeSeconds": 0.3,
+  "labelMarginPixels": 48,
+  "labelFontSize": 42,
+  "subtitleFontSize": 25,
+  "titleCardFontSize": 70,
+  "videoCodec": "libx264",
+  "preset": "medium",
+  "crf": 18,
+  "pixelFormat": "yuv420p",
+  "audioCodec": "aac",
+  "audioBitrate": "192k",
+  "landscapeFileName": "opennv-four-game-sneak-peek-1080p.mp4",
+  "mobileFileName": "opennv-four-game-sneak-peek-mobile.mp4",
+  "reportFileName": "opennv-four-game-sneak-peek-report.json"
+}
