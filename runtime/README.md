@@ -87,6 +87,23 @@ source portal transition. Python and
 OpenMW are not required on the player's machine. Later
 launches reopen that verified cache automatically.
 
+The owned character menus now bind the prepared `TextEditMenu` and
+`RaceSexMenu` backgrounds. The current ordinary stage-10 capture is
+`D:\Builds\OpenNV-fnv-doc-opening-20260829-r3-owned-menu-nav\stage10-owned-menu-nav.png`,
+SHA-256
+`5096233bbcf0293191c83dd4fbdaf0ce5f5d3aed16ba380eb31f1c3d7e744c28`.
+Doc's startup placement no longer adds the raw chair-reference elevation. The
+native proof at `D:\Builds\OpenNV-fnv-furniture-occupancy-proof-20260829-r1`
+preserves his authored ACHR transform while occupying FURN `001059b0`, releases
+that occupancy for the stage-40 package, and reaches the stage-55 checkpoint.
+Exact seated-loop, furniture-entry, and furniture-exit visuals remain
+unsupported. The native
+`D:\Builds\OpenNV-fnv-cigarette-proof-20260829-r2` proof shows source cigarette
+`ANIO 00083519` default-hidden, visible only for its exact `IDLE 00071ee3`, and
+hidden on idle exit. Its owned NIF contains no particle/effect owner, and no
+other source-backed smoke emitter was found, so visible smoke is not
+implemented.
+
 The following controls and loadout describe the independently accepted saloon
 component, not the complete default Doc/exterior/saloon route. Use WASD and
 mouse-look, press E to pick up items, open containers, or operate a
@@ -146,10 +163,28 @@ exact stage-65 Dad cue, applies stages 80 and 85, reaches stage 90 INFO
 `0001f379`, and advances through seven exact stage-100 commands with cold
 restore. A fresh pinned-Theora profile also compiles the exact CG01 stage-0 and
 stage-5 results plus the sex-specific two-line Dad dialogue into stage 10. The
-stage-10 runtime/save adapter is implemented, but native apply/restore remains
-blocked before execution because the existing Vault 101 presentation manifest
-contains actor-derivative paths from another local cache root. This does not
-implement general package/KF/dialogue AI or a freely playable Vault 101 world.
+portable native stage-10 apply and cold-restore reports now pass against profile
+SHA-256 `4233253dfc347694ab7e4cbc8ee76961ee21e0cfb65db753be95fdf997d64833`.
+The ignored proof root is
+`C:\Users\nbrys\AppData\Local\OpenNV\private-proof\fo3-cg01-stage10-portable-20260829-r1`;
+its apply/restore report SHA-256 values are
+`ff3c3957c1e2936ec470eb0f578f5e3f12680bc95b4993051b7984239f10fc87`
+and `257512e45a92f5d2b184795c3082258526031818e00d0c18a8d034e86ec51f93`.
+This does not implement post-stage-10 toddler-world interaction, general
+package/KF/dialogue AI, or a freely playable Vault 101 world.
+
+The isolated TTW executor applies and cold-restores the exact owned effective-
+source stages `CG00:0/60/100` and `CG01:0/5`, including the synchronously nested
+stage 5, with 38 commands and matching state SHA-256
+`a4d3b74e5d7e4a83c409138e377aa17ac54d7387b6a23f2c5e6e5db1c7d53e58`.
+It uses dedicated `ttw:` save and `ttw-fo3-opening:` cache identities and keeps
+`runtimeReady=false`. The ignored local reports are
+`local/ttw-fo3-runtime-proof/apply.json` and `restore.json`. Their exact blockers
+are `ttw-vault101-cell-resource-compilation`,
+`reference-transform-and-world-application`,
+`owned-movie-runtime-transcode-and-playback`,
+`cg01-stage-10-and-later-gameplay`, and
+`xnvse-and-jam-native-plugin-execution`.
 
 The private Fallout 1 tactical slice launches from a prepared, ignored owned
 cache with:

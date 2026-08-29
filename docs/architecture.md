@@ -56,6 +56,23 @@ Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
 Pip-Boy surface through Godot's input-event path. The accepted surface uses the
 owned background, bitmap fonts, and source rectangles, but it does not execute
 the complete Gamebryo tile graph and is not retail-pixel parity.
+The character flow now binds the prepared owned `TextEditMenu` and `RaceSexMenu`
+background assets instead of presenting those source rectangles over a generic
+translucent panel. A fresh ordinary stage-10 capture at
+`D:\Builds\OpenNV-fnv-doc-opening-20260829-r3-owned-menu-nav\stage10-owned-menu-nav.png`
+has SHA-256
+`5096233bbcf0293191c83dd4fbdaf0ce5f5d3aed16ba380eb31f1c3d7e744c28`.
+Doc's startup transform no longer receives the raw chair-reference elevation.
+The separate native proof at
+`D:\Builds\OpenNV-fnv-furniture-occupancy-proof-20260829-r1` preserves the
+authored ACHR transform while Doc occupies FURN reference `001059b0`, releases
+that occupancy for the stage-40 bedside package, and reaches the stage-55
+checkpoint. Exact seated-loop, furniture-entry, and furniture-exit visuals are
+still unsupported. The source `ANIO 00083519` cigarette is now default-hidden
+and follows its exact `IDLE 00071ee3` start/exit identity; the native lifecycle
+proof is `D:\Builds\OpenNV-fnv-cigarette-proof-20260829-r2`. The admitted NIF is
+mesh-only, and no source-backed smoke particle, effect shader, animation event,
+or engine-special-case owner was found, so visible smoke is not implemented.
 Fallout 3 owns its menu, persistent CG00 selection, and bounded Vault 101 birth-
 room progression through stage 100. The ordinary route plays the exact stage-65
 Dad cue, applies stage-80/85 results and stage-90 INFO `0001f379`, presents the
@@ -65,20 +82,24 @@ The profile producer compiles the exact four-command CG01 stage-0 result, its
 synchronously nested thirteen-command stage-5 result, and the sex-specific
 two-line Dad-speech transition into stage 10 with source-bound references,
 transforms, script variables, controls, objectives, audio/LIP, and movie
-operands. The bounded stage-10 runtime/save adapter is implemented, but a fresh
-native apply/restore is blocked before execution by non-portable absolute actor
-paths in the previous Vault 101 presentation cache. There is no freely playable
-Vault 101 route or general package/dialogue runtime.
-TTW runtime support is absent. Flattened installer outputs can derive a strict
+operands. The bounded stage-10 runtime/save adapter is implemented, and a fresh
+portable native apply and cold restore now pass. The state stops explicitly at
+`fo3-cg01-post-stage-10-toddler-world-interaction-not-implemented`; there is no
+freely playable Vault 101 route or general package/dialogue runtime.
+TTW runtime support is bounded and not launch-ready. Flattened installer outputs
+can derive a strict
 all-active plugin order from unique increasing plugin modification times, and
 the registered base-plus-generated profile emits a neutral effective top-level
 source namespace. A bounded compiler now resolves the effective TTW/FO3
 CG00→CG01-stage-5 record/command/movie closure and the launcher revalidates that
-contract with dedicated TTW cache and save identities. General BSA-member and
-nested loose-file precedence, override-member semantics, command execution,
-world presentation/transition, xNVSE, JAM, and save runtime remain uncompiled or
-unapplied. JAM remains dependency- and portable-semantic-gated. These routes
-consume the shared authoritative state in
+contract with dedicated TTW cache and save identities. Its isolated executor
+applies and cold-restores 38 source commands across `CG00:0/60/100` and
+`CG01:0/5`; the matching state hash proves the dedicated save boundary, not a
+native world. `runtimeReady` remains false until Vault 101 cell-resource
+compilation, reference-transform/world application, owned-movie
+transcode/playback, CG01 stage 10 and later gameplay, and xNVSE/JAM native-plugin
+semantics exist. JAM remains dependency- and portable-semantic-gated. These
+routes consume the shared authoritative state in
 `runtime/src/Gameplay/State`; presentation does not fork inventory, quests,
 objectives, opening completion, or save identity.
 
@@ -428,11 +449,11 @@ retail data, or promotion verdict.
 | `test_fo1_campaign_inventory.py` | Synthetic all-map inventory, identity, and monotonic-promotion regressions | Retail bytes or campaign-readiness claims |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
-| `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, versioned flow contract, and hash-bound HUD/STATS/ITEMS/DATA XML/font/texture contract | Runtime state, Gamebryo tile execution, or Godot UI |
+| `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, versioned flow contract, hash-bound HUD/STATS/ITEMS/DATA XML/font/texture contract, source menu-background bindings, and IDLE→ANIO ownership | Runtime state, Gamebryo tile execution, Godot UI, or unowned smoke behavior |
 | `runtime/src/Campaigns/NewVegas/Opening/NewVegasOpeningNamespaceBridge.cs` | Compile-time namespace join between the New Vegas opening campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs` | Flow/configuration/command-contract parsing and fail-closed runtime validation | Command execution or save state |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningManifest.cs` | Owned New Vegas front-end manifest identity, hash verification, and typed menu/media/gameplay-UI contract loading | Menu rendering, command execution, or source compilation |
-| `runtime/src/Campaigns/NewVegas/Opening/OpeningQuestRuntime.cs` | Data-driven opening command interpreter, authored UI/dialogue/AI progression, checkpoint capture, and completion handoff | ESM/BSA parsing or guessed content identities |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningQuestRuntime.cs` | Data-driven opening command interpreter, owned TextEdit/RaceSex presentation, authored UI/dialogue/AI progression, source-FURN occupancy/release, IDLE-bound animation-object lifecycle, checkpoint capture, and completion handoff | ESM/BSA parsing, complete furniture animation, smoke effects, or guessed content identities |
 | `runtime/src/Gameplay/State/OpeningCampaignState.cs` | Shared versioned opening character/quest/objective/inventory snapshot validation and transform serialization | Flow progression or file I/O |
 | `runtime/src/Presentation/Ui/OwnedUiContracts.cs` | Campaign-neutral owned texture, bitmap-font, style, role, and gameplay-presentation value contracts | Parsing, extraction, state mutation, or UI nodes |
 | `runtime/src/Presentation/Ui/OwnedUiTheme.cs` | Owned bitmap-font, texture, and UI-style construction shared by opening and gameplay presentation | Manifest parsing, progression, or UI state |
@@ -510,7 +531,7 @@ retail data, or promotion verdict.
 | `prepare_fo3_profile.py` / `prepare_fo3_opening_slice.py` | Read-only Fallout 3 GOTY profile, CG00/Vault 101 source graph, playable race and sex-aware hair/eye inventory, Player-plus-RACE FaceGen defaults, and hash-bound local manifest generation | Godot nodes, runtime progression, 3D FaceGen rendering, or full-opening claims |
 | `runtime/src/Campaigns/Fallout3/Fallout3NamespaceBridge.cs` | Compile-time namespace join between the Fallout 3 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
 | `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified intro playback/skip, CG00 sex/name/appearance UI, stage-100 flow, and bounded CG01 stage-5 Dad-dialogue dispatch/save wiring | General dialogue/KF/package AI, portable presentation-cache publication, full Vault 101 play, or parity |
-| `runtime/src/Campaigns/Fallout3/Fo3Cg01Stage10Transition.cs` | Fail-closed sex-specific two-INFO Dad dialogue and exact stage-10 objective/timer/control/autosave state plus cold-restore contract | Native apply evidence, LIP animation, toddler interaction, general dialogue/package AI, or world play |
+| `runtime/src/Campaigns/Fallout3/Fo3Cg01Stage10Transition.cs` | Fail-closed sex-specific two-INFO Dad dialogue and exact stage-10 objective/timer/control/autosave state plus cold-restore contract | LIP animation, toddler interaction, general dialogue/package AI, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage65AppearanceTransition.cs` | Fail-closed validation/application contract for all owned stage-65 MatchRace and MatchFaceGeometry commands across the exact race/sex matrix | Ordinary-flow trigger execution, persistence, face rendering, animation, or Vault 101 play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage80Transition.cs` | Exact sex-conditional INFO result plus stage-80 package, variable, EVP, and enable-reference contract | Ordinary-flow trigger execution/persistence, dialogue/KF playback, package AI, actors, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage85Transition.cs` | Exact post-stage-80 INFO trigger and zero-command stage-85 result contract | Ordinary-flow trigger execution/persistence, dialogue playback, later CG00 interpretation, actors, or world play |
@@ -519,6 +540,8 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout3/Fo3PlayerPackageTransition.cs` | Source-bound `CG00PlayerSection4` package, marker, idle/event animation identities, activation, and fail-closed stage-65 boundary | KF playback, package AI, `MatchRace`, `MatchFaceGeometry`, or stage advancement |
 | `ttw_profile.py` | Read-only layered profile identity, explicit flattened-output mtime order derivation, immutable load-order snapshot, master closure, plugin hashes, archive-name inventory, and save boundary | Archive members, loose-file precedence, records, scripts, or runtime-compatibility promotion |
 | `ttw_source_namespace.py` | Registered-plugin revalidation plus effective top-level loose-file, BSA-v104-header, and zero-byte override-marker winner inventory | BSA member resolution, nested loose files, override-member semantics, records, scripts, or runtime behavior |
+| `runtime/src/Campaigns/TTW/TtwNamespaceBridge.cs` | Compile-time namespace join between the isolated TTW campaign adapter and shared runtime composition | Runtime behavior, profile reuse, routing, or campaign abstractions |
+| `runtime/src/Campaigns/TTW/TtwFo3OpeningRuntime.cs` | Fail-closed TTW profile/namespace/cache/save identity validation plus exact 38-command `CG00:0/60/100` → `CG01:0/5` state application, atomic save, cold restore, and proof report | Vault 101 resources/presentation, movie playback, CG01 stage 10+, xNVSE/JAM execution, or runtime-ready claims |
 | `jam_profile.py` | Read-only JAM dependency identity, plugin/master closure, hashes, save boundary, bounded portable-capability transport, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or complete runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |

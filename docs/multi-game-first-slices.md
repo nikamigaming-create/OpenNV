@@ -2,8 +2,8 @@
 
 Status: **the compact four-game launcher exposes bounded Fallout 1 Hex/FPS,
 Fallout 2 premade-or-custom-to-Arroyo Hex, New Vegas opening/Goodsprings, and a
-Fallout 3 CG00 development frontend; TTW runtime is absent and JAM
-remains dependency-gated**.
+Fallout 3 CG00 development frontend; TTW has an isolated command/save executor
+but is not runtime-ready, and JAM remains dependency-gated**.
 
 This plan coordinates the common launcher/boot surface across Fallout 1,
 Fallout 2, Fallout: New Vegas, Fallout 3, TTW, and JAM. It does not replace the canonical
@@ -71,7 +71,19 @@ retail startup-logo and original-menu presentation remain absent.
    passes first-run plus cold-Continue validation. Complete tile
    interaction, reverse traversal, neighboring exterior-grid streaming,
    integrated-route OpenXR acceptance, and retail visual parity remain open.
-   An uninterrupted whole-campaign route is not proven.
+   The character flow binds the prepared owned `TextEditMenu` and `RaceSexMenu`
+   backgrounds. The current stage-10 frame is
+   `D:\Builds\OpenNV-fnv-doc-opening-20260829-r3-owned-menu-nav\stage10-owned-menu-nav.png`,
+   SHA-256
+   `5096233bbcf0293191c83dd4fbdaf0ce5f5d3aed16ba380eb31f1c3d7e744c28`.
+   Doc no longer receives the raw chair-reference elevation. The native
+   `D:\Builds\OpenNV-fnv-furniture-occupancy-proof-20260829-r1` proof preserves
+   his authored ACHR transform on FURN `001059b0` and releases it for stage 40;
+   exact seated-loop, entry, and exit visuals remain unsupported. The native
+   `D:\Builds\OpenNV-fnv-cigarette-proof-20260829-r2` proof shows source
+   `ANIO 00083519` default-hidden, visible for `IDLE 00071ee3`, and hidden on
+   idle exit. No source-backed smoke emitter was found, so smoke is absent. An
+   uninterrupted whole-campaign route is not proven.
 5. Available now: `scripts/Register-OpenNVFallout2.ps1` validates the legally
    owned `master.dat`, `critter.dat`, and `patch000.dat` DAT2 archives and emits
    a hash-bound source-only profile. The launcher shows Fallout 2 as the fourth
@@ -159,10 +171,16 @@ with a registered development menu/CG00 frontend but no playable presentation.
    `SetPCYoung 1`, and cold-restores stage 100 without replaying one-shot
    effects. A fresh profile now compiles both opening movies without decode
    errors plus the exact CG01 stage-0/stage-5 tree and sex-specific two-line
-   Dad-speech transition into stage 10. Its bounded runtime/save adapter is
-   implemented, but native apply/restore remains blocked because the existing
-   Vault 101 presentation manifest contains actor-derivative paths from another
-   local cache root. Compile the eighth stage-100 command and the remaining
+   Dad-speech transition into stage 10. A portable native proof now applies and
+   cold-restores the stage-10 runtime/save state. The private proof root is
+   `C:\Users\nbrys\AppData\Local\OpenNV\private-proof\fo3-cg01-stage10-portable-20260829-r1`;
+   apply/restore report SHA-256 values are
+   `ff3c3957c1e2936ec470eb0f578f5e3f12680bc95b4993051b7984239f10fc87`
+   and `257512e45a92f5d2b184795c3082258526031818e00d0c18a8d034e86ec51f93`
+   for profile SHA-256
+   `4233253dfc347694ab7e4cbc8ee76961ee21e0cfb65db753be95fdf997d64833`.
+   This is command/movie-surface/save evidence, not a playable toddler world.
+   Compile the eighth stage-100 command and the remaining
    authored birth/age/SPECIAL/tag/trait sequence,
    dialogue, packages, controls, Vault 101 cells, actors, scripts, inventory,
    collision, NAVM, doors, and save boundary into neutral versioned contracts.
@@ -182,10 +200,17 @@ Vault 101 opening and persists outside. This is not a full-campaign claim.
    data roots and active load order, validates TTW markers and plugin master
    closure, hashes active plugins, inventories effective BSA names, and emits a
    distinct save-compatibility identity.
-3. Compile archive members, loose-file precedence, records, scripts, and the
-   same command-capability inventory over the effective
-   TTW stack and reject every ambiguous or unsupported winner.
-4. Prove TTW's selected start, character sequence, first playable slice,
+3. Available now: the isolated TTW executor applies and cold-restores the exact
+   source stages `CG00:0/60/100` and `CG01:0/5`, including the synchronously
+   nested stage 5, with 38 commands and identical state SHA-256
+   `a4d3b74e5d7e4a83c409138e377aa17ac54d7387b6a23f2c5e6e5db1c7d53e58`.
+   It preserves dedicated `ttw:` save and `ttw-fo3-opening:` cache identities;
+   `runtimeReady` remains false.
+4. Compile general archive-member/loose-file override precedence and connect
+   the remaining Vault 101 cell resources, reference transforms/world
+   application, owned movie transcode/playback, CG01 stage 10 and later
+   gameplay, and first-party xNVSE/JAM semantics.
+5. Prove TTW's selected start, character sequence, first playable slice,
    persistence, and later the authored inter-wasteland transition.
 
 Exit: TTW is a separate launcher path with new-character enforcement. It never
@@ -212,9 +237,9 @@ is supported for the selected base profile.
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
 | Fallout 2 | The launcher enables the bounded Hex premade-or-custom-to-Arroyo slice when all owned-profile/cache identities match; exact Map 3 exit serial 1738 loads ARTEMPLE Map 126 and cold-restores. Tag/trait editing, campaign-wide persistence, remaining exits, INT, actors, combat, inventory, full campaign, FPS, VR, and parity remain absent |
-| New Vegas first slice | Menu/intro/Doc house, source-ordered Doc speech/quest beats, source-derived Level/HP/AP/XP, the source-bound HUD/Pip-Boy runtime shell, and the bounded eagerly instantiated Doc/exterior/saloon composite load; the current configured-input route and cold Continue pass against the admitted four-family cache. Current-CELL-only render/collision activation prevents linked interior/exterior shells from presenting together, and one-time source-collision grounding reports actor corrections. The [source package audit](evidence/fnv-goodsprings-actor-package-contract.md) now pins Doc, Pete, Trudy, settler, Sunny, and Cheyenne schedules and conditions, but those generic package/quest executors are not implemented. The exact startup player-root/camera, complete population/package AI, exterior surface/directional lighting, dynamic time/weather, reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual parity remain |
-| Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance enter the bounded Vault 101 birth room and reach/cold-restore stage 100 through seven of eight exact stage-100 commands. A fresh pinned-Theora profile compiles the CG01 stage-0/stage-5 and Dad-speech → stage-10 contracts; native stage-10 apply/restore is still blocked by non-portable actor paths in the prior presentation cache. FPS/Hex/VR, general package/dialogue/KF AI, the eighth stage-100 command, and freely playable Vault 101 remain |
-| TTW | The strict profile/effective-source namespace and bounded FO3 CG00→CG01-stage-5 command/movie contract compile and validate against the installed stack; the launcher binds dedicated TTW cache/save identities but keeps the route disabled because command execution, Vault 101 presentation/transition, xNVSE, JAM, and save runtime are absent |
+| New Vegas first slice | Menu/intro/Doc house, source-ordered Doc speech/quest beats, source-derived Level/HP/AP/XP, the source-bound HUD/Pip-Boy runtime shell, and the bounded eagerly instantiated Doc/exterior/saloon composite load; the current configured-input route and cold Continue pass against the admitted four-family cache. Current-CELL-only render/collision activation prevents linked interior/exterior shells from presenting together, and one-time source-collision grounding reports actor corrections. The owned TextEdit/RaceSex backgrounds are bound; the current stage-10 frame is `D:\Builds\OpenNV-fnv-doc-opening-20260829-r3-owned-menu-nav\stage10-owned-menu-nav.png`, SHA-256 `5096233bbcf0293191c83dd4fbdaf0ce5f5d3aed16ba380eb31f1c3d7e744c28`. Doc no longer receives raw chair elevation. A native furniture proof preserves his authored ACHR/FURN occupancy and releases it at stage 40, but exact seated-loop/entry/exit visuals remain unsupported. A second native proof binds cigarette `ANIO 00083519` to `IDLE 00071ee3` with default-hidden and exit-hide behavior; no source-backed smoke emitter was found or implemented. The [source package audit](evidence/fnv-goodsprings-actor-package-contract.md) pins Doc, Pete, Trudy, settler, Sunny, and Cheyenne schedules and conditions, but those generic package/quest executors are not implemented. The exact startup player-root/camera, complete population/package AI, exterior surface/directional lighting, dynamic time/weather, reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual parity remain |
+| Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance enter the bounded Vault 101 birth room and reach/cold-restore stage 100 through seven of eight exact stage-100 commands. A fresh pinned-Theora profile compiles the CG01 stage-0/stage-5 and Dad-speech → stage-10 contracts; the portable native stage-10 apply and cold-restore reports pass. FPS/Hex/VR, the post-stage-10 toddler world interaction, general package/dialogue/KF AI, the eighth stage-100 command, and freely playable Vault 101 remain |
+| TTW | The strict profile/effective-source namespace and bounded FO3 CG00→CG01-stage-5 command/movie contract compile and validate against the installed stack; the isolated executor applies and cold-restores 38 exact source commands under dedicated TTW cache/save identities. `runtimeReady` remains false because Vault 101 cell-resource compilation, reference-transform/world application, owned-movie transcode/playback, CG01 stage 10 and later gameplay, and xNVSE/JAM native-plugin semantics remain absent |
 | JAM | Dependency registrar plus bounded JVS sprint and JBT time-dilation semantics work; missing dependencies and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM semantics keep the launcher toggle disabled |
 
 The runtime manifest is the executable truth. Documentation may describe this
