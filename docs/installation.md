@@ -80,9 +80,13 @@ links; campaign save v6 records source-derived Level/HP/AP/XP plus saloon CELL
 `00106185`, and a fresh owned-menu Continue restores the unchanged save and
 player transform there. A source-portal active set suspends distant resources,
 and the current r25 first-run/cold-Continue pair passes against the admitted
-four-family cache with exact selected source-door identity. Reverse traversal,
-neighboring exterior-grid streaming, and integrated-route OpenXR acceptance
-remain pending. The registered
+four-family cache with exact selected source-door identity. The active-CELL
+WorldEnvironment/sky owner now restores interior XCLL background/fog and renders the owned
+configured clear-day `NVWastelandClear` atmosphere/cloud pair outside without
+rebuilding that cache. Exterior surface/directional lighting remains
+provisional. Dynamic time/weather, reverse traversal, neighboring exterior-grid
+streaming, integrated-route OpenXR acceptance, and visual parity remain
+pending. The registered
 Fallout 3 development frontend opens its
 profile-backed menu, plays a locally
 converted and hash-verified copy of the owned intro, and converges through

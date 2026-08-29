@@ -38,7 +38,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
 | Fallout 2 Hex | Registered-profile launcher route into the owned Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL; Take enters Map 3 at tile 28707 with PRO-linked sex-correct HMWARR/HFPRIM AA idle and directional AB walking. Ordinary grounded movement can follow the exact 13-step source path to exit serial 1738, enter owned ARTEMPLE Map 126 at tile 16486, save as v3, and cold-restore the same grounded position/facing. The non-source opaque wall proxy is removed while all 45 owned wall FRMs and source-derived collision remain | Tag/trait editing, other animations, remaining exits, scripts, actors, combat, inventory, campaign-wide persistence, full campaign, and parity remain absent; classic fixed-Y sprite composition is still visibly incomplete; FPS and OpenXR stay disabled |
-| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. A fresh four-family cache admits controller-door articulation, target-local static convex collision, current-plus-neighbor suspension, and a manifest-validated configured-input first-run/cold-Continue pair through the saloon door | Player deposits, Pip-Boy tab navigation, reverse traversal, neighboring exterior-grid streaming, Sunny AI/dialogue, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven |
+| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. A fresh four-family cache admits controller-door articulation, target-local static convex collision, current-plus-neighbor suspension, current-CELL WorldEnvironment switching, the owned clear-day atmosphere/cloud pair, and a manifest-validated configured-input first-run/cold-Continue pair through the saloon door | Exterior surface/directional lighting remains the provisional compiled adapter; player deposits, Pip-Boy tab navigation, dynamic clock/weather/global state, reverse traversal, neighboring exterior-grid streaming, Sunny AI/dialogue, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and normal persistent CG00 progression into the owned Vault 101 birth room through stage 100. The bounded route plays the stage-65 Dad cue, applies stage-80/85 and stage-90 INFO `0001f379`, then executes seven of eight exact stage-100 commands through `SetPCYoung 1`; cold Continue restores without replaying one-shot cue/effects | No freely playable first-person Vault 101 route or general package/dialogue interpreter exists; CG01 stage 0, the eighth stage-100 command, lip/idle/package AI, Mom/player presentation, Hex, VR, and retail parity remain absent |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
@@ -75,7 +75,15 @@ and the player transform, and also persists the source-derived Level 1,
 HP 200/200, AP 80/80, and XP 0/200 state used by the Pip-Boy. The current
 source-portal lifecycle eagerly instantiates all three prepared spaces, keeps
 the authoritative CELL plus direct neighbors active, and suspends distant
-presentation/physics resources. A fresh four-family cache now admits that
+presentation/physics resources. One current-CELL WorldEnvironment/sky owner restores
+interior XCLL background/fog on interior transitions and, in the configured bounded clear-day
+mode, resolves exterior `000daebb` through its owned WRLD/CLMT to unconditional
+`NVWastelandClear` `000ffc88` at the exact day sample. The normal route now
+renders the verified owned atmosphere/cloud models and binds four cloud texture
+layers. Exterior surface and directional lighting still use the existing
+provisional compiled adapter; dynamic clock/weather/global state and retail
+visual parity remain open. A
+fresh four-family cache now admits that
 lifecycle together with exact controller-door articulation and target-local
 static convex collision. The current configured-input route requires vertical
 as well as horizontal convergence at intermediate NAVM edges, climbs the
@@ -325,7 +333,7 @@ and `0010636f` → `0010618e`. The saved saloon CELL and player transform then
 cold-restore without replaying a transition. All three spaces remain instantiated, but
 only the current CELL and its direct portal neighbors remain active for
 visibility, processing, physics, and lights. Remaining work includes reverse
-traversal, neighboring exterior-grid streaming, integrated-route
+traversal, dynamic time/weather, neighboring exterior-grid streaming, integrated-route
 OpenXR, Sunny behavior, and an uninterrupted whole campaign. See the
 [canonical whole-game delivery plan](docs/whole-game-delivery-plan.md),
 [multi-game first-slice plan](docs/multi-game-first-slices.md),

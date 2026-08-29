@@ -47,9 +47,17 @@ These 2026-08-29 slices are on `origin/main`:
 - `6e73bd3` samples portal frames at synchronous closed articulation terminals,
   rejects facing fallback after non-door hits, requires a unique empty-ray
   portal candidate, and gates acceptance on the exact selected source door.
+- `62a4dfa` makes the current CELL own the active WorldEnvironment/sky, restores
+  XCLL background/fog on interior transitions, and renders the source-backed
+  default WTHR atmosphere and clouds for the configured Goodsprings clear-day
+  slice. Exterior surface/directional lighting remains provisional.
+- `75a78ff` narrows that report boundary explicitly and makes the route
+  validator require the exact WTHR selection, update order, sky source hashes,
+  and bound cloud-texture count.
 
-The last implementation commit is `6e73bd3`. The current Debug C# build, native
-first-run, native cold Continue, and both manifest-backed report validators pass.
+The last implementation commit is `75a78ff`. The current Debug and Release C#
+builds, formatting gate, native first-run, native cold Continue, and both
+manifest-backed report validators pass.
 No proprietary asset or generated cache is tracked.
 
 ## Honest game status
@@ -67,7 +75,11 @@ No proprietary asset or generated cache is tracked.
   Continue reaches the physical Pip-Boy setup, Doc-house portal, and
   source-animated Goodsprings gate. r25 climbs the source-backed Prospector
   Saloon porch, crosses the second XTEL pair, saves in the saloon, and cold-
-  restores with zero replayed transitions. Both reports validate. Do not
+  restores with zero replayed transitions. The current active-CELL
+  WorldEnvironment/sky owner also removes the Doc-house brown-fog leak and renders the owned
+  `NVWastelandClear` day atmosphere/cloud pair in Goodsprings. Both reports
+  validate. Exterior surface/directional lighting remains provisional and
+  dynamic time/weather remains absent. Do not
   describe the actors, renderer, campaign, TTW, JAM, or OpenXR as complete or
   retail-parity.
 
@@ -99,18 +111,33 @@ shell hit to fall through to facing activation and did not bind the selected
 door identity. r25 instead resolves exact source door `0010636f` after sampling
 the articulated portal at its synchronous closed terminal.
 
+The accepted current-code environment-report proof is:
+
+`D:\Builds\OpenNV-fnv-route-environment-acceptance-20260829-r4`
+
+It reuses the same admitted cache without rebuilding. The first/cold report and
+resulting save SHA-256 values are
+`4f94eae1182ef32d1e643dc351e627bb9ed288c351b14824e88b448358c2d449`,
+`7353410112de5c518fe7a52c64010f0cd0b5320b291725a51da909c7fa119f2f`,
+and `40c047aac33c4a293798389ae2ec764de1d7ee480171c4b6c9885cab46d0cd81`.
+The landscape/mobile visual copies remain under the r3 sky-corrected capture;
+their hashes are `84462af39409b1b716dc775e314f61dc7470d39409e43ad7a5db41c885bb2012`
+and `4d55a15b77b886cc23e7c3ffdd7f188c4cfb8ab1e01e6b2ab9adbc7615ae13b4`.
+The sky selection is the declared bounded clear-day adapter. Its owned WTHR
+values do not yet replace the provisional compiled exterior surface/directional
+lighting, and it is not a dynamic weather, image-space, or retail-parity claim.
+
 ## Exact resume order
 
 1. Read this file, `docs/architecture.md`, and both FNV evidence contracts;
    inspect `git status --short` and preserve the two unrelated Fallout 1 files.
 2. Reuse the admitted cache and r25 evidence; do not rebuild the cache unless a
    compiler/source identity actually changes.
-3. The next honest FNV media slice may show owned Continue, the populated
-   Pip-Boy/HUD, Doc-house exit, animated Goodsprings gate, porch climb, saloon
-   entry, and cold Continue. Label it as bounded route evidence, not parity.
-4. Resume bounded FO2/FO3/FO1 work after recording or deliberately deferring
-   that clip. FNV reverse traversal, grid streaming, integrated OpenXR, actors,
-   and retail visual parity remain separate gates.
+3. The current landscape/mobile FNV route copies are ready to review. Do not
+   use the visually bad r2 capture; r3 is the current sky-corrected source.
+4. Resume bounded FO2/FO3/FO1 work. FNV dynamic time/weather, reverse traversal,
+   grid streaming, integrated OpenXR, actors, and retail visual parity remain
+   separate gates.
 
 ## Preserved local media
 
@@ -122,6 +149,10 @@ the articulated portal at its synchronous closed terminal.
 - launcher package:
   `D:\code\OpenNV\desktop\release\OpenNevada-Launcher-0.1.0-win-x64.zip`, SHA-256
   `ef7029b36023c7dccd40f524c13f1b3a2d485c7110bb2e19780594dc41220e98`.
+- New Vegas current route:
+  `D:\Builds\OpenNV-fnv-route-sneak-peek-20260829-r3-sky\OpenNV-FNV-Doc-Goodsprings-Saloon-sneak-peek.mp4`;
+- New Vegas current route mobile:
+  `D:\Builds\OpenNV-fnv-route-sneak-peek-20260829-r3-sky\OpenNV-FNV-Doc-Goodsprings-Saloon-sneak-peek-mobile.mp4`.
 
 No media, retail asset, or generated cache belongs in Git.
 

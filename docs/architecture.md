@@ -547,8 +547,17 @@ exterior, activates the exact source-articulated gate, completes the vertically
 bounded saloon-porch route, resolves the exact exterior portal door, enters
 saloon CELL `00106185`, and saves. A fresh process cold-restores that saloon/
 player state with zero replayed transitions. Both manifest-backed validators
-pass. Campaign save v6 owns saloon CELL `00106185`, container remaining counts,
-and the player transform.
+pass. Commit `62a4dfa` replaces the former root-CELL-global WorldEnvironment
+with a current-CELL WorldEnvironment/sky owner: interiors restore their own
+XCLL background/fog, while configured bounded
+clear-day exteriors resolve the owned WRLD/CLMT default WTHR and attach the
+verified atmosphere/cloud pair. The accepted Goodsprings proof selects
+`NVWastelandClear` `000ffc88` at source climate hour 8 with four bound cloud
+texture layers. Exterior surface/directional lighting remains the existing
+provisional compiled adapter; this is source-backed sky presentation, not a
+complete WTHR lighting application, dynamic weather, or retail parity.
+Campaign save v6 owns saloon CELL `00106185`, container remaining counts, and
+the player transform.
 The lifecycle is not demand streaming or unloading: all three
 prepared spaces still instantiate before the distant one is suspended. This
 does not promote reverse traversal, neighboring exterior-grid streaming, Sunny

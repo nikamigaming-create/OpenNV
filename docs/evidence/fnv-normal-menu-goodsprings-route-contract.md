@@ -88,6 +88,43 @@ activation, and its report did not bind the selected door identity.
 This is route acceptance, not reverse traversal, full campaign coverage,
 OpenXR acceptance, actor behavior, or retail visual parity.
 
+## Current active-CELL environment correction
+
+Commit `62a4dfa` removes the root-CELL-global environment leak. Before that
+change, the exterior movie background was exact RGB `(73,68,48)`, matching Doc
+Mitchell CELL `00103df9` XCLL fog byte-for-byte after the player had already
+entered Goodsprings. The runtime now owns one mutable `WorldEnvironment` per
+loaded route and switches it with the authoritative current CELL. Interior
+transitions restore that CELL's XCLL background/fog. Configured bounded clear-day exterior
+mode resolves Goodsprings `000daebb` through WRLD `000da726` and CLMT
+`0008809b` to its unique unconditional 100-percent WTHR `000ffc88`
+`NVWastelandClear`, uses the source climate day boundary at hour 8, and renders
+the verified owned atmosphere/cloud models with four bound decoded cloud
+texture layers. Exterior surface shaders and directional lighting still use
+the existing provisional compiled CELL adapter; this correction does not claim
+a complete owned WTHR lighting application.
+
+The no-rebuild native acceptance proof is
+`D:\Builds\OpenNV-fnv-route-environment-acceptance-20260829-r4`. Its first-run
+and cold-Continue reports pass the manifest-backed validators and record
+the selected weather, hour, bound cloud-texture count, environment update sequence, and
+both sky-model hashes. Commit `75a78ff` makes the route validator require that
+exact environment scope, weather selection, update order, source hashes, and
+bound texture count.
+The sky-corrected visual capture and shareable copies remain at
+`D:\Builds\OpenNV-fnv-route-sneak-peek-20260829-r3-sky`. The private artifact
+hashes are:
+
+- accepted first-run report: `4f94eae1182ef32d1e643dc351e627bb9ed288c351b14824e88b448358c2d449`;
+- accepted cold-reload report: `7353410112de5c518fe7a52c64010f0cd0b5320b291725a51da909c7fa119f2f`;
+- accepted resulting save: `40c047aac33c4a293798389ae2ec764de1d7ee480171c4b6c9885cab46d0cd81`;
+- landscape MP4: `84462af39409b1b716dc775e314f61dc7470d39409e43ad7a5db41c885bb2012`;
+- mobile MP4: `4d55a15b77b886cc23e7c3ffdd7f188c4cfb8ab1e01e6b2ab9adbc7615ae13b4`.
+
+This correction does not yet preserve or mutate the referenced climate GLOB,
+advance campaign time, select conditional/night weather, resolve the missing
+night-sky assets, or prove retail camera/material/image-space parity.
+
 ## Bound local acceptance
 
 The 2026-08-28 v13/v4 owned-data run completed checkpoint stage 55, resumed the
