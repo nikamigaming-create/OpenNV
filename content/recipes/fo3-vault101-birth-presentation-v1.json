@@ -54,7 +54,8 @@
     ]
   },
   "unsupported": [
-    "actors and creatures",
+    "Dad, Mom, player body, and all actors except Doctor Li",
+    "CG00-specific dialogue, package state, and animation selection",
     "quest and package command execution",
     "CELL lighting and image-space effects",
     "collision and interaction",

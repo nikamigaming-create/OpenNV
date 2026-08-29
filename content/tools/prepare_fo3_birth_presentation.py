@@ -18,12 +18,13 @@ from export_static_nif_gltf import (
     export_static_nif,
 )
 from material_contract import material_bindings, texture_binding_requests
+from prepare_actor import prepare_actor
 from runtime_configuration import load_runtime_configuration
 from texture_pipeline import TexturePipeline
 
 
 RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
-OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v1"
+OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v2"
 PROFILE_SCHEMA = "opennv-owned-game-profile/v1"
 OUTPUT_NAME = "fo3-vault101-birth-presentation.json"
 SHA256_HEX_CHARACTERS = 64
@@ -95,6 +96,11 @@ def _default_recipe_path() -> Path:
     return root / "recipes" / "fo3-vault101-birth-presentation-v1.json"
 
 
+def _default_actor_recipe_path() -> Path:
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    return root / "recipes" / "fo3-vault101-doctor-li-actor-v1.json"
+
+
 def _archive(install: dict[str, object], role: str) -> dict[str, object]:
     matches = [
         row
@@ -125,7 +131,12 @@ def _distance(first: list[object], second: list[object]) -> float:
     )
 
 
-def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
+def prepare(
+    profile_path: Path,
+    cache_root: Path,
+    recipe_path: Path,
+    actor_recipe_path: Path,
+) -> Path:
     profile, _profile_payload = _read_json(profile_path.resolve())
     if (
         profile.get("schema") != PROFILE_SCHEMA
@@ -208,6 +219,30 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
 
     entry_transform = _required_object(entry, "transform")
     entry_position = _required_list(entry_transform, "positionGameUnits")
+    doctor_source = _required_object(birth, "doctorActor")
+    doctor_reference = _required_object(doctor_source, "reference")
+    doctor_base = _required_object(doctor_source, "base")
+    doctor_appearance = _required_object(doctor_source, "appearance")
+    actor_recipe, actor_recipe_payload = _read_json(actor_recipe_path.resolve())
+    actor_recipe_master = _required_object(actor_recipe, "master")
+    actor_recipe_meshes = _required_object(actor_recipe, "meshesArchive")
+    actor_recipe_textures = _required_list(actor_recipe, "textureArchives")
+    if (
+        actor_recipe.get("schema") != "opennv-actor-recipe/v1"
+        or actor_recipe.get("cellFormId") != cell.get("formId")
+        or actor_recipe.get("proofActorReferenceFormId") != doctor_reference.get("formId")
+        or actor_recipe.get("expectedBaseFormId") != doctor_base.get("formId")
+        or actor_recipe.get("originGameUnits") != entry_position
+        or actor_recipe_master.get("file") != source.get("master", {}).get("file")
+        or actor_recipe_master.get("sha256") != source.get("master", {}).get("sha256")
+        or actor_recipe_meshes.get("file") != source_meshes.get("file")
+        or actor_recipe_meshes.get("sha256") != source_meshes.get("sha256")
+        or len(actor_recipe_textures) != 1
+        or not isinstance(actor_recipe_textures[0], dict)
+        or actor_recipe_textures[0].get("file") != source_textures.get("file")
+        or actor_recipe_textures[0].get("sha256") != source_textures.get("sha256")
+    ):
+        raise ValueError("Fallout 3 Doctor Li recipe does not bind the owned birth slice")
     selected: list[tuple[dict[str, object], dict[str, object], str]] = []
     excluded: dict[str, int] = {}
     for value in _required_list(graph, "references"):
@@ -402,9 +437,80 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
     entry_rotation = tuple(
         float(value) for value in _required_list(entry_transform, "rotationRadians")
     )
+    actor_manifest = prepare_actor(
+        Path(_required_string(source, "dataRoot")).resolve(),
+        cache_root.resolve(),
+        _required_string(actor_recipe, "id"),
+        recipe_document=actor_recipe,
+    )
+    actor_reference = _required_object(actor_manifest, "reference")
+    actor_identity = _required_object(actor_manifest, "actor")
+    actor_coverage = _required_object(actor_manifest, "coverage")
+    doctor_transform = _required_object(doctor_reference, "transform")
+    doctor_race = _required_object(doctor_appearance, "race")
+    doctor_hair = _required_object(doctor_appearance, "hair")
+    doctor_eyes = _required_object(doctor_appearance, "eyes")
+    doctor_head_parts = _required_list(doctor_appearance, "headParts")
+    doctor_outfits = _required_list(doctor_appearance, "outfits")
+    if (
+        actor_manifest.get("schema") != "opennv-actor-scene/v5"
+        or actor_manifest.get("status") != "skinned-animated"
+        or actor_manifest.get("cellFormId") != cell.get("formId")
+        or actor_reference.get("formId") != doctor_reference.get("formId")
+        or actor_reference.get("baseFormId") != doctor_base.get("formId")
+        or actor_reference.get("initiallyDisabled") is not False
+        or actor_reference.get("positionGameUnits")
+        != doctor_transform.get("positionGameUnits")
+        or actor_reference.get("rotationRadians")
+        != doctor_transform.get("rotationRadians")
+        or actor_reference.get("scale") != doctor_transform.get("scale")
+        or actor_identity.get("editorId") != doctor_base.get("editorId")
+        or actor_identity.get("name") != doctor_base.get("name")
+        or actor_identity.get("female") is not doctor_appearance.get("female")
+        or actor_identity.get("raceFormId") != doctor_race.get("formId")
+        or actor_identity.get("hairFormId") != doctor_hair.get("formId")
+        or actor_identity.get("eyesFormId") != doctor_eyes.get("formId")
+        or actor_identity.get("headPartFormIds")
+        != [row.get("formId") for row in doctor_head_parts if isinstance(row, dict)]
+        or actor_identity.get("outfitFormIds")
+        != [row.get("formId") for row in doctor_outfits if isinstance(row, dict)]
+        or actor_coverage.get("animated") is not True
+        or int(actor_coverage.get("components", 0)) <= 0
+        or int(actor_coverage.get("skins", 0)) <= 0
+        or int(actor_coverage.get("surfaces", 0)) <= 0
+        or int(actor_coverage.get("textures", 0)) <= 0
+        or int(actor_coverage.get("faceGenMorphTargets", 0)) <= 0
+        or int(actor_coverage.get("omittedSurfaces", -1)) != 0
+    ):
+        raise ValueError("Compiled Doctor Li actor differs from the transported owned actor")
+
+    actor_scene_path = Path(_required_string(actor_manifest, "manifest")).resolve()
+    actor_sidecar_path = actor_scene_path.parent / _required_string(
+        _required_object(actor_manifest, "outputs"), "sidecar"
+    )
+    actor_sidecar, _actor_sidecar_payload = _read_json(actor_sidecar_path)
+    transported_models = {
+        canonical_member_path(_required_string(row, "logicalPath")): row
+        for row in _required_list(_required_object(doctor_source, "resources"), "models")
+        if isinstance(row, dict)
+    }
+    bound_actor_models = []
+    for row in _required_list(actor_sidecar, "nifDecodes"):
+        if not isinstance(row, dict):
+            raise ValueError("Compiled Doctor Li NIF provenance row is malformed")
+        logical_path = canonical_member_path("meshes\\" + _required_string(row, "logicalPath"))
+        transported = transported_models.get(logical_path)
+        if transported is None or row.get("sha256") != transported.get("sha256"):
+            raise ValueError(
+                f"Compiled Doctor Li model escapes transported ownership: {logical_path}"
+            )
+        bound_actor_models.append(logical_path)
+    if len(bound_actor_models) != int(actor_coverage["components"]) + 1:
+        raise ValueError("Compiled Doctor Li component provenance coverage differs")
+
     document: dict[str, object] = {
         "schema": OUTPUT_SCHEMA,
-        "status": "prepared-owned-materials-not-yet-rendered",
+        "status": "prepared-owned-materials-and-doctor-actor-not-yet-rendered",
         "recipe": {
             "id": _required_string(recipe, "id"),
             "path": str(recipe_path.resolve()),
@@ -449,6 +555,40 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
             "rotationGodotQuaternion": godot_rotation_quaternion(entry_rotation),
             "yawGodotRadians": godot_yaw_radians(entry_rotation[2]),
         },
+        "doctorActor": {
+            "source": "transported-owned-ACHR-NPC-template-and-appearance-closure",
+            "scene": str(actor_scene_path),
+            "sha256": _sha256_file(actor_scene_path),
+            "recipe": {
+                "id": _required_string(actor_recipe, "id"),
+                "path": str(actor_recipe_path.resolve()),
+                "sha256": _sha256_bytes(actor_recipe_payload),
+            },
+            "sourceRecordBindings": {
+                "referenceFormId": _required_string(doctor_reference, "formId"),
+                "baseFormId": _required_string(doctor_base, "formId"),
+                "baseRecordDataSha256": _required_sha256(
+                    doctor_base, "recordDataSha256"
+                ),
+                "raceRecordDataSha256": _required_sha256(
+                    doctor_race, "recordDataSha256"
+                ),
+                "hairRecordDataSha256": _required_sha256(
+                    doctor_hair, "recordDataSha256"
+                ),
+                "eyesRecordDataSha256": _required_sha256(
+                    doctor_eyes, "recordDataSha256"
+                ),
+            },
+            "boundTransportedModels": sorted(bound_actor_models),
+            "reference": actor_reference,
+            "actor": actor_identity,
+            "coverage": actor_coverage,
+            "poseAuthority": (
+                "owned mtidle compiler input only; CG00 package and scripted idle selection "
+                "are not implemented"
+            ),
+        },
         "presentation": {
             "verticalFovDegrees": float(presentation["verticalFovDegrees"]),
             "proofAmbientColor": presentation["proofAmbientColor"],
@@ -483,6 +623,7 @@ def prepare(profile_path: Path, cache_root: Path, recipe_path: Path) -> Path:
         "promotion": {
             "transported": True,
             "texturesPrepared": True,
+            "doctorActorPrepared": True,
             "runtimeManifestValidated": False,
             "runtimeSceneConstructed": False,
             "rendered": False,
@@ -504,8 +645,16 @@ def main() -> int:
     parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--cache-root", type=Path, required=True)
     parser.add_argument("--recipe", type=Path, default=_default_recipe_path())
+    parser.add_argument(
+        "--actor-recipe", type=Path, default=_default_actor_recipe_path()
+    )
     arguments = parser.parse_args()
-    output = prepare(arguments.profile, arguments.cache_root, arguments.recipe)
+    output = prepare(
+        arguments.profile,
+        arguments.cache_root,
+        arguments.recipe,
+        arguments.actor_recipe,
+    )
     print(
         json.dumps(
             {

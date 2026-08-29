@@ -54,7 +54,7 @@ $receiptLine = @(
         Where-Object { $_.TrimStart().StartsWith("{") }
 )[-1]
 $receipt = $receiptLine | ConvertFrom-Json
-if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v1" -or
+if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v2" -or
     -not (Test-Path -LiteralPath $receipt.output -PathType Leaf)) {
     throw "Fallout 3 Vault 101 preparation receipt is invalid."
 }
@@ -67,25 +67,40 @@ $renderOutput = & $Godot --xr-mode off --path $runtimeRoot --windowed `
 $renderText = $renderOutput | Out-String
 $expected =
     "OPENNV_FO3_VAULT101_RENDER_PASS cell=00028138 entry=00039562 " +
-    "references=29 models=23 surfaces=148 textures=51 materials=118 actors=0 interactive=0"
+    "references=29 models=23 surfaces=148 textures=51 materials=118 " +
+    "actors=1 actorSurfaces=18 interactive=0"
 if ($LASTEXITCODE -ne 0 -or $renderText -notmatch [regex]::Escape($expected)) {
     throw "Fallout 3 Vault 101 native render proof failed:`n$renderText"
 }
 
 $reportPath = Join-Path $CaptureRoot "vault101-birth-native-render-proof.json"
 $framePath = Join-Path $CaptureRoot "vault101-birth-entry.png"
+$actorFramePath = Join-Path $CaptureRoot "doctor-li-owned-actor.png"
 $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json -Depth 100
-if ($report.status -ne "pass-rendered-owned-textured-birth-room-no-actors-scripts-or-gameplay" -or
+if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v2" -or
+    $report.status -ne "pass-rendered-owned-textured-birth-room-and-doctor-li-no-dialogue-scripts-or-gameplay" -or
     -not $report.promotion.rendered -or
     -not $report.promotion.texturesBound -or
     $report.promotion.interactive -or
-    $report.promotion.actorsRendered -or
+    -not $report.promotion.actorsRendered -or
+    -not $report.promotion.doctorLiRendered -or
     $report.promotion.questCommandsExecuted -or
     $report.cell.loadedStaticReferences -ne 29 -or
     $report.cell.loadedUniqueModels -ne 23 -or
     $report.materials.resolvedUniqueTextures -ne 51 -or
     $report.materials.materialBindings -ne 118 -or
-    -not (Test-Path -LiteralPath $framePath -PathType Leaf)) {
+    $report.doctorActor.referenceFormId -ne "000290a5" -or
+    $report.doctorActor.baseFormId -ne "000290a3" -or
+    $report.doctorActor.authoredComponents -ne 12 -or
+    $report.doctorActor.authoredSkins -ne 10 -or
+    $report.doctorActor.authoredSurfaces -ne 18 -or
+    $report.doctorActor.runtimeSurfaces -ne 18 -or
+    $report.doctorActor.proofLitMaterials -le 0 -or
+    -not $report.doctorActor.frustumIntersection -or
+    -not $report.doctorActorFrame.visualGatePassed -or
+    $report.doctorActorFrame.runtimeSurfaces -ne 18 -or
+    -not (Test-Path -LiteralPath $framePath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $actorFramePath -PathType Leaf)) {
     throw "Fallout 3 Vault 101 render report promotion boundary is invalid."
 }
 

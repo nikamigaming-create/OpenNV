@@ -7,6 +7,7 @@ namespace OpenNV.Runtime.Campaigns.Fallout3;
 internal partial class Fo3Vault101BirthProof : Node3D
 {
     private const int WarmupFrames = 8;
+    private const int ActorProofWarmupFrames = 4;
     private const double MinimumLuminanceDeviation = 0.005;
     private const int MinimumNonBackgroundPixels = 1000;
     private const float BackgroundPixelDeltaSquared = 16.0f;
@@ -44,16 +45,71 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     $"Could not save Fallout 3 Vault 101 render frame: {saveError}");
             using var frameStream = File.OpenRead(framePath);
             var frameSha256 = Convert.ToHexString(SHA256.HashData(frameStream)).ToLowerInvariant();
-            var failure = metrics.LuminanceDeviation < MinimumLuminanceDeviation
+            var roomFailure = metrics.LuminanceDeviation < MinimumLuminanceDeviation
                 ? "luminance-deviation"
                 : metrics.NonBackgroundPixels < MinimumNonBackgroundPixels
                     ? "owned-geometry-not-visible"
                     : null;
+            var entryCameraPosition = coverage.Camera.GlobalPosition;
+            var entryCameraFov = coverage.Camera.Fov;
+            foreach (var child in coverage.CellRoot.GetChildren().OfType<Node3D>()
+                         .Where(child => child.Name.ToString().StartsWith(
+                             "REFR_", StringComparison.Ordinal)))
+                child.Visible = false;
+            var actorTarget = ActorModelSlice.PosedSemanticCenter(
+                    coverage.DoctorActor.Actor,
+                    "head",
+                    "eye-left",
+                    "eye-right",
+                    "hair")
+                ?? throw new InvalidOperationException(
+                    "Fallout 3 Doctor Li actor has no owned head target.");
+            coverage.Camera.GlobalPosition = actorTarget + new Vector3(0.0f, 0.0f, -1.5f);
+            coverage.Camera.LookAt(actorTarget, Vector3.Up);
+            coverage.Camera.Fov = 45.0f;
+            coverage.Camera.AddChild(new DirectionalLight3D
+            {
+                Name = "DOCTOR_LI_PROOF_CAMERA_FILL",
+                LightColor = Colors.White,
+                LightEnergy = 1.5f,
+                ShadowEnabled = false,
+            });
+            for (var actorFrame = 0; actorFrame < ActorProofWarmupFrames; actorFrame++)
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            var actorProofGeometry = CellReferenceLedger.MeasureGeometry(
+                coverage.DoctorActor.Actor.Root,
+                coverage.Camera,
+                coverage.DoctorActor.Placement.GlobalPosition);
+            var actorFramePath = Path.Combine(output, "doctor-li-owned-actor.png");
+            var actorImage = GetViewport().GetTexture().GetImage();
+            actorImage.Convert(Image.Format.Rgba8);
+            var actorMetrics = Analyze(actorImage, contract.ProofBackgroundColor);
+            var actorSaveError = actorImage.SavePng(actorFramePath);
+            if (actorSaveError != Error.Ok)
+                throw new InvalidOperationException(
+                    $"Could not save Fallout 3 Doctor Li render frame: {actorSaveError}");
+            using var actorFrameStream = File.OpenRead(actorFramePath);
+            var actorFrameSha256 = Convert.ToHexString(
+                SHA256.HashData(actorFrameStream)).ToLowerInvariant();
+            var actorFailure = !actorProofGeometry.RenderLayerVisible ||
+                !actorProofGeometry.AabbValid ||
+                !actorProofGeometry.FrustumIntersection ||
+                actorProofGeometry.ProjectedScreenBounds is not Vector4 projectedBounds ||
+                !CellReferenceLedger.ProjectedBoundsIntersectsViewport(
+                    projectedBounds,
+                    coverage.Camera)
+                    ? "doctor-li-not-visible-in-actor-proof"
+                    : actorMetrics.LuminanceDeviation < MinimumLuminanceDeviation
+                        ? "doctor-li-luminance-deviation"
+                        : actorMetrics.NonBackgroundPixels < MinimumNonBackgroundPixels
+                            ? "doctor-li-pixels-not-visible"
+                            : null;
+            var failure = roomFailure ?? actorFailure;
             var report = new
             {
-                schema = "opennv-fo3-vault101-birth-native-render-proof/v1",
+                schema = "opennv-fo3-vault101-birth-native-render-proof/v2",
                 status = failure is null
-                    ? "pass-rendered-owned-textured-birth-room-no-actors-scripts-or-gameplay"
+                    ? "pass-rendered-owned-textured-birth-room-and-doctor-li-no-dialogue-scripts-or-gameplay"
                     : "fail-rendered-owned-birth-room",
                 campaign = "Fallout3",
                 slice = "Vault101BirthRoom",
@@ -69,6 +125,8 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     presentationManifestSha256 = contract.ManifestSha256,
                     recipeId = contract.RecipeId,
                     recipeSha256 = contract.RecipeSha256,
+                    doctorActorScene = contract.DoctorActor.ScenePath,
+                    doctorActorSceneSha256 = contract.DoctorActor.SceneSha256,
                 },
                 cell = new
                 {
@@ -84,9 +142,9 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     referenceFormId = contract.EntryReferenceFormId,
                     positionGameUnits = Vector(contract.EntryPositionGameUnits),
                     rotationRadians = Vector(contract.EntryRotationRadians),
-                    positionGodotMeters = Vector(coverage.Camera.GlobalPosition),
+                    positionGodotMeters = Vector(entryCameraPosition),
                     cameraProjection = "recipe-proof-only-not-retail-parity",
-                    verticalFovDegrees = coverage.Camera.Fov,
+                    verticalFovDegrees = entryCameraFov,
                 },
                 geometry = new
                 {
@@ -115,6 +173,47 @@ internal partial class Fo3Vault101BirthProof : Node3D
                         coverage.MaterialBindings > 0,
                     lightingAuthority = "recipe proof only; retail CELL lighting remains absent",
                 },
+                doctorActor = new
+                {
+                    authority =
+                        "owned ACHR/NPC_/template/appearance closure at authored transform",
+                    referenceFormId = coverage.DoctorActor.ReferenceFormId,
+                    baseFormId = coverage.DoctorActor.BaseFormId,
+                    name = coverage.DoctorActor.Actor.Name,
+                    raceFormId = coverage.DoctorActor.RaceFormId,
+                    hairFormId = coverage.DoctorActor.HairFormId,
+                    eyesFormId = coverage.DoctorActor.EyesFormId,
+                    headPartFormIds = coverage.DoctorActor.HeadPartFormIds,
+                    outfitFormIds = coverage.DoctorActor.OutfitFormIds,
+                    positionGameUnits = Vector(contract.DoctorActor.PositionGameUnits),
+                    positionGodotGameUnits = Vector(coverage.DoctorActor.Placement.Position),
+                    idleAnimation = coverage.DoctorActor.Actor.AnimationLogicalPath,
+                    idleAuthority =
+                        "owned mtidle compiler input only; not CG00 package/script selection",
+                    meshes = coverage.DoctorActor.Actor.Meshes,
+                    skeletons = coverage.DoctorActor.Actor.Skeletons,
+                    animations = coverage.DoctorActor.Actor.Animations,
+                    animationChannels = coverage.DoctorActor.Actor.AnimationChannels,
+                    authoredComponents = contract.DoctorActor.Components,
+                    authoredSkins = contract.DoctorActor.Skins,
+                    authoredSurfaces = contract.DoctorActor.Surfaces,
+                    authoredTextures = contract.DoctorActor.Textures,
+                    faceGenMorphTargets = contract.DoctorActor.FaceGenMorphTargets,
+                    proofLitMaterials = coverage.ProofLitActorMaterials,
+                    runtimeSurfaces = coverage.DoctorActorGeometry.Surfaces,
+                    runtimeVertices = coverage.DoctorActorGeometry.Vertices,
+                    runtimeTriangles = coverage.DoctorActorGeometry.Triangles,
+                    renderLayerVisible = coverage.DoctorActorGeometry.RenderLayerVisible,
+                    aabbValid = coverage.DoctorActorGeometry.AabbValid,
+                    frustumIntersection = coverage.DoctorActorGeometry.FrustumIntersection,
+                    globalBounds = coverage.DoctorActorGeometry.GlobalAabb is Aabb actorBounds
+                        ? new
+                        {
+                            position = Vector(actorBounds.Position),
+                            size = Vector(actorBounds.Size),
+                        }
+                        : null,
+                },
                 frame = new
                 {
                     path = framePath,
@@ -125,8 +224,35 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     meanLuminance = metrics.MeanLuminance,
                     luminanceDeviation = metrics.LuminanceDeviation,
                     nonBackgroundPixels = metrics.NonBackgroundPixels,
-                    visualGatePassed = failure is null,
-                    visualGateFailure = failure,
+                    visualGatePassed = roomFailure is null,
+                    visualGateFailure = roomFailure,
+                },
+                doctorActorFrame = new
+                {
+                    path = actorFramePath,
+                    bytes = actorFrameStream.Length,
+                    sha256 = actorFrameSha256,
+                    width = actorMetrics.Width,
+                    height = actorMetrics.Height,
+                    meanLuminance = actorMetrics.MeanLuminance,
+                    luminanceDeviation = actorMetrics.LuminanceDeviation,
+                    nonBackgroundPixels = actorMetrics.NonBackgroundPixels,
+                    sourceTransformPreserved = true,
+                    staticGeometryHiddenForIsolation = true,
+                    cameraAuthority = "proof-only framing, not retail or CG00 camera",
+                    cameraPositionGodotMeters = Vector(coverage.Camera.GlobalPosition),
+                    targetGodotMeters = Vector(actorTarget),
+                    runtimeSurfaces = actorProofGeometry.Surfaces,
+                    runtimeVertices = actorProofGeometry.Vertices,
+                    runtimeTriangles = actorProofGeometry.Triangles,
+                    renderLayerVisible = actorProofGeometry.RenderLayerVisible,
+                    aabbValid = actorProofGeometry.AabbValid,
+                    frustumIntersection = actorProofGeometry.FrustumIntersection,
+                    projectedScreenBounds = actorProofGeometry.ProjectedScreenBounds is Vector4 bounds
+                        ? new[] { bounds.X, bounds.Y, bounds.Z, bounds.W }
+                        : null,
+                    visualGatePassed = actorFailure is null,
+                    visualGateFailure = actorFailure,
                 },
                 promotion = new
                 {
@@ -135,7 +261,9 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     runtimeSceneConstructed = true,
                     rendered = failure is null,
                     interactive = false,
-                    actorsRendered = false,
+                    actorsRendered = failure is null,
+                    doctorLiRendered = failure is null &&
+                        actorFailure is null,
                     questCommandsExecuted = false,
                     characterSelectionJoinedToScene = false,
                     collisionConsumed = false,
@@ -148,8 +276,8 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 },
                 unsupported = new[]
                 {
-                    "Dad, Doctor Li, Mom, player body, and all other actors",
-                    "CG00 dialogue, packages, animation, quest triggers, and stage progression",
+                    "Dad, Mom, player body, and all actors except Doctor Li",
+                    "CG00 dialogue, packages, scripted animation selection, quest triggers, and stage progression",
                     "CELL lighting, image-space effects, collision, interaction, audio, save, and OpenXR",
                     "retail camera, material, lighting, animation, and pixel parity",
                 },
@@ -167,7 +295,8 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     $"entry={contract.EntryReferenceFormId} references={coverage.PlacedReferences} " +
                     $"models={coverage.LoadedAssets} surfaces={coverage.Surfaces} " +
                     $"textures={coverage.LoadedTextures} materials={coverage.MaterialBindings} " +
-                    $"actors=0 interactive=0 output={output}");
+                    $"actors=1 actorSurfaces={coverage.DoctorActorGeometry.Surfaces} " +
+                    $"interactive=0 output={output}");
             else
                 GD.PushError(
                     $"OPENNV_FO3_VAULT101_RENDER_VISUAL_FAIL failure={failure} output={output}");

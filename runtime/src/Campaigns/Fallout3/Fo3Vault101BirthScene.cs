@@ -15,6 +15,9 @@ internal sealed record Fo3Vault101BirthSceneCoverage(
     int RuntimeGeneratedMipTextures,
     int MaterialBindings,
     int ProofLitRetailMaterials,
+    int ProofLitActorMaterials,
+    CellActorLoader.PlacedActor DoctorActor,
+    CellReferenceLedger.Geometry DoctorActorGeometry,
     int PlacedReferences,
     int MeshInstances,
     int Surfaces,
@@ -115,6 +118,37 @@ internal static class Fo3Vault101BirthScene
                 }
             }
 
+            var doctorActor = CellActorLoader.Load(
+                    contract.DoctorActor.ScenePath,
+                    new HashSet<string>([contract.CellFormId], StringComparer.OrdinalIgnoreCase),
+                    root,
+                    contract.EntryPositionGameUnits,
+                    configuration,
+                    proofEnableInitiallyDisabled: false)
+                ?? throw new InvalidOperationException(
+                    "Fallout 3 Doctor Li actor was unexpectedly disabled.");
+            if (doctorActor.ReferenceFormId != contract.DoctorActor.ReferenceFormId ||
+                doctorActor.BaseFormId != contract.DoctorActor.BaseFormId ||
+                doctorActor.RaceFormId != contract.DoctorActor.RaceFormId ||
+                doctorActor.HairFormId != contract.DoctorActor.HairFormId ||
+                doctorActor.EyesFormId != contract.DoctorActor.EyesFormId ||
+                !doctorActor.HeadPartFormIds.SequenceEqual(
+                    contract.DoctorActor.HeadPartFormIds) ||
+                !doctorActor.OutfitFormIds.SequenceEqual(
+                    contract.DoctorActor.OutfitFormIds) ||
+                !doctorActor.Placement.Position.IsEqualApprox(
+                    contract.DoctorActor.PositionGodotGameUnits) ||
+                !doctorActor.Placement.Quaternion.IsEqualApprox(
+                    contract.DoctorActor.RotationGodotQuaternion) ||
+                !doctorActor.Placement.Scale.IsEqualApprox(
+                    Vector3.One * contract.DoctorActor.Scale) ||
+                doctorActor.Actor.AuthoredSurfaces != contract.DoctorActor.Surfaces ||
+                doctorActor.Actor.AuthoredTextures != contract.DoctorActor.Textures ||
+                doctorActor.Actor.Surfaces.Count != contract.DoctorActor.Surfaces ||
+                doctorActor.Actor.AnimationLogicalPath != contract.DoctorActor.IdleAnimationPath)
+                throw new InvalidOperationException(
+                    "Fallout 3 Doctor Li runtime actor differs from its owned contract.");
+
             var proofLitRetailMaterials =
                 RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
                     root,
@@ -124,6 +158,17 @@ internal static class Fo3Vault101BirthScene
                     contract.ProofFogFarGameUnits,
                     contract.ProofFogPower,
                     contract.UnitsToMeters);
+            var proofLitActorMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
+                doctorActor.Actor.Root,
+                contract.ProofAmbientColor,
+                contract.ProofBackgroundColor,
+                contract.ProofFogNearGameUnits,
+                contract.ProofFogFarGameUnits,
+                contract.ProofFogPower,
+                contract.UnitsToMeters);
+            if (proofLitActorMaterials <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 Doctor Li actor received no proof-lighting contract.");
 
             host.AddChild(new WorldEnvironment
             {
@@ -150,6 +195,18 @@ internal static class Fo3Vault101BirthScene
             camera.SetMeta("opennv_source_position_game_units", contract.EntryPositionGameUnits);
             camera.SetMeta("opennv_source_rotation_radians", contract.EntryRotationRadians);
             host.AddChild(camera);
+            var doctorActorGeometry = CellReferenceLedger.MeasureGeometry(
+                doctorActor.Actor.Root,
+                camera,
+                doctorActor.Placement.GlobalPosition);
+            if (!doctorActorGeometry.RenderLayerVisible ||
+                !doctorActorGeometry.AabbValid ||
+                !doctorActorGeometry.FrustumIntersection ||
+                doctorActorGeometry.Surfaces != contract.DoctorActor.Surfaces ||
+                doctorActorGeometry.Vertices <= 0 ||
+                doctorActorGeometry.Triangles <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 Doctor Li actor did not enter the birth-room proof frustum.");
             if (meshInstances == 0 || surfaces == 0 || vertices == 0 || triangles == 0)
                 throw new InvalidOperationException(
                     "Fallout 3 Vault 101 birth room constructed no render geometry.");
@@ -165,6 +222,9 @@ internal static class Fo3Vault101BirthScene
                 textures.RuntimeGeneratedMipTextures,
                 materialBindings,
                 proofLitRetailMaterials,
+                proofLitActorMaterials,
+                doctorActor,
+                doctorActorGeometry,
                 contract.References.Count,
                 meshInstances,
                 surfaces,
