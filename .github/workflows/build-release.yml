@@ -43,7 +43,7 @@ jobs:
           $archive = Join-Path $env:RUNNER_TEMP 'godot-mono.zip'
           $root = Join-Path $env:RUNNER_TEMP 'godot-mono'
           $expectedSha256 = 'a2a48473a7414c5f19fab690518caebb738c09ef9601f6bd2388676a7f53b3c0'
-          Invoke-WebRequest -Uri "https://github.com/godotengine/godot/releases/download/$version/Godot_v4.7.1-stable_mono_win64.zip" -OutFile $archive
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot/releases/download/$version/Godot_v4.7.2-stable_mono_win64.zip" -OutFile $archive
           $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actualSha256 -ne $expectedSha256) { throw "Godot archive hash mismatch: $actualSha256" }
           Expand-Archive -LiteralPath $archive -DestinationPath $root
