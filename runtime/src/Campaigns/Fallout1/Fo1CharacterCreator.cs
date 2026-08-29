@@ -98,6 +98,7 @@ internal static class Fo1CharacterCreatorNumericContracts
     internal const int SourcePresentationInt38 = 38;
     internal const float SourcePresentationFloat397Point0f = 397.0f;
     internal const int SourcePresentationInt40 = 40;
+    internal const int SourcePresentationInt424 = 424;
     internal const float SourcePresentationFloat416Point0f = 416.0f;
     internal const float SourcePresentationFloat42Point0f = 42.0f;
     internal const int SourcePresentationInt44 = 44;
@@ -157,6 +158,8 @@ internal partial class Fo1CharacterCreator : CanvasLayer
     private TextureRect _pickerPortrait = null!;
     private Fo1OwnedPortraitRelief? _pickerPortraitRelief;
     private Button? _pickerPortraitToggle;
+    private Fo1CustomAppearanceEditor? _appearanceEditor;
+    private Fo1CustomAppearanceSelection? _customAppearanceSelection;
     private Label _pickerDetails = null!;
     private Label _pickerCounter = null!;
     private int _pickerIndex;
@@ -207,6 +210,26 @@ internal partial class Fo1CharacterCreator : CanvasLayer
         }
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
         OpenCustomEditor();
+        if (_hexPortraitToggleEnabled)
+        {
+            OpenCustomAppearanceEditor();
+            _appearanceEditor!.SetSelection(new Fo1CustomAppearanceSelection(
+                "angular",
+                "long",
+                "deep",
+                "auburn",
+                "green"));
+            _appearanceEditor.TogglePreviewMode();
+            if (!_appearanceEditor.Live3DVisible ||
+                _appearanceEditor.Head.FaceShapeId != "angular" ||
+                _appearanceEditor.Head.HairStyleId != "long" ||
+                _appearanceEditor.Head.SkinToneId != "deep" ||
+                _appearanceEditor.Head.HairColorId != "auburn" ||
+                _appearanceEditor.Head.EyeColorId != "green")
+                throw new InvalidOperationException(
+                    "Fallout 1 Hex custom live head identity differs.");
+            _appearanceEditor.Confirm();
+        }
         _name.Text = "NIKAMI";
         _info.Text = "NAME\nNIKAMI\n\nYour name is preserved in the live tactical session and save contract.";
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
@@ -381,6 +404,15 @@ internal partial class Fo1CharacterCreator : CanvasLayer
         {
             _info.Text = "OPTIONS\n\nThis proof keeps the owned original UI art at 640×480 and scales it cleanly.";
         }, Fo1CharacterCreatorNumericContracts.SourcePresentationInt11);
+        if (_hexPortraitToggleEnabled)
+            AddFlatButton(
+                "FACE",
+                Fo1CharacterCreatorNumericContracts.SourcePresentationInt337,
+                Fo1CharacterCreatorNumericContracts.SourcePresentationInt424,
+                Fo1CharacterCreatorNumericContracts.SourcePresentationInt103,
+                Fo1CharacterCreatorNumericContracts.SourcePresentationInt24,
+                OpenCustomAppearanceEditor,
+                Fo1CharacterCreatorNumericContracts.SourcePresentationInt11);
         AddFlatButton("DONE", Fo1CharacterCreatorNumericContracts.SourcePresentationInt446, Fo1CharacterCreatorNumericContracts.SourcePresentationInt452, Fo1CharacterCreatorNumericContracts.SourcePresentationInt98, Fo1CharacterCreatorNumericContracts.SourcePresentationInt24, CompleteInteractive, Fo1CharacterCreatorNumericContracts.SourcePresentationInt11);
         AddFlatButton("CANCEL", Fo1CharacterCreatorNumericContracts.SourcePresentationInt551, Fo1CharacterCreatorNumericContracts.SourcePresentationInt452, Fo1CharacterCreatorNumericContracts.SourcePresentationInt77, Fo1CharacterCreatorNumericContracts.SourcePresentationInt24, () =>
         {
@@ -540,6 +572,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
 
     private void ModifyPremade()
     {
+        _customAppearanceSelection = null;
         LoadProfile(_contract.PremadeCharacters[_pickerIndex].Profile);
         _pickerOverlay.Visible = false;
         _info.Text = "MODIFY CHARACTER\n\nThe selected owned premade is loaded into the complete SPECIAL, skills, and traits editor.";
@@ -547,6 +580,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
 
     private void OpenCustomEditor()
     {
+        _customAppearanceSelection = null;
         LoadProfile(new Fo1CharacterProfile(
             "None",
             Fo1CharacterCreatorNumericContracts.SourcePresentationInt25,
@@ -562,6 +596,31 @@ internal partial class Fo1CharacterCreator : CanvasLayer
             []));
         _pickerOverlay.Visible = false;
         _info.Text = "CUSTOM CHARACTER\n\nSpend five SPECIAL points, tag exactly three skills, and optionally select up to two traits.";
+    }
+
+    private void OpenCustomAppearanceEditor()
+    {
+        if (!_hexPortraitToggleEnabled || _pickerOverlay.Visible ||
+            _appearanceEditor is not null)
+            return;
+        _appearanceEditor = new Fo1CustomAppearanceEditor(
+            _sex,
+            _customAppearanceSelection);
+        _appearanceEditor.Confirmed += selection =>
+        {
+            _customAppearanceSelection = selection;
+            _appearanceEditor?.QueueFree();
+            _appearanceEditor = null;
+            _info.Text =
+                "CUSTOM FACE SAVED\n\nThe deterministic green portrait and matching live 3D head will be stored with this Hex character.";
+        };
+        _appearanceEditor.Cancelled += () =>
+        {
+            _appearanceEditor?.QueueFree();
+            _appearanceEditor = null;
+        };
+        _canvas.AddChild(_appearanceEditor);
+        _canvas.MoveChild(_appearanceEditor, _canvas.GetChildCount() - 1);
     }
 
     private void LoadProfile(Fo1CharacterProfile profile)
@@ -740,6 +799,20 @@ internal partial class Fo1CharacterCreator : CanvasLayer
     private Fo1CharacterProfile BuildProfile()
     {
         var profile = PreviewProfile();
+        if (_customAppearanceSelection is not null)
+        {
+            var appearance = _customAppearanceSelection;
+            profile = profile with
+            {
+                Appearance = Fo1ProceduralPortrait.Commit(
+                    profile.Sex,
+                    appearance.FaceShapeId,
+                    appearance.HairStyleId,
+                    appearance.SkinToneId,
+                    appearance.HairColorId,
+                    appearance.EyeColorId),
+            };
+        }
         profile.Validate();
         return profile;
     }

@@ -721,7 +721,8 @@ internal partial class Fo1TacticalSession : Node
         first.Intelligence == second.Intelligence && first.Agility == second.Agility &&
         first.Luck == second.Luck &&
         first.TaggedSkills.SequenceEqual(second.TaggedSkills, StringComparer.Ordinal) &&
-        first.Traits.SequenceEqual(second.Traits, StringComparer.Ordinal);
+        first.Traits.SequenceEqual(second.Traits, StringComparer.Ordinal) &&
+        Equals(first.Appearance, second.Appearance);
 
     internal void SetWorldGuidesVisible(bool visible)
     {
@@ -1950,8 +1951,17 @@ internal partial class Fo1TacticalSession : Node
 
     private static Fo1CharacterProfile ParseSavedCharacter(JsonElement source)
     {
-        if (source.GetProperty("schema").GetString() != "opennv-fo1-character/v1")
-            throw new InvalidOperationException("Fallout save contains an unknown character schema.");
+        var schema = source.GetProperty("schema").GetString();
+        if (!string.Equals(
+                schema,
+                "opennv-fo1-character/v1",
+                StringComparison.Ordinal) &&
+            !string.Equals(
+                schema,
+                "opennv-fo1-character/v2",
+                StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"Fallout save contains an unknown character schema: {schema}");
         var special = source.GetProperty("allocatedSpecial");
         var profile = new Fo1CharacterProfile(
             source.GetProperty("name").GetString()!,
@@ -1970,6 +1980,33 @@ internal partial class Fo1TacticalSession : Node
             source.GetProperty("traits").EnumerateArray()
                 .Select(row => row.GetString()!)
                 .ToArray());
+        if (schema == "opennv-fo1-character/v2")
+        {
+            var appearance = source.GetProperty("appearance");
+            if (appearance.ValueKind != JsonValueKind.Object ||
+                appearance.GetProperty("schema").GetString() !=
+                    Fo1CharacterAppearance.ExpectedSchema ||
+                appearance.GetProperty("mode").GetString() !=
+                    "hex-local-procedural-custom")
+                throw new InvalidOperationException(
+                    "Fallout save contains an unknown character appearance.");
+            profile = profile with
+            {
+                Appearance = new Fo1CharacterAppearance(
+                    appearance.GetProperty("faceShapeId").GetString()!,
+                    appearance.GetProperty("hairStyleId").GetString()!,
+                    appearance.GetProperty("skinToneId").GetString()!,
+                    appearance.GetProperty("hairColorId").GetString()!,
+                    appearance.GetProperty("eyeColorId").GetString()!,
+                    appearance.GetProperty("recipeId").GetString()!,
+                    appearance.GetProperty("recipeSha256").GetString()!,
+                    appearance.GetProperty("generatorId").GetString()!,
+                    appearance.GetProperty("portraitPath").GetString()!,
+                    appearance.GetProperty("portraitSha256").GetString()!,
+                    appearance.GetProperty("portraitWidth").GetInt32(),
+                    appearance.GetProperty("portraitHeight").GetInt32()),
+            };
+        }
         profile.Validate();
         return profile;
     }

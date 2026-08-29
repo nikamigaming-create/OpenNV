@@ -33,6 +33,8 @@ internal sealed record Fo1CharacterProfile(
     IReadOnlyList<string> TaggedSkills,
     IReadOnlyList<string> Traits)
 {
+    internal Fo1CharacterAppearance? Appearance { get; init; }
+
     internal static readonly string[] SkillNames =
     [
         "Small Guns", "Big Guns", "Energy Weapons", "Unarmed", "Melee Weapons", "Throwing",
@@ -105,6 +107,7 @@ internal sealed record Fo1CharacterProfile(
         if (Traits.Count > 2 || Traits.Distinct(StringComparer.Ordinal).Count() != Traits.Count ||
             Traits.Any(trait => !TraitNames.Contains(trait, StringComparer.Ordinal)))
             throw new InvalidOperationException("Fallout character creation allows no more than two distinct traits.");
+        Appearance?.Validate(Sex);
     }
 
     internal IReadOnlyDictionary<string, int> Skills()
@@ -151,7 +154,9 @@ internal sealed record Fo1CharacterProfile(
 
     internal object Report() => new
     {
-        schema = "opennv-fo1-character/v1",
+        schema = Appearance is null
+            ? "opennv-fo1-character/v1"
+            : "opennv-fo1-character/v2",
         name = Name,
         age = Age,
         sex = Sex,
@@ -178,6 +183,7 @@ internal sealed record Fo1CharacterProfile(
         },
         taggedSkills = TaggedSkills,
         traits = Traits,
+        appearance = Appearance?.Report(),
         derived = new
         {
             hitPoints = HitPoints,

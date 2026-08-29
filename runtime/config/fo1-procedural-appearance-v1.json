@@ -1,0 +1,57 @@
+{
+  "schema": "opennv-fo1-procedural-appearance/v1",
+  "id": "fo1-local-classic-green-appearance-v1",
+  "campaign": "Fallout1",
+  "defaults": {
+    "faceShapeId": "oval",
+    "hairStyleId": "cropped",
+    "skinToneId": "medium",
+    "hairColorId": "brown",
+    "eyeColorId": "hazel"
+  },
+  "faceShapes": [
+    { "id": "round", "halfWidth": 41.0, "halfHeight": 42.0, "taper": 0.0, "headScale": [1.08, 0.92, 1.0] },
+    { "id": "oval", "halfWidth": 35.0, "halfHeight": 48.0, "taper": 0.0, "headScale": [0.94, 1.08, 1.0] },
+    { "id": "angular", "halfWidth": 38.0, "halfHeight": 46.0, "taper": 0.42, "headScale": [1.0, 1.02, 0.94] }
+  ],
+  "hairStyles": [
+    { "id": "cropped", "hairLineY": 42, "bottomY": 42, "sideMode": "none", "sideLength": 0.32 },
+    { "id": "swept", "hairLineY": 46, "bottomY": 70, "sideMode": "right", "sideLength": 0.82 },
+    { "id": "long", "hairLineY": 42, "bottomY": 100, "sideMode": "both", "sideLength": 1.36 }
+  ],
+  "skinTones": [
+    { "id": "light", "portraitShadow": "3c7d40", "portraitHighlight": "a1f0a5", "headAlbedo": [0.82, 0.62, 0.48, 1.0] },
+    { "id": "medium", "portraitShadow": "286b2d", "portraitHighlight": "78e781", "headAlbedo": [0.55, 0.34, 0.22, 1.0] },
+    { "id": "deep", "portraitShadow": "17471c", "portraitHighlight": "4fab55", "headAlbedo": [0.32, 0.18, 0.12, 1.0] }
+  ],
+  "hairColors": [
+    { "id": "black", "portraitColor": "0b240d", "headAlbedo": [0.025, 0.02, 0.015, 1.0] },
+    { "id": "brown", "portraitColor": "123b16", "headAlbedo": [0.12, 0.055, 0.025, 1.0] },
+    { "id": "auburn", "portraitColor": "286b2d", "headAlbedo": [0.32, 0.07, 0.025, 1.0] }
+  ],
+  "eyeColors": [
+    { "id": "hazel", "portraitColor": "4f8847", "headAlbedo": [0.28, 0.22, 0.08, 1.0] },
+    { "id": "blue", "portraitColor": "65b96b", "headAlbedo": [0.12, 0.32, 0.55, 1.0] },
+    { "id": "green", "portraitColor": "78e781", "headAlbedo": [0.12, 0.42, 0.18, 1.0] }
+  ],
+  "portrait": {
+    "width": 128,
+    "height": 128,
+    "background": "061006",
+    "outline": "163e1a",
+    "feature": "0b240d"
+  },
+  "live3d": {
+    "viewport": [192, 192],
+    "headRadius": 0.68,
+    "headHeight": 1.72,
+    "yawAmplitudeRadians": 0.09,
+    "yawCyclesPerSecond": 0.08
+  },
+  "boundary": "asset-free-local-procedural-hex-extension-not-retail-face-geometry",
+  "unsupported": [
+    "retail Fallout 1 face or head parity",
+    "owned portrait pixels or proprietary head geometry",
+    "facial morph animation, asymmetry, and body customization"
+  ]
+}
