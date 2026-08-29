@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.World.Portals;
 
 namespace OpenNV.Runtime;
 
@@ -19,7 +20,7 @@ internal static class CellSceneLoaderNumericContracts
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v12";
+    private const string CellSceneSchema = "opennv-cell-scene/v13";
 
     internal static LoadedCell Load(
         string scenePath,
@@ -89,7 +90,9 @@ internal static class CellSceneLoader
                 loadout.AmmoEditorId,
                 loadout.Damage,
                 loadout.ClipSize,
-                loadout.ReserveRounds));
+                loadout.ReserveRounds,
+                loadout.WeaponDisplayName,
+                loadout.AmmoDisplayName));
         }
 
         var linkedCells = new List<LinkedCell>();
@@ -117,6 +120,9 @@ internal static class CellSceneLoader
                     throw new InvalidOperationException("Linked CELL unit scales do not match.");
                 var fromDoorId = link.GetProperty("fromDoorReferenceFormId").GetString()!;
                 var toDoorId = link.GetProperty("toDoorReferenceFormId").GetString()!;
+                var sourceRenderLayer = linkedCells.Count == 0
+                    ? 1u
+                    : linkedCells[^1].RenderLayer;
                 var sourceContent = linkedCells.Count == 0
                     ? main
                     : linkedCells[^1].Content;
@@ -141,6 +147,12 @@ internal static class CellSceneLoader
                     !linked.Doors.TryGetValue(toDoorId, out var toDoor))
                     throw new InvalidOperationException(
                         $"Linked CELL portal doors are missing: {fromDoorId} -> {toDoorId}");
+                if (fromDoor.Destination is null || toDoor.Destination is null)
+                    throw new InvalidOperationException(
+                        $"Linked CELL portal XTEL transforms are missing: {fromDoorId} -> {toDoorId}");
+                var portalWasOpen = fromDoor.IsOpen || toDoor.IsOpen;
+                fromDoor.SetOpen(false);
+                toDoor.SetOpen(false);
                 var fromFrame = BuildProofRay(fromDoor, configuration.Proof);
                 var toFrame = BuildProofRay(toDoor, configuration.Proof);
                 var fromNormal = HorizontalDoorNormal(fromFrame);
@@ -170,8 +182,25 @@ internal static class CellSceneLoader
                     throw new InvalidOperationException(
                         $"Linked CELL portal normals disagree: {normalAgreement:F6}");
                 fromDoor.Link(toDoor);
+                fromDoor.SetOpen(portalWasOpen);
                 linkedCells.Add(new LinkedCell(linked, renderLayer));
-                portalLinks.Add(new PortalLink(fromDoor, toDoor, alignmentError, normalAgreement));
+                portalLinks.Add(new PortalLink(
+                    sourceContent.FormId,
+                    sourceContent.EditorId,
+                    sourceContent.Root,
+                    sourceContent.OriginGameUnits,
+                    sourceRenderLayer,
+                    fromDoor,
+                    fromFrame,
+                    linked.FormId,
+                    linked.EditorId,
+                    linked.Root,
+                    linked.OriginGameUnits,
+                    renderLayer,
+                    toDoor,
+                    alignedToFrame,
+                    alignmentError,
+                    normalAgreement));
             }
         }
 
@@ -200,8 +229,16 @@ internal static class CellSceneLoader
             renderBounds);
         session.ConfigureWorldContext(
             player,
-            new[] { main }.Concat(linkedCells.Select(value => value.Content)));
-        player.CollisionMask = (1u << (linkedCells.Count + 1)) - 1u;
+            new[] { main }.Concat(linkedCells.Select(value => value.Content)),
+            portalLinks.Select(link => (link.FromCellFormId, link.ToCellFormId)));
+        player.ConfigurePortalTravel(new CellPortalTravel(portalLinks, session));
+        player.CollisionMask = main.FormId.Equals(
+                session.ActiveCellFormId,
+                StringComparison.OrdinalIgnoreCase)
+            ? 1u
+            : linkedCells.Single(value => value.Content.FormId.Equals(
+                session.ActiveCellFormId,
+                StringComparison.OrdinalIgnoreCase)).RenderLayer;
         if (enableFirstPersonPresentation)
         {
             if (main.FirstPersonRig is not null)
@@ -583,8 +620,20 @@ internal static class CellSceneLoader
     internal readonly record struct LinkedCell(CellContentLoader.LoadedContent Content, uint RenderLayer);
 
     internal readonly record struct PortalLink(
+        string FromCellFormId,
+        string FromCellEditorId,
+        Node3D FromRoot,
+        Vector3 FromOriginGameUnits,
+        uint FromCollisionLayer,
         DoorInstance FromDoor,
+        DoorRay FromFrame,
+        string ToCellFormId,
+        string ToCellEditorId,
+        Node3D ToRoot,
+        Vector3 ToOriginGameUnits,
+        uint ToCollisionLayer,
         DoorInstance ToDoor,
+        DoorRay ToFrame,
         float AlignmentErrorMeters,
         float NormalAgreement);
 

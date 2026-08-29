@@ -12,12 +12,17 @@ internal sealed class CellNavigationGraph
     private const int NoAdjacentTriangle = -1;
     private const float TriangleCentroidDivisor = 3.0f;
     private const float BarycentricUnit = 1.0f;
+    private const float ExternalEndpointToleranceGameUnits = 4.0f;
 
     private readonly IReadOnlyList<NavigationMeshRecord> _navmeshes;
+    private readonly IReadOnlyDictionary<string, NavigationMeshRecord> _navmeshesByFormId;
 
     private CellNavigationGraph(IReadOnlyList<NavigationMeshRecord> navmeshes)
     {
         _navmeshes = navmeshes;
+        _navmeshesByFormId = navmeshes.ToDictionary(
+            value => value.FormId,
+            StringComparer.OrdinalIgnoreCase);
     }
 
     internal int NavMeshes => _navmeshes.Count;
@@ -47,25 +52,66 @@ internal sealed class CellNavigationGraph
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
                 "Owned CELL has no navigation mesh for actor travel.");
-        var candidates = _navmeshes
-            .Select(value => new
-            {
-                NavMesh = value,
-                Start = value.NearestTriangle(startGameUnits),
-                Destination = value.NearestTriangle(destinationGameUnits),
-            })
-            .OrderBy(value => value.Start.DistanceSquared + value.Destination.DistanceSquared)
-            .ThenBy(value => value.NavMesh.FormId, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var selected = candidates[0];
-        var trianglePath = selected.NavMesh.FindTrianglePath(
-            selected.Start.Index,
-            selected.Destination.Index);
+        var start = NearestNode(startGameUnits);
+        var destination = NearestNode(destinationGameUnits);
+        var trianglePath = FindTrianglePath(start.Node, destination.Node);
         var result = new List<Vector3>();
         foreach (var pair in trianglePath.Zip(trianglePath.Skip(1)))
-            result.Add(selected.NavMesh.SharedEdgeMidpoint(pair.First, pair.Second));
+        {
+            if (pair.First.NavMesh == pair.Second.NavMesh)
+                result.Add(pair.First.NavMesh.SharedEdgeMidpoint(
+                    pair.First.TriangleIndex,
+                    pair.Second.TriangleIndex));
+            else
+                result.Add(ExternalSharedEdgeMidpoint(pair.First, pair.Second));
+        }
         result.Add(destinationGameUnits);
         return result;
+    }
+
+    private static Vector3 ExternalSharedEdgeMidpoint(
+        NavigationNode source,
+        NavigationNode target)
+    {
+        var sourceVertices = source.NavMesh.TriangleVertices(source.TriangleIndex);
+        var targetVertices = target.NavMesh.TriangleVertices(target.TriangleIndex);
+        var candidates = (
+            from sourceIndex in Enumerable.Range(0, sourceVertices.Count)
+            from targetIndex in Enumerable.Range(0, targetVertices.Count)
+            select new
+            {
+                SourceIndex = sourceIndex,
+                TargetIndex = targetIndex,
+                DistanceSquared = sourceVertices[sourceIndex]
+                    .DistanceSquaredTo(targetVertices[targetIndex]),
+            }).ToArray();
+        var matched = (
+            from first in candidates
+            from second in candidates
+            where first.SourceIndex != second.SourceIndex &&
+                  first.TargetIndex != second.TargetIndex
+            let maximumDistanceSquared = MathF.Max(
+                first.DistanceSquared,
+                second.DistanceSquared)
+            orderby maximumDistanceSquared,
+                first.DistanceSquared + second.DistanceSquared,
+                first.SourceIndex,
+                first.TargetIndex,
+                second.SourceIndex,
+                second.TargetIndex
+            select new { First = first, Second = second, maximumDistanceSquared })
+            .First();
+        if (matched.maximumDistanceSquared >
+            ExternalEndpointToleranceGameUnits * ExternalEndpointToleranceGameUnits)
+            throw new InvalidOperationException(
+                $"Owned NAVM external edge endpoints do not match: " +
+                $"{source.NavMesh.FormId}:{source.TriangleIndex} -> " +
+                $"{target.NavMesh.FormId}:{target.TriangleIndex}.");
+        return (
+            sourceVertices[matched.First.SourceIndex] +
+            targetVertices[matched.First.TargetIndex] +
+            sourceVertices[matched.Second.SourceIndex] +
+            targetVertices[matched.Second.TargetIndex]) / 4.0f;
     }
 
     internal Vector3 FindNearestPoint(Vector3 pointGameUnits)
@@ -73,16 +119,7 @@ internal sealed class CellNavigationGraph
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
                 "Owned CELL has no navigation mesh for actor placement.");
-        return _navmeshes
-            .Select(value => new
-            {
-                NavMesh = value,
-                Nearest = value.NearestTriangle(pointGameUnits),
-            })
-            .OrderBy(value => value.Nearest.DistanceSquared)
-            .ThenBy(value => value.NavMesh.FormId, StringComparer.OrdinalIgnoreCase)
-            .First()
-            .Nearest.Point;
+        return NearestNode(pointGameUnits).Point;
     }
 
     internal Vector3 FindReachablePoint(
@@ -92,24 +129,97 @@ internal sealed class CellNavigationGraph
         if (_navmeshes.Count == 0)
             throw new InvalidOperationException(
                 "Owned CELL has no navigation mesh for player movement.");
-        var candidates = _navmeshes
-            .Select(value => new
+        var start = NearestNode(startGameUnits);
+        var destination = NearestNode(destinationGameUnits);
+        if (start.Node.NavMesh == destination.Node.NavMesh &&
+            start.Node.NavMesh.CanReach(
+                start.Node.TriangleIndex,
+                destination.Node.TriangleIndex))
+            return destination.Point;
+        if (Neighbors(start.Node).Contains(destination.Node))
+            return destination.Point;
+        return start.Point;
+    }
+
+    private NearestNodeResult NearestNode(Vector3 point)
+    {
+        if (_navmeshes.Count == 0)
+            throw new InvalidOperationException(
+                "Owned CELL has no navigation mesh for actor travel.");
+        return _navmeshes
+            .Select(value =>
             {
-                NavMesh = value,
-                Start = value.NearestTriangle(startGameUnits),
-                Destination = value.NearestTriangle(destinationGameUnits),
+                var nearest = value.NearestTriangle(point);
+                return new NearestNodeResult(
+                    new NavigationNode(value, nearest.Index),
+                    nearest.Point,
+                    nearest.DistanceSquared);
             })
-            .OrderBy(value => value.Start.DistanceSquared + value.Destination.DistanceSquared)
-            .ThenBy(value => value.NavMesh.FormId, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        foreach (var candidate in candidates)
+            .OrderBy(value => value.DistanceSquared)
+            .ThenBy(value => value.Node.NavMesh.FormId, StringComparer.OrdinalIgnoreCase)
+            .First();
+    }
+
+    private IReadOnlyList<NavigationNode> FindTrianglePath(
+        NavigationNode start,
+        NavigationNode destination)
+    {
+        if (start == destination)
+            return new[] { start };
+        var internalOnly = start.NavMesh == destination.NavMesh &&
+            start.NavMesh.CanReach(start.TriangleIndex, destination.TriangleIndex);
+        var frontier = new PriorityQueue<NavigationNode, float>();
+        var previous = new Dictionary<NavigationNode, NavigationNode>();
+        var costs = new Dictionary<NavigationNode, float> { [start] = 0.0f };
+        frontier.Enqueue(start, 0.0f);
+        while (frontier.TryDequeue(out var current, out _))
         {
-            if (candidate.NavMesh.CanReach(
-                    candidate.Start.Index,
-                    candidate.Destination.Index))
-                return candidate.Destination.Point;
+            if (current == destination)
+                break;
+            foreach (var adjacent in Neighbors(current).Where(value =>
+                         !internalOnly || value.NavMesh == start.NavMesh))
+            {
+                var cost = costs[current] + current.Centroid.DistanceTo(adjacent.Centroid);
+                if (costs.TryGetValue(adjacent, out var known) && cost >= known)
+                    continue;
+                costs[adjacent] = cost;
+                previous[adjacent] = current;
+                frontier.Enqueue(
+                    adjacent,
+                    cost + adjacent.Centroid.DistanceTo(destination.Centroid));
+            }
         }
-        return candidates[0].Start.Point;
+        if (!previous.ContainsKey(destination))
+            throw new InvalidOperationException(
+                $"Owned NAVM active set has no route between {start.NavMesh.FormId} " +
+                $"and {destination.NavMesh.FormId}.");
+        var path = new List<NavigationNode> { destination };
+        while (path[^1] != start)
+            path.Add(previous[path[^1]]);
+        path.Reverse();
+        return path;
+    }
+
+    private IEnumerable<NavigationNode> Neighbors(NavigationNode node)
+    {
+        var triangle = node.NavMesh.Triangles[node.TriangleIndex];
+        foreach (var adjacent in triangle.AdjacentTriangles.Distinct().Order())
+        {
+            if (node.NavMesh.IsInternalNeighbor(node.TriangleIndex, adjacent))
+            {
+                yield return new NavigationNode(node.NavMesh, adjacent);
+                continue;
+            }
+            if (adjacent < 0 || adjacent >= node.NavMesh.ExternalConnections.Count)
+                continue;
+            var external = node.NavMesh.ExternalConnections[adjacent];
+            if (!_navmeshesByFormId.TryGetValue(external.NavMeshFormId, out var target))
+                continue;
+            if (external.TriangleIndex < 0 ||
+                external.TriangleIndex >= target.Triangles.Count)
+                continue;
+            yield return new NavigationNode(target, external.TriangleIndex);
+        }
     }
 
     private static NavigationMeshRecord ParseNavMesh(JsonElement source)
@@ -123,8 +233,12 @@ internal sealed class CellNavigationGraph
                 ReadIntegers(value.GetProperty("adjacentTriangles"), TriangleEdgeCount),
                 value.GetProperty("flags").GetUInt32()))
             .ToArray();
-        var externalConnectionCount = source.GetProperty("externalConnections")
-            .GetArrayLength();
+        var externalConnections = source.GetProperty("externalConnections")
+            .EnumerateArray()
+            .Select(value => new NavigationExternalConnection(
+                value.GetProperty("navmeshFormId").GetString()!,
+                value.GetProperty("triangleIndex").GetInt32()))
+            .ToArray();
         if (vertices.Length == 0 || triangles.Length == 0 ||
             vertices.Any(value => !value.IsFinite()) ||
             triangles.Any(value =>
@@ -139,7 +253,7 @@ internal sealed class CellNavigationGraph
             source.GetProperty("version").GetUInt32(),
             vertices,
             triangles,
-            externalConnectionCount);
+            externalConnections);
         result.ValidateAdjacency();
         return result;
     }
@@ -167,6 +281,10 @@ internal sealed class CellNavigationGraph
         IReadOnlyList<int> AdjacentTriangles,
         uint Flags);
 
+    private sealed record NavigationExternalConnection(
+        string NavMeshFormId,
+        int TriangleIndex);
+
     private sealed class NavigationMeshRecord
     {
         internal NavigationMeshRecord(
@@ -175,14 +293,14 @@ internal sealed class CellNavigationGraph
             uint version,
             IReadOnlyList<Vector3> vertices,
             IReadOnlyList<NavigationTriangle> triangles,
-            int externalConnectionCount)
+            IReadOnlyList<NavigationExternalConnection> externalConnections)
         {
             FormId = formId;
             CellFormId = cellFormId;
             Version = version;
             Vertices = vertices;
             Triangles = triangles;
-            ExternalConnectionCount = externalConnectionCount;
+            ExternalConnections = externalConnections;
         }
 
         internal string FormId { get; }
@@ -190,7 +308,7 @@ internal sealed class CellNavigationGraph
         internal uint Version { get; }
         internal IReadOnlyList<Vector3> Vertices { get; }
         internal IReadOnlyList<NavigationTriangle> Triangles { get; }
-        internal int ExternalConnectionCount { get; }
+        internal IReadOnlyList<NavigationExternalConnection> ExternalConnections { get; }
 
         internal void ValidateAdjacency()
         {
@@ -200,7 +318,7 @@ internal sealed class CellNavigationGraph
                 {
                     if (adjacent == NoAdjacentTriangle ||
                         IsInternalNeighbor(triangleIndex, adjacent) ||
-                        adjacent < ExternalConnectionCount)
+                        adjacent < ExternalConnections.Count)
                         continue;
                     else
                         throw new InvalidOperationException(
@@ -223,42 +341,6 @@ internal sealed class CellNavigationGraph
                 .ThenBy(value => value.Index)
                 .ToArray();
             return results[0];
-        }
-
-        internal IReadOnlyList<int> FindTrianglePath(int start, int destination)
-        {
-            if (start == destination)
-                return new[] { start };
-            var frontier = new PriorityQueue<int, float>();
-            var previous = new Dictionary<int, int>();
-            var costs = new Dictionary<int, float> { [start] = 0.0f };
-            frontier.Enqueue(start, 0.0f);
-            while (frontier.TryDequeue(out var current, out _))
-            {
-                if (current == destination)
-                    break;
-                foreach (var adjacent in Triangles[current].AdjacentTriangles
-                    .Where(value => IsInternalNeighbor(current, value))
-                    .Distinct()
-                    .Order())
-                {
-                    var cost = costs[current] + Centroid(current).DistanceTo(Centroid(adjacent));
-                    if (costs.TryGetValue(adjacent, out var known) && cost >= known)
-                        continue;
-                    costs[adjacent] = cost;
-                    previous[adjacent] = current;
-                    var estimate = cost + Centroid(adjacent).DistanceTo(Centroid(destination));
-                    frontier.Enqueue(adjacent, estimate);
-                }
-            }
-            if (!previous.ContainsKey(destination))
-                throw new InvalidOperationException(
-                    $"Owned NAVM {FormId} has no route between package markers.");
-            var path = new List<int> { destination };
-            while (path[^1] != start)
-                path.Add(previous[path[^1]]);
-            path.Reverse();
-            return path;
         }
 
         internal bool CanReach(int start, int destination)
@@ -294,19 +376,24 @@ internal sealed class CellNavigationGraph
             return (Vertices[shared[0]] + Vertices[shared[1]]) / SharedEdgeVertexCount;
         }
 
+        internal IReadOnlyList<Vector3> TriangleVertices(int triangleIndex) =>
+            Triangles[triangleIndex].VertexIndices
+                .Select(index => Vertices[index])
+                .ToArray();
+
         private IReadOnlyList<int> SharedVertices(int first, int second) =>
             Triangles[first].VertexIndices.Intersect(Triangles[second].VertexIndices)
                 .Order()
                 .ToArray();
 
-        private bool IsInternalNeighbor(int source, int adjacent) =>
+        internal bool IsInternalNeighbor(int source, int adjacent) =>
             adjacent >= 0 &&
             adjacent < Triangles.Count &&
             adjacent != source &&
             Triangles[adjacent].AdjacentTriangles.Contains(source) &&
             SharedVertices(source, adjacent).Count == SharedEdgeVertexCount;
 
-        private Vector3 Centroid(int triangleIndex)
+        internal Vector3 Centroid(int triangleIndex)
         {
             var triangle = Triangles[triangleIndex];
             return triangle.VertexIndices
@@ -396,4 +483,17 @@ internal sealed class CellNavigationGraph
         int Index,
         Vector3 Point,
         float DistanceSquared);
+
+    private readonly record struct NavigationNode(
+        NavigationMeshRecord NavMesh,
+        int TriangleIndex)
+    {
+        internal Vector3 Centroid => NavMesh.Centroid(TriangleIndex);
+    }
+
+    private sealed record NearestNodeResult(
+        NavigationNode Node,
+        Vector3 Point,
+        float DistanceSquared);
+
 }

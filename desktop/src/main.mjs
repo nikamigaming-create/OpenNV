@@ -460,7 +460,7 @@ function readNewVegasProfile() {
       "Godot", "app_userdata", "OpenNV", "cache", "legal-assets-v1");
     const required = [
       ["install-manifest.json", "opennv-legal-asset-cache/v1"],
-      [path.join("generated", "cells", defaultCellRecipe, "cell-scene.json"), "opennv-cell-scene/v12"],
+      [path.join("generated", "cells", defaultCellRecipe, "cell-scene.json"), "opennv-cell-scene/v13"],
       [path.join("generated", "actors", "actor-scenes.json"), "opennv-world-actor-scenes/v2"],
       [path.join("generated", "opening", "opening-manifest.json"), "opennv-owned-opening-manifest/v1"]
     ];

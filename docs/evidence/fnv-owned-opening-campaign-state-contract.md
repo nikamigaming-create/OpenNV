@@ -62,10 +62,14 @@ the live stage transition, preventing the prior silent combat re-enable.
 Pip-Boy visibility is restored separately; point-of-view and sneaking bits do
 not yet have runtime consumers. The two-process report proves the
 incomplete-save resume to completion. The 2026-08-28 normal-menu route acceptance
-adds a third completed-save cold load through the owned Continue button and
-restores stage 200 into the bounded Doc/exterior/saloon composite. It does not
-yet persist or restore an independently streamed active-CELL identity. The acceptance report records source scene,
-configuration identity, save SHA-256, initial/final state summaries, and that
-Windows app control and foreground input injection were not used. Generated
+adds a completed-save load through the owned Continue button, configured flat
+movement and activation through both forward XTEL links, and a fresh-process
+Continue. Campaign save v5 persists saloon CELL `00106185`; the cold process
+restores stage 200, the unchanged save, and the same player transform there.
+This is active-CELL identity inside one preloaded bounded composite, not
+independent CELL streaming or reverse-traversal acceptance. The reports record
+source scene, configuration identity, save SHA-256, initial/final state
+summaries, and that Windows app control and foreground input injection were not
+used. Generated
 cache, save, voice, LIP, and other commercial artifacts remain local and are not
 committed.

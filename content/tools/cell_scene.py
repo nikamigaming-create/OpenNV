@@ -31,7 +31,7 @@ from first_person_rig import prepare_first_person_rig
 from owned_archive_stack import OwnedArchiveStack
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v12"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v13"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 ORDERED_CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v2"
 EXTERIOR_RECIPE_SCHEMA = "opennv-exterior-recipe/v1"
@@ -514,6 +514,19 @@ def prepare_cell_scene(
                 "teleportDestinationFormId": (
                     form_id(reference.teleport_destination_form_id)
                     if reference.teleport_destination_form_id is not None
+                    else None
+                ),
+                "teleportDestinationTransform": (
+                    {
+                        "positionGameUnits": list(
+                            reference.teleport_destination_transform.position
+                        ),
+                        "yawRadians": reference.teleport_destination_transform.rotation_radians[2],
+                        "yawGodotRadians": godot_yaw_radians(
+                            reference.teleport_destination_transform.rotation_radians[2]
+                        ),
+                    }
+                    if reference.teleport_destination_transform is not None
                     else None
                 ),
                 "interaction": interaction,

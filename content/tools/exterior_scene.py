@@ -706,6 +706,19 @@ def prepare_exterior_scene(
                     if reference.teleport_destination_form_id is not None
                     else None
                 ),
+                "teleportDestinationTransform": (
+                    {
+                        "positionGameUnits": list(
+                            reference.teleport_destination_transform.position
+                        ),
+                        "yawRadians": reference.teleport_destination_transform.rotation_radians[2],
+                        "yawGodotRadians": godot_yaw_radians(
+                            reference.teleport_destination_transform.rotation_radians[2]
+                        ),
+                    }
+                    if reference.teleport_destination_transform is not None
+                    else None
+                ),
                 "interaction": interaction_manifest(reference, base, catalog),
             }
         )

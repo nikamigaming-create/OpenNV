@@ -15,7 +15,10 @@ hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
 XML closures, and the bounded ordered Doc house → Goodsprings exterior → saloon
 composite with reciprocal exits (`00103e61` ↔ `00103e69`, then
 `0010636f` ↔ `0010618e`) and normally enabled Sunny `00104e85`; flat is
-launchable and OpenXR remains experimental with no physical-headset acceptance.
+launchable. From a completed stage-200 Continue, its accepted forward flat route
+uses configured input through both XTEL links and campaign save v5 cold-restores
+saloon CELL `00106185`; OpenXR remains experimental with no physical-headset
+acceptance.
 Fallout 3 owns its menu and persistent CG00 selection through stage 62; later
 Section 4 and stage-65/80/85 contracts validate but do not bypass unimplemented
 world triggers. It has no Vault 101 runtime. TTW runtime support is absent, and JAM remains dependency- and
@@ -179,10 +182,10 @@ flowchart LR
     Owned[Owned ESM/BSA records] --> Compiler[opening_catalog.py]
     Compiler --> Flow[New-game flow v5]
     Flow --> Interpreter[OpeningQuestRuntime]
-    Interpreter --> Checkpoint[Campaign save v3: incomplete]
+    Interpreter --> Checkpoint[Campaign save v5: incomplete]
     Checkpoint --> Reload[Cold process reload]
     Reload --> Interpreter
-    Interpreter --> Complete[Campaign save v3: stage 200 complete]
+    Interpreter --> Complete[Campaign save v5: stage 200 complete]
     Complete --> World[Normal world collision and gameplay handoff]
 ```
 
@@ -350,7 +353,7 @@ retail data, or promotion verdict.
 | `runtime/src/Presentation/Ui/GameplayUiController.cs` | Flat HUD/Pip-Boy and status-only shared-state wrist presentation; New Vegas flat UI consumes the owned XML/font/texture/rectangle role contract, STATS explicitly reuses the verified ITEMS frame, and the wrist consumes its owned font/theme path | Campaign state, asset extraction, native STATS rectangle evaluation, ITEMS/DATA wrist navigation, full Gamebryo tile execution, or retail-parity claims |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
 | `CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
-| `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal and proof queries | Binary parsing |
+| `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal composition, active collision-layer selection, and proof queries | Binary parsing or portal gameplay decisions |
 | `RuntimeMaterialLoader.cs` | Hash-verified 2D/cubemap load and name-keyed retail material passes | DDS/BSA parsing |
 | `StaticCellCompileArtifact.cs` | Static compile schema/configuration/hash/path/count verification and immutable row load | Godot node construction |
 | `StaticCellCompileLoader.cs` | Verified relative artifact load, profile-typed static/point-light placement instantiation, CELL lighting, and authored collision | Record parsing, actors, gameplay, or parity claims |
@@ -366,13 +369,16 @@ retail data, or promotion verdict.
 | `PoolBallInstance.cs` | One authored dynamic convex body and its persisted motion/pocket state | Table rules or input |
 | `PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
 | `runtime/src/Gameplay/State/GameplayStateNamespaceBridge.cs` | Compile-time namespace join between shared authoritative state and its campaign, world, and presentation consumers | Runtime behavior or gameplay abstractions |
-| `runtime/src/Gameplay/State/GameplaySession.cs` | Shared authoritative inventory/world delta, objective state, opening-completion envelope, pool snapshots, and atomic save/reload | Asset parsing or opening progression |
+| `runtime/src/Gameplay/State/GameplaySession.cs` | Shared authoritative inventory/world delta, active-CELL identity, objective state, opening-completion envelope, pool snapshots, and atomic save/reload | Asset parsing, portal geometry, or opening progression |
+| `runtime/src/Gameplay/Containers/` | Source-named two-column container view plus authoritative per-reference remaining counts and transfer operations | Player-to-container deposits, barter, or retail-pixel parity |
 | `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
+| `runtime/src/World/Portals/CellPortalTravel.cs` | Production reciprocal-XTEL activation, owned arrival transform, active collision layer, and authoritative CELL transition | Input synthesis, save serialization, or content parsing |
 | `DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
 | `FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |
 | `PlayerControlTelemetry.cs` | Simulator-only pose, locomotion, floor-height, snap-pivot, and action acceptance measurements | Input synthesis or gameplay mutation |
 | `runtime/src/Presentation/OpenXR/XrSimulatorAcceptance.cs` | Time-bounded simulator observation and evidence report for tracked hands, sticks, locomotion, interactions, weapon, save, and floor height | Input synthesis or headset claims |
 | `FlatControlsAcceptance.cs` | Configured Godot keyboard/mouse event acceptance over the shared gameplay path | Windows input injection or gameplay rules |
+| `runtime/src/World/Portals/CellRouteTravelAcceptance.cs` | Bounded forward configured-input route and v4 cold-Continue evidence report | Portal rules, reverse-traversal claims, OpenXR acceptance, or world streaming |
 | `runtime/src/Presentation/OpenXR/OpenXrNamespaceBridge.cs` | Compile-time namespace join between OpenXR acceptance and shared runtime composition | Runtime behavior, input translation, or presentation abstractions |
 | `runtime/src/Presentation/OpenXR/XrRigLayoutAcceptance.cs` | Headless OpenXR action-map, node hierarchy, HUD, and shared weapon-state layout gate | Simulator or headset claims |
 | `RuntimeCoordinator.cs` | Startup option routing, composition, shared report writing, and shutdown ownership | Feature-specific acceptance logic, UI construction, or file-format parsing |
@@ -443,16 +449,22 @@ supported authored packed-triangle collision,
 movement, configured flat input, HUD, inventory, authored `.357` and 10mm
 damage/clip data, firing/reload, objectives,
 doors, atomic save, cold reload, and sandbox play. The default Doc-house route
-reuses and preloads that exterior/saloon content, but its joined form is only
-loaded and programmatically portal-validated; the component gameplay and XR
-acceptance do not promote the complete joined route.
+reuses and preloads that exterior/saloon content. Its joined flat form is now
+interactive on one bounded forward route: from a completed stage-200 owned
+Continue, configured Godot movement follows owned NAVM to each source door,
+normal activation applies the two source-derived XTEL arrivals in order, and
+campaign save v5 persists saloon CELL `00106185`, container remaining counts,
+and the player transform. A
+fresh process using the owned Continue button restores the unchanged save and
+transform there. This does not promote reverse traversal, neighboring CELL
+streaming, Sunny behavior, or the joined OpenXR route.
 The Doc door pair `00103e61`/`00103e69` and saloon pair
 `0010636f`/`0010618e` form a fail-closed ordered chain. Each target scene and
 recipe is hash-bound, each source door must belong to the immediately preceding
 scene, and a programmatic diagnostic gate proves closed/open ray, projectile,
-and two-way capsule behavior per hop. This is not yet ordinary player-driven
-end-to-end traversal or integrated OpenXR acceptance. The saloon door `0010618e`
-and exterior door `0010636f` are a reciprocal pair.
+and two-way capsule behavior per hop. That diagnostic remains distinct from the
+accepted configured-input forward route. The saloon door `0010618e` and exterior
+door `0010636f` are a reciprocal pair.
 Their visible planes align below `0.000001` metre, both states persist together,
 and the gate passes closed collision, open fire-ray clearance, and two-way player
 capsule traversal. The linked exterior includes LAND `000db010`; Sunny Smiles
@@ -546,8 +558,9 @@ lighting/HDR path, complete Havok behavior, and actor pixels remain open
 differential gates. The clean-room shader observations are recorded in
 `docs/evidence/fnv-retail-material-shader-contract.md`.
 
-The canonical next promotion continues the normal-launch-menu-to-Goodsprings active slice with
-active-CELL persistence, ordinary player-driven travel, and authored Sunny behavior in the
+The canonical next promotion continues the normal-launch-menu-to-Goodsprings
+active slice with neighboring active-set streaming and authored Sunny behavior;
+reverse traversal and integrated OpenXR also remain open in the
 [whole-game delivery plan](whole-game-delivery-plan.md). Later CELL, gameplay,
 actor, renderer, UI, compatibility, exhaustive-acceptance, and release work is
 ordered there so this architecture document cannot drift into a second roadmap.

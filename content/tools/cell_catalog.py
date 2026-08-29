@@ -37,8 +37,9 @@ BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "TREE",
 }
 CATALOG_RECORD_TYPES = frozenset(
-    BASE_RECORD_TYPES | {"CELL", "LGTM", "NAVM", "REFR"}
+    BASE_RECORD_TYPES | {"CELL", "LGTM", "NAVM", "REFR", "TES4"}
 )
+PLUGIN_LOCALIZED_FLAG = 0x00000080
 
 REFERENCE_TRANSFORM_BYTES = 24
 REFERENCE_SCALE_BYTES = 4
@@ -151,6 +152,7 @@ class BaseObject:
     record_type: str
     editor_id: str
     model_path: str | None
+    display_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -273,6 +275,32 @@ def subrecords_by_signature(record: Record) -> dict[str, list[bytes]]:
 def _first_text(values: dict[str, list[bytes]], signature: str) -> str:
     matches = values.get(signature, [])
     return zstring(matches[0]) if matches else ""
+
+
+def _display_name(
+    values: dict[str, list[bytes]],
+    localized_plugin: bool,
+    record: Record,
+) -> str | None:
+    matches = values.get("FULL", [])
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise ValueError(
+            f"{record.signature} {record.form_id:08x} has ambiguous FULL values"
+        )
+    if localized_plugin:
+        if len(matches[0]) != 4:
+            raise ValueError(
+                f"Localized {record.signature} {record.form_id:08x} has malformed FULL ID"
+            )
+        string_id = struct.unpack("<I", matches[0])[0]
+        raise ValueError(
+            "Localized plugin FULL values require an owned STRINGS table; "
+            f"refusing to decode string ID {string_id:08x} as text"
+        )
+    value = zstring(matches[0]).strip()
+    return value or None
 
 
 def normalize_model_path(data: bytes) -> str:
@@ -640,7 +668,15 @@ def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObje
 @cache
 def scan_cell_catalog(path: Path) -> CellCatalog:
     catalog = CellCatalog({}, {}, {}, {}, {}, {}, {}, [])
+    localized_plugin: bool | None = None
     for record in iter_plugin_records(path, CATALOG_RECORD_TYPES):
+        if record.signature == "TES4":
+            if localized_plugin is not None:
+                raise ValueError(f"Plugin has duplicate TES4 headers: {path}")
+            localized_plugin = bool(record.flags & PLUGIN_LOCALIZED_FLAG)
+            continue
+        if localized_plugin is None:
+            raise ValueError(f"Plugin records precede the TES4 header: {path}")
         if record.signature == "CELL":
             values = subrecords_by_signature(record)
             data = values.get("DATA", [b"\0"])[0]
@@ -694,6 +730,7 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 record.signature,
                 _first_text(values, "EDID"),
                 normalize_model_path(models[0]) if models else None,
+                _display_name(values, localized_plugin, record),
             )
             if record.signature == "LIGH":
                 light = parse_light_object(record, values)
@@ -734,6 +771,8 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                     else None,
                 )
             )
+    if localized_plugin is None:
+        raise ValueError(f"Plugin has no TES4 header: {path}")
     for form_id, cell in tuple(catalog.cells.items()):
         template = (
             catalog.lighting_templates.get(cell.lighting_template_form_id)

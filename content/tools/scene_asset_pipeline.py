@@ -72,6 +72,7 @@ def interaction_manifest(
             "type": "pickup",
             "itemFormId": form_id(base.form_id),
             "itemEditorId": base.editor_id,
+            "itemDisplayName": base.display_name or "",
             "itemRecordType": base.record_type,
             "count": 1,
         }
@@ -93,12 +94,19 @@ def interaction_manifest(
                     {
                         "itemFormId": form_id(entry.item_form_id),
                         "itemEditorId": item.editor_id if item is not None else "",
+                        "itemDisplayName": (
+                            item.display_name if item is not None and item.display_name else ""
+                        ),
                         "itemRecordType": item.record_type if item is not None else "",
                         "count": entry.count,
                         "resolved": item is not None,
                     }
                 )
-        return {"type": "container", "items": items}
+        return {
+            "type": "container",
+            "displayName": base.display_name or "",
+            "items": items,
+        }
     if base.record_type == "DOOR":
         return {"type": "door"}
     return None
@@ -137,9 +145,11 @@ def vr_smoke_loadout_manifest(
     return {
         "weaponFormId": form_id(weapon_form_id),
         "weaponEditorId": weapon_base.editor_id,
+        "weaponDisplayName": weapon_base.display_name or "",
         "modelPath": weapon_base.model_path,
         "ammoFormId": form_id(ammo_form_id),
         "ammoEditorId": ammo.editor_id,
+        "ammoDisplayName": ammo.display_name or "",
         "damage": weapon.damage,
         "clipSize": weapon.clip_size,
         "reserveRounds": weapon.clip_size * reserve_magazines,

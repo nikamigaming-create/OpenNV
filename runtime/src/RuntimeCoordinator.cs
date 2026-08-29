@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Diagnostics.Performance;
+using OpenNV.Runtime.World.Portals;
 
 namespace OpenNV.Runtime;
 
@@ -33,6 +34,7 @@ public partial class RuntimeCoordinator : Node3D
             "portal-proof",
             "quit-after-load",
             "report",
+            "route-travel-proof",
             "xr-simulator-proof",
         },
         StringComparer.OrdinalIgnoreCase);
@@ -136,6 +138,16 @@ public partial class RuntimeCoordinator : Node3D
                     "--opening-menu-proof continue requires --report and --save-path with a " +
                     "completed prepared campaign cache, and cannot combine with a direct CELL " +
                     "or another opening/portal proof.");
+            if (_options.TryGetValue("route-travel-proof", out var routeTravelMode) &&
+                (routeTravelMode is not "first-run" and not "cold-reload" ||
+                    !_options.TryGetValue("opening-menu-proof", out var routeMenuAction) ||
+                    routeMenuAction != "continue" ||
+                    !_options.ContainsKey("report") ||
+                    !_options.ContainsKey("save-path") ||
+                    _options.ContainsKey("vr")))
+                throw new ArgumentException(
+                    "--route-travel-proof first-run|cold-reload requires the owned " +
+                    "--opening-menu-proof continue path, --report, and --save-path, and cannot use --vr.");
             if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
                 throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
             if ((_options.ContainsKey("classic-diorama") || _options.ContainsKey("classic-diorama-rig-proof")) &&
@@ -461,9 +473,11 @@ public partial class RuntimeCoordinator : Node3D
             ? ResolveRuntimePath(configuredSavePath)
             : ResolveRuntimePath(DefaultNewVegasOpeningSavePath);
         var expectedCellFormId = ReadPreparedCellFormId(prepared.CellScenePath);
+        var allowedActiveCellFormIds = ReadPreparedCellFormIds(prepared.CellScenePath);
         var canContinue = GameplaySession.CanContinueOpening(
             savePath,
             expectedCellFormId,
+            allowedActiveCellFormIds,
             state => OpeningQuestRuntime.MatchesFlow(manifest.NewGameFlow, state));
         var opening = new RetailOpening();
         AddChild(opening);
@@ -575,6 +589,26 @@ public partial class RuntimeCoordinator : Node3D
             : formId;
     }
 
+    private static IReadOnlySet<string> ReadPreparedCellFormIds(string? scenePath)
+    {
+        if (scenePath is null)
+            throw new InvalidOperationException(
+                "Owned opening menu requires a prepared campaign CELL scene.");
+        using var document = JsonDocument.Parse(File.ReadAllText(scenePath));
+        var root = document.RootElement;
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            root.GetProperty("cell").GetProperty("formId").GetString()
+                ?? throw new InvalidOperationException("Prepared campaign CELL has no FormID."),
+        };
+        if (root.TryGetProperty("linkedCells", out var linkedCells))
+            foreach (var linked in linkedCells.EnumerateArray())
+                result.Add(
+                    linked.GetProperty("cellFormId").GetString()
+                    ?? throw new InvalidOperationException("Prepared linked CELL has no FormID."));
+        return result;
+    }
+
     private static string ValidatePerformanceReportPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || path == "true")
@@ -625,8 +659,7 @@ public partial class RuntimeCoordinator : Node3D
 
     private void LoadCellScene(string scenePath, IReadOnlyDictionary<string, string> options)
     {
-        var runTraversalProof = options.ContainsKey("portal-proof") ||
-            options.ContainsKey("opening-menu-proof");
+        var runTraversalProof = options.ContainsKey("portal-proof");
         var useXrLayout = options.ContainsKey("vr") || options.ContainsKey("vr-layout-proof");
         var galleryContract = options.TryGetValue("gallery-shot", out var galleryShotPath)
             ? GalleryShotContract.Load(galleryShotPath, _configuration)
@@ -682,7 +715,7 @@ public partial class RuntimeCoordinator : Node3D
         var restoredOpening = startsNewGame ? null : loaded.Session.OpeningState;
         if (usesCampaignState && !startsNewGame && restoredOpening is null)
             throw new InvalidOperationException(
-                "Campaign Continue requires a valid v3 opening save; choose New Game instead.");
+                "Campaign Continue requires a valid campaign save; choose New Game instead.");
         if (usesCampaignState && restoredOpening is not null &&
             (openingManifest is null ||
              !OpeningQuestRuntime.MatchesFlow(openingManifest.NewGameFlow, restoredOpening) ||
@@ -722,6 +755,15 @@ public partial class RuntimeCoordinator : Node3D
                 loaded,
                 scenePath,
                 openingProof,
+                options);
+            return;
+        }
+        if (options.TryGetValue("route-travel-proof", out var routeTravelMode))
+        {
+            _ = RunCellRouteTravelAcceptance(
+                loaded,
+                scenePath,
+                routeTravelMode,
                 options);
             return;
         }
@@ -1043,6 +1085,31 @@ public partial class RuntimeCoordinator : Node3D
         catch (Exception exception)
         {
             GD.PushError($"OPENNV_FLAT_CONTROLS_FAIL {exception.Message}");
+            GetTree().Quit(1);
+        }
+    }
+
+    private async Task RunCellRouteTravelAcceptance(
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        string mode,
+        IReadOnlyDictionary<string, string> options)
+    {
+        try
+        {
+            await CellRouteTravelAcceptance.Run(
+                this,
+                loaded,
+                scenePath,
+                mode,
+                options,
+                _configuration);
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PrintErr($"OPENNV_FLAT_ROUTE_TRAVEL_FAIL {exception}");
+            GD.PushError($"OPENNV_FLAT_ROUTE_TRAVEL_FAIL {exception}");
             GetTree().Quit(1);
         }
     }

@@ -60,9 +60,13 @@ and the compact oracle artifact supplied as `--retail-state-contract`. The
 runtime rejects a missing/mismatched ACHR, shot set, pose, geometry gate, or
 projection label. A provisional retail FOV may improve a failing comparison but
 cannot promote exact projection parity.
-Cell scene v12 and actor scene v5 are required. Older caches omit full authored
+
+Cell scene v13 and actor scene v5 are required. Older caches omit full authored
 rotation/scale, configuration identity, deterministic outfit resolution,
 current actor sidecars, or the owned-data first-person rig and are rejected.
+Campaign save v5 retains v1-v4 load compatibility and adds opened-container
+remaining counts; the current container view supports Take One, Take All, and
+Exit, while player-to-container deposits and integrated OpenXR input remain open.
 
 Build an asset-free experimental Windows archive after installing the pinned
 Godot Mono export templates and `content/requirements-build.txt`:

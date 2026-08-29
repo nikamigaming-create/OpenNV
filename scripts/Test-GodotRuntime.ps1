@@ -47,7 +47,7 @@ $TestGodotRuntimeContract7 = 7
 $TestGodotRuntimeContract80 = 80
 $TestGodotRuntimeContract87903 = 87903
 $DemonstratedCombatKillPaths = 4
-$CampaignSaveSchema = "opennv-campaign-save/v3"
+$CampaignSaveSchema = "opennv-campaign-save/v5"
 
 
 $ErrorActionPreference = "Stop"
@@ -427,11 +427,10 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     }
 
     $routeCache = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-cache-{0}" -f [guid]::NewGuid().ToString("N"))
-    $routeReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-{0}.json" -f [guid]::NewGuid().ToString("N"))
-    $routeSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $routeCheckpointReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-opening-checkpoint-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $routeResumeReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-opening-resume-{0}.json" -f [guid]::NewGuid().ToString("N"))
-    $routeMenuReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-menu-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $routeTravelReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-travel-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $routeReloadReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-reload-{0}.json" -f [guid]::NewGuid().ToString("N"))
     $routeOpeningSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-route-opening-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
     try {
         & python $preparer --data-root $resolvedFalloutData --cache-root $routeCache `
@@ -439,19 +438,6 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         if ($LASTEXITCODE -ne 0) { throw "Default owned route preparation failed." }
         $routeInstall = Join-Path $routeCache "install-manifest.json"
         $preparedRoute = Get-Content -Raw -LiteralPath $routeInstall | ConvertFrom-Json
-        $routeOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
-            --cell-scene ([string]$preparedRoute.outputs.cellScene) `
-            --actor-scenes ([string]$preparedRoute.outputs.actorScenes) `
-            --save-path $routeSave --report $routeReport --portal-proof 2>&1
-        $routeText = $routeOutput | Out-String
-        if ($LASTEXITCODE -ne 0 -or
-            $routeText -notmatch "OPENNV_GODOT_CELL_PASS" -or
-            $routeText -match "(?m)^ERROR:") {
-            throw "Default Doc-to-saloon route gate failed:`n$routeText"
-        }
-        & python $reportValidator --mode cell --report $routeReport `
-            --install-manifest $routeInstall
-        if ($LASTEXITCODE -ne 0) { throw "Default owned route report is invalid." }
 
         $checkpointOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
             --cell-scene ([string]$preparedRoute.outputs.cellScene) `
@@ -479,27 +465,43 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
             $resumeText -match "(?m)^ERROR:") {
             throw "Default route opening resume failed:`n$resumeText"
         }
-        $menuOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+
+        $travelOutput = & $Godot --xr-mode off --path $runtimeRoot -- `
             --reuse-cache --cache-root $routeCache --save-path $routeOpeningSave `
-            --opening-menu-proof continue --report $routeMenuReport 2>&1
-        $menuText = $menuOutput | Out-String
+            --opening-menu-proof continue --route-travel-proof first-run `
+            --report $routeTravelReport 2>&1
+        $travelText = $travelOutput | Out-String
         if ($LASTEXITCODE -ne 0 -or
-            $menuText -notmatch "OPENNV_OWNED_MENU_ACCEPTANCE action=continue transport=godot-button-signal" -or
-            $menuText -notmatch "OPENNV_GODOT_CELL_PASS" -or
-            $menuText -match "(?m)^ERROR:") {
-            throw "Default route normal-menu Continue gate failed:`n$menuText"
+            $travelText -notmatch "OPENNV_OWNED_MENU_ACCEPTANCE action=continue transport=godot-button-signal" -or
+            $travelText -notmatch "OPENNV_FLAT_ROUTE_TRAVEL_PASS phase=first-run" -or
+            $travelText -match "(?m)^ERROR:") {
+            throw "Default route normal-input travel gate failed:`n$travelText"
         }
-        & python $reportValidator --mode cell-menu-continue --report $routeMenuReport `
+        & python $reportValidator --mode flat-route-travel --report $routeTravelReport `
             --install-manifest $routeInstall
-        if ($LASTEXITCODE -ne 0) { throw "Default route normal-menu report is invalid." }
+        if ($LASTEXITCODE -ne 0) { throw "Default route normal-input travel report is invalid." }
+
+        $reloadOutput = & $Godot --xr-mode off --path $runtimeRoot -- `
+            --reuse-cache --cache-root $routeCache --save-path $routeOpeningSave `
+            --opening-menu-proof continue --route-travel-proof cold-reload `
+            --report $routeReloadReport 2>&1
+        $reloadText = $reloadOutput | Out-String
+        if ($LASTEXITCODE -ne 0 -or
+            $reloadText -notmatch "OPENNV_OWNED_MENU_ACCEPTANCE action=continue transport=godot-button-signal" -or
+            $reloadText -notmatch "OPENNV_FLAT_ROUTE_TRAVEL_PASS phase=cold-reload" -or
+            $reloadText -match "(?m)^ERROR:") {
+            throw "Default route cold-reload gate failed:`n$reloadText"
+        }
+        & python $reportValidator --mode flat-route-reload --report $routeReloadReport `
+            --install-manifest $routeInstall --prior-report $routeTravelReport
+        if ($LASTEXITCODE -ne 0) { throw "Default route cold-reload report is invalid." }
     }
     finally {
         foreach ($path in @(
-            $routeReport,
-            $routeSave,
             $routeCheckpointReport,
             $routeResumeReport,
-            $routeMenuReport,
+            $routeTravelReport,
+            $routeReloadReport,
             $routeOpeningSave
         )) {
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }

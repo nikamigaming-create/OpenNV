@@ -15,8 +15,9 @@ CELL_REPORT_SCHEMA = "opennv-godot-cell/v1"
 XR_REPORT_SCHEMA = "opennv-openxr-rig/v3"
 XR_SIMULATOR_REPORT_SCHEMA = "opennv-openxr-simulator-acceptance/v1"
 FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v1"
+FLAT_ROUTE_TRAVEL_REPORT_SCHEMA = "opennv-flat-route-travel/v1"
 GAMEPLAY_REPORT_SCHEMA = "opennv-godot-playable-route/v1"
-CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v3"
+CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v5"
 POOL_REPORT_SCHEMA = "opennv-pool-practice/v1"
 FLOAT_COMPARISON_TOLERANCE = 1.0e-6
 
@@ -463,6 +464,140 @@ def validate_flat_controls_report(
     _require(int(gameplay["shotsFired"]) == 1, "Flat shot count differs")
 
 
+def validate_flat_route_travel_report(
+    report: dict[str, object],
+    install_manifest_path: Path,
+    configuration: RuntimeConfiguration,
+    expected_phase: str,
+    prior_report: dict[str, object] | None,
+) -> None:
+    _verify_configuration(report, configuration)
+    primary, linked, _actors = _owned_documents(install_manifest_path)
+    expected_portals = [
+        {
+            "fromCellFormId": str(row["fromCellFormId"]),
+            "toCellFormId": str(row["cellFormId"]),
+            "fromDoorReferenceFormId": str(row["fromDoorReferenceFormId"]),
+            "toDoorReferenceFormId": str(row["toDoorReferenceFormId"]),
+        }
+        for row in primary.get("linkedCells", [])
+    ]
+    _require(expected_portals, "Owned route contains no portal links")
+    expected_active = expected_portals[-1]["toCellFormId"]
+    expected_editor = str(linked[-1]["cell"]["editorId"])
+    gameplay = report["gameplay"]
+    save = _read(Path(str(report["save"]["path"])))
+
+    _require(
+        report.get("schema") == FLAT_ROUTE_TRAVEL_REPORT_SCHEMA,
+        "Unexpected flat route travel schema",
+    )
+    _require(report.get("status") == "pass", "Flat route travel did not pass")
+    _require(report.get("phase") == expected_phase, "Flat route travel phase differs")
+    _require(
+        report.get("inputTransport")
+        == "owned-menu-button-signal-plus-godot-input-map",
+        "Flat route travel input transport differs",
+    )
+    _require(not bool(report["windowsAppControlUsed"]), "Route proof used Windows app control")
+    _require(not bool(report["foregroundInputInjected"]), "Route proof injected foreground input")
+    _require(report["orderedPortals"] == expected_portals, "Ordered portal route differs")
+    _require(report["routeCellFormId"] == primary["cell"]["formId"], "Route root CELL differs")
+    _require(report["activeCellFormId"] == expected_active, "Final active CELL differs")
+    _require(report["activeCellEditorId"] == expected_editor, "Final active CELL editor ID differs")
+    _require(gameplay["schema"] == CAMPAIGN_SAVE_SCHEMA, "Route save schema differs")
+    _require(gameplay["activeCellFormId"] == expected_active, "Gameplay active CELL differs")
+    _require(bool(gameplay["playerTransformRestored"]), "Menu Continue did not restore a transform")
+    opening = gameplay["opening"]
+    _require(
+        isinstance(opening, dict)
+        and int(opening["stage"]) == 200
+        and bool(opening["completed"]),
+        "Route travel did not retain the completed opening state",
+    )
+    _require(save["schema"] == CAMPAIGN_SAVE_SCHEMA, "Persisted route save schema differs")
+    _require(save["cellFormId"] == primary["cell"]["formId"], "Persisted route root differs")
+    _require(save["activeCellFormId"] == expected_active, "Persisted active CELL differs")
+    _require(
+        int(save["opening"]["Stage"]) == 200 and bool(save["opening"]["Completed"]),
+        "Persisted opening completion differs",
+    )
+    expected_open_doors = {
+        door
+        for portal in expected_portals
+        for door in (
+            portal["fromDoorReferenceFormId"],
+            portal["toDoorReferenceFormId"],
+        )
+    }
+    actual_open_doors = {
+        str(form_id)
+        for form_id, opened in save["doorStates"].items()
+        if bool(opened)
+    }
+    _require(
+        expected_open_doors.issubset(actual_open_doors),
+        "Persisted route door state is incomplete",
+    )
+    sunny = report.get("sunny")
+    _require(
+        isinstance(sunny, dict)
+        and sunny["referenceFormId"] == "00104e85"
+        and not bool(sunny["InitiallyDisabled"])
+        and not bool(sunny["ProofEnabled"]),
+        "Enabled owned Sunny state differs",
+    )
+
+    transitions = report["transitions"]
+    if expected_phase == "first-run":
+        _require(
+            [
+                {
+                    key: row[key]
+                    for key in (
+                        "fromCellFormId",
+                        "toCellFormId",
+                        "fromDoorReferenceFormId",
+                        "toDoorReferenceFormId",
+                    )
+                }
+                for row in transitions
+            ]
+            == expected_portals,
+            "Player portal transition order or identity differs",
+        )
+        _require(prior_report is None, "First route phase cannot use a prior report")
+    else:
+        _require(bool(report["activeCellRestored"]), "Cold Continue did not restore active CELL")
+        _require(not transitions, "Cold reload unexpectedly replayed portal transitions")
+        _require(prior_report is not None, "Cold route phase requires the first-run report")
+        _require(prior_report.get("phase") == "first-run", "Prior route phase differs")
+        _require(
+            prior_report["save"]["sha256"] == report["save"]["sha256"],
+            "Cold Continue changed the persisted save",
+        )
+        first_transform = prior_report["playerTransform"]
+        cold_transform = report["playerTransform"]
+        _require(
+            all(
+                math.isclose(float(first), float(cold), abs_tol=FLOAT_COMPARISON_TOLERANCE)
+                for first, cold in zip(
+                    first_transform["position"], cold_transform["position"], strict=True
+                )
+            ),
+            "Cold Continue player position differs",
+        )
+        first_rotation = [float(value) for value in first_transform["rotation"]]
+        cold_rotation = [float(value) for value in cold_transform["rotation"]]
+        quaternion_dot = abs(sum(
+            first * cold for first, cold in zip(first_rotation, cold_rotation, strict=True)
+        ))
+        _require(
+            math.isclose(quaternion_dot, 1.0, abs_tol=FLOAT_COMPARISON_TOLERANCE),
+            "Cold Continue player rotation differs",
+        )
+
+
 def validate_gameplay_report(
     report: dict[str, object],
     install_manifest_path: Path,
@@ -569,11 +704,14 @@ def main() -> int:
             "pool-xr-layout",
             "xr-simulator",
             "flat-controls",
+            "flat-route-travel",
+            "flat-route-reload",
         ),
         required=True,
     )
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--install-manifest", type=Path)
+    parser.add_argument("--prior-report", type=Path)
     args = parser.parse_args()
     configuration = load_runtime_configuration()
     report = _read(args.report)
@@ -602,6 +740,14 @@ def main() -> int:
             validate_xr_simulator_report(report, args.install_manifest, configuration)
         elif args.mode == "flat-controls":
             validate_flat_controls_report(report, args.install_manifest, configuration)
+        elif args.mode in ("flat-route-travel", "flat-route-reload"):
+            validate_flat_route_travel_report(
+                report,
+                args.install_manifest,
+                configuration,
+                "first-run" if args.mode == "flat-route-travel" else "cold-reload",
+                _read(args.prior_report) if args.prior_report is not None else None,
+            )
         else:
             validate_pool_report(
                 report,

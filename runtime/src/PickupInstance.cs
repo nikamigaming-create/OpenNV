@@ -7,6 +7,7 @@ internal partial class PickupInstance : Node3D
     internal string ReferenceFormId { get; private set; } = "";
     internal string ItemFormId { get; private set; } = "";
     internal string EditorId { get; private set; } = "";
+    internal string? DisplayName { get; private set; }
     internal string RecordType { get; private set; } = "";
     internal int Count { get; private set; }
     internal WeaponProfile? Weapon { get; private set; }
@@ -15,6 +16,7 @@ internal partial class PickupInstance : Node3D
         string referenceFormId,
         string itemFormId,
         string editorId,
+        string? displayName,
         string recordType,
         int count,
         WeaponProfile? weapon)
@@ -22,6 +24,7 @@ internal partial class PickupInstance : Node3D
         ReferenceFormId = referenceFormId;
         ItemFormId = itemFormId;
         EditorId = editorId;
+        DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName;
         RecordType = recordType;
         Count = count;
         Weapon = weapon;

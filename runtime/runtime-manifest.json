@@ -86,7 +86,7 @@
             "hex-tactical": { "ready": false, "status": "not-implemented" },
             "openxr": { "ready": true, "status": "experimental-headset-gate-pending" }
           },
-          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy shell and an ordered Doc house to Goodsprings exterior to saloon composite. Both reciprocal XTEL pairs and normally enabled Sunny are source-bound; ordinary end-to-end travel, active-CELL persistence, integrated-route OpenXR acceptance, Sunny behavior, complete tile interaction, and retail UI parity remain pending.",
+          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy shell and a bounded preloaded Doc house to Goodsprings exterior to saloon composite. From a completed stage-200 Continue, configured flat input traverses both forward XTEL links; campaign save v5 persists saloon CELL 00106185, opened-container remaining counts, and the player transform. Owned containers support Take One, Take All, and Exit in a two-column flat view. Player deposits, reverse traversal, neighboring CELL streaming, integrated-route OpenXR acceptance, Sunny behavior, complete tile interaction, and retail UI parity remain pending.",
           "unavailableDlc": []
         },
         "jam": {
@@ -132,6 +132,10 @@
     "interactive-doors-and-physical-fire-rays",
     "bounded-linked-cells-no-portal-culling",
     "ordered-doc-exterior-saloon-portal-chain",
+    "flat-doc-exterior-saloon-forward-xtel-travel",
+    "campaign-save-v4-load-compatibility",
+    "campaign-save-v5-saloon-container-state",
+    "owned-container-take-one-take-all-exit",
     "forward-plus-static-model-load",
     "artifact-provenance-validation",
     "authored-pickup-inventory-loop",

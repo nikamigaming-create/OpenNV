@@ -69,12 +69,15 @@ def synthetic_plugin() -> bytes:
     item = record(
         "MISC",
         0x303,
-        subrecord("EDID", b"SyntheticPickup\0") + subrecord("MODL", b"clutter/test/pickup.nif\0"),
+        subrecord("EDID", b"SyntheticPickup\0")
+        + subrecord("FULL", b"Synthetic Pickup\0")
+        + subrecord("MODL", b"clutter/test/pickup.nif\0"),
     )
     container = record(
         "CONT",
         0x304,
         subrecord("EDID", b"SyntheticContainer\0")
+        + subrecord("FULL", b"Synthetic Container\0")
         + subrecord("MODL", b"clutter/test/container.nif\0")
         + subrecord("CNTO", struct.pack("<Ii", 0x303, 2)),
     )
@@ -82,11 +85,17 @@ def synthetic_plugin() -> bytes:
         "WEAP",
         0x305,
         subrecord("EDID", b"SyntheticWeapon\0")
+        + subrecord("FULL", b"Synthetic Weapon\0")
         + subrecord("MODL", b"weapons/test/weapon.nif\0")
         + subrecord("NAM0", struct.pack("<I", 0x306))
         + subrecord("DATA", struct.pack("<IIfHB", 100, 200, 2.0, 26, 6)),
     )
-    ammo = record("AMMO", 0x306, subrecord("EDID", b"SyntheticAmmo\0"))
+    ammo = record(
+        "AMMO",
+        0x306,
+        subrecord("EDID", b"SyntheticAmmo\0")
+        + subrecord("FULL", b"Synthetic Ammo\0"),
+    )
     xcll = bytes((10, 20, 30, 0, 40, 50, 60, 0, 70, 80, 90, 0)) + struct.pack(
         "<ffii3f", 64.0, 3750.0, 0, 250, 1.0, 6600.0, 1.25
     )
@@ -338,9 +347,11 @@ class CellCatalogTest(unittest.TestCase):
             {
                 "weaponFormId": "00000305",
                 "weaponEditorId": "SyntheticWeapon",
+                "weaponDisplayName": "Synthetic Weapon",
                 "modelPath": "weapons\\test\\weapon.nif",
                 "ammoFormId": "00000306",
                 "ammoEditorId": "SyntheticAmmo",
+                "ammoDisplayName": "Synthetic Ammo",
                 "damage": 26,
                 "clipSize": 6,
                 "reserveRounds": 6,
@@ -356,10 +367,12 @@ class CellCatalogTest(unittest.TestCase):
             container_interaction,
             {
                 "type": "container",
+                "displayName": "Synthetic Container",
                 "items": [
                     {
                         "itemFormId": "00000303",
                         "itemEditorId": "SyntheticPickup",
+                        "itemDisplayName": "Synthetic Pickup",
                         "itemRecordType": "MISC",
                         "count": 2,
                         "resolved": True,
@@ -375,6 +388,28 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(weapon_interaction["weapon"]["damage"], 26)
         self.assertEqual(weapon_interaction["weapon"]["clipSize"], 6)
         self.assertEqual(weapon_interaction["weapon"]["ammoFormId"], "00000306")
+
+    def test_localized_full_is_not_decoded_as_a_zstring(self) -> None:
+        plugin = record(
+            "TES4",
+            0,
+            subrecord("HEDR", struct.pack("<fII", 1.34, 1, 0)),
+            0x00000080,
+        ) + group(
+            b"MISC",
+            0,
+            record(
+                "MISC",
+                0x500,
+                subrecord("EDID", b"LocalizedItem\0")
+                + subrecord("FULL", struct.pack("<I", 0x1234)),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "localized.esm"
+            path.write_bytes(plugin)
+            with self.assertRaisesRegex(ValueError, "owned STRINGS table"):
+                scan_cell_catalog(path)
 
     def test_truncated_group_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:

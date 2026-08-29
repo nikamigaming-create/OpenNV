@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.World.Portals;
 
 namespace OpenNV.Runtime;
 
@@ -26,6 +27,10 @@ internal partial class CellPlayer : CharacterBody3D
     internal const float DioramaMaximumSizeMeters = 64.0f;
     internal const float DioramaYawStepRadians = MathF.PI / 3.0f;
     internal const float DioramaPanSpeedMetersPerSecond = 7.5f;
+    private const float MinimumStepProgressFraction = 0.1f;
+    private const float RepeatedTangentOriginToleranceMeters = 0.06f;
+    private const float StepDownHeightMultiplier = 2.0f;
+    private const float StepForwardClearanceRadii = 1.1f;
 
     private RuntimeConfiguration _configuration = null!;
     private Camera3D _camera = null!;
@@ -74,6 +79,8 @@ internal partial class CellPlayer : CharacterBody3D
     private JamJvsSprintContract? _jamJvsSprint;
     private JamJbtBulletTimeContract? _jamJbtBulletTime;
     private bool _jamBulletTimeActive;
+    private CellPortalTravel? _portalTravel;
+    private Vector3? _lastFloorTangentOrigin;
 
     internal Camera3D Camera => _camera;
     internal bool UsesXr => _useXr;
@@ -95,6 +102,13 @@ internal partial class CellPlayer : CharacterBody3D
     internal bool HasHeldPoolCue => _poolCueMount is not null && _poolCueTip is not null;
     internal float DesiredEyeHeightMeters => _configuration.Xr.DesiredEyeHeightMeters;
     internal PlayerControlTelemetry.Snapshot ControlTelemetry => _controlTelemetry.Report();
+    internal IReadOnlyList<CellPortalTravel.Transition> PortalTransitions =>
+        _portalTravel?.Transitions ?? Array.Empty<CellPortalTravel.Transition>();
+    internal string LastStepAttempt { get; private set; } = "none";
+    internal string LastMovementCollision { get; private set; } = "none";
+    internal string LastMovementState { get; private set; } = "none";
+    internal string LastActivationCollider { get; private set; } = "none";
+    internal Vector3 LastBlockingNormal { get; private set; }
 
     internal void SetControlPolicy(
         bool movement,
@@ -140,6 +154,50 @@ internal partial class CellPlayer : CharacterBody3D
         _navigation = navigation;
         _navigationRoot = root;
         _navigationOriginGameUnits = originGameUnits;
+    }
+
+    internal void ConfigurePortalTravel(CellPortalTravel portalTravel) =>
+        _portalTravel = portalTravel;
+
+    internal bool CanSweepTo(Vector3 target)
+    {
+        if (_useXr || _useClassicDiorama)
+            return false;
+        var motion = target - GlobalPosition;
+        if (motion.IsZeroApprox())
+            return true;
+        return MoveAndCollide(
+            motion,
+            testOnly: true,
+            safeMargin: SafeMargin,
+            recoveryAsCollision: true) is null;
+    }
+
+    internal void ApplyPortalArrival(
+        Node3D targetRoot,
+        Vector3 targetOriginGameUnits,
+        DoorInstance.TeleportDestination destination)
+    {
+        var localPosition = new Vector3(
+            destination.PositionGameUnits.X - targetOriginGameUnits.X,
+            destination.PositionGameUnits.Z - targetOriginGameUnits.Z,
+            -(destination.PositionGameUnits.Y - targetOriginGameUnits.Y));
+        var floorPosition = targetRoot.ToGlobal(localPosition);
+        var targetBasis = targetRoot.GlobalBasis.Orthonormalized() *
+            new Basis(Vector3.Up, destination.YawGodotRadians);
+        var bodyPosition = floorPosition +
+            Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
+        if (_useXr)
+        {
+            var headOffset = _camera.GlobalPosition - GlobalPosition;
+            headOffset.Y = 0.0f;
+            var localHeadOffset = GlobalBasis.Orthonormalized().Inverse() * headOffset;
+            var rotatedHeadOffset = targetBasis * localHeadOffset;
+            bodyPosition -= new Vector3(rotatedHeadOffset.X, 0.0f, rotatedHeadOffset.Z);
+        }
+        var scale = GlobalBasis.Scale;
+        GlobalTransform = new Transform3D(targetBasis.Scaled(scale), bodyPosition);
+        Velocity = Vector3.Zero;
     }
 
     internal void ClearOwnedNavigation()
@@ -307,6 +365,9 @@ internal partial class CellPlayer : CharacterBody3D
 
     private void MoveWithPhysics(Vector3 horizontalVelocity, float delta)
     {
+        var before = GlobalPosition;
+        var wasOnFloor = IsOnFloor();
+        var beforeVelocity = Velocity;
         var velocity = Velocity;
         velocity.X = horizontalVelocity.X;
         velocity.Z = horizontalVelocity.Z;
@@ -315,6 +376,183 @@ internal partial class CellPlayer : CharacterBody3D
             : velocity.Y - _configuration.Simulation.GravityMetersPerSecondSquared * delta;
         Velocity = velocity;
         MoveAndSlide();
+        var expectedHorizontalMotion = horizontalVelocity * delta;
+        var horizontalProgress = GlobalPosition - before;
+        horizontalProgress.Y = 0.0f;
+        if (wasOnFloor &&
+            !expectedHorizontalMotion.IsZeroApprox() &&
+            horizontalProgress.Length() <
+                expectedHorizontalMotion.Length() * MinimumStepProgressFraction)
+        {
+            LastMovementCollision = DescribeSlideCollisions();
+            LastMovementState =
+                $"requested={horizontalVelocity} expected={expectedHorizontalMotion} " +
+                $"progress={horizontalProgress} beforeVelocity={beforeVelocity} " +
+                $"afterVelocity={Velocity} wasOnFloor={wasOnFloor} onFloor={IsOnFloor()}";
+            var repeatedTangent = _lastFloorTangentOrigin is { } tangentOrigin &&
+                GlobalPosition.DistanceTo(tangentOrigin) <=
+                    RepeatedTangentOriginToleranceMeters;
+            if (repeatedTangent)
+            {
+                _lastFloorTangentOrigin = null;
+            }
+            else if (TryFloorTangentMotion(expectedHorizontalMotion, delta))
+            {
+                return;
+            }
+            var remainingHorizontalMotion = expectedHorizontalMotion - horizontalProgress;
+            remainingHorizontalMotion.Y = 0.0f;
+            if (repeatedTangent && !remainingHorizontalMotion.IsZeroApprox())
+            {
+                remainingHorizontalMotion = remainingHorizontalMotion.Normalized() *
+                    _configuration.Player.CapsuleRadiusMeters *
+                    StepForwardClearanceRadii;
+            }
+            var blockingNormal = Enumerable.Range(0, GetSlideCollisionCount())
+                .Select(index => GetSlideCollision(index).GetNormal())
+                .FirstOrDefault(normal =>
+                    normal.Dot(Vector3.Up) < MathF.Cos(FloorMaxAngle));
+            if (!blockingNormal.IsZeroApprox())
+                LastBlockingNormal = blockingNormal;
+            _ = TryStepUp(
+                GlobalTransform,
+                before,
+                remainingHorizontalMotion,
+                delta,
+                blockingNormal.IsZeroApprox() ? null : blockingNormal);
+        }
+        else
+        {
+            _lastFloorTangentOrigin = null;
+        }
+    }
+
+    private bool TryFloorTangentMotion(Vector3 horizontalMotion, float delta)
+    {
+        var walkableNormalMinimum = MathF.Cos(FloorMaxAngle);
+        if (GetSlideCollisionCount() == 0 ||
+            Enumerable.Range(0, GetSlideCollisionCount()).Any(index =>
+                GetSlideCollision(index).GetNormal().Dot(Vector3.Up) < walkableNormalMinimum))
+            return false;
+        var tangentMotion = horizontalMotion.Slide(
+            GetSlideCollision(0).GetNormal().Normalized());
+        var tangentHorizontalMotion = tangentMotion;
+        tangentHorizontalMotion.Y = 0.0f;
+        if (tangentHorizontalMotion.IsZeroApprox())
+            return false;
+        tangentMotion *= horizontalMotion.Length() / tangentHorizontalMotion.Length();
+        var beforeTransform = GlobalTransform;
+        var beforePosition = GlobalPosition;
+        _ = MoveAndCollide(
+            tangentMotion,
+            testOnly: false,
+            safeMargin: 0.0f,
+            recoveryAsCollision: false);
+        var progress = GlobalPosition - beforePosition;
+        var horizontalProgress = progress;
+        horizontalProgress.Y = 0.0f;
+        if (horizontalProgress.Length() <
+            horizontalMotion.Length() * MinimumStepProgressFraction)
+        {
+            GlobalTransform = beforeTransform;
+            return false;
+        }
+        Velocity = progress / delta;
+        _lastFloorTangentOrigin = beforePosition;
+        LastStepAttempt =
+            $"floor-tangent-sweep:{horizontalProgress.Length():F4}/" +
+            $"{horizontalMotion.Length():F4}";
+        return true;
+    }
+
+    private bool TryStepUp(
+        Transform3D stepStartTransform,
+        Vector3 beforePosition,
+        Vector3 horizontalMotion,
+        float delta,
+        Vector3? blockingNormal)
+    {
+        var stepHeight = _configuration.Player.CapsuleRadiusMeters;
+        if (blockingNormal is { } normal)
+        {
+            normal.Y = 0.0f;
+            if (!normal.IsZeroApprox())
+            {
+                var crossingMotion = -normal.Normalized() *
+                    stepHeight * StepForwardClearanceRadii;
+                if (crossingMotion.Dot(horizontalMotion) > 0.0f)
+                    horizontalMotion = crossingMotion;
+            }
+        }
+        var upMotion = Vector3.Up * stepHeight;
+        var upCollision = new KinematicCollision3D();
+        if (TestMove(
+                stepStartTransform,
+                upMotion,
+                upCollision,
+                safeMargin: 0.0f,
+                recoveryAsCollision: false))
+        {
+            LastStepAttempt =
+                $"up-blocked:normal={upCollision.GetNormal()}:" +
+                $"travel={upCollision.GetTravel()}:" +
+                $"collider={upCollision.GetCollider()}";
+            return false;
+        }
+        var raised = stepStartTransform;
+        raised.Origin += upMotion;
+        var forwardCollision = new KinematicCollision3D();
+        if (TestMove(
+                raised,
+                horizontalMotion,
+                forwardCollision,
+                safeMargin: 0.0f,
+                recoveryAsCollision: false))
+        {
+            LastStepAttempt =
+                $"forward-blocked:normal={forwardCollision.GetNormal()}:" +
+                $"travel={forwardCollision.GetTravel()}:" +
+                $"collider={forwardCollision.GetCollider()}";
+            return false;
+        }
+        var advanced = raised;
+        advanced.Origin += horizontalMotion;
+        var downCollision = new KinematicCollision3D();
+        if (!TestMove(
+                advanced,
+                Vector3.Down * stepHeight * StepDownHeightMultiplier,
+                downCollision,
+                SafeMargin,
+                recoveryAsCollision: false))
+        {
+            LastStepAttempt = "no-step-floor";
+            return false;
+        }
+        if (downCollision.GetNormal().Dot(Vector3.Up) < MathF.Cos(FloorMaxAngle))
+        {
+            LastStepAttempt = $"steep-step-floor:{downCollision.GetNormal()}";
+            return false;
+        }
+        advanced.Origin += downCollision.GetTravel();
+        GlobalTransform = advanced;
+        Velocity = (GlobalPosition - beforePosition) / delta;
+        LastStepAttempt = "accepted";
+        return true;
+    }
+
+    private string DescribeSlideCollisions()
+    {
+        if (GetSlideCollisionCount() == 0)
+            return "none";
+        return string.Join(
+            ";",
+            Enumerable.Range(0, GetSlideCollisionCount()).Select(index =>
+            {
+                var collision = GetSlideCollision(index);
+                var collider = collision.GetCollider() as Node;
+                return $"{collider?.GetPath().ToString() ?? "unknown"}" +
+                    $"@{collision.GetPosition()} normal={collision.GetNormal()}";
+            }));
     }
 
     private Vector3 NavigationWorldToGame(Vector3 world)
@@ -358,6 +596,7 @@ internal partial class CellPlayer : CharacterBody3D
     private bool Activate(Node3D aimSource)
     {
         var collider = Cast(aimSource, _configuration.Player.ActivationDistanceMeters);
+        LastActivationCollider = collider?.GetPath().ToString() ?? "none";
         if (_externalActivationHandler?.Invoke(collider) == true)
             return true;
         var poolBall = Ancestor<PoolBallInstance>(collider);
@@ -386,7 +625,18 @@ internal partial class CellPlayer : CharacterBody3D
         }
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
-            return false;
+            return collider is null &&
+                _portalTravel?.TryActivateFacing(
+                    aimSource,
+                    this,
+                    _configuration.Player.ActivationDistanceMeters) == true;
+        if (_portalTravel?.TryActivate(door, this) == true)
+        {
+            GD.Print(
+                $"OPENNV_DOOR_TRAVEL form={door.ReferenceFormId} " +
+                $"activeCell={_session!.ActiveCellFormId}");
+            return true;
+        }
         door.SetOpen(!door.IsOpen);
         _session!.DoorChanged(door);
         GD.Print($"OPENNV_DOOR_STATE form={door.Name.ToString().Replace("DOOR_", "")} open={door.IsOpen}");

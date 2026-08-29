@@ -10,16 +10,22 @@ internal partial class DoorInstance : Node3D
     internal bool IsOpen { get; private set; }
     internal string ReferenceFormId { get; private set; } = "";
     internal string? DestinationReferenceFormId { get; private set; }
+    internal TeleportDestination? Destination { get; private set; }
     internal DoorInstance? LinkedDoor { get; private set; }
 
     internal void Configure(
         string referenceFormId,
         float closedYaw,
         float openAngleDegrees,
-        string? destinationReferenceFormId = null)
+        string? destinationReferenceFormId = null,
+        TeleportDestination? destination = null)
     {
+        if ((destinationReferenceFormId is null) != (destination is null))
+            throw new InvalidOperationException(
+                "Door XTEL reference and destination transform must be present together.");
         ReferenceFormId = referenceFormId;
         DestinationReferenceFormId = destinationReferenceFormId;
+        Destination = destination;
         _closedYaw = closedYaw;
         _openAngleRadians = Mathf.DegToRad(openAngleDegrees);
         SetOpen(false);
@@ -43,4 +49,8 @@ internal partial class DoorInstance : Node3D
         if (LinkedDoor is not null && LinkedDoor.IsOpen != open)
             LinkedDoor.SetOpen(open);
     }
+
+    internal readonly record struct TeleportDestination(
+        Vector3 PositionGameUnits,
+        float YawGodotRadians);
 }

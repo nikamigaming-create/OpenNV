@@ -74,9 +74,12 @@ reads the same inventory, quest, map, and save state; complete tile interaction
 and retail UI parity remain pending. STATS currently shares the verified ITEMS
 frame while its remaining Gamebryo layout expressions are unsupported. The
 default cache preloads the ordered Doc house, Goodsprings active exterior set,
-and saloon composite with both reciprocal XTEL pairs. Ordinary player-driven
-end-to-end travel, active-CELL restoration, and integrated-route OpenXR
-acceptance remain pending. The registered Fallout 3 development frontend opens its
+and saloon composite with both reciprocal XTEL pairs. From a completed stage-200
+save, configured flat input traverses both forward XTEL links; campaign save v5
+records saloon CELL `00106185`, and a fresh owned-menu Continue restores the
+unchanged save and player transform there. Reverse traversal, neighboring CELL
+streaming, and integrated-route OpenXR acceptance remain pending. The registered
+Fallout 3 development frontend opens its
 profile-backed menu, plays a locally
 converted and hash-verified copy of the owned intro, and converges through
 Escape or the Skip button on CG00 sex/name selection, a persistent stage-60

@@ -61,7 +61,7 @@ retail startup-logo and original-menu presentation remain absent.
    now consumes that same state; STATS explicitly reuses the verified ITEMS
    frame until its remaining layout expressions execute. From a completed
    stage-200 Continue, configured flat input traverses both forward XTEL links;
-   campaign save v4 persists saloon CELL `00106185`, and a fresh owned-menu
+   campaign save v5 persists saloon CELL `00106185`, and a fresh owned-menu
    Continue restores the unchanged save and player transform there. Complete
    tile interaction, reverse traversal, neighboring CELL streaming,
    integrated-route OpenXR acceptance, and retail visual parity remain open.

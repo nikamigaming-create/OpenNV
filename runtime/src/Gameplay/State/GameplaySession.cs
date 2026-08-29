@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Gameplay.Containers;
 using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Gameplay.State;
@@ -9,6 +10,8 @@ internal partial class GameplaySession : Node
     private const string SaveSchemaV1 = "opennv-sandbox-save/v1";
     private const string SaveSchemaV2 = "opennv-sandbox-save/v2";
     private const string SaveSchemaV3 = "opennv-campaign-save/v3";
+    private const string SaveSchemaV4 = "opennv-campaign-save/v4";
+    private const string SaveSchemaV5 = "opennv-campaign-save/v5";
     private const int EquippedWeaponCount = 1;
 
     private readonly Dictionary<string, InventoryEntry> _inventory = new(StringComparer.OrdinalIgnoreCase);
@@ -18,10 +21,19 @@ internal partial class GameplaySession : Node
     private readonly Dictionary<string, PoolTableInstance> _pools = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PoolTableInstance.PoolState> _loadedPoolStates =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly ContainerInventoryStore _containerInventories = new();
     private GameplayUiController? _uiController;
+    private ContainerInteractionView? _containerView;
     private string _savePath = "";
     private string _cellFormId = "";
     private string _cellEditorId = "";
+    private string _activeCellFormId = "";
+    private string _activeCellEditorId = "";
+    private string? _loadedActiveCellFormId;
+    private bool _activeCellRestored;
+    private IReadOnlyDictionary<string, WorldSpace> _worldSpaces =
+        new Dictionary<string, WorldSpace>(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlySet<PortalEdge> _portalEdges = new HashSet<PortalEdge>();
     private string _entryDoorFormId = "";
     private RuntimeConfiguration _configuration = null!;
     private bool _useXrHud;
@@ -55,8 +67,12 @@ internal partial class GameplaySession : Node
     internal bool HasPipBoy => _uiController?.HasPipBoy == true;
     internal float XrHudPixelSize => _uiController?.XrHudPixelSize ?? 0.0f;
     internal bool IsPipBoyOpen => _uiController?.IsPipBoyOpen == true;
+    internal bool IsContainerOpen => _containerView?.IsOpen == true;
     internal bool HasItem(string itemFormId) => _inventory.ContainsKey(itemFormId);
     internal OpeningCampaignState? OpeningState => _openingState;
+    internal string ActiveCellFormId => _activeCellFormId;
+    internal string ActiveCellEditorId => _activeCellEditorId;
+    internal bool ActiveCellRestored => _activeCellRestored;
     internal bool IsContainerEmptied(string referenceFormId) => _emptiedContainers.Contains(referenceFormId);
     internal SandboxObjectiveStage ObjectiveStage =>
         _equippedWeaponFormId is null ? SandboxObjectiveStage.EquipWeapon :
@@ -68,6 +84,7 @@ internal partial class GameplaySession : Node
     internal static bool CanContinueOpening(
         string savePath,
         string expectedCellFormId,
+        IReadOnlySet<string> allowedActiveCellFormIds,
         Func<OpeningCampaignState, bool> acceptsOpeningState)
     {
         if (!File.Exists(savePath))
@@ -80,6 +97,8 @@ internal partial class GameplaySession : Node
                 _savePath = savePath,
             };
             probe.Load(expectedCellFormId);
+            if (!allowedActiveCellFormIds.Contains(probe._activeCellFormId))
+                return false;
             return probe._openingState is not null &&
                 acceptsOpeningState(probe._openingState) &&
                 probe.HasConsistentOpeningGameplayState();
@@ -114,6 +133,8 @@ internal partial class GameplaySession : Node
         Name = "GameplaySession";
         _cellFormId = cellFormId;
         _cellEditorId = cellEditorId;
+        _activeCellFormId = cellFormId;
+        _activeCellEditorId = cellEditorId;
         _entryDoorFormId = entryDoorFormId;
         _useXrHud = useXrHud;
         _showHud = showHud;
@@ -136,6 +157,9 @@ internal partial class GameplaySession : Node
             _showHud,
             _useClassicDioramaHud,
             _gameplayUi);
+        _containerView = new ContainerInteractionView();
+        AddChild(_containerView);
+        _containerView.Configure(_useXrHud);
         RefreshHud(
             _useClassicDioramaHud
                 ? "WASD pan • Wheel zoom • Q/E rotate 60° • Home reset • F5 save"
@@ -152,11 +176,27 @@ internal partial class GameplaySession : Node
 
     internal void ConfigureWorldContext(
         CellPlayer player,
-        IEnumerable<CellContentLoader.LoadedContent> contents)
+        IEnumerable<CellContentLoader.LoadedContent> contents,
+        IEnumerable<(string FromCellFormId, string ToCellFormId)> portalEdges)
     {
+        var loadedContents = contents.ToArray();
+        _worldSpaces = loadedContents.ToDictionary(
+            content => content.FormId,
+            content => new WorldSpace(content.FormId, content.EditorId),
+            StringComparer.OrdinalIgnoreCase);
+        _portalEdges = portalEdges
+            .Select(edge => PortalEdge.Create(edge.FromCellFormId, edge.ToCellFormId))
+            .ToHashSet();
+        var restoredCellFormId = _loadedActiveCellFormId ?? _cellFormId;
+        if (!_worldSpaces.TryGetValue(restoredCellFormId, out var activeSpace))
+            throw new InvalidOperationException(
+                $"Saved active CELL is outside the prepared route: {restoredCellFormId}");
+        _activeCellFormId = activeSpace.FormId;
+        _activeCellEditorId = activeSpace.EditorId;
+        _activeCellRestored = _loadedActiveCellFormId is not null;
         _player = player;
         _loadedPlayerTransform?.Apply(player);
-        _mapMarkers = contents
+        _mapMarkers = loadedContents
             .SelectMany(content => content.PlacedReferences)
             .Where(reference => !IsReferenceRemoved(reference.FormId))
             .Select(reference => new GameplayUiMapMarker(
@@ -172,8 +212,12 @@ internal partial class GameplaySession : Node
 
     internal void ClosePipBoy() => _uiController?.ClosePipBoy();
 
-    internal void SetGameplayUiVisible(bool visible) =>
+    internal void SetGameplayUiVisible(bool visible)
+    {
+        if (!visible && IsContainerOpen)
+            CloseContainer();
         _uiController?.SetGameplayVisible(visible);
+    }
 
     internal GameplayUiSnapshot BuildUiSnapshot()
     {
@@ -192,8 +236,8 @@ internal partial class GameplaySession : Node
             : "None";
         var controls = _configuration.Player.DesktopInput;
         return new GameplayUiSnapshot(
-            _cellFormId,
-            _cellEditorId,
+            _activeCellFormId,
+            _activeCellEditorId,
             _player?.GlobalPosition ?? Vector3.Zero,
             _lastStatus,
             objective,
@@ -251,8 +295,18 @@ internal partial class GameplaySession : Node
     {
         if (_equippedWeaponFormId is not null)
             return;
-        AddInventory(loadout.WeaponFormId, loadout.WeaponEditorId, "WEAP", EquippedWeaponCount);
-        AddInventory(loadout.AmmoFormId, loadout.AmmoEditorId, "AMMO", loadout.ReserveRounds);
+        AddInventory(
+            loadout.WeaponFormId,
+            loadout.WeaponEditorId,
+            loadout.WeaponDisplayName,
+            "WEAP",
+            EquippedWeaponCount);
+        AddInventory(
+            loadout.AmmoFormId,
+            loadout.AmmoEditorId,
+            loadout.AmmoDisplayName,
+            "AMMO",
+            loadout.ReserveRounds);
         _equippedWeaponFormId = loadout.WeaponFormId;
         _weaponAmmoFormId = loadout.AmmoFormId;
         _weaponDamage = loadout.Damage;
@@ -270,7 +324,12 @@ internal partial class GameplaySession : Node
     {
         if (!_removedReferences.Add(pickup.ReferenceFormId))
             return;
-        AddInventory(pickup.ItemFormId, pickup.EditorId, pickup.RecordType, pickup.Count);
+        AddInventory(
+            pickup.ItemFormId,
+            pickup.EditorId,
+            pickup.DisplayName,
+            pickup.RecordType,
+            pickup.Count);
         if (pickup.Weapon is { } weapon)
         {
             _equippedWeaponFormId = pickup.ItemFormId;
@@ -286,25 +345,77 @@ internal partial class GameplaySession : Node
 
     internal void OpenContainer(ContainerInstance container)
     {
-        if (!_emptiedContainers.Add(container.ReferenceFormId))
+        if (string.IsNullOrWhiteSpace(container.DisplayName) ||
+            container.Items.Any(item => !item.Resolved || string.IsNullOrWhiteSpace(item.DisplayName)))
         {
-            RefreshHud($"{container.EditorId}: empty");
+            RefreshHud("Container names or contents are unresolved; rebuild the owned cache");
             return;
         }
-        if (container.Items.Any(item => !item.Resolved))
-        {
-            _emptiedContainers.Remove(container.ReferenceFormId);
-            RefreshHud($"{container.EditorId}: unresolved leveled contents remain locked out");
-            return;
-        }
-        var transferred = 0;
-        foreach (var item in container.Items.Where(item => item.Resolved && item.Count > 0))
-        {
-            AddInventory(item.ItemFormId, item.EditorId, item.RecordType, item.Count);
-            transferred += item.Count;
-        }
+        if (_containerView is null)
+            throw new InvalidOperationException("Container interaction UI is not ready.");
+        ClosePipBoy();
+        var snapshot = _containerInventories.Register(
+            container,
+            _emptiedContainers.Contains(container.ReferenceFormId));
+        SynchronizeContainerEmptyMarker(snapshot.ReferenceFormId);
+        _containerView.Open(
+            snapshot,
+            BuildPlayerContainerInventory(),
+            itemFormId => TakeOneFromContainer(snapshot.ReferenceFormId, itemFormId),
+            () => TakeAllFromContainer(snapshot.ReferenceFormId),
+            CloseContainer);
+        RefreshHud($"Opened {snapshot.DisplayName}: {snapshot.Items.Sum(item => item.RemainingCount)} item(s)");
+    }
+
+    private void TakeOneFromContainer(string referenceFormId, string itemFormId)
+    {
+        var transfer = _containerInventories.TakeOne(referenceFormId, itemFormId);
+        AddInventory(
+            transfer.ItemFormId,
+            transfer.EditorId,
+            transfer.DisplayName,
+            transfer.RecordType,
+            transfer.Count);
+        SynchronizeContainerEmptyMarker(referenceFormId);
         Save();
-        RefreshHud($"{container.EditorId}: transferred {transferred} resolved item(s)");
+        _containerView!.Refresh(
+            _containerInventories.Snapshot(referenceFormId),
+            BuildPlayerContainerInventory());
+        RefreshHud($"Took {transfer.DisplayName} x{transfer.Count}");
+    }
+
+    private void TakeAllFromContainer(string referenceFormId)
+    {
+        var transfers = _containerInventories.TakeAll(referenceFormId);
+        foreach (var transfer in transfers)
+            AddInventory(
+                transfer.ItemFormId,
+                transfer.EditorId,
+                transfer.DisplayName,
+                transfer.RecordType,
+                transfer.Count);
+        SynchronizeContainerEmptyMarker(referenceFormId);
+        Save();
+        _containerView!.Refresh(
+            _containerInventories.Snapshot(referenceFormId),
+            BuildPlayerContainerInventory());
+        RefreshHud($"Took all: {transfers.Sum(transfer => transfer.Count)} item(s)");
+    }
+
+    private void CloseContainer()
+    {
+        if (_containerView?.IsOpen != true)
+            return;
+        _containerView.Close();
+        RefreshHud("Container closed");
+    }
+
+    private void SynchronizeContainerEmptyMarker(string referenceFormId)
+    {
+        if (_containerInventories.IsEmpty(referenceFormId))
+            _emptiedContainers.Add(referenceFormId);
+        else
+            _emptiedContainers.Remove(referenceFormId);
     }
 
     internal void SaveAndNotify()
@@ -323,6 +434,7 @@ internal partial class GameplaySession : Node
             _inventory[item.FormId] = new InventoryEntry(
                 item.FormId,
                 item.EditorId,
+                null,
                 item.RecordType,
                 item.Count);
         if (_equippedWeaponFormId is not null &&
@@ -357,6 +469,37 @@ internal partial class GameplaySession : Node
             _doorStates[door.LinkedDoor.ReferenceFormId] = door.LinkedDoor.IsOpen;
         Save();
         RefreshHud($"Door {door.ReferenceFormId}: {(door.IsOpen ? "open" : "closed")}");
+    }
+
+    internal void CrossPortal(
+        string expectedFromCellFormId,
+        string targetCellFormId,
+        DoorInstance sourceDoor)
+    {
+        if (!_activeCellFormId.Equals(expectedFromCellFormId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Portal source CELL is stale: active={_activeCellFormId} " +
+                $"expected={expectedFromCellFormId}");
+        if (!_portalEdges.Contains(PortalEdge.Create(expectedFromCellFormId, targetCellFormId)))
+            throw new InvalidOperationException(
+                $"Portal edge is outside the prepared route: " +
+                $"{expectedFromCellFormId} -> {targetCellFormId}");
+        if (!_worldSpaces.TryGetValue(targetCellFormId, out var targetSpace))
+            throw new InvalidOperationException(
+                $"Portal target CELL is not loaded: {targetCellFormId}");
+        if (!sourceDoor.IsOpen || sourceDoor.LinkedDoor?.IsOpen != true)
+            throw new InvalidOperationException(
+                $"Portal crossing requires an open reciprocal door: {sourceDoor.ReferenceFormId}");
+
+        _activeCellFormId = targetSpace.FormId;
+        _activeCellEditorId = targetSpace.EditorId;
+        _doorStates[sourceDoor.ReferenceFormId] = true;
+        _doorStates[sourceDoor.LinkedDoor.ReferenceFormId] = true;
+        Save();
+        RefreshHud($"Entered {_activeCellEditorId} ({_activeCellFormId})");
+        GD.Print(
+            $"OPENNV_ACTIVE_CELL from={expectedFromCellFormId} " +
+            $"to={_activeCellFormId} door={sourceDoor.ReferenceFormId}");
     }
 
     internal bool Fire(Node3D aimSource, uint collisionMask)
@@ -422,8 +565,9 @@ internal partial class GameplaySession : Node
             : PlayerTransformState.Capture(_player);
         var document = new
         {
-            schema = SaveSchemaV3,
+            schema = SaveSchemaV5,
             cellFormId = _cellFormId,
+            activeCellFormId = _activeCellFormId,
             opening = _openingState,
             inventory = _inventory.Values.OrderBy(entry => entry.ItemFormId, StringComparer.OrdinalIgnoreCase),
             removedReferences = _removedReferences.Order(StringComparer.OrdinalIgnoreCase),
@@ -431,6 +575,20 @@ internal partial class GameplaySession : Node
                 .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase),
             emptiedContainers = _emptiedContainers.Order(StringComparer.OrdinalIgnoreCase),
+            containerInventories = _containerInventories.Capture().Select(container => new
+            {
+                referenceFormId = container.ReferenceFormId,
+                editorId = container.EditorId,
+                displayName = container.DisplayName,
+                items = container.Items.Select(item => new
+                {
+                    itemFormId = item.ItemFormId,
+                    editorId = item.EditorId,
+                    displayName = item.DisplayName,
+                    recordType = item.RecordType,
+                    remainingCount = item.RemainingCount,
+                }),
+            }),
             playerTransform = capturedPlayerTransform is null
                 ? null
                 : new
@@ -472,8 +630,12 @@ internal partial class GameplaySession : Node
 
     internal object Report() => new
     {
-        schema = SaveSchemaV3,
+        schema = SaveSchemaV5,
         savePath = _savePath,
+        routeCellFormId = _cellFormId,
+        activeCellFormId = _activeCellFormId,
+        activeCellEditorId = _activeCellEditorId,
+        activeCellRestored = _activeCellRestored,
         objectiveStage = (int)ObjectiveStage,
         objectiveComplete = ObjectiveComplete,
         inventoryEntries = _inventory.Count,
@@ -487,6 +649,8 @@ internal partial class GameplaySession : Node
         shotsFired = _shotsFired,
         removedReferences = _removedReferences.Count,
         emptiedContainers = _emptiedContainers.Count,
+        containerInventories = _containerInventories.RegisteredContainers,
+        containerRemainingItems = _containerInventories.RemainingItemCount,
         openDoors = _doorStates.Count(entry => entry.Value),
         poolTables = _pools.Count,
         poolBalls = _pools.Values.Sum(table => table.BallCount),
@@ -517,15 +681,28 @@ internal partial class GameplaySession : Node
         using var document = JsonDocument.Parse(File.ReadAllText(_savePath));
         var root = document.RootElement;
         var schema = root.GetProperty("schema").GetString();
-        if (schema != SaveSchemaV1 && schema != SaveSchemaV2 && schema != SaveSchemaV3)
+        if (schema != SaveSchemaV1 && schema != SaveSchemaV2 &&
+            schema != SaveSchemaV3 && schema != SaveSchemaV4 && schema != SaveSchemaV5)
             throw new InvalidOperationException($"Unexpected sandbox save schema: {_savePath}");
         if (root.GetProperty("cellFormId").GetString() != cellFormId)
             throw new InvalidOperationException($"Sandbox save belongs to another cell: {_savePath}");
+        if (schema == SaveSchemaV4 || schema == SaveSchemaV5)
+        {
+            if (!root.TryGetProperty("activeCellFormId", out var activeCell) ||
+                activeCell.ValueKind != JsonValueKind.String)
+                throw new InvalidOperationException("Campaign save has no active CELL identity.");
+            _loadedActiveCellFormId = FalloutFormId.Normalize(activeCell.GetString()!);
+            _activeCellFormId = _loadedActiveCellFormId;
+        }
         foreach (var item in root.GetProperty("inventory").EnumerateArray())
         {
             var entry = new InventoryEntry(
                 item.GetProperty("ItemFormId").GetString()!,
                 item.GetProperty("EditorId").GetString()!,
+                item.TryGetProperty("DisplayName", out var displayName) &&
+                    displayName.ValueKind == JsonValueKind.String
+                        ? displayName.GetString()
+                        : null,
                 item.GetProperty("RecordType").GetString()!,
                 item.GetProperty("Count").GetInt32());
             _inventory.Add(entry.ItemFormId, entry);
@@ -536,6 +713,14 @@ internal partial class GameplaySession : Node
             _doorStates.Add(property.Name, property.Value.GetBoolean());
         foreach (var value in root.GetProperty("emptiedContainers").EnumerateArray())
             _emptiedContainers.Add(value.GetString()!);
+        if (schema == SaveSchemaV5)
+        {
+            if (!root.TryGetProperty("containerInventories", out var containers))
+                throw new InvalidOperationException(
+                    "Campaign save has no container inventory state.");
+            _containerInventories.Load(containers);
+            _containerInventories.ValidateEmptiedReferences(_emptiedContainers);
+        }
         _equippedWeaponFormId = root.GetProperty("equippedWeaponFormId").ValueKind == JsonValueKind.String
             ? root.GetProperty("equippedWeaponFormId").GetString()
             : null;
@@ -565,7 +750,7 @@ internal partial class GameplaySession : Node
                     new PoolTableInstance.PoolState(referenceFormId, balls));
             }
         }
-        if (schema == SaveSchemaV3 &&
+        if ((schema == SaveSchemaV3 || schema == SaveSchemaV4 || schema == SaveSchemaV5) &&
             root.TryGetProperty("opening", out var opening) &&
             opening.ValueKind == JsonValueKind.Object)
             _openingState = OpeningCampaignState.Parse(opening);
@@ -667,12 +852,50 @@ internal partial class GameplaySession : Node
         _openingState.Validate();
     }
 
-    private void AddInventory(string itemFormId, string editorId, string recordType, int count)
+    private PlayerContainerInventorySnapshot BuildPlayerContainerInventory()
+    {
+        var named = _inventory.Values
+            .Where(item => !string.IsNullOrWhiteSpace(item.DisplayName))
+            .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(item => new PlayerContainerInventoryItem(item.DisplayName!, item.Count))
+            .ToArray();
+        var otherItemCount = _inventory.Values
+            .Where(item => string.IsNullOrWhiteSpace(item.DisplayName))
+            .Sum(item => item.Count);
+        return new PlayerContainerInventorySnapshot(named, otherItemCount);
+    }
+
+    private void AddInventory(
+        string itemFormId,
+        string editorId,
+        string? displayName,
+        string recordType,
+        int count)
     {
         if (_inventory.TryGetValue(itemFormId, out var current))
-            _inventory[itemFormId] = current with { Count = current.Count + count };
+        {
+            if (!string.IsNullOrWhiteSpace(current.DisplayName) &&
+                !string.IsNullOrWhiteSpace(displayName) &&
+                !current.DisplayName.Equals(displayName, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Owned item display names disagree for {itemFormId}.");
+            _inventory[itemFormId] = current with
+            {
+                DisplayName = current.DisplayName ?? displayName,
+                Count = checked(current.Count + count),
+            };
+        }
         else
-            _inventory.Add(itemFormId, new InventoryEntry(itemFormId, editorId, recordType, count));
+        {
+            _inventory.Add(
+                itemFormId,
+                new InventoryEntry(
+                    itemFormId,
+                    editorId,
+                    string.IsNullOrWhiteSpace(displayName) ? null : displayName,
+                    recordType,
+                    count));
+        }
     }
 
     private void RefreshHud(string status)
@@ -704,6 +927,16 @@ internal partial class GameplaySession : Node
         if (values.Length != 4)
             throw new InvalidOperationException("Pool save quaternion must contain four values.");
         return new Quaternion(values[0], values[1], values[2], values[3]).Normalized();
+    }
+
+    private sealed record WorldSpace(string FormId, string EditorId);
+
+    private readonly record struct PortalEdge(string FirstCellFormId, string SecondCellFormId)
+    {
+        internal static PortalEdge Create(string firstCellFormId, string secondCellFormId) =>
+            string.Compare(firstCellFormId, secondCellFormId, StringComparison.OrdinalIgnoreCase) <= 0
+                ? new PortalEdge(firstCellFormId.ToLowerInvariant(), secondCellFormId.ToLowerInvariant())
+                : new PortalEdge(secondCellFormId.ToLowerInvariant(), firstCellFormId.ToLowerInvariant());
     }
 
     private sealed record PlayerTransformState(Vector3 Position, Quaternion Rotation)
@@ -794,11 +1027,14 @@ internal partial class GameplaySession : Node
         string AmmoEditorId,
         int Damage,
         int ClipSize,
-        int ReserveRounds);
+        int ReserveRounds,
+        string? WeaponDisplayName = null,
+        string? AmmoDisplayName = null);
 
     internal readonly record struct InventoryEntry(
         string ItemFormId,
         string EditorId,
+        string? DisplayName,
         string RecordType,
         int Count);
 

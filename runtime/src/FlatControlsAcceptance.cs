@@ -167,7 +167,7 @@ internal static class FlatControlsAcceptance
         }
     }
 
-    private static async Task PulseKeyBinding(
+    internal static async Task PulseKeyBinding(
         RuntimeCoordinator host,
         DesktopKeyBindingConfiguration binding,
         int settleFrames)
@@ -178,7 +178,7 @@ internal static class FlatControlsAcceptance
         await WaitPhysicsFrames(host, settleFrames);
     }
 
-    private static async Task PulseMouseBinding(
+    internal static async Task PulseMouseBinding(
         RuntimeCoordinator host,
         DesktopMouseBindingConfiguration binding,
         int settleFrames)
@@ -189,7 +189,7 @@ internal static class FlatControlsAcceptance
         await WaitPhysicsFrames(host, settleFrames);
     }
 
-    private static void ApplyMouseLook(
+    internal static void ApplyMouseLook(
         CellPlayer player,
         Vector3 target,
         PlayerConfiguration configuration)
@@ -203,7 +203,24 @@ internal static class FlatControlsAcceptance
             configuration.MouseSensitivityRadiansPerPixel);
     }
 
-    private static void ApplyMouseRotation(
+    internal static void ApplyMouseYaw(
+        CellPlayer player,
+        Vector3 target,
+        PlayerConfiguration configuration)
+    {
+        var direction = target - player.GlobalPosition;
+        direction.Y = 0.0f;
+        if (direction.IsZeroApprox())
+            return;
+        direction = direction.Normalized();
+        var desiredYaw = MathF.Atan2(-direction.X, -direction.Z);
+        ApplyMouseRotation(
+            Mathf.AngleDifference(player.Rotation.Y, desiredYaw),
+            0.0f,
+            configuration.MouseSensitivityRadiansPerPixel);
+    }
+
+    internal static void ApplyMouseRotation(
         float yawDelta,
         float pitchDelta,
         float sensitivity)
@@ -214,7 +231,7 @@ internal static class FlatControlsAcceptance
         });
     }
 
-    private static async Task WaitPhysicsFrames(RuntimeCoordinator host, int frameCount)
+    internal static async Task WaitPhysicsFrames(RuntimeCoordinator host, int frameCount)
     {
         for (var frame = 0; frame < frameCount; frame++)
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);

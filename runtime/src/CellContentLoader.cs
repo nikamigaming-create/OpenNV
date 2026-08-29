@@ -5,7 +5,7 @@ namespace OpenNV.Runtime;
 
 internal static class CellContentLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v12";
+    private const string CellSceneSchema = "opennv-cell-scene/v13";
 
     internal static LoadedContent Load(
         string scenePath,
@@ -30,6 +30,7 @@ internal static class CellContentLoader
         var prototypes = new Dictionary<string, VerifiedGltfLoader.LoadedGltf>(StringComparer.Ordinal);
         var assetLogicalPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var collisionAssets = new HashSet<string>(StringComparer.Ordinal);
+        var landscapeCollisionAssets = new HashSet<string>(StringComparer.Ordinal);
         try
         {
             var textures = RuntimeMaterialLoader.LoadTextures(source, configuration.Renderer);
@@ -64,10 +65,12 @@ internal static class CellContentLoader
                 var collision = asset.GetProperty("collision");
                 if (collision.GetProperty("enabled").GetBoolean())
                 {
-                    if (loaded.CollisionScene is null &&
-                        collision.GetProperty("source").GetString() != "LAND-height-grid")
+                    var collisionSource = collision.GetProperty("source").GetString();
+                    if (loaded.CollisionScene is null && collisionSource != "LAND-height-grid")
                         throw new InvalidOperationException($"Authored collision payload is missing: {assetId}");
                     collisionAssets.Add(assetId);
+                    if (collisionSource == "LAND-height-grid")
+                        landscapeCollisionAssets.Add(assetId);
                 }
                 prototypes.Add(assetId, loaded);
             }
@@ -187,6 +190,7 @@ internal static class CellContentLoader
             Node3D? poolRackPlacement = null;
             var poolBalls = new List<PoolBallInstance>();
             var collisionMeshes = 0;
+            var landscapeCollisionMeshes = new List<MeshInstance3D>();
             var startingWeaponFormId = source.TryGetProperty("firstPerson", out var firstPersonSource)
                 ? firstPersonSource.GetProperty("startingLoadout").GetProperty("weaponFormId").GetString()
                 : null;
@@ -272,12 +276,21 @@ internal static class CellContentLoader
                 else if (interactionType == "door")
                 {
                     var destination = reference.GetProperty("teleportDestinationFormId");
+                    var destinationTransform = reference.GetProperty("teleportDestinationTransform");
+                    DoorInstance.TeleportDestination? teleportDestination = null;
+                    if (destinationTransform.ValueKind == JsonValueKind.Object)
+                    {
+                        teleportDestination = new DoorInstance.TeleportDestination(
+                            ReadVector(destinationTransform.GetProperty("positionGameUnits")),
+                            destinationTransform.GetProperty("yawGodotRadians").GetSingle());
+                    }
                     var door = new DoorInstance { Name = $"DOOR_{referenceFormId}" };
                     door.Configure(
                         referenceFormId,
                         yaw,
                         configuration.Door.OpenAngleDegrees,
-                        destination.ValueKind == JsonValueKind.String ? destination.GetString() : null);
+                        destination.ValueKind == JsonValueKind.String ? destination.GetString() : null,
+                        teleportDestination);
                     door.SetOpen(session.IsDoorOpen(referenceFormId));
                     doors.Add(referenceFormId, door);
                     placement = door;
@@ -299,6 +312,9 @@ internal static class CellContentLoader
                         referenceFormId,
                         interaction.GetProperty("itemFormId").GetString()!,
                         interaction.GetProperty("itemEditorId").GetString()!,
+                        interaction.TryGetProperty("itemDisplayName", out var pickupDisplayName)
+                            ? pickupDisplayName.GetString()
+                            : null,
                         interaction.GetProperty("itemRecordType").GetString()!,
                         interaction.GetProperty("count").GetInt32(),
                         weapon);
@@ -313,6 +329,9 @@ internal static class CellContentLoader
                         .Select(item => new ContainerInstance.Entry(
                             item.GetProperty("itemFormId").GetString()!,
                             item.GetProperty("itemEditorId").GetString()!,
+                            item.TryGetProperty("itemDisplayName", out var itemDisplayName)
+                                ? itemDisplayName.GetString() ?? ""
+                                : "",
                             item.GetProperty("itemRecordType").GetString()!,
                             item.GetProperty("count").GetInt32(),
                             item.GetProperty("resolved").GetBoolean()))
@@ -321,6 +340,9 @@ internal static class CellContentLoader
                     container.Configure(
                         referenceFormId,
                         reference.GetProperty("baseEditorId").GetString()!,
+                        interaction.TryGetProperty("displayName", out var containerDisplayName)
+                            ? containerDisplayName.GetString() ?? ""
+                            : "",
                         entries);
                     container.Basis = new Basis(rotation);
                     containers.Add(referenceFormId, container);
@@ -380,13 +402,23 @@ internal static class CellContentLoader
                         ?? throw new InvalidOperationException($"Could not duplicate authored collision: {assetId}");
                     collisionInstance.Name = $"AUTHORED_COLLISION_{assetId}";
                     placement.AddChild(collisionInstance);
-                    foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionInstance))
+                    if (baseEditorId.StartsWith(
+                            "WastelandRoad",
+                            StringComparison.OrdinalIgnoreCase))
+                        collisionMeshes += BuildWalkableRoadCollision(
+                            placement,
+                            collisionInstance,
+                            renderLayer);
+                    else
                     {
-                        collisionMesh.Visible = false;
-                        collisionMesh.CreateTrimeshCollision();
-                        foreach (var body in Descendants<StaticBody3D>(collisionMesh))
-                            body.CollisionLayer = renderLayer;
-                        collisionMeshes++;
+                        foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionInstance))
+                        {
+                            collisionMesh.Visible = false;
+                            collisionMesh.CreateTrimeshCollision();
+                            foreach (var body in Descendants<StaticBody3D>(collisionMesh))
+                                body.CollisionLayer = renderLayer;
+                            collisionMeshes++;
+                        }
                     }
                 }
                 else if (buildCollision &&
@@ -395,13 +427,24 @@ internal static class CellContentLoader
                 {
                     foreach (var mesh in Descendants<MeshInstance3D>(instance))
                     {
-                        mesh.CreateTrimeshCollision();
-                        foreach (var body in Descendants<StaticBody3D>(mesh))
-                            body.CollisionLayer = renderLayer;
-                        collisionMeshes++;
+                        if (landscapeCollisionAssets.Contains(assetId))
+                            landscapeCollisionMeshes.Add(mesh);
+                        else
+                        {
+                            mesh.CreateTrimeshCollision();
+                            foreach (var body in Descendants<StaticBody3D>(mesh))
+                                body.CollisionLayer = renderLayer;
+                            collisionMeshes++;
+                        }
                     }
                 }
                 loadedReferences++;
+            }
+
+            if (buildCollision && landscapeCollisionMeshes.Count > 0)
+            {
+                BuildLandscapeCollision(root, landscapeCollisionMeshes, renderLayer);
+                collisionMeshes++;
             }
 
             if (poolManifest is not null)
@@ -453,8 +496,14 @@ internal static class CellContentLoader
                     startingLoadout = new StartingLoadout(
                         loadout.GetProperty("weaponFormId").GetString()!,
                         loadout.GetProperty("weaponEditorId").GetString()!,
+                        loadout.TryGetProperty("weaponDisplayName", out var weaponDisplayName)
+                            ? weaponDisplayName.GetString()
+                            : null,
                         loadout.GetProperty("ammoFormId").GetString()!,
                         loadout.GetProperty("ammoEditorId").GetString()!,
+                        loadout.TryGetProperty("ammoDisplayName", out var ammoDisplayName)
+                            ? ammoDisplayName.GetString()
+                            : null,
                         loadout.GetProperty("damage").GetInt32(),
                         loadout.GetProperty("clipSize").GetInt32(),
                         loadout.GetProperty("reserveRounds").GetInt32());
@@ -794,6 +843,111 @@ internal static class CellContentLoader
         return new Quaternion(values[0], values[1], values[2], values[3]).Normalized();
     }
 
+    private static void BuildLandscapeCollision(
+        Node3D root,
+        IReadOnlyList<MeshInstance3D> landscapeMeshes,
+        uint collisionLayer)
+    {
+        var vertices = new List<Vector3>();
+        var triangleCount = 0;
+        foreach (var mesh in landscapeMeshes)
+        {
+            if (mesh.Mesh is null)
+                throw new InvalidOperationException("Owned LAND presentation mesh is missing.");
+            var faces = mesh.Mesh.GetFaces();
+            if (faces.Length == 0 || faces.Length % 3 != 0)
+                throw new InvalidOperationException("Owned LAND collision faces are malformed.");
+            var rootLocal = root.GlobalTransform.AffineInverse() * mesh.GlobalTransform;
+            foreach (var face in faces)
+                vertices.Add(rootLocal * face);
+            triangleCount += faces.Length / 3;
+        }
+        var surface = new SurfaceTool();
+        surface.Begin(Mesh.PrimitiveType.Triangles);
+        foreach (var vertex in vertices)
+            surface.AddVertex(vertex);
+        surface.Index();
+        var collisionMesh = surface.Commit() ??
+            throw new InvalidOperationException("Could not merge owned LAND collision mesh.");
+        var shape = collisionMesh.CreateTrimeshShape() ??
+            throw new InvalidOperationException("Could not construct owned LAND collision shape.");
+        if (shape is ConcavePolygonShape3D concave)
+            concave.BackfaceCollision = true;
+        var body = new StaticBody3D
+        {
+            Name = "LAND_ACTIVE_SET_COLLISION",
+            CollisionLayer = collisionLayer,
+            CollisionMask = 0,
+        };
+        body.SetMeta("opennv_land_meshes", landscapeMeshes.Count);
+        body.SetMeta("opennv_land_triangles", triangleCount);
+        body.SetMeta("opennv_collision_role", "owned-land-merged-triangles");
+        body.AddChild(new CollisionShape3D
+        {
+            Name = "LAND_ACTIVE_SET_COLLISION_SHAPE",
+            Shape = shape,
+        });
+        root.AddChild(body);
+    }
+
+    private static int BuildWalkableRoadCollision(
+        Node3D placement,
+        Node3D collisionRoot,
+        uint collisionLayer)
+    {
+        var surface = new SurfaceTool();
+        surface.Begin(Mesh.PrimitiveType.Triangles);
+        var triangles = 0;
+        foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionRoot))
+        {
+            collisionMesh.Visible = false;
+            if (collisionMesh.Mesh is null)
+                throw new InvalidOperationException("Owned road collision mesh is missing.");
+            var faces = collisionMesh.Mesh.GetFaces();
+            if (faces.Length == 0 || faces.Length % 3 != 0)
+                throw new InvalidOperationException("Owned road collision faces are malformed.");
+            var placementLocal = placement.GlobalTransform.AffineInverse() *
+                collisionMesh.GlobalTransform;
+            for (var index = 0; index < faces.Length; index += 3)
+            {
+                var first = placementLocal * faces[index];
+                var second = placementLocal * faces[index + 1];
+                var third = placementLocal * faces[index + 2];
+                var normal = (second - first).Cross(third - first).Normalized();
+                var worldNormal = (placement.GlobalBasis * normal).Normalized();
+                if (worldNormal.Dot(Vector3.Up) < 0.5f)
+                    continue;
+                surface.AddVertex(first);
+                surface.AddVertex(second);
+                surface.AddVertex(third);
+                triangles++;
+            }
+        }
+        if (triangles == 0)
+            throw new InvalidOperationException("Owned road has no walkable collision faces.");
+        var mesh = surface.Commit() ??
+            throw new InvalidOperationException("Could not combine owned road collision.");
+        var shape = mesh.CreateTrimeshShape() ??
+            throw new InvalidOperationException("Could not construct owned road collision shape.");
+        if (shape is ConcavePolygonShape3D concave)
+            concave.BackfaceCollision = true;
+        var body = new StaticBody3D
+        {
+            Name = "WALKABLE_ROAD_COLLISION",
+            CollisionLayer = collisionLayer,
+            CollisionMask = 0,
+        };
+        body.SetMeta("opennv_collision_role", "owned-wasteland-road-walkable-deck");
+        body.SetMeta("opennv_collision_triangles", triangles);
+        body.AddChild(new CollisionShape3D
+        {
+            Name = "WALKABLE_ROAD_COLLISION_SHAPE",
+            Shape = shape,
+        });
+        placement.AddChild(body);
+        return 1;
+    }
+
     private static void SetRenderLayer(Node root, uint layer)
     {
         foreach (var mesh in Descendants<MeshInstance3D>(root))
@@ -858,7 +1012,22 @@ internal static class CellContentLoader
         Vector3 MuzzlePosition,
         StartingLoadout? StartingLoadout,
         FirstPersonRig.Contract? FirstPersonRig,
-        LightingContract Lighting);
+        LightingContract Lighting)
+    {
+        internal Vector3 GameToWorld(Vector3 position) => Root.ToGlobal(new Vector3(
+            position.X - OriginGameUnits.X,
+            position.Z - OriginGameUnits.Z,
+            -(position.Y - OriginGameUnits.Y)));
+
+        internal Vector3 WorldToGame(Vector3 position)
+        {
+            var local = Root.ToLocal(position);
+            return new Vector3(
+                local.X + OriginGameUnits.X,
+                -local.Z + OriginGameUnits.Y,
+                local.Y + OriginGameUnits.Z);
+        }
+    }
 
     internal readonly record struct SourceReference(
         string FormId,
@@ -933,8 +1102,10 @@ internal static class CellContentLoader
     internal readonly record struct StartingLoadout(
         string WeaponFormId,
         string WeaponEditorId,
+        string? WeaponDisplayName,
         string AmmoFormId,
         string AmmoEditorId,
+        string? AmmoDisplayName,
         int Damage,
         int ClipSize,
         int ReserveRounds);
