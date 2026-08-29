@@ -12,6 +12,9 @@ internal sealed record Fo2ArroyoPlayerProfile(
     string Id,
     string FloorCollisionMode,
     string BlockedMovementMode,
+    string PlayerPresentationMode,
+    string PlayerDirectionMode,
+    string PlayerBillboardMode,
     float CapsuleRadiusMeters,
     float CapsuleHeightMeters,
     float SpawnCenterHeightMeters,
@@ -60,6 +63,7 @@ internal sealed record Fo2ArroyoPlayerProfile(
         var map = root.GetProperty("map");
         var arrival = root.GetProperty("arrival");
         var semantics = root.GetProperty("sourceSemantics");
+        var presentation = root.GetProperty("presentation");
         var player = root.GetProperty("player");
         var camera = root.GetProperty("camera");
         var input = root.GetProperty("input");
@@ -85,10 +89,24 @@ internal sealed record Fo2ArroyoPlayerProfile(
                 "source-walk-mask-kinematic-gate-v1" ||
             RequiredString(semantics, "multihexCoverage") !=
                 "central-source-hex-only-unresolved" ||
+            RequiredString(presentation, "mode") !=
+                "owned-critter-frm-direction-frame-zero" ||
+            RequiredString(presentation, "recipeId") !=
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedRecipeId ||
+            RequiredString(presentation, "fid") !=
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedFid ||
+            RequiredString(presentation, "logicalPath") !=
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath ||
+            presentation.GetProperty("frame").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.IdleFrame ||
+            RequiredString(presentation, "directionMode") !=
+                "nearest-source-hex-direction-from-input" ||
+            RequiredString(presentation, "billboard") != "fixed-y" ||
+            presentation.GetProperty("animationPlayback").GetBoolean() ||
             RequiredString(camera, "projection") != "orthographic-follow" ||
             promotion.GetProperty("runtimeReady").GetBoolean() ||
             promotion.GetProperty("persistentInteraction").GetBoolean() ||
-            promotion.GetProperty("playerArtLoaded").GetBoolean() ||
+            !promotion.GetProperty("playerArtLoaded").GetBoolean() ||
             promotion.GetProperty("playableCampaign").GetBoolean() ||
             promotion.GetProperty("collisionParity").GetBoolean() ||
             promotion.GetProperty("walkabilityParity").GetBoolean())
@@ -101,6 +119,9 @@ internal sealed record Fo2ArroyoPlayerProfile(
             RequiredString(root, "id"),
             RequiredString(semantics, "floorCollisionMode"),
             RequiredString(semantics, "blockedMovementMode"),
+            RequiredString(presentation, "mode"),
+            RequiredString(presentation, "directionMode"),
+            RequiredString(presentation, "billboard"),
             Finite(player, "capsuleRadiusMeters"),
             Finite(player, "capsuleHeightMeters"),
             Finite(player, "spawnCenterHeightMeters"),

@@ -2,7 +2,7 @@ using Godot;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
-public sealed partial class Fo2ArroyoCavesPlayProofHost : Node3D
+public sealed partial class Fo2ArroyoCavesInteractiveHost : Node3D
 {
     public override void _Ready()
     {
@@ -25,17 +25,22 @@ public sealed partial class Fo2ArroyoCavesPlayProofHost : Node3D
                 catalog,
                 scene,
                 playerPresentation);
-            _ = Fo2ArroyoCavesPlayProof.Run(
-                this,
-                catalog,
-                scene,
-                runtime,
-                Fo2ArroyoCavesProofOptions.Require(options, "fo2-arroyo-player-proof"));
+            GD.Print(
+                $"OPENNV_FO2_ARROYO_INTERACTIVE_READY map={scene.MapIndex} " +
+                $"elevation={scene.Elevation} tile={runtime.Player.ArrivalTile} " +
+                $"fid={Fo2ArroyoPlayerPresentationCatalog.ExpectedFid} " +
+                "controls=WASD exit=Escape");
         }
         catch (Exception exception)
         {
-            GD.PushError($"OPENNV_FO2_ARROYO_PLAYER_FAIL {exception}");
+            GD.PushError($"OPENNV_FO2_ARROYO_INTERACTIVE_FAIL {exception}");
             GetTree().Quit(1);
         }
+    }
+
+    public override void _UnhandledKeyInput(InputEvent inputEvent)
+    {
+        if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
+            GetTree().Quit();
     }
 }

@@ -20,6 +20,16 @@
     "blockedMovementMode": "source-walk-mask-kinematic-gate-v1",
     "multihexCoverage": "central-source-hex-only-unresolved"
   },
+  "presentation": {
+    "mode": "owned-critter-frm-direction-frame-zero",
+    "recipeId": "fo2-arroyo-player-presentation-v1",
+    "fid": "0100003e",
+    "logicalPath": "art\\critters\\hmwarraa.frm",
+    "frame": 0,
+    "directionMode": "nearest-source-hex-direction-from-input",
+    "billboard": "fixed-y",
+    "animationPlayback": false
+  },
   "player": {
     "capsuleRadiusMeters": 0.28,
     "capsuleHeightMeters": 1.7,
@@ -62,13 +72,13 @@
   "promotion": {
     "runtimeReady": false,
     "persistentInteraction": false,
-    "playerArtLoaded": false,
+    "playerArtLoaded": true,
     "playableCampaign": false,
     "collisionParity": false,
     "walkabilityParity": false
   },
   "unsupported": [
-    "Chosen One character art, animation, character creation, stats, inventory, combat, scripts, quests, audio, HUD, Pip-Boy, and save state",
+    "Chosen One character creation, appearance selection, animation beyond idle frame zero, stats, inventory, combat, scripts, quests, audio, HUD, Pip-Boy, and save state",
     "multihex footprint expansion beyond the stored central source hex",
     "retail collision and walkability parity",
     "FPS and OpenXR interaction",

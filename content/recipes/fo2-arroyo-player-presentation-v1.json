@@ -1,0 +1,28 @@
+{
+  "schema": "opennv-fo2-player-presentation-recipe/v1",
+  "id": "fo2-arroyo-player-presentation-v1",
+  "campaign": "Fallout2",
+  "sourceProfileSchema": "opennv-fo2-owned-profile/v1",
+  "overlayOrderHighToLow": [
+    "patch000.dat",
+    "critter.dat",
+    "master.dat"
+  ],
+  "player": {
+    "role": "Chosen One male tribal source presentation",
+    "critterListLogicalPath": "art\\critters\\critters.lst",
+    "artIndex": 62,
+    "artListEntry": "hmwarr,11,1",
+    "objectType": 1,
+    "fid": "0100003e",
+    "idleFrmLogicalPath": "art\\critters\\hmwarraa.frm",
+    "frame": 0,
+    "directions": [0, 1, 2, 3, 4, 5]
+  },
+  "unsupported": [
+    "sex or appearance selection and character creation",
+    "animation playback beyond source idle frame zero",
+    "stats, inventory, combat, scripts, quests, audio, HUD, Pip-Boy, and save state",
+    "retail parity, FPS, OpenXR, and launcher playability"
+  ]
+}

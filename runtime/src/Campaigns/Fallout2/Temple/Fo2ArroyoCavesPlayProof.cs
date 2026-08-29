@@ -31,6 +31,7 @@ internal static class Fo2ArroyoCavesPlayProof
             Directory.CreateDirectory(output);
             var profile = runtime.Profile;
             var player = runtime.Player;
+            var presentation = player.Presentation;
             for (var frame = 0; frame < GroundingFrames && !player.IsOnFloor(); frame++)
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);
             if (!player.IsOnFloor() || player.CurrentTile != catalog.ArrivalTile ||
@@ -45,6 +46,8 @@ internal static class Fo2ArroyoCavesPlayProof
                     "Fallout 2 Arroyo arrival player missed its source floor support.");
             await WaitForDraws(host, SettleFrames);
             var startFrame = Capture(host, output, "player-arrival-start.png");
+            var startDirection = presentation.Direction;
+            var startPlayerPngSha256 = presentation.CurrentFrame.PngSha256;
 
             var startPosition = player.Position;
             var firstNeighborReached = false;
@@ -72,6 +75,9 @@ internal static class Fo2ArroyoCavesPlayProof
             var endFloor = CastFloor(space, player, player.Position);
             await WaitForDraws(host, SettleFrames);
             var endFrame = Capture(host, output, "player-source-boundary-stop.png");
+            var expectedEndDirection = Fo2ArroyoCavesPlayerBody.DirectionForMovement(
+                player.CurrentTile,
+                Vector3.Back);
             var expectedTransitions =
                 (profile.AcceptanceLastWalkableTile - catalog.ArrivalTile) /
                 Fo1HexMath.Width;
@@ -89,12 +95,17 @@ internal static class Fo2ArroyoCavesPlayProof
                     profile.AcceptanceGroundHeightToleranceMeters &&
                 endFloor.Hit &&
                 endFloor.ColliderPath == runtime.FloorCollisionPath &&
+                presentation.Visible &&
+                presentation.Texture is not null &&
+                startDirection == catalog.ArrivalRotation &&
+                presentation.Direction == expectedEndDirection &&
+                startPlayerPngSha256 != presentation.CurrentFrame.PngSha256 &&
                 startFrame.Sha256 != endFrame.Sha256;
             var report = new
             {
                 schema = "opennv-fo2-arroyo-player-runtime-proof/v1",
                 status = passed
-                    ? "pass-input-driven-source-gated-player-runtime-no-character-art-or-save"
+                    ? "pass-input-driven-source-gated-player-runtime-owned-hmwarr-no-save"
                     : "fail-player-runtime-gate",
                 campaign = "Fallout2",
                 slice = "ArroyoCaves",
@@ -116,6 +127,27 @@ internal static class Fo2ArroyoCavesPlayProof
                     id = profile.Id,
                     floorCollisionMode = profile.FloorCollisionMode,
                     blockedMovementMode = profile.BlockedMovementMode,
+                },
+                playerPresentation = new
+                {
+                    cache = runtime.PlayerPresentation.ManifestPath,
+                    cacheManifestSha256 = runtime.PlayerPresentation.ManifestSha256,
+                    recipeSha256 = runtime.PlayerPresentation.RecipeSha256,
+                    critterListSha256 = runtime.PlayerPresentation.CritterListSha256,
+                    fid = Fo2ArroyoPlayerPresentationCatalog.ExpectedFid,
+                    logicalPath = Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath,
+                    sourceSha256 = runtime.PlayerPresentation.SourceSha256,
+                    sourceDirections = runtime.PlayerPresentation.Directions.Count,
+                    sourceFramesPerDirection = runtime.PlayerPresentation.FramesPerDirection,
+                    admittedFrame = Fo2ArroyoPlayerPresentationCatalog.IdleFrame,
+                    animationPlayback = false,
+                    billboard = profile.PlayerBillboardMode,
+                    directionMode = profile.PlayerDirectionMode,
+                    startDirection,
+                    startPngSha256 = startPlayerPngSha256,
+                    endDirection = presentation.Direction,
+                    endPngSha256 = presentation.CurrentFrame.PngSha256,
+                    visible = presentation.Visible,
                 },
                 arrival = new
                 {
@@ -171,9 +203,10 @@ internal static class Fo2ArroyoCavesPlayProof
                     inputDrivenMovement = passed,
                     physicalFloorSupport = passed,
                     sourceMaskCollisionGate = passed,
-                    characterArtLoaded = false,
+                    characterArtLoaded = passed,
                     playerStatePersistent = false,
                     interactive = false,
+                    humanInteractiveEntryAvailable = true,
                     playableCampaign = false,
                     launcherPlayable = false,
                     retailParityReviewed = false,

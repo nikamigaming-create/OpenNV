@@ -4,6 +4,7 @@ namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2ArroyoCavesPlayerRuntimeCoverage(
     Fo2ArroyoPlayerProfile Profile,
+    Fo2ArroyoPlayerPresentationCatalog PlayerPresentation,
     string FloorCollisionPath,
     int FloorSupportPatches,
     int FloorCollisionTriangles,
@@ -14,8 +15,12 @@ internal static class Fo2ArroyoCavesPlayerRuntime
 {
     internal static Fo2ArroyoCavesPlayerRuntimeCoverage Build(
         Fo2ArroyoCavesPresentationCatalog catalog,
-        Fo2ArroyoCavesSceneCoverage scene)
+        Fo2ArroyoCavesSceneCoverage scene,
+        Fo2ArroyoPlayerPresentationCatalog playerPresentation)
     {
+        if (playerPresentation.SourceProfileId != catalog.SourceProfileId)
+            throw new InvalidOperationException(
+                "Fallout 2 Arroyo player/map source profiles differ.");
         var profile = Fo2ArroyoPlayerProfile.Load(catalog);
         var component = EntryComponent(catalog.ArrivalTile, catalog.Walkable);
         if (component.Count != catalog.ArrivalComponentHexes ||
@@ -59,9 +64,15 @@ internal static class Fo2ArroyoCavesPlayerRuntime
         Fo2ArroyoCavesInput.Configure(profile);
         var player = new Fo2ArroyoCavesPlayerBody();
         scene.Root.AddChild(player);
-        player.Configure(catalog, profile, component);
+        player.Configure(
+            catalog,
+            profile,
+            component,
+            playerPresentation,
+            scene.SourcePixelsPerMeter);
         return new Fo2ArroyoCavesPlayerRuntimeCoverage(
             profile,
+            playerPresentation,
             floorBody.GetPath().ToString(),
             floorPatches.Length,
             floorPatches.Length * 2,
@@ -119,6 +130,7 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
 {
     private Fo2ArroyoPlayerProfile? _profile;
     private HashSet<int>? _arrivalComponent;
+    private Fo2ArroyoPlayerPresentation? _presentation;
     private Vector3 _spawnWorldMeters;
 
     internal int ArrivalTile { get; private set; }
@@ -127,6 +139,8 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
     internal int RejectedMovementFrames { get; private set; }
     internal int LastRejectedCandidateTile { get; private set; } = -1;
     internal Vector3 SpawnWorldMeters => _spawnWorldMeters;
+    internal Fo2ArroyoPlayerPresentation Presentation => _presentation ??
+        throw new InvalidOperationException("Fallout 2 player presentation is not configured.");
     internal float HorizontalDistanceFromSpawn => new Vector2(
         Position.X - _spawnWorldMeters.X,
         Position.Z - _spawnWorldMeters.Z).Length();
@@ -134,7 +148,9 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
     internal void Configure(
         Fo2ArroyoCavesPresentationCatalog catalog,
         Fo2ArroyoPlayerProfile profile,
-        HashSet<int> arrivalComponent)
+        HashSet<int> arrivalComponent,
+        Fo2ArroyoPlayerPresentationCatalog playerPresentation,
+        float sourcePixelsPerMeter)
     {
         if (_profile is not null ||
             arrivalComponent.Count != catalog.ArrivalComponentHexes ||
@@ -148,7 +164,7 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         _spawnWorldMeters = Fo1HexMath.Center(ArrivalTile) +
             Vector3.Up * profile.SpawnCenterHeightMeters;
         Position = _spawnWorldMeters;
-        Name = "MAP_3_ARRIVAL_PLAYER_BODY_NO_CHARACTER_ART";
+        Name = "MAP_3_ARRIVAL_CHOSEN_ONE_PLAYER_BODY";
         CollisionLayer = 1;
         CollisionMask = 1;
         MotionMode = MotionModeEnum.Grounded;
@@ -162,7 +178,9 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         SetMeta("blocked_movement_mode", profile.BlockedMovementMode);
         SetMeta("arrival_tile", ArrivalTile);
         SetMeta("arrival_rotation", catalog.ArrivalRotation);
-        SetMeta("character_art_loaded", false);
+        SetMeta("character_art_loaded", true);
+        SetMeta("character_fid", Fo2ArroyoPlayerPresentationCatalog.ExpectedFid);
+        SetMeta("character_source_sha256", playerPresentation.SourceSha256);
         AddChild(new CollisionShape3D
         {
             Name = "PLAYER_CAPSULE_COLLISION",
@@ -173,6 +191,12 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
                 Height = profile.CapsuleHeightMeters,
             },
         });
+        _presentation = new Fo2ArroyoPlayerPresentation(
+            playerPresentation,
+            sourcePixelsPerMeter,
+            profile.SpawnCenterHeightMeters,
+            catalog.ArrivalRotation);
+        AddChild(_presentation);
         var camera = new Camera3D
         {
             Name = "ARROYO_PLAYER_FOLLOW_CAMERA",
@@ -201,6 +225,8 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         var desired = new Vector3(input.X, 0.0f, input.Y);
         if (desired.LengthSquared() > 1.0f)
             desired = desired.Normalized();
+        if (!desired.IsZeroApprox())
+            Presentation.SetDirection(DirectionForMovement(CurrentTile, desired));
         var before = Position;
         var horizontal = desired * _profile.SpeedMetersPerSecond;
         var candidatePosition = before + horizontal * (float)delta;
@@ -238,6 +264,35 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
 
     internal bool CanOccupy(int tile) =>
         tile >= 0 && _arrivalComponent?.Contains(tile) == true;
+
+    internal static int DirectionForMovement(int tile, Vector3 desired)
+    {
+        if (desired.IsZeroApprox())
+            throw new ArgumentException(
+                "Fallout 2 player facing requires a non-zero movement vector.",
+                nameof(desired));
+        var origin = Fo1HexMath.Center(tile);
+        var normalized = new Vector3(desired.X, 0.0f, desired.Z).Normalized();
+        var bestDirection = -1;
+        var bestDot = float.NegativeInfinity;
+        for (var direction = 0; direction < Fo1HexMath.DirectionCount; direction++)
+        {
+            var neighbor = Fo1HexMath.TileInDirection(tile, direction);
+            if (neighbor < 0)
+                continue;
+            var vector = (Fo1HexMath.Center(neighbor) - origin).Normalized();
+            var dot = vector.Dot(normalized);
+            if (dot > bestDot)
+            {
+                bestDot = dot;
+                bestDirection = direction;
+            }
+        }
+        return bestDirection >= 0
+            ? bestDirection
+            : throw new InvalidOperationException(
+                "Fallout 2 player tile has no source direction.");
+    }
 }
 
 internal static class Fo2ArroyoCavesInput
