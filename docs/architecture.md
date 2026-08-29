@@ -12,26 +12,34 @@ bounded character-start surface selects Narg, Mingan, or Chitsa from owned
 GCD/BIO/panel data or uses the same source surface to Modify/Create name, sex,
 age, and exact SPECIAL allocation. Modify preserves source tags/traits; Create
 leaves them unselected. Take applies sex-correct HMWARR/HFPRIM presentation and
-hands the state to the grounded Map 3 tile 28707 player. Its atomic version-2
+hands the state to the grounded Map 3 tile 28707 player. Its atomic version-3
 save cold-restores character source/custom state and current transform/mode.
-Tag/trait editing, campaign-wide persistence, scripts, reciprocal exits,
-FPS/OpenXR, and parity remain absent.
+Ordinary grounded movement follows the exact owned exit path into ARTEMPLE Map
+126 tile 16486; the non-source opaque wall proxy is gone while its collision and
+all 45 owned wall FRMs remain. Tag/trait editing, campaign-wide persistence,
+scripts, remaining exits, FPS/OpenXR, and parity remain absent.
 New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
 hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
 XML closures, and the bounded ordered Doc house → Goodsprings exterior → saloon
 composite with reciprocal exits (`00103e61` ↔ `00103e69`, then
 `0010636f` ↔ `0010618e`) and normally enabled Sunny `00104e85`; flat is
 launchable. From a completed stage-200 Continue, its accepted forward flat route
-uses configured input through both XTEL links and campaign save v5 cold-restores
-saloon CELL `00106185`; OpenXR remains experimental with no physical-headset
-acceptance.
+uses configured input through both XTEL links and campaign save v6 cold-restores
+saloon CELL `00106185`; save v6 also owns source-derived Level/HP/AP/XP. The
+source-portal active set keeps the current CELL plus direct neighbors active and
+suspends distant resources, but its retained direct native proof uses an older
+compiler identity that normal restore correctly rejects. OpenXR remains
+experimental with no physical-headset acceptance.
 Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
 Pip-Boy surface through Godot's input-event path. The accepted surface uses the
 owned background, bitmap fonts, and source rectangles, but it does not execute
 the complete Gamebryo tile graph and is not retail-pixel parity.
-Fallout 3 owns its menu and persistent CG00 selection through stage 62; later
-Section 4 and stage-65/80/85 contracts validate but do not bypass unimplemented
-world triggers. It has no Vault 101 runtime. TTW runtime support is absent, and JAM remains dependency- and
+Fallout 3 owns its menu, persistent CG00 selection, and bounded Vault 101 birth-
+room progression through stage 90. The ordinary route plays the exact stage-65
+Dad cue, applies stage-80/85 results and stage-90 INFO `0001f379`, presents the
+owned white fade/sound, and cold-restores stage 90 without replaying the cue.
+It has no freely playable Vault 101 route or general package/dialogue runtime.
+TTW runtime support is absent, and JAM remains dependency- and
 portable-semantic-gated. These routes consume the shared authoritative state in
 `runtime/src/Gameplay/State`; presentation does not fork inventory, quests,
 objectives, opening completion, or save identity.
@@ -207,12 +215,12 @@ or a configuration-hash mismatch.
 ```mermaid
 flowchart LR
     Owned[Owned ESM/BSA records] --> Compiler[opening_catalog.py]
-    Compiler --> Flow[New-game flow v5]
+    Compiler --> Flow[New-game flow v6]
     Flow --> Interpreter[OpeningQuestRuntime]
-    Interpreter --> Checkpoint[Campaign save v5: incomplete]
+    Interpreter --> Checkpoint[Campaign save v6: incomplete]
     Checkpoint --> Reload[Cold process reload]
     Reload --> Interpreter
-    Interpreter --> Complete[Campaign save v5: stage 200 complete]
+    Interpreter --> Complete[Campaign save v6: stage 200 complete]
     Complete --> World[Normal world collision and gameplay handoff]
 ```
 
@@ -453,6 +461,7 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout3/Fo3Stage65AppearanceTransition.cs` | Fail-closed validation/application contract for all owned stage-65 MatchRace and MatchFaceGeometry commands across the exact race/sex matrix | Ordinary-flow trigger execution, persistence, face rendering, animation, or Vault 101 play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage80Transition.cs` | Exact sex-conditional INFO result plus stage-80 package, variable, EVP, and enable-reference contract | Ordinary-flow trigger execution/persistence, dialogue/KF playback, package AI, actors, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage85Transition.cs` | Exact post-stage-80 INFO trigger and zero-command stage-85 result contract | Ordinary-flow trigger execution/persistence, dialogue playback, later CG00 interpretation, actors, or world play |
+| `runtime/src/Campaigns/Fallout3/Fo3Stage90Transition.cs` | Exact INFO `0001f379` four-command result, timer/runTimer state, owned white-fade/sound presentation, persistence, and one-shot replay policy | Timer-to-stage-100 progression, other IMAD channels, general dialogue/package/KF AI, or retail parity |
 | `runtime/src/Campaigns/Fallout3/Fo3PlayerPackageTransition.cs` | Source-bound `CG00PlayerSection4` package, marker, idle/event animation identities, activation, and fail-closed stage-65 boundary | KF playback, package AI, `MatchRace`, `MatchFaceGeometry`, or stage advancement |
 | `ttw_profile.py` / `jam_profile.py` | Read-only installed-profile identity, dependency/master closure, hashes, save boundary, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
