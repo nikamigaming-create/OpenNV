@@ -108,6 +108,8 @@ public partial class RuntimeCoordinator : Node3D
                 _loadingScreen?.SetTitle("FALLOUT 2  //  VERIFYING TEMPLE MAP 126");
             if (_options.ContainsKey("fo3-profile"))
                 _loadingScreen?.SetTitle("FALLOUT 3  //  CG00 CHARACTER SELECTION");
+            if (_options.ContainsKey("ttw-fo3-opening-profile"))
+                _loadingScreen?.SetTitle("TTW  //  VERIFYING CG00 TO CG01 STATE");
             if (_options.ContainsKey("xr-simulator-proof") &&
                 (!_options.ContainsKey("vr") || !_options.ContainsKey("report")))
                 throw new ArgumentException("--xr-simulator-proof requires --vr and --report.");
@@ -215,10 +217,22 @@ public partial class RuntimeCoordinator : Node3D
             var hasFo1CampaignPresentation = _options.ContainsKey("fo1-campaign-presentation");
             var hasFo2TemplePresentation = _options.ContainsKey("fo2-temple-cache");
             var hasFo3Profile = _options.ContainsKey("fo3-profile");
+            var hasTtwFo3OpeningProfile = _options.ContainsKey("ttw-fo3-opening-profile");
             var hasPreparedCache = _options.ContainsKey("reuse-cache");
             if (_options.ContainsKey("fo3-birth-presentation") && !hasFo3Profile)
                 throw new ArgumentException(
                     "--fo3-birth-presentation requires --fo3-profile.");
+            if (hasTtwFo3OpeningProfile &&
+                (!_options.TryGetValue("ttw-fo3-opening-proof", out var ttwProofMode) ||
+                 ttwProofMode is not "apply" and not "restore" ||
+                 !_options.ContainsKey("save-path") ||
+                 !_options.ContainsKey("report")))
+                throw new ArgumentException(
+                    "--ttw-fo3-opening-profile requires --ttw-fo3-opening-proof " +
+                    "apply|restore, --save-path, and --report.");
+            if (_options.ContainsKey("ttw-fo3-opening-proof") && !hasTtwFo3OpeningProfile)
+                throw new ArgumentException(
+                    "--ttw-fo3-opening-proof requires --ttw-fo3-opening-profile.");
             var hasJamProfile = _options.ContainsKey("jam-profile");
             if (hasJamProfile && !hasDataRoot && !hasCellScene && !hasPreparedCache)
                 throw new ArgumentException(
@@ -255,12 +269,14 @@ public partial class RuntimeCoordinator : Node3D
                     (hasStaticCellCompile ? 1 : 0) + (hasActorModel ? 1 : 0) +
                     (hasActorReviewScene ? 1 : 0) + (hasFo1HexScene ? 1 : 0) +
                     (hasFo1Campaign ? 1 : 0) + (hasFo1CampaignPresentation ? 1 : 0) +
-                    (hasFo2TemplePresentation ? 1 : 0) + (hasFo3Profile ? 1 : 0) > 1)
+                    (hasFo2TemplePresentation ? 1 : 0) + (hasFo3Profile ? 1 : 0) +
+                    (hasTtwFo3OpeningProfile ? 1 : 0) > 1)
                 throw new ArgumentException(
                     "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
                     "--static-cell-compile, --actor-model/--actor-sidecar, " +
                     "--actor-review-scene, --fo1-hex-scene, --fo1-campaign-transport, or " +
-                    "--fo1-campaign-presentation, --fo2-temple-cache, or --fo3-profile.");
+                    "--fo1-campaign-presentation, --fo2-temple-cache, --fo3-profile, or " +
+                    "--ttw-fo3-opening-profile.");
             var startsFo1NewGame = _options.ContainsKey("fo1-new-game") ||
                 _options.ContainsKey("fo1-new-game-demo");
             if (startsFo1NewGame && !hasFo1HexScene)
@@ -410,6 +426,16 @@ public partial class RuntimeCoordinator : Node3D
             {
                 SetLoadingStatus("VERIFYING OWNED FALLOUT 3 CG00 CONTRACT");
                 LoadFo3Opening(RequireOption(_options, "fo3-profile"), _options);
+                DismissLoadingScreen();
+                return;
+            }
+
+            if (hasTtwFo3OpeningProfile)
+            {
+                SetLoadingStatus("APPLYING ISOLATED TTW CG00 TO CG01 STATE");
+                LoadTtwFo3Opening(
+                    RequireOption(_options, "ttw-fo3-opening-profile"),
+                    _options);
                 DismissLoadingScreen();
                 return;
             }
@@ -728,6 +754,19 @@ public partial class RuntimeCoordinator : Node3D
             !options.ContainsKey("fo3-appearance-proof") &&
             cg01ProofMode is null)
             GetTree().Quit(0);
+    }
+
+    private void LoadTtwFo3Opening(
+        string profilePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var contract = TtwFo3OpeningContract.Load(ResolveRuntimePath(profilePath));
+        TtwFo3OpeningProof.Run(
+            contract,
+            RequireOption(options, "ttw-fo3-opening-proof"),
+            ResolveRuntimePath(RequireOption(options, "save-path")),
+            ResolveRuntimePath(RequireOption(options, "report")));
+        GetTree().Quit(0);
     }
 
     private void LoadFo2TemplePresentation(
