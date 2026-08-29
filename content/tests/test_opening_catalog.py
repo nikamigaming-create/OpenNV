@@ -15,6 +15,7 @@ from opening_catalog import (  # noqa: E402
     IdleAnimationSource,
     ReferenceTransformSource,
     _compile_dialogue_voice,
+    _compile_gameplay_vitals,
     _compile_guide_package,
     _compile_player_package,
     _resolve_command_record_identities,
@@ -63,6 +64,88 @@ def subrecord(signature: str, data: bytes = b"") -> bytes:
 
 
 class OpeningCatalogTest(unittest.TestCase):
+    def test_gameplay_vitals_join_player_actor_values_and_owned_settings(self):
+        player_acbs = bytearray(24)
+        struct.pack_into("<h", player_acbs, 8, 1)
+        player_data = struct.pack("<I7B", 100, 5, 5, 5, 5, 5, 5, 5)
+        player = Record(
+            "NPC_",
+            0x07,
+            0,
+            b"".join(
+                (
+                    subrecord("EDID", b"Player\0"),
+                    subrecord("ACBS", bytes(player_acbs)),
+                    subrecord("DATA", player_data),
+                )
+            ),
+            (),
+        )
+        setting_values = {
+            "fAVDHealthEnduranceMult": 20.0,
+            "fAVDHealthLevelMult": 5.0,
+            "fAVDActionPointsBase": 65.0,
+            "fAVDActionPointsMult": 3.0,
+            "iXPBumpBase": 150,
+        }
+        settings = {}
+        for index, (editor_id, value) in enumerate(setting_values.items(), start=1):
+            payload = (
+                struct.pack("<f", value)
+                if editor_id.startswith("f")
+                else struct.pack("<i", value)
+            )
+            settings[editor_id.casefold()] = Record(
+                "GMST",
+                0x100 + index,
+                0,
+                subrecord("EDID", editor_id.encode("ascii") + b"\0")
+                + subrecord("DATA", payload),
+                (),
+            )
+        actor_values = [
+            {
+                "editorId": editor_id,
+                "formId": f"{0x200 + index:08x}",
+                "dataSha256": f"actor-value-{index}",
+            }
+            for index, editor_id in enumerate(
+                ("AVHealth", "AVActionPoints", "AVXP", "AVEndurance", "AVAgility"),
+                start=1,
+            )
+        ]
+        sources = FlowSourceCatalog(
+            actor_values=actor_values,
+            traits=[],
+            scripts={},
+            idle_animations_by_editor={},
+            idle_animations_by_form={},
+            packages_by_editor={},
+            packages_by_form={},
+            actors_by_form={},
+            voice_types_by_form={},
+            references_by_form={},
+            image_space_modifiers_by_editor={},
+            needed={},
+            game_settings_by_editor=settings,
+            player_base=player,
+        )
+
+        contract = _compile_gameplay_vitals(sources)
+
+        self.assertEqual(contract["playerBase"]["initialLevel"], 1)
+        self.assertEqual(contract["playerBase"]["baseHealth"], 100)
+        self.assertEqual(contract["initialExperiencePoints"], 0)
+        self.assertEqual(
+            {value["editorId"]: value["value"] for value in contract["gameSettings"]},
+            {**setting_values, "iXPBase": 200},
+        )
+        self.assertEqual(len(contract["actorValues"]), 5)
+        self.assertEqual(
+            contract["gameSettings"][-1]["evidenceId"],
+            "fnv-1.4.0.525-gmst-ixpbase-v1",
+        )
+
     def test_command_contract_resolves_owned_record_identities(self):
         commands = [
             {"kind": "additem", "itemEditorId": "SyntheticItem", "count": 1},

@@ -97,6 +97,7 @@ internal static class PipBoyVisualAcceptance
                     "Held and lowered Pip-Boy captures contain no changed pixels.");
             var changedPixelFraction = (double)changedPixels /
                 (heldImage.GetWidth() * heldImage.GetHeight());
+            var vitalsColdRestorePassed = loaded.Session.PersistAndVerifyVitalsColdRestore();
             var missingAuthoritativeVitals = new[]
             {
                 ("level", snapshot.Level.HasValue),
@@ -109,6 +110,9 @@ internal static class PipBoyVisualAcceptance
                 .Where(value => !value.Item2)
                 .Select(value => value.Item1)
                 .ToArray();
+            if (missingAuthoritativeVitals.Length == 0 && !vitalsColdRestorePassed)
+                throw new InvalidOperationException(
+                    "Authoritative gameplay vitals did not survive a cold save restore.");
 
             RuntimeCoordinator.WriteReport(
                 RuntimeCoordinator.RequireOption(options, "report"),
@@ -131,6 +135,15 @@ internal static class PipBoyVisualAcceptance
                     {
                         complete = missingAuthoritativeVitals.Length == 0,
                         missing = missingAuthoritativeVitals,
+                        level = snapshot.Level,
+                        hitPoints = snapshot.HitPoints,
+                        maximumHitPoints = snapshot.MaximumHitPoints,
+                        actionPoints = snapshot.ActionPoints,
+                        maximumActionPoints = snapshot.MaximumActionPoints,
+                        experiencePoints = snapshot.ExperiencePoints,
+                        nextLevelExperiencePoints = snapshot.NextLevelExperiencePoints,
+                        persisted = vitalsColdRestorePassed,
+                        coldRestorePassed = vitalsColdRestorePassed,
                     },
                     screenshot = new
                     {

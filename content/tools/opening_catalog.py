@@ -29,6 +29,32 @@ from texture_pipeline import OwnedTexturePipeline
 OPENING_RECIPE_SCHEMA = "opennv-owned-opening-recipe/v1"
 OPENING_MANIFEST_SCHEMA = "opennv-owned-opening-manifest/v1"
 OPENING_MANIFEST_STATUS = "compiled-owned-opening-graph"
+GAMEPLAY_VITALS_SCHEMA = "opennv-owned-gameplay-vitals/v1"
+PLAYER_BASE_EDITOR_ID = "Player"
+PLAYER_BASE_LEVEL_OFFSET = 8
+PLAYER_BASE_HEALTH_OFFSET = 0
+PLAYER_BASE_ACBS_BYTES = 24
+PLAYER_BASE_DATA_MINIMUM_BYTES = 11
+FNV_ENGINE_BUILD = "1.4.0.525"
+FNV_ENGINE_DEFAULT_XP_BASE_EVIDENCE = "fnv-1.4.0.525-gmst-ixpbase-v1"
+# FalloutNV.exe owns this default; FalloutNV.esm intentionally has no GMST override.
+# The value was recovered from the exact 1.4.0.525 engine setting and is emitted with
+# explicit engine-default provenance, never as a recipe/runtime fallback.
+FNV_ENGINE_DEFAULT_XP_BASE = 200
+REQUIRED_VITAL_GAME_SETTINGS = (
+    "fAVDHealthEnduranceMult",
+    "fAVDHealthLevelMult",
+    "fAVDActionPointsBase",
+    "fAVDActionPointsMult",
+    "iXPBumpBase",
+)
+REQUIRED_VITAL_ACTOR_VALUES = (
+    "AVHealth",
+    "AVActionPoints",
+    "AVXP",
+    "AVEndurance",
+    "AVAgility",
+)
 FORM_ID_BYTES = 4
 QUEST_STAGE_INDEX_BYTES = 2
 FORM_ID_HEX_CHARACTERS = 8
@@ -213,6 +239,8 @@ class FlowSourceCatalog:
     references_by_form: dict[int, ReferenceTransformSource]
     image_space_modifiers_by_editor: dict[str, Record]
     needed: dict[int, dict[str, object]]
+    game_settings_by_editor: dict[str, Record] = field(default_factory=dict)
+    player_base: Record | None = None
 
 
 @dataclass
@@ -2667,6 +2695,8 @@ def _scan_flow_sources(
     voice_types_by_form: dict[int, str] = {}
     references_by_form: dict[int, ReferenceTransformSource] = {}
     image_space_modifiers_by_editor: dict[str, Record] = {}
+    game_settings_by_editor: dict[str, Record] = {}
+    player_base: Record | None = None
     needed: dict[int, dict[str, object]] = {}
     selector_type = str(trait_rules["recordType"])
     selector_signature = str(trait_rules["selectorSubrecord"])
@@ -2679,6 +2709,21 @@ def _scan_flow_sources(
             entry = _catalog_entry(record, subrecords, source_order)
             if entry is not None:
                 actor_values.append(entry)
+        if record.signature == "GMST":
+            editor_id = _catalog_text(subrecords, "EDID")
+            if editor_id in REQUIRED_VITAL_GAME_SETTINGS:
+                identity = editor_id.casefold()
+                if identity in game_settings_by_editor:
+                    raise ValueError(
+                        f"Owned vital game setting is duplicated: {editor_id}"
+                    )
+                game_settings_by_editor[identity] = record
+        if record.signature == "NPC_":
+            editor_id = _catalog_text(subrecords, "EDID")
+            if editor_id == PLAYER_BASE_EDITOR_ID:
+                if player_base is not None:
+                    raise ValueError("Owned player base is duplicated")
+                player_base = record
         if record.signature == selector_type:
             selected_value = next(
                 (
@@ -2801,6 +2846,8 @@ def _scan_flow_sources(
         references_by_form,
         image_space_modifiers_by_editor,
         needed,
+        game_settings_by_editor,
+        player_base,
     )
 
 
@@ -2840,6 +2887,163 @@ def _match_actor_values(
         selected.append({**match, "sourceName": source_name})
     selected.sort(key=lambda value: int(str(value["formId"]), FORM_ID_RADIX))
     return selected
+
+
+def _single_subrecord(record: Record, signature: str) -> bytes:
+    values = [
+        subrecord.data
+        for subrecord in iter_subrecords(record)
+        if subrecord.signature == signature
+    ]
+    if len(values) != 1:
+        raise ValueError(
+            f"Owned {record.signature} {form_id_text(record.form_id)} has no unique "
+            f"{signature} subrecord"
+        )
+    return values[0]
+
+
+def _game_setting_manifest(record: Record) -> dict[str, object]:
+    editor_id = _catalog_text(list(iter_subrecords(record)), "EDID")
+    if not editor_id:
+        raise ValueError("Owned vital game setting has no editor ID")
+    payload = _single_subrecord(record, "DATA")
+    if len(payload) != 4:
+        raise ValueError(f"Owned vital game setting has invalid DATA: {editor_id}")
+    if editor_id.startswith("f"):
+        value: float | int = struct.unpack("<f", payload)[0]
+    elif editor_id.startswith("i"):
+        value = struct.unpack("<i", payload)[0]
+    else:
+        raise ValueError(f"Owned vital game setting has unsupported type: {editor_id}")
+    return {
+        "editorId": editor_id,
+        "formId": form_id_text(record.form_id),
+        "recordSha256": hashlib.sha256(record.data).hexdigest(),
+        "sourceKind": "owned-master-gmst",
+        "value": value,
+    }
+
+
+def _compile_gameplay_vitals(sources: FlowSourceCatalog) -> dict[str, object]:
+    if sources.player_base is None:
+        raise ValueError("Owned opening player base is absent")
+    player = sources.player_base
+    acbs = _single_subrecord(player, "ACBS")
+    data = _single_subrecord(player, "DATA")
+    if len(acbs) != PLAYER_BASE_ACBS_BYTES or len(data) < PLAYER_BASE_DATA_MINIMUM_BYTES:
+        raise ValueError("Owned opening player base has an unsupported ACBS/DATA layout")
+    level = struct.unpack_from("<h", acbs, PLAYER_BASE_LEVEL_OFFSET)[0]
+    base_health = struct.unpack_from("<I", data, PLAYER_BASE_HEALTH_OFFSET)[0]
+    if level <= 0 or base_health <= 0:
+        raise ValueError("Owned opening player level or base health is invalid")
+
+    settings = []
+    for editor_id in REQUIRED_VITAL_GAME_SETTINGS:
+        record = sources.game_settings_by_editor.get(editor_id.casefold())
+        if record is None:
+            raise ValueError(f"Owned vital game setting is absent: {editor_id}")
+        settings.append(_game_setting_manifest(record))
+    settings.append(
+        {
+            "editorId": "iXPBase",
+            "formId": None,
+            "recordSha256": None,
+            "sourceKind": "falloutnv-exact-build-engine-default",
+            "engineBuild": FNV_ENGINE_BUILD,
+            "evidenceId": FNV_ENGINE_DEFAULT_XP_BASE_EVIDENCE,
+            "value": FNV_ENGINE_DEFAULT_XP_BASE,
+        }
+    )
+
+    actor_values_by_editor = {
+        str(value["editorId"]).casefold(): value for value in sources.actor_values
+    }
+    actor_values = []
+    for editor_id in REQUIRED_VITAL_ACTOR_VALUES:
+        value = actor_values_by_editor.get(editor_id.casefold())
+        if value is None:
+            raise ValueError(f"Owned vital actor value is absent: {editor_id}")
+        actor_values.append(
+            {
+                "editorId": value["editorId"],
+                "formId": value["formId"],
+                "recordSha256": value["dataSha256"],
+            }
+        )
+
+    return {
+        "schema": GAMEPLAY_VITALS_SCHEMA,
+        "playerBase": {
+            "editorId": PLAYER_BASE_EDITOR_ID,
+            "formId": form_id_text(player.form_id),
+            "recordSha256": hashlib.sha256(player.data).hexdigest(),
+            "initialLevel": level,
+            "baseHealth": base_health,
+        },
+        "actorValues": actor_values,
+        "gameSettings": settings,
+        "initialExperiencePoints": 0,
+        "derivations": {
+            "maximumHitPoints": (
+                "baseHealth + endurance * fAVDHealthEnduranceMult + "
+                "(level - 1) * fAVDHealthLevelMult"
+            ),
+            "maximumActionPoints": (
+                "fAVDActionPointsBase + agility * fAVDActionPointsMult"
+            ),
+            "experienceThreshold": (
+                "(targetLevel - 1) * (((targetLevel - 2) * iXPBumpBase) / 2 + "
+                "iXPBase)"
+            ),
+        },
+    }
+
+
+def compile_gameplay_vitals_from_master(master_path: Path) -> dict[str, object]:
+    """Compile only the owned opening vitals contract without preparing world assets."""
+    actor_values = []
+    game_settings_by_editor: dict[str, Record] = {}
+    player_base: Record | None = None
+    source_order = 0
+    for record in iter_plugin_records(master_path):
+        source_order += 1
+        if record.signature not in {"AVIF", "GMST", "NPC_"}:
+            continue
+        subrecords = list(iter_subrecords(record))
+        editor_id = _catalog_text(subrecords, "EDID")
+        if record.signature == "AVIF" and editor_id in REQUIRED_VITAL_ACTOR_VALUES:
+            entry = _catalog_entry(record, subrecords, source_order)
+            if entry is None:
+                raise ValueError(f"Owned vital actor value is incomplete: {editor_id}")
+            actor_values.append(entry)
+        elif record.signature == "GMST" and editor_id in REQUIRED_VITAL_GAME_SETTINGS:
+            identity = editor_id.casefold()
+            if identity in game_settings_by_editor:
+                raise ValueError(f"Owned vital game setting is duplicated: {editor_id}")
+            game_settings_by_editor[identity] = record
+        elif record.signature == "NPC_" and editor_id == PLAYER_BASE_EDITOR_ID:
+            if player_base is not None:
+                raise ValueError("Owned player base is duplicated")
+            player_base = record
+    return _compile_gameplay_vitals(
+        FlowSourceCatalog(
+            actor_values=actor_values,
+            traits=[],
+            scripts={},
+            idle_animations_by_editor={},
+            idle_animations_by_form={},
+            packages_by_editor={},
+            packages_by_form={},
+            actors_by_form={},
+            voice_types_by_form={},
+            references_by_form={},
+            image_space_modifiers_by_editor={},
+            needed={},
+            game_settings_by_editor=game_settings_by_editor,
+            player_base=player_base,
+        )
+    )
 
 
 def _deferred_stage_command(
@@ -4209,7 +4413,7 @@ def compile_new_game_flow(
     )
     return (
         {
-            "schema": "opennv-owned-new-game-flow/v5",
+            "schema": "opennv-owned-new-game-flow/v6",
             "commandContract": command_contract,
             "quest": {
                 "formId": quest["formId"],
@@ -4230,6 +4434,7 @@ def compile_new_game_flow(
             "interactions": interaction_rows,
             "dialogue": dialogue,
             "character": {
+                "vitals": _compile_gameplay_vitals(sources),
                 "sex": {
                     "messageFormId": sex_message["formId"],
                     "title": next(iter(_record_text_values(sex_message, "FULL")), ""),

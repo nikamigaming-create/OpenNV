@@ -30,7 +30,7 @@ internal sealed record OpeningNewGameFlow(
     IReadOnlyDictionary<string, OpeningImageSpaceModifier> ImageSpaceModifiers,
     OpeningCharacterCreation Character)
 {
-    private const string ExpectedSchema = "opennv-owned-new-game-flow/v5";
+    private const string ExpectedSchema = "opennv-owned-new-game-flow/v6";
     private const string ExpectedCommandContractSchema =
         "opennv-owned-opening-command-contract/v1";
     private const string ExpectedGuideActorAiSchema =
@@ -542,7 +542,8 @@ internal sealed record OpeningNewGameFlow(
             skills.GetProperty("maximumSelected").GetInt32(),
             ParseCharacterValues(skills.GetProperty("values"), textures),
             traits.GetProperty("maximumSelected").GetInt32(),
-            ParseCharacterValues(traits.GetProperty("values"), textures));
+            ParseCharacterValues(traits.GetProperty("values"), textures),
+            OpeningGameplayVitalsContract.Parse(value.GetProperty("vitals")));
     }
 
     private static OpeningDocReaction ParseDocReaction(JsonElement value) => new(
@@ -1144,7 +1145,196 @@ internal sealed record OpeningCharacterCreation(
     int TagSkillMaximumSelected,
     IReadOnlyList<OpeningCharacterValue> SkillValues,
     int TraitMaximumSelected,
-    IReadOnlyList<OpeningCharacterValue> TraitValues);
+    IReadOnlyList<OpeningCharacterValue> TraitValues,
+    OpeningGameplayVitalsContract Vitals);
+
+internal sealed record OpeningGameplayVitalsContract(
+    string Schema,
+    OpeningVitalsPlayerBase PlayerBase,
+    IReadOnlyDictionary<string, OpeningVitalsActorValue> ActorValues,
+    IReadOnlyDictionary<string, OpeningVitalsGameSetting> GameSettings,
+    int InitialExperiencePoints,
+    IReadOnlyDictionary<string, string> Derivations)
+{
+    private const string ExpectedSchema = "opennv-owned-gameplay-vitals/v1";
+    private const string ExactEngineBuild = "1.4.0.525";
+    private const string XpBaseEvidenceId = "fnv-1.4.0.525-gmst-ixpbase-v1";
+    private const string HitPointFormula =
+        "baseHealth + endurance * fAVDHealthEnduranceMult + " +
+        "(level - 1) * fAVDHealthLevelMult";
+    private const string ActionPointFormula =
+        "fAVDActionPointsBase + agility * fAVDActionPointsMult";
+    private const string ExperienceFormula =
+        "(targetLevel - 1) * (((targetLevel - 2) * iXPBumpBase) / 2 + iXPBase)";
+    private static readonly string[] RequiredActorValues =
+        ["AVHealth", "AVActionPoints", "AVXP", "AVEndurance", "AVAgility"];
+    private static readonly string[] RequiredGameSettings =
+    [
+        "fAVDHealthEnduranceMult",
+        "fAVDHealthLevelMult",
+        "fAVDActionPointsBase",
+        "fAVDActionPointsMult",
+        "iXPBumpBase",
+        "iXPBase",
+    ];
+
+    internal static OpeningGameplayVitalsContract Parse(JsonElement source)
+    {
+        var result = new OpeningGameplayVitalsContract(
+            source.GetProperty("schema").GetString()!,
+            ParsePlayerBase(source.GetProperty("playerBase")),
+            source.GetProperty("actorValues").EnumerateArray()
+                .Select(value => new OpeningVitalsActorValue(
+                    value.GetProperty("editorId").GetString()!,
+                    value.GetProperty("formId").GetString()!,
+                    value.GetProperty("recordSha256").GetString()!))
+                .ToDictionary(value => value.EditorId, StringComparer.OrdinalIgnoreCase),
+            source.GetProperty("gameSettings").EnumerateArray()
+                .Select(ParseGameSetting)
+                .ToDictionary(value => value.EditorId, StringComparer.OrdinalIgnoreCase),
+            source.GetProperty("initialExperiencePoints").GetInt32(),
+            source.GetProperty("derivations").EnumerateObject().ToDictionary(
+                value => value.Name,
+                value => value.Value.GetString()!,
+                StringComparer.Ordinal));
+        result.Validate();
+        return result;
+    }
+
+    internal GameplayVitals CreateInitial(OpeningCampaignState opening)
+    {
+        opening.Validate();
+        var endurance = ReadSpecial(opening, "AVEndurance");
+        var agility = ReadSpecial(opening, "AVAgility");
+        var maximumHitPoints = ExactInt(
+            PlayerBase.BaseHealth +
+            endurance * Setting("fAVDHealthEnduranceMult") +
+            (PlayerBase.InitialLevel - 1) * Setting("fAVDHealthLevelMult"),
+            "maximum hit points");
+        var maximumActionPoints = ExactInt(
+            Setting("fAVDActionPointsBase") +
+            agility * Setting("fAVDActionPointsMult"),
+            "maximum action points");
+        var targetLevel = PlayerBase.InitialLevel + 1;
+        var nextLevelExperiencePoints = ExactInt(
+            (targetLevel - 1) *
+            (((targetLevel - 2) * Setting("iXPBumpBase")) / 2.0 +
+             Setting("iXPBase")),
+            "next-level experience threshold");
+        var result = new GameplayVitals(
+            PlayerBase.InitialLevel,
+            maximumHitPoints,
+            maximumHitPoints,
+            maximumActionPoints,
+            maximumActionPoints,
+            InitialExperiencePoints,
+            nextLevelExperiencePoints);
+        result.Validate();
+        return result;
+    }
+
+    private static OpeningVitalsPlayerBase ParsePlayerBase(JsonElement source) => new(
+        source.GetProperty("editorId").GetString()!,
+        source.GetProperty("formId").GetString()!,
+        source.GetProperty("recordSha256").GetString()!,
+        source.GetProperty("initialLevel").GetInt32(),
+        source.GetProperty("baseHealth").GetInt32());
+
+    private static OpeningVitalsGameSetting ParseGameSetting(JsonElement source) => new(
+        source.GetProperty("editorId").GetString()!,
+        source.GetProperty("formId").ValueKind == JsonValueKind.String
+            ? source.GetProperty("formId").GetString()
+            : null,
+        source.GetProperty("recordSha256").ValueKind == JsonValueKind.String
+            ? source.GetProperty("recordSha256").GetString()
+            : null,
+        source.GetProperty("sourceKind").GetString()!,
+        source.TryGetProperty("engineBuild", out var build) &&
+            build.ValueKind == JsonValueKind.String
+                ? build.GetString()
+                : null,
+        source.TryGetProperty("evidenceId", out var evidence) &&
+            evidence.ValueKind == JsonValueKind.String
+                ? evidence.GetString()
+                : null,
+        source.GetProperty("value").GetDouble());
+
+    private void Validate()
+    {
+        if (Schema != ExpectedSchema || PlayerBase.EditorId != "Player" ||
+            FalloutFormId.Normalize(PlayerBase.FormId) != PlayerBase.FormId ||
+            PlayerBase.RecordSha256.Length != 64 || PlayerBase.InitialLevel <= 0 ||
+            PlayerBase.BaseHealth <= 0 || InitialExperiencePoints < 0 ||
+            ActorValues.Count != RequiredActorValues.Length ||
+            RequiredActorValues.Any(value => !ActorValues.ContainsKey(value)) ||
+            ActorValues.Values.Any(value =>
+                FalloutFormId.Normalize(value.FormId) != value.FormId ||
+                value.RecordSha256.Length != 64) ||
+            GameSettings.Count != RequiredGameSettings.Length ||
+            RequiredGameSettings.Any(value => !GameSettings.ContainsKey(value)) ||
+            GameSettings.Values.Any(value => !double.IsFinite(value.Value)) ||
+            GameSettings.Where(value => value.Key != "iXPBase").Any(value =>
+                value.Value.SourceKind != "owned-master-gmst" ||
+                value.Value.FormId is null || value.Value.RecordSha256?.Length != 64 ||
+                FalloutFormId.Normalize(value.Value.FormId) != value.Value.FormId) ||
+            GameSettings["iXPBase"] is not
+            {
+                SourceKind: "falloutnv-exact-build-engine-default",
+                FormId: null,
+                RecordSha256: null,
+                EngineBuild: ExactEngineBuild,
+                EvidenceId: XpBaseEvidenceId,
+                Value: 200d,
+            } ||
+            Derivations.Count != 3 ||
+            Derivations.GetValueOrDefault("maximumHitPoints") != HitPointFormula ||
+            Derivations.GetValueOrDefault("maximumActionPoints") != ActionPointFormula ||
+            Derivations.GetValueOrDefault("experienceThreshold") != ExperienceFormula)
+            throw new InvalidOperationException("Owned gameplay-vitals contract is invalid.");
+    }
+
+    private int ReadSpecial(OpeningCampaignState opening, string editorId)
+    {
+        var actorValue = ActorValues[editorId];
+        if (!opening.SpecialValues.TryGetValue(actorValue.FormId, out var value) || value <= 0)
+            throw new InvalidOperationException(
+                $"Opening character state has no positive {editorId} value.");
+        return value;
+    }
+
+    private double Setting(string editorId) => GameSettings[editorId].Value;
+
+    private static int ExactInt(double value, string name)
+    {
+        var rounded = Math.Round(value);
+        if (!double.IsFinite(value) || Math.Abs(value - rounded) > 0.000001 ||
+            rounded <= 0 || rounded > int.MaxValue)
+            throw new InvalidOperationException(
+                $"Owned gameplay-vitals derivation did not produce an exact positive {name}.");
+        return checked((int)rounded);
+    }
+}
+
+internal sealed record OpeningVitalsPlayerBase(
+    string EditorId,
+    string FormId,
+    string RecordSha256,
+    int InitialLevel,
+    int BaseHealth);
+
+internal sealed record OpeningVitalsActorValue(
+    string EditorId,
+    string FormId,
+    string RecordSha256);
+
+internal sealed record OpeningVitalsGameSetting(
+    string EditorId,
+    string? FormId,
+    string? RecordSha256,
+    string SourceKind,
+    string? EngineBuild,
+    string? EvidenceId,
+    double Value);
 
 internal sealed record OpeningCharacterValue(
     string FormId,

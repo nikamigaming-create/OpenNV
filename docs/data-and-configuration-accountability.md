@@ -135,14 +135,16 @@ only while the opening is active, the CELL's owned NAVM plus configured capsule
 dimensions. It does not carry a Doc-specific coordinate, route, key, item, or
 stage table.
 
-`opennv-campaign-save/v5` embeds
+`opennv-campaign-save/v6` embeds
 `opennv-opening-campaign-state/v1` in the same atomic save envelope used by the
 gameplay session. Loading validates schemas, normalized FormIDs, uniqueness,
 finite values, transform shape, and the flow-specific character constraints
 before restoring state. Version 4 additionally records the active CELL FormID;
 Continue rejects an active CELL outside the prepared ordered route before it
 restores the player transform. Version 5 adds source-identity-checked remaining
-counts for each opened container while retaining v1-v4 load compatibility. A
+counts for each opened container. Version 6 persists the shared gameplay-vitals
+state derived from the owned player, AVIF, and GMST contracts while retaining
+v1-v5 load compatibility. A
 headless two-process gate reaches the authored
 autosave, exits, reloads that exact incomplete state, and requires the owned
 completion stage and command effects. Godot's configured input events and

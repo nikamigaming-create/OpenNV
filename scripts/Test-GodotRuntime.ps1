@@ -47,7 +47,7 @@ $TestGodotRuntimeContract7 = 7
 $TestGodotRuntimeContract80 = 80
 $TestGodotRuntimeContract87903 = 87903
 $DemonstratedCombatKillPaths = 4
-$CampaignSaveSchema = "opennv-campaign-save/v5"
+$CampaignSaveSchema = "opennv-campaign-save/v6"
 
 
 $ErrorActionPreference = "Stop"

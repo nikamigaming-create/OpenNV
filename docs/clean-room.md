@@ -25,6 +25,15 @@ format facts, synthetic fixtures, and targeted observations of the retail game.
 Quarantined material may explain historical experiments but cannot enter
 `runtime`, `content`, a release bundle, or an acceptance oracle.
 
+## Exact-build engine setting contract
+
+Neutral evidence contract `fnv-1.4.0.525-gmst-ixpbase-v1` records that the exact
+retail build owns `iXPBase = 200`. `FalloutNV.esm` intentionally has no GMST
+override for this setting. The opening compiler identifies the value as an
+exact-build engine default, and the runtime requires the contract ID, build,
+source kind, and value; it is never treated as an owned-master record or a
+recipe fallback. Private executable evidence remains outside the repository.
+
 ## First direct slice
 
 The first authored local check uses the owned retail file

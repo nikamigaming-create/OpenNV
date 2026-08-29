@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Gameplay.Containers;
 using OpenNV.Runtime.Presentation.Ui;
 
@@ -12,6 +13,7 @@ internal partial class GameplaySession : Node
     private const string SaveSchemaV3 = "opennv-campaign-save/v3";
     private const string SaveSchemaV4 = "opennv-campaign-save/v4";
     private const string SaveSchemaV5 = "opennv-campaign-save/v5";
+    private const string SaveSchemaV6 = "opennv-campaign-save/v6";
     private const int EquippedWeaponCount = 1;
 
     private readonly Dictionary<string, InventoryEntry> _inventory = new(StringComparer.OrdinalIgnoreCase);
@@ -52,6 +54,8 @@ internal partial class GameplaySession : Node
     private int _shotsFired;
     private OpeningCampaignState? _openingState;
     private OwnedGameplayUiPresentation? _gameplayUi;
+    private OpeningGameplayVitalsContract? _vitalsContract;
+    private GameplayVitals? _vitals;
 
     internal bool ObjectiveComplete => ObjectiveStage == SandboxObjectiveStage.Complete;
     internal string SavePath => _savePath;
@@ -85,6 +89,7 @@ internal partial class GameplaySession : Node
         string savePath,
         string expectedCellFormId,
         IReadOnlySet<string> allowedActiveCellFormIds,
+        OpeningGameplayVitalsContract vitalsContract,
         Func<OpeningCampaignState, bool> acceptsOpeningState)
     {
         if (!File.Exists(savePath))
@@ -95,8 +100,10 @@ internal partial class GameplaySession : Node
             probe = new GameplaySession
             {
                 _savePath = savePath,
+                _vitalsContract = vitalsContract,
             };
             probe.Load(expectedCellFormId);
+            probe.DeriveMissingVitals();
             if (!allowedActiveCellFormIds.Contains(probe._activeCellFormId))
                 return false;
             return probe._openingState is not null &&
@@ -124,7 +131,8 @@ internal partial class GameplaySession : Node
         bool showHud = true,
         bool useClassicDioramaHud = false,
         string? objectiveOverride = null,
-        OwnedGameplayUiPresentation? gameplayUi = null)
+        OwnedGameplayUiPresentation? gameplayUi = null,
+        OpeningGameplayVitalsContract? vitalsContract = null)
     {
         if (useXrHud && useClassicDioramaHud)
             throw new ArgumentException(
@@ -141,9 +149,11 @@ internal partial class GameplaySession : Node
         _useClassicDioramaHud = useClassicDioramaHud;
         _objectiveOverride = objectiveOverride;
         _gameplayUi = gameplayUi;
+        _vitalsContract = vitalsContract;
         _savePath = ResolvePath(configuredSavePath ?? configuration.Hud.DefaultSavePath);
         if (loadExistingSave)
             Load(cellFormId);
+        DeriveMissingVitals();
     }
 
     public override void _Ready()
@@ -243,13 +253,13 @@ internal partial class GameplaySession : Node
             objective,
             opening?.PlayerName ?? "",
             opening?.Completed == true,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
+            _vitals?.Level,
+            _vitals?.HitPoints,
+            _vitals?.MaximumHitPoints,
+            _vitals?.ActionPoints,
+            _vitals?.MaximumActionPoints,
+            _vitals?.ExperiencePoints,
+            _vitals?.NextLevelExperiencePoints,
             ObjectiveStage,
             _equippedWeaponFormId,
             equipped,
@@ -437,6 +447,8 @@ internal partial class GameplaySession : Node
         foreach (var previous in _openingState?.Inventory ?? Array.Empty<OpeningInventoryState>())
             _inventory.Remove(previous.FormId);
         _openingState = state;
+        if (_vitalsContract is not null)
+            _vitals = _vitalsContract.CreateInitial(state);
         foreach (var item in state.Inventory)
             _inventory[item.FormId] = new InventoryEntry(
                 item.FormId,
@@ -572,10 +584,11 @@ internal partial class GameplaySession : Node
             : PlayerTransformState.Capture(_player);
         var document = new
         {
-            schema = SaveSchemaV5,
+            schema = SaveSchemaV6,
             cellFormId = _cellFormId,
             activeCellFormId = _activeCellFormId,
             opening = _openingState,
+            vitals = _vitals,
             inventory = _inventory.Values.OrderBy(entry => entry.ItemFormId, StringComparer.OrdinalIgnoreCase),
             removedReferences = _removedReferences.Order(StringComparer.OrdinalIgnoreCase),
             doorStates = _doorStates
@@ -637,7 +650,7 @@ internal partial class GameplaySession : Node
 
     internal object Report() => new
     {
-        schema = SaveSchemaV5,
+        schema = SaveSchemaV6,
         savePath = _savePath,
         routeCellFormId = _cellFormId,
         activeCellFormId = _activeCellFormId,
@@ -663,6 +676,7 @@ internal partial class GameplaySession : Node
         poolBalls = _pools.Values.Sum(table => table.BallCount),
         pocketedPoolBalls = _pools.Values.Sum(table => table.PocketedBallCount),
         playerTransformRestored = _loadedPlayerTransform is not null,
+        vitals = _vitals,
         playerPosition = _player is null ? null : Vector(_player.GlobalPosition),
         opening = _openingState is null
             ? null
@@ -689,11 +703,12 @@ internal partial class GameplaySession : Node
         var root = document.RootElement;
         var schema = root.GetProperty("schema").GetString();
         if (schema != SaveSchemaV1 && schema != SaveSchemaV2 &&
-            schema != SaveSchemaV3 && schema != SaveSchemaV4 && schema != SaveSchemaV5)
+            schema != SaveSchemaV3 && schema != SaveSchemaV4 && schema != SaveSchemaV5 &&
+            schema != SaveSchemaV6)
             throw new InvalidOperationException($"Unexpected sandbox save schema: {_savePath}");
         if (root.GetProperty("cellFormId").GetString() != cellFormId)
             throw new InvalidOperationException($"Sandbox save belongs to another cell: {_savePath}");
-        if (schema == SaveSchemaV4 || schema == SaveSchemaV5)
+        if (schema == SaveSchemaV4 || schema == SaveSchemaV5 || schema == SaveSchemaV6)
         {
             if (!root.TryGetProperty("activeCellFormId", out var activeCell) ||
                 activeCell.ValueKind != JsonValueKind.String)
@@ -720,7 +735,7 @@ internal partial class GameplaySession : Node
             _doorStates.Add(property.Name, property.Value.GetBoolean());
         foreach (var value in root.GetProperty("emptiedContainers").EnumerateArray())
             _emptiedContainers.Add(value.GetString()!);
-        if (schema == SaveSchemaV5)
+        if (schema == SaveSchemaV5 || schema == SaveSchemaV6)
         {
             if (!root.TryGetProperty("containerInventories", out var containers))
                 throw new InvalidOperationException(
@@ -757,10 +772,19 @@ internal partial class GameplaySession : Node
                     new PoolTableInstance.PoolState(referenceFormId, balls));
             }
         }
-        if ((schema == SaveSchemaV3 || schema == SaveSchemaV4 || schema == SaveSchemaV5) &&
+        if ((schema == SaveSchemaV3 || schema == SaveSchemaV4 || schema == SaveSchemaV5 ||
+             schema == SaveSchemaV6) &&
             root.TryGetProperty("opening", out var opening) &&
             opening.ValueKind == JsonValueKind.Object)
             _openingState = OpeningCampaignState.Parse(opening);
+        if (schema == SaveSchemaV6)
+        {
+            if (!root.TryGetProperty("vitals", out var vitals) ||
+                vitals.ValueKind is not JsonValueKind.Object and not JsonValueKind.Null)
+                throw new InvalidOperationException("Campaign save has malformed gameplay vitals.");
+            if (vitals.ValueKind == JsonValueKind.Object)
+                _vitals = ParseVitals(vitals);
+        }
         if (root.TryGetProperty("playerTransform", out var playerTransform))
         {
             if (playerTransform.ValueKind is not JsonValueKind.Object and not JsonValueKind.Null)
@@ -779,6 +803,62 @@ internal partial class GameplaySession : Node
         }
         if (_openingState is not null && _loadedPlayerTransform is null)
             _loadedPlayerTransform = PlayerTransformState.FromOpening(_openingState.PlayerTransform);
+    }
+
+    internal bool PersistAndVerifyVitalsColdRestore()
+    {
+        if (_vitals is null || _vitalsContract is null)
+            return false;
+        Save();
+        GameplaySession? probe = null;
+        try
+        {
+            probe = new GameplaySession
+            {
+                _savePath = _savePath,
+                _vitalsContract = _vitalsContract,
+            };
+            probe.Load(_cellFormId);
+            probe.DeriveMissingVitals();
+            return probe._vitals == _vitals;
+        }
+        finally
+        {
+            probe?.Free();
+        }
+    }
+
+    private void DeriveMissingVitals()
+    {
+        if (_openingState is null || _vitalsContract is null)
+            return;
+        var expected = _vitalsContract.CreateInitial(_openingState);
+        if (_vitals is null)
+        {
+            _vitals = expected;
+            return;
+        }
+        _vitals.Validate();
+        if (_vitals.Level != expected.Level ||
+            _vitals.MaximumHitPoints != expected.MaximumHitPoints ||
+            _vitals.MaximumActionPoints != expected.MaximumActionPoints ||
+            _vitals.NextLevelExperiencePoints != expected.NextLevelExperiencePoints)
+            throw new InvalidOperationException(
+                "Saved gameplay vitals do not match the owned opening derivation contract.");
+    }
+
+    private static GameplayVitals ParseVitals(JsonElement source)
+    {
+        var result = new GameplayVitals(
+            source.GetProperty(nameof(GameplayVitals.Level)).GetInt32(),
+            source.GetProperty(nameof(GameplayVitals.HitPoints)).GetInt32(),
+            source.GetProperty(nameof(GameplayVitals.MaximumHitPoints)).GetInt32(),
+            source.GetProperty(nameof(GameplayVitals.ActionPoints)).GetInt32(),
+            source.GetProperty(nameof(GameplayVitals.MaximumActionPoints)).GetInt32(),
+            source.GetProperty(nameof(GameplayVitals.ExperiencePoints)).GetInt32(),
+            source.GetProperty(nameof(GameplayVitals.NextLevelExperiencePoints)).GetInt32());
+        result.Validate();
+        return result;
     }
 
     internal bool HasConsistentOpeningGameplayState()

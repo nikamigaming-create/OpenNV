@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Portals;
 
@@ -39,7 +40,8 @@ internal static class CellSceneLoader
         bool loadExistingSave = true,
         bool showGameplayHud = true,
         bool useClassicDiorama = false,
-        OwnedGameplayUiPresentation? gameplayUi = null)
+        OwnedGameplayUiPresentation? gameplayUi = null,
+        OpeningGameplayVitalsContract? gameplayVitals = null)
     {
         var resolvedScenePath = VerifiedGltfLoader.ResolvePath(scenePath);
         using var document = JsonDocument.Parse(File.ReadAllText(resolvedScenePath));
@@ -68,7 +70,8 @@ internal static class CellSceneLoader
             showGameplayHud,
             useClassicDiorama,
             objectiveOverride,
-            gameplayUi);
+            gameplayUi,
+            gameplayVitals);
         parent.AddChild(session);
         var main = CellContentLoader.Load(
             resolvedScenePath,

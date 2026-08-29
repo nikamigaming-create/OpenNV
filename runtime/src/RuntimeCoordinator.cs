@@ -504,6 +504,7 @@ public partial class RuntimeCoordinator : Node3D
             savePath,
             expectedCellFormId,
             allowedActiveCellFormIds,
+            manifest.NewGameFlow.Character.Vitals,
             state => OpeningQuestRuntime.MatchesFlow(manifest.NewGameFlow, state));
         var opening = new RetailOpening();
         AddChild(opening);
@@ -728,7 +729,8 @@ public partial class RuntimeCoordinator : Node3D
             !options.ContainsKey("new-game"),
             true,
             options.ContainsKey("classic-diorama"),
-            openingManifest?.GameplayUi);
+            openingManifest?.GameplayUi,
+            openingManifest?.NewGameFlow.Character.Vitals);
         if (options.TryGetValue("jam-profile", out var jamProfilePath))
         {
             var jamProfile = JamProfileContract.Load(jamProfilePath);

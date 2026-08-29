@@ -17,7 +17,7 @@ XR_SIMULATOR_REPORT_SCHEMA = "opennv-openxr-simulator-acceptance/v1"
 FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v1"
 FLAT_ROUTE_TRAVEL_REPORT_SCHEMA = "opennv-flat-route-travel/v1"
 GAMEPLAY_REPORT_SCHEMA = "opennv-godot-playable-route/v1"
-CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v5"
+CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v6"
 POOL_REPORT_SCHEMA = "opennv-pool-practice/v1"
 FLOAT_COMPARISON_TOLERANCE = 1.0e-6
 
