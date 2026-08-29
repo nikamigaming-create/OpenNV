@@ -10,16 +10,19 @@ internal sealed class CellPortalTravel
 
     private readonly GameplaySession _session;
     private readonly CellActiveSet _activeSet;
+    private readonly CellEnvironmentSet? _environmentSet;
     private readonly IReadOnlyList<Passage> _passages;
     private readonly List<Transition> _transitions = new();
 
     internal CellPortalTravel(
         IEnumerable<CellSceneLoader.PortalLink> links,
         GameplaySession session,
-        CellActiveSet activeSet)
+        CellActiveSet activeSet,
+        CellEnvironmentSet? environmentSet)
     {
         _session = session;
         _activeSet = activeSet;
+        _environmentSet = environmentSet;
         _passages = links.Select(link => new Passage(
             Endpoint.Create(
                 link.FromCellFormId,
@@ -99,6 +102,7 @@ internal sealed class CellPortalTravel
         player.CollisionMask = target.CollisionLayer;
         _session.CrossPortal(source.CellFormId, target.CellFormId, source.Door);
         _activeSet.Activate(target.CellFormId);
+        _environmentSet?.Activate(target.CellFormId);
         _transitions.Add(new Transition(
             source.CellFormId,
             target.CellFormId,

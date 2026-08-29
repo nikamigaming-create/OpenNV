@@ -18,7 +18,7 @@ internal static class RetailEnvironmentRenderer
 
         void vertex() {
             source_vertex_color = COLOR;
-            vec3 world_direction = mat3(MODEL_MATRIX) * VERTEX;
+            vec3 world_direction = normalize(mat3(MODEL_MATRIX) * VERTEX);
             POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 1.0);
             POSITION.z = 0.0;
         }
@@ -67,7 +67,7 @@ internal static class RetailEnvironmentRenderer
 
         void vertex() {
             source_vertex_color = COLOR;
-            vec3 world_direction = mat3(MODEL_MATRIX) * VERTEX;
+            vec3 world_direction = normalize(mat3(MODEL_MATRIX) * VERTEX);
             POSITION = PROJECTION_MATRIX * vec4(mat3(VIEW_MATRIX) * world_direction, 1.0);
             POSITION.z = 0.0;
         }
@@ -253,6 +253,20 @@ internal static class RetailEnvironmentRenderer
             retailActorMaterials > 0);
     }
 
+    internal static SkyApplication AddSky(
+        Node3D host,
+        RetailExteriorEnvironment environment,
+        RetailExteriorEnvironment.ResolvedEnvironment resolved,
+        RuntimeConfiguration configuration)
+    {
+        var atmosphere = AddAtmosphere(host, environment, resolved, configuration);
+        var clouds = AddClouds(host, environment, resolved, configuration);
+        return new SkyApplication(
+            atmosphere.SourceSha256,
+            clouds.SourceSha256,
+            clouds.Layers);
+    }
+
     private static VerifiedGltfLoader.LoadedGltf AddAtmosphere(
         Node3D host,
         RetailExteriorEnvironment environment,
@@ -434,6 +448,11 @@ internal static class RetailEnvironmentRenderer
     internal readonly record struct CloudApplication(
         string SourceSha256,
         IReadOnlyList<CloudLayerApplication> Layers);
+
+    internal readonly record struct SkyApplication(
+        string AtmosphereSourceSha256,
+        string CloudsSourceSha256,
+        IReadOnlyList<CloudLayerApplication> CloudLayers);
 
     internal readonly record struct CloudLayerApplication(
         int WeatherLayerIndex,

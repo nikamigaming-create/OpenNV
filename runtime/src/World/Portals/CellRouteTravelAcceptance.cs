@@ -787,6 +787,32 @@ internal static class CellRouteTravelAcceptance
                         suspendedCellFormIds = update.SuspendedCellFormIds,
                     }),
                 },
+                environmentSet = loaded.EnvironmentSet is null
+                    ? null
+                    : new
+                    {
+                        policy = "current-cell-owned-environment",
+                        activeCellFormId = loaded.EnvironmentSet.ActiveCellFormId,
+                        spaces = loaded.EnvironmentSet.Snapshot().Select(space => new
+                        {
+                            cellFormId = space.CellFormId,
+                            space.Active,
+                            mode = space.Mode,
+                            gameHour = space.GameHour,
+                            weatherFormId = space.WeatherFormId,
+                            weatherEditorId = space.WeatherEditorId,
+                            atmosphereSourceSha256 = space.AtmosphereSourceSha256,
+                            cloudsSourceSha256 = space.CloudsSourceSha256,
+                            cloudLayers = space.CloudLayers,
+                        }),
+                        updates = loaded.EnvironmentSet.Updates.Select(update => new
+                        {
+                            cellFormId = update.CellFormId,
+                            mode = update.Mode,
+                            weatherFormId = update.WeatherFormId,
+                            weatherEditorId = update.WeatherEditorId,
+                        }),
+                    },
                 playerTransform = new
                 {
                     position = Vector(transform.Origin),

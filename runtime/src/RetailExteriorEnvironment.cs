@@ -234,6 +234,74 @@ internal sealed class RetailExteriorEnvironment
             composedImageSpace);
     }
 
+    internal ResolvedEnvironment ResolveConfiguredClearDay()
+    {
+        var defaults = Climate.WeatherEntries
+            .Where(entry => entry.GlobalFormId is null && entry.Chance == 100)
+            .ToArray();
+        if (defaults.Length != 1)
+            throw new InvalidOperationException(
+                "Configured clear-day mode requires one unconditional 100-percent CLMT weather.");
+        if (!_weather.TryGetValue(defaults[0].WeatherFormId, out var current))
+            throw new InvalidOperationException(
+                $"Default CLMT weather is absent from the owned master: " +
+                $"0x{defaults[0].WeatherFormId:X8}");
+        if (current.SampleCount != WeatherSampleCount)
+            throw new InvalidOperationException(
+                "Default CLMT weather lacks its exact six-sample color tables.");
+
+        var gameHour = Climate.SunriseEndHour;
+        var blend = Blend(gameHour, Climate);
+        if (blend.Primary != DaySample || blend.Secondary != DaySample ||
+            blend.PrimaryStrength != 1.0f)
+            throw new InvalidOperationException(
+                "Configured clear-day CLMT selection did not resolve to the exact day sample.");
+        var colors = current.Colors.ToDictionary(
+            value => value.Key,
+            value => Interpolate(value.Value, blend),
+            StringComparer.Ordinal);
+        var cloudColors = current.CloudColors
+            .Select(samples => Interpolate(samples, blend))
+            .ToArray();
+        var cloudTextures = current.CloudTextures.Select(path =>
+        {
+            if (path.Length == 0)
+                return (TextureEvidence?)null;
+            if (MissingTextures.Contains(path) || !Textures.TryGetValue(path, out var texture))
+                throw new InvalidOperationException(
+                    $"Default WTHR cloud texture is unavailable: {path}");
+            return texture;
+        }).ToArray();
+        var baseImageSpace = new RetailImageSpaceComposition.ComposedImageSpace(
+            ImageSpace.Traits,
+            new Vector4(1.0f, 1.0f, 1.0f, 0.0f),
+            Vector4.Zero,
+            1.0f,
+            ImageSpace.SourceSha256,
+            Array.Empty<RetailImageSpaceComposition.AppliedModifier>());
+        return new ResolvedEnvironment(
+            current.FormId,
+            current.EditorId,
+            gameHour,
+            0u,
+            blend,
+            colors["skyUpper"],
+            colors["skyLower"],
+            colors["horizon"],
+            colors["fog"],
+            colors["ambient"],
+            colors["sunlight"],
+            colors["sun"],
+            colors["stars"],
+            cloudColors,
+            cloudTextures,
+            current.CloudSpeeds,
+            current.FogDistances[DayFogNearIndex],
+            current.FogDistances[DayFogFarIndex],
+            current.FogDistances[DayFogPowerIndex],
+            baseImageSpace);
+    }
+
     private IReadOnlyList<RetailImageSpaceComposition.Contribution>
         ResolveImageSpaceContributions(
             WeatherRecord weather,
@@ -283,13 +351,26 @@ internal sealed class RetailExteriorEnvironment
     private static ClimateState ParseClimate(JsonElement source)
     {
         var timing = source.GetProperty("timing");
+        var weatherEntries = source.GetProperty("weatherEntries").EnumerateArray()
+            .Select(entry => new ClimateWeatherEntry(
+                ParseFormId(entry.GetProperty("weatherFormId").GetString(), "climate weather"),
+                entry.GetProperty("chance").GetByte(),
+                entry.GetProperty("globalFormId").ValueKind == JsonValueKind.Null
+                    ? null
+                    : ParseFormId(
+                        entry.GetProperty("globalFormId").GetString(),
+                        "climate weather global")))
+            .ToArray();
+        if (weatherEntries.Length == 0)
+            throw new InvalidOperationException("Owned climate contains no weather entries.");
         return new ClimateState(
             ParseFormId(source.GetProperty("formId").GetString(), "climate"),
             RequireText(source, "editorId"),
             timing.GetProperty("sunriseBeginHour").GetSingle(),
             timing.GetProperty("sunriseEndHour").GetSingle(),
             timing.GetProperty("sunsetBeginHour").GetSingle(),
-            timing.GetProperty("sunsetEndHour").GetSingle());
+            timing.GetProperty("sunsetEndHour").GetSingle(),
+            weatherEntries);
     }
 
     private static ImageSpaceState ParseImageSpace(JsonElement source)
@@ -538,7 +619,13 @@ internal sealed class RetailExteriorEnvironment
         float SunriseBeginHour,
         float SunriseEndHour,
         float SunsetBeginHour,
-        float SunsetEndHour);
+        float SunsetEndHour,
+        IReadOnlyList<ClimateWeatherEntry> WeatherEntries);
+
+    internal readonly record struct ClimateWeatherEntry(
+        uint WeatherFormId,
+        byte Chance,
+        uint? GlobalFormId);
 
     internal readonly record struct ImageSpaceState(
         uint FormId,

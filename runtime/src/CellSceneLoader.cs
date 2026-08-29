@@ -231,7 +231,8 @@ internal static class CellSceneLoader
             applyCellEnvironment,
             useClassicDiorama,
             renderBounds,
-            out var mainLights);
+            out var mainLights,
+            out var worldEnvironment);
         session.ConfigureWorldContext(
             player,
             new[] { main }.Concat(linkedCells.Select(value => value.Content)),
@@ -257,8 +258,19 @@ internal static class CellSceneLoader
         var activeSet = new CellActiveSet(
             activeSpaces,
             portalLinks.Select(link => (link.FromCellFormId, link.ToCellFormId)));
+        var environmentSet = worldEnvironment is null
+            ? null
+            : CellEnvironmentSet.Create(
+                worldEnvironment,
+                new[] { main }.Concat(linkedCells.Select(value => value.Content)),
+                configuration);
         activeSet.Activate(session.ActiveCellFormId);
-        player.ConfigurePortalTravel(new CellPortalTravel(portalLinks, session, activeSet));
+        environmentSet?.Activate(session.ActiveCellFormId);
+        player.ConfigurePortalTravel(new CellPortalTravel(
+            portalLinks,
+            session,
+            activeSet,
+            environmentSet));
         player.CollisionMask = main.FormId.Equals(
                 session.ActiveCellFormId,
                 StringComparison.OrdinalIgnoreCase)
@@ -315,6 +327,7 @@ internal static class CellSceneLoader
             linkedCells,
             portalLinks,
             activeSet,
+            environmentSet,
             main);
     }
 
@@ -328,10 +341,12 @@ internal static class CellSceneLoader
         bool applyCellEnvironment,
         bool useClassicDiorama,
         Aabb? renderBounds,
-        out IReadOnlyList<Light3D> lights)
+        out IReadOnlyList<Light3D> lights,
+        out WorldEnvironment? worldEnvironment)
     {
         var lighting = main.Lighting;
         Godot.Environment? environment = null;
+        worldEnvironment = null;
         if (applyCellEnvironment)
         {
             environment = new Godot.Environment
@@ -351,7 +366,8 @@ internal static class CellSceneLoader
                 FogDepthEnd = lighting.FogFarGameUnits * main.UnitsToMeters,
                 FogDepthCurve = lighting.FogPower,
             };
-            parent.AddChild(new WorldEnvironment { Environment = environment });
+            worldEnvironment = new WorldEnvironment { Environment = environment };
+            parent.AddChild(worldEnvironment);
         }
         lights = AddCellLights(parent, main, configuration, 1u, true, applyCellEnvironment);
         var player = new CellPlayer();
@@ -641,6 +657,7 @@ internal static class CellSceneLoader
         IReadOnlyList<LinkedCell> LinkedCells,
         IReadOnlyList<PortalLink> PortalLinks,
         CellActiveSet ActiveSet,
+        CellEnvironmentSet? EnvironmentSet,
         CellContentLoader.LoadedContent MainContent)
     {
         internal Vector3 GameToCellUnits(Vector3 position) => new(

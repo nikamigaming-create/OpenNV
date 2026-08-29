@@ -104,6 +104,7 @@ internal static class CellContentLoader
             var recipeSha256 = source.GetProperty("recipeSha256").GetString()!;
             var formId = cell.GetProperty("formId").GetString()!;
             var editorId = cell.GetProperty("editorId").GetString()!;
+            var interior = cell.GetProperty("interior").GetBoolean();
             var acceptedCellFormIds = cell.TryGetProperty("sourceCellFormIds", out var sourceCells)
                 ? sourceCells.EnumerateArray().Select(value => value.GetString()!)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase)
@@ -614,6 +615,11 @@ internal static class CellContentLoader
             }
 
             var lighting = ReadLighting(source.GetProperty("lighting"));
+            var exteriorEnvironment = interior
+                ? null
+                : RetailExteriorEnvironment.Load(
+                    source,
+                    configuration.FalloutEnvironment.ImageSpace);
             return new LoadedContent(
                 resolvedScenePath,
                 recipeId,
@@ -621,7 +627,7 @@ internal static class CellContentLoader
                 root,
                 formId,
                 editorId,
-                cell.GetProperty("interior").GetBoolean(),
+                interior,
                 acceptedCellFormIds,
                 originGameUnits,
                 unitScale,
@@ -652,7 +658,8 @@ internal static class CellContentLoader
                 muzzlePosition,
                 startingLoadout,
                 firstPersonRig,
-                lighting);
+                lighting,
+                exteriorEnvironment);
         }
         finally
         {
@@ -1591,7 +1598,8 @@ internal static class CellContentLoader
         Vector3 MuzzlePosition,
         StartingLoadout? StartingLoadout,
         FirstPersonRig.Contract? FirstPersonRig,
-        LightingContract Lighting)
+        LightingContract Lighting,
+        RetailExteriorEnvironment? ExteriorEnvironment)
     {
         internal Vector3 GameToWorld(Vector3 position) => Root.ToGlobal(new Vector3(
             position.X - OriginGameUnits.X,
