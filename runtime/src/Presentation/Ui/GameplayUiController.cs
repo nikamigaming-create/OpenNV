@@ -227,7 +227,7 @@ internal partial class GameplayUiController : CanvasLayer
         if (_pipBoyFooter is not null)
             _pipBoyFooter.Text = _ownedPresentation is null
                 ? _configuration.Hud.PipBoy.CloseHint
-                : $"TAB CLOSE   F5 SAVE   {snapshot.SavePath}";
+                : "TAB CLOSE";
         if (_xrContent is not null)
             _xrContent.Text = FormatWrist(snapshot);
     }
@@ -363,25 +363,18 @@ internal partial class GameplayUiController : CanvasLayer
             OffsetBottom = TabBarHeightPixels,
         };
         screen.AddChild(tabs);
-        AddOwnedTab(tabs, "STATS", GameplayUiPanel.Status);
+        AddOwnedTab(tabs, "STAT", GameplayUiPanel.Status);
         AddOwnedTab(tabs, "ITEMS", GameplayUiPanel.Items);
         AddOwnedTab(tabs, "DATA", GameplayUiPanel.Data);
-        var save = new Button
-        {
-            Name = "SaveGame",
-            Text = "SAVE",
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-        };
-        ApplyOwnedButton(save);
-        save.Pressed += _session.SaveAndNotify;
-        tabs.AddChild(save);
 
         var content = new VBoxContainer
         {
             Name = "OwnedPipBoyContent",
             AnchorRight = 1.0f,
             AnchorBottom = 1.0f,
+            OffsetLeft = ScreenMarginPixels,
             OffsetTop = TabBarHeightPixels + ScreenMarginPixels,
+            OffsetRight = -ScreenMarginPixels,
             OffsetBottom = -FooterBaselineOffsetPixels,
         };
         screen.AddChild(content);
@@ -396,7 +389,9 @@ internal partial class GameplayUiController : CanvasLayer
         _pipBoyFooter.AnchorTop = 1.0f;
         _pipBoyFooter.AnchorRight = 1.0f;
         _pipBoyFooter.AnchorBottom = 1.0f;
+        _pipBoyFooter.OffsetLeft = ScreenMarginPixels;
         _pipBoyFooter.OffsetTop = -FooterBaselineOffsetPixels;
+        _pipBoyFooter.OffsetRight = -ScreenMarginPixels;
         _pipBoyFooter.HorizontalAlignment = HorizontalAlignment.Right;
         screen.AddChild(_pipBoyFooter);
         ApplyOwnedPipBoyRole();
@@ -699,15 +694,79 @@ internal partial class GameplayUiController : CanvasLayer
         CornerRadiusBottomRight = 3,
     };
 
-    private string FormatPanel(GameplayUiSnapshot snapshot, GameplayUiPanel panel) => panel switch
+    private string FormatPanel(GameplayUiSnapshot snapshot, GameplayUiPanel panel)
     {
-        GameplayUiPanel.Status => FormatStatus(snapshot),
-        GameplayUiPanel.Items => FormatItems(snapshot),
-        GameplayUiPanel.Data => FormatData(snapshot),
-        GameplayUiPanel.Map => FormatMap(snapshot),
+        if (_ownedPresentation is not null)
+            return FormatOwnedPanel(snapshot, panel);
+        return panel switch
+        {
+            GameplayUiPanel.Status => FormatStatus(snapshot),
+            GameplayUiPanel.Items => FormatItems(snapshot),
+            GameplayUiPanel.Data => FormatData(snapshot),
+            GameplayUiPanel.Map => FormatMap(snapshot),
+            GameplayUiPanel.Controls => FormatControls(snapshot),
+            _ => throw new ArgumentOutOfRangeException(nameof(panel)),
+        };
+    }
+
+    private string FormatOwnedPanel(GameplayUiSnapshot snapshot, GameplayUiPanel panel) => panel switch
+    {
+        GameplayUiPanel.Status => string.Join(
+            "\n",
+            string.IsNullOrWhiteSpace(snapshot.PlayerName) ? "COURIER" : snapshot.PlayerName,
+            "",
+            "EQUIPPED WEAPON",
+            snapshot.EquippedWeaponLabel,
+            "",
+            "ACTIVE OBJECTIVE",
+            DisplayObjective(snapshot.Objective)),
+        GameplayUiPanel.Items => snapshot.Inventory.Count == 0
+            ? "NO ITEMS"
+            : string.Join(
+                "\n",
+                snapshot.Inventory.Select(item =>
+                    $"{(item.Equipped ? ">" : " ")} {DisplayEditorId(item.EditorId)}  ({item.Count})")),
+        GameplayUiPanel.Data => FormatOwnedData(snapshot),
+        GameplayUiPanel.Map => FormatOwnedData(snapshot),
         GameplayUiPanel.Controls => FormatControls(snapshot),
         _ => throw new ArgumentOutOfRangeException(nameof(panel)),
     };
+
+    private static string FormatOwnedData(GameplayUiSnapshot snapshot)
+    {
+        var objectives = snapshot.Objectives
+            .Where(objective => objective.Enabled &&
+                !objective.State.Equals("completed", StringComparison.OrdinalIgnoreCase))
+            .Select(objective => objective.Text)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return objectives.Length == 0
+            ? "QUESTS\nNO ACTIVE QUESTS"
+            : "QUESTS\n" + string.Join("\n", objectives.Select(text => $"> {text}"));
+    }
+
+    private static string DisplayEditorId(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "ITEM";
+        var result = new System.Text.StringBuilder(value.Length + 8);
+        for (var index = 0; index < value.Length; index++)
+        {
+            var current = value[index];
+            if (index > 0 && char.IsUpper(current) && !char.IsUpper(value[index - 1]))
+                result.Append(' ');
+            result.Append(index == 0 ? char.ToUpperInvariant(current) : current);
+        }
+        return result.ToString();
+    }
+
+    private static string DisplayObjective(string value)
+    {
+        const string prefix = "OBJECTIVE ";
+        return value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? value[prefix.Length..]
+            : value;
+    }
 
     private string FormatStatus(GameplayUiSnapshot snapshot) => string.Join(
         "\n",

@@ -17,6 +17,7 @@ internal static class PipBoyVisualAcceptance
         {
             if (loaded.Player.UsesXr)
                 throw new InvalidOperationException("Flat Pip-Boy visual proof loaded an XR player.");
+            await host.WaitForLoadingScreenDismissal();
             await FlatControlsAcceptance.WaitPhysicsFrames(host, input.Acceptance.SettleFrames);
             await FlatControlsAcceptance.PulseKeyBinding(
                 host,

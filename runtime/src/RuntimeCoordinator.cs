@@ -463,6 +463,15 @@ public partial class RuntimeCoordinator : Node3D
         timer.Timeout += loading.QueueFree;
     }
 
+    internal async Task WaitForLoadingScreenDismissal()
+    {
+        while (GetNodeOrNull<LoadingScreen>("OwnedDataLoadingScreen") is { } loading &&
+               GodotObject.IsInstanceValid(loading) &&
+               !loading.IsQueuedForDeletion())
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
     private void LoadPrepared(
         LegalAssetPreparer.PreparedContent prepared,
         IReadOnlyDictionary<string, string> options)
