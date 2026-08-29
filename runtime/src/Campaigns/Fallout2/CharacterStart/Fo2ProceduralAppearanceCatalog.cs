@@ -31,18 +31,48 @@ internal sealed record Fo2AppearanceColorPreset(
     Color PortraitColor,
     Color HeadAlbedo);
 
+internal sealed record Fo2BrowStylePreset(
+    string Id,
+    int PortraitY,
+    int PortraitOuterOffset,
+    int PortraitThickness,
+    float LiveY,
+    float LiveRotationRadians,
+    float LiveWidth,
+    float LiveThickness);
+
+internal sealed record Fo2NoseStylePreset(
+    string Id,
+    int PortraitWidth,
+    int PortraitHeight,
+    Vector3 HeadScale);
+
+internal sealed record Fo2MouthStylePreset(
+    string Id,
+    int PortraitWidth,
+    int PortraitThickness,
+    float LiveWidth,
+    float LiveHeight);
+
 internal sealed record Fo2LiveHeadProfile(
     Vector2I Viewport,
     float HeadRadius,
     float HeadHeight,
+    float BrowX,
+    float BrowZ,
+    float NoseY,
+    float NoseZ,
+    float MouthY,
+    float MouthZ,
+    float FeatureDepth,
     float YawAmplitudeRadians,
     float YawCyclesPerSecond);
 
 internal sealed class Fo2ProceduralAppearanceCatalog
 {
-    internal const string ResourcePath = "res://config/fo2-procedural-appearance-v2.json";
-    internal const string ExpectedSchema = "opennv-fo2-procedural-appearance/v2";
-    internal const string ExpectedId = "fo2-local-classic-green-appearance-v2";
+    internal const string ResourcePath = "res://config/fo2-procedural-appearance-v3.json";
+    internal const string ExpectedSchema = "opennv-fo2-procedural-appearance/v3";
+    internal const string ExpectedId = "fo2-local-classic-green-appearance-v3";
     internal const string NoSideHair = "none";
     internal const string RightSideHair = "right";
     internal const string BothSideHair = "both";
@@ -65,16 +95,27 @@ internal sealed class Fo2ProceduralAppearanceCatalog
         Color background,
         Color outline,
         Color feature,
+        int portraitBrowLeftX,
+        int portraitBrowRightX,
+        int portraitBrowWidth,
+        int portraitNoseY,
+        int portraitMouthY,
         string defaultFaceShapeId,
         string defaultHairStyleId,
         string defaultSkinToneId,
         string defaultHairColorId,
         string defaultEyeColorId,
+        string defaultBrowStyleId,
+        string defaultNoseStyleId,
+        string defaultMouthStyleId,
         IReadOnlyList<Fo2FaceShapePreset> faceShapes,
         IReadOnlyList<Fo2HairStylePreset> hairStyles,
         IReadOnlyList<Fo2SkinTonePreset> skinTones,
         IReadOnlyList<Fo2AppearanceColorPreset> hairColors,
         IReadOnlyList<Fo2AppearanceColorPreset> eyeColors,
+        IReadOnlyList<Fo2BrowStylePreset> browStyles,
+        IReadOnlyList<Fo2NoseStylePreset> noseStyles,
+        IReadOnlyList<Fo2MouthStylePreset> mouthStyles,
         Fo2LiveHeadProfile liveHead)
     {
         Sha256 = sha256;
@@ -83,21 +124,35 @@ internal sealed class Fo2ProceduralAppearanceCatalog
         Background = background;
         Outline = outline;
         Feature = feature;
+        PortraitBrowLeftX = portraitBrowLeftX;
+        PortraitBrowRightX = portraitBrowRightX;
+        PortraitBrowWidth = portraitBrowWidth;
+        PortraitNoseY = portraitNoseY;
+        PortraitMouthY = portraitMouthY;
         DefaultFaceShapeId = defaultFaceShapeId;
         DefaultHairStyleId = defaultHairStyleId;
         DefaultSkinToneId = defaultSkinToneId;
         DefaultHairColorId = defaultHairColorId;
         DefaultEyeColorId = defaultEyeColorId;
+        DefaultBrowStyleId = defaultBrowStyleId;
+        DefaultNoseStyleId = defaultNoseStyleId;
+        DefaultMouthStyleId = defaultMouthStyleId;
         FaceShapes = faceShapes;
         HairStyles = hairStyles;
         SkinTones = skinTones;
         HairColors = hairColors;
         EyeColors = eyeColors;
+        BrowStyles = browStyles;
+        NoseStyles = noseStyles;
+        MouthStyles = mouthStyles;
         FaceShapeIds = faceShapes.Select(row => row.Id).ToArray();
         HairStyleIds = hairStyles.Select(row => row.Id).ToArray();
         SkinToneIds = skinTones.Select(row => row.Id).ToArray();
         HairColorIds = hairColors.Select(row => row.Id).ToArray();
         EyeColorIds = eyeColors.Select(row => row.Id).ToArray();
+        BrowStyleIds = browStyles.Select(row => row.Id).ToArray();
+        NoseStyleIds = noseStyles.Select(row => row.Id).ToArray();
+        MouthStyleIds = mouthStyles.Select(row => row.Id).ToArray();
         LiveHead = liveHead;
     }
 
@@ -107,21 +162,35 @@ internal sealed class Fo2ProceduralAppearanceCatalog
     internal Color Background { get; }
     internal Color Outline { get; }
     internal Color Feature { get; }
+    internal int PortraitBrowLeftX { get; }
+    internal int PortraitBrowRightX { get; }
+    internal int PortraitBrowWidth { get; }
+    internal int PortraitNoseY { get; }
+    internal int PortraitMouthY { get; }
     internal string DefaultFaceShapeId { get; }
     internal string DefaultHairStyleId { get; }
     internal string DefaultSkinToneId { get; }
     internal string DefaultHairColorId { get; }
     internal string DefaultEyeColorId { get; }
+    internal string DefaultBrowStyleId { get; }
+    internal string DefaultNoseStyleId { get; }
+    internal string DefaultMouthStyleId { get; }
     internal IReadOnlyList<Fo2FaceShapePreset> FaceShapes { get; }
     internal IReadOnlyList<Fo2HairStylePreset> HairStyles { get; }
     internal IReadOnlyList<Fo2SkinTonePreset> SkinTones { get; }
     internal IReadOnlyList<Fo2AppearanceColorPreset> HairColors { get; }
     internal IReadOnlyList<Fo2AppearanceColorPreset> EyeColors { get; }
+    internal IReadOnlyList<Fo2BrowStylePreset> BrowStyles { get; }
+    internal IReadOnlyList<Fo2NoseStylePreset> NoseStyles { get; }
+    internal IReadOnlyList<Fo2MouthStylePreset> MouthStyles { get; }
     internal IReadOnlyList<string> FaceShapeIds { get; }
     internal IReadOnlyList<string> HairStyleIds { get; }
     internal IReadOnlyList<string> SkinToneIds { get; }
     internal IReadOnlyList<string> HairColorIds { get; }
     internal IReadOnlyList<string> EyeColorIds { get; }
+    internal IReadOnlyList<string> BrowStyleIds { get; }
+    internal IReadOnlyList<string> NoseStyleIds { get; }
+    internal IReadOnlyList<string> MouthStyleIds { get; }
     internal Fo2LiveHeadProfile LiveHead { get; }
 
     internal static Fo2ProceduralAppearanceCatalog Load() => SharedCatalog.Value;
@@ -144,6 +213,18 @@ internal sealed class Fo2ProceduralAppearanceCatalog
     internal Fo2AppearanceColorPreset EyeColor(string id) =>
         EyeColors.SingleOrDefault(row => row.Id == id) ??
         throw new InvalidOperationException($"Unsupported Fallout 2 eye color: {id}");
+
+    internal Fo2BrowStylePreset BrowStyle(string id) =>
+        BrowStyles.SingleOrDefault(row => row.Id == id) ??
+        throw new InvalidOperationException($"Unsupported Fallout 2 brow style: {id}");
+
+    internal Fo2NoseStylePreset NoseStyle(string id) =>
+        NoseStyles.SingleOrDefault(row => row.Id == id) ??
+        throw new InvalidOperationException($"Unsupported Fallout 2 nose style: {id}");
+
+    internal Fo2MouthStylePreset MouthStyle(string id) =>
+        MouthStyles.SingleOrDefault(row => row.Id == id) ??
+        throw new InvalidOperationException($"Unsupported Fallout 2 mouth style: {id}");
 
     private static Fo2ProceduralAppearanceCatalog LoadCore()
     {
@@ -189,6 +270,29 @@ internal sealed class Fo2ProceduralAppearanceCatalog
                 ReadColor(row.GetProperty("headAlbedo")))).ToArray();
         var hairColors = ReadColors(root, "hairColors");
         var eyeColors = ReadColors(root, "eyeColors");
+        var browStyles = root.GetProperty("browStyles").EnumerateArray().Select(row =>
+            new Fo2BrowStylePreset(
+                RequiredString(row, "id"),
+                NonNegativeInt(row, "portraitY"),
+                NonNegativeInt(row, "portraitOuterOffset"),
+                PositiveInt(row, "portraitThickness"),
+                Finite(row, "liveY"),
+                Finite(row, "liveRotationRadians"),
+                Positive(row, "liveWidth"),
+                Positive(row, "liveThickness"))).ToArray();
+        var noseStyles = root.GetProperty("noseStyles").EnumerateArray().Select(row =>
+            new Fo2NoseStylePreset(
+                RequiredString(row, "id"),
+                PositiveInt(row, "portraitWidth"),
+                PositiveInt(row, "portraitHeight"),
+                ReadVector(row.GetProperty("headScale")))).ToArray();
+        var mouthStyles = root.GetProperty("mouthStyles").EnumerateArray().Select(row =>
+            new Fo2MouthStylePreset(
+                RequiredString(row, "id"),
+                PositiveInt(row, "portraitWidth"),
+                PositiveInt(row, "portraitThickness"),
+                Positive(row, "liveWidth"),
+                Positive(row, "liveHeight"))).ToArray();
         var profile = new Fo2ProceduralAppearanceCatalog(
             Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
             portrait.GetProperty("width").GetInt32(),
@@ -196,24 +300,46 @@ internal sealed class Fo2ProceduralAppearanceCatalog
             ReadHtmlColor(portrait, "background"),
             ReadHtmlColor(portrait, "outline"),
             ReadHtmlColor(portrait, "feature"),
+            NonNegativeInt(portrait, "browLeftX"),
+            NonNegativeInt(portrait, "browRightX"),
+            PositiveInt(portrait, "browWidth"),
+            NonNegativeInt(portrait, "noseY"),
+            NonNegativeInt(portrait, "mouthY"),
             RequiredString(defaults, "faceShapeId"),
             RequiredString(defaults, "hairStyleId"),
             RequiredString(defaults, "skinToneId"),
             RequiredString(defaults, "hairColorId"),
             RequiredString(defaults, "eyeColorId"),
+            RequiredString(defaults, "browStyleId"),
+            RequiredString(defaults, "noseStyleId"),
+            RequiredString(defaults, "mouthStyleId"),
             faces,
             hair,
             skin,
             hairColors,
             eyeColors,
+            browStyles,
+            noseStyles,
+            mouthStyles,
             new Fo2LiveHeadProfile(
                 ReadVector2I(live.GetProperty("viewport")),
                 Positive(live, "headRadius"),
                 Positive(live, "headHeight"),
+                Positive(live, "browX"),
+                Positive(live, "browZ"),
+                Finite(live, "noseY"),
+                Positive(live, "noseZ"),
+                Finite(live, "mouthY"),
+                Positive(live, "mouthZ"),
+                Positive(live, "featureDepth"),
                 Positive(live, "yawAmplitudeRadians"),
                 Positive(live, "yawCyclesPerSecond")));
         if (profile.PortraitWidth != Fo2ProceduralPortrait.Width ||
             profile.PortraitHeight != Fo2ProceduralPortrait.Height ||
+            profile.PortraitBrowLeftX + profile.PortraitBrowWidth >= profile.PortraitWidth ||
+            profile.PortraitBrowRightX + profile.PortraitBrowWidth >= profile.PortraitWidth ||
+            profile.PortraitNoseY >= profile.PortraitHeight ||
+            profile.PortraitMouthY >= profile.PortraitHeight ||
             !faces.Select(row => row.Id).SequenceEqual(
                 [Fo2ProceduralPortrait.RoundFace, Fo2ProceduralPortrait.OvalFace,
                     Fo2ProceduralPortrait.AngularFace]) ||
@@ -231,15 +357,36 @@ internal sealed class Fo2ProceduralAppearanceCatalog
                 [Fo2ProceduralPortrait.HazelEyeColor,
                     Fo2ProceduralPortrait.BlueEyeColor,
                     Fo2ProceduralPortrait.GreenEyeColor]) ||
+            !browStyles.Select(row => row.Id).SequenceEqual(
+                [Fo2ProceduralPortrait.StraightBrow,
+                    Fo2ProceduralPortrait.ArchedBrow,
+                    Fo2ProceduralPortrait.HeavyBrow]) ||
+            !noseStyles.Select(row => row.Id).SequenceEqual(
+                [Fo2ProceduralPortrait.NarrowNose,
+                    Fo2ProceduralPortrait.StandardNose,
+                    Fo2ProceduralPortrait.BroadNose]) ||
+            !mouthStyles.Select(row => row.Id).SequenceEqual(
+                [Fo2ProceduralPortrait.SmallMouth,
+                    Fo2ProceduralPortrait.NeutralMouth,
+                    Fo2ProceduralPortrait.WideMouth]) ||
             profile.DefaultFaceShapeId != Fo2ProceduralPortrait.OvalFace ||
             profile.DefaultHairStyleId != Fo2ProceduralPortrait.CroppedHair ||
             profile.DefaultSkinToneId != Fo2ProceduralPortrait.MediumSkin ||
             profile.DefaultHairColorId != Fo2ProceduralPortrait.BrownHairColor ||
             profile.DefaultEyeColorId != Fo2ProceduralPortrait.HazelEyeColor ||
+            profile.DefaultBrowStyleId != Fo2ProceduralPortrait.StraightBrow ||
+            profile.DefaultNoseStyleId != Fo2ProceduralPortrait.StandardNose ||
+            profile.DefaultMouthStyleId != Fo2ProceduralPortrait.NeutralMouth ||
             hair.Any(row => row.HairLineY < ZeroInteger || row.BottomY < row.HairLineY ||
                 row.BottomY >= profile.PortraitHeight || row.SideInset < MinimumPositive ||
                 row.SideLength < MinimumPositive ||
-                row.SideMode is not NoSideHair and not RightSideHair and not BothSideHair))
+                row.SideMode is not NoSideHair and not RightSideHair and not BothSideHair) ||
+            browStyles.Any(row => row.PortraitY + row.PortraitOuterOffset +
+                    row.PortraitThickness >= profile.PortraitHeight) ||
+            noseStyles.Any(row => row.PortraitWidth >= profile.PortraitWidth ||
+                row.PortraitHeight >= profile.PortraitHeight) ||
+            mouthStyles.Any(row => row.PortraitWidth >= profile.PortraitWidth ||
+                row.PortraitThickness >= profile.PortraitHeight))
             throw new InvalidOperationException(
                 "Fallout 2 procedural appearance identities or dimensions drifted.");
         return profile;
@@ -278,6 +425,24 @@ internal sealed class Fo2ProceduralAppearanceCatalog
             ? value
             : throw new InvalidOperationException(
                 $"Fallout 2 appearance recipe number is not positive: {property}");
+    }
+
+    private static int NonNegativeInt(JsonElement source, string property)
+    {
+        var value = source.GetProperty(property).GetInt32();
+        return value >= ZeroInteger
+            ? value
+            : throw new InvalidOperationException(
+                $"Fallout 2 appearance recipe integer is negative: {property}");
+    }
+
+    private static int PositiveInt(JsonElement source, string property)
+    {
+        var value = NonNegativeInt(source, property);
+        return value > ZeroInteger
+            ? value
+            : throw new InvalidOperationException(
+                $"Fallout 2 appearance recipe integer is not positive: {property}");
     }
 
     private static Color ReadHtmlColor(JsonElement source, string property) =>

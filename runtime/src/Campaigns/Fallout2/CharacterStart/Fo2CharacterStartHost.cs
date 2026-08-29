@@ -129,6 +129,10 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     "fo2-custom-portrait-restore-proof",
                     out var portraitRestoreRoot))
                 Fo2ProceduralPortraitProof.RunRestore(this, portraitRestoreRoot);
+            else if (options.TryGetValue(
+                    "fo2-custom-portrait-v8-migration-proof",
+                    out var portraitMigrationRoot))
+                Fo2ProceduralPortraitProof.RunV8MigrationRestore(this, portraitMigrationRoot);
         }
         catch (Exception exception)
         {
@@ -209,6 +213,9 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         player.SetMeta("selected_skin_tone", character.Appearance.SkinToneId);
         player.SetMeta("selected_hair_color", character.Appearance.HairColorId);
         player.SetMeta("selected_eye_color", character.Appearance.EyeColorId);
+        player.SetMeta("selected_brow_style", character.Appearance.BrowStyleId);
+        player.SetMeta("selected_nose_style", character.Appearance.NoseStyleId);
+        player.SetMeta("selected_mouth_style", character.Appearance.MouthStyleId);
         player.SetMeta(
             "selected_appearance_recipe_sha256",
             character.Appearance.AppearanceRecipeSha256);

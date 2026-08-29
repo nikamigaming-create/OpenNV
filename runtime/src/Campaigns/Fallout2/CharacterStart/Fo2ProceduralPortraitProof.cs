@@ -38,6 +38,9 @@ internal static class Fo2ProceduralPortraitProof
             editor.SetSkinTone(Fo2ProceduralPortrait.DeepSkin);
             editor.SetHairColor(Fo2ProceduralPortrait.AuburnHairColor);
             editor.SetEyeColor(Fo2ProceduralPortrait.BlueEyeColor);
+            editor.SetBrowStyle(Fo2ProceduralPortrait.ArchedBrow);
+            editor.SetNoseStyle(Fo2ProceduralPortrait.NarrowNose);
+            editor.SetMouthStyle(Fo2ProceduralPortrait.WideMouth);
             editor.TogglePreviewMode();
             editor.SetSpecial(
             [
@@ -54,6 +57,22 @@ internal static class Fo2ProceduralPortraitProof
                     "Fallout 2 portrait proof custom state is invalid.");
             var liveHeadMatches = editor.Live3DVisible &&
                 MatchesLiveHead(editor.HeadPreview);
+            var selectedFeatureState = editor.HeadPreview.FeatureState;
+            var alternateHead = new Fo2ProceduralHeadPreview();
+            host.AddChild(alternateHead);
+            alternateHead.SetIdentity(
+                ExpectedSex,
+                Fo2ProceduralPortrait.AngularFace,
+                Fo2ProceduralPortrait.LongHair,
+                Fo2ProceduralPortrait.DeepSkin,
+                Fo2ProceduralPortrait.AuburnHairColor,
+                Fo2ProceduralPortrait.BlueEyeColor,
+                Fo2ProceduralPortrait.StraightBrow,
+                Fo2ProceduralPortrait.StandardNose,
+                Fo2ProceduralPortrait.NeutralMouth);
+            var distinctLive3dFeatureGeometry =
+                selectedFeatureState != alternateHead.FeatureState;
+            alternateHead.QueueFree();
             editor.Confirm();
             var saved = host.PersistCurrentState();
             var appearance = saved.Character.Appearance;
@@ -64,49 +83,100 @@ internal static class Fo2ProceduralPortraitProof
                 appearance.HairStyleId,
                 appearance.SkinToneId,
                 appearance.HairColorId,
-                appearance.EyeColorId);
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId);
             var selectedPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 appearance.HairStyleId,
                 appearance.SkinToneId,
                 appearance.HairColorId,
-                appearance.EyeColorId));
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId));
             var alternateFacePixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 Fo2ProceduralPortrait.RoundFace,
                 appearance.HairStyleId,
                 appearance.SkinToneId,
                 appearance.HairColorId,
-                appearance.EyeColorId));
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId));
             var alternateHairPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 Fo2ProceduralPortrait.CroppedHair,
                 appearance.SkinToneId,
                 appearance.HairColorId,
-                appearance.EyeColorId));
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId));
             var alternateSkinPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 appearance.HairStyleId,
                 Fo2ProceduralPortrait.LightSkin,
                 appearance.HairColorId,
-                appearance.EyeColorId));
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId));
             var alternateHairColorPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 appearance.HairStyleId,
                 appearance.SkinToneId,
                 Fo2ProceduralPortrait.BlackHairColor,
-                appearance.EyeColorId));
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId));
             var alternateEyeColorPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 appearance.HairStyleId,
                 appearance.SkinToneId,
                 appearance.HairColorId,
-                Fo2ProceduralPortrait.GreenEyeColor));
+                Fo2ProceduralPortrait.GreenEyeColor,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId));
+            var alternateBrowPixels = PixelSha256(Fo2ProceduralPortrait.Render(
+                saved.Character.Profile.Sex,
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                appearance.EyeColorId,
+                Fo2ProceduralPortrait.StraightBrow,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId));
+            var alternateNosePixels = PixelSha256(Fo2ProceduralPortrait.Render(
+                saved.Character.Profile.Sex,
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                Fo2ProceduralPortrait.StandardNose,
+                appearance.MouthStyleId));
+            var alternateMouthPixels = PixelSha256(Fo2ProceduralPortrait.Render(
+                saved.Character.Profile.Sex,
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                Fo2ProceduralPortrait.NeutralMouth));
             var passed = Matches(saved.Character) &&
                 liveHeadMatches &&
                 appearance == repeat &&
@@ -115,6 +185,10 @@ internal static class Fo2ProceduralPortraitProof
                 selectedPixels != alternateSkinPixels &&
                 selectedPixels != alternateHairColorPixels &&
                 selectedPixels != alternateEyeColorPixels &&
+                selectedPixels != alternateBrowPixels &&
+                selectedPixels != alternateNosePixels &&
+                selectedPixels != alternateMouthPixels &&
+                distinctLive3dFeatureGeometry &&
                 File.Exists(appearance.GeneratedPortraitPath) &&
                 saved.Sha256.Length == HashLength;
             WriteReport(
@@ -134,6 +208,10 @@ internal static class Fo2ProceduralPortraitProof
                     distinctSkinTonePixels = selectedPixels != alternateSkinPixels,
                     distinctHairColorPixels = selectedPixels != alternateHairColorPixels,
                     distinctEyeColorPixels = selectedPixels != alternateEyeColorPixels,
+                    distinctBrowPixels = selectedPixels != alternateBrowPixels,
+                    distinctNosePixels = selectedPixels != alternateNosePixels,
+                    distinctMouthPixels = selectedPixels != alternateMouthPixels,
+                    distinctLive3dFeatureGeometry,
                     matchingLive3dHead = liveHeadMatches,
                     mediaCaptureCreated = false,
                 });
@@ -165,7 +243,10 @@ internal static class Fo2ProceduralPortraitProof
                 appearance.HairStyleId,
                 appearance.SkinToneId,
                 appearance.HairColorId,
-                appearance.EyeColorId);
+                appearance.EyeColorId,
+                appearance.BrowStyleId,
+                appearance.NoseStyleId,
+                appearance.MouthStyleId);
             var liveHeadMatches = MatchesLiveHead(restoredHead);
             restoredHead.QueueFree();
             var passed = host.RestoredFromSave && host.Runtime is not null &&
@@ -200,6 +281,65 @@ internal static class Fo2ProceduralPortraitProof
         }
     }
 
+    internal static void RunV8MigrationRestore(Fo2CharacterStartHost host, string proofRoot)
+    {
+        try
+        {
+            var output = PrepareOutput(proofRoot, false);
+            var saved = host.CurrentSave ?? throw new InvalidOperationException(
+                "Fallout 2 v8 migration proof has no validated save.");
+            using var document = JsonDocument.Parse(File.ReadAllBytes(saved.Path));
+            var sourceSchema = document.RootElement.GetProperty("schema").GetString();
+            var recipe = Fo2ProceduralAppearanceCatalog.Load();
+            var appearance = saved.Character.Appearance;
+            var passed = sourceSchema == Fo2CharacterStartSaveState.ColorAppearanceSchema &&
+                host.RestoredFromSave && host.Runtime is not null &&
+                saved.Character.Mode == Fo2CharacterSelection.CreateMode &&
+                saved.Character.Profile.Name == ExpectedName &&
+                appearance.FaceShapeId == Fo2ProceduralPortrait.AngularFace &&
+                appearance.HairStyleId == Fo2ProceduralPortrait.LongHair &&
+                appearance.SkinToneId == Fo2ProceduralPortrait.DeepSkin &&
+                appearance.HairColorId == Fo2ProceduralPortrait.AuburnHairColor &&
+                appearance.EyeColorId == Fo2ProceduralPortrait.BlueEyeColor &&
+                appearance.BrowStyleId == recipe.DefaultBrowStyleId &&
+                appearance.NoseStyleId == recipe.DefaultNoseStyleId &&
+                appearance.MouthStyleId == recipe.DefaultMouthStyleId &&
+                appearance.Schema == Fo2CharacterAppearanceContract.ExpectedSchema &&
+                appearance.AppearanceRecipeId == Fo2ProceduralAppearanceCatalog.ExpectedId &&
+                appearance.AppearanceRecipeSha256 == recipe.Sha256 &&
+                File.Exists(appearance.GeneratedPortraitPath);
+            WriteReport(
+                output,
+                "fo2-custom-portrait-v8-migration-proof.json",
+                new
+                {
+                    schema = "opennv-fo2-custom-portrait-v8-migration-proof/v1",
+                    status = passed
+                        ? "pass-v8-feature-default-migration"
+                        : "fail-v8-feature-default-migration",
+                    sourceSchema,
+                    appearance,
+                    migratedDefaults = new
+                    {
+                        recipe.DefaultBrowStyleId,
+                        recipe.DefaultNoseStyleId,
+                        recipe.DefaultMouthStyleId,
+                    },
+                    coldProcess = true,
+                    mediaCaptureCreated = false,
+                });
+            GD.Print(passed
+                ? "OPENNV_FO2_CUSTOM_PORTRAIT_V8_MIGRATION_PASS"
+                : $"OPENNV_FO2_CUSTOM_PORTRAIT_V8_MIGRATION_FAIL output={output}");
+            host.GetTree().Quit(passed ? 0 : 1);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO2_CUSTOM_PORTRAIT_V8_MIGRATION_FAIL {exception}");
+            host.GetTree().Quit(1);
+        }
+    }
+
     private static bool Matches(Fo2CharacterSelection character)
     {
         var appearance = character.Appearance;
@@ -214,6 +354,9 @@ internal static class Fo2ProceduralPortraitProof
             appearance.SkinToneId == Fo2ProceduralPortrait.DeepSkin &&
             appearance.HairColorId == Fo2ProceduralPortrait.AuburnHairColor &&
             appearance.EyeColorId == Fo2ProceduralPortrait.BlueEyeColor &&
+            appearance.BrowStyleId == Fo2ProceduralPortrait.ArchedBrow &&
+            appearance.NoseStyleId == Fo2ProceduralPortrait.NarrowNose &&
+            appearance.MouthStyleId == Fo2ProceduralPortrait.WideMouth &&
             appearance.PortraitGeneratorId == Fo2ProceduralPortrait.GeneratorId &&
             appearance.AppearanceRecipeId == Fo2ProceduralAppearanceCatalog.ExpectedId &&
             appearance.AppearanceRecipeSha256 == Fo2ProceduralAppearanceCatalog.Load().Sha256 &&
@@ -225,11 +368,26 @@ internal static class Fo2ProceduralPortraitProof
     private static bool MatchesLiveHead(Fo2ProceduralHeadPreview head)
     {
         var catalog = Fo2ProceduralAppearanceCatalog.Load();
+        var brow = catalog.BrowStyle(Fo2ProceduralPortrait.ArchedBrow);
+        var nose = catalog.NoseStyle(Fo2ProceduralPortrait.NarrowNose);
+        var mouth = catalog.MouthStyle(Fo2ProceduralPortrait.WideMouth);
+        var expectedFeatures = new Fo2LiveHeadFeatureState(
+            brow.LiveY,
+            brow.LiveRotationRadians,
+            brow.LiveWidth,
+            brow.LiveThickness,
+            nose.HeadScale,
+            mouth.LiveWidth,
+            mouth.LiveHeight);
         return head.FaceShapeId == Fo2ProceduralPortrait.AngularFace &&
             head.HairStyleId == Fo2ProceduralPortrait.LongHair &&
             head.SkinToneId == Fo2ProceduralPortrait.DeepSkin &&
             head.HairColorId == Fo2ProceduralPortrait.AuburnHairColor &&
             head.EyeColorId == Fo2ProceduralPortrait.BlueEyeColor &&
+            head.BrowStyleId == Fo2ProceduralPortrait.ArchedBrow &&
+            head.NoseStyleId == Fo2ProceduralPortrait.NarrowNose &&
+            head.MouthStyleId == Fo2ProceduralPortrait.WideMouth &&
+            head.FeatureState == expectedFeatures &&
             head.HairAlbedo == catalog.HairColor(head.HairColorId).HeadAlbedo &&
             head.EyeAlbedo == catalog.EyeColor(head.EyeColorId).HeadAlbedo &&
             head.RecipeSha256 == catalog.Sha256 &&

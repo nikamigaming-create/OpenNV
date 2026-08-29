@@ -72,6 +72,9 @@ internal sealed record Fo2CharacterAppearanceContract(
     string SkinToneId,
     string HairColorId,
     string EyeColorId,
+    string BrowStyleId,
+    string NoseStyleId,
+    string MouthStyleId,
     string PortraitGeneratorId,
     string AppearanceRecipeId,
     string AppearanceRecipeSha256,
@@ -80,7 +83,7 @@ internal sealed record Fo2CharacterAppearanceContract(
     int GeneratedPortraitWidth,
     int GeneratedPortraitHeight)
 {
-    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v4";
+    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v5";
     internal const string OwnedReliefPreview = "owned-panel-curved-relief-v1";
     internal const string GeneratedPortraitPreview = "opennv-local-classic-green-portrait-v1";
     internal const string OwnedPanelFaceShape = "owned-premade-panel";
@@ -88,6 +91,9 @@ internal sealed record Fo2CharacterAppearanceContract(
     internal const string OwnedPanelSkinTone = "owned-premade-panel";
     internal const string OwnedPanelHairColor = "owned-premade-panel";
     internal const string OwnedPanelEyeColor = "owned-premade-panel";
+    internal const string OwnedPanelBrowStyle = "owned-premade-panel";
+    internal const string OwnedPanelNoseStyle = "owned-premade-panel";
+    internal const string OwnedPanelMouthStyle = "owned-premade-panel";
     internal const string NoPortraitGenerator = "none";
     internal const string NoAppearanceRecipe = "none";
 
@@ -115,6 +121,9 @@ internal sealed record Fo2CharacterAppearanceContract(
         OwnedPanelSkinTone,
         OwnedPanelHairColor,
         OwnedPanelEyeColor,
+        OwnedPanelBrowStyle,
+        OwnedPanelNoseStyle,
+        OwnedPanelMouthStyle,
         NoPortraitGenerator,
         NoAppearanceRecipe,
         "",
