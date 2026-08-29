@@ -106,16 +106,16 @@ internal static class Fo2TempleConfrontationProof
             var stateBeforeInventory = confrontation.State;
             var saveBeforeInventory = host.CurrentSave ?? throw new InvalidOperationException(
                 "Fallout 2 inventory proof has no saved post-loot state.");
+            var positionBeforeInventory = player.Position;
+            var tileBeforeInventory = player.CurrentTile;
+            var rotationBeforeInventory = player.Presentation.Direction;
             if (!InputMap.HasAction(confrontation.InventoryAction) ||
                 !InputMap.ActionGetEvents(confrontation.InventoryAction)
                     .OfType<InputEventKey>()
                     .Any(row => row.PhysicalKeycode == confrontation.InventoryPhysicalKey))
                 throw new InvalidOperationException(
                     "Fallout 2 inventory action is not configured from the runtime profile.");
-            Input.ActionPress(confrontation.InventoryAction);
-            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            Input.ActionRelease(confrontation.InventoryAction);
+            await PressAction(host, confrontation.InventoryAction);
             if (!confrontation.InventoryVisible)
                 throw new InvalidOperationException(
                     "Fallout 2 configured inventory action did not open the screen.");
@@ -130,15 +130,57 @@ internal static class Fo2TempleConfrontationProof
                     StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
                     "Fallout 2 inventory screen did not show the selected character.");
-            if (!confrontation.InventoryItemText.Contains(
-                    $"{host.Temple.Confrontation.DefeatLoot.Quantity} × SPEAR",
-                    StringComparison.Ordinal) ||
+            if (!confrontation.InventorySpearSelected ||
                 !confrontation.InventoryItemText.Contains(
-                    $"PID {host.Temple.Confrontation.DefeatLoot.Pid}",
+                    $"{host.Temple.Confrontation.DefeatLoot.Quantity} × SPEAR",
                     StringComparison.Ordinal))
                 throw new InvalidOperationException(
-                    $"Fallout 2 inventory screen did not show the exact Spear stack: " +
+                    $"Fallout 2 inventory screen did not select the exact Spear stack: " +
                     confrontation.InventoryItemText.Replace('\n', '|'));
+            if (confrontation.State != stateBeforeInventory ||
+                host.CurrentSave?.Sha256 != saveBeforeInventory.Sha256)
+                throw new InvalidOperationException(
+                    "Fallout 2 opening/selecting inventory changed gameplay or save state.");
+
+            await PressAction(host, confrontation.InventoryInspectAction);
+            if (!confrontation.InventoryInspectionVisible ||
+                !confrontation.InventoryInspectionText.Contains(
+                    $"PID {host.Temple.Confrontation.DefeatLoot.Pid}",
+                    StringComparison.Ordinal) ||
+                !confrontation.InventoryInspectionText.Contains("DMG 3–10", StringComparison.Ordinal) ||
+                confrontation.State != stateBeforeInventory ||
+                host.CurrentSave?.Sha256 != saveBeforeInventory.Sha256)
+                throw new InvalidOperationException(
+                    "Fallout 2 Spear inspection changed state or lost exact weapon data.");
+
+            await PressAction(host, confrontation.InventoryEquipAction);
+            var equippedState = stateBeforeInventory with { SpearEquipped = true };
+            var equippedSave = host.CurrentSave ?? throw new InvalidOperationException(
+                "Fallout 2 equipped Spear state was not persisted.");
+            if (confrontation.State != equippedState ||
+                equippedSave.TempleConfrontation != equippedState ||
+                equippedSave.Sha256 == saveBeforeInventory.Sha256 ||
+                !confrontation.InventoryItemText.Contains("[EQUIPPED]", StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Fallout 2 Spear equip did not persist its sole intended state change.");
+
+            await PressAction(host, confrontation.InventoryEquipAction);
+            if (confrontation.State != stateBeforeInventory ||
+                !confrontation.InventoryItemText.Contains("[UNEQUIPPED]", StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Fallout 2 Spear unequip did not restore the exact prior equipment state.");
+            await PressAction(host, confrontation.InventoryEquipAction);
+            equippedSave = host.CurrentSave ?? throw new InvalidOperationException(
+                "Fallout 2 final equipped Spear state was not persisted.");
+            if (confrontation.State != equippedState ||
+                equippedSave.TempleConfrontation != equippedState ||
+                player.CurrentTile != tileBeforeInventory ||
+                player.Position != positionBeforeInventory ||
+                player.Presentation.Direction != rotationBeforeInventory ||
+                !SameNonEquipmentState(confrontation.State, stateBeforeInventory))
+                throw new InvalidOperationException(
+                    "Fallout 2 equipment interaction changed AP, combat, loot, or world state.");
+            var selectedSpear = confrontation.InventorySpearSelected;
             var escape = new InputEventKey
             {
                 Keycode = Key.Escape,
@@ -146,23 +188,24 @@ internal static class Fo2TempleConfrontationProof
                 Pressed = true,
             };
             host._UnhandledKeyInput(escape);
-            if (confrontation.InventoryVisible || confrontation.State != stateBeforeInventory ||
-                host.CurrentSave?.Sha256 != saveBeforeInventory.Sha256 ||
-                host.CurrentSave?.TempleConfrontation != saveBeforeInventory.TempleConfrontation)
+            if (confrontation.InventoryVisible || confrontation.State != equippedState ||
+                host.CurrentSave?.Sha256 != equippedSave.Sha256 ||
+                host.CurrentSave?.TempleConfrontation != equippedState)
                 throw new InvalidOperationException(
                     "Fallout 2 inventory open/close changed gameplay or save state.");
             var saved = host.PersistCurrentState();
             var passed = saved.MapIndex == Fo2TemplePresentationCatalog.MapIndex &&
                 saved.TempleConfrontation == confrontation.State &&
-                confrontation.State.SpearLooted && !confrontation.TargetVisible;
+                confrontation.State.SpearLooted && confrontation.State.SpearEquipped &&
+                !confrontation.TargetVisible;
             WriteReport(
                 System.IO.Path.Combine(output, "fo2-temple-confrontation-write-proof.json"),
                 new
                 {
                     schema = "opennv-fo2-temple-confrontation-write-proof/v1",
                     status = passed
-                        ? "pass-bounded-defeat-loot-save"
-                        : "fail-bounded-defeat-loot-save",
+                        ? "pass-bounded-defeat-loot-inventory-equip-save"
+                        : "fail-bounded-defeat-loot-inventory-equip-save",
                     source = host.Temple.Confrontation,
                     appearance = new
                     {
@@ -182,9 +225,19 @@ internal static class Fo2TempleConfrontationProof
                         sourceSha256 = confrontation.InventorySourceSha256,
                         character = confrontation.InventoryCharacterText,
                         items = confrontation.InventoryItemText,
+                        inspection = confrontation.InventoryInspectionText,
+                        selectedSpear,
+                        inspectionExercised = true,
+                        equipAndUnequipExercised = true,
+                        finalSpearEquipped = confrontation.State.SpearEquipped,
                         closedByEscape = !confrontation.InventoryVisible,
-                        gameplayStateUnchanged = confrontation.State == stateBeforeInventory,
-                        saveSha256Unchanged = saveBeforeInventory.Sha256 ==
+                        nonEquipmentStateUnchanged = SameNonEquipmentState(
+                            confrontation.State,
+                            stateBeforeInventory),
+                        worldStateUnchanged = player.CurrentTile == tileBeforeInventory &&
+                            player.Position == positionBeforeInventory &&
+                            player.Presentation.Direction == rotationBeforeInventory,
+                        openInspectCloseSaveUnchanged = equippedSave.Sha256 ==
                             host.CurrentSave?.Sha256,
                     },
                     player = new
@@ -226,7 +279,7 @@ internal static class Fo2TempleConfrontationProof
         }
     }
 
-    internal static Task RunRestore(Fo2CharacterStartHost host, string proofRoot)
+    internal static async Task RunRestore(Fo2CharacterStartHost host, string proofRoot)
     {
         try
         {
@@ -236,12 +289,28 @@ internal static class Fo2TempleConfrontationProof
             var confrontation = host.TempleConfrontation ??
                 throw new InvalidOperationException(
                     "Fallout 2 confrontation cold restore has no active Temple runtime.");
+            var restoredState = confrontation.State;
+            var restoredSaveSha256 = saved.Sha256;
+            await PressAction(host, confrontation.InventoryAction);
+            var restoredInventory = confrontation.InventoryVisible &&
+                confrontation.InventorySpearSelected &&
+                confrontation.InventoryItemText.Contains("[EQUIPPED]", StringComparison.Ordinal);
+            host._UnhandledKeyInput(new InputEventKey
+            {
+                Keycode = Key.Escape,
+                PhysicalKeycode = Key.Escape,
+                Pressed = true,
+            });
             var passed = host.RestoredFromSave && host.TempleScene is not null &&
                 host.LastTransition == host.Arroyo.LiveExit &&
                 saved.MapIndex == Fo2TemplePresentationCatalog.MapIndex &&
                 saved.TempleConfrontation == confrontation.State &&
                 confrontation.State.TargetHitPoints == 0 &&
-                confrontation.State.SpearLooted && !confrontation.TargetVisible;
+                confrontation.State.SpearLooted && confrontation.State.SpearEquipped &&
+                restoredInventory && !confrontation.InventoryVisible &&
+                confrontation.State == restoredState &&
+                host.CurrentSave?.Sha256 == restoredSaveSha256 &&
+                !confrontation.TargetVisible;
             saved.Character.Appearance.Validate(saved.Character);
             WriteReport(
                 System.IO.Path.Combine(output, "fo2-temple-confrontation-restore-proof.json"),
@@ -249,12 +318,19 @@ internal static class Fo2TempleConfrontationProof
                 {
                     schema = "opennv-fo2-temple-confrontation-restore-proof/v1",
                     status = passed
-                        ? "pass-cold-restore-defeated-looted-state"
-                        : "fail-cold-restore-defeated-looted-state",
+                        ? "pass-cold-restore-defeated-looted-equipped-state"
+                        : "fail-cold-restore-defeated-looted-equipped-state",
                     coldProcess = true,
                     state = confrontation.State,
                     appearance = saved.Character.Appearance,
                     targetVisible = confrontation.TargetVisible,
+                    inventory = new
+                    {
+                        restoredEquippedSelection = restoredInventory,
+                        closedByEscape = !confrontation.InventoryVisible,
+                        stateUnchangedByOpenClose = confrontation.State == restoredState,
+                        saveSha256Unchanged = host.CurrentSave?.Sha256 == restoredSaveSha256,
+                    },
                     save = new
                     {
                         saved.Path,
@@ -275,8 +351,29 @@ internal static class Fo2TempleConfrontationProof
             GD.PushError($"OPENNV_FO2_CONFRONTATION_RESTORE_FAIL {exception}");
             host.GetTree().Quit(1);
         }
-        return Task.CompletedTask;
     }
+
+    private static async Task PressAction(Fo2CharacterStartHost host, string action)
+    {
+        Input.ActionPress(action);
+        try
+        {
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        finally
+        {
+            Input.ActionRelease(action);
+        }
+    }
+
+    private static bool SameNonEquipmentState(
+        Fo2TempleConfrontationState left,
+        Fo2TempleConfrontationState right) =>
+        left.TargetHitPoints == right.TargetHitPoints &&
+        left.PlayerActionPoints == right.PlayerActionPoints &&
+        left.CombatActive == right.CombatActive &&
+        left.SpearLooted == right.SpearLooted;
 
     private static string PrepareOutput(string proofRoot, bool requireExisting)
     {

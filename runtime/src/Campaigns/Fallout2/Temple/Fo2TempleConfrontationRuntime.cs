@@ -170,7 +170,8 @@ internal sealed record Fo2TempleConfrontationState(
     int TargetHitPoints,
     int PlayerActionPoints,
     bool CombatActive,
-    bool SpearLooted)
+    bool SpearLooted,
+    bool SpearEquipped)
 {
     internal void Validate(
         Fo2TempleConfrontationContract contract,
@@ -178,7 +179,8 @@ internal sealed record Fo2TempleConfrontationState(
     {
         if (TargetHitPoints is < 0 || TargetHitPoints > contract.Critter.CurrentHitPoints ||
             PlayerActionPoints is < 0 || PlayerActionPoints > maximumPlayerActionPoints ||
-            CombatActive && TargetHitPoints == 0 || SpearLooted && TargetHitPoints != 0)
+            CombatActive && TargetHitPoints == 0 || SpearLooted && TargetHitPoints != 0 ||
+            SpearEquipped && !SpearLooted)
             throw new InvalidOperationException(
                 "Fallout 2 Temple confrontation save state is invalid.");
     }
@@ -216,10 +218,15 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     internal bool InventoryVisible => _inventory.IsOpen;
     internal string InventoryCharacterText => _inventory.CharacterText;
     internal string InventoryItemText => _inventory.ItemText;
+    internal string InventoryInspectionText => _inventory.InspectionText;
     internal string InventorySourceLogicalPath => _inventory.SourceLogicalPath;
     internal string InventorySourceSha256 => _inventory.SourceSha256;
     internal string InventoryAction => _profile.Inventory.Action;
     internal Key InventoryPhysicalKey => _profile.Inventory.PhysicalKey;
+    internal string InventoryEquipAction => _profile.Attack.Action;
+    internal string InventoryInspectAction => _profile.Loot.Action;
+    internal bool InventorySpearSelected => _inventory.SpearSelected;
+    internal bool InventoryInspectionVisible => _inventory.InspectionVisible;
 
     private Fo2TempleConfrontationRuntime(
         Fo2TempleConfrontationContract contract,
@@ -240,6 +247,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         _state = restored ?? new Fo2TempleConfrontationState(
             contract.Critter.CurrentHitPoints,
             _maximumPlayerActionPoints,
+            false,
             false,
             false);
         _state.Validate(contract, _maximumPlayerActionPoints);
@@ -316,7 +324,13 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             return;
         }
         if (_inventory.IsOpen)
+        {
+            if (Input.IsActionJustPressed(_profile.Attack.Action))
+                ToggleSpearEquipment();
+            else if (Input.IsActionJustPressed(_profile.Loot.Action))
+                InspectSelectedInventoryItem();
             return;
+        }
         if (Input.IsActionJustPressed(_profile.Combat.Action))
             ToggleCombat();
         if (Input.IsActionJustPressed(_profile.Attack.Action))
@@ -336,7 +350,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         }
         _player.Presentation.StopWalking();
         _player.SetPhysicsProcess(false);
-        _inventory.Open(_state.SpearLooted);
+        _inventory.Open(_state.SpearLooted, _state.SpearEquipped);
     }
 
     internal bool CloseInventoryIfOpen()
@@ -344,6 +358,23 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         if (!_inventory.Close())
             return false;
         _player.SetPhysicsProcess(true);
+        return true;
+    }
+
+    internal bool ToggleSpearEquipment()
+    {
+        if (!_inventory.IsOpen || !_inventory.SpearSelected || !_state.SpearLooted)
+            return false;
+        _state = _state with { SpearEquipped = !_state.SpearEquipped };
+        Changed();
+        return true;
+    }
+
+    internal bool InspectSelectedInventoryItem()
+    {
+        if (!_inventory.IsOpen || !_inventory.SpearSelected || !_state.SpearLooted)
+            return false;
+        _inventory.ShowInspection(_state.SpearEquipped);
         return true;
     }
 
@@ -485,7 +516,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             $"{_contract.Critter.DisplayName} HP {_state.TargetHitPoints}/" +
             $"{_contract.Critter.CurrentHitPoints}   " +
             $"Combat {(_state.CombatActive ? "ON" : "OFF")}";
-        _inventory.Refresh(_state.SpearLooted);
+        _inventory.Refresh(_state.SpearLooted, _state.SpearEquipped);
     }
 
     private Label Label(string text)

@@ -209,6 +209,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     playerActionPoints = TempleConfrontation.PlayerActionPoints,
                     combatActive = TempleConfrontation.CombatActive,
                     spearLooted = TempleConfrontation.SpearLooted,
+                    spearEquipped = TempleConfrontation.SpearEquipped,
                 },
             };
             File.WriteAllText(
@@ -428,7 +429,9 @@ internal sealed record Fo2CharacterStartSaveState(
             value.GetProperty("targetHitPoints").GetInt32(),
             value.GetProperty("playerActionPoints").GetInt32(),
             value.GetProperty("combatActive").GetBoolean(),
-            value.GetProperty("spearLooted").GetBoolean());
+            value.GetProperty("spearLooted").GetBoolean(),
+            value.TryGetProperty("spearEquipped", out var equipped) &&
+                equipped.GetBoolean());
         state.Validate(
             temple.Confrontation,
             Fo2TempleConfrontationRuntime.MaximumActionPoints(character));
