@@ -116,11 +116,62 @@
     "gameplayPresentation": {
       "referenceCanvasSize": [1024, 768],
       "backgroundAsset": "textures\\interface\\shared\\background\\pipboy.dds",
+      "systemColor": {
+        "section": "Interface",
+        "packedPreferenceKey": "uPipboyColor",
+        "fallbackRedKey": "iSystemColorPipboyRed",
+        "fallbackGreenKey": "iSystemColorPipboyGreen",
+        "fallbackBlueKey": "iSystemColorPipboyBlue"
+      },
       "physicalDevice": {
         "modelAsset": "meshes\\pipboy3000\\pipboyarm.nif",
         "screenSurface": "pipboyscreen:0",
+        "buttonGlowSurfaces": {
+          "status": "StatsGlow:0",
+          "items": "ItemsGlow:0",
+          "data": "DataGlow:0"
+        },
         "exportStrict": false,
         "textureAliases": {}
+      },
+      "statusPresentation": {
+        "document": "menus\\main\\stats_menu.xml",
+        "statusContainerTile": "stats_status_container",
+        "tailLineTile": "stats_tailline",
+        "rules": [
+          { "tile": "stats_headline_h1", "orientation": "horizontal" },
+          { "tile": "stats_headline_v1", "orientation": "vertical" },
+          { "tile": "stats_headline_h2", "orientation": "horizontal" },
+          { "tile": "stats_tailline", "orientation": "horizontal" }
+        ],
+        "headline": [
+          { "tile": "stats_title", "engineId": 39, "trait": "string", "entity": "-sStats", "fontId": 4, "fallbackText": "STATS" },
+          { "tile": "stats_lvl_info", "engineId": 40, "trait": "_title", "entity": "-sStatsLVLAbbrev", "fontId": 2, "fallbackText": "LVL" },
+          { "tile": "stats_hp_info", "engineId": 41, "trait": "_title", "entity": "-sStatsHP", "fontId": 2, "fallbackText": "HP" },
+          { "tile": "stats_ap_info", "engineId": 42, "trait": "_title", "entity": "-sStatsAP", "fontId": 2, "fallbackText": "AP" },
+          { "tile": "stats_xp_info", "engineId": 43, "trait": "_title", "entity": "-sStatsXP", "fontId": 2, "fallbackText": "XP" }
+        ],
+        "conditionTabs": [
+          { "tile": "stats_CND_button", "engineId": 28, "trait": "string", "entity": "-sStatsCNDAbbrev", "fontId": 2, "fallbackText": "CND" },
+          { "tile": "stats_RAD_button", "engineId": 29, "trait": "string", "entity": "-sStatsRADAbbrev", "fontId": 2, "fallbackText": "RAD" },
+          { "tile": "stats_EFF_button", "engineId": 30, "trait": "user10", "sourceTile": "StatsMenu", "entity": "-sStatsEFFAbbrev", "fontId": 2, "fallbackText": "EFF" }
+        ],
+        "navigation": [
+          { "tile": "stats_tailline_status", "engineId": 0, "trait": "string", "entity": "-sStatsStatus", "fontId": 2, "fallbackText": "Status" },
+          { "tile": "stats_tailline_SPECIAL", "engineId": 1, "trait": "string", "entity": "-sStatsSpecial", "fontId": 2, "fallbackText": "S.P.E.C.I.A.L." },
+          { "tile": "stats_tailline_skills", "engineId": 2, "trait": "string", "entity": "-sStatsSkills", "fontId": 2, "fallbackText": "Skills" },
+          { "tile": "stats_tailline_perks", "engineId": 3, "trait": "string", "entity": "-sStatsPerks", "fontId": 2, "fallbackText": "Perks" },
+          { "tile": "stats_tailline_general", "engineId": 4, "trait": "string", "entity": "-sStatsGeneral", "fontId": 2, "fallbackText": "General" }
+        ],
+        "bodyImages": [
+          { "tile": "stats_player_head", "engineId": 12, "asset": "textures\\interface\\stats\\head.dds" },
+          { "tile": "stats_player_face", "engineId": 24, "asset": "textures\\interface\\stats\\face_00.dds" },
+          { "tile": "stats_player_torso", "engineId": 14, "asset": "textures\\interface\\stats\\torso.dds" },
+          { "tile": "stats_player_leftarm", "engineId": 16, "asset": "textures\\interface\\stats\\left_arm.dds" },
+          { "tile": "stats_player_rightarm", "engineId": 18, "asset": "textures\\interface\\stats\\right_arm.dds" },
+          { "tile": "stats_player_leftleg", "engineId": 20, "asset": "textures\\interface\\stats\\left_leg.dds" },
+          { "tile": "stats_player_rightleg", "engineId": 22, "asset": "textures\\interface\\stats\\right_leg.dds" }
+        ]
       },
       "roles": {
         "hud": {

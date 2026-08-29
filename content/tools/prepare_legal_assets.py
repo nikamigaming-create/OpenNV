@@ -54,6 +54,7 @@ def prepare(
     logical_model: str | None = None,
     expected_meshes_sha256: str = "",
     cell_recipe: str | None = None,
+    preferences_ini: Path | None = None,
 ) -> dict[str, object]:
     configuration = load_runtime_configuration()
     legal_assets = configuration.document["legalAssets"]
@@ -102,6 +103,7 @@ def prepare(
         str(owned_data["videoDirectoryName"]),
         master_hash,
         default_ini,
+        preferences_ini,
     )
     member = visual_archives.extract(logical_model)
 
@@ -272,6 +274,13 @@ def prepare(
                 "bytes": default_ini.stat().st_size,
                 "sha256": file_sha256(default_ini),
             },
+            "preferencesIni": None
+            if preferences_ini is None
+            else {
+                "file": preferences_ini.name,
+                "bytes": preferences_ini.stat().st_size,
+                "sha256": file_sha256(preferences_ini),
+            },
             "meshesArchive": {"file": meshes.name, "bytes": meshes.stat().st_size, "sha256": meshes_hash},
             "uiArchive": {
                 "file": ui_archive.name,
@@ -331,6 +340,7 @@ def main() -> int:
     )
     parser.add_argument("--expected-meshes-bsa-sha256", default="")
     parser.add_argument("--cell-recipe")
+    parser.add_argument("--preferences-ini", type=Path)
     args = parser.parse_args()
     if args.compiler_identity:
         print(
@@ -367,6 +377,7 @@ def main() -> int:
             args.logical_model,
             args.expected_meshes_bsa_sha256,
             args.cell_recipe,
+            args.preferences_ini,
         )
     except Exception as error:
         print(f"OPENNV_LEGAL_ASSET_ERROR {error}", file=sys.stderr)

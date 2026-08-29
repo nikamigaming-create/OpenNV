@@ -36,6 +36,7 @@ internal sealed record OwnedGameplayUiPresentation(
     Vector2 CanvasSize,
     OwnedUiTexture Background,
     OwnedPhysicalPipBoy PhysicalDevice,
+    OwnedPipBoyStatusPresentation StatusPresentation,
     Color SystemColor,
     OwnedUiStyle Style,
     IReadOnlyDictionary<string, OwnedGameplayUiRole> Roles,
@@ -64,9 +65,37 @@ internal sealed record OwnedPhysicalPipBoy(
     string MaterialManifestPath,
     string MaterialManifestSha256,
     string ScreenSurface,
+    IReadOnlyDictionary<string, string> ButtonGlowSurfaces,
     int Surfaces,
     int Vertices,
     int Textures);
+
+internal sealed record OwnedPipBoyStatusPresentation(
+    Rect2 StatusContainerRect,
+    IReadOnlyList<OwnedPipBoyRule> Rules,
+    IReadOnlyList<OwnedPipBoyStringSource> Headline,
+    IReadOnlyList<OwnedPipBoyStringSource> ConditionTabs,
+    IReadOnlyList<OwnedPipBoyStringSource> Navigation,
+    IReadOnlyList<OwnedPipBoyBodyImage> BodyImages);
+
+internal sealed record OwnedPipBoyRule(string Tile, Rect2 Rect);
+
+internal sealed record OwnedPipBoyStringSource(
+    string Tile,
+    int EngineId,
+    string Entity,
+    int FontId,
+    string Text,
+    string TextProvenance,
+    Rect2 Rect,
+    bool Selected);
+
+internal sealed record OwnedPipBoyBodyImage(
+    string Tile,
+    string ParentTile,
+    int EngineId,
+    Rect2 Rect,
+    OwnedUiTexture Texture);
 
 internal sealed record OwnedGameplayUiRole(
     string Role,

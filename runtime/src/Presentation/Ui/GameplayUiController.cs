@@ -40,8 +40,12 @@ internal partial class GameplayUiController : CanvasLayer
     private Control? _pipBoyPanel;
     private Control? _ownedPipBoyCanvas;
     private Control? _ownedPipBoyScreen;
+    private Control? _ownedPipBoyStatusScreen;
     private Label? _pipBoyContent;
     private Label? _pipBoyFooter;
+    private readonly Dictionary<int, Label> _ownedStatusValues = new();
+    private readonly Dictionary<int, OwnedPipBoyStringSource> _ownedStatusSources = new();
+    private readonly Dictionary<GameplayUiPanel, PipBoyGlowSurface> _ownedButtonGlows = new();
     private Label? _xrContent;
     private ColorRect? _xrCursor;
     private Sprite3D? _xrScreen;
@@ -175,6 +179,8 @@ internal partial class GameplayUiController : CanvasLayer
         if (_pipBoyPanel is null)
             return;
         _pipBoyPanel.Visible = !_pipBoyPanel.Visible;
+        if (_desktopHud is not null)
+            _desktopHud.Visible = !_pipBoyPanel.Visible;
         if (_pipBoyPanel.Visible)
         {
             _activePanel = GameplayUiPanel.Status;
@@ -198,6 +204,8 @@ internal partial class GameplayUiController : CanvasLayer
         if (_pipBoyPanel?.Visible != true)
             return;
         _pipBoyPanel.Visible = false;
+        if (_desktopHud is not null)
+            _desktopHud.Visible = _showHud && _gameplayEnabled;
         if (!_useXr && DisplayServer.GetName() != "headless")
             Input.MouseMode = Input.MouseModeEnum.Captured;
     }
@@ -219,12 +227,18 @@ internal partial class GameplayUiController : CanvasLayer
         var snapshot = _session.BuildUiSnapshot();
         if (_desktopObjective is not null)
         {
-            _desktopObjective.Text = snapshot.Objective;
-            _desktopStatus!.Text = FormatStatusLine(snapshot);
-            _desktopInventory!.Text = FormatInventorySummary(snapshot);
+            var ownedRetailHud = _ownedPresentation is not null && !_useClassicDiorama;
+            _desktopObjective.Text = ownedRetailHud ? string.Empty : snapshot.Objective;
+            _desktopStatus!.Text = ownedRetailHud
+                ? string.Empty
+                : FormatStatusLine(snapshot);
+            _desktopInventory!.Text = ownedRetailHud
+                ? string.Empty
+                : FormatInventorySummary(snapshot);
         }
         if (_pipBoyContent is not null)
             _pipBoyContent.Text = FormatPanel(snapshot, _activePanel);
+        RefreshOwnedStatus(snapshot);
         if (_pipBoyFooter is not null)
             _pipBoyFooter.Text = _ownedPresentation is null
                 ? _configuration.Hud.PipBoy.CloseHint
@@ -431,6 +445,7 @@ internal partial class GameplayUiController : CanvasLayer
         _pipBoyFooter.OffsetRight = -ScreenMarginPixels;
         _pipBoyFooter.HorizontalAlignment = HorizontalAlignment.Right;
         screen.AddChild(_pipBoyFooter);
+        BuildOwnedStatusScreen(presentation);
         ApplyOwnedPipBoyRole();
         BuildOwnedPhysicalPipBoy(
             deviceViewport,
@@ -502,6 +517,43 @@ internal partial class GameplayUiController : CanvasLayer
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             });
+        foreach (var (role, surfaceName) in contract.ButtonGlowSurfaces)
+        {
+            var glowMatches = surfaces.Where(surface =>
+                    RuntimeMaterialLoader.SourceSurfaceIdentity(surface.Mesh, surface.Surface)
+                        ?.Equals(surfaceName, StringComparison.Ordinal) == true)
+                .ToArray();
+            if (glowMatches.Length != 1)
+                throw new InvalidOperationException(
+                    $"Owned physical Pip-Boy button glow does not resolve uniquely: " +
+                    $"{role}={surfaceName}");
+            var authoredMaterial = glowMatches[0].Mesh.GetSurfaceOverrideMaterial(
+                    glowMatches[0].Surface)
+                ?? throw new InvalidOperationException(
+                    $"Owned physical Pip-Boy button glow has no authored material: {surfaceName}");
+            _ownedButtonGlows.Add(
+                role.ToLowerInvariant() switch
+                {
+                    "status" => GameplayUiPanel.Status,
+                    "items" => GameplayUiPanel.Items,
+                    "data" => GameplayUiPanel.Data,
+                    _ => throw new InvalidOperationException(
+                        $"Owned physical Pip-Boy button role is unsupported: {role}"),
+                },
+                new PipBoyGlowSurface(
+                    glowMatches[0].Mesh,
+                    glowMatches[0].Surface,
+                    authoredMaterial,
+                    new StandardMaterial3D
+                    {
+                        ResourceName = $"OpenNV_Inactive_{surfaceName}",
+                        AlbedoColor = Colors.Transparent,
+                        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                        DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+                    }));
+        }
+        UpdateOwnedPipBoyButtonGlows();
 
         var preview = _configuration.DiagnosticPreview;
         var ambient = preview.AmbientColorRgba.Color();
@@ -551,6 +603,156 @@ internal partial class GameplayUiController : CanvasLayer
             $"OPENNV_OWNED_PIPBOY_PHYSICAL_READY source={contract.LogicalPath} " +
             $"surfaces={contract.Surfaces} vertices={contract.Vertices} " +
             $"textures={contract.Textures} screen={contract.ScreenSurface}");
+    }
+
+    private void BuildOwnedStatusScreen(OwnedGameplayUiPresentation presentation)
+    {
+        if (_ownedPipBoyCanvas is null)
+            throw new InvalidOperationException("Owned Pip-Boy canvas is unavailable.");
+        var contract = presentation.StatusPresentation;
+        var status = new Control
+        {
+            Name = "OwnedPipBoyStatsMenu",
+            Size = presentation.CanvasSize,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _ownedPipBoyStatusScreen = status;
+        _ownedPipBoyCanvas.AddChild(status);
+
+        foreach (var rule in contract.Rules)
+            AddOwnedRule(status, rule.Rect.Position, rule.Rect.Size);
+        foreach (var source in contract.Headline)
+        {
+            var label = BuildOwnedLabel(
+                OwnedUiTheme.BuildFont(presentation.Font(source.FontId)));
+            label.Name = source.Tile;
+            label.Position = source.Rect.Position;
+            label.Size = source.Rect.Size;
+            label.Text = source.Text;
+            status.AddChild(label);
+            _ownedStatusValues.Add(source.EngineId, label);
+            _ownedStatusSources.Add(source.EngineId, source);
+        }
+
+        var statusContainer = new Control
+        {
+            Name = "stats_status_container",
+            Position = contract.StatusContainerRect.Position,
+            Size = contract.StatusContainerRect.Size,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        status.AddChild(statusContainer);
+        foreach (var source in contract.ConditionTabs)
+        {
+            var label = BuildOwnedLabel(
+                OwnedUiTheme.BuildFont(presentation.Font(source.FontId)));
+            label.Name = source.Tile;
+            label.Text = source.Text;
+            label.Position = source.Rect.Position;
+            label.Size = source.Rect.Size;
+            label.VerticalAlignment = VerticalAlignment.Center;
+            if (source.Selected)
+            {
+                var selection = new Panel
+                {
+                    Name = $"{source.Tile}_selection",
+                    Position = source.Rect.Position,
+                    Size = source.Rect.Size,
+                    MouseFilter = Control.MouseFilterEnum.Ignore,
+                };
+                selection.AddThemeStyleboxOverride("panel", BuildOwnedFrameStyle());
+                statusContainer.AddChild(selection);
+            }
+            statusContainer.AddChild(label);
+        }
+
+        var bodyNodes = new Dictionary<string, Control>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["stats_status_container"] = statusContainer,
+        };
+        foreach (var source in contract.BodyImages)
+        {
+            if (!bodyNodes.TryGetValue(source.ParentTile, out var parent))
+                throw new InvalidOperationException(
+                    $"Owned Pip-Boy body-image parent is unavailable: " +
+                    $"{source.Tile} -> {source.ParentTile}");
+            var image = new TextureRect
+            {
+                Name = source.Tile,
+                Position = source.Rect.Position,
+                Size = source.Rect.Size,
+                Texture = OwnedUiTheme.LoadTexture(source.Texture.Path),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.Scale,
+                Modulate = presentation.SystemColor,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            parent.AddChild(image);
+            bodyNodes.Add(source.Tile, image);
+        }
+
+        foreach (var source in contract.Navigation)
+        {
+            var label = BuildOwnedLabel(
+                OwnedUiTheme.BuildFont(presentation.Font(source.FontId)));
+            label.Name = source.Tile;
+            label.Text = source.Text;
+            label.Position = source.Rect.Position;
+            label.Size = source.Rect.Size;
+            label.HorizontalAlignment = HorizontalAlignment.Center;
+            label.VerticalAlignment = VerticalAlignment.Center;
+            if (source.Selected)
+            {
+                var selection = new Panel
+                {
+                    Name = $"{source.Tile}_selection",
+                    Position = source.Rect.Position,
+                    Size = source.Rect.Size,
+                    MouseFilter = Control.MouseFilterEnum.Ignore,
+                };
+                selection.AddThemeStyleboxOverride("panel", BuildOwnedFrameStyle());
+                status.AddChild(selection);
+            }
+            status.AddChild(label);
+        }
+    }
+
+    private void AddOwnedRule(Control parent, Vector2 position, Vector2 size)
+    {
+        var presentation = _ownedPresentation
+            ?? throw new InvalidOperationException("Owned gameplay UI presentation is unavailable.");
+        parent.AddChild(new ColorRect
+        {
+            Position = position,
+            Size = size,
+            Color = OwnedUiTheme.Brightness(
+                presentation.SystemColor,
+                presentation.Style.LineBrightness),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        });
+    }
+
+    private void RefreshOwnedStatus(GameplayUiSnapshot snapshot)
+    {
+        if (_ownedStatusValues.Count == 0)
+            return;
+        _ownedStatusValues[39].Text = _ownedStatusSources[39].Text;
+        _ownedStatusValues[40].Text = snapshot.Level is { } level
+            ? $"{_ownedStatusSources[40].Text}  {level}"
+            : _ownedStatusSources[40].Text;
+        _ownedStatusValues[41].Text =
+            snapshot.HitPoints is { } hp && snapshot.MaximumHitPoints is { } maximumHp
+                ? $"{_ownedStatusSources[41].Text}  {hp}/{maximumHp}"
+                : _ownedStatusSources[41].Text;
+        _ownedStatusValues[42].Text =
+            snapshot.ActionPoints is { } ap && snapshot.MaximumActionPoints is { } maximumAp
+                ? $"{_ownedStatusSources[42].Text}  {ap}/{maximumAp}"
+                : _ownedStatusSources[42].Text;
+        _ownedStatusValues[43].Text =
+            snapshot.ExperiencePoints is { } xp &&
+                snapshot.NextLevelExperiencePoints is { } nextLevelXp
+                ? $"{_ownedStatusSources[43].Text}  {xp}/{nextLevelXp}"
+                : _ownedStatusSources[43].Text;
     }
 
     private static PipBoyReferenceFrame DerivePipBoyFrame(
@@ -654,6 +856,12 @@ internal partial class GameplayUiController : CanvasLayer
         float Near,
         float Far);
 
+    private readonly record struct PipBoyGlowSurface(
+        MeshInstance3D Mesh,
+        int Surface,
+        Material AuthoredMaterial,
+        Material InactiveMaterial);
+
     private Label BuildOwnedLabel(FontFile font)
     {
         var presentation = _ownedPresentation
@@ -755,9 +963,26 @@ internal partial class GameplayUiController : CanvasLayer
         var role = _ownedPresentation.Role(roleId);
         var layoutRole = _ownedPresentation.Role(layoutRoleId);
         PlaceOwnedCanvasRect(_ownedPipBoyScreen, layoutRole.Layout[layoutTile]);
+        var showStatus = _activePanel == GameplayUiPanel.Status;
+        _ownedPipBoyScreen.Visible = !showStatus;
+        if (_ownedPipBoyStatusScreen is not null)
+            _ownedPipBoyStatusScreen.Visible = showStatus;
         var font = OwnedUiTheme.BuildFont(_ownedPresentation.Font(role.BodyFontId));
         _pipBoyContent.AddThemeFontOverride("font", font);
         _pipBoyContent.AddThemeFontSizeOverride("font_size", font.FixedSize);
+        UpdateOwnedPipBoyButtonGlows();
+    }
+
+    private void UpdateOwnedPipBoyButtonGlows()
+    {
+        foreach (var (panel, glow) in _ownedButtonGlows)
+        {
+            var selected = panel == _activePanel ||
+                panel == GameplayUiPanel.Data && _activePanel == GameplayUiPanel.Map;
+            glow.Mesh.SetSurfaceOverrideMaterial(
+                glow.Surface,
+                selected ? glow.AuthoredMaterial : glow.InactiveMaterial);
+        }
     }
 
     private static void ScaleOwnedCanvas(Control viewport, Control canvas, Vector2 authoredSize)

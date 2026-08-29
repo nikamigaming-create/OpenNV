@@ -209,11 +209,20 @@ internal static class LegalAssetPreparer
             gameplaySchema.GetString() != "opennv-owned-gameplay-ui/v1")
             throw new InvalidOperationException(
                 "Prepared opening manifest lacks the current owned gameplay UI contract.");
+        if (!gameplayPresentation.TryGetProperty("systemColor", out var systemColor) ||
+            systemColor.GetProperty("rgba").GetArrayLength() != 4 ||
+            !gameplayPresentation.TryGetProperty(
+                "statusPresentation",
+                out var statusPresentation) ||
+            statusPresentation.GetProperty("bodyImages").GetArrayLength() != 7)
+            throw new InvalidOperationException(
+                "Prepared opening manifest lacks the owned Pip-Boy STATS presentation.");
         if (!gameplayPresentation.TryGetProperty("physicalDevice", out var physicalDevice) ||
             physicalDevice.ValueKind != JsonValueKind.Object ||
             physicalDevice.GetProperty("schema").GetString() !=
                 "opennv-owned-physical-pipboy/v1" ||
-            physicalDevice.GetProperty("screenSurface").GetString() != "pipboyscreen:0")
+            physicalDevice.GetProperty("screenSurface").GetString() != "pipboyscreen:0" ||
+            physicalDevice.GetProperty("buttonGlowSurfaces").EnumerateObject().Count() != 3)
             throw new InvalidOperationException(
                 "Prepared opening manifest lacks the owned physical Pip-Boy contract.");
         VerifyHash(

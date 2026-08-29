@@ -814,6 +814,56 @@ def _ini_setting(
     return matches[0]
 
 
+def _gameplay_system_color(
+    configured: dict[str, object],
+    default_ini_path: Path,
+    preferences_ini_path: Path | None,
+) -> dict[str, object]:
+    section = str(configured["section"])
+    if preferences_ini_path is not None:
+        resolved = preferences_ini_path.resolve()
+        if not resolved.is_file():
+            raise FileNotFoundError(
+                f"Owned Fallout preferences INI is unavailable: {resolved}"
+            )
+        packed = int(
+            _ini_setting(
+                _ini_index(resolved),
+                section,
+                configured["packedPreferenceKey"],
+            ),
+            10,
+        )
+        if packed < 0 or packed > 0xFFFFFFFF:
+            raise ValueError("Owned Pip-Boy packed system color is outside uint32")
+        rgba = [
+            (packed >> 24) & 0xFF,
+            (packed >> 16) & 0xFF,
+            (packed >> 8) & 0xFF,
+            packed & 0xFF,
+        ]
+        return {
+            "rgba": rgba,
+            "setting": str(configured["packedPreferenceKey"]),
+            "source": str(resolved),
+            "sourceSha256": file_sha256(resolved),
+        }
+
+    values = _ini_index(default_ini_path)
+    rgb = [
+        int(_ini_setting(values, section, configured[key]))
+        for key in ("fallbackRedKey", "fallbackGreenKey", "fallbackBlueKey")
+    ]
+    if any(value < 0 or value > 0xFF for value in rgb):
+        raise ValueError("Owned default Pip-Boy system color is outside byte range")
+    return {
+        "rgba": [*rgb, 0xFF],
+        "setting": "fallback-components",
+        "source": str(default_ini_path.resolve()),
+        "sourceSha256": file_sha256(default_ini_path),
+    }
+
+
 def _configured_relative_path(template: object, value: str, label: str) -> str:
     template_text = str(template)
     if template_text.count("{value}") != 1:
@@ -1531,11 +1581,272 @@ def _gameplay_ui_contract(
             "schema": "opennv-owned-gameplay-ui/v1",
             "referenceCanvasSize": canvas,
             "backgroundAsset": background,
+            "statusPresentation": _status_presentation_contract(
+                dict(configured["statusPresentation"]),
+                trees,
+            ),
             "roles": sorted(rows, key=lambda value: str(value["role"])),
         },
         frozenset(full_closure),
         frozenset(font_ids),
     )
+
+
+def _status_presentation_contract(
+    configured: dict[str, object],
+    trees: dict[str, TileNode],
+) -> dict[str, object]:
+    document = canonical_ui_path(str(configured["document"]))
+    if document not in trees:
+        raise ValueError(f"Owned Pip-Boy STATS document is absent: {document}")
+    tree = trees[document]
+    parents = _tile_parent_index(tree)
+    screen = {"width": 1024.0, "height": 768.0}
+
+    def number(node: TileNode, trait: str) -> float:
+        return _layout_trait(node, trait, tree, parents, screen)
+
+    def engine_id(node: TileNode, expected: int) -> int:
+        actual = _direct_number(node.child("id"))
+        if actual is None or not float(actual).is_integer() or int(actual) != expected:
+            raise ValueError(
+                f"Owned Pip-Boy STATS engine ID differs: {node.name} "
+                f"expected={expected} actual={actual}"
+            )
+        return int(actual)
+
+    def strings(
+        values: object,
+        *,
+        include_position: bool,
+    ) -> list[dict[str, object]]:
+        rows = []
+        for raw in values:
+            definition = dict(raw)
+            tile = _named_tile(tree, str(definition["tile"]))
+            source_tile = _named_tile(
+                tree,
+                str(definition.get("sourceTile", definition["tile"])),
+            )
+            trait = source_tile.child(str(definition["trait"]))
+            entity = None if trait is None else _entity_name(trait.text)
+            if entity is None and trait is not None:
+                loose = trait.text.strip()
+                if loose.startswith("&") and ";" not in loose and len(loose) > 1:
+                    entity = loose[1:]
+            expected_entity = str(definition["entity"])
+            if entity != expected_entity:
+                raise ValueError(
+                    f"Owned Pip-Boy STATS string entity differs: "
+                    f"{tile.name} expected={expected_entity} actual={entity}"
+                )
+            row: dict[str, object] = {
+                "tile": tile.name,
+                "engineId": engine_id(tile, int(definition["engineId"])),
+                "entity": entity,
+                "fontId": int(definition["fontId"]),
+                "text": str(definition["fallbackText"]),
+                "textProvenance": {
+                    "kind": "recipe-fallback-after-owned-entity-validation",
+                    "entity": entity,
+                },
+            }
+            if include_position:
+                row["position"] = [number(tile, "x"), number(tile, "y")]
+            if include_position and tile.child("width") is not None:
+                row["width"] = number(tile, "width")
+            rows.append(row)
+        return rows
+
+    status_container = _named_tile(tree, str(configured["statusContainerTile"]))
+    tail_line = _named_tile(tree, str(configured["tailLineTile"]))
+    rules = []
+    for raw in configured["rules"]:
+        definition = dict(raw)
+        tile = _named_tile(tree, str(definition["tile"]))
+        orientation = str(definition["orientation"])
+        if orientation not in {"horizontal", "vertical"}:
+            raise ValueError(
+                f"Owned Pip-Boy STATS rule orientation is invalid: {tile.name}"
+            )
+        rules.append({"tile": tile.name, "orientation": orientation})
+    images = []
+    for raw in configured["bodyImages"]:
+        definition = dict(raw)
+        tile = _named_tile(tree, str(definition["tile"]))
+        parent = parents.get(id(tile))
+        if parent is None or not parent.name:
+            raise ValueError(
+                f"Owned Pip-Boy STATS body image has no named parent: {tile.name}"
+            )
+        asset = _asset_path(str(definition["asset"]))
+        if asset is None or not asset.startswith("textures\\") or not asset.endswith(".dds"):
+            raise ValueError(
+                f"Owned Pip-Boy STATS body image is not a DDS texture: {tile.name}"
+            )
+        images.append(
+            {
+                "tile": tile.name,
+                "parentTile": parent.name,
+                "engineId": engine_id(tile, int(definition["engineId"])),
+                "asset": asset,
+                "rect": [
+                    number(tile, "x"),
+                    number(tile, "y"),
+                    number(tile, "width"),
+                    number(tile, "height"),
+                ],
+            }
+        )
+    return {
+        "document": document,
+        "statusContainer": {
+            "tile": status_container.name,
+            "position": [number(status_container, "x"), number(status_container, "y")],
+            "width": number(status_container, "width"),
+        },
+        "tailLine": {
+            "tile": tail_line.name,
+            "position": [number(tail_line, "x"), number(tail_line, "y")],
+            "width": number(tail_line, "width"),
+            "stretch": number(tail_line, "_stretch"),
+        },
+        "rules": rules,
+        "headline": strings(configured["headline"], include_position=True),
+        "conditionTabs": strings(configured["conditionTabs"], include_position=False),
+        "navigation": strings(configured["navigation"], include_position=False),
+        "bodyImages": images,
+    }
+
+
+def _finalize_status_presentation_layout(
+    presentation: dict[str, object],
+    configured: dict[str, object],
+    trees: dict[str, TileNode],
+    fonts: list[dict[str, object]],
+    line_thickness: float,
+) -> None:
+    """Resolve the bounded STATS layout from owned XML/prefabs and font metrics."""
+
+    document = canonical_ui_path(str(configured["document"]))
+    tree = trees[document]
+    fonts_by_id = {int(value["fontId"]): value for value in fonts}
+    super_box = trees[canonical_ui_path("menus\\prefabs\\super_text_box.xml")]
+    card_info = trees[canonical_ui_path("menus\\prefabs\\card_info.xml")]
+    vertical_line = trees[
+        canonical_ui_path("menus\\prefabs\\vertical_fade_line.xml")
+    ]
+
+    def direct(node: TileNode, trait: str) -> float:
+        value = _direct_number(node.child(trait))
+        if value is None:
+            raise ValueError(
+                f"Owned Pip-Boy STATS numeric trait is absent: {node.name}.{trait}"
+            )
+        return value
+
+    horizontal_buffer = direct(super_box, "_horbuf")
+    vertical_buffer = direct(super_box, "_verbuf")
+    card_height = direct(card_info, "height")
+    vertical_rule_length = direct(vertical_line, "height")
+    if line_thickness <= 0.0:
+        raise ValueError("Owned Pip-Boy STATS line thickness is invalid")
+
+    status_container = _named_tile(tree, str(configured["statusContainerTile"]))
+    tail_line = _named_tile(tree, str(configured["tailLineTile"]))
+    container_x = direct(status_container, "x")
+    container_y = direct(status_container, "y")
+    container_width = direct(status_container, "width")
+    tail_x = direct(tail_line, "x")
+    tail_y = direct(tail_line, "y")
+    tail_width = direct(tail_line, "width")
+    tail_stretch = direct(tail_line, "_stretch")
+    presentation["statusContainer"]["rect"] = [
+        container_x,
+        container_y,
+        container_width,
+        tail_y - vertical_rule_length - container_y,
+    ]
+
+    finalized_rules = []
+    for raw in configured["rules"]:
+        definition = dict(raw)
+        tile = _named_tile(tree, str(definition["tile"]))
+        orientation = str(definition["orientation"])
+        if tile is tail_line:
+            x, y, length = tail_x, tail_y, tail_width
+        elif orientation == "horizontal":
+            x, y, length = direct(tile, "x"), direct(tile, "y"), direct(tile, "_length")
+        else:
+            x, y, length = direct(tile, "_x"), direct(tile, "_y"), vertical_rule_length
+        finalized_rules.append(
+            {
+                "tile": tile.name,
+                "rect": [
+                    x,
+                    y,
+                    length if orientation == "horizontal" else line_thickness,
+                    line_thickness if orientation == "horizontal" else length,
+                ],
+            }
+        )
+    presentation["rules"] = finalized_rules
+
+    headline_config = {
+        str(value["tile"]): dict(value) for value in configured["headline"]
+    }
+    for row in presentation["headline"]:
+        definition = headline_config[str(row["tile"])]
+        tile = _named_tile(tree, str(row["tile"]))
+        font = fonts_by_id[int(row["fontId"])]
+        width_node = tile.child("width")
+        width = (
+            direct(tile, "width")
+            if width_node is not None
+            else _text_width(str(row["text"]), font)
+        )
+        include = tile.child("include")
+        height = (
+            card_height
+            if include is not None
+            and canonical_ui_path(include.attributes.get("src", "")) == "card_info.xml"
+            else float(font["lineHeightPixels"])
+        )
+        row["rect"] = [direct(tile, "x"), direct(tile, "y"), width, height]
+        if int(definition["fontId"]) != int(row["fontId"]):
+            raise ValueError(f"Owned Pip-Boy STATS font identity differs: {tile.name}")
+
+    condition_height = float(fonts_by_id[2]["lineHeightPixels"]) + vertical_buffer
+    condition_config = {
+        str(value["tile"]): dict(value) for value in configured["conditionTabs"]
+    }
+    for index, row in enumerate(presentation["conditionTabs"]):
+        tile = _named_tile(tree, str(row["tile"]))
+        definition = condition_config[str(row["tile"])]
+        fixed_width = _direct_number(tile.child("_fixedwidth"))
+        if fixed_width is None:
+            fixed_width = direct(_named_tile(tree, str(configured["conditionTabs"][0]["tile"])), "_fixedwidth")
+        row["rect"] = [0.0, condition_height * index, fixed_width, condition_height]
+        row["selected"] = index == 0
+        if int(definition["fontId"]) != int(row["fontId"]):
+            raise ValueError(f"Owned Pip-Boy STATS font identity differs: {tile.name}")
+
+    navigation_count = len(presentation["navigation"])
+    center_step = (tail_width + tail_stretch * 2.0) / (navigation_count + 1.0)
+    navigation_config = {
+        str(value["tile"]): dict(value) for value in configured["navigation"]
+    }
+    for index, row in enumerate(presentation["navigation"]):
+        tile = _named_tile(tree, str(row["tile"]))
+        definition = navigation_config[str(row["tile"])]
+        font = fonts_by_id[int(row["fontId"])]
+        width = _text_width(str(row["text"]), font) + horizontal_buffer
+        height = float(font["lineHeightPixels"]) + vertical_buffer
+        center_x = tail_x + center_step * (index + 1.0) - tail_stretch
+        row["rect"] = [center_x - width * 0.5, tail_y - height * 0.5, width, height]
+        row["selected"] = index == 0
+        if int(definition["fontId"]) != int(row["fontId"]):
+            raise ValueError(f"Owned Pip-Boy STATS font identity differs: {tile.name}")
 
 
 def _prepare_gameplay_physical_device(
@@ -1555,6 +1866,14 @@ def _prepare_gameplay_physical_device(
     screen_surface = str(configured["screenSurface"])
     if not screen_surface:
         raise ValueError("Owned Pip-Boy screen surface identity is empty")
+    button_glow_surfaces = {
+        str(role): str(surface)
+        for role, surface in dict(configured["buttonGlowSurfaces"]).items()
+    }
+    if set(button_glow_surfaces) != {"status", "items", "data"} or any(
+        not surface for surface in button_glow_surfaces.values()
+    ):
+        raise ValueError("Owned Pip-Boy hardware button-glow identities are incomplete")
 
     member = owned_archives.extract(logical_path)
     source_path = cache_root / "source" / Path(logical_path.replace("\\", "/"))
@@ -1580,6 +1899,20 @@ def _prepare_gameplay_physical_device(
         raise ValueError(
             "Owned Pip-Boy CRT surface does not resolve uniquely: "
             f"{screen_surface} matches={len(screen_matches)}"
+        )
+    surface_names = [str(surface["name"]) for surface in sidecar["surfaces"]]
+    ambiguous_glows = {
+        role: surface_names.count(name)
+        for role, name in button_glow_surfaces.items()
+        if surface_names.count(name) != 1
+    }
+    if ambiguous_glows:
+        raise ValueError(
+            "Owned Pip-Boy button-glow surfaces do not resolve uniquely: "
+            + ", ".join(
+                f"{role}={button_glow_surfaces[role]} matches={count}"
+                for role, count in sorted(ambiguous_glows.items())
+            )
         )
 
     binding_paths = sorted(
@@ -1642,6 +1975,7 @@ def _prepare_gameplay_physical_device(
         "materialManifest": str(material_manifest_path.resolve()),
         "materialManifestSha256": file_sha256(material_manifest_path),
         "screenSurface": screen_surface,
+        "buttonGlowSurfaces": button_glow_surfaces,
         "surfaces": len(sidecar["surfaces"]),
         "vertices": sum(
             int(surface["vertices"]) for surface in sidecar["surfaces"]
@@ -1654,6 +1988,7 @@ def _prepare_gameplay_physical_device(
 def compile_ui(
     data_root: Path,
     default_ini_path: Path,
+    preferences_ini_path: Path | None,
     ui_archive_path: Path,
     owned_archives: OwnedArchiveStack,
     cache_root: Path,
@@ -1735,6 +2070,11 @@ def compile_ui(
         cache_root,
         configuration,
     )
+    gameplay["systemColor"] = _gameplay_system_color(
+        dict(dict(recipe_ui["gameplayPresentation"])["systemColor"]),
+        default_ini_path,
+        preferences_ini_path,
+    )
     boot_closure = set()
     queue = deque([boot_document, confirmation_document])
     while queue:
@@ -1752,6 +2092,10 @@ def compile_ui(
             for asset in documents[member]["initiallyVisibleAssetReferences"]
         }
         | {str(gameplay["backgroundAsset"])}
+        | {
+            str(value["asset"])
+            for value in gameplay["statusPresentation"]["bodyImages"]
+        }
         | {str(value) for value in additional_texture_paths}
     )
     texture_pipeline = OwnedTexturePipeline(
@@ -1824,6 +2168,13 @@ def compile_ui(
         )
         gameplay_fonts.append({"fontId": font_id, **font})
         gameplay_font_textures.append(atlas)
+    _finalize_status_presentation_layout(
+        gameplay["statusPresentation"],
+        dict(dict(recipe_ui["gameplayPresentation"])["statusPresentation"]),
+        trees,
+        gameplay_fonts,
+        float(engine_presentation["globalStyleTraits"]["_line_thickness"]),
+    )
     textures_by_path = {
         str(value["requestedPath"]): value
         for value in [*texture_rows, *engine_textures, *gameplay_font_textures]
@@ -1832,6 +2183,13 @@ def compile_ui(
     if background_asset not in textures_by_path:
         raise ValueError("Owned gameplay UI background texture was not prepared")
     gameplay["background"] = textures_by_path[background_asset]
+    for body_image in gameplay["statusPresentation"]["bodyImages"]:
+        asset = str(body_image["asset"])
+        if asset not in textures_by_path:
+            raise ValueError(
+                f"Owned Pip-Boy STATS body texture was not prepared: {asset}"
+            )
+        body_image["texture"] = textures_by_path[asset]
     gameplay["fonts"] = gameplay_fonts
     texture_rows = [textures_by_path[key] for key in sorted(textures_by_path)]
     title_tile = str(recipe_ui["titleTile"])
@@ -4121,6 +4479,7 @@ def prepare_opening_manifest(
     video_directory_name: str,
     master_sha256: str,
     default_ini_path: Path,
+    preferences_ini_path: Path | None = None,
 ) -> dict[str, object]:
     recipe = load_opening_recipe(recipe_path)
     graph = dict(recipe["recordGraph"])
@@ -4184,6 +4543,7 @@ def prepare_opening_manifest(
     ui = compile_ui(
         data_root,
         default_ini_path,
+        preferences_ini_path,
         ui_archive_path,
         owned_archives,
         cache_root,

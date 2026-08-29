@@ -5,6 +5,9 @@ namespace OpenNV.Runtime.Presentation.Ui;
 
 internal static class PipBoyVisualAcceptance
 {
+    private const int MovieProofHeldFrames = 150;
+    private const int MovieProofLoweredFrames = 150;
+
     internal static async Task Run(
         RuntimeCoordinator host,
         CellSceneLoader.LoadedCell loaded,
@@ -32,6 +35,11 @@ internal static class PipBoyVisualAcceptance
                 await host.ToSignal(
                     RenderingServer.Singleton,
                     RenderingServer.SignalName.FramePostDraw);
+            if (!string.IsNullOrWhiteSpace(Engine.GetWriteMoviePath()))
+                for (var frame = 0; frame < MovieProofHeldFrames; frame++)
+                    await host.ToSignal(
+                        RenderingServer.Singleton,
+                        RenderingServer.SignalName.FramePostDraw);
             var screenshot = Path.GetFullPath(
                 RuntimeCoordinator.RequireOption(options, "pipboy-screenshot"));
             Directory.CreateDirectory(Path.GetDirectoryName(screenshot)!);
@@ -54,6 +62,11 @@ internal static class PipBoyVisualAcceptance
                 await host.ToSignal(
                     RenderingServer.Singleton,
                     RenderingServer.SignalName.FramePostDraw);
+            if (!string.IsNullOrWhiteSpace(Engine.GetWriteMoviePath()))
+                for (var frame = 0; frame < MovieProofLoweredFrames; frame++)
+                    await host.ToSignal(
+                        RenderingServer.Singleton,
+                        RenderingServer.SignalName.FramePostDraw);
             var loweredScreenshot = Path.Combine(
                 Path.GetDirectoryName(screenshot)!,
                 Path.GetFileNameWithoutExtension(screenshot) + "-lowered.png");
@@ -84,6 +97,18 @@ internal static class PipBoyVisualAcceptance
                     "Held and lowered Pip-Boy captures contain no changed pixels.");
             var changedPixelFraction = (double)changedPixels /
                 (heldImage.GetWidth() * heldImage.GetHeight());
+            var missingAuthoritativeVitals = new[]
+            {
+                ("level", snapshot.Level.HasValue),
+                ("hitPoints", snapshot.HitPoints.HasValue && snapshot.MaximumHitPoints.HasValue),
+                ("actionPoints", snapshot.ActionPoints.HasValue &&
+                    snapshot.MaximumActionPoints.HasValue),
+                ("experience", snapshot.ExperiencePoints.HasValue &&
+                    snapshot.NextLevelExperiencePoints.HasValue),
+            }
+                .Where(value => !value.Item2)
+                .Select(value => value.Item1)
+                .ToArray();
 
             RuntimeCoordinator.WriteReport(
                 RuntimeCoordinator.RequireOption(options, "report"),
@@ -102,6 +127,11 @@ internal static class PipBoyVisualAcceptance
                     inventoryEntries = snapshot.Inventory.Count,
                     quests = snapshot.Quests.Count,
                     objectives = snapshot.Objectives.Count,
+                    authoritativeVitals = new
+                    {
+                        complete = missingAuthoritativeVitals.Length == 0,
+                        missing = missingAuthoritativeVitals,
+                    },
                     screenshot = new
                     {
                         path = screenshot,

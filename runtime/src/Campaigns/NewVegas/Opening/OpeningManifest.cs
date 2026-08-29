@@ -78,7 +78,6 @@ internal sealed record OpeningManifest(
                 StringComparer.OrdinalIgnoreCase);
         var gameplayUi = ParseGameplayUi(
             ui.GetProperty("gameplayPresentation"),
-            mainMenuColor,
             style,
             uiDocuments);
 
@@ -149,7 +148,6 @@ internal sealed record OpeningManifest(
 
     private static OwnedGameplayUiPresentation ParseGameplayUi(
         JsonElement source,
-        Color systemColor,
         OwnedUiStyle style,
         IReadOnlyDictionary<string, JsonElement> documents)
     {
@@ -202,7 +200,8 @@ internal sealed record OpeningManifest(
             ReadVector(source.GetProperty("referenceCanvasSize")),
             ParseTexture(source.GetProperty("background")),
             ParsePhysicalPipBoy(source.GetProperty("physicalDevice")),
-            systemColor,
+            ParsePipBoyStatusPresentation(source.GetProperty("statusPresentation")),
+            ReadRgba(source.GetProperty("systemColor").GetProperty("rgba")),
             style,
             roles,
             fonts);
@@ -229,6 +228,90 @@ internal sealed record OpeningManifest(
             throw new InvalidOperationException("Owned gameplay UI presentation is incomplete.");
         return result;
     }
+
+    private static OwnedPipBoyStatusPresentation ParsePipBoyStatusPresentation(
+        JsonElement source)
+    {
+        var statusContainer = source.GetProperty("statusContainer");
+        var result = new OwnedPipBoyStatusPresentation(
+            ReadRect(statusContainer.GetProperty("rect")),
+            source.GetProperty("rules")
+                .EnumerateArray()
+                .Select(value => new OwnedPipBoyRule(
+                    value.GetProperty("tile").GetString()!,
+                    ReadRect(value.GetProperty("rect"))))
+                .ToArray(),
+            ParsePipBoyStrings(source.GetProperty("headline")),
+            ParsePipBoyStrings(source.GetProperty("conditionTabs")),
+            ParsePipBoyStrings(source.GetProperty("navigation")),
+            source.GetProperty("bodyImages")
+                .EnumerateArray()
+                .Select(value => new OwnedPipBoyBodyImage(
+                    value.GetProperty("tile").GetString()!,
+                    value.GetProperty("parentTile").GetString()!,
+                    value.GetProperty("engineId").GetInt32(),
+                    ReadRect(value.GetProperty("rect")),
+                    ParseTexture(value.GetProperty("texture"))))
+                .ToArray());
+        var strings = result.Headline
+            .Concat(result.ConditionTabs)
+            .Concat(result.Navigation)
+            .ToArray();
+        if (result.StatusContainerRect.Size.X <= 0.0f ||
+            result.StatusContainerRect.Size.Y <= 0.0f ||
+            result.Rules.Count != 4 ||
+            result.Rules.Any(value =>
+                string.IsNullOrWhiteSpace(value.Tile) ||
+                value.Rect.Size.X <= 0.0f ||
+                value.Rect.Size.Y <= 0.0f) ||
+            result.Headline.Count != 5 ||
+            result.ConditionTabs.Count != 3 ||
+            result.Navigation.Count != 5 ||
+            result.BodyImages.Count != 7 ||
+            strings.Any(value =>
+                string.IsNullOrWhiteSpace(value.Tile) ||
+                string.IsNullOrWhiteSpace(value.Entity) ||
+                string.IsNullOrWhiteSpace(value.Text) ||
+                value.TextProvenance !=
+                    "recipe-fallback-after-owned-entity-validation" ||
+                value.FontId <= 0 ||
+                value.Rect.Size.X <= 0.0f ||
+                value.Rect.Size.Y <= 0.0f) ||
+            strings.Select(value => value.EngineId).Distinct().Count() != strings.Length ||
+            result.BodyImages.Any(value =>
+                string.IsNullOrWhiteSpace(value.Tile) ||
+                string.IsNullOrWhiteSpace(value.ParentTile) ||
+                value.Rect.Size.X <= 0.0f ||
+                value.Rect.Size.Y <= 0.0f) ||
+            result.BodyImages.Select(value => value.EngineId).Distinct().Count() !=
+                result.BodyImages.Count)
+            throw new InvalidOperationException(
+                "Owned Pip-Boy STATS presentation is incomplete.");
+        return result;
+    }
+
+    private static IReadOnlyList<OwnedPipBoyStringSource> ParsePipBoyStrings(
+        JsonElement source) => source
+        .EnumerateArray()
+        .Select(value =>
+        {
+            var provenance = value.GetProperty("textProvenance");
+            if (provenance.GetProperty("entity").GetString() !=
+                    value.GetProperty("entity").GetString())
+                throw new InvalidOperationException(
+                    "Owned Pip-Boy STATS text provenance differs from its entity.");
+            return new OwnedPipBoyStringSource(
+                value.GetProperty("tile").GetString()!,
+                value.GetProperty("engineId").GetInt32(),
+                value.GetProperty("entity").GetString()!,
+                value.GetProperty("fontId").GetInt32(),
+                value.GetProperty("text").GetString()!,
+                provenance.GetProperty("kind").GetString()!,
+                ReadRect(value.GetProperty("rect")),
+                value.TryGetProperty("selected", out var selected) &&
+                    selected.GetBoolean());
+        })
+        .ToArray();
 
     private static OwnedPhysicalPipBoy ParsePhysicalPipBoy(JsonElement source)
     {
@@ -285,6 +368,12 @@ internal sealed record OpeningManifest(
             System.IO.Path.GetFullPath(materialManifestPath),
             materialManifestSha256,
             source.GetProperty("screenSurface").GetString()!,
+            source.GetProperty("buttonGlowSurfaces")
+                .EnumerateObject()
+                .ToDictionary(
+                    value => value.Name,
+                    value => value.Value.GetString()!,
+                    StringComparer.OrdinalIgnoreCase),
             source.GetProperty("surfaces").GetInt32(),
             source.GetProperty("vertices").GetInt32(),
             source.GetProperty("textures").GetInt32());
@@ -293,6 +382,10 @@ internal sealed record OpeningManifest(
                 StringComparison.OrdinalIgnoreCase) ||
             string.IsNullOrWhiteSpace(result.SourceSha256) ||
             string.IsNullOrWhiteSpace(result.ScreenSurface) ||
+            result.ButtonGlowSurfaces.Count != 3 ||
+            new[] { "status", "items", "data" }.Any(role =>
+                !result.ButtonGlowSurfaces.TryGetValue(role, out var surface) ||
+                string.IsNullOrWhiteSpace(surface)) ||
             result.Surfaces < 1 ||
             result.Vertices < 1 ||
             result.Textures < 1)
@@ -404,6 +497,19 @@ internal sealed record OpeningManifest(
             values[1] / ByteChannelMaximum,
             values[2] / ByteChannelMaximum,
             1.0f);
+    }
+
+    private static Color ReadRgba(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+        if (values.Length != 4 ||
+            values.Any(value => value < 0.0f || value > ByteChannelMaximum))
+            throw new InvalidOperationException("Owned opening RGBA color is invalid.");
+        return new Color(
+            values[0] / ByteChannelMaximum,
+            values[1] / ByteChannelMaximum,
+            values[2] / ByteChannelMaximum,
+            values[3] / ByteChannelMaximum);
     }
 
     internal static void VerifyHash(string path, string expected)
