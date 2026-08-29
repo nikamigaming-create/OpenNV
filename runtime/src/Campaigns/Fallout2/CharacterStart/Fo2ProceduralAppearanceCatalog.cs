@@ -26,20 +26,23 @@ internal sealed record Fo2SkinTonePreset(
     Color PortraitHighlight,
     Color HeadAlbedo);
 
+internal sealed record Fo2AppearanceColorPreset(
+    string Id,
+    Color PortraitColor,
+    Color HeadAlbedo);
+
 internal sealed record Fo2LiveHeadProfile(
     Vector2I Viewport,
     float HeadRadius,
     float HeadHeight,
-    Color HairAlbedo,
-    Color EyeAlbedo,
     float YawAmplitudeRadians,
     float YawCyclesPerSecond);
 
 internal sealed class Fo2ProceduralAppearanceCatalog
 {
-    internal const string ResourcePath = "res://config/fo2-procedural-appearance-v1.json";
-    internal const string ExpectedSchema = "opennv-fo2-procedural-appearance/v1";
-    internal const string ExpectedId = "fo2-local-classic-green-appearance-v1";
+    internal const string ResourcePath = "res://config/fo2-procedural-appearance-v2.json";
+    internal const string ExpectedSchema = "opennv-fo2-procedural-appearance/v2";
+    internal const string ExpectedId = "fo2-local-classic-green-appearance-v2";
     internal const string NoSideHair = "none";
     internal const string RightSideHair = "right";
     internal const string BothSideHair = "both";
@@ -62,13 +65,16 @@ internal sealed class Fo2ProceduralAppearanceCatalog
         Color background,
         Color outline,
         Color feature,
-        Color hair,
         string defaultFaceShapeId,
         string defaultHairStyleId,
         string defaultSkinToneId,
+        string defaultHairColorId,
+        string defaultEyeColorId,
         IReadOnlyList<Fo2FaceShapePreset> faceShapes,
         IReadOnlyList<Fo2HairStylePreset> hairStyles,
         IReadOnlyList<Fo2SkinTonePreset> skinTones,
+        IReadOnlyList<Fo2AppearanceColorPreset> hairColors,
+        IReadOnlyList<Fo2AppearanceColorPreset> eyeColors,
         Fo2LiveHeadProfile liveHead)
     {
         Sha256 = sha256;
@@ -77,13 +83,21 @@ internal sealed class Fo2ProceduralAppearanceCatalog
         Background = background;
         Outline = outline;
         Feature = feature;
-        Hair = hair;
         DefaultFaceShapeId = defaultFaceShapeId;
         DefaultHairStyleId = defaultHairStyleId;
         DefaultSkinToneId = defaultSkinToneId;
+        DefaultHairColorId = defaultHairColorId;
+        DefaultEyeColorId = defaultEyeColorId;
         FaceShapes = faceShapes;
         HairStyles = hairStyles;
         SkinTones = skinTones;
+        HairColors = hairColors;
+        EyeColors = eyeColors;
+        FaceShapeIds = faceShapes.Select(row => row.Id).ToArray();
+        HairStyleIds = hairStyles.Select(row => row.Id).ToArray();
+        SkinToneIds = skinTones.Select(row => row.Id).ToArray();
+        HairColorIds = hairColors.Select(row => row.Id).ToArray();
+        EyeColorIds = eyeColors.Select(row => row.Id).ToArray();
         LiveHead = liveHead;
     }
 
@@ -93,13 +107,21 @@ internal sealed class Fo2ProceduralAppearanceCatalog
     internal Color Background { get; }
     internal Color Outline { get; }
     internal Color Feature { get; }
-    internal Color Hair { get; }
     internal string DefaultFaceShapeId { get; }
     internal string DefaultHairStyleId { get; }
     internal string DefaultSkinToneId { get; }
+    internal string DefaultHairColorId { get; }
+    internal string DefaultEyeColorId { get; }
     internal IReadOnlyList<Fo2FaceShapePreset> FaceShapes { get; }
     internal IReadOnlyList<Fo2HairStylePreset> HairStyles { get; }
     internal IReadOnlyList<Fo2SkinTonePreset> SkinTones { get; }
+    internal IReadOnlyList<Fo2AppearanceColorPreset> HairColors { get; }
+    internal IReadOnlyList<Fo2AppearanceColorPreset> EyeColors { get; }
+    internal IReadOnlyList<string> FaceShapeIds { get; }
+    internal IReadOnlyList<string> HairStyleIds { get; }
+    internal IReadOnlyList<string> SkinToneIds { get; }
+    internal IReadOnlyList<string> HairColorIds { get; }
+    internal IReadOnlyList<string> EyeColorIds { get; }
     internal Fo2LiveHeadProfile LiveHead { get; }
 
     internal static Fo2ProceduralAppearanceCatalog Load() => SharedCatalog.Value;
@@ -114,6 +136,14 @@ internal sealed class Fo2ProceduralAppearanceCatalog
     internal Fo2SkinTonePreset SkinTone(string id) =>
         SkinTones.SingleOrDefault(row => row.Id == id) ??
         throw new InvalidOperationException($"Unsupported Fallout 2 skin tone: {id}");
+
+    internal Fo2AppearanceColorPreset HairColor(string id) =>
+        HairColors.SingleOrDefault(row => row.Id == id) ??
+        throw new InvalidOperationException($"Unsupported Fallout 2 hair color: {id}");
+
+    internal Fo2AppearanceColorPreset EyeColor(string id) =>
+        EyeColors.SingleOrDefault(row => row.Id == id) ??
+        throw new InvalidOperationException($"Unsupported Fallout 2 eye color: {id}");
 
     private static Fo2ProceduralAppearanceCatalog LoadCore()
     {
@@ -157,6 +187,8 @@ internal sealed class Fo2ProceduralAppearanceCatalog
                 ReadHtmlColor(row, "portraitShadow"),
                 ReadHtmlColor(row, "portraitHighlight"),
                 ReadColor(row.GetProperty("headAlbedo")))).ToArray();
+        var hairColors = ReadColors(root, "hairColors");
+        var eyeColors = ReadColors(root, "eyeColors");
         var profile = new Fo2ProceduralAppearanceCatalog(
             Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
             portrait.GetProperty("width").GetInt32(),
@@ -164,19 +196,20 @@ internal sealed class Fo2ProceduralAppearanceCatalog
             ReadHtmlColor(portrait, "background"),
             ReadHtmlColor(portrait, "outline"),
             ReadHtmlColor(portrait, "feature"),
-            ReadHtmlColor(portrait, "hair"),
             RequiredString(defaults, "faceShapeId"),
             RequiredString(defaults, "hairStyleId"),
             RequiredString(defaults, "skinToneId"),
+            RequiredString(defaults, "hairColorId"),
+            RequiredString(defaults, "eyeColorId"),
             faces,
             hair,
             skin,
+            hairColors,
+            eyeColors,
             new Fo2LiveHeadProfile(
                 ReadVector2I(live.GetProperty("viewport")),
                 Positive(live, "headRadius"),
                 Positive(live, "headHeight"),
-                ReadColor(live.GetProperty("hairAlbedo")),
-                ReadColor(live.GetProperty("eyeAlbedo")),
                 Positive(live, "yawAmplitudeRadians"),
                 Positive(live, "yawCyclesPerSecond")));
         if (profile.PortraitWidth != Fo2ProceduralPortrait.Width ||
@@ -190,9 +223,19 @@ internal sealed class Fo2ProceduralAppearanceCatalog
             !skin.Select(row => row.Id).SequenceEqual(
                 [Fo2ProceduralPortrait.LightSkin, Fo2ProceduralPortrait.MediumSkin,
                     Fo2ProceduralPortrait.DeepSkin]) ||
+            !hairColors.Select(row => row.Id).SequenceEqual(
+                [Fo2ProceduralPortrait.BlackHairColor,
+                    Fo2ProceduralPortrait.BrownHairColor,
+                    Fo2ProceduralPortrait.AuburnHairColor]) ||
+            !eyeColors.Select(row => row.Id).SequenceEqual(
+                [Fo2ProceduralPortrait.HazelEyeColor,
+                    Fo2ProceduralPortrait.BlueEyeColor,
+                    Fo2ProceduralPortrait.GreenEyeColor]) ||
             profile.DefaultFaceShapeId != Fo2ProceduralPortrait.OvalFace ||
             profile.DefaultHairStyleId != Fo2ProceduralPortrait.CroppedHair ||
             profile.DefaultSkinToneId != Fo2ProceduralPortrait.MediumSkin ||
+            profile.DefaultHairColorId != Fo2ProceduralPortrait.BrownHairColor ||
+            profile.DefaultEyeColorId != Fo2ProceduralPortrait.HazelEyeColor ||
             hair.Any(row => row.HairLineY < ZeroInteger || row.BottomY < row.HairLineY ||
                 row.BottomY >= profile.PortraitHeight || row.SideInset < MinimumPositive ||
                 row.SideLength < MinimumPositive ||
@@ -201,6 +244,14 @@ internal sealed class Fo2ProceduralAppearanceCatalog
                 "Fallout 2 procedural appearance identities or dimensions drifted.");
         return profile;
     }
+
+    private static Fo2AppearanceColorPreset[] ReadColors(
+        JsonElement root,
+        string property) => root.GetProperty(property).EnumerateArray().Select(row =>
+            new Fo2AppearanceColorPreset(
+                RequiredString(row, "id"),
+                ReadHtmlColor(row, "portraitColor"),
+                ReadColor(row.GetProperty("headAlbedo")))).ToArray();
 
     private static string RequiredString(JsonElement source, string property)
     {

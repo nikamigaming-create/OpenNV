@@ -207,6 +207,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         player.SetMeta("selected_face_shape", character.Appearance.FaceShapeId);
         player.SetMeta("selected_hair_style", character.Appearance.HairStyleId);
         player.SetMeta("selected_skin_tone", character.Appearance.SkinToneId);
+        player.SetMeta("selected_hair_color", character.Appearance.HairColorId);
+        player.SetMeta("selected_eye_color", character.Appearance.EyeColorId);
         player.SetMeta(
             "selected_appearance_recipe_sha256",
             character.Appearance.AppearanceRecipeSha256);

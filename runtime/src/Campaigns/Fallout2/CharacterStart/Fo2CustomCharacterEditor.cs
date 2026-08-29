@@ -9,17 +9,19 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private const float PortraitX = 78.0f;
     private const float PortraitY = 34.0f;
     private const float PortraitSize = 150.0f;
-    private const float FaceControlY = 190.0f;
-    private const float HairControlY = 216.0f;
-    private const float SkinControlY = 242.0f;
+    private const float FaceControlY = 186.0f;
+    private const float HairControlY = 208.0f;
+    private const float SkinControlY = 230.0f;
+    private const float HairColorControlY = 252.0f;
+    private const float EyeColorControlY = 274.0f;
     private const float PreviewToggleX = 106.0f;
     private const float PreviewToggleY = 7.0f;
     private const float PreviewToggleWidth = 94.0f;
     private const float PreviewToggleHeight = 22.0f;
-    private const float FaceButtonSize = 24.0f;
-    private const float FaceLabelX = 101.0f;
-    private const float FaceLabelWidth = 104.0f;
-    private const int FaceLabelFontSize = 9;
+    private const float FaceButtonSize = 20.0f;
+    private const float FaceLabelX = 99.0f;
+    private const float FaceLabelWidth = 108.0f;
+    private const int FaceLabelFontSize = 8;
     private static readonly string[] SpecialNames = ["ST", "PE", "EN", "CH", "IN", "AG", "LK"];
     private readonly Fo2CharacterStartCatalog _catalog;
     private readonly Fo2PremadeCharacter _source;
@@ -32,6 +34,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private readonly Label _faceShape;
     private readonly Label _hairStyle;
     private readonly Label _skinTone;
+    private readonly Label _hairColor;
+    private readonly Label _eyeColor;
     private readonly Button _sex;
     private readonly Label _age;
     private readonly Label[] _specialValues = new Label[7];
@@ -43,6 +47,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private int _faceShapeIndex;
     private int _hairStyleIndex;
     private int _skinToneIndex;
+    private int _hairColorIndex;
+    private int _eyeColorIndex;
     private string _sexValue;
 
     internal Fo2CustomCharacterEditor(
@@ -60,6 +66,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         _faceShapeIndex = Fo2ProceduralPortrait.ShapeIndex(appearance.DefaultFaceShapeId);
         _hairStyleIndex = Fo2ProceduralPortrait.HairStyleIndex(appearance.DefaultHairStyleId);
         _skinToneIndex = Fo2ProceduralPortrait.SkinToneIndex(appearance.DefaultSkinToneId);
+        _hairColorIndex = Fo2ProceduralPortrait.HairColorIndex(appearance.DefaultHairColorId);
+        _eyeColorIndex = Fo2ProceduralPortrait.EyeColorIndex(appearance.DefaultEyeColorId);
         Name = modify
             ? "FALLOUT_2_MODIFY_OWNED_CHARACTER"
             : "FALLOUT_2_CREATE_CUSTOM_CHARACTER";
@@ -206,6 +214,54 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             FaceButtonSize,
             () => SetSkinToneIndex(_skinToneIndex + 1),
             FaceLabelFontSize);
+        AddButton(
+            "◀",
+            PortraitX,
+            HairColorControlY,
+            FaceButtonSize,
+            FaceButtonSize,
+            () => SetHairColorIndex(_hairColorIndex - 1),
+            FaceLabelFontSize);
+        _hairColor = AddText(
+            "",
+            FaceLabelX,
+            HairColorControlY,
+            FaceLabelWidth,
+            FaceButtonSize,
+            FaceLabelFontSize,
+            HorizontalAlignment.Center);
+        AddButton(
+            "▶",
+            PortraitX + PortraitSize - FaceButtonSize,
+            HairColorControlY,
+            FaceButtonSize,
+            FaceButtonSize,
+            () => SetHairColorIndex(_hairColorIndex + 1),
+            FaceLabelFontSize);
+        AddButton(
+            "◀",
+            PortraitX,
+            EyeColorControlY,
+            FaceButtonSize,
+            FaceButtonSize,
+            () => SetEyeColorIndex(_eyeColorIndex - 1),
+            FaceLabelFontSize);
+        _eyeColor = AddText(
+            "",
+            FaceLabelX,
+            EyeColorControlY,
+            FaceLabelWidth,
+            FaceButtonSize,
+            FaceLabelFontSize,
+            HorizontalAlignment.Center);
+        AddButton(
+            "▶",
+            PortraitX + PortraitSize - FaceButtonSize,
+            EyeColorControlY,
+            FaceButtonSize,
+            FaceButtonSize,
+            () => SetEyeColorIndex(_eyeColorIndex + 1),
+            FaceLabelFontSize);
         AddText(
             modify ? "MODIFY CHOSEN ONE" : "CREATE CHOSEN ONE",
             304.0f,
@@ -278,6 +334,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     internal string FaceShapeId => Fo2ProceduralPortrait.Shapes[_faceShapeIndex];
     internal string HairStyleId => Fo2ProceduralPortrait.HairStyles[_hairStyleIndex];
     internal string SkinToneId => Fo2ProceduralPortrait.SkinTones[_skinToneIndex];
+    internal string HairColorId => Fo2ProceduralPortrait.HairColors[_hairColorIndex];
+    internal string EyeColorId => Fo2ProceduralPortrait.EyeColors[_eyeColorIndex];
     internal bool Live3DVisible => _headPreview.Visible;
     internal Fo2ProceduralHeadPreview HeadPreview => _headPreview;
     internal IReadOnlyList<int> Special => _special;
@@ -346,6 +404,22 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         SetSkinToneIndex(index);
     }
 
+    internal void SetHairColor(string value)
+    {
+        var index = Fo2ProceduralPortrait.HairColorIndex(value);
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        SetHairColorIndex(index);
+    }
+
+    internal void SetEyeColor(string value)
+    {
+        var index = Fo2ProceduralPortrait.EyeColorIndex(value);
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        SetEyeColorIndex(index);
+    }
+
     internal void TogglePreviewMode()
     {
         _headPreview.Visible = !_headPreview.Visible;
@@ -394,7 +468,9 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
                 profile.Sex,
                 FaceShapeId,
                 HairStyleId,
-                SkinToneId),
+                SkinToneId,
+                HairColorId,
+                EyeColorId),
         };
         selection.Validate(_catalog);
         return selection;
@@ -435,6 +511,20 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         Refresh();
     }
 
+    private void SetHairColorIndex(int index)
+    {
+        var count = Fo2ProceduralPortrait.HairColors.Count;
+        _hairColorIndex = (index % count + count) % count;
+        Refresh();
+    }
+
+    private void SetEyeColorIndex(int index)
+    {
+        var count = Fo2ProceduralPortrait.EyeColors.Count;
+        _eyeColorIndex = (index % count + count) % count;
+        Refresh();
+    }
+
     private void AdjustSpecial(int index, int delta)
     {
         if (index is < 0 or >= 7 || delta is < -1 or > 1)
@@ -452,13 +542,23 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         _faceShape.Text = $"FACE: {FaceShapeId.ToUpperInvariant()}";
         _hairStyle.Text = $"HAIR: {HairStyleId.ToUpperInvariant()}";
         _skinTone.Text = $"SKIN: {SkinToneId.ToUpperInvariant()}";
+        _hairColor.Text = $"HAIR COLOR: {HairColorId.ToUpperInvariant()}";
+        _eyeColor.Text = $"EYE COLOR: {EyeColorId.ToUpperInvariant()}";
         _portrait.Texture = ImageTexture.CreateFromImage(
             Fo2ProceduralPortrait.Render(
                 _sexValue,
                 FaceShapeId,
                 HairStyleId,
-                SkinToneId));
-        _headPreview.SetIdentity(_sexValue, FaceShapeId, HairStyleId, SkinToneId);
+                SkinToneId,
+                HairColorId,
+                EyeColorId));
+        _headPreview.SetIdentity(
+            _sexValue,
+            FaceShapeId,
+            HairStyleId,
+            SkinToneId,
+            HairColorId,
+            EyeColorId);
         _age.Text = _ageValue.ToString();
         for (var index = 0; index < _special.Length; index++)
             _specialValues[index].Text = _special[index].ToString("00");
@@ -479,6 +579,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         SetMeta("custom_face_shape", FaceShapeId);
         SetMeta("custom_hair_style", HairStyleId);
         SetMeta("custom_skin_tone", SkinToneId);
+        SetMeta("custom_hair_color", HairColorId);
+        SetMeta("custom_eye_color", EyeColorId);
         SetMeta("custom_appearance_recipe_sha256", Fo2ProceduralAppearanceCatalog.Load().Sha256);
         SetMeta("custom_portrait_generator", Fo2ProceduralPortrait.GeneratorId);
         SetMeta("custom_special", string.Join(",", _special));

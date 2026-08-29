@@ -35,6 +35,7 @@ internal sealed partial class Fo2ProceduralHeadPreview : SubViewportContainer
     private readonly MeshInstance3D _rightHair;
     private readonly StandardMaterial3D _skinMaterial;
     private readonly StandardMaterial3D _hairMaterial;
+    private readonly StandardMaterial3D _eyeMaterial;
     private double _elapsed;
 
     internal Fo2ProceduralHeadPreview()
@@ -74,7 +75,8 @@ internal sealed partial class Fo2ProceduralHeadPreview : SubViewportContainer
         _identityRoot = new Node3D { Name = "SavedProceduralIdentity" };
         viewport.AddChild(_identityRoot);
         _skinMaterial = BuildMaterial(Colors.White);
-        _hairMaterial = BuildMaterial(_catalog.LiveHead.HairAlbedo);
+        _hairMaterial = BuildMaterial(Colors.White);
+        _eyeMaterial = BuildMaterial(Colors.White);
         _head = Part(
             "FaceShape",
             new SphereMesh
@@ -98,8 +100,8 @@ internal sealed partial class Fo2ProceduralHeadPreview : SubViewportContainer
         _hairCap.Position = new Vector3(0.0f, HairCapY, 0.0f);
         _leftHair = Part("LeftHair", SideMesh(MinimumCapsuleHeight), _hairMaterial);
         _rightHair = Part("RightHair", SideMesh(MinimumCapsuleHeight), _hairMaterial);
-        AddFeature("LeftEye", new Vector3(-EyeX, EyeY, EyeZ), EyeRadius);
-        AddFeature("RightEye", new Vector3(EyeX, EyeY, EyeZ), EyeRadius);
+        AddFeature("LeftEye", new Vector3(-EyeX, EyeY, EyeZ), EyeRadius, _eyeMaterial);
+        AddFeature("RightEye", new Vector3(EyeX, EyeY, EyeZ), EyeRadius, _eyeMaterial);
         AddFeature("Nose", new Vector3(0.0f, NoseY, NoseZ), NoseRadius, _skinMaterial);
         viewport.AddChild(new Camera3D
         {
@@ -114,7 +116,11 @@ internal sealed partial class Fo2ProceduralHeadPreview : SubViewportContainer
     internal string FaceShapeId => GetMeta("face_shape_id").AsString();
     internal string HairStyleId => GetMeta("hair_style_id").AsString();
     internal string SkinToneId => GetMeta("skin_tone_id").AsString();
+    internal string HairColorId => GetMeta("hair_color_id").AsString();
+    internal string EyeColorId => GetMeta("eye_color_id").AsString();
     internal string RecipeSha256 => GetMeta("appearance_recipe_sha256").AsString();
+    internal Color HairAlbedo => _hairMaterial.AlbedoColor;
+    internal Color EyeAlbedo => _eyeMaterial.AlbedoColor;
     internal int VisibleGeometryParts =>
         new[] { _head, _hairCap, _leftHair, _rightHair }
             .Count(part => part.Visible);
@@ -123,15 +129,27 @@ internal sealed partial class Fo2ProceduralHeadPreview : SubViewportContainer
         string sex,
         string faceShapeId,
         string hairStyleId,
-        string skinToneId)
+        string skinToneId,
+        string hairColorId,
+        string eyeColorId)
     {
-        _ = Fo2ProceduralPortrait.Render(sex, faceShapeId, hairStyleId, skinToneId);
+        _ = Fo2ProceduralPortrait.Render(
+            sex,
+            faceShapeId,
+            hairStyleId,
+            skinToneId,
+            hairColorId,
+            eyeColorId);
         var face = _catalog.Face(faceShapeId);
         var hair = _catalog.HairStyle(hairStyleId);
         var skin = _catalog.SkinTone(skinToneId);
+        var hairColor = _catalog.HairColor(hairColorId);
+        var eyeColor = _catalog.EyeColor(eyeColorId);
         _head.Scale = face.HeadScale;
         _hairCap.Scale = new Vector3(face.HeadScale.X, face.HeadScale.Y, face.HeadScale.Z);
         _skinMaterial.AlbedoColor = skin.HeadAlbedo;
+        _hairMaterial.AlbedoColor = hairColor.HeadAlbedo;
+        _eyeMaterial.AlbedoColor = eyeColor.HeadAlbedo;
         var sideHeight = MathF.Max(hair.SideLength, MinimumCapsuleHeight);
         _leftHair.Mesh = SideMesh(sideHeight);
         _rightHair.Mesh = SideMesh(sideHeight);
@@ -150,6 +168,8 @@ internal sealed partial class Fo2ProceduralHeadPreview : SubViewportContainer
         SetMeta("face_shape_id", faceShapeId);
         SetMeta("hair_style_id", hairStyleId);
         SetMeta("skin_tone_id", skinToneId);
+        SetMeta("hair_color_id", hairColorId);
+        SetMeta("eye_color_id", eyeColorId);
         SetMeta("appearance_recipe_sha256", _catalog.Sha256);
         SetMeta("boundary", "local-procedural-preview-not-retail-head-geometry");
     }
@@ -182,7 +202,7 @@ internal sealed partial class Fo2ProceduralHeadPreview : SubViewportContainer
         string name,
         Vector3 position,
         float radius,
-        Material? material = null)
+        Material material)
     {
         var feature = Part(
             name,
@@ -193,7 +213,7 @@ internal sealed partial class Fo2ProceduralHeadPreview : SubViewportContainer
                 RadialSegments = RadialSegments,
                 Rings = Rings,
             },
-            material ?? BuildMaterial(_catalog.LiveHead.EyeAlbedo));
+            material);
         feature.Position = position;
     }
 

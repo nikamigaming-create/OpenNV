@@ -1,19 +1,20 @@
 {
-  "schema": "opennv-fo2-procedural-appearance/v1",
-  "id": "fo2-local-classic-green-appearance-v1",
+  "schema": "opennv-fo2-procedural-appearance/v2",
+  "id": "fo2-local-classic-green-appearance-v2",
   "campaign": "Fallout2",
   "portrait": {
     "width": 128,
     "height": 128,
     "background": "061006",
     "outline": "163e1a",
-    "feature": "0b240d",
-    "hair": "123b16"
+    "feature": "0b240d"
   },
   "defaults": {
     "faceShapeId": "oval",
     "hairStyleId": "cropped",
-    "skinToneId": "medium"
+    "skinToneId": "medium",
+    "hairColorId": "brown",
+    "eyeColorId": "hazel"
   },
   "faceShapes": [
     { "id": "round", "halfWidth": 41.0, "halfHeight": 42.0, "taper": 0.0, "headScale": [1.08, 0.92, 1.0] },
@@ -30,12 +31,20 @@
     { "id": "medium", "portraitShadow": "286b2d", "portraitHighlight": "78e781", "headAlbedo": [0.55, 0.34, 0.22, 1.0] },
     { "id": "deep", "portraitShadow": "17471c", "portraitHighlight": "4fab55", "headAlbedo": [0.32, 0.18, 0.12, 1.0] }
   ],
+  "hairColors": [
+    { "id": "black", "portraitColor": "0b240d", "headAlbedo": [0.025, 0.02, 0.015, 1.0] },
+    { "id": "brown", "portraitColor": "123b16", "headAlbedo": [0.12, 0.055, 0.025, 1.0] },
+    { "id": "auburn", "portraitColor": "286b2d", "headAlbedo": [0.32, 0.07, 0.025, 1.0] }
+  ],
+  "eyeColors": [
+    { "id": "hazel", "portraitColor": "4f8847", "headAlbedo": [0.28, 0.22, 0.08, 1.0] },
+    { "id": "blue", "portraitColor": "65b96b", "headAlbedo": [0.12, 0.32, 0.55, 1.0] },
+    { "id": "green", "portraitColor": "78e781", "headAlbedo": [0.12, 0.42, 0.18, 1.0] }
+  ],
   "live3d": {
     "viewport": [192, 192],
     "headRadius": 0.68,
     "headHeight": 1.72,
-    "hairAlbedo": [0.12, 0.055, 0.025, 1.0],
-    "eyeAlbedo": [0.055, 0.07, 0.045, 1.0],
     "yawAmplitudeRadians": 0.09,
     "yawCyclesPerSecond": 0.08
   },
@@ -43,6 +52,6 @@
   "unsupported": [
     "retail Fallout 2 face or head parity",
     "owned portrait pixels or proprietary head geometry",
-    "hair color, eye color, facial feature morphs, and body customization"
+    "hair texture, eye texture, facial feature morphs, and body customization"
   ]
 }

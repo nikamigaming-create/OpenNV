@@ -36,6 +36,8 @@ internal static class Fo2ProceduralPortraitProof
             editor.SetFaceShape(Fo2ProceduralPortrait.AngularFace);
             editor.SetHairStyle(Fo2ProceduralPortrait.LongHair);
             editor.SetSkinTone(Fo2ProceduralPortrait.DeepSkin);
+            editor.SetHairColor(Fo2ProceduralPortrait.AuburnHairColor);
+            editor.SetEyeColor(Fo2ProceduralPortrait.BlueEyeColor);
             editor.TogglePreviewMode();
             editor.SetSpecial(
             [
@@ -51,12 +53,7 @@ internal static class Fo2ProceduralPortraitProof
                 throw new InvalidOperationException(
                     "Fallout 2 portrait proof custom state is invalid.");
             var liveHeadMatches = editor.Live3DVisible &&
-                editor.HeadPreview.FaceShapeId == Fo2ProceduralPortrait.AngularFace &&
-                editor.HeadPreview.HairStyleId == Fo2ProceduralPortrait.LongHair &&
-                editor.HeadPreview.SkinToneId == Fo2ProceduralPortrait.DeepSkin &&
-                editor.HeadPreview.RecipeSha256 ==
-                    Fo2ProceduralAppearanceCatalog.Load().Sha256 &&
-                editor.HeadPreview.VisibleGeometryParts == ExpectedLongHairVisibleParts;
+                MatchesLiveHead(editor.HeadPreview);
             editor.Confirm();
             var saved = host.PersistCurrentState();
             var appearance = saved.Character.Appearance;
@@ -65,33 +62,59 @@ internal static class Fo2ProceduralPortraitProof
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 appearance.HairStyleId,
-                appearance.SkinToneId);
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                appearance.EyeColorId);
             var selectedPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 appearance.HairStyleId,
-                appearance.SkinToneId));
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                appearance.EyeColorId));
             var alternateFacePixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 Fo2ProceduralPortrait.RoundFace,
                 appearance.HairStyleId,
-                appearance.SkinToneId));
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                appearance.EyeColorId));
             var alternateHairPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 Fo2ProceduralPortrait.CroppedHair,
-                appearance.SkinToneId));
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                appearance.EyeColorId));
             var alternateSkinPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
                 appearance.FaceShapeId,
                 appearance.HairStyleId,
-                Fo2ProceduralPortrait.LightSkin));
+                Fo2ProceduralPortrait.LightSkin,
+                appearance.HairColorId,
+                appearance.EyeColorId));
+            var alternateHairColorPixels = PixelSha256(Fo2ProceduralPortrait.Render(
+                saved.Character.Profile.Sex,
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                appearance.SkinToneId,
+                Fo2ProceduralPortrait.BlackHairColor,
+                appearance.EyeColorId));
+            var alternateEyeColorPixels = PixelSha256(Fo2ProceduralPortrait.Render(
+                saved.Character.Profile.Sex,
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                Fo2ProceduralPortrait.GreenEyeColor));
             var passed = Matches(saved.Character) &&
                 liveHeadMatches &&
                 appearance == repeat &&
                 selectedPixels != alternateFacePixels &&
                 selectedPixels != alternateHairPixels &&
                 selectedPixels != alternateSkinPixels &&
+                selectedPixels != alternateHairColorPixels &&
+                selectedPixels != alternateEyeColorPixels &&
                 File.Exists(appearance.GeneratedPortraitPath) &&
                 saved.Sha256.Length == HashLength;
             WriteReport(
@@ -109,6 +132,8 @@ internal static class Fo2ProceduralPortraitProof
                     distinctFaceShapePixels = selectedPixels != alternateFacePixels,
                     distinctHairStylePixels = selectedPixels != alternateHairPixels,
                     distinctSkinTonePixels = selectedPixels != alternateSkinPixels,
+                    distinctHairColorPixels = selectedPixels != alternateHairColorPixels,
+                    distinctEyeColorPixels = selectedPixels != alternateEyeColorPixels,
                     matchingLive3dHead = liveHeadMatches,
                     mediaCaptureCreated = false,
                 });
@@ -132,8 +157,20 @@ internal static class Fo2ProceduralPortraitProof
             var saved = host.CurrentSave ?? throw new InvalidOperationException(
                 "Fallout 2 portrait restore proof has no validated save.");
             var appearance = saved.Character.Appearance;
+            var restoredHead = new Fo2ProceduralHeadPreview();
+            host.AddChild(restoredHead);
+            restoredHead.SetIdentity(
+                saved.Character.Profile.Sex,
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                appearance.SkinToneId,
+                appearance.HairColorId,
+                appearance.EyeColorId);
+            var liveHeadMatches = MatchesLiveHead(restoredHead);
+            restoredHead.QueueFree();
             var passed = host.RestoredFromSave && host.Runtime is not null &&
                 Matches(saved.Character) &&
+                liveHeadMatches &&
                 File.Exists(appearance.GeneratedPortraitPath) &&
                 saved.Sha256.Length == HashLength;
             WriteReport(
@@ -148,6 +185,7 @@ internal static class Fo2ProceduralPortraitProof
                     appearance,
                     save = new { path = saved.Path, sha256 = saved.Sha256 },
                     coldProcess = true,
+                    matchingRestoredLive3dHead = liveHeadMatches,
                     mediaCaptureCreated = false,
                 });
             GD.Print(passed
@@ -174,12 +212,28 @@ internal static class Fo2ProceduralPortraitProof
             appearance.FaceShapeId == Fo2ProceduralPortrait.AngularFace &&
             appearance.HairStyleId == Fo2ProceduralPortrait.LongHair &&
             appearance.SkinToneId == Fo2ProceduralPortrait.DeepSkin &&
+            appearance.HairColorId == Fo2ProceduralPortrait.AuburnHairColor &&
+            appearance.EyeColorId == Fo2ProceduralPortrait.BlueEyeColor &&
             appearance.PortraitGeneratorId == Fo2ProceduralPortrait.GeneratorId &&
             appearance.AppearanceRecipeId == Fo2ProceduralAppearanceCatalog.ExpectedId &&
             appearance.AppearanceRecipeSha256 == Fo2ProceduralAppearanceCatalog.Load().Sha256 &&
             appearance.CustomFaceEdited && appearance.CustomPortraitGenerated &&
             appearance.GeneratedPortraitWidth == Fo2ProceduralPortrait.Width &&
             appearance.GeneratedPortraitHeight == Fo2ProceduralPortrait.Height;
+    }
+
+    private static bool MatchesLiveHead(Fo2ProceduralHeadPreview head)
+    {
+        var catalog = Fo2ProceduralAppearanceCatalog.Load();
+        return head.FaceShapeId == Fo2ProceduralPortrait.AngularFace &&
+            head.HairStyleId == Fo2ProceduralPortrait.LongHair &&
+            head.SkinToneId == Fo2ProceduralPortrait.DeepSkin &&
+            head.HairColorId == Fo2ProceduralPortrait.AuburnHairColor &&
+            head.EyeColorId == Fo2ProceduralPortrait.BlueEyeColor &&
+            head.HairAlbedo == catalog.HairColor(head.HairColorId).HeadAlbedo &&
+            head.EyeAlbedo == catalog.EyeColor(head.EyeColorId).HeadAlbedo &&
+            head.RecipeSha256 == catalog.Sha256 &&
+            head.VisibleGeometryParts == ExpectedLongHairVisibleParts;
     }
 
     private static string PrepareOutput(string proofRoot, bool requireExisting)

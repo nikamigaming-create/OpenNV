@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal static class Fo2ProceduralPortrait
 {
-    internal const string GeneratorId = "opennv-classic-green-appearance/v2";
+    internal const string GeneratorId = "opennv-classic-green-appearance/v3";
     internal const string PortraitState = "generated-local-classic-green-appearance";
     internal const string RoundFace = "round";
     internal const string OvalFace = "oval";
@@ -16,6 +16,12 @@ internal static class Fo2ProceduralPortrait
     internal const string LightSkin = "light";
     internal const string MediumSkin = "medium";
     internal const string DeepSkin = "deep";
+    internal const string BlackHairColor = "black";
+    internal const string BrownHairColor = "brown";
+    internal const string AuburnHairColor = "auburn";
+    internal const string HazelEyeColor = "hazel";
+    internal const string BlueEyeColor = "blue";
+    internal const string GreenEyeColor = "green";
     internal const int Width = 128;
     internal const int Height = 128;
     private const int HashLength = 64;
@@ -41,12 +47,11 @@ internal static class Fo2ProceduralPortrait
     private static Fo2ProceduralAppearanceCatalog Catalog =>
         Fo2ProceduralAppearanceCatalog.Load();
 
-    internal static IReadOnlyList<string> Shapes =>
-        Catalog.FaceShapes.Select(row => row.Id).ToArray();
-    internal static IReadOnlyList<string> HairStyles =>
-        Catalog.HairStyles.Select(row => row.Id).ToArray();
-    internal static IReadOnlyList<string> SkinTones =>
-        Catalog.SkinTones.Select(row => row.Id).ToArray();
+    internal static IReadOnlyList<string> Shapes => Catalog.FaceShapeIds;
+    internal static IReadOnlyList<string> HairStyles => Catalog.HairStyleIds;
+    internal static IReadOnlyList<string> SkinTones => Catalog.SkinToneIds;
+    internal static IReadOnlyList<string> HairColors => Catalog.HairColorIds;
+    internal static IReadOnlyList<string> EyeColors => Catalog.EyeColorIds;
 
     internal static int ShapeIndex(string faceShapeId) =>
         Shapes.ToList().IndexOf(faceShapeId);
@@ -54,17 +59,31 @@ internal static class Fo2ProceduralPortrait
         HairStyles.ToList().IndexOf(hairStyleId);
     internal static int SkinToneIndex(string skinToneId) =>
         SkinTones.ToList().IndexOf(skinToneId);
+    internal static int HairColorIndex(string hairColorId) =>
+        HairColors.ToList().IndexOf(hairColorId);
+    internal static int EyeColorIndex(string eyeColorId) =>
+        EyeColors.ToList().IndexOf(eyeColorId);
 
     internal static Image Render(
         string sex,
         string faceShapeId,
         string hairStyleId,
-        string skinToneId)
+        string skinToneId,
+        string hairColorId,
+        string eyeColorId)
     {
-        ValidateIdentity(sex, faceShapeId, hairStyleId, skinToneId);
+        ValidateIdentity(
+            sex,
+            faceShapeId,
+            hairStyleId,
+            skinToneId,
+            hairColorId,
+            eyeColorId);
         var face = Catalog.Face(faceShapeId);
         var hair = Catalog.HairStyle(hairStyleId);
         var skin = Catalog.SkinTone(skinToneId);
+        var hairColor = Catalog.HairColor(hairColorId);
+        var eyeColor = Catalog.EyeColor(eyeColorId);
         var image = Image.CreateEmpty(Width, Height, false, Image.Format.Rgba8);
         image.Fill(Catalog.Background);
         for (var y = 0; y < Height; y++)
@@ -89,17 +108,17 @@ internal static class Fo2ProceduralPortrait
             skin.PortraitShadow);
         image.FillRect(
             new Rect2I(LeftEyeX, EyeY, EyeWidth, EyeHeight),
-            Catalog.Feature);
+            eyeColor.PortraitColor);
         image.FillRect(
             new Rect2I(RightEyeX, EyeY, EyeWidth, EyeHeight),
-            Catalog.Feature);
+            eyeColor.PortraitColor);
         image.FillRect(
             new Rect2I(NoseX, NoseY, OutlineInset, EyeWidth),
             skin.PortraitShadow);
         image.FillRect(
             new Rect2I(MouthX, MouthY, MouthWidth, OutlineInset),
             Catalog.Feature);
-        DrawHair(image, face, hair);
+        DrawHair(image, face, hair, hairColor);
         return image;
     }
 
@@ -108,9 +127,17 @@ internal static class Fo2ProceduralPortrait
         string sex,
         string faceShapeId,
         string hairStyleId,
-        string skinToneId)
+        string skinToneId,
+        string hairColorId,
+        string eyeColorId)
     {
-        var image = Render(sex, faceShapeId, hairStyleId, skinToneId);
+        var image = Render(
+            sex,
+            faceShapeId,
+            hairStyleId,
+            skinToneId,
+            hairColorId,
+            eyeColorId);
         var root = DefaultRoot();
         Directory.CreateDirectory(root);
         var temporary = System.IO.Path.Combine(root, $".{Guid.NewGuid():N}.png");
@@ -145,6 +172,8 @@ internal static class Fo2ProceduralPortrait
                 faceShapeId,
                 hairStyleId,
                 skinToneId,
+                hairColorId,
+                eyeColorId,
                 GeneratorId,
                 Fo2ProceduralAppearanceCatalog.ExpectedId,
                 Catalog.Sha256,
@@ -170,6 +199,8 @@ internal static class Fo2ProceduralPortrait
             !Shapes.Contains(contract.FaceShapeId, StringComparer.Ordinal) ||
             !HairStyles.Contains(contract.HairStyleId, StringComparer.Ordinal) ||
             !SkinTones.Contains(contract.SkinToneId, StringComparer.Ordinal) ||
+            !HairColors.Contains(contract.HairColorId, StringComparer.Ordinal) ||
+            !EyeColors.Contains(contract.EyeColorId, StringComparer.Ordinal) ||
             contract.PortraitGeneratorId != GeneratorId ||
             contract.AppearanceRecipeId != Fo2ProceduralAppearanceCatalog.ExpectedId ||
             contract.AppearanceRecipeSha256 != Catalog.Sha256 ||
@@ -222,7 +253,8 @@ internal static class Fo2ProceduralPortrait
     private static void DrawHair(
         Image image,
         Fo2FaceShapePreset face,
-        Fo2HairStylePreset hair)
+        Fo2HairStylePreset hair,
+        Fo2AppearanceColorPreset hairColor)
     {
         for (var y = 0; y < Height; y++)
         {
@@ -230,7 +262,7 @@ internal static class Fo2ProceduralPortrait
             {
                 if (!InsideFace(x, y, face, out _) || y > hair.HairLineY)
                     continue;
-                image.SetPixel(x, y, Catalog.Hair);
+                image.SetPixel(x, y, hairColor.PortraitColor);
             }
         }
         if (hair.SideMode == Fo2ProceduralAppearanceCatalog.NoSideHair)
@@ -239,12 +271,12 @@ internal static class Fo2ProceduralPortrait
         var leftX = CenterX - (int)(face.HalfWidth - hair.SideInset);
         for (var y = hair.HairLineY; y <= hair.BottomY; y++)
         {
-            image.SetPixel(rightX, y, Catalog.Hair);
-            image.SetPixel(rightX - 1, y, Catalog.Hair);
+            image.SetPixel(rightX, y, hairColor.PortraitColor);
+            image.SetPixel(rightX - 1, y, hairColor.PortraitColor);
             if (hair.SideMode != Fo2ProceduralAppearanceCatalog.BothSideHair)
                 continue;
-            image.SetPixel(leftX, y, Catalog.Hair);
-            image.SetPixel(leftX + 1, y, Catalog.Hair);
+            image.SetPixel(leftX, y, hairColor.PortraitColor);
+            image.SetPixel(leftX + 1, y, hairColor.PortraitColor);
         }
     }
 
@@ -252,11 +284,14 @@ internal static class Fo2ProceduralPortrait
         string sex,
         string faceShapeId,
         string hairStyleId,
-        string skinToneId)
+        string skinToneId,
+        string hairColorId,
+        string eyeColorId)
     {
         if (sex is not "Male" and not "Female" ||
             ShapeIndex(faceShapeId) < 0 || HairStyleIndex(hairStyleId) < 0 ||
-            SkinToneIndex(skinToneId) < 0)
+            SkinToneIndex(skinToneId) < 0 || HairColorIndex(hairColorId) < 0 ||
+            EyeColorIndex(eyeColorId) < 0)
             throw new ArgumentOutOfRangeException(
                 nameof(faceShapeId),
                 "Fallout 2 portrait sex, face, hair, or skin input is unsupported.");
