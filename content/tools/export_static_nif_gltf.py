@@ -1613,6 +1613,7 @@ def export_static_nif(
                     "triangles": len(body["triangles"]),
                 }
                 for body in collision_bodies
+                if body.get("shapeType") != "convex-hull-points"
             ],
             "dynamicPhysicsExported": bool(physics_bodies),
             "dynamicPhysicsUnsupportedReasons": physics_unsupported,
@@ -1628,6 +1629,17 @@ def export_static_nif(
         "attachmentMarkers": attachment_markers,
         "surfaces": surface_rows,
     }
+    static_convex_bodies = [
+        {
+            **{key: value for key, value in body.items() if key not in {"positions", "triangles"}},
+            "vertices": len(body["positions"]),
+            "triangles": len(body["triangles"]),
+        }
+        for body in collision_bodies
+        if body.get("shapeType") == "convex-hull-points"
+    ]
+    if static_convex_bodies:
+        sidecar["coverage"]["staticConvexBodies"] = static_convex_bodies
     if articulation_contract is not None:
         sidecar["articulation"] = articulation_contract
     sidecar_bytes = (json.dumps(sidecar, indent=2, sort_keys=True) + "\n").encode()

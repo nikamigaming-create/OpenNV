@@ -32,6 +32,23 @@ def form_id(value: int) -> str:
     return f"{value:08x}"
 
 
+def authored_collision_source(coverage: dict[str, object]) -> str:
+    collision_exported = bool(coverage["collisionExported"])
+    packed_collision_bodies = coverage["collisionBodies"]
+    static_convex_bodies = coverage.get("staticConvexBodies", [])
+    if collision_exported:
+        if packed_collision_bodies and static_convex_bodies:
+            return "NIF-authored-bhk-packed-triangles-plus-static-convex-points"
+        if static_convex_bodies:
+            return "NIF-authored-bhk-static-convex-points"
+        if packed_collision_bodies:
+            return "NIF-authored-bhk-packed-triangles"
+        raise ValueError("Exported authored collision has no typed body contract")
+    if packed_collision_bodies or static_convex_bodies:
+        raise ValueError("Disabled authored collision contains typed body contracts")
+    return "unsupported-or-absent"
+
+
 def reference_selection_reason(
     base: BaseObject,
     recipe: dict[str, object],
@@ -306,6 +323,8 @@ def prepare_scene_assets(
             compiler = sidecar["compiler"]
         elif compiler != sidecar["compiler"]:
             raise ValueError("Cell assets were produced by different compilers")
+        collision_exported = bool(sidecar["coverage"]["collisionExported"])
+        collision_source = authored_collision_source(sidecar["coverage"])
         assets[model_path] = {
             "id": asset_id,
             "logicalPath": member.logical_path,
@@ -318,12 +337,8 @@ def prepare_scene_assets(
             "compiler": sidecar["compiler"],
             "presentationClip": sidecar["coverage"].get("presentationClip"),
             "collision": {
-                "enabled": bool(sidecar["coverage"]["collisionExported"]),
-                "source": (
-                    "NIF-authored-bhk-packed-triangles"
-                    if sidecar["coverage"]["collisionExported"]
-                    else "unsupported-or-absent"
-                ),
+                "enabled": collision_exported,
+                "source": collision_source,
                 "blockTypes": sidecar["coverage"]["collisionBlockTypes"],
                 "unsupportedReason": sidecar["coverage"]["collisionUnsupportedReason"],
             },

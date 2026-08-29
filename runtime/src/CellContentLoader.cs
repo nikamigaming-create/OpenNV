@@ -460,6 +460,8 @@ internal static class CellContentLoader
                         collisionInstance,
                         articulationTarget,
                         doorArticulation,
+                        prototypes[assetId].AuthoredConvexBodies,
+                        prototypes[assetId].SourceSha256,
                         buildCollision,
                         renderLayer);
                     if (buildCollision)
@@ -1007,6 +1009,8 @@ internal static class CellContentLoader
         Node3D collisionRoot,
         Node3D articulationTarget,
         DoorArticulationContract contract,
+        IReadOnlyList<VerifiedGltfLoader.AuthoredConvexBodyContract> convexBodies,
+        string sourceSha256,
         bool buildCollision,
         uint collisionLayer)
     {
@@ -1019,17 +1023,44 @@ internal static class CellContentLoader
             wrapper,
             contract.Target.CollisionDescendantNodeNames,
             "collision");
+        var convexByNodeName = convexBodies.ToDictionary(
+            body => $"OPENNV_ARTICULATION_COLLISION_BODY_{body.BodyBlock}",
+            StringComparer.Ordinal);
+        if (convexBodies.Any(body => body.OwnerTargetId != contract.Target.TargetId) ||
+            convexByNodeName.Keys.Any(name =>
+                !contract.Target.CollisionDescendantNodeNames.Contains(name, StringComparer.Ordinal)))
+            throw new InvalidOperationException(
+                $"Authored convex collision is joined to another articulation target: {contract.Target.TargetId}");
         var bodies = 0;
+        var consumedConvexBodies = 0;
         if (buildCollision)
         {
             foreach (var mesh in meshes)
             {
-                if (mesh.Mesh is null || mesh.Mesh.GetFaces().Length == 0)
-                    throw new InvalidOperationException(
-                        $"Articulated door collision mesh is empty: {mesh.Name}");
-                var shape = mesh.Mesh.CreateTrimeshShape() ??
-                    throw new InvalidOperationException(
-                        $"Could not construct articulated door collision: {mesh.Name}");
+                Shape3D shape;
+                VerifiedGltfLoader.AuthoredConvexBodyContract? convexBody = null;
+                if (convexByNodeName.TryGetValue(mesh.Name.ToString(), out var sourceConvexBody))
+                {
+                    if (!TransformsMatch(mesh.Transform, Transform3D.Identity))
+                        throw new InvalidOperationException(
+                            $"Authored convex collision node has an unexpected transform: {mesh.Name}");
+                    shape = new ConvexPolygonShape3D
+                    {
+                        Points = sourceConvexBody.PointsGodotGameUnits.ToArray(),
+                        Margin = sourceConvexBody.RadiusGameUnits,
+                    };
+                    convexBody = sourceConvexBody;
+                    consumedConvexBodies++;
+                }
+                else
+                {
+                    if (mesh.Mesh is null || mesh.Mesh.GetFaces().Length == 0)
+                        throw new InvalidOperationException(
+                            $"Articulated door collision mesh is empty: {mesh.Name}");
+                    shape = mesh.Mesh.CreateTrimeshShape() ??
+                        throw new InvalidOperationException(
+                            $"Could not construct articulated door collision: {mesh.Name}");
+                }
                 var body = new StaticBody3D
                 {
                     Name = $"AUTHORED_{mesh.Name}",
@@ -1037,6 +1068,8 @@ internal static class CellContentLoader
                     CollisionLayer = collisionLayer,
                 };
                 body.SetMeta("opennv_articulation_target_id", contract.Target.TargetId);
+                if (convexBody is not null)
+                    ApplyAuthoredConvexIdentity(body, convexBody.Value, sourceSha256);
                 articulationTarget.AddChild(body);
                 body.AddChild(new CollisionShape3D { Shape = shape });
                 bodies++;
@@ -1047,7 +1080,49 @@ internal static class CellContentLoader
         if (buildCollision && bodies != contract.Target.CollisionDescendantNodeNames.Count)
             throw new InvalidOperationException(
                 $"Articulated door collision join is incomplete: {contract.Target.TargetId}");
+        if (buildCollision && consumedConvexBodies != convexBodies.Count)
+            throw new InvalidOperationException(
+                $"Authored convex collision join is incomplete: {contract.Target.TargetId}");
         return bodies;
+    }
+
+    private static void ApplyAuthoredConvexIdentity(
+        StaticBody3D target,
+        VerifiedGltfLoader.AuthoredConvexBodyContract source,
+        string sourceSha256)
+    {
+        target.PhysicsMaterialOverride = new PhysicsMaterial
+        {
+            Friction = source.Friction,
+            Bounce = source.Restitution,
+        };
+        target.SetMeta("opennv_collision_shape_type", "convex-hull-points");
+        target.SetMeta("opennv_collision_source_sha256", sourceSha256);
+        target.SetMeta("opennv_collision_object_block", source.CollisionObjectBlock);
+        target.SetMeta("opennv_collision_body_block", source.BodyBlock);
+        target.SetMeta("opennv_collision_shape_block", source.ShapeBlock);
+        target.SetMeta("opennv_collision_target_block", source.TargetBlock);
+        target.SetMeta("opennv_collision_target_name", source.TargetName);
+        target.SetMeta("opennv_collision_body_type", source.BodyType);
+        target.SetMeta("opennv_collision_transform_policy", source.ShapeTransformPolicy);
+        target.SetMeta(
+            "opennv_collision_source_body_translation_havok_units",
+            source.SourceBodyTranslationHavokUnits);
+        target.SetMeta("opennv_collision_source_body_rotation", source.SourceBodyRotation);
+        target.SetMeta("opennv_collision_mass", source.Mass);
+        target.SetMeta("opennv_collision_friction", source.Friction);
+        target.SetMeta("opennv_collision_restitution", source.Restitution);
+        target.SetMeta("opennv_collision_linear_damping", source.LinearDamping);
+        target.SetMeta("opennv_collision_angular_damping", source.AngularDamping);
+        target.SetMeta("opennv_collision_motion_system", source.MotionSystem);
+        target.SetMeta("opennv_collision_quality_type", source.QualityType);
+        target.SetMeta("opennv_collision_havok_layer", source.Layer);
+        target.SetMeta("opennv_collision_flags_and_part_number", source.FlagsAndPartNumber);
+        target.SetMeta("opennv_collision_unknown_short", source.UnknownShort);
+        target.SetMeta("opennv_collision_material", source.Material);
+        target.SetMeta("opennv_collision_radius_havok_units", source.RadiusHavokUnits);
+        target.SetMeta("opennv_collision_radius_game_units", source.RadiusGameUnits);
+        target.SetMeta("opennv_collision_point_count", source.PointsGodotGameUnits.Count);
     }
 
     private static Node3D FindUniqueArticulationWrapper(

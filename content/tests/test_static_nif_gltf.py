@@ -40,13 +40,14 @@ from export_static_nif_gltf import (  # noqa: E402
 from runtime_configuration import load_runtime_configuration  # noqa: E402
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
 from gltf_io import compiler_sources_sha256, local_python_dependency_paths  # noqa: E402
-from havok_collision_gltf import dynamic_physics_contract  # noqa: E402
+from havok_collision_gltf import collision_contract, dynamic_physics_contract  # noqa: E402
 from nif_decoder import (  # noqa: E402
     _block_directory,
     decode_nif,
     load_nif_decoder_contract,
 )
 from texture_pipeline import decode_dds, decode_dds_cubemap  # noqa: E402
+from scene_asset_pipeline import authored_collision_source  # noqa: E402
 
 
 def identity_transform(target: object) -> None:
@@ -131,7 +132,11 @@ def write_synthetic_nif(path: Path) -> None:
         document.write(stream)
 
 
-def synthetic_controller_door_document() -> tuple[object, object]:
+def synthetic_controller_door_document(
+    *,
+    gate_collision_kind: str = "packed",
+    include_posts_collision: bool = True,
+) -> tuple[object, object]:
     root = NifFormat.NiNode()
     root.name = "Synthetic Door Root"
     identity_transform(root)
@@ -176,13 +181,52 @@ def synthetic_controller_door_document() -> tuple[object, object]:
         mesh.update_center_radius()
         parent.add_child(shape)
 
-    def add_collision(target: object) -> object:
+    def add_collision(target: object, kind: str = "packed") -> object:
         collision = NifFormat.bhkCollisionObject()
         collision.target = target
         target.collision_object = collision
-        body = NifFormat.bhkRigidBodyT()
+        body = (
+            NifFormat.bhkRigidBody()
+            if kind == "convex"
+            else NifFormat.bhkRigidBodyT()
+        )
         collision.body = body
         body.rotation.w = 1.0
+        if kind in {"convex", "convex-t"}:
+            body.mass = 0.0
+            body.translation.x = 0.25
+            body.friction = 0.4
+            body.restitution = 0.1
+            body.linear_damping = 0.2
+            body.angular_damping = 0.3
+            body.motion_system = 7
+            body.quality_type = 1
+            body.havok_col_filter.layer = 2
+            body.havok_col_filter.flags_and_part_number = 3
+            body.havok_col_filter.unknown_short = 4
+            shape = NifFormat.bhkConvexVerticesShape()
+            shape.radius = 0.05
+            shape.material.material = 9
+            shape.num_vertices = 8
+            shape.vertices.update_size()
+            for vertex, values in zip(
+                shape.vertices,
+                (
+                    (-1.0, -1.0, -1.0),
+                    (-1.0, -1.0, 1.0),
+                    (-1.0, 1.0, -1.0),
+                    (-1.0, 1.0, 1.0),
+                    (1.0, -1.0, -1.0),
+                    (1.0, -1.0, 1.0),
+                    (1.0, 1.0, -1.0),
+                    (1.0, 1.0, 1.0),
+                ),
+            ):
+                vertex.x, vertex.y, vertex.z = values
+            body.shape = shape
+            return collision
+        if kind != "packed":
+            raise ValueError(f"Unsupported synthetic collision kind: {kind}")
         mopp = NifFormat.bhkMoppBvTreeShape()
         body.shape = mopp
         packed = NifFormat.bhkPackedNiTriStripsShape()
@@ -211,8 +255,9 @@ def synthetic_controller_door_document() -> tuple[object, object]:
 
     add_surface(gate, "BGate:0")
     add_surface(posts, "BPosts:0")
-    gate_collision = add_collision(gate)
-    add_collision(posts)
+    gate_collision = add_collision(gate, gate_collision_kind)
+    if include_posts_collision:
+        add_collision(posts)
 
     manager = NifFormat.NiControllerManager()
     manager.target = root
@@ -664,6 +709,14 @@ class StaticNifGltfTest(unittest.TestCase):
             collision = json.loads(
                 (directory / "controller-door.collision.gltf").read_text()
             )
+            self.assertEqual(
+                collision["extras"]["openNvSchema"],
+                "opennv-authored-collision-gltf/v1",
+            )
+            self.assertEqual(
+                authored_collision_source(result["coverage"]),
+                "NIF-authored-bhk-packed-triangles",
+            )
             collision_wrapper = next(
                 node
                 for node in collision["nodes"]
@@ -676,6 +729,26 @@ class StaticNifGltfTest(unittest.TestCase):
                     for index in collision_wrapper["children"]
                 ),
                 articulation["target"]["collisionDescendantNodeNames"],
+            )
+            gate_body_block = next(
+                row["bodyBlock"]
+                for row in collision_rows
+                if row["targetName"] == "BGate"
+            )
+            gate_collision_node = next(
+                node
+                for node in collision["nodes"]
+                if node["name"] == f"OPENNV_ARTICULATION_COLLISION_BODY_{gate_body_block}"
+            )
+            gate_primitive = collision["meshes"][gate_collision_node["mesh"]]["primitives"][0]
+            gate_position_accessor = collision["accessors"][
+                gate_primitive["attributes"]["POSITION"]
+            ]
+            gate_position_view = collision["bufferViews"][gate_position_accessor["bufferView"]]
+            gate_collision_bytes = (directory / "controller-door.collision.bin").read_bytes()
+            self.assertEqual(
+                struct.unpack_from("<3f", gate_collision_bytes, gate_position_view["byteOffset"]),
+                (0.0, 0.0, -0.0),
             )
 
             gate_collision.target = next(
@@ -697,6 +770,207 @@ class StaticNifGltfTest(unittest.TestCase):
                         strict=False,
                         require_door_articulation=True,
                     )
+
+    def test_controller_door_exports_target_local_mass_zero_static_convex(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            source = directory / "controller-convex.nif"
+            source.write_bytes(b"synthetic decoded controller convex door")
+            document, gate_collision = synthetic_controller_door_document(
+                gate_collision_kind="convex",
+                include_posts_collision=False,
+            )
+            decoded = SimpleNamespace(
+                document=document,
+                evidence=lambda: {"status": "synthetic-in-memory-contract"},
+            )
+
+            def export(destination: Path) -> dict[str, object]:
+                destination.mkdir()
+                with patch("export_static_nif_gltf.decode_nif", return_value=decoded):
+                    return export_static_nif(
+                        source,
+                        "meshes/open-nv-tests/controller-convex.nif",
+                        destination / "controller-convex.gltf",
+                        destination / "controller-convex.opennv.json",
+                        load_runtime_configuration().content_compiler,
+                        strict=False,
+                        require_door_articulation=True,
+                    )
+
+            first_directory = directory / "first"
+            second_directory = directory / "second"
+            first = export(first_directory)
+            second = export(second_directory)
+            self.assertEqual(first, second)
+            for file_name in (
+                "controller-convex.gltf",
+                "controller-convex.bin",
+                "controller-convex.collision.gltf",
+                "controller-convex.collision.bin",
+                "controller-convex.opennv.json",
+            ):
+                self.assertEqual(
+                    (first_directory / file_name).read_bytes(),
+                    (second_directory / file_name).read_bytes(),
+                )
+
+            self.assertEqual(first["coverage"]["collisionBodies"], [])
+            convex_rows = first["coverage"]["staticConvexBodies"]
+            self.assertEqual(len(convex_rows), 1)
+            convex = convex_rows[0]
+            blocks = list(document.get_global_iterator())
+            block_index = {id(block): index for index, block in enumerate(blocks)}
+            shape = gate_collision.body.shape
+            self.assertEqual(
+                {
+                    "collisionObjectBlock": convex["collisionObjectBlock"],
+                    "bodyBlock": convex["bodyBlock"],
+                    "shapeBlock": convex["shapeBlock"],
+                    "targetBlock": convex["targetBlock"],
+                },
+                {
+                    "collisionObjectBlock": block_index[id(gate_collision)],
+                    "bodyBlock": block_index[id(gate_collision.body)],
+                    "shapeBlock": block_index[id(shape)],
+                    "targetBlock": block_index[id(gate_collision.target)],
+                },
+            )
+            self.assertEqual(convex["targetName"], "BGate")
+            self.assertEqual(convex["ownerTargetId"], first["articulation"]["target"]["targetId"])
+            self.assertEqual(convex["bodyType"], "bhkRigidBody")
+            self.assertEqual(convex["shapeType"], "convex-hull-points")
+            self.assertEqual(
+                convex["shapeTransformPolicy"],
+                "articulation-target-local;bhkRigidBody-pose-evidence-only;godot-axis-converted",
+            )
+            self.assertEqual(convex["sourceBodyTranslationHavokUnits"], [0.25, 0.0, 0.0])
+            self.assertEqual(convex["sourceBodyRotation"], [0.0, 0.0, 0.0, 1.0])
+            self.assertEqual(convex["mass"], 0.0)
+            self.assertEqual(convex["layer"], 2)
+            self.assertEqual(convex["flagsAndPartNumber"], 3)
+            self.assertEqual(convex["unknownShort"], 4)
+            self.assertEqual(convex["material"], 9)
+            self.assertAlmostEqual(convex["radiusHavokUnits"], 0.05)
+            self.assertAlmostEqual(convex["radiusGameUnits"], 0.35)
+            self.assertEqual(convex["vertices"], 8)
+            self.assertEqual(convex["triangles"], 0)
+            self.assertEqual(convex["pointsGodotGameUnits"][0], (-7.0, -7.0, 7.0))
+
+            collision_gltf = json.loads(
+                (first_directory / "controller-convex.collision.gltf").read_text()
+            )
+            self.assertEqual(
+                collision_gltf["extras"]["openNvSchema"],
+                "opennv-authored-collision-gltf/v2",
+            )
+            node_name = f"OPENNV_ARTICULATION_COLLISION_BODY_{convex['bodyBlock']}"
+            node = next(row for row in collision_gltf["nodes"] if row["name"] == node_name)
+            self.assertEqual(
+                node["extras"],
+                {
+                    "openNvArticulationTargetId": convex["ownerTargetId"],
+                    "openNvCollisionBodyBlock": convex["bodyBlock"],
+                    "openNvCollisionShapeType": "convex-hull-points",
+                },
+            )
+            primitive = collision_gltf["meshes"][node["mesh"]]["primitives"][0]
+            self.assertEqual(primitive["mode"], 0)
+            self.assertNotIn("indices", primitive)
+            self.assertEqual(
+                collision_gltf["accessors"][primitive["attributes"]["POSITION"]]["count"],
+                8,
+            )
+            self.assertEqual(
+                first["articulation"]["target"]["collisionDescendantNodeNames"],
+                [node_name],
+            )
+
+            self.assertEqual(
+                authored_collision_source(first["coverage"]),
+                "NIF-authored-bhk-static-convex-points",
+            )
+            self.assertEqual(
+                authored_collision_source(
+                    {
+                        "collisionExported": True,
+                        "collisionBodies": [{"bodyBlock": 1}],
+                        "staticConvexBodies": [{"bodyBlock": 2}],
+                    }
+                ),
+                "NIF-authored-bhk-packed-triangles-plus-static-convex-points",
+            )
+
+    def test_articulated_static_convex_variants_fail_closed(self) -> None:
+        document, gate_collision = synthetic_controller_door_document(
+            gate_collision_kind="convex",
+            include_posts_collision=False,
+        )
+        root = document.roots[0]
+        target = gate_collision.target
+
+        def resolve() -> tuple[list[dict[str, object]], str | None]:
+            blocks = list(document.get_global_iterator())
+            return collision_contract(
+                blocks,
+                root,
+                {id(block): index for index, block in enumerate(blocks)},
+                articulation_target=target,
+                articulation_target_id="synthetic-target",
+                articulation_descendant_ids={id(target)},
+            )
+
+        bodies, reason = collision_contract(
+            list(document.get_global_iterator()),
+            root,
+            {id(block): index for index, block in enumerate(document.get_global_iterator())},
+            articulation_target=target,
+            articulation_target_id="synthetic-target",
+            articulation_descendant_ids=set(),
+        )
+        self.assertEqual(bodies, [])
+        self.assertEqual(reason, "unsupported-static-convex-owner:non-articulated")
+
+        gate_collision.body.mass = 1.0
+        self.assertEqual(resolve(), ([], "unsupported-static-convex-mass:1.0"))
+        gate_collision.body.mass = 0.0
+        for vertex in gate_collision.body.shape.vertices:
+            vertex.z = 0.0
+        self.assertEqual(resolve(), ([], "invalid-static-convex-points"))
+
+        list_shape = NifFormat.bhkListShape()
+        gate_collision.body.shape = list_shape
+        self.assertEqual(resolve(), ([], "unsupported-root-shape:bhkListShape"))
+
+        transformed_document, transformed_collision = synthetic_controller_door_document(
+            gate_collision_kind="convex-t",
+            include_posts_collision=False,
+        )
+        transformed_root = transformed_document.roots[0]
+        transformed_target = transformed_collision.target
+        transformed_blocks = list(transformed_document.get_global_iterator())
+        transformed_bodies, transformed_reason = collision_contract(
+            transformed_blocks,
+            transformed_root,
+            {
+                id(block): index
+                for index, block in enumerate(transformed_blocks)
+            },
+            articulation_target=transformed_target,
+            articulation_target_id="synthetic-target",
+            articulation_descendant_ids={id(transformed_target)},
+        )
+        self.assertIsNone(transformed_reason)
+        self.assertEqual(len(transformed_bodies), 1)
+        self.assertEqual(transformed_bodies[0]["bodyType"], "bhkRigidBodyT")
+        self.assertEqual(
+            transformed_bodies[0]["shapeTransformPolicy"],
+            "articulation-target-local;bhkRigidBodyT-pose-applied;godot-axis-converted",
+        )
+        self.assertEqual(
+            transformed_bodies[0]["pointsGodotGameUnits"][0],
+            (-5.25, -7.0, 7.0),
+        )
 
     def test_static_shape_prefix_filter_is_explicit_and_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
