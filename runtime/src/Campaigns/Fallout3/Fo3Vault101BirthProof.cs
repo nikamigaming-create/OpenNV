@@ -52,6 +52,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
             var profile = Fo3OwnedProfile.Load(profilePath);
             var contract = Fo3Vault101BirthPresentationContract.Load(
                 profile.BirthSlice,
+                profile.Cg01Stage0Transition,
                 presentationPath);
             var handoff = profile.Section4Transition;
             if (handoff.SourceStage != profile.Appearance.AcceptedStage ||

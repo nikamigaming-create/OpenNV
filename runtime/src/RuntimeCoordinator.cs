@@ -726,6 +726,7 @@ public partial class RuntimeCoordinator : Node3D
                 out var configuredBirthPresentation)
             ? Fo3Vault101BirthPresentationContract.Load(
                 profile.BirthSlice,
+                profile.Cg01Stage0Transition,
                 ResolveRuntimePath(configuredBirthPresentation))
             : null;
         var savePath = options.TryGetValue("save-path", out var configuredSavePath)

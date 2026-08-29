@@ -24,7 +24,7 @@ from texture_pipeline import TexturePipeline
 
 
 RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
-OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v5"
+OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v6"
 PROFILE_SCHEMA = "opennv-owned-game-profile/v1"
 OUTPUT_NAME = "fo3-vault101-birth-presentation.json"
 SHA256_HEX_CHARACTERS = 64
@@ -195,6 +195,7 @@ def prepare(
     recipe_path: Path,
     actor_recipe_path: Path,
     dad_actor_recipe_path: Path,
+    cg01_dad_actor_recipe_path: Path | None,
 ) -> Path:
     profile, _profile_payload = _read_json(profile_path.resolve())
     if (
@@ -220,6 +221,11 @@ def prepare(
     recipe, recipe_payload = _read_json(recipe_path.resolve())
     if recipe.get("schema") != RECIPE_SCHEMA:
         raise ValueError("Fallout 3 birth-presentation recipe schema is unsupported")
+    if cg01_dad_actor_recipe_path is None:
+        actor_recipes = _required_object(recipe, "actorRecipes")
+        cg01_dad_actor_recipe_path = (
+            recipe_path.resolve().parent / _required_string(actor_recipes, "cg01Dad")
+        )
     recipe_source = _required_object(recipe, "source")
     birth_recipe = _required_object(birth, "recipe")
     cell = _required_object(birth, "cell")
@@ -273,7 +279,8 @@ def prepare(
         raise ValueError("Fallout 3 birth-presentation radius must be positive")
     require_enabled = selection.get("requireInitiallyEnabled") is True
     require_single = selection.get("requireSingleMainModel") is True
-    if not require_enabled or not require_single:
+    include_cg01 = selection.get("includeCg01DadStartMarker") is True
+    if not require_enabled or not require_single or not include_cg01:
         raise ValueError("Fallout 3 birth presentation must fail closed on enable/model identity")
 
     entry_transform = _required_object(entry, "transform")
@@ -342,6 +349,74 @@ def prepare(
         != source_textures.get("sha256")
     ):
         raise ValueError("Fallout 3 CG00 Dad recipe does not bind the owned birth slice")
+
+    character_selection = _required_object(opening, "characterSelection")
+    cg01_transition = _required_object(character_selection, "cg01Stage0Transition")
+    stage0_result = _required_object(cg01_transition, "stage0Result")
+    stage0_commands = _required_list(stage0_result, "commands")
+    cg01_move_commands = [
+        row
+        for row in stage0_commands
+        if isinstance(row, dict)
+        and row.get("kind") == "moveToReference"
+        and isinstance(row.get("subject"), dict)
+        and isinstance(row["subject"].get("base"), dict)
+        and row["subject"]["base"].get("editorId") == "CG01Dad"
+    ]
+    if len(cg01_move_commands) != 1:
+        raise ValueError("Fallout 3 CG01 Dad stage-0 MoveTo is absent or ambiguous")
+    cg01_move = cg01_move_commands[0]
+    cg01_dad_source = _required_object(cg01_move, "subject")
+    cg01_dad_base = _required_object(cg01_dad_source, "base")
+    cg01_dad_marker = _required_object(cg01_move, "target")
+    if (
+        cg01_transition.get("cellFormId") != cell.get("formId")
+        or cg01_dad_source.get("cellFormId") != cell.get("formId")
+        or cg01_dad_marker.get("cellFormId") != cell.get("formId")
+    ):
+        raise ValueError("Fallout 3 CG01 Dad stage-0 source join differs")
+    cg01_dad_marker_position = _required_list(
+        _required_object(cg01_dad_marker, "sourceTransform"),
+        "positionGameUnits",
+    )
+
+    cg01_dad_actor_recipe, cg01_dad_actor_recipe_payload = _read_json(
+        cg01_dad_actor_recipe_path.resolve()
+    )
+    cg01_dad_actor_recipe_master = _required_object(
+        cg01_dad_actor_recipe, "master"
+    )
+    cg01_dad_actor_recipe_meshes = _required_object(
+        cg01_dad_actor_recipe, "meshesArchive"
+    )
+    cg01_dad_actor_recipe_textures = _required_list(
+        cg01_dad_actor_recipe, "textureArchives"
+    )
+    if (
+        cg01_dad_actor_recipe.get("schema") != "opennv-actor-recipe/v1"
+        or cg01_dad_actor_recipe.get("cellFormId") != cell.get("formId")
+        or cg01_dad_actor_recipe.get("proofActorReferenceFormId")
+        != cg01_dad_source.get("formId")
+        or cg01_dad_actor_recipe.get("expectedBaseFormId")
+        != cg01_dad_base.get("formId")
+        or cg01_dad_actor_recipe.get("originGameUnits") != entry_position
+        or cg01_dad_actor_recipe.get("bodyModPolicy")
+        != "owned-race-base-diffuse-when-precomputed-absent"
+        or cg01_dad_actor_recipe_master.get("file")
+        != source.get("master", {}).get("file")
+        or cg01_dad_actor_recipe_master.get("sha256")
+        != source.get("master", {}).get("sha256")
+        or cg01_dad_actor_recipe_meshes.get("file") != source_meshes.get("file")
+        or cg01_dad_actor_recipe_meshes.get("sha256")
+        != source_meshes.get("sha256")
+        or len(cg01_dad_actor_recipe_textures) != 1
+        or not isinstance(cg01_dad_actor_recipe_textures[0], dict)
+        or cg01_dad_actor_recipe_textures[0].get("file")
+        != source_textures.get("file")
+        or cg01_dad_actor_recipe_textures[0].get("sha256")
+        != source_textures.get("sha256")
+    ):
+        raise ValueError("Fallout 3 CG01 Dad recipe does not bind the owned stage-0 join")
     selected: list[tuple[dict[str, object], dict[str, object], str]] = []
     excluded: dict[str, int] = {}
     for value in _required_list(graph, "references"):
@@ -368,8 +443,11 @@ def prepare(
                 else:
                     transform = _required_object(value, "transform")
                     position = _required_list(transform, "positionGameUnits")
-                    if _distance(position, entry_position) > maximum_distance:
-                        reason = "outside-birth-radius"
+                    if min(
+                        _distance(position, entry_position),
+                        _distance(position, cg01_dad_marker_position),
+                    ) > maximum_distance:
+                        reason = "outside-owned-slice-radius"
         if reason != "selected":
             excluded[reason] = excluded.get(reason, 0) + 1
             continue
@@ -717,9 +795,54 @@ def prepare(
         raise ValueError("Compiled CG00 Dad differs from the direct owned NPC")
     dad_scene_path = Path(_required_string(dad_manifest, "manifest")).resolve()
 
+    cg01_dad_manifest = prepare_actor(
+        Path(_required_string(source, "dataRoot")).resolve(),
+        cache_root.resolve(),
+        _required_string(cg01_dad_actor_recipe, "id"),
+        recipe_document=cg01_dad_actor_recipe,
+    )
+    cg01_dad_reference = _required_object(cg01_dad_manifest, "reference")
+    cg01_dad_identity = _required_object(cg01_dad_manifest, "actor")
+    cg01_dad_coverage = _required_object(cg01_dad_manifest, "coverage")
+    cg01_dad_transform = _required_object(cg01_dad_source, "sourceTransform")
+    cg01_dad_marker_transform = _required_object(
+        cg01_dad_marker, "sourceTransform"
+    )
+    if (
+        cg01_dad_manifest.get("schema") != "opennv-actor-scene/v5"
+        or cg01_dad_manifest.get("status") != "skinned-animated"
+        or cg01_dad_manifest.get("cellFormId") != cell.get("formId")
+        or cg01_dad_manifest.get("bodyModLogicalPath") is not None
+        or cg01_dad_manifest.get("bodyModPolicy")
+        != "owned-race-base-diffuse-when-precomputed-absent"
+        or cg01_dad_manifest.get("bodySurfaceTextureSource")
+        != "owned-race-base-diffuse-no-body-mod"
+        or cg01_dad_reference.get("formId") != cg01_dad_source.get("formId")
+        or cg01_dad_reference.get("baseFormId") != cg01_dad_base.get("formId")
+        or cg01_dad_reference.get("initiallyDisabled") is not True
+        or cg01_dad_reference.get("positionGameUnits")
+        != cg01_dad_transform.get("positionGameUnits")
+        or cg01_dad_reference.get("rotationRadians")
+        != cg01_dad_transform.get("rotationRadians")
+        or cg01_dad_reference.get("scale") != cg01_dad_transform.get("scale")
+        or cg01_dad_identity.get("editorId") != cg01_dad_base.get("editorId")
+        or cg01_dad_identity.get("name") != "Dad"
+        or cg01_dad_identity.get("female") is not False
+        or int(cg01_dad_coverage.get("components", 0)) <= 0
+        or int(cg01_dad_coverage.get("skins", 0)) <= 0
+        or int(cg01_dad_coverage.get("surfaces", 0)) <= 0
+        or int(cg01_dad_coverage.get("textures", 0)) <= 0
+        or int(cg01_dad_coverage.get("faceGenMorphTargets", 0)) <= 0
+        or int(cg01_dad_coverage.get("omittedSurfaces", -1)) != 0
+    ):
+        raise ValueError("Compiled CG01 Dad differs from the source stage-0 actor")
+    cg01_dad_scene_path = Path(
+        _required_string(cg01_dad_manifest, "manifest")
+    ).resolve()
+
     document: dict[str, object] = {
         "schema": OUTPUT_SCHEMA,
-        "status": "prepared-owned-materials-doctor-and-cg00-dad-not-yet-rendered",
+        "status": "prepared-owned-materials-doctor-cg00-dad-and-cg01-dad-not-yet-rendered",
         "recipe": {
             "id": _required_string(recipe, "id"),
             "path": str(recipe_path.resolve()),
@@ -865,6 +988,67 @@ def prepare(
                 "CG00 package idle selection is not implemented"
             ),
         },
+        "cg01DadActor": {
+            "source": "source-stage-0-CG01Dad-ACHR-NPC-raw-authored-appearance",
+            "scene": _cache_relative_derivative(cache_root, cg01_dad_scene_path),
+            "sha256": _sha256_file(cg01_dad_scene_path),
+            "recipe": {
+                "id": _required_string(cg01_dad_actor_recipe, "id"),
+                "path": str(cg01_dad_actor_recipe_path.resolve()),
+                "sha256": _sha256_bytes(cg01_dad_actor_recipe_payload),
+            },
+            "sourceRecordBindings": {
+                "referenceFormId": _required_string(cg01_dad_source, "formId"),
+                "referenceRecordSha256": _required_sha256(
+                    cg01_dad_source, "recordSha256"
+                ),
+                "baseFormId": _required_string(cg01_dad_base, "formId"),
+                "baseRecordDataSha256": _required_sha256(
+                    cg01_dad_base, "recordSha256"
+                ),
+            },
+            "reference": cg01_dad_reference,
+            "actor": cg01_dad_identity,
+            "coverage": cg01_dad_coverage,
+            "bodySurfaceTextureSource": _required_string(
+                cg01_dad_manifest, "bodySurfaceTextureSource"
+            ),
+            "bodyModPolicy": _required_string(cg01_dad_manifest, "bodyModPolicy"),
+            "startMarker": {
+                "referenceFormId": _required_string(cg01_dad_marker, "formId"),
+                "referenceRecordSha256": _required_sha256(
+                    cg01_dad_marker, "recordSha256"
+                ),
+                "positionGameUnits": _required_list(
+                    cg01_dad_marker_transform, "positionGameUnits"
+                ),
+                "positionGodotGameUnits": godot_position(
+                    tuple(
+                        float(value)
+                        for value in _required_list(
+                            cg01_dad_marker_transform, "positionGameUnits"
+                        )
+                    ),
+                    origin,
+                ),
+                "rotationRadians": _required_list(
+                    cg01_dad_marker_transform, "rotationRadians"
+                ),
+                "rotationGodotQuaternion": godot_rotation_quaternion(
+                    tuple(
+                        float(value)
+                        for value in _required_list(
+                            cg01_dad_marker_transform, "rotationRadians"
+                        )
+                    )
+                ),
+            },
+            "poseAuthority": (
+                "owned mtidle compiler input and exact CG01 stage-0 MoveTo marker; "
+                "stage-5 enable is runtime-applied; stage-65 matched race and FaceGen "
+                "geometry are not applied to this raw authored actor"
+            ),
+        },
         "presentation": {
             "verticalFovDegrees": float(presentation["verticalFovDegrees"]),
             "proofAmbientColor": presentation["proofAmbientColor"],
@@ -901,6 +1085,7 @@ def prepare(
             "texturesPrepared": True,
             "doctorActorPrepared": True,
             "dadActorPrepared": True,
+            "cg01DadActorPrepared": True,
             "runtimeManifestValidated": False,
             "runtimeSceneConstructed": False,
             "rendered": False,
@@ -928,6 +1113,11 @@ def main() -> int:
     parser.add_argument(
         "--dad-actor-recipe", type=Path, default=_default_dad_actor_recipe_path()
     )
+    parser.add_argument(
+        "--cg01-dad-actor-recipe",
+        type=Path,
+        default=None,
+    )
     arguments = parser.parse_args()
     output = prepare(
         arguments.profile,
@@ -935,6 +1125,7 @@ def main() -> int:
         arguments.recipe,
         arguments.actor_recipe,
         arguments.dad_actor_recipe,
+        arguments.cg01_dad_actor_recipe,
     )
     print(
         json.dumps(

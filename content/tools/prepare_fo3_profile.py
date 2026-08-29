@@ -175,6 +175,7 @@ TRIGGER_PRIMITIVE_COLOR_START = 3
 TRIGGER_PRIMITIVE_TYPE_INDEX = TRIGGER_PRIMITIVE_FLOATS
 CG01_WALK_OBJECTIVE_INDEX = 10
 CG01_WALK_TARGET_STAGE = 12
+PERSPECTIVE_MAXIMUM_DEGREES = 180.0
 CG00_TIMER_CHAIN_PATTERN = re.compile(
     r"\bif\s+runTimer\s*==\s*1\b.*?"
     r"\bif\s+timer\s*>\s*0\b\s*"
@@ -3758,6 +3759,112 @@ def _bind_cg01_transition_video(
     character_selection["cg01Stage0Transition"] = transition
 
 
+def _bind_cg01_toddler_world(
+    character_selection: dict[str, object],
+    definition: dict[str, object],
+    default_ini: Path,
+    configuration: object,
+) -> None:
+    transition = dict(character_selection["cg01Stage0Transition"])
+    stage0 = dict(transition["stage0Result"])
+    stage0_commands = [dict(command) for command in stage0["commands"]]
+    player_scale_commands = [
+        command for command in stage0_commands if command.get("kind") == "setPlayerScale"
+    ]
+    player_move_commands = [
+        command
+        for command in stage0_commands
+        if command.get("kind") == "moveToReference"
+        and dict(command.get("subject", {})).get("role") == "player"
+    ]
+    if len(player_scale_commands) != 1 or len(player_move_commands) != 1:
+        raise ValueError("Fallout 3 CG01 toddler player source state is ambiguous")
+    player_scale = float(player_scale_commands[0]["value"])
+    if not math.isfinite(player_scale) or player_scale <= 0.0:
+        raise ValueError("Fallout 3 CG01 toddler player scale is invalid")
+    player_marker = dict(player_move_commands[0]["target"])
+
+    post_stage5 = dict(transition["postStage5Transition"])
+    post_stage10 = dict(post_stage5["postStage10TriggerTransition"])
+    trigger = dict(post_stage10["trigger"])
+    if trigger.get("cellFormId") != transition.get("cellFormId"):
+        raise ValueError("Fallout 3 CG01 toddler trigger CELL differs")
+
+    world_definition = dict(definition["toddlerWorld"])
+    camera_rows = _ini_settings(
+        default_ini,
+        [dict(row) for row in world_definition["cameraIniSettings"]],
+    )
+    camera_by_key = {str(row["key"]): row for row in camera_rows}
+    if set(camera_by_key) != {"fDefaultFOV", "fNearDistance"}:
+        raise ValueError("Fallout 3 CG01 toddler camera settings differ")
+    vertical_fov = float(camera_by_key["fDefaultFOV"]["value"])
+    near_game_units = float(camera_by_key["fNearDistance"]["value"])
+    if (
+        not math.isfinite(vertical_fov)
+        or not 0.0 < vertical_fov < PERSPECTIVE_MAXIMUM_DEGREES
+        or not math.isfinite(near_game_units)
+        or near_game_units <= 0.0
+    ):
+        raise ValueError("Fallout 3 CG01 toddler camera values are invalid")
+
+    runtime_document = dict(configuration.document)
+    player_policy = dict(runtime_document["player"])
+    simulation_policy = dict(runtime_document["simulation"])
+    expected_policy = "open-nv-player-policy-scaled-by-owned-player-scale"
+    if str(world_definition["physicsPolicy"]) != expected_policy:
+        raise ValueError("Fallout 3 CG01 toddler physics policy differs")
+    transition["toddlerWorld"] = {
+        "schema": "opennv-fo3-cg01-toddler-world/v1",
+        "status": "source-marker-camera-and-open-nv-physics-policy-runtime-ready",
+        "cellFormId": str(transition["cellFormId"]),
+        "player": {
+            "role": "player",
+            "scale": player_scale,
+            "startMarker": player_marker,
+            "visualBodyPrepared": False,
+        },
+        "camera": {
+            "verticalFovDegrees": vertical_fov,
+            "nearGameUnits": near_game_units,
+            "settings": camera_rows,
+        },
+        "physicsPolicy": {
+            "authority": expected_policy,
+            "runtimeConfiguration": configuration.manifest(),
+            "spawnCenterHeightMeters": float(player_policy["spawnCenterHeightMeters"]),
+            "capsuleRadiusMeters": float(player_policy["capsuleRadiusMeters"]),
+            "capsuleHeightMeters": float(player_policy["capsuleHeightMeters"]),
+            "moveSpeedMetersPerSecond": float(player_policy["moveSpeedMetersPerSecond"]),
+            "mouseSensitivityRadiansPerPixel": float(
+                player_policy["mouseSensitivityRadiansPerPixel"]
+            ),
+            "verticalLookLimitRadians": float(player_policy["verticalLookLimitRadians"]),
+            "desktopCameraOffsetMeters": list(player_policy["desktopCameraOffsetMeters"]),
+            "cameraFarMeters": float(player_policy["cameraFarMeters"]),
+            "collisionLayer": int(player_policy["collisionLayer"]),
+            "collisionMask": int(player_policy["collisionMask"]),
+            "gravityMetersPerSecondSquared": float(
+                simulation_policy["gravityMetersPerSecondSquared"]
+            ),
+            "desktopInput": {
+                key: dict(dict(player_policy["desktopInput"])[key])
+                for key in (
+                    "moveLeft",
+                    "moveRight",
+                    "moveForward",
+                    "moveBackward",
+                )
+            },
+        },
+        "triggerReferenceFormId": str(trigger["referenceFormId"]),
+        "targetStage": int(post_stage10["targetStage"]),
+        "runtimeReady": True,
+        "blocker": None,
+    }
+    character_selection["cg01Stage0Transition"] = transition
+
+
 def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dict[str, object]], dict[str, object]]:
     records = tuple(
         iter_plugin_records(
@@ -4207,6 +4314,12 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     post_stage5_transition["dialogue"] = cg01_dad_dialogue
     cg01_transition["postStage5Transition"] = post_stage5_transition
     character_selection["cg01Stage0Transition"] = cg01_transition
+    _bind_cg01_toddler_world(
+        character_selection,
+        dict(dict(opening["characterSelection"])["cg01Stage0Transition"]),
+        default_ini,
+        configuration,
+    )
     appearance_contract = _appearance_inventory(
         master,
         recipe,
@@ -4390,12 +4503,13 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "cg01Stage0ContractReady": True,
             "cg01Stage10ContractReady": True,
             "cg01Stage12ContractReady": True,
+            "cg01ToddlerWorldRuntimeReady": True,
             "vault101BirthGraphCompiled": True,
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg01-stage-10-world-trigger-application-not-implemented",
             "fo3-cg01-stage-12-dad-response-not-implemented",
+            "fo3-cg01-toddler-visual-body-not-prepared",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
         ],

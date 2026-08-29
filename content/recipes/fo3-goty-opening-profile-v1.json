@@ -159,7 +159,14 @@
         "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
         "tutorialQuestEditorId": "CGTutorial",
         "tutorialQuestFormId": "00059c85",
-        "tutorialQuestStage": 2
+        "tutorialQuestStage": 2,
+        "toddlerWorld": {
+          "cameraIniSettings": [
+            { "section": "Display", "key": "fDefaultFOV" },
+            { "section": "Display", "key": "fNearDistance" }
+          ],
+          "physicsPolicy": "open-nv-player-policy-scaled-by-owned-player-scale"
+        }
       }
     },
     "appearanceUi": {

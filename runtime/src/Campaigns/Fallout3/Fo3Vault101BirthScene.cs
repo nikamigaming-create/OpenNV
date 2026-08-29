@@ -23,11 +23,16 @@ internal sealed record Fo3Vault101BirthSceneCoverage(
     Fo3Vault101ActorGrounding DadGrounding,
     CellReferenceLedger.Geometry DadActorGeometry,
     int ProofLitDadActorMaterials,
+    CellActorLoader.PlacedActor Cg01DadActor,
+    Fo3Vault101ActorGrounding Cg01DadGrounding,
+    CellReferenceLedger.Geometry Cg01DadActorGeometry,
+    int ProofLitCg01DadActorMaterials,
     int PlacedReferences,
     int MeshInstances,
     int Surfaces,
     int Vertices,
-    int Triangles);
+    int Triangles,
+    int AuthoredCollisionBodies);
 
 internal sealed record Fo3Vault101ActorGrounding(
     string SupportReferenceFormId,
@@ -101,6 +106,7 @@ internal static class Fo3Vault101BirthScene
             var surfaces = 0;
             var vertices = 0;
             var triangles = 0;
+            var authoredCollisionBodies = 0;
             foreach (var reference in contract.References)
             {
                 var placement = new Node3D
@@ -132,6 +138,45 @@ internal static class Fo3Vault101BirthScene
                         vertices += arrayMesh.SurfaceGetArrayLen(surface);
                         var indices = arrayMesh.SurfaceGetArrayIndexLen(surface);
                         triangles += (indices > 0 ? indices : arrayMesh.SurfaceGetArrayLen(surface)) / 3;
+                    }
+                }
+                var collisionExpected = assetRows[reference.AssetId]
+                    .GetProperty("collisionExportedButNotConsumed")
+                    .GetBoolean();
+                var collisionPrototype = prototypes[reference.AssetId].CollisionScene;
+                if (collisionExpected != (collisionPrototype is not null))
+                    throw new InvalidOperationException(
+                        $"Fallout 3 Vault 101 authored collision differs: {reference.AssetId}");
+                if (collisionPrototype is not null)
+                {
+                    var collision = collisionPrototype.Duplicate(
+                            (int)Node.DuplicateFlags.Default) as Node3D
+                        ?? throw new InvalidOperationException(
+                            $"Could not duplicate Fallout 3 Vault 101 collision: " +
+                            reference.AssetId);
+                    collision.Name = $"AUTHORED_COLLISION_{reference.AssetId}";
+                    placement.AddChild(collision);
+                    foreach (var mesh in Descendants<MeshInstance3D>(collision))
+                    {
+                        mesh.Visible = false;
+                        mesh.CreateTrimeshCollision();
+                        var bodies = Descendants<StaticBody3D>(mesh).ToArray();
+                        var shapes = Descendants<CollisionShape3D>(mesh)
+                            .Select(value => value.Shape)
+                            .OfType<ConcavePolygonShape3D>()
+                            .ToArray();
+                        if (bodies.Length == 0 || shapes.Length == 0)
+                            throw new InvalidOperationException(
+                                $"Could not construct Fallout 3 two-sided authored " +
+                                $"collision: {reference.AssetId}");
+                        foreach (var shape in shapes)
+                            shape.BackfaceCollision = true;
+                        foreach (var body in bodies)
+                        {
+                            body.CollisionLayer = configuration.Player.CollisionMask;
+                            body.CollisionMask = configuration.Player.CollisionLayer;
+                            authoredCollisionBodies++;
+                        }
                     }
                 }
             }
@@ -214,6 +259,50 @@ internal static class Fo3Vault101BirthScene
                 contract,
                 "CG00 Dad");
 
+            var cg01DadActor = CellActorLoader.Load(
+                    contract.Cg01DadActor.ScenePath,
+                    new HashSet<string>([contract.CellFormId], StringComparer.OrdinalIgnoreCase),
+                    root,
+                    contract.EntryPositionGameUnits,
+                    configuration,
+                    proofEnableInitiallyDisabled: true)
+                ?? throw new InvalidOperationException(
+                    "Fallout 3 CG01 Dad stage-5 actor was not proof-enabled.");
+            if (cg01DadActor.ReferenceFormId != contract.Cg01DadActor.ReferenceFormId ||
+                cg01DadActor.BaseFormId != contract.Cg01DadActor.BaseFormId ||
+                cg01DadActor.RaceFormId != contract.Cg01DadActor.RaceFormId ||
+                cg01DadActor.HairFormId != contract.Cg01DadActor.HairFormId ||
+                cg01DadActor.EyesFormId != contract.Cg01DadActor.EyesFormId ||
+                !cg01DadActor.HeadPartFormIds.SequenceEqual(
+                    contract.Cg01DadActor.HeadPartFormIds) ||
+                !cg01DadActor.OutfitFormIds.SequenceEqual(
+                    contract.Cg01DadActor.OutfitFormIds) ||
+                !cg01DadActor.Placement.Position.IsEqualApprox(
+                    contract.Cg01DadActor.AuthoredPositionGodotGameUnits) ||
+                !cg01DadActor.Placement.Quaternion.IsEqualApprox(
+                    contract.Cg01DadActor.AuthoredRotationGodotQuaternion) ||
+                !cg01DadActor.Placement.Scale.IsEqualApprox(
+                    Vector3.One * contract.Cg01DadActor.Scale) ||
+                cg01DadActor.Actor.AuthoredSurfaces != contract.Cg01DadActor.Surfaces ||
+                cg01DadActor.Actor.AuthoredTextures != contract.Cg01DadActor.Textures ||
+                cg01DadActor.Actor.Surfaces.Count != contract.Cg01DadActor.Surfaces ||
+                cg01DadActor.Actor.AnimationLogicalPath !=
+                    contract.Cg01DadActor.IdleAnimationPath)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 Dad runtime actor differs from its provisional owned contract.");
+            cg01DadActor.Placement.Position =
+                contract.Cg01DadActor.StartMarkerPositionGodotGameUnits;
+            cg01DadActor.Placement.Quaternion =
+                contract.Cg01DadActor.StartMarkerRotationGodotQuaternion;
+            var cg01DadGrounding = GroundActor(
+                root,
+                cg01DadActor,
+                contract.Cg01DadActor.StartMarkerPositionGodotGameUnits,
+                contract.Cg01DadActor.StartMarkerRotationGodotQuaternion,
+                contract.Cg01DadActor.Scale,
+                contract,
+                "CG01 Dad");
+
             var proofLitRetailMaterials =
                 RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
                     root,
@@ -245,6 +334,17 @@ internal static class Fo3Vault101BirthScene
             if (proofLitDadActorMaterials <= 0)
                 throw new InvalidOperationException(
                     "Fallout 3 CG00 Dad actor received no proof-lighting contract.");
+            var proofLitCg01DadActorMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
+                cg01DadActor.Actor.Root,
+                contract.ProofAmbientColor,
+                contract.ProofBackgroundColor,
+                contract.ProofFogNearGameUnits,
+                contract.ProofFogFarGameUnits,
+                contract.ProofFogPower,
+                contract.UnitsToMeters);
+            if (proofLitCg01DadActorMaterials <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 Dad actor received no proof-lighting contract.");
 
             host.AddChild(new WorldEnvironment
             {
@@ -301,9 +401,23 @@ internal static class Fo3Vault101BirthScene
                 dadActorGeometry.Triangles <= 0)
                 throw new InvalidOperationException(
                     "Fallout 3 CG00 Dad actor did not enter the birth-room proof frustum.");
-            if (meshInstances == 0 || surfaces == 0 || vertices == 0 || triangles == 0)
+            var cg01DadActorGeometry = CellReferenceLedger.MeasureGeometry(
+                cg01DadActor.Actor.Root,
+                camera,
+                cg01DadGrounding.GroundedBounds.GetCenter());
+            if (!cg01DadActorGeometry.RenderLayerVisible ||
+                !cg01DadActorGeometry.AabbValid ||
+                cg01DadActorGeometry.Surfaces != contract.Cg01DadActor.Surfaces ||
+                cg01DadActorGeometry.Vertices <= 0 ||
+                cg01DadActorGeometry.Triangles <= 0)
                 throw new InvalidOperationException(
-                    "Fallout 3 Vault 101 birth room constructed no render geometry.");
+                    "Fallout 3 CG01 Dad provisional actor geometry is incomplete.");
+            cg01DadActor.Placement.Visible = false;
+            cg01DadActor.Placement.ProcessMode = Node.ProcessModeEnum.Disabled;
+            if (meshInstances == 0 || surfaces == 0 || vertices == 0 || triangles == 0 ||
+                authoredCollisionBodies == 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 Vault 101 birth room constructed no render geometry or collision.");
             return new Fo3Vault101BirthSceneCoverage(
                 contract,
                 root,
@@ -324,11 +438,16 @@ internal static class Fo3Vault101BirthScene
                 dadGrounding,
                 dadActorGeometry,
                 proofLitDadActorMaterials,
+                cg01DadActor,
+                cg01DadGrounding,
+                cg01DadActorGeometry,
+                proofLitCg01DadActorMaterials,
                 contract.References.Count,
                 meshInstances,
                 surfaces,
                 vertices,
-                triangles);
+                triangles,
+                authoredCollisionBodies);
         }
         finally
         {
@@ -350,6 +469,7 @@ internal static class Fo3Vault101BirthScene
         string actorLabel)
     {
         const string utilityRoomModelPrefix = "meshes\\dungeons\\utility\\rooms\\";
+        const string vaultRoomModelPrefix = "meshes\\dungeons\\vault\\room\\";
         const float supportToleranceGameUnits = 0.01f;
         var authoredPlacement = targetPlacement;
         var supports = contract.References
@@ -357,9 +477,12 @@ internal static class Fo3Vault101BirthScene
                 Mathf.IsZeroApprox(reference.RotationRadians.X) &&
                 Mathf.IsZeroApprox(reference.RotationRadians.Y) &&
                 contract.Assets.TryGetValue(reference.AssetId, out var asset) &&
-                asset.LogicalPath.StartsWith(
-                    utilityRoomModelPrefix,
-                    StringComparison.OrdinalIgnoreCase) &&
+                (asset.LogicalPath.StartsWith(
+                     utilityRoomModelPrefix,
+                     StringComparison.OrdinalIgnoreCase) ||
+                 asset.LogicalPath.StartsWith(
+                     vaultRoomModelPrefix,
+                     StringComparison.OrdinalIgnoreCase)) &&
                 ContainsHorizontal(asset, reference, authoredPlacement))
             .Select(reference =>
             {

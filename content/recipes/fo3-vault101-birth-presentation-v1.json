@@ -1,6 +1,9 @@
 {
   "schema": "opennv-fo3-birth-presentation-recipe/v1",
   "id": "fo3-vault101-birth-presentation-v1",
+  "actorRecipes": {
+    "cg01Dad": "fo3-vault101-cg01-dad-actor-v1.json"
+  },
   "source": {
     "birthSliceSchema": "opennv-fo3-opening-slice/v1",
     "birthSliceRecipeId": "fo3-vault101-cg00-birth-v1",
@@ -10,8 +13,9 @@
   },
   "selection": {
     "maximumDistanceFromEntryGameUnits": 1200.0,
-    "expectedSelectedReferences": 29,
-    "expectedSelectedUniqueModels": 23,
+    "includeCg01DadStartMarker": true,
+    "expectedSelectedReferences": 118,
+    "expectedSelectedUniqueModels": 72,
     "includeReferenceRecordTypes": [
       "REFR"
     ],
@@ -59,8 +63,9 @@
     ]
   },
   "unsupported": [
-    "Mom, player body, and all actors except Doctor Li and CG00 Dad",
+    "Mom, player body, and all actors except Doctor Li, CG00 Dad, and CG01 Dad",
     "automatic CG00 dialogue timing, package state, and animation selection",
+    "CG01 Dad stage-65 matched race and FaceGen geometry presentation",
     "quest and package command execution",
     "CELL lighting and image-space effects",
     "collision and interaction",

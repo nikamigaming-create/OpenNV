@@ -4,6 +4,7 @@ import hashlib
 import json
 import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,7 @@ sys.path.insert(0, str(TOOLS))
 from plugin_records import GroupContext, Record  # noqa: E402
 from prepare_fo3_profile import (  # noqa: E402
     FORM_ID_RADIX,
+    _bind_cg01_toddler_world,
     _bind_cg01_transition_video,
     _compile_cg01_stage0_transition,
     _compile_cg00_section4_transition,
@@ -1026,8 +1028,64 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "stage100Transition": contract,
             "cg01Stage0Transition": cg01_contract,
         }
+        with tempfile.TemporaryDirectory() as temporary:
+            default_ini = Path(temporary) / "Fallout_default.ini"
+            default_ini.write_text(
+                "[Display]\nfDefaultFOV=75.0000\nfNearDistance=5\n",
+                encoding="cp1252",
+            )
+            _bind_cg01_toddler_world(
+                character_selection,
+                dict(
+                    dict(load_recipe(FO3_RECIPE)["opening"])[
+                        "characterSelection"
+                    ]["cg01Stage0Transition"]
+                ),
+                default_ini,
+                SimpleNamespace(
+                    document={
+                        "player": {
+                            "spawnCenterHeightMeters": 0.9,
+                            "capsuleRadiusMeters": 0.32,
+                            "capsuleHeightMeters": 1.8,
+                            "moveSpeedMetersPerSecond": 3.6,
+                            "mouseSensitivityRadiansPerPixel": 0.0025,
+                            "verticalLookLimitRadians": 1.45,
+                            "desktopCameraOffsetMeters": [0.0, 0.72, 0.0],
+                            "cameraFarMeters": 1000.0,
+                            "collisionLayer": 2,
+                            "collisionMask": 1,
+                            "desktopInput": {
+                                "moveLeft": {"action": "move_left"},
+                                "moveRight": {"action": "move_right"},
+                                "moveForward": {"action": "move_forward"},
+                                "moveBackward": {"action": "move_backward"},
+                            },
+                        },
+                        "simulation": {"gravityMetersPerSecondSquared": 9.8},
+                    },
+                    manifest=lambda: {
+                        "schema": "opennv-runtime-configuration/v1",
+                        "sha256": "c" * 64,
+                    },
+                ),
+            )
         _bind_cg01_transition_video(character_selection, transition_video)
         bound_transition = character_selection["cg01Stage0Transition"]
+        toddler_world = bound_transition["toddlerWorld"]
+        self.assertEqual(
+            "opennv-fo3-cg01-toddler-world/v1",
+            toddler_world["schema"],
+        )
+        self.assertEqual(0.4, toddler_world["player"]["scale"])
+        self.assertEqual("0002ea4f", toddler_world["player"]["startMarker"]["formId"])
+        self.assertEqual(75.0, toddler_world["camera"]["verticalFovDegrees"])
+        self.assertEqual(5.0, toddler_world["camera"]["nearGameUnits"])
+        self.assertEqual(
+            "0002ea54",
+            toddler_world["triggerReferenceFormId"],
+        )
+        self.assertEqual(12, toddler_world["targetStage"])
         bound_stage0 = bound_transition["stage0Result"]
         self.assertEqual(
             ["moveToReference", "setStage", "setPlayerScale", "moveToReference"],
