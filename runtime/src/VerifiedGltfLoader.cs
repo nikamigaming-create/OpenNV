@@ -8,6 +8,7 @@ internal static class VerifiedGltfLoader
 {
     private const string SidecarSchemaV1 = "opennv-static-nif-gltf/v1";
     private const string SidecarSchemaV2 = "opennv-static-nif-gltf/v2";
+    private const string SidecarSchemaV3 = "opennv-static-nif-gltf/v3";
     private const string LandscapeSidecarSchema = "opennv-landscape-gltf/v1";
 
     internal static LoadedGltf Load(string modelPath, string sidecarPath)
@@ -16,7 +17,8 @@ internal static class VerifiedGltfLoader
         using var document = JsonDocument.Parse(File.ReadAllText(sidecarFile));
         var root = document.RootElement;
         var schema = root.GetProperty("schema").GetString();
-        if (schema != SidecarSchemaV1 && schema != SidecarSchemaV2 && schema != LandscapeSidecarSchema)
+        if (schema != SidecarSchemaV1 && schema != SidecarSchemaV2 &&
+            schema != SidecarSchemaV3 && schema != LandscapeSidecarSchema)
             throw new InvalidOperationException($"Unexpected sidecar schema: {sidecarPath}");
         var status = root.GetProperty("status").GetString();
         var expectedStatus = schema == LandscapeSidecarSchema
@@ -51,10 +53,20 @@ internal static class VerifiedGltfLoader
         }
         var compiler = root.GetProperty("compiler");
         var dynamicBodies = ReadDynamicBodies(root);
+        string? articulationJson = null;
+        if (root.TryGetProperty("articulation", out var articulation) &&
+            articulation.ValueKind != JsonValueKind.Null)
+        {
+            if (articulation.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException(
+                    $"Static NIF articulation is not an object: {sidecarPath}");
+            articulationJson = articulation.GetRawText();
+        }
         return new LoadedGltf(
             scene,
             collisionScene,
             dynamicBodies,
+            articulationJson,
             root.GetProperty("source").GetProperty("sha256").GetString()!,
             compiler.GetProperty("name").GetString()!,
             compiler.GetProperty("sha256").GetString()!);
@@ -132,6 +144,7 @@ internal static class VerifiedGltfLoader
         Node3D Scene,
         Node3D? CollisionScene,
         IReadOnlyList<DynamicBodyContract> DynamicPhysicsBodies,
+        string? ArticulationJson,
         string SourceSha256,
         string CompilerName,
         string CompilerSha256);

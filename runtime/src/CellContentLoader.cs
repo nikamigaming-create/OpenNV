@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Godot;
 
@@ -5,7 +7,10 @@ namespace OpenNV.Runtime;
 
 internal static class CellContentLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v13";
+    private const string CellSceneSchema = "opennv-cell-scene/v14";
+    private const string DoorArticulationSchema = "opennv-controller-door-articulation/v1";
+    private const string DoorArticulationStatus = "owned-open-close-transform-complete";
+    private const float TransformTolerance = 0.00001f;
 
     internal static LoadedContent Load(
         string scenePath,
@@ -31,6 +36,7 @@ internal static class CellContentLoader
         var assetLogicalPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var collisionAssets = new HashSet<string>(StringComparer.Ordinal);
         var landscapeCollisionAssets = new HashSet<string>(StringComparer.Ordinal);
+        var doorArticulations = new Dictionary<string, DoorArticulationContract>(StringComparer.Ordinal);
         try
         {
             var textures = RuntimeMaterialLoader.LoadTextures(source, configuration.Renderer);
@@ -43,6 +49,19 @@ internal static class CellContentLoader
                 var loaded = VerifiedGltfLoader.Load(
                     asset.GetProperty("model").GetString()!,
                     asset.GetProperty("sidecar").GetString()!);
+                var articulation = ReadDoorArticulation(asset, $"CELL asset {assetId}");
+                var sidecarArticulation = ReadDoorArticulation(
+                    loaded.ArticulationJson,
+                    $"static sidecar {assetId}");
+                if ((articulation is null) != (sidecarArticulation is null) ||
+                    articulation is not null &&
+                    !articulation.CanonicalSha256.Equals(
+                        sidecarArticulation!.CanonicalSha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        $"CELL asset articulation differs from its static sidecar: {assetId}");
+                if (articulation is not null)
+                    doorArticulations.Add(assetId, articulation);
                 if (!loaded.SourceSha256.Equals(
                         asset.GetProperty("sourceSha256").GetString(),
                         StringComparison.OrdinalIgnoreCase))
@@ -211,6 +230,10 @@ internal static class CellContentLoader
                 if (interactionType == "pickup" && session.IsReferenceRemoved(referenceFormId))
                     continue;
                 var assetId = reference.GetProperty("assetId").GetString()!;
+                doorArticulations.TryGetValue(assetId, out var doorArticulation);
+                if (doorArticulation is not null && interactionType != "door")
+                    throw new InvalidOperationException(
+                        $"Controller articulation is attached to a non-door reference: {referenceFormId}");
                 var referencePosition = ReadVector(reference.GetProperty("positionGodotUnits"));
                 var referenceScale = reference.GetProperty("scale").GetSingle();
                 var baseEditorId = reference.GetProperty("baseEditorId").GetString()!;
@@ -291,7 +314,6 @@ internal static class CellContentLoader
                         configuration.Door.OpenAngleDegrees,
                         destination.ValueKind == JsonValueKind.String ? destination.GetString() : null,
                         teleportDestination);
-                    door.SetOpen(session.IsDoorOpen(referenceFormId));
                     doors.Add(referenceFormId, door);
                     placement = door;
                 }
@@ -362,9 +384,34 @@ internal static class CellContentLoader
 
                 var instance = prototypes[assetId].Scene.Duplicate((int)Node.DuplicateFlags.Default) as Node3D
                     ?? throw new InvalidOperationException($"Could not duplicate cell asset: {assetId}");
-                placement.AddChild(instance);
-                SetRenderLayer(instance, renderLayer);
-                CountGeometry(instance, ref surfaces, ref vertices, ref triangles);
+                Node3D visual = instance;
+                Node3D? articulationTarget = null;
+                if (doorArticulation is null)
+                {
+                    placement.AddChild(instance);
+                }
+                else
+                {
+                    var presentationRoot = new Node3D
+                    {
+                        Name = $"DOOR_PRESENTATION_{referenceFormId}",
+                    };
+                    placement.AddChild(presentationRoot);
+                    presentationRoot.AddChild(instance);
+                    articulationTarget = new Node3D
+                    {
+                        Name = doorArticulation.Target.VisualNodeName,
+                        Transform = doorArticulation.ClosedLocalTransform,
+                    };
+                    presentationRoot.AddChild(articulationTarget);
+                    MoveArticulatedVisuals(
+                        instance,
+                        articulationTarget,
+                        doorArticulation);
+                    visual = presentationRoot;
+                }
+                SetRenderLayer(visual, renderLayer);
+                CountGeometry(visual, ref surfaces, ref vertices, ref triangles);
                 placedReferences.Add(new PlacedReference(
                     referenceFormId,
                     reference.GetProperty("baseFormId").GetString()!,
@@ -372,8 +419,8 @@ internal static class CellContentLoader
                     assetId,
                     reference.GetProperty("cellFormId").GetString()!,
                     placement,
-                    instance,
-                    CountGeometry(instance)));
+                    visual,
+                    CountGeometry(visual)));
                 if (poolManifest is not null && referenceFormId == poolManifest.CueReferenceFormId)
                 {
                     poolCuePlacement = placement;
@@ -395,6 +442,48 @@ internal static class CellContentLoader
                             body.CollisionLayer = renderLayer;
                         collisionMeshes++;
                     }
+                }
+                else if (doorArticulation is not null)
+                {
+                    if (placement is not DoorInstance articulatedDoor ||
+                        articulationTarget is null ||
+                        prototypes[assetId].CollisionScene is not Node3D articulatedCollisionPrototype)
+                        throw new InvalidOperationException(
+                            $"Controller door articulation is missing authored collision: {referenceFormId}");
+                    var collisionInstance = articulatedCollisionPrototype.Duplicate(
+                            (int)Node.DuplicateFlags.Default) as Node3D
+                        ?? throw new InvalidOperationException(
+                            $"Could not duplicate articulated door collision: {assetId}");
+                    collisionInstance.Name = $"AUTHORED_COLLISION_{assetId}";
+                    placement.AddChild(collisionInstance);
+                    collisionMeshes += AttachArticulatedDoorCollision(
+                        collisionInstance,
+                        articulationTarget,
+                        doorArticulation,
+                        buildCollision,
+                        renderLayer);
+                    if (buildCollision)
+                    {
+                        foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionInstance))
+                        {
+                            collisionMesh.Visible = false;
+                            collisionMesh.CreateTrimeshCollision();
+                            foreach (var body in Descendants<StaticBody3D>(collisionMesh))
+                                body.CollisionLayer = renderLayer;
+                            collisionMeshes++;
+                        }
+                    }
+                    else
+                    {
+                        placement.RemoveChild(collisionInstance);
+                        collisionInstance.Free();
+                    }
+                    articulatedDoor.ConfigureSourceArticulation(
+                        articulationTarget,
+                        new Basis(rotation).Scaled(Vector3.One * referenceScale),
+                        doorArticulation.Open.ToRuntimeSequence(),
+                        doorArticulation.Close.ToRuntimeSequence());
+                    articulatedDoor.RestoreOpenState(session.IsDoorOpen(referenceFormId));
                 }
                 else if (buildCollision && prototypes[assetId].CollisionScene is Node3D collisionPrototype)
                 {
@@ -437,6 +526,14 @@ internal static class CellContentLoader
                             collisionMeshes++;
                         }
                     }
+                }
+                if (placement is DoorInstance ordinaryDoor && doorArticulation is null)
+                {
+                    ValidateSinglePieceDoor(
+                        referenceFormId,
+                        instance,
+                        prototypes[assetId].CollisionScene);
+                    ordinaryDoor.RestoreOpenState(session.IsDoorOpen(referenceFormId));
                 }
                 loadedReferences++;
             }
@@ -731,6 +828,370 @@ internal static class CellContentLoader
             cue.GetProperty("tipEndpoint").GetString()!,
             rack.GetProperty("referenceFormId").GetString()!,
             balls);
+    }
+
+    private static DoorArticulationContract? ReadDoorArticulation(
+        JsonElement container,
+        string owner)
+    {
+        if (!container.TryGetProperty("articulation", out var articulation) ||
+            articulation.ValueKind == JsonValueKind.Null)
+            return null;
+        if (articulation.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException($"Door articulation is not an object: {owner}");
+        return ReadDoorArticulationObject(articulation, owner);
+    }
+
+    private static DoorArticulationContract? ReadDoorArticulation(
+        string? articulationJson,
+        string owner)
+    {
+        if (articulationJson is null)
+            return null;
+        using var document = JsonDocument.Parse(articulationJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException($"Door articulation is not an object: {owner}");
+        return ReadDoorArticulationObject(document.RootElement, owner);
+    }
+
+    private static DoorArticulationContract ReadDoorArticulationObject(
+        JsonElement source,
+        string owner)
+    {
+        if (source.GetProperty("schema").GetString() != DoorArticulationSchema ||
+            source.GetProperty("status").GetString() != DoorArticulationStatus)
+            throw new InvalidOperationException($"Unexpected door articulation contract: {owner}");
+        var expectedHash = source.GetProperty("canonicalSha256").GetString()!;
+        var actualHash = CanonicalSha256(source);
+        if (!IsSha256(expectedHash) ||
+            !actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Door articulation hash mismatch: {owner}");
+
+        var targetSource = source.GetProperty("target");
+        var targetId = RequiredString(targetSource, "targetId", owner);
+        var sourceBlockIndex = targetSource.GetProperty("sourceBlockIndex").GetInt32();
+        var sourceName = RequiredString(targetSource, "sourceName", owner);
+        var visualNodeName = RequiredString(targetSource, "visualNodeName", owner);
+        var collisionNodeName = RequiredString(targetSource, "collisionNodeName", owner);
+        var visualSurfaceStableIds = ReadSortedUniqueStrings(
+            targetSource.GetProperty("visualSurfaceStableIds"),
+            owner,
+            "visual surface stable IDs");
+        var collisionBodyBlocks = ReadSortedUniqueIntegers(
+            targetSource.GetProperty("collisionBodyBlocks"),
+            owner,
+            "collision body blocks");
+        var visualDescendantNodeNames = ReadSortedUniqueStrings(
+            targetSource.GetProperty("visualDescendantNodeNames"),
+            owner,
+            "visual descendant nodes");
+        var collisionDescendantNodeNames = ReadSortedUniqueStrings(
+            targetSource.GetProperty("collisionDescendantNodeNames"),
+            owner,
+            "collision descendant nodes");
+        var expectedTargetNodeName = $"OPENNV_ARTICULATION_{targetId}";
+        if (sourceBlockIndex < 0 ||
+            string.IsNullOrWhiteSpace(sourceName) ||
+            visualNodeName != expectedTargetNodeName ||
+            collisionNodeName != expectedTargetNodeName ||
+            !visualDescendantNodeNames.ToHashSet(StringComparer.Ordinal).SetEquals(
+                visualSurfaceStableIds.Select(id => $"OPENNV_ARTICULATION_VISUAL_{id}")) ||
+            !collisionDescendantNodeNames.ToHashSet(StringComparer.Ordinal).SetEquals(
+                collisionBodyBlocks.Select(block => $"OPENNV_ARTICULATION_COLLISION_BODY_{block}")))
+            throw new InvalidOperationException($"Door articulation target join is invalid: {owner}");
+
+        var closed = ReadLocalTransform(source.GetProperty("closedLocalTransform"), owner);
+        var sequences = source.GetProperty("sequences");
+        var open = ReadDoorArticulationSequence(sequences.GetProperty("open"), "Open", owner);
+        var close = ReadDoorArticulationSequence(sequences.GetProperty("close"), "Close", owner);
+        if (!TransformsMatch(open.Initial, closed) ||
+            !TransformsMatch(close.Terminal, closed) ||
+            TransformsMatch(open.Terminal, closed))
+            throw new InvalidOperationException(
+                $"Door articulation open/close terminals are inconsistent: {owner}");
+        return new DoorArticulationContract(
+            expectedHash,
+            new DoorArticulationTarget(
+                targetId,
+                visualNodeName,
+                collisionNodeName,
+                visualDescendantNodeNames,
+                collisionDescendantNodeNames),
+            closed,
+            open,
+            close);
+    }
+
+    private static DoorArticulationSequence ReadDoorArticulationSequence(
+        JsonElement source,
+        string expectedName,
+        string owner)
+    {
+        if (RequiredString(source, "sourceName", owner) != expectedName)
+            throw new InvalidOperationException(
+                $"Door articulation sequence name differs: {owner} {expectedName}");
+        var start = source.GetProperty("startSeconds").GetSingle();
+        var stop = source.GetProperty("stopSeconds").GetSingle();
+        var duration = source.GetProperty("durationSeconds").GetSingle();
+        var initial = ReadLocalTransform(source.GetProperty("initialLocalTransform"), owner);
+        var terminal = ReadLocalTransform(source.GetProperty("terminalLocalTransform"), owner);
+        var interpolation = source.GetProperty("keyInterpolation");
+        _ = RequiredString(interpolation, "rotation", owner);
+        _ = RequiredString(interpolation, "translation", owner);
+        _ = RequiredString(interpolation, "scale", owner);
+        if (!IsSha256(RequiredString(source, "keySha256", owner)))
+            throw new InvalidOperationException(
+                $"Door articulation sequence key hash is invalid: {owner} {expectedName}");
+        var sourceJoin = source.GetProperty("source");
+        if (sourceJoin.GetProperty("sequenceBlock").GetInt32() < 0 ||
+            sourceJoin.GetProperty("controllerBlock").GetInt32() < 0 ||
+            sourceJoin.GetProperty("interpolatorBlock").GetInt32() < 0 ||
+            sourceJoin.GetProperty("transformDataBlock").GetInt32() < 0 ||
+            !float.IsFinite(start) ||
+            !float.IsFinite(stop) ||
+            !float.IsFinite(duration) ||
+            stop <= start ||
+            duration <= 0.0f ||
+            !Mathf.IsEqualApprox(stop - start, duration))
+            throw new InvalidOperationException(
+                $"Door articulation sequence timing/source join is invalid: {owner} {expectedName}");
+        return new DoorArticulationSequence(initial, terminal, duration);
+    }
+
+    private static Transform3D ReadLocalTransform(JsonElement source, string owner)
+    {
+        var translation = ReadVector(source.GetProperty("translationGodotUnits"));
+        var values = source.GetProperty("rotationGodotQuaternion")
+            .EnumerateArray()
+            .Select(value => value.GetSingle())
+            .ToArray();
+        var scale = source.GetProperty("scale").GetSingle();
+        if (values.Length != 4 ||
+            !values.All(float.IsFinite) ||
+            !float.IsFinite(scale) ||
+            scale <= 0.0f)
+            throw new InvalidOperationException($"Door articulation transform is invalid: {owner}");
+        var quaternion = new Quaternion(values[0], values[1], values[2], values[3]);
+        if (!Mathf.IsEqualApprox(quaternion.LengthSquared(), 1.0f))
+            throw new InvalidOperationException(
+                $"Door articulation quaternion is not normalized: {owner}");
+        return new Transform3D(
+            new Basis(quaternion).Scaled(Vector3.One * scale),
+            translation);
+    }
+
+    private static void MoveArticulatedVisuals(
+        Node3D visualRoot,
+        Node3D articulationTarget,
+        DoorArticulationContract contract)
+    {
+        var wrapper = FindUniqueArticulationWrapper(
+            visualRoot,
+            contract.Target.VisualNodeName,
+            contract.ClosedLocalTransform,
+            "visual");
+        var meshes = ValidateWrapperMeshes(
+            wrapper,
+            contract.Target.VisualDescendantNodeNames,
+            "visual");
+        foreach (var mesh in meshes)
+        {
+            wrapper.RemoveChild(mesh);
+            articulationTarget.AddChild(mesh);
+        }
+        wrapper.GetParent().RemoveChild(wrapper);
+        wrapper.Free();
+    }
+
+    private static int AttachArticulatedDoorCollision(
+        Node3D collisionRoot,
+        Node3D articulationTarget,
+        DoorArticulationContract contract,
+        bool buildCollision,
+        uint collisionLayer)
+    {
+        var wrapper = FindUniqueArticulationWrapper(
+            collisionRoot,
+            contract.Target.CollisionNodeName,
+            contract.ClosedLocalTransform,
+            "collision");
+        var meshes = ValidateWrapperMeshes(
+            wrapper,
+            contract.Target.CollisionDescendantNodeNames,
+            "collision");
+        var bodies = 0;
+        if (buildCollision)
+        {
+            foreach (var mesh in meshes)
+            {
+                if (mesh.Mesh is null || mesh.Mesh.GetFaces().Length == 0)
+                    throw new InvalidOperationException(
+                        $"Articulated door collision mesh is empty: {mesh.Name}");
+                var shape = mesh.Mesh.CreateTrimeshShape() ??
+                    throw new InvalidOperationException(
+                        $"Could not construct articulated door collision: {mesh.Name}");
+                var body = new StaticBody3D
+                {
+                    Name = $"AUTHORED_{mesh.Name}",
+                    Transform = mesh.Transform,
+                    CollisionLayer = collisionLayer,
+                };
+                body.SetMeta("opennv_articulation_target_id", contract.Target.TargetId);
+                articulationTarget.AddChild(body);
+                body.AddChild(new CollisionShape3D { Shape = shape });
+                bodies++;
+            }
+        }
+        wrapper.GetParent().RemoveChild(wrapper);
+        wrapper.Free();
+        if (buildCollision && bodies != contract.Target.CollisionDescendantNodeNames.Count)
+            throw new InvalidOperationException(
+                $"Articulated door collision join is incomplete: {contract.Target.TargetId}");
+        return bodies;
+    }
+
+    private static Node3D FindUniqueArticulationWrapper(
+        Node3D root,
+        string name,
+        Transform3D expectedTransform,
+        string role)
+    {
+        var matches = Descendants<Node3D>(root)
+            .Where(node => node.Name == name)
+            .ToArray();
+        if (matches.Length != 1 || !TransformsMatch(matches[0].Transform, expectedTransform))
+            throw new InvalidOperationException(
+                $"Door articulation {role} wrapper is missing, duplicated, or transformed: {name}");
+        return matches[0];
+    }
+
+    private static IReadOnlyList<MeshInstance3D> ValidateWrapperMeshes(
+        Node3D wrapper,
+        IReadOnlyList<string> expectedNames,
+        string role)
+    {
+        var children = wrapper.GetChildren();
+        var meshes = children.OfType<MeshInstance3D>().ToArray();
+        var names = meshes.Select(mesh => mesh.Name.ToString())
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        if (children.Count != meshes.Length ||
+            meshes.Any(mesh => mesh.Mesh is null) ||
+            !names.SequenceEqual(expectedNames, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                $"Door articulation {role} descendants do not match the source contract: {wrapper.Name}");
+        return meshes;
+    }
+
+    private static void ValidateSinglePieceDoor(
+        string referenceFormId,
+        Node3D visual,
+        Node3D? collision)
+    {
+        if (Descendants<MeshInstance3D>(visual).Count() != 1 ||
+            collision is null ||
+            Descendants<MeshInstance3D>(collision).Count() != 1)
+            throw new InvalidOperationException(
+                $"Non-controller door is not a single-piece visual/collision pair: {referenceFormId}");
+    }
+
+    private static IReadOnlyList<string> ReadSortedUniqueStrings(
+        JsonElement source,
+        string owner,
+        string field)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetString()!).ToArray();
+        if (values.Length == 0 ||
+            values.Any(string.IsNullOrWhiteSpace) ||
+            values.Distinct(StringComparer.Ordinal).Count() != values.Length ||
+            !values.SequenceEqual(values.OrderBy(value => value, StringComparer.Ordinal), StringComparer.Ordinal))
+            throw new InvalidOperationException($"Door articulation {field} are not sorted/unique: {owner}");
+        return values;
+    }
+
+    private static IReadOnlyList<int> ReadSortedUniqueIntegers(
+        JsonElement source,
+        string owner,
+        string field)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetInt32()).ToArray();
+        if (values.Length == 0 ||
+            values.Any(value => value < 0) ||
+            values.Distinct().Count() != values.Length ||
+            !values.SequenceEqual(values.Order()))
+            throw new InvalidOperationException($"Door articulation {field} are not sorted/unique: {owner}");
+        return values;
+    }
+
+    private static string RequiredString(JsonElement source, string property, string owner)
+    {
+        var value = source.GetProperty(property).GetString();
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException(
+                $"Door articulation {property} is empty: {owner}");
+        return value;
+    }
+
+    private static bool TransformsMatch(Transform3D left, Transform3D right) =>
+        left.Origin.DistanceTo(right.Origin) <= TransformTolerance &&
+        left.Basis.X.DistanceTo(right.Basis.X) <= TransformTolerance &&
+        left.Basis.Y.DistanceTo(right.Basis.Y) <= TransformTolerance &&
+        left.Basis.Z.DistanceTo(right.Basis.Z) <= TransformTolerance;
+
+    private static bool IsSha256(string value) =>
+        value.Length == 64 && value.All(Uri.IsHexDigit);
+
+    private static string CanonicalSha256(JsonElement source)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+            WriteCanonicalJson(writer, source, excludeCanonicalSha256: true);
+        return Convert.ToHexString(SHA256.HashData(stream.ToArray())).ToLowerInvariant();
+    }
+
+    private static void WriteCanonicalJson(
+        Utf8JsonWriter writer,
+        JsonElement source,
+        bool excludeCanonicalSha256 = false)
+    {
+        switch (source.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in source.EnumerateObject()
+                             .Where(property => !excludeCanonicalSha256 ||
+                                 property.Name != "canonicalSha256")
+                             .OrderBy(property => property.Name, StringComparer.Ordinal))
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteCanonicalJson(writer, property.Value);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var value in source.EnumerateArray())
+                    WriteCanonicalJson(writer, value);
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                writer.WriteRawValue(source.GetRawText());
+                break;
+            case JsonValueKind.Number:
+                writer.WriteRawValue(source.GetRawText());
+                break;
+            case JsonValueKind.True:
+                writer.WriteBooleanValue(true);
+                break;
+            case JsonValueKind.False:
+                writer.WriteBooleanValue(false);
+                break;
+            case JsonValueKind.Null:
+                writer.WriteNullValue();
+                break;
+            default:
+                throw new InvalidOperationException("Unsupported door articulation JSON value.");
+        }
     }
 
     private static GeometryCounts CountGeometry(Node root)
@@ -1129,6 +1590,31 @@ internal static class CellContentLoader
         Color Color,
         float Intensity,
         float RadiusMeters);
+
+    private sealed record DoorArticulationContract(
+        string CanonicalSha256,
+        DoorArticulationTarget Target,
+        Transform3D ClosedLocalTransform,
+        DoorArticulationSequence Open,
+        DoorArticulationSequence Close);
+
+    private sealed record DoorArticulationTarget(
+        string TargetId,
+        string VisualNodeName,
+        string CollisionNodeName,
+        IReadOnlyList<string> VisualDescendantNodeNames,
+        IReadOnlyList<string> CollisionDescendantNodeNames);
+
+    private readonly record struct DoorArticulationSequence(
+        Transform3D Initial,
+        Transform3D Terminal,
+        float DurationSeconds)
+    {
+        internal DoorInstance.ArticulationSequence ToRuntimeSequence() => new(
+            Initial,
+            Terminal,
+            DurationSeconds);
+    }
 
     private sealed record PoolManifest(
         string TableReferenceFormId,
