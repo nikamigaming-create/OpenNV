@@ -310,7 +310,8 @@ internal static class CellRouteTravelAcceptance
             }
             var waypointCenter = content.GameToWorld(path[waypointIndex]) +
                 Vector3.Up * configuration.Player.SpawnCenterHeightMeters;
-            var waypointTolerance = waypointIndex >= path.Count - 3
+            var finalApproach = waypointIndex >= path.Count - 3;
+            var waypointTolerance = finalApproach
                 ? WaypointToleranceMeters
                 : MathF.Max(
                     WaypointToleranceMeters,
@@ -321,7 +322,8 @@ internal static class CellRouteTravelAcceptance
                 waypointCenter,
                 input,
                 configuration,
-                waypointTolerance);
+                waypointTolerance,
+                finalApproach);
             if (!reached)
                 reached = await RecoverAroundObstacle(
                     host,
@@ -329,7 +331,8 @@ internal static class CellRouteTravelAcceptance
                     waypointCenter,
                     input,
                     configuration,
-                    waypointTolerance);
+                    waypointTolerance,
+                    finalApproach);
             if (reached)
                 continue;
             var waypointDistance = HorizontalDistance(player.GlobalPosition, waypointCenter);
@@ -432,7 +435,8 @@ internal static class CellRouteTravelAcceptance
         Vector3 target,
         DesktopInputConfiguration input,
         RuntimeConfiguration configuration,
-        float toleranceMeters)
+        float toleranceMeters,
+        bool requireDirectSweep)
     {
         var initialDistance = HorizontalDistance(player.GlobalPosition, target);
         var frameBudget = Math.Max(
@@ -448,7 +452,8 @@ internal static class CellRouteTravelAcceptance
             for (var frame = 0; frame < frameBudget; frame++)
             {
                 var distance = HorizontalDistance(player.GlobalPosition, target);
-                if (distance <= toleranceMeters && CanAdvanceCapsule(player, target))
+                if (distance <= toleranceMeters &&
+                    (!requireDirectSweep || CanAdvanceCapsule(player, target)))
                     return true;
                 FlatControlsAcceptance.ApplyMouseYaw(player, target, configuration.Player);
                 await FlatControlsAcceptance.WaitPhysicsFrames(host, 1);
@@ -476,7 +481,8 @@ internal static class CellRouteTravelAcceptance
         Vector3 target,
         DesktopInputConfiguration input,
         RuntimeConfiguration configuration,
-        float toleranceMeters)
+        float toleranceMeters,
+        bool requireDirectSweep)
     {
         if (await FollowObstacleBoundary(
                 host,
@@ -490,7 +496,8 @@ internal static class CellRouteTravelAcceptance
                 target,
                 input,
                 configuration,
-                toleranceMeters))
+                toleranceMeters,
+                requireDirectSweep))
             return true;
 
         var clearanceFrames = Math.Max(
@@ -527,7 +534,8 @@ internal static class CellRouteTravelAcceptance
                     target,
                     input,
                     configuration,
-                    toleranceMeters))
+                    toleranceMeters,
+                    requireDirectSweep))
                 return true;
         }
         return false;
