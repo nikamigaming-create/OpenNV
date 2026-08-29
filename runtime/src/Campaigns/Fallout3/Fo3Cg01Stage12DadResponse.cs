@@ -159,6 +159,51 @@ internal sealed record Fo3Cg01Stage12DadResponse(
             new Fo3Cg01Stage12Boundary(false, NextBoundaryBlocker));
     }
 
+    internal object SavedState(Fo3Cg01Stage14State state) => new
+    {
+        schema = ExpectedSavedStateSchema,
+        sourceStage = state.SourceStage,
+        activeQuest = new
+        {
+            formId = state.ActiveQuestFormId,
+            editorId = state.ActiveQuestEditorId,
+            stage = state.ActiveStage,
+        },
+        appliedInfoFormIds = state.AppliedInfoFormIds,
+        dadTalking = state.DadTalking,
+        dadLooksAtPlayer = state.DadLooksAtPlayer,
+        dadPackageEvaluated = state.DadPackageEvaluated,
+        accountedCommandCount = state.AccountedCommandCount,
+        appliedCommandCount = state.AppliedCommandCount,
+        nextBoundary = new
+        {
+            applied = state.NextBoundary.Applied,
+            blocker = state.NextBoundary.Blocker,
+        },
+    };
+
+    internal void ValidateSavedState(JsonElement source, Fo3Cg01Stage14State expected)
+    {
+        var activeQuest = RequiredObject(source, "activeQuest");
+        var boundary = RequiredObject(source, "nextBoundary");
+        if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
+            RequiredInteger(source, "sourceStage") != expected.SourceStage ||
+            RequiredFormId(activeQuest, "formId") != expected.ActiveQuestFormId ||
+            RequiredString(activeQuest, "editorId") != expected.ActiveQuestEditorId ||
+            RequiredInteger(activeQuest, "stage") != expected.ActiveStage ||
+            !RequiredArray(source, "appliedInfoFormIds").EnumerateArray()
+                .Select(value => value.GetString()).SequenceEqual(expected.AppliedInfoFormIds) ||
+            RequiredInteger(source, "dadTalking") != expected.DadTalking ||
+            RequiredBoolean(source, "dadLooksAtPlayer") != expected.DadLooksAtPlayer ||
+            RequiredBoolean(source, "dadPackageEvaluated") != expected.DadPackageEvaluated ||
+            RequiredInteger(source, "accountedCommandCount") != expected.AccountedCommandCount ||
+            RequiredInteger(source, "appliedCommandCount") != expected.AppliedCommandCount ||
+            RequiredBoolean(boundary, "applied") != expected.NextBoundary.Applied ||
+            RequiredString(boundary, "blocker") != expected.NextBoundary.Blocker)
+            throw new InvalidOperationException(
+                "Saved Fallout 3 CG01 stage-14 Dad response differs.");
+    }
+
     private static Fo3Cg01Stage12DadResponseCue LoadCue(
         JsonElement source,
         int expectedSequence,
