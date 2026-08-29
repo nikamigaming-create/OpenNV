@@ -67,7 +67,7 @@ if ($write.schema -ne 'opennv-fo2-character-save-write-proof/v1' -or
     $write.status -ne 'pass-owned-premade-map3-state-atomic-save' -or
     $restore.schema -ne 'opennv-fo2-character-save-restore-proof/v1' -or
     $restore.status -ne 'pass-owned-premade-map3-state-cold-restore' -or
-    $saved.schema -ne 'opennv-fo2-character-arroyo-save/v2' -or
+    $saved.schema -ne 'opennv-fo2-character-arroyo-save/v3' -or
     $saved.character.Name -ne 'Chitsa' -or
     $saved.character.Sex -ne 'Female' -or
     $saved.world.mapIndex -ne 3 -or

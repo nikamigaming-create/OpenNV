@@ -52,6 +52,13 @@ def _walk_mask_sha256(walkable: set[int]) -> str:
     return digest.hexdigest()
 
 
+def _path_sha256(path: list[int]) -> str:
+    digest = hashlib.sha256()
+    for tile in path:
+        digest.update(struct.pack(">i", tile))
+    return digest.hexdigest()
+
+
 def _entry_component(start: int, walkable: set[int]) -> set[int]:
     if start not in walkable:
         raise Fo1ProfileError("Fallout 2 Arroyo Caves transition arrival is not source-walkable")
@@ -80,6 +87,46 @@ def _entry_component(start: int, walkable: set[int]) -> set[int]:
                 visited.add(neighbor)
                 queue.append(neighbor)
     return visited
+
+
+def _shortest_path(start: int, target: int, walkable: set[int]) -> list[int]:
+    if start not in walkable or target not in walkable:
+        raise Fo1ProfileError("Fallout 2 Arroyo Caves path endpoint is not source-walkable")
+    parents = {start: -1}
+    queue = deque([start])
+    while queue and target not in parents:
+        tile = queue.popleft()
+        x, y = tile % MAP_WIDTH, tile // MAP_WIDTH
+        odd = x & 1
+        offsets = (
+            (-1, -1 if odd else 0),
+            (-1, 0 if odd else 1),
+            (0, 1),
+            (1, 0 if odd else 1),
+            (1, -1 if odd else 0),
+            (0, -1),
+        )
+        for dx, dy in offsets:
+            target_x, target_y = x + dx, y + dy
+            neighbor = (
+                target_y * MAP_WIDTH + target_x
+                if 0 <= target_x < MAP_WIDTH and 0 <= target_y < MAP_WIDTH
+                else -1
+            )
+            if neighbor in walkable and neighbor not in parents:
+                parents[neighbor] = tile
+                queue.append(neighbor)
+    if target not in parents:
+        raise Fo1ProfileError(
+            "Fallout 2 Arroyo Caves exit is not reachable from the incoming placement"
+        )
+    path = []
+    tile = target
+    while tile >= 0:
+        path.append(tile)
+        tile = parents[tile]
+    path.reverse()
+    return path
 
 
 def compile_fo2_arroyo_caves_slice(
@@ -264,6 +311,23 @@ def compile_fo2_arroyo_caves_slice(
         }
         for obj in reciprocal
     ]
+    reachable_exits = []
+    for record in reciprocal_records:
+        if not record["reachableFromIncomingPlacement"]:
+            continue
+        path = _shortest_path(arrival_tile, int(record["tile"]), component)
+        reachable_exits.append((len(path) - 1, int(record["serial"]), record, path))
+    if not reachable_exits:
+        raise Fo1ProfileError(
+            "Fallout 2 Arroyo Caves has no source-walkable reciprocal Temple exit"
+        )
+    _, _, selected_exit, selected_path = min(reachable_exits)
+    temple_map = temple_source["map"]
+    if (
+        temple_map["header"]["mapIndex"] != reciprocal_target[0]
+        or temple_map["logicalPath"] != "maps\\artemple.map"
+    ):
+        raise Fo1ProfileError("Fallout 2 reciprocal Temple MAP identity drifted")
     return {
         "schema": SCHEMA,
         "status": "transported-owned-map-source-and-presentation-graph",
@@ -330,6 +394,29 @@ def compile_fo2_arroyo_caves_slice(
             "multihexExpansionImplemented": False,
         },
         "reciprocalTempleExitGrids": reciprocal_records,
+        "liveExitTransition": {
+            "selection": "shortest-source-walk-path-then-serial-v1",
+            "source": {
+                "mapIndex": MAP_INDEX,
+                "mapSha256": map_resource.sha256,
+                "exitSerial": selected_exit["serial"],
+                "tile": selected_exit["tile"],
+                "elevation": selected_exit["elevation"],
+                "fid": selected_exit["fid"],
+                "pid": selected_exit["pid"],
+            },
+            "path": selected_path,
+            "pathSteps": len(selected_path) - 1,
+            "pathSha256": _path_sha256(selected_path),
+            "destination": {
+                "mapIndex": reciprocal_target[0],
+                "logicalPath": temple_map["logicalPath"],
+                "mapSha256": temple_map["sha256"],
+                "tile": reciprocal_target[1],
+                "elevation": reciprocal_target[2],
+                "rotation": reciprocal_target[3],
+            },
+        },
         "reciprocalTransition": {
             "sourceRecords": len(reciprocal_records),
             "reachableFromIncomingPlacement": sum(

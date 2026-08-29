@@ -21,10 +21,13 @@ internal sealed record Fo2CharacterStartSaveState(
     Vector3 Position,
     string MotionMode,
     string BlockedMovementMode,
-    string PresentationMode)
+    string PresentationMode,
+    Fo2ArroyoExitTransition? LastTransition)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v2";
-    internal const string RouteMode = "chosen-one-taken-to-arroyo-map-3";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v3";
+    internal const string RouteMode = "chosen-one-source-exit-route-v1";
+    private const string PreviousSchema = "opennv-fo2-character-arroyo-save/v2";
+    private const string PreviousRouteMode = "chosen-one-taken-to-arroyo-map-3";
     private const string LegacySchema = "opennv-fo2-character-arroyo-save/v1";
     private const string LegacyRouteMode = "owned-premade-taken-to-arroyo-map-3";
 
@@ -41,11 +44,13 @@ internal sealed record Fo2CharacterStartSaveState(
         string configuredPath,
         Fo2CharacterStartCatalog characterStart,
         Fo2ArroyoCavesPresentationCatalog arroyo,
+        Fo2TemplePresentationCatalog temple,
         Fo2ArroyoCavesPlayerRuntimeCoverage runtime,
         Fo2CharacterSelection character)
     {
         character.Validate(characterStart);
         if (characterStart.SourceProfileId != arroyo.SourceProfileId ||
+            temple.SourceProfileId != arroyo.SourceProfileId ||
             runtime.Profile.Id != "fo2-arroyo-map-3-player-runtime-v1" ||
             runtime.Player.MotionMode != CharacterBody3D.MotionModeEnum.Grounded ||
             !runtime.Player.CanOccupy(runtime.Player.CurrentTile))
@@ -58,6 +63,16 @@ internal sealed record Fo2CharacterStartSaveState(
             throw new InvalidOperationException(
                 "Fallout 2 player position does not resolve to its saved source tile.");
 
+        var player = runtime.Player;
+        Fo2ArroyoExitTransition? lastTransition = player.CurrentMapIndex switch
+        {
+            Fo2ArroyoCavesPresentationCatalog.MapIndex => null,
+            Fo2TemplePresentationCatalog.MapIndex
+                when player.CurrentMapSha256 == temple.MapSha256 &&
+                    player.ArrivalTile == arroyo.LiveExit.TargetTile => arroyo.LiveExit,
+            _ => throw new InvalidOperationException(
+                "Fallout 2 active map is outside the admitted Arroyo/Temple route."),
+        };
         return new Fo2CharacterStartSaveState(
             ResolvePath(configuredPath),
             "",
@@ -65,17 +80,18 @@ internal sealed record Fo2CharacterStartSaveState(
             character,
             runtime.Profile.Id,
             runtime.Profile.Sha256,
-            arroyo.MapSha256,
-            arroyo.WalkMaskSha256,
-            Fo2ArroyoCavesPresentationCatalog.MapIndex,
-            Fo2ArroyoCavesPresentationCatalog.Elevation,
-            runtime.Player.ArrivalTile,
-            runtime.Player.CurrentTile,
-            runtime.Player.Presentation.Direction,
+            player.CurrentMapSha256,
+            player.CurrentWalkMaskSha256,
+            player.CurrentMapIndex,
+            player.CurrentElevation,
+            player.ArrivalTile,
+            player.CurrentTile,
+            player.Presentation.Direction,
             position,
             runtime.Player.MotionMode.ToString(),
             runtime.Profile.BlockedMovementMode,
-            runtime.Profile.PlayerPresentationMode);
+            runtime.Profile.PlayerPresentationMode,
+            lastTransition);
     }
 
     internal Fo2CharacterStartSaveState Write()
@@ -125,6 +141,23 @@ internal sealed record Fo2CharacterStartSaveState(
                     blockedMovementMode = BlockedMovementMode,
                     presentationMode = PresentationMode,
                 },
+                lastTransition = LastTransition is null ? null : new
+                {
+                    sourceMapIndex = LastTransition.SourceMapIndex,
+                    sourceMapSha256 = LastTransition.SourceMapSha256,
+                    sourceTile = LastTransition.SourceTile,
+                    sourceElevation = LastTransition.SourceElevation,
+                    exitSerial = LastTransition.ExitSerial,
+                    exitFid = LastTransition.ExitFid,
+                    exitPid = LastTransition.ExitPid,
+                    sourcePathSha256 = LastTransition.SourcePathSha256,
+                    targetMapIndex = LastTransition.TargetMapIndex,
+                    targetLogicalPath = LastTransition.TargetLogicalPath,
+                    targetMapSha256 = LastTransition.TargetMapSha256,
+                    targetTile = LastTransition.TargetTile,
+                    targetElevation = LastTransition.TargetElevation,
+                    targetRotation = LastTransition.TargetRotation,
+                },
             };
             File.WriteAllText(
                 temporary,
@@ -146,6 +179,7 @@ internal sealed record Fo2CharacterStartSaveState(
         string configuredPath,
         Fo2CharacterStartCatalog characterStart,
         Fo2ArroyoCavesPresentationCatalog arroyo,
+        Fo2TemplePresentationCatalog temple,
         Fo2ArroyoPlayerProfile runtimeProfile)
     {
         var path = ResolvePath(configuredPath);
@@ -153,11 +187,14 @@ internal sealed record Fo2CharacterStartSaveState(
         var root = document.RootElement;
         var schema = RequiredString(root, "schema");
         var legacy = schema == LegacySchema;
-        if (schema != Schema && schema != LegacySchema ||
+        var previous = schema == PreviousSchema;
+        if (schema != Schema && schema != PreviousSchema && schema != LegacySchema ||
             RequiredString(root, "campaign") != "Fallout2" ||
-            RequiredString(root, "routeMode") != (legacy ? LegacyRouteMode : RouteMode) ||
+            RequiredString(root, "routeMode") !=
+                (legacy ? LegacyRouteMode : previous ? PreviousRouteMode : RouteMode) ||
             RequiredString(root, "sourceProfileId") != characterStart.SourceProfileId ||
-            characterStart.SourceProfileId != arroyo.SourceProfileId)
+            characterStart.SourceProfileId != arroyo.SourceProfileId ||
+            temple.SourceProfileId != arroyo.SourceProfileId)
             throw new InvalidOperationException(
                 "Fallout 2 save does not match the active owned source profile.");
 
@@ -197,19 +234,32 @@ internal sealed record Fo2CharacterStartSaveState(
         var currentTile = world.GetProperty("currentTile").GetInt32();
         var rotation = world.GetProperty("rotation").GetInt32();
         var position = ReadVector(world.GetProperty("position"));
-        if (mapIndex != Fo2ArroyoCavesPresentationCatalog.MapIndex ||
-            elevation != Fo2ArroyoCavesPresentationCatalog.Elevation ||
-            arrivalTile != arroyo.ArrivalTile ||
-            currentTile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height ||
-            !arroyo.Walkable[currentTile] ||
+        var lastTransition = ReadLastTransition(root, schema, arroyo);
+        var tileInRange = currentTile is >= 0 and < Fo1HexMath.Width * Fo1HexMath.Height;
+        var mapIdentityValid = mapIndex switch
+        {
+            Fo2ArroyoCavesPresentationCatalog.MapIndex =>
+                elevation == Fo2ArroyoCavesPresentationCatalog.Elevation &&
+                arrivalTile == arroyo.ArrivalTile &&
+                RequiredString(world, "mapSha256") == arroyo.MapSha256 &&
+                RequiredString(world, "walkMaskSha256") == arroyo.WalkMaskSha256 &&
+                tileInRange && arroyo.Walkable[currentTile] && lastTransition is null,
+            Fo2TemplePresentationCatalog.MapIndex =>
+                schema == Schema &&
+                elevation == arroyo.LiveExit.TargetElevation &&
+                arrivalTile == arroyo.LiveExit.TargetTile &&
+                RequiredString(world, "mapSha256") == temple.MapSha256 &&
+                lastTransition == arroyo.LiveExit,
+            _ => false,
+        };
+        if (!tileInRange ||
+            !mapIdentityValid ||
             rotation is < 0 or >= Fo1HexMath.DirectionCount ||
-            RequiredString(world, "mapSha256") != arroyo.MapSha256 ||
-            RequiredString(world, "walkMaskSha256") != arroyo.WalkMaskSha256 ||
             Fo1HexMath.NearestTile(new Vector3(position.X, 0.0f, position.Z)) != currentTile ||
             MathF.Abs(position.Y - runtimeProfile.SpawnCenterHeightMeters) >
                 runtimeProfile.FloorSnapLengthMeters)
             throw new InvalidOperationException(
-                "Fallout 2 saved Map 3 player state is outside the admitted Arroyo runtime.");
+                "Fallout 2 saved player state is outside the admitted Arroyo/Temple route.");
 
         var runtime = root.GetProperty("runtime");
         var motionMode = RequiredString(runtime, "motionMode");
@@ -230,8 +280,8 @@ internal sealed record Fo2CharacterStartSaveState(
             character,
             runtimeProfile.Id,
             runtimeProfile.Sha256,
-            arroyo.MapSha256,
-            arroyo.WalkMaskSha256,
+            RequiredString(world, "mapSha256"),
+            RequiredString(world, "walkMaskSha256"),
             mapIndex,
             elevation,
             arrivalTile,
@@ -240,7 +290,38 @@ internal sealed record Fo2CharacterStartSaveState(
             position,
             motionMode,
             blockedMovementMode,
-            presentationMode);
+            presentationMode,
+            lastTransition);
+    }
+
+    private static Fo2ArroyoExitTransition? ReadLastTransition(
+        JsonElement root,
+        string schema,
+        Fo2ArroyoCavesPresentationCatalog arroyo)
+    {
+        if (schema != Schema)
+            return null;
+        var value = root.GetProperty("lastTransition");
+        if (value.ValueKind == JsonValueKind.Null)
+            return null;
+        var expected = arroyo.LiveExit;
+        if (value.GetProperty("sourceMapIndex").GetInt32() != expected.SourceMapIndex ||
+            RequiredString(value, "sourceMapSha256") != expected.SourceMapSha256 ||
+            value.GetProperty("sourceTile").GetInt32() != expected.SourceTile ||
+            value.GetProperty("sourceElevation").GetInt32() != expected.SourceElevation ||
+            value.GetProperty("exitSerial").GetInt32() != expected.ExitSerial ||
+            RequiredString(value, "exitFid") != expected.ExitFid ||
+            RequiredString(value, "exitPid") != expected.ExitPid ||
+            RequiredString(value, "sourcePathSha256") != expected.SourcePathSha256 ||
+            value.GetProperty("targetMapIndex").GetInt32() != expected.TargetMapIndex ||
+            RequiredString(value, "targetLogicalPath") != expected.TargetLogicalPath ||
+            RequiredString(value, "targetMapSha256") != expected.TargetMapSha256 ||
+            value.GetProperty("targetTile").GetInt32() != expected.TargetTile ||
+            value.GetProperty("targetElevation").GetInt32() != expected.TargetElevation ||
+            value.GetProperty("targetRotation").GetInt32() != expected.TargetRotation)
+            throw new InvalidOperationException(
+                "Fallout 2 saved transition differs from the owned exit-grid contract.");
+        return expected;
     }
 
     private static string ResolvePath(string configuredPath)

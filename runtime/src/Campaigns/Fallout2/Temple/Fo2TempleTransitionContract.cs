@@ -59,6 +59,7 @@ internal sealed class Fo2TempleTransitionCatalog
     private Fo2TempleTransitionCatalog(
         string manifestPath,
         string manifestSha256,
+        string sourceMapSha256,
         Fo2TempleScriptProgram headerProgram,
         IReadOnlyList<Fo2TempleLiveScriptRecord> liveScriptRecords,
         string liveScriptRecordsSha256,
@@ -68,6 +69,7 @@ internal sealed class Fo2TempleTransitionCatalog
     {
         ManifestPath = manifestPath;
         ManifestSha256 = manifestSha256;
+        SourceMapSha256 = sourceMapSha256;
         HeaderProgram = headerProgram;
         LiveScriptRecords = liveScriptRecords;
         LiveScriptRecordsSha256 = liveScriptRecordsSha256;
@@ -78,6 +80,7 @@ internal sealed class Fo2TempleTransitionCatalog
 
     internal string ManifestPath { get; }
     internal string ManifestSha256 { get; }
+    internal string SourceMapSha256 { get; }
     internal Fo2TempleScriptProgram HeaderProgram { get; }
     internal IReadOnlyList<Fo2TempleLiveScriptRecord> LiveScriptRecords { get; }
     internal string LiveScriptRecordsSha256 { get; }
@@ -253,6 +256,7 @@ internal sealed class Fo2TempleTransitionCatalog
         return new Fo2TempleTransitionCatalog(
             manifestPath,
             Sha256(manifestBytes),
+            presentation.MapSha256,
             headerProgram,
             liveRecords,
             liveRecordsSha256,

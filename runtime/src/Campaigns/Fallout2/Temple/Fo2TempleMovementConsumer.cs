@@ -45,6 +45,7 @@ internal sealed class Fo2TempleMovementConsumer
     internal string TopologyProfileSha256 { get; }
     internal string WalkMaskSha256 { get; }
     internal Vector3 WorldPosition => _cursor.Position;
+    internal IReadOnlySet<int> ReachableTiles => _entryComponent;
 
     internal static Fo2TempleMovementConsumer Build(
         Node3D root,

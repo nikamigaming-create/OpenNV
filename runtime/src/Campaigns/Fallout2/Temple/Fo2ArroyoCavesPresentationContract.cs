@@ -2,6 +2,23 @@ using System.Text.Json;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
+internal sealed record Fo2ArroyoExitTransition(
+    int ExitSerial,
+    string ExitFid,
+    string ExitPid,
+    int SourceMapIndex,
+    string SourceMapSha256,
+    int SourceTile,
+    int SourceElevation,
+    IReadOnlyList<int> SourcePath,
+    string SourcePathSha256,
+    int TargetMapIndex,
+    string TargetLogicalPath,
+    string TargetMapSha256,
+    int TargetTile,
+    int TargetElevation,
+    int TargetRotation);
+
 internal sealed class Fo2ArroyoCavesPresentationCatalog
 {
     private const string CacheSchema = "opennv-fo2-arroyo-caves-presentation-cache/v1";
@@ -32,7 +49,8 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
         string walkMaskSha256,
         int walkableHexes,
         int arrivalComponentHexes,
-        string sourceTransitionSha256)
+        string sourceTransitionSha256,
+        Fo2ArroyoExitTransition liveExit)
     {
         ManifestPath = manifestPath;
         ManifestSha256 = manifestSha256;
@@ -52,6 +70,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
         WalkableHexes = walkableHexes;
         ArrivalComponentHexes = arrivalComponentHexes;
         SourceTransitionSha256 = sourceTransitionSha256;
+        LiveExit = liveExit;
     }
 
     internal string ManifestPath { get; }
@@ -72,6 +91,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
     internal int WalkableHexes { get; }
     internal int ArrivalComponentHexes { get; }
     internal string SourceTransitionSha256 { get; }
+    internal Fo2ArroyoExitTransition LiveExit { get; }
 
     internal static Fo2ArroyoCavesPresentationCatalog Load(
         string cacheManifestPath,
@@ -290,6 +310,13 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
                 arrivalComponentHexes)
             throw new InvalidOperationException(
                 "Fallout 2 Arroyo Caves arrival walk contract drifted.");
+        var liveExit = LoadLiveExit(
+            source,
+            transition,
+            sourceObjects,
+            walkable,
+            arrivalTile,
+            mapSha256);
 
         return new Fo2ArroyoCavesPresentationCatalog(
             manifestPath,
@@ -309,7 +336,139 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
             walkMaskSha256,
             walkable.Count(row => row),
             arrivalComponentHexes,
-            transition.ManifestSha256);
+            transition.ManifestSha256,
+            liveExit);
+    }
+
+    private static Fo2ArroyoExitTransition LoadLiveExit(
+        JsonElement source,
+        Fo2TempleTransitionCatalog transition,
+        IReadOnlyDictionary<int, Fo2TemplePresentationCatalog.SourceObject> sourceObjects,
+        IReadOnlyList<bool> walkable,
+        int arrivalTile,
+        string mapSha256)
+    {
+        var reciprocal = source.GetProperty("reciprocalTempleExitGrids")
+            .EnumerateArray().ToArray();
+        var component = ReachableTiles(arrivalTile, walkable);
+        if (reciprocal.Any(row =>
+                row.GetProperty("reachableFromIncomingPlacement").GetBoolean() !=
+                component.Contains(row.GetProperty("tile").GetInt32())))
+            throw new InvalidOperationException(
+                "Fallout 2 Arroyo Caves reciprocal exit reachability drifted.");
+        var reachable = reciprocal
+            .Where(row => component.Contains(row.GetProperty("tile").GetInt32()))
+            .Select(row => new
+            {
+                Row = row,
+                Serial = row.GetProperty("serial").GetInt32(),
+                Path = ShortestPath(arrivalTile, row.GetProperty("tile").GetInt32(), walkable),
+            })
+            .OrderBy(row => row.Path.Count)
+            .ThenBy(row => row.Serial)
+            .ToArray();
+        if (reachable.Length == 0)
+            throw new InvalidOperationException(
+                "Fallout 2 Arroyo Caves has no source-walkable reciprocal exit.");
+        var expected = reachable[0];
+        var declared = source.GetProperty("liveExitTransition");
+        var declaredSource = declared.GetProperty("source");
+        var declaredDestination = declared.GetProperty("destination");
+        var declaredPath = declared.GetProperty("path").EnumerateArray()
+            .Select(row => row.GetInt32()).ToArray();
+        var destination = expected.Row.GetProperty("destination");
+        var sourceTile = expected.Row.GetProperty("tile").GetInt32();
+        var sourceElevation = expected.Row.GetProperty("elevation").GetInt32();
+        var exitFid = Fo2TemplePresentationCatalog.RequiredString(expected.Row, "fid");
+        var exitPid = Fo2TemplePresentationCatalog.RequiredString(expected.Row, "pid");
+        if (Fo2TemplePresentationCatalog.RequiredString(declared, "selection") !=
+                "shortest-source-walk-path-then-serial-v1" ||
+            declaredSource.GetProperty("mapIndex").GetInt32() != MapIndex ||
+            Fo2TemplePresentationCatalog.RequiredHash(declaredSource, "mapSha256") != mapSha256 ||
+            declaredSource.GetProperty("exitSerial").GetInt32() != expected.Serial ||
+            declaredSource.GetProperty("tile").GetInt32() != sourceTile ||
+            declaredSource.GetProperty("elevation").GetInt32() != sourceElevation ||
+            Fo2TemplePresentationCatalog.RequiredString(declaredSource, "fid") != exitFid ||
+            Fo2TemplePresentationCatalog.RequiredString(declaredSource, "pid") != exitPid ||
+            !declaredPath.SequenceEqual(expected.Path) ||
+            declared.GetProperty("pathSteps").GetInt32() != expected.Path.Count - 1 ||
+            Fo2TemplePresentationCatalog.RequiredHash(declared, "pathSha256") !=
+                Fo2TempleMovementConsumer.PathSha256(expected.Path) ||
+            declaredDestination.GetProperty("mapIndex").GetInt32() !=
+                destination.GetProperty("mapIndex").GetInt32() ||
+            declaredDestination.GetProperty("tile").GetInt32() !=
+                destination.GetProperty("tile").GetInt32() ||
+            declaredDestination.GetProperty("elevation").GetInt32() !=
+                destination.GetProperty("elevation").GetInt32() ||
+            declaredDestination.GetProperty("rotation").GetInt32() !=
+                destination.GetProperty("rotation").GetInt32() ||
+            declaredDestination.GetProperty("mapIndex").GetInt32() !=
+                Fo2TemplePresentationCatalog.MapIndex ||
+            Fo2TemplePresentationCatalog.RequiredString(declaredDestination, "logicalPath") !=
+                "maps\\artemple.map" ||
+            Fo2TemplePresentationCatalog.RequiredHash(declaredDestination, "mapSha256") !=
+                transition.SourceMapSha256 ||
+            !sourceObjects.TryGetValue(expected.Serial, out var sourceObject) ||
+            sourceObject.ObjectType != 5 ||
+            sourceObject.Tile != sourceTile ||
+            sourceObject.Elevation != sourceElevation ||
+            sourceObject.Fid != exitFid ||
+            sourceObject.Pid != exitPid ||
+            sourceObject.InstanceValues.Count != 4 ||
+            sourceObject.InstanceValues[0] != Fo2TemplePresentationCatalog.MapIndex ||
+            sourceObject.InstanceValues[1] != declaredDestination.GetProperty("tile").GetInt32() ||
+            sourceObject.InstanceValues[2] != declaredDestination.GetProperty("elevation").GetInt32() ||
+            sourceObject.InstanceValues[3] != declaredDestination.GetProperty("rotation").GetInt32())
+            throw new InvalidOperationException(
+                "Fallout 2 Arroyo Caves live exit transition drifted from source records.");
+        return new Fo2ArroyoExitTransition(
+            expected.Serial,
+            exitFid,
+            exitPid,
+            MapIndex,
+            mapSha256,
+            sourceTile,
+            sourceElevation,
+            expected.Path,
+            Fo2TempleMovementConsumer.PathSha256(expected.Path),
+            declaredDestination.GetProperty("mapIndex").GetInt32(),
+            Fo2TemplePresentationCatalog.RequiredString(declaredDestination, "logicalPath"),
+            Fo2TemplePresentationCatalog.RequiredHash(declaredDestination, "mapSha256"),
+            declaredDestination.GetProperty("tile").GetInt32(),
+            declaredDestination.GetProperty("elevation").GetInt32(),
+            declaredDestination.GetProperty("rotation").GetInt32());
+    }
+
+    private static IReadOnlyList<int> ShortestPath(
+        int start,
+        int target,
+        IReadOnlyList<bool> walkable)
+    {
+        if (start is < 0 or >= HexEntryCount || target is < 0 or >= HexEntryCount ||
+            !walkable[start] || !walkable[target])
+            throw new InvalidOperationException(
+                "Fallout 2 Arroyo Caves live exit endpoint is not source-walkable.");
+        var parents = new Dictionary<int, int> { [start] = -1 };
+        var queue = new Queue<int>();
+        queue.Enqueue(start);
+        while (queue.Count > 0 && !parents.ContainsKey(target))
+        {
+            var tile = queue.Dequeue();
+            foreach (var neighbor in Fo1HexMath.Neighbors(tile))
+                if (walkable[neighbor] && !parents.ContainsKey(neighbor))
+                {
+                    parents.Add(neighbor, tile);
+                    queue.Enqueue(neighbor);
+                }
+        }
+        if (!parents.ContainsKey(target))
+            throw new InvalidOperationException(
+                "Fallout 2 Arroyo Caves reciprocal exit is outside the incoming component.");
+        var reversed = new List<int>();
+        for (var tile = target; tile >= 0; tile = parents[tile])
+            reversed.Add(tile);
+        reversed.Reverse();
+        return reversed;
     }
 
     private static void ValidateTransition(
@@ -358,6 +517,9 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
     }
 
     private static int ReachableCount(int start, IReadOnlyList<bool> walkable)
+        => ReachableTiles(start, walkable).Count;
+
+    private static HashSet<int> ReachableTiles(int start, IReadOnlyList<bool> walkable)
     {
         var visited = new HashSet<int> { start };
         var queue = new Queue<int>();
@@ -366,6 +528,6 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
             foreach (var neighbor in Fo1HexMath.Neighbors(queue.Dequeue()))
                 if (walkable[neighbor] && visited.Add(neighbor))
                     queue.Enqueue(neighbor);
-        return visited.Count;
+        return visited;
     }
 }

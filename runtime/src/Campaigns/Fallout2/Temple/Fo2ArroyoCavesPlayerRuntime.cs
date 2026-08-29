@@ -139,8 +139,13 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
     private HashSet<int>? _arrivalComponent;
     private Fo2ArroyoPlayerPresentation? _presentation;
     private Vector3 _spawnWorldMeters;
+    private bool _requireNeutralInput;
 
     internal int ArrivalTile { get; private set; }
+    internal int CurrentMapIndex { get; private set; }
+    internal int CurrentElevation { get; private set; }
+    internal string CurrentMapSha256 { get; private set; } = "";
+    internal string CurrentWalkMaskSha256 { get; private set; } = "";
     internal int CurrentTile { get; private set; }
     internal int CompletedTileTransitions { get; private set; }
     internal int RejectedMovementFrames { get; private set; }
@@ -168,6 +173,10 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         _profile = profile;
         _arrivalComponent = arrivalComponent.ToHashSet();
         ArrivalTile = catalog.ArrivalTile;
+        CurrentMapIndex = Fo2ArroyoCavesPresentationCatalog.MapIndex;
+        CurrentElevation = Fo2ArroyoCavesPresentationCatalog.Elevation;
+        CurrentMapSha256 = catalog.MapSha256;
+        CurrentWalkMaskSha256 = catalog.WalkMaskSha256;
         CurrentTile = ArrivalTile;
         _spawnWorldMeters = Fo1HexMath.Center(ArrivalTile) +
             Vector3.Up * profile.SpawnCenterHeightMeters;
@@ -183,6 +192,8 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         SetMeta("player_runtime_profile_sha256", profile.Sha256);
         SetMeta("source_map_sha256", catalog.MapSha256);
         SetMeta("source_walk_mask_sha256", catalog.WalkMaskSha256);
+        SetMeta("current_map_index", CurrentMapIndex);
+        SetMeta("current_elevation", CurrentElevation);
         SetMeta("blocked_movement_mode", profile.BlockedMovementMode);
         SetMeta("arrival_tile", ArrivalTile);
         SetMeta("arrival_rotation", catalog.ArrivalRotation);
@@ -230,6 +241,13 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
             _profile.MoveRight.Action,
             _profile.MoveForward.Action,
             _profile.MoveBackward.Action);
+        if (_requireNeutralInput)
+        {
+            if (input.IsZeroApprox())
+                _requireNeutralInput = false;
+            else
+                input = Vector2.Zero;
+        }
         var desired = new Vector3(input.X, 0.0f, input.Y);
         if (desired.LengthSquared() > 1.0f)
             desired = desired.Normalized();
@@ -295,13 +313,53 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
                 _profile.FloorSnapLengthMeters ||
             rotation is < 0 or >= Fo1HexMath.DirectionCount)
             throw new InvalidOperationException(
-                "Fallout 2 saved player state is outside the admitted Map 3 runtime.");
+                "Fallout 2 saved player state is outside the admitted active-map runtime.");
         Position = position;
         Velocity = Vector3.Zero;
         CurrentTile = tile;
         _presentation.SetDirection(rotation);
         SetMeta("current_tile", CurrentTile);
         SetMeta("restored_from_save", true);
+    }
+
+    internal void EnterTemple(
+        Fo2TempleSceneCoverage destination,
+        Fo2ArroyoExitTransition transition)
+    {
+        if (_profile is null || _arrivalComponent is null || _presentation is null ||
+            CurrentMapIndex != transition.SourceMapIndex ||
+            CurrentElevation != transition.SourceElevation ||
+            CurrentMapSha256 != transition.SourceMapSha256 ||
+            CurrentTile != transition.SourceTile ||
+            destination.MapSha256 != transition.TargetMapSha256 ||
+            destination.EntryElevation != transition.TargetElevation ||
+            !destination.Topology.Movement.CanReachFromEntry(transition.TargetTile) ||
+            destination.Topology.WalkMaskSha256.Length != 64)
+            throw new InvalidOperationException(
+                "Fallout 2 source exit cannot enter the admitted Temple destination.");
+        Reparent(destination.Root, keepGlobalTransform: false);
+        _arrivalComponent = destination.Topology.Movement.ReachableTiles.ToHashSet();
+        CurrentMapIndex = transition.TargetMapIndex;
+        CurrentElevation = transition.TargetElevation;
+        CurrentMapSha256 = transition.TargetMapSha256;
+        CurrentWalkMaskSha256 = destination.Topology.WalkMaskSha256;
+        ArrivalTile = transition.TargetTile;
+        CurrentTile = transition.TargetTile;
+        Name = "MAP_126_EXIT_ARRIVAL_CHOSEN_ONE_PLAYER_BODY";
+        _spawnWorldMeters = Fo1HexMath.Center(CurrentTile) +
+            Vector3.Up * _profile.SpawnCenterHeightMeters;
+        Position = _spawnWorldMeters;
+        Velocity = Vector3.Zero;
+        _presentation.SetDirection(transition.TargetRotation);
+        _requireNeutralInput = true;
+        SetMeta("source_map_sha256", CurrentMapSha256);
+        SetMeta("source_walk_mask_sha256", CurrentWalkMaskSha256);
+        SetMeta("current_map_index", CurrentMapIndex);
+        SetMeta("current_elevation", CurrentElevation);
+        SetMeta("arrival_tile", ArrivalTile);
+        SetMeta("arrival_rotation", transition.TargetRotation);
+        SetMeta("current_tile", CurrentTile);
+        SetMeta("last_exit_serial", transition.ExitSerial);
     }
 
     internal bool CanOccupy(int tile) =>

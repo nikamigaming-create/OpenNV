@@ -5,6 +5,8 @@ namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 public sealed partial class Fo2CharacterStartHost : Node3D
 {
     private Fo2ArroyoCavesPresentationCatalog _arroyo = null!;
+    private Fo2TemplePresentationCatalog _temple = null!;
+    private Fo2TempleTransitionCatalog _transition = null!;
     private Fo2ArroyoPlayerPresentationCatalog _malePresentation = null!;
     private Fo2CharacterStartCatalog _characterStart = null!;
     private string _savePath = "";
@@ -13,9 +15,11 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     internal Fo2CharacterPicker Picker { get; private set; } = null!;
     internal Fo2CharacterSelection? SelectedCharacter { get; private set; }
     internal Fo2ArroyoCavesSceneCoverage? Scene { get; private set; }
+    internal Fo2TempleSceneCoverage? TempleScene { get; private set; }
     internal Fo2ArroyoCavesPlayerRuntimeCoverage? Runtime { get; private set; }
     internal Fo2CharacterStartSaveState? CurrentSave { get; private set; }
     internal bool RestoredFromSave { get; private set; }
+    internal Fo2ArroyoExitTransition? LastTransition { get; private set; }
     internal string SavePath => _savePath;
 
     public override void _Ready()
@@ -23,14 +27,14 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         try
         {
             var options = Fo2ArroyoCavesProofOptions.Parse(OS.GetCmdlineUserArgs());
-            var temple = Fo2TemplePresentationCatalog.Load(
+            _temple = Fo2TemplePresentationCatalog.Load(
                 Fo2ArroyoCavesProofOptions.Require(options, "fo2-temple-cache"));
-            var transition = Fo2TempleTransitionCatalog.Load(
+            _transition = Fo2TempleTransitionCatalog.Load(
                 Fo2ArroyoCavesProofOptions.Require(options, "fo2-temple-transitions"),
-                temple);
+                _temple);
             _arroyo = Fo2ArroyoCavesPresentationCatalog.Load(
                 Fo2ArroyoCavesProofOptions.Require(options, "fo2-arroyo-cache"),
-                transition);
+                _transition);
             _malePresentation = Fo2ArroyoPlayerPresentationCatalog.Load(
                 Fo2ArroyoCavesProofOptions.Require(options, "fo2-player-cache"),
                 _arroyo.SourceProfileId);
@@ -54,6 +58,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     _savePath,
                     _characterStart,
                     _arroyo,
+                    _temple,
                     runtimeProfile);
                 StartArroyo(state.Character, state);
                 RestoredFromSave = true;
@@ -98,6 +103,14 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     this,
                     walkRestoreRoot,
                     Fo2ArroyoCavesProofOptions.Require(options, "fo2-walk-animation-sex"));
+            else if (options.TryGetValue(
+                    "fo2-exit-transition-write-proof",
+                    out var exitWriteRoot))
+                _ = Fo2ExitTransitionProof.RunWrite(this, exitWriteRoot);
+            else if (options.TryGetValue(
+                    "fo2-exit-transition-restore-proof",
+                    out var exitRestoreRoot))
+                _ = Fo2ExitTransitionProof.RunRestore(this, exitRestoreRoot);
         }
         catch (Exception exception)
         {
@@ -141,10 +154,28 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             selectedPresentation);
         var player = Runtime.Player;
         if (restoredState is not null)
+        {
+            if (restoredState.MapIndex == Fo2TemplePresentationCatalog.MapIndex)
+            {
+                var exit = restoredState.LastTransition ?? throw new InvalidOperationException(
+                    "Fallout 2 Temple save has no source-authored transition identity.");
+                player.Restore(
+                    exit.SourceTile,
+                    Fo1HexMath.Center(exit.SourceTile) +
+                        Vector3.Up * Runtime.Profile.SpawnCenterHeightMeters,
+                    exit.TargetRotation);
+                EnterTemple(exit);
+            }
+            if (restoredState.MapSha256 != player.CurrentMapSha256 ||
+                restoredState.WalkMaskSha256 != player.CurrentWalkMaskSha256 ||
+                restoredState.Elevation != player.CurrentElevation)
+                throw new InvalidOperationException(
+                    "Fallout 2 saved active-map identity differs from the loaded source scene.");
             player.Restore(
                 restoredState.CurrentTile,
                 restoredState.Position,
                 restoredState.Rotation);
+        }
         player.SetMeta("selected_character_id", character.Id);
         player.SetMeta("selected_character_name", character.Profile.Name);
         player.SetMeta("selected_character_sex", character.Profile.Sex);
@@ -156,13 +187,44 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         player.SetMeta("selected_character_source_id", character.Source.Id);
         player.SetMeta("selected_gcd_sha256", character.GcdSha256);
         if (_persistenceEnabled)
-            player.PersistenceBoundaryReached += () => PersistCurrentState();
+            player.PersistenceBoundaryReached += OnPlayerPersistenceBoundary;
         if (_persistenceEnabled && restoredState is null)
             PersistCurrentState();
         GD.Print(
             $"OPENNV_FO2_CHARACTER_HANDOFF mode={character.Mode} name={character.Profile.Name} " +
-            $"sex={character.Profile.Sex} map={Scene.MapIndex} tile={player.CurrentTile} " +
+            $"sex={character.Profile.Sex} map={player.CurrentMapIndex} tile={player.CurrentTile} " +
             $"fid={selectedPresentation.Fid} restored={restoredState is not null}");
+    }
+
+    private void OnPlayerPersistenceBoundary()
+    {
+        var player = Runtime?.Player ?? throw new InvalidOperationException(
+            "Fallout 2 player persistence boundary has no runtime.");
+        if (player.CurrentMapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
+            player.CurrentTile == _arroyo.LiveExit.SourceTile)
+            EnterTemple(_arroyo.LiveExit);
+        PersistCurrentState();
+    }
+
+    private void EnterTemple(Fo2ArroyoExitTransition exit)
+    {
+        if (Runtime is null || Scene is null || TempleScene is not null ||
+            exit != _arroyo.LiveExit ||
+            _temple.SourceProfileId != _arroyo.SourceProfileId ||
+            _temple.MapSha256 != exit.TargetMapSha256 ||
+            exit.TargetMapIndex != Fo2TemplePresentationCatalog.MapIndex)
+            throw new InvalidOperationException(
+                "Fallout 2 Arroyo exit cannot resolve its owned Temple destination.");
+        var sourceRoot = Scene.Root;
+        TempleScene = Fo2TempleScene.Build(_temple, this);
+        Runtime.Player.EnterTemple(TempleScene, exit);
+        LastTransition = exit;
+        sourceRoot.QueueFree();
+        GD.Print(
+            $"OPENNV_FO2_EXIT_TRANSITION serial={exit.ExitSerial} " +
+            $"source={exit.SourceMapIndex}:{exit.SourceTile} " +
+            $"target={exit.TargetMapIndex}:{exit.TargetTile} " +
+            $"elevation={exit.TargetElevation} rotation={exit.TargetRotation}");
     }
 
     internal Fo2CharacterStartSaveState PersistCurrentState()
@@ -174,6 +236,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 _savePath,
                 _characterStart,
                 _arroyo,
+                _temple,
                 Runtime,
                 SelectedCharacter)
             .Write();
@@ -181,4 +244,5 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     }
 
     internal Fo2CharacterStartCatalog CharacterStart => _characterStart;
+    internal Fo2ArroyoCavesPresentationCatalog Arroyo => _arroyo;
 }
