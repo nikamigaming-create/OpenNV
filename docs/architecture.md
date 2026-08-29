@@ -113,6 +113,23 @@ flowchart TD
     SaloonRoot --> Sunny[Enabled Sunny ACHR]
 ```
 
+### New Vegas cache-family provenance
+
+Prepared New Vegas caches admit four compiler families: `static`, `cell`,
+`opening`, and `actor`. Each generated family embeds its own source-and-recipe
+SHA-256 identity, and `install-manifest.json` records the same complete set.
+The actor identity deliberately includes the opening graph because its runtime
+animation membership comes from that graph. Static and CELL identities exclude
+opening/UI sources, so an opening-only edit cannot invalidate unchanged world
+output.
+
+Runtime restore is read-only and rejects legacy single-identity caches, missing
+families, owned-input or output hash drift, and embedded-family mismatches. An
+explicit prepare reuses a family only when its compiler identity, owned inputs,
+route recipes, dependency manifests, and every admitted output hash match. A
+failed family is rebuilt together with its real dependents; restore never
+silently starts a compiler.
+
 The actor data boundary is separate from model assembly and rendering:
 
 ```mermaid
@@ -319,6 +336,7 @@ retail data, or promotion verdict.
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
 | `havok_collision_gltf.py` | Bounded authored packed triangles plus convex/list dynamic body, shape, mass, friction, bounce, damping and filter export | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
+| `compiler_provenance.py` | Family-scoped static/CELL/opening/actor compiler identities and source/recipe dependency sets | Cache mutation, runtime loading, or owned-asset distribution |
 | `cell_scene.py` | Recipe selection, XTEL origin, full Gamebryo-to-Godot transform/scale conversion, asset/reference/material manifest | Godot nodes or input |
 | `material_contract.py` | Shared NIF-surface to runtime material binding translation | Mesh export, archive lookup, or Godot resources |
 | `scene_asset_pipeline.py` | Shared bounded-scene NIF extraction, interactions, and data-resolved loadout artifacts | CELL selection or Godot nodes |

@@ -18,7 +18,10 @@ internal static class LegalAssetPreparer
         var contentTool = ResolveContentTool(options, configuration)
             ?? throw new FileNotFoundException(
                 "Neither the packaged nor source-checkout legal-content helper is available.");
-        var compiler = ReadContentToolCompilerIdentity(contentTool);
+        var cellRecipe = options.TryGetValue("cell-recipe", out var configuredRecipe)
+            ? configuredRecipe
+            : configuration.LegalAssets.DefaultCellRecipe;
+        var compilers = ReadContentToolCompilerIdentities(contentTool, cellRecipe);
         var cacheRoot = ResolveCacheRoot(options, configuration);
         var arguments = new List<string>
         {
@@ -27,9 +30,7 @@ internal static class LegalAssetPreparer
             "--cache-root",
             cacheRoot,
             "--cell-recipe",
-            options.TryGetValue("cell-recipe", out var configuredRecipe)
-                ? configuredRecipe
-                : configuration.LegalAssets.DefaultCellRecipe,
+            cellRecipe,
         };
         var (exitCode, output) = ExecuteContentTool(contentTool, arguments);
         if (exitCode != 0)
@@ -38,7 +39,7 @@ internal static class LegalAssetPreparer
                 $"Legal-content helper exited with code {exitCode}: {output}");
         }
 
-        return OpenPreparedCache(cacheRoot, dataRoot, compiler, configuration);
+        return OpenPreparedCache(cacheRoot, dataRoot, compilers, configuration);
     }
 
     internal static bool TryRestore(
@@ -59,9 +60,12 @@ internal static class LegalAssetPreparer
             var contentTool = ResolveContentTool(options, configuration)
                 ?? throw new FileNotFoundException(
                     "Neither the packaged nor source-checkout legal-content helper is available.");
-            var compiler = ReadContentToolCompilerIdentity(contentTool);
+            var cellRecipe = options.TryGetValue("cell-recipe", out var configuredRecipe)
+                ? configuredRecipe
+                : configuration.LegalAssets.DefaultCellRecipe;
+            var compilers = ReadContentToolCompilerIdentities(contentTool, cellRecipe);
             var dataRoot = ReadManifestDataRoot(manifestPath);
-            prepared = OpenPreparedCache(cacheRoot, dataRoot, compiler, configuration);
+            prepared = OpenPreparedCache(cacheRoot, dataRoot, compilers, configuration);
             return true;
         }
         catch (Exception exception)
@@ -74,7 +78,7 @@ internal static class LegalAssetPreparer
     private static PreparedContent OpenPreparedCache(
         string cacheRoot,
         string expectedDataRoot,
-        CompilerIdentity expectedCompiler,
+        CompilerIdentitySet expectedCompilers,
         RuntimeConfiguration configuration)
     {
         var manifestPath = Path.Combine(cacheRoot, "install-manifest.json");
@@ -83,12 +87,15 @@ internal static class LegalAssetPreparer
         if (root.GetProperty("schema").GetString() != CacheSchema ||
             root.GetProperty("status").GetString() != "prepared-legal-assets")
             throw new InvalidOperationException($"Unexpected legal-asset cache manifest: {manifestPath}");
-        var manifestDataRoot = ResolvePath(root.GetProperty("install").GetProperty("dataRoot").GetString()!);
+        var install = root.GetProperty("install");
+        var manifestDataRoot = ResolvePath(install.GetProperty("dataRoot").GetString()!);
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
         if (!expectedDataRoot.Equals(manifestDataRoot, comparison))
             throw new InvalidOperationException("Legal-asset cache manifest belongs to a different Data folder.");
+        ValidateInstalledInputs(install, manifestDataRoot);
+        ValidateAdmittedCompilerFamilies(root, expectedCompilers);
         var outputs = root.GetProperty("outputs");
         var modelPath = outputs.GetProperty("model").GetString()!;
         var sidecarPath = outputs.GetProperty("sidecar").GetString()!;
@@ -114,21 +121,33 @@ internal static class LegalAssetPreparer
                 : null,
             outputs.GetProperty("openingManifest").GetString()!,
             outputs.GetProperty("openingManifestSha256").GetString()!);
-        ValidateCompilerProvenance(prepared.SidecarPath, expectedCompiler);
+        ValidateCompilerProvenance(prepared.SidecarPath, expectedCompilers["static"]);
         if (prepared.CellScenePath is not null)
         {
             if (prepared.CellSceneSha256 is null)
                 throw new InvalidOperationException("Cell scene has no install-manifest hash.");
             VerifyHash(prepared.CellScenePath, prepared.CellSceneSha256);
-            ValidateCellCompilerProvenance(prepared.CellScenePath, expectedCompiler);
+            ValidateCellCompilerProvenance(prepared.CellScenePath, expectedCompilers["cell"]);
+            foreach (var linked in outputs.GetProperty("linkedCellScenes").EnumerateArray())
+            {
+                var linkedPath = linked.GetProperty("scene").GetString()!;
+                VerifyHash(linkedPath, linked.GetProperty("sha256").GetString()!);
+                ValidateCellCompilerProvenance(linkedPath, expectedCompilers["cell"]);
+            }
         }
         if (prepared.ActorScenesPath is not null)
         {
             if (prepared.ActorScenesSha256 is null)
                 throw new InvalidOperationException("Actor scene set has no install-manifest hash.");
             VerifyHash(prepared.ActorScenesPath, prepared.ActorScenesSha256);
+            ValidateActorCompilerProvenance(
+                prepared.ActorScenesPath,
+                expectedCompilers["actor"]);
         }
         VerifyHash(prepared.OpeningManifestPath, prepared.OpeningManifestSha256);
+        ValidateOpeningCompilerProvenance(
+            prepared.OpeningManifestPath,
+            expectedCompilers["opening"]);
         ValidateOpeningManifest(prepared.OpeningManifestPath, configuration);
         return prepared;
     }
@@ -161,15 +180,116 @@ internal static class LegalAssetPreparer
             "Cell scene");
     }
 
+    private static void ValidateActorCompilerProvenance(
+        string actorSetPath,
+        CompilerIdentity expectedCompiler)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(actorSetPath));
+        ValidateCompilerIdentity(
+            document.RootElement.GetProperty("compiler"),
+            expectedCompiler,
+            "Actor scene set");
+        foreach (var actor in document.RootElement.GetProperty("actors").EnumerateArray())
+        {
+            var actorPath = actor.GetProperty("scene").GetString()!;
+            VerifyHash(actorPath, actor.GetProperty("sha256").GetString()!);
+            using var actorDocument = JsonDocument.Parse(File.ReadAllText(actorPath));
+            ValidateCompilerIdentity(
+                actorDocument.RootElement.GetProperty("compiler"),
+                expectedCompiler,
+                "Actor scene");
+        }
+    }
+
+    private static void ValidateOpeningCompilerProvenance(
+        string openingPath,
+        CompilerIdentity expectedCompiler)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(openingPath));
+        ValidateCompilerIdentity(
+            document.RootElement.GetProperty("compiler"),
+            expectedCompiler,
+            "Opening manifest");
+    }
+
+    private static void ValidateAdmittedCompilerFamilies(
+        JsonElement manifest,
+        CompilerIdentitySet expectedCompilers)
+    {
+        var admitted = manifest.GetProperty("compilerFamilies");
+        var names = admitted.EnumerateObject().Select(value => value.Name).ToHashSet();
+        if (!names.SetEquals(expectedCompilers.Families.Keys))
+            throw new InvalidOperationException(
+                "Legal-asset cache compiler-family set differs from the active helper.");
+        foreach (var expected in expectedCompilers.Families)
+            ValidateCompilerIdentity(
+                admitted.GetProperty(expected.Key),
+                expected.Value,
+                $"Legal-asset {expected.Key} family");
+    }
+
+    private static void ValidateInstalledInputs(JsonElement install, string dataRoot)
+    {
+        var inputs = new Dictionary<string, (long Bytes, string Sha256)>(
+            OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal);
+        AddInstalledInput(inputs, dataRoot, install.GetProperty("master"));
+        AddInstalledInput(inputs, dataRoot, install.GetProperty("meshesArchive"));
+        AddInstalledInput(inputs, dataRoot, install.GetProperty("uiArchive"));
+        AddInstalledInput(
+            inputs,
+            Path.GetDirectoryName(dataRoot)!,
+            install.GetProperty("defaultIni"));
+        var preferences = install.GetProperty("preferencesIni");
+        if (preferences.ValueKind == JsonValueKind.Object)
+        {
+            var path = preferences.GetProperty("path").GetString()!;
+            AddInstalledInput(inputs, Path.GetDirectoryName(path)!, preferences);
+        }
+        foreach (var texture in install.GetProperty("textureArchives").EnumerateArray())
+            AddInstalledInput(inputs, dataRoot, texture);
+        foreach (var key in new[] { "archiveStack", "audioArchiveStack" })
+            foreach (var archive in install.GetProperty(key).GetProperty("archives").EnumerateArray())
+                AddInstalledInput(inputs, dataRoot, archive);
+        foreach (var input in inputs)
+        {
+            if (!File.Exists(input.Key) || new FileInfo(input.Key).Length != input.Value.Bytes)
+                throw new InvalidOperationException(
+                    $"Owned input differs from prepared cache: {input.Key}");
+            VerifyHash(input.Key, input.Value.Sha256);
+        }
+    }
+
+    private static void AddInstalledInput(
+        IDictionary<string, (long Bytes, string Sha256)> inputs,
+        string root,
+        JsonElement row)
+    {
+        var file = row.GetProperty("file").GetString()!;
+        if (!Path.GetFileName(file).Equals(file, StringComparison.Ordinal))
+            throw new InvalidOperationException("Owned input manifest contains a non-local file name.");
+        var path = Path.GetFullPath(Path.Combine(root, file));
+        var expected = (
+            row.GetProperty("bytes").GetInt64(),
+            row.GetProperty("sha256").GetString()!);
+        if (inputs.TryGetValue(path, out var existing) && existing != expected)
+            throw new InvalidOperationException(
+                $"Owned input manifest contains contradictory identities: {path}");
+        inputs[path] = expected;
+    }
+
     private static void ValidateCompilerIdentity(
         JsonElement source,
         CompilerIdentity expected,
         string label)
     {
         var actual = new CompilerIdentity(
+            source.GetProperty("family").GetString()!,
             source.GetProperty("name").GetString()!,
             source.GetProperty("sha256").GetString()!);
-        if (!actual.Name.Equals(expected.Name, StringComparison.Ordinal) ||
+        if (!actual.Family.Equals(expected.Family, StringComparison.Ordinal) ||
+            !actual.Name.Equals(expected.Name, StringComparison.Ordinal) ||
             !actual.Sha256.Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 $"{label} compiler identity differs from the active legal-content helper.");
@@ -302,12 +422,13 @@ internal static class LegalAssetPreparer
             : null;
     }
 
-    private static CompilerIdentity ReadContentToolCompilerIdentity(
-        ContentToolInvocation contentTool)
+    private static CompilerIdentitySet ReadContentToolCompilerIdentities(
+        ContentToolInvocation contentTool,
+        string cellRecipe)
     {
         var (exitCode, output) = ExecuteContentTool(
             contentTool,
-            new[] { "--compiler-identity" });
+            new[] { "--compiler-identity", "--cell-recipe", cellRecipe });
         const string Prefix = "OPENNV_CONTENT_COMPILER_IDENTITY ";
         var payload = output.Split(
                 new[] { '\r', '\n' },
@@ -317,27 +438,43 @@ internal static class LegalAssetPreparer
             throw new InvalidOperationException(
                 $"Legal-content helper identity query failed with code {exitCode}: {output}");
         using var document = JsonDocument.Parse(payload[Prefix.Length..]);
-        var identity = new CompilerIdentity(
-            document.RootElement.GetProperty("name").GetString()!,
-            document.RootElement.GetProperty("sha256").GetString()!,
-            document.RootElement.TryGetProperty("artifactSha256", out var artifactSha256)
-                ? artifactSha256.GetString()
-                : null);
-        if (!identity.Name.Equals(contentTool.CompilerName, StringComparison.Ordinal))
+        var root = document.RootElement;
+        if (root.GetProperty("schema").GetString() !=
+            "opennv-content-compiler-identities/v1")
             throw new InvalidOperationException(
-                "Legal-content helper reported an unexpected compiler name.");
+                "Legal-content helper reported an unexpected compiler-family contract.");
+        var families = new Dictionary<string, CompilerIdentity>(StringComparer.Ordinal);
+        foreach (var row in root.GetProperty("families").EnumerateObject())
+        {
+            var source = row.Value;
+            var identity = new CompilerIdentity(
+                source.GetProperty("family").GetString()!,
+                source.GetProperty("name").GetString()!,
+                source.GetProperty("sha256").GetString()!,
+                source.TryGetProperty("artifactSha256", out var artifactSha256)
+                    ? artifactSha256.GetString()
+                    : null);
+            if (!identity.Family.Equals(row.Name, StringComparison.Ordinal) ||
+                !identity.Name.Equals(contentTool.CompilerName, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Legal-content helper reported an unexpected compiler identity.");
+            families.Add(row.Name, identity);
+        }
+        var expectedFamilies = new[] { "static", "cell", "opening", "actor" };
+        if (!families.Keys.ToHashSet().SetEquals(expectedFamilies))
+            throw new InvalidOperationException(
+                "Legal-content helper omitted a required compiler family.");
         if (contentTool.Packaged)
         {
-            if (identity.ArtifactSha256 is null)
-                throw new InvalidOperationException(
-                    "Packaged legal-content helper omitted its binary hash.");
             using var stream = File.OpenRead(contentTool.Executable);
             var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-            if (!actual.Equals(identity.ArtifactSha256, StringComparison.OrdinalIgnoreCase))
+            if (families.Values.Any(identity =>
+                identity.ArtifactSha256 is null ||
+                !actual.Equals(identity.ArtifactSha256, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException(
                     "Packaged legal-content helper reported an incorrect binary hash.");
         }
-        return identity;
+        return new CompilerIdentitySet(families);
     }
 
     private static (int ExitCode, string Output) ExecuteContentTool(
@@ -415,7 +552,14 @@ internal static class LegalAssetPreparer
         string CompilerName);
 
     private sealed record CompilerIdentity(
+        string Family,
         string Name,
         string Sha256,
         string? ArtifactSha256 = null);
+
+    private sealed record CompilerIdentitySet(
+        IReadOnlyDictionary<string, CompilerIdentity> Families)
+    {
+        internal CompilerIdentity this[string family] => Families[family];
+    }
 }

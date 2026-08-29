@@ -24,6 +24,7 @@ from owned_archive_stack import OwnedArchiveStack
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 from runtime_configuration import RuntimeConfiguration
 from texture_pipeline import OwnedTexturePipeline
+from compiler_provenance import compiler_provenance
 
 
 OPENING_RECIPE_SCHEMA = "opennv-owned-opening-recipe/v1"
@@ -4768,6 +4769,7 @@ def prepare_opening_manifest(
     manifest = {
         "schema": OPENING_MANIFEST_SCHEMA,
         "status": OPENING_MANIFEST_STATUS,
+        "compiler": compiler_provenance("opening"),
         "campaign": recipe["campaign"],
         "recipe": {
             "id": recipe["id"],

@@ -36,6 +36,7 @@ from scene_asset_pipeline import (
 )
 from texture_pipeline import OwnedTexturePipeline, TexturePipeline
 from runtime_configuration import load_runtime_configuration
+from compiler_provenance import compiler_provenance
 from plugin_stack import (
     FORM_ID_HEX_CHARACTERS,
     FORM_ID_OBJECT_MASK,
@@ -180,6 +181,7 @@ def prepare_exterior_scene(
     retail_grass_observation: Path | None = None,
     retail_grass_render_state_observation: Path | None = None,
     owned_archives: OwnedArchiveStack | None = None,
+    family_compiler: dict[str, str] | None = None,
 ) -> dict[str, object]:
     configuration = load_runtime_configuration()
     scene_archives = owned_archives if owned_archives is not None else BsaArchive(meshes_path)
@@ -843,7 +845,7 @@ def prepare_exterior_scene(
                 else None
             ),
         },
-        "compiler": compiler,
+        "compiler": family_compiler or compiler_provenance("cell"),
         "configuration": configuration.manifest(),
         "cell": {
             "formId": form_id(cell.form_id),

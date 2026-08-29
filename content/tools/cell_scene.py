@@ -29,6 +29,7 @@ from scene_asset_pipeline import (
 from runtime_configuration import load_runtime_configuration
 from first_person_rig import prepare_first_person_rig
 from owned_archive_stack import OwnedArchiveStack
+from compiler_provenance import compiler_provenance
 
 
 CELL_SCENE_SCHEMA = "opennv-cell-scene/v13"
@@ -337,6 +338,7 @@ def prepare_cell_scene(
     recipe: dict[str, object],
     master_sha256: str,
     owned_archives: OwnedArchiveStack | None = None,
+    family_compiler: dict[str, str] | None = None,
 ) -> dict[str, object]:
     configuration = load_runtime_configuration()
     units_to_meters = configuration.world_units_to_meters
@@ -572,7 +574,7 @@ def prepare_cell_scene(
                 owned_archives.manifest() if owned_archives is not None else None
             ),
         },
-        "compiler": compiler,
+        "compiler": family_compiler or compiler_provenance("cell"),
         "configuration": configuration.manifest(),
         "cell": {
             "formId": form_id(cell.form_id),

@@ -38,12 +38,13 @@ from prepare_wasteland_gallery import (  # noqa: E402
 
 
 class WastelandGalleryTest(unittest.TestCase):
-    def test_source_compiler_identity_binds_cell_and_actor_dependencies(self):
+    def test_static_compiler_identity_excludes_route_and_actor_dependencies(self):
         sources = compiler_provenance_source_paths()
         source_names = {path.name for path in sources}
-        self.assertIn("cell_catalog.py", source_names)
-        self.assertIn("actor_catalog.py", source_names)
-        self.assertIn("scene_asset_pipeline.py", source_names)
+        self.assertIn("export_static_nif_gltf.py", source_names)
+        self.assertNotIn("cell_catalog.py", source_names)
+        self.assertNotIn("actor_catalog.py", source_names)
+        self.assertNotIn("opening_catalog.py", source_names)
         self.assertEqual(
             compiler_provenance()["sha256"],
             compiler_sources_sha256(sources),
@@ -51,11 +52,11 @@ class WastelandGalleryTest(unittest.TestCase):
         self.assertNotEqual(
             compiler_sources_sha256(sources),
             compiler_sources_sha256(
-                path for path in sources if path.name != "actor_catalog.py"
+                path for path in sources if path.name != "export_static_nif_gltf.py"
             ),
         )
         resolved_sources = {path.resolve() for path in sources}
-        for contract_name in ("visualArchives", "audioArchives"):
+        for contract_name in ("nifDecoder", "materialBinding"):
             contract = configured_recipe_path(contract_name).resolve()
             self.assertIn(contract, resolved_sources)
             self.assertNotEqual(

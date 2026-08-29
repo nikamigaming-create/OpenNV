@@ -167,6 +167,18 @@ runtime material bindings. Build scripts do not repeat retail weapon stats or
 coverage totals: `validate_runtime_report.py` joins reports back to the actual
 owned-data manifests and this configuration.
 
+### Prepared-cache compiler families
+
+New Vegas derived caches use four separately hashed compiler families:
+`static`, `cell`, `opening`, and `actor`. Opening/UI source changes affect the
+opening family and, because that graph owns actor animation membership, the
+actor family. They do not affect static NIF or CELL world identity. Every
+admitted manifest carries its family/name/hash tuple; the install manifest seals
+the complete family set and owned-input hashes. Explicit preparation reuses a
+family only when those identities, route recipes, dependency rows, and output
+hashes all match. `TryRestore` never recompiles. Legacy single-identity caches
+fail closed and require one explicit migration build.
+
 ## Configuration ownership
 
 | Section | Owner and present truth |

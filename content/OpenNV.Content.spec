@@ -7,7 +7,7 @@ import pyffi
 content_root = Path(SPECPATH)
 tools = content_root / "tools"
 sys.path.insert(0, str(tools))
-from export_static_nif_gltf import compiler_provenance_source_paths
+from compiler_provenance import all_compiler_provenance_source_paths
 
 pyffi_root = Path(pyffi.__file__).resolve().parent
 pyffi_data = [(str(pyffi_root / "VERSION"), "pyffi")]
@@ -19,7 +19,7 @@ pyffi_data.append((str(content_root / "recipes"), "recipes"))
 pyffi_data.append((str(content_root.parent / "runtime" / "config"), "config"))
 pyffi_data.extend(
     (str(source), "compiler-sources")
-    for source in compiler_provenance_source_paths()
+    for source in all_compiler_provenance_source_paths()
     if source.suffix == ".py"
 )
 

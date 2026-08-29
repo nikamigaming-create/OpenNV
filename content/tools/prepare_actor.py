@@ -47,6 +47,7 @@ from facegen import (
 from gallery_actor_presentation import load_gallery_actor_presentation
 from texture_pipeline import decode_dds
 from runtime_configuration import RuntimeConfiguration, load_runtime_configuration
+from compiler_provenance import compiler_provenance
 
 
 RECIPE_SCHEMA = "opennv-actor-recipe/v1"
@@ -327,6 +328,7 @@ def prepare_actor(
     recipe_document: dict[str, object] | None = None,
     preparation_context: ActorPreparationContext | None = None,
     runtime_animation_paths: Sequence[str] = (),
+    family_compiler: dict[str, str] | None = None,
 ) -> dict[str, object]:
     recipe = load_recipe(recipe_id) if recipe_document is None else recipe_document
     if recipe.get("schema") != RECIPE_SCHEMA or not str(recipe.get("id", "")).strip():
@@ -814,6 +816,7 @@ def prepare_actor(
     manifest = {
         "schema": "opennv-actor-scene/v5",
         "status": "skinned-animated",
+        "compiler": family_compiler or compiler_provenance("actor"),
         "recipe": recipe_id,
         "configuration": configuration.manifest(),
         "cellFormId": recipe["cellFormId"],
@@ -925,6 +928,7 @@ def prepare_actor_set(
     cache_root: Path,
     recipe_ids: list[str],
     runtime_animation_paths_by_reference: dict[str, Sequence[str]] | None = None,
+    family_compiler: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if len(recipe_ids) < 1 or len(set(recipe_ids)) != len(recipe_ids):
         raise ValueError("Actor-set recipes must be non-empty and unique")
@@ -940,6 +944,7 @@ def prepare_actor_set(
                 str(recipe["proofActorReferenceFormId"]).casefold(),
                 (),
             ),
+            family_compiler=family_compiler,
         )
         for recipe_id, recipe in zip(recipe_ids, recipes, strict=True)
     ]
@@ -948,6 +953,7 @@ def prepare_actor_set(
         raise ValueError("Actor-set members must use unique references")
     document = {
         "schema": "opennv-world-actor-scenes/v2",
+        "compiler": family_compiler or compiler_provenance("actor"),
         "actors": [
             {
                 "recipe": actor["recipe"],

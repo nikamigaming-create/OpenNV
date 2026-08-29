@@ -27,10 +27,12 @@ from gltf_io import (
     GL_UNSIGNED_SHORT_MAX,
     BufferBuilder,
     atomic_write,
-    compiler_sources_sha256,
-    local_python_dependency_paths,
     pack_floats,
     sha256_bytes,
+)
+from compiler_provenance import (
+    compiler_provenance as family_compiler_provenance,
+    compiler_provenance_source_paths as family_compiler_provenance_source_paths,
 )
 from havok_collision_gltf import (
     collision_contract,
@@ -610,73 +612,11 @@ def is_lod_landscape_surface(shape: object) -> bool:
 
 
 def compiler_provenance_source_paths() -> list[Path]:
-    packaged_root = getattr(sys, "_MEIPASS", None)
-    root = (
-        Path(packaged_root) / "compiler-sources"
-        if packaged_root is not None
-        else Path(__file__).resolve().parent
-    )
-    python_sources = local_python_dependency_paths(
-        root / "prepare_legal_assets.py",
-        root,
-        excluded_modules=("prepare_fo3_profile",),
-    )
-    decoder_contract = configured_recipe_path("nifDecoder")
-    material_binding_contract = configured_recipe_path("materialBinding")
-    visual_archives_contract = configured_recipe_path("visualArchives")
-    audio_archives_contract = configured_recipe_path("audioArchives")
-    configuration = load_runtime_configuration()
-    recipes_root = (
-        Path(packaged_root) / "recipes"
-        if packaged_root is not None
-        else root.parent / "recipes"
-    )
-    route_recipe_ids = [
-        str(configuration.document["legalAssets"]["defaultCellRecipe"]),
-        str(configuration.document["legalAssets"]["defaultOpeningRecipe"]),
-    ]
-    route_recipe_sources: list[Path] = []
-    seen_route_recipes: set[str] = set()
-    while route_recipe_ids:
-        recipe_id = route_recipe_ids.pop(0)
-        if recipe_id in seen_route_recipes:
-            continue
-        seen_route_recipes.add(recipe_id)
-        source = recipes_root / f"{recipe_id}.json"
-        if not source.is_file():
-            raise FileNotFoundError(f"Default legal route recipe is missing: {source}")
-        route_recipe_sources.append(source)
-        document = json.loads(source.read_text(encoding="utf-8"))
-        route_recipe_ids.extend(str(value) for value in document.get("actorRecipes", []))
-        if document.get("linkedExteriorRecipe"):
-            route_recipe_ids.append(str(document["linkedExteriorRecipe"]))
-        route_recipe_ids.extend(
-            str(value["recipe"])
-            for value in document.get("linkedCellRecipes", [])
-        )
-    return [
-        *python_sources,
-        configuration.path,
-        decoder_contract,
-        material_binding_contract,
-        visual_archives_contract,
-        audio_archives_contract,
-        *route_recipe_sources,
-    ]
+    return family_compiler_provenance_source_paths("static")
 
 
 def compiler_provenance() -> dict[str, str]:
-    identity = {
-        "name": (
-            "OpenNV.Content packaged direct exporter v1"
-            if getattr(sys, "frozen", False)
-            else GENERATOR
-        ),
-        "sha256": compiler_sources_sha256(compiler_provenance_source_paths()),
-    }
-    if getattr(sys, "frozen", False):
-        identity["artifactSha256"] = sha256_bytes(Path(sys.executable).read_bytes())
-    return identity
+    return family_compiler_provenance("static")
 
 
 def export_static_nif(
