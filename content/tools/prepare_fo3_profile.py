@@ -2281,7 +2281,7 @@ def _compile_stage100_transition(
             "stageResultSourceSha256": resolved_commands[-1]["stageResultSourceSha256"],
             "stageResultCommandCount": resolved_commands[-1]["stageResultCommandCount"],
             "applied": False,
-            "blocker": "fo3-cg01-stage-0-result-not-implemented",
+            "blocker": "fo3-cg01-stage-0-runtime-application-not-implemented",
         },
     }
 
@@ -2924,6 +2924,79 @@ def _bind_stage90_sound(
     transition["commands"] = commands
 
 
+def _bind_cg01_transition_video(
+    character_selection: dict[str, object],
+    transition_video: dict[str, object],
+) -> None:
+    transition = dict(character_selection["cg01Stage0Transition"])
+    if transition.get("schema") != "opennv-fo3-cg01-stage-0-to-5-transition/v1":
+        raise ValueError("Fallout 3 CG01 transition contract is unsupported")
+    stage0 = dict(transition["stage0Result"])
+    stage0_commands = [dict(command) for command in stage0["commands"]]
+    if (
+        len(stage0_commands) != 4
+        or stage0_commands[1].get("index") != 1
+        or stage0_commands[1].get("kind") != "setStage"
+    ):
+        raise ValueError("Fallout 3 CG01 nested stage command is absent")
+    nested = dict(stage0_commands[1]["stageResult"])
+    if nested.get("schema") != "opennv-fo3-cg01-stage-5-result/v1":
+        raise ValueError("Fallout 3 CG01 nested stage result is unsupported")
+    nested_commands = [dict(command) for command in nested["commands"]]
+    movie_commands = [
+        command for command in nested_commands if command.get("kind") == "playBink"
+    ]
+    if len(movie_commands) != 1:
+        raise ValueError("Fallout 3 CG01 transition movie command is ambiguous")
+    movie = movie_commands[0]
+    if movie.get("index") != 12:
+        raise ValueError("Fallout 3 CG01 transition movie command order differs")
+
+    runtime = transition_video.get("runtime")
+    if not isinstance(runtime, dict):
+        raise ValueError("Fallout 3 CG01 runtime transition movie is absent")
+    runtime_inputs = runtime.get("inputs")
+    if not isinstance(runtime_inputs, dict):
+        raise ValueError("Fallout 3 CG01 runtime transition movie inputs are absent")
+    if (
+        str(movie["logicalPath"]).casefold() != str(transition_video["file"]).casefold()
+        or runtime.get("schema") != "opennv-owned-opening-video/v1"
+        or runtime.get("status") != "deterministic-owned-video-transcode"
+        or runtime_inputs.get("source") != transition_video.get("source")
+        or runtime_inputs.get("sourceSha256") != transition_video.get("sha256")
+    ):
+        raise ValueError("Fallout 3 CG01 runtime transition movie identity differs")
+
+    movie["video"] = transition_video
+    nested["commands"] = nested_commands
+    stage0_commands[1]["stageResult"] = nested
+    stage0["commands"] = stage0_commands
+    transition["stage0Result"] = stage0
+    transition_sha256 = hashlib.sha256(
+        json.dumps(transition, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    stage100 = dict(character_selection["stage100Transition"])
+    stage100_commands = [dict(command) for command in stage100["commands"]]
+    if (
+        len(stage100_commands) != 8
+        or stage100_commands[7].get("index") != 7
+        or stage100_commands[7].get("kind") != "setStage"
+    ):
+        raise ValueError("Fallout 3 CG00 stage-100 transition trigger differs")
+    transition_identity = {
+        "schema": transition["schema"],
+        "sha256": transition_sha256,
+    }
+    stage100_commands[7]["stageResultContract"] = transition_identity
+    stage100["commands"] = stage100_commands
+    next_boundary = dict(stage100["nextBoundary"])
+    next_boundary["transitionContract"] = transition_identity
+    stage100["nextBoundary"] = next_boundary
+    character_selection["stage100Transition"] = stage100
+    character_selection["cg01Stage0Transition"] = transition
+
+
 def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dict[str, object]], dict[str, object]]:
     records = tuple(
         iter_plugin_records(
@@ -3146,25 +3219,6 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         selection,
         stage100_transition,
     )
-    cg01_contract_sha256 = hashlib.sha256(
-        json.dumps(
-            cg01_stage0_transition,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
-    stage100_commands = [dict(command) for command in stage100_transition["commands"]]
-    stage100_commands[-1]["stageResultContract"] = {
-        "schema": cg01_stage0_transition["schema"],
-        "sha256": cg01_contract_sha256,
-    }
-    stage100_transition["commands"] = stage100_commands
-    stage100_boundary = dict(stage100_transition["nextBoundary"])
-    stage100_boundary["transitionContract"] = {
-        "schema": cg01_stage0_transition["schema"],
-        "sha256": cg01_contract_sha256,
-    }
-    stage100_transition["nextBoundary"] = stage100_boundary
     stage90_transition["nextBoundary"] = stage100_transition["schema"]
 
     character_selection = {
@@ -3426,6 +3480,43 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         profile_root,
         configuration,
     )
+    cg01_transition = dict(character_selection["cg01Stage0Transition"])
+    stage0_commands = [
+        dict(command)
+        for command in dict(cg01_transition["stage0Result"])["commands"]
+    ]
+    nested_commands = [
+        dict(command)
+        for command in dict(stage0_commands[1]["stageResult"])["commands"]
+    ]
+    transition_movie_commands = [
+        command for command in nested_commands if command.get("kind") == "playBink"
+    ]
+    if len(transition_movie_commands) != 1:
+        raise ValueError("Fallout 3 CG01 transition movie command is ambiguous")
+    transition_movie = transition_movie_commands[0]
+    transition_source_matches = [
+        row
+        for row in videos[1:]
+        if str(row["file"]).casefold() == str(transition_movie["logicalPath"]).casefold()
+    ]
+    if len(transition_source_matches) != 1:
+        raise ValueError("Fallout 3 CG01 owned transition movie is ambiguous")
+    transition_source = transition_source_matches[0]
+    runtime_transition_video = _prepare_runtime_video(
+        Path(str(transition_source["source"])),
+        profile_root,
+        configuration,
+    )
+    prepared_transition_video = {
+        **transition_source,
+        "runtime": runtime_transition_video,
+    }
+    _bind_cg01_transition_video(character_selection, prepared_transition_video)
+    transition_videos = [
+        prepared_transition_video if row is transition_source else row
+        for row in videos[1:]
+    ]
 
     source_rows = [
         _file_row(master, role="master"),
@@ -3488,7 +3579,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         },
         "opening": {
             "introVideo": {**videos[0], "runtime": runtime_intro_video},
-            "transitionVideos": videos[1:],
+            "transitionVideos": transition_videos,
             "quests": quests,
             "characterSelection": character_selection,
             "birthSlice": {
@@ -3519,11 +3610,12 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "cg00Stage85ContractReady": True,
             "cg00Stage90ContractReady": True,
             "cg00Stage100ContractReady": True,
+            "cg01Stage0ContractReady": True,
             "vault101BirthGraphCompiled": True,
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg01-stage-0-result-not-implemented",
+            "fo3-cg01-post-stage-5-world-ai-not-implemented",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
         ],

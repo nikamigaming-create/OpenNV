@@ -671,15 +671,28 @@ public partial class RuntimeCoordinator : Node3D
         var savePath = options.TryGetValue("save-path", out var configuredSavePath)
             ? ResolveRuntimePath(configuredSavePath)
             : ResolveRuntimePath("user://profiles/fallout3/cg00-character-v2.json");
+        var cg01ProofMode = options.TryGetValue("fo3-cg01-proof", out var configuredCg01Proof)
+            ? configuredCg01Proof
+            : null;
+        if (cg01ProofMode is not null &&
+            (cg01ProofMode is not "apply" and not "restore" ||
+             birthPresentation is null ||
+             !options.ContainsKey("report")))
+            throw new ArgumentException(
+                "--fo3-cg01-proof requires apply|restore, --fo3-birth-presentation, and --report.");
         var opening = new Fo3OpeningFlow();
         opening.Configure(
             profile,
             savePath,
             this,
             birthPresentation,
-            options.ContainsKey("fo3-appearance-proof"));
+            options.ContainsKey("fo3-appearance-proof"),
+            cg01ProofMode,
+            cg01ProofMode is null ? null : ResolveRuntimePath(RequireOption(options, "report")));
         AddChild(opening);
-        if (options.ContainsKey("quit-after-load") && !options.ContainsKey("fo3-appearance-proof"))
+        if (options.ContainsKey("quit-after-load") &&
+            !options.ContainsKey("fo3-appearance-proof") &&
+            cg01ProofMode is null)
             GetTree().Quit(0);
     }
 

@@ -23,8 +23,13 @@ internal sealed record Fo3Stage100Boundary(
     int Stage,
     string StageResultSourceSha256,
     int StageResultCommandCount,
+    Fo3Stage100TransitionContract TransitionContract,
     bool Applied,
     string Blocker);
+
+internal sealed record Fo3Stage100TransitionContract(
+    string Schema,
+    string Sha256);
 
 internal sealed record Fo3Stage100State(
     int Stage,
@@ -55,7 +60,7 @@ internal sealed record Fo3Stage100Transition(
     private const string ExpectedStatus =
         "source-backed-timer-stage-result-through-next-quest-boundary";
     private const string ExpectedNextBoundaryBlocker =
-        "fo3-cg01-stage-0-result-not-implemented";
+        "fo3-cg01-stage-0-runtime-application-not-implemented";
     private const int ExpectedAccountedCommandCount = 8;
     private const int ExpectedAppliedCommandCount = 7;
 
@@ -154,6 +159,8 @@ internal sealed record Fo3Stage100Transition(
 
         var nextBoundary = LoadBoundary(RequiredObject(source, "nextBoundary"));
         var nextCommand = commands[7];
+        var nextCommandContract = LoadTransitionContract(
+            RequiredObject(nextCommand, "stageResultContract"));
         if (RequiredFormId(nextCommand, "questFormId") != nextBoundary.QuestFormId ||
             RequiredString(nextCommand, "questEditorId") != nextBoundary.QuestEditorId ||
             RequiredInteger(nextCommand, "stage") != nextBoundary.Stage ||
@@ -161,6 +168,7 @@ internal sealed record Fo3Stage100Transition(
                 nextBoundary.StageResultSourceSha256 ||
             RequiredInteger(nextCommand, "stageResultCommandCount") !=
                 nextBoundary.StageResultCommandCount ||
+            nextCommandContract != nextBoundary.TransitionContract ||
             RequiredBoolean(nextCommand, "applied") ||
             nextBoundary.Applied)
             throw new InvalidOperationException("Fallout 3 stage-100 next boundary differs.");
@@ -270,8 +278,20 @@ internal sealed record Fo3Stage100Transition(
             RequiredInteger(source, "stage"),
             RequiredSha256(source, "stageResultSourceSha256"),
             RequiredInteger(source, "stageResultCommandCount"),
+            LoadTransitionContract(RequiredObject(source, "transitionContract")),
             false,
             ExpectedNextBoundaryBlocker);
+    }
+
+    private static Fo3Stage100TransitionContract LoadTransitionContract(JsonElement source)
+    {
+        var contract = new Fo3Stage100TransitionContract(
+            RequiredString(source, "schema"),
+            RequiredSha256(source, "sha256"));
+        if (contract.Schema != Fo3Cg01Stage0Transition.ExpectedSchema)
+            throw new InvalidOperationException(
+                "Fallout 3 stage-100 next transition contract is unsupported.");
+        return contract;
     }
 
     private static void ValidateVariables(

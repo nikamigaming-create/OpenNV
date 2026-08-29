@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import struct
 import sys
 import unittest
@@ -12,6 +14,7 @@ sys.path.insert(0, str(TOOLS))
 
 from plugin_records import GroupContext, Record  # noqa: E402
 from prepare_fo3_profile import (  # noqa: E402
+    _bind_cg01_transition_video,
     _compile_cg01_stage0_transition,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
@@ -751,6 +754,77 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual(moved_dad, stage5["commands"][2]["reference"]["formId"])
         self.assertEqual(moved_dad, stage5["commands"][4]["reference"]["formId"])
         self.assertFalse(cg01_contract["nextBoundary"]["applied"])
+
+        transition_video = {
+            "file": "1 year later.bik",
+            "source": "C:/owned/Fallout 3/Data/Video/1 year later.bik",
+            "bytes": 12345,
+            "sha256": "a" * 64,
+            "runtime": {
+                "schema": "opennv-owned-opening-video/v1",
+                "status": "deterministic-owned-video-transcode",
+                "inputs": {
+                    "source": "C:/owned/Fallout 3/Data/Video/1 year later.bik",
+                    "sourceSha256": "a" * 64,
+                    "policy": {"videoCodec": "libtheora"},
+                },
+                "output": "C:/cache/generated/opening/video/cg01.ogv",
+                "outputBytes": 9876,
+                "outputSha256": "b" * 64,
+            },
+        }
+        character_selection = {
+            "stage100Transition": contract,
+            "cg01Stage0Transition": cg01_contract,
+        }
+        _bind_cg01_transition_video(character_selection, transition_video)
+        bound_transition = character_selection["cg01Stage0Transition"]
+        bound_stage0 = bound_transition["stage0Result"]
+        self.assertEqual(
+            ["moveToReference", "setStage", "setPlayerScale", "moveToReference"],
+            [command["kind"] for command in bound_stage0["commands"]],
+        )
+        bound_stage5 = bound_stage0["commands"][1]["stageResult"]
+        self.assertEqual(
+            [
+                "setLocationSpecificLoadScreensOnly",
+                "setInCharGen",
+                "enable",
+                "enable",
+                "setScriptVariable",
+                "setScriptVariable",
+                "enablePlayerControls",
+                "disablePlayerControls",
+                "autoDisplayObjectives",
+                "setNoActivationSound",
+                "setPlayerToddler",
+                "setPlayerYoung",
+                "playBink",
+            ],
+            [command["kind"] for command in bound_stage5["commands"]],
+        )
+        bound_movie = bound_stage5["commands"][12]
+        self.assertEqual("a" * 64, bound_movie["video"]["sha256"])
+        self.assertEqual(
+            "b" * 64,
+            bound_movie["video"]["runtime"]["outputSha256"],
+        )
+        expected_contract_sha256 = hashlib.sha256(
+            json.dumps(
+                bound_transition,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        bound_stage100 = character_selection["stage100Transition"]
+        self.assertEqual(
+            expected_contract_sha256,
+            bound_stage100["commands"][7]["stageResultContract"]["sha256"],
+        )
+        self.assertEqual(
+            bound_stage100["commands"][7]["stageResultContract"],
+            bound_stage100["nextBoundary"]["transitionContract"],
+        )
 
         cg01_without_stage5 = Record(
             "QUST",
