@@ -9,6 +9,8 @@ param(
     [switch]$Launch,
     [Parameter(ParameterSetName = 'Launch')]
     [string[]]$LaunchArgument = @(),
+    [Parameter(ParameterSetName = 'Launch')]
+    [string]$StartingCell = '',
     [ValidateRange(1, 60)]
     [int]$ObserveSeconds = 4,
     [ValidateRange(1, 20)]
@@ -113,6 +115,58 @@ function Assert-CleanModuleInventory([object[]]$Modules, [string]$OwnedGameRoot)
     }
 }
 
+function Get-HitContext(
+    [Diagnostics.Process]$Process,
+    [ref]$NextId,
+    [string]$SessionId,
+    [object]$Hit,
+    [object[]]$Regions
+) {
+    $hitAddress = [uint64]$Hit.va
+    $region = @($Regions | Where-Object {
+        $base = [uint64]$_.base
+        $hitAddress -ge $base -and $hitAddress -lt ($base + [uint64]$_.size)
+    }) | Select-Object -First 1
+    if ($null -eq $region) {
+        throw ('No committed memory region contains scan hit 0x{0:X}.' -f $hitAddress)
+    }
+    $regionBase = [uint64]$region.base
+    $regionEnd = $regionBase + [uint64]$region.size
+    $contextStart = if ($hitAddress -gt ($regionBase + 256)) {
+        $hitAddress - 256
+    } else {
+        $regionBase
+    }
+    $contextEnd = [Math]::Min([double]$regionEnd, [double]($hitAddress + 272))
+    $contextSize = [int]($contextEnd - $contextStart)
+    $read = Invoke-McpTool -Process $Process -NextId $NextId `
+        -Name 'process_read' -Arguments @{
+            session_id = $SessionId
+            addr = ('0x{0:X}' -f $contextStart)
+            size = $contextSize
+        }
+    return [ordered]@{
+        hit_va = $hitAddress
+        hit_preview_hex = $Hit.preview_hex
+        module = if ($Hit.PSObject.Properties.Name -contains 'module') {
+            $Hit.module
+        } else { $null }
+        rva = if ($Hit.PSObject.Properties.Name -contains 'rva') {
+            $Hit.rva
+        } else { $null }
+        region = [ordered]@{
+            base = $regionBase
+            size = [uint64]$region.size
+            protect = [string]$region.protect
+            state = [string]$region.state
+            type = [string]$region.typ
+        }
+        context_start_va = [uint64]$read.va
+        context_bytes_read = [int]$read.bytes_read
+        context_hex = [string]$read.hex
+    }
+}
+
 foreach ($required in @($gameExe, $ghidrustExe)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Missing required file: $required"
@@ -159,6 +213,13 @@ $identity = [ordered]@{
     }
     root_proxy_files = $rootProxyFiles
 }
+if (-not [string]::IsNullOrWhiteSpace($StartingCell) -and -not $Launch) {
+    throw 'StartingCell is valid only with -Launch.'
+}
+if (-not [string]::IsNullOrWhiteSpace($StartingCell) -and
+    $StartingCell -notmatch '^[A-Za-z][A-Za-z0-9_]{0,63}$') {
+    throw "StartingCell is not a canonical editor ID: $StartingCell"
+}
 if ($ValidateOnly) {
     $identity | ConvertTo-Json -Depth 10
     return
@@ -183,6 +244,11 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $output) | Out-Nul
 $mcp = $null
 $launchedProcess = $null
 $shadowDirectory = $null
+$falloutIni = $null
+$falloutIniBackup = $null
+$falloutIniBackupVerified = $false
+$originalIniSha256 = $null
+$modifiedIniSha256 = $null
 $sessionId = $null
 $nextId = 1
 try {
@@ -196,6 +262,40 @@ try {
         Copy-Item -LiteralPath $gameExe -Destination $shadowExe
         if ((Get-Sha256 $shadowExe) -ne $expectedGameSha256) {
             throw 'Private Fallout3.exe shadow hash mismatch.'
+        }
+        if (-not [string]::IsNullOrWhiteSpace($StartingCell)) {
+            $falloutIni = Join-Path ([Environment]::GetFolderPath('MyDocuments')) `
+                'My Games\Fallout3\FALLOUT.INI'
+            if (-not (Test-Path -LiteralPath $falloutIni -PathType Leaf)) {
+                throw "Missing Fallout 3 user INI required for StartingCell staging: $falloutIni"
+            }
+            $falloutIniBackup = Join-Path $privateEvidenceRoot `
+                ('.Fallout.ini-backup-' + [Guid]::NewGuid().ToString('N'))
+            if (Test-Path -LiteralPath $falloutIniBackup) {
+                throw "Refusing to overwrite Fallout 3 INI backup: $falloutIniBackup"
+            }
+            $originalIniSha256 = Get-Sha256 $falloutIni
+            Copy-Item -LiteralPath $falloutIni -Destination $falloutIniBackup
+            if ((Get-Sha256 $falloutIniBackup) -ne $originalIniSha256) {
+                throw 'Fallout 3 INI backup hash mismatch.'
+            }
+            $falloutIniBackupVerified = $true
+            $iniEncoding = [Text.Encoding]::Default
+            $iniText = [IO.File]::ReadAllText($falloutIni, $iniEncoding)
+            $startingCellMatches = [regex]::Matches(
+                $iniText, '(?im)^SStartingCell\s*=.*$')
+            if ($startingCellMatches.Count -ne 1) {
+                throw "Expected exactly one SStartingCell entry, found $($startingCellMatches.Count)."
+            }
+            $stagedIniText = [regex]::Replace(
+                $iniText,
+                '(?im)^SStartingCell\s*=.*$',
+                "SStartingCell=$StartingCell")
+            [IO.File]::WriteAllText($falloutIni, $stagedIniText, $iniEncoding)
+            $modifiedIniSha256 = Get-Sha256 $falloutIni
+            if ($modifiedIniSha256 -eq $originalIniSha256) {
+                throw 'Fallout 3 StartingCell staging did not change the user INI.'
+            }
         }
         $start = @{
             FilePath = $shadowExe
@@ -269,6 +369,8 @@ try {
     $modules = @(Invoke-McpTool -Process $mcp -NextId ([ref]$nextId) `
         -Name 'process_modules' -Arguments @{ session_id = $sessionId })
     Assert-CleanModuleInventory -Modules $modules -OwnedGameRoot ([IO.Path]::GetFullPath($GameRoot))
+    $regions = @(Invoke-McpTool -Process $mcp -NextId ([ref]$nextId) `
+        -Name 'process_regions' -Arguments @{ session_id = $sessionId; max = 4096 })
     $mainModule = @($modules | Where-Object { $_.name -ieq 'Fallout3.exe' })
     if ($mainModule.Count -ne 1) {
         throw "Expected one Fallout3.exe module, found $($mainModule.Count)."
@@ -294,7 +396,14 @@ try {
                     aob = $pattern.Value
                     max_hits = 64
                 }
-            $matches[$pattern.Key] = $scan
+            $contexts = @($scan.hits | ForEach-Object {
+                Get-HitContext -Process $mcp -NextId ([ref]$nextId) `
+                    -SessionId $sessionId -Hit $_ -Regions $regions
+            })
+            $matches[$pattern.Key] = [ordered]@{
+                scan = $scan
+                contexts = $contexts
+            }
         }
         $samples.Add([ordered]@{
             index = $sampleIndex
@@ -304,7 +413,7 @@ try {
     }
 
     $evidence = [ordered]@{
-        schema = 'opennv.fo3-retail-raw-observation.v1'
+        schema = 'opennv.fo3-retail-raw-observation.v2'
         captured_utc = [DateTime]::UtcNow.ToString('o')
         classification = 'private-raw-candidate-evidence-not-a-runtime-contract'
         identity = $identity
@@ -315,7 +424,16 @@ try {
             session_mode = [string]$session.mode
             capabilities = @($session.capabilities)
         }
+        startup_configuration = [ordered]@{
+            starting_cell = $StartingCell
+            temporary_ini_staging = -not [string]::IsNullOrWhiteSpace($StartingCell)
+            original_ini_sha256 = $originalIniSha256
+            staged_ini_sha256 = $modifiedIniSha256
+            restoration_required = -not [string]::IsNullOrWhiteSpace($StartingCell)
+            restoration_verification = 'required-before-successful-observer-exit'
+        }
         module_inventory = $modules
+        region_count = $regions.Count
         record_derived_candidate_patterns = $patterns
         samples = $samples
         unresolved = @(
@@ -359,6 +477,17 @@ finally {
             }
         }
         finally { $launchedProcess.Dispose() }
+    }
+    if ($null -ne $falloutIniBackup -and
+        (Test-Path -LiteralPath $falloutIniBackup -PathType Leaf)) {
+        if ($falloutIniBackupVerified) {
+            Copy-Item -LiteralPath $falloutIniBackup -Destination $falloutIni -Force
+            $restoredIniSha256 = Get-Sha256 $falloutIni
+            if ($restoredIniSha256 -ne $originalIniSha256) {
+                throw "Fallout 3 INI restoration hash mismatch: $restoredIniSha256"
+            }
+        }
+        Remove-Item -LiteralPath $falloutIniBackup -Force
     }
     if ($null -ne $shadowDirectory -and (Test-Path -LiteralPath $shadowDirectory)) {
         if (-not (Test-PathWithin -Path $shadowDirectory -Root $privateEvidenceRoot)) {
