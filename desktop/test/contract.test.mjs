@@ -354,7 +354,8 @@ test("the checked-in runtime keeps owned-data routes profile-gated", () => {
   const ttwRuntime = manifest.campaigns.find((campaign) => campaign.id === "TTW").variants.vanilla;
   assert.equal(ttwRuntime.ready, false);
   assert.equal(ttwRuntime.requiresOpeningProfile, "opennv-ttw-fo3-opening-profile/v1");
-  assert.match(ttwRuntime.message, /No TTW command interpreter/);
+  assert.match(ttwRuntime.message, /cold-restores all 38 admitted commands/);
+  assert.match(ttwRuntime.message, /Vault 101 world and movie presentation/);
 
   const withFo2 = mergeRuntimeState(createOfflineState({ platform: "win32" }), manifest, {
     fallout2Profile: { ready: true, message: "Prepared owned Hex cache" }

@@ -632,7 +632,7 @@ def compile_ttw_fo3_opening(
         "movies": movies,
         "runtimeCompatibility": {
             "ready": False,
-            "reason": "The TTW effective CG00-to-CG01-stage-5 command contract is transported, but the dedicated TTW runtime interpreter and Vault 101 presentation are not connected yet.",
+            "reason": "The TTW effective CG00-to-CG01-stage-5 command contract has a dedicated state executor, but Vault 101 world and movie presentation are not connected yet.",
         },
         "unsupportedSemantics": [
             "cg00-unlisted-stage-results-and-dialogue-package-ai",

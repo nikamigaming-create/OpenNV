@@ -81,6 +81,8 @@ internal sealed record TtwFo3OpeningContract(
         "validated-neutral-effective-source-namespace";
     private const string ExpectedCacheKind = "dedicated-ttw-opening-profile";
     private const string CachePrefix = "opennv-ttw-fo3-opening-cache-v1\0";
+    private const string FlattenedSourceMode =
+        "flattened-installer-output-plugin-mtime";
 
     private static readonly IReadOnlyDictionary<string, string[]> ExpectedStages =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
@@ -187,10 +189,7 @@ internal sealed record TtwFo3OpeningContract(
             .Select(value => System.IO.Path.GetFullPath(
                 TtwJson.ValueString(value, "source root")))
             .ToArray();
-        if (sourceRoots.Length < 2 || sourceRoots.Distinct(
-                StringComparer.OrdinalIgnoreCase).Count() != sourceRoots.Length ||
-            sourceRoots.Any(rootPath => !Directory.Exists(rootPath)))
-            throw new InvalidOperationException("TTW source-root boundary differs.");
+        ValidateSourceRootLayout(sourceProfile, sourceRoots);
 
         var namespaceBinding = TtwJson.Object(root, "sourceNamespace");
         if (TtwJson.String(namespaceBinding, "schema") != ExpectedNamespaceSchema ||
@@ -261,6 +260,47 @@ internal sealed record TtwFo3OpeningContract(
 
     internal bool TryGetStage(string questEditorId, int stage, out TtwStageResult result) =>
         StageResults.TryGetValue(StageKey(questEditorId, stage), out result!);
+
+    private static void ValidateSourceRootLayout(
+        JsonElement sourceProfile,
+        string[] sourceRoots)
+    {
+        if (sourceRoots.Length == 0 || sourceRoots.Distinct(
+                StringComparer.OrdinalIgnoreCase).Count() != sourceRoots.Length ||
+            sourceRoots.Any(rootPath => !Directory.Exists(rootPath)))
+            throw new InvalidOperationException("TTW source-root boundary differs.");
+
+        var loadOrderSource = TtwJson.Object(sourceProfile, "loadOrderSource");
+        if (!loadOrderSource.TryGetProperty("derivation", out var derivation))
+        {
+            if (sourceRoots.Length < 2)
+                throw new InvalidOperationException("TTW layered source-root boundary differs.");
+            return;
+        }
+        if (derivation.ValueKind != JsonValueKind.Object ||
+            TtwJson.String(derivation, "mode") != FlattenedSourceMode ||
+            !TtwJson.Boolean(derivation, "allPluginsActive") ||
+            !TtwJson.Boolean(derivation, "strictlyIncreasingPluginModificationTimes"))
+            throw new InvalidOperationException("TTW flattened-source derivation differs.");
+
+        var flattenedIndex = TtwJson.Integer(derivation, "flattenedSourceRootIndex");
+        var plugins = TtwJson.Array(sourceProfile, "plugins").EnumerateArray().ToArray();
+        var evidence = TtwJson.Array(derivation, "plugins").EnumerateArray().ToArray();
+        if (flattenedIndex != sourceRoots.Length - 1 || evidence.Length != plugins.Length)
+            throw new InvalidOperationException("TTW flattened-source boundary differs.");
+
+        long previousTimestamp = -1;
+        for (var index = 0; index < plugins.Length; index++)
+        {
+            var timestamp = TtwJson.Long(evidence[index], "lastWriteTimeNs");
+            if (TtwJson.Integer(plugins[index], "sourceRootIndex") != flattenedIndex ||
+                TtwJson.String(plugins[index], "file") !=
+                    TtwJson.String(evidence[index], "file") ||
+                timestamp <= previousTimestamp)
+                throw new InvalidOperationException("TTW flattened-source evidence differs.");
+            previousTimestamp = timestamp;
+        }
+    }
 
     internal TtwOwnedMovie MovieForCommand(string logicalPath)
     {

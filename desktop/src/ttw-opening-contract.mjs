@@ -10,6 +10,12 @@ const OPENING_STATUS = "transported-bounded-ttw-fo3-opening-command-contract";
 const SOURCE_SCHEMA = "opennv-ttw-effective-source-namespace/v1";
 const SOURCE_STATUS = "validated-neutral-effective-source-namespace";
 const SOURCE_RESOLUTION_POLICY = "top-level-case-insensitive-last-data-root-wins";
+const FLATTENED_SOURCE_MODE = "flattened-installer-output-plugin-mtime";
+const REQUIRED_UPPER_PLUGINS = new Set([
+  "fallout3.esm",
+  "taleoftwowastelands.esm",
+  "yupttw.esm"
+]);
 
 function isSha256(value) {
   return typeof value === "string" &&
@@ -39,6 +45,48 @@ function canonicalJson(value) {
       `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+export function validateTtwProfileSourceLayout(profile) {
+  const roots = profile?.sourceRoots;
+  const plugins = profile?.plugins;
+  if (!Array.isArray(roots) || roots.length === 0 ||
+      roots.some((root) => typeof root !== "string" || root.length === 0) ||
+      new Set(roots.map((root) => path.resolve(root).toLowerCase())).size !== roots.length ||
+      !Array.isArray(plugins) || plugins.length === 0) {
+    throw new Error("The selected TTW manifest has an invalid source-root layout.");
+  }
+
+  const derivation = profile?.loadOrderSource?.derivation;
+  if (derivation !== undefined) {
+    const flattenedIndex = derivation?.flattenedSourceRootIndex;
+    const evidence = derivation?.plugins;
+    if (derivation?.mode !== FLATTENED_SOURCE_MODE ||
+        derivation?.allPluginsActive !== true ||
+        derivation?.strictlyIncreasingPluginModificationTimes !== true ||
+        !Number.isInteger(flattenedIndex) || flattenedIndex !== roots.length - 1 ||
+        !Array.isArray(evidence) || evidence.length !== plugins.length) {
+      throw new Error("The selected TTW flattened-source derivation is invalid.");
+    }
+
+    let previousTimestamp = -1;
+    for (const [index, row] of plugins.entries()) {
+      const source = evidence[index];
+      const timestamp = source?.lastWriteTimeNs;
+      if (row?.sourceRootIndex !== flattenedIndex || source?.file !== row?.file ||
+          !Number.isFinite(timestamp) || timestamp <= previousTimestamp) {
+        throw new Error("The selected TTW flattened-source evidence changed.");
+      }
+      previousTimestamp = timestamp;
+    }
+    return { mode: FLATTENED_SOURCE_MODE, sourceRootIndex: flattenedIndex };
+  }
+
+  if (roots.length < 2 || plugins.some((row) =>
+    REQUIRED_UPPER_PLUGINS.has(String(row?.file).toLowerCase()) && row?.sourceRootIndex === 0)) {
+    throw new Error("The selected TTW manifest has no validated upper source layer.");
+  }
+  return { mode: "layered-data-roots", sourceRootIndex: roots.length - 1 };
 }
 
 export function ttwFo3OpeningCacheCompatibilityId(document) {
@@ -161,7 +209,7 @@ export function readTtwFo3OpeningContract({
       validated: true,
       runtimeReady: false,
       manifestDetected: true,
-      message: "TTW source and bounded Fallout 3 opening contract validated; CG00 to CG01 runtime execution is still pending.",
+      message: "TTW source and bounded Fallout 3 opening state validated; Vault 101 world presentation is still pending.",
       reason: String(document.runtimeCompatibility.reason),
       path: manifestPath,
       sourceNamespacePath: namespacePath,

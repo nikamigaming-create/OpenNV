@@ -118,7 +118,7 @@
           "presentations": {
             "first-person": {
               "ready": false,
-              "status": "cg00-cg01-command-contract-runtime-unapplied"
+              "status": "cg00-cg01-command-state-native-proof"
             },
             "hex-tactical": {
               "ready": false,
@@ -131,7 +131,7 @@
           },
           "requiresProfile": "opennv-ttw-profile/v1",
           "requiresOpeningProfile": "opennv-ttw-fo3-opening-profile/v1",
-          "message": "The strict TTW source namespace and bounded CG00-to-CG01-stage-5 command contract can be launcher-validated with dedicated cache and save identities. No TTW command interpreter, Vault 101 world presentation, save runtime, xNVSE execution, or JAM runtime is connected, so every TTW presentation remains disabled."
+          "message": "The strict TTW source namespace and bounded CG00-to-CG01-stage-5 command contract can be launcher-validated with dedicated cache and save identities. The isolated native interpreter applies and cold-restores all 38 admitted commands. Vault 101 world and movie presentation, stage-10-and-later gameplay, xNVSE execution, and JAM runtime are not connected, so every TTW presentation remains disabled."
         },
         "jam": {
           "ready": false,

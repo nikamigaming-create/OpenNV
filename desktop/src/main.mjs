@@ -5,7 +5,10 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, sta
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOfflineState, createRuntimeArguments, mergeRuntimeState, validateLaunchRequest } from "./contract.mjs";
-import { readTtwFo3OpeningContract } from "./ttw-opening-contract.mjs";
+import {
+  readTtwFo3OpeningContract,
+  validateTtwProfileSourceLayout
+} from "./ttw-opening-contract.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const renderer = path.join(here, "renderer", "index.html");
@@ -275,7 +278,7 @@ function readTtwProfile(manifestOverride = null) {
         profile?.status !== "validated-generated-plugin-profile" ||
         profile?.kind !== "ttw" || !isSha256(profile?.pluginStackId) ||
         profile?.saveCompatibilityId !== `ttw:${profile.pluginStackId}` ||
-        !Array.isArray(profile?.sourceRoots) || profile.sourceRoots.length < 2 ||
+        !Array.isArray(profile?.sourceRoots) || profile.sourceRoots.length < 1 ||
         !Array.isArray(profile?.plugins) || profile.plugins.length === 0) {
       return unavailable("The selected TTW manifest is not a validated generated profile.", true);
     }
@@ -298,18 +301,12 @@ function readTtwProfile(manifestOverride = null) {
       pluginNames.add(foldedName);
       validateHashBoundFile(path.join(roots[row.sourceRootIndex], row.file), row, `TTW plugin ${row.file}`);
     }
-    const requiredUpperPlugins = new Set([
-      "fallout3.esm",
-      "taleoftwowastelands.esm",
-      "yupttw.esm"
-    ]);
     if (profile.plugins[0].file.toLowerCase() !== "falloutnv.esm" ||
         REQUIRED_TTW_PLUGINS.some((plugin) => !pluginNames.has(plugin)) ||
-        profile.plugins.some((row) =>
-          requiredUpperPlugins.has(row.file.toLowerCase()) && row.sourceRootIndex === 0) ||
         ttwPluginStackId(profile) !== profile.pluginStackId) {
       return unavailable("The selected TTW plugin stack identity changed; register it again.", true);
     }
+    validateTtwProfileSourceLayout(profile);
     const loadOrder = profile?.loadOrderSource;
     if (!loadOrder?.file || !isSha256(loadOrder?.sha256) ||
         !existsSync(loadOrder.file) || sha256(loadOrder.file) !== loadOrder.sha256) {

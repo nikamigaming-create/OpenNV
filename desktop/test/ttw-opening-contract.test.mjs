@@ -7,12 +7,49 @@ import path from "node:path";
 import { mkdtemp } from "node:fs/promises";
 import {
   readTtwFo3OpeningContract,
-  ttwFo3OpeningCacheCompatibilityId
+  ttwFo3OpeningCacheCompatibilityId,
+  validateTtwProfileSourceLayout
 } from "../src/ttw-opening-contract.mjs";
 
 function hash(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
+
+test("the TTW profile source layout admits a strict flattened installer stack", () => {
+  const plugins = [
+    "FalloutNV.esm",
+    "Fallout3.esm",
+    "TaleOfTwoWastelands.esm",
+    "YUPTTW.esm"
+  ].map((file, loadOrderIndex) => ({ file, loadOrderIndex, sourceRootIndex: 0 }));
+  const profile = {
+    sourceRoots: ["D:\\TTW\\Installed"],
+    plugins,
+    loadOrderSource: {
+      derivation: {
+        mode: "flattened-installer-output-plugin-mtime",
+        allPluginsActive: true,
+        strictlyIncreasingPluginModificationTimes: true,
+        flattenedSourceRootIndex: 0,
+        plugins: plugins.map((row, index) => ({
+          file: row.file,
+          lastWriteTimeNs: 1000 + index
+        }))
+      }
+    }
+  };
+
+  assert.deepEqual(validateTtwProfileSourceLayout(profile), {
+    mode: "flattened-installer-output-plugin-mtime",
+    sourceRootIndex: 0
+  });
+  assert.throws(
+    () => validateTtwProfileSourceLayout({ ...profile, loadOrderSource: {} }),
+    /upper source layer/i
+  );
+  profile.loadOrderSource.derivation.plugins[2].lastWriteTimeNs = 1000;
+  assert.throws(() => validateTtwProfileSourceLayout(profile), /evidence changed/i);
+});
 
 test("the TTW FO3 launch boundary binds its source namespace, cache, and save identity", async (context) => {
   const root = await mkdtemp(path.join(tmpdir(), "opennv-ttw-launch-"));
