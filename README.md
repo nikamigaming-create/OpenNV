@@ -311,7 +311,10 @@ startup logos and exact retail menu art/presentation are not implemented.
 
 The New Vegas saloon/exterior component remains independently playable, not
 only a renderer, and its saloon interior is now also the second linked target
-of the default Doc route. Its hash-pinned retail baseline
+of the default Doc route. The compact launcher now registers one explicit
+immutable New Vegas cache root through **Set up New Vegas**; launching never
+rebuilds or silently swaps that cache, and the legacy Godot cache is only a
+fallback when no registration exists. Its hash-pinned retail baseline
 resolves 228 interior/exterior
 assets, 504 enabled placements, 379 textures, 476 materials, 97 authored saloon
 pickups, five containers, 27 lights, and a

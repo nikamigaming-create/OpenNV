@@ -47,6 +47,15 @@ test("the compact renderer starts with one readable four-card row and two column
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*grid-template-columns:\s*repeat\(2,/u);
 });
 
+test("New Vegas uses an explicit immutable cache registration", () => {
+  const main = readFileSync(new URL("../src/main.mjs", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../src/renderer/index.html", import.meta.url), "utf8");
+  assert.match(main, /opennv-launcher-owned-cache-registration\/v1/u);
+  assert.match(main, /campaign:\s*"NewVegas"/u);
+  assert.match(main, /OPENNV_NEWVEGAS_CACHE_ROOT/u);
+  assert.match(html, /id="choose-newvegas-cache"/u);
+});
+
 test("Fallout 2 enables only the matching owned-cache Hex first slice", () => {
   const base = createOfflineState({ platform: "win32" });
   const profile = {

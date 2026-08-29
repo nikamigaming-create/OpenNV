@@ -41,6 +41,13 @@ The portable contract is implemented in
 separate from the current Windows PowerShell bridge, so platform-specific
 runtime launches cannot redefine product or save semantics.
 
+New Vegas cache selection is explicit. The contextual **Set up New Vegas**
+action validates a generated `install-manifest.json` and stores only its
+immutable cache-root path in the launcher user-data directory. The launcher
+falls back to the legacy Godot `legal-assets-v1` cache only when no registration
+exists. It never rebuilds or silently replaces that cache during launch; a new
+compiler result becomes active only after it is registered.
+
 ## Runtime manifest and portability
 
 The Electron shell reads `runtime-manifest.json` from a selected OpenNV runtime

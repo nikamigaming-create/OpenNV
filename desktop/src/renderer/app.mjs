@@ -26,6 +26,7 @@ const editionRow = document.querySelector("#edition-row");
 const edition = document.querySelector("#edition");
 const fo1ProfileButton = document.querySelector("#choose-fo1-profile");
 const fo2ProfileButton = document.querySelector("#choose-fo2-profile");
+const newVegasCacheButton = document.querySelector("#choose-newvegas-cache");
 const ttwProfileButton = document.querySelector("#choose-ttw-profile");
 const jamProfileButton = document.querySelector("#choose-jam-profile");
 const launchButton = document.querySelector("#launch");
@@ -183,6 +184,10 @@ function render() {
   fo2ProfileButton.textContent = state.profiles?.fallout2?.validated
     ? "Fallout 2 installed"
     : "Set up Fallout 2";
+  newVegasCacheButton.classList.toggle("hidden", selectedGameId !== "newvegas");
+  newVegasCacheButton.textContent = state.profiles?.newVegas?.ready
+    ? "New Vegas set up"
+    : "Set up New Vegas";
   ttwProfileButton.classList.toggle("hidden", campaign.id !== "ttw");
   ttwProfileButton.textContent = modProfileLabel("ttw");
   ttwProfileButton.title = state.profiles?.ttw?.message || "Choose a local TTW profile manifest.";
@@ -233,6 +238,13 @@ fo1ProfileButton.addEventListener("click", async () => {
 
 fo2ProfileButton.addEventListener("click", async () => {
   const result = await api.chooseFo2Profile();
+  showToast(result.message, result.ok ? "success" : "warning");
+  state = await api.getState();
+  render();
+});
+
+newVegasCacheButton.addEventListener("click", async () => {
+  const result = await api.chooseNewVegasCache();
   showToast(result.message, result.ok ? "success" : "warning");
   state = await api.getState();
   render();

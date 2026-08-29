@@ -77,6 +77,10 @@ function fo2ProfileRegistrationPath() {
   return path.join(app.getPath("userData"), "fallout2-profile-registration.json");
 }
 
+function newVegasCacheRegistrationPath() {
+  return path.join(app.getPath("userData"), "newvegas-cache-registration.json");
+}
+
 function defaultFo2ProfilePath() {
   return path.join(fo2LocalDataRoot(), "profiles", "fallout2", "fallout2-profile.json");
 }
@@ -112,6 +116,33 @@ function configuredFo2ProfilePath() {
     // Fall through to the documented LocalAppData profile location.
   }
   return defaultFo2ProfilePath();
+}
+
+function defaultNewVegasCacheRoot() {
+  return path.join(
+    app.getPath("appData"),
+    "Godot", "app_userdata", "OpenNV", "cache", "legal-assets-v1");
+}
+
+function configuredNewVegasCacheRoot() {
+  if (process.env.OPENNV_NEWVEGAS_CACHE_ROOT) {
+    return path.resolve(process.env.OPENNV_NEWVEGAS_CACHE_ROOT);
+  }
+  try {
+    const registration = JSON.parse(
+      readFileSync(newVegasCacheRegistrationPath(), "utf8"));
+    if (registration?.schema === "opennv-launcher-owned-cache-registration/v1" &&
+        registration?.campaign === "NewVegas" &&
+        typeof registration?.cacheRoot === "string") {
+      const registeredRoot = path.resolve(registration.cacheRoot);
+      if (existsSync(path.join(registeredRoot, "install-manifest.json"))) {
+        return registeredRoot;
+      }
+    }
+  } catch {
+    // Fall through to the legacy Godot user-data cache for existing installs.
+  }
+  return defaultNewVegasCacheRoot();
 }
 
 function fo3ProfileConfigPath() {
@@ -563,16 +594,22 @@ function readFo3Profile() {
   }
 }
 
-function readNewVegasProfile() {
-  const unavailable = (message) => ({ ready: false, message });
+function readNewVegasProfile(cacheRootOverride = null) {
+  const cacheRoot = path.resolve(cacheRootOverride || configuredNewVegasCacheRoot());
+  const unavailable = (message, manifestDetected =
+    existsSync(path.join(cacheRoot, "install-manifest.json"))) => ({
+    ready: false,
+    runtimeReady: false,
+    validated: false,
+    manifestDetected,
+    message,
+    cacheRoot
+  });
   try {
     const defaultCellRecipe = productConfiguration()?.legalAssets?.defaultCellRecipe;
     if (typeof defaultCellRecipe !== "string" || path.basename(defaultCellRecipe) !== defaultCellRecipe) {
       return unavailable("The OpenNV default New Vegas cell recipe is invalid.");
     }
-    const cacheRoot = path.join(
-      app.getPath("appData"),
-      "Godot", "app_userdata", "OpenNV", "cache", "legal-assets-v1");
     const manifest = JSON.parse(readFileSync(path.join(cacheRoot, "install-manifest.json"), "utf8"));
     if (manifest?.schema !== "opennv-legal-asset-cache/v1" ||
         manifest?.status !== "prepared-legal-assets" ||
@@ -600,6 +637,9 @@ function readNewVegasProfile() {
     }
     return {
       ready: true,
+      runtimeReady: true,
+      validated: true,
+      manifestDetected: true,
       message: "New Vegas owned menu, opening, actor, and Doc Mitchell cell cache registered.",
       cacheRoot,
       savePath: path.join(app.getPath("userData"), "profiles", "newvegas", "courier-v1.json")
@@ -766,6 +806,36 @@ async function chooseFo2Profile() {
   return { ok: true, message: profile.message };
 }
 
+async function chooseNewVegasCache() {
+  const selection = await dialog.showOpenDialog({
+    title: "Choose the generated New Vegas install-manifest.json",
+    properties: ["openFile"],
+    filters: [{ name: "OpenNV New Vegas cache manifest", extensions: ["json"] }]
+  });
+  if (selection.canceled || selection.filePaths.length !== 1) {
+    return { ok: false, message: "New Vegas cache registration canceled." };
+  }
+  const manifest = path.resolve(selection.filePaths[0]);
+  if (path.basename(manifest).toLowerCase() !== "install-manifest.json") {
+    return { ok: false, message: "Choose the generated New Vegas install-manifest.json." };
+  }
+  const cacheRoot = path.dirname(manifest);
+  const profile = readNewVegasProfile(cacheRoot);
+  if (!profile.ready) return { ok: false, message: profile.message };
+  const registration = {
+    schema: "opennv-launcher-owned-cache-registration/v1",
+    campaign: "NewVegas",
+    cacheRoot
+  };
+  mkdirSync(path.dirname(newVegasCacheRegistrationPath()), { recursive: true });
+  writeFileSync(
+    newVegasCacheRegistrationPath(),
+    `${JSON.stringify(registration, null, RUNTIME_CONFIG_JSON_INDENT)}\n`,
+    "utf8"
+  );
+  return { ok: true, message: profile.message };
+}
+
 async function chooseModProfile(kind) {
   const title = kind === "ttw"
     ? "Choose the locally generated TTW profile manifest"
@@ -925,6 +995,7 @@ app.whenReady().then(() => {
   ipcMain.handle("opennv:choose-runtime", chooseRuntime);
   ipcMain.handle("opennv:choose-fo1-profile", chooseFo1Profile);
   ipcMain.handle("opennv:choose-fo2-profile", chooseFo2Profile);
+  ipcMain.handle("opennv:choose-newvegas-cache", chooseNewVegasCache);
   ipcMain.handle("opennv:choose-ttw-profile", () => chooseModProfile("ttw"));
   ipcMain.handle("opennv:choose-jam-profile", () => chooseModProfile("jam"));
   ipcMain.handle("opennv:launch", (_, request) => launch(request));
