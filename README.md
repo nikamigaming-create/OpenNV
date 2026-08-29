@@ -39,7 +39,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
 | Fallout 2 Hex | Registered-profile launcher route into the owned Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL; Take enters Map 3 at tile 28707 with sex-correct HMWARR/HFPRIM art, grounded source-walk-gated movement, and atomic cold restore | Tag/trait editing, reciprocal exits, scripts, actors, combat, inventory, campaign-wide persistence, full campaign, and parity remain absent; FPS and OpenXR stay disabled |
 | New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; from a completed stage-200 Continue, configured flat input traverses both forward XTEL links and campaign save v5 cold-restores saloon CELL `00106185`; owned containers retain remaining item counts after Take One/Take All; configured `Tab` now opens the populated owned campaign Pip-Boy surface and `Escape` closes it through Godot's input-event path; original flat and experimental OpenXR routes are launchable | Player-to-container deposits, Pip-Boy tab-navigation acceptance, reverse-traversal acceptance, neighboring CELL streaming, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
-| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and persistent CG00 stage 62; exact later state contracts compile and validate | No first-person Vault 101 world or authored package/dialogue trigger execution exists, so FPS, Hex, and VR stay disabled |
+| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, persistent CG00 stage 62, and a deterministic Vault 101 birth-room proof with grounded Doctor Li, direct CG00 Dad identity/FaceGen/outfit, and the exact owned stage-65 voice/subtitle cue | No playable first-person Vault 101 route or authored package/dialogue trigger execution exists; automatic timing, lip/idle/package behavior, stage 80, Mom/player presentation, Hex, and VR remain absent |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
 
@@ -115,11 +115,16 @@ sex-aware hair/eye records, and persist the owned FaceGen defaults at stage 62.
 The preview is an exact owned-texture inspection surface, not a 3D face render.
 The exact `CG00PlayerSection4`, stage-65 parent appearance, stage-80
 package/variable/reference, and empty stage-85 contracts compile and validate.
+An isolated native proof now renders the owned Vault 101 birth room with
+grounded Doctor Li and direct `CG00Dad` ACHR/NPC/race/FaceGen/outfit identity at
+the exact stage-0 marker, then plays the exact owned stage-65 OGG and subtitle.
+That proof uses a deterministic proof camera and `mtidle`; it does not claim
+retail camera, lighting, material, animation, lip, package, or timing parity.
 The normal flow deliberately stops at stage 62 instead of bypassing their
 authored package and dialogue triggers; the launcher therefore keeps every
-Fallout 3 presentation disabled. Dialogue/KF playback, 3D FaceGen
-presentation, the Godot Vault 101 scene, and the remaining opening interpreter
-are active work. TTW and JAM
+Fallout 3 presentation disabled. Automatic quest timing, package/KF execution,
+lip/idle behavior, stage 80, Mom/player presentation, and the remaining opening
+interpreter are active work. TTW and JAM
 registration are documented in [the mod policy](docs/mods.md);
 registration alone does not make either route runtime-playable.
 
