@@ -636,7 +636,11 @@ internal static class Fo1HexSceneLoader
         VerifiedGltfLoader.VerifyHash(materialPath, target.GetProperty("materialManifestSha256").GetString()!);
         using var materialDocument = JsonDocument.Parse(File.ReadAllText(materialPath));
         var materialManifest = materialDocument.RootElement;
-        var textures = RuntimeMaterialLoader.LoadTextures(materialManifest);
+        var textures = RuntimeMaterialLoader.LoadTextures(
+            materialManifest.GetProperty("textures").EnumerateArray(),
+            RuntimeConfiguration.Load().Renderer,
+            "id",
+            Path.GetDirectoryName(materialPath));
         var materialBindings = RuntimeMaterialLoader.Apply(
             loaded.Scene,
             materialManifest.GetProperty("asset"),

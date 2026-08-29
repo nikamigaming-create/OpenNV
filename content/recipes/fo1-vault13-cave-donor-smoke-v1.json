@@ -51,6 +51,7 @@
     ],
     "excludeModelPrefixes": [
       "effects\\ambient\\",
+      "effects\\forcefieldfx\\",
       "sky\\",
       "marker"
     ],

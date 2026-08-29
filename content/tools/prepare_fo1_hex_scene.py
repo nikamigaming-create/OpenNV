@@ -1552,9 +1552,15 @@ def prepare(
         raise Fo1ProfileError("unexpected Vault door proof schema")
     if proof["sourceObjectContract"]["door"]["serial"] != door["serial"]:
         raise Fo1ProfileError("Vault door proof source identity drift")
-    model_path = Path(proof["outputs"]["model"])
-    sidecar_path = Path(proof["outputs"]["sidecar"])
-    material_path = Path(proof["outputs"]["materialManifest"])
+    def proof_output_path(value: object) -> Path:
+        path = Path(str(value))
+        if not path.is_absolute():
+            path = door_proof_path.parent / path
+        return path.resolve()
+
+    model_path = proof_output_path(proof["outputs"]["model"])
+    sidecar_path = proof_output_path(proof["outputs"]["sidecar"])
+    material_path = proof_output_path(proof["outputs"]["materialManifest"])
     if sha256_path(model_path) != proof["outputs"]["modelSha256"]:
         raise Fo1ProfileError("Vault door model hash drift")
     if sha256_path(material_path) != proof["outputs"]["materialManifestSha256"]:

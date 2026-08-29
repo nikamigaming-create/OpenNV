@@ -200,16 +200,18 @@ def build(
             row = artifact.manifest()
             for field in ("dds", "png", "rgba8MipChain"):
                 if field in row:
-                    row[field] = str(
-                        (cache_root / Path(str(row[field])).relative_to(staging)).resolve()
-                    )
+                    relocated = staging / Path(str(row[field])).relative_to(staging)
+                    row[field] = Path(os.path.relpath(relocated, generated)).as_posix()
             if "cubeFaces" in row:
                 row["cubeFaces"] = [
                     {
                         **face,
-                        "png": str(
-                            (cache_root / Path(str(face["png"])).relative_to(staging)).resolve()
-                        ),
+                        "png": Path(
+                            os.path.relpath(
+                                staging / Path(str(face["png"])).relative_to(staging),
+                                generated,
+                            )
+                        ).as_posix(),
                     }
                     for face in row["cubeFaces"]
                 ]
@@ -246,13 +248,11 @@ def build(
                 "compressed": member.compressed,
             },
             "outputs": {
-                "model": str((cache_root / "generated" / model.name).resolve()),
-                "sidecar": str((cache_root / "generated" / sidecar.name).resolve()),
+                "model": f"generated/{model.name}",
+                "sidecar": f"generated/{sidecar.name}",
                 "modelSha256": export["outputs"]["gltf"]["sha256"],
                 "bufferSha256": export["outputs"]["buffer"]["sha256"],
-                "materialManifest": str(
-                    (cache_root / "generated" / material_manifest_path.name).resolve()
-                ),
+                "materialManifest": f"generated/{material_manifest_path.name}",
                 "materialManifestSha256": material_manifest_hash,
             },
             "controllerInventory": controllers,
