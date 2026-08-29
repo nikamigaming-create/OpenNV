@@ -70,10 +70,25 @@ function fo2ProfileRegistrationPath() {
 }
 
 function defaultFo2ProfilePath() {
-  const localAppData = process.env.LOCALAPPDATA;
-  return localAppData
-    ? path.join(localAppData, "OpenNV", "profiles", "fallout2", "fallout2-profile.json")
-    : path.join(app.getPath("userData"), "profiles", "fallout2", "fallout2-profile.json");
+  return path.join(fo2LocalDataRoot(), "profiles", "fallout2", "fallout2-profile.json");
+}
+
+function fo2LocalDataRoot() {
+  return process.env.LOCALAPPDATA
+    ? path.join(process.env.LOCALAPPDATA, "OpenNV")
+    : app.getPath("userData");
+}
+
+function fo2SlicePaths() {
+  const root = fo2LocalDataRoot();
+  return {
+    templeCache: path.join(root, "cache", "fallout2", "temple-of-trials-v1", "fo2-temple-presentation-cache.json"),
+    templeTransitions: path.join(root, "profiles", "fallout2", "temple-transitions-v1.json"),
+    arroyoCache: path.join(root, "cache", "fallout2", "arroyo-caves-v1", "fo2-arroyo-caves-presentation-cache.json"),
+    playerCache: path.join(root, "cache", "fallout2", "arroyo-player-v1", "fo2-arroyo-player-presentation-cache.json"),
+    characterStartCache: path.join(root, "cache", "fallout2", "character-start-v1", "fo2-character-start-cache.json"),
+    savePath: path.join(root, "saves", "fallout2", "character-arroyo-v1.json")
+  };
 }
 
 function configuredFo2ProfilePath() {
@@ -406,16 +421,48 @@ function readFo2Profile(manifestOverride = null) {
         !["hex-tactical", "first-person", "openxr"].every((id) => presentations[id]?.ready === false)) {
       return unavailable("The Fallout 2 profile overstates runtime presentation readiness.", true);
     }
+    const profileSha256 = sha256(manifestPath);
+    const slicePaths = fo2SlicePaths();
+    const contracts = [
+      ["templeCache", "opennv-fo2-temple-presentation-cache/v1", "decoded-disposable-local-cache", "TempleOfTrials"],
+      ["templeTransitions", "opennv-fo2-temple-transitions/v1", "compiled-owned-transition-records", "TempleOfTrials"],
+      ["arroyoCache", "opennv-fo2-arroyo-caves-presentation-cache/v1", "decoded-disposable-local-cache", "ArroyoCaves"],
+      ["playerCache", "opennv-fo2-player-presentation-cache/v1", "decoded-disposable-local-cache", "ArroyoCavesPlayer"],
+      ["characterStartCache", "opennv-fo2-character-start-cache/v1", "decoded-disposable-local-cache", "CharacterStartToArroyo"]
+    ];
+    const missing = contracts.find(([key]) => !existsSync(slicePaths[key]));
+    if (missing) {
+      return {
+        ready: false,
+        runtimeReady: false,
+        validated: true,
+        manifestDetected: true,
+        message: "Fallout 2 owned install registered; prepare its bounded Hex first-slice cache to play.",
+        reason: `The required Fallout 2 ${missing[0]} contract is missing.`,
+        path: manifestPath,
+        sourceProfileId: profile.sourceProfileId,
+        saveCompatibilityId: profile.saveCompatibilityId
+      };
+    }
+    for (const [key, schema, status, slice] of contracts) {
+      const contract = JSON.parse(readFileSync(slicePaths[key], "utf8"));
+      if (contract?.schema !== schema || contract?.status !== status ||
+          contract?.campaign !== "Fallout2" || contract?.slice !== slice ||
+          contract?.sourceProfile?.sourceProfileId !== profile.sourceProfileId ||
+          contract?.sourceProfile?.sha256 !== profileSha256) {
+        return unavailable(`The Fallout 2 ${key} contract does not match the registered owned profile. Prepare it again.`, true);
+      }
+    }
     return {
-      ready: false,
-      runtimeReady: false,
+      ready: true,
+      runtimeReady: true,
       validated: true,
       manifestDetected: true,
-      message: "Fallout 2 owned DAT2 install registered; Hex, FPS, and VR runtime work is pending.",
-      reason: String(profile.runtimeCompatibility.firstSliceBlocker || "Fallout 2 runtime slice pending."),
+      message: "Ready: bounded Fallout 2 Hex first slice with owned premade selection and cold restore.",
       path: manifestPath,
       sourceProfileId: profile.sourceProfileId,
-      saveCompatibilityId: profile.saveCompatibilityId
+      saveCompatibilityId: profile.saveCompatibilityId,
+      ...slicePaths
     };
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : "Set up the local Fallout 2 profile first.");
@@ -726,13 +773,10 @@ function launch(request) {
     mkdirSync(path.dirname(fallout1Profile.savePath), { recursive: true });
   }
   if (campaign.id === "fallout2") {
-    return {
-      ok: false,
-      code: "fallout2-runtime-not-ready",
-      message: fallout2Profile.validated
-        ? fallout2Profile.reason
-        : fallout2Profile.message
-    };
+    if (!fallout2Profile.ready) {
+      return { ok: false, code: "fallout2-profile-not-ready", message: fallout2Profile.reason || fallout2Profile.message };
+    }
+    mkdirSync(path.dirname(fallout2Profile.savePath), { recursive: true });
   }
   if (campaign.id === "fallout3" && !fallout3Profile.ready) {
     return { ok: false, code: "fallout3-profile-not-ready", message: fallout3Profile.message };

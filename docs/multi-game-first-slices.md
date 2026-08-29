@@ -1,8 +1,8 @@
 # Multi-game launcher and first-slice delivery
 
 Status: **the compact four-game launcher exposes bounded Fallout 1 Hex/FPS,
-New Vegas opening/Goodsprings, a launcher-disabled Fallout 2 owned-premade-to-
-Arroyo development route, and Fallout 3 CG00; TTW runtime is absent and JAM
+Fallout 2 owned-premade-to-Arroyo Hex, New Vegas opening/Goodsprings, and a
+Fallout 3 CG00 development frontend; TTW runtime is absent and JAM
 remains dependency-gated**.
 
 This plan coordinates the common launcher/boot surface across Fallout 1,
@@ -70,7 +70,8 @@ retail startup-logo and original-menu presentation remain absent.
 5. Available now: `scripts/Register-OpenNVFallout2.ps1` validates the legally
    owned `master.dat`, `critter.dat`, and `patch000.dat` DAT2 archives and emits
    a hash-bound source-only profile. The launcher shows Fallout 2 as the fourth
-   game and keeps Hex/FPS/VR disabled.
+   game and enables Hex only after its five matching local slice artifacts are
+   present; FPS and VR remain disabled.
 6. Available now: `content/tools/fo2_first_slice.py` resolves effective Map 126
    through patch/critter/master overlay precedence and emits its exact MAP
    header and elevation, MAP-header player entry marker, scripts, 567 placed
@@ -112,13 +113,10 @@ retail startup-logo and original-menu presentation remain absent.
     cold-restores the same sex-correct player. Modify/Create, editable fields,
     animation playback, campaign-wide state, and campaign play remain absent.
 
-Current result: a normal launcher starts either registered Fallout 1 view
-through its menu/creator/movie path and the bounded New Vegas menu/Doc/exterior/
-saloon composite. Fallout 2 and Fallout 3 remain launcher-disabled;
-Fallout 3 has a registered development menu/CG00 frontend but no playable
-presentation, while Fallout 2's exact source-bound Godot scene can be
-rendered through a visible selectable premade-to-Arroyo development route
-with bounded cold-restorable player state but without launcher promotion.
+Current result: a normal launcher starts either registered Fallout 1 view, the
+registered and prepared Fallout 2 Hex premade-to-Arroyo slice, or the bounded
+New Vegas menu/Doc/exterior/saloon composite. Fallout 3 remains launcher-disabled
+with a registered development menu/CG00 frontend but no playable presentation.
 
 ### P1 — Fallout 3 first slice
 
@@ -191,7 +189,7 @@ is supported for the selected base profile.
 | --- | --- |
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
-| Fallout 2 | Exact Temple/Arroyo Caves source transport and a rendered Map 3 arrival now include an owned Narg/Mingan/Chitsa selector, source stats/bios/portraits, sex-correct HMWARR/HFPRIM art, Take handoff to tile 28707, grounded source-walk-gated movement, and atomic cold restore of the selected state and current Map 3 transform/mode. Modify/Create, editable fields, campaign-wide persistence, reciprocal runtime exit execution, INT, actors, combat, inventory, full campaign, FPS, VR, parity, and launcher promotion remain absent, so all modes stay disabled |
+| Fallout 2 | The launcher enables the bounded Hex premade-to-Arroyo slice when all owned-profile/cache identities match. Modify/Create, editable fields, campaign-wide persistence, reciprocal runtime exit execution, INT, actors, combat, inventory, full campaign, FPS, VR, and parity remain absent |
 | New Vegas first slice | Menu/intro/Doc house, the source-bound HUD/Pip-Boy runtime shell, and the bounded preloaded Doc/exterior/saloon composite load; diagnostic portal checks pass, and completed-save owned Continue drives configured flat input through both forward XTEL links before v4 cold-restores saloon CELL `00106185`; reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
 | Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance through stage 62 work; later state contracts validate, but FPS/Hex/VR, authored trigger execution, dialogue/KF, actors, and Vault 101 remain |
 | TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |

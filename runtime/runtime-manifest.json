@@ -4,7 +4,7 @@
     "engine": "Godot",
     "engineVersion": "4.7.2",
     "status": "experimental",
-    "label": "Launcher-ready Fallout 1 V13ENT and New Vegas Goodsprings slices; Fallout 3 CG00 frontend is not yet a playable presentation.",
+    "label": "Launcher-ready bounded Fallout 1 V13ENT, Fallout 2 Arroyo Hex, and New Vegas Goodsprings slices; Fallout 3 CG00 remains a development frontend.",
     "canLaunch": true,
     "executables": {},
     "contentExecutables": {},
@@ -65,14 +65,14 @@
       "id": "Fallout2",
       "variants": {
         "arroyo": {
-          "ready": false,
+          "ready": true,
           "presentations": {
-            "first-person": { "ready": false, "status": "no-player-runtime" },
-            "hex-tactical": { "ready": false, "status": "no-player-runtime" },
-            "openxr": { "ready": false, "status": "no-player-runtime" }
+            "first-person": { "ready": false, "status": "not-implemented" },
+            "hex-tactical": { "ready": true, "status": "bounded-premade-arroyo-map3-slice" },
+            "openxr": { "ready": false, "status": "not-implemented" }
           },
           "requiresProfile": "opennv-fo2-owned-profile/v1",
-          "message": "The owned Fallout 2 Map 126 Temple and Map 3 Arroyo Caves graphs/caches, Temple construction/topology/physics, nonvisual movement, and exact exit state are available. No Godot Map 3 consumer, reciprocal runtime execution, INT, actors, controls, rendered interaction, character/gameplay/save state, FPS, or OpenXR exists, so every mode remains disabled."
+          "message": "The bounded Hex first slice selects owned Narg, Mingan, or Chitsa source state, hands Take to Map 3 tile 28707, renders the sex-correct owned idle FRM, permits grounded source-walk-gated movement, and atomically cold-restores that selected state plus current Map 3 transform/mode. Modify/Create, editable fields, scripts, actors, combat, inventory, reciprocal exits, campaign-wide persistence, the full campaign, FPS, OpenXR, and retail parity remain unavailable."
         }
       }
     },
@@ -156,6 +156,7 @@
     "intact-retail-pool-table-practice-extension",
     "shared-flat-openxr-pool-simulation",
     "persistent-pool-ball-motion-and-pocket-state",
-    "retail-actor-set-sunny-settler-easy-pete"
+    "retail-actor-set-sunny-settler-easy-pete",
+    "fo2-owned-premade-arroyo-cold-restore"
   ]
 }

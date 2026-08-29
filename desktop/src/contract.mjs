@@ -173,7 +173,21 @@ export function createRuntimeArguments(
     ];
   }
   if (campaign.id === "fallout2") {
-    throw new Error(CONTRACT.copy.fallout2RuntimeUnavailable);
+    if (!fallout2Profile?.ready) throw new Error(CONTRACT.copy.fallout2ProfileUnavailable);
+    if (presentation !== "hex-tactical") throw new Error(CONTRACT.copy.invalidPresentation);
+    return [
+      "--xr-mode", "off",
+      "--windowed",
+      "--resolution", "1280x720",
+      "res://src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStart.tscn",
+      "--",
+      "--fo2-temple-cache", fallout2Profile.templeCache,
+      "--fo2-temple-transitions", fallout2Profile.templeTransitions,
+      "--fo2-arroyo-cache", fallout2Profile.arroyoCache,
+      "--fo2-player-cache", fallout2Profile.playerCache,
+      "--fo2-character-start-cache", fallout2Profile.characterStartCache,
+      "--fo2-save", fallout2Profile.savePath
+    ];
   }
   if (campaign.id === "fallout3") {
     if (!fallout3Profile?.ready) throw new Error(CONTRACT.copy.fallout3ProfileUnavailable);

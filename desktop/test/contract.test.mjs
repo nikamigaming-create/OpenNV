@@ -22,7 +22,7 @@ test("the launcher has four top-level games while TTW remains an edition", () =>
   );
   assert.deepEqual(
     state.campaigns.find((campaign) => campaign.id === "fallout2").pendingPresentations,
-    ["hex-tactical", "first-person", "openxr"]
+    ["first-person", "openxr"]
   );
   for (const id of ["fallout1", "fallout2", "newvegas", "fallout3"]) {
     assert.match(
@@ -30,7 +30,7 @@ test("the launcher has four top-level games while TTW remains an edition", () =>
       /FPS · Hex · VR/
     );
   }
-  assert.deepEqual(state.campaigns.find((campaign) => campaign.id === "fallout2").presentations, []);
+  assert.deepEqual(state.campaigns.find((campaign) => campaign.id === "fallout2").presentations, ["hex-tactical"]);
   assert.equal(state.campaigns.find((campaign) => campaign.id === "ttw").ttw, true);
   assert.match(state.campaignRule, /before creating a character/i);
 });
@@ -47,30 +47,57 @@ test("the compact renderer starts with one readable four-card row and two column
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*grid-template-columns:\s*repeat\(2,/u);
 });
 
-test("Fallout 2 stays disabled with a registered owned profile and no runtime variant", () => {
+test("Fallout 2 enables only the matching owned-cache Hex first slice", () => {
   const base = createOfflineState({ platform: "win32" });
   const profile = {
-    ready: false,
-    runtimeReady: false,
+    ready: true,
+    runtimeReady: true,
     validated: true,
-    message: "Fallout 2 owned DAT2 install registered; runtime pending."
+    message: "Ready: bounded Fallout 2 Hex first slice.",
+    templeCache: "D:\\cache\\fo2-temple.json",
+    templeTransitions: "D:\\profiles\\fo2-transitions.json",
+    arroyoCache: "D:\\cache\\fo2-arroyo.json",
+    playerCache: "D:\\cache\\fo2-player.json",
+    characterStartCache: "D:\\cache\\fo2-character-start.json",
+    savePath: "D:\\saves\\fo2-character-arroyo.json"
   };
   const merged = mergeRuntimeState(base, {
     runtime: { status: "ready", label: "Godot runtime ready", canLaunch: true },
-    campaigns: []
+    campaigns: [{
+      id: "Fallout2",
+      variants: {
+        arroyo: {
+          ready: true,
+          presentations: {
+            "hex-tactical": { ready: true },
+            "first-person": { ready: false },
+            openxr: { ready: false }
+          }
+        }
+      }
+    }]
   }, { fallout2Profile: profile });
   const fallout2 = merged.campaigns.find((campaign) => campaign.id === "fallout2");
-  assert.equal(fallout2.ready, false);
-  assert.match(fallout2.readiness, /registered/i);
+  assert.equal(fallout2.ready, true);
+  assert.deepEqual(fallout2.presentations, ["hex-tactical"]);
+  const request = validateLaunchRequest({ campaign: "fallout2", presentation: "hex-tactical" });
+  assert.deepEqual(createRuntimeArguments(request, { fallout2Profile: profile }), [
+    "--xr-mode", "off", "--windowed", "--resolution", "1280x720",
+    "res://src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStart.tscn", "--",
+    "--fo2-temple-cache", profile.templeCache,
+    "--fo2-temple-transitions", profile.templeTransitions,
+    "--fo2-arroyo-cache", profile.arroyoCache,
+    "--fo2-player-cache", profile.playerCache,
+    "--fo2-character-start-cache", profile.characterStartCache,
+    "--fo2-save", profile.savePath
+  ]);
   assert.throws(
-    () => validateLaunchRequest({ campaign: "fallout2", presentation: "hex-tactical" }),
+    () => validateLaunchRequest({ campaign: "fallout2", presentation: "first-person" }),
     /not available/i
   );
   assert.throws(
-    () => createRuntimeArguments({ campaign: fallout2, presentation: "hex-tactical" }, {
-      fallout2Profile: profile
-    }),
-    /no player-controlled Hex, FPS, or VR presentation/i
+    () => validateLaunchRequest({ campaign: "fallout2", presentation: "openxr" }),
+    /not available/i
   );
 });
 
@@ -236,4 +263,10 @@ test("the checked-in runtime keeps owned-data routes profile-gated", () => {
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "fallout2").ready, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "fallout3").ready, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "ttw").ready, false);
+
+  const withFo2 = mergeRuntimeState(createOfflineState({ platform: "win32" }), manifest, {
+    fallout2Profile: { ready: true, message: "Prepared owned Hex cache" }
+  });
+  assert.equal(withFo2.campaigns.find((campaign) => campaign.id === "fallout2").ready, true);
+  assert.deepEqual(withFo2.campaigns.find((campaign) => campaign.id === "fallout2").presentations, ["hex-tactical"]);
 });

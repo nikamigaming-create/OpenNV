@@ -54,14 +54,14 @@ Mitchell house/exterior exit, the bounded Fallout 1 Vault 13/V13ENT Hex/FPS
 route, and the bounded Fallout 3 owned-profile menu/intro/CG00 source route
 through persistent stage 62. Fallout 2 is a
 fourth visible game card whose owned DAT2 installation and exact Map 126/Map 3 source
-graph can be admitted. A separate local development route selects the owned
+graph can be admitted. Its bounded Hex route selects the owned
 Narg, Mingan, or Chitsa premade, applies source stats/biography/portrait and
 sex-correct idle FRM presentation, and hands Take to the grounded Map 3 player
 at tile 28707. An atomic user-data save cold-restores the selected source state,
-tile, facing, transform, and bounded runtime modes. Hex, FPS, and VR remain
-disabled because the route still lacks Modify/Create, scripting, campaign-wide
-state, parity, and the ordinary launcher handoff; its runtime proof is not a
-launcher-ready mode. The Fallout 3
+tile, facing, transform, and bounded runtime modes. The launcher enables Hex
+only after all five local slice artifacts match the registered profile; FPS and
+VR remain disabled. Modify/Create, scripting, campaign-wide state, and parity
+remain open. The Fallout 3
 intro is converted locally to a hash-verified Theora cache during profile
 registration; Escape and the visible Skip action enter the same CG00 state.
 Fallout 1 Hex/FPS remain disabled
@@ -93,7 +93,10 @@ Fallout 2 profiles are generated with `content/tools/fo2_profile.py` or
 `scripts/Register-OpenNVFallout2.ps1`. The profile hashes `master.dat`,
 `critter.dat`, and `patch000.dat`, verifies each DAT2 footer and directory, and
 records a neutral source/index identity. The launcher rechecks those three
-hash-bound files on every read. It neither extracts nor copies archive members.
+hash-bound files on every read, then requires the matching local Temple,
+transition, Arroyo, player, and character-start contracts before enabling Hex.
+It neither extracts nor copies archive members; those disposable caches remain
+outside the repository and package.
 
 TTW and JAM manifests are auto-detected from
 `%LOCALAPPDATA%\OpenNV\profiles\ttw-profile.json` and
@@ -125,8 +128,8 @@ initialization. Continue/Load restore the profile's canonical save. A proof-only
 command-line bypass does not make a route launcher-ready.
 
 Fallout 1 enables Hex Tactical and FPS over one authoritative Vault Dweller
-state; its VR choice remains disabled. Fallout 2 visibly lists all three while
-keeping them disabled. New Vegas enables FPS and its experimental software-gated
+state; its VR choice remains disabled. Fallout 2 enables only Hex for its
+bounded premade-to-Arroyo slice; FPS and VR remain disabled. New Vegas enables FPS and its experimental software-gated
 VR route while Hex remains disabled; OpenXR is not physical-headset accepted.
 Fallout 3 keeps FPS, Hex, and VR disabled; its bounded menu/CG00 frontend is not
 misrepresented as a first-person world. TTW's separate combined-world
