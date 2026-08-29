@@ -61,14 +61,7 @@ internal static class LegalAssetPreparer
                     "Neither the packaged nor source-checkout legal-content helper is available.");
             var compiler = ReadContentToolCompilerIdentity(contentTool);
             var dataRoot = ReadManifestDataRoot(manifestPath);
-            try
-            {
-                prepared = OpenPreparedCache(cacheRoot, dataRoot, compiler, configuration);
-            }
-            catch when (Directory.Exists(dataRoot))
-            {
-                prepared = Prepare(dataRoot, options, configuration);
-            }
+            prepared = OpenPreparedCache(cacheRoot, dataRoot, compiler, configuration);
             return true;
         }
         catch (Exception exception)
