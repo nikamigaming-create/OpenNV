@@ -113,6 +113,64 @@ class SourceConstantPolicyTest(unittest.TestCase):
                 },
             )
 
+    def test_debt_ratchet_ignores_lines_and_allows_removal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            source = repository / "source.py"
+            baseline = AUDIT.violation_debt_counts(
+                repository,
+                [
+                    AUDIT.Violation(source, 8, "12", "python"),
+                    AUDIT.Violation(source, 12, "12", "python"),
+                ],
+            )
+            current = AUDIT.violation_debt_counts(
+                repository,
+                [AUDIT.Violation(source, 800, "12", "python")],
+            )
+            self.assertEqual(AUDIT.debt_regressions(current, baseline), [])
+
+    def test_debt_ratchet_rejects_one_new_violation_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            source = repository / "source.py"
+            baseline = AUDIT.violation_debt_counts(
+                repository,
+                [AUDIT.Violation(source, 8, "12", "python")],
+            )
+            current = AUDIT.violation_debt_counts(
+                repository,
+                [
+                    AUDIT.Violation(source, 80, "12", "python"),
+                    AUDIT.Violation(source, 90, "13", "python"),
+                ],
+            )
+            regressions = AUDIT.debt_regressions(current, baseline)
+            self.assertEqual(len(regressions), 1)
+            self.assertEqual(regressions[0].value, "13")
+            self.assertEqual(regressions[0].baseline_count, 0)
+            self.assertEqual(regressions[0].current_count, 1)
+
+    def test_debt_ratchet_rejects_increased_multiplicity(self):
+        key = ("source.py", "python", "12")
+        regressions = AUDIT.debt_regressions(
+            AUDIT.collections.Counter({key: 2}),
+            AUDIT.collections.Counter({key: 1}),
+        )
+        self.assertEqual(len(regressions), 1)
+        self.assertEqual(regressions[0].baseline_count, 1)
+        self.assertEqual(regressions[0].current_count, 2)
+
+    def test_unsupported_source_allows_only_the_named_baseline_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            scripts = repository / "scripts"
+            scripts.mkdir()
+            self.write(scripts, AUDIT.DEBT_BASELINE_PATH.name, "{}\n")
+            unsupported = self.write(scripts, "unscanned.json", "{}\n")
+            violations = AUDIT.unsupported_source_violations(repository)
+            self.assertEqual([violation.path for violation in violations], [unsupported])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import collections
 import json
 import re
 import sys
@@ -50,6 +51,8 @@ DECLARATIVE_CONFIGURATION_GLOBS = (
     "runtime/*.tres",
     "runtime/*.tscn",
 )
+DEBT_BASELINE_SCHEMA = "opennv-source-constant-debt-baseline/v1"
+DEBT_BASELINE_PATH = Path(__file__).with_name("source_constant_debt_baseline.json")
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,125 @@ class Violation:
     line: int
     value: str
     language: str
+
+
+DebtKey = tuple[str, str, str]
+
+
+@dataclass(frozen=True)
+class DebtRegression:
+    path: str
+    category: str
+    value: str
+    baseline_count: int
+    current_count: int
+
+
+def violation_debt_counts(
+    repository: Path,
+    violations: list[Violation],
+) -> collections.Counter[DebtKey]:
+    """Aggregate stable debt keys without binding the baseline to line numbers."""
+
+    return collections.Counter(
+        (
+            violation.path.relative_to(repository).as_posix(),
+            violation.language,
+            violation.value,
+        )
+        for violation in violations
+    )
+
+
+def debt_categories(
+    counts: collections.Counter[DebtKey],
+) -> dict[str, int]:
+    categories: collections.Counter[str] = collections.Counter()
+    for (_path, category, _value), count in counts.items():
+        categories[category] += count
+    return dict(sorted(categories.items()))
+
+
+def load_debt_baseline(path: Path = DEBT_BASELINE_PATH) -> collections.Counter[DebtKey]:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if set(document) != {
+        "schema",
+        "sourceRevision",
+        "total",
+        "categories",
+        "violations",
+    }:
+        raise ValueError("Source-constant debt baseline document is malformed")
+    if document.get("schema") != DEBT_BASELINE_SCHEMA:
+        raise ValueError("Source-constant debt baseline schema differs")
+    source_revision = document.get("sourceRevision")
+    if (
+        not isinstance(source_revision, str)
+        or re.fullmatch(r"[0-9a-f]{40}", source_revision) is None
+    ):
+        raise ValueError("Source-constant debt baseline revision is malformed")
+    rows = document.get("violations")
+    if not isinstance(rows, list):
+        raise ValueError("Source-constant debt baseline has no violation rows")
+    result: collections.Counter[DebtKey] = collections.Counter()
+    ordered_keys: list[DebtKey] = []
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {
+            "path",
+            "category",
+            "value",
+            "count",
+        }:
+            raise ValueError("Source-constant debt baseline row is malformed")
+        path_value = row["path"]
+        category = row["category"]
+        value = row["value"]
+        count = row["count"]
+        if (
+            not isinstance(path_value, str)
+            or not path_value
+            or "\\" in path_value
+            or not isinstance(category, str)
+            or not category
+            or not isinstance(value, str)
+            or not value
+            or not isinstance(count, int)
+            or isinstance(count, bool)
+            or count < 1
+        ):
+            raise ValueError("Source-constant debt baseline row has invalid values")
+        key = (path_value, category, value)
+        if key in result:
+            raise ValueError("Source-constant debt baseline repeats a violation key")
+        result[key] = count
+        ordered_keys.append(key)
+    if ordered_keys != sorted(ordered_keys):
+        raise ValueError("Source-constant debt baseline rows are not deterministic")
+    if document.get("total") != sum(result.values()):
+        raise ValueError("Source-constant debt baseline total differs")
+    if document.get("categories") != debt_categories(result):
+        raise ValueError("Source-constant debt baseline categories differ")
+    return result
+
+
+def debt_regressions(
+    current: collections.Counter[DebtKey],
+    baseline: collections.Counter[DebtKey],
+) -> list[DebtRegression]:
+    regressions: list[DebtRegression] = []
+    for (path, category, value), current_count in sorted(current.items()):
+        baseline_count = baseline[(path, category, value)]
+        if current_count > baseline_count:
+            regressions.append(
+                DebtRegression(
+                    path,
+                    category,
+                    value,
+                    baseline_count,
+                    current_count,
+                )
+            )
+    return regressions
 
 
 def source_data_violations(
@@ -362,6 +484,8 @@ def unsupported_source_violations(repository: Path) -> list[Violation]:
         for path in sorted(candidate for candidate in root.rglob("*") if candidate.is_file()):
             if "__pycache__" in path.parts:
                 continue
+            if path == repository / "scripts" / DEBT_BASELINE_PATH.name:
+                continue
             if path.suffix.casefold() not in supported_suffixes:
                 violations.append(
                     Violation(path, 1, path.suffix or "<none>", "unsupported-source")
@@ -437,8 +561,7 @@ def configuration_substitution_violations(repository: Path) -> list[Violation]:
     return violations
 
 
-def main() -> int:
-    repository = Path(__file__).resolve().parents[1]
+def repository_violations(repository: Path) -> tuple[list[Violation], list[tuple[Path, str]]]:
     violations: list[Violation] = []
     scanners = {
         "csharp": csharp_violations,
@@ -457,14 +580,28 @@ def main() -> int:
             continue
         violations.extend(source_data_violations(path, identities))
     violations.extend(configuration_substitution_violations(repository))
-    if violations:
-        for violation in violations:
-            relative = violation.path.relative_to(repository)
+    return violations, sources
+
+
+def main() -> int:
+    repository = Path(__file__).resolve().parents[1]
+    violations, sources = repository_violations(repository)
+    current = violation_debt_counts(repository, violations)
+    baseline = load_debt_baseline()
+    regressions = debt_regressions(current, baseline)
+    categories = json.dumps(debt_categories(current), sort_keys=True, separators=(",", ":"))
+    if regressions:
+        for regression in regressions:
             print(
-                f"{relative}:{violation.line}: unexplained {violation.language} literal "
-                f"{violation.value}"
+                f"{regression.path}: unexplained {regression.category} literal "
+                f"{regression.value} multiplicity={regression.current_count} "
+                f"baseline={regression.baseline_count}"
             )
-        print(f"OPENNV_SOURCE_CONSTANT_POLICY_FAIL violations={len(violations)}")
+        print(
+            "OPENNV_SOURCE_CONSTANT_POLICY_FAIL "
+            f"violations={sum(current.values())} baseline={sum(baseline.values())} "
+            f"regressions={len(regressions)} categories={categories}"
+        )
         return 1
     source_lines = sum(
         len(path.read_text(encoding="utf-8-sig").splitlines())
@@ -472,7 +609,9 @@ def main() -> int:
     )
     print(
         "OPENNV_SOURCE_CONSTANT_POLICY_PASS "
-        f"violations=0 sourceFiles={len(sources)} sourceLines={source_lines} "
+        f"violations={sum(current.values())} baseline={sum(baseline.values())} "
+        f"removed={sum(baseline.values()) - sum(current.values())} "
+        f"categories={categories} sourceFiles={len(sources)} sourceLines={source_lines} "
         f"configurationFiles={len(configuration_surfaces(repository))}"
     )
     return 0

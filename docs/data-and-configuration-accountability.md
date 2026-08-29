@@ -1,7 +1,8 @@
 # OpenNV data and configuration accountability
 
-Status: **enforced for all first-party executable C#, Python, JavaScript, and
-PowerShell, with unsupported source-language detection**.
+Status: **recursively inventoried for first-party executable C#, Python,
+JavaScript, and PowerShell, with a deterministic debt ratchet and unsupported
+source-language detection**.
 
 OpenNV has one rule for every meaningful value: it is either authored Fallout
 data, an immutable external-format or mathematical contract, or an explicitly
@@ -239,7 +240,13 @@ gallery identities, and guessed-substitution language in executable source; it
 also rejects guessed-substitution language in JSON configuration. The pass
 line reports audited source-file, source-line, and declarative-configuration
 counts. `Test-GodotRuntime.ps1` runs this gate, so release CI and packaging
-inherit it.
+inherit it. The checked-in `scripts/source_constant_debt_baseline.json` records
+the exact debt and source revision from the clean tree used to seed it, as stable
+path/category/value keys with a multiplicity, not line numbers. CI fails for
+every new key or increased multiplicity and permits only unchanged debt or
+removal. The pass/fail summary always reports the current total and per-category
+counts. Updating the baseline is an explicit review action; the gate never
+rewrites or expands it automatically.
 
 The policy is necessary but not sufficient. Promotion also requires:
 
