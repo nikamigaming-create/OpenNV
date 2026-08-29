@@ -203,13 +203,14 @@ public partial class RuntimeCoordinator : Node3D
             var hasFo1CampaignPresentation = _options.ContainsKey("fo1-campaign-presentation");
             var hasFo2TemplePresentation = _options.ContainsKey("fo2-temple-cache");
             var hasFo3Profile = _options.ContainsKey("fo3-profile");
+            var hasPreparedCache = _options.ContainsKey("reuse-cache");
             if (_options.ContainsKey("fo3-birth-presentation") && !hasFo3Profile)
                 throw new ArgumentException(
                     "--fo3-birth-presentation requires --fo3-profile.");
             var hasJamProfile = _options.ContainsKey("jam-profile");
-            if (hasJamProfile && (!hasDataRoot && !hasCellScene))
+            if (hasJamProfile && !hasDataRoot && !hasCellScene && !hasPreparedCache)
                 throw new ArgumentException(
-                    "--jam-profile requires --data-root or --cell-scene.");
+                    "--jam-profile requires --data-root, --cell-scene, or --reuse-cache.");
             if (hasJamProfile &&
                 (_options.ContainsKey("vr") || _options.ContainsKey("vr-layout-proof") ||
                     _options.ContainsKey("classic-diorama")))
