@@ -115,6 +115,14 @@ internal static class CellRouteTravelAcceptance
                 host,
                 input.Activate,
                 input.Acceptance.SettleFrames);
+            if (!loaded.Player.LastActivationDoorFormId.Equals(
+                    link.FromDoor.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Configured activation did not resolve expected portal door " +
+                    $"{link.FromDoor.ReferenceFormId}: " +
+                    $"door={loaded.Player.LastActivationDoorFormId} " +
+                    $"collider={loaded.Player.LastActivationCollider}.");
             if (!link.FromDoor.IsOpen || !link.ToDoor.IsOpen)
                 throw new InvalidOperationException(
                     $"Configured activation did not open reciprocal portal " +

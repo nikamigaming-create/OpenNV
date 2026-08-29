@@ -155,8 +155,8 @@ internal static class CellSceneLoader
                     throw new InvalidOperationException(
                         $"Linked CELL portal XTEL transforms are missing: {fromDoorId} -> {toDoorId}");
                 var portalWasOpen = fromDoor.IsOpen || toDoor.IsOpen;
-                fromDoor.SetOpen(false);
-                toDoor.SetOpen(false);
+                fromDoor.RestoreOpenState(false);
+                toDoor.RestoreOpenState(false);
                 var fromFrame = BuildProofRay(fromDoor, configuration.Proof);
                 var toFrame = BuildProofRay(toDoor, configuration.Proof);
                 var fromNormal = HorizontalDoorNormal(fromFrame);
@@ -186,7 +186,7 @@ internal static class CellSceneLoader
                     throw new InvalidOperationException(
                         $"Linked CELL portal normals disagree: {normalAgreement:F6}");
                 fromDoor.Link(toDoor);
-                fromDoor.SetOpen(portalWasOpen);
+                fromDoor.RestoreOpenState(portalWasOpen);
                 linkedCells.Add(new LinkedCell(linked, renderLayer));
                 portalLinks.Add(new PortalLink(
                     sourceContent.FormId,
@@ -559,6 +559,7 @@ internal static class CellSceneLoader
     {
         var query = PhysicsRayQueryParameters3D.Create(ray.From, ray.To);
         query.CollisionMask = collisionMask;
+        query.HitBackFaces = false;
         var hit = space.IntersectRay(query);
         if (hit.Count == 0)
             return new RayHit(false, false, "", Vector3.Zero);

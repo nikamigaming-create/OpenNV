@@ -57,9 +57,12 @@ internal sealed class CellPortalTravel
     internal bool TryActivateFacing(
         Node3D aimSource,
         CellPlayer player,
-        float maximumDistance)
+        float maximumDistance,
+        out string activatedDoorFormId)
     {
+        activatedDoorFormId = "none";
         var forward = -aimSource.GlobalBasis.Z.Normalized();
+        (Passage Passage, Endpoint Source)? match = null;
         foreach (var passage in _passages)
         {
             var source = passage.SourceFor(_session.ActiveCellFormId);
@@ -70,9 +73,16 @@ internal sealed class CellPortalTravel
             if (distance <= maximumDistance &&
                 distance > 0.0f &&
                 forward.Dot(offset / distance) >= MinimumFacingDot)
-                return TravelThrough(passage, source.Value, player);
+            {
+                if (match is not null)
+                    return false;
+                match = (passage, source.Value);
+            }
         }
-        return false;
+        if (match is null)
+            return false;
+        activatedDoorFormId = match.Value.Source.Door.ReferenceFormId;
+        return TravelThrough(match.Value.Passage, match.Value.Source, player);
     }
 
     private bool TravelThrough(Passage passage, Endpoint source, CellPlayer player)

@@ -108,6 +108,7 @@ internal partial class CellPlayer : CharacterBody3D
     internal string LastMovementCollision { get; private set; } = "none";
     internal string LastMovementState { get; private set; } = "none";
     internal string LastActivationCollider { get; private set; } = "none";
+    internal string LastActivationDoorFormId { get; private set; } = "none";
     internal Vector3 LastBlockingNormal { get; private set; }
     internal Node? LastBlockingCollider { get; private set; }
     internal Vector3? LastBlockingPosition { get; private set; }
@@ -625,6 +626,7 @@ internal partial class CellPlayer : CharacterBody3D
     {
         var collider = Cast(aimSource, _configuration.Player.ActivationDistanceMeters);
         LastActivationCollider = collider?.GetPath().ToString() ?? "none";
+        LastActivationDoorFormId = Ancestor<DoorInstance>(collider)?.ReferenceFormId ?? "none";
         if (_externalActivationHandler?.Invoke(collider) == true)
             return true;
         var poolBall = Ancestor<PoolBallInstance>(collider);
@@ -654,10 +656,17 @@ internal partial class CellPlayer : CharacterBody3D
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
         {
-            return _portalTravel?.TryActivateFacing(
-                aimSource,
-                this,
-                _configuration.Player.ActivationDistanceMeters) == true;
+            if (collider is null &&
+                _portalTravel?.TryActivateFacing(
+                    aimSource,
+                    this,
+                    _configuration.Player.ActivationDistanceMeters,
+                    out var facingDoorFormId) == true)
+            {
+                LastActivationDoorFormId = facingDoorFormId;
+                return true;
+            }
+            return false;
         }
         if (_portalTravel?.TryActivate(door, this) == true)
         {
