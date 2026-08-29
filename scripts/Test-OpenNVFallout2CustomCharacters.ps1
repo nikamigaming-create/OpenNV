@@ -80,7 +80,7 @@ foreach ($sex in @('Male', 'Female')) {
         $write.status -ne "pass-$expectedMode-map3-atomic-save" -or
         $restore.schema -ne 'opennv-fo2-custom-character-restore-proof/v1' -or
         $restore.status -ne "pass-$expectedMode-map3-cold-restore" -or
-        $saved.schema -ne 'opennv-fo2-character-arroyo-save/v5' -or
+        $saved.schema -ne 'opennv-fo2-character-arroyo-save/v7' -or
         $saved.character.Mode -ne $expectedMode -or
         $saved.character.Sex -ne $sex -or
         ($saved.character.special | Measure-Object -Sum).Sum -ne 40 -or

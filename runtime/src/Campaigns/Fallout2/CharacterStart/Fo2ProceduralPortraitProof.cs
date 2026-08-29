@@ -9,6 +9,7 @@ internal static class Fo2ProceduralPortraitProof
     private const int SourceIndex = 2;
     private const int ExpectedAge = 20;
     private const int ExpectedSpecialTotal = 40;
+    private const int ExpectedLongHairVisibleParts = 4;
     private const int HashLength = 64;
     private const int SpecialFour = 4;
     private const int SpecialFive = 5;
@@ -33,6 +34,9 @@ internal static class Fo2ProceduralPortraitProof
             editor.SetSex(ExpectedSex);
             editor.SetAge(ExpectedAge);
             editor.SetFaceShape(Fo2ProceduralPortrait.AngularFace);
+            editor.SetHairStyle(Fo2ProceduralPortrait.LongHair);
+            editor.SetSkinTone(Fo2ProceduralPortrait.DeepSkin);
+            editor.TogglePreviewMode();
             editor.SetSpecial(
             [
                 SpecialFour,
@@ -46,22 +50,48 @@ internal static class Fo2ProceduralPortraitProof
             if (!editor.CanConfirm || editor.AllocatedSpecial != ExpectedSpecialTotal)
                 throw new InvalidOperationException(
                     "Fallout 2 portrait proof custom state is invalid.");
+            var liveHeadMatches = editor.Live3DVisible &&
+                editor.HeadPreview.FaceShapeId == Fo2ProceduralPortrait.AngularFace &&
+                editor.HeadPreview.HairStyleId == Fo2ProceduralPortrait.LongHair &&
+                editor.HeadPreview.SkinToneId == Fo2ProceduralPortrait.DeepSkin &&
+                editor.HeadPreview.RecipeSha256 ==
+                    Fo2ProceduralAppearanceCatalog.Load().Sha256 &&
+                editor.HeadPreview.VisibleGeometryParts == ExpectedLongHairVisibleParts;
             editor.Confirm();
             var saved = host.PersistCurrentState();
             var appearance = saved.Character.Appearance;
             var repeat = Fo2ProceduralPortrait.Commit(
                 saved.Character.Source,
                 saved.Character.Profile.Sex,
-                appearance.FaceShapeId);
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                appearance.SkinToneId);
             var selectedPixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
-                appearance.FaceShapeId));
-            var alternatePixels = PixelSha256(Fo2ProceduralPortrait.Render(
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                appearance.SkinToneId));
+            var alternateFacePixels = PixelSha256(Fo2ProceduralPortrait.Render(
                 saved.Character.Profile.Sex,
-                Fo2ProceduralPortrait.RoundFace));
+                Fo2ProceduralPortrait.RoundFace,
+                appearance.HairStyleId,
+                appearance.SkinToneId));
+            var alternateHairPixels = PixelSha256(Fo2ProceduralPortrait.Render(
+                saved.Character.Profile.Sex,
+                appearance.FaceShapeId,
+                Fo2ProceduralPortrait.CroppedHair,
+                appearance.SkinToneId));
+            var alternateSkinPixels = PixelSha256(Fo2ProceduralPortrait.Render(
+                saved.Character.Profile.Sex,
+                appearance.FaceShapeId,
+                appearance.HairStyleId,
+                Fo2ProceduralPortrait.LightSkin));
             var passed = Matches(saved.Character) &&
+                liveHeadMatches &&
                 appearance == repeat &&
-                selectedPixels != alternatePixels &&
+                selectedPixels != alternateFacePixels &&
+                selectedPixels != alternateHairPixels &&
+                selectedPixels != alternateSkinPixels &&
                 File.Exists(appearance.GeneratedPortraitPath) &&
                 saved.Sha256.Length == HashLength;
             WriteReport(
@@ -76,7 +106,10 @@ internal static class Fo2ProceduralPortraitProof
                     appearance,
                     save = new { path = saved.Path, sha256 = saved.Sha256 },
                     deterministicRepeat = appearance == repeat,
-                    distinctFaceShapePixels = selectedPixels != alternatePixels,
+                    distinctFaceShapePixels = selectedPixels != alternateFacePixels,
+                    distinctHairStylePixels = selectedPixels != alternateHairPixels,
+                    distinctSkinTonePixels = selectedPixels != alternateSkinPixels,
+                    matchingLive3dHead = liveHeadMatches,
                     mediaCaptureCreated = false,
                 });
             GD.Print(passed
@@ -139,7 +172,11 @@ internal static class Fo2ProceduralPortraitProof
             character.Profile.Age == ExpectedAge &&
             appearance.Schema == Fo2CharacterAppearanceContract.ExpectedSchema &&
             appearance.FaceShapeId == Fo2ProceduralPortrait.AngularFace &&
+            appearance.HairStyleId == Fo2ProceduralPortrait.LongHair &&
+            appearance.SkinToneId == Fo2ProceduralPortrait.DeepSkin &&
             appearance.PortraitGeneratorId == Fo2ProceduralPortrait.GeneratorId &&
+            appearance.AppearanceRecipeId == Fo2ProceduralAppearanceCatalog.ExpectedId &&
+            appearance.AppearanceRecipeSha256 == Fo2ProceduralAppearanceCatalog.Load().Sha256 &&
             appearance.CustomFaceEdited && appearance.CustomPortraitGenerated &&
             appearance.GeneratedPortraitWidth == Fo2ProceduralPortrait.Width &&
             appearance.GeneratedPortraitHeight == Fo2ProceduralPortrait.Height;

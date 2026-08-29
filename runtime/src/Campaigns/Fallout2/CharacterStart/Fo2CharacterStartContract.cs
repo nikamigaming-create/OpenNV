@@ -68,17 +68,24 @@ internal sealed record Fo2CharacterAppearanceContract(
     bool CustomFaceEdited,
     bool CustomPortraitGenerated,
     string FaceShapeId,
+    string HairStyleId,
+    string SkinToneId,
     string PortraitGeneratorId,
+    string AppearanceRecipeId,
+    string AppearanceRecipeSha256,
     string GeneratedPortraitPath,
     string GeneratedPortraitSha256,
     int GeneratedPortraitWidth,
     int GeneratedPortraitHeight)
 {
-    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v2";
+    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v3";
     internal const string OwnedReliefPreview = "owned-panel-curved-relief-v1";
     internal const string GeneratedPortraitPreview = "opennv-local-classic-green-portrait-v1";
     internal const string OwnedPanelFaceShape = "owned-premade-panel";
+    internal const string OwnedPanelHairStyle = "owned-premade-panel";
+    internal const string OwnedPanelSkinTone = "owned-premade-panel";
     internal const string NoPortraitGenerator = "none";
+    internal const string NoAppearanceRecipe = "none";
 
     internal static Fo2CharacterAppearanceContract FromSelection(
         Fo2CharacterSelection selection) => new(
@@ -100,7 +107,11 @@ internal sealed record Fo2CharacterAppearanceContract(
         false,
         false,
         OwnedPanelFaceShape,
+        OwnedPanelHairStyle,
+        OwnedPanelSkinTone,
         NoPortraitGenerator,
+        NoAppearanceRecipe,
+        "",
         "",
         "",
         0,

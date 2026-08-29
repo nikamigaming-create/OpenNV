@@ -25,8 +25,9 @@ internal sealed record Fo2CharacterStartSaveState(
     Fo2ArroyoExitTransition? LastTransition,
     Fo2TempleConfrontationState? TempleConfrontation)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v6";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v7";
     internal const string RouteMode = "chosen-one-source-exit-route-v1";
+    private const string FaceAppearanceSchema = "opennv-fo2-character-arroyo-save/v6";
     private const string AppearanceSchema = "opennv-fo2-character-arroyo-save/v5";
     private const string ConfrontationSchema = "opennv-fo2-character-arroyo-save/v4";
     private const string RouteSchema = "opennv-fo2-character-arroyo-save/v3";
@@ -149,7 +150,11 @@ internal sealed record Fo2CharacterStartSaveState(
                     Character.Appearance.CustomFaceEdited,
                     Character.Appearance.CustomPortraitGenerated,
                     Character.Appearance.FaceShapeId,
+                    Character.Appearance.HairStyleId,
+                    Character.Appearance.SkinToneId,
                     Character.Appearance.PortraitGeneratorId,
+                    Character.Appearance.AppearanceRecipeId,
+                    Character.Appearance.AppearanceRecipeSha256,
                     Character.Appearance.GeneratedPortraitPath,
                     Character.Appearance.GeneratedPortraitSha256,
                     Character.Appearance.GeneratedPortraitWidth,
@@ -230,7 +235,8 @@ internal sealed record Fo2CharacterStartSaveState(
         var previous = schema == PreviousSchema;
         var route = schema == RouteSchema;
         var confrontation = schema == ConfrontationSchema;
-        if (schema != Schema && schema != AppearanceSchema &&
+        if (schema != Schema && schema != FaceAppearanceSchema &&
+                schema != AppearanceSchema &&
                 schema != ConfrontationSchema && schema != RouteSchema &&
                 schema != PreviousSchema && schema != LegacySchema ||
             RequiredString(root, "campaign") != "Fallout2" ||
@@ -298,7 +304,8 @@ internal sealed record Fo2CharacterStartSaveState(
                 RequiredString(world, "walkMaskSha256") == arroyo.WalkMaskSha256 &&
                 tileInRange && arroyo.Walkable[currentTile] && lastTransition is null,
             Fo2TemplePresentationCatalog.MapIndex =>
-                (schema == Schema || schema == AppearanceSchema || confrontation || route) &&
+                (schema == Schema || schema == FaceAppearanceSchema ||
+                    schema == AppearanceSchema || confrontation || route) &&
                 elevation == arroyo.LiveExit.TargetElevation &&
                 arrivalTile == arroyo.LiveExit.TargetTile &&
                 RequiredString(world, "mapSha256") == temple.MapSha256 &&
@@ -353,7 +360,8 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoCavesPresentationCatalog arroyo)
     {
-        if (schema != Schema && schema != AppearanceSchema &&
+        if (schema != Schema && schema != FaceAppearanceSchema &&
+            schema != AppearanceSchema &&
             schema != ConfrontationSchema && schema != RouteSchema)
             return null;
         var value = root.GetProperty("lastTransition");
@@ -386,7 +394,8 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterSelection character,
         Fo2TemplePresentationCatalog temple)
     {
-        if (schema != Schema && schema != AppearanceSchema && schema != ConfrontationSchema)
+        if (schema != Schema && schema != FaceAppearanceSchema &&
+            schema != AppearanceSchema && schema != ConfrontationSchema)
             return null;
         var value = root.GetProperty("templeConfrontation");
         if (mapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex)
@@ -417,12 +426,20 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterSelection character)
     {
         if (schema != Schema)
-            return character.Mode == Fo2CharacterSelection.PremadeMode
-                ? Fo2CharacterAppearanceContract.FromSelection(character)
-                : Fo2ProceduralPortrait.Commit(
-                    character.Source,
-                    character.Profile.Sex,
-                    Fo2ProceduralPortrait.OvalFace);
+        {
+            if (character.Mode == Fo2CharacterSelection.PremadeMode)
+                return Fo2CharacterAppearanceContract.FromSelection(character);
+            var recipe = Fo2ProceduralAppearanceCatalog.Load();
+            var faceShapeId = schema == FaceAppearanceSchema
+                ? RequiredString(root.GetProperty("appearance"), "FaceShapeId")
+                : recipe.DefaultFaceShapeId;
+            return Fo2ProceduralPortrait.Commit(
+                character.Source,
+                character.Profile.Sex,
+                faceShapeId,
+                recipe.DefaultHairStyleId,
+                recipe.DefaultSkinToneId);
+        }
         var value = root.GetProperty("appearance");
         var appearance = new Fo2CharacterAppearanceContract(
             RequiredString(value, "Schema"),
@@ -435,7 +452,11 @@ internal sealed record Fo2CharacterStartSaveState(
             value.GetProperty("CustomFaceEdited").GetBoolean(),
             value.GetProperty("CustomPortraitGenerated").GetBoolean(),
             RequiredString(value, "FaceShapeId"),
+            RequiredString(value, "HairStyleId"),
+            RequiredString(value, "SkinToneId"),
             RequiredString(value, "PortraitGeneratorId"),
+            RequiredString(value, "AppearanceRecipeId"),
+            RequiredString(value, "AppearanceRecipeSha256"),
             value.GetProperty("GeneratedPortraitPath").GetString() ?? "",
             value.GetProperty("GeneratedPortraitSha256").GetString() ?? "",
             value.GetProperty("GeneratedPortraitWidth").GetInt32(),

@@ -90,7 +90,7 @@ if ($write.schema -ne 'opennv-fo2-exit-transition-write-proof/v1' -or
     -not $restore.restore.grounded -or
     -not $restore.restore.ownedPresentationVisible -or
     -not $restore.restore.idleAa -or
-    $saved.schema -ne 'opennv-fo2-character-arroyo-save/v5' -or
+    $saved.schema -ne 'opennv-fo2-character-arroyo-save/v7' -or
     $saved.world.mapIndex -ne 126 -or $saved.world.currentTile -ne 16486 -or
     $saved.lastTransition.exitSerial -ne 1738 -or
     $write.save.Sha256 -ne $restore.save.Sha256) {
