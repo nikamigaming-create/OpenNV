@@ -17,6 +17,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_post_stage80_dialogue,
     _compile_post_stage85_dialogue,
     _compile_stage65_appearance_contract,
+    _compile_stage100_transition,
     _float_contract,
 )
 
@@ -394,6 +395,161 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "sound\\fx\\qst\\qst_fadetowhite_a.wav",
             transition["commands"][3]["sound"]["logicalPath"],
         )
+
+    def test_compiles_exact_stage90_timer_and_stage100_boundary(self) -> None:
+        quest_script_source = "\n".join(
+            (
+                "scn CG00SCRIPT",
+                "float timer",
+                "short runTimer",
+                "begin gamemode",
+                "if runTimer == 1",
+                "if timer > 0",
+                "set timer to timer - GetSecondsPassed",
+                "else",
+                "if getstage CG00 == 5",
+                "setstage CG00 6",
+                "elseif getstage CG00 == 90",
+                "setstage CG00 100",
+                "endif",
+                "endif",
+                "endif",
+                "if chooseSex == 1",
+                "endif",
+                "end",
+            )
+        )
+        quest_script = Record(
+            "SCPT",
+            0x0003A17C,
+            0,
+            subrecord("EDID", b"CG00SCRIPT\0")
+            + subrecord("SCTX", quest_script_source.encode("cp1252") + b"\0"),
+            (),
+        )
+        actor_script = lambda form_id, editor_id: Record(
+            "SCPT",
+            form_id,
+            0,
+            subrecord("EDID", editor_id.encode("ascii") + b"\0")
+            + subrecord("SCTX", b"short doTalk\0"),
+            (),
+        )
+        mom_script = actor_script(0x0005EDDD, "CG00MomSCRIPT")
+        dad_script = actor_script(0x0002C9F6, "CG00DadSCRIPT")
+        mom_base = Record(
+            "NPC_",
+            0x0005EDDF,
+            0,
+            subrecord("EDID", b"CG00Mom\0")
+            + subrecord("SCRI", struct.pack("<I", mom_script.form_id)),
+            (),
+        )
+        dad_base = Record(
+            "NPC_",
+            0x000290A6,
+            0,
+            subrecord("EDID", b"CG00Dad\0")
+            + subrecord("SCRI", struct.pack("<I", dad_script.form_id)),
+            (),
+        )
+        mom_ref = Record(
+            "ACHR",
+            0x0005EDE0,
+            0,
+            subrecord("EDID", b"CG00MomREF\0")
+            + subrecord("NAME", struct.pack("<I", mom_base.form_id)),
+            (),
+        )
+        dad_ref = Record(
+            "ACHR",
+            0x000290A7,
+            0,
+            subrecord("EDID", b"CG00DadREF\0")
+            + subrecord("NAME", struct.pack("<I", dad_base.form_id)),
+            (),
+        )
+        cg00 = Record(
+            "QUST",
+            QUEST_FORM,
+            0,
+            subrecord("EDID", b"CG00\0"),
+            (),
+        )
+        cg01_source = "\n".join(
+            (
+                "CG01DadREF.moveto CG01DadStartMarker",
+                "setstage CG01 5",
+                "player.setscale .4",
+                "player.moveto CG01PlayerStartMarker",
+            )
+        )
+        cg01 = Record(
+            "QUST",
+            0x00014E83,
+            0,
+            subrecord("EDID", b"CG01\0")
+            + subrecord("INDX", struct.pack("<H", 0))
+            + subrecord("SCTX", cg01_source.encode("cp1252") + b"\0"),
+            (),
+        )
+        modifier = Record(
+            "IMAD",
+            0x00035A20,
+            0,
+            subrecord("EDID", b"CG00BirthBaseISFX\0"),
+            (),
+        )
+        stage100_source = "\n".join(
+            (
+                "player.removescriptpackage",
+                "set CG00MomREF.doTalk to 0",
+                "set CG00DadREF.doTalk to 0",
+                "rimod CG00BirthBaseISFX",
+                "CG00DadREF.disable",
+                "stopQuest CG00",
+                "SetPCYoung 1",
+                "setstage CG01 0",
+            )
+        )
+        selection = {
+            "stage100Transition": {
+                "sourceStage": 90,
+                "targetStage": 100,
+                "removedImageSpaceModifierEditorId": "CG00BirthBaseISFX",
+                "removedImageSpaceModifierFormId": "00035a20",
+                "nextQuestEditorId": "CG01",
+                "nextQuestFormId": "00014e83",
+                "nextQuestStage": 0,
+            }
+        }
+
+        contract = _compile_stage100_transition(
+            (
+                quest_script,
+                mom_script,
+                dad_script,
+                mom_base,
+                dad_base,
+                mom_ref,
+                dad_ref,
+                cg00,
+                cg01,
+                modifier,
+            ),
+            selection,
+            QUEST_FORM,
+            quest_script,
+            quest_script_source,
+            {100: [stage100_source]},
+        )
+
+        self.assertEqual(100, contract["stage"])
+        self.assertEqual(8, contract["accountedCommandCount"])
+        self.assertEqual(7, contract["appliedCommandCount"])
+        self.assertEqual("000290a7", contract["commands"][4]["referenceFormId"])
+        self.assertEqual("00014e83", contract["nextBoundary"]["questFormId"])
+        self.assertFalse(contract["nextBoundary"]["applied"])
 
     def test_compiles_owned_package_activation_and_stops_before_stage_65(self) -> None:
         stage_65 = "\n".join(

@@ -115,6 +115,15 @@
         "resultInfoFormId": "0001f379",
         "minimumStage": 80,
         "targetStage": 90
+      },
+      "stage100Transition": {
+        "sourceStage": 90,
+        "targetStage": 100,
+        "removedImageSpaceModifierEditorId": "CG00BirthBaseISFX",
+        "removedImageSpaceModifierFormId": "00035a20",
+        "nextQuestEditorId": "CG01",
+        "nextQuestFormId": "00014e83",
+        "nextQuestStage": 0
       }
     },
     "appearanceUi": {

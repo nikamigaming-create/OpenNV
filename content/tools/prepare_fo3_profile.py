@@ -96,6 +96,32 @@ PLAY_SOUND_PATTERN = re.compile(
     r"^playSound\s+(?P<sound>[A-Za-z_][A-Za-z0-9_]*)$",
     re.IGNORECASE,
 )
+REMOVE_SCRIPT_PACKAGE_PATTERN = re.compile(
+    r"^(?P<subject>player)\.removeScriptPackage$",
+    re.IGNORECASE,
+)
+REMOVE_IMAGE_SPACE_MODIFIER_PATTERN = re.compile(
+    r"^rimod\s+(?P<modifier>[A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+DISABLE_REFERENCE_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.disable$",
+    re.IGNORECASE,
+)
+STOP_QUEST_PATTERN = re.compile(
+    r"^stopQuest\s+(?P<quest>[A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+SET_PC_YOUNG_PATTERN = re.compile(r"^SetPCYoung\s+(?P<value>\d+)$", re.IGNORECASE)
+CG00_TIMER_STAGE_PATTERN = re.compile(
+    r"\bif\s+runTimer\s*==\s*1\b.*?"
+    r"\bif\s+timer\s*>\s*0\b\s*"
+    r"set\s+timer\s+to\s+timer\s*-\s*GetSecondsPassed\b.*?"
+    r"\belseif\s+getstage\s+CG00\s*==\s*(?P<source>\d+)\b\s*"
+    r"setstage\s+CG00\s+(?P<target>\d+)\b.*?"
+    r"\bendif\b\s*\bendif\b\s*\bif\s+chooseSex\b",
+    re.IGNORECASE | re.DOTALL,
+)
 SET_REFERENCE_VARIABLE_PATTERN = re.compile(
     r"^set\s+(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\."
     r"(?P<variable>[A-Za-z_][A-Za-z0-9_]*)\s+to\s+(?P<value>-?\d+(?:\.\d+)?)$",
@@ -1185,6 +1211,66 @@ def _parse_stage90_commands(source: str) -> list[dict[str, object]]:
     return commands
 
 
+def _parse_stage100_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := REMOVE_SCRIPT_PACKAGE_PATTERN.fullmatch(text):
+            commands.append({"kind": "removeScriptPackage", "subject": match.group("subject")})
+            continue
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            raw_value = match.group("value")
+            value: int | float = float(raw_value) if "." in raw_value else int(raw_value)
+            commands.append(
+                {
+                    "kind": "setScriptVariable",
+                    "subject": match.group("subject"),
+                    "variable": match.group("variable"),
+                    "value": value,
+                }
+            )
+            continue
+        if match := REMOVE_IMAGE_SPACE_MODIFIER_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "removeImageSpaceModifier",
+                    "modifierEditorId": match.group("modifier"),
+                }
+            )
+            continue
+        if match := DISABLE_REFERENCE_PATTERN.fullmatch(text):
+            commands.append({"kind": "disable", "subject": match.group("subject")})
+            continue
+        if match := STOP_QUEST_PATTERN.fullmatch(text):
+            commands.append({"kind": "stopQuest", "questEditorId": match.group("quest")})
+            continue
+        if match := SET_PC_YOUNG_PATTERN.fullmatch(text):
+            commands.append({"kind": "setPlayerYoung", "value": int(match.group("value"))})
+            continue
+        if match := SET_STAGE_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "setStage",
+                    "questEditorId": match.group("quest"),
+                    "stage": int(match.group("stage")),
+                }
+            )
+            continue
+        raise ValueError(f"Fallout 3 CG00 stage 100 uses an unsupported command: {text}")
+    expected = [
+        "removeScriptPackage",
+        "setScriptVariable",
+        "setScriptVariable",
+        "removeImageSpaceModifier",
+        "disable",
+        "stopQuest",
+        "setPlayerYoung",
+        "setStage",
+    ]
+    if [str(command["kind"]) for command in commands] != expected:
+        raise ValueError("Fallout 3 CG00 stage 100 command order differs")
+    return commands
+
+
 def _compile_post_stage65_dialogue(
     records: tuple[object, ...],
     selection: dict[str, object],
@@ -1753,6 +1839,242 @@ def _compile_post_stage85_dialogue(
     return dialogue, transition
 
 
+def _compile_stage100_transition(
+    records: tuple[object, ...],
+    selection: dict[str, object],
+    quest_form_id: int,
+    quest_script: object,
+    quest_script_source: str,
+    stage_sources: dict[int, list[str]],
+) -> dict[str, object]:
+    definition = dict(selection["stage100Transition"])
+    source_stage = int(definition["sourceStage"])
+    target_stage = int(definition["targetStage"])
+    target_sources = stage_sources.get(target_stage, [])
+    if len(target_sources) != 1:
+        raise ValueError("Fallout 3 CG00 stage 100 result source is ambiguous")
+    target_source = target_sources[0]
+    commands = _parse_stage100_commands(target_source)
+
+    timer_matches = list(CG00_TIMER_STAGE_PATTERN.finditer(quest_script_source))
+    if len(timer_matches) != 1:
+        raise ValueError("Fallout 3 CG00 stage 90 timer trigger is ambiguous")
+    timer_match = timer_matches[0]
+    if (
+        int(timer_match.group("source")) != source_stage
+        or int(timer_match.group("target")) != target_stage
+    ):
+        raise ValueError("Fallout 3 CG00 stage 90 timer target differs")
+    declarations = {
+        name: [
+            match.group("type").casefold()
+            for match in re.finditer(
+                rf"^\s*(?P<type>short|float)\s+{name}\b",
+                quest_script_source,
+                re.IGNORECASE | re.MULTILINE,
+            )
+        ]
+        for name in ("timer", "runTimer")
+    }
+    if declarations != {"timer": ["float"], "runTimer": ["short"]}:
+        raise ValueError("Fallout 3 CG00 timer variable declarations differ")
+
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    def unique_record(editor_id: str, signature: str, label: str) -> object:
+        matches = [
+            record
+            for record in by_editor.get(editor_id.casefold(), [])
+            if record.signature == signature
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"Fallout 3 stage 100 {label} is ambiguous: {editor_id}")
+        return matches[0]
+
+    def actor_reference(editor_id: str) -> tuple[object, object]:
+        reference = unique_record(editor_id, ACTOR_REFERENCE_RECORD, "actor reference")
+        base_form_id = struct.unpack("<I", _single_subrecord(reference, "NAME"))[0]
+        base = by_form.get(base_form_id)
+        if base is None or base.signature != ACTOR_BASE_RECORD:
+            raise ValueError("Fallout 3 stage 100 actor base is absent")
+        return reference, base
+
+    resolved_commands = []
+    for index, command in enumerate(commands):
+        kind = str(command["kind"])
+        resolved: dict[str, object] = {"index": index, "kind": kind}
+        if kind == "removeScriptPackage":
+            if str(command["subject"]).casefold() != "player":
+                raise ValueError("Fallout 3 stage 100 package-removal subject differs")
+            resolved["subject"] = "player"
+        elif kind == "setScriptVariable":
+            reference, base = actor_reference(str(command["subject"]))
+            script_form_id = struct.unpack("<I", _single_subrecord(base, "SCRI"))[0]
+            script = by_form.get(script_form_id)
+            if script is None or script.signature != SCRIPT_RECORD:
+                raise ValueError("Fallout 3 stage 100 actor script is absent")
+            variable = str(command["variable"])
+            variable_declarations = [
+                match.group("type").casefold()
+                for match in re.finditer(
+                    rf"^\s*(?P<type>short|float)\s+{re.escape(variable)}\b",
+                    _script_source(script),
+                    re.IGNORECASE | re.MULTILINE,
+                )
+            ]
+            if variable_declarations != ["short"] or command["value"] != 0:
+                raise ValueError("Fallout 3 stage 100 actor variable differs")
+            resolved.update(
+                {
+                    "referenceFormId": _form_id(reference.form_id),
+                    "referenceEditorId": _editor_id(reference),
+                    "referenceRecordSha256": hashlib.sha256(reference.data).hexdigest(),
+                    "baseFormId": _form_id(base.form_id),
+                    "baseEditorId": _editor_id(base),
+                    "baseRecordSha256": hashlib.sha256(base.data).hexdigest(),
+                    "scriptFormId": _form_id(script.form_id),
+                    "scriptEditorId": _editor_id(script),
+                    "scriptSourceSha256": hashlib.sha256(
+                        _script_source(script).encode("cp1252")
+                    ).hexdigest(),
+                    "variable": variable,
+                    "variableType": "short",
+                    "value": 0,
+                }
+            )
+        elif kind == "removeImageSpaceModifier":
+            editor_id = str(command["modifierEditorId"])
+            modifier = unique_record(
+                editor_id,
+                IMAGE_SPACE_MODIFIER_RECORD,
+                "image-space modifier",
+            )
+            if (
+                editor_id.casefold()
+                != str(definition["removedImageSpaceModifierEditorId"]).casefold()
+                or modifier.form_id
+                != int(str(definition["removedImageSpaceModifierFormId"]), FORM_ID_RADIX)
+            ):
+                raise ValueError("Fallout 3 stage 100 removed modifier identity differs")
+            resolved["modifier"] = {
+                "formId": _form_id(modifier.form_id),
+                "editorId": _editor_id(modifier),
+                "recordSha256": hashlib.sha256(modifier.data).hexdigest(),
+            }
+        elif kind == "disable":
+            reference, base = actor_reference(str(command["subject"]))
+            if reference.flags & INITIALLY_DISABLED_RECORD_FLAG:
+                raise ValueError("Fallout 3 stage 100 disable target starts disabled")
+            resolved.update(
+                {
+                    "referenceFormId": _form_id(reference.form_id),
+                    "referenceEditorId": _editor_id(reference),
+                    "referenceRecordSha256": hashlib.sha256(reference.data).hexdigest(),
+                    "baseFormId": _form_id(base.form_id),
+                    "baseEditorId": _editor_id(base),
+                    "baseRecordSha256": hashlib.sha256(base.data).hexdigest(),
+                    "initiallyDisabled": False,
+                }
+            )
+        elif kind == "stopQuest":
+            if str(command["questEditorId"]).casefold() != "cg00":
+                raise ValueError("Fallout 3 stage 100 stopped quest differs")
+            quest = by_form.get(quest_form_id)
+            if quest is None or quest.signature != QUEST_RECORD:
+                raise ValueError("Fallout 3 stage 100 CG00 identity is absent")
+            resolved.update(
+                {
+                    "questFormId": _form_id(quest.form_id),
+                    "questEditorId": _editor_id(quest),
+                    "questRecordSha256": hashlib.sha256(quest.data).hexdigest(),
+                }
+            )
+        elif kind == "setPlayerYoung":
+            if command["value"] != 1:
+                raise ValueError("Fallout 3 stage 100 player-young value differs")
+            resolved["value"] = 1
+        else:
+            next_editor_id = str(definition["nextQuestEditorId"])
+            next_stage = int(definition["nextQuestStage"])
+            if (
+                str(command["questEditorId"]).casefold() != next_editor_id.casefold()
+                or int(command["stage"]) != next_stage
+            ):
+                raise ValueError("Fallout 3 stage 100 next-quest boundary differs")
+            next_quest = unique_record(next_editor_id, QUEST_RECORD, "next quest")
+            if next_quest.form_id != int(
+                str(definition["nextQuestFormId"]), FORM_ID_RADIX
+            ):
+                raise ValueError("Fallout 3 stage 100 next-quest FormID differs")
+            next_sources: dict[int, list[str]] = {}
+            current_stage = None
+            for subrecord in iter_subrecords(next_quest):
+                if subrecord.signature == "INDX":
+                    current_stage = int.from_bytes(subrecord.data, "little")
+                elif subrecord.signature == "SCTX" and current_stage is not None:
+                    next_sources.setdefault(current_stage, []).append(zstring(subrecord.data))
+            stage_zero_sources = next_sources.get(next_stage, [])
+            if len(stage_zero_sources) != 1:
+                raise ValueError("Fallout 3 CG01 stage-zero result is ambiguous")
+            stage_zero_source = stage_zero_sources[0]
+            resolved.update(
+                {
+                    "questFormId": _form_id(next_quest.form_id),
+                    "questEditorId": _editor_id(next_quest),
+                    "questRecordSha256": hashlib.sha256(next_quest.data).hexdigest(),
+                    "stage": next_stage,
+                    "stageResultSourceSha256": hashlib.sha256(
+                        stage_zero_source.encode("cp1252")
+                    ).hexdigest(),
+                    "stageResultCommandCount": len(_source_commands(stage_zero_source)),
+                    "applied": False,
+                }
+            )
+        resolved_commands.append(resolved)
+
+    if resolved_commands[4]["referenceFormId"] != resolved_commands[2]["referenceFormId"]:
+        raise ValueError("Fallout 3 stage 100 Dad disable/variable identity differs")
+    quest_script_hash = hashlib.sha256(quest_script_source.encode("cp1252")).hexdigest()
+    return {
+        "schema": "opennv-fo3-cg00-stage-100-transition/v1",
+        "status": "source-backed-timer-stage-result-through-next-quest-boundary",
+        "sourceStage": source_stage,
+        "stage": target_stage,
+        "trigger": {
+            "questFormId": _form_id(quest_form_id),
+            "questEditorId": "CG00",
+            "scriptFormId": _form_id(quest_script.form_id),
+            "scriptEditorId": _editor_id(quest_script),
+            "scriptSourceSha256": quest_script_hash,
+            "runVariable": {"name": "runTimer", "type": "short", "requiredValue": 1},
+            "timerVariable": {"name": "timer", "type": "float", "initialValue": 2.2},
+            "decrementFunction": "GetSecondsPassed",
+            "sourceStage": source_stage,
+            "targetStage": target_stage,
+        },
+        "stageSourceSha256": hashlib.sha256(target_source.encode("cp1252")).hexdigest(),
+        "accountedCommandCount": len(resolved_commands),
+        "appliedCommandCount": len(resolved_commands) - 1,
+        "commands": resolved_commands,
+        "nextBoundary": {
+            "commandIndex": len(resolved_commands) - 1,
+            "kind": "setStage",
+            "questFormId": resolved_commands[-1]["questFormId"],
+            "questEditorId": resolved_commands[-1]["questEditorId"],
+            "stage": resolved_commands[-1]["stage"],
+            "stageResultSourceSha256": resolved_commands[-1]["stageResultSourceSha256"],
+            "stageResultCommandCount": resolved_commands[-1]["stageResultCommandCount"],
+            "applied": False,
+            "blocker": "fo3-cg01-stage-0-result-not-implemented",
+        },
+    }
+
+
 def _compile_cg00_section4_transition(
     records: tuple[object, ...],
     selection: dict[str, object],
@@ -2090,6 +2412,8 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     VOICE_TYPE_RECORD,
                     IMAGE_SPACE_MODIFIER_RECORD,
                     SOUND_RECORD,
+                    ACTOR_REFERENCE_RECORD,
+                    ACTOR_BASE_RECORD,
                 }
             ),
         )
@@ -2278,6 +2602,15 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         quest_script,
         stage_sources,
     )
+    stage100_transition = _compile_stage100_transition(
+        records,
+        selection,
+        selection_quest_form_id,
+        quest_script,
+        quest_script_source,
+        stage_sources,
+    )
+    stage90_transition["nextBoundary"] = stage100_transition["schema"]
 
     character_selection = {
         "questEditorId": selection_quest,
@@ -2315,6 +2648,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         "stage85Transition": stage85_transition,
         "postStage85Dialogue": post_stage85_dialogue,
         "stage90Transition": stage90_transition,
+        "stage100Transition": stage100_transition,
     }
     return quest_rows, character_selection
 
@@ -2628,11 +2962,12 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "cg00Stage80ContractReady": True,
             "cg00Stage85ContractReady": True,
             "cg00Stage90ContractReady": True,
+            "cg00Stage100ContractReady": True,
             "vault101BirthGraphCompiled": True,
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg00-stage-90-timer-to-stage-100-not-implemented",
+            "fo3-cg01-stage-0-result-not-implemented",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
         ],
