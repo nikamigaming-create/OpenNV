@@ -30,9 +30,19 @@ These 2026-08-29 slices are on `origin/main`:
 - `d333f10` exports a canonical source-owned Open/Close articulation contract
   with exact moving visual/collision membership; and
 - `52f5b69` validates and consumes that contract in Godot, moving only the
-  controlled target and restoring saved state without replay.
+  controlled target and restoring saved state without replay;
+- `f34bef6` preserves mass-zero target-local convex door collision and corrects
+  articulated packed-collision target-local transforms;
+- `982e068` accepts current CELL scene schema v14;
+- `208ca8d` validates one-piece generated-collision fallback doors without a
+  FormID exception;
+- `80f2a02` waits for source door terminals, uses exact sweep remainder
+  semantics, and keeps door/non-door recovery inside the bounded replan budget;
+  and
+- `45ff582` treats intermediate NAVM shared edges as tolerance regions while
+  keeping the final three waypoints strict.
 
-The last implementation commit is `52f5b69`. Focused producer tests, Python
+The last implementation commit is `45ff582`. Focused producer tests, Python
 compilation, Debug/Release C# builds, and formatting verification passed before
 the fresh owned-data build. No proprietary asset or generated cache is tracked.
 
@@ -47,67 +57,56 @@ the fresh owned-data build. No proprietary asset or generated cache is tracked.
 - Fallout 3: ordinary CG00 flow reaches and cold-restores stage 100. Seven of
   eight stage-100 commands are applied; CG01 stage 0 is the explicit boundary.
   This is not a freely playable Vault 101 route.
-- New Vegas: fresh compiler-family cache preparation and an ordinary completed
-  stage-200 Continue/Pip-Boy `Tab`/`Escape` interaction passed. Current code
-  repairs bounded replanning, actual blocking-door activation, and composite
-  source articulation. A fresh cache for the articulation schema failed closed
-  before admission, so current-source Doc-house→exterior→saloon and cold
-  Continue acceptance are pending. Do not describe the route, actors, renderer,
-  TTW, JAM, or OpenXR as complete or retail-parity.
+- New Vegas: one fresh full four-family cache is admitted. Ordinary stage-200
+  Continue reaches the physical Pip-Boy setup, Doc-house portal, source-animated
+  Goodsprings gate, and Prospector Saloon stair. The latest run fails closed on
+  the same building's authored collision during strict final approach at
+  waypoint 62/64, 4.889 metres from the portal. It emitted no route report, so
+  cold Continue and video were not run. Do not describe the route, actors,
+  renderer, TTW, JAM, or OpenXR as complete or retail-parity.
 
 ## Exact terminal FNV boundary
 
-One and only one fresh build was started at:
+The admitted cache is:
 
-`D:\Builds\OpenNV-fnv-articulated-door-cache-20260829-r1`
+`D:\Builds\OpenNV-fnv-articulated-convex-cache-20260829-r1`
 
-It exited with code 2 after 245.365 seconds on:
+It completed once in 689.831 seconds with 6,104 files / 1,019,974,001 bytes and
+four closed compiler-family identities. The owned Data tree stayed unchanged at
+321 files, 48 directories, 9,875,907,799 bytes, with size/mtime digest
+`b2e21cd1d34d9e9a5b62dc68790fb8e390bdaaf0a442d764260469cb270c3bfc`.
 
-`meshes\dungeons\nv_craftsmanhomesinterior\nvcraftsmanrmdooranimated.nif`
+The latest route proof root is:
 
-The compiler error was:
+`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r10`
 
-`Controller-bearing DOOR target has no joined authored collision`
-
-The partial target contained 1,334 files / 218,620,063 bytes and no
-`install-manifest.json`; it was not an admitted cache. It was moved to the
-Windows Recycle Bin after the retained evidence was written, so it remains
-recoverable but must never be restored or used as evidence. The owned Data tree
-was unchanged before/after: 321 files, 48 directories, 9,875,907,799 bytes,
-size/mtime digest
-`25abe0156faaaad8f831b0bfc33745dc9a35cb0da65ac91e77eaab1c0323efbb`.
-Run evidence is retained outside the repository at
-`D:\Builds\OpenNV-fnv-articulated-door-cache-20260829-r1-evidence`.
-
-The Goodsprings blocker `0010757e` itself has a deterministic exact articulation
-contract, but the whole-cache build stopped on the different owned interior-door
-pattern before emitting its route artifact. Read-only inspection showed that
-target `OffDoorHotelSm` block 18 owns both visual block 23 and collision blocks
-20/21/22. The shape is an eight-vertex, mass-zero
-`bhkConvexVerticesShape`; there is no static sibling/root collision. Static
-collision export currently admits only MOPP packed triangles, which is why the
-strict articulation join saw no exported body. No retry and no Godot run
-followed.
+It passed the Doc portal, exact one-second `0010757e` gate articulation, and the
+source/NAVM-backed 0.257-metre Prospector Saloon stair transition. It then failed
+closed at exterior waypoint 62/64 against the correctly placed packed collision
+of REFR `001055e0`, base `0010243e` `NVProspectorSaloon`, asset
+`351f418a5cca45d12b71`. The remaining waypoint distance was 1.304 metres and the
+portal was 4.889 metres away. The fail-closed sweep retained the full movement
+remainder and identified the exact authored collision node. No report was
+emitted; do not run cold Continue or make a route video until this final approach
+is physically traversed and the first-run validator passes.
 
 ## Exact resume order
 
-1. Read this file, `docs/architecture.md`, and
-   `docs/evidence/fnv-owned-door-articulation-contract.md`; inspect
-   `git status --short` and preserve the two unrelated Fallout 1 files.
-2. Implement one narrow producer/runtime contract for the failing Craftsman
-   door's mass-zero `bhkRigidBody` + `bhkConvexVerticesShape`: preserve its
-   target-local ownership, filter/radius/points, emit deterministic convex
-   collision under the same articulation wrapper, and keep unsupported convex
-   variants fail-closed. Do not invent collision, reassign it to root, rotate the
-   REFR, or weaken joins globally.
-3. Run the focused articulation test and normal build/format checks once.
-4. Build once into a new unique cache path; never overwrite or reuse the partial
-   `r1` target. Require an admitted install manifest, family/output hash closure,
-   and unchanged owned Data snapshot.
-5. Only then run one ordinary completed-save FNV route pass followed by one cold
-   Continue pass. If both pass, capture an honest Pip-Boy plus route video and
-   state clearly that it is bounded development footage.
-6. Resume FO2/FO3/FO1 work only after this FNV cache/route boundary is closed.
+1. Read this file, `docs/architecture.md`, and both FNV evidence contracts;
+   inspect `git status --short` and preserve the two unrelated Fallout 1 files.
+2. Reproduce only the r10 final-approach boundary against the admitted cache; do
+   not rebuild it. Audit the final four-point NAVM path, portal plane, saloon
+   exterior door placement, and exact `001055e0` collision around waypoint 2/4.
+3. Fix only an evidence-backed navigation/step/approach mismatch. Do not disable
+   the saloon collision, enlarge final tolerance, teleport the player, skip a
+   waypoint, or special-case a FormID.
+4. Run Debug/Release, format/diff checks, then one new unique first-run proof.
+   Require `OPENNV_FLAT_ROUTE_TRAVEL_PASS phase=first-run`, no errors, and the
+   manifest-backed `flat-route-travel` validator.
+5. Only after first-run passes, run one cold process against the same save and
+   require the `flat-route-reload` validator. Then capture an honest bounded
+   Pip-Boy/route video.
+6. Resume FO2/FO3/FO1 work after recording this FNV boundary or closing it.
 
 ## Preserved local media
 

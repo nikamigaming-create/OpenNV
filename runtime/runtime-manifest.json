@@ -86,7 +86,7 @@
             "hex-tactical": { "ready": false, "status": "not-implemented" },
             "openxr": { "ready": true, "status": "experimental-headset-gate-pending" }
           },
-          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy shell and a bounded eagerly instantiated Doc house to Goodsprings exterior to saloon composite. Campaign save v6 persists source-derived Level/HP/AP/XP, saloon CELL 00106185, opened-container remaining counts, and the player transform. A source-portal active set keeps the current CELL plus direct neighbors live while suspending distant presentation and physics resources. The retained active-set proof cache has an older compiler identity and normal restore fails closed until explicit migration. Player deposits, reverse traversal, neighboring exterior-grid streaming, integrated-route OpenXR acceptance, Sunny behavior, complete tile interaction, and retail UI parity remain pending.",
+          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy shell and a bounded eagerly instantiated Doc house to Goodsprings exterior to saloon composite. Campaign save v6 persists source-derived Level/HP/AP/XP, saloon CELL 00106185, opened-container remaining counts, and the player transform. A fresh four-family cache admits exact controller-door articulation, mass-zero target-local convex collision, and current-plus-neighbor resource suspension. Current configured-input acceptance passes the Doc portal, animated Goodsprings gate, and saloon stair transition, then fails closed against authored Prospector Saloon collision during the strict final approach; no current first-run report or cold-Continue pair exists. Player deposits, reverse traversal, neighboring exterior-grid streaming, integrated-route OpenXR acceptance, Sunny behavior, complete tile interaction, and retail UI parity remain pending.",
           "unavailableDlc": []
         },
         "jam": {
@@ -106,7 +106,7 @@
             "openxr": { "ready": false, "status": "not-implemented" }
           },
           "requiresProfile": "opennv-owned-game-profile/v1",
-          "message": "The registered Fallout 3 GOTY profile runs the bounded menu, owned intro, Escape/Skip convergence, CG00 sex/name/appearance selection, and owned Vault 101 birth-room flow through persistent stage 90. Exact stage-65 Dad cue, stage-80/85 INFO results, and stage-90 INFO 0001f379 white-fade/sound result execute and cold-restore without replaying one-shot effects. General package/dialogue/KF AI, the stage-90 timer-to-stage-100 boundary, and freely playable Vault 101 remain absent, so FPS, Hex, and VR stay launcher-disabled."
+          "message": "The registered Fallout 3 GOTY profile runs the bounded menu, owned intro, Escape/Skip convergence, CG00 sex/name/appearance selection, and owned Vault 101 birth-room flow through persistent stage 100. Exact stage-65 Dad cue, stage-80/85 INFO results, stage-90 INFO 0001f379 white-fade/sound, and seven of eight exact stage-100 commands through SetPCYoung 1 execute and cold-restore without replaying one-shot effects. CG01 stage 0, general package/dialogue/KF AI, the eighth stage-100 command, and freely playable Vault 101 remain absent, so FPS, Hex, and VR stay launcher-disabled."
         }
       }
     }

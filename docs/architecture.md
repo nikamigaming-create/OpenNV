@@ -32,10 +32,12 @@ door contracts and is not current route acceptance. The
 source-portal active set keeps the current CELL plus direct neighbors active and
 suspends distant resources. Current code bounds NAVM replanning, activates the
 actual blocking authored door, and preserves controller-owned Open/Close
-articulation for joined moving visuals and collision. The first fresh cache for
-that contract failed closed on a different animated door because the collision
-exporter does not yet admit its mass-zero authored convex body, so the controlled
-target could not be joined. Route/cold-Continue reacceptance remains pending.
+articulation for joined moving visuals and collision. Mass-zero authored convex
+door bodies now remain target-local and produce deterministic runtime convex
+shapes. A fresh four-family cache is admitted. The current configured-input run
+passes the Doc portal, animated Goodsprings gate, and saloon stair transition,
+then fails closed against authored Prospector Saloon collision during the strict
+final approach. Route/cold-Continue reacceptance remains pending.
 OpenXR remains experimental with no physical-headset acceptance.
 Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
 Pip-Boy surface through Godot's input-event path. The accepted surface uses the
@@ -152,11 +154,12 @@ The static sidecar and CELL manifest repeat the canonical
 `opennv-controller-door-articulation/v1` contract. Runtime requires identical
 hashes, exact Open/Close source joins, finite normalized transforms, and exact
 moving visual/collision membership before it reparents those descendants under
-one pivot. Static siblings and the placed REFR transform never move. A
+one pivot. Static siblings and the placed REFR transform never move. Mass-zero
+direct convex bodies retain their target ownership, source body/filter/material/
+radius/point evidence, and become runtime convex shapes under the same pivot. A
 non-controller fallback may rotate the placement only when visual and collision
-are each verified as a single piece. The current compiler remains fail-closed
-for controlled targets without joined collision; the exact unresolved owned
-pattern is recorded in the
+are each verified as a single piece. Unsupported or incomplete joins remain
+fail-closed; exact evidence is recorded in the
 [door-articulation evidence](evidence/fnv-owned-door-articulation-contract.md).
 
 The actor data boundary is separate from model assembly and rendering:
@@ -363,7 +366,7 @@ retail data, or promotion verdict.
 | `prepare_fo2_temple_presentation.py` | Deterministic disposable local PNG cache for exact Map 126/Map 3 floor/roof tile frames and MAP-admitted object frame/rotation pairs; owned 80×36 isometric floor pixels are source-bound and unprojected to opaque square textures while MAP placement remains authoritative | Source selection, invented art, Godot loading, gameplay, packaging, runtime readiness, or playability |
 | `prepare_fo2_character_start.py` | Exact 432-byte premade GCD parsing and disposable local picker/panel/biography plus sex-correct idle-FRM cache generation | Custom character policy, runtime selection, persistence, packaging, or playability |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
-| `havok_collision_gltf.py` | Bounded authored packed triangles plus convex/list dynamic body, shape, mass, friction, bounce, damping and filter export | Runtime body policy or unsupported shape guessing |
+| `havok_collision_gltf.py` | Bounded authored packed triangles, mass-zero direct convex articulation bodies, and convex/list dynamic body evidence with exact ownership, pose, material, radius, points, damping, and filters | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
 | `compiler_provenance.py` | Family-scoped static/CELL/opening/actor compiler identities and source/recipe dependency sets | Cache mutation, runtime loading, or owned-asset distribution |
 | `cell_scene.py` | Recipe selection, XTEL origin, full Gamebryo-to-Godot transform/scale conversion, asset/reference/material manifest | Godot nodes or input |
@@ -482,7 +485,8 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout3/Fo3Stage65AppearanceTransition.cs` | Fail-closed validation/application contract for all owned stage-65 MatchRace and MatchFaceGeometry commands across the exact race/sex matrix | Ordinary-flow trigger execution, persistence, face rendering, animation, or Vault 101 play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage80Transition.cs` | Exact sex-conditional INFO result plus stage-80 package, variable, EVP, and enable-reference contract | Ordinary-flow trigger execution/persistence, dialogue/KF playback, package AI, actors, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage85Transition.cs` | Exact post-stage-80 INFO trigger and zero-command stage-85 result contract | Ordinary-flow trigger execution/persistence, dialogue playback, later CG00 interpretation, actors, or world play |
-| `runtime/src/Campaigns/Fallout3/Fo3Stage90Transition.cs` | Exact INFO `0001f379` four-command result, timer/runTimer state, owned white-fade/sound presentation, persistence, and one-shot replay policy | Timer-to-stage-100 progression, other IMAD channels, general dialogue/package/KF AI, or retail parity |
+| `runtime/src/Campaigns/Fallout3/Fo3Stage90Transition.cs` | Exact INFO `0001f379` four-command result, timer/runTimer state, owned white-fade/sound presentation, persistence, and one-shot replay policy | Stage-100 command application, other IMAD channels, general dialogue/package/KF AI, or retail parity |
+| `runtime/src/Campaigns/Fallout3/Fo3Stage100Transition.cs` | Exact timer-triggered stage-100 command order, seven applied state transitions through `SetPCYoung 1`, persistence, and CG01 stage-0 boundary | Eighth command execution, CG01 runtime, general dialogue/package/KF AI, or retail parity |
 | `runtime/src/Campaigns/Fallout3/Fo3PlayerPackageTransition.cs` | Source-bound `CG00PlayerSection4` package, marker, idle/event animation identities, activation, and fail-closed stage-65 boundary | KF playback, package AI, `MatchRace`, `MatchFaceGeometry`, or stage advancement |
 | `ttw_profile.py` / `jam_profile.py` | Read-only installed-profile identity, dependency/master closure, hashes, save boundary, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
@@ -529,14 +533,14 @@ doors, atomic save, cold reload, and sandbox play. The default Doc-house route
 reuses and eagerly instantiates that exterior/saloon content. A source-portal-
 derived active set keeps the authoritative current CELL and its direct neighbors
 live while suspending distant prepared roots, processing, collision layers,
-rigid bodies, and lights. Its joined flat form is now
-interactive on one bounded forward route: from a completed stage-200 owned
-Continue, configured Godot movement follows owned NAVM to each source door,
-normal activation applies the two source-derived XTEL arrivals in order, and
-campaign save v6 persists saloon CELL `00106185`, container remaining counts,
-and the player transform. A
-fresh process using the owned Continue button restores the unchanged save and
-transform there. The lifecycle is not demand streaming or unloading: all three
+rigid bodies, and lights. Historical evidence completed one bounded forward
+route and cold restore. Current-source configured input reaches the exterior,
+activates the exact source-articulated gate, and crosses the saloon stair before
+failing closed on authored building collision during the strict final approach;
+it has not yet produced a current first-run report or cold-Continue pair.
+Campaign save v6 owns saloon CELL `00106185`, container remaining counts, and
+the player transform, but those current-source transitions remain unaccepted.
+The lifecycle is not demand streaming or unloading: all three
 prepared spaces still instantiate before the distant one is suspended. This
 does not promote reverse traversal, neighboring exterior-grid streaming, Sunny
 behavior, or the joined OpenXR route.
@@ -545,7 +549,7 @@ The Doc door pair `00103e61`/`00103e69` and saloon pair
 recipe is hash-bound, each source door must belong to the immediately preceding
 scene, and a programmatic diagnostic gate proves closed/open ray, projectile,
 and two-way capsule behavior per hop. That diagnostic remains distinct from the
-accepted configured-input forward route. The saloon door `0010618e` and exterior
+historical configured-input forward route. The saloon door `0010618e` and exterior
 door `0010636f` are a reciprocal pair.
 Their visible planes align below `0.000001` metre, both states persist together,
 and the gate passes closed collision, open fire-ray clearance, and two-way player

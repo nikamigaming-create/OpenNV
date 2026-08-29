@@ -1,7 +1,7 @@
 # New Vegas normal-menu Goodsprings route contract
 
 Status: **historical bounded forward flat proof retained; current-source route
-reacceptance pending**.
+reaches the Prospector Saloon final approach and remains fail-closed**.
 
 The default owned-data recipe compiles one hash-bound chain from the player's
 legal `FalloutNV.esm` and archive stack:
@@ -15,7 +15,7 @@ legal `FalloutNV.esm` and archive stack:
 The v2 root recipe names the targets in order. Preparation requires each source
 door in the immediately preceding scene, independently verifies the target
 door's XTEL arrival, hashes every target scene and recipe, and aggregates the
-actor recipe closure. Cell scene v13 rejects the former primary-centered link
+actor recipe closure. Cell scene v14 rejects the former primary-centered link
 semantics and carries each owned XTEL arrival transform. The runtime aligns each
 next space to its reciprocal door, gives each CELL its own collision layer, and
 switches the player's active collision and CELL ownership when normal activation
@@ -38,42 +38,38 @@ Neither phase uses Windows app control or injected foreground input.
 This historical evidence proves only the bounded eagerly instantiated forward
 flat route from a completed save. A later direct native proof establishes
 current-plus-neighbor resource suspension. Current-source normal-route
-reacceptance still awaits an admitted source-articulation cache. It does **not**
+reacceptance still awaits a passing first-run/cold pair. It does **not**
 prove reverse traversal, neighboring exterior-grid streaming/load-unload,
 an uninterrupted New Game-to-saloon run, Sunny dialogue/package AI, visual
 parity, integrated OpenXR acceptance, or a complete campaign.
 
 ## Current source boundary
 
-The 2026-08-29 compiler-family migration produced one admitted fresh cache and
-one ordinary stage-200 Continue/Pip-Boy acceptance. The first route attempt then
-correctly collided with authored exterior geometry after a stale loose NAVM
-point. Current code advances only across capsule-clear route segments and allows
-at most three bounded replans. The next attempt reached ordinary closed gate
-`0010757e`; current code activates only the actual in-range non-XTEL
-`DoorInstance` returned by the player collision and persists its open state.
+The mass-zero articulated-convex gap is closed. One fresh full cache at
+`D:\Builds\OpenNV-fnv-articulated-convex-cache-20260829-r1` completed in one
+process and admitted all four compiler families. It contains 6,104 files /
+1,019,974,001 bytes. The unchanged owned Data snapshot was 321 files, 48
+directories, 9,875,907,799 bytes, with size/mtime digest
+`b2e21cd1d34d9e9a5b62dc68790fb8e390bdaaf0a442d764260469cb270c3bfc`.
 
-That gate still blocked the capsule because its old generated model had flattened
-the animated leaf and static posts. The owned source NIF contains independent
-Open and Close controller sequences for target `BGate`; Close is not exactly the
-reverse of Open. Static export and runtime now preserve a hash-joined
-`opennv-controller-door-articulation/v1` contract so only the target leaf's
-visuals and authored collision move while `BPosts` and the REFR stay fixed.
+Ordinary stage-200 Continue reaches the owned menu, physical Pip-Boy setup,
+Doc-house portal, and Goodsprings exterior. Gate `0010757e` activates through
+normal Godot input, waits for its exact one-second source Open terminal, and
+keeps both the moving solid leaf and static posts physical. The runtime accepts
+floor-recovery contacts only when their horizontal remainder is zero, treats
+intermediate NAVM shared-edge waypoints as bounded tolerance regions, and keeps
+strict 0.18-metre direct sweeps for the final three waypoints. Non-door stalls
+consume only the existing three-replan budget; wrong-cell and XTEL blockers
+still fail immediately.
 
-Exactly one fresh cache build was started for that schema at
-`D:\Builds\OpenNV-fnv-articulated-door-cache-20260829-r1`. It failed closed
-after 245.365 seconds on
-`meshes\dungeons\nv_craftsmanhomesinterior\nvcraftsmanrmdooranimated.nif`:
-the target owns a mass-zero convex collision body, but the current static
-collision exporter admits only MOPP packed triangles and therefore could not
-join that authored body. The partial cache has no `install-manifest.json`, is
-not admitted, and was moved to the Windows Recycle Bin after its failure
-evidence was retained. The owned Data tree remained unchanged at 321 files,
-9,875,907,799 bytes, with size/mtime digest
-`25abe0156faaaad8f831b0bfc33745dc9a35cb0da65ac91e77eaab1c0323efbb`.
-No retry or Godot acceptance followed. The next slice is to represent this exact
-authored convex collision without weakening the join, rebuild once into a new
-unique cache, then run ordinary route and cold-Continue acceptance.
+The latest run is
+`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r10`.
+It passed the gate and the exact 0.257-metre Prospector Saloon stair transition,
+then stopped fail-closed against the correctly placed authored collision for
+REFR `001055e0` during final approach at waypoint 62/64. The player remained
+1.304 metres from that waypoint and 4.889 metres from the portal. No first-run
+report was emitted, so the validator, cold Continue, and video capture were not
+run. This is the exact resume boundary, not route acceptance or parity.
 
 ## Bound local acceptance
 

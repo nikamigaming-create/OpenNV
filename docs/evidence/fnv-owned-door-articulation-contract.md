@@ -59,12 +59,11 @@ articulation hash
 `998387cd8e7b94ffd2864ab069415693069261a551251ff91f5dddc7c049ec5b`.
 This is contract evidence, not a passed gameplay route or visual-parity claim.
 
-## Current unresolved owned pattern
+## Resolved convex pattern and current route boundary
 
-The first whole-route cache build with this contract stopped on
-`meshes\dungeons\nv_craftsmanhomesinterior\nvcraftsmanrmdooranimated.nif`
-because its controlled target did not join to the currently supported collision
-form. The owned NIF SHA-256 is
+The formerly blocking owned model
+`meshes\dungeons\nv_craftsmanhomesinterior\nvcraftsmanrmdooranimated.nif` has
+SHA-256
 `6d3c9586c988a746db1c62e5d18c0d48664c98a613b7d942fec1167f3ca9ff3a`.
 Root `Point01` block 1 reaches `Point01 NonAccum` block 17 and animated target
 `OffDoorHotelSm` block 18. Both Open and Close control block 18. Its visual is
@@ -72,18 +71,22 @@ block 23; collision object 20 targets the same block and owns mass-zero
 `bhkRigidBody` block 21 plus eight-vertex `bhkConvexVerticesShape` block 22.
 There is no static sibling/root collision.
 
-The gap is bounded: static collision export currently admits MOPP packed
-triangles, while the dynamic-physics path recognizes convex vertices but skips
-mass-zero bodies. The next producer slice must admit this exact authored static
-convex form, preserving target-local ownership, body/filter/radius/points, and a
-deterministic runtime convex representation beneath the same articulation
-wrapper. Unsupported convex variants remain fail-closed. It must not relax the
-articulation requirement, reassign the body to root, manufacture collision, or
-rotate the whole REFR.
+Static export now preserves that exact target-local body, its source/filter/
+material/radius/point evidence, and runtime builds one deterministic
+`ConvexPolygonShape3D` beneath the shared articulation pivot. Positive-mass
+dynamics and unsupported owner/list/shape variants remain on separate
+fail-closed paths. Two focused exact exports were byte-identical.
 
-The run exited once with code 2 after 245.365 seconds, atomically emitted no
-sidecar or install manifest, and therefore admitted no cache or compiler-family
-closure. The partial output was moved to the Windows Recycle Bin after its
-failure evidence was retained and must not be restored. After the bounded
-convex-body fix, one new unique cache build and an ordinary route/cold-Continue
-pair are required before this path can be promoted.
+One fresh full cache was admitted at
+`D:\Builds\OpenNV-fnv-articulated-convex-cache-20260829-r1`. Its install
+manifest closes all four compiler families against the unchanged owned Data
+snapshot. Native route attempts prove that gate `0010757e` reaches its exact
+one-second Open terminal with moving body 21 under `BGate`, while its solid leaf
+and static posts remain physical. Acceptance waits for the terminal and uses
+bounded replanning around that owned geometry.
+
+This does not yet promote the whole route. The latest ordinary run passed the
+Doc-house portal, the gate, and the owned Prospector Saloon stair transition.
+It then stopped fail-closed on the same building's authored collision during
+the strict final approach at waypoint 62/64, 4.889 metres from the portal. Cold
+Continue and video capture were withheld.
