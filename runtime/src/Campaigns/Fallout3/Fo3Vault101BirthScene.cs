@@ -17,15 +17,19 @@ internal sealed record Fo3Vault101BirthSceneCoverage(
     int ProofLitRetailMaterials,
     int ProofLitActorMaterials,
     CellActorLoader.PlacedActor DoctorActor,
-    Fo3Vault101DoctorGrounding DoctorGrounding,
+    Fo3Vault101ActorGrounding DoctorGrounding,
     CellReferenceLedger.Geometry DoctorActorGeometry,
+    CellActorLoader.PlacedActor DadActor,
+    Fo3Vault101ActorGrounding DadGrounding,
+    CellReferenceLedger.Geometry DadActorGeometry,
+    int ProofLitDadActorMaterials,
     int PlacedReferences,
     int MeshInstances,
     int Surfaces,
     int Vertices,
     int Triangles);
 
-internal sealed record Fo3Vault101DoctorGrounding(
+internal sealed record Fo3Vault101ActorGrounding(
     string SupportReferenceFormId,
     string SupportBaseEditorId,
     string SupportAssetLogicalPath,
@@ -162,7 +166,53 @@ internal static class Fo3Vault101BirthScene
                 doctorActor.Actor.AnimationLogicalPath != contract.DoctorActor.IdleAnimationPath)
                 throw new InvalidOperationException(
                     "Fallout 3 Doctor Li runtime actor differs from its owned contract.");
-            var doctorGrounding = GroundDoctorActor(root, doctorActor, contract);
+            var doctorGrounding = GroundActor(
+                root,
+                doctorActor,
+                contract.DoctorActor.PositionGodotGameUnits,
+                contract.DoctorActor.RotationGodotQuaternion,
+                contract.DoctorActor.Scale,
+                contract,
+                "Doctor Li");
+
+            var dadActor = CellActorLoader.Load(
+                    contract.DadActor.ScenePath,
+                    new HashSet<string>([contract.CellFormId], StringComparer.OrdinalIgnoreCase),
+                    root,
+                    contract.EntryPositionGameUnits,
+                    configuration,
+                    proofEnableInitiallyDisabled: false)
+                ?? throw new InvalidOperationException(
+                    "Fallout 3 CG00 Dad actor was unexpectedly disabled.");
+            if (dadActor.ReferenceFormId != contract.DadActor.ReferenceFormId ||
+                dadActor.BaseFormId != contract.DadActor.BaseFormId ||
+                dadActor.RaceFormId != contract.DadActor.RaceFormId ||
+                dadActor.HairFormId != contract.DadActor.HairFormId ||
+                dadActor.EyesFormId != contract.DadActor.EyesFormId ||
+                !dadActor.HeadPartFormIds.SequenceEqual(contract.DadActor.HeadPartFormIds) ||
+                !dadActor.OutfitFormIds.SequenceEqual(contract.DadActor.OutfitFormIds) ||
+                !dadActor.Placement.Position.IsEqualApprox(
+                    contract.DadActor.AuthoredPositionGodotGameUnits) ||
+                !dadActor.Placement.Quaternion.IsEqualApprox(
+                    contract.DadActor.AuthoredRotationGodotQuaternion) ||
+                !dadActor.Placement.Scale.IsEqualApprox(
+                    Vector3.One * contract.DadActor.Scale) ||
+                dadActor.Actor.AuthoredSurfaces != contract.DadActor.Surfaces ||
+                dadActor.Actor.AuthoredTextures != contract.DadActor.Textures ||
+                dadActor.Actor.Surfaces.Count != contract.DadActor.Surfaces ||
+                dadActor.Actor.AnimationLogicalPath != contract.DadActor.IdleAnimationPath)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG00 Dad runtime actor differs from its owned contract.");
+            dadActor.Placement.Position = contract.DadActor.StartMarkerPositionGodotGameUnits;
+            dadActor.Placement.Quaternion = contract.DadActor.StartMarkerRotationGodotQuaternion;
+            var dadGrounding = GroundActor(
+                root,
+                dadActor,
+                contract.DadActor.StartMarkerPositionGodotGameUnits,
+                contract.DadActor.StartMarkerRotationGodotQuaternion,
+                contract.DadActor.Scale,
+                contract,
+                "CG00 Dad");
 
             var proofLitRetailMaterials =
                 RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
@@ -184,6 +234,17 @@ internal static class Fo3Vault101BirthScene
             if (proofLitActorMaterials <= 0)
                 throw new InvalidOperationException(
                     "Fallout 3 Doctor Li actor received no proof-lighting contract.");
+            var proofLitDadActorMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
+                dadActor.Actor.Root,
+                contract.ProofAmbientColor,
+                contract.ProofBackgroundColor,
+                contract.ProofFogNearGameUnits,
+                contract.ProofFogFarGameUnits,
+                contract.ProofFogPower,
+                contract.UnitsToMeters);
+            if (proofLitDadActorMaterials <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG00 Dad actor received no proof-lighting contract.");
 
             host.AddChild(new WorldEnvironment
             {
@@ -228,6 +289,18 @@ internal static class Fo3Vault101BirthScene
                 doctorActorGeometry.Triangles <= 0)
                 throw new InvalidOperationException(
                     "Fallout 3 Doctor Li actor did not enter the birth-room proof frustum.");
+            var dadActorGeometry = CellReferenceLedger.MeasureGeometry(
+                dadActor.Actor.Root,
+                camera,
+                dadGrounding.GroundedBounds.GetCenter());
+            if (!dadActorGeometry.RenderLayerVisible ||
+                !dadActorGeometry.AabbValid ||
+                !dadActorGeometry.FrustumIntersection ||
+                dadActorGeometry.Surfaces != contract.DadActor.Surfaces ||
+                dadActorGeometry.Vertices <= 0 ||
+                dadActorGeometry.Triangles <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG00 Dad actor did not enter the birth-room proof frustum.");
             if (meshInstances == 0 || surfaces == 0 || vertices == 0 || triangles == 0)
                 throw new InvalidOperationException(
                     "Fallout 3 Vault 101 birth room constructed no render geometry.");
@@ -247,6 +320,10 @@ internal static class Fo3Vault101BirthScene
                 doctorActor,
                 doctorGrounding,
                 doctorActorGeometry,
+                dadActor,
+                dadGrounding,
+                dadActorGeometry,
+                proofLitDadActorMaterials,
                 contract.References.Count,
                 meshInstances,
                 surfaces,
@@ -263,14 +340,18 @@ internal static class Fo3Vault101BirthScene
         }
     }
 
-    private static Fo3Vault101DoctorGrounding GroundDoctorActor(
+    private static Fo3Vault101ActorGrounding GroundActor(
         Node3D cellRoot,
-        CellActorLoader.PlacedActor doctorActor,
-        Fo3Vault101BirthPresentationContract contract)
+        CellActorLoader.PlacedActor actor,
+        Vector3 targetPlacement,
+        Quaternion targetRotation,
+        float targetScale,
+        Fo3Vault101BirthPresentationContract contract,
+        string actorLabel)
     {
         const string utilityRoomModelPrefix = "meshes\\dungeons\\utility\\rooms\\";
         const float supportToleranceGameUnits = 0.01f;
-        var authoredPlacement = contract.DoctorActor.PositionGodotGameUnits;
+        var authoredPlacement = targetPlacement;
         var supports = contract.References
             .Where(reference =>
                 Mathf.IsZeroApprox(reference.RotationRadians.X) &&
@@ -296,37 +377,35 @@ internal static class Fo3Vault101BirthScene
             .ToArray();
         if (supports.Length != 1)
             throw new InvalidOperationException(
-                "Fallout 3 Doctor Li owned floor support is absent or ambiguous.");
+                $"Fallout 3 {actorLabel} owned floor support is absent or ambiguous.");
         var support = supports[0];
         var supportGlobal = cellRoot.ToGlobal(new Vector3(
             authoredPlacement.X,
             support.Surface,
             authoredPlacement.Z));
         var ungroundedBounds = ActorModelSlice.PosedWorldBounds(
-            doctorActor.Actor,
+            actor.Actor,
             includeWeapons: false);
         var correctionMeters = supportGlobal.Y - ungroundedBounds.Position.Y;
         var correctionGameUnits = correctionMeters / contract.UnitsToMeters;
         if (!float.IsFinite(correctionMeters) || !float.IsFinite(correctionGameUnits))
             throw new InvalidOperationException(
-                "Fallout 3 Doctor Li vertical grounding correction is invalid.");
-        doctorActor.Placement.Position = authoredPlacement +
+                $"Fallout 3 {actorLabel} vertical grounding correction is invalid.");
+        actor.Placement.Position = authoredPlacement +
             Vector3.Up * correctionGameUnits;
         var groundedBounds = ActorModelSlice.PosedWorldBounds(
-            doctorActor.Actor,
+            actor.Actor,
             includeWeapons: false);
         var groundedToleranceMeters = supportToleranceGameUnits * contract.UnitsToMeters;
         if (MathF.Abs(groundedBounds.Position.Y - supportGlobal.Y) >
                 groundedToleranceMeters ||
-            !Mathf.IsEqualApprox(doctorActor.Placement.Position.X, authoredPlacement.X) ||
-            !Mathf.IsEqualApprox(doctorActor.Placement.Position.Z, authoredPlacement.Z) ||
-            !doctorActor.Placement.Quaternion.IsEqualApprox(
-                contract.DoctorActor.RotationGodotQuaternion) ||
-            !doctorActor.Placement.Scale.IsEqualApprox(
-                Vector3.One * contract.DoctorActor.Scale))
+            !Mathf.IsEqualApprox(actor.Placement.Position.X, authoredPlacement.X) ||
+            !Mathf.IsEqualApprox(actor.Placement.Position.Z, authoredPlacement.Z) ||
+            !actor.Placement.Quaternion.IsEqualApprox(targetRotation) ||
+            !actor.Placement.Scale.IsEqualApprox(Vector3.One * targetScale))
             throw new InvalidOperationException(
-                "Fallout 3 Doctor Li did not ground while preserving authored X/Z/yaw/scale.");
-        return new Fo3Vault101DoctorGrounding(
+                $"Fallout 3 {actorLabel} did not ground while preserving source X/Z/yaw/scale.");
+        return new Fo3Vault101ActorGrounding(
             support.Reference.FormId,
             support.Reference.BaseEditorId,
             support.Asset.LogicalPath,
@@ -336,7 +415,7 @@ internal static class Fo3Vault101BirthScene
             correctionGameUnits,
             correctionMeters,
             authoredPlacement,
-            doctorActor.Placement.Position,
+            actor.Placement.Position,
             groundedBounds);
     }
 

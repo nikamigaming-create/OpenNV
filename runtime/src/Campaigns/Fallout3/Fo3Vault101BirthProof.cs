@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
 using Godot;
 
@@ -26,6 +28,26 @@ internal partial class Fo3Vault101BirthProof : Node3D
             if (DisplayServer.GetName() == "headless")
                 throw new InvalidOperationException(
                     "Fallout 3 Vault 101 render proof requires a rendering display driver.");
+            var runtimeAssemblyPath = Path.GetFullPath(
+                RequiredOption("--fo3-runtime-assembly"));
+            var expectedRuntimeAssemblySha256 =
+                RequiredOption("--fo3-runtime-assembly-sha256");
+            using var runtimeAssemblyStream = File.OpenRead(runtimeAssemblyPath);
+            var runtimeAssemblySha256 = Convert.ToHexString(
+                SHA256.HashData(runtimeAssemblyStream)).ToLowerInvariant();
+            if (!runtimeAssemblySha256.Equals(
+                    expectedRuntimeAssemblySha256,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Fallout 3 proof runtime assembly hash differs from its launch receipt.");
+            using var runtimePeStream = File.OpenRead(runtimeAssemblyPath);
+            using var runtimePe = new PEReader(runtimePeStream);
+            var metadata = runtimePe.GetMetadataReader();
+            var declaredMvid = metadata.GetGuid(metadata.GetModuleDefinition().Mvid);
+            var loadedMvid = typeof(Fo3Vault101BirthProof).Assembly.ManifestModule.ModuleVersionId;
+            if (declaredMvid != loadedMvid)
+                throw new InvalidOperationException(
+                    "Fallout 3 proof loaded assembly differs from the current-source build.");
 
             var profile = Fo3OwnedProfile.Load(profilePath);
             var contract = Fo3Vault101BirthPresentationContract.Load(
@@ -98,6 +120,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                          .Where(child => child.Name.ToString().StartsWith(
                              "REFR_", StringComparison.Ordinal)))
                 child.Visible = false;
+            coverage.DadActor.Actor.Root.Visible = false;
             var actorTarget = ActorModelSlice.PosedSemanticCenter(
                     coverage.DoctorActor.Actor,
                     "head",
@@ -133,6 +156,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
             using var actorFrameStream = File.OpenRead(actorFramePath);
             var actorFrameSha256 = Convert.ToHexString(
                 SHA256.HashData(actorFrameStream)).ToLowerInvariant();
+            var doctorProofCameraPosition = coverage.Camera.GlobalPosition;
             var actorFailure = !actorProofGeometry.RenderLayerVisible ||
                 !actorProofGeometry.AabbValid ||
                 !actorProofGeometry.FrustumIntersection ||
@@ -146,12 +170,55 @@ internal partial class Fo3Vault101BirthProof : Node3D
                         : actorMetrics.NonBackgroundPixels < MinimumNonBackgroundPixels
                             ? "doctor-li-pixels-not-visible"
                             : null;
-            var failure = roomFailure ?? actorFailure;
+            coverage.DoctorActor.Actor.Root.Visible = false;
+            coverage.DadActor.Actor.Root.Visible = true;
+            var dadTarget = ActorModelSlice.PosedSemanticCenter(
+                    coverage.DadActor.Actor,
+                    "head",
+                    "eye-left",
+                    "eye-right",
+                    "hair")
+                ?? throw new InvalidOperationException(
+                    "Fallout 3 CG00 Dad actor has no owned head target.");
+            coverage.Camera.GlobalPosition = dadTarget + new Vector3(0.0f, 0.0f, -1.5f);
+            coverage.Camera.LookAt(dadTarget, Vector3.Up);
+            for (var dadFrame = 0; dadFrame < ActorProofWarmupFrames; dadFrame++)
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            var dadProofGeometry = CellReferenceLedger.MeasureGeometry(
+                coverage.DadActor.Actor.Root,
+                coverage.Camera,
+                coverage.DadGrounding.GroundedBounds.GetCenter());
+            var dadFramePath = Path.Combine(output, "cg00-dad-owned-actor.png");
+            var dadImage = GetViewport().GetTexture().GetImage();
+            dadImage.Convert(Image.Format.Rgba8);
+            var dadMetrics = Analyze(dadImage, contract.ProofBackgroundColor);
+            var dadSaveError = dadImage.SavePng(dadFramePath);
+            if (dadSaveError != Error.Ok)
+                throw new InvalidOperationException(
+                    $"Could not save Fallout 3 CG00 Dad render frame: {dadSaveError}");
+            using var dadFrameStream = File.OpenRead(dadFramePath);
+            var dadFrameSha256 = Convert.ToHexString(
+                SHA256.HashData(dadFrameStream)).ToLowerInvariant();
+            var dadProofCameraPosition = coverage.Camera.GlobalPosition;
+            var dadFailure = !dadProofGeometry.RenderLayerVisible ||
+                !dadProofGeometry.AabbValid ||
+                !dadProofGeometry.FrustumIntersection ||
+                dadProofGeometry.ProjectedScreenBounds is not Vector4 dadProjectedBounds ||
+                !CellReferenceLedger.ProjectedBoundsIntersectsViewport(
+                    dadProjectedBounds,
+                    coverage.Camera)
+                    ? "cg00-dad-not-visible-in-actor-proof"
+                    : dadMetrics.LuminanceDeviation < MinimumLuminanceDeviation
+                        ? "cg00-dad-luminance-deviation"
+                        : dadMetrics.NonBackgroundPixels < MinimumNonBackgroundPixels
+                            ? "cg00-dad-pixels-not-visible"
+                            : null;
+            var failure = roomFailure ?? actorFailure ?? dadFailure;
             var report = new
             {
-                schema = "opennv-fo3-vault101-birth-native-render-proof/v5",
+                schema = "opennv-fo3-vault101-birth-native-render-proof/v6",
                 status = failure is null
-                    ? "pass-rendered-owned-birth-room-doctor-li-and-explicit-dad-dialogue-cue"
+                    ? "pass-rendered-owned-birth-room-doctor-li-cg00-dad-and-dialogue-cue"
                     : "fail-rendered-owned-birth-room",
                 campaign = "Fallout3",
                 slice = "Vault101BirthRoom",
@@ -159,6 +226,13 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 displayDriver = DisplayServer.GetName(),
                 source = new
                 {
+                    runtimeAssembly = new
+                    {
+                        path = runtimeAssemblyPath,
+                        bytes = runtimeAssemblyStream.Length,
+                        sha256 = runtimeAssemblySha256,
+                        moduleVersionId = loadedMvid,
+                    },
                     profileId = profile.ProfileId,
                     profileSha256 = profile.Sha256,
                     birthSlice = profile.BirthSlice.Path,
@@ -169,6 +243,8 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     recipeSha256 = contract.RecipeSha256,
                     doctorActorScene = contract.DoctorActor.ScenePath,
                     doctorActorSceneSha256 = contract.DoctorActor.SceneSha256,
+                    dadActorScene = contract.DadActor.ScenePath,
+                    dadActorSceneSha256 = contract.DadActor.SceneSha256,
                 },
                 cell = new
                 {
@@ -243,7 +319,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     audioPlaybackStarted = dialoguePlaybackStarted,
                     subtitleRendered = true,
                     lipPlayback = false,
-                    dadRendered = false,
+                    dadRendered = true,
                     retailTimingApplied = false,
                     stage80Applied = false,
                     frame = new
@@ -346,6 +422,64 @@ internal partial class Fo3Vault101BirthProof : Node3D
                         }
                         : null,
                 },
+                dadActor = new
+                {
+                    authority =
+                        "direct owned CG00Dad ACHR/NPC_/race/FaceGen with authored stage-0 " +
+                        "MoveTo marker and owned posed-foot grounding",
+                    referenceFormId = coverage.DadActor.ReferenceFormId,
+                    baseFormId = coverage.DadActor.BaseFormId,
+                    name = coverage.DadActor.Actor.Name,
+                    raceFormId = coverage.DadActor.RaceFormId,
+                    hairFormId = coverage.DadActor.HairFormId,
+                    eyesFormId = coverage.DadActor.EyesFormId,
+                    headPartFormIds = coverage.DadActor.HeadPartFormIds,
+                    outfitFormIds = coverage.DadActor.OutfitFormIds,
+                    authoredPositionGameUnits = Vector(
+                        contract.DadActor.AuthoredPositionGameUnits),
+                    stage0MarkerReferenceFormId =
+                        contract.DadActor.StartMarkerReferenceFormId,
+                    stage0MarkerPositionGameUnits = Vector(
+                        contract.DadActor.StartMarkerPositionGameUnits),
+                    presentationPositionGodotGameUnits = Vector(
+                        coverage.DadGrounding.PresentationPlacementGodotGameUnits),
+                    bodySurfaceTextureSource = contract.DadActor.BodySurfaceTextureSource,
+                    bodyModSynthesized = false,
+                    grounding = new
+                    {
+                        authority =
+                            "owned utility-room mesh minimum joined to owned posed actor foot bound",
+                        supportReferenceFormId = coverage.DadGrounding.SupportReferenceFormId,
+                        supportBaseEditorId = coverage.DadGrounding.SupportBaseEditorId,
+                        supportAssetLogicalPath = coverage.DadGrounding.SupportAssetLogicalPath,
+                        supportGodotGameUnits = coverage.DadGrounding.SupportGodotGameUnits,
+                        supportGodotMeters = coverage.DadGrounding.SupportGodotMeters,
+                        ungroundedFootMinimumGodotMeters =
+                            coverage.DadGrounding.UngroundedFootMinimumGodotMeters,
+                        verticalCorrectionGodotGameUnits =
+                            coverage.DadGrounding.VerticalCorrectionGodotGameUnits,
+                        verticalCorrectionGodotMeters =
+                            coverage.DadGrounding.VerticalCorrectionGodotMeters,
+                        groundedFootMinimumGodotMeters =
+                            coverage.DadGrounding.GroundedBounds.Position.Y,
+                        preservedStage0MarkerHorizontalTransform = true,
+                    },
+                    idleAnimation = coverage.DadActor.Actor.AnimationLogicalPath,
+                    idleAuthority =
+                        "owned mtidle compiler input only; not CG00 package/script selection",
+                    authoredComponents = contract.DadActor.Components,
+                    authoredSkins = contract.DadActor.Skins,
+                    authoredSurfaces = contract.DadActor.Surfaces,
+                    authoredTextures = contract.DadActor.Textures,
+                    faceGenMorphTargets = contract.DadActor.FaceGenMorphTargets,
+                    proofLitMaterials = coverage.ProofLitDadActorMaterials,
+                    runtimeSurfaces = coverage.DadActorGeometry.Surfaces,
+                    runtimeVertices = coverage.DadActorGeometry.Vertices,
+                    runtimeTriangles = coverage.DadActorGeometry.Triangles,
+                    renderLayerVisible = coverage.DadActorGeometry.RenderLayerVisible,
+                    aabbValid = coverage.DadActorGeometry.AabbValid,
+                    frustumIntersection = coverage.DadActorGeometry.FrustumIntersection,
+                },
                 frame = new
                 {
                     path = framePath,
@@ -372,7 +506,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     sourceTransformPreserved = true,
                     staticGeometryHiddenForIsolation = true,
                     cameraAuthority = "proof-only framing, not retail or CG00 camera",
-                    cameraPositionGodotMeters = Vector(coverage.Camera.GlobalPosition),
+                    cameraPositionGodotMeters = Vector(doctorProofCameraPosition),
                     targetGodotMeters = Vector(actorTarget),
                     runtimeSurfaces = actorProofGeometry.Surfaces,
                     runtimeVertices = actorProofGeometry.Vertices,
@@ -386,6 +520,33 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     visualGatePassed = actorFailure is null,
                     visualGateFailure = actorFailure,
                 },
+                dadActorFrame = new
+                {
+                    path = dadFramePath,
+                    bytes = dadFrameStream.Length,
+                    sha256 = dadFrameSha256,
+                    width = dadMetrics.Width,
+                    height = dadMetrics.Height,
+                    meanLuminance = dadMetrics.MeanLuminance,
+                    luminanceDeviation = dadMetrics.LuminanceDeviation,
+                    nonBackgroundPixels = dadMetrics.NonBackgroundPixels,
+                    stage0MarkerTransformPreserved = true,
+                    staticGeometryHiddenForIsolation = true,
+                    cameraAuthority = "proof-only framing, not retail or CG00 camera",
+                    cameraPositionGodotMeters = Vector(dadProofCameraPosition),
+                    targetGodotMeters = Vector(dadTarget),
+                    runtimeSurfaces = dadProofGeometry.Surfaces,
+                    runtimeVertices = dadProofGeometry.Vertices,
+                    runtimeTriangles = dadProofGeometry.Triangles,
+                    renderLayerVisible = dadProofGeometry.RenderLayerVisible,
+                    aabbValid = dadProofGeometry.AabbValid,
+                    frustumIntersection = dadProofGeometry.FrustumIntersection,
+                    projectedScreenBounds = dadProofGeometry.ProjectedScreenBounds is Vector4 dadBounds
+                        ? new[] { dadBounds.X, dadBounds.Y, dadBounds.Z, dadBounds.W }
+                        : null,
+                    visualGatePassed = dadFailure is null,
+                    visualGateFailure = dadFailure,
+                },
                 promotion = new
                 {
                     transported = true,
@@ -396,6 +557,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     actorsRendered = failure is null,
                     doctorLiRendered = failure is null &&
                         actorFailure is null,
+                    cg00DadRendered = failure is null && dadFailure is null,
                     questCommandsExecuted = false,
                     characterSelectionJoinedToScene = true,
                     sourceBoundDialogueCue = failure is null && dialoguePlaybackStarted,
@@ -409,9 +571,9 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 },
                 unsupported = new[]
                 {
-                    "Dad, Mom, player body, and all actors except Doctor Li",
+                    "Mom, player body, and all actors except Doctor Li and CG00 Dad",
                     "automatic CG00 dialogue timing, package execution, scripted animation selection, and quest triggers",
-                    "Dad lip animation and stage-65-matched actor appearance",
+                    "Dad lip animation",
                     "CELL lighting, image-space effects, collision, world interaction, and OpenXR",
                     "retail camera, material, lighting, animation, and pixel parity",
                 },
@@ -429,7 +591,8 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     $"entry={contract.EntryReferenceFormId} references={coverage.PlacedReferences} " +
                     $"models={coverage.LoadedAssets} surfaces={coverage.Surfaces} " +
                     $"textures={coverage.LoadedTextures} materials={coverage.MaterialBindings} " +
-                    $"actors=1 actorSurfaces={coverage.DoctorActorGeometry.Surfaces} " +
+                    $"actors=2 actorSurfaces=" +
+                    $"{coverage.DoctorActorGeometry.Surfaces + coverage.DadActorGeometry.Surfaces} " +
                     $"interactive=0 output={output}");
             else
                 GD.PushError(
@@ -465,7 +628,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
         layer.AddChild(panel);
         var label = new Label
         {
-            Text = $"DAD  •  EXPLICIT SOURCE-BACKED STAGE 65 CUE\n{subtitle}",
+            Text = $"DAD\n{subtitle}",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,

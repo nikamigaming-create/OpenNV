@@ -1094,12 +1094,14 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         var overlay = new PanelContainer
         {
             Name = "FO3_STAGE62_VAULT101_PREVIEW_BOUNDARY",
-            Position = new Vector2(
-                Fo3OpeningFlowNumericContracts.VaultPreviewMarginPixels,
-                Fo3OpeningFlowNumericContracts.VaultPreviewMarginPixels),
-            CustomMinimumSize = new Vector2(
-                Fo3OpeningFlowNumericContracts.VaultPreviewPanelWidthPixels,
-                0.0f),
+            AnchorLeft = 0.0f,
+            AnchorTop = 1.0f,
+            AnchorRight = 1.0f,
+            AnchorBottom = 1.0f,
+            OffsetLeft = 150.0f,
+            OffsetTop = -180.0f,
+            OffsetRight = -150.0f,
+            OffsetBottom = -20.0f,
         };
         overlay.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
@@ -1117,26 +1119,11 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         var status = new VBoxContainer();
         status.AddThemeConstantOverride("separation", Fo3OpeningFlowNumericContracts.SeparationPixels);
         margin.AddChild(status);
-        status.AddChild(Label(
-            "OWNED VAULT 101  •  BOUNDED STAGE-62 PREVIEW",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        status.AddChild(Label(
-            $"{playerName}  •  {sex.Label}  •  {selection.Race.Label}",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        status.AddChild(Label(
-            $"ENTRY {contract.EntryReferenceFormId}  •  PACKAGE {transition.PackageFormId}",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        status.AddChild(Label(
-            "Exact owned marker/room/Doctor Li presentation. Package execution, player idle, " +
-            "camera timing, and automatic quest progression are not running.",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        var subtitle = Label(
-            "The next authored beat is available as an explicit source-backed advance. " +
-            "Dad is not rendered in this bounded slice.",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels);
+        var subtitle = Label(" ", Fo3OpeningFlowNumericContracts.BodyFontPixels);
         subtitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        subtitle.Visible = false;
         status.AddChild(subtitle);
-        var playDialogue = Button("EXPLICIT ADVANCE TO STAGE 65  •  PLAY OWNED DAD CUE");
+        var playDialogue = Button("CONTINUE");
         playDialogue.Pressed += () =>
         {
             var package = _profile.Section4Transition.Activate();
@@ -1147,12 +1134,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             PersistStage65Appearance(playerName, sex, selection, package, stage65);
             var branch = _profile.Stage80Transition.DialogueFor(sex.EngineSex);
             PlayVaultDialogue(branch, subtitle);
-            playDialogue.Disabled = true;
+            playDialogue.Visible = false;
         };
         status.AddChild(playDialogue);
-        var menu = Button("RETURN TO MAIN MENU  •  ESC");
-        menu.Pressed += ExitVault101Preview;
-        status.AddChild(menu);
         AddChild(overlay);
         _vaultPreviewOverlay = overlay;
         Callable.From(playDialogue.GrabFocus).CallDeferred();
@@ -1160,7 +1144,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"OPENNV_FO3_CG00_VAULT101_PREVIEW_READY profile={_profile.ProfileId} " +
             $"stage={transition.SourceStage} package={transition.PackageFormId} " +
             $"entry={contract.EntryReferenceFormId} cell={contract.CellFormId} " +
-            $"references={coverage.PlacedReferences} actors=1 packageExecuted=0 " +
+            $"references={coverage.PlacedReferences} actors=2 packageExecuted=0 " +
             "playerIdleExecuted=0 dialoguePlaybackReady=1 retailTiming=0");
     }
 
@@ -1183,6 +1167,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         };
         AddChild(_vaultDialogueVoice);
         subtitle.Text = $"DAD: {branch.Response.Text}";
+        subtitle.Visible = true;
         _vaultDialogueVoice.Play();
         GD.Print(
             $"OPENNV_FO3_CG00_DAD_CUE_STARTED stage=65 info={branch.InfoFormId} " +

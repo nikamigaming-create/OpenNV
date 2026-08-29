@@ -24,7 +24,7 @@ from texture_pipeline import TexturePipeline
 
 
 RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
-OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v3"
+OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v4"
 PROFILE_SCHEMA = "opennv-owned-game-profile/v1"
 OUTPUT_NAME = "fo3-vault101-birth-presentation.json"
 SHA256_HEX_CHARACTERS = 64
@@ -101,6 +101,11 @@ def _default_actor_recipe_path() -> Path:
     return root / "recipes" / "fo3-vault101-doctor-li-actor-v1.json"
 
 
+def _default_dad_actor_recipe_path() -> Path:
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    return root / "recipes" / "fo3-vault101-dad-actor-v1.json"
+
+
 def _archive(install: dict[str, object], role: str) -> dict[str, object]:
     matches = [
         row
@@ -175,6 +180,7 @@ def prepare(
     cache_root: Path,
     recipe_path: Path,
     actor_recipe_path: Path,
+    dad_actor_recipe_path: Path,
 ) -> Path:
     profile, _profile_payload = _read_json(profile_path.resolve())
     if (
@@ -262,6 +268,19 @@ def prepare(
     doctor_reference = _required_object(doctor_source, "reference")
     doctor_base = _required_object(doctor_source, "base")
     doctor_appearance = _required_object(doctor_source, "appearance")
+    father_rows = [
+        row
+        for row in _required_list(start_graph, "actors")
+        if isinstance(row, dict) and row.get("role") == "father"
+    ]
+    if len(father_rows) != 1:
+        raise ValueError("Fallout 3 CG00 Dad start-graph identity is ambiguous")
+    father_source = father_rows[0]
+    father_reference = _required_object(father_source, "reference")
+    father_start_marker = _required_object(father_source, "startMarker")
+    father_base = bases.get(_required_string(father_reference, "baseFormId"))
+    if father_base is None:
+        raise ValueError("Fallout 3 CG00 Dad base is absent from the owned CELL graph")
     actor_recipe, actor_recipe_payload = _read_json(actor_recipe_path.resolve())
     actor_recipe_master = _required_object(actor_recipe, "master")
     actor_recipe_meshes = _required_object(actor_recipe, "meshesArchive")
@@ -282,6 +301,33 @@ def prepare(
         or actor_recipe_textures[0].get("sha256") != source_textures.get("sha256")
     ):
         raise ValueError("Fallout 3 Doctor Li recipe does not bind the owned birth slice")
+    dad_actor_recipe, dad_actor_recipe_payload = _read_json(
+        dad_actor_recipe_path.resolve()
+    )
+    dad_actor_recipe_master = _required_object(dad_actor_recipe, "master")
+    dad_actor_recipe_meshes = _required_object(dad_actor_recipe, "meshesArchive")
+    dad_actor_recipe_textures = _required_list(dad_actor_recipe, "textureArchives")
+    if (
+        dad_actor_recipe.get("schema") != "opennv-actor-recipe/v1"
+        or dad_actor_recipe.get("cellFormId") != cell.get("formId")
+        or dad_actor_recipe.get("proofActorReferenceFormId")
+        != father_reference.get("formId")
+        or dad_actor_recipe.get("expectedBaseFormId") != father_base.get("formId")
+        or dad_actor_recipe.get("originGameUnits") != entry_position
+        or dad_actor_recipe.get("bodyModPolicy")
+        != "owned-race-base-diffuse-when-precomputed-absent"
+        or dad_actor_recipe_master.get("file") != source.get("master", {}).get("file")
+        or dad_actor_recipe_master.get("sha256")
+        != source.get("master", {}).get("sha256")
+        or dad_actor_recipe_meshes.get("file") != source_meshes.get("file")
+        or dad_actor_recipe_meshes.get("sha256") != source_meshes.get("sha256")
+        or len(dad_actor_recipe_textures) != 1
+        or not isinstance(dad_actor_recipe_textures[0], dict)
+        or dad_actor_recipe_textures[0].get("file") != source_textures.get("file")
+        or dad_actor_recipe_textures[0].get("sha256")
+        != source_textures.get("sha256")
+    ):
+        raise ValueError("Fallout 3 CG00 Dad recipe does not bind the owned birth slice")
     selected: list[tuple[dict[str, object], dict[str, object], str]] = []
     excluded: dict[str, int] = {}
     for value in _required_list(graph, "references"):
@@ -616,9 +662,50 @@ def prepare(
     if len(bound_actor_models) != int(actor_coverage["components"]) + 1:
         raise ValueError("Compiled Doctor Li component provenance coverage differs")
 
+    dad_manifest = prepare_actor(
+        Path(_required_string(source, "dataRoot")).resolve(),
+        cache_root.resolve(),
+        _required_string(dad_actor_recipe, "id"),
+        recipe_document=dad_actor_recipe,
+    )
+    dad_reference = _required_object(dad_manifest, "reference")
+    dad_identity = _required_object(dad_manifest, "actor")
+    dad_coverage = _required_object(dad_manifest, "coverage")
+    father_transform = _required_object(father_reference, "transform")
+    father_marker_transform = _required_object(father_start_marker, "transform")
+    if (
+        dad_manifest.get("schema") != "opennv-actor-scene/v5"
+        or dad_manifest.get("status") != "skinned-animated"
+        or dad_manifest.get("cellFormId") != cell.get("formId")
+        or dad_manifest.get("bodyModLogicalPath") is not None
+        or dad_manifest.get("bodyModPolicy")
+        != "owned-race-base-diffuse-when-precomputed-absent"
+        or dad_manifest.get("bodySurfaceTextureSource")
+        != "owned-race-base-diffuse-no-body-mod"
+        or dad_reference.get("formId") != father_reference.get("formId")
+        or dad_reference.get("baseFormId") != father_base.get("formId")
+        or dad_reference.get("initiallyDisabled") is not False
+        or dad_reference.get("positionGameUnits")
+        != father_transform.get("positionGameUnits")
+        or dad_reference.get("rotationRadians")
+        != father_transform.get("rotationRadians")
+        or dad_reference.get("scale") != father_transform.get("scale")
+        or dad_identity.get("editorId") != father_base.get("editorId")
+        or dad_identity.get("name") != "Dad"
+        or dad_identity.get("female") is not False
+        or int(dad_coverage.get("components", 0)) <= 0
+        or int(dad_coverage.get("skins", 0)) <= 0
+        or int(dad_coverage.get("surfaces", 0)) <= 0
+        or int(dad_coverage.get("textures", 0)) <= 0
+        or int(dad_coverage.get("faceGenMorphTargets", 0)) <= 0
+        or int(dad_coverage.get("omittedSurfaces", -1)) != 0
+    ):
+        raise ValueError("Compiled CG00 Dad differs from the direct owned NPC")
+    dad_scene_path = Path(_required_string(dad_manifest, "manifest")).resolve()
+
     document: dict[str, object] = {
         "schema": OUTPUT_SCHEMA,
-        "status": "prepared-owned-materials-and-doctor-actor-not-yet-rendered",
+        "status": "prepared-owned-materials-doctor-and-cg00-dad-not-yet-rendered",
         "recipe": {
             "id": _required_string(recipe, "id"),
             "path": str(recipe_path.resolve()),
@@ -710,6 +797,60 @@ def prepare(
                 "are not implemented"
             ),
         },
+        "dadActor": {
+            "source": "direct-owned-CG00Dad-ACHR-NPC-race-and-FaceGen",
+            "scene": str(dad_scene_path),
+            "sha256": _sha256_file(dad_scene_path),
+            "recipe": {
+                "id": _required_string(dad_actor_recipe, "id"),
+                "path": str(dad_actor_recipe_path.resolve()),
+                "sha256": _sha256_bytes(dad_actor_recipe_payload),
+            },
+            "sourceRecordBindings": {
+                "referenceFormId": _required_string(father_reference, "formId"),
+                "baseFormId": _required_string(father_base, "formId"),
+                "baseRecordDataSha256": _required_sha256(
+                    father_base, "recordDataSha256"
+                ),
+            },
+            "reference": dad_reference,
+            "actor": dad_identity,
+            "coverage": dad_coverage,
+            "bodySurfaceTextureSource": _required_string(
+                dad_manifest, "bodySurfaceTextureSource"
+            ),
+            "bodyModPolicy": _required_string(dad_manifest, "bodyModPolicy"),
+            "startMarker": {
+                "referenceFormId": _required_string(father_start_marker, "formId"),
+                "positionGameUnits": _required_list(
+                    father_marker_transform, "positionGameUnits"
+                ),
+                "positionGodotGameUnits": godot_position(
+                    tuple(
+                        float(value)
+                        for value in _required_list(
+                            father_marker_transform, "positionGameUnits"
+                        )
+                    ),
+                    origin,
+                ),
+                "rotationRadians": _required_list(
+                    father_marker_transform, "rotationRadians"
+                ),
+                "rotationGodotQuaternion": godot_rotation_quaternion(
+                    tuple(
+                        float(value)
+                        for value in _required_list(
+                            father_marker_transform, "rotationRadians"
+                        )
+                    )
+                ),
+            },
+            "poseAuthority": (
+                "owned mtidle compiler input and exact stage-0 MoveTo marker only; "
+                "CG00 package idle selection is not implemented"
+            ),
+        },
         "presentation": {
             "verticalFovDegrees": float(presentation["verticalFovDegrees"]),
             "proofAmbientColor": presentation["proofAmbientColor"],
@@ -745,6 +886,7 @@ def prepare(
             "transported": True,
             "texturesPrepared": True,
             "doctorActorPrepared": True,
+            "dadActorPrepared": True,
             "runtimeManifestValidated": False,
             "runtimeSceneConstructed": False,
             "rendered": False,
@@ -769,12 +911,16 @@ def main() -> int:
     parser.add_argument(
         "--actor-recipe", type=Path, default=_default_actor_recipe_path()
     )
+    parser.add_argument(
+        "--dad-actor-recipe", type=Path, default=_default_dad_actor_recipe_path()
+    )
     arguments = parser.parse_args()
     output = prepare(
         arguments.profile,
         arguments.cache_root,
         arguments.recipe,
         arguments.actor_recipe,
+        arguments.dad_actor_recipe,
     )
     print(
         json.dumps(

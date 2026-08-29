@@ -544,35 +544,61 @@ def prepare_actor(
         f"textures\\characters\\bodymods\\{texture_owner}\\"
         f"{actor.form_id:08x}modbody{sex_label}.dds"
     )
-    if not has_texture(texture_archives, body_mod_path):
+    body_mod_policy = str(recipe.get("bodyModPolicy", "require-retail-precomputed"))
+    if body_mod_policy not in {
+        "require-retail-precomputed",
+        "owned-race-base-diffuse-when-precomputed-absent",
+    }:
+        raise ValueError(f"Unsupported actor body-mod policy: {body_mod_policy}")
+    if has_texture(texture_archives, body_mod_path):
+        body_mod = decode_dds(extract_texture(texture_archives, body_mod_path), False)
+        body_surface_texture_source = "retail-precomputed-body-mod-composite"
+    elif (
+        body_mod_policy == "owned-race-base-diffuse-when-precomputed-absent"
+        and retail_presentation is None
+    ):
+        body_mod = None
+        body_surface_texture_source = "owned-race-base-diffuse-no-body-mod"
+    else:
         raise ValueError("Proof actor has no retail precomputed body-mod texture")
-    body_mod = decode_dds(extract_texture(texture_archives, body_mod_path), False)
     left_hand_texture = body_textures[RACE_LEFT_HAND_MODEL_INDEX]
     right_hand_texture = body_textures[RACE_RIGHT_HAND_MODEL_INDEX]
     if left_hand_texture is None or right_hand_texture is None:
         raise ValueError("Proof actor race has no sex-specific hand textures")
-    generated_left_hand = compose_body_albedo(
-        decode_dds(extract_texture(texture_archives, left_hand_texture), False),
-        body_mod,
+    generated_left_hand = (
+        compose_body_albedo(
+            decode_dds(extract_texture(texture_archives, left_hand_texture), False),
+            body_mod,
+        )
+        if body_mod is not None
+        else None
     )
-    generated_right_hand = compose_body_albedo(
-        decode_dds(extract_texture(texture_archives, right_hand_texture), False),
-        body_mod,
+    generated_right_hand = (
+        compose_body_albedo(
+            decode_dds(extract_texture(texture_archives, right_hand_texture), False),
+            body_mod,
+        )
+        if body_mod is not None
+        else None
     )
 
     components = []
     if retail_presentation is None:
         for index, (outfit_model, outfit_payload) in enumerate(outfit_payloads):
             skin_paths = actor_skin_diffuse_paths(outfit_payload)
-            generated_skin = tuple(
-                (
-                    source,
-                    compose_body_albedo(
-                        decode_dds(extract_texture(texture_archives, source), False),
-                        body_mod,
-                    ),
+            generated_skin = (
+                tuple(
+                    (
+                        source,
+                        compose_body_albedo(
+                            decode_dds(extract_texture(texture_archives, source), False),
+                            body_mod,
+                        ),
+                    )
+                    for source in skin_paths
                 )
-                for source in skin_paths
+                if body_mod is not None
+                else ()
             )
             components.append(
                 ActorComponent(
@@ -869,7 +895,9 @@ def prepare_actor(
         },
         "faceDetailSource": face_detail_source,
         "faceDetailLogicalPath": face_mod_path if face_detail_source == "retail-precomputed" else head_egt,
-        "bodyModLogicalPath": body_mod_path,
+        "bodyModLogicalPath": body_mod_path if body_mod is not None else None,
+        "bodyModPolicy": body_mod_policy,
+        "bodySurfaceTextureSource": body_surface_texture_source,
         "outputs": {
             "gltf": gltf_path.name,
             "sidecar": sidecar_path.name,

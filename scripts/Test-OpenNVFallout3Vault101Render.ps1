@@ -43,6 +43,17 @@ foreach ($path in @($CacheRoot, $CaptureRoot)) {
     }
 }
 
+$buildOutput = & dotnet build (Join-Path $runtimeRoot "OpenNV.csproj") `
+    -c Debug --no-restore 2>&1
+if ($LASTEXITCODE -ne 0) {
+    throw "Fallout 3 Vault 101 current-source build failed:`n$($buildOutput | Out-String)"
+}
+$builtAssembly = Join-Path $runtimeRoot ".godot\mono\temp\bin\Debug\OpenNV.dll"
+if (-not (Test-Path -LiteralPath $builtAssembly -PathType Leaf)) {
+    throw "Fallout 3 Vault 101 current-source assembly is absent: $builtAssembly"
+}
+$builtAssemblySha256 = (Get-FileHash -LiteralPath $builtAssembly -Algorithm SHA256).Hash.ToLowerInvariant()
+
 $prepareOutput = & $Python $preparer --profile ([IO.Path]::GetFullPath($Profile)) `
     --cache-root ([IO.Path]::GetFullPath($CacheRoot)) 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -54,7 +65,7 @@ $receiptLine = @(
         Where-Object { $_.TrimStart().StartsWith("{") }
 )[-1]
 $receipt = $receiptLine | ConvertFrom-Json
-if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v3" -or
+if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v4" -or
     -not (Test-Path -LiteralPath $receipt.output -PathType Leaf)) {
     throw "Fallout 3 Vault 101 preparation receipt is invalid."
 }
@@ -62,13 +73,15 @@ if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v3" -or
 $renderOutput = & $Godot --xr-mode off --path $runtimeRoot --windowed `
     --resolution 1280x720 --position 10000,10000 $proofScene -- `
     --fo3-profile ([IO.Path]::GetFullPath($Profile)) `
+    --fo3-runtime-assembly ([IO.Path]::GetFullPath($builtAssembly)) `
+    --fo3-runtime-assembly-sha256 $builtAssemblySha256 `
     --fo3-birth-presentation ([IO.Path]::GetFullPath($receipt.output)) `
     --fo3-birth-capture ([IO.Path]::GetFullPath($CaptureRoot)) 2>&1
 $renderText = $renderOutput | Out-String
 $expected =
     "OPENNV_FO3_VAULT101_RENDER_PASS cell=00028138 entry=00039562 " +
     "references=29 models=23 surfaces=148 textures=51 materials=118 " +
-    "actors=1 actorSurfaces=18 interactive=0"
+    "actors=2 actorSurfaces=33 interactive=0"
 if ($LASTEXITCODE -ne 0 -or $renderText -notmatch [regex]::Escape($expected)) {
     throw "Fallout 3 Vault 101 native render proof failed:`n$renderText"
 }
@@ -77,9 +90,15 @@ $reportPath = Join-Path $CaptureRoot "vault101-birth-native-render-proof.json"
 $framePath = Join-Path $CaptureRoot "vault101-birth-entry.png"
 $actorFramePath = Join-Path $CaptureRoot "doctor-li-owned-actor.png"
 $dialogueFramePath = Join-Path $CaptureRoot "stage65-owned-dad-cue.png"
+$dadActorFramePath = Join-Path $CaptureRoot "cg00-dad-owned-actor.png"
 $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json -Depth 100
-if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v5" -or
-    $report.status -ne "pass-rendered-owned-birth-room-doctor-li-and-explicit-dad-dialogue-cue" -or
+$runtimeAssemblyPath = [IO.Path]::GetFullPath($report.source.runtimeAssembly.path)
+$runtimeAssemblyInfo = Get-Item -LiteralPath $runtimeAssemblyPath
+$runtimeAssemblySha256 = (Get-FileHash -LiteralPath $runtimeAssemblyPath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v6" -or
+    $report.status -ne "pass-rendered-owned-birth-room-doctor-li-cg00-dad-and-dialogue-cue" -or
+    $report.source.runtimeAssembly.bytes -ne $runtimeAssemblyInfo.Length -or
+    $report.source.runtimeAssembly.sha256 -ne $runtimeAssemblySha256 -or
     -not $report.promotion.rendered -or
     -not $report.promotion.texturesBound -or
     $report.promotion.interactive -or
@@ -110,6 +129,7 @@ if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v5" -or
     -not (Test-Path -LiteralPath $framePath -PathType Leaf) -or
     -not (Test-Path -LiteralPath $actorFramePath -PathType Leaf) -or
     -not (Test-Path -LiteralPath $dialogueFramePath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $dadActorFramePath -PathType Leaf) -or
     $report.boundedDialogueCue.sourceStage -ne 65 -or
     $report.boundedDialogueCue.targetStage -ne 80 -or
     $report.boundedDialogueCue.infoFormId -ne "0001f380" -or
@@ -117,10 +137,26 @@ if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v5" -or
     -not $report.boundedDialogueCue.audioPlaybackStarted -or
     -not $report.boundedDialogueCue.subtitleRendered -or
     $report.boundedDialogueCue.lipPlayback -or
-    $report.boundedDialogueCue.dadRendered -or
+    -not $report.boundedDialogueCue.dadRendered -or
     $report.boundedDialogueCue.retailTimingApplied -or
     $report.boundedDialogueCue.stage80Applied -or
     -not $report.promotion.sourceBoundDialogueCue -or
+    -not $report.promotion.cg00DadRendered -or
+    $report.dadActor.referenceFormId -ne "000290a7" -or
+    $report.dadActor.baseFormId -ne "000290a6" -or
+    $report.dadActor.stage0MarkerReferenceFormId -ne "0003a17b" -or
+    $report.dadActor.bodySurfaceTextureSource -ne "owned-race-base-diffuse-no-body-mod" -or
+    $report.dadActor.bodyModSynthesized -or
+    $report.dadActor.authoredComponents -ne 12 -or
+    $report.dadActor.authoredSkins -ne 8 -or
+    $report.dadActor.authoredSurfaces -ne 15 -or
+    $report.dadActor.runtimeSurfaces -ne 15 -or
+    $report.dadActor.grounding.verticalCorrectionGodotGameUnits -ge 0 -or
+    [Math]::Abs(
+        $report.dadActor.grounding.groundedFootMinimumGodotMeters -
+        $report.dadActor.grounding.supportGodotMeters) -gt 0.0002 -or
+    -not $report.dadActor.grounding.preservedStage0MarkerHorizontalTransform -or
+    -not $report.dadActorFrame.visualGatePassed -or
     $report.characterSelectionHandoff.sourceStage -ne 62 -or
     $report.characterSelectionHandoff.packageFormId -ne "0006a818" -or
     $report.characterSelectionHandoff.packageLocationReferenceFormId -ne "00039562" -or
