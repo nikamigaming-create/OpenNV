@@ -15,6 +15,7 @@ internal sealed record Fo2TempleWalkMaskProfile(
 
 internal sealed record Fo2TempleWallProfile(
     string Mode,
+    string PresentationMode,
     int SourceObjectType,
     string CollisionMode,
     float CellRadiusScale,
@@ -90,6 +91,7 @@ internal sealed record Fo2TempleTopologyProfile(
                 ReadColor(walk.GetProperty("overlayColor"))),
             new Fo2TempleWallProfile(
                 RequiredString(wall, "mode"),
+                RequiredString(wall, "presentationMode"),
                 wall.GetProperty("sourceObjectType").GetInt32(),
                 RequiredString(wall, "collisionMode"),
                 Finite(wall, "cellRadiusScale"),
@@ -103,6 +105,8 @@ internal sealed record Fo2TempleTopologyProfile(
             profile.ObjectMultihexFlag != 0x800 ||
             profile.MultihexCoverage != "central-source-hex-only-unresolved" ||
             profile.Wall.SourceObjectType != 3 ||
+            profile.Wall.PresentationMode !=
+                "collision-only-proxy-owned-wall-frms-visible-v1" ||
             profile.FloorSupport.SurfaceMeters != 0.0f ||
             profile.WalkMask.OverlayHeightMeters <= 0.0f ||
             profile.WalkMask.OverlayRadiusScale is <= 0.0f or > 1.0f ||

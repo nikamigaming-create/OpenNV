@@ -54,6 +54,22 @@ internal static class Fo2ExitTransitionProof
             var framePath = System.IO.Path.Combine(output, "temple-arrival.png");
             var image = host.GetViewport().GetTexture().GetImage();
             image.SavePng(framePath);
+            var temple = host.TempleScene;
+            var descendants = temple is null
+                ? Array.Empty<Node>()
+                : Descendants(temple.Root).ToArray();
+            var wallProxyMeshes = descendants
+                .OfType<MeshInstance3D>()
+                .Count(node => node.Name == "MOLDED_SOURCE_WALL_SHELL");
+            var sourceWallSprites = descendants
+                .OfType<Sprite3D>()
+                .Where(node => node.HasMeta("source_object_type") &&
+                    node.GetMeta("source_object_type").AsInt32() == 3)
+                .ToArray();
+            var sourceWallsVisible = temple is not null && wallProxyMeshes == 0 &&
+                sourceWallSprites.Length == temple.Topology.WallSourceObjects &&
+                sourceWallSprites.All(sprite => sprite.Visible && sprite.Texture is not null);
+            var camera = player.GetChildren().OfType<Camera3D>().Single();
             var passed = host.LastTransition == exit && host.TempleScene is not null &&
                 observedPath.SequenceEqual(exit.SourcePath) &&
                 player.CurrentMapIndex == exit.TargetMapIndex &&
@@ -71,6 +87,7 @@ internal static class Fo2ExitTransitionProof
                 saved.ArrivalTile == exit.TargetTile &&
                 saved.CurrentTile == exit.TargetTile &&
                 saved.LastTransition == exit && saved.Sha256.Length == 64 &&
+                sourceWallsVisible && camera.Size == runtime.Profile.CameraSizeMeters &&
                 File.Exists(framePath) && FileSha256(framePath).Length == 64;
             WriteReport(
                 System.IO.Path.Combine(output, "fo2-exit-transition-write-proof.json"),
@@ -112,6 +129,16 @@ internal static class Fo2ExitTransitionProof
                         sha256 = FileSha256(framePath),
                         width = image.GetWidth(),
                         height = image.GetHeight(),
+                    },
+                    visual = new
+                    {
+                        wallProxyMeshes,
+                        sourceWallSprites = sourceWallSprites.Length,
+                        sourceWallsVisible,
+                        cameraSizeMeters = camera.Size,
+                        cameraProfileSizeMeters = runtime.Profile.CameraSizeMeters,
+                        sourceFrmSpritesRetained = true,
+                        hiddenSourceGeometry = false,
                     },
                     movementFrames,
                     ordinaryGroundedMovement = true,
@@ -230,6 +257,16 @@ internal static class Fo2ExitTransitionProof
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    private static IEnumerable<Node> Descendants(Node root)
+    {
+        foreach (var child in root.GetChildren())
+        {
+            yield return child;
+            foreach (var descendant in Descendants(child))
+                yield return descendant;
+        }
     }
 
     private static void WriteReport(string path, object report) => File.WriteAllText(

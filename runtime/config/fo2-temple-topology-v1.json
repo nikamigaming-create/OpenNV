@@ -27,6 +27,7 @@
   },
   "wallGeometry": {
     "mode": "source-wall-hex-union-v1",
+    "presentationMode": "collision-only-proxy-owned-wall-frms-visible-v1",
     "sourceObjectType": 3,
     "collisionMode": "blocking-wall-hex-union-v1",
     "cellRadiusScale": 1.0,

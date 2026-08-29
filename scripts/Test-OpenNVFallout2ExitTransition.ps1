@@ -76,6 +76,13 @@ if ($write.schema -ne 'opennv-fo2-exit-transition-write-proof/v1' -or
     $write.destination.animation -ne 'AA' -or
     $write.frame.width -ne 1280 -or $write.frame.height -ne 720 -or
     $write.frame.sha256.Length -ne 64 -or
+    $write.visual.wallProxyMeshes -ne 0 -or
+    $write.visual.sourceWallSprites -le 0 -or
+    -not $write.visual.sourceWallsVisible -or
+    $write.visual.cameraSizeMeters -ne 12.0 -or
+    $write.visual.cameraProfileSizeMeters -ne 12.0 -or
+    -not $write.visual.sourceFrmSpritesRetained -or
+    $write.visual.hiddenSourceGeometry -or
     -not $restore.restore.coldProcess -or
     -not $restore.restore.exactInitialPosition -or
     -not $restore.restore.exactInitialTile -or

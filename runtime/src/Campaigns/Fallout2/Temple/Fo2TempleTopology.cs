@@ -105,27 +105,12 @@ internal static class Fo2TempleTopology
         {
             var componentRoot = new Node3D { Name = $"WALL_COMPONENT_{index:D3}" };
             wallRoot.AddChild(componentRoot);
-            var (renderMesh, componentBoundary, componentTriangles) = BuildWallMesh(
-                component,
-                profile.Wall);
+            var (componentBoundary, componentTriangles) = WallGeometryMetrics(component);
             boundaryEdges += componentBoundary;
             wallTriangles += componentTriangles;
-            var material = new StandardMaterial3D
-            {
-                AlbedoColor = profile.Wall.UnresolvedSourceAlbedo,
-                Roughness = profile.Wall.Roughness,
-                Metallic = profile.Wall.Metallic,
-                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            };
-            var instance = new MeshInstance3D
-            {
-                Name = "MOLDED_SOURCE_WALL_SHELL",
-                Mesh = renderMesh,
-                MaterialOverride = material,
-            };
-            instance.SetMeta("fo2_wall_geometry_contract", profile.Wall.Mode);
-            componentRoot.AddChild(instance);
-            wallMeshes++;
+            componentRoot.SetMeta(
+                "fo2_wall_presentation_contract",
+                profile.Wall.PresentationMode);
 
             var blockingComponent = component
                 .Where(tile => wallPlacements.Any(row =>
@@ -294,6 +279,16 @@ internal static class Fo2TempleTopology
         }
         return (
             builder.Commit("Fallout 2 Temple molded wall shell"),
+            boundary,
+            occupied.Count * Fo1HexMath.DirectionCount * 2 + boundary * 2);
+    }
+
+    private static (int BoundaryEdges, int Triangles) WallGeometryMetrics(
+        IReadOnlySet<int> occupied)
+    {
+        var boundary = occupied.Sum(tile => Enumerable.Range(0, Fo1HexMath.DirectionCount)
+            .Count(edge => !occupied.Contains(Fo1HexMath.NeighborAcrossEdge(tile, edge))));
+        return (
             boundary,
             occupied.Count * Fo1HexMath.DirectionCount * 2 + boundary * 2);
     }

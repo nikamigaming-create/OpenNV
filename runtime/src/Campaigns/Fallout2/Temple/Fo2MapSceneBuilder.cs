@@ -149,6 +149,8 @@ internal static class Fo2MapSceneBuilder
             sprite.SetMeta("map_serial", placement.Serial);
             sprite.SetMeta("map_tile", placement.Tile);
             sprite.SetMeta("fid", placement.Fid);
+            sprite.SetMeta("source_object_type", placement.ObjectType);
+            sprite.SetMeta("source_logical_path", placement.LogicalPath);
             sprite.SetMeta("source_sha256", artifact.SourceSha256);
             objectRoot.AddChild(sprite);
         }
