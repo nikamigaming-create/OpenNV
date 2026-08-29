@@ -15,7 +15,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator
 
-from actor_gltf import sample_root_motion, sample_transform_animation
+from actor_gltf import (
+    authored_rigid_attachment_node,
+    sample_root_motion,
+    sample_transform_animation,
+)
 from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
@@ -207,6 +211,15 @@ class IdleAnimationSource:
 
 
 @dataclass(frozen=True)
+class AnimationObjectSource:
+    form_id: int
+    editor_id: str
+    logical_path: str
+    idle_form_id: int
+    record_sha256: str
+
+
+@dataclass(frozen=True)
 class ReferenceTransformSource:
     form_id: int
     editor_id: str | None
@@ -241,6 +254,9 @@ class FlowSourceCatalog:
     references_by_form: dict[int, ReferenceTransformSource]
     image_space_modifiers_by_editor: dict[str, Record]
     needed: dict[int, dict[str, object]]
+    animation_objects_by_idle_form: dict[
+        int, tuple[AnimationObjectSource, ...]
+    ] = field(default_factory=dict)
     game_settings_by_editor: dict[str, Record] = field(default_factory=dict)
     player_base: Record | None = None
 
@@ -2701,6 +2717,7 @@ def _scan_flow_sources(
     scripts: dict[str, tuple[int, str]] = {}
     idle_animations_by_editor: dict[str, IdleAnimationSource] = {}
     idle_animations_by_form: dict[int, IdleAnimationSource] = {}
+    animation_objects_by_idle_form: dict[int, list[AnimationObjectSource]] = defaultdict(list)
     packages_by_editor: dict[str, Record] = {}
     packages_by_form: dict[int, Record] = {}
     actors_by_form: dict[int, Record] = {}
@@ -2773,6 +2790,30 @@ def _scan_flow_sources(
                 source = IdleAnimationSource(record.form_id, editor_id, logical_path)
                 idle_animations_by_editor[identity] = source
                 idle_animations_by_form[record.form_id] = source
+        if record.signature == "ANIO":
+            editor_id = _catalog_text(subrecords, "EDID")
+            model_path = _catalog_text(subrecords, "MODL")
+            data = [
+                subrecord.data
+                for subrecord in subrecords
+                if subrecord.signature == "DATA"
+            ]
+            if (
+                editor_id
+                and model_path
+                and len(data) == 1
+                and len(data[0]) == FORM_ID_BYTES
+            ):
+                idle_form_id = struct.unpack("<I", data[0])[0]
+                animation_objects_by_idle_form[idle_form_id].append(
+                    AnimationObjectSource(
+                        record.form_id,
+                        editor_id,
+                        _asset_path(model_path),
+                        idle_form_id,
+                        hashlib.sha256(record.data).hexdigest(),
+                    )
+                )
         if record.signature == "PACK":
             editor_id = _catalog_text(subrecords, "EDID")
             if editor_id:
@@ -2846,20 +2887,24 @@ def _scan_flow_sources(
         missing = sorted(form_id_text(value) for value in set(needed_form_ids) - set(needed))
         raise ValueError("Owned opening scene-role bases are missing: " + ", ".join(missing))
     return FlowSourceCatalog(
-        actor_values,
-        traits,
-        scripts,
-        idle_animations_by_editor,
-        idle_animations_by_form,
-        packages_by_editor,
-        packages_by_form,
-        actors_by_form,
-        voice_types_by_form,
-        references_by_form,
-        image_space_modifiers_by_editor,
-        needed,
-        game_settings_by_editor,
-        player_base,
+        actor_values=actor_values,
+        traits=traits,
+        scripts=scripts,
+        idle_animations_by_editor=idle_animations_by_editor,
+        idle_animations_by_form=idle_animations_by_form,
+        packages_by_editor=packages_by_editor,
+        packages_by_form=packages_by_form,
+        actors_by_form=actors_by_form,
+        voice_types_by_form=voice_types_by_form,
+        references_by_form=references_by_form,
+        image_space_modifiers_by_editor=image_space_modifiers_by_editor,
+        needed=needed,
+        animation_objects_by_idle_form={
+            idle_form_id: tuple(sorted(values, key=lambda value: value.form_id))
+            for idle_form_id, values in animation_objects_by_idle_form.items()
+        },
+        game_settings_by_editor=game_settings_by_editor,
+        player_base=player_base,
     )
 
 
@@ -3509,6 +3554,8 @@ def _resolve_actor_animation_commands(
                 + reference_editor_id
             )
         command["animationLogicalPath"] = logical_path
+        command["idleFormId"] = form_id_text(source.form_id)
+        command["idleRecordType"] = "IDLE"
         reference_form_id = str(role["referenceFormId"])
         if logical_path not in paths_by_reference[reference_form_id]:
             paths_by_reference[reference_form_id].append(logical_path)
@@ -3964,6 +4011,41 @@ def _compile_guide_package(
     )
 
 
+def _compile_guide_animation_objects(
+    idle_form_ids: Iterable[int],
+    sources: FlowSourceCatalog,
+    owned_archives: OwnedArchiveStack,
+) -> list[dict[str, object]]:
+    animation_objects = []
+    for idle_form_id in sorted(idle_form_ids):
+        idle = sources.idle_animations_by_form[idle_form_id]
+        for animation_object in sources.animation_objects_by_idle_form.get(
+            idle_form_id, ()
+        ):
+            member = owned_archives.extract(animation_object.logical_path)
+            animation_objects.append(
+                {
+                    "componentRole": (
+                        f"animation-object-{form_id_text(animation_object.form_id)}"
+                    ),
+                    "formId": form_id_text(animation_object.form_id),
+                    "editorId": animation_object.editor_id,
+                    "recordType": "ANIO",
+                    "recordSha256": animation_object.record_sha256,
+                    "idleAnimationFormId": form_id_text(idle.form_id),
+                    "idleAnimationEditorId": idle.editor_id,
+                    "idleAnimationLogicalPath": idle.logical_path,
+                    "modelLogicalPath": member.logical_path,
+                    "bytes": len(member.data),
+                    "sha256": member.sha256,
+                    "sourceArchive": member.source_archive,
+                    "sourceArchiveSha256": member.source_archive_sha256,
+                    "attachmentNode": authored_rigid_attachment_node(member.data),
+                }
+            )
+    return animation_objects
+
+
 def _compile_guide_actor_ai(
     flow: dict[str, object],
     roles: list[dict[str, object]],
@@ -3990,6 +4072,7 @@ def _compile_guide_actor_ai(
         raise ValueError("Owned opening guide AI base has no packages")
     packages = []
     animation_paths: list[str] = []
+    idle_form_ids: set[int] = set()
     for form_id in package_form_ids:
         package_record = sources.packages_by_form.get(form_id)
         if package_record is None:
@@ -4003,6 +4086,29 @@ def _compile_guide_actor_ai(
         )
         packages.append(package)
         animation_paths.extend(idle_paths)
+        idle_form_ids.update(
+            int(value, FORM_ID_RADIX)
+            for value in package["idleAnimationFormIds"]
+        )
+    animation_objects = _compile_guide_animation_objects(
+        idle_form_ids,
+        sources,
+        owned_archives,
+    )
+    required_animation_objects = [
+        int(str(value), FORM_ID_RADIX)
+        for value in contract.get("requiredAnimationObjectFormIds", [])
+    ]
+    actual_animation_objects = [
+        int(str(value["formId"]), FORM_ID_RADIX)
+        for value in animation_objects
+    ]
+    if actual_animation_objects != required_animation_objects:
+        raise ValueError(
+            "Owned opening guide animation objects differ from the strict recipe: "
+            f"expected={[form_id_text(value) for value in required_animation_objects]} "
+            f"actual={[form_id_text(value) for value in actual_animation_objects]}"
+        )
 
     locomotion_contract = dict(contract["locomotion"])
     root_node = str(locomotion_contract["rootNode"])
@@ -4025,13 +4131,14 @@ def _compile_guide_actor_ai(
         animation_paths.append(logical_path)
     return (
         {
-            "schema": "opennv-owned-guide-actor-ai/v1",
+            "schema": "opennv-owned-guide-actor-ai/v2",
             "role": role_name,
             "referenceFormId": role["referenceFormId"],
             "baseFormId": role["baseFormId"],
             "questFormId": quest_form_id,
             "packagePriority": [form_id_text(value) for value in package_form_ids],
             "packages": packages,
+            "animationObjects": animation_objects,
             "locomotion": locomotion,
         },
         tuple(dict.fromkeys(animation_paths)),
@@ -4424,7 +4531,7 @@ def compile_new_game_flow(
     )
     return (
         {
-            "schema": "opennv-owned-new-game-flow/v6",
+            "schema": "opennv-owned-new-game-flow/v7",
             "commandContract": command_contract,
             "quest": {
                 "formId": quest["formId"],

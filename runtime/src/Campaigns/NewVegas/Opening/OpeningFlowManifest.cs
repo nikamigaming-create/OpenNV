@@ -30,11 +30,11 @@ internal sealed record OpeningNewGameFlow(
     IReadOnlyDictionary<string, OpeningImageSpaceModifier> ImageSpaceModifiers,
     OpeningCharacterCreation Character)
 {
-    private const string ExpectedSchema = "opennv-owned-new-game-flow/v6";
+    private const string ExpectedSchema = "opennv-owned-new-game-flow/v7";
     private const string ExpectedCommandContractSchema =
         "opennv-owned-opening-command-contract/v1";
     private const string ExpectedGuideActorAiSchema =
-        "opennv-owned-guide-actor-ai/v1";
+        "opennv-owned-guide-actor-ai/v2";
     private const string ExpectedPlayerAnimationSchema =
         "opennv-owned-player-animation-graph/v1";
     private static readonly HashSet<string> RuntimeCommandKinds = new(
@@ -328,6 +328,8 @@ internal sealed record OpeningNewGameFlow(
         OptionalString(value, "globalEditorId"),
         OptionalString(value, "variable") ?? OptionalString(value, "value"),
         OptionalString(value, "idleEditorId"),
+        OptionalString(value, "idleFormId"),
+        OptionalString(value, "idleRecordType"),
         OptionalString(value, "animationLogicalPath"),
         OptionalString(value, "state"),
         OptionalInt(value, "stage"),
@@ -375,10 +377,30 @@ internal sealed record OpeningNewGameFlow(
                 .Select(value => value.GetString()!)
                 .ToArray(),
             packages,
+            source.GetProperty("animationObjects").EnumerateArray()
+                .Select(ParseGuideAnimationObject)
+                .ToArray(),
             new OpeningGuideLocomotion(
                 ParseGuideLocomotionClip(locomotion.GetProperty("walk")),
                 ParseGuideLocomotionClip(locomotion.GetProperty("run"))));
     }
+
+    private static OpeningGuideAnimationObject ParseGuideAnimationObject(
+        JsonElement source) => new(
+        source.GetProperty("componentRole").GetString()!,
+        source.GetProperty("formId").GetString()!,
+        source.GetProperty("editorId").GetString()!,
+        source.GetProperty("recordType").GetString()!,
+        source.GetProperty("recordSha256").GetString()!,
+        source.GetProperty("idleAnimationFormId").GetString()!,
+        source.GetProperty("idleAnimationEditorId").GetString()!,
+        source.GetProperty("idleAnimationLogicalPath").GetString()!,
+        source.GetProperty("modelLogicalPath").GetString()!,
+        source.GetProperty("bytes").GetInt64(),
+        source.GetProperty("sha256").GetString()!,
+        source.GetProperty("sourceArchive").GetString()!,
+        source.GetProperty("sourceArchiveSha256").GetString()!,
+        source.GetProperty("attachmentNode").GetString()!);
 
     private static OpeningGuidePackage ParseGuidePackage(JsonElement source) => new(
         source.GetProperty("formId").GetString()!,
@@ -727,6 +749,10 @@ internal sealed record OpeningNewGameFlow(
             throw new InvalidOperationException(
                 "Owned dialogue response, voice, or lip graph is incomplete.");
         var guide = flow.GuideActorAi;
+        var guideIdleAnimations = guide.Packages.Values
+            .SelectMany(package => package.IdleAnimationFormIds.Zip(
+                package.IdleAnimationLogicalPaths))
+            .ToHashSet();
         if (guide.PackagePriority.Count == 0 ||
             guide.PackagePriority.Count != guide.Packages.Count ||
             guide.PackagePriority.Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
@@ -746,6 +772,26 @@ internal sealed record OpeningNewGameFlow(
                         !destination.RotationGodot.IsNormalized()) ||
                 package.IdleAnimationFormIds.Count !=
                     package.IdleAnimationLogicalPaths.Count) ||
+            guide.AnimationObjects.Select(value => value.FormId)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                guide.AnimationObjects.Count ||
+            guide.AnimationObjects.Any(value =>
+                !value.RecordType.Equals("ANIO", StringComparison.Ordinal) ||
+                !value.ComponentRole.Equals(
+                    $"animation-object-{value.FormId}",
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(value.EditorId) ||
+                string.IsNullOrWhiteSpace(value.RecordSha256) ||
+                string.IsNullOrWhiteSpace(value.IdleAnimationEditorId) ||
+                string.IsNullOrWhiteSpace(value.ModelLogicalPath) ||
+                value.Bytes <= 0 ||
+                string.IsNullOrWhiteSpace(value.Sha256) ||
+                string.IsNullOrWhiteSpace(value.SourceArchive) ||
+                string.IsNullOrWhiteSpace(value.SourceArchiveSha256) ||
+                string.IsNullOrWhiteSpace(value.AttachmentNode) ||
+                !guideIdleAnimations.Contains((
+                    value.IdleAnimationFormId,
+                    value.IdleAnimationLogicalPath))) ||
             !ValidGuideLocomotionClip(guide.Locomotion.Walk) ||
             !ValidGuideLocomotionClip(guide.Locomotion.Run))
             throw new InvalidOperationException("Owned guide-actor AI graph is incomplete.");
@@ -836,6 +882,11 @@ internal sealed record OpeningNewGameFlow(
                     command.OwnerFormId,
                     command.OwnerRecordType,
                     "QUST") ||
+                command.Kind == "playIdle" && !ValidIdentity(
+                    command.IdleEditorId,
+                    command.IdleFormId,
+                    command.IdleRecordType,
+                    "IDLE") ||
                 !ValidReferenceIdentity(command)))
             throw new InvalidOperationException(
                 "Owned opening command execution contract is incomplete.");
@@ -1005,6 +1056,8 @@ internal sealed record OpeningFlowCommand(
     string? GlobalEditorId,
     string? ValueName,
     string? IdleEditorId,
+    string? IdleFormId,
+    string? IdleRecordType,
     string? AnimationLogicalPath,
     string? State,
     int? Stage,
@@ -1038,7 +1091,24 @@ internal sealed record OpeningGuideActorAi(
     string QuestFormId,
     IReadOnlyList<string> PackagePriority,
     IReadOnlyDictionary<string, OpeningGuidePackage> Packages,
+    IReadOnlyList<OpeningGuideAnimationObject> AnimationObjects,
     OpeningGuideLocomotion Locomotion);
+
+internal sealed record OpeningGuideAnimationObject(
+    string ComponentRole,
+    string FormId,
+    string EditorId,
+    string RecordType,
+    string RecordSha256,
+    string IdleAnimationFormId,
+    string IdleAnimationEditorId,
+    string IdleAnimationLogicalPath,
+    string ModelLogicalPath,
+    long Bytes,
+    string Sha256,
+    string SourceArchive,
+    string SourceArchiveSha256,
+    string AttachmentNode);
 
 internal sealed record OpeningGuidePackage(
     string FormId,

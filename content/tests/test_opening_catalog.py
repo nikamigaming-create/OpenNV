@@ -1,24 +1,29 @@
 from __future__ import annotations
 
+import hashlib
 import struct
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from opening_catalog import (  # noqa: E402
+    AnimationObjectSource,
     FlowSourceCatalog,
     IdleAnimationSource,
     ReferenceTransformSource,
     _compile_dialogue_voice,
     _compile_gameplay_vitals,
+    _compile_guide_animation_objects,
     _compile_guide_package,
     _compile_player_package,
     _resolve_command_record_identities,
+    _resolve_actor_animation_commands,
     _script_commands,
 )
 from bsa_archive import ExtractedMember  # noqa: E402
@@ -350,6 +355,95 @@ class OpeningCatalogTest(unittest.TestCase):
             "SyntheticMarker",
         )
         self.assertEqual(idle_paths, ("meshes\\synthetic-idle.kf",))
+
+    def test_guide_animation_object_joins_idle_anio_nif_and_attachment(self):
+        animation_object_form = 0x35
+        payload = b"owned-animation-object"
+        logical_path = "meshes\\animobjects\\owned.nif"
+        sources = FlowSourceCatalog(
+            actor_values=[],
+            traits=[],
+            scripts={},
+            idle_animations_by_editor={},
+            idle_animations_by_form={
+                SYNTHETIC_IDLE_BEGIN_FORM: IdleAnimationSource(
+                    SYNTHETIC_IDLE_BEGIN_FORM,
+                    "SyntheticIdle",
+                    "meshes\\synthetic-idle.kf",
+                )
+            },
+            packages_by_editor={},
+            packages_by_form={},
+            actors_by_form={},
+            voice_types_by_form={},
+            references_by_form={},
+            image_space_modifiers_by_editor={},
+            needed={},
+            animation_objects_by_idle_form={
+                SYNTHETIC_IDLE_BEGIN_FORM: (
+                    AnimationObjectSource(
+                        animation_object_form,
+                        "SyntheticAnimationObject",
+                        logical_path,
+                        SYNTHETIC_IDLE_BEGIN_FORM,
+                        "owned-anio-record-sha256",
+                    ),
+                )
+            },
+        )
+        archives = SyntheticAudioArchives({logical_path: payload})
+
+        with patch(
+            "opening_catalog.authored_rigid_attachment_node",
+            return_value="Bip01 R Hand",
+        ):
+            result = _compile_guide_animation_objects(
+                [SYNTHETIC_IDLE_BEGIN_FORM],
+                sources,
+                archives,  # type: ignore[arg-type]
+            )
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["formId"], f"{animation_object_form:08x}")
+        self.assertEqual(
+            result[0]["idleAnimationFormId"],
+            f"{SYNTHETIC_IDLE_BEGIN_FORM:08x}",
+        )
+        self.assertEqual(result[0]["modelLogicalPath"], logical_path)
+        self.assertEqual(result[0]["sha256"], hashlib.sha256(payload).hexdigest())
+        self.assertEqual(result[0]["attachmentNode"], "Bip01 R Hand")
+
+    def test_play_idle_runtime_binding_carries_source_idle_form_id(self):
+        command = {
+            "kind": "playIdle",
+            "idleEditorId": "SyntheticIdle",
+            "referenceEditorId": "SyntheticActor",
+        }
+
+        _resolve_actor_animation_commands(
+            [{"commands": [command]}],
+            {"topics": [], "psychologyRootInfo": {"commands": []}},
+            [
+                {
+                    "editorId": "SyntheticActor",
+                    "recordType": "ACHR",
+                    "referenceFormId": "00000080",
+                }
+            ],
+            {
+                "syntheticidle": IdleAnimationSource(
+                    SYNTHETIC_IDLE_BEGIN_FORM,
+                    "SyntheticIdle",
+                    "meshes\\synthetic-idle.kf",
+                )
+            },
+        )
+
+        self.assertEqual(
+            command["idleFormId"],
+            f"{SYNTHETIC_IDLE_BEGIN_FORM:08x}",
+        )
+        self.assertEqual(command["idleRecordType"], "IDLE")
 
     def test_dialogue_voice_joins_vtck_info_and_paired_archive_members(self):
         info_form_id = f"{SYNTHETIC_INFO_FORM:08x}"

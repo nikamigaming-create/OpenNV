@@ -674,6 +674,7 @@ internal static class CellContentLoader
     private static SourceReference ReadSourceReference(JsonElement reference) => new(
         reference.GetProperty("formId").GetString()!,
         reference.GetProperty("baseFormId").GetString()!,
+        reference.GetProperty("baseRecordType").GetString()!,
         reference.GetProperty("baseEditorId").GetString()!,
         reference.GetProperty("assetId").GetString()!,
         reference.GetProperty("cellFormId").GetString()!,
@@ -1619,6 +1620,7 @@ internal static class CellContentLoader
     internal readonly record struct SourceReference(
         string FormId,
         string BaseFormId,
+        string BaseRecordType,
         string BaseEditorId,
         string AssetId,
         string SourceCellFormId,

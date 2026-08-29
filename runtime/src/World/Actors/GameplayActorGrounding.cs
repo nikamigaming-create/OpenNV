@@ -43,6 +43,38 @@ internal sealed partial class GameplayActorGrounding : Node3D
             (float)actor.Placement.GetMeta(GroundOffsetMetadata).AsDouble();
     }
 
+    internal void PreserveAuthoredFurnitureOccupancy(
+        CellActorLoader.PlacedActor actor,
+        Node3D furniture)
+    {
+        if (!_spaces.SelectMany(space => space.Actors).Any(value =>
+                value.ReferenceFormId.Equals(
+                    actor.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                "Furniture occupant is absent from the actor-grounding spaces: " +
+                actor.ReferenceFormId);
+        if (!_groundedReferences.Add(actor.ReferenceFormId))
+            return;
+        actor.Placement.SetMeta(GroundOffsetMetadata, 0.0f);
+        _results.Add(new Result(
+            actor.ReferenceFormId,
+            _spaces.Single(space => space.Actors.Any(value =>
+                value.ReferenceFormId.Equals(
+                    actor.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase))).CellFormId,
+            actor.Placement.GlobalPosition,
+            actor.Placement.GlobalPosition,
+            0.0f,
+            0.0f,
+            actor.Placement.GlobalPosition,
+            furniture.GetPath().ToString(),
+            "owned-furn-initial-occupancy-preserves-authored-achr-transform"));
+        GD.Print(
+            $"OPENNV_GAMEPLAY_ACTOR_FURNITURE_OCCUPANCY " +
+            $"reference={actor.ReferenceFormId} support={furniture.GetPath()}");
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         foreach (var space in _spaces.Where(space =>

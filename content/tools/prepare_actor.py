@@ -28,6 +28,7 @@ from actor_gltf import (
     ActorComponent,
     ActorGltfInput,
     actor_skin_diffuse_paths,
+    authored_rigid_attachment_node,
     export_actor_gltf,
     retail_render_parts_from_snapshot,
 )
@@ -651,6 +652,7 @@ def prepare_actor(
     recipe_document: dict[str, object] | None = None,
     preparation_context: ActorPreparationContext | None = None,
     runtime_animation_paths: Sequence[str] = (),
+    runtime_animation_objects: Sequence[dict[str, object]] = (),
     family_compiler: dict[str, str] | None = None,
 ) -> dict[str, object]:
     recipe = load_recipe(recipe_id) if recipe_document is None else recipe_document
@@ -1116,6 +1118,41 @@ def prepare_actor(
             )
         )
 
+    animation_object_roles: set[str] = set()
+    for animation_object in runtime_animation_objects:
+        role = str(animation_object["componentRole"])
+        form_id_text = str(animation_object["formId"]).casefold()
+        model_path = _mesh_logical_path(str(animation_object["modelLogicalPath"]))
+        payload = mesh(model_path)
+        if (
+            animation_object.get("recordType") != "ANIO"
+            or role != f"animation-object-{form_id_text}"
+        ):
+            raise ValueError("Owned actor animation-object identity is malformed")
+        if role in animation_object_roles:
+            raise ValueError(f"Owned actor animation-object role is duplicated: {role}")
+        animation_object_roles.add(role)
+        actual_hash = hashlib.sha256(payload).hexdigest()
+        if actual_hash != str(animation_object["sha256"]).casefold():
+            raise ValueError(
+                f"Actor animation-object hash mismatch: {model_path} "
+                f"expected={animation_object['sha256']} actual={actual_hash}"
+            )
+        attachment_node = authored_rigid_attachment_node(payload)
+        if attachment_node != str(animation_object["attachmentNode"]):
+            raise ValueError(
+                f"Actor animation-object attachment mismatch: {model_path} "
+                f"expected={animation_object['attachmentNode']} actual={attachment_node}"
+            )
+        components.append(
+            ActorComponent(
+                role,
+                model_path,
+                payload,
+                source_form_id=form_id_text,
+            )
+        )
+
     output_root = cache_root / "generated" / "actors" / recipe_id
     gltf_path = output_root / "actor.gltf"
     sidecar_path = output_root / "actor.opennv.json"
@@ -1263,11 +1300,17 @@ def prepare_actor_set(
     cache_root: Path,
     recipe_ids: list[str],
     runtime_animation_paths_by_reference: dict[str, Sequence[str]] | None = None,
+    runtime_animation_objects_by_reference: dict[
+        str, Sequence[dict[str, object]]
+    ] | None = None,
     family_compiler: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if len(recipe_ids) < 1 or len(set(recipe_ids)) != len(recipe_ids):
         raise ValueError("Actor-set recipes must be non-empty and unique")
     runtime_animation_paths_by_reference = runtime_animation_paths_by_reference or {}
+    runtime_animation_objects_by_reference = (
+        runtime_animation_objects_by_reference or {}
+    )
     recipes = [load_recipe(recipe_id) for recipe_id in recipe_ids]
     actors = [
         prepare_actor(
@@ -1276,6 +1319,10 @@ def prepare_actor_set(
             recipe_id,
             recipe_document=recipe,
             runtime_animation_paths=runtime_animation_paths_by_reference.get(
+                str(recipe["proofActorReferenceFormId"]).casefold(),
+                (),
+            ),
+            runtime_animation_objects=runtime_animation_objects_by_reference.get(
                 str(recipe["proofActorReferenceFormId"]).casefold(),
                 (),
             ),

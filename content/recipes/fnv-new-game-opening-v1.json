@@ -249,6 +249,9 @@
     },
     "guideActorAi": {
       "role": "guideActor",
+      "requiredAnimationObjectFormIds": [
+        "00083519"
+      ],
       "packageTypeNames": {
         "6": "travel",
         "12": "sandbox",

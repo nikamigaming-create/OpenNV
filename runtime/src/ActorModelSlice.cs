@@ -8,6 +8,7 @@ internal static class ActorModelSlice
 {
     private const string ActorSchema = "opennv-actor-gltf/v4";
     private const string WeaponSurfaceRole = "weapon";
+    private const string AnimationObjectSurfaceRolePrefix = "animation-object-";
     private const string AuthoredPrnRootMarkerDisposition =
         "omit-authored-prn-root-marker";
 
@@ -291,6 +292,15 @@ internal static class ActorModelSlice
                         $"Actor FaceGen target names disagree for {role}/{shape} in {sidecarPath}: " +
                         $"declared=[{string.Join(",", declaredMorphTargets)}] " +
                         $"runtime=[{string.Join(",", runtimeMorphTargets)}].");
+            }
+            if (role.StartsWith(
+                    AnimationObjectSurfaceRolePrefix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                matches[0].Visible = false;
+                GD.Print(
+                    $"OPENNV_ACTOR_ANIMATION_OBJECT_DEFAULT_HIDDEN role={role} " +
+                    $"source={sourceFormId} attachment={attachmentNode}");
             }
             RetailActorMaterial.Apply(
                 matches[0],

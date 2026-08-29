@@ -13,6 +13,7 @@ from actor_gltf import (  # noqa: E402
     RetailRenderPart,
     _append_facegen_morph_targets,
     _append_runtime_surface_node,
+    _authored_rigid_attachment_nodes,
     _bake_actor_shape_transform,
     _is_authored_prn_root_marker,
     _compensated_inverse_bind,
@@ -703,6 +704,21 @@ class ActorGltfTest(unittest.TestCase):
                 "Bip01",
             ),
             ("Bip01 Head", "nif-prn-skeleton-node"),
+        )
+
+    def test_animation_object_reads_exact_owned_prn_attachment(self):
+        parent = NifFormat.NiStringExtraData()
+        parent.name = b"Prn"
+        parent.string_data = b"Bip01 R Hand"
+
+        class Document:
+            @staticmethod
+            def get_global_iterator():
+                return (parent,)
+
+        self.assertEqual(
+            _authored_rigid_attachment_nodes(Document()),
+            ("Bip01 R Hand",),
         )
 
     def test_particle_geometry_is_an_explicit_actor_capability_gap(self):

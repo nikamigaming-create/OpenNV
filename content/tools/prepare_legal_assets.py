@@ -505,6 +505,16 @@ def prepare(
                         )
                         for row in opening["manifest"]["newGameFlow"]["actorAnimations"]
                     },
+                    {
+                        str(opening["manifest"]["newGameFlow"]["guideActorAi"][
+                            "referenceFormId"
+                        ]).casefold(): tuple(
+                            dict(row)
+                            for row in opening["manifest"]["newGameFlow"][
+                                "guideActorAi"
+                            ]["animationObjects"]
+                        )
+                    },
                     identities["families"]["actor"],
                 )
     manifest = {

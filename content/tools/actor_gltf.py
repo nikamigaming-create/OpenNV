@@ -1026,6 +1026,29 @@ def _rigid_attachment(
     return configured_node, RIGID_ATTACHMENT_CONFIGURED_NODE
 
 
+def authored_rigid_attachment_node(payload: bytes) -> str:
+    """Return the single owned NIF ``Prn`` attachment node."""
+
+    document = decode_nif(payload).document
+    authored_parents = _authored_rigid_attachment_nodes(document)
+    if len(authored_parents) != 1:
+        raise ValueError(
+            "Actor animation object must declare exactly one owned NIF Prn "
+            f"attachment node, found {list(authored_parents)}"
+        )
+    return authored_parents[0]
+
+
+def _authored_rigid_attachment_nodes(document: object) -> tuple[str, ...]:
+    return tuple(sorted({
+        _text(extra.string_data)
+        for extra in document.get_global_iterator()
+        if isinstance(extra, NifFormat.NiStringExtraData)
+        and _text(extra.name).casefold() == NIF_PARENT_EXTRA_DATA_NAME
+        and _text(extra.string_data)
+    }))
+
+
 def _geometry_identity_tokens(value: str) -> frozenset[str]:
     words = re.findall(
         r"[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z]+|[0-9]+",

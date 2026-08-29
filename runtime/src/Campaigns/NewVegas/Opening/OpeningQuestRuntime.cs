@@ -62,6 +62,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         Enumerable.Repeat(true, PlayerControlCount).ToArray();
     private readonly Dictionary<string, ActiveImageSpaceModifier> _activeImageSpaceModifiers =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyList<MeshInstance3D>>
+        _guideAnimationObjectSurfaces = new(StringComparer.OrdinalIgnoreCase);
 
     private OpeningManifest _opening = null!;
     private OpeningNewGameFlow _flow = null!;
@@ -102,11 +104,16 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private OpeningGuidePackage? _activeGuidePackage;
     private OpeningGuideLocomotionClip? _activeGuideLocomotion;
     private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
+    private ActorModelSlice.LoadedAnimation? _activeGuideIdleAnimation;
+    private string? _guideAnimationObjectIdleFormId;
     private Vector3 _guideDestinationCellUnits;
     private IReadOnlyList<Vector3> _guidePathCellUnits = Array.Empty<Vector3>();
     private int _guidePathIndex;
     private OpeningGuideReference? _guideDestinationReference;
     private bool _guideMoving;
+    private bool _guidePackageBegan;
+    private bool _guideFurnitureOccupied;
+    private string? _guideFurnitureReferenceFormId;
     private bool _guideLookAtPlayer;
     private Action? _guideArrivalContinuation;
     private int _guideArrivalGeneration;
@@ -456,6 +463,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _specialValues[value.FormId] = _flow.Character.SpecialInitial;
         ResolveSceneRoles();
         ResolveGuideActor();
+        ResolveGuideAnimationObjects();
         _dialogueFace = new FaceGenMorphController(
             _guideActor.Actor,
             configuration.ActorCompiler.FaceGenAnimation.Lip);
@@ -520,6 +528,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         UpdatePlayerAnimation(delta);
         UpdateImageSpaceModifiers(delta);
         UpdateGuideActor(delta);
+        UpdateGuideAnimationObjectLifecycle();
         UpdateDialogueVoice();
         if (_activeModal is not null)
             return;
@@ -590,6 +599,44 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _guideActorResolved = true;
     }
 
+    private void ResolveGuideAnimationObjects()
+    {
+        var runtimeSurfaces = _guideActor.Actor.Surfaces.Where(surface =>
+                surface.Role.StartsWith(
+                    "animation-object-",
+                    StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        foreach (var animationObject in _flow.GuideActorAi.AnimationObjects)
+        {
+            var surfaces = runtimeSurfaces.Where(surface =>
+                    surface.Role.Equals(
+                        animationObject.ComponentRole,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    surface.SourceFormId?.Equals(
+                        animationObject.FormId,
+                        StringComparison.OrdinalIgnoreCase) == true &&
+                    surface.AttachmentNode?.Equals(
+                        animationObject.AttachmentNode,
+                        StringComparison.Ordinal) == true)
+                .Select(surface => surface.Mesh)
+                .Distinct()
+                .ToArray();
+            if (surfaces.Length == 0)
+                throw new InvalidOperationException(
+                    "Owned guide animation object is absent from its actor: " +
+                    animationObject.EditorId);
+            if (surfaces.Any(surface => surface.Visible))
+                throw new InvalidOperationException(
+                    "Owned guide animation object is not default-hidden: " +
+                    animationObject.EditorId);
+            _guideAnimationObjectSurfaces.Add(animationObject.FormId, surfaces);
+        }
+        if (runtimeSurfaces.Length !=
+            _guideAnimationObjectSurfaces.Values.Sum(value => value.Count))
+            throw new InvalidOperationException(
+                "Owned guide actor contains undeclared animation-object surfaces.");
+    }
+
     private void EvaluateGuidePackage(bool force = false)
     {
         if (!_guideActorResolved)
@@ -656,6 +703,18 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         _guideArrivalContinuation = null;
         _guideDestinationReference = package.Location?.Reference;
+        if (TryPreserveInitialFurnitureOccupancy(package))
+        {
+            _guidePackageBegan = true;
+            _guideMoving = false;
+            _guidePathCellUnits = Array.Empty<Vector3>();
+            _guidePathIndex = 0;
+            _activeGuideLocomotion = null;
+            PlayGuidePackageIdle(package);
+            return;
+        }
+        ReleaseInitialFurnitureOccupancy(package);
+        _guidePackageBegan = true;
         if (_guideDestinationReference is not { } destination)
         {
             _guideMoving = false;
@@ -703,6 +762,66 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _activeGuideLocomotion.LogicalPath,
             _activeGuideLocomotion.Sha256,
             restart: true);
+    }
+
+    private bool TryPreserveInitialFurnitureOccupancy(OpeningGuidePackage package)
+    {
+        if (_guideFurnitureOccupied)
+            return package.Location?.FormId.Equals(
+                    _guideFurnitureReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase) == true;
+        if (_guidePackageBegan || package.Conditions.Count != 0 ||
+            package.Location is not
+            {
+                TypeName: "nearReference",
+                Reference: { } destination,
+            })
+            return false;
+        var sourceReferences = _loaded.MainContent.SourceReferences.Where(value =>
+                value.FormId.Equals(
+                    destination.FormId,
+                    StringComparison.OrdinalIgnoreCase) &&
+                value.BaseRecordType.Equals("FURN", StringComparison.Ordinal))
+            .ToArray();
+        if (sourceReferences.Length == 0)
+            return false;
+        if (sourceReferences.Length != 1)
+            throw new InvalidOperationException(
+                "Owned initial furniture package destination is ambiguous: " +
+                destination.FormId);
+        var source = sourceReferences[0];
+        var furniture = _loaded.MainContent.PlacedReferences.Where(value =>
+                value.FormId.Equals(source.FormId, StringComparison.OrdinalIgnoreCase) &&
+                value.BaseFormId.Equals(
+                    source.BaseFormId,
+                    StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (furniture.Length != 1)
+            throw new InvalidOperationException(
+                "Owned initial furniture package destination is absent or ambiguous: " +
+                destination.FormId);
+        _loaded.ActorGrounding.PreserveAuthoredFurnitureOccupancy(
+            _guideActor,
+            furniture[0].Placement);
+        _guideFurnitureOccupied = true;
+        _guideFurnitureReferenceFormId = source.FormId;
+        GD.Print(
+            $"OPENNV_NEW_GAME_GUIDE_FURNITURE_OCCUPIED " +
+            $"package={package.EditorId} reference={source.FormId} " +
+            $"base={source.BaseFormId} transform=authored-achr");
+        return true;
+    }
+
+    private void ReleaseInitialFurnitureOccupancy(OpeningGuidePackage package)
+    {
+        if (!_guideFurnitureOccupied)
+            return;
+        GD.Print(
+            $"OPENNV_NEW_GAME_GUIDE_FURNITURE_RELEASED " +
+            $"reference={_guideFurnitureReferenceFormId} nextPackage={package.EditorId} " +
+            "exitAnimation=unsupported");
+        _guideFurnitureOccupied = false;
+        _guideFurnitureReferenceFormId = null;
     }
 
     private void UpdateGuideActor(double delta)
@@ -776,16 +895,23 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void PlayGuidePackageIdle(OpeningGuidePackage package)
     {
+        var idleFormId = package.IdleAnimationFormIds.FirstOrDefault();
         var path = package.IdleAnimationLogicalPaths.FirstOrDefault()
             ?? _guideActor.IdleAnimationPath;
-        PlayGuideAnimation(path, expectedSha256: null, restart: true);
+        PlayGuideAnimation(
+            path,
+            expectedSha256: null,
+            restart: true,
+            idleAnimationFormId: idleFormId);
+        _activeGuideIdleAnimation = _activeGuideAnimation;
         _activeGuideAnimation = null;
     }
 
     private void PlayGuideAnimation(
         string logicalPath,
         string? expectedSha256,
-        bool restart)
+        bool restart,
+        string? idleAnimationFormId = null)
     {
         var expected = ActorModelSlice.NormalizeAnimationPath(logicalPath);
         var matches = _guideActor.Actor.LoadedAnimations.Where(animation =>
@@ -808,7 +934,50 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             animation.Player.Play(animation.RuntimeName);
             animation.Player.Advance(0.0);
         }
+        _activeGuideIdleAnimation = null;
+        SetGuideAnimationObjects(idleAnimationFormId);
         _activeGuideAnimation = animation;
+    }
+
+    private void SetGuideAnimationObjects(string? idleAnimationFormId)
+    {
+        if (string.Equals(
+                _guideAnimationObjectIdleFormId,
+                idleAnimationFormId,
+                StringComparison.OrdinalIgnoreCase))
+            return;
+        _guideAnimationObjectIdleFormId = idleAnimationFormId;
+        foreach (var animationObject in _flow.GuideActorAi.AnimationObjects)
+        {
+            var visible = idleAnimationFormId is not null &&
+                animationObject.IdleAnimationFormId.Equals(
+                    idleAnimationFormId,
+                    StringComparison.OrdinalIgnoreCase);
+            foreach (var surface in _guideAnimationObjectSurfaces[animationObject.FormId])
+                surface.Visible = visible;
+            GD.Print(
+                $"OPENNV_NEW_GAME_ANIMATION_OBJECT form={animationObject.FormId} " +
+                $"idle={idleAnimationFormId ?? "none"} " +
+                $"editor={animationObject.EditorId} visible={visible} " +
+                $"attachment={animationObject.AttachmentNode}");
+        }
+    }
+
+    private void UpdateGuideAnimationObjectLifecycle()
+    {
+        if (_activeGuideIdleAnimation is not { } idle ||
+            idle.Player.IsPlaying() && idle.Player.CurrentAnimation.ToString().Equals(
+                idle.RuntimeName,
+                StringComparison.Ordinal))
+            return;
+        _activeGuideIdleAnimation = null;
+        SetGuideAnimationObjects(null);
+    }
+
+    public override void _ExitTree()
+    {
+        if (_guideActorResolved)
+            SetGuideAnimationObjects(null);
     }
 
     private void FaceGuideTowardCellPosition(Vector3 target)
@@ -1221,6 +1390,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         if (command.ReferenceEditorId is null || command.ReferenceFormId is null ||
             command.IdleEditorId is null ||
+            command.IdleFormId is null || command.IdleRecordType != "IDLE" ||
             command.AnimationLogicalPath is null)
             throw new InvalidOperationException("Owned opening idle command is incomplete.");
         var actors = _loaded.Actors.Where(value =>
@@ -1247,12 +1417,23 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             throw new InvalidOperationException(
                 $"Owned opening idle animation is absent from the actor: {command.AnimationLogicalPath}");
         var animation = animations[0];
-        animation.Player.Play(animation.RuntimeName);
-        animation.Player.Advance(0.0);
         if (actor.ReferenceFormId.Equals(
             _flow.GuideActorAi.ReferenceFormId,
             StringComparison.OrdinalIgnoreCase))
+        {
+            PlayGuideAnimation(
+                command.AnimationLogicalPath,
+                expectedSha256: null,
+                restart: true,
+                idleAnimationFormId: command.IdleFormId);
+            _activeGuideIdleAnimation = _activeGuideAnimation;
             _activeGuideAnimation = null;
+        }
+        else
+        {
+            animation.Player.Play(animation.RuntimeName);
+            animation.Player.Advance(0.0);
+        }
         GD.Print(
             $"OPENNV_NEW_GAME_IDLE source={command.ReferenceEditorId} " +
             $"authored={command.IdleEditorId} runtime={animation.RuntimeName}");
