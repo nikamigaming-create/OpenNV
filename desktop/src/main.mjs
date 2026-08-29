@@ -12,6 +12,13 @@ const DAT2_FOOTER_BYTES = 8;
 const HASH_READ_CHUNK_BYTES = 1024 * 1024;
 const RUNTIME_CONFIG_JSON_INDENT = 2;
 const SHA256_HEX_CHARACTERS = 64;
+const TTW_PLUGIN_STACK_ID_PREFIX = "opennv-ttw-plugin-stack-v1\0";
+const REQUIRED_TTW_PLUGINS = [
+  "falloutnv.esm",
+  "fallout3.esm",
+  "taleoftwowastelands.esm",
+  "yupttw.esm"
+];
 
 function productConfigurationPath() {
   return app.isPackaged
@@ -166,6 +173,22 @@ function canonicalJson(value) {
   return JSON.stringify(value);
 }
 
+function ttwPluginStackId(profile) {
+  const identity = {
+    schema: "opennv-ttw-profile/v1",
+    plugins: profile.plugins.map((row) => ({
+      file: row.file,
+      bytes: row.bytes,
+      sha256: row.sha256,
+      masters: row.masters
+    }))
+  };
+  return createHash("sha256")
+    .update(TTW_PLUGIN_STACK_ID_PREFIX, "utf8")
+    .update(canonicalJson(identity), "utf8")
+    .digest("hex");
+}
+
 function jamProfileIdentity(profile) {
   const rows = [...profile.files.gameRoot, ...profile.files.effectiveData];
   const identity = {
@@ -213,17 +236,40 @@ function readTtwProfile(manifestOverride = null) {
         profile?.status !== "validated-generated-plugin-profile" ||
         profile?.kind !== "ttw" || !isSha256(profile?.pluginStackId) ||
         profile?.saveCompatibilityId !== `ttw:${profile.pluginStackId}` ||
-        !Array.isArray(profile?.sourceRoots) || profile.sourceRoots.length === 0 ||
+        !Array.isArray(profile?.sourceRoots) || profile.sourceRoots.length < 2 ||
         !Array.isArray(profile?.plugins) || profile.plugins.length === 0) {
       return unavailable("The selected TTW manifest is not a validated generated profile.", true);
     }
     const roots = profile.sourceRoots.map((root) => path.resolve(root));
-    for (const row of profile.plugins) {
+    if (!existsSync(path.join(roots[0], "FalloutNV.esm"))) {
+      return unavailable("The TTW profile has no vanilla New Vegas lower source layer.", true);
+    }
+    const pluginNames = new Set();
+    for (const [loadOrderIndex, row] of profile.plugins.entries()) {
       if (!Number.isInteger(row?.sourceRootIndex) || !roots[row.sourceRootIndex] ||
-          typeof row?.file !== "string" || path.basename(row.file) !== row.file) {
+          row?.loadOrderIndex !== loadOrderIndex ||
+          typeof row?.file !== "string" || path.basename(row.file) !== row.file ||
+          !Array.isArray(row?.masters) || !row.masters.every((master) => typeof master === "string")) {
         return unavailable("The selected TTW manifest has an invalid plugin source.", true);
       }
+      const foldedName = row.file.toLowerCase();
+      if (pluginNames.has(foldedName)) {
+        return unavailable("The selected TTW manifest repeats an active plugin.", true);
+      }
+      pluginNames.add(foldedName);
       validateHashBoundFile(path.join(roots[row.sourceRootIndex], row.file), row, `TTW plugin ${row.file}`);
+    }
+    const requiredUpperPlugins = new Set([
+      "fallout3.esm",
+      "taleoftwowastelands.esm",
+      "yupttw.esm"
+    ]);
+    if (profile.plugins[0].file.toLowerCase() !== "falloutnv.esm" ||
+        REQUIRED_TTW_PLUGINS.some((plugin) => !pluginNames.has(plugin)) ||
+        profile.plugins.some((row) =>
+          requiredUpperPlugins.has(row.file.toLowerCase()) && row.sourceRootIndex === 0) ||
+        ttwPluginStackId(profile) !== profile.pluginStackId) {
+      return unavailable("The selected TTW plugin stack identity changed; register it again.", true);
     }
     const loadOrder = profile?.loadOrderSource;
     if (!loadOrder?.file || !isSha256(loadOrder?.sha256) ||
@@ -505,8 +551,23 @@ function readNewVegasProfile() {
     const cacheRoot = path.join(
       app.getPath("appData"),
       "Godot", "app_userdata", "OpenNV", "cache", "legal-assets-v1");
+    const manifest = JSON.parse(readFileSync(path.join(cacheRoot, "install-manifest.json"), "utf8"));
+    if (manifest?.schema !== "opennv-legal-asset-cache/v1" ||
+        manifest?.status !== "prepared-legal-assets" ||
+        manifest?.install?.master?.file !== "FalloutNV.esm" ||
+        typeof manifest?.install?.dataRoot !== "string") {
+      return unavailable("Rebuild the standalone New Vegas owned-data cache.");
+    }
+    const dataRoot = path.resolve(manifest.install.dataRoot);
+    if (existsSync(path.join(dataRoot, "TaleOfTwoWastelands.esm")) ||
+        existsSync(path.join(dataRoot, "YUPTTW.esm"))) {
+      return unavailable("The New Vegas route cannot use a TTW source root.", true);
+    }
+    validateHashBoundFile(
+      path.join(dataRoot, manifest.install.master.file),
+      manifest.install.master,
+      "New Vegas master");
     const required = [
-      ["install-manifest.json", "opennv-legal-asset-cache/v1"],
       [path.join("generated", "cells", defaultCellRecipe, "cell-scene.json"), "opennv-cell-scene/v13"],
       [path.join("generated", "actors", "actor-scenes.json"), "opennv-world-actor-scenes/v2"],
       [path.join("generated", "opening", "opening-manifest.json"), "opennv-owned-opening-manifest/v1"]
@@ -518,6 +579,7 @@ function readNewVegasProfile() {
     return {
       ready: true,
       message: "New Vegas owned menu, opening, actor, and Doc Mitchell cell cache registered.",
+      cacheRoot,
       savePath: path.join(app.getPath("userData"), "profiles", "newvegas", "courier-v1.json")
     };
   } catch {

@@ -95,7 +95,7 @@ export function mergeRuntimeState(
           : (requiredProfile?.validated && requiredProfile?.message
             ? requiredProfile.message
             : (selectedVariant.message || CONTRACT.copy.readinessUnavailable))),
-      jamReady: Boolean(jam?.ready && jamProfile?.ready),
+      jamReady: Boolean(campaign.jam && jam?.ready && jamProfile?.ready),
       jamReadiness: jamProfile?.message || jam?.message || CONTRACT.copy.jamProfileUnavailable,
       unavailableDlc: Array.isArray(selectedVariant.unavailableDlc) ? selectedVariant.unavailableDlc : []
     };
@@ -198,10 +198,13 @@ export function createRuntimeArguments(
     ];
   }
   if (campaign.id === "newvegas") {
-    if (!newVegasProfile?.savePath) throw new Error("The New Vegas save profile is unavailable.");
+    if (!newVegasProfile?.ready || !newVegasProfile?.cacheRoot || !newVegasProfile?.savePath) {
+      throw new Error("The New Vegas owned-data profile is unavailable.");
+    }
     const args = [
       "--xr-mode", enableVr ? "on" : "off", "--",
       "--reuse-cache",
+      "--cache-root", newVegasProfile.cacheRoot,
       "--opening-menu",
       "--save-path", newVegasProfile.savePath
     ];

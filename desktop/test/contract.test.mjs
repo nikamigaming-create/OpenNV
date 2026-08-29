@@ -102,16 +102,63 @@ test("Fallout 2 enables only the matching owned-cache Hex first slice", () => {
 });
 
 test("flat and OpenXR launches separate engine and game arguments", () => {
-  const profile = { savePath: "D:\\profiles\\courier-v1.json" };
+  const profile = {
+    ready: true,
+    cacheRoot: "D:\\cache\\newvegas-vanilla",
+    savePath: "D:\\profiles\\courier-v1.json"
+  };
   const flat = validateLaunchRequest({ campaign: "newvegas" });
   assert.deepEqual(createRuntimeArguments(flat, { newVegasProfile: profile }), [
-    "--xr-mode", "off", "--", "--reuse-cache", "--opening-menu", "--save-path", profile.savePath
+    "--xr-mode", "off", "--", "--reuse-cache",
+    "--cache-root", profile.cacheRoot,
+    "--opening-menu", "--save-path", profile.savePath
   ]);
   const xr = validateLaunchRequest({ campaign: "newvegas", enableVr: true });
   assert.deepEqual(
     createRuntimeArguments(xr, { newVegasProfile: profile }),
-    ["--xr-mode", "on", "--", "--reuse-cache", "--opening-menu", "--save-path", profile.savePath, "--vr"]
+    ["--xr-mode", "on", "--", "--reuse-cache",
+      "--cache-root", profile.cacheRoot,
+      "--opening-menu", "--save-path", profile.savePath, "--vr"]
   );
+});
+
+test("standalone routes cannot inherit TTW sources or each other's saves", () => {
+  const newVegas = {
+    ready: true,
+    cacheRoot: "D:\\cache\\newvegas-vanilla",
+    savePath: "D:\\saves\\newvegas\\courier-v1.json"
+  };
+  const fallout3 = {
+    ready: true,
+    path: "D:\\profiles\\fallout3-vanilla.json",
+    savePath: "D:\\saves\\fallout3\\cg00-character-v1.json"
+  };
+  const ttw = {
+    ready: true,
+    path: "D:\\profiles\\ttw-profile.json",
+    savePath: "D:\\saves\\ttw\\courier-v1.json"
+  };
+  const nvArgs = createRuntimeArguments(
+    validateLaunchRequest({ campaign: "newvegas" }),
+    { newVegasProfile: newVegas, fallout3Profile: fallout3, ttwProfile: ttw });
+  assert.deepEqual(nvArgs, [
+    "--xr-mode", "off", "--", "--reuse-cache",
+    "--cache-root", newVegas.cacheRoot,
+    "--opening-menu", "--save-path", newVegas.savePath
+  ]);
+  assert.equal(nvArgs.includes(ttw.path), false);
+  assert.equal(nvArgs.includes(fallout3.path), false);
+
+  const fo3Args = createRuntimeArguments(
+    validateLaunchRequest({ campaign: "fallout3" }),
+    { newVegasProfile: newVegas, fallout3Profile: fallout3, ttwProfile: ttw });
+  assert.deepEqual(fo3Args, [
+    "--xr-mode", "off", "--",
+    "--fo3-profile", fallout3.path,
+    "--save-path", fallout3.savePath
+  ]);
+  assert.equal(fo3Args.includes(newVegas.cacheRoot), false);
+  assert.equal(fo3Args.includes(ttw.path), false);
 });
 
 test("Fallout 1 launches the registered local contracts into the selected presentation", () => {
@@ -142,6 +189,21 @@ test("JAM is modular only for the supported character paths", () => {
   assert.equal(validateLaunchRequest({ campaign: "newvegas", enableJam: true }).enableJam, true);
   assert.throws(() => validateLaunchRequest({ campaign: "fallout3", enableJam: true }), /New Vegas and TTW/);
   assert.equal(validateLaunchRequest({ campaign: "newvegas", enableVr: true }).enableVr, true);
+
+  const merged = mergeRuntimeState(createOfflineState({ platform: "win32" }), {
+    runtime: { status: "ready", label: "Godot runtime ready", canLaunch: true },
+    campaigns: [{
+      id: "Fallout3",
+      variants: {
+        vanilla: { ready: true, presentations: { "first-person": { ready: true } } },
+        jam: { ready: true }
+      }
+    }]
+  }, {
+    fallout3Profile: { ready: true, message: "Registered" },
+    jamProfile: { ready: true, message: "Registered" }
+  });
+  assert.equal(merged.campaigns.find((campaign) => campaign.id === "fallout3").jamReady, false);
 });
 
 test("TTW and JAM remain disabled until both registered profiles report portable runtime readiness", () => {
