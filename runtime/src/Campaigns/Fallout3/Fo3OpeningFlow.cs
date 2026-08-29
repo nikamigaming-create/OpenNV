@@ -893,7 +893,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 return;
             }
             if (stage != _profile.Appearance.AcceptedStage &&
-                stage != _profile.Stage65Appearance.Stage)
+                stage != _profile.Stage65Appearance.Stage &&
+                stage != _profile.Stage80Transition.Stage &&
+                stage != _profile.Stage85Transition.Stage)
                 throw new InvalidOperationException("Saved Fallout 3 CG00 stage is unsupported.");
             var savedAppearance = RequiredSaveObject(root, "appearance");
             if (RequiredSaveString(savedAppearance, "sourceContract") !=
@@ -929,8 +931,45 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             _profile.Stage65Appearance.ValidateSavedState(
                 RequiredSaveObject(root, "stage65Appearance"),
                 stage65);
-            ValidateBirthRuntimeState(RequiredSaveObject(root, "birthRuntime"));
-            ShowVault101BirthRoom(playerName, _selectedSex, selection, stage65);
+            if (stage == stage65.Stage)
+            {
+                ValidateBirthRuntimeState(
+                    RequiredSaveObject(root, "birthRuntime"),
+                    "stage65-source-bound-ready");
+                ShowVault101BirthRoom(playerName, _selectedSex, selection, stage65);
+                return;
+            }
+            var stage80 = _profile.Stage80Transition.Apply(_selectedSex.EngineSex, stage65);
+            _profile.Stage80Transition.ValidateSavedState(
+                RequiredSaveObject(root, "stage80Transition"),
+                stage80);
+            if (stage == stage80.Stage)
+            {
+                ValidateBirthRuntimeState(
+                    RequiredSaveObject(root, "birthRuntime"),
+                    "stage65-cue-finished-stage80-applied");
+                ShowVault101BirthRoom(
+                    playerName,
+                    _selectedSex,
+                    selection,
+                    stage65,
+                    stage80);
+                return;
+            }
+            var stage85 = _profile.Stage85Transition.Apply(stage80);
+            _profile.Stage85Transition.ValidateSavedState(
+                RequiredSaveObject(root, "stage85Transition"),
+                stage85);
+            ValidateBirthRuntimeState(
+                RequiredSaveObject(root, "birthRuntime"),
+                "stage80-info-trigger-stage85-applied");
+            ShowVault101BirthRoom(
+                playerName,
+                _selectedSex,
+                selection,
+                stage65,
+                stage80,
+                stage85);
         }
         catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
         {
@@ -1080,7 +1119,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         string playerName,
         Fo3SexChoice sex,
         Fo3AppearanceSelection selection,
-        Fo3Stage65AppearanceState? resumedStage65 = null)
+        Fo3Stage65AppearanceState? resumedStage65 = null,
+        Fo3Stage80State? resumedStage80 = null,
+        Fo3Stage85State? resumedStage85 = null)
     {
         var contract = _birthPresentation ?? throw new InvalidOperationException(
             "Fallout 3 Vault 101 birth room has no owned presentation contract.");
@@ -1110,8 +1151,15 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 throw new InvalidOperationException(
                     "Fallout 3 player-package trigger differs from the stage-65 result.");
         }
+        if ((resumedStage80 is not null &&
+                resumedStage80.Stage != _profile.Stage80Transition.Stage) ||
+            (resumedStage85 is not null &&
+                (resumedStage80 is null ||
+                 resumedStage85.Stage != _profile.Stage85Transition.Stage)))
+            throw new InvalidOperationException(
+                "Fallout 3 resumed birth-room stage chain is incomplete.");
 
-        var previewHost = new Node3D { Name = "FO3_STAGE65_VAULT101_BIRTH_ROOM" };
+        var previewHost = new Node3D { Name = "FO3_VAULT101_BIRTH_ROOM" };
         _worldHost.AddChild(previewHost);
         Fo3Vault101BirthSceneCoverage coverage;
         try
@@ -1127,6 +1175,57 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _background.Visible = false;
         _panel.Visible = false;
 
+        if (activation is not null)
+            PersistStage65Appearance(
+                playerName,
+                sex,
+                selection,
+                activation.Package,
+                stage65,
+                activation);
+        if (resumedStage80 is null)
+        {
+            var subtitle = AddVaultDialogueOverlay();
+            var branch = _profile.Stage80Transition.DialogueFor(sex.EngineSex);
+            Callable.From(() => PlayVaultDialogue(
+                branch,
+                subtitle,
+                playerName,
+                sex,
+                selection,
+                stage65)).CallDeferred();
+        }
+        else if (resumedStage85 is null)
+        {
+            var stage85 = _profile.Stage85Transition.Apply(resumedStage80);
+            PersistStage85Transition(
+                playerName,
+                sex,
+                selection,
+                transition.Activate(),
+                stage65,
+                resumedStage80,
+                stage85);
+            PrintStage85Applied(stage85, resumed: true);
+            resumedStage85 = stage85;
+        }
+        var activeStage = resumedStage85?.Stage ?? resumedStage80?.Stage ?? stage65.Stage;
+        GD.Print(
+            $"OPENNV_FO3_CG00_VAULT101_BIRTH_ROOM_READY profile={_profile.ProfileId} " +
+            $"stage={activeStage} package={transition.PackageFormId} " +
+            $"entry={contract.EntryReferenceFormId} cell={contract.CellFormId} " +
+            $"references={coverage.PlacedReferences} actors=2 " +
+            $"doctor={coverage.DoctorActor.ReferenceFormId} " +
+            $"dad={coverage.DadActor.ReferenceFormId} " +
+            $"resumed={(resumedStage65 is null ? 0 : 1)} packageActive=1 " +
+            $"trigger={transition.NextCommand} playerIdleExecuted=0 " +
+            $"dialoguePlaybackReady={(resumedStage80 is null ? 1 : 0)} retailTiming=0 " +
+            $"stage80Applied={(resumedStage80 is null ? 0 : 1)} " +
+            $"stage85Applied={(resumedStage85 is null ? 0 : 1)}");
+    }
+
+    private Label AddVaultDialogueOverlay()
+    {
         var overlay = new PanelContainer
         {
             Name = "FO3_STAGE65_VAULT101_DIALOGUE",
@@ -1152,38 +1251,22 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
             margin.AddThemeConstantOverride(side, Fo3OpeningFlowNumericContracts.SeparationPixels);
         overlay.AddChild(margin);
-        var status = new VBoxContainer();
-        status.AddThemeConstantOverride("separation", Fo3OpeningFlowNumericContracts.SeparationPixels);
-        margin.AddChild(status);
         var subtitle = Label(" ", Fo3OpeningFlowNumericContracts.BodyFontPixels);
         subtitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         subtitle.Visible = false;
-        status.AddChild(subtitle);
+        margin.AddChild(subtitle);
         AddChild(overlay);
         _vaultPreviewOverlay = overlay;
-        if (activation is not null)
-            PersistStage65Appearance(
-                playerName,
-                sex,
-                selection,
-                activation.Package,
-                stage65,
-                activation);
-        var branch = _profile.Stage80Transition.DialogueFor(sex.EngineSex);
-        Callable.From(() => PlayVaultDialogue(branch, subtitle)).CallDeferred();
-        GD.Print(
-            $"OPENNV_FO3_CG00_VAULT101_BIRTH_ROOM_READY profile={_profile.ProfileId} " +
-            $"stage={stage65.Stage} package={transition.PackageFormId} " +
-            $"entry={contract.EntryReferenceFormId} cell={contract.CellFormId} " +
-            $"references={coverage.PlacedReferences} actors=2 " +
-            $"doctor={coverage.DoctorActor.ReferenceFormId} " +
-            $"dad={coverage.DadActor.ReferenceFormId} " +
-            $"resumed={(resumedStage65 is null ? 0 : 1)} packageActive=1 " +
-            $"trigger={transition.NextCommand} playerIdleExecuted=0 " +
-            "dialoguePlaybackReady=1 retailTiming=0 stage80Applied=0");
+        return subtitle;
     }
 
-    private void PlayVaultDialogue(Fo3Stage80DialogueBranch branch, Label subtitle)
+    private void PlayVaultDialogue(
+        Fo3Stage80DialogueBranch branch,
+        Label subtitle,
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3Stage65AppearanceState stage65)
     {
         _vaultDialogueVoice?.Stop();
         _vaultDialogueVoice?.QueueFree();
@@ -1200,6 +1283,12 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             Name = "FO3_CG00_OWNED_DAD_DIALOGUE",
             Stream = stream,
         };
+        _vaultDialogueVoice.Finished += () => CompleteStage65Dialogue(
+            subtitle,
+            playerName,
+            sex,
+            selection,
+            stage65);
         AddChild(_vaultDialogueVoice);
         subtitle.Text = $"DAD: {branch.Response.Text}";
         subtitle.Visible = true;
@@ -1211,6 +1300,47 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"lip={branch.Response.Lip.LogicalPath} sourceTriggerAdvance=1 explicitUiAdvance=0 " +
             "dadRendered=1 lipPlayback=0 retailTiming=0 stage80Applied=0");
     }
+
+    private void CompleteStage65Dialogue(
+        Label subtitle,
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3Stage65AppearanceState stage65)
+    {
+        subtitle.Visible = false;
+        _vaultPreviewOverlay?.QueueFree();
+        _vaultPreviewOverlay = null;
+        _vaultDialogueVoice?.QueueFree();
+        _vaultDialogueVoice = null;
+        var package = _profile.Section4Transition.Activate();
+        var stage80 = _profile.Stage80Transition.Apply(sex.EngineSex, stage65);
+        PersistStage80Transition(playerName, sex, selection, package, stage65, stage80);
+        GD.Print(
+            $"OPENNV_FO3_CG00_STAGE80_APPLIED_NORMAL stage={stage80.Stage} " +
+            $"info={stage80.AppliedInfoFormId} commands={stage80.AppliedCommandCount} " +
+            $"package={stage80.AddedPlayerPackage.FormId} " +
+            $"variables={stage80.ScriptVariables.Count} " +
+            $"evaluated={stage80.EvaluatedPackageReferences.Count} " +
+            $"enabled={stage80.EnabledReferences.Count} cueFinished=1 playerIdleExecuted=0");
+        var stage85 = _profile.Stage85Transition.Apply(stage80);
+        PersistStage85Transition(
+            playerName,
+            sex,
+            selection,
+            package,
+            stage65,
+            stage80,
+            stage85);
+        PrintStage85Applied(stage85, resumed: false);
+    }
+
+    private static void PrintStage85Applied(Fo3Stage85State stage85, bool resumed) =>
+        GD.Print(
+            $"OPENNV_FO3_CG00_STAGE85_APPLIED_NORMAL stage={stage85.Stage} " +
+            $"info={stage85.AppliedInfoFormId} commands={stage85.AppliedCommandCount} " +
+            $"resumed={(resumed ? 1 : 0)} infoConditionsEvaluated=1 " +
+            "dialoguePlayback=0 playerIdleExecuted=0 retailTiming=0");
 
     private void ExitVault101Preview()
     {
@@ -1485,7 +1615,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         return value;
     }
 
-    private void ValidateBirthRuntimeState(JsonElement source)
+    private void ValidateBirthRuntimeState(JsonElement source, string expectedCueState)
     {
         var contract = _birthPresentation ?? throw new InvalidOperationException(
             "Saved Fallout 3 birth runtime has no owned presentation contract.");
@@ -1510,9 +1640,34 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             RequiredSaveString(source, "triggerCondition") != transition.TriggerCondition ||
             RequiredSaveString(source, "triggerCommand") != transition.NextCommand ||
             RequiredSaveInteger(source, "triggeredStage") != transition.NextStage ||
-            RequiredSaveString(source, "cueState") != "stage65-source-bound-ready")
+            RequiredSaveString(source, "cueState") != expectedCueState)
             throw new InvalidOperationException(
                 "Saved Fallout 3 birth runtime differs from its owned source contracts.");
+    }
+
+    private Dictionary<string, object?> BirthRuntimeState(string cueState)
+    {
+        var contract = _birthPresentation ?? throw new InvalidOperationException(
+            "Fallout 3 birth runtime has no owned presentation contract.");
+        var transition = _profile.Section4Transition;
+        return new Dictionary<string, object?>
+        {
+            ["schema"] = "opennv-fo3-cg00-birth-runtime/v1",
+            ["cellFormId"] = contract.CellFormId,
+            ["entryReferenceFormId"] = contract.EntryReferenceFormId,
+            ["doctorLiReferenceFormId"] = contract.DoctorActor.ReferenceFormId,
+            ["dadReferenceFormId"] = contract.DadActor.ReferenceFormId,
+            ["beginEventIdleFormId"] = transition.BeginEventIdleFormId,
+            ["endEventIdleFormId"] = transition.EndEventIdleFormId,
+            ["changeEventIdleFormId"] = transition.ChangeEventIdleFormId,
+            ["triggerScriptEditorId"] = transition.TriggerScriptEditorId,
+            ["triggerScriptFormId"] = transition.TriggerScriptFormId,
+            ["triggerScriptSourceSha256"] = transition.TriggerScriptSourceSha256,
+            ["triggerCondition"] = transition.TriggerCondition,
+            ["triggerCommand"] = transition.NextCommand,
+            ["triggeredStage"] = transition.NextStage,
+            ["cueState"] = cueState,
+        };
     }
 
     private void PersistNamedCharacter(string playerName, Fo3SexChoice sex)
@@ -1623,7 +1778,6 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Stage65AppearanceState stage65,
         Fo3PlayerPackageRuntimeActivation? birthActivation = null)
     {
-        var contract = _birthPresentation;
         var state = new
         {
             schema = "opennv-fo3-opening-character/v2",
@@ -1682,26 +1836,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 }),
                 nextBoundary = stage65.NextBoundary,
             },
-            birthRuntime = birthActivation is null || contract is null
+            birthRuntime = birthActivation is null
                 ? null
-                : new
-                {
-                    schema = "opennv-fo3-cg00-birth-runtime/v1",
-                    cellFormId = contract.CellFormId,
-                    entryReferenceFormId = contract.EntryReferenceFormId,
-                    doctorLiReferenceFormId = contract.DoctorActor.ReferenceFormId,
-                    dadReferenceFormId = contract.DadActor.ReferenceFormId,
-                    beginEventIdleFormId = birthActivation.BeginEventIdleFormId,
-                    endEventIdleFormId = birthActivation.EndEventIdleFormId,
-                    changeEventIdleFormId = birthActivation.ChangeEventIdleFormId,
-                    triggerScriptEditorId = birthActivation.TriggerScriptEditorId,
-                    triggerScriptFormId = birthActivation.TriggerScriptFormId,
-                    triggerScriptSourceSha256 = birthActivation.TriggerScriptSourceSha256,
-                    triggerCondition = birthActivation.TriggerCondition,
-                    triggerCommand = birthActivation.TriggerCommand,
-                    triggeredStage = birthActivation.TriggeredStage,
-                    cueState = "stage65-source-bound-ready",
-                },
+                : BirthRuntimeState("stage65-source-bound-ready"),
             completed = false,
         };
         WriteState(state);
@@ -1818,6 +1955,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                     appliedCommandCount = stage85.AppliedCommandCount,
                     nextBoundary = stage85.NextBoundary,
                 },
+            birthRuntime = BirthRuntimeState(stage85 is null
+                ? "stage65-cue-finished-stage80-applied"
+                : "stage80-info-trigger-stage85-applied"),
             completed = false,
         };
         WriteState(state);
