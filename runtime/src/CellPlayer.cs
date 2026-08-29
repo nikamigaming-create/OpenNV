@@ -282,6 +282,26 @@ internal partial class CellPlayer : CharacterBody3D
             Math.Clamp((float)delta * CellPlayerNumericContracts.PresentationFloat10Point0f, 0.0f, 1.0f));
     }
 
+    public override void _Input(InputEvent @event)
+    {
+        if (_useXr || _session is null || @event is InputEventKey { Echo: true })
+            return;
+        var input = _configuration.Player.DesktopInput;
+        if (@event.IsActionPressed(input.PipBoy.Action))
+        {
+            _session.TogglePipBoy();
+            GetViewport().SetInputAsHandled();
+            GD.Print($"OPENNV_FLAT_ACTION action=pipboy open={_session.IsPipBoyOpen}");
+            return;
+        }
+        if (_session.IsPipBoyOpen && @event.IsActionPressed(input.Cancel.Action))
+        {
+            _session.ClosePipBoy();
+            GetViewport().SetInputAsHandled();
+            GD.Print("OPENNV_FLAT_ACTION action=pipboy-close accepted=True");
+        }
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         if (_useClassicDiorama)
@@ -891,17 +911,8 @@ internal partial class CellPlayer : CharacterBody3D
     private void PollDesktopActions()
     {
         var input = _configuration.Player.DesktopInput;
-        if (Input.IsActionJustPressed(input.PipBoy.Action))
-        {
-            _session!.TogglePipBoy();
-            return;
-        }
         if (_session!.IsPipBoyOpen)
-        {
-            if (Input.IsActionJustPressed(input.Cancel.Action))
-                _session.ClosePipBoy();
             return;
-        }
         if (_activationEnabled && Input.IsActionJustPressed(input.Activate.Action))
         {
             bool accepted;

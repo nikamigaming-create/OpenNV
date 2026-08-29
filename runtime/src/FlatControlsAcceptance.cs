@@ -84,6 +84,15 @@ internal static class FlatControlsAcceptance
             if (!loaded.Session.HasPipBoy || !loaded.Session.IsPipBoyOpen)
                 throw new InvalidOperationException("Configured Pip-Boy input did not open the UI.");
             pipBoyOpened = true;
+            var pipBoyScreenshotPath = options.TryGetValue(
+                "pipboy-screenshot",
+                out var requestedPipBoyScreenshot)
+                ? await CaptureScreenshot(
+                    host,
+                    requestedPipBoyScreenshot,
+                    input.Acceptance.RenderedFramesBeforeScreenshot,
+                    "Pip-Boy")
+                : null;
             await PulseKeyBinding(host, input.Cancel, input.Acceptance.SettleFrames);
             if (loaded.Session.IsPipBoyOpen)
                 throw new InvalidOperationException("Configured cancel input did not close the Pip-Boy.");
@@ -95,20 +104,11 @@ internal static class FlatControlsAcceptance
 
             string? screenshotPath = null;
             if (options.TryGetValue("screenshot", out var requestedScreenshot))
-            {
-                screenshotPath = Path.GetFullPath(requestedScreenshot);
-                Directory.CreateDirectory(Path.GetDirectoryName(screenshotPath)!);
-                for (var frame = 0;
-                     frame < input.Acceptance.RenderedFramesBeforeScreenshot;
-                     frame++)
-                    await host.ToSignal(
-                        RenderingServer.Singleton,
-                        RenderingServer.SignalName.FramePostDraw);
-                var image = host.GetViewport().GetTexture().GetImage();
-                if (image.IsEmpty() || image.SavePng(screenshotPath) != Error.Ok)
-                    throw new InvalidOperationException(
-                        $"Could not save the flat acceptance screenshot: {screenshotPath}");
-            }
+                screenshotPath = await CaptureScreenshot(
+                    host,
+                    requestedScreenshot,
+                    input.Acceptance.RenderedFramesBeforeScreenshot,
+                    "flat acceptance");
 
             var report = new
             {
@@ -134,6 +134,7 @@ internal static class FlatControlsAcceptance
                     available = loaded.Session.HasPipBoy,
                     opened = pipBoyOpened,
                     closed = !loaded.Session.IsPipBoyOpen,
+                    screenshot = pipBoyScreenshotPath,
                 },
                 openDoors = loaded.Session.OpenDoorsCount,
                 screenshot = screenshotPath,
@@ -235,5 +236,24 @@ internal static class FlatControlsAcceptance
     {
         for (var frame = 0; frame < frameCount; frame++)
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);
+    }
+
+    private static async Task<string> CaptureScreenshot(
+        RuntimeCoordinator host,
+        string requestedPath,
+        int renderedFrames,
+        string label)
+    {
+        var path = Path.GetFullPath(requestedPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        for (var frame = 0; frame < renderedFrames; frame++)
+            await host.ToSignal(
+                RenderingServer.Singleton,
+                RenderingServer.SignalName.FramePostDraw);
+        var image = host.GetViewport().GetTexture().GetImage();
+        if (image.IsEmpty() || image.SavePng(path) != Error.Ok)
+            throw new InvalidOperationException(
+                $"Could not save the {label} screenshot: {path}");
+        return path;
     }
 }

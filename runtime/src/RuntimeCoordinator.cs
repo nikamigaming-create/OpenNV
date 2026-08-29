@@ -30,6 +30,8 @@ public partial class RuntimeCoordinator : Node3D
             "new-game",
             "opening-proof",
             "open-proof-door",
+            "pipboy-visual-proof",
+            "pipboy-screenshot",
             "pool-proof",
             "portal-proof",
             "quit-after-load",
@@ -114,6 +116,18 @@ public partial class RuntimeCoordinator : Node3D
                     !_options.ContainsKey("save-path")))
                 throw new ArgumentException(
                     "--flat-controls-proof requires --report and --save-path and cannot use --vr.");
+            if (_options.ContainsKey("pipboy-screenshot") &&
+                !_options.ContainsKey("flat-controls-proof") &&
+                !_options.ContainsKey("pipboy-visual-proof"))
+                throw new ArgumentException(
+                    "--pipboy-screenshot requires --flat-controls-proof or --pipboy-visual-proof.");
+            if (_options.ContainsKey("pipboy-visual-proof") &&
+                (_options.ContainsKey("vr") || !_options.ContainsKey("report") ||
+                    !_options.ContainsKey("save-path") ||
+                    !_options.ContainsKey("pipboy-screenshot")))
+                throw new ArgumentException(
+                    "--pipboy-visual-proof requires --report, --save-path, and " +
+                    "--pipboy-screenshot and cannot use --vr.");
             if (_options.TryGetValue("opening-proof", out var openingProofMode))
             {
                 if (!_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
@@ -774,6 +788,11 @@ public partial class RuntimeCoordinator : Node3D
             _ = RunXrSimulatorAcceptance(loaded, scenePath, options);
             return;
         }
+        if (options.ContainsKey("pipboy-visual-proof"))
+        {
+            _ = RunPipBoyVisualAcceptance(loaded, scenePath, options);
+            return;
+        }
         if (options.ContainsKey("flat-controls-proof"))
         {
             _ = RunFlatControlsAcceptance(loaded, scenePath, options);
@@ -1085,6 +1104,23 @@ public partial class RuntimeCoordinator : Node3D
         catch (Exception exception)
         {
             GD.PushError($"OPENNV_FLAT_CONTROLS_FAIL {exception.Message}");
+            GetTree().Quit(1);
+        }
+    }
+
+    private async Task RunPipBoyVisualAcceptance(
+        CellSceneLoader.LoadedCell loaded,
+        string scenePath,
+        IReadOnlyDictionary<string, string> options)
+    {
+        try
+        {
+            await PipBoyVisualAcceptance.Run(this, loaded, scenePath, options, _configuration);
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_PIPBOY_VISUAL_FAIL {exception.Message}");
             GetTree().Quit(1);
         }
     }
