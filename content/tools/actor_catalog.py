@@ -86,6 +86,7 @@ class ActorReference:
     position: tuple[float, float, float]
     rotation_radians: tuple[float, float, float]
     scale: float
+    enable_parent_form_id: int | None
 
     @property
     def initially_disabled(self) -> bool:
@@ -513,6 +514,17 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
     scale = struct.unpack("<f", scales[0])[0] if scales else DEFAULT_REFERENCE_SCALE
     if not scale > 0.0:
         raise ValueError(f"{record.signature} XSCL must be positive in {record.form_id:08x}")
+    enable_parents = values.get("XESP", [])
+    if enable_parents and (
+        len(enable_parents) != 1 or len(enable_parents[0]) < FORM_ID_BYTES
+    ):
+        raise ValueError(
+            f"{record.signature} XESP must contain one enable-parent FormID in "
+            f"{record.form_id:08x}"
+        )
+    enable_parent_form_id = (
+        struct.unpack_from("<I", enable_parents[0])[0] if enable_parents else None
+    )
     return ActorReference(
         record.form_id,
         record.signature,
@@ -522,6 +534,7 @@ def _reference(record: Record, subrecords: list[tuple[str, bytes]]) -> ActorRefe
         tuple(values6[:3]),
         tuple(values6[3:]),
         scale,
+        enable_parent_form_id,
     )
 
 

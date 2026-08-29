@@ -38,11 +38,11 @@ internal static class GalleryGroundContact
         if (!before.GroundFound || before.DeltaMeters is not float correctionMeters ||
             before.DeltaGameUnits is not float correctionGameUnits)
             throw new InvalidOperationException(
-                "Gallery actor has no authored collision support for floor alignment.");
+                "Actor has no authored collision support for floor alignment.");
         if (!float.IsFinite(correctionMeters) ||
             MathF.Abs(correctionMeters) > visualBounds.Size.Y)
             throw new InvalidOperationException(
-                "Gallery actor floor alignment exceeds its posed visual height.");
+                "Actor floor alignment exceeds its posed visual height.");
         var rootBefore = actor.Placement.GlobalPosition;
         actor.Placement.GlobalPosition = rootBefore - Vector3.Up * correctionMeters;
         return new Alignment(
@@ -78,7 +78,7 @@ internal static class GalleryGroundContact
             !visualBounds.Size.IsFinite() ||
             !float.IsFinite(searchRange) ||
             !float.IsFinite(visualSupportY) || searchRange <= 0.0f)
-            throw new InvalidOperationException("Gallery actor has no finite ground-contact search range.");
+            throw new InvalidOperationException("Actor has no finite ground-contact search range.");
         var rayStartClearance = configuration.Player.CameraNearMeters;
         var candidates = new[]
             {

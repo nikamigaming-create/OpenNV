@@ -128,30 +128,42 @@ public partial class RuntimeCoordinator : Node3D
                 throw new ArgumentException(
                     "--pipboy-visual-proof requires --report, --save-path, and " +
                     "--pipboy-screenshot and cannot use --vr.");
+            var startsFromMenuNewGame =
+                _options.TryGetValue("opening-menu-proof", out var configuredMenuProof) &&
+                configuredMenuProof == "new-game";
             if (_options.TryGetValue("opening-proof", out var openingProofMode))
             {
                 if (!_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
                     !_options.ContainsKey("opening-proof-name") ||
                     !_options.ContainsKey("opening-proof-timeout-seconds") ||
                     openingProofMode is not "checkpoint" and not "resume" ||
-                    openingProofMode == "checkpoint" != _options.ContainsKey("new-game"))
+                    openingProofMode == "checkpoint" !=
+                        (_options.ContainsKey("new-game") || startsFromMenuNewGame))
                     throw new ArgumentException(
-                        "--opening-proof requires mode checkpoint with --new-game or mode resume " +
-                        "without it, plus --report, --save-path, --opening-proof-name, and " +
-                        "--opening-proof-timeout-seconds.");
+                        "--opening-proof requires mode checkpoint with --new-game or the owned " +
+                        "menu new-game route, or mode resume without either, plus --report, " +
+                        "--save-path, --opening-proof-name, and --opening-proof-timeout-seconds.");
             }
-            if (_options.TryGetValue("opening-menu-proof", out var openingMenuAction) &&
-                (openingMenuAction != "continue" ||
+            if (_options.TryGetValue("opening-menu-proof", out var openingMenuAction))
+            {
+                var sharedMenuProofInvalid =
                     !_options.ContainsKey("report") ||
                     !_options.ContainsKey("save-path") ||
                     _options.ContainsKey("cell-scene") ||
-                    _options.ContainsKey("new-game") ||
-                    _options.ContainsKey("opening-proof") ||
-                    _options.ContainsKey("portal-proof")))
-                throw new ArgumentException(
-                    "--opening-menu-proof continue requires --report and --save-path with a " +
-                    "completed prepared campaign cache, and cannot combine with a direct CELL " +
-                    "or another opening/portal proof.");
+                    _options.ContainsKey("portal-proof");
+                var validContinue = openingMenuAction == "continue" &&
+                    !_options.ContainsKey("new-game") &&
+                    !_options.ContainsKey("opening-proof");
+                var validNewGame = openingMenuAction == "new-game" &&
+                    !_options.ContainsKey("new-game") &&
+                    _options.TryGetValue("opening-proof", out var menuOpeningProof) &&
+                    menuOpeningProof == "checkpoint";
+                if (sharedMenuProofInvalid || (!validContinue && !validNewGame))
+                    throw new ArgumentException(
+                        "--opening-menu-proof accepts continue for a completed prepared save, " +
+                        "or new-game with --opening-proof checkpoint; both require --report and " +
+                        "--save-path and cannot combine with a direct CELL or portal proof.");
+            }
             if (_options.TryGetValue("route-travel-proof", out var routeTravelMode) &&
                 (routeTravelMode is not "first-run" and not "cold-reload" ||
                     !_options.TryGetValue("opening-menu-proof", out var routeMenuAction) ||
@@ -515,6 +527,13 @@ public partial class RuntimeCoordinator : Node3D
             _configuration.Player.DesktopInput.Cancel.Action,
             () =>
             {
+                if (options.TryGetValue("opening-menu-proof", out var acceptedAction))
+                {
+                    if (acceptedAction != "new-game")
+                        throw new InvalidOperationException(
+                            $"Owned main-menu new-game dispatched while expecting {acceptedAction}.");
+                    _acceptedOpeningMenuAction = acceptedAction;
+                }
                 var newGameOptions = options.ToDictionary(
                     pair => pair.Key,
                     pair => pair.Value,
@@ -545,25 +564,39 @@ public partial class RuntimeCoordinator : Node3D
             $"buttons={manifest.Buttons.Count} continue={canContinue}");
         if (options.TryGetValue("opening-menu-proof", out var action))
         {
-            if (!canContinue)
+            if (action == "continue" && !canContinue)
                 throw new InvalidOperationException(
                     "Owned main-menu Continue acceptance requires a valid completed campaign save.");
-            Callable.From(() =>
-            {
-                try
-                {
-                    GD.Print($"OPENNV_OWNED_MENU_ACCEPTANCE action={action} transport=godot-button-signal");
-                    opening.PressActionForAcceptance(action);
-                }
-                catch (Exception exception)
-                {
-                    GD.PushError($"OPENNV_OWNED_MENU_ACCEPTANCE_FAIL {exception}");
-                    GetTree().Quit(1);
-                }
-            }).CallDeferred();
+            _ = RunOwnedOpeningMenuAcceptance(opening, action);
         }
         if (options.ContainsKey("quit-after-load"))
             GetTree().Quit(0);
+    }
+
+    private async Task RunOwnedOpeningMenuAcceptance(RetailOpening opening, string action)
+    {
+        try
+        {
+            await ToSignal(GetTree().CreateTimer(2.0), SceneTreeTimer.SignalName.Timeout);
+            GD.Print(
+                $"OPENNV_OWNED_MENU_ACCEPTANCE action={action} transport=godot-button-signal");
+            opening.PressActionForAcceptance(action);
+            if (action != "new-game")
+                return;
+            await ToSignal(GetTree().CreateTimer(2.0), SceneTreeTimer.SignalName.Timeout);
+            Input.ParseInputEvent(new InputEventKey
+            {
+                Keycode = Key.Escape,
+                PhysicalKeycode = Key.Escape,
+                Pressed = true,
+            });
+            GD.Print("OPENNV_OWNED_INTRO_ACCEPTANCE action=escape transport=godot-input-event");
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_OWNED_MENU_ACCEPTANCE_FAIL {exception}");
+            GetTree().Quit(1);
+        }
     }
 
     private void LoadPreparedGameplay(
@@ -921,6 +954,16 @@ public partial class RuntimeCoordinator : Node3D
                     configurationSchema = RuntimeConfiguration.ExpectedSchema,
                     configurationSha256 = _configuration.Sha256,
                     scene = Path.GetFullPath(scenePath),
+                    openingMenuProof = _acceptedOpeningMenuAction is null
+                        ? null
+                        : new
+                        {
+                            action = _acceptedOpeningMenuAction,
+                            inputTransport = "godot-owned-button-signal",
+                            introSkipTransport = "godot-input-event",
+                            windowsAppControlUsed = false,
+                            foregroundInputInjected = false,
+                        },
                     save = new
                     {
                         path = loaded.Session.SavePath,
@@ -1614,7 +1657,7 @@ public partial class RuntimeCoordinator : Node3D
             }).ToArray(),
             activeSet = new
             {
-                policy = "current-cell-plus-direct-portal-neighbors",
+                policy = "authoritative-current-cell-only-linked-cells-preloaded",
                 currentCellFormId = loaded.Session.ActiveCellFormId,
                 activeCellFormIds = loaded.ActiveSet.ActiveCellFormIds
                     .OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
@@ -1636,6 +1679,22 @@ public partial class RuntimeCoordinator : Node3D
                     lights = space.Lights,
                     sourceVisibleLights = space.SourceVisibleLights,
                     visibleLights = space.VisibleLights,
+                }),
+            },
+            actorGrounding = new
+            {
+                policy = "nearest-authored-collision-current-posed-visual-support",
+                results = loaded.ActorGrounding.Results.Select(result => new
+                {
+                    result.ReferenceFormId,
+                    result.CellFormId,
+                    rootBefore = Vector(result.RootBefore),
+                    rootAfter = Vector(result.RootAfter),
+                    result.CorrectionMeters,
+                    result.CorrectionGameUnits,
+                    groundPosition = Vector(result.GroundPosition),
+                    result.ColliderPath,
+                    result.Derivation,
                 }),
             },
             xrPresentation = !loaded.Player.UsesXr

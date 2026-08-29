@@ -9,6 +9,7 @@ import re
 import shutil
 import struct
 import subprocess
+import urllib.request
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -305,6 +306,7 @@ def load_opening_recipe(path: Path) -> dict[str, object]:
     graph = document.get("recordGraph")
     ui = document.get("ui")
     flow = document.get("newGameFlow")
+    video_import = document.get("videoImport")
     if (
         not isinstance(roots, list)
         or not roots
@@ -312,6 +314,7 @@ def load_opening_recipe(path: Path) -> dict[str, object]:
         or not isinstance(graph, dict)
         or not isinstance(ui, dict)
         or not isinstance(flow, dict)
+        or not isinstance(video_import, dict)
     ):
         raise ValueError(f"Owned opening recipe is incomplete: {path}")
     return document
@@ -2114,6 +2117,9 @@ def compile_ui(
         queue.extend(resolved_includes[current])
 
     prepared_closure = boot_closure | set(flow_closure) | set(gameplay_closure)
+    configured_title_asset = _asset_path(str(recipe_ui["titleAsset"]))
+    if configured_title_asset is None or not configured_title_asset.endswith(".dds"):
+        raise ValueError("Owned boot menu title asset is invalid")
     requested_assets = sorted(
         {
             str(asset)
@@ -2121,6 +2127,7 @@ def compile_ui(
             for asset in documents[member]["initiallyVisibleAssetReferences"]
         }
         | {str(gameplay["backgroundAsset"])}
+        | {configured_title_asset}
         | {
             str(value["asset"])
             for value in gameplay["statusPresentation"]["bodyImages"]
@@ -2223,7 +2230,7 @@ def compile_ui(
     texture_rows = [textures_by_path[key] for key in sorted(textures_by_path)]
     title_tile = str(recipe_ui["titleTile"])
     title_nodes = [node for node in tree.walk() if node.name == title_tile]
-    title_assets = sorted(
+    authored_title_assets = sorted(
         {
             asset
             for node in title_nodes
@@ -2233,6 +2240,9 @@ def compile_ui(
             if asset is not None
         }
     )
+    if configured_title_asset not in textures_by_path:
+        raise ValueError("Configured owned boot menu title texture was not prepared")
+    title_assets = [configured_title_asset]
     layout = _boot_layout(
         container,
         buttons,
@@ -2267,6 +2277,7 @@ def compile_ui(
             "buttonSpacing": _direct_number(container.child("_spacing")),
             "titleTile": title_tile,
             "titleAssets": title_assets,
+            "authoredTitleAssets": authored_title_assets,
             "buttons": buttons,
             "layout": layout,
         },
@@ -4166,7 +4177,6 @@ def compile_new_game_flow(
     programs, timer_transitions, menu_close_transitions = _stage_programs(
         quest, quest_script_sources[0]
     )
-
     roles = []
     needed_forms = set()
     for role, editor_id in dict(flow["sceneRoles"]).items():
@@ -4474,22 +4484,100 @@ def _script_sources(record: dict[str, object]) -> Iterator[str]:
             yield str(value["value"])
 
 
+def _resolve_video_transcoder(policy: dict[str, object]) -> Path:
+    kind = str(policy.get("transcoderKind", "ffmpeg"))
+    executable_name = str(policy["transcoderExecutable"])
+    resolved = shutil.which(executable_name)
+    required_sha256 = str(policy.get("transcoderSha256", "")).casefold()
+    if resolved is not None:
+        path = Path(resolved).resolve()
+        if not required_sha256 or file_sha256(path) == required_sha256:
+            return path
+    if kind != "ffmpeg2theora" or os.name != "nt":
+        detail = "" if resolved is None else " with the required SHA-256"
+        raise FileNotFoundError(
+            f"Configured opening video transcoder is unavailable{detail}: {executable_name}"
+        )
+    bootstrap = policy.get("windowsBootstrap")
+    if not isinstance(bootstrap, dict) or not required_sha256:
+        raise ValueError("Pinned Windows opening-video transcoder bootstrap is incomplete")
+    local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+    if not local_app_data:
+        raise FileNotFoundError("Windows local application-data directory is unavailable")
+    relative = Path(str(bootstrap.get("cacheRelativePath", "")))
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise ValueError("Opening-video transcoder bootstrap path is unsafe")
+    target = (Path(local_app_data) / relative).resolve()
+    if target.is_file():
+        if file_sha256(target) != required_sha256:
+            raise RuntimeError(
+                f"Pinned opening-video transcoder hash differs at {target}"
+            )
+        return target
+    source_url = str(bootstrap.get("sourceUrl", ""))
+    if not source_url.startswith(("http://", "https://")):
+        raise ValueError("Opening-video transcoder bootstrap URL is invalid")
+    with urllib.request.urlopen(source_url, timeout=60) as response:
+        payload = response.read()
+    actual_sha256 = hashlib.sha256(payload).hexdigest()
+    if actual_sha256 != required_sha256:
+        raise RuntimeError(
+            "Downloaded opening-video transcoder failed its pinned SHA-256 gate"
+        )
+    atomic_bytes(target, payload)
+    return target
+
+
+def _validate_runtime_video(
+    output: Path,
+    policy: dict[str, object],
+) -> dict[str, object]:
+    validator_name = str(policy.get("validatorExecutable", "ffmpeg"))
+    validator = shutil.which(validator_name)
+    if validator is None:
+        raise FileNotFoundError(
+            f"Configured opening video validator is unavailable: {validator_name}"
+        )
+    command = [
+        validator,
+        "-nostdin",
+        "-v",
+        "error",
+        "-i",
+        str(output),
+        "-f",
+        "null",
+        "-",
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    errors = result.stderr.strip()
+    if result.returncode != 0 or errors:
+        raise RuntimeError(
+            "Opening video decode validation failed: "
+            + (errors or f"exit={result.returncode}")
+        )
+    validator_path = Path(validator).resolve()
+    return {
+        "status": "decoded-without-errors",
+        "validator": str(validator_path),
+        "validatorSha256": file_sha256(validator_path),
+        "arguments": command[1:],
+    }
+
+
 def _prepare_runtime_video(
     source: Path,
     cache_root: Path,
     configuration: RuntimeConfiguration,
+    policy_override: dict[str, object] | None = None,
 ) -> dict[str, object]:
     legal_assets = configuration.document["legalAssets"]
     if not isinstance(legal_assets, dict):
         raise ValueError("OpenNV legal-assets configuration is invalid")
-    policy = legal_assets["videoImport"]
+    policy = legal_assets["videoImport"] if policy_override is None else policy_override
     if not isinstance(policy, dict):
         raise ValueError("OpenNV opening video-import configuration is invalid")
-    executable = shutil.which(str(policy["transcoderExecutable"]))
-    if executable is None:
-        raise FileNotFoundError(
-            f"Configured opening video transcoder is unavailable: {policy['transcoderExecutable']}"
-        )
+    executable = _resolve_video_transcoder(policy)
     source_sha256 = file_sha256(source)
     identity = hashlib.sha256(
         (
@@ -4515,14 +4603,18 @@ def _prepare_runtime_video(
             isinstance(existing_inputs, dict)
             and all(existing_inputs.get(key) == value for key, value in expected.items())
             and existing.get("outputSha256") == file_sha256(output)
+            and isinstance(existing.get("validation"), dict)
+            and existing["validation"].get("status") == "decoded-without-errors"
         ):
             if existing_inputs != expected:
                 existing["inputs"] = expected
                 atomic_json(sidecar, existing)
             return existing
 
+    transcoder_kind = str(policy.get("transcoderKind", "ffmpeg"))
+    version_argument = "-h" if transcoder_kind == "ffmpeg2theora" else "-version"
     version_result = subprocess.run(
-        [executable, "-version"],
+        [str(executable), version_argument],
         check=False,
         capture_output=True,
         text=True,
@@ -4531,48 +4623,75 @@ def _prepare_runtime_video(
         raise RuntimeError("Opening video transcoder version probe failed")
     temporary = output.with_name(output.stem + ".tmp" + output.suffix)
     output.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        executable,
-        "-nostdin",
-        "-hide_banner",
-        "-loglevel",
-        str(policy["logLevel"]),
-        "-y",
-        "-fflags",
-        "+bitexact",
-        "-i",
-        str(source),
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a?",
-        "-map_metadata",
-        "-1",
-        "-c:v",
-        str(policy["videoCodec"]),
-        "-q:v",
-        str(policy["videoQuality"]),
-        "-pix_fmt",
-        str(policy["pixelFormat"]),
-        "-c:a",
-        str(policy["audioCodec"]),
-        "-q:a",
-        str(policy["audioQuality"]),
-        "-threads",
-        str(policy["threads"]),
-        "-flags:v",
-        "+bitexact",
-        "-flags:a",
-        "+bitexact",
-        "-f",
-        str(policy["containerFormat"]),
-        str(temporary),
-    ]
+    temporary.unlink(missing_ok=True)
+    if transcoder_kind == "ffmpeg2theora":
+        command = [str(executable)]
+        if bool(policy.get("disableSkeleton", False)):
+            command.append("--no-skeleton")
+        if bool(policy.get("stripMetadata", False)):
+            command.append("--nometadata")
+        command.extend(
+            [
+                "-v",
+                str(policy["videoQuality"]),
+                "-a",
+                str(policy["audioQuality"]),
+                "-o",
+                str(temporary),
+                str(source),
+            ]
+        )
+    elif transcoder_kind == "ffmpeg":
+        command = [
+            str(executable),
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            str(policy["logLevel"]),
+            "-y",
+            "-fflags",
+            "+bitexact",
+            "-i",
+            str(source),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-map_metadata",
+            "-1",
+            "-c:v",
+            str(policy["videoCodec"]),
+            "-q:v",
+            str(policy["videoQuality"]),
+            "-pix_fmt",
+            str(policy["pixelFormat"]),
+            "-c:a",
+            str(policy["audioCodec"]),
+            "-q:a",
+            str(policy["audioQuality"]),
+            "-threads",
+            str(policy["threads"]),
+            "-flags:v",
+            "+bitexact",
+            "-flags:a",
+            "+bitexact",
+            "-f",
+            str(policy["containerFormat"]),
+            str(temporary),
+        ]
+    else:
+        raise ValueError(f"Unsupported opening video transcoder kind: {transcoder_kind}")
     result = subprocess.run(command, check=False, capture_output=True, text=True)
     if result.returncode != 0 or not temporary.is_file() or not temporary.stat().st_size:
+        temporary.unlink(missing_ok=True)
         raise RuntimeError(
             "Opening video transcoding failed: " + result.stderr.strip()
         )
+    try:
+        validation = _validate_runtime_video(temporary, policy)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     os.replace(temporary, output)
     document = {
         "schema": "opennv-owned-opening-video/v1",
@@ -4581,11 +4700,12 @@ def _prepare_runtime_video(
         "output": str(output.resolve()),
         "outputBytes": output.stat().st_size,
         "outputSha256": file_sha256(output),
+        "validation": validation,
         "transcoder": {
-            "path": str(Path(executable).resolve()),
-            "sha256": file_sha256(Path(executable)),
+            "path": str(executable),
+            "sha256": file_sha256(executable),
             "version": version_result.stdout.splitlines()[0],
-            "arguments": command[1:-1],
+            "arguments": command[1:],
         },
     }
     atomic_json(sidecar, document)
@@ -4599,6 +4719,7 @@ def video_manifest(
     entry_point: dict[str, object],
     cache_root: Path,
     configuration: RuntimeConfiguration,
+    policy_override: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     entry_editor_id = str(entry_point["questEditorId"])
     entry_stage = int(entry_point["stage"])
@@ -4651,7 +4772,12 @@ def video_manifest(
         runtime = (
             None
             if source is None or not required_at_entry
-            else _prepare_runtime_video(source, cache_root, configuration)
+            else _prepare_runtime_video(
+                source,
+                cache_root,
+                configuration,
+                policy_override,
+            )
         )
         rows.append(
             {
@@ -4765,6 +4891,7 @@ def prepare_opening_manifest(
         dict(recipe["entryPoint"]),
         cache_root,
         configuration,
+        dict(recipe["videoImport"]),
     )
     manifest = {
         "schema": OPENING_MANIFEST_SCHEMA,

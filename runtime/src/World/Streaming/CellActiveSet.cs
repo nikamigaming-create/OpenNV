@@ -5,7 +5,6 @@ namespace OpenNV.Runtime.World.Streaming;
 internal sealed class CellActiveSet
 {
     private readonly IReadOnlyDictionary<string, SpaceState> _spaces;
-    private readonly IReadOnlyDictionary<string, IReadOnlySet<string>> _neighbors;
     private readonly List<Update> _updates = new();
     private IReadOnlySet<string> _activeCellFormIds = new HashSet<string>(
         StringComparer.OrdinalIgnoreCase);
@@ -26,14 +25,10 @@ internal sealed class CellActiveSet
         if (roots.Distinct().Count() != roots.Length)
             throw new InvalidOperationException("Active CELL set contains duplicate owned roots.");
 
-        var neighbors = _spaces.Keys.ToDictionary(
-            formId => formId,
-            _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            StringComparer.OrdinalIgnoreCase);
         foreach (var edge in edges)
         {
-            if (!neighbors.ContainsKey(edge.FromCellFormId) ||
-                !neighbors.ContainsKey(edge.ToCellFormId))
+            if (!_spaces.ContainsKey(edge.FromCellFormId) ||
+                !_spaces.ContainsKey(edge.ToCellFormId))
                 throw new InvalidOperationException(
                     $"Active CELL edge references an unloaded CELL: " +
                     $"{edge.FromCellFormId} -> {edge.ToCellFormId}");
@@ -42,13 +37,7 @@ internal sealed class CellActiveSet
                     StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
                     $"Active CELL edge cannot link a CELL to itself: {edge.FromCellFormId}");
-            neighbors[edge.FromCellFormId].Add(edge.ToCellFormId);
-            neighbors[edge.ToCellFormId].Add(edge.FromCellFormId);
         }
-        _neighbors = neighbors.ToDictionary(
-            entry => entry.Key,
-            entry => (IReadOnlySet<string>)entry.Value,
-            StringComparer.OrdinalIgnoreCase);
     }
 
     internal IReadOnlySet<string> ActiveCellFormIds => _activeCellFormIds;
@@ -65,7 +54,6 @@ internal sealed class CellActiveSet
         {
             activeCellFormId,
         };
-        next.UnionWith(_neighbors[activeCellFormId]);
         foreach (var state in _spaces.Values)
             state.SetActive(next.Contains(state.FormId));
         _activeCellFormIds = next;

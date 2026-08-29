@@ -2,6 +2,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Portals;
 using OpenNV.Runtime.World.Streaming;
 
@@ -266,6 +267,23 @@ internal static class CellSceneLoader
                 configuration);
         activeSet.Activate(session.ActiveCellFormId);
         environmentSet?.Activate(session.ActiveCellFormId);
+        var actorGrounding = GameplayActorGrounding.Install(
+            parent,
+            configuration,
+            activeSet,
+            new[]
+            {
+                new GameplayActorGrounding.Space(
+                    main.FormId,
+                    main.Root,
+                    1u,
+                    main.Actors),
+            }.Concat(linkedCells.Select(linked =>
+                new GameplayActorGrounding.Space(
+                    linked.Content.FormId,
+                    linked.Content.Root,
+                    linked.RenderLayer,
+                    linked.Content.Actors))).ToArray());
         player.ConfigurePortalTravel(new CellPortalTravel(
             portalLinks,
             session,
@@ -328,6 +346,7 @@ internal static class CellSceneLoader
             portalLinks,
             activeSet,
             environmentSet,
+            actorGrounding,
             main);
     }
 
@@ -658,6 +677,7 @@ internal static class CellSceneLoader
         IReadOnlyList<PortalLink> PortalLinks,
         CellActiveSet ActiveSet,
         CellEnvironmentSet? EnvironmentSet,
+        GameplayActorGrounding ActorGrounding,
         CellContentLoader.LoadedContent MainContent)
     {
         internal Vector3 GameToCellUnits(Vector3 position) => new(

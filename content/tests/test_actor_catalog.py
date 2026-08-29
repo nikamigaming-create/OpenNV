@@ -10,6 +10,7 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from actor_catalog import resolve_actor_outfit_form_ids, scan_actor_catalog  # noqa: E402
+from prepare_actor import resolve_proof_creature  # noqa: E402
 
 
 def subrecord(signature: str, data: bytes) -> bytes:
@@ -124,6 +125,7 @@ def plugin() -> bytes:
         "ACRE",
         0x71,
         subrecord("NAME", struct.pack("<I", 0x70))
+        + subrecord("XESP", struct.pack("<II", 0x72, 1))
         + subrecord("DATA", struct.pack("<6f", 4.0, 5.0, 6.0, 0.0, 0.0, 0.0)),
     )
     children = group(
@@ -186,7 +188,9 @@ class ActorCatalogTest(unittest.TestCase):
         self.assertEqual(reference.position, (1.0, 2.0, 3.0))
         self.assertAlmostEqual(reference.scale, 0.95)
         self.assertTrue(reference.initially_disabled)
+        self.assertIsNone(reference.enable_parent_form_id)
         self.assertEqual(references[1].record_type, "ACRE")
+        self.assertEqual(references[1].enable_parent_form_id, 0x72)
         self.assertEqual(catalog.creatures[0x70].name, "Creature")
         self.assertEqual(catalog.creatures[0x70].actor_flags, 0x20)
         self.assertEqual(catalog.creatures[0x70].template_flags, 0x0040)
@@ -194,6 +198,13 @@ class ActorCatalogTest(unittest.TestCase):
             catalog.creatures[0x70].model_paths,
             ("test-base.nif", "test-extra.nif"),
         )
+        creature_reference, creature = resolve_proof_creature(
+            catalog,
+            0x71,
+            0x100,
+            0x70,
+        )
+        self.assertEqual(creature_reference.actor_form_id, creature.form_id)
 
 
 if __name__ == "__main__":

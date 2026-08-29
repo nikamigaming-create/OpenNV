@@ -9,12 +9,13 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Sequence
 
 from actor_catalog import (
     ActorCatalog,
     ActorReference,
+    CreatureActor,
     FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
     FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
     FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
@@ -30,7 +31,7 @@ from actor_gltf import (
     export_actor_gltf,
     retail_render_parts_from_snapshot,
 )
-from bsa_archive import BsaArchive, canonical_member_path
+from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
 from cell_catalog import scan_cell_catalog
 from cell_scene import (
     arrival_transform,
@@ -68,6 +69,11 @@ RACE_HEAD_COMPONENT_ROLES = {
     7: "eye-right",
 }
 NO_SOURCE_SLOT = 0xFFFFFFFF
+CREATURE_REFERENCE_RECORD_TYPE = "ACRE"
+CREATURE_BASE_RECORD_TYPE = "CREA"
+HUMANOID_REFERENCE_RECORD_TYPE = "ACHR"
+HUMANOID_BASE_RECORD_TYPE = "NPC_"
+MESH_ROOT = "meshes"
 RETAIL_ROLE_BY_COMPONENT_ROLE = {
     "head": "face",
     "eye-left": "eyes",
@@ -253,6 +259,113 @@ def resolve_proof_actor(
     return references[0], actor
 
 
+def resolve_proof_creature(
+    catalog: ActorCatalog,
+    reference_form_id: int,
+    cell_form_id: int,
+    expected_base_form_id: int,
+) -> tuple[ActorReference, CreatureActor]:
+    references = [
+        reference
+        for reference in catalog.references_for(cell_form_id)
+        if reference.form_id == reference_form_id
+        and reference.record_type == CREATURE_REFERENCE_RECORD_TYPE
+    ]
+    if len(references) != 1:
+        raise ValueError(
+            f"Expected one source ACRE {reference_form_id:08x}, found {len(references)}"
+        )
+    reference = references[0]
+    if reference.actor_form_id != expected_base_form_id:
+        raise ValueError(
+            "Creature reference resolves another base: "
+            f"expected={expected_base_form_id:08x} actual={reference.actor_form_id:08x}"
+        )
+    creature = catalog.creatures.get(reference.actor_form_id)
+    if creature is None:
+        raise ValueError(f"ACRE has no CREA base: {reference.actor_form_id:08x}")
+    if creature.skeleton_path is None or not creature.model_paths:
+        raise ValueError(
+            f"CREA has no complete skeleton/model assembly: {creature.editor_id}"
+        )
+    return reference, creature
+
+
+def _mesh_logical_path(path: str) -> str:
+    canonical = canonical_member_path(path)
+    return canonical if canonical.startswith(f"{MESH_ROOT}\\") else f"{MESH_ROOT}\\{canonical}"
+
+
+def _creature_model_logical_path(skeleton_path: str, model_path: str) -> str:
+    model = PureWindowsPath(canonical_member_path(model_path))
+    if model.suffix.lower() != ".nif":
+        raise ValueError(f"CREA model is not a NIF: {model_path}")
+    if len(model.parts) == 1:
+        model = PureWindowsPath(canonical_member_path(skeleton_path)).parent / model
+    return _mesh_logical_path(str(model))
+
+
+def _extract_mesh_member(
+    archives: Sequence[BsaArchive],
+    logical_path: str,
+) -> tuple[BsaArchive, ExtractedMember]:
+    requested = _mesh_logical_path(logical_path)
+    matches = [archive for archive in archives if requested in archive.members]
+    if len(matches) != 1:
+        raise FileNotFoundError(
+            f"Expected one actor mesh {requested!r}, found {len(matches)}"
+        )
+    archive = matches[0]
+    return archive, archive.extract(requested)
+
+
+def _member_manifest(
+    archive: BsaArchive,
+    member: ExtractedMember,
+    source_contract: tuple[tuple[Path, str], ...],
+) -> dict[str, object]:
+    source_hashes = {
+        path.resolve(): source_hash for path, source_hash in source_contract
+    }
+    return {
+        "logicalPath": member.logical_path,
+        "bytes": len(member.data),
+        "sha256": member.sha256,
+        "sourceArchive": archive.archive.name,
+        "sourceArchiveSha256": source_hashes[archive.archive.resolve()],
+    }
+
+
+def _reference_manifest(
+    catalog: ActorCatalog,
+    reference: ActorReference,
+    origin: tuple[float, float, float],
+) -> dict[str, object]:
+    return {
+        "formId": f"{reference.form_id:08x}",
+        "recordType": reference.record_type,
+        "recordSha256": catalog.record_data_sha256[reference.record_type][
+            reference.form_id
+        ],
+        "baseFormId": f"{reference.actor_form_id:08x}",
+        "initiallyDisabled": reference.initially_disabled,
+        "enableParentFormId": (
+            None
+            if reference.enable_parent_form_id is None
+            else f"{reference.enable_parent_form_id:08x}"
+        ),
+        "positionGameUnits": list(reference.position),
+        "positionGodotUnits": godot_position(reference.position, origin),
+        "rotationRadians": list(reference.rotation_radians),
+        "yawRadians": reference.rotation_radians[2],
+        "yawGodotRadians": godot_yaw_radians(reference.rotation_radians[2]),
+        "rotationGodotQuaternion": godot_rotation_quaternion(
+            reference.rotation_radians
+        ),
+        "scale": reference.scale,
+    }
+
+
 @dataclass(frozen=True)
 class ActorPreparationContext:
     configuration: RuntimeConfiguration
@@ -321,6 +434,216 @@ def create_actor_preparation_context(
     )
 
 
+def _prepare_creature_actor(
+    cache_root: Path,
+    recipe: dict[str, object],
+    context: ActorPreparationContext,
+    runtime_animation_paths: Sequence[str],
+    family_compiler: dict[str, str] | None,
+) -> dict[str, object]:
+    if recipe.get("referenceRecordType") != CREATURE_REFERENCE_RECORD_TYPE:
+        raise ValueError("Creature recipe must require one ACRE reference")
+    if recipe.get("baseRecordType") != CREATURE_BASE_RECORD_TYPE:
+        raise ValueError("Creature recipe must require one CREA base")
+    if "expectedBaseFormId" not in recipe:
+        raise ValueError("Creature recipe must pin its expected CREA base")
+    if not isinstance(recipe.get("expectedInitiallyDisabled"), bool):
+        raise ValueError("Creature recipe must pin its authored initially-disabled state")
+    if recipe.get("enableParentPolicy") != "require-absent":
+        raise ValueError("Creature recipe must declare its enable-parent policy")
+
+    catalog = context.catalog
+    reference, creature = resolve_proof_creature(
+        catalog,
+        form_id(str(recipe["proofActorReferenceFormId"])),
+        form_id(str(recipe["cellFormId"])),
+        form_id(str(recipe["expectedBaseFormId"])),
+    )
+    if reference.initially_disabled != bool(recipe["expectedInitiallyDisabled"]):
+        raise ValueError(
+            "Creature ACRE initially-disabled state differs from its recipe: "
+            f"expected={recipe['expectedInitiallyDisabled']} "
+            f"actual={reference.initially_disabled}"
+        )
+    if reference.enable_parent_form_id is not None:
+        raise ValueError(
+            "Creature ACRE has an XESP enable parent but its recipe requires none: "
+            f"{reference.enable_parent_form_id:08x}"
+        )
+
+    configured_origin = recipe.get("originGameUnits")
+    if configured_origin is None:
+        cell_recipe = load_spatial_recipe(str(recipe["cellRecipe"]))
+        cell_catalog = scan_cell_catalog(context.master)
+        _source_door, arrival = arrival_transform(
+            cell_catalog,
+            form_id(str(cell_recipe["entryDoorReferenceFormId"])),
+        )
+        origin = arrival.position
+    else:
+        origin = tuple(float(value) for value in configured_origin)
+        if len(origin) != 3:
+            raise ValueError("Actor recipe originGameUnits must contain three values")
+
+    configuration = context.configuration
+    actor_rig = configuration.actor_rig
+    rig_profile = actor_rig.profiles[CREATURE_BASE_RECORD_TYPE]
+    animation_profile = configuration.document["actorCompiler"]["animationProfiles"][
+        CREATURE_BASE_RECORD_TYPE
+    ]
+    if animation_profile.get("mode") != "skeleton-directory":
+        raise ValueError("CREA animation profile must be resolved from its skeleton directory")
+    idle_name = str(animation_profile.get("fileName", ""))
+    if not idle_name or PureWindowsPath(idle_name).name != idle_name:
+        raise ValueError("CREA animation profile has an invalid idle file name")
+    skeleton_path = str(creature.skeleton_path)
+    primary_animation_path = str(
+        PureWindowsPath(canonical_member_path(skeleton_path)).parent / idle_name
+    )
+    requested_animation_paths: list[str] = []
+    for path in (
+        primary_animation_path,
+        *runtime_animation_paths,
+        *(str(row["path"]) for row in recipe.get("additionalAnimations", [])),
+    ):
+        canonical = _mesh_logical_path(path)
+        if canonical.casefold() not in {
+            value.casefold() for value in requested_animation_paths
+        }:
+            requested_animation_paths.append(canonical)
+
+    skeleton_archive, skeleton = _extract_mesh_member(
+        context.mesh_archives,
+        skeleton_path,
+    )
+    models = [
+        _extract_mesh_member(
+            context.mesh_archives,
+            _creature_model_logical_path(skeleton_path, model_path),
+        )
+        for model_path in creature.model_paths
+    ]
+    animations = [
+        _extract_mesh_member(context.mesh_archives, path)
+        for path in requested_animation_paths
+    ]
+    additional_animation_hashes = {
+        _mesh_logical_path(str(row["path"])): str(row["sha256"]).casefold()
+        for row in recipe.get("additionalAnimations", [])
+    }
+    for _archive, animation in animations:
+        expected_hash = additional_animation_hashes.get(animation.logical_path)
+        if expected_hash is not None and animation.sha256 != expected_hash:
+            raise ValueError(
+                f"Actor animation hash mismatch: {animation.logical_path} "
+                f"expected={expected_hash} actual={animation.sha256}"
+            )
+
+    output_root = cache_root / "generated" / "actors" / str(recipe["id"])
+    gltf_path = output_root / "actor.gltf"
+    sidecar_path = output_root / "actor.opennv.json"
+    source_form_id = f"0x{creature.form_id:08X}"
+    sidecar = export_actor_gltf(
+        ActorGltfInput(
+            f"{creature.form_id:08x}",
+            creature.name or creature.editor_id,
+            creature.skeleton_path,
+            skeleton.data,
+            (),
+            (),
+            tuple(
+                ActorComponent(
+                    f"creature-model-{index}",
+                    member.logical_path,
+                    member.data,
+                    source_form_id=source_form_id,
+                    source_slot=NO_SOURCE_SLOT,
+                )
+                for index, (_archive, member) in enumerate(models)
+            ),
+            animations[0][1].logical_path,
+            animations[0][1].data,
+            skeleton_root_node=rig_profile.skeleton_root_node,
+            rigid_attachment_node=rig_profile.unparented_rigid_node,
+            biped_head_node=actor_rig.biped_head_node,
+            additional_animations=tuple(
+                ActorAnimation(member.logical_path, member.data)
+                for _archive, member in animations[1:]
+            ),
+        ),
+        context.texture_archives,
+        gltf_path,
+        sidecar_path,
+        configuration.content_compiler,
+    )
+    manifest = {
+        "schema": "opennv-actor-scene/v5",
+        "status": "skinned-animated",
+        "compiler": family_compiler or compiler_provenance("actor"),
+        "recipe": str(recipe["id"]),
+        "configuration": configuration.manifest(),
+        "cellFormId": str(recipe["cellFormId"]),
+        "reference": _reference_manifest(catalog, reference, origin),
+        "actor": {
+            "name": creature.name or creature.editor_id,
+            "editorId": creature.editor_id,
+            "recordType": CREATURE_BASE_RECORD_TYPE,
+            "recordSha256": catalog.record_data_sha256[CREATURE_BASE_RECORD_TYPE][
+                creature.form_id
+            ],
+            "female": False,
+            "raceFormId": "00000000",
+            "hairFormId": "00000000",
+            "eyesFormId": "00000000",
+            "headPartFormIds": [],
+            "outfitFormIds": [],
+            "modelPaths": list(creature.model_paths),
+        },
+        "idleAnimation": animations[0][1].logical_path,
+        "retailPresentation": None,
+        "appearanceResolution": {
+            "source": "effective owned CREA skeleton/model fields",
+            "placement": "authored ACRE transform",
+            "status": "source-bound-presence-compiled-parity-pending",
+        },
+        "source": {
+            "master": str(context.master.resolve()),
+            "masterSha256": context.source_contract[0][1],
+            "skeleton": _member_manifest(
+                skeleton_archive,
+                skeleton,
+                context.source_contract,
+            ),
+            "models": [
+                _member_manifest(archive, member, context.source_contract)
+                for archive, member in models
+            ],
+            "animations": [
+                _member_manifest(archive, member, context.source_contract)
+                for archive, member in animations
+            ],
+        },
+        "outputs": {
+            "gltf": gltf_path.name,
+            "sidecar": sidecar_path.name,
+            "gltfSha256": sidecar["outputs"]["gltf"]["sha256"],
+            "sidecarSha256": file_sha256(sidecar_path),
+            "bufferSha256": sidecar["outputs"]["buffer"]["sha256"],
+        },
+        "coverage": sidecar["coverage"],
+        "capabilityBoundary": {
+            "presence": "source-bound",
+            "aiPackages": "not-compiled",
+            "questConditions": "not-compiled",
+            "retailParity": "not-claimed",
+        },
+    }
+    manifest_path = output_root / "actor-scene.json"
+    _atomic_json(manifest_path, manifest)
+    manifest["manifest"] = str(manifest_path.resolve())
+    return manifest
+
+
 def prepare_actor(
     data_root: Path,
     cache_root: Path,
@@ -337,6 +660,26 @@ def prepare_actor(
     context = preparation_context or create_actor_preparation_context(data_root, recipe)
     if context.source_contract != _actor_source_contract(data_root, recipe):
         raise ValueError("Actor preparation context belongs to another owned-data recipe")
+    reference_record_type = str(
+        recipe.get("referenceRecordType", HUMANOID_REFERENCE_RECORD_TYPE)
+    )
+    base_record_type = str(recipe.get("baseRecordType", HUMANOID_BASE_RECORD_TYPE))
+    if reference_record_type == CREATURE_REFERENCE_RECORD_TYPE:
+        return _prepare_creature_actor(
+            cache_root,
+            recipe,
+            context,
+            runtime_animation_paths,
+            family_compiler,
+        )
+    if (
+        reference_record_type != HUMANOID_REFERENCE_RECORD_TYPE
+        or base_record_type != HUMANOID_BASE_RECORD_TYPE
+    ):
+        raise ValueError(
+            "Actor recipe record pair is unsupported: "
+            f"{reference_record_type}/{base_record_type}"
+        )
     configuration = context.configuration
     actor_rig = configuration.actor_rig
     rig_profile = actor_rig.profiles["NPC_"]
@@ -820,28 +1163,20 @@ def prepare_actor(
         "recipe": recipe_id,
         "configuration": configuration.manifest(),
         "cellFormId": recipe["cellFormId"],
-        "reference": {
-            "formId": f"{reference.form_id:08x}",
-            "baseFormId": f"{reference.actor_form_id:08x}",
-            "initiallyDisabled": reference.initially_disabled,
-            "positionGameUnits": list(reference.position),
-            "positionGodotUnits": godot_position(reference.position, origin),
-            "rotationRadians": list(reference.rotation_radians),
-            "yawRadians": reference.rotation_radians[2],
-            "yawGodotRadians": godot_yaw_radians(reference.rotation_radians[2]),
-            "rotationGodotQuaternion": godot_rotation_quaternion(reference.rotation_radians),
-            "scale": reference.scale,
-        },
+        "reference": _reference_manifest(catalog, reference, origin),
         "actor": {
             "name": actor.name,
             "editorId": actor.editor_id,
+            "recordSha256": catalog.record_data_sha256[HUMANOID_BASE_RECORD_TYPE][
+                actor.form_id
+            ],
             "female": actor.female,
             "raceFormId": f"{actor.race_form_id:08x}",
             "hairFormId": f"{actor.hair_form_id:08x}",
             "eyesFormId": f"{actor.eyes_form_id:08x}",
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
             "outfitFormIds": [f"{outfit_form:08x}" for outfit_form in outfit_forms],
-            "recordType": "NPC_",
+            "recordType": HUMANOID_BASE_RECORD_TYPE,
         },
         "idleAnimation": actor_animation_path,
         "retailPresentation": (

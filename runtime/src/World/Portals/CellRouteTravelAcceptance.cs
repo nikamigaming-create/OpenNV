@@ -182,16 +182,9 @@ internal static class CellRouteTravelAcceptance
         {
             current,
         };
-        foreach (var portal in loaded.PortalLinks)
-        {
-            if (portal.FromCellFormId.Equals(current, StringComparison.OrdinalIgnoreCase))
-                expected.Add(portal.ToCellFormId);
-            else if (portal.ToCellFormId.Equals(current, StringComparison.OrdinalIgnoreCase))
-                expected.Add(portal.FromCellFormId);
-        }
         if (!expected.SetEquals(loaded.ActiveSet.ActiveCellFormIds))
             throw new InvalidOperationException(
-                $"CELL active set differs from current-plus-neighbors: " +
+                $"CELL active set differs from the authoritative current CELL: " +
                 $"expected={string.Join(',', expected.OrderBy(value => value))} " +
                 $"actual={string.Join(',', loaded.ActiveSet.ActiveCellFormIds.OrderBy(value => value))}");
 
@@ -758,7 +751,7 @@ internal static class CellRouteTravelAcceptance
                 }),
                 activeSet = new
                 {
-                    policy = "current-cell-plus-direct-portal-neighbors",
+                    policy = "authoritative-current-cell-only-linked-cells-preloaded",
                     activeCellFormIds = loaded.ActiveSet.ActiveCellFormIds
                         .OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
                     spaces = loaded.ActiveSet.Snapshot().Select(space => new
@@ -785,6 +778,22 @@ internal static class CellRouteTravelAcceptance
                         currentCellFormId = update.CurrentCellFormId,
                         activeCellFormIds = update.ActiveCellFormIds,
                         suspendedCellFormIds = update.SuspendedCellFormIds,
+                    }),
+                },
+                actorGrounding = new
+                {
+                    policy = "nearest-authored-collision-current-posed-visual-support",
+                    results = loaded.ActorGrounding.Results.Select(result => new
+                    {
+                        result.ReferenceFormId,
+                        result.CellFormId,
+                        rootBefore = Vector(result.RootBefore),
+                        rootAfter = Vector(result.RootAfter),
+                        result.CorrectionMeters,
+                        result.CorrectionGameUnits,
+                        groundPosition = Vector(result.GroundPosition),
+                        result.ColliderPath,
+                        result.Derivation,
                     }),
                 },
                 environmentSet = loaded.EnvironmentSet is null

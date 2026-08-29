@@ -16,6 +16,21 @@
     "questEditorId": "VCG00",
     "stage": 0
   },
+  "videoImport": {
+    "transcoderKind": "ffmpeg2theora",
+    "transcoderExecutable": "ffmpeg2theora",
+    "transcoderSha256": "a1e0f97bde8b1b8874480a2f153651258e0f35b86d1d24a8a911bd4a841b8308",
+    "outputExtension": ".ogv",
+    "videoQuality": 7,
+    "audioQuality": 5,
+    "disableSkeleton": true,
+    "stripMetadata": true,
+    "validatorExecutable": "ffmpeg",
+    "windowsBootstrap": {
+      "sourceUrl": "http://v2v.cc/~j/ffmpeg2theora/ffmpeg2theora-0.29.exe",
+      "cacheRelativePath": "OpenNV/tools/ffmpeg2theora/0.29-a1e0f97b/ffmpeg2theora.exe"
+    }
+  },
   "recordGraph": {
     "engineForms": {
       "00000014": "player"
@@ -68,6 +83,7 @@
     "confirmationDocument": "menus\\message_menu.xml",
     "buttonContainer": "main_button_layout",
     "titleTile": "oblivion_logo",
+    "titleAsset": "textures\\interface\\main\\main_title.dds",
     "engineSettings": {
       "background": {
         "section": "Loading",

@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -664,8 +665,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             PlayGuidePackageIdle(package);
             return;
         }
-        _guideDestinationCellUnits = _loaded.GameToCellUnits(
-            destination.PositionGameUnits);
+        _guideDestinationCellUnits = GameplayActorGrounding.ApplyGroundOffset(
+            _guideActor,
+            _loaded.GameToCellUnits(destination.PositionGameUnits));
         _activeGuideLocomotion = package.AlwaysRun
             ? _flow.GuideActorAi.Locomotion.Run
             : _flow.GuideActorAi.Locomotion.Walk;
@@ -681,6 +683,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 _loaded.CellToGameUnits(_guideActor.Placement.Position),
                 destination.PositionGameUnits)
             .Select(_loaded.GameToCellUnits)
+            .Select(position => GameplayActorGrounding.ApplyGroundOffset(
+                _guideActor,
+                position))
             .ToArray();
         if (_guidePathCellUnits.Count == 0)
             throw new InvalidOperationException(
@@ -969,10 +974,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     throw new InvalidOperationException("Owned SayTo command has no topic.");
                 if (IsGuideSpeaker(command))
                     RunWhenGuideReady(
-                        () => PlayTopicEditor(command.TopicEditorId, () => Next(), generation),
+                        () => PlayTopicEditor(command.TopicEditorId, () => { }, generation),
                         generation);
                 else
-                    PlayTopicEditor(command.TopicEditorId, () => Next(), generation);
+                    PlayTopicEditor(command.TopicEditorId, () => { }, generation);
+                Next();
                 return;
             case "showMenu":
                 ShowMenu(command, () =>
