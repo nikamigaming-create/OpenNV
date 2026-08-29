@@ -139,6 +139,7 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
     private HashSet<int>? _arrivalComponent;
     private Fo2ArroyoPlayerPresentation? _presentation;
     private Vector3 _spawnWorldMeters;
+    private bool _controlsEnabled = true;
     private bool _requireNeutralInput;
 
     internal int ArrivalTile { get; private set; }
@@ -150,6 +151,7 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
     internal int CompletedTileTransitions { get; private set; }
     internal int RejectedMovementFrames { get; private set; }
     internal int LastRejectedCandidateTile { get; private set; } = -1;
+    internal bool ControlsEnabled => _controlsEnabled;
     internal event Action? PersistenceBoundaryReached;
     internal Vector3 SpawnWorldMeters => _spawnWorldMeters;
     internal Fo2ArroyoPlayerPresentation Presentation => _presentation ??
@@ -241,6 +243,8 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
             _profile.MoveRight.Action,
             _profile.MoveForward.Action,
             _profile.MoveBackward.Action);
+        if (!_controlsEnabled)
+            input = Vector2.Zero;
         if (_requireNeutralInput)
         {
             if (input.IsZeroApprox())
@@ -300,6 +304,15 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
             SetMeta("current_tile", CurrentTile);
             PersistenceBoundaryReached?.Invoke();
         }
+    }
+
+    internal void SetControlsEnabled(bool enabled)
+    {
+        _controlsEnabled = enabled;
+        if (enabled)
+            _requireNeutralInput = true;
+        Presentation.StopWalking();
+        SetMeta("opening_controls_enabled", enabled);
     }
 
     internal void Restore(int tile, Vector3 position, int rotation)

@@ -202,7 +202,8 @@ internal sealed class Fo2CharacterStartCatalog
     private const string CacheSchema = "opennv-fo2-character-start-cache/v1";
     private const string RecipeSchema = "opennv-fo2-character-start-recipe/v1";
     private const string ProfileSchema = "opennv-fo2-owned-profile/v1";
-    internal const string RecipeId = "fo2-character-start-v1";
+    internal const string LegacyRecipeId = "fo2-character-start-v1";
+    internal const string OpeningRecipeId = "fo2-character-start-v2";
     internal const string FemaleFid = "0100003d";
     internal const string FemaleLogicalPath = "art\\critters\\hfprimaa.frm";
     internal const string FemaleWalkLogicalPath = "art\\critters\\hfprimab.frm";
@@ -231,6 +232,7 @@ internal sealed class Fo2CharacterStartCatalog
         Fo2CharacterStartAsset inventory,
         IReadOnlyList<Fo2PremadeCharacter> characters,
         Fo2ArroyoPlayerPresentationSource femalePresentation,
+        Fo2OpeningTailContract? openingTail,
         int verifiedResources)
     {
         ManifestPath = manifestPath;
@@ -241,6 +243,7 @@ internal sealed class Fo2CharacterStartCatalog
         Inventory = inventory;
         Characters = characters;
         FemalePresentation = femalePresentation;
+        OpeningTail = openingTail;
         VerifiedResources = verifiedResources;
     }
 
@@ -252,6 +255,7 @@ internal sealed class Fo2CharacterStartCatalog
     internal Fo2CharacterStartAsset Inventory { get; }
     internal IReadOnlyList<Fo2PremadeCharacter> Characters { get; }
     internal Fo2ArroyoPlayerPresentationSource FemalePresentation { get; }
+    internal Fo2OpeningTailContract? OpeningTail { get; }
     internal int VerifiedResources { get; }
 
     internal Fo2ArroyoPlayerPresentationSource PresentationFor(
@@ -314,6 +318,16 @@ internal sealed class Fo2CharacterStartCatalog
             recipe.GetProperty("inventory"),
             cacheRoot,
             "inventory");
+        var recipeId = Fo2TemplePresentationCatalog.RequiredString(recipe, "id");
+        var openingTail = recipeId == OpeningRecipeId
+            ? Fo2OpeningTailContract.Load(
+                cache.GetProperty("openingTail"),
+                recipe.GetProperty("openingTail"),
+                cacheRoot)
+            : null;
+        if (recipeId == LegacyRecipeId && cache.TryGetProperty("openingTail", out _))
+            throw new InvalidOperationException(
+                "Legacy Fallout 2 character-start cache contains an opening tail.");
         var recipeRows = recipe.GetProperty("premades").EnumerateArray().ToArray();
         var cacheRows = cache.GetProperty("characters").EnumerateArray().ToArray();
         if (recipeRows.Length != 3 || cacheRows.Length != 3)
@@ -399,7 +413,13 @@ internal sealed class Fo2CharacterStartCatalog
                 Fo2TemplePresentationCatalog.RequiredHash(
                     femaleRow.GetProperty("prototype"),
                     "sha256"))
-            .ToArray();
+            .ToList();
+        if (openingTail is not null)
+        {
+            required.Add($"{openingTail.MovieLogicalPath}|{openingTail.MovieSha256}");
+            required.Add(
+                $"{openingTail.FadeConfigLogicalPath}|{openingTail.FadeConfigSha256}");
+        }
         if (identities.Count != resources.Length || required.Any(row => !identities.Contains(row)))
             throw new InvalidOperationException(
                 "Fallout 2 character-start resource identity closure failed.");
@@ -410,6 +430,9 @@ internal sealed class Fo2CharacterStartCatalog
                 female.Directions.Count ||
             counts.GetProperty("femaleWalkFramePngs").GetInt32() !=
                 female.Walk.Directions.Values.Sum(row => row.Count) ||
+            openingTail is not null &&
+                counts.GetProperty("openingTailPngs").GetInt32() != openingTail.Frames.Count ||
+            openingTail is null && counts.TryGetProperty("openingTailPngs", out _) ||
             counts.GetProperty("sourceResources").GetInt32() != resources.Length)
             throw new InvalidOperationException(
                 "Fallout 2 character-start cache counts drifted.");
@@ -423,6 +446,7 @@ internal sealed class Fo2CharacterStartCatalog
             inventory,
             characters,
             female,
+            openingTail,
             resources.Length);
     }
 
@@ -467,10 +491,12 @@ internal sealed class Fo2CharacterStartCatalog
         var document = JsonDocument.Parse(bytes);
         var recipe = document.RootElement.Clone();
         document.Dispose();
+        var descriptorId = Fo2TemplePresentationCatalog.RequiredString(descriptor, "id");
+        var recipeId = Fo2TemplePresentationCatalog.RequiredString(recipe, "id");
         if (Fo2TemplePresentationCatalog.RequiredString(descriptor, "schema") != RecipeSchema ||
-            Fo2TemplePresentationCatalog.RequiredString(descriptor, "id") != RecipeId ||
+            descriptorId != recipeId ||
+            recipeId != LegacyRecipeId && recipeId != OpeningRecipeId ||
             Fo2TemplePresentationCatalog.RequiredString(recipe, "schema") != RecipeSchema ||
-            Fo2TemplePresentationCatalog.RequiredString(recipe, "id") != RecipeId ||
             Fo2TemplePresentationCatalog.RequiredString(recipe, "campaign") != "Fallout2" ||
             Fo2TemplePresentationCatalog.RequiredString(recipe, "sourceProfileSchema") !=
                 ProfileSchema)

@@ -4,15 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 import hashlib
 import json
 import os
 import shutil
 import struct
+import subprocess
 import sys
 import tempfile
+import wave
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 from corpus_io import atomic_json
 from fo1_frm import decode_frm, decode_frm_frame, palette_rgba_bytes
@@ -73,11 +79,23 @@ TRAIT_NAMES = [
     "Skilled",
     "Gifted",
 ]
+MVE_VIDEO_STREAM_COUNT = 1
+MVE_AUDIO_STREAM_COUNT = 1
+MVE_SOURCE_FRAME_NUMBER_ORIGIN = 1
+MVE_FADE_COLOR_COMPONENTS = 3
+MVE_WAVE_SAMPLE_WIDTH_BYTES = 2
+MVE_WAVE_CHANNELS = 2
+MVE_FRAME_FILENAME_DIGITS = 4
+MVE_FFMPEG_SUCCESS = 0
+MVE_TIMESTAMP_DECIMAL_DIGITS = 9
+SHA256_HEX_LENGTH = 64
+FO2_OPENING_HANDOFF_ARRIVAL_TILE = 28707
+OPENING_RECIPE_ID = "fo2-character-start-v2"
 
 
 def default_recipe_path() -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    path = base / "recipes" / "fo2-character-start-v1.json"
+    path = base / "recipes" / f"{OPENING_RECIPE_ID}.json"
     if not path.is_file():
         raise Fo1ProfileError(f"Fallout 2 character-start recipe is missing: {path}")
     return path
@@ -96,6 +114,36 @@ def _load_recipe(path: Path) -> dict[str, Any]:
     female = recipe.get("femalePresentation")
     presentation = recipe.get("presentation")
     inventory = recipe.get("inventory")
+    opening = recipe.get("openingTail")
+    opening_required = recipe.get("id") == OPENING_RECIPE_ID
+    opening_valid = (
+        isinstance(opening, dict)
+        and isinstance(opening.get("movie"), dict)
+        and opening["movie"].get("logicalPath") == "art\\cuts\\elder.mve"
+        and isinstance(opening["movie"].get("sha256"), str)
+        and len(opening["movie"]["sha256"]) == SHA256_HEX_LENGTH
+        and isinstance(opening.get("fadeConfig"), dict)
+        and opening["fadeConfig"].get("logicalPath") == "art\\cuts\\elder.cfg"
+        and isinstance(opening["fadeConfig"].get("sha256"), str)
+        and len(opening["fadeConfig"]["sha256"]) == SHA256_HEX_LENGTH
+        and isinstance(opening.get("video"), dict)
+        and opening["video"].get("sourceFrameNumbersOneBased") is True
+        and opening["video"].get("tailStartFrame")
+        == opening.get("fade", {}).get("startFrame")
+        and isinstance(opening.get("audio"), dict)
+        and opening["audio"].get("channels") == MVE_WAVE_CHANNELS
+        and opening["audio"].get("sampleBytes") == MVE_WAVE_SAMPLE_WIDTH_BYTES
+        and isinstance(opening.get("fade"), dict)
+        and opening["fade"].get("type") == "out"
+        and opening["fade"].get("color") == [0, 0, 0]
+        and opening["fade"].get("movieEndForcesBlack") is True
+        and isinstance(opening.get("handoff"), dict)
+        and opening["handoff"].get("mapIndex") == 3
+        and opening["handoff"].get("elevation") == 0
+        and opening["handoff"].get("arrivalTile")
+        == FO2_OPENING_HANDOFF_ARRIVAL_TILE
+        and opening["handoff"].get("arrivalRotation") == 0
+    )
     if (
         recipe.get("schema") != RECIPE_SCHEMA
         or recipe.get("id") != path.stem
@@ -109,12 +157,13 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         or not isinstance(inventory, dict)
         or inventory.get("logicalPath") != "art\\intrface\\invbox.frm"
         or not isinstance(inventory.get("sha256"), str)
-        or len(inventory["sha256"]) != 64
+        or len(inventory["sha256"]) != SHA256_HEX_LENGTH
         or not isinstance(inventory.get("width"), int)
         or inventory["width"] <= 0
         or not isinstance(inventory.get("height"), int)
         or inventory["height"] <= 0
         or inventory.get("frame") != 0
+        or opening_required != opening_valid
         or not isinstance(female, dict)
         or female.get("artIndex") != 61
         or female.get("artListEntry") != "hfprim,11,1"
@@ -139,6 +188,116 @@ def _load_recipe(path: Path) -> dict[str, Any]:
     ):
         raise Fo1ProfileError("unexpected Fallout 2 character-start recipe")
     return recipe
+
+
+def _parse_opening_fade_config(
+    data: bytes,
+    expected: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        text = data.decode("ascii", errors="strict")
+    except UnicodeDecodeError as error:
+        raise Fo1ProfileError("Fallout 2 Elder fade config is not ASCII") from error
+    config = configparser.ConfigParser(
+        interpolation=None,
+        inline_comment_prefixes=(";",),
+    )
+    config.read_string(text)
+    try:
+        total_effects = config.getint("info", "total_effects")
+        effect_frames = [
+            int(value.strip())
+            for value in config.get("info", "effect_frames").split(",")
+        ]
+        start_frame = int(expected["startFrame"])
+        section = config[str(start_frame)]
+        fade_type = section.get("fade_type", "").strip().casefold()
+        fade_color = [
+            int(value.strip()) for value in section.get("fade_color", "").split(",")
+        ]
+        fade_steps = section.getint("fade_steps")
+    except (KeyError, ValueError, configparser.Error) as error:
+        raise Fo1ProfileError("Fallout 2 Elder fade config is malformed") from error
+    if (
+        total_effects != len(effect_frames)
+        or len(set(effect_frames)) != total_effects
+        or start_frame not in effect_frames
+        or fade_type != expected["type"]
+        or fade_color != expected["color"]
+        or len(fade_color) != MVE_FADE_COLOR_COMPONENTS
+        or fade_steps != expected["steps"]
+        or fade_steps <= 0
+    ):
+        raise Fo1ProfileError("Fallout 2 Elder source fade contract drifted")
+    return {
+        "startFrame": start_frame,
+        "endFrame": start_frame + fade_steps - MVE_SOURCE_FRAME_NUMBER_ORIGIN,
+        "type": fade_type,
+        "color": fade_color,
+        "steps": fade_steps,
+    }
+
+
+def _probe_opening_movie(
+    path: Path,
+    ffprobe: str,
+    expected_video: dict[str, Any],
+    expected_audio: dict[str, Any],
+) -> dict[str, Any]:
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-count_frames",
+            "-show_entries",
+            (
+                "stream=index,codec_name,codec_type,width,height,r_frame_rate,"
+                "nb_read_frames,sample_rate,channels"
+            ),
+            "-of",
+            "json",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    document = json.loads(result.stdout)
+    streams = document.get("streams")
+    if not isinstance(streams, list):
+        raise Fo1ProfileError("Fallout 2 Elder movie probe has no streams")
+    video_rows = [row for row in streams if row.get("codec_type") == "video"]
+    audio_rows = [row for row in streams if row.get("codec_type") == "audio"]
+    if len(video_rows) != MVE_VIDEO_STREAM_COUNT or len(audio_rows) != MVE_AUDIO_STREAM_COUNT:
+        raise Fo1ProfileError("Fallout 2 Elder movie stream coverage drifted")
+    video = video_rows[0]
+    audio = audio_rows[0]
+    expected_rate = (
+        f"{expected_video['frameRateNumerator']}/"
+        f"{expected_video['frameRateDenominator']}"
+    )
+    if (
+        video.get("codec_name") != expected_video["codec"]
+        or video.get("width") != expected_video["width"]
+        or video.get("height") != expected_video["height"]
+        or video.get("r_frame_rate") != expected_rate
+        or int(video.get("nb_read_frames", -1)) != expected_video["sourceFrameCount"]
+        or audio.get("codec_name") != expected_audio["sourceCodec"]
+        or int(audio.get("sample_rate", -1)) != expected_audio["sampleRate"]
+        or audio.get("channels") != expected_audio["channels"]
+    ):
+        raise Fo1ProfileError("Fallout 2 Elder movie stream identity drifted")
+    return {
+        "videoCodec": video["codec_name"],
+        "audioCodec": audio["codec_name"],
+        "width": video["width"],
+        "height": video["height"],
+        "frameRate": expected_rate,
+        "sourceFrameCount": int(video["nb_read_frames"]),
+        "sampleRate": int(audio["sample_rate"]),
+        "channels": audio["channels"],
+    }
 
 
 def parse_fo2_premade_gcd(data: bytes) -> dict[str, object]:
@@ -242,6 +401,8 @@ def prepare_fo2_character_start(
     profile_path: Path,
     output_root: Path,
     recipe_path: Path | None = None,
+    ffmpeg: str = "ffmpeg",
+    ffprobe: str = "ffprobe",
 ) -> dict[str, Any]:
     profile_path = profile_path.resolve()
     output_root = output_root.resolve()
@@ -286,6 +447,190 @@ def prepare_fo2_character_start(
                 staging=staging,
                 opaque=True,
             )
+            opening_tail = None
+            tail_frames = []
+            if "openingTail" in recipe:
+                opening_recipe = recipe["openingTail"]
+                opening_movie = _verified(resolver, opening_recipe["movie"])
+                opening_fade_config = _verified(
+                    resolver,
+                    opening_recipe["fadeConfig"],
+                )
+                opening_fade = _parse_opening_fade_config(
+                    opening_fade_config.data,
+                    opening_recipe["fade"],
+                )
+                source_mve_path = staging / "ELDER.MVE"
+                source_mve_path.write_bytes(opening_movie.data)
+                opening_probe = _probe_opening_movie(
+                    source_mve_path,
+                    ffprobe,
+                    opening_recipe["video"],
+                    opening_recipe["audio"],
+                )
+                source_frame_count = int(opening_recipe["video"]["sourceFrameCount"])
+                tail_start_frame = int(opening_recipe["video"]["tailStartFrame"])
+                tail_frame_count = (
+                    source_frame_count - tail_start_frame + MVE_SOURCE_FRAME_NUMBER_ORIGIN
+                )
+                decoded_start_index = tail_start_frame - MVE_SOURCE_FRAME_NUMBER_ORIGIN
+                if tail_frame_count <= 0 or opening_fade["startFrame"] != tail_start_frame:
+                    raise Fo1ProfileError("Fallout 2 Elder tail range is invalid")
+                tail_directory = staging / "assets" / "opening-tail"
+                tail_directory.mkdir(parents=True)
+                frame_pattern = tail_directory / (
+                    f"frame-%0{MVE_FRAME_FILENAME_DIGITS}d.png"
+                )
+                frame_command = [
+                    ffmpeg,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    str(source_mve_path),
+                    "-map",
+                    "0:v:0",
+                    "-an",
+                    "-vf",
+                    f"select=gte(n\\,{decoded_start_index})",
+                    "-fps_mode",
+                    "passthrough",
+                    "-start_number",
+                    str(tail_start_frame),
+                    str(frame_pattern),
+                ]
+                if subprocess.run(frame_command, check=False).returncode != MVE_FFMPEG_SUCCESS:
+                    raise Fo1ProfileError("Fallout 2 Elder tail frame decode failed")
+                frame_paths = sorted(tail_directory.glob("frame-*.png"))
+                if len(frame_paths) != tail_frame_count:
+                    raise Fo1ProfileError("Fallout 2 Elder tail frame count drifted")
+                tail_frames = []
+                for offset, frame_path in enumerate(frame_paths):
+                    source_frame = tail_start_frame + offset
+                    expected_name = (
+                        f"frame-{source_frame:0{MVE_FRAME_FILENAME_DIGITS}d}.png"
+                    )
+                    with Image.open(frame_path) as frame_image:
+                        dimensions = frame_image.size
+                    if frame_path.name != expected_name or dimensions != (
+                        opening_probe["width"],
+                        opening_probe["height"],
+                    ):
+                        raise Fo1ProfileError(
+                            "Fallout 2 Elder tail frame identity or dimensions drifted"
+                        )
+                    relative = frame_path.relative_to(staging).as_posix()
+                    tail_frames.append(
+                        {
+                            "sourceFrame": source_frame,
+                            "png": relative,
+                            "pngBytes": frame_path.stat().st_size,
+                            "pngSha256": file_sha256(frame_path),
+                        }
+                    )
+                terminal_hash = tail_frames[-MVE_SOURCE_FRAME_NUMBER_ORIGIN]["pngSha256"]
+                terminal_repeated_from = source_frame_count
+                for frame in reversed(tail_frames):
+                    if frame["pngSha256"] != terminal_hash:
+                        break
+                    terminal_repeated_from = frame["sourceFrame"]
+
+                frame_rate_numerator = int(
+                    opening_recipe["video"]["frameRateNumerator"]
+                )
+                frame_rate_denominator = int(
+                    opening_recipe["video"]["frameRateDenominator"]
+                )
+                frame_period = Fraction(frame_rate_denominator, frame_rate_numerator)
+                audio_start = frame_period * decoded_start_index
+                audio_duration = frame_period * tail_frame_count
+                audio_path = staging / "assets" / "opening-tail" / "elder-tail.wav"
+                audio_command = [
+                    ffmpeg,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    str(source_mve_path),
+                    "-ss",
+                    f"{float(audio_start):.{MVE_TIMESTAMP_DECIMAL_DIGITS}f}",
+                    "-t",
+                    f"{float(audio_duration):.{MVE_TIMESTAMP_DECIMAL_DIGITS}f}",
+                    "-map",
+                    "0:a:0",
+                    "-vn",
+                    "-c:a",
+                    "pcm_s16le",
+                    "-ar",
+                    str(opening_recipe["audio"]["sampleRate"]),
+                    "-ac",
+                    str(opening_recipe["audio"]["channels"]),
+                    str(audio_path),
+                ]
+                if subprocess.run(audio_command, check=False).returncode != MVE_FFMPEG_SUCCESS:
+                    raise Fo1ProfileError("Fallout 2 Elder tail audio decode failed")
+                with wave.open(str(audio_path), "rb") as audio_stream:
+                    audio_channels = audio_stream.getnchannels()
+                    audio_sample_bytes = audio_stream.getsampwidth()
+                    audio_sample_rate = audio_stream.getframerate()
+                    audio_sample_frames = audio_stream.getnframes()
+                expected_audio_frames = round(float(audio_duration) * audio_sample_rate)
+                if (
+                    audio_channels != opening_recipe["audio"]["channels"]
+                    or audio_sample_bytes != opening_recipe["audio"]["sampleBytes"]
+                    or audio_sample_rate != opening_recipe["audio"]["sampleRate"]
+                    or audio_sample_frames != expected_audio_frames
+                ):
+                    raise Fo1ProfileError("Fallout 2 Elder tail PCM identity drifted")
+                source_mve_path.unlink()
+                opening_tail = {
+                    "source": {
+                        "movie": {
+                            "logicalPath": opening_movie.logical_path,
+                            "source": opening_movie.source,
+                            "bytes": len(opening_movie.data),
+                            "sha256": opening_movie.sha256,
+                        },
+                        "fadeConfig": {
+                            "logicalPath": opening_fade_config.logical_path,
+                            "source": opening_fade_config.source,
+                            "bytes": len(opening_fade_config.data),
+                            "sha256": opening_fade_config.sha256,
+                        },
+                    },
+                    "video": {
+                        **opening_probe,
+                        "frameRateNumerator": frame_rate_numerator,
+                        "frameRateDenominator": frame_rate_denominator,
+                        "sourceFrameNumbersOneBased": True,
+                        "tailStartFrame": tail_start_frame,
+                        "tailFrameCount": tail_frame_count,
+                        "terminalFrame": source_frame_count,
+                        "terminalFramePngSha256": terminal_hash,
+                        "terminalFrameRepeatedFrom": terminal_repeated_from,
+                        "frames": tail_frames,
+                    },
+                    "audio": {
+                        "wav": audio_path.relative_to(staging).as_posix(),
+                        "wavBytes": audio_path.stat().st_size,
+                        "wavSha256": file_sha256(audio_path),
+                        "channels": audio_channels,
+                        "sampleBytes": audio_sample_bytes,
+                        "sampleRate": audio_sample_rate,
+                        "sampleFrames": audio_sample_frames,
+                        "sourceStartNumerator": audio_start.numerator,
+                        "sourceStartDenominator": audio_start.denominator,
+                        "sourceDurationNumerator": audio_duration.numerator,
+                        "sourceDurationDenominator": audio_duration.denominator,
+                    },
+                    "fade": {
+                        **opening_fade,
+                        "movieEndForcesBlack": opening_recipe["fade"][
+                            "movieEndForcesBlack"
+                        ],
+                    },
+                    "handoff": opening_recipe["handoff"],
+                }
             characters = []
             for descriptor in recipe["premades"]:
                 gcd = _verified(resolver, descriptor["gcd"])
@@ -510,6 +855,9 @@ def prepare_fo2_character_start(
             },
             "retailOrDerivedAssetsPackaged": False,
         }
+        if opening_tail is not None:
+            document["openingTail"] = opening_tail
+            document["counts"]["openingTailPngs"] = len(tail_frames)
         atomic_json(staging / CACHE_MANIFEST_NAME, document)
         os.replace(staging, output_root)
         return document
@@ -525,12 +873,16 @@ def main() -> int:
     parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--recipe", type=Path, default=None)
+    parser.add_argument("--ffmpeg", default="ffmpeg")
+    parser.add_argument("--ffprobe", default="ffprobe")
     args = parser.parse_args()
     try:
         document = prepare_fo2_character_start(
             args.profile,
             args.output_root,
             args.recipe,
+            args.ffmpeg,
+            args.ffprobe,
         )
     except Exception as error:
         print(f"OPENNV_FO2_CHARACTER_START_ERROR {error}", file=sys.stderr)
@@ -543,6 +895,7 @@ def main() -> int:
                 "premades": document["counts"]["premades"],
                 "femaleDirectionPngs": document["counts"]["femaleDirectionPngs"],
                 "femaleWalkFramePngs": document["counts"]["femaleWalkFramePngs"],
+                "openingTailPngs": document["counts"].get("openingTailPngs", 0),
                 "runtimeReady": False,
             },
             sort_keys=True,

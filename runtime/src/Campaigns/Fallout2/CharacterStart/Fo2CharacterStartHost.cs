@@ -9,6 +9,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     private Fo2TempleTransitionCatalog _transition = null!;
     private Fo2ArroyoPlayerPresentationCatalog _malePresentation = null!;
     private Fo2CharacterStartCatalog _characterStart = null!;
+    private string? _openingProofRoot;
     private string _savePath = "";
     private bool _persistenceEnabled;
 
@@ -21,6 +22,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     internal Fo2CharacterStartSaveState? CurrentSave { get; private set; }
     internal bool RestoredFromSave { get; private set; }
     internal Fo2ArroyoExitTransition? LastTransition { get; private set; }
+    internal Fo2OpeningTailHandoff? OpeningHandoff { get; private set; }
+    internal Task? OpeningHandoffTask { get; private set; }
     internal string SavePath => _savePath;
 
     public override void _Ready()
@@ -28,6 +31,11 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         try
         {
             var options = Fo2ArroyoCavesProofOptions.Parse(OS.GetCmdlineUserArgs());
+            _openingProofRoot = options.TryGetValue(
+                "fo2-opening-handoff-proof",
+                out var openingProofRoot)
+                ? openingProofRoot
+                : null;
             _temple = Fo2TemplePresentationCatalog.Load(
                 Fo2ArroyoCavesProofOptions.Require(options, "fo2-temple-cache"));
             _transition = Fo2TempleTransitionCatalog.Load(
@@ -133,6 +141,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     "fo2-custom-portrait-v8-migration-proof",
                     out var portraitMigrationRoot))
                 Fo2ProceduralPortraitProof.RunV8MigrationRestore(this, portraitMigrationRoot);
+            else if (_openingProofRoot is not null)
+                _ = Fo2OpeningHandoffProof.Run(this, _openingProofRoot);
         }
         catch (Exception exception)
         {
@@ -146,6 +156,12 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         if (Runtime is not null &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
         {
+            if (OpeningHandoff?.IsPlaying == true)
+            {
+                OpeningHandoff.RequestSkip();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
             if (TempleConfrontation?.CloseInventoryIfOpen() == true)
             {
                 GetViewport().SetInputAsHandled();
@@ -231,10 +247,45 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             player.PersistenceBoundaryReached += OnPlayerPersistenceBoundary;
         if (_persistenceEnabled && restoredState is null)
             PersistCurrentState();
+        if (restoredState is null && _characterStart.OpeningTail is not null)
+        {
+            OpeningHandoff = new Fo2OpeningTailHandoff
+            {
+                Name = "FO2_OWNED_ELDER_TAIL_HANDOFF",
+            };
+            AddChild(OpeningHandoff);
+            OpeningHandoffTask = RunOpeningTail(
+                OpeningHandoff,
+                _characterStart.OpeningTail,
+                Scene,
+                Runtime,
+                _openingProofRoot);
+        }
         GD.Print(
             $"OPENNV_FO2_CHARACTER_HANDOFF mode={character.Mode} name={character.Profile.Name} " +
             $"sex={character.Profile.Sex} map={player.CurrentMapIndex} tile={player.CurrentTile} " +
             $"fid={selectedPresentation.Fid} restored={restoredState is not null}");
+    }
+
+    private async Task RunOpeningTail(
+        Fo2OpeningTailHandoff handoff,
+        Fo2OpeningTailContract contract,
+        Fo2ArroyoCavesSceneCoverage scene,
+        Fo2ArroyoCavesPlayerRuntimeCoverage runtime,
+        string? proofRoot)
+    {
+        try
+        {
+            await handoff.Play(contract, scene, runtime, proofRoot);
+            GD.Print(
+                $"OPENNV_FO2_OPENING_HANDOFF_COMPLETE terminal={handoff.FinalPresentedSourceFrame} " +
+                $"black={handoff.TerminalBlackPresented} controls={handoff.ControlReleased}");
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO2_OPENING_HANDOFF_FAIL {exception}");
+            GetTree().Quit(1);
+        }
     }
 
     private void OnPlayerPersistenceBoundary()
