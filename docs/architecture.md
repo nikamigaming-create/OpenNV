@@ -2,15 +2,18 @@
 
 Status: **launcher-routed bounded Fallout 1 V13ENT and New Vegas opening/
 Goodsprings slices, a non-playable Fallout 3 CG00 development frontend, and a bounded Fallout 2
-Temple/Arroyo MAP/PRO/FRM presentation over registered DAT2 overlays
-profile; no full campaign**.
+Temple/Arroyo MAP/PRO/FRM presentation plus an owned premade-to-Map-3
+development route over registered DAT2 overlays; no full campaign**.
 
 The compact launcher exposes four core game cards. Fallout 1 has a bounded
 Godot Vault 13/V13ENT opening slice in Hex and FPS; its OpenXR adapter is
 simulator-only and launcher-disabled. Fallout 2 admits the owned Map 126 and Map 3
-MAP/PRO/FRM source graphs, renders Arroyo Caves in Godot's 3D hex space, and has a
-bounded grounded source-walk-gated player proof; character flow, campaign systems,
-save ownership, reciprocal exits, FPS/OpenXR, and launcher readiness remain absent.
+MAP/PRO/FRM source graphs and renders Arroyo Caves in Godot's 3D hex space. Its
+bounded character-start surface selects Narg, Mingan, or Chitsa from owned
+GCD/BIO/panel data, applies sex-correct HMWARR/HFPRIM presentation, and hands
+Take to the grounded source-walk-gated player at Map 3 tile 28707. Modify/Create,
+persistence, script/campaign systems, reciprocal exits, FPS/OpenXR, parity, and
+launcher readiness remain absent.
 New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
 hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
 XML closures, and the bounded ordered Doc house → Goodsprings exterior → saloon
@@ -310,6 +313,7 @@ retail data, or promotion verdict.
 | `fo2_profile.py` | Read-only Fallout 2 root-archive DAT2/index identity and source-only launcher profile | Member extraction, caches, runtime readiness, or playability |
 | `fo2_first_slice.py` | Effective patch/critter/master overlay resolution and exact asset-free Temple MAP header/elevation, entry marker, placed-object, PRO, and FRM identity manifest | Character creation, new-game executable policy, Godot loading, gameplay, saves, runtime readiness, or playability |
 | `prepare_fo2_temple_presentation.py` | Deterministic disposable local PNG cache for exact Map 126 floor/roof tile frames and MAP-admitted object frame/rotation pairs, with owned-palette and artifact provenance | Source selection, 3D substitution, Godot loading, gameplay, packaging, runtime readiness, or playability |
+| `prepare_fo2_character_start.py` | Exact 432-byte premade GCD parsing and disposable local picker/panel/biography plus sex-correct idle-FRM cache generation | Custom character policy, runtime selection, persistence, packaging, or playability |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
 | `havok_collision_gltf.py` | Bounded authored packed triangles plus convex/list dynamic body, shape, mass, friction, bounce, damping and filter export | Runtime body policy or unsupported shape guessing |
 | `gltf_io.py` | Deterministic buffer/accessor packing and atomic glTF artifact writes | NIF, LAND, actor, or gameplay semantics |
@@ -415,6 +419,8 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionRuntime.cs` | Fail-closed nonvisual exit-grid destination-state application after exact component movement | Destination loading, doors, script execution, actors, or save state |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, MAP-header entry marker, and topology composition in Godot's 3D hex coordinate space | Scripts, character creation, interaction, or playability |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference construction plus exact floor/wall physics-ray report | Rendered-frame, interaction, parity, or launcher claims |
+| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned premade/picker cache validation, visible Narg/Mingan/Chitsa selection, and Take handoff into exact Map 3 arrival state | Modify/Create, editable fields, saves, scripts, campaign progression, parity, or launcher readiness |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs` | Grounded source-walk-gated Map 3 arrival body with selected sex-correct owned idle-FRM presentation | AP/combat, animation playback, scripts, inventory, persistence, full campaign, or parity |
 | `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
 | `runtime/src/Compatibility/Jam/JamProfileContract.cs` | Shared hash-bound JAM profile/plugin identity and transported-capability admission | Native DLL loading, script interpretation, or complete compatibility |
 | `runtime/src/Compatibility/Jam/JamJvsSprintContract.cs` | Hash-bound transport and validation of JAM 4.6 JVS hold-to-sprint settings | Native DLL loading, xNVSE interpretation, or complete JAM compatibility |
@@ -445,6 +451,15 @@ package only a clean commit, refuse overwrites, scan for commercial extensions,
 and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
+
+The separate Fallout 2 development route renders the owned premade picker and
+the exact combat, stealth, and diplomat panels, while the runtime text comes
+from the corresponding GCD/BIO records. Taking Narg, Mingan, or Chitsa applies
+that source state and the matching male or female idle FRM to the Map 3 arrival
+body at elevation 0, tile 28707. Keyboard/mouse selection and grounded bounded
+movement are directly proven. There is no Modify/Create implementation,
+editable name/sex/stats, persistence, Temple script execution, animation
+playback, complete campaign, launcher route, or parity claim.
 
 Implemented in the independently playable saloon/exterior component: direct owned
 ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 504

@@ -37,7 +37,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 Hex | Registered-cache launcher route through the OpenNV menu, character picker, owned Overseer movie, and bounded Godot V13ENT/Vault 13 slice | Only V13ENT is playable; this is not the complete Fallout 1 campaign |
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
-| Fallout 2 Hex/FPS/VR | Owned Map 126 Temple and Map 3 Arroyo Caves source graphs/caches, exact Temple topology, a rendered Map 3 scene, and a grounded input-driven player that spawns at the owned arrival hex, crosses source-walkable neighbors, and stops at a source-blocked hex | Character art, player-authored free play, reciprocal exit execution, INT scripts, actors, combat, inventory, saves, FPS/OpenXR adapters, and launcher readiness remain absent, so all three modes stay disabled |
+| Fallout 2 Hex/FPS/VR | Owned Map 126 Temple and Map 3 Arroyo Caves graphs/caches; a bounded owned premade selector renders Narg, Mingan, or Chitsa with source stats, biography, and portrait, then Take enters Map 3 at tile 28707 with sex-correct HMWARR/HFPRIM art and grounded source-walk-gated movement | Modify/Create, editable name/sex/stats, persistence, reciprocal exit execution, INT scripts, actors, combat, inventory, FPS/OpenXR adapters, full campaign, launcher readiness, and parity remain absent, so all three modes stay disabled |
 | New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; from a completed stage-200 Continue, configured flat input traverses both forward XTEL links and campaign save v5 cold-restores saloon CELL `00106185`; owned containers retain remaining item counts after Take One/Take All; configured `Tab` now opens the populated owned campaign Pip-Boy surface and `Escape` closes it through Godot's input-event path; original flat and experimental OpenXR routes are launchable | Player-to-container deposits, Pip-Boy tab-navigation acceptance, reverse-traversal acceptance, neighboring CELL streaming, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and persistent CG00 stage 62; exact later state contracts compile and validate | No first-person Vault 101 world or authored package/dialogue trigger execution exists, so FPS, Hex, and VR stay disabled |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
@@ -150,9 +150,9 @@ python .\content\tools\fo2_first_slice.py `
 
 This resolves Map 126 (`Arroyo Temple` / `artemple`), its MAP-header entry tile
 and rotation, exact elevation grid, scripts, placed object graph, and required
-PRO/FRM hashes through patch → critter → master overlay precedence. Character
-creation, script execution, gameplay/save state, and launcher-ready presentations
-remain absent, so the launcher choices stay disabled.
+PRO/FRM hashes through patch → critter → master overlay precedence. Script
+execution, gameplay/save state, and launcher-ready presentations remain absent,
+so the launcher choices stay disabled.
 
 The next local-only compiler decodes only Map 126's admitted floor/roof tile
 frames and placed-object frame/rotation pairs with the owned `color.pal`:
@@ -183,7 +183,7 @@ the 45 source wall-object hexes into two connected shells, and proves the exact
 floor and wall colliders with headless physics rays. A nonvisual cursor consumes
 42 exact adjacent moves inside the 1,085-hex entry component, proving floor
 contact and fail-closed boundary rejection. Multihex footprint semantics,
-player controls, rendering, character flow, gameplay/save state, parity, and
+Temple player controls, script execution, gameplay/save state, parity, and
 launcher readiness remain unimplemented. A separate asset-free transition
 contract proves that Map 126 has no door-prototype objects, moves through the
 same walk component to one of three exact exit grids, and changes only nonvisual
@@ -191,7 +191,15 @@ state to owned Map 3 / tile 28707. Destination loading and `ARTemple.int`
 execution remain disabled. The destination compiler now independently binds
 Map 3 `ARCAVES`, that exact incoming placement, 24 reciprocal exits to Map 126,
 the 586-hex arrival component, and a 173-artifact disposable presentation cache.
-Godot does not consume that destination contract yet.
+Godot consumes that bounded Map 3 cache in a rendered 3D hex scene.
+`content/tools/prepare_fo2_character_start.py` parses the exact Fallout 2
+premades Narg, Mingan, and Chitsa from their GCD/BIO records and decodes the
+owned picker, portraits, and male/female idle FRMs into a disposable local
+cache. `scripts/Start-OpenNVFallout2Arroyo.ps1` opens that selector; keyboard or
+mouse can choose a premade, and Take hands the selected source state and
+sex-correct FRM to the grounded Map 3 player at exact tile 28707. This is a
+bounded no-save development route, not custom character creation, a playable
+campaign, launcher readiness, or retail parity.
 
 ## Character path is a real choice
 
@@ -201,7 +209,7 @@ profile and save boundary.
 | Path | Character | JAM rule |
 | --- | --- | --- |
 | Fallout 1 | One Vault Dweller state shared by hex, FPS, and eventually VR presentations | Separate from the Gamebryo-family profiles. |
-| Fallout 2 | One future Chosen One state shared by hex, FPS, and VR presentations | A bounded rendered arrival/movement proof exists; no character-art-backed player-controlled presentation, campaign state, or save is promoted yet. |
+| Fallout 2 | One future Chosen One state shared by hex, FPS, and VR presentations | The bounded selector applies one of three owned premades and sex-correct FRM art to the Map 3 arrival player; custom creation, authoritative persistent campaign state, and a save remain absent. |
 | New Vegas | Separate standalone Mojave character | Base route today; JAM remains disabled until its dependencies and portable semantics pass. |
 | Fallout 3 | Separate standalone Capital Wasteland character | Standalone CG00 profile today; TTW is a future separate path and is currently disabled. |
 | TTW | One future Capital Wasteland-to-Mojave character | Runtime support is absent. It cannot later adopt an existing standalone save. |

@@ -1,8 +1,9 @@
 # Multi-game launcher and first-slice delivery
 
 Status: **the compact four-game launcher exposes bounded Fallout 1 Hex/FPS,
-New Vegas opening/Goodsprings, Fallout 2 source-only, and Fallout 3 CG00 routes;
-TTW runtime is absent and JAM remains dependency-gated**.
+New Vegas opening/Goodsprings, a launcher-disabled Fallout 2 owned-premade-to-
+Arroyo development route, and Fallout 3 CG00; TTW runtime is absent and JAM
+remains dependency-gated**.
 
 This plan coordinates the common launcher/boot surface across Fallout 1,
 Fallout 2, Fallout: New Vegas, Fallout 3, TTW, and JAM. It does not replace the canonical
@@ -87,9 +88,9 @@ retail startup-logo and original-menu presentation remain absent.
    derives exact floor support, a central-hex blocker walk mask, and connected
    wall-shell collision from owned MAP fields; headless rays prove the floor and
    wall colliders. A source-bound nonvisual cursor proves adjacent movement and
-   boundary rejection inside the exact entry component. Multihex footprints
-   and player controls are unresolved, with no rendered frame, character,
-   scripts, interaction, gameplay, save, FPS, or OpenXR claim.
+   boundary rejection inside the exact entry component. Multihex footprints,
+   Temple player controls, scripts, interaction, gameplay, save, FPS, and
+   OpenXR remain unresolved.
 9. Available now: an asset-free transition compiler binds all 18 Map 126 exit
    grids, the zero door-prototype count, `ARTemple.int`, and three live MAP
    script records. The headless runtime moves to a reachable source exit and
@@ -98,15 +99,23 @@ retail startup-logo and original-menu presentation remain absent.
 10. Available now: a separate Map 3 `ARCAVES` compiler proves that incoming
     tile/elevation/rotation, 24 reciprocal exits to Map 126, 18 reachable exits
     in the 586-hex arrival component, 298 owned resource identities, and all 173
-    disposable presentation artifacts. A Godot Map 3 consumer and reciprocal
-    runtime execution remain absent.
+    disposable presentation artifacts. Godot renders that cache and grounds an
+    input-driven source-walk-gated arrival body at exact tile 28707; reciprocal
+    runtime execution remains absent.
+11. Available now: an exact 432-byte GCD compiler plus disposable local cache
+    binds the owned Narg, Mingan, and Chitsa profiles, BIO text, picker/panels,
+    and male/female idle FRMs. The visible Godot selector supports keyboard and
+    mouse choice, then Take applies the selected source state and sex-correct
+    FRM before the Map 3 handoff. Modify/Create, editable fields, persistence,
+    animation playback, and campaign play remain absent.
 
 Current result: a normal launcher starts either registered Fallout 1 view
 through its menu/creator/movie path and the bounded New Vegas menu/Doc/exterior/
 saloon composite. Fallout 2 and Fallout 3 remain launcher-disabled;
 Fallout 3 has a registered development menu/CG00 frontend but no playable
 presentation, while Fallout 2's exact source-bound Godot scene can be
-constructed headlessly, but no presentation is yet interactive or promoted.
+rendered through a visible selectable premade-to-Arroyo development route
+without persistent gameplay or launcher promotion.
 
 ### P1 — Fallout 3 first slice
 
@@ -179,7 +188,7 @@ is supported for the selected base profile.
 | --- | --- |
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
-| Fallout 2 | Exact Temple/Arroyo Caves source transport, selective caches, Map 126 construction/topology, and owned exit state are joined by a rendered Map 3 scene with a grounded input-driven player at the exact arrival hex; the bounded proof crosses source-walkable neighbors and rejects a source-blocked hex. Character art, player-authored free play, reciprocal runtime exit execution, INT, actors, character creation, combat, inventory, shared gameplay/save state, FPS, and VR remain absent, so all modes stay disabled |
+| Fallout 2 | Exact Temple/Arroyo Caves source transport and a rendered Map 3 arrival now include an owned Narg/Mingan/Chitsa selector, source stats/bios/portraits, sex-correct HMWARR/HFPRIM art, Take handoff to tile 28707, and grounded source-walk-gated movement. Modify/Create, editable fields, persistence, reciprocal runtime exit execution, INT, actors, combat, inventory, full campaign, FPS, VR, parity, and launcher promotion remain absent, so all modes stay disabled |
 | New Vegas first slice | Menu/intro/Doc house, the source-bound HUD/Pip-Boy runtime shell, and the bounded preloaded Doc/exterior/saloon composite load; diagnostic portal checks pass, and completed-save owned Continue drives configured flat input through both forward XTEL links before v4 cold-restores saloon CELL `00106185`; reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
 | Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance through stage 62 work; later state contracts validate, but FPS/Hex/VR, authored trigger execution, dialogue/KF, actors, and Vault 101 remain |
 | TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |
