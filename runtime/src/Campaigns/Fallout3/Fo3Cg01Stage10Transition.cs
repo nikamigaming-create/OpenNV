@@ -9,7 +9,18 @@ internal sealed record Fo3Cg01DadSpeechCue(
     string EngineSex,
     string InfoFormId,
     double DadTimerAfterSeconds,
+    Fo3Cg01DadSpeakerIdle SpeakerIdle,
     Fo3OwnedDialogueResponse Response);
+
+internal sealed record Fo3Cg01DadSpeakerIdle(
+    string FormId,
+    string EditorId,
+    string RecordSha256,
+    string ModelPath,
+    string SourceArchive,
+    string SourceArchiveSha256,
+    long SourceBytes,
+    string SourceSha256);
 
 internal sealed record Fo3Cg01Stage10Boundary(bool Applied, string Blocker);
 
@@ -138,6 +149,17 @@ internal sealed record Fo3Cg01Stage10Transition(
             !cues.Select(value => $"{value.Sequence}:{value.EngineSex}").ToHashSet(
                 StringComparer.Ordinal).SetEquals(expectedCueKeys))
             throw new InvalidOperationException("Fallout 3 CG01 Dad dialogue branches differ.");
+        var preludeIdles = cues.Where(value => value.Sequence == 0)
+            .Select(value => value.SpeakerIdle).ToArray();
+        var beckonIdles = cues.Where(value => value.Sequence == 1)
+            .Select(value => value.SpeakerIdle).ToArray();
+        if (preludeIdles.Length != 2 ||
+            !SpeakerIdleEquals(preludeIdles[0], preludeIdles[1]) ||
+            beckonIdles.Length != 2 ||
+            beckonIdles.Select(value => value.FormId).Distinct(
+                StringComparer.OrdinalIgnoreCase).Count() != beckonIdles.Length)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad speaker-idle branch ownership differs.");
         var dialogueBySex = cues.GroupBy(value => value.EngineSex, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
@@ -377,12 +399,51 @@ internal sealed record Fo3Cg01Stage10Transition(
             engineSex,
             infoFormId,
             timerAfter,
+            LoadSpeakerIdle(RequiredObject(source, "speakerIdle")),
             new Fo3OwnedDialogueResponse(
                 responseIndex,
                 text,
                 LoadDialogueAsset(RequiredObject(response, "voice"), suffix + ".ogg"),
                 LoadDialogueAsset(RequiredObject(response, "lip"), suffix + ".lip")));
     }
+
+    internal static Fo3Cg01DadSpeakerIdle LoadSpeakerIdle(JsonElement source)
+    {
+        var modelPath = RequiredString(source, "modelPath").Replace('/', '\\');
+        if (!modelPath.StartsWith(
+                "meshes\\characters\\_male\\idleanims\\",
+                StringComparison.OrdinalIgnoreCase) ||
+            !modelPath.EndsWith(".kf", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad speaker-idle asset differs.");
+        var sourceBytes = RequiredLong(source, "sourceBytes");
+        if (sourceBytes <= 0)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad speaker-idle asset is empty.");
+        return new Fo3Cg01DadSpeakerIdle(
+            RequiredFormId(source, "formId"),
+            RequiredString(source, "editorId"),
+            RequiredSha256(source, "recordSha256"),
+            modelPath,
+            RequiredString(source, "sourceArchive"),
+            RequiredSha256(source, "sourceArchiveSha256"),
+            sourceBytes,
+            RequiredSha256(source, "sourceSha256"));
+    }
+
+    internal static bool SpeakerIdleEquals(
+        Fo3Cg01DadSpeakerIdle first,
+        Fo3Cg01DadSpeakerIdle second) =>
+        first.FormId.Equals(second.FormId, StringComparison.OrdinalIgnoreCase) &&
+        first.EditorId.Equals(second.EditorId, StringComparison.Ordinal) &&
+        first.RecordSha256.Equals(second.RecordSha256, StringComparison.OrdinalIgnoreCase) &&
+        first.ModelPath.Equals(second.ModelPath, StringComparison.OrdinalIgnoreCase) &&
+        first.SourceArchive.Equals(second.SourceArchive, StringComparison.OrdinalIgnoreCase) &&
+        first.SourceArchiveSha256.Equals(
+            second.SourceArchiveSha256,
+            StringComparison.OrdinalIgnoreCase) &&
+        first.SourceBytes == second.SourceBytes &&
+        first.SourceSha256.Equals(second.SourceSha256, StringComparison.OrdinalIgnoreCase);
 
     private static Fo3OwnedDialogueAsset LoadDialogueAsset(
         JsonElement source,

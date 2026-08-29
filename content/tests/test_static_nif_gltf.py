@@ -404,7 +404,41 @@ def write_synthetic_fallout_packed_uv_nif(path: Path) -> int:
     return uv_count_offset
 
 
+def synthetic_fallout_animation(user_version_2: int, root: object) -> bytes:
+    contract = load_nif_decoder_contract()
+    document = NifFormat.Data(
+        version=contract.version,
+        user_version=contract.user_version,
+        user_version_2=user_version_2,
+    )
+    document.header.endian_type = contract.endian
+    document.roots = [root]
+    encoded = BytesIO()
+    document.write(encoded)
+    return encoded.getvalue()
+
+
 class StaticNifGltfTest(unittest.TestCase):
+    def test_fallout_alternate_animation_identity_is_controller_sequence_only(self) -> None:
+        contract = load_nif_decoder_contract()
+        alternate_user_version_2 = next(iter(contract.animation_user_version_2))
+        decoded = decode_nif(
+            synthetic_fallout_animation(
+                alternate_user_version_2,
+                NifFormat.NiControllerSequence(),
+            )
+        )
+        self.assertTrue(decoded.format_matched)
+        self.assertEqual(decoded.document.user_version_2, alternate_user_version_2)
+
+        with self.assertRaisesRegex(ValueError, "alternate animation identity"):
+            decode_nif(
+                synthetic_fallout_animation(
+                    alternate_user_version_2,
+                    NifFormat.NiNode(),
+                )
+            )
+
     def test_fallout_uv_count_is_recovered_only_by_exact_block_parse(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

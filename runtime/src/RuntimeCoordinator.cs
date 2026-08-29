@@ -728,6 +728,7 @@ public partial class RuntimeCoordinator : Node3D
                 profile.BirthSlice,
                 profile.Cg01Stage0Transition,
                 profile.Stage65Appearance,
+                profile.Cg01Stage10Transition,
                 ResolveRuntimePath(configuredBirthPresentation))
             : null;
         var savePath = options.TryGetValue("save-path", out var configuredSavePath)
@@ -736,12 +737,20 @@ public partial class RuntimeCoordinator : Node3D
         var cg01ProofMode = options.TryGetValue("fo3-cg01-proof", out var configuredCg01Proof)
             ? configuredCg01Proof
             : null;
+        var cg01CapturePath = options.TryGetValue(
+                "fo3-cg01-capture",
+                out var configuredCg01Capture)
+            ? ResolveRuntimePath(configuredCg01Capture)
+            : null;
         if (cg01ProofMode is not null &&
             (cg01ProofMode is not "apply" and not "restore" ||
              birthPresentation is null ||
              !options.ContainsKey("report")))
             throw new ArgumentException(
                 "--fo3-cg01-proof requires apply|restore, --fo3-birth-presentation, and --report.");
+        if (cg01CapturePath is not null && cg01ProofMode != "apply")
+            throw new ArgumentException(
+                "--fo3-cg01-capture requires --fo3-cg01-proof apply.");
         var opening = new Fo3OpeningFlow();
         opening.Configure(
             profile,
@@ -750,7 +759,8 @@ public partial class RuntimeCoordinator : Node3D
             birthPresentation,
             options.ContainsKey("fo3-appearance-proof"),
             cg01ProofMode,
-            cg01ProofMode is null ? null : ResolveRuntimePath(RequireOption(options, "report")));
+            cg01ProofMode is null ? null : ResolveRuntimePath(RequireOption(options, "report")),
+            cg01CapturePath);
         AddChild(opening);
         if (options.ContainsKey("quit-after-load") &&
             !options.ContainsKey("fo3-appearance-proof") &&

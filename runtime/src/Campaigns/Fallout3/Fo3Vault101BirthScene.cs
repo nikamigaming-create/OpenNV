@@ -293,6 +293,27 @@ internal static class Fo3Vault101BirthScene
                     cg01DadContract.IdleAnimationPath)
                 throw new InvalidOperationException(
                     "Fallout 3 CG01 Dad runtime actor differs from its stage-65 contract.");
+            var expectedDialogueAnimations = cg01DadAppearance.DialogueAnimations;
+            var loadedAnimations = cg01DadActor.Actor.LoadedAnimations;
+            var primaryAnimations = loadedAnimations.Where(value =>
+                ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
+                    ActorModelSlice.NormalizeAnimationPath(
+                        cg01DadContract.IdleAnimationPath),
+                    StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (expectedDialogueAnimations.Count != 2 ||
+                loadedAnimations.Count != expectedDialogueAnimations.Count + 1 ||
+                primaryAnimations.Length != 1 ||
+                expectedDialogueAnimations.Any(expected =>
+                    loadedAnimations.Count(value =>
+                        ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
+                            ActorModelSlice.NormalizeAnimationPath(
+                                expected.SpeakerIdle.ModelPath),
+                            StringComparison.OrdinalIgnoreCase) &&
+                        value.SourceSha256.Equals(
+                            expected.SpeakerIdle.SourceSha256,
+                            StringComparison.OrdinalIgnoreCase)) != 1))
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 Dad INFO speaker-idle publication is incomplete.");
             cg01DadActor.Placement.Position =
                 cg01DadContract.StartMarkerPositionGodotGameUnits;
             cg01DadActor.Placement.Quaternion =

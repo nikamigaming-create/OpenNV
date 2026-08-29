@@ -2079,6 +2079,20 @@ def _compile_cg01_post_stage5_transition(
             if len(response_lines) != 1:
                 raise ValueError("Fallout 3 CG01 Dad response is absent or ambiguous")
             response_text = response_lines[0]
+            speaker_idle_links = [
+                struct.unpack("<I", subrecord.data)[0]
+                for subrecord in iter_subrecords(info)
+                if subrecord.signature == "SNAM"
+                and len(subrecord.data) == FORM_ID_BYTES
+            ]
+            if len(speaker_idle_links) != 1:
+                raise ValueError("Fallout 3 CG01 Dad speaker idle is absent or ambiguous")
+            speaker_idle = by_form.get(speaker_idle_links[0])
+            if speaker_idle is None or speaker_idle.signature != IDLE_RECORD:
+                raise ValueError("Fallout 3 CG01 Dad speaker idle does not resolve")
+            speaker_idle_models = _text_values(speaker_idle, "MODL")
+            if len(speaker_idle_models) != 1:
+                raise ValueError("Fallout 3 CG01 Dad speaker idle model is unsupported")
             branches.append(
                 {
                     "sequence": sequence,
@@ -2097,6 +2111,14 @@ def _compile_cg01_post_stage5_transition(
                         }
                         for row in conditions
                     ],
+                    "speakerIdle": {
+                        "formId": _form_id(speaker_idle.form_id),
+                        "editorId": _editor_id(speaker_idle),
+                        "recordSha256": hashlib.sha256(speaker_idle.data).hexdigest(),
+                        "modelPath": canonical_member_path(
+                            f"meshes\\{speaker_idle_models[0]}"
+                        ),
+                    },
                     "response": {
                         "index": 1,
                         "text": response_text,
@@ -3656,6 +3678,29 @@ def _bind_owned_dad_dialogue_audio(
     dialogue["voiceType"] = {**voice_type, "memberNamespace": namespace}
 
 
+def _bind_owned_dad_dialogue_animations(
+    dialogue: dict[str, object],
+    meshes_archive: BsaArchive,
+    meshes_archive_sha256: str,
+) -> None:
+    prepared = []
+    for raw_branch in dialogue["branches"]:
+        branch = dict(raw_branch)
+        speaker_idle = dict(branch["speakerIdle"])
+        member = meshes_archive.extract(str(speaker_idle["modelPath"]))
+        speaker_idle.update(
+            {
+                "sourceArchive": meshes_archive.archive.name,
+                "sourceArchiveSha256": meshes_archive_sha256,
+                "sourceBytes": len(member.data),
+                "sourceSha256": member.sha256,
+            }
+        )
+        branch["speakerIdle"] = speaker_idle
+        prepared.append(branch)
+    dialogue["branches"] = prepared
+
+
 def _bind_stage90_sound(
     transition: dict[str, object],
     sound_archive: BsaArchive,
@@ -4279,10 +4324,14 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     meshes_role = "meshes"
     meshes_archive_path = archive_by_role[meshes_role]
     section4_transition = dict(character_selection["section4Transition"])
+    meshes_archive = BsaArchive(meshes_archive_path)
+    meshes_archive_sha256 = next(
+        str(row["sha256"]) for row in archives if row["role"] == meshes_role
+    )
     _bind_cg00_package_animations(
         section4_transition,
-        BsaArchive(meshes_archive_path),
-        next(str(row["sha256"]) for row in archives if row["role"] == meshes_role),
+        meshes_archive,
+        meshes_archive_sha256,
     )
     character_selection["section4Transition"] = section4_transition
     voices_role = "voices"
@@ -4305,6 +4354,11 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     cg01_transition = dict(character_selection["cg01Stage0Transition"])
     post_stage5_transition = dict(cg01_transition["postStage5Transition"])
     cg01_dad_dialogue = dict(post_stage5_transition["dialogue"])
+    _bind_owned_dad_dialogue_animations(
+        cg01_dad_dialogue,
+        meshes_archive,
+        meshes_archive_sha256,
+    )
     _bind_owned_dad_dialogue_audio(
         cg01_dad_dialogue,
         BsaArchive(archive_by_role[voices_role]),
@@ -4337,8 +4391,8 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     stage80_transition = dict(character_selection["stage80Transition"])
     _bind_cg00_package_animations(
         stage80_transition,
-        BsaArchive(meshes_archive_path),
-        next(str(row["sha256"]) for row in archives if row["role"] == meshes_role),
+        meshes_archive,
+        meshes_archive_sha256,
         "addedPlayerPackage",
     )
     character_selection["stage80Transition"] = stage80_transition

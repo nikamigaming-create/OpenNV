@@ -54,6 +54,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 profile.BirthSlice,
                 profile.Cg01Stage0Transition,
                 profile.Stage65Appearance,
+                profile.Cg01Stage10Transition,
                 presentationPath);
             var handoff = profile.Section4Transition;
             if (handoff.SourceStage != profile.Appearance.AcceptedStage ||

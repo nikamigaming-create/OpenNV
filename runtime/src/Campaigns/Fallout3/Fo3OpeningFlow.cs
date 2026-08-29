@@ -32,6 +32,9 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const float BoundaryPanelAlpha = 0.9f;
     internal const float Cg01ProofTimeoutMultiplier = 4.0f;
     internal const int ProofFailureExitCode = 2;
+    internal const int Cg01CaptureWarmupFrames = 4;
+    internal const int CaptureBytesPerPixel = 4;
+    internal const int CaptureRgbChannels = 3;
     internal const int FaceGenSymmetricGeometryFloats = 50;
     internal const int FaceGenAsymmetricGeometryFloats = 30;
     internal const int FaceGenSymmetricTextureFloats = 50;
@@ -693,6 +696,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private string? _activeCg01DadInfoFormId;
     private bool _cg01DadLipSampleLogged;
     private int _cg01DadLipCueSamples;
+    private readonly List<string> _cg01DadPublishedSpeakerIdleInfoFormIds = [];
     private AudioStreamPlayer? _vaultEffectSound;
     private ColorRect? _vaultStage90Fade;
     private Fo3Stage90ImageSpaceModifier? _activeStage90ImageSpaceModifier;
@@ -708,11 +712,19 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Fo3Cg01ToddlerWorldRuntime? _cg01ToddlerWorld;
     private string? _cg01ProofMode;
     private string? _cg01ProofReportPath;
+    private string? _cg01ProofCapturePath;
     private bool _cg01ProofMovieEscapeSkipped;
     private bool _ownedVideoFrameNonblank;
     private bool _ownedVideoEverVisible;
     private bool _ownedVideoCleared;
     private CellReferenceLedger.Geometry? _cg01DadDialogueGeometry;
+    private bool _cg01ProofCaptureCompleted;
+    private string? _cg01ProofCaptureSha256;
+    private string? _cg01ProofCaptureInfoFormId;
+    private string? _cg01ProofCaptureSpeakerIdleFormId;
+    private int _cg01ProofCaptureWidth;
+    private int _cg01ProofCaptureHeight;
+    private int _cg01ProofCaptureRgbSpan;
 
     internal void Configure(
         Fo3OwnedProfile profile,
@@ -721,7 +733,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Vault101BirthPresentationContract? birthPresentation,
         bool runAppearanceProof = false,
         string? cg01ProofMode = null,
-        string? cg01ProofReportPath = null)
+        string? cg01ProofReportPath = null,
+        string? cg01ProofCapturePath = null)
     {
         _profile = profile;
         _savePath = System.IO.Path.GetFullPath(savePath);
@@ -754,6 +767,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _runAppearanceProof = runAppearanceProof;
         _cg01ProofMode = cg01ProofMode;
         _cg01ProofReportPath = cg01ProofReportPath;
+        _cg01ProofCapturePath = cg01ProofCapturePath;
         Name = "Fallout3FrontEnd";
         Layer = Fo3OpeningFlowNumericContracts.UiLayer;
     }
@@ -2205,6 +2219,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             !_cg01DadDialogueGeometry.FrustumIntersection)
             throw new InvalidOperationException(
                 "Fallout 3 CG01 subtitle or camera subject differs from Dad.");
+        var publishedSpeakerIdle = PublishCg01DadSpeakerIdle(cue);
         _vaultDialogueVoice?.Stop();
         _vaultDialogueVoice?.QueueFree();
         ClearCg01DadLip();
@@ -2227,6 +2242,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         };
         _vaultDialogueVoice.SetMeta("opennv_info_form_id", cue.InfoFormId);
         _vaultDialogueVoice.SetMeta("opennv_speaker_reference_form_id", speaker);
+        _vaultDialogueVoice.SetMeta(
+            "opennv_speaker_idle_form_id",
+            cue.SpeakerIdle.FormId);
         _vaultDialogueVoice.Finished += () =>
         {
             ClearCg01DadLip();
@@ -2255,9 +2273,13 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         if (_vaultDialogueVoice.GetMeta("opennv_info_form_id").AsString() !=
                 _activeCg01DadInfoFormId ||
             _vaultDialogueVoice.GetMeta("opennv_speaker_reference_form_id").AsString() !=
-                speaker)
+                speaker ||
+            _vaultDialogueVoice.GetMeta("opennv_speaker_idle_form_id").AsString() !=
+                cue.SpeakerIdle.FormId ||
+            publishedSpeakerIdle.Player.CurrentAnimation.ToString() !=
+                publishedSpeakerIdle.RuntimeName)
             throw new InvalidOperationException(
-                "Fallout 3 CG01 audio and LIP clocks do not own the same INFO speaker.");
+                "Fallout 3 CG01 audio, LIP, and speaker idle do not own the same INFO.");
         GD.Print(
             $"OPENNV_FO3_CG01_DAD_CUE_STARTED sequence={cue.Sequence} " +
             $"info={cue.InfoFormId} duration={durationSeconds:F3} " +
@@ -2268,6 +2290,149 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"startFrame={_activeCg01DadLip.StartFrame} " +
             $"metadata=0x{_activeCg01DadLip.MetadataWord:x8} " +
             $"actor={_vaultBirthCoverage?.Cg01DadActor.ReferenceFormId}");
+        if (_cg01ProofCapturePath is not null && cue.Sequence == 1)
+            CaptureCg01DadCue(cue, publishedSpeakerIdle, subtitle);
+    }
+
+    private async void CaptureCg01DadCue(
+        Fo3Cg01DadSpeechCue cue,
+        ActorModelSlice.LoadedAnimation publishedSpeakerIdle,
+        Label subtitle)
+    {
+        try
+        {
+            for (var frame = 0;
+                 frame < Fo3OpeningFlowNumericContracts.Cg01CaptureWarmupFrames;
+                 frame++)
+                await ToSignal(
+                    RenderingServer.Singleton,
+                    RenderingServer.SignalName.FramePostDraw);
+            var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+                "Fallout 3 CG01 capture has no owned world.");
+            if (_cg01ProofCaptureCompleted ||
+                _background.Visible ||
+                _panel.Visible ||
+                _introLayer is not null ||
+                _video is not null ||
+                !coverage.Cg01DadActor.Placement.Visible ||
+                coverage.DoctorActor.Placement.Visible ||
+                coverage.DadActor.Placement.Visible ||
+                _cg01DadDialogueGeometry is null ||
+                !_cg01DadDialogueGeometry.FrustumIntersection ||
+                _vaultDialogueVoice is null ||
+                !_vaultDialogueVoice.Playing ||
+                _activeCg01DadLip is null ||
+                _activeCg01DadInfoFormId != cue.InfoFormId ||
+                !subtitle.Visible ||
+                publishedSpeakerIdle.Player.CurrentAnimation.ToString() !=
+                    publishedSpeakerIdle.RuntimeName)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 capture presentation is blank, stale, or unsynchronized.");
+            var path = _cg01ProofCapturePath ?? throw new InvalidOperationException(
+                "Fallout 3 CG01 capture path is absent.");
+            var image = GetViewport().GetTexture().GetImage();
+            image.Convert(Image.Format.Rgba8);
+            var data = image.GetData();
+            var pixels = image.GetWidth() * image.GetHeight();
+            if (pixels <= 0 ||
+                data.Length != pixels * Fo3OpeningFlowNumericContracts.CaptureBytesPerPixel)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 capture viewport is empty.");
+            var minimum = byte.MaxValue;
+            var maximum = byte.MinValue;
+            for (var offset = 0;
+                 offset < data.Length;
+                 offset += Fo3OpeningFlowNumericContracts.CaptureBytesPerPixel)
+            {
+                for (var channel = 0;
+                     channel < Fo3OpeningFlowNumericContracts.CaptureRgbChannels;
+                     channel++)
+                {
+                    minimum = Math.Min(minimum, data[offset + channel]);
+                    maximum = Math.Max(maximum, data[offset + channel]);
+                }
+            }
+            var rgbSpan = maximum - minimum;
+            if (rgbSpan <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 capture contains one blank color.");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var saveError = image.SavePng(path);
+            if (saveError != Error.Ok)
+                throw new InvalidOperationException(
+                    $"Fallout 3 CG01 capture could not be saved: {saveError}.");
+            using var stream = File.OpenRead(path);
+            _cg01ProofCaptureSha256 = Convert.ToHexString(
+                SHA256.HashData(stream)).ToLowerInvariant();
+            _cg01ProofCaptureInfoFormId = cue.InfoFormId;
+            _cg01ProofCaptureSpeakerIdleFormId = cue.SpeakerIdle.FormId;
+            _cg01ProofCaptureWidth = image.GetWidth();
+            _cg01ProofCaptureHeight = image.GetHeight();
+            _cg01ProofCaptureRgbSpan = rgbSpan;
+            _cg01ProofCaptureCompleted = true;
+            GD.Print(
+                $"OPENNV_FO3_CG01_COHERENT_CAPTURE_READY path={path} " +
+                $"sha256={_cg01ProofCaptureSha256} info={cue.InfoFormId} " +
+                $"idle={cue.SpeakerIdle.FormId} size={image.GetWidth()}x{image.GetHeight()} " +
+                $"rgbSpan={rgbSpan} shellVisible=0 movieVisible=0 frustum=1 " +
+                "audioLipIdleSynchronized=1");
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO3_CG01_COHERENT_CAPTURE_FAIL {exception.Message}");
+            GetTree().Quit(Fo3OpeningFlowNumericContracts.ProofFailureExitCode);
+        }
+    }
+
+    private ActorModelSlice.LoadedAnimation PublishCg01DadSpeakerIdle(
+        Fo3Cg01DadSpeechCue cue)
+    {
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 Dad speaker idle has no owned actor scene.");
+        var expected = coverage.Cg01DadAppearance.DialogueAnimations.Single(value =>
+            value.Sequence == cue.Sequence &&
+            value.InfoFormId.Equals(cue.InfoFormId, StringComparison.OrdinalIgnoreCase));
+        if (!Fo3Cg01Stage10Transition.SpeakerIdleEquals(
+                expected.SpeakerIdle,
+                cue.SpeakerIdle))
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad INFO speaker-idle source differs from the actor derivative.");
+        var loaded = coverage.Cg01DadActor.Actor.LoadedAnimations.Single(value =>
+            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
+                ActorModelSlice.NormalizeAnimationPath(cue.SpeakerIdle.ModelPath),
+                StringComparison.OrdinalIgnoreCase) &&
+            value.SourceSha256.Equals(
+                cue.SpeakerIdle.SourceSha256,
+                StringComparison.OrdinalIgnoreCase));
+        foreach (var player in coverage.Cg01DadActor.Actor.LoadedAnimations
+                     .Select(value => value.Player).Distinct())
+            player.Stop();
+        loaded.Player.Play(loaded.RuntimeName);
+        loaded.Player.Advance(0.0);
+        if (loaded.Player.CurrentAnimation.ToString() != loaded.RuntimeName ||
+            _cg01DadPublishedSpeakerIdleInfoFormIds.Contains(
+                cue.InfoFormId,
+                StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad speaker idle was not published exactly once.");
+        _cg01DadPublishedSpeakerIdleInfoFormIds.Add(cue.InfoFormId);
+        _cg01DadDialogueGeometry = CellReferenceLedger.MeasureGeometry(
+            coverage.Cg01DadActor.Actor.Root,
+            coverage.Camera,
+            coverage.Cg01DadGrounding.GroundedBounds.GetCenter());
+        if (!_cg01DadDialogueGeometry.RenderLayerVisible ||
+            !_cg01DadDialogueGeometry.AabbValid ||
+            !_cg01DadDialogueGeometry.FrustumIntersection ||
+            _cg01DadDialogueGeometry.Surfaces != coverage.Cg01DadAppearance.Actor.Surfaces)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad speaker-idle pose is outside the active camera.");
+        GD.Print(
+            $"OPENNV_FO3_CG01_DAD_SPEAKER_IDLE_PUBLISHED sequence={cue.Sequence} " +
+            $"info={cue.InfoFormId} idle={cue.SpeakerIdle.FormId} " +
+            $"path={cue.SpeakerIdle.ModelPath} sha256={cue.SpeakerIdle.SourceSha256} " +
+            $"runtime={loaded.RuntimeName} channels={loaded.Channels} " +
+            $"frustum=1 surfaces={_cg01DadDialogueGeometry.Surfaces}");
+        return loaded;
     }
 
     private void UpdateCg01DadLip()
@@ -2306,6 +2471,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         IReadOnlyList<Fo3Cg01DadSpeechCue> cues,
         Label subtitle)
     {
+        RestoreCg01DadPrimaryIdle();
         subtitle.Visible = false;
         _vaultPreviewOverlay?.QueueFree();
         _vaultPreviewOverlay = null;
@@ -2326,6 +2492,25 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"objective={state.DisplayedObjectiveIndex} tutorial={state.TutorialQuestStage} " +
             $"autosave={state.AutosaveRequestCount} toddlerWorld=1 " +
             $"blocker={state.NextBoundary.Blocker}");
+    }
+
+    private void RestoreCg01DadPrimaryIdle()
+    {
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 Dad primary idle has no owned actor scene.");
+        var primary = coverage.Cg01DadActor.Actor.LoadedAnimations.Single(value =>
+            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
+                ActorModelSlice.NormalizeAnimationPath(
+                    coverage.Cg01DadAppearance.Actor.IdleAnimationPath),
+                StringComparison.OrdinalIgnoreCase));
+        foreach (var player in coverage.Cg01DadActor.Actor.LoadedAnimations
+                     .Select(value => value.Player).Distinct())
+            player.Stop();
+        primary.Player.Play(primary.RuntimeName);
+        primary.Player.Advance(0.0);
+        if (primary.Player.CurrentAnimation.ToString() != primary.RuntimeName)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad primary idle was not restored after dialogue.");
     }
 
     private void BeginCg01ToddlerWorld(
@@ -3709,6 +3894,15 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             string.IsNullOrWhiteSpace(_cg01ProofReportPath) ||
             _birthPresentation is null)
             throw new InvalidOperationException("Fallout 3 CG01 proof configuration differs.");
+        if (_cg01ProofCapturePath is not null &&
+            (_cg01ProofMode != "apply" ||
+             DisplayServer.GetName() == "headless" ||
+             File.Exists(_cg01ProofCapturePath) ||
+             !Path.GetExtension(_cg01ProofCapturePath).Equals(
+                 ".png",
+                 StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 capture requires a fresh PNG and a rendering display driver.");
         var sex = _profile.SexChoices.Single(value => value.EngineSex == "male");
         var selection = _profile.Appearance.DefaultSelection(sex.EngineSex);
         var package = _profile.Section4Transition.Activate();
@@ -3824,10 +4018,13 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         var path = _cg01ProofReportPath ?? throw new InvalidOperationException(
             "Fallout 3 CG01 proof report path is absent.");
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        if (_cg01ProofCapturePath is not null && !_cg01ProofCaptureCompleted)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 proof reached its report before coherent capture completed.");
         var cues = _profile.Cg01Stage10Transition.DialogueFor(engineSex);
         var report = new
         {
-            schema = "opennv-fo3-cg01-runtime-proof/v6",
+            schema = "opennv-fo3-cg01-runtime-proof/v7",
             profileId = _profile.ProfileId,
             profileSha256 = _profile.Sha256,
             phase,
@@ -3854,12 +4051,19 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 speakerReferenceFormId = stage5.Dad.Reference.FormId,
                 lipClockBoundToSpeaker = true,
                 lipCueSamplesThisProcess = _cg01DadLipCueSamples,
+                speakerIdleInfoFormIdsPublishedThisProcess =
+                    _cg01DadPublishedSpeakerIdleInfoFormIds,
+                speakerIdlesPublishedThisProcess =
+                    _cg01DadPublishedSpeakerIdleInfoFormIds.Count,
                 assets = cues.Select(cue => new
                 {
                     cue.Sequence,
                     cue.InfoFormId,
                     voiceSha256 = cue.Response.Voice.Sha256,
                     lipSha256 = cue.Response.Lip.Sha256,
+                    speakerIdleFormId = cue.SpeakerIdle.FormId,
+                    speakerIdlePath = cue.SpeakerIdle.ModelPath,
+                    speakerIdleSha256 = cue.SpeakerIdle.SourceSha256,
                 }),
             },
             actorPresentation = new
@@ -3972,6 +4176,22 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 hiddenAndQueuedAfterCompletion = _ownedVideoCleared,
                 escapeSkipped,
                 replayed = movieReplayed,
+            },
+            visualCapture = new
+            {
+                requested = _cg01ProofCapturePath is not null,
+                completed = _cg01ProofCaptureCompleted,
+                path = _cg01ProofCapturePath,
+                sha256 = _cg01ProofCaptureSha256,
+                infoFormId = _cg01ProofCaptureInfoFormId,
+                speakerIdleFormId = _cg01ProofCaptureSpeakerIdleFormId,
+                width = _cg01ProofCaptureWidth,
+                height = _cg01ProofCaptureHeight,
+                rgbSpan = _cg01ProofCaptureRgbSpan,
+                shellVisible = false,
+                movieVisible = false,
+                dadCameraFrustum = _cg01DadDialogueGeometry?.FrustumIntersection,
+                audioLipIdleSynchronized = _cg01ProofCaptureCompleted,
             },
             nextBoundary = new
             {

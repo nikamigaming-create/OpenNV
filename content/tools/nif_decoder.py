@@ -49,6 +49,8 @@ class NifDecoderContract:
     endian: int
     user_version: int
     user_version_2: int
+    animation_user_version_2: frozenset[int]
+    animation_root_block_type: str
     export_info_string_count: int
     footer_bytes: int
     geometry_block_types: frozenset[str]
@@ -172,6 +174,8 @@ def load_nif_decoder_contract() -> NifDecoderContract:
         "endian",
         "userVersion",
         "userVersion2",
+        "animationUserVersion2",
+        "animationRootBlockType",
         "exportInfoStringCount",
         "footerBytes",
     }:
@@ -213,6 +217,11 @@ def load_nif_decoder_contract() -> NifDecoderContract:
         endian=_integer(format_contract, "endian"),
         user_version=_integer(format_contract, "userVersion"),
         user_version_2=_integer(format_contract, "userVersion2"),
+        animation_user_version_2=frozenset(
+            _integer({"value": value}, "value")
+            for value in format_contract.get("animationUserVersion2", [])
+        ),
+        animation_root_block_type=str(format_contract.get("animationRootBlockType", "")),
         export_info_string_count=_integer(format_contract, "exportInfoStringCount", minimum=1),
         footer_bytes=_integer(format_contract, "footerBytes"),
         geometry_block_types=frozenset(block_types),
@@ -228,6 +237,9 @@ def load_nif_decoder_contract() -> NifDecoderContract:
     if (
         not contract.contract_id
         or not contract.status
+        or not contract.animation_user_version_2
+        or contract.user_version_2 in contract.animation_user_version_2
+        or getattr(NifFormat, contract.animation_root_block_type, None) is None
         or contract.recovery_method != "unique-exact-block-parse"
         or contract.source_mutation_policy != "in-memory-parse-buffer-only"
         or len(contract.canonical_sha256) != SHA256_HEX_CHARACTERS
@@ -268,11 +280,18 @@ def _block_directory(
     offset += 1
     user_version, block_count, user_version_2 = struct.unpack_from("<III", payload, offset)
     offset += UINT32_BYTES * 3
-    if (endian, user_version, user_version_2) != (
+    format_identity_matches = (endian, user_version) == (
         contract.endian,
         contract.user_version,
-        contract.user_version_2,
-    ):
+    )
+    primary_format_identity = (
+        format_identity_matches and user_version_2 == contract.user_version_2
+    )
+    animation_format_identity = (
+        format_identity_matches
+        and user_version_2 in contract.animation_user_version_2
+    )
+    if not primary_format_identity and not animation_format_identity:
         raise ValueError(
             "NIF version matched the configured Fallout format but its user-version identity did not: "
             f"endian={endian} user={user_version}/{user_version_2}"
@@ -336,6 +355,18 @@ def _block_directory(
             "NIF footer size differs from the configured format contract: "
             f"expected={contract.footer_bytes} actual={len(payload) - offset}"
         )
+    if animation_format_identity:
+        footer_root_count, footer_root_index = struct.unpack_from("<Ii", payload, offset)
+        if (
+            footer_root_count != 1
+            or footer_root_index < 0
+            or footer_root_index >= len(entries)
+            or entries[footer_root_index].type_name != contract.animation_root_block_type
+        ):
+            raise ValueError(
+                "NIF alternate animation identity is not rooted by the configured "
+                f"controller sequence: user={user_version}/{user_version_2}"
+            )
     return entries, True
 
 

@@ -40,6 +40,9 @@ VOICE_FORM = 0x00019FDF
 CG01_DAD_TRIGGER_SCRIPT_FORM = 0x00081983
 CG01_DAD_TRIGGER_BASE_FORM = 0x00081984
 CG01_DAD_TRIGGER_REFERENCE_FORM = 0x0002EA54
+CG01_DAD_TALK_IDLE_FORM = 0x0003D33B
+CG01_DAD_BECKON_FEMALE_IDLE_FORM = 0x0005943A
+CG01_DAD_BECKON_MALE_IDLE_FORM = 0x0005943B
 CG01_WALK_OBJECTIVE_INDEX = 10
 CG01_WALK_TARGET_STAGE = 12
 CG01_TRIGGER_COLLISION_LAYERS = 12
@@ -768,6 +771,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             sex_value: int,
             text: str,
             sources: tuple[str, ...],
+            speaker_idle_form_id: int,
         ) -> Record:
             return Record(
                 "INFO",
@@ -775,6 +779,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 0,
                 subrecord("QSTI", struct.pack("<I", cg01.form_id))
                 + subrecord("NAM1", text.encode("cp1252") + b"\0")
+                + subrecord("SNAM", struct.pack("<I", speaker_idle_form_id))
                 + subrecord("CTDA", condition(131, sex_value))
                 + subrecord("CTDA", condition(72, cg01_dad_base.form_id))
                 + b"".join(
@@ -790,24 +795,28 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 1,
                 "Don't look straight into the light, honey.",
                 ("set CG01DadREF.timer to 1",),
+                CG01_DAD_TALK_IDLE_FORM,
             ),
             cg01_dad_info(
                 0x0001F3E9,
                 0,
                 "Don't look straight into the light, pal.",
                 ("set CG01DadREF.timer to 1",),
+                CG01_DAD_TALK_IDLE_FORM,
             ),
             cg01_dad_info(
                 0x0001F3E6,
                 1,
                 "Come on over here, sweetie. Come on! Walk to Daddy!",
                 ("setstage CG01 10", "setstage CGTutorial 2"),
+                CG01_DAD_BECKON_FEMALE_IDLE_FORM,
             ),
             cg01_dad_info(
                 0x0001F3E7,
                 0,
                 "Come on over here, son. Come on! Walk to Daddy!",
                 ("setstage CG01 10", "setstage CGTutorial 2"),
+                CG01_DAD_BECKON_MALE_IDLE_FORM,
             ),
         )
         modifier = Record(
@@ -882,6 +891,21 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             voice,
             cg01_dad_topic,
             *cg01_dad_infos,
+            idle(
+                CG01_DAD_TALK_IDLE_FORM,
+                "ttnpcNTRLHandsDownTalkA",
+                r"Characters\_Male\IdleAnims\ttnpcNTRLHandsDownTalkA.kf",
+            ),
+            idle(
+                CG01_DAD_BECKON_FEMALE_IDLE_FORM,
+                "LooseBeckoningToChildA",
+                r"Characters\_Male\IdleAnims\BeckoningToChildA.kf",
+            ),
+            idle(
+                CG01_DAD_BECKON_MALE_IDLE_FORM,
+                "LooseBeckoningToChildB",
+                r"Characters\_Male\IdleAnims\BeckoningToChildB.kf",
+            ),
             cg02_dad_base,
             marker_base,
             cg01_dad_ref,
@@ -975,6 +999,22 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual(
             ["female", "male", "female", "male"],
             [branch["engineSex"] for branch in post_stage5["dialogue"]["branches"]],
+        )
+        self.assertEqual(
+            [
+                "0003d33b",
+                "0003d33b",
+                "0005943a",
+                "0005943b",
+            ],
+            [
+                branch["speakerIdle"]["formId"]
+                for branch in post_stage5["dialogue"]["branches"]
+            ],
+        )
+        self.assertEqual(
+            r"meshes\characters\_male\idleanims\beckoningtochildb.kf",
+            post_stage5["dialogue"]["branches"][3]["speakerIdle"]["modelPath"],
         )
         self.assertEqual(
             [

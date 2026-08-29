@@ -84,7 +84,13 @@ internal sealed record Fo3Vault101Cg01DadActorVariant(
     string SymmetricGeometrySha256,
     string AsymmetricGeometrySha256,
     string SymmetricTextureSha256,
+    IReadOnlyList<Fo3Vault101Cg01DadDialogueAnimation> DialogueAnimations,
     Fo3Vault101DadActor Actor);
+
+internal sealed record Fo3Vault101Cg01DadDialogueAnimation(
+    int Sequence,
+    string InfoFormId,
+    Fo3Cg01DadSpeakerIdle SpeakerIdle);
 
 internal sealed record Fo3Vault101BirthPresentationContract(
     string ManifestPath,
@@ -122,9 +128,9 @@ internal sealed record Fo3Vault101BirthPresentationContract(
     IReadOnlyDictionary<string, Fo3Vault101BirthAsset> Assets,
     IReadOnlyList<Fo3Vault101BirthReference> References)
 {
-    internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v7";
+    internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v8";
     private const string ExpectedStatus =
-        "prepared-owned-materials-and-stage65-cg01-dad-matrix-not-yet-rendered";
+        "prepared-owned-materials-stage65-and-cg01-dialogue-idles-not-yet-rendered";
     private const string ExpectedCellEditorId = "Vault101d";
     private const string ExpectedLightingAuthority =
         "recipe-proof-only-not-retail-CELL-lighting";
@@ -144,6 +150,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         Fo3BirthSliceContract birthSlice,
         Fo3Cg01Stage0Transition cg01Transition,
         Fo3Stage65AppearanceTransition stage65Appearance,
+        Fo3Cg01Stage10Transition cg01Stage10,
         string manifestPath)
     {
         var path = Path.GetFullPath(manifestPath);
@@ -260,6 +267,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             birthSlice,
             cg01Transition,
             stage65Appearance,
+            cg01Stage10,
             RequiredObject(root, "cg01DadActors"),
             cacheRoot,
             origin);
@@ -753,6 +761,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         Fo3BirthSliceContract birthSlice,
         Fo3Cg01Stage0Transition transition,
         Fo3Stage65AppearanceTransition stage65Appearance,
+        Fo3Cg01Stage10Transition stage10,
         JsonElement source,
         string cacheRoot,
         Vector3 origin)
@@ -761,9 +770,10 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         const string sourceAuthority =
             "source-stage-65-CG01Dad-MatchRace-and-MatchFaceGeometry";
         const string poseAuthority =
-            "owned mtidle compiler input and exact CG01 stage-0 MoveTo marker; " +
-            "stage-5 enable is runtime-applied; stage-65 MatchRace and 50-percent " +
-            "player MatchFaceGeometry are compiled before actor visibility";
+            "exact INFO SNAM speaker idles compiled with owned KF inputs and exact " +
+            "CG01 stage-0 MoveTo marker; stage-5 enable is runtime-applied; " +
+            "stage-65 MatchRace and 50-percent player MatchFaceGeometry are " +
+            "compiled before actor visibility";
         if (RequiredString(source, "schema") != matrixSchema ||
             RequiredString(source, "source") != sourceAuthority ||
             RequiredString(source, "poseAuthority") != poseAuthority ||
@@ -795,6 +805,10 @@ internal sealed record Fo3Vault101BirthPresentationContract(
                 parent,
                 cacheRoot,
                 origin);
+            var dialogueAnimations = ReadCg01DadDialogueAnimations(
+                row,
+                playerSex,
+                stage10.DialogueFor(playerSex));
             var faceGen = RequiredObject(row, "faceGen");
             var variant = new Fo3Vault101Cg01DadActorVariant(
                 playerRaceFormId,
@@ -803,6 +817,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
                 RequiredSha256(faceGen, "symmetricGeometrySha256"),
                 RequiredSha256(faceGen, "asymmetricGeometrySha256"),
                 RequiredSha256(faceGen, "symmetricTextureSha256"),
+                dialogueAnimations,
                 actor);
             if (variant.Stage65AppearanceSha256 != stage65Appearance.ContractSha256 ||
                 variant.SymmetricGeometrySha256 != parent.SymmetricGeometrySha256 ||
@@ -818,6 +833,44 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             throw new InvalidOperationException(
                 "Fallout 3 CG01 Dad stage-65 derivative matrix is incomplete.");
         return variants;
+    }
+
+    private static IReadOnlyList<Fo3Vault101Cg01DadDialogueAnimation>
+        ReadCg01DadDialogueAnimations(
+        JsonElement source,
+        string playerSex,
+        IReadOnlyList<Fo3Cg01DadSpeechCue> expectedCues)
+    {
+        _ = RequiredSha256(source, "dialogueAnimationContractSha256");
+        var rows = RequiredArray(source, "dialogueAnimations").EnumerateArray()
+            .OrderBy(value => RequiredInteger(value, "sequence"))
+            .ToArray();
+        if (rows.Length != expectedCues.Count)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad dialogue-animation coverage differs.");
+        var animations = new List<Fo3Vault101Cg01DadDialogueAnimation>(rows.Length);
+        for (var index = 0; index < rows.Length; index++)
+        {
+            var row = rows[index];
+            var expected = expectedCues[index];
+            var sequence = RequiredInteger(row, "sequence");
+            var infoFormId = RequiredFormId(row, "infoFormId");
+            var speakerIdle = Fo3Cg01Stage10Transition.LoadSpeakerIdle(
+                RequiredObject(row, "speakerIdle"));
+            if (sequence != expected.Sequence ||
+                RequiredString(row, "engineSex") != playerSex ||
+                infoFormId != expected.InfoFormId ||
+                !Fo3Cg01Stage10Transition.SpeakerIdleEquals(
+                    speakerIdle,
+                    expected.SpeakerIdle))
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 Dad dialogue-animation source join differs.");
+            animations.Add(new Fo3Vault101Cg01DadDialogueAnimation(
+                sequence,
+                infoFormId,
+                speakerIdle));
+        }
+        return animations;
     }
 
     private static Fo3Vault101DadActor ReadCg01DadActorVariant(
@@ -1095,6 +1148,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             !RequiredBoolean(promotion, "dadActorPrepared") ||
             !RequiredBoolean(promotion, "cg01DadActorPrepared") ||
             !RequiredBoolean(promotion, "cg01DadStage65AppearanceCompiled") ||
+            !RequiredBoolean(promotion, "cg01DadDialogueAnimationsCompiled") ||
             RequiredBoolean(promotion, "runtimeManifestValidated") ||
             RequiredBoolean(promotion, "runtimeSceneConstructed") ||
             RequiredBoolean(promotion, "rendered") ||
