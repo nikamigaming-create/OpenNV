@@ -48,6 +48,7 @@ IDLE_RECORD = "IDLE"
 GLOBAL_RECORD = "GLOB"
 ACTOR_REFERENCE_RECORD = "ACHR"
 PLACED_REFERENCE_RECORD = "REFR"
+ACTIVATOR_RECORD = "ACTI"
 ACTOR_BASE_RECORD = "NPC_"
 STATIC_RECORD = "STAT"
 DIALOGUE_TOPIC_RECORD = "DIAL"
@@ -148,6 +149,11 @@ SET_OBJECTIVE_DISPLAYED_PATTERN = re.compile(
     re.IGNORECASE,
 )
 AUTOSAVE_PATTERN = re.compile(r"^autosave$", re.IGNORECASE)
+SET_OBJECTIVE_COMPLETED_PATTERN = re.compile(
+    r"^setObjectiveCompleted\s+(?P<quest>[A-Za-z_][A-Za-z0-9_]*)\s+"
+    r"(?P<index>\d+)\s+(?P<value>\d+)$",
+    re.IGNORECASE,
+)
 SET_NO_ACTIVATION_SOUND_PATTERN = re.compile(
     r"^SetNoActivationSound\s+(?P<sound>[A-Za-z_][A-Za-z0-9_]*)$",
     re.IGNORECASE,
@@ -162,6 +168,13 @@ REFERENCE_TRANSFORM_FLOATS = 6
 REFERENCE_TRANSFORM_BYTES = REFERENCE_TRANSFORM_FLOATS * 4
 REFERENCE_SCALE_BYTES = 4
 DEFAULT_REFERENCE_SCALE = 1.0
+TRIGGER_PRIMITIVE_FLOATS = 7
+TRIGGER_PRIMITIVE_BYTES = TRIGGER_PRIMITIVE_FLOATS * 4 + 4
+TRIGGER_PRIMITIVE_BOX_TYPE = 2
+TRIGGER_PRIMITIVE_COLOR_START = 3
+TRIGGER_PRIMITIVE_TYPE_INDEX = TRIGGER_PRIMITIVE_FLOATS
+CG01_WALK_OBJECTIVE_INDEX = 10
+CG01_WALK_TARGET_STAGE = 12
 CG00_TIMER_CHAIN_PATTERN = re.compile(
     r"\bif\s+runTimer\s*==\s*1\b.*?"
     r"\bif\s+timer\s*>\s*0\b\s*"
@@ -178,6 +191,19 @@ CG00_TIMER_STAGE_PATTERN = re.compile(
 SET_REFERENCE_VARIABLE_PATTERN = re.compile(
     r"^set\s+(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\."
     r"(?P<variable>[A-Za-z_][A-Za-z0-9_]*)\s+to\s+(?P<value>-?\d+(?:\.\d+)?)$",
+    re.IGNORECASE,
+)
+CG01_PLAYER_TRIGGER_BLOCK_PATTERN = re.compile(
+    r"\bbegin\s+onTriggerEnter\s+player\b(?P<body>.*?)\bend\b",
+    re.IGNORECASE | re.DOTALL,
+)
+GET_STAGE_DONE_PATTERN = re.compile(
+    r"\bgetStageDone\s+(?P<quest>[A-Za-z_][A-Za-z0-9_]*)\s+"
+    r"(?P<stage>\d+)\s*==\s*0\b",
+    re.IGNORECASE,
+)
+IS_ACTION_REF_PLAYER_PATTERN = re.compile(
+    r"\bIsActionRef\s+player\s*==\s*1\b",
     re.IGNORECASE,
 )
 REFERENCE_COMMAND_PATTERN = re.compile(
@@ -1566,6 +1592,285 @@ def _parse_cg01_stage10_commands(source: str) -> list[dict[str, object]]:
     return commands
 
 
+def _quest_objectives(quest: object) -> dict[int, str]:
+    objectives: dict[int, str] = {}
+    pending_index: int | None = None
+    for subrecord in iter_subrecords(quest):
+        if subrecord.signature == "QOBJ":
+            if len(subrecord.data) != FORM_ID_BYTES or pending_index is not None:
+                raise ValueError("Fallout 3 quest objective layout is unsupported")
+            pending_index = struct.unpack("<I", subrecord.data)[0]
+        elif subrecord.signature == "NNAM" and pending_index is not None:
+            text = zstring(subrecord.data)
+            if not text or pending_index in objectives:
+                raise ValueError("Fallout 3 quest objective is absent or repeated")
+            objectives[pending_index] = text
+            pending_index = None
+    if pending_index is not None:
+        raise ValueError("Fallout 3 quest objective text is absent")
+    return objectives
+
+
+def _parse_cg01_stage12_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := SET_OBJECTIVE_COMPLETED_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "setObjectiveCompleted",
+                    "questEditorId": match.group("quest"),
+                    "index": int(match.group("index")),
+                    "value": int(match.group("value")),
+                }
+            )
+            continue
+        if match := PLAYER_CONTROLS_PATTERN.fullmatch(text):
+            if match.group("command").casefold() != "disableplayercontrols":
+                raise ValueError(
+                    f"Fallout 3 CG01 stage 12 uses an unsupported command: {text}"
+                )
+            commands.append(
+                {
+                    "kind": "disablePlayerControls",
+                    "arguments": [int(value) for value in match.group("arguments").split()],
+                }
+            )
+            continue
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            raw_value = match.group("value")
+            value: int | float = float(raw_value) if "." in raw_value else int(raw_value)
+            commands.append(
+                {
+                    "kind": "setScriptVariable",
+                    "subject": match.group("subject"),
+                    "variable": match.group("variable"),
+                    "value": value,
+                }
+            )
+            continue
+        raise ValueError(f"Fallout 3 CG01 stage 12 uses an unsupported command: {text}")
+    expected = [
+        "setObjectiveCompleted",
+        "disablePlayerControls",
+        "setScriptVariable",
+        "setScriptVariable",
+    ]
+    if [str(command["kind"]) for command in commands] != expected:
+        raise ValueError("Fallout 3 CG01 stage 12 command order differs")
+    if commands[1]["arguments"] != [1, 1, 1, 1, 0, 0, 1]:
+        raise ValueError("Fallout 3 CG01 stage 12 disabled-control mask differs")
+    return commands
+
+
+def _compile_cg01_walk_to_dad_transition(
+    records: tuple[object, ...],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    dad_reference: object,
+    dad_script: object,
+    source_stage: int,
+) -> dict[str, object]:
+    quest_editor_id = _editor_id(quest)
+    dad_editor_id = _editor_id(dad_reference)
+    if not quest_editor_id or not dad_editor_id:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad identities are absent")
+
+    trigger_scripts = []
+    for record in records:
+        if record.signature != SCRIPT_RECORD:
+            continue
+        script_source = _script_source(record)
+        block = CG01_PLAYER_TRIGGER_BLOCK_PATTERN.search(script_source)
+        if block is None or IS_ACTION_REF_PLAYER_PATTERN.search(block.group("body")) is None:
+            continue
+        stage_done = GET_STAGE_DONE_PATTERN.search(block.group("body"))
+        stage_effects = [
+            match
+            for command in _source_commands(block.group("body"))
+            if (match := SET_STAGE_PATTERN.fullmatch(command)) is not None
+        ]
+        if (
+            stage_done is None
+            or stage_done.group("quest").casefold() != quest_editor_id.casefold()
+            or len(stage_effects) != 1
+            or stage_effects[0].group("quest").casefold() != quest_editor_id.casefold()
+            or int(stage_done.group("stage")) != int(stage_effects[0].group("stage"))
+        ):
+            continue
+        trigger_scripts.append(
+            (record, script_source, int(stage_effects[0].group("stage")))
+        )
+    if len(trigger_scripts) != 1:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad trigger script is ambiguous")
+    trigger_script, trigger_source, target_stage = trigger_scripts[0]
+    if target_stage != CG01_WALK_TARGET_STAGE or target_stage <= source_stage:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad target stage differs")
+
+    by_form = {record.form_id: record for record in records}
+    activators = [
+        record
+        for record in records
+        if record.signature == ACTIVATOR_RECORD
+        and [
+            struct.unpack("<I", subrecord.data)[0]
+            for subrecord in iter_subrecords(record)
+            if subrecord.signature == "SCRI" and len(subrecord.data) == FORM_ID_BYTES
+        ]
+        == [trigger_script.form_id]
+    ]
+    if len(activators) != 1:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad activator is ambiguous")
+    activator = activators[0]
+    trigger_references = [
+        record
+        for record in records
+        if record.signature == PLACED_REFERENCE_RECORD
+        and [
+            struct.unpack("<I", subrecord.data)[0]
+            for subrecord in iter_subrecords(record)
+            if subrecord.signature == "NAME" and len(subrecord.data) == FORM_ID_BYTES
+        ]
+        == [activator.form_id]
+    ]
+    if len(trigger_references) != 1:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad reference is ambiguous")
+    trigger_reference = trigger_references[0]
+    parent_cell = cell_parent_form_id(trigger_reference)
+    if parent_cell is None:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad reference has no CELL")
+
+    primitive_data = _single_subrecord(trigger_reference, "XPRM")
+    if len(primitive_data) != TRIGGER_PRIMITIVE_BYTES:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad primitive layout differs")
+    primitive = struct.unpack(f"<{TRIGGER_PRIMITIVE_FLOATS}fI", primitive_data)
+    if (
+        not all(math.isfinite(value) and value > 0 for value in primitive[:3])
+        or not all(
+            math.isfinite(value)
+            for value in primitive[
+                TRIGGER_PRIMITIVE_COLOR_START:TRIGGER_PRIMITIVE_TYPE_INDEX
+            ]
+        )
+        or primitive[TRIGGER_PRIMITIVE_TYPE_INDEX] != TRIGGER_PRIMITIVE_BOX_TYPE
+    ):
+        raise ValueError("Fallout 3 CG01 walk-to-Dad primitive differs")
+    collision_layer_data = _single_subrecord(trigger_reference, "XTRI")
+    if len(collision_layer_data) != FORM_ID_BYTES:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad collision layers differ")
+    collision_layers = struct.unpack("<I", collision_layer_data)[0]
+
+    objective_text = _quest_objectives(quest).get(CG01_WALK_OBJECTIVE_INDEX)
+    if not objective_text:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad objective is absent")
+    target_sources = stage_sources.get(target_stage, [])
+    if len(target_sources) != 1:
+        raise ValueError("Fallout 3 CG01 stage 12 result is ambiguous")
+    target_source = target_sources[0]
+    commands = _parse_cg01_stage12_commands(target_source)
+    resolved_commands = []
+    for index, command in enumerate(commands):
+        kind = str(command["kind"])
+        resolved: dict[str, object] = {"index": index, "kind": kind}
+        if kind == "setObjectiveCompleted":
+            if (
+                str(command["questEditorId"]).casefold() != quest_editor_id.casefold()
+                or int(command["index"]) != CG01_WALK_OBJECTIVE_INDEX
+                or int(command["value"]) != 1
+            ):
+                raise ValueError("Fallout 3 CG01 stage 12 objective differs")
+            resolved.update(
+                {
+                    "questFormId": _form_id(quest.form_id),
+                    "questEditorId": quest_editor_id,
+                    "objectiveIndex": CG01_WALK_OBJECTIVE_INDEX,
+                    "completed": True,
+                }
+            )
+        elif kind == "disablePlayerControls":
+            resolved["arguments"] = list(command["arguments"])
+        elif kind == "setScriptVariable":
+            variable = str(command["variable"])
+            value = command["value"]
+            expected_value = 1 if variable.casefold() == "dotalk" else 0
+            if (
+                str(command["subject"]).casefold() != dad_editor_id.casefold()
+                or variable.casefold() not in {"dotalk", "timer"}
+                or value != expected_value
+            ):
+                raise ValueError("Fallout 3 CG01 stage 12 Dad variable differs")
+            resolved.update(
+                {
+                    "referenceFormId": _form_id(dad_reference.form_id),
+                    "referenceEditorId": dad_editor_id,
+                    "scriptFormId": _form_id(dad_script.form_id),
+                    "scriptEditorId": _editor_id(dad_script),
+                    "variable": "doTalk" if variable.casefold() == "dotalk" else "timer",
+                    "variableType": "short" if variable.casefold() == "dotalk" else "float",
+                    "value": value,
+                }
+            )
+        else:
+            raise ValueError(f"Fallout 3 CG01 stage 12 command is unresolved: {kind}")
+        resolved_commands.append(resolved)
+
+    activator_editor_id = _editor_id(activator)
+    script_editor_id = _editor_id(trigger_script)
+    if not activator_editor_id or not script_editor_id:
+        raise ValueError("Fallout 3 CG01 walk-to-Dad trigger identities are absent")
+    return {
+        "schema": "opennv-fo3-cg01-stage-10-to-12-trigger-transition/v1",
+        "status": "source-backed-player-trigger-and-stage-result-runtime-unapplied",
+        "sourceStage": source_stage,
+        "targetStage": target_stage,
+        "objective": {
+            "questFormId": _form_id(quest.form_id),
+            "questEditorId": quest_editor_id,
+            "index": CG01_WALK_OBJECTIVE_INDEX,
+            "text": objective_text,
+            "textSha256": hashlib.sha256(objective_text.encode("utf-8")).hexdigest(),
+        },
+        "trigger": {
+            "event": "onTriggerEnter",
+            "actionReference": "player",
+            "scriptFormId": _form_id(trigger_script.form_id),
+            "scriptEditorId": script_editor_id,
+            "scriptRecordSha256": hashlib.sha256(trigger_script.data).hexdigest(),
+            "scriptSourceSha256": hashlib.sha256(
+                trigger_source.encode("cp1252")
+            ).hexdigest(),
+            "activatorFormId": _form_id(activator.form_id),
+            "activatorEditorId": activator_editor_id,
+            "activatorRecordSha256": hashlib.sha256(activator.data).hexdigest(),
+            "referenceFormId": _form_id(trigger_reference.form_id),
+            "referenceRecordSha256": hashlib.sha256(trigger_reference.data).hexdigest(),
+            "cellFormId": _form_id(parent_cell),
+            "sourceTransform": _reference_transform_contract(trigger_reference),
+            "collisionLayers": collision_layers,
+            "primitive": {
+                "shape": "box",
+                "dimensionsGameUnits": list(primitive[:3]),
+                "colorRgba": list(
+                    primitive[
+                        TRIGGER_PRIMITIVE_COLOR_START:TRIGGER_PRIMITIVE_TYPE_INDEX
+                    ]
+                ),
+                "type": primitive[TRIGGER_PRIMITIVE_TYPE_INDEX],
+            },
+        },
+        "stageResult": {
+            "stageSourceSha256": hashlib.sha256(
+                target_source.encode("cp1252")
+            ).hexdigest(),
+            "accountedCommandCount": len(resolved_commands),
+            "commands": resolved_commands,
+        },
+        "nextBoundary": {
+            "applied": False,
+            "blocker": "fo3-cg01-stage-12-dad-response-not-implemented",
+        },
+    }
+
+
 def _compile_cg01_post_stage5_transition(
     records: tuple[object, ...],
     definition: dict[str, object],
@@ -1861,6 +2166,14 @@ def _compile_cg01_post_stage5_transition(
             raise ValueError(f"Fallout 3 CG01 stage 10 command is not resolved: {kind}")
         resolved_commands.append(resolved)
 
+    walk_to_dad = _compile_cg01_walk_to_dad_transition(
+        records,
+        quest,
+        stage_sources,
+        dad_reference,
+        dad_script,
+        target_stage,
+    )
     return {
         "schema": "opennv-fo3-cg01-stage-5-to-10-transition/v1",
         "status": "source-backed-dad-dialogue-and-stage-result-runtime-unapplied",
@@ -1904,9 +2217,10 @@ def _compile_cg01_post_stage5_transition(
             "accountedCommandCount": len(resolved_commands),
             "commands": resolved_commands,
         },
+        "postStage10TriggerTransition": walk_to_dad,
         "nextBoundary": {
             "applied": False,
-            "blocker": "fo3-cg01-post-stage-10-toddler-world-interaction-not-implemented",
+            "blocker": "fo3-cg01-stage-10-walk-to-dad-trigger-runtime-not-implemented",
         },
     }
 
@@ -3463,6 +3777,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     SOUND_RECORD,
                     ACTOR_REFERENCE_RECORD,
                     PLACED_REFERENCE_RECORD,
+                    ACTIVATOR_RECORD,
                     ACTOR_BASE_RECORD,
                     STATIC_RECORD,
                 }
@@ -4074,11 +4389,13 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "cg00Stage100ContractReady": True,
             "cg01Stage0ContractReady": True,
             "cg01Stage10ContractReady": True,
+            "cg01Stage12ContractReady": True,
             "vault101BirthGraphCompiled": True,
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg01-post-stage-10-toddler-world-interaction-not-implemented",
+            "fo3-cg01-stage-10-world-trigger-application-not-implemented",
+            "fo3-cg01-stage-12-dad-response-not-implemented",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
         ],

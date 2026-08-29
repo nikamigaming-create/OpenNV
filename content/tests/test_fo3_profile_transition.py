@@ -14,6 +14,7 @@ sys.path.insert(0, str(TOOLS))
 
 from plugin_records import GroupContext, Record  # noqa: E402
 from prepare_fo3_profile import (  # noqa: E402
+    FORM_ID_RADIX,
     _bind_cg01_transition_video,
     _compile_cg01_stage0_transition,
     _compile_cg00_section4_transition,
@@ -34,6 +35,15 @@ SECTION5_IDLE_FORM = 0x00069EFD
 QUEST_FORM = 0x0001F388
 TOPIC_FORM = 0x0001F378
 VOICE_FORM = 0x00019FDF
+CG01_DAD_TRIGGER_SCRIPT_FORM = 0x00081983
+CG01_DAD_TRIGGER_BASE_FORM = 0x00081984
+CG01_DAD_TRIGGER_REFERENCE_FORM = 0x0002EA54
+CG01_WALK_OBJECTIVE_INDEX = 10
+CG01_WALK_TARGET_STAGE = 12
+CG01_TRIGGER_COLLISION_LAYERS = 12
+CG01_TRIGGER_PRIMITIVE_TYPE = 2
+CG01_TRIGGER_PRIMITIVE = (69.24656, 69.24656, 69.24656, 0.8, 0.298039, 0.15, 0.0)
+CG01_TRIGGER_TRANSFORM = (-2600.9722, -5436.599, 7432.794, 0.0, 0.0, 0.0)
 FO3_RECIPE = Path(__file__).resolve().parents[1] / "recipes" / (
     "fo3-goty-opening-profile-v1.json"
 )
@@ -650,6 +660,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "autosave",
             )
         )
+        cg01_stage12_source = "\n".join(
+            (
+                "setObjectiveCompleted CG01 10 1",
+                "DisablePlayerControls 1 1 1 1 0 0 1",
+                "set CG01DadREF.doTalk to 1",
+                "set CG01DadREF.timer to 0",
+            )
+        )
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -661,8 +679,64 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("INDX", struct.pack("<H", 5))
             + subrecord("SCTX", cg01_stage5_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", 10))
-            + subrecord("SCTX", cg01_stage10_source.encode("cp1252") + b"\0"),
+            + subrecord("SCTX", cg01_stage10_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", CG01_WALK_TARGET_STAGE))
+            + subrecord("SCTX", cg01_stage12_source.encode("cp1252") + b"\0")
+            + subrecord("QOBJ", struct.pack("<I", CG01_WALK_OBJECTIVE_INDEX))
+            + subrecord("NNAM", b"Walk to Dad.\0"),
             (),
+        )
+        cg01_dad_trigger_script = Record(
+            "SCPT",
+            CG01_DAD_TRIGGER_SCRIPT_FORM,
+            0,
+            subrecord("EDID", b"CG01DadTriggerSCRIPT\0")
+            + subrecord(
+                "SCTX",
+                "\n".join(
+                    (
+                        "ScriptName CG01DadTriggerSCRIPT",
+                        "short doOnce",
+                        "begin onTriggerEnter player",
+                        "if getStageDone CG01 12 == 0",
+                        "if IsActionRef player == 1",
+                        "setstage CG01 12",
+                        "endif",
+                        "endif",
+                        "End",
+                    )
+                ).encode("cp1252")
+                + b"\0",
+            ),
+            (),
+        )
+        cg01_dad_trigger_base = Record(
+            "ACTI",
+            CG01_DAD_TRIGGER_BASE_FORM,
+            0,
+            subrecord("EDID", b"CG01DadTrigger\0")
+            + subrecord("SCRI", struct.pack("<I", cg01_dad_trigger_script.form_id)),
+            (),
+        )
+        cg01_dad_trigger_reference = Record(
+            "REFR",
+            CG01_DAD_TRIGGER_REFERENCE_FORM,
+            0,
+            subrecord("NAME", struct.pack("<I", cg01_dad_trigger_base.form_id))
+            + subrecord("XTRI", struct.pack("<I", CG01_TRIGGER_COLLISION_LAYERS))
+            + subrecord(
+                "XPRM",
+                struct.pack(
+                    "<7fI",
+                    *CG01_TRIGGER_PRIMITIVE,
+                    CG01_TRIGGER_PRIMITIVE_TYPE,
+                ),
+            )
+            + subrecord(
+                "DATA",
+                struct.pack("<6f", *CG01_TRIGGER_TRANSFORM),
+            ),
+            cell_groups,
         )
         tutorial = Record(
             "QUST",
@@ -798,6 +872,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg01,
             tutorial,
             cg01_script,
+            cg01_dad_trigger_script,
+            cg01_dad_trigger_base,
+            cg01_dad_trigger_reference,
             cg01_dad_script,
             cg01_dad_base,
             voice,
@@ -909,6 +986,22 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual(
             [1, 0, 0, 0, 1, 1, 0],
             post_stage5["stageResult"]["commands"][2]["arguments"],
+        )
+        walk_to_dad = post_stage5["postStage10TriggerTransition"]
+        self.assertEqual(CG01_WALK_TARGET_STAGE, walk_to_dad["targetStage"])
+        self.assertEqual("Walk to Dad.", walk_to_dad["objective"]["text"])
+        self.assertEqual(
+            CG01_DAD_TRIGGER_REFERENCE_FORM,
+            int(walk_to_dad["trigger"]["referenceFormId"], FORM_ID_RADIX),
+        )
+        self.assertEqual(
+            [
+                "setObjectiveCompleted",
+                "disablePlayerControls",
+                "setScriptVariable",
+                "setScriptVariable",
+            ],
+            [command["kind"] for command in walk_to_dad["stageResult"]["commands"]],
         )
 
         transition_video = {

@@ -58,7 +58,7 @@ internal sealed record Fo3Cg01Stage10Transition(
     private const string ExpectedTutorialQuestFormId = "00059c85";
     private const string ExpectedTutorialQuestEditorId = "CGTutorial";
     private const string ExpectedBoundaryBlocker =
-        "fo3-cg01-post-stage-10-toddler-world-interaction-not-implemented";
+        "fo3-cg01-stage-10-walk-to-dad-trigger-runtime-not-implemented";
     private const int ExpectedSourceStage = 5;
     private const int ExpectedTargetStage = 10;
     private const int ExpectedTutorialStage = 2;
