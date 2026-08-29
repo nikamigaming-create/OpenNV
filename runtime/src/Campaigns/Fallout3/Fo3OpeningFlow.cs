@@ -892,7 +892,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 ShowAppearanceSelection(playerName, _selectedSex);
                 return;
             }
-            if (stage != _profile.Appearance.AcceptedStage)
+            if (stage != _profile.Appearance.AcceptedStage &&
+                stage != _profile.Stage65Appearance.Stage)
                 throw new InvalidOperationException("Saved Fallout 3 CG00 stage is unsupported.");
             var savedAppearance = RequiredSaveObject(root, "appearance");
             if (RequiredSaveString(savedAppearance, "sourceContract") !=
@@ -912,10 +913,24 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 RequiredSaveString(faceGen, "symmetricTextureSha256") !=
                     selection.Sex.FaceGen.SymmetricTextureSha256)
                 throw new InvalidOperationException("Saved Fallout 3 FaceGen defaults differ from the profile.");
-            if (root.TryGetProperty("playerPackage", out _))
-                throw new InvalidOperationException(
-                    "Saved Fallout 3 state advanced through an unimplemented package trigger.");
-            ShowAppearanceAccepted(playerName, _selectedSex, selection);
+            if (stage == _profile.Appearance.AcceptedStage)
+            {
+                if (root.TryGetProperty("playerPackage", out var savedStage62Package))
+                    _profile.Section4Transition.ValidateSavedState(savedStage62Package);
+                ShowVault101BirthRoom(playerName, _selectedSex, selection);
+                return;
+            }
+            var savedPackage = RequiredSaveObject(root, "playerPackage");
+            _profile.Section4Transition.ValidateSavedState(savedPackage);
+            var stage65 = _profile.Stage65Appearance.Apply(
+                _selectedSex.EngineSex,
+                selection.Race.FormId,
+                selection.Sex.FaceGen);
+            _profile.Stage65Appearance.ValidateSavedState(
+                RequiredSaveObject(root, "stage65Appearance"),
+                stage65);
+            ValidateBirthRuntimeState(RequiredSaveObject(root, "birthRuntime"));
+            ShowVault101BirthRoom(playerName, _selectedSex, selection, stage65);
         }
         catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
         {
@@ -1001,7 +1016,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 raceSex.HairOptions[hairSelect.Selected],
                 raceSex.EyeOptions[eyesSelect.Selected]);
             PersistAppearance(playerName, sex, selection);
-            ShowAppearanceAccepted(playerName, sex, selection);
+            if (_birthPresentation is null)
+                ShowAppearanceAccepted(playerName, sex, selection);
+            else
+                ShowVault101BirthRoom(playerName, sex, selection);
         };
         _content.AddChild(accept);
         Callable.From(raceSelect.GrabFocus).CallDeferred();
@@ -1040,8 +1058,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         if (_birthPresentation is not null)
         {
-            var enter = Button("ENTER OWNED VAULT 101 PREVIEW");
-            enter.Pressed += () => ShowVault101Preview(playerName, sex, selection);
+            var enter = Button("ENTER OWNED VAULT 101 BIRTH ROOM");
+            enter.Pressed += () => ShowVault101BirthRoom(playerName, sex, selection);
             _content.AddChild(enter);
         }
         var menu = Button("MAIN MENU");
@@ -1058,24 +1076,42 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"next={_profile.Appearance.AcceptedStageCommand} packageRuntimeReady=0");
     }
 
-    private void ShowVault101Preview(
+    private void ShowVault101BirthRoom(
         string playerName,
         Fo3SexChoice sex,
-        Fo3AppearanceSelection selection)
+        Fo3AppearanceSelection selection,
+        Fo3Stage65AppearanceState? resumedStage65 = null)
     {
         var contract = _birthPresentation ?? throw new InvalidOperationException(
-            "Fallout 3 Vault 101 preview has no owned presentation contract.");
+            "Fallout 3 Vault 101 birth room has no owned presentation contract.");
         var transition = _profile.Section4Transition;
         if (transition.SourceStage != _profile.Appearance.AcceptedStage ||
             !transition.LocationReferenceFormId.Equals(
                 contract.EntryReferenceFormId,
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
-                "Fallout 3 Vault 101 preview does not join the stage-62 package location.");
+                "Fallout 3 Vault 101 birth room does not join the stage-62 package location.");
         if (_vaultPreviewHost is not null)
-            throw new InvalidOperationException("Fallout 3 Vault 101 preview is already active.");
+            throw new InvalidOperationException("Fallout 3 Vault 101 birth room is already active.");
 
-        var previewHost = new Node3D { Name = "FO3_STAGE62_VAULT101_PREVIEW" };
+        Fo3PlayerPackageRuntimeActivation? activation = null;
+        var stage65 = resumedStage65;
+        if (stage65 is null)
+        {
+            activation = transition.ActivateAtOwnedMarker(
+                contract.EntryReferenceFormId,
+                _profile.Appearance.AcceptedStage,
+                targetStageDone: false);
+            stage65 = _profile.Stage65Appearance.Apply(
+                sex.EngineSex,
+                selection.Race.FormId,
+                selection.Sex.FaceGen);
+            if (stage65.Stage != activation.TriggeredStage)
+                throw new InvalidOperationException(
+                    "Fallout 3 player-package trigger differs from the stage-65 result.");
+        }
+
+        var previewHost = new Node3D { Name = "FO3_STAGE65_VAULT101_BIRTH_ROOM" };
         _worldHost.AddChild(previewHost);
         Fo3Vault101BirthSceneCoverage coverage;
         try
@@ -1093,7 +1129,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
 
         var overlay = new PanelContainer
         {
-            Name = "FO3_STAGE62_VAULT101_PREVIEW_BOUNDARY",
+            Name = "FO3_STAGE65_VAULT101_DIALOGUE",
             AnchorLeft = 0.0f,
             AnchorTop = 1.0f,
             AnchorRight = 1.0f,
@@ -1123,29 +1159,28 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         subtitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         subtitle.Visible = false;
         status.AddChild(subtitle);
-        var playDialogue = Button("CONTINUE");
-        playDialogue.Pressed += () =>
-        {
-            var package = _profile.Section4Transition.Activate();
-            var stage65 = _profile.Stage65Appearance.Apply(
-                sex.EngineSex,
-                selection.Race.FormId,
-                selection.Sex.FaceGen);
-            PersistStage65Appearance(playerName, sex, selection, package, stage65);
-            var branch = _profile.Stage80Transition.DialogueFor(sex.EngineSex);
-            PlayVaultDialogue(branch, subtitle);
-            playDialogue.Visible = false;
-        };
-        status.AddChild(playDialogue);
         AddChild(overlay);
         _vaultPreviewOverlay = overlay;
-        Callable.From(playDialogue.GrabFocus).CallDeferred();
+        if (activation is not null)
+            PersistStage65Appearance(
+                playerName,
+                sex,
+                selection,
+                activation.Package,
+                stage65,
+                activation);
+        var branch = _profile.Stage80Transition.DialogueFor(sex.EngineSex);
+        Callable.From(() => PlayVaultDialogue(branch, subtitle)).CallDeferred();
         GD.Print(
-            $"OPENNV_FO3_CG00_VAULT101_PREVIEW_READY profile={_profile.ProfileId} " +
-            $"stage={transition.SourceStage} package={transition.PackageFormId} " +
+            $"OPENNV_FO3_CG00_VAULT101_BIRTH_ROOM_READY profile={_profile.ProfileId} " +
+            $"stage={stage65.Stage} package={transition.PackageFormId} " +
             $"entry={contract.EntryReferenceFormId} cell={contract.CellFormId} " +
-            $"references={coverage.PlacedReferences} actors=2 packageExecuted=0 " +
-            "playerIdleExecuted=0 dialoguePlaybackReady=1 retailTiming=0");
+            $"references={coverage.PlacedReferences} actors=2 " +
+            $"doctor={coverage.DoctorActor.ReferenceFormId} " +
+            $"dad={coverage.DadActor.ReferenceFormId} " +
+            $"resumed={(resumedStage65 is null ? 0 : 1)} packageActive=1 " +
+            $"trigger={transition.NextCommand} playerIdleExecuted=0 " +
+            "dialoguePlaybackReady=1 retailTiming=0 stage80Applied=0");
     }
 
     private void PlayVaultDialogue(Fo3Stage80DialogueBranch branch, Label subtitle)
@@ -1173,8 +1208,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"OPENNV_FO3_CG00_DAD_CUE_STARTED stage=65 info={branch.InfoFormId} " +
             $"response={branch.Response.Index} duration={durationSeconds:F3} " +
             $"voice={branch.Response.Voice.LogicalPath} " +
-            $"lip={branch.Response.Lip.LogicalPath} explicitAdvance=1 " +
-            "dadRendered=0 lipPlayback=0 retailTiming=0 stage80Applied=0");
+            $"lip={branch.Response.Lip.LogicalPath} sourceTriggerAdvance=1 explicitUiAdvance=0 " +
+            "dadRendered=1 lipPlayback=0 retailTiming=0 stage80Applied=0");
     }
 
     private void ExitVault101Preview()
@@ -1197,7 +1232,11 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3SexChoice sex,
         Fo3AppearanceSelection selection)
     {
-        var package = _profile.Section4Transition.Activate();
+        var activation = _profile.Section4Transition.ActivateAtOwnedMarker(
+            _profile.Section4Transition.LocationReferenceFormId,
+            _profile.Appearance.AcceptedStage,
+            targetStageDone: false);
+        var package = activation.Package;
         ClearContent();
         _content.AddChild(Label(
             $"{_profile.QuestEditorId}  •  STAGE {_profile.Appearance.AcceptedStage}",
@@ -1225,7 +1264,13 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 sex.EngineSex,
                 selection.Race.FormId,
                 selection.Sex.FaceGen);
-            PersistStage65Appearance(playerName, sex, selection, package, state);
+            PersistStage65Appearance(
+                playerName,
+                sex,
+                selection,
+                package,
+                state,
+                activation);
             ShowStage65AppearanceApplied(playerName, sex, selection, state);
         };
         _content.AddChild(apply);
@@ -1440,6 +1485,36 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         return value;
     }
 
+    private void ValidateBirthRuntimeState(JsonElement source)
+    {
+        var contract = _birthPresentation ?? throw new InvalidOperationException(
+            "Saved Fallout 3 birth runtime has no owned presentation contract.");
+        var transition = _profile.Section4Transition;
+        if (RequiredSaveString(source, "schema") != "opennv-fo3-cg00-birth-runtime/v1" ||
+            RequiredSaveString(source, "cellFormId") != contract.CellFormId ||
+            RequiredSaveString(source, "entryReferenceFormId") != contract.EntryReferenceFormId ||
+            RequiredSaveString(source, "doctorLiReferenceFormId") !=
+                contract.DoctorActor.ReferenceFormId ||
+            RequiredSaveString(source, "dadReferenceFormId") !=
+                contract.DadActor.ReferenceFormId ||
+            RequiredSaveString(source, "beginEventIdleFormId") !=
+                transition.BeginEventIdleFormId ||
+            RequiredSaveString(source, "changeEventIdleFormId") !=
+                transition.ChangeEventIdleFormId ||
+            RequiredSaveString(source, "triggerScriptEditorId") !=
+                transition.TriggerScriptEditorId ||
+            RequiredSaveString(source, "triggerScriptFormId") !=
+                transition.TriggerScriptFormId ||
+            RequiredSaveString(source, "triggerScriptSourceSha256") !=
+                transition.TriggerScriptSourceSha256 ||
+            RequiredSaveString(source, "triggerCondition") != transition.TriggerCondition ||
+            RequiredSaveString(source, "triggerCommand") != transition.NextCommand ||
+            RequiredSaveInteger(source, "triggeredStage") != transition.NextStage ||
+            RequiredSaveString(source, "cueState") != "stage65-source-bound-ready")
+            throw new InvalidOperationException(
+                "Saved Fallout 3 birth runtime differs from its owned source contracts.");
+    }
+
     private void PersistNamedCharacter(string playerName, Fo3SexChoice sex)
     {
         var state = new
@@ -1545,8 +1620,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3SexChoice sex,
         Fo3AppearanceSelection selection,
         Fo3ActivePlayerPackage package,
-        Fo3Stage65AppearanceState stage65)
+        Fo3Stage65AppearanceState stage65,
+        Fo3PlayerPackageRuntimeActivation? birthActivation = null)
     {
+        var contract = _birthPresentation;
         var state = new
         {
             schema = "opennv-fo3-opening-character/v2",
@@ -1605,6 +1682,26 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 }),
                 nextBoundary = stage65.NextBoundary,
             },
+            birthRuntime = birthActivation is null || contract is null
+                ? null
+                : new
+                {
+                    schema = "opennv-fo3-cg00-birth-runtime/v1",
+                    cellFormId = contract.CellFormId,
+                    entryReferenceFormId = contract.EntryReferenceFormId,
+                    doctorLiReferenceFormId = contract.DoctorActor.ReferenceFormId,
+                    dadReferenceFormId = contract.DadActor.ReferenceFormId,
+                    beginEventIdleFormId = birthActivation.BeginEventIdleFormId,
+                    endEventIdleFormId = birthActivation.EndEventIdleFormId,
+                    changeEventIdleFormId = birthActivation.ChangeEventIdleFormId,
+                    triggerScriptEditorId = birthActivation.TriggerScriptEditorId,
+                    triggerScriptFormId = birthActivation.TriggerScriptFormId,
+                    triggerScriptSourceSha256 = birthActivation.TriggerScriptSourceSha256,
+                    triggerCondition = birthActivation.TriggerCondition,
+                    triggerCommand = birthActivation.TriggerCommand,
+                    triggeredStage = birthActivation.TriggeredStage,
+                    cueState = "stage65-source-bound-ready",
+                },
             completed = false,
         };
         WriteState(state);

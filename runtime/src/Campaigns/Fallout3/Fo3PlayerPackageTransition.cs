@@ -16,6 +16,18 @@ internal sealed record Fo3ActivePlayerPackage(
     string NextCommand,
     int NextStage);
 
+internal sealed record Fo3PlayerPackageRuntimeActivation(
+    Fo3ActivePlayerPackage Package,
+    string BeginEventIdleFormId,
+    string? EndEventIdleFormId,
+    string ChangeEventIdleFormId,
+    string TriggerScriptEditorId,
+    string TriggerScriptFormId,
+    string TriggerScriptSourceSha256,
+    string TriggerCondition,
+    string TriggerCommand,
+    int TriggeredStage);
+
 internal sealed record Fo3PlayerPackageTransition(
     int SourceStage,
     string Command,
@@ -28,7 +40,15 @@ internal sealed record Fo3PlayerPackageTransition(
     int NextStage,
     string NextStageSourceSha256,
     string NextStageContractSchema,
-    IReadOnlyList<string> NextCommandKinds)
+    IReadOnlyList<string> NextCommandKinds,
+    string BeginEventIdleFormId,
+    string? EndEventIdleFormId,
+    string ChangeEventIdleFormId,
+    string TriggerScriptEditorId,
+    string TriggerScriptFormId,
+    string TriggerScriptSourceSha256,
+    string TriggerCondition,
+    int TriggerThresholdStage)
 {
     private const string ExpectedSchema = "opennv-fo3-cg00-player-package-transition/v1";
     private const string ExpectedStatus = "source-backed-package-activation";
@@ -87,10 +107,14 @@ internal sealed record Fo3PlayerPackageTransition(
         var eventNames = events.EnumerateObject().Select(value => value.Name).ToHashSet();
         if (!eventNames.SetEquals(new[] { "begin", "end", "change" }))
             throw new InvalidOperationException("Fallout 3 player-package events are incomplete.");
+        var eventAnimationFormIds = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var property in events.EnumerateObject())
         {
             if (property.Value.ValueKind == JsonValueKind.Null)
+            {
+                eventAnimationFormIds.Add(property.Name, null);
                 continue;
+            }
             if (property.Value.ValueKind != JsonValueKind.Object)
                 throw new InvalidOperationException("Fallout 3 player-package event is invalid.");
             var formId = RequiredFormId(property.Value, "formId");
@@ -98,18 +122,28 @@ internal sealed record Fo3PlayerPackageTransition(
                     value.FormId.Equals(formId, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException(
                     "Fallout 3 player-package event animation is absent.");
+            eventAnimationFormIds.Add(property.Name, formId);
         }
+        if (eventAnimationFormIds["begin"] is not string beginEventIdleFormId ||
+            eventAnimationFormIds["change"] is not string changeEventIdleFormId)
+            throw new InvalidOperationException(
+                "Fallout 3 player-package begin/change events are incomplete.");
 
         var trigger = RequiredObject(source, "nextStageTrigger");
-        _ = RequiredString(trigger, "scriptEditorId");
-        _ = RequiredFormId(trigger, "scriptFormId");
-        _ = RequiredSha256(trigger, "scriptSourceSha256");
-        _ = RequiredString(trigger, "condition");
+        var triggerScriptEditorId = RequiredString(trigger, "scriptEditorId");
+        var triggerScriptFormId = RequiredFormId(trigger, "scriptFormId");
+        var triggerScriptSourceSha256 = RequiredSha256(trigger, "scriptSourceSha256");
+        var triggerCondition = RequiredString(trigger, "condition");
         var thresholdStage = RequiredInteger(trigger, "thresholdStage");
         var nextCommand = RequiredString(trigger, "command");
         var nextStage = RequiredInteger(trigger, "targetStage");
         if (thresholdStage > sourceStage || nextStage <= sourceStage)
             throw new InvalidOperationException("Fallout 3 next CG00 stage is not forward-moving.");
+        if (triggerCondition !=
+                $"getStage CG00 >= {thresholdStage} && GetStageDone CG00 {nextStage} == 0" ||
+            nextCommand != $"setstage CG00 {nextStage}")
+            throw new InvalidOperationException(
+                "Fallout 3 next CG00 stage trigger cannot be interpreted deterministically.");
 
         var result = RequiredObject(source, "nextStageResult");
         if (RequiredInteger(result, "stage") != nextStage || !RequiredBoolean(result, "runtimeReady"))
@@ -137,7 +171,15 @@ internal sealed record Fo3PlayerPackageTransition(
             nextStage,
             nextStageSourceSha256,
             nextStageContractSchema,
-            commandKinds);
+            commandKinds,
+            beginEventIdleFormId,
+            eventAnimationFormIds["end"],
+            changeEventIdleFormId,
+            triggerScriptEditorId,
+            triggerScriptFormId,
+            triggerScriptSourceSha256,
+            triggerCondition,
+            thresholdStage);
     }
 
     internal Fo3ActivePlayerPackage Activate() =>
@@ -148,6 +190,34 @@ internal sealed record Fo3PlayerPackageTransition(
             IdleFormIds,
             NextCommand,
             NextStage);
+
+    internal Fo3PlayerPackageRuntimeActivation ActivateAtOwnedMarker(
+        string locationReferenceFormId,
+        int currentStage,
+        bool targetStageDone)
+    {
+        if (!locationReferenceFormId.Equals(
+                LocationReferenceFormId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 player-package activation location differs from its owned marker.");
+        if (currentStage != SourceStage ||
+            currentStage < TriggerThresholdStage ||
+            targetStageDone)
+            throw new InvalidOperationException(
+                "Fallout 3 player-package stage trigger is not satisfied.");
+        return new Fo3PlayerPackageRuntimeActivation(
+            Activate(),
+            BeginEventIdleFormId,
+            EndEventIdleFormId,
+            ChangeEventIdleFormId,
+            TriggerScriptEditorId,
+            TriggerScriptFormId,
+            TriggerScriptSourceSha256,
+            TriggerCondition,
+            NextCommand,
+            NextStage);
+    }
 
     internal void ValidateSavedState(JsonElement source)
     {
