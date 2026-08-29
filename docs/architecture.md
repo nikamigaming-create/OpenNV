@@ -1,15 +1,16 @@
 # OpenNV architecture and code accountability
 
 Status: **launcher-routed bounded Fallout 1 V13ENT and New Vegas opening/
-Goodsprings slices, a non-playable Fallout 3 CG00 development frontend, and an asset-free Fallout 2
-Temple MAP/PRO/FRM source transport over registered DAT2 overlays
+Goodsprings slices, a non-playable Fallout 3 CG00 development frontend, and a bounded Fallout 2
+Temple/Arroyo MAP/PRO/FRM presentation over registered DAT2 overlays
 profile; no full campaign**.
 
 The compact launcher exposes four core game cards. Fallout 1 has a bounded
 Godot Vault 13/V13ENT opening slice in Hex and FPS; its OpenXR adapter is
-simulator-only and launcher-disabled. Fallout 2 admits the owned Map 126
-MAP/PRO/FRM source graph and constructs its exact floor/object presentation in
-Godot's 3D hex space; no rendered, interactive, or launcher-ready Hex/FPS/VR mode exists.
+simulator-only and launcher-disabled. Fallout 2 admits the owned Map 126 and Map 3
+MAP/PRO/FRM source graphs, renders Arroyo Caves in Godot's 3D hex space, and has a
+bounded grounded source-walk-gated player proof; character flow, campaign systems,
+save ownership, reciprocal exits, FPS/OpenXR, and launcher readiness remain absent.
 New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
 hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
 XML closures, and the bounded ordered Doc house → Goodsprings exterior → saloon
@@ -19,6 +20,10 @@ launchable. From a completed stage-200 Continue, its accepted forward flat route
 uses configured input through both XTEL links and campaign save v5 cold-restores
 saloon CELL `00106185`; OpenXR remains experimental with no physical-headset
 acceptance.
+Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
+Pip-Boy surface through Godot's input-event path. The accepted surface uses the
+owned background, bitmap fonts, and source rectangles, but it does not execute
+the complete Gamebryo tile graph and is not retail-pixel parity.
 Fallout 3 owns its menu and persistent CG00 selection through stage 62; later
 Section 4 and stage-65/80/85 contracts validate but do not bypass unimplemented
 world triggers. It has no Vault 101 runtime. TTW runtime support is absent, and JAM remains dependency- and

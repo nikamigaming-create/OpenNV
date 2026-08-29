@@ -38,7 +38,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
 | Fallout 2 Hex/FPS/VR | Owned Map 126 Temple and Map 3 Arroyo Caves source graphs/caches, exact Temple topology, a rendered Map 3 scene, and a grounded input-driven player that spawns at the owned arrival hex, crosses source-walkable neighbors, and stops at a source-blocked hex | Character art, player-authored free play, reciprocal exit execution, INT scripts, actors, combat, inventory, saves, FPS/OpenXR adapters, and launcher readiness remain absent, so all three modes stay disabled |
-| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; from a completed stage-200 Continue, configured flat input traverses both forward XTEL links and campaign save v5 cold-restores saloon CELL `00106185`; owned containers now retain remaining item counts after Take One/Take All; original flat and experimental OpenXR routes are launchable | Player-to-container deposits, reverse-traversal acceptance, neighboring CELL streaming, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
+| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; from a completed stage-200 Continue, configured flat input traverses both forward XTEL links and campaign save v5 cold-restores saloon CELL `00106185`; owned containers retain remaining item counts after Take One/Take All; configured `Tab` now opens the populated owned campaign Pip-Boy surface and `Escape` closes it through Godot's input-event path; original flat and experimental OpenXR routes are launchable | Player-to-container deposits, Pip-Boy tab-navigation acceptance, reverse-traversal acceptance, neighboring CELL streaming, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and persistent CG00 stage 62; exact later state contracts compile and validate | No first-person Vault 101 world or authored package/dialogue trigger execution exists, so FPS, Hex, and VR stay disabled |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
@@ -77,8 +77,12 @@ state without a proof override. OpenNV compiles the installed
 `inventory_menu.xml`, and `map_menu.xml` closures, their four selected owned
 bitmap fonts, and the owned Pip-Boy background into a hash-verified gameplay-UI
 contract. The HUD stays hidden until the authored Doc control policy enables
-the Pip-Boy, and `Tab` then opens the authoritative
-inventory/quest/map snapshot in flat mode. OpenXR consumes that same snapshot
+the Pip-Boy. A completed owned campaign save now has a native Godot visual
+acceptance in which configured `Tab` opens the surface, all three saved opening
+items are present in the authoritative snapshot, and configured `Escape` closes
+it. The accepted capture uses the installed background and bitmap fonts without
+missing-glyph boxes or exposing a local save path. It is a functional flat input
+and populated-surface result, not a retail visual-parity claim. OpenXR consumes that same snapshot
 through a status-only wrist surface and owned font/theme path; ITEMS/DATA
 navigation and its full Pip-Boy input contract remain explicit headset gates. The current shell
 uses verified ITEMS/DATA rectangles while STATS reuses the verified ITEMS frame
