@@ -119,7 +119,9 @@ internal static class Fo1NewGameFlow
         string startPresentation)
     {
         var creator = new Fo1CharacterCreator();
-        creator.Configure(contract);
+        creator.Configure(
+            contract,
+            enableHexPortraitToggle: startPresentation == "hex-tactical");
         var resolved = false;
         creator.CharacterReady += profile =>
         {
@@ -153,7 +155,7 @@ internal static class Fo1NewGameFlow
             GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE character-creation");
             HideWorld(loaded);
             var creator = new Fo1CharacterCreator();
-            creator.Configure(contract);
+            creator.Configure(contract, enableHexPortraitToggle: true);
             host.AddChild(creator);
             var profile = await creator.RunAutomatedDemo(host);
             profile.Validate();

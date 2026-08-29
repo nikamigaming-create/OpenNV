@@ -155,18 +155,24 @@ internal partial class Fo1CharacterCreator : CanvasLayer
     private ImageTexture _creatorChromeTexture = null!;
     private Control _pickerOverlay = null!;
     private TextureRect _pickerPortrait = null!;
+    private Fo1OwnedPortraitRelief? _pickerPortraitRelief;
+    private Button? _pickerPortraitToggle;
     private Label _pickerDetails = null!;
     private Label _pickerCounter = null!;
     private int _pickerIndex;
     private int _age = Fo1CharacterCreatorNumericContracts.SourcePresentationInt25;
     private string _sex = "Male";
+    private bool _hexPortraitToggleEnabled;
 
     internal event Action<Fo1CharacterProfile>? CharacterReady;
     internal event Action? BackRequested;
 
-    internal void Configure(Fo1CharacterStartContract contract)
+    internal void Configure(
+        Fo1CharacterStartContract contract,
+        bool enableHexPortraitToggle = false)
     {
         _contract = contract;
+        _hexPortraitToggleEnabled = enableHexPortraitToggle;
         Name = "OriginalFalloutCharacterCreator";
         Layer = Fo1CharacterCreatorNumericContracts.SourcePresentationInt110;
     }
@@ -183,10 +189,22 @@ internal partial class Fo1CharacterCreator : CanvasLayer
     {
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt24);
         ShowPremade(0);
+        if (_hexPortraitToggleEnabled)
+        {
+            TogglePortraitMode();
+            AssertLivePortrait(_contract.PremadeCharacters[0]);
+        }
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
         ShowPremade(1);
+        if (_hexPortraitToggleEnabled)
+            AssertLivePortrait(_contract.PremadeCharacters[1]);
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
         ShowPremade(2);
+        if (_hexPortraitToggleEnabled)
+        {
+            AssertLivePortrait(_contract.PremadeCharacters[2]);
+            TogglePortraitMode();
+        }
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
         OpenCustomEditor();
         _name.Text = "NIKAMI";
@@ -400,6 +418,26 @@ internal partial class Fo1CharacterCreator : CanvasLayer
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         _pickerOverlay.AddChild(_pickerPortrait);
+        if (_hexPortraitToggleEnabled)
+        {
+            _pickerPortraitRelief = new Fo1OwnedPortraitRelief(
+                _contract.PremadeCharacters[0])
+            {
+                Position = _pickerPortrait.Position,
+                Size = _pickerPortrait.Size,
+            };
+            _pickerOverlay.AddChild(_pickerPortraitRelief);
+            _pickerPortraitToggle = AddPickerButton(
+                "LIVE 3D",
+                Fo1CharacterCreatorNumericContracts.SourcePresentationFloat153Point0f,
+                Fo1CharacterCreatorNumericContracts.SourcePresentationFloat244Point0f,
+                Fo1CharacterCreatorNumericContracts.SourcePresentationFloat115Point0f,
+                Fo1CharacterCreatorNumericContracts.SourcePresentationFloat24Point0f,
+                TogglePortraitMode,
+                Fo1CharacterCreatorNumericContracts.SourcePresentationInt9);
+            _pickerPortraitToggle.TooltipText =
+                "Hex view: toggle the exact owned portrait on a live curved 3D surface";
+        }
         _pickerDetails = PickerLabel(
             "",
             Fo1CharacterCreatorNumericContracts.SourcePresentationFloat275Point0f,
@@ -443,6 +481,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
         var premade = _contract.PremadeCharacters[_pickerIndex];
         var profile = premade.Profile;
         _pickerPortrait.Texture = premade.Portrait.Load();
+        _pickerPortraitRelief?.SetCharacter(premade);
         _pickerCounter.Text = $"{profile.Name.ToUpperInvariant()}  {_pickerIndex + 1}/3";
         var biography = string.Join(
             " ",
@@ -458,6 +497,37 @@ internal partial class Fo1CharacterCreator : CanvasLayer
             $"TAGGED  {string.Join(" • ", profile.TaggedSkills)}\n" +
             $"TRAITS  {string.Join(" • ", profile.Traits)}\n\n" +
             biography;
+    }
+
+    internal bool Live3DVisible => _pickerPortraitRelief?.Visible == true;
+
+    internal void TogglePortraitMode()
+    {
+        if (!_hexPortraitToggleEnabled || _pickerPortraitRelief is null ||
+            _pickerPortraitToggle is null)
+            return;
+        _pickerPortraitRelief.Visible = !_pickerPortraitRelief.Visible;
+        _pickerPortrait.Visible = !_pickerPortraitRelief.Visible;
+        _pickerPortraitToggle.Text = _pickerPortraitRelief.Visible
+            ? "PORTRAIT"
+            : "LIVE 3D";
+        _pickerOverlay.SetMeta(
+            "portrait_view_mode",
+            _pickerPortraitRelief.Visible
+                ? "owned-portrait-live-3d-relief"
+                : "owned-source-portrait");
+    }
+
+    private void AssertLivePortrait(Fo1PremadeCharacter expected)
+    {
+        if (_pickerPortraitRelief is null || !_pickerPortraitRelief.Visible ||
+            _pickerPortraitRelief.SurfaceCount != 1 ||
+            _pickerPortraitRelief.CharacterId != expected.Id ||
+            _pickerPortraitRelief.SourcePortraitSha256 !=
+                expected.Portrait.SourceFrmSha256 ||
+            _pickerPortraitRelief.LocalPortraitPngSha256 != expected.Portrait.Sha256)
+            throw new InvalidOperationException(
+                $"Fallout 1 Hex live portrait did not bind exact premade {expected.Id}.");
     }
 
     private void TakePremade()
