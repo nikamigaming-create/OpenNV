@@ -31,7 +31,7 @@ internal sealed record OpeningCampaignState(
     OpeningTransformState PlayerTransform,
     OpeningTransformState GuideTransform)
 {
-    internal const string ExpectedSchema = "opennv-opening-campaign-state/v3";
+    internal const string ExpectedSchema = "opennv-opening-campaign-state/v4";
 
     internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
 

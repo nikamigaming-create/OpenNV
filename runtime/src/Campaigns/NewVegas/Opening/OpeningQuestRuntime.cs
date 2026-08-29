@@ -35,6 +35,14 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         "preserve-hash-bound-owned-clip-root-curve";
     private const string ZeroedAccumulationRootTranslation =
         "owned-world-root-authoritative-zero-local-translation";
+    private const string FaceGenSliderNamePrefix = "OwnedFaceGenGeometrySlider_";
+    private const string FaceGenResetAllName = "OwnedFaceGenGeometryResetAll";
+    private static readonly string[] FaceGenPreviewControlLabels =
+    [
+        "Brow Ridge - high / low",
+        "Mouth - happy / sad",
+        "Nose - bridge shallow / deep",
+    ];
 
     private readonly Dictionary<string, Node3D> _roleNodes =
         new(StringComparer.OrdinalIgnoreCase);
@@ -278,49 +286,59 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             value.Name == "OwnedHairSelector");
         var eyesSelector = Descendants<OptionButton>(_activeModal).SingleOrDefault(value =>
             value.Name == "OwnedEyesSelector");
-        var geometrySlider = Descendants<HSlider>(_activeModal).SingleOrDefault(value =>
-            value.Name == "OwnedFaceGenGeometrySlider");
         if (raceSelector is not null && hairSelector is not null && eyesSelector is not null)
         {
-            if (geometrySlider is null)
+            var faceGen = _flow.Character.Appearance.FaceGen;
+            var previewPolicy = faceGen.ControlSpace.PreviewControl;
+            var previewControls = FaceGenPreviewControls(faceGen);
+            var geometrySliders = Descendants<HSlider>(_activeModal)
+                .Where(value => value.Name.ToString().StartsWith(
+                    FaceGenSliderNamePrefix,
+                    StringComparison.Ordinal))
+                .ToDictionary(
+                    value => value.Name.ToString()[FaceGenSliderNamePrefix.Length..],
+                    StringComparer.Ordinal);
+            if (geometrySliders.Count != previewControls.Count ||
+                previewControls.Any(control =>
+                    !geometrySliders.ContainsKey(control.SettingEntity)))
                 throw new InvalidOperationException(
-                    "Owned appearance modal has no FaceGen geometry slider.");
+                    "Owned appearance modal FaceGen geometry sliders are incomplete.");
+            void SetGeometrySliders(float value)
+            {
+                foreach (var control in previewControls)
+                    geometrySliders[control.SettingEntity].Value = value;
+            }
+            bool GeometryValuesEqual(float value) =>
+                previewControls.All(control =>
+                    _faceGeometryControlValues.TryGetValue(
+                        control.SettingEntity,
+                        out var actual) &&
+                    Mathf.IsEqualApprox(actual, value));
             if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.EditGeometry)
             {
-                var previewControl =
-                    _flow.Character.Appearance.FaceGen.ControlSpace.PreviewControl;
-                geometrySlider.Value = previewControl.AcceptanceValue;
+                SetGeometrySliders(previewPolicy.AcceptanceValue);
                 var editedSha256 = CurrentFaceSymmetricGeometrySha256();
-                if (!_faceGeometryControlValues.TryGetValue(
-                        previewControl.SettingEntity,
-                        out var editedValue) ||
-                    !Mathf.IsEqualApprox(editedValue, previewControl.AcceptanceValue) ||
+                if (!GeometryValuesEqual(previewPolicy.AcceptanceValue) ||
                     editedSha256.Equals(
-                        _flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
+                        faceGen.SymmetricGeometrySha256,
                         StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
-                        "Owned FaceGen acceptance slider did not change source coordinates.");
+                        "Owned FaceGen acceptance sliders did not change source coordinates.");
                 _acceptanceAppearancePhase = AcceptanceAppearancePhase.ResetGeometry;
                 GD.Print(
                     $"OPENNV_OPENING_ACCEPTANCE_FACEGEN_INPUT " +
-                    $"control={previewControl.SettingEntity} " +
-                    $"value={previewControl.AcceptanceValue:F4} " +
+                    $"controls={FaceGenControlValuesText(previewControls)} " +
                     $"editedSha256={editedSha256} " +
-                    "transport=godot-authored-slider-signal");
+                    "transport=godot-authored-slider-signals");
                 return;
             }
             if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.ResetGeometry)
             {
-                var previewControl =
-                    _flow.Character.Appearance.FaceGen.ControlSpace.PreviewControl;
                 PressAcceptanceButton(buttons.FirstOrDefault(button =>
-                    button.Name == "OwnedFaceGenGeometryReset"));
-                if (!_faceGeometryControlValues.TryGetValue(
-                        previewControl.SettingEntity,
-                        out var resetValue) ||
-                    !Mathf.IsEqualApprox(resetValue, previewControl.ResetValue) ||
+                    button.Name == FaceGenResetAllName));
+                if (!GeometryValuesEqual(previewPolicy.ResetValue) ||
                     !CurrentFaceSymmetricGeometrySha256().Equals(
-                        _flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
+                        faceGen.SymmetricGeometrySha256,
                         StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
                         "Owned FaceGen reset did not restore source coordinates.");
@@ -332,9 +350,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             }
             if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.RestoreGeometryEdit)
             {
-                var previewControl =
-                    _flow.Character.Appearance.FaceGen.ControlSpace.PreviewControl;
-                geometrySlider.Value = previewControl.AcceptanceValue;
+                SetGeometrySliders(previewPolicy.AcceptanceValue);
                 _acceptanceAppearancePhase = AcceptanceAppearancePhase.SelectSex;
                 return;
             }
@@ -561,9 +577,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _raceFormId = _flow.Character.Appearance.DefaultRaceFormId;
         _hairFormId = _flow.Character.Appearance.DefaultHairFormId;
         _eyesFormId = _flow.Character.Appearance.DefaultEyesFormId;
-        var previewControl = _flow.Character.Appearance.FaceGen.ControlSpace.PreviewControl;
-        _faceGeometryControlValues[previewControl.SettingEntity] =
-            previewControl.ResetValue;
+        var faceGen = _flow.Character.Appearance.FaceGen;
+        var previewPolicy = faceGen.ControlSpace.PreviewControl;
+        foreach (var control in FaceGenPreviewControls(faceGen))
+            _faceGeometryControlValues[control.SettingEntity] = previewPolicy.ResetValue;
         if (!CurrentFaceSymmetricGeometrySha256().Equals(
                 _flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
                 StringComparison.OrdinalIgnoreCase))
@@ -2095,7 +2112,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         }
         var appearance = _flow.Character.Appearance;
         var faceGen = appearance.FaceGen;
-        var previewControl = faceGen.ControlSpace.PreviewControl;
+        var previewPolicy = faceGen.ControlSpace.PreviewControl;
+        var previewControls = FaceGenPreviewControls(faceGen);
         var engineSex = appearance.SexEngineValues[_sexIndex];
         var raceSelect = NewOptionButton("OwnedRaceSelector");
         var hairSelect = NewOptionButton("OwnedHairSelector");
@@ -2113,50 +2131,73 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         };
         content.AddChild(preview);
         OpeningPlayerFaceGenPreviewHost? previewHost = null;
-        var controlLabel = NewLabel("");
-        controlLabel.Name = "OwnedFaceGenGeometryControlValue";
-        controlLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        content.AddChild(controlLabel);
-        var controlRow = new HBoxContainer
-        {
-            Name = "OwnedFaceGenGeometryControl",
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-        };
-        content.AddChild(controlRow);
-        var controlSlider = new HSlider
-        {
-            Name = "OwnedFaceGenGeometrySlider",
-            MinValue = previewControl.Minimum,
-            MaxValue = previewControl.Maximum,
-            Step = previewControl.Step,
-            Value = _faceGeometryControlValues[previewControl.SettingEntity],
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            FocusMode = Control.FocusModeEnum.All,
-        };
-        controlRow.AddChild(controlSlider);
-        var resetControl = NewButton(_flow.Strings["reset"]);
-        resetControl.Name = "OwnedFaceGenGeometryReset";
-        controlRow.AddChild(resetControl);
+        var controlSliders = new Dictionary<string, HSlider>(StringComparer.Ordinal);
 
-        void UpdateControlValue(float value)
+        void UpdateControlValue(
+            OpeningNativeFaceGenGeometryControl control,
+            Label label,
+            float value)
         {
             if (!float.IsFinite(value) ||
-                value < previewControl.Minimum ||
-                value > previewControl.Maximum)
+                value < previewPolicy.Minimum ||
+                value > previewPolicy.Maximum)
                 throw new InvalidOperationException(
                     "Normalized FaceGen preview control value is invalid.");
-            _faceGeometryControlValues[previewControl.SettingEntity] = value;
-            controlLabel.Text =
-                $"{previewControl.SourceLabel} (normalized preview; retail range pending): " +
-                $"{value:+0.00;-0.00;0.00}";
-            previewHost?.Apply(value);
+            var normalizedValue = Mathf.IsEqualApprox(
+                value,
+                previewPolicy.ResetValue)
+                ? previewPolicy.ResetValue
+                : value;
+            _faceGeometryControlValues[control.SettingEntity] = normalizedValue;
+            label.Text =
+                $"{control.SourceLabel} (normalized preview; retail range pending): " +
+                $"{normalizedValue:+0.00;-0.00;0.00}";
+            previewHost?.Apply(control.SettingEntity, normalizedValue);
             GD.Print(
-                $"OPENNV_NEW_GAME_FACEGEN_CONTROL name={previewControl.SettingEntity} " +
-                $"value={value:F4} semantics={previewControl.Semantics}");
+                $"OPENNV_NEW_GAME_FACEGEN_CONTROL name={control.SettingEntity} " +
+                $"axisSha256={control.AxisSha256} value={normalizedValue:R} " +
+                $"semantics={previewPolicy.Semantics}");
         }
-        controlSlider.ValueChanged += value => UpdateControlValue((float)value);
-        resetControl.Pressed += () => controlSlider.Value = previewControl.ResetValue;
-        UpdateControlValue((float)controlSlider.Value);
+
+        foreach (var control in previewControls)
+        {
+            var selectedControl = control;
+            var controlLabel = NewLabel("");
+            controlLabel.Name = $"OwnedFaceGenGeometryControlValue_{control.SettingEntity}";
+            controlLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            content.AddChild(controlLabel);
+            var controlRow = new HBoxContainer
+            {
+                Name = $"OwnedFaceGenGeometryControl_{control.SettingEntity}",
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            };
+            content.AddChild(controlRow);
+            var controlSlider = new HSlider
+            {
+                Name = FaceGenSliderNamePrefix + control.SettingEntity,
+                MinValue = previewPolicy.Minimum,
+                MaxValue = previewPolicy.Maximum,
+                Step = previewPolicy.Step,
+                Value = _faceGeometryControlValues[control.SettingEntity],
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                FocusMode = Control.FocusModeEnum.All,
+            };
+            controlSliders[control.SettingEntity] = controlSlider;
+            controlRow.AddChild(controlSlider);
+            controlSlider.ValueChanged += value => UpdateControlValue(
+                selectedControl,
+                controlLabel,
+                (float)value);
+            UpdateControlValue(selectedControl, controlLabel, (float)controlSlider.Value);
+        }
+        var resetControls = NewButton(_flow.Strings["reset"]);
+        resetControls.Name = FaceGenResetAllName;
+        resetControls.Pressed += () =>
+        {
+            foreach (var control in previewControls)
+                controlSliders[control.SettingEntity].Value = previewPolicy.ResetValue;
+        };
+        content.AddChild(resetControls);
 
         void FillPartOptions(
             OptionButton selector,
@@ -2203,19 +2244,22 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     _flow.ReferenceCanvasSize;
                 previewHost = OpeningPlayerFaceGenPreviewHost.Load(
                     faceGen.PreviewHead,
-                    previewControl,
+                    previewControls,
+                    previewPolicy,
                     preview,
                     _configuration,
                     new Vector2(
-                        menuSize.X * previewControl.Presentation.ViewportWidthFraction,
-                        menuSize.Y * previewControl.Presentation.ViewportHeightFraction));
-                previewHost.Apply(
-                    _faceGeometryControlValues[previewControl.SettingEntity]);
+                        menuSize.X * previewPolicy.Presentation.ViewportWidthFraction,
+                        menuSize.Y * previewPolicy.Presentation.ViewportHeightFraction));
+                foreach (var control in previewControls)
+                    previewHost.Apply(
+                        control.SettingEntity,
+                        _faceGeometryControlValues[control.SettingEntity]);
                 GD.Print(
                     $"OPENNV_NEW_GAME_FACEGEN_PREVIEW_READY " +
                     $"player={faceGen.PreviewHead.PlayerFormId} " +
                     $"race={faceGen.PreviewHead.RaceFormId} " +
-                    $"control={previewControl.SettingEntity} " +
+                    $"boundControls={previewHost.BoundControlCount} " +
                     $"boundSurfaces={previewHost.BoundSurfaceCount} " +
                     $"availableControls={faceGen.PreviewHead.GeometryControlCount}");
             }
@@ -2272,8 +2316,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 $"race={_raceFormId} hair={_hairFormId} eyes={_eyesFormId} " +
                 $"faceGeometry={appearance.FaceGen.SymmetricGeometrySha256} " +
                 $"editedFaceGeometry={CurrentFaceSymmetricGeometrySha256()} " +
-                $"control={previewControl.SettingEntity}:" +
-                $"{_faceGeometryControlValues[previewControl.SettingEntity]:F4} " +
+                $"controls={FaceGenControlValuesText(previewControls)} " +
                 $"preview={appearance.PreviewDisposition}");
             CloseModal();
             completed();
@@ -3280,31 +3323,76 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _flow.Character.Appearance.FaceGen,
             _faceGeometryControlValues);
 
+    private string FaceGenControlValuesText(
+        IReadOnlyList<OpeningNativeFaceGenGeometryControl> controls) =>
+        string.Join(
+            ",",
+            controls.Select(control =>
+                $"{control.SettingEntity}:" +
+                $"{_faceGeometryControlValues[control.SettingEntity]:F4}"));
+
+    private static IReadOnlyList<OpeningNativeFaceGenGeometryControl>
+        FaceGenPreviewControls(OpeningAppearanceFaceGen faceGen)
+    {
+        var selected = FaceGenPreviewControlLabels.Select(label =>
+        {
+            var matches = faceGen.ControlSpace.NativeGeometryControls
+                .Where(control => control.SourceLabel == label)
+                .ToArray();
+            if (matches.Length != 1)
+                throw new InvalidOperationException(
+                    $"Owned FaceGen preview label has {matches.Length} controls: {label}.");
+            return matches[0];
+        }).ToArray();
+        var configured = faceGen.ControlSpace.PreviewControl;
+        if (selected[0].ControlIndex != configured.ControlIndex ||
+            selected[0].SettingEntity != configured.SettingEntity ||
+            selected[0].AxisSha256 != configured.AxisSha256)
+            throw new InvalidOperationException(
+                "Owned FaceGen configured preview control is not the leading compact control.");
+        foreach (var control in selected)
+        {
+            var source = faceGen.ControlSpace.SymmetricGeometryControls.SingleOrDefault(
+                value => value.Index == control.ControlIndex);
+            if (source is null ||
+                source.SourceLabel != control.SourceLabel ||
+                source.AxisSha256 != control.AxisSha256 ||
+                source.Axis.Count != faceGen.SymmetricGeometryValues.Count)
+                throw new InvalidOperationException(
+                    $"Owned FaceGen compact control axis differs: {control.SettingEntity}.");
+        }
+        return selected;
+    }
+
     private static string FaceSymmetricGeometrySha256(
         OpeningAppearanceFaceGen faceGen,
         IReadOnlyDictionary<string, float> values)
     {
-        var preview = faceGen.ControlSpace.PreviewControl;
-        if (values.Count != 1 ||
-            !values.TryGetValue(preview.SettingEntity, out var value) ||
-            !float.IsFinite(value) ||
-            value < preview.Minimum ||
-            value > preview.Maximum)
+        var policy = faceGen.ControlSpace.PreviewControl;
+        var controls = FaceGenPreviewControls(faceGen);
+        if (values.Count != controls.Count ||
+            controls.Any(control =>
+                !values.TryGetValue(control.SettingEntity, out var value) ||
+                !float.IsFinite(value) ||
+                value < policy.Minimum ||
+                value > policy.Maximum))
             throw new InvalidOperationException(
-                "Saved normalized FaceGen preview coordinate is invalid.");
-        var sourceControl = faceGen.ControlSpace.SymmetricGeometryControls.SingleOrDefault(
-            control => control.Index == preview.ControlIndex);
-        if (sourceControl is null ||
-            sourceControl.AxisSha256 != preview.AxisSha256 ||
-            sourceControl.Axis.Count != faceGen.SymmetricGeometryValues.Count)
-            throw new InvalidOperationException(
-                "Owned FaceGen preview axis does not match the control-space contract.");
+                "Saved normalized FaceGen preview coordinates are invalid.");
+        var sourceControls = controls.Select(control =>
+            faceGen.ControlSpace.SymmetricGeometryControls.Single(source =>
+                source.Index == control.ControlIndex)).ToArray();
 
         var payload = new byte[faceGen.SymmetricGeometryValues.Count * sizeof(float)];
         for (var index = 0; index < faceGen.SymmetricGeometryValues.Count; index++)
         {
-            var coordinate = faceGen.SymmetricGeometryValues[index] +
-                value * sourceControl.Axis[index];
+            var coordinate = faceGen.SymmetricGeometryValues[index];
+            for (var controlIndex = 0; controlIndex < controls.Count; controlIndex++)
+            {
+                var value = values[controls[controlIndex].SettingEntity];
+                if (value == policy.ResetValue)
+                    continue;
+                coordinate += value * sourceControls[controlIndex].Axis[index];
+            }
             if (!float.IsFinite(coordinate))
                 throw new InvalidOperationException(
                     "Edited FaceGen geometry coordinate is non-finite.");

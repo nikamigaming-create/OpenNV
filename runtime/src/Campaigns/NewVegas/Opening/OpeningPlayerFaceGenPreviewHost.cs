@@ -10,28 +10,38 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
     private const float PreviewNearPlaneMeters = 0.01f;
     private const float PreviewFarPlaneMeters = 100.0f;
 
-    private readonly IReadOnlyList<MorphBinding> _bindings;
+    private readonly IReadOnlyDictionary<string, IReadOnlyList<MorphBinding>> _bindings;
 
     private OpeningPlayerFaceGenPreviewHost(
         SubViewportContainer control,
-        IReadOnlyList<MorphBinding> bindings)
+        IReadOnlyDictionary<string, IReadOnlyList<MorphBinding>> bindings)
     {
         Control = control;
         _bindings = bindings;
     }
 
     internal Control Control { get; }
-    internal int BoundSurfaceCount => _bindings.Count;
+    internal int BoundControlCount => _bindings.Count;
+    internal int BoundSurfaceCount => _bindings.Values
+        .Select(value => value.Count)
+        .Distinct()
+        .Single();
 
     internal static OpeningPlayerFaceGenPreviewHost Load(
         OpeningPlayerFaceGenPreview source,
-        OpeningFaceGenPreviewControl control,
+        IReadOnlyList<OpeningNativeFaceGenGeometryControl> controls,
+        OpeningFaceGenPreviewControl policy,
         Control parent,
         RuntimeConfiguration configuration,
         Vector2 availableSize)
     {
         VerifyHash(source.GltfPath, source.GltfSha256);
         VerifyHash(source.SidecarPath, source.SidecarSha256);
+        if (controls.Count == 0 ||
+            controls.Select(value => value.SettingEntity).Distinct(StringComparer.Ordinal).Count() !=
+                controls.Count)
+            throw new InvalidOperationException(
+                "Player FaceGen preview control selection is invalid.");
         if (!parent.IsInsideTree())
             throw new InvalidOperationException(
                 "Player FaceGen preview owner is outside the SceneTree.");
@@ -81,12 +91,12 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
         };
         scene.AddChild(camera);
         var verticalHalfRadians = Mathf.DegToRad(camera.Fov) *
-            control.Presentation.VerticalFovHalfAngleFactor;
+            policy.Presentation.VerticalFovHalfAngleFactor;
         var framedDimension = Mathf.Max(bounds.Size.X, bounds.Size.Y);
         var distance = framedDimension * PreviewFrameMargin /
             (2.0f * MathF.Tan(verticalHalfRadians));
         camera.Position = target + Vector3.Forward *
-            (distance + bounds.Size.Z * control.Presentation.DepthExtentFraction);
+            (distance + bounds.Size.Z * policy.Presentation.DepthExtentFraction);
         camera.LookAt(target, Vector3.Up);
         var environment = new WorldEnvironment
         {
@@ -102,29 +112,32 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
         };
         scene.AddChild(environment);
 
-        var bindings = actor.Surfaces.Select(surface =>
-        {
-            var matches = surface.FaceGenMorphTargets
-                .Select((name, index) => (name, index))
-                .Where(value => value.name == control.SettingEntity)
-                .ToArray();
-            if (matches.Length != 1)
-                throw new InvalidOperationException(
-                    "Owned player preview surface has no unique CTL/EGM target: " +
-                    $"{surface.Role}/{surface.Shape}/{control.SettingEntity}.");
-            return new MorphBinding(surface.Mesh, matches[0].index);
-        }).ToArray();
-        if (bindings.Length != actor.Surfaces.Count)
+        var bindings = controls.ToDictionary(
+            control => control.SettingEntity,
+            control => (IReadOnlyList<MorphBinding>)actor.Surfaces.Select(surface =>
+            {
+                var matches = surface.FaceGenMorphTargets
+                    .Select((name, index) => (name, index))
+                    .Where(value => value.name == control.SettingEntity)
+                    .ToArray();
+                if (matches.Length != 1)
+                    throw new InvalidOperationException(
+                        "Owned player preview surface has no unique CTL/EGM target: " +
+                        $"{surface.Role}/{surface.Shape}/{control.SettingEntity}.");
+                return new MorphBinding(surface.Mesh, matches[0].index);
+            }).ToArray(),
+            StringComparer.Ordinal);
+        if (bindings.Values.Any(value => value.Count != actor.Surfaces.Count))
             throw new InvalidOperationException(
                 "Owned player preview CTL/EGM binding coverage is incomplete.");
         return new OpeningPlayerFaceGenPreviewHost(viewportContainer, bindings);
     }
 
-    internal void Apply(float value)
+    internal void Apply(string settingEntity, float value)
     {
-        if (!float.IsFinite(value))
+        if (!float.IsFinite(value) || !_bindings.TryGetValue(settingEntity, out var bindings))
             throw new ArgumentOutOfRangeException(nameof(value));
-        foreach (var binding in _bindings)
+        foreach (var binding in bindings)
             binding.Mesh.SetBlendShapeValue(binding.Index, value);
     }
 
