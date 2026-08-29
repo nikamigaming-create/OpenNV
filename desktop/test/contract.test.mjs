@@ -229,10 +229,16 @@ test("TTW and JAM remain disabled until both registered profiles report portable
   assert.equal(withProfiles.campaigns.find((campaign) => campaign.id === "ttw").jamReady, true);
 });
 
-test("TTW and JAM launch arguments pass only manifest identities to the portable runtime", () => {
+test("TTW launch arguments preserve the isolated opening, cache, and save identities", () => {
   const ttwProfile = {
     ready: true,
+    openingValidated: true,
     path: "D:\\profiles\\ttw-profile.json",
+    sourceNamespacePath: "D:\\profiles\\ttw-effective-source.json",
+    openingProfilePath: "D:\\profiles\\ttw-fo3-opening-profile.json",
+    cacheCompatibilityId: `ttw-fo3-opening:${"a".repeat(64)}`,
+    cacheRoot: `D:\\cache\\ttw\\${"b".repeat(64)}\\${"a".repeat(64)}`,
+    saveCompatibilityId: `ttw:${"b".repeat(64)}`,
     savePath: "D:\\profiles\\ttw\\courier-v1.json"
   };
   const jamProfile = { ready: true, path: "D:\\profiles\\jam-profile.json" };
@@ -241,12 +247,23 @@ test("TTW and JAM launch arguments pass only manifest identities to the portable
     "--xr-mode", "off", "--",
     "--campaign", "TTW",
     "--ttw-profile", ttwProfile.path,
+    "--ttw-source-namespace", ttwProfile.sourceNamespacePath,
+    "--ttw-fo3-opening-profile", ttwProfile.openingProfilePath,
+    "--ttw-cache-compatibility-id", ttwProfile.cacheCompatibilityId,
+    "--ttw-cache-root", ttwProfile.cacheRoot,
+    "--save-compatibility-id", ttwProfile.saveCompatibilityId,
     "--save-path", ttwProfile.savePath,
     "--enable-jam", "--jam-profile", jamProfile.path
   ]);
   assert.throws(
     () => createRuntimeArguments(request, { ttwProfile }),
     /JAM profile/
+  );
+  assert.throws(
+    () => createRuntimeArguments(
+      validateLaunchRequest({ campaign: "ttw" }),
+      { ttwProfile: { ...ttwProfile, openingValidated: false } }),
+    /TTW profile/
   );
 });
 
@@ -325,6 +342,10 @@ test("the checked-in runtime keeps owned-data routes profile-gated", () => {
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "fallout2").ready, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "fallout3").ready, false);
   assert.equal(merged.campaigns.find((campaign) => campaign.id === "ttw").ready, false);
+  const ttwRuntime = manifest.campaigns.find((campaign) => campaign.id === "TTW").variants.vanilla;
+  assert.equal(ttwRuntime.ready, false);
+  assert.equal(ttwRuntime.requiresOpeningProfile, "opennv-ttw-fo3-opening-profile/v1");
+  assert.match(ttwRuntime.message, /No TTW command interpreter/);
 
   const withFo2 = mergeRuntimeState(createOfflineState({ platform: "win32" }), manifest, {
     fallout2Profile: { ready: true, message: "Prepared owned Hex cache" }

@@ -16,7 +16,9 @@ if str(TOOLS) not in sys.path:
 from plugin_stack import PluginContext, file_sha256  # noqa: E402
 from ttw_fo3_opening import (  # noqa: E402
     EffectiveRecords,
+    _cache_compatibility_id,
     _movie_source,
+    _validated_source_namespace,
     _validated_stack,
     parse_stage,
 )
@@ -251,6 +253,65 @@ class TtwFo3OpeningTests(unittest.TestCase):
             (root / "YUPTTW.esm").write_bytes(b"changed")
             with self.assertRaisesRegex(ValueError, "bytes or hash changed"):
                 _validated_stack(profile)
+
+    def test_effective_source_namespace_is_bound_to_the_same_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = root / "profile.json"
+            profile_document = {
+                "sourceRoots": [str(root)],
+                "plugins": [{"file": "FalloutNV.esm", "loadOrderIndex": 0}],
+                "pluginStackId": "a" * 64,
+                "saveCompatibilityId": f"ttw:{'a' * 64}",
+            }
+            profile.write_text(json.dumps(profile_document), encoding="utf-8")
+            namespace = root / "effective-source.json"
+            namespace_document = {
+                "schema": "opennv-ttw-effective-source-namespace/v1",
+                "status": "validated-neutral-effective-source-namespace",
+                "resolutionPolicy": "top-level-case-insensitive-last-data-root-wins",
+                "sourceProfile": {
+                    "file": str(profile),
+                    "sha256": file_sha256(profile),
+                    "pluginStackId": profile_document["pluginStackId"],
+                    "saveCompatibilityId": profile_document["saveCompatibilityId"],
+                },
+                "sourceRoots": [str(root.resolve())],
+                "plugins": profile_document["plugins"],
+                "runtimeCompatibility": {"ready": False},
+            }
+            namespace.write_text(json.dumps(namespace_document), encoding="utf-8")
+            validated = _validated_source_namespace(
+                namespace,
+                profile,
+                profile_document,
+            )
+            self.assertEqual(validated["sourceProfile"]["sha256"], file_sha256(profile))
+
+            namespace_document["runtimeCompatibility"]["ready"] = True
+            namespace.write_text(json.dumps(namespace_document), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "overstates runtime compatibility"):
+                _validated_source_namespace(namespace, profile, profile_document)
+
+    def test_cache_identity_binds_source_namespace_and_save_inputs(self) -> None:
+        document = {
+            "schema": "opennv-ttw-fo3-opening-profile/v1",
+            "sourceProfile": {
+                "pluginStackId": "a" * 64,
+                "saveCompatibilityId": f"ttw:{'a' * 64}",
+            },
+            "sourceNamespace": {"sha256": "b" * 64},
+            "recipe": {"sha256": "c" * 64},
+            "forms": {},
+            "operands": {},
+            "stages": {},
+            "movies": {},
+        }
+        first = _cache_compatibility_id(document)
+        document["sourceNamespace"]["sha256"] = "d" * 64
+        second = _cache_compatibility_id(document)
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.startswith("ttw-fo3-opening:"))
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, sta
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOfflineState, createRuntimeArguments, mergeRuntimeState, validateLaunchRequest } from "./contract.mjs";
+import { readTtwFo3OpeningContract } from "./ttw-opening-contract.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const renderer = path.join(here, "renderer", "index.html");
@@ -148,6 +149,13 @@ function configuredModProfilePath(kind) {
   return defaultModProfilePath(kind);
 }
 
+function configuredTtwFo3OpeningProfilePath(ttwManifestPath) {
+  if (process.env.OPENNV_TTW_FO3_OPENING_PROFILE) {
+    return path.resolve(process.env.OPENNV_TTW_FO3_OPENING_PROFILE);
+  }
+  return path.join(path.dirname(ttwManifestPath), "ttw-fo3-opening-profile.json");
+}
+
 function sha256(filePath) {
   const digest = createHash("sha256");
   const handle = openSync(filePath, "r");
@@ -276,21 +284,35 @@ function readTtwProfile(manifestOverride = null) {
         !existsSync(loadOrder.file) || sha256(loadOrder.file) !== loadOrder.sha256) {
       return unavailable("The TTW active load order changed; register it again.", true);
     }
-    const runtimeReady = profile?.runtimeCompatibility?.ready === true;
+    const opening = readTtwFo3OpeningContract({
+      baseManifestPath: manifestPath,
+      baseProfile: profile,
+      openingManifestPath: configuredTtwFo3OpeningProfilePath(manifestPath)
+    });
+    const runtimeReady = profile?.runtimeCompatibility?.ready === true && opening.runtimeReady;
     const reason = String(profile?.runtimeCompatibility?.reason || "TTW runtime compatibility is not ready.");
+    const cacheDigest = opening.validated ? opening.cacheCompatibilityId.split(":", 2)[1] : null;
     return {
       ready: runtimeReady,
       runtimeReady,
       validated: true,
       manifestDetected: true,
-      message: runtimeReady
-        ? "TTW profile and portable runtime compatibility are ready."
-        : "TTW profile registered; portable runtime support is still pending.",
-      reason,
+      openingValidated: opening.validated,
+      openingManifestDetected: opening.manifestDetected,
+      message: opening.validated
+        ? opening.message
+        : "TTW profile registered; the bounded Fallout 3 opening contract is missing or changed.",
+      reason: opening.validated ? opening.reason : `${opening.message} ${reason}`,
       path: manifestPath,
+      openingProfilePath: opening.path,
+      sourceNamespacePath: opening.sourceNamespacePath,
       pluginStackId: profile.pluginStackId,
       saveCompatibilityId: profile.saveCompatibilityId,
-      savePath: path.join(app.getPath("userData"), "profiles", "ttw", profile.pluginStackId, "courier-v1.json")
+      cacheCompatibilityId: opening.cacheCompatibilityId,
+      cacheRoot: cacheDigest
+        ? path.join(app.getPath("userData"), "cache", "ttw", profile.pluginStackId, cacheDigest)
+        : null,
+      savePath: path.join(app.getPath("userData"), "profiles", "ttw", profile.pluginStackId, "fo3-opening-v1.json")
     };
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : "The TTW profile could not be read.");

@@ -215,11 +215,21 @@ export function createRuntimeArguments(
     if (enableVr) args.push("--vr");
     return args;
   }
-  if (!ttwProfile?.ready) throw new Error(CONTRACT.copy.ttwProfileUnavailable);
+  if (!ttwProfile?.ready || !ttwProfile?.openingValidated ||
+      !ttwProfile?.openingProfilePath || !ttwProfile?.sourceNamespacePath ||
+      !ttwProfile?.cacheCompatibilityId || !ttwProfile?.cacheRoot ||
+      !ttwProfile?.saveCompatibilityId) {
+    throw new Error(CONTRACT.copy.ttwProfileUnavailable);
+  }
   const args = [
     "--xr-mode", enableVr ? "on" : "off", "--",
     "--campaign", campaign.engineCampaign,
     "--ttw-profile", ttwProfile.path,
+    "--ttw-source-namespace", ttwProfile.sourceNamespacePath,
+    "--ttw-fo3-opening-profile", ttwProfile.openingProfilePath,
+    "--ttw-cache-compatibility-id", ttwProfile.cacheCompatibilityId,
+    "--ttw-cache-root", ttwProfile.cacheRoot,
+    "--save-compatibility-id", ttwProfile.saveCompatibilityId,
     "--save-path", ttwProfile.savePath
   ];
   if (enableJam) {

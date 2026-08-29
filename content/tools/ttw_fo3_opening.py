@@ -35,6 +35,11 @@ from ttw_profile import (
     plugin_stack_id,
     read_active_load_order,
 )
+from ttw_source_namespace import (
+    RESOLUTION_POLICY as SOURCE_NAMESPACE_RESOLUTION_POLICY,
+    SCHEMA as SOURCE_NAMESPACE_SCHEMA,
+    STATUS as SOURCE_NAMESPACE_STATUS,
+)
 
 
 SCHEMA = "opennv-ttw-fo3-opening-profile/v1"
@@ -45,6 +50,8 @@ DELETED_RECORD_FLAG = 0x00000020
 ADMITTED_SIGNATURES = frozenset({"ACHR", "CELL", "IMAD", "NPC_", "QUST", "REFR", "SCPT", "SOUN"})
 SHA256_HEX_CHARACTERS = 64
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)"
+CACHE_COMPATIBILITY_PREFIX = b"opennv-ttw-fo3-opening-cache-v1\0"
+CACHE_COMPATIBILITY_NAMESPACE = "ttw-fo3-opening"
 
 
 @dataclass(frozen=True)
@@ -185,6 +192,65 @@ def _validated_stack(profile_path: Path) -> tuple[dict[str, object], tuple[Path,
     if profile.get("saveCompatibilityId") != f"ttw:{expected_stack_id}":
         raise ValueError("TTW save-compatibility identity changed")
     return profile, roots, tuple(contexts), {name.casefold(): index for index, name in enumerate(load_order)}
+
+
+def _validated_source_namespace(
+    namespace_path: Path,
+    profile_path: Path,
+    profile: dict[str, object],
+) -> dict[str, object]:
+    resolved_namespace = namespace_path.resolve()
+    namespace = json.loads(resolved_namespace.read_text(encoding="utf-8"))
+    if (
+        namespace.get("schema") != SOURCE_NAMESPACE_SCHEMA
+        or namespace.get("status") != SOURCE_NAMESPACE_STATUS
+        or namespace.get("resolutionPolicy") != SOURCE_NAMESPACE_RESOLUTION_POLICY
+    ):
+        raise ValueError(f"Not a validated TTW effective-source namespace: {resolved_namespace}")
+
+    source = namespace.get("sourceProfile")
+    if not isinstance(source, dict):
+        raise ValueError("TTW effective-source namespace has no source-profile binding")
+    resolved_profile = profile_path.resolve()
+    if (
+        not isinstance(source.get("file"), str)
+        or Path(str(source["file"])).resolve() != resolved_profile
+        or source.get("sha256") != file_sha256(resolved_profile)
+        or source.get("pluginStackId") != profile.get("pluginStackId")
+        or source.get("saveCompatibilityId") != profile.get("saveCompatibilityId")
+    ):
+        raise ValueError("TTW effective-source namespace profile binding differs")
+
+    expected_roots = [str(Path(row).resolve()) for row in profile["sourceRoots"]]
+    if namespace.get("sourceRoots") != expected_roots:
+        raise ValueError("TTW effective-source namespace roots differ from its profile")
+    if namespace.get("plugins") != profile.get("plugins"):
+        raise ValueError("TTW effective-source namespace plugin stack differs from its profile")
+    compatibility = namespace.get("runtimeCompatibility")
+    if not isinstance(compatibility, dict) or compatibility.get("ready") is not False:
+        raise ValueError("TTW effective-source namespace overstates runtime compatibility")
+    return namespace
+
+
+def _cache_compatibility_id(document: dict[str, object]) -> str:
+    payload = {
+        "schema": document["schema"],
+        "sourceProfile": document["sourceProfile"],
+        "sourceNamespace": document["sourceNamespace"],
+        "recipe": document["recipe"],
+        "forms": document["forms"],
+        "operands": document["operands"],
+        "stages": document["stages"],
+        "movies": document["movies"],
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    digest = hashlib.sha256(CACHE_COMPATIBILITY_PREFIX + encoded).hexdigest()
+    return f"{CACHE_COMPATIBILITY_NAMESPACE}:{digest}"
 
 
 def _editor_id(record: Record) -> str | None:
@@ -405,9 +471,14 @@ def _require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
-def compile_ttw_fo3_opening(profile_path: Path, recipe_path: Path = DEFAULT_RECIPE) -> dict[str, object]:
+def compile_ttw_fo3_opening(
+    profile_path: Path,
+    source_namespace_path: Path,
+    recipe_path: Path = DEFAULT_RECIPE,
+) -> dict[str, object]:
     recipe = _load_recipe(recipe_path.resolve())
     profile, roots, contexts, indices = _validated_stack(profile_path)
+    _validated_source_namespace(source_namespace_path, profile_path, profile)
     source_root_indices = {str(row["file"]).casefold(): int(row["sourceRootIndex"]) for row in profile["plugins"]}
     effective = EffectiveRecords(contexts, source_root_indices, indices)
 
@@ -512,22 +583,31 @@ def compile_ttw_fo3_opening(profile_path: Path, recipe_path: Path = DEFAULT_RECI
     movies = {name: _movie_source(roots, str(path)) for name, path in dict(recipe["movies"]).items()}
     recipe_hash = file_sha256(recipe_path.resolve())
     profile_hash = file_sha256(profile_path.resolve())
-    return {
+    document = {
         "schema": SCHEMA,
         "status": "transported-bounded-ttw-fo3-opening-command-contract",
         "campaign": "Fallout3",
         "edition": "TTW",
+        "saveCompatibilityId": profile["saveCompatibilityId"],
         "sourceProfile": {
             "file": str(profile_path.resolve()),
             "sha256": profile_hash,
             "pluginStackId": profile["pluginStackId"],
             "saveCompatibilityId": profile["saveCompatibilityId"],
         },
+        "sourceNamespace": {
+            "file": str(source_namespace_path.resolve()),
+            "sha256": file_sha256(source_namespace_path.resolve()),
+            "schema": SOURCE_NAMESPACE_SCHEMA,
+            "status": SOURCE_NAMESPACE_STATUS,
+        },
         "recipe": {"file": recipe_path.resolve().name, "sha256": recipe_hash},
         "cacheBoundary": {
             "kind": "dedicated-ttw-opening-profile",
             "standaloneFallout3ProfileAccepted": False,
             "standaloneFallout3CacheReused": False,
+            "standaloneNewVegasProfileAccepted": False,
+            "standaloneNewVegasCacheReused": False,
         },
         "scope": {
             "effectiveRecordMerge": "admitted-closure-only-last-active-plugin-wins",
@@ -562,22 +642,123 @@ def compile_ttw_fo3_opening(profile_path: Path, recipe_path: Path = DEFAULT_RECI
             "xnvse-and-jam-native-plugin-execution",
         ],
     }
+    document["cacheBoundary"]["compatibilityId"] = _cache_compatibility_id(document)
+    return document
+
+
+def validate_ttw_fo3_opening(profile_path: Path) -> dict[str, object]:
+    """Validate one compiled TTW opening contract without compiling owned records."""
+
+    resolved = profile_path.resolve()
+    document = json.loads(resolved.read_text(encoding="utf-8"))
+    if (
+        document.get("schema") != SCHEMA
+        or document.get("status")
+        != "transported-bounded-ttw-fo3-opening-command-contract"
+        or document.get("campaign") != "Fallout3"
+        or document.get("edition") != "TTW"
+    ):
+        raise ValueError(f"Not a compiled TTW Fallout 3 opening profile: {resolved}")
+
+    source = document.get("sourceProfile")
+    if not isinstance(source, dict) or not isinstance(source.get("file"), str):
+        raise ValueError("TTW Fallout 3 opening profile has no source-profile binding")
+    source_profile_path = Path(str(source["file"])).resolve()
+    if not source_profile_path.is_file() or source.get("sha256") != file_sha256(source_profile_path):
+        raise ValueError("TTW Fallout 3 opening source profile changed")
+    source_profile, roots, _, _ = _validated_stack(source_profile_path)
+    if (
+        source.get("pluginStackId") != source_profile.get("pluginStackId")
+        or source.get("saveCompatibilityId") != source_profile.get("saveCompatibilityId")
+        or document.get("saveCompatibilityId") != source_profile.get("saveCompatibilityId")
+    ):
+        raise ValueError("TTW Fallout 3 opening save or plugin-stack identity changed")
+
+    namespace_source = document.get("sourceNamespace")
+    if not isinstance(namespace_source, dict) or not isinstance(namespace_source.get("file"), str):
+        raise ValueError("TTW Fallout 3 opening profile has no effective-source binding")
+    namespace_path = Path(str(namespace_source["file"])).resolve()
+    if (
+        not namespace_path.is_file()
+        or namespace_source.get("sha256") != file_sha256(namespace_path)
+        or namespace_source.get("schema") != SOURCE_NAMESPACE_SCHEMA
+        or namespace_source.get("status") != SOURCE_NAMESPACE_STATUS
+    ):
+        raise ValueError("TTW Fallout 3 opening effective-source namespace changed")
+    _validated_source_namespace(namespace_path, source_profile_path, source_profile)
+
+    cache = document.get("cacheBoundary")
+    if (
+        not isinstance(cache, dict)
+        or cache.get("kind") != "dedicated-ttw-opening-profile"
+        or cache.get("standaloneFallout3ProfileAccepted") is not False
+        or cache.get("standaloneFallout3CacheReused") is not False
+        or cache.get("standaloneNewVegasProfileAccepted") is not False
+        or cache.get("standaloneNewVegasCacheReused") is not False
+        or cache.get("compatibilityId") != _cache_compatibility_id(document)
+    ):
+        raise ValueError("TTW Fallout 3 opening cache isolation changed")
+
+    movies = document.get("movies")
+    if not isinstance(movies, dict):
+        raise ValueError("TTW Fallout 3 opening movie boundary is absent")
+    for name, recorded in movies.items():
+        if not isinstance(recorded, dict) or not isinstance(recorded.get("logicalPath"), str):
+            raise ValueError(f"TTW Fallout 3 opening movie binding is invalid: {name}")
+        current = _movie_source(roots, str(recorded["logicalPath"]))
+        if current != recorded:
+            raise ValueError(f"TTW Fallout 3 opening movie source changed: {name}")
+
+    compatibility = document.get("runtimeCompatibility")
+    if not isinstance(compatibility, dict) or compatibility.get("ready") is not False:
+        raise ValueError("TTW Fallout 3 opening profile overstates runtime compatibility")
+    unsupported = document.get("unsupportedSemantics")
+    if not isinstance(unsupported, list) or "ttw-save-runtime-and-world-transition" not in unsupported:
+        raise ValueError("TTW Fallout 3 opening unsupported save boundary is absent")
+    return document
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compile a dedicated bounded TTW Fallout 3 CG00-to-CG01-stage-5 owned-data profile.")
-    parser.add_argument("--ttw-profile", type=Path, required=True)
+    parser.add_argument("--ttw-profile", type=Path)
+    parser.add_argument("--source-namespace", type=Path)
+    parser.add_argument("--validate-profile", type=Path)
     parser.add_argument("--recipe", type=Path, default=DEFAULT_RECIPE)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     try:
+        if args.validate_profile is not None:
+            if args.ttw_profile is not None or args.source_namespace is not None or args.output is not None:
+                raise ValueError("--validate-profile cannot be combined with compile inputs")
+            document = validate_ttw_fo3_opening(args.validate_profile)
+            print(
+                "OPENNV_TTW_FO3_OPENING_VALIDATED "
+                + json.dumps(
+                    {
+                        "manifest": str(args.validate_profile.resolve()),
+                        "pluginStackId": document["sourceProfile"]["pluginStackId"],
+                        "saveCompatibilityId": document["saveCompatibilityId"],
+                        "cacheCompatibilityId": document["cacheBoundary"]["compatibilityId"],
+                        "runtimeReady": document["runtimeCompatibility"]["ready"],
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.ttw_profile is None or args.source_namespace is None or args.output is None:
+            raise ValueError("compile requires --ttw-profile, --source-namespace, and --output")
         output = args.output.resolve()
-        document = compile_ttw_fo3_opening(args.ttw_profile, args.recipe)
+        document = compile_ttw_fo3_opening(
+            args.ttw_profile,
+            args.source_namespace,
+            args.recipe,
+        )
         roots = tuple(Path(row).resolve() for row in json.loads(args.ttw_profile.resolve().read_text(encoding="utf-8"))["sourceRoots"])
         if any(output.is_relative_to(root) for root in roots):
             raise ValueError("TTW opening-profile output must be outside every owned data root")
         output.parent.mkdir(parents=True, exist_ok=True)
         atomic_json(output, document)
+        validate_ttw_fo3_opening(output)
     except Exception as error:
         print(f"OPENNV_TTW_FO3_OPENING_ERROR {error}", file=sys.stderr)
         return 2
@@ -587,6 +768,8 @@ def main() -> int:
             {
                 "manifest": str(output),
                 "pluginStackId": document["sourceProfile"]["pluginStackId"],
+                "saveCompatibilityId": document["saveCompatibilityId"],
+                "cacheCompatibilityId": document["cacheBoundary"]["compatibilityId"],
                 "cg00Stages": list(document["stages"]["CG00"]["results"]),
                 "cg01Stages": list(document["stages"]["CG01"]["results"]),
                 "runtimeReady": document["runtimeCompatibility"]["ready"],
