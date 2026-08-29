@@ -36,7 +36,7 @@ from export_static_nif_gltf import (  # noqa: E402
 )
 from runtime_configuration import load_runtime_configuration  # noqa: E402
 from bsa_archive import canonical_member_path, decode_member_payload, strip_embedded_name  # noqa: E402
-from gltf_io import compiler_sources_sha256  # noqa: E402
+from gltf_io import compiler_sources_sha256, local_python_dependency_paths  # noqa: E402
 from havok_collision_gltf import dynamic_physics_contract  # noqa: E402
 from nif_decoder import (  # noqa: E402
     _block_directory,
@@ -340,6 +340,39 @@ class StaticNifGltfTest(unittest.TestCase):
             self.assertEqual(baseline, compiler_sources_sha256([second, first]))
             second.write_bytes(b"changed")
             self.assertNotEqual(baseline, compiler_sources_sha256([first, second]))
+
+    def test_compiler_identity_is_scoped_and_transitive(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            entrypoint = root / "prepare.py"
+            fnv = root / "fnv.py"
+            shared = root / "shared.py"
+            fallout3 = root / "fallout3.py"
+            entrypoint.write_text("import fnv\nimport fallout3\n", encoding="utf-8")
+            fnv.write_text("from shared import value\n", encoding="utf-8")
+            shared.write_text("value = 1\n", encoding="utf-8")
+            fallout3.write_text("presentation = 1\n", encoding="utf-8")
+
+            def identity() -> str:
+                paths = local_python_dependency_paths(
+                    entrypoint,
+                    root,
+                    excluded_modules=("fallout3",),
+                )
+                self.assertEqual(
+                    ["fnv.py", "prepare.py", "shared.py"],
+                    [path.name for path in paths],
+                )
+                return compiler_sources_sha256(paths)
+
+            baseline = identity()
+            fallout3.write_text("presentation = 2\n", encoding="utf-8")
+            self.assertEqual(baseline, identity())
+            shared.write_text("value = 2\n", encoding="utf-8")
+            self.assertNotEqual(baseline, identity())
+            entrypoint.write_text("__import__('fnv')\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Dynamic import"):
+                local_python_dependency_paths(entrypoint, root)
 
     def test_bsa_member_path_and_compression_fail_closed(self) -> None:
         original = b"owned retail bytes"

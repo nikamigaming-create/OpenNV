@@ -295,15 +295,21 @@ internal static class LegalAssetPreparer
         using var document = JsonDocument.Parse(payload[Prefix.Length..]);
         var identity = new CompilerIdentity(
             document.RootElement.GetProperty("name").GetString()!,
-            document.RootElement.GetProperty("sha256").GetString()!);
+            document.RootElement.GetProperty("sha256").GetString()!,
+            document.RootElement.TryGetProperty("artifactSha256", out var artifactSha256)
+                ? artifactSha256.GetString()
+                : null);
         if (!identity.Name.Equals(contentTool.CompilerName, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "Legal-content helper reported an unexpected compiler name.");
         if (contentTool.Packaged)
         {
+            if (identity.ArtifactSha256 is null)
+                throw new InvalidOperationException(
+                    "Packaged legal-content helper omitted its binary hash.");
             using var stream = File.OpenRead(contentTool.Executable);
             var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-            if (!actual.Equals(identity.Sha256, StringComparison.OrdinalIgnoreCase))
+            if (!actual.Equals(identity.ArtifactSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
                     "Packaged legal-content helper reported an incorrect binary hash.");
         }
@@ -384,5 +390,8 @@ internal static class LegalAssetPreparer
         bool Packaged,
         string CompilerName);
 
-    private sealed record CompilerIdentity(string Name, string Sha256);
+    private sealed record CompilerIdentity(
+        string Name,
+        string Sha256,
+        string? ArtifactSha256 = null);
 }

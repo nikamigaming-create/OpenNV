@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 import struct
@@ -37,6 +38,59 @@ def compiler_sources_sha256(paths: Iterable[Path]) -> str:
             + payload
         )
     return sha256_bytes(b"".join(rows))
+
+
+def local_python_dependency_paths(
+    entrypoint: Path,
+    module_root: Path,
+    *,
+    excluded_modules: Iterable[str] = (),
+) -> list[Path]:
+    """Return the fail-closed transitive local-import graph for one entrypoint."""
+    root = module_root.resolve()
+    pending = [entrypoint.resolve()]
+    excluded = set(excluded_modules)
+    discovered: set[Path] = set()
+    while pending:
+        source = pending.pop()
+        if source in discovered:
+            continue
+        if source.suffix != ".py" or not source.is_file() or not source.is_relative_to(root):
+            raise ValueError(f"Compiler dependency is outside the local module root: {source}")
+        discovered.add(source)
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and (
+                isinstance(node.func, ast.Name) and node.func.id == "__import__"
+                or isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "importlib"
+                and node.func.attr == "import_module"
+            ):
+                raise ValueError(
+                    f"Dynamic import cannot establish compiler provenance: {source}:{node.lineno}"
+                )
+            imported_names: list[str] = []
+            if isinstance(node, ast.Import):
+                imported_names.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    raise ValueError(
+                        f"Relative import cannot establish compiler provenance: {source}:{node.lineno}"
+                    )
+                if node.module:
+                    imported_names.append(node.module)
+            for imported_name in imported_names:
+                top_level = imported_name.split(".", 1)[0]
+                if top_level in excluded:
+                    continue
+                module_path = root.joinpath(*imported_name.split(".")).with_suffix(".py")
+                package_path = root.joinpath(*imported_name.split("."), "__init__.py")
+                candidates = [path for path in (module_path, package_path) if path.is_file()]
+                if len(candidates) > 1:
+                    raise ValueError(f"Ambiguous local compiler import: {imported_name}")
+                pending.extend(candidates)
+    return sorted(discovered, key=lambda path: path.relative_to(root).as_posix())
 
 
 @dataclass

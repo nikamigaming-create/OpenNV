@@ -28,6 +28,7 @@ from gltf_io import (
     BufferBuilder,
     atomic_write,
     compiler_sources_sha256,
+    local_python_dependency_paths,
     pack_floats,
     sha256_bytes,
 )
@@ -609,13 +610,27 @@ def is_lod_landscape_surface(shape: object) -> bool:
 
 
 def compiler_provenance_source_paths() -> list[Path]:
-    root = Path(__file__).resolve().parent
+    packaged_root = getattr(sys, "_MEIPASS", None)
+    root = (
+        Path(packaged_root) / "compiler-sources"
+        if packaged_root is not None
+        else Path(__file__).resolve().parent
+    )
+    python_sources = local_python_dependency_paths(
+        root / "prepare_legal_assets.py",
+        root,
+        excluded_modules=("prepare_fo3_profile",),
+    )
     decoder_contract = configured_recipe_path("nifDecoder")
     material_binding_contract = configured_recipe_path("materialBinding")
     visual_archives_contract = configured_recipe_path("visualArchives")
     audio_archives_contract = configured_recipe_path("audioArchives")
     configuration = load_runtime_configuration()
-    recipes_root = root.parent / "recipes"
+    recipes_root = (
+        Path(packaged_root) / "recipes"
+        if packaged_root is not None
+        else root.parent / "recipes"
+    )
     route_recipe_ids = [
         str(configuration.document["legalAssets"]["defaultCellRecipe"]),
         str(configuration.document["legalAssets"]["defaultOpeningRecipe"]),
@@ -640,7 +655,8 @@ def compiler_provenance_source_paths() -> list[Path]:
             for value in document.get("linkedCellRecipes", [])
         )
     return [
-        *sorted(root.glob("*.py"), key=lambda value: value.name),
+        *python_sources,
+        configuration.path,
         decoder_contract,
         material_binding_contract,
         visual_archives_contract,
@@ -650,13 +666,17 @@ def compiler_provenance_source_paths() -> list[Path]:
 
 
 def compiler_provenance() -> dict[str, str]:
-    if getattr(sys, "frozen", False):
-        executable = Path(sys.executable)
-        return {"name": "OpenNV.Content packaged direct exporter v1", "sha256": sha256_bytes(executable.read_bytes())}
-    return {
-        "name": GENERATOR,
+    identity = {
+        "name": (
+            "OpenNV.Content packaged direct exporter v1"
+            if getattr(sys, "frozen", False)
+            else GENERATOR
+        ),
         "sha256": compiler_sources_sha256(compiler_provenance_source_paths()),
     }
+    if getattr(sys, "frozen", False):
+        identity["artifactSha256"] = sha256_bytes(Path(sys.executable).read_bytes())
+    return identity
 
 
 def export_static_nif(
