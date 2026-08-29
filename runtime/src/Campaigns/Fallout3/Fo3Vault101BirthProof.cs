@@ -57,6 +57,41 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 : metrics.NonBackgroundPixels < MinimumNonBackgroundPixels
                     ? "owned-geometry-not-visible"
                     : null;
+            var dialogue = profile.Stage80Transition.DialogueFor("male");
+            var dialogueStream = AudioStreamOggVorbis.LoadFromFile(
+                    dialogue.Response.Voice.SourcePath)
+                ?? throw new InvalidOperationException(
+                    "Fallout 3 owned Dad dialogue voice could not be decoded.");
+            var dialogueDurationSeconds = dialogueStream.GetLength();
+            if (!double.IsFinite(dialogueDurationSeconds) || dialogueDurationSeconds <= 0.0)
+                throw new InvalidOperationException(
+                    "Fallout 3 owned Dad dialogue voice has no duration.");
+            var dialoguePlayer = new AudioStreamPlayer
+            {
+                Name = "FO3_CG00_OWNED_DAD_DIALOGUE_PROOF",
+                Stream = dialogueStream,
+            };
+            AddChild(dialoguePlayer);
+            var dialogueOverlay = BuildDialogueOverlay(dialogue.Response.Text);
+            AddChild(dialogueOverlay);
+            dialoguePlayer.Play();
+            for (var dialogueFrame = 0; dialogueFrame < ActorProofWarmupFrames; dialogueFrame++)
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            var dialoguePlaybackStarted = dialoguePlayer.Playing;
+            var dialogueFramePath = Path.Combine(output, "stage65-owned-dad-cue.png");
+            var dialogueImage = GetViewport().GetTexture().GetImage();
+            dialogueImage.Convert(Image.Format.Rgba8);
+            var dialogueSaveError = dialogueImage.SavePng(dialogueFramePath);
+            if (dialogueSaveError != Error.Ok)
+                throw new InvalidOperationException(
+                    $"Could not save Fallout 3 Dad dialogue frame: {dialogueSaveError}");
+            using var dialogueFrameStream = File.OpenRead(dialogueFramePath);
+            var dialogueFrameSha256 = Convert.ToHexString(
+                SHA256.HashData(dialogueFrameStream)).ToLowerInvariant();
+            dialoguePlayer.Stop();
+            dialoguePlayer.QueueFree();
+            dialogueOverlay.QueueFree();
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             var proofCameraPosition = coverage.Camera.GlobalPosition;
             var proofCameraFov = coverage.Camera.Fov;
             foreach (var child in coverage.CellRoot.GetChildren().OfType<Node3D>()
@@ -114,9 +149,9 @@ internal partial class Fo3Vault101BirthProof : Node3D
             var failure = roomFailure ?? actorFailure;
             var report = new
             {
-                schema = "opennv-fo3-vault101-birth-native-render-proof/v4",
+                schema = "opennv-fo3-vault101-birth-native-render-proof/v5",
                 status = failure is null
-                    ? "pass-rendered-owned-textured-birth-room-and-doctor-li-no-dialogue-scripts-or-gameplay"
+                    ? "pass-rendered-owned-birth-room-doctor-li-and-explicit-dad-dialogue-cue"
                     : "fail-rendered-owned-birth-room",
                 campaign = "Fallout3",
                 slice = "Vault101BirthRoom",
@@ -186,6 +221,37 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     playerIdleExecuted = false,
                     dialoguePlayback = false,
                     retailTimingApplied = false,
+                },
+                boundedDialogueCue = new
+                {
+                    authority =
+                        "owned stage-65 INFO response text and exact owned voice/LIP members",
+                    sourceStage = profile.Stage80Transition.SourceStage,
+                    targetStage = profile.Stage80Transition.Stage,
+                    engineSex = dialogue.EngineSex,
+                    infoFormId = dialogue.InfoFormId,
+                    responseIndex = dialogue.Response.Index,
+                    subtitleSha256 = Convert.ToHexString(SHA256.HashData(
+                        System.Text.Encoding.UTF8.GetBytes(dialogue.Response.Text)))
+                        .ToLowerInvariant(),
+                    voiceLogicalPath = dialogue.Response.Voice.LogicalPath,
+                    voiceSha256 = dialogue.Response.Voice.Sha256,
+                    lipLogicalPath = dialogue.Response.Lip.LogicalPath,
+                    lipSha256 = dialogue.Response.Lip.Sha256,
+                    durationSeconds = dialogueDurationSeconds,
+                    explicitAdvanceRequired = true,
+                    audioPlaybackStarted = dialoguePlaybackStarted,
+                    subtitleRendered = true,
+                    lipPlayback = false,
+                    dadRendered = false,
+                    retailTimingApplied = false,
+                    stage80Applied = false,
+                    frame = new
+                    {
+                        path = dialogueFramePath,
+                        bytes = dialogueFrameStream.Length,
+                        sha256 = dialogueFrameSha256,
+                    },
                 },
                 geometry = new
                 {
@@ -332,6 +398,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                         actorFailure is null,
                     questCommandsExecuted = false,
                     characterSelectionJoinedToScene = true,
+                    sourceBoundDialogueCue = failure is null && dialoguePlaybackStarted,
                     collisionConsumed = false,
                     texturesBound = failure is null &&
                         coverage.LoadedTextures == contract.ResolvedUniqueTextures &&
@@ -343,8 +410,9 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 unsupported = new[]
                 {
                     "Dad, Mom, player body, and all actors except Doctor Li",
-                    "CG00 dialogue, packages, scripted animation selection, quest triggers, and stage progression",
-                    "CELL lighting, image-space effects, collision, interaction, audio, save, and OpenXR",
+                    "automatic CG00 dialogue timing, package execution, scripted animation selection, and quest triggers",
+                    "Dad lip animation and stage-65-matched actor appearance",
+                    "CELL lighting, image-space effects, collision, world interaction, and OpenXR",
                     "retail camera, material, lighting, animation, and pixel parity",
                 },
                 windowsAppControlUsed = false,
@@ -373,6 +441,38 @@ internal partial class Fo3Vault101BirthProof : Node3D
             GD.PushError($"OPENNV_FO3_VAULT101_RENDER_FAIL {exception.Message}");
             GetTree().Quit(1);
         }
+    }
+
+    private static CanvasLayer BuildDialogueOverlay(string subtitle)
+    {
+        var layer = new CanvasLayer { Name = "FO3_CG00_DAD_DIALOGUE_OVERLAY" };
+        var panel = new PanelContainer
+        {
+            OffsetLeft = 150.0f,
+            OffsetTop = 540.0f,
+            OffsetRight = 1130.0f,
+            OffsetBottom = 700.0f,
+        };
+        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(0.0f, 0.0f, 0.0f, 0.88f),
+            BorderColor = new Color(0.25f, 0.85f, 0.35f),
+            BorderWidthLeft = 2,
+            BorderWidthTop = 2,
+            BorderWidthRight = 2,
+            BorderWidthBottom = 2,
+        });
+        layer.AddChild(panel);
+        var label = new Label
+        {
+            Text = $"DAD  •  EXPLICIT SOURCE-BACKED STAGE 65 CUE\n{subtitle}",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        label.AddThemeFontSizeOverride("font_size", 24);
+        panel.AddChild(label);
+        return layer;
     }
 
     private static FrameMetrics Analyze(Image image, Color backgroundColor)

@@ -1243,6 +1243,12 @@ def _compile_post_stage65_dialogue(
         ):
             raise ValueError("Fallout 3 post-stage-65 INFO voice condition differs")
         voice_form_ids.add(voice_form_id)
+        response_lines = [value for value in _text_values(info, "NAM1") if value]
+        if len(response_lines) != 1:
+            raise ValueError(
+                "Fallout 3 post-stage-65 INFO response text is absent or ambiguous"
+            )
+        response_text = response_lines[0]
         branch_rows.append(
             {
                 "engineSex": "female" if sex_value == 1 else "male",
@@ -1250,6 +1256,13 @@ def _compile_post_stage65_dialogue(
                 "recordSha256": hashlib.sha256(info.data).hexdigest(),
                 "resultSourceSha256": hashlib.sha256(source.encode("cp1252")).hexdigest(),
                 "targetStage": target_stage,
+                "response": {
+                    "index": 1,
+                    "text": response_text,
+                    "textSha256": hashlib.sha256(
+                        response_text.encode("utf-8")
+                    ).hexdigest(),
+                },
                 "conditions": [
                     {
                         **row,
@@ -1662,6 +1675,70 @@ def _bind_cg00_package_animations(
     transition[package_key] = package
 
 
+def _bind_post_stage65_dialogue_audio(
+    dialogue: dict[str, object],
+    voices_archive: BsaArchive,
+    voices_archive_sha256: str,
+    profile_root: Path,
+) -> None:
+    voice_type = dict(dialogue["voiceType"])
+    voice_editor_id = str(voice_type["editorId"])
+    if not voice_editor_id:
+        raise ValueError("Fallout 3 post-stage-65 voice type has no editor ID")
+    namespace = canonical_member_path(
+        f"sound\\voice\\fallout3.esm\\{voice_editor_id}"
+    )
+    prepared = []
+    for raw_branch in dialogue["branches"]:
+        branch = dict(raw_branch)
+        response = dict(branch["response"])
+        response_index = int(response["index"])
+        info_form_id = str(branch["infoFormId"]).casefold()
+        suffix = f"_{info_form_id}_{response_index}.ogg"
+        matches = [
+            path
+            for path in voices_archive.members
+            if path.startswith(namespace + "\\") and path.endswith(suffix)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                "Fallout 3 post-stage-65 owned voice is absent or ambiguous: "
+                f"info={info_form_id} response={response_index}"
+            )
+        voice_path = matches[0]
+        lip_path = voice_path.removesuffix(".ogg") + ".lip"
+        if lip_path not in voices_archive.members:
+            raise ValueError(
+                "Fallout 3 post-stage-65 owned lip data is absent: "
+                f"info={info_form_id} response={response_index}"
+            )
+
+        def prepare_asset(logical_path: str) -> dict[str, object]:
+            member = voices_archive.extract(logical_path)
+            output = profile_root / "generated" / "fallout3" / "dialogue" / Path(
+                logical_path.replace("\\", "/")
+            )
+            if not output.is_file() or file_sha256(output) != member.sha256:
+                atomic_bytes(output, member.data)
+            return {
+                "logicalPath": member.logical_path,
+                "source": str(output.resolve()),
+                "bytes": len(member.data),
+                "sha256": member.sha256,
+                "sourceArchive": voices_archive.archive.name,
+                "sourceArchiveSha256": voices_archive_sha256,
+            }
+
+        response["voice"] = prepare_asset(voice_path)
+        response["lip"] = prepare_asset(lip_path)
+        branch["response"] = response
+        prepared.append(branch)
+    dialogue["branches"] = prepared
+    dialogue["dialoguePlaybackPrepared"] = True
+    dialogue["dialoguePlaybackImplemented"] = True
+    dialogue["voiceType"] = {**voice_type, "memberNamespace": namespace}
+
+
 def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dict[str, object]], dict[str, object]]:
     records = tuple(
         iter_plugin_records(
@@ -2043,6 +2120,15 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         next(str(row["sha256"]) for row in archives if row["role"] == meshes_role),
     )
     character_selection["section4Transition"] = section4_transition
+    voices_role = "voices"
+    post_stage65_dialogue = dict(character_selection["postStage65Dialogue"])
+    _bind_post_stage65_dialogue_audio(
+        post_stage65_dialogue,
+        BsaArchive(archive_by_role[voices_role]),
+        next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
+        profile_root,
+    )
+    character_selection["postStage65Dialogue"] = post_stage65_dialogue
     appearance_contract = _appearance_inventory(
         master,
         recipe,

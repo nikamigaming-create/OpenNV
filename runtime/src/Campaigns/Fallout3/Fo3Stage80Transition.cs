@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
@@ -30,7 +32,20 @@ internal sealed record Fo3Stage80State(
 
 internal sealed record Fo3Stage80DialogueBranch(
     string EngineSex,
-    string InfoFormId);
+    string InfoFormId,
+    Fo3OwnedDialogueResponse Response);
+
+internal sealed record Fo3OwnedDialogueAsset(
+    string LogicalPath,
+    string SourcePath,
+    long Bytes,
+    string Sha256);
+
+internal sealed record Fo3OwnedDialogueResponse(
+    int Index,
+    string Text,
+    Fo3OwnedDialogueAsset Voice,
+    Fo3OwnedDialogueAsset Lip);
 
 internal sealed record Fo3Stage80Transition(
     int SourceStage,
@@ -63,7 +78,8 @@ internal sealed record Fo3Stage80Transition(
         if (RequiredString(dialogue, "schema") != ExpectedDialogueSchema ||
             RequiredString(dialogue, "status") != ExpectedDialogueStatus ||
             RequiredInteger(dialogue, "sourceStage") != expectedSourceStage ||
-            RequiredBoolean(dialogue, "dialoguePlaybackImplemented"))
+            !RequiredBoolean(dialogue, "dialoguePlaybackPrepared") ||
+            !RequiredBoolean(dialogue, "dialoguePlaybackImplemented"))
             throw new InvalidOperationException(
                 "Fallout 3 post-stage-65 INFO trigger contract is unsupported.");
         var stage = RequiredInteger(dialogue, "targetStage");
@@ -207,6 +223,14 @@ internal sealed record Fo3Stage80Transition(
             NextBoundary);
     }
 
+    internal Fo3Stage80DialogueBranch DialogueFor(string engineSex)
+    {
+        if (!DialogueBranches.TryGetValue(engineSex, out var branch))
+            throw new InvalidOperationException(
+                "Fallout 3 post-stage-65 dialogue sex branch is unsupported.");
+        return branch;
+    }
+
     internal void ValidateSavedState(JsonElement source, Fo3Stage80State expected)
     {
         if (RequiredString(source, "schema") != ExpectedSchema ||
@@ -277,9 +301,61 @@ internal sealed record Fo3Stage80Transition(
             stage,
             questFormId,
             0);
+        var infoFormId = RequiredFormId(source, "infoFormId");
+        var response = RequiredObject(source, "response");
+        var responseIndex = RequiredInteger(response, "index");
+        if (responseIndex != 1)
+            throw new InvalidOperationException(
+                "Fallout 3 post-stage-65 response index is unsupported.");
+        var responseText = RequiredString(response, "text");
+        var responseTextSha256 = RequiredSha256(response, "textSha256");
+        var actualTextSha256 = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(responseText))).ToLowerInvariant();
+        if (!actualTextSha256.Equals(responseTextSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 post-stage-65 response text hash differs.");
+        var suffix = $"_{infoFormId}_{responseIndex}";
         return new Fo3Stage80DialogueBranch(
             engineSex,
-            RequiredFormId(source, "infoFormId"));
+            infoFormId,
+            new Fo3OwnedDialogueResponse(
+                responseIndex,
+                responseText,
+                LoadDialogueAsset(RequiredObject(response, "voice"), suffix + ".ogg"),
+                LoadDialogueAsset(RequiredObject(response, "lip"), suffix + ".lip")));
+    }
+
+    private static Fo3OwnedDialogueAsset LoadDialogueAsset(
+        JsonElement source,
+        string expectedSuffix)
+    {
+        var logicalPath = RequiredString(source, "logicalPath");
+        var normalizedLogicalPath = logicalPath.Replace('/', '\\');
+        if (!normalizedLogicalPath.StartsWith(
+                "sound\\voice\\fallout3.esm\\maleuniquedad\\",
+                StringComparison.OrdinalIgnoreCase) ||
+            !normalizedLogicalPath.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase) ||
+            RequiredString(source, "sourceArchive") != "Fallout - Voices.bsa")
+            throw new InvalidOperationException(
+                "Fallout 3 post-stage-65 dialogue asset identity differs.");
+        _ = RequiredSha256(source, "sourceArchiveSha256");
+        var path = Path.GetFullPath(RequiredString(source, "source"));
+        var expectedBytes = RequiredLong(source, "bytes");
+        var expectedSha256 = RequiredSha256(source, "sha256");
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length != expectedBytes)
+            throw new InvalidOperationException(
+                "Fallout 3 post-stage-65 dialogue asset is absent or changed.");
+        using var stream = File.OpenRead(path);
+        var actualSha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        if (!actualSha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 post-stage-65 dialogue asset hash differs.");
+        return new Fo3OwnedDialogueAsset(
+            normalizedLogicalPath,
+            path,
+            expectedBytes,
+            expectedSha256);
     }
 
     private static void ValidateCondition(
@@ -418,6 +494,14 @@ internal sealed record Fo3Stage80Transition(
     {
         if (!parent.TryGetProperty(name, out var value) || !value.TryGetDouble(out var result) ||
             !double.IsFinite(result))
+            throw new InvalidOperationException($"Fallout 3 stage-80 field {name} is invalid.");
+        return result;
+    }
+
+    private static long RequiredLong(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) ||
+            !value.TryGetInt64(out var result) || result <= 0)
             throw new InvalidOperationException($"Fallout 3 stage-80 field {name} is invalid.");
         return result;
     }

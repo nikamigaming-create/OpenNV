@@ -605,6 +605,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Fo3SexChoice? _selectedSex;
     private Node3D? _vaultPreviewHost;
     private Control? _vaultPreviewOverlay;
+    private AudioStreamPlayer? _vaultDialogueVoice;
     private bool _runAppearanceProof;
     private bool _introCompleted;
 
@@ -1127,24 +1128,75 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         status.AddChild(Label(
             "Exact owned marker/room/Doctor Li presentation. Package execution, player idle, " +
-            "dialogue, camera timing, and quest progression are not running.",
+            "camera timing, and automatic quest progression are not running.",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var subtitle = Label(
+            "The next authored beat is available as an explicit source-backed advance. " +
+            "Dad is not rendered in this bounded slice.",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels);
+        subtitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        status.AddChild(subtitle);
+        var playDialogue = Button("EXPLICIT ADVANCE TO STAGE 65  •  PLAY OWNED DAD CUE");
+        playDialogue.Pressed += () =>
+        {
+            var package = _profile.Section4Transition.Activate();
+            var stage65 = _profile.Stage65Appearance.Apply(
+                sex.EngineSex,
+                selection.Race.FormId,
+                selection.Sex.FaceGen);
+            PersistStage65Appearance(playerName, sex, selection, package, stage65);
+            var branch = _profile.Stage80Transition.DialogueFor(sex.EngineSex);
+            PlayVaultDialogue(branch, subtitle);
+            playDialogue.Disabled = true;
+        };
+        status.AddChild(playDialogue);
         var menu = Button("RETURN TO MAIN MENU  •  ESC");
         menu.Pressed += ExitVault101Preview;
         status.AddChild(menu);
         AddChild(overlay);
         _vaultPreviewOverlay = overlay;
-        Callable.From(menu.GrabFocus).CallDeferred();
+        Callable.From(playDialogue.GrabFocus).CallDeferred();
         GD.Print(
             $"OPENNV_FO3_CG00_VAULT101_PREVIEW_READY profile={_profile.ProfileId} " +
             $"stage={transition.SourceStage} package={transition.PackageFormId} " +
             $"entry={contract.EntryReferenceFormId} cell={contract.CellFormId} " +
             $"references={coverage.PlacedReferences} actors=1 packageExecuted=0 " +
-            "playerIdleExecuted=0 dialoguePlayback=0 retailTiming=0");
+            "playerIdleExecuted=0 dialoguePlaybackReady=1 retailTiming=0");
+    }
+
+    private void PlayVaultDialogue(Fo3Stage80DialogueBranch branch, Label subtitle)
+    {
+        _vaultDialogueVoice?.Stop();
+        _vaultDialogueVoice?.QueueFree();
+        var stream = AudioStreamOggVorbis.LoadFromFile(branch.Response.Voice.SourcePath)
+            ?? throw new InvalidOperationException(
+                $"Fallout 3 owned Dad voice could not be decoded: " +
+                branch.Response.Voice.LogicalPath);
+        var durationSeconds = stream.GetLength();
+        if (!double.IsFinite(durationSeconds) || durationSeconds <= 0.0)
+            throw new InvalidOperationException("Fallout 3 owned Dad voice has no duration.");
+        _music.Stop();
+        _vaultDialogueVoice = new AudioStreamPlayer
+        {
+            Name = "FO3_CG00_OWNED_DAD_DIALOGUE",
+            Stream = stream,
+        };
+        AddChild(_vaultDialogueVoice);
+        subtitle.Text = $"DAD: {branch.Response.Text}";
+        _vaultDialogueVoice.Play();
+        GD.Print(
+            $"OPENNV_FO3_CG00_DAD_CUE_STARTED stage=65 info={branch.InfoFormId} " +
+            $"response={branch.Response.Index} duration={durationSeconds:F3} " +
+            $"voice={branch.Response.Voice.LogicalPath} " +
+            $"lip={branch.Response.Lip.LogicalPath} explicitAdvance=1 " +
+            "dadRendered=0 lipPlayback=0 retailTiming=0 stage80Applied=0");
     }
 
     private void ExitVault101Preview()
     {
+        _vaultDialogueVoice?.Stop();
+        _vaultDialogueVoice?.QueueFree();
+        _vaultDialogueVoice = null;
         _vaultPreviewOverlay?.QueueFree();
         _vaultPreviewOverlay = null;
         _vaultPreviewHost?.QueueFree();
@@ -1232,7 +1284,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         _content.AddChild(Label(
             "The owned post-stage-65 INFO conditions select one sex-specific result. " +
-            "Dialogue playback is not implemented; only its exact stage result can run here.",
+            "Its source-bound cue plays in the bounded Vault preview; this state screen " +
+            "applies only the exact stage result.",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         var apply = Button($"APPLY OWNED INFO RESULT  •  STAGE {_profile.Stage80Transition.Stage}");
         apply.Pressed += () =>

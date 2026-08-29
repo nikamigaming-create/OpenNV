@@ -76,9 +76,10 @@ if ($LASTEXITCODE -ne 0 -or $renderText -notmatch [regex]::Escape($expected)) {
 $reportPath = Join-Path $CaptureRoot "vault101-birth-native-render-proof.json"
 $framePath = Join-Path $CaptureRoot "vault101-birth-entry.png"
 $actorFramePath = Join-Path $CaptureRoot "doctor-li-owned-actor.png"
+$dialogueFramePath = Join-Path $CaptureRoot "stage65-owned-dad-cue.png"
 $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json -Depth 100
-if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v4" -or
-    $report.status -ne "pass-rendered-owned-textured-birth-room-and-doctor-li-no-dialogue-scripts-or-gameplay" -or
+if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v5" -or
+    $report.status -ne "pass-rendered-owned-birth-room-doctor-li-and-explicit-dad-dialogue-cue" -or
     -not $report.promotion.rendered -or
     -not $report.promotion.texturesBound -or
     $report.promotion.interactive -or
@@ -108,6 +109,18 @@ if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v4" -or
     $report.doctorActorFrame.runtimeSurfaces -ne 18 -or
     -not (Test-Path -LiteralPath $framePath -PathType Leaf) -or
     -not (Test-Path -LiteralPath $actorFramePath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $dialogueFramePath -PathType Leaf) -or
+    $report.boundedDialogueCue.sourceStage -ne 65 -or
+    $report.boundedDialogueCue.targetStage -ne 80 -or
+    $report.boundedDialogueCue.infoFormId -ne "0001f380" -or
+    -not $report.boundedDialogueCue.explicitAdvanceRequired -or
+    -not $report.boundedDialogueCue.audioPlaybackStarted -or
+    -not $report.boundedDialogueCue.subtitleRendered -or
+    $report.boundedDialogueCue.lipPlayback -or
+    $report.boundedDialogueCue.dadRendered -or
+    $report.boundedDialogueCue.retailTimingApplied -or
+    $report.boundedDialogueCue.stage80Applied -or
+    -not $report.promotion.sourceBoundDialogueCue -or
     $report.characterSelectionHandoff.sourceStage -ne 62 -or
     $report.characterSelectionHandoff.packageFormId -ne "0006a818" -or
     $report.characterSelectionHandoff.packageLocationReferenceFormId -ne "00039562" -or

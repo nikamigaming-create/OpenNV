@@ -154,6 +154,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 0,
                 subrecord("QSTI", struct.pack("<I", QUEST_FORM))
                 + subrecord("SCTX", b"setstage CG00 80\0")
+                + subrecord(
+                    "NAM1",
+                    (
+                        b"Owned authored response for the focused compiler test.\0"
+                    ),
+                )
                 + subrecord("CTDA", condition(70, sex, run_on=1))
                 + subrecord("CTDA", condition(427, VOICE_FORM))
                 + subrecord(
@@ -194,6 +200,13 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             {branch["engineSex"]: branch["infoFormId"] for branch in result["branches"]},
         )
         self.assertFalse(result["dialoguePlaybackImplemented"])
+        self.assertEqual(
+            {1},
+            {branch["response"]["index"] for branch in result["branches"]},
+        )
+        self.assertTrue(
+            all(branch["response"]["textSha256"] for branch in result["branches"])
+        )
         self.assertEqual(
             [
                 "addScriptPackage",
