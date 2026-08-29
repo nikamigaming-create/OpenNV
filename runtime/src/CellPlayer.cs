@@ -109,6 +109,8 @@ internal partial class CellPlayer : CharacterBody3D
     internal string LastMovementState { get; private set; } = "none";
     internal string LastActivationCollider { get; private set; } = "none";
     internal Vector3 LastBlockingNormal { get; private set; }
+    internal Node? LastBlockingCollider { get; private set; }
+    internal Vector3? LastBlockingPosition { get; private set; }
 
     internal void SetControlPolicy(
         bool movement,
@@ -428,12 +430,13 @@ internal partial class CellPlayer : CharacterBody3D
                     _configuration.Player.CapsuleRadiusMeters *
                     StepForwardClearanceRadii;
             }
-            var blockingNormal = Enumerable.Range(0, GetSlideCollisionCount())
-                .Select(index => GetSlideCollision(index).GetNormal())
-                .FirstOrDefault(normal =>
-                    normal.Dot(Vector3.Up) < MathF.Cos(FloorMaxAngle));
-            if (!blockingNormal.IsZeroApprox())
-                LastBlockingNormal = blockingNormal;
+            var blockingCollision = Enumerable.Range(0, GetSlideCollisionCount())
+                .Select(GetSlideCollision)
+                .FirstOrDefault(collision =>
+                    collision.GetNormal().Dot(Vector3.Up) < MathF.Cos(FloorMaxAngle));
+            if (blockingCollision is not null)
+                RecordBlockingCollision(blockingCollision);
+            var blockingNormal = blockingCollision?.GetNormal() ?? Vector3.Zero;
             _ = TryStepUp(
                 GlobalTransform,
                 before,
@@ -444,6 +447,8 @@ internal partial class CellPlayer : CharacterBody3D
         else
         {
             _lastFloorTangentOrigin = null;
+            if (!expectedHorizontalMotion.IsZeroApprox())
+                ClearBlockingCollision();
         }
     }
 
@@ -513,6 +518,7 @@ internal partial class CellPlayer : CharacterBody3D
                 safeMargin: 0.0f,
                 recoveryAsCollision: false))
         {
+            RecordBlockingCollision(upCollision);
             LastStepAttempt =
                 $"up-blocked:normal={upCollision.GetNormal()}:" +
                 $"travel={upCollision.GetTravel()}:" +
@@ -529,6 +535,7 @@ internal partial class CellPlayer : CharacterBody3D
                 safeMargin: 0.0f,
                 recoveryAsCollision: false))
         {
+            RecordBlockingCollision(forwardCollision);
             LastStepAttempt =
                 $"forward-blocked:normal={forwardCollision.GetNormal()}:" +
                 $"travel={forwardCollision.GetTravel()}:" +
@@ -557,7 +564,22 @@ internal partial class CellPlayer : CharacterBody3D
         GlobalTransform = advanced;
         Velocity = (GlobalPosition - beforePosition) / delta;
         LastStepAttempt = "accepted";
+        ClearBlockingCollision();
         return true;
+    }
+
+    private void ClearBlockingCollision()
+    {
+        LastBlockingNormal = Vector3.Zero;
+        LastBlockingCollider = null;
+        LastBlockingPosition = null;
+    }
+
+    private void RecordBlockingCollision(KinematicCollision3D collision)
+    {
+        LastBlockingNormal = collision.GetNormal();
+        LastBlockingCollider = collision.GetCollider() as Node;
+        LastBlockingPosition = collision.GetPosition();
     }
 
     private string DescribeSlideCollisions()

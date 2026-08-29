@@ -252,6 +252,13 @@ internal static class CellRouteTravelAcceptance
             if (player.Camera.GlobalPosition.DistanceTo(center) <=
                 configuration.Player.ActivationDistanceMeters)
                 return;
+            await OpenBlockingDoorForReplan(
+                host,
+                player,
+                content,
+                lastStall.Value,
+                input,
+                configuration);
             if (replan < MaximumOwnedNavigationReplans)
                 GD.Print(
                     $"OPENNV_FLAT_ROUTE_NAVM_STALL " +
@@ -341,6 +348,58 @@ internal static class CellRouteTravelAcceptance
                 waypointCenter);
         }
         return null;
+    }
+
+    private static async Task OpenBlockingDoorForReplan(
+        RuntimeCoordinator host,
+        CellPlayer player,
+        CellContentLoader.LoadedContent content,
+        NavigationStall stall,
+        DesktopInputConfiguration input,
+        RuntimeConfiguration configuration)
+    {
+        var door = Ancestor<DoorInstance>(player.LastBlockingCollider);
+        if (door is null)
+            throw new InvalidOperationException(
+                "Configured route stall did not resolve to an authored door collider.");
+        if (!content.Doors.TryGetValue(door.ReferenceFormId, out var activeDoor) ||
+            !ReferenceEquals(activeDoor, door))
+            throw new InvalidOperationException(
+                "Configured route was blocked by a door outside the active CELL.");
+        if (door.Destination is not null || door.LinkedDoor is not null)
+            throw new InvalidOperationException(
+                "Configured route stall resolved to an XTEL door outside the ordered portal step.");
+        if (door.IsOpen)
+            throw new InvalidOperationException(
+                "Configured route remained blocked by an already-open authored door.");
+        var blockingPosition = player.LastBlockingPosition ?? throw new InvalidOperationException(
+            "Configured route door blocker has no physics impact position.");
+        var distance = player.Camera.GlobalPosition.DistanceTo(blockingPosition);
+        if (distance > configuration.Player.ActivationDistanceMeters)
+            throw new InvalidOperationException(
+                $"Configured route door blocker is outside activation distance: " +
+                $"distance={distance:F3} limit={configuration.Player.ActivationDistanceMeters:F3}.");
+
+        FlatControlsAcceptance.ApplyMouseLook(
+            player,
+            blockingPosition,
+            configuration.Player);
+        await FlatControlsAcceptance.WaitPhysicsFrames(host, input.Acceptance.SettleFrames);
+        await FlatControlsAcceptance.PulseKeyBinding(
+            host,
+            input.Activate,
+            input.Acceptance.SettleFrames);
+        if (!door.IsOpen)
+            throw new InvalidOperationException(
+                $"Configured activation did not open blocking door {door.ReferenceFormId}: " +
+                $"collider={player.LastActivationCollider}.");
+        if (!CanAdvanceCapsule(player, stall.Target))
+            throw new InvalidOperationException(
+                $"Blocking door {door.ReferenceFormId} opened but its collision did not clear " +
+                $"the owned NAVM waypoint.");
+        GD.Print(
+            $"OPENNV_FLAT_ROUTE_BLOCKING_DOOR_OPEN form={door.ReferenceFormId} " +
+            $"distance={distance:F3} waypoint={stall.WaypointIndex + 1}/{stall.WaypointCount}");
     }
 
     private static async Task<bool> WalkToWaypoint(
@@ -539,6 +598,18 @@ internal static class CellRouteTravelAcceptance
 
     private static bool CanAdvanceCapsule(CellPlayer player, Vector3 target) =>
         player.CanSweepTo(new Vector3(target.X, player.GlobalPosition.Y, target.Z));
+
+    private static T? Ancestor<T>(Node? node)
+        where T : Node
+    {
+        while (node is not null)
+        {
+            if (node is T match)
+                return match;
+            node = node.GetParent();
+        }
+        return null;
+    }
 
     private static string DescribeSlideCollisions(CellPlayer player)
     {
