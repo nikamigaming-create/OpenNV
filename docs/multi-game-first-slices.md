@@ -56,15 +56,18 @@ retail startup-logo and original-menu presentation remain absent.
 4. Available now: the normal New Vegas menu and skippable intro enter the Doc
    opening, and the accepted checkpoint/reload path completes character setup,
    farewell, and the stage-200 open-world-ready save. The default bounded
-   composite preloads the Doc house, Goodsprings exterior active set, saloon,
+   composite eagerly instantiates the Doc house, Goodsprings exterior active set, saloon,
    LAND, actors, and both reciprocal XTEL pairs with shared gameplay/save state.
    A source-bound HUD/STATS/ITEMS/DATA and Pip-Boy shell
    now consumes that same state; STATS explicitly reuses the verified ITEMS
    frame until its remaining layout expressions execute. From a completed
    stage-200 Continue, configured flat input traverses both forward XTEL links;
-   campaign save v5 persists saloon CELL `00106185`, and a fresh owned-menu
-   Continue restores the unchanged save and player transform there. Complete
-   tile interaction, reverse traversal, neighboring CELL streaming,
+   campaign save v6 persists source-derived Level/HP/AP/XP plus saloon CELL
+   `00106185`, and a fresh owned-menu Continue restores the unchanged save and
+   player transform there. The current-plus-direct-neighbors active set suspends
+   distant resources; its retained direct proof uses an older compiler identity
+   that normal restore rejects until explicit migration. Complete tile
+   interaction, reverse traversal, neighboring exterior-grid streaming,
    integrated-route OpenXR acceptance, and retail visual parity remain open.
    An uninterrupted whole-campaign route is not proven.
 5. Available now: `scripts/Register-OpenNVFallout2.ps1` validates the legally
@@ -94,15 +97,16 @@ retail startup-logo and original-menu presentation remain absent.
    OpenXR remain unresolved.
 9. Available now: an asset-free transition compiler binds all 18 Map 126 exit
    grids, the zero door-prototype count, `ARTemple.int`, and three live MAP
-   script records. The headless runtime moves to a reachable source exit and
-   applies only its owned Map 3 / tile 28707 destination state. It does not load
-   that destination or execute INT bytecode.
+   script records. The ordinary runtime follows the exact source walk path from
+   Map 3 to exit serial 1738 and loads owned ARTEMPLE Map 126 at tile 16486,
+   elevation 0, rotation 0. It does not execute INT bytecode.
 10. Available now: a separate Map 3 `ARCAVES` compiler proves that incoming
     tile/elevation/rotation, 24 reciprocal exits to Map 126, 18 reachable exits
     in the 586-hex arrival component, 298 owned resource identities, and all 173
     disposable presentation artifacts. Godot renders that cache and grounds an
-    input-driven source-walk-gated arrival body at exact tile 28707; reciprocal
-    runtime execution remains absent.
+    input-driven source-walk-gated arrival body at exact tile 28707; the admitted
+    Map 3-to-126 exit now executes and cold-restores, while remaining reciprocal
+    runtime exits remain absent.
 11. Available now: an exact 432-byte GCD compiler plus disposable local cache
     binds the owned Narg, Mingan, and Chitsa profiles, BIO text, picker/panels,
     and PRO/FID-linked male/female AA idle plus 6-direction, 8-frame AB walk
@@ -110,11 +114,16 @@ retail startup-logo and original-menu presentation remain absent.
     mouse choice. Modify/Create edit name, sex, age 16–35, and seven 1–10
     SPECIAL values totaling 40. Modify preserves source tags/traits and Create
     leaves them unselected. Confirm applies the sex-correct FRM before Map 3.
-    The version-2 atomic save preserves character mode, source basis, custom
-    profile, Map 3/elevation/tile/facing, transform, and bounded modes; fresh
+    The version-3 atomic save preserves character mode, source basis, custom
+    profile, map/elevation/tile/facing, transform, bounded modes, and the exact
+    source exit identity. Ordinary grounded movement follows the 13-step path
+    from Map 3 tile 28707 through exit serial 1738 into ARTEMPLE Map 126 tile
+    16486; fresh
     male and female processes prove two directions, return to owned AA idle,
     and cold-restore the same state. Tag/trait editing, other animations,
-    campaign-wide state, and campaign play remain absent.
+    campaign-wide state, remaining exits, and campaign play remain absent. The
+    non-source opaque Temple wall proxy is removed while source-derived collision
+    and all 45 owned wall FRMs remain; classic fixed-Y composition is non-parity.
 
 Current result: a normal launcher starts either registered Fallout 1 view, the
 registered and prepared Fallout 2 Hex character-to-Arroyo slice, or the bounded
@@ -141,9 +150,11 @@ with a registered development menu/CG00 frontend but no playable presentation.
    exact model/texture inputs.
 4. Available now: the source-bound `CG00PlayerSection4` package, exact stage-65
    parent race/FaceGen commands, stage-80 package/variable/reference commands,
-   and zero-command stage-85 result compile and validate fail-closed. The normal
-   UI does not apply or persist them because the authored package/dialogue
-   triggers and Vault 101 world are absent. Compile the authored
+   zero-command stage-85 result, and four-command stage-90 INFO `0001f379`
+   compile and validate fail-closed. The ordinary bounded route enters the owned
+   birth room, plays the Dad cue, applies those results plus the owned stage-90
+   white fade/sound, and cold-restores stage 90 without replaying one-shot
+   effects. Compile the remaining authored
    birth/age/SPECIAL/tag/trait sequence,
    dialogue, packages, controls, Vault 101 cells, actors, scripts, inventory,
    collision, NAVM, doors, and save boundary into neutral versioned contracts.
@@ -192,9 +203,9 @@ is supported for the selected base profile.
 | --- | --- |
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
-| Fallout 2 | The launcher enables the bounded Hex premade-or-custom-to-Arroyo slice when all owned-profile/cache identities match. Tag/trait editing, campaign-wide persistence, reciprocal runtime exit execution, INT, actors, combat, inventory, full campaign, FPS, VR, and parity remain absent |
-| New Vegas first slice | Menu/intro/Doc house, the source-bound HUD/Pip-Boy runtime shell, and the bounded preloaded Doc/exterior/saloon composite load; diagnostic portal checks pass, and completed-save owned Continue drives configured flat input through both forward XTEL links before v4 cold-restores saloon CELL `00106185`; reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
-| Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance through stage 62 work; later state contracts validate, but FPS/Hex/VR, authored trigger execution, dialogue/KF, actors, and Vault 101 remain |
+| Fallout 2 | The launcher enables the bounded Hex premade-or-custom-to-Arroyo slice when all owned-profile/cache identities match; exact Map 3 exit serial 1738 loads ARTEMPLE Map 126 and cold-restores. Tag/trait editing, campaign-wide persistence, remaining exits, INT, actors, combat, inventory, full campaign, FPS, VR, and parity remain absent |
+| New Vegas first slice | Menu/intro/Doc house, source-derived Level/HP/AP/XP, the source-bound HUD/Pip-Boy runtime shell, and the bounded eagerly instantiated Doc/exterior/saloon composite load; the current-plus-neighbors active set has direct native lifecycle evidence, while normal restore awaits compiler-family migration/reacceptance; reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
+| Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance enter the bounded Vault 101 birth room and reach exact stage 90 with Dad cue, fade, sound, and cold restore; FPS/Hex/VR, general package/dialogue/KF AI, stage 100, and freely playable Vault 101 remain |
 | TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |
 | JAM | Dependency registrar plus bounded JVS sprint and JBT time-dilation semantics work; missing dependencies and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM semantics keep the launcher toggle disabled |
 

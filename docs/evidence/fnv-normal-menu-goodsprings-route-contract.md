@@ -27,14 +27,18 @@ The owned main-menu Continue button drives a completed stage-200 campaign save
 into this composite through a Godot button signal. Configured Godot movement and
 activation then take the forward route `00103df9` → `000daebb` → `00106185`
 through doors `00103e61` → `00103e69` and `0010636f` → `0010618e`.
-Campaign save v5 records saloon CELL `00106185`, opened-container remaining
-counts, and the player transform. A fresh
+The retained route proof recorded campaign save v5 with saloon CELL `00106185`,
+opened-container remaining counts, and the player transform. Current save v6
+loads that state and adds source-derived Level/HP/AP/XP. A fresh
 process emits the owned Continue button again and must restore the unchanged save,
 active saloon identity, and equivalent transform without replaying a transition.
 Neither phase uses Windows app control or injected foreground input.
 
-This proves only the bounded preloaded forward flat route from a completed save.
-It does **not** prove reverse traversal, neighboring CELL streaming/load-unload,
+This proves only the bounded eagerly instantiated forward flat route from a
+completed save. A later direct native proof establishes current-plus-neighbor
+resource suspension, but normal-route reacceptance awaits compiler-family
+migration. It does **not** prove reverse traversal, neighboring exterior-grid
+streaming/load-unload,
 an uninterrupted New Game-to-saloon run, Sunny dialogue/package AI, visual
 parity, integrated OpenXR acceptance, or a complete campaign.
 

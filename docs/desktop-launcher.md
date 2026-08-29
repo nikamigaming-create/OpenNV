@@ -52,17 +52,20 @@ The checked-in runtime declares the New Vegas owned menu/intro/Doc Mitchell
 house route, its source-bound HUD/Pip-Boy runtime shell, plus its production Goodsprings active set and reciprocal Doc
 Mitchell house/exterior exit, the bounded Fallout 1 Vault 13/V13ENT Hex/FPS
 route, and the bounded Fallout 3 owned-profile menu/intro/CG00 source route
-through persistent stage 62. Fallout 2 is a
+through persistent stage 90 inside the bounded owned birth-room flow. Fallout 2 is a
 fourth visible game card whose owned DAT2 installation and exact Map 126/Map 3 source
 graph can be admitted. Its bounded Hex route selects the owned
 Narg, Mingan, or Chitsa premade, applies source stats/biography/portrait and
 also exposes source-backed Modify/Create for name, sex, age, and exact SPECIAL.
 Modify retains source tags/traits; Create leaves them unselected. Confirm applies
 sex-correct idle FRM presentation and hands the state to the grounded Map 3
-player at tile 28707. An atomic version-2 save cold-restores the character mode,
-source basis, custom state, tile, facing, transform, and bounded modes. The launcher enables Hex
+player at tile 28707. An atomic version-3 save cold-restores the character mode,
+source basis, custom state, tile, facing, transform, bounded modes, and the exact
+Map 3 exit-to-ARTEMPLE Map 126 arrival. The launcher enables Hex
 only after all five local slice artifacts match the registered profile; FPS and
-VR remain disabled. Tag/trait editing, scripting, campaign-wide state, and parity
+VR remain disabled. The non-source opaque Temple wall proxy is removed while
+the owned wall FRMs and source-derived collision remain; Tag/trait editing,
+scripting, classic fixed-Y composition, campaign-wide state, and parity
 remain open. The Fallout 3
 intro is converted locally to a hash-verified Theora cache during profile
 registration; Escape and the visible Skip action enter the same CG00 state.
@@ -80,9 +83,10 @@ functional bounded-route recovery path, not a claim that the supplied video's
 visually consistent high-fidelity cave is renderer-matched.
 The Fallout 1 OpenXR adapter has simulator coverage but remains
 launcher-disabled and has no physical-headset acceptance. Fallout 3's owned
-frontend reaches stage 62, but all three presentation buttons remain disabled
-because no Vault 101 world runtime or authored package/dialogue trigger execution
-is present. TTW runtime support is absent, JAM remains dependency- and
+frontend now enters the bounded birth room and persists exact stages 65, 80,
+85, and 90, including the stage-90 fade/sound result, but all three presentation
+buttons remain disabled because no freely playable Vault 101 route or general
+package/dialogue interpreter is present. TTW runtime support is absent, JAM remains dependency- and
 portable-semantic-gated, and every full-campaign readiness claim stays false.
 The New Vegas UI shell binds the installed HUD/STATS/ITEMS/DATA XML graph,
 selected owned bitmap fonts and textures, and the authoritative campaign

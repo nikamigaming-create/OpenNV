@@ -64,9 +64,10 @@ cannot promote exact projection parity.
 Cell scene v13 and actor scene v5 are required. Older caches omit full authored
 rotation/scale, configuration identity, deterministic outfit resolution,
 current actor sidecars, or the owned-data first-person rig and are rejected.
-Campaign save v5 retains v1-v4 load compatibility and adds opened-container
-remaining counts; the current container view supports Take One, Take All, and
-Exit, while player-to-container deposits and integrated OpenXR input remain open.
+Campaign save v6 retains v1-v5 load compatibility, persists source-derived
+Level/HP/AP/XP, and keeps the v5 opened-container remaining counts. The current
+container view supports Take One, Take All, and Exit, while player-to-container
+deposits and integrated OpenXR input remain open.
 
 Build an asset-free experimental Windows archive after installing the pinned
 Godot Mono export templates and `content/requirements-build.txt`:
@@ -79,7 +80,9 @@ The archive contains the Godot executable and a packaged legal-content helper,
 but no commercial content. On first launch, select a legal Fallout: New Vegas
 `Data` folder; OpenNV prepares its private cache and enters the owned New Vegas
 menu, whose New Game/Continue route begins in Doc Mitchell's house with the
-Goodsprings exterior and saloon preloaded as a bounded composite. Python and
+Goodsprings exterior and saloon eagerly instantiated as a bounded composite.
+The source-portal active set keeps only the current CELL and direct neighbors
+active. Python and
 OpenMW are not required on the player's machine. Later
 launches reopen that verified cache automatically.
 
@@ -137,8 +140,12 @@ stage 60. The source-backed appearance route exposes the owned playable races,
 sex-aware hair and eye lists, and Player-plus-RACE FaceGen defaults, then saves
 the accepted choice at stage 62. Its deterministic preview shows the exact
 owned head/hair/eye source textures; it is not yet a 3D FaceGen actor render.
-Execution stops before `player.addScriptPackage CG00PlayerSection4`; the package
-runtime and Vault 101 world are not playable from this route.
+The bounded normal route now enters the owned Vault 101 birth room, plays the
+exact stage-65 Dad cue, applies stages 80 and 85, and reaches stage 90 INFO
+`0001f379` with its four commands, owned white fade, and sound. Cold Continue
+restores stage 90 without replaying the one-shot cue/effects. This does not
+implement general package/KF/dialogue AI, the timer-to-stage-100 boundary, or a
+freely playable Vault 101 world.
 
 The private Fallout 1 tactical slice launches from a prepared, ignored owned
 cache with:

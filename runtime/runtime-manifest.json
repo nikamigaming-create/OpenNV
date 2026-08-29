@@ -86,7 +86,7 @@
             "hex-tactical": { "ready": false, "status": "not-implemented" },
             "openxr": { "ready": true, "status": "experimental-headset-gate-pending" }
           },
-          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy shell and a bounded preloaded Doc house to Goodsprings exterior to saloon composite. From a completed stage-200 Continue, configured flat input traverses both forward XTEL links; campaign save v5 persists saloon CELL 00106185, opened-container remaining counts, and the player transform. Owned containers support Take One, Take All, and Exit in a two-column flat view. Player deposits, reverse traversal, neighboring CELL streaming, integrated-route OpenXR acceptance, Sunny behavior, complete tile interaction, and retail UI parity remain pending.",
+          "message": "Owned menu and Doc opening plus source-bound HUD/Pip-Boy shell and a bounded eagerly instantiated Doc house to Goodsprings exterior to saloon composite. Campaign save v6 persists source-derived Level/HP/AP/XP, saloon CELL 00106185, opened-container remaining counts, and the player transform. A source-portal active set keeps the current CELL plus direct neighbors live while suspending distant presentation and physics resources. The retained active-set proof cache has an older compiler identity and normal restore fails closed until explicit migration. Player deposits, reverse traversal, neighboring exterior-grid streaming, integrated-route OpenXR acceptance, Sunny behavior, complete tile interaction, and retail UI parity remain pending.",
           "unavailableDlc": []
         },
         "jam": {
@@ -106,7 +106,7 @@
             "openxr": { "ready": false, "status": "not-implemented" }
           },
           "requiresProfile": "opennv-owned-game-profile/v1",
-          "message": "The registered Fallout 3 GOTY profile can run a bounded menu, owned intro, Escape/Skip convergence, CG00 sex/name flow, and source-backed appearance selection through persistent stage 62. Exact Section 4 and stage-65/80/85 contracts compile and validate, but normal progression stops before them because their authored package/dialogue triggers and Vault 101 world do not execute. FPS, Hex, and VR remain launcher-disabled. The texture preview is not a 3D face render."
+          "message": "The registered Fallout 3 GOTY profile runs the bounded menu, owned intro, Escape/Skip convergence, CG00 sex/name/appearance selection, and owned Vault 101 birth-room flow through persistent stage 90. Exact stage-65 Dad cue, stage-80/85 INFO results, and stage-90 INFO 0001f379 white-fade/sound result execute and cold-restore without replaying one-shot effects. General package/dialogue/KF AI, the stage-90 timer-to-stage-100 boundary, and freely playable Vault 101 remain absent, so FPS, Hex, and VR stay launcher-disabled."
         }
       }
     }

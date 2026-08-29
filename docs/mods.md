@@ -1,9 +1,10 @@
 # Mod compatibility policy
 
 Mod compatibility is a post-gameplay promotion track. New Vegas has bounded
-opening and Goodsprings routes, while Fallout 3 stops at its owned menu/CG00
-stage-62 profile with no playable Vault 101 runtime. The current Godot runtime does not
-claim any complete campaign, TTW, JAM, or native extender-plugin compatibility.
+opening and Goodsprings routes, while Fallout 3 reaches persistent stage 90 in
+its bounded owned Vault 101 birth room without a freely playable wider Vault
+runtime. The current Godot runtime does not claim any complete campaign, TTW,
+JAM, or native extender-plugin compatibility.
 
 When the base campaign route passes, a mod is promoted one behavior contract at
 a time:

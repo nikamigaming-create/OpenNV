@@ -64,10 +64,12 @@ not yet have runtime consumers. The two-process report proves the
 incomplete-save resume to completion. The 2026-08-28 normal-menu route acceptance
 adds a completed-save load through the owned Continue button, configured flat
 movement and activation through both forward XTEL links, and a fresh-process
-Continue. Campaign save v5 persists saloon CELL `00106185`; the cold process
-restores stage 200, the unchanged save, and the same player transform there.
-This is active-CELL identity inside one preloaded bounded composite, not
-independent CELL streaming or reverse-traversal acceptance. The reports record
+Continue. The retained acceptance used campaign save v5 to persist saloon CELL
+`00106185`; current save v6 loads that state and adds source-derived
+Level/HP/AP/XP. The cold process restores stage 200, the unchanged save, and the
+same player transform there. This is active-CELL identity inside one eagerly
+instantiated bounded composite, not independent CELL streaming or reverse-
+traversal acceptance. The reports record
 source scene, configuration identity, save SHA-256, initial/final state
 summaries, and that Windows app control and foreground input injection were not
 used. Generated

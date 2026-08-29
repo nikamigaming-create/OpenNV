@@ -37,9 +37,9 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 Hex | Registered-cache launcher route through the OpenNV menu, character picker, owned Overseer movie, and bounded Godot V13ENT/Vault 13 slice | Only V13ENT is playable; this is not the complete Fallout 1 campaign |
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
-| Fallout 2 Hex | Registered-profile launcher route into the owned Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL; Take enters Map 3 at tile 28707 with PRO-linked sex-correct HMWARR/HFPRIM AA idle and directional AB walking, grounded source-walk-gated movement, and atomic cold restore | Tag/trait editing, other animations, reciprocal exits, scripts, actors, combat, inventory, campaign-wide persistence, full campaign, and parity remain absent; FPS and OpenXR stay disabled |
-| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; from a completed stage-200 Continue, configured flat input traverses both forward XTEL links and campaign save v5 cold-restores saloon CELL `00106185`; owned containers retain remaining item counts after Take One/Take All; configured `Tab` now opens the populated owned campaign Pip-Boy surface and `Escape` closes it through Godot's input-event path; original flat and experimental OpenXR routes are launchable | Player-to-container deposits, Pip-Boy tab-navigation acceptance, reverse-traversal acceptance, neighboring CELL streaming, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
-| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, persistent CG00 stage 62, and a deterministic Vault 101 birth-room proof with grounded Doctor Li, direct CG00 Dad identity/FaceGen/outfit, and the exact owned stage-65 voice/subtitle cue | No playable first-person Vault 101 route or authored package/dialogue trigger execution exists; automatic timing, lip/idle/package behavior, stage 80, Mom/player presentation, Hex, and VR remain absent |
+| Fallout 2 Hex | Registered-profile launcher route into the owned Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL; Take enters Map 3 at tile 28707 with PRO-linked sex-correct HMWARR/HFPRIM AA idle and directional AB walking. Ordinary grounded movement can follow the exact 13-step source path to exit serial 1738, enter owned ARTEMPLE Map 126 at tile 16486, save as v3, and cold-restore the same grounded position/facing. The non-source opaque wall proxy is removed while all 45 owned wall FRMs and source-derived collision remain | Tag/trait editing, other animations, remaining exits, scripts, actors, combat, inventory, campaign-wide persistence, full campaign, and parity remain absent; classic fixed-Y sprite composition is still visibly incomplete; FPS and OpenXR stay disabled |
+| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. A source-portal active set keeps the current CELL plus direct neighbors live while suspending distant roots, collision, rigid bodies, processing, and lights | The active-set native proof used direct loading of hash-closed older output; normal restore correctly rejects its stale compiler identity. Compiler-family migration and normal-route reacceptance, player-to-container deposits, Pip-Boy tab navigation, reverse traversal, neighboring exterior-grid streaming, Sunny AI/dialogue, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven |
+| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and normal persistent CG00 progression into the owned Vault 101 birth room. The bounded route plays the exact stage-65 Dad cue, applies the exact stage-80 and stage-85 INFO results, then applies stage 90 INFO `0001f379` with its four commands, white-fade modifier, and owned sound; cold Continue restores stage 90 without replaying the one-shot cue/effects | No freely playable first-person Vault 101 route or general package/dialogue interpreter exists; the stage-90 timer-to-stage-100 boundary, lip/idle/package AI, Mom/player presentation, Hex, VR, and retail parity remain absent |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
 
@@ -69,9 +69,15 @@ opening state as watching it through. The default owned-data cache now binds an
 ordered Doc house → Goodsprings exterior → saloon chain. It aligns and links
 `00103e61 ↔ 00103e69` and `0010636f ↔ 0010618e`, exercises ray/projectile/
 capsule continuity at each pair, and separately accepts configured flat movement
-and activation through both forward XTEL links. Campaign save v5 records saloon
+and activation through both forward XTEL links. Campaign save v6 records saloon
 CELL `00106185`, and a fresh owned-menu Continue restores the unchanged save and
-player transform there. Sunny `00104e85` loads once in her authored enabled
+player transform there. Save v6 also persists the source-derived Level 1,
+HP 200/200, AP 80/80, and XP 0/200 state used by the Pip-Boy. The current
+source-portal lifecycle eagerly instantiates all three prepared spaces, keeps
+the authoritative CELL plus direct neighbors active, and suspends distant
+presentation/physics resources. Its retained native evidence is a direct-load
+lifecycle proof; normal restore rejects that proof cache's older compiler
+identity until it is explicitly migrated. Sunny `00104e85` loads once in her authored enabled
 state without a proof override. OpenNV compiles the installed
 `hud_main_menu.xml`, `stats_menu.xml`,
 `inventory_menu.xml`, and `map_menu.xml` closures, their four selected owned
@@ -114,17 +120,18 @@ resume its stage-60 character, select from source-backed playable race and
 sex-aware hair/eye records, and persist the owned FaceGen defaults at stage 62.
 The preview is an exact owned-texture inspection surface, not a 3D face render.
 The exact `CG00PlayerSection4`, stage-65 parent appearance, stage-80
-package/variable/reference, and empty stage-85 contracts compile and validate.
-An isolated native proof now renders the owned Vault 101 birth room with
-grounded Doctor Li and direct `CG00Dad` ACHR/NPC/race/FaceGen/outfit identity at
-the exact stage-0 marker, then plays the exact owned stage-65 OGG and subtitle.
-That proof uses a deterministic proof camera and `mtidle`; it does not claim
-retail camera, lighting, material, animation, lip, package, or timing parity.
-The normal flow deliberately stops at stage 62 instead of bypassing their
-authored package and dialogue triggers; the launcher therefore keeps every
-Fallout 3 presentation disabled. Automatic quest timing, package/KF execution,
-lip/idle behavior, stage 80, Mom/player presentation, and the remaining opening
-interpreter are active work. TTW and JAM
+package/variable/reference, stage-85 zero-command result, and stage-90
+four-command result compile and validate. The ordinary bounded flow renders the
+owned Vault 101 birth room with grounded Doctor Li and direct `CG00Dad`
+ACHR/NPC/race/FaceGen/outfit identity, plays the exact owned Dad cue/subtitle,
+applies INFO `0001f379`, sets timer `2.2` and `runTimer=1`, and presents the
+owned white fade and sound. Cold Continue restores stage 90 without replaying
+those one-shot effects. This remains a deterministic bounded room/front-end
+route, not retail camera, lighting, material, animation, lip, package, timing,
+or freely playable first-person parity; the launcher therefore keeps every
+Fallout 3 presentation disabled. General package/KF execution, the stage-90
+timer-to-stage-100 transition, Mom/player presentation, and the remaining
+opening interpreter are active work. TTW and JAM
 registration are documented in [the mod policy](docs/mods.md);
 registration alone does not make either route runtime-playable.
 
@@ -184,20 +191,21 @@ $Godot = '<path-to-Godot-4.7.2-Mono-console.exe>'
 
 That proof builds the exact admitted floor and top-level object planes, derives
 floor support and the central-hex blocker walk mask from owned MAP values, molds
-the 45 source wall-object hexes into two connected shells, and proves the exact
-floor and wall colliders with headless physics rays. A nonvisual cursor consumes
+the 45 source wall-object hexes into connected collision shells, and proves the
+exact floor and wall colliders with headless physics rays. The non-source visual
+shell is now suppressed while all 45 owned wall FRMs remain visible. A nonvisual cursor consumes
 42 exact adjacent moves inside the 1,085-hex entry component, proving floor
 contact and fail-closed boundary rejection. Multihex footprint semantics,
 Temple player controls, script execution, Temple gameplay/save state, and
 parity remain unimplemented; they are not claimed by the promoted Map 3 Hex
 slice. A separate asset-free transition
-contract proves that Map 126 has no door-prototype objects, moves through the
-same walk component to one of three exact exit grids, and changes only nonvisual
-state to owned Map 3 / tile 28707. Destination loading and `ARTemple.int`
-execution remain disabled. The destination compiler now independently binds
+contract proves that Map 126 has no door-prototype objects and binds its source
+exit grids without executing `ARTemple.int`. The destination compiler independently binds
 Map 3 `ARCAVES`, that exact incoming placement, 24 reciprocal exits to Map 126,
 the 586-hex arrival component, and a 173-artifact disposable presentation cache.
-Godot consumes that bounded Map 3 cache in a rendered 3D hex scene.
+Godot consumes that bounded Map 3 cache in a rendered 3D hex scene; ordinary
+grounded movement now follows the exact 13-step path to exit serial 1738 and
+loads ARTEMPLE Map 126 at tile 16486, elevation 0, rotation 0.
 `content/tools/prepare_fo2_character_start.py` parses the exact Fallout 2
 premades Narg, Mingan, and Chitsa from their GCD/BIO records and decodes the
 owned picker, portraits, and male/female idle FRMs into a disposable local
@@ -207,10 +215,11 @@ name (1–11 characters), sex, age (16–35), and seven SPECIAL values (1–10 e
 exactly 40 total). Modify preserves the source premade's tags/traits unchanged;
 Create leaves them explicitly unselected because their editing rules are not yet
 transported. Confirm hands the state and sex-correct FRM to the grounded Map 3
-player at exact tile 28707. Its version-2 atomic OpenNV user-data save retains
-the selected mode, owned GCD/BIO source basis, custom profile state, plus Map 3,
-elevation, tile, facing, transform, and bounded movement/presentation modes; a
-fresh process validates those identities and restores the same player. The
+player at exact tile 28707. Its version-3 atomic OpenNV user-data save retains
+the selected mode, owned GCD/BIO source basis, custom profile state, current map,
+elevation, tile, facing, transform, bounded movement/presentation modes, and the
+source exit transition identity; a fresh process validates those identities and
+restores the same player. The
 launcher passes these exact five hash-matched local artifacts and the isolated
 save path to the same character-start scene. This is bounded custom character
 creation and Hex playability, not a complete campaign save, FPS/VR, or retail parity.
@@ -300,15 +309,18 @@ activation, and fighting bits back onto `CellPlayer`, including the authored
 disabled-combat state. Pip-Boy visibility is restored separately; saved POV and
 sneaking bits still lack runtime consumers. The
 bounded default cache joins the reciprocal Doc Mitchell house/exterior and
-Goodsprings exterior/saloon pairs in one preloaded bounded composite. From a
+Goodsprings exterior/saloon pairs in one eagerly instantiated bounded composite. From a
 completed stage-200 save, the owned Continue button signal restores the Doc
 route; configured Godot movement and activation then traverse `00103e61` →
-`00103e69` and `0010636f` → `0010618e` in order. Campaign save v5 persists
+`00103e69` and `0010636f` → `0010618e` in order. Campaign save v6 persists
 saloon CELL `00106185` and the player transform, and a fresh process using the
 owned Continue button restores the unchanged save and transform there. All three
-spaces remain preloaded: reverse traversal, neighboring CELL streaming,
-integrated-route OpenXR, Sunny behavior, and an uninterrupted whole campaign
-remain unproven. See the
+spaces remain instantiated, but only the current CELL and its direct portal
+neighbors remain active for visibility, processing, physics, and lights. Normal
+restore still rejects the retained direct-proof cache's older compiler identity,
+so compiler-family migration and normal-route reacceptance remain open alongside
+reverse traversal, neighboring exterior-grid streaming, integrated-route
+OpenXR, Sunny behavior, and an uninterrupted whole campaign. See the
 [canonical whole-game delivery plan](docs/whole-game-delivery-plan.md),
 [multi-game first-slice plan](docs/multi-game-first-slices.md),
 [single-page architecture](docs/architecture.md),

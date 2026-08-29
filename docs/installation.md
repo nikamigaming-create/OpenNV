@@ -73,20 +73,26 @@ its source-bound HUD/Pip-Boy runtime shell
 reads the same inventory, quest, map, and save state; complete tile interaction
 and retail UI parity remain pending. STATS currently shares the verified ITEMS
 frame while its remaining Gamebryo layout expressions are unsupported. The
-default cache preloads the ordered Doc house, Goodsprings active exterior set,
-and saloon composite with both reciprocal XTEL pairs. From a completed stage-200
-save, configured flat input traverses both forward XTEL links; campaign save v5
-records saloon CELL `00106185`, and a fresh owned-menu Continue restores the
-unchanged save and player transform there. Reverse traversal, neighboring CELL
-streaming, and integrated-route OpenXR acceptance remain pending. The registered
+default cache eagerly instantiates the ordered Doc house, Goodsprings active
+exterior set, and saloon composite with both reciprocal XTEL pairs. From a
+completed stage-200 save, configured flat input traverses both forward XTEL
+links; campaign save v6 records source-derived Level/HP/AP/XP plus saloon CELL
+`00106185`, and a fresh owned-menu Continue restores the unchanged save and
+player transform there. A source-portal active set suspends distant resources,
+but the retained direct lifecycle proof cache has an older compiler identity and
+normal restore fails closed until explicit migration. Reverse traversal,
+neighboring exterior-grid streaming, and integrated-route OpenXR acceptance
+remain pending. The registered
 Fallout 3 development frontend opens its
 profile-backed menu, plays a locally
 converted and hash-verified copy of the owned intro, and converges through
 Escape or the Skip button on CG00 sex/name selection, a persistent stage-60
 character, and source-backed race/hair/eye selection persisted at stage 62.
-Exact Section 4 and stage-65/80/85 contracts compile and validate, but normal
-progression stops at stage 62 until their authored package/dialogue triggers and
-Vault 101 world execute; it does not persist a synthetic later quest state.
+The bounded ordinary route enters the owned Vault 101 birth room, executes the
+exact stage-65 Dad cue and stage-80/85 results, applies stage-90 INFO `0001f379`
+with its owned fade/sound, and cold-restores stage 90 without replaying the
+one-shot effects. It does not yet advance the stage-90 timer to stage 100 or
+provide a freely playable Vault 101 route.
 The current preview shows verified owned source textures rather than a 3D
 FaceGen actor. Fallout 1 OpenXR has a shared-state V13ENT simulator adapter that
 passes locomotion, snap turn, fire, reload, and save. XR door use,
