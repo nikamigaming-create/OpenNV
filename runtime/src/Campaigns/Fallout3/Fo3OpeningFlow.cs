@@ -348,6 +348,7 @@ internal sealed record Fo3OwnedProfile(
     Fo3Stage80Transition Stage80Transition,
     Fo3Stage85Transition Stage85Transition,
     Fo3Stage90Transition Stage90Transition,
+    Fo3Stage100Transition Stage100Transition,
     string MainMenuMusicPath,
     string IntroVideoPath,
     Color InterfaceColor)
@@ -376,6 +377,7 @@ internal sealed record Fo3OwnedProfile(
             !RequiredBoolean(capabilities, "cg00Stage80ContractReady") ||
             !RequiredBoolean(capabilities, "cg00Stage85ContractReady") ||
             !RequiredBoolean(capabilities, "cg00Stage90ContractReady") ||
+            !RequiredBoolean(capabilities, "cg00Stage100ContractReady") ||
             !RequiredBoolean(capabilities, "vault101BirthGraphCompiled") ||
             !RequiredBoolean(capabilities, "mainMenuRuntimeReady") ||
             !RequiredBoolean(capabilities, "introVideoRuntimeReady") ||
@@ -435,10 +437,15 @@ internal sealed record Fo3OwnedProfile(
             stage85Transition.Stage,
             stage80Transition.Stage,
             RequiredString(quest, "formId"));
+        var stage100Transition = Fo3Stage100Transition.Load(
+            RequiredObject(selection, "stage100Transition"),
+            stage90Transition,
+            RequiredString(quest, "formId"));
         if (!stages.Contains(stage65Appearance.Stage) ||
             !stages.Contains(stage80Transition.Stage) ||
             !stages.Contains(stage85Transition.Stage) ||
-            !stages.Contains(stage90Transition.Stage))
+            !stages.Contains(stage90Transition.Stage) ||
+            !stages.Contains(stage100Transition.Stage))
             throw new InvalidOperationException(
                 "Fallout 3 compiled CG00 transitions do not join the owned quest stages.");
 
@@ -490,6 +497,7 @@ internal sealed record Fo3OwnedProfile(
             stage80Transition,
             stage85Transition,
             stage90Transition,
+            stage100Transition,
             RequiredString(mainMenuMusic, "source"),
             RequiredString(runtimeIntroVideo, "output"),
             interfaceColor);
@@ -600,6 +608,16 @@ internal sealed record Fo3OwnedProfile(
         value.Length == characters && value.All(Uri.IsHexDigit);
 }
 
+internal sealed record Fo3Stage100RuntimeContext(
+    string PlayerName,
+    Fo3SexChoice Sex,
+    Fo3AppearanceSelection Selection,
+    Fo3ActivePlayerPackage Section4Package,
+    Fo3Stage65AppearanceState Stage65,
+    Fo3Stage80State Stage80,
+    Fo3Stage85State Stage85,
+    Fo3Stage90State Stage90);
+
 internal partial class Fo3OpeningFlow : CanvasLayer
 {
     private Fo3OwnedProfile _profile = null!;
@@ -620,6 +638,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private ColorRect? _vaultStage90Fade;
     private Fo3Stage90ImageSpaceModifier? _activeStage90ImageSpaceModifier;
     private double _stage90ImageSpaceElapsedSeconds;
+    private Fo3Vault101BirthSceneCoverage? _vaultBirthCoverage;
+    private Fo3Stage100RuntimeContext? _stage100Runtime;
+    private double _stage100TimerRemainingSeconds;
     private bool _runAppearanceProof;
     private bool _introCompleted;
 
@@ -636,13 +657,16 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _birthPresentation = birthPresentation;
         if (_birthPresentation is not null &&
             (!_birthPresentation.EntryReferenceFormId.Equals(
-                _profile.Section4Transition.LocationReferenceFormId,
-                StringComparison.OrdinalIgnoreCase) ||
+                 _profile.Section4Transition.LocationReferenceFormId,
+                 StringComparison.OrdinalIgnoreCase) ||
              !_birthPresentation.CellFormId.Equals(
-                _profile.BirthSlice.CellFormId,
-                StringComparison.OrdinalIgnoreCase)))
+                 _profile.BirthSlice.CellFormId,
+                 StringComparison.OrdinalIgnoreCase) ||
+             !_birthPresentation.DadActor.ReferenceFormId.Equals(
+                 _profile.Stage100Transition.DisabledDad.FormId,
+                 StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException(
-                "Fallout 3 stage-62 package location does not join the owned Vault 101 entry.");
+                "Fallout 3 stage-62 package or stage-100 Dad does not join the owned Vault 101 scene.");
         _runAppearanceProof = runAppearanceProof;
         Name = "Fallout3FrontEnd";
         Layer = Fo3OpeningFlowNumericContracts.UiLayer;
@@ -674,23 +698,36 @@ internal partial class Fo3OpeningFlow : CanvasLayer
 
     public override void _Process(double delta)
     {
-        if (_vaultStage90Fade is null || _activeStage90ImageSpaceModifier is null)
+        if (_vaultStage90Fade is not null && _activeStage90ImageSpaceModifier is not null)
+        {
+            _stage90ImageSpaceElapsedSeconds += delta;
+            var modifier = _activeStage90ImageSpaceModifier;
+            var normalizedTime = modifier.DurationSeconds <= 0.0f
+                ? 1.0f
+                : Mathf.Clamp(
+                    (float)(_stage90ImageSpaceElapsedSeconds / modifier.DurationSeconds),
+                    0.0f,
+                    1.0f);
+            _vaultStage90Fade.Color = EvaluateStage90Fade(modifier.Fade, normalizedTime);
+            if (normalizedTime >= 1.0f)
+            {
+                _vaultStage90Fade.QueueFree();
+                _vaultStage90Fade = null;
+                _activeStage90ImageSpaceModifier = null;
+                _stage90ImageSpaceElapsedSeconds = 0.0;
+            }
+        }
+
+        if (_stage100Runtime is null)
             return;
-        _stage90ImageSpaceElapsedSeconds += delta;
-        var modifier = _activeStage90ImageSpaceModifier;
-        var normalizedTime = modifier.DurationSeconds <= 0.0f
-            ? 1.0f
-            : Mathf.Clamp(
-                (float)(_stage90ImageSpaceElapsedSeconds / modifier.DurationSeconds),
-                0.0f,
-                1.0f);
-        _vaultStage90Fade.Color = EvaluateStage90Fade(modifier.Fade, normalizedTime);
-        if (normalizedTime < 1.0f)
+        _stage100TimerRemainingSeconds = Math.Max(
+            0.0,
+            _stage100TimerRemainingSeconds - delta);
+        if (_stage100TimerRemainingSeconds > 0.0)
             return;
-        _vaultStage90Fade.QueueFree();
-        _vaultStage90Fade = null;
-        _activeStage90ImageSpaceModifier = null;
-        _stage90ImageSpaceElapsedSeconds = 0.0;
+        var context = _stage100Runtime;
+        _stage100Runtime = null;
+        CompleteStage90Timer(context);
     }
 
     public override void _Input(InputEvent @event)
@@ -931,7 +968,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 stage != _profile.Stage65Appearance.Stage &&
                 stage != _profile.Stage80Transition.Stage &&
                 stage != _profile.Stage85Transition.Stage &&
-                stage != _profile.Stage90Transition.Stage)
+                stage != _profile.Stage90Transition.Stage &&
+                stage != _profile.Stage100Transition.Stage)
                 throw new InvalidOperationException("Saved Fallout 3 CG00 stage is unsupported.");
             var savedAppearance = RequiredSaveObject(root, "appearance");
             if (RequiredSaveString(savedAppearance, "sourceContract") !=
@@ -959,7 +997,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 return;
             }
             var savedPackage = RequiredSaveObject(root, "playerPackage");
-            _profile.Section4Transition.ValidateSavedState(savedPackage);
+            if (stage == _profile.Stage100Transition.Stage)
+                ValidateRemovedPlayerPackageState(savedPackage);
+            else
+                _profile.Section4Transition.ValidateSavedState(savedPackage);
             var stage65 = _profile.Stage65Appearance.Apply(
                 _selectedSex.EngineSex,
                 selection.Race.FormId,
@@ -1014,9 +1055,28 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             _profile.Stage90Transition.ValidateSavedState(
                 RequiredSaveObject(root, "stage90Transition"),
                 stage90);
+            if (stage == stage90.Stage)
+            {
+                ValidateBirthRuntimeState(
+                    RequiredSaveObject(root, "birthRuntime"),
+                    "stage85-info-finished-stage90-applied");
+                ShowVault101BirthRoom(
+                    playerName,
+                    _selectedSex,
+                    selection,
+                    stage65,
+                    stage80,
+                    stage85,
+                    stage90);
+                return;
+            }
+            var stage100 = _profile.Stage100Transition.Apply(stage90, 0.0);
+            _profile.Stage100Transition.ValidateSavedState(
+                RequiredSaveObject(root, "stage100Transition"),
+                stage100);
             ValidateBirthRuntimeState(
                 RequiredSaveObject(root, "birthRuntime"),
-                "stage85-info-finished-stage90-applied");
+                "stage90-timer-finished-stage100-applied");
             ShowVault101BirthRoom(
                 playerName,
                 _selectedSex,
@@ -1024,7 +1084,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 stage65,
                 stage80,
                 stage85,
-                stage90);
+                stage90,
+                stage100);
         }
         catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
         {
@@ -1177,7 +1238,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Stage65AppearanceState? resumedStage65 = null,
         Fo3Stage80State? resumedStage80 = null,
         Fo3Stage85State? resumedStage85 = null,
-        Fo3Stage90State? resumedStage90 = null)
+        Fo3Stage90State? resumedStage90 = null,
+        Fo3Stage100State? resumedStage100 = null)
     {
         var contract = _birthPresentation ?? throw new InvalidOperationException(
             "Fallout 3 Vault 101 birth room has no owned presentation contract.");
@@ -1214,7 +1276,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                  resumedStage85.Stage != _profile.Stage85Transition.Stage)) ||
             (resumedStage90 is not null &&
                 (resumedStage85 is null ||
-                 resumedStage90.Stage != _profile.Stage90Transition.Stage)))
+                 resumedStage90.Stage != _profile.Stage90Transition.Stage)) ||
+            (resumedStage100 is not null &&
+                (resumedStage90 is null ||
+                 resumedStage100.Stage != _profile.Stage100Transition.Stage)))
             throw new InvalidOperationException(
                 "Fallout 3 resumed birth-room stage chain is incomplete.");
 
@@ -1231,6 +1296,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             throw;
         }
         _vaultPreviewHost = previewHost;
+        _vaultBirthCoverage = coverage;
         _background.Visible = false;
         _panel.Visible = false;
 
@@ -1276,7 +1342,19 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 stage65,
                 resumedStage80,
                 resumedStage85!);
-        var activeStage = resumedStage90?.Stage ?? resumedStage85?.Stage ??
+        if (resumedStage100 is not null)
+            ApplyStage100Presentation(resumedStage100);
+        else if (resumedStage90 is not null)
+            StartStage100Timer(new Fo3Stage100RuntimeContext(
+                playerName,
+                sex,
+                selection,
+                transition.Activate(),
+                stage65,
+                resumedStage80!,
+                resumedStage85!,
+                resumedStage90));
+        var activeStage = resumedStage100?.Stage ?? resumedStage90?.Stage ?? resumedStage85?.Stage ??
             resumedStage80?.Stage ?? stage65.Stage;
         GD.Print(
             $"OPENNV_FO3_CG00_VAULT101_BIRTH_ROOM_READY profile={_profile.ProfileId} " +
@@ -1285,12 +1363,15 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"references={coverage.PlacedReferences} actors=2 " +
             $"doctor={coverage.DoctorActor.ReferenceFormId} " +
             $"dad={coverage.DadActor.ReferenceFormId} " +
-            $"resumed={(resumedStage65 is null ? 0 : 1)} packageActive=1 " +
+            $"resumed={(resumedStage65 is null ? 0 : 1)} " +
+            $"packageActive={(resumedStage100 is null ? 1 : 0)} " +
             $"trigger={transition.NextCommand} playerIdleExecuted=0 " +
             $"dialoguePlaybackReady={(resumedStage80 is null ? 1 : 0)} retailTiming=0 " +
             $"stage80Applied={(resumedStage80 is null ? 0 : 1)} " +
             $"stage85Applied={(resumedStage85 is null ? 0 : 1)} " +
-            $"stage90Applied={(resumedStage90 is null ? 0 : 1)}");
+            $"stage90Applied={(resumedStage90 is null ? 0 : 1)} " +
+            $"stage100Applied={(resumedStage100 is null ? 0 : 1)} " +
+            $"cg01Stage0Applied=0 dadEnabled={(resumedStage100 is null ? 1 : 0)}");
     }
 
     private Label AddVaultDialogueOverlay(
@@ -1491,14 +1572,76 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             stage80,
             stage85,
             stage90);
+        StartStage100Timer(new Fo3Stage100RuntimeContext(
+            playerName,
+            sex,
+            selection,
+            _profile.Section4Transition.Activate(),
+            stage65,
+            stage80,
+            stage85,
+            stage90));
         GD.Print(
             $"OPENNV_FO3_CG00_STAGE90_APPLIED_NORMAL stage={stage90.Stage} " +
             $"info={stage90.AppliedInfoFormId} commands={stage90.AppliedCommandCount} " +
             $"timer={stage90.QuestVariables.Single(value => value.Name == "timer").Value:F1} " +
             $"runTimer={stage90.QuestVariables.Single(value => value.Name == "runTimer").Value:F0} " +
             $"imad={stage90.ImageSpaceModifier.FormId} imadFade=1 imadOtherChannels=0 " +
-            $"sound={stage90.Sound.FormId} soundStarted=1 timerAdvancing=0 " +
+            $"sound={stage90.Sound.FormId} soundStarted=1 timerAdvancing=1 " +
             "playerIdleExecuted=0 packageAi=0 retailTiming=0 stage100Applied=0");
+    }
+
+    private void StartStage100Timer(Fo3Stage100RuntimeContext context)
+    {
+        if (_stage100Runtime is not null || !context.Stage90.TimerAdvancing)
+            throw new InvalidOperationException("Fallout 3 stage-100 timer is already active.");
+        var timer = context.Stage90.QuestVariables.Single(value => value.Name == "timer");
+        if (timer.Value != _profile.Stage100Transition.TimerInitialSeconds)
+            throw new InvalidOperationException("Fallout 3 stage-100 timer start differs.");
+        _stage100Runtime = context;
+        _stage100TimerRemainingSeconds = timer.Value;
+        GD.Print(
+            $"OPENNV_FO3_CG00_STAGE100_TIMER_STARTED sourceStage={context.Stage90.Stage} " +
+            $"seconds={_stage100TimerRemainingSeconds:F1} decrement=GetSecondsPassed " +
+            "debugJump=0 retailTiming=0");
+    }
+
+    private void CompleteStage90Timer(Fo3Stage100RuntimeContext context)
+    {
+        var stage100 = _profile.Stage100Transition.Apply(
+            context.Stage90,
+            _stage100TimerRemainingSeconds);
+        ApplyStage100Presentation(stage100);
+        PersistStage100Transition(
+            context.PlayerName,
+            context.Sex,
+            context.Selection,
+            context.Section4Package,
+            context.Stage65,
+            context.Stage80,
+            context.Stage85,
+            context.Stage90,
+            stage100);
+        GD.Print(
+            $"OPENNV_FO3_CG00_STAGE100_APPLIED_NORMAL stage={stage100.Stage} " +
+            $"commandsApplied={stage100.AppliedCommandCount} " +
+            $"commandsAccounted={stage100.AccountedCommandCount} packageActive=0 " +
+            $"dad={stage100.DisabledDad.FormId} dadEnabled=0 cg00Running=0 " +
+            $"playerYoung=1 nextQuest={stage100.NextBoundary.QuestFormId} " +
+            $"nextStage={stage100.NextBoundary.Stage} nextApplied=0 " +
+            $"blocker={stage100.NextBoundary.Blocker}");
+    }
+
+    private void ApplyStage100Presentation(Fo3Stage100State stage100)
+    {
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 stage-100 Dad has no owned Vault 101 scene.");
+        if (!coverage.DadActor.ReferenceFormId.Equals(
+                stage100.DisabledDad.FormId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Fallout 3 stage-100 Dad identity differs.");
+        coverage.DadActor.Placement.Visible = false;
+        coverage.DadActor.Placement.ProcessMode = ProcessModeEnum.Disabled;
     }
 
     private void StartStage90ImageSpace(Fo3Stage90ImageSpaceModifier modifier)
@@ -1568,6 +1711,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _vaultStage90Fade = null;
         _activeStage90ImageSpaceModifier = null;
         _stage90ImageSpaceElapsedSeconds = 0.0;
+        _stage100Runtime = null;
+        _stage100TimerRemainingSeconds = 0.0;
+        _vaultBirthCoverage = null;
         _vaultPreviewOverlay?.QueueFree();
         _vaultPreviewOverlay = null;
         _vaultPreviewHost?.QueueFree();
@@ -1836,6 +1982,44 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         return value;
     }
 
+    private static JsonElement RequiredSaveArray(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException($"Fallout 3 save field {name} is invalid.");
+        return value;
+    }
+
+    private static bool RequiredSaveBoolean(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) ||
+            value.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+            throw new InvalidOperationException($"Fallout 3 save field {name} is invalid.");
+        return value.GetBoolean();
+    }
+
+    private void ValidateRemovedPlayerPackageState(JsonElement source)
+    {
+        var transition = _profile.Section4Transition;
+        if (RequiredSaveString(source, "schema") != "opennv-fo3-player-package-state/v1" ||
+            RequiredSaveBoolean(source, "active") ||
+            RequiredSaveString(source, "formId") != transition.PackageFormId ||
+            RequiredSaveString(source, "editorId") != transition.PackageEditorId ||
+            RequiredSaveString(source, "locationReferenceFormId") !=
+                transition.LocationReferenceFormId ||
+            RequiredSaveString(source, "nextCommand") != transition.NextCommand ||
+            RequiredSaveInteger(source, "nextStage") != transition.NextStage)
+            throw new InvalidOperationException(
+                "Saved Fallout 3 removed player package differs from the profile.");
+        var idles = RequiredSaveArray(source, "idleFormIds").EnumerateArray()
+            .Select(value => value.GetString() ?? "")
+            .ToArray();
+        if (idles.Any(string.IsNullOrWhiteSpace) ||
+            !transition.IdleFormIds.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(idles))
+            throw new InvalidOperationException(
+                "Saved Fallout 3 removed player-package idles differ.");
+    }
+
     private void ValidateBirthRuntimeState(JsonElement source, string expectedCueState)
     {
         var contract = _birthPresentation ?? throw new InvalidOperationException(
@@ -2073,7 +2257,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Stage65AppearanceState stage65,
         Fo3Stage80State stage80,
         Fo3Stage85State? stage85 = null,
-        Fo3Stage90State? stage90 = null)
+        Fo3Stage90State? stage90 = null,
+        Fo3Stage100State? stage100 = null)
     {
         var state = new
         {
@@ -2082,7 +2267,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             profileSha256 = _profile.Sha256,
             questEditorId = _profile.QuestEditorId,
             questFormId = _profile.QuestFormId,
-            stage = stage90?.Stage ?? stage85?.Stage ?? stage80.Stage,
+            stage = stage100?.Stage ?? stage90?.Stage ?? stage85?.Stage ?? stage80.Stage,
             playerName,
             sex = new { label = sex.Label, engineSex = sex.EngineSex },
             appearance = new
@@ -2102,7 +2287,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             playerPackage = new
             {
                 schema = "opennv-fo3-player-package-state/v1",
-                active = true,
+                active = stage100 is null,
                 formId = section4Package.FormId,
                 editorId = section4Package.EditorId,
                 locationReferenceFormId = section4Package.LocationReferenceFormId,
@@ -2209,8 +2394,56 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                     timerAdvancing = stage90.TimerAdvancing,
                     nextBoundary = stage90.NextBoundary,
                 },
-            birthRuntime = BirthRuntimeState(stage90 is not null
-                ? "stage85-info-finished-stage90-applied"
+            stage100Transition = stage100 is null
+                ? null
+                : new
+                {
+                    schema = Fo3Stage100Transition.ExpectedSchema,
+                    stage = stage100.Stage,
+                    accountedCommandCount = stage100.AccountedCommandCount,
+                    appliedCommandCount = stage100.AppliedCommandCount,
+                    timerRemainingSeconds = stage100.TimerRemainingSeconds,
+                    timerAdvancing = stage100.TimerAdvancing,
+                    playerScriptPackageActive = stage100.PlayerScriptPackageActive,
+                    scriptVariables = stage100.ScriptVariables.Select(variable => new
+                    {
+                        referenceFormId = variable.ReferenceFormId,
+                        referenceEditorId = variable.ReferenceEditorId,
+                        variable = variable.Variable,
+                        value = variable.Value,
+                    }),
+                    removedImageSpaceModifier = new
+                    {
+                        formId = stage100.RemovedImageSpaceModifier.FormId,
+                        editorId = stage100.RemovedImageSpaceModifier.EditorId,
+                        recordSha256 = stage100.RemovedImageSpaceModifier.RecordSha256,
+                    },
+                    disabledDad = new
+                    {
+                        formId = stage100.DisabledDad.FormId,
+                        editorId = stage100.DisabledDad.EditorId,
+                    },
+                    cg00Running = stage100.Cg00Running,
+                    playerYoung = stage100.PlayerYoung,
+                    nextBoundary = new
+                    {
+                        commandIndex = 7,
+                        kind = "setStage",
+                        questFormId = stage100.NextBoundary.QuestFormId,
+                        questEditorId = stage100.NextBoundary.QuestEditorId,
+                        stage = stage100.NextBoundary.Stage,
+                        stageResultSourceSha256 =
+                            stage100.NextBoundary.StageResultSourceSha256,
+                        stageResultCommandCount =
+                            stage100.NextBoundary.StageResultCommandCount,
+                        applied = stage100.NextBoundary.Applied,
+                        blocker = stage100.NextBoundary.Blocker,
+                    },
+                },
+            birthRuntime = BirthRuntimeState(stage100 is not null
+                ? "stage90-timer-finished-stage100-applied"
+                : stage90 is not null
+                    ? "stage85-info-finished-stage90-applied"
                 : stage85 is not null
                     ? "stage80-info-trigger-stage85-applied"
                     : "stage65-cue-finished-stage80-applied"),
@@ -2254,6 +2487,27 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             stage80,
             stage85,
             stage90);
+
+    private void PersistStage100Transition(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        Fo3ActivePlayerPackage section4Package,
+        Fo3Stage65AppearanceState stage65,
+        Fo3Stage80State stage80,
+        Fo3Stage85State stage85,
+        Fo3Stage90State stage90,
+        Fo3Stage100State stage100) =>
+        PersistStage80Transition(
+            playerName,
+            sex,
+            selection,
+            section4Package,
+            stage65,
+            stage80,
+            stage85,
+            stage90,
+            stage100);
 
     private void WriteState(object state)
     {

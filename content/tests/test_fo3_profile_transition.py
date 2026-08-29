@@ -409,6 +409,8 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "else",
                 "if getstage CG00 == 5",
                 "setstage CG00 6",
+                "elseif getstage CG00 == 6",
+                "setstage CG00 8",
                 "elseif getstage CG00 == 90",
                 "setstage CG00 100",
                 "endif",

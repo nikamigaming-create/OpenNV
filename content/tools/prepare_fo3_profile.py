@@ -113,14 +113,18 @@ STOP_QUEST_PATTERN = re.compile(
     re.IGNORECASE,
 )
 SET_PC_YOUNG_PATTERN = re.compile(r"^SetPCYoung\s+(?P<value>\d+)$", re.IGNORECASE)
-CG00_TIMER_STAGE_PATTERN = re.compile(
+CG00_TIMER_CHAIN_PATTERN = re.compile(
     r"\bif\s+runTimer\s*==\s*1\b.*?"
     r"\bif\s+timer\s*>\s*0\b\s*"
     r"set\s+timer\s+to\s+timer\s*-\s*GetSecondsPassed\b.*?"
-    r"\belseif\s+getstage\s+CG00\s*==\s*(?P<source>\d+)\b\s*"
-    r"setstage\s+CG00\s+(?P<target>\d+)\b.*?"
+    r"(?P<stage_branches>.*?)"
     r"\bendif\b\s*\bendif\b\s*\bif\s+chooseSex\b",
     re.IGNORECASE | re.DOTALL,
+)
+CG00_TIMER_STAGE_PATTERN = re.compile(
+    r"\b(?:if|elseif)\s+getstage\s+CG00\s*==\s*(?P<source>\d+)\b\s*"
+    r"setstage\s+CG00\s+(?P<target>\d+)\b",
+    re.IGNORECASE,
 )
 SET_REFERENCE_VARIABLE_PATTERN = re.compile(
     r"^set\s+(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\."
@@ -1856,14 +1860,18 @@ def _compile_stage100_transition(
     target_source = target_sources[0]
     commands = _parse_stage100_commands(target_source)
 
-    timer_matches = list(CG00_TIMER_STAGE_PATTERN.finditer(quest_script_source))
-    if len(timer_matches) != 1:
+    timer_chains = list(CG00_TIMER_CHAIN_PATTERN.finditer(quest_script_source))
+    if len(timer_chains) != 1:
         raise ValueError("Fallout 3 CG00 stage 90 timer trigger is ambiguous")
-    timer_match = timer_matches[0]
-    if (
-        int(timer_match.group("source")) != source_stage
-        or int(timer_match.group("target")) != target_stage
-    ):
+    timer_matches = [
+        match
+        for match in CG00_TIMER_STAGE_PATTERN.finditer(
+            timer_chains[0].group("stage_branches")
+        )
+        if int(match.group("source")) == source_stage
+        and int(match.group("target")) == target_stage
+    ]
+    if len(timer_matches) != 1:
         raise ValueError("Fallout 3 CG00 stage 90 timer target differs")
     declarations = {
         name: [

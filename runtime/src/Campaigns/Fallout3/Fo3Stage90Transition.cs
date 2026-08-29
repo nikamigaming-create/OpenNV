@@ -199,7 +199,7 @@ internal sealed record Fo3Stage90Transition(
             true,
             false,
             true,
-            false,
+            true,
             NextBoundary);
     }
 
