@@ -653,11 +653,12 @@ internal partial class CellPlayer : CharacterBody3D
         }
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
-            return collider is null &&
-                _portalTravel?.TryActivateFacing(
-                    aimSource,
-                    this,
-                    _configuration.Player.ActivationDistanceMeters) == true;
+        {
+            return _portalTravel?.TryActivateFacing(
+                aimSource,
+                this,
+                _configuration.Player.ActivationDistanceMeters) == true;
+        }
         if (_portalTravel?.TryActivate(door, this) == true)
         {
             GD.Print(
@@ -676,6 +677,7 @@ internal partial class CellPlayer : CharacterBody3D
         var from = aimSource.GlobalPosition;
         var to = from - aimSource.GlobalBasis.Z * distance;
         var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionMask);
+        query.HitBackFaces = false;
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         return hit.Count == 0 ? null : hit["collider"].AsGodotObject() as Node;
     }

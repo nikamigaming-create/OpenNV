@@ -438,9 +438,7 @@ internal static class CellContentLoader
                         throw new InvalidOperationException("Unsupported pool table gameplay collision source.");
                     foreach (var mesh in Descendants<MeshInstance3D>(instance))
                     {
-                        mesh.CreateTrimeshCollision();
-                        foreach (var body in Descendants<StaticBody3D>(mesh))
-                            body.CollisionLayer = renderLayer;
+                        CreateDoubleSidedTrimeshCollision(mesh, renderLayer);
                         collisionMeshes++;
                     }
                 }
@@ -470,9 +468,7 @@ internal static class CellContentLoader
                         foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionInstance))
                         {
                             collisionMesh.Visible = false;
-                            collisionMesh.CreateTrimeshCollision();
-                            foreach (var body in Descendants<StaticBody3D>(collisionMesh))
-                                body.CollisionLayer = renderLayer;
+                            CreateDoubleSidedTrimeshCollision(collisionMesh, renderLayer);
                             collisionMeshes++;
                         }
                     }
@@ -507,9 +503,7 @@ internal static class CellContentLoader
                         foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionInstance))
                         {
                             collisionMesh.Visible = false;
-                            collisionMesh.CreateTrimeshCollision();
-                            foreach (var body in Descendants<StaticBody3D>(collisionMesh))
-                                body.CollisionLayer = renderLayer;
+                            CreateDoubleSidedTrimeshCollision(collisionMesh, renderLayer);
                             collisionMeshes++;
                         }
                     }
@@ -524,9 +518,7 @@ internal static class CellContentLoader
                             landscapeCollisionMeshes.Add(mesh);
                         else
                         {
-                            mesh.CreateTrimeshCollision();
-                            foreach (var body in Descendants<StaticBody3D>(mesh))
-                                body.CollisionLayer = renderLayer;
+                            CreateDoubleSidedTrimeshCollision(mesh, renderLayer);
                             collisionMeshes++;
                         }
                     }
@@ -1456,6 +1448,25 @@ internal static class CellContentLoader
             Shape = shape,
         });
         root.AddChild(body);
+    }
+
+    private static void CreateDoubleSidedTrimeshCollision(
+        MeshInstance3D mesh,
+        uint collisionLayer)
+    {
+        mesh.CreateTrimeshCollision();
+        var bodies = Descendants<StaticBody3D>(mesh).ToArray();
+        var shapes = Descendants<CollisionShape3D>(mesh)
+            .Select(value => value.Shape)
+            .OfType<ConcavePolygonShape3D>()
+            .ToArray();
+        if (bodies.Length == 0 || shapes.Length == 0)
+            throw new InvalidOperationException(
+                $"Could not construct double-sided trimesh collision: {mesh.Name}");
+        foreach (var body in bodies)
+            body.CollisionLayer = collisionLayer;
+        foreach (var shape in shapes)
+            shape.BackfaceCollision = true;
     }
 
     private static int BuildWalkableRoadCollision(

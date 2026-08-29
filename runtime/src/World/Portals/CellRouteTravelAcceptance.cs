@@ -338,6 +338,8 @@ internal static class CellRouteTravelAcceptance
             var waypointDistance = HorizontalDistance(player.GlobalPosition, waypointCenter);
             if (waypointIndex + 3 < path.Count &&
                 waypointDistance <= configuration.Player.ActivationDistanceMeters &&
+                VerticalDistance(player.GlobalPosition, waypointCenter) <=
+                    WaypointToleranceMeters &&
                 CanAdvanceCapsule(player, waypointCenter))
             {
                 GD.Print(
@@ -453,6 +455,8 @@ internal static class CellRouteTravelAcceptance
             {
                 var distance = HorizontalDistance(player.GlobalPosition, target);
                 if (distance <= toleranceMeters &&
+                    VerticalDistance(player.GlobalPosition, target) <=
+                        WaypointToleranceMeters &&
                     (!requireDirectSweep || CanAdvanceCapsule(player, target)))
                     return true;
                 FlatControlsAcceptance.ApplyMouseYaw(player, target, configuration.Player);
@@ -551,6 +555,11 @@ internal static class CellRouteTravelAcceptance
         var normal = player.LastBlockingNormal;
         normal.Y = 0.0f;
         if (normal.IsZeroApprox())
+        {
+            normal = CapsuleSweep(player, target)?.GetNormal() ?? Vector3.Zero;
+            normal.Y = 0.0f;
+        }
+        if (normal.IsZeroApprox())
             return false;
         normal = normal.Normalized();
         var targetDirection = target - player.GlobalPosition;
@@ -627,6 +636,9 @@ internal static class CellRouteTravelAcceptance
         delta.Y = 0.0f;
         return delta.Length();
     }
+
+    private static float VerticalDistance(Vector3 first, Vector3 second) =>
+        MathF.Abs(second.Y - first.Y);
 
     private static bool CanAdvanceCapsule(CellPlayer player, Vector3 target)
     {
