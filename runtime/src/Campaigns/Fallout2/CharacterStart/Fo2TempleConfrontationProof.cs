@@ -19,6 +19,36 @@ internal static class Fo2TempleConfrontationProof
                 Fo2CharacterStartSaveState.Exists(host.SavePath))
                 throw new InvalidOperationException(
                     "Fallout 2 confrontation write proof requires an empty save boundary.");
+            host.Picker.TogglePortraitMode();
+            var appearanceIdentities = new List<object>();
+            for (var index = 0; index < host.CharacterStart.Characters.Count; index++)
+            {
+                host.Picker.Select(index);
+                var character = host.Picker.Selected;
+                var relief = host.Picker.PortraitRelief;
+                if (!host.Picker.Live3DVisible || relief.CharacterId != character.Id ||
+                    relief.SourcePanelSha256 != character.Panel.SourceSha256 ||
+                    relief.LocalPanelPngSha256 != character.Panel.PngSha256 ||
+                    relief.SurfaceCount != 1)
+                    throw new InvalidOperationException(
+                        "Fallout 2 distinct owned panel relief identity failed.");
+                appearanceIdentities.Add(new
+                {
+                    character.Id,
+                    character.Profile.Name,
+                    character.Panel.LogicalPath,
+                    character.Panel.SourceSha256,
+                    character.Panel.PngSha256,
+                    relief.SurfaceCount,
+                });
+            }
+            if (host.CharacterStart.Characters
+                    .Select(character => character.Panel.SourceSha256)
+                    .Distinct(StringComparer.Ordinal)
+                    .Count() != host.CharacterStart.Characters.Count)
+                throw new InvalidOperationException(
+                    "Fallout 2 premade source panels are not distinct.");
+            host.Picker.TogglePortraitMode();
             host.Picker.Select(0);
             host.Picker.ChooseCurrent();
             var runtime = host.Runtime ?? throw new InvalidOperationException(
@@ -86,6 +116,15 @@ internal static class Fo2TempleConfrontationProof
                         ? "pass-bounded-defeat-loot-save"
                         : "fail-bounded-defeat-loot-save",
                     source = host.Temple.Confrontation,
+                    appearance = new
+                    {
+                        contract = saved.Character.Appearance,
+                        distinctOwnedPanelReliefs = appearanceIdentities,
+                        originalPickerPreserved = true,
+                        fullHeadGeometryRebuilt = false,
+                        customFaceEditorImplemented = false,
+                        customPortraitGenerated = false,
+                    },
                     state = confrontation.State,
                     player = new
                     {
@@ -142,6 +181,7 @@ internal static class Fo2TempleConfrontationProof
                 saved.TempleConfrontation == confrontation.State &&
                 confrontation.State.TargetHitPoints == 0 &&
                 confrontation.State.SpearLooted && !confrontation.TargetVisible;
+            saved.Character.Appearance.Validate(saved.Character);
             WriteReport(
                 System.IO.Path.Combine(output, "fo2-temple-confrontation-restore-proof.json"),
                 new
@@ -152,6 +192,7 @@ internal static class Fo2TempleConfrontationProof
                         : "fail-cold-restore-defeated-looted-state",
                     coldProcess = true,
                     state = confrontation.State,
+                    appearance = saved.Character.Appearance,
                     targetVisible = confrontation.TargetVisible,
                     save = new
                     {

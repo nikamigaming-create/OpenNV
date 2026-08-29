@@ -25,8 +25,9 @@ internal sealed record Fo2CharacterStartSaveState(
     Fo2ArroyoExitTransition? LastTransition,
     Fo2TempleConfrontationState? TempleConfrontation)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v4";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v5";
     internal const string RouteMode = "chosen-one-source-exit-route-v1";
+    private const string ConfrontationSchema = "opennv-fo2-character-arroyo-save/v4";
     private const string RouteSchema = "opennv-fo2-character-arroyo-save/v3";
     private const string PreviousSchema = "opennv-fo2-character-arroyo-save/v2";
     private const string PreviousRouteMode = "chosen-one-taken-to-arroyo-map-3";
@@ -135,6 +136,18 @@ internal sealed record Fo2CharacterStartSaveState(
                     taggedSkills = Character.Profile.TaggedSkills,
                     traits = Character.Profile.Traits,
                 },
+                appearance = new
+                {
+                    Character.Appearance.Schema,
+                    Character.Appearance.BasisPremadeId,
+                    Character.Appearance.SourcePanelLogicalPath,
+                    Character.Appearance.SourcePanelSha256,
+                    Character.Appearance.LocalPanelPngSha256,
+                    Character.Appearance.PreviewMode,
+                    Character.Appearance.PortraitState,
+                    Character.Appearance.CustomFaceEdited,
+                    Character.Appearance.CustomPortraitGenerated,
+                },
                 world = new
                 {
                     mapIndex = MapIndex,
@@ -209,7 +222,8 @@ internal sealed record Fo2CharacterStartSaveState(
         var legacy = schema == LegacySchema;
         var previous = schema == PreviousSchema;
         var route = schema == RouteSchema;
-        if (schema != Schema && schema != RouteSchema &&
+        var confrontation = schema == ConfrontationSchema;
+        if (schema != Schema && schema != ConfrontationSchema && schema != RouteSchema &&
                 schema != PreviousSchema && schema != LegacySchema ||
             RequiredString(root, "campaign") != "Fallout2" ||
             RequiredString(root, "routeMode") !=
@@ -248,6 +262,7 @@ internal sealed record Fo2CharacterStartSaveState(
             RequiredString(savedCharacter, "Role") != character.Role)
             throw new InvalidOperationException(
                 "Fallout 2 saved character route identity drifted.");
+        ReadAppearance(root, schema, character);
 
         var world = root.GetProperty("world");
         var mapIndex = world.GetProperty("mapIndex").GetInt32();
@@ -273,7 +288,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 RequiredString(world, "walkMaskSha256") == arroyo.WalkMaskSha256 &&
                 tileInRange && arroyo.Walkable[currentTile] && lastTransition is null,
             Fo2TemplePresentationCatalog.MapIndex =>
-                (schema == Schema || route) &&
+                (schema == Schema || confrontation || route) &&
                 elevation == arroyo.LiveExit.TargetElevation &&
                 arrivalTile == arroyo.LiveExit.TargetTile &&
                 RequiredString(world, "mapSha256") == temple.MapSha256 &&
@@ -328,7 +343,7 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoCavesPresentationCatalog arroyo)
     {
-        if (schema != Schema && schema != RouteSchema)
+        if (schema != Schema && schema != ConfrontationSchema && schema != RouteSchema)
             return null;
         var value = root.GetProperty("lastTransition");
         if (value.ValueKind == JsonValueKind.Null)
@@ -360,7 +375,7 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterSelection character,
         Fo2TemplePresentationCatalog temple)
     {
-        if (schema != Schema)
+        if (schema != Schema && schema != ConfrontationSchema)
             return null;
         var value = root.GetProperty("templeConfrontation");
         if (mapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex)
@@ -383,6 +398,27 @@ internal sealed record Fo2CharacterStartSaveState(
             temple.Confrontation,
             Fo2TempleConfrontationRuntime.MaximumActionPoints(character));
         return state;
+    }
+
+    private static void ReadAppearance(
+        JsonElement root,
+        string schema,
+        Fo2CharacterSelection character)
+    {
+        if (schema != Schema)
+            return;
+        var value = root.GetProperty("appearance");
+        var appearance = new Fo2CharacterAppearanceContract(
+            RequiredString(value, "Schema"),
+            RequiredString(value, "BasisPremadeId"),
+            RequiredString(value, "SourcePanelLogicalPath"),
+            RequiredString(value, "SourcePanelSha256"),
+            RequiredString(value, "LocalPanelPngSha256"),
+            RequiredString(value, "PreviewMode"),
+            RequiredString(value, "PortraitState"),
+            value.GetProperty("CustomFaceEdited").GetBoolean(),
+            value.GetProperty("CustomPortraitGenerated").GetBoolean());
+        appearance.Validate(character);
     }
 
     private static string ResolvePath(string configuredPath)

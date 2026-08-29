@@ -57,6 +57,49 @@ internal sealed record Fo2PremadeCharacter(
     Fo2CharacterStartAsset Panel,
     Fo2CharacterProfile Profile);
 
+internal sealed record Fo2CharacterAppearanceContract(
+    string Schema,
+    string BasisPremadeId,
+    string SourcePanelLogicalPath,
+    string SourcePanelSha256,
+    string LocalPanelPngSha256,
+    string PreviewMode,
+    string PortraitState,
+    bool CustomFaceEdited,
+    bool CustomPortraitGenerated)
+{
+    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v1";
+    internal const string OwnedReliefPreview = "owned-panel-curved-relief-v1";
+
+    internal static Fo2CharacterAppearanceContract FromSelection(
+        Fo2CharacterSelection selection) => new(
+        ExpectedSchema,
+        selection.Source.Id,
+        selection.Source.Panel.LogicalPath,
+        selection.Source.Panel.SourceSha256,
+        selection.Source.Panel.PngSha256,
+        OwnedReliefPreview,
+        selection.Mode switch
+        {
+            Fo2CharacterSelection.PremadeMode => "owned-premade-panel",
+            Fo2CharacterSelection.ModifyMode => "owned-premade-panel-modified-stats",
+            Fo2CharacterSelection.CreateMode =>
+                "owned-premade-panel-basis-pending-custom-face-editor",
+            _ => throw new InvalidOperationException(
+                "Fallout 2 appearance has an unsupported character mode."),
+        },
+        false,
+        false);
+
+    internal void Validate(Fo2CharacterSelection selection)
+    {
+        var expected = FromSelection(selection);
+        if (this != expected)
+            throw new InvalidOperationException(
+                "Fallout 2 appearance/portrait contract differs from its owned source basis.");
+    }
+}
+
 internal sealed record Fo2CharacterSelection(
     string Mode,
     Fo2PremadeCharacter Source,
@@ -70,6 +113,8 @@ internal sealed record Fo2CharacterSelection(
     internal string Role => Mode == PremadeMode ? Source.Role : "Custom";
     internal string GcdSha256 => Source.GcdSha256;
     internal string BioSha256 => Source.BioSha256;
+    internal Fo2CharacterAppearanceContract Appearance =>
+        Fo2CharacterAppearanceContract.FromSelection(this);
 
     internal static Fo2CharacterSelection FromPremade(Fo2PremadeCharacter source) =>
         new(PremadeMode, source, source.Profile);
@@ -82,6 +127,7 @@ internal sealed record Fo2CharacterSelection(
                 "Fallout 2 character selection source binding is invalid.");
         Source.Profile.Validate();
         Profile.Validate(Mode == CreateMode);
+        Appearance.Validate(this);
         if (Mode == PremadeMode && !SameProfile(Profile, Source.Profile) ||
             Mode == ModifyMode &&
                 (!Profile.TaggedSkills.SequenceEqual(Source.Profile.TaggedSkills) ||

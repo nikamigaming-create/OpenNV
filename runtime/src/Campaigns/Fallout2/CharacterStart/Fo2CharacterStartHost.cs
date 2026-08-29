@@ -67,7 +67,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             }
             GD.Print(
                 $"OPENNV_FO2_CHARACTER_START_READY premades=3 restored={RestoredFromSave} " +
-                "controls=Left/Right+Enter mouse=Take/Modify/Create/Back exit=Escape+save");
+                "controls=Left/Right+Enter+V mouse=Take/Modify/Create/Back/PortraitToggle " +
+                "exit=Escape+save");
             if (options.TryGetValue("fo2-character-start-proof", out var proofRoot))
                 _ = Fo2CharacterStartProof.Run(this, proofRoot);
             else if (options.TryGetValue("fo2-character-save-write-proof", out var writeRoot))

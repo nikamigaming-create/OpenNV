@@ -6,9 +6,21 @@ internal sealed partial class Fo2CharacterPicker : Control
 {
     private const float SourceWidth = 640.0f;
     private const float SourceHeight = 480.0f;
+    private const float PortraitBoundaryX = 29.0f;
+    private const float PortraitBoundaryY = 247.0f;
+    private const float PortraitBoundaryWidth = 255.0f;
+    private const float PortraitBoundaryHeight = 25.0f;
+    private const int PortraitBoundaryFontSize = 7;
+    private const float PortraitToggleX = 400.0f;
+    private const float PortraitToggleY = 279.0f;
+    private const float PortraitToggleWidth = 112.0f;
+    private const float PortraitToggleHeight = 22.0f;
     private readonly Fo2CharacterStartCatalog _catalog;
     private readonly Control _canvas;
     private readonly TextureRect _panel;
+    private readonly Fo2OwnedPortraitRelief _portraitRelief;
+    private readonly Label _portraitBoundary;
+    private readonly Button _portraitToggle;
     private readonly Label _details;
     private readonly Label _selection;
     private int _index;
@@ -55,6 +67,12 @@ internal sealed partial class Fo2CharacterPicker : Control
             MouseFilter = MouseFilterEnum.Ignore,
         };
         _canvas.AddChild(_panel);
+        _portraitRelief = new Fo2OwnedPortraitRelief(catalog.Characters[0])
+        {
+            Position = _panel.Position,
+            Size = _panel.Size,
+        };
+        _canvas.AddChild(_portraitRelief);
         _details = new Label
         {
             Name = "OwnedPremadeGcdState",
@@ -85,6 +103,29 @@ internal sealed partial class Fo2CharacterPicker : Control
         _selection.AddThemeConstantOverride("outline_size", 3);
         _selection.AddThemeFontSizeOverride("font_size", 12);
         _canvas.AddChild(_selection);
+        _portraitBoundary = new Label
+        {
+            Name = "OwnedPortraitReliefBoundary",
+            Position = new Vector2(PortraitBoundaryX, PortraitBoundaryY),
+            Size = new Vector2(PortraitBoundaryWidth, PortraitBoundaryHeight),
+            Text = "OWNED PANEL RELIEF • HEAD GEOMETRY NOT REBUILT",
+            Visible = false,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        _portraitBoundary.AddThemeColorOverride("font_color", new Color("78e781"));
+        _portraitBoundary.AddThemeColorOverride("font_outline_color", Colors.Black);
+        _portraitBoundary.AddThemeConstantOverride("outline_size", 2);
+        _portraitBoundary.AddThemeFontSizeOverride("font_size", PortraitBoundaryFontSize);
+        _canvas.AddChild(_portraitBoundary);
+        _portraitToggle = AddButton(
+            "LIVE 3D",
+            PortraitToggleX,
+            PortraitToggleY,
+            PortraitToggleWidth,
+            PortraitToggleHeight,
+            TogglePortraitMode);
+        _portraitToggle.TooltipText =
+            "Toggle the exact owned premade panel on a live curved 3D surface";
         AddButton("◀", 270.0f, 303.0f, 35.0f, 35.0f, () => Select(_index - 1));
         AddButton("▶", 335.0f, 303.0f, 35.0f, 35.0f, () => Select(_index + 1));
         AddButton("", 65.0f, 301.0f, 181.0f, 79.0f, ChooseCurrent)
@@ -132,6 +173,9 @@ internal sealed partial class Fo2CharacterPicker : Control
             case Key.Space:
                 ChooseCurrent();
                 break;
+            case Key.V:
+                TogglePortraitMode();
+                break;
             case Key.Escape:
                 BackRequested?.Invoke();
                 break;
@@ -148,6 +192,7 @@ internal sealed partial class Fo2CharacterPicker : Control
         var character = Selected;
         var profile = character.Profile;
         _panel.Texture = character.Panel.Load();
+        _portraitRelief.SetCharacter(character);
         _selection.Text =
             $"{profile.Name.ToUpperInvariant()}  {_index + 1}/{_catalog.Characters.Count}";
         var biography = string.Join(
@@ -168,6 +213,22 @@ internal sealed partial class Fo2CharacterPicker : Control
         SetMeta("selected_character", profile.Name);
         SetMeta("selected_sex", profile.Sex);
         SetMeta("selected_gcd_sha256", character.GcdSha256);
+        SetMeta("selected_appearance_schema", Fo2CharacterAppearanceContract.ExpectedSchema);
+        SetMeta("selected_panel_source_sha256", character.Panel.SourceSha256);
+    }
+
+    internal bool Live3DVisible => _portraitRelief.Visible;
+    internal Fo2OwnedPortraitRelief PortraitRelief => _portraitRelief;
+
+    internal void TogglePortraitMode()
+    {
+        _portraitRelief.Visible = !_portraitRelief.Visible;
+        _panel.Visible = !_portraitRelief.Visible;
+        _portraitBoundary.Visible = _portraitRelief.Visible;
+        _portraitToggle.Text = _portraitRelief.Visible ? "PORTRAIT" : "LIVE 3D";
+        SetMeta("portrait_view_mode", _portraitRelief.Visible
+            ? Fo2CharacterAppearanceContract.OwnedReliefPreview
+            : "owned-source-panel");
     }
 
     internal void ChooseCurrent()

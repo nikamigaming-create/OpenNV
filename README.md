@@ -37,7 +37,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 Hex | Registered-cache launcher route through the OpenNV menu, character picker, owned Overseer movie, and bounded Godot V13ENT/Vault 13 slice | Only V13ENT is playable; this is not the complete Fallout 1 campaign |
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
-| Fallout 2 Hex | Registered-profile launcher route into the owned Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL; Take enters Map 3 at tile 28707 with PRO-linked sex-correct HMWARR/HFPRIM AA idle and directional AB walking. Ordinary grounded movement follows exact exit serial 1738 into owned ARTEMPLE Map 126. A bounded source-identified Temple Villager exposes player HP/AP, deterministic adjacent melee, defeat, exact nested Spear loot, visible inventory state, version-4 save, and cold restore | The adapter does not execute the Villager's INT, target AI/turns, dialogue, retail hit formulas, or general inventory. Tag/trait editing, other actors/animations, remaining exits, campaign-wide persistence, full campaign, parity, FPS, and OpenXR remain absent; classic fixed-Y sprite composition is still visibly incomplete |
+| Fallout 2 Hex | Registered-profile launcher route into the original owned 640×480 Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL. Each premade keeps its distinct exact owned panel and one small Portrait/Live 3D toggle presents that panel on a curved live 3D surface. Take enters Map 3 and exact exit serial 1738 reaches ARTEMPLE Map 126. A bounded source-identified Temple Villager exposes player HP/AP, deterministic adjacent melee, defeat, exact nested Spear loot, visible inventory state, version-5 save, and cold restore | The Live 3D mode is an owned-reference panel relief, not rebuilt head geometry. Custom face/hair/skin controls and generated portraits are not implemented; v5 records that state explicitly. The Temple adapter does not execute target AI/turns, INT/dialogue, retail hit formulas, or general inventory. Full campaign, parity, FPS, and OpenXR remain absent |
 | New Vegas | Owned menu, skippable intro, source-ordered Doc Mitchell speech/quest beats, stage-36 character selection, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. The admitted four-family cache supports controller-door articulation, target-local static convex collision, current-CELL-only render/collision activation with linked CELLs preloaded, current-CELL WorldEnvironment switching, the owned clear-day atmosphere/cloud pair, one-time source-collision actor grounding, and a manifest-validated configured-input first-run/cold-Continue pair through the saloon door | The exact startup player-root/camera transform, complete saloon population/package AI, exterior surface/directional lighting, player deposits, Pip-Boy tab navigation, dynamic clock/weather/global state, reverse traversal, neighboring exterior-grid streaming, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven; the [Goodsprings actor/package audit](docs/evidence/fnv-goodsprings-actor-package-contract.md) records the next source contract |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and normal persistent CG00 progression into the owned Vault 101 birth room through stage 100. The bounded route plays the stage-65 Dad cue, applies stage-80/85 and stage-90 INFO `0001f379`, then executes seven of eight exact stage-100 commands through `SetPCYoung 1`; cold Continue restores without replaying one-shot cue/effects. A fresh pinned-Theora profile now compiles both movies plus the exact CG01 stage-0/stage-5 tree and the sex-specific two-line Dad-speech → stage-10 contract | The stage-10 runtime/save adapter is implemented but not native-proven: the fresh run correctly stops on stale absolute actor-derivative paths in the existing Vault 101 presentation cache. No freely playable first-person Vault 101 route, general package/dialogue interpreter, lip playback, Mom/player presentation, Hex, VR, or retail parity exists |
 | TTW | Strict local profile/effective-source registration plus a launcher-validated, source-bound Fallout 3 CG00→CG01-stage-5 command/movie contract with dedicated TTW cache and save identities | No TTW command interpreter, Vault 101 world presentation, save runtime, xNVSE execution, or JAM runtime exists; every TTW presentation remains disabled |
@@ -224,7 +224,7 @@ parity remain unimplemented. One deliberately bounded confrontation adapter
 binds MAP critter serial 379/PID `01000003`/SID `04000001`, its owned Villager
 PRO/MSG stats, and nested Spear serial 378/PID `00000007`. Adjacent player melee
 uses visible derived HP/AP, deterministic damage, defeat-to-loot, inventory
-visibility, and version-4 save/cold restore; it never executes `ARTemple.int` or
+visibility, and version-5 save/cold restore; it never executes `ARTemple.int` or
 claims retail combat parity. A separate asset-free transition
 contract proves that Map 126 has no door-prototype objects and binds its source
 exit grids without executing `ARTemple.int`. The destination compiler independently binds
@@ -241,12 +241,17 @@ mouse can Take a premade, Modify it, or Create a custom state. Modify/Create edi
 name (1–11 characters), sex, age (16–35), and seven SPECIAL values (1–10 each,
 exactly 40 total). Modify preserves the source premade's tags/traits unchanged;
 Create leaves them explicitly unselected because their editing rules are not yet
-transported. Confirm hands the state and sex-correct FRM to the grounded Map 3
-player at exact tile 28707. Its version-4 atomic OpenNV user-data save retains
+transported. A single `LIVE 3D`/`PORTRAIT` button (or `V`) switches each exact
+owned Narg/Mingan/Chitsa panel to a gently curved live 3D surface while the
+original picker remains intact. This is an owned-reference relief, not rebuilt
+head geometry. Confirm hands the state and sex-correct FRM to the grounded Map 3
+player at exact tile 28707. Its version-5 atomic OpenNV user-data save retains
 the selected mode, owned GCD/BIO source basis, custom profile state, current map,
 elevation, tile, facing, transform, bounded movement/presentation modes, and the
 source exit transition identity plus the bounded Temple target HP/AP/combat and
-Spear-loot state; a fresh process validates those identities and restores the
+Spear-loot state and an explicit source-panel appearance contract. Custom face,
+hair, skin, and portrait-generation fields remain false until a real editor owns
+them; a fresh process validates those identities and restores the
 same player. The
 launcher passes these exact five hash-matched local artifacts and the isolated
 save path to the same character-start scene. This is bounded custom character

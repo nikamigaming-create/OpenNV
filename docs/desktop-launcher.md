@@ -57,9 +57,12 @@ fourth visible game card whose owned DAT2 installation and exact Map 126/Map 3 s
 graph can be admitted. Its bounded Hex route selects the owned
 Narg, Mingan, or Chitsa premade, applies source stats/biography/portrait and
 also exposes source-backed Modify/Create for name, sex, age, and exact SPECIAL.
-Modify retains source tags/traits; Create leaves them unselected. Confirm applies
+Modify retains source tags/traits; Create leaves them unselected. Each exact
+Narg/Mingan/Chitsa panel has one Portrait/Live 3D toggle; Live 3D is
+an owned-reference curved panel surface, not reconstructed head geometry.
+Confirm applies
 sex-correct idle FRM presentation and hands the state to the grounded Map 3
-player at tile 28707. An atomic version-4 save cold-restores the character mode,
+player at tile 28707. An atomic version-5 save cold-restores the character mode,
 source basis, custom state, tile, facing, transform, bounded modes, and the exact
 Map 3 exit-to-ARTEMPLE Map 126 arrival plus the bounded source-identified
 Villager HP/AP/defeat and exact nested-Spear loot state. The Temple HUD exposes
@@ -69,7 +72,8 @@ only after all five local slice artifacts match the registered profile; FPS and
 VR remain disabled. The non-source opaque Temple wall proxy is removed while
 the owned wall FRMs and source-derived collision remain; Tag/trait editing,
 target AI/turns, general scripting/combat/inventory, classic fixed-Y
-composition, campaign-wide state, and parity
+composition, campaign-wide state, custom face/hair/skin editing, deterministic
+custom portrait generation, and parity
 remain open. The Fallout 3
 intro is converted locally to a hash-verified Theora cache during profile
 registration; Escape and the visible Skip action enter the same CG00 state.
