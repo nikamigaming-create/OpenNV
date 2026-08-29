@@ -24,6 +24,8 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const float SkipButtonOffsetYPixels = 24.0f;
     internal const float SkipButtonWidthPixels = 190.0f;
     internal const float AppearancePreviewTexturePixels = 150.0f;
+    internal const float VaultPreviewMarginPixels = 24.0f;
+    internal const float VaultPreviewPanelWidthPixels = 560.0f;
     internal const int FaceGenSymmetricGeometryFloats = 50;
     internal const int FaceGenAsymmetricGeometryFloats = 30;
     internal const int FaceGenSymmetricTextureFloats = 50;
@@ -592,18 +594,40 @@ internal partial class Fo3OpeningFlow : CanvasLayer
 {
     private Fo3OwnedProfile _profile = null!;
     private string _savePath = "";
+    private Node3D _worldHost = null!;
+    private Fo3Vault101BirthPresentationContract? _birthPresentation;
+    private ColorRect _background = null!;
+    private PanelContainer _panel = null!;
     private VBoxContainer _content = null!;
     private AudioStreamPlayer _music = null!;
     private Control? _introLayer;
     private VideoStreamPlayer? _video;
     private Fo3SexChoice? _selectedSex;
+    private Node3D? _vaultPreviewHost;
+    private Control? _vaultPreviewOverlay;
     private bool _runAppearanceProof;
     private bool _introCompleted;
 
-    internal void Configure(Fo3OwnedProfile profile, string savePath, bool runAppearanceProof = false)
+    internal void Configure(
+        Fo3OwnedProfile profile,
+        string savePath,
+        Node3D worldHost,
+        Fo3Vault101BirthPresentationContract? birthPresentation,
+        bool runAppearanceProof = false)
     {
         _profile = profile;
         _savePath = System.IO.Path.GetFullPath(savePath);
+        _worldHost = worldHost;
+        _birthPresentation = birthPresentation;
+        if (_birthPresentation is not null &&
+            (!_birthPresentation.EntryReferenceFormId.Equals(
+                _profile.Section4Transition.LocationReferenceFormId,
+                StringComparison.OrdinalIgnoreCase) ||
+             !_birthPresentation.CellFormId.Equals(
+                _profile.BirthSlice.CellFormId,
+                StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                "Fallout 3 stage-62 package location does not join the owned Vault 101 entry.");
         _runAppearanceProof = runAppearanceProof;
         Name = "Fallout3FrontEnd";
         Layer = Fo3OpeningFlowNumericContracts.UiLayer;
@@ -635,7 +659,15 @@ internal partial class Fo3OpeningFlow : CanvasLayer
 
     public override void _Input(InputEvent @event)
     {
-        if (_video is null || !IsEscapePressed(@event))
+        if (!IsEscapePressed(@event))
+            return;
+        if (_vaultPreviewHost is not null)
+        {
+            GetViewport().SetInputAsHandled();
+            ExitVault101Preview();
+            return;
+        }
+        if (_video is null)
             return;
         GetViewport().SetInputAsHandled();
         CompleteIntro(true);
@@ -643,19 +675,19 @@ internal partial class Fo3OpeningFlow : CanvasLayer
 
     private void BuildShell()
     {
-        var background = new ColorRect { Color = Colors.Black };
-        background.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        AddChild(background);
+        _background = new ColorRect { Color = Colors.Black };
+        _background.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_background);
 
-        var panel = new PanelContainer();
-        panel.SetAnchorsPreset(Control.LayoutPreset.Center);
-        panel.AnchorLeft -= Fo3OpeningFlowNumericContracts.PanelWidthFraction * Fo3OpeningFlowNumericContracts.Center;
-        panel.AnchorRight += Fo3OpeningFlowNumericContracts.PanelWidthFraction * Fo3OpeningFlowNumericContracts.Center;
-        panel.AnchorTop -= Fo3OpeningFlowNumericContracts.PanelHeightFraction * Fo3OpeningFlowNumericContracts.Center;
-        panel.AnchorBottom += Fo3OpeningFlowNumericContracts.PanelHeightFraction * Fo3OpeningFlowNumericContracts.Center;
-        panel.GrowHorizontal = Control.GrowDirection.Both;
-        panel.GrowVertical = Control.GrowDirection.Both;
-        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        _panel = new PanelContainer();
+        _panel.SetAnchorsPreset(Control.LayoutPreset.Center);
+        _panel.AnchorLeft -= Fo3OpeningFlowNumericContracts.PanelWidthFraction * Fo3OpeningFlowNumericContracts.Center;
+        _panel.AnchorRight += Fo3OpeningFlowNumericContracts.PanelWidthFraction * Fo3OpeningFlowNumericContracts.Center;
+        _panel.AnchorTop -= Fo3OpeningFlowNumericContracts.PanelHeightFraction * Fo3OpeningFlowNumericContracts.Center;
+        _panel.AnchorBottom += Fo3OpeningFlowNumericContracts.PanelHeightFraction * Fo3OpeningFlowNumericContracts.Center;
+        _panel.GrowHorizontal = Control.GrowDirection.Both;
+        _panel.GrowVertical = Control.GrowDirection.Both;
+        _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(
                 _profile.InterfaceColor.R * Fo3OpeningFlowNumericContracts.DimmedColorScale,
@@ -668,12 +700,12 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             BorderWidthRight = 1,
             BorderWidthBottom = 1,
         });
-        AddChild(panel);
+        AddChild(_panel);
 
         var margin = new MarginContainer();
         foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
             margin.AddThemeConstantOverride(side, Fo3OpeningFlowNumericContracts.MarginPixels);
-        panel.AddChild(margin);
+        _panel.AddChild(margin);
         var scroll = new ScrollContainer
         {
             HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
@@ -997,10 +1029,20 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"NEXT OWNED COMMAND: {_profile.Appearance.AcceptedStageCommand}",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         _content.AddChild(Label(
-            "The owned CG00 appearance choice is saved at stage 62. The Section 4 " +
-            "package and later stage contracts are compiled, but normal progression stops " +
-            "until the authored package/dialogue triggers execute in the Vault 101 world.",
+            _birthPresentation is null
+                ? "The owned CG00 appearance choice is saved at stage 62. The Section 4 " +
+                    "package and later stage contracts are compiled, but normal progression stops " +
+                    "until the authored package/dialogue triggers execute in the Vault 101 world."
+                : "The owned CG00 appearance choice is saved at stage 62. Its next authored " +
+                    "package targets the exact Vault 101 player-start marker. The bounded preview " +
+                    "shows that owned room only; it does not execute the package or dialogue.",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        if (_birthPresentation is not null)
+        {
+            var enter = Button("ENTER OWNED VAULT 101 PREVIEW");
+            enter.Pressed += () => ShowVault101Preview(playerName, sex, selection);
+            _content.AddChild(enter);
+        }
         var menu = Button("MAIN MENU");
         menu.Pressed += () =>
         {
@@ -1013,6 +1055,104 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"stage={_profile.Appearance.AcceptedStage} race={selection.Race.FormId} " +
             $"hair={selection.Hair.FormId} eyes={selection.Eyes.FormId} " +
             $"next={_profile.Appearance.AcceptedStageCommand} packageRuntimeReady=0");
+    }
+
+    private void ShowVault101Preview(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection)
+    {
+        var contract = _birthPresentation ?? throw new InvalidOperationException(
+            "Fallout 3 Vault 101 preview has no owned presentation contract.");
+        var transition = _profile.Section4Transition;
+        if (transition.SourceStage != _profile.Appearance.AcceptedStage ||
+            !transition.LocationReferenceFormId.Equals(
+                contract.EntryReferenceFormId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 preview does not join the stage-62 package location.");
+        if (_vaultPreviewHost is not null)
+            throw new InvalidOperationException("Fallout 3 Vault 101 preview is already active.");
+
+        var previewHost = new Node3D { Name = "FO3_STAGE62_VAULT101_PREVIEW" };
+        _worldHost.AddChild(previewHost);
+        Fo3Vault101BirthSceneCoverage coverage;
+        try
+        {
+            coverage = Fo3Vault101BirthScene.Build(previewHost, contract);
+        }
+        catch
+        {
+            previewHost.QueueFree();
+            throw;
+        }
+        _vaultPreviewHost = previewHost;
+        _background.Visible = false;
+        _panel.Visible = false;
+
+        var overlay = new PanelContainer
+        {
+            Name = "FO3_STAGE62_VAULT101_PREVIEW_BOUNDARY",
+            Position = new Vector2(
+                Fo3OpeningFlowNumericContracts.VaultPreviewMarginPixels,
+                Fo3OpeningFlowNumericContracts.VaultPreviewMarginPixels),
+            CustomMinimumSize = new Vector2(
+                Fo3OpeningFlowNumericContracts.VaultPreviewPanelWidthPixels,
+                0.0f),
+        };
+        overlay.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(0.0f, 0.0f, 0.0f, 0.84f),
+            BorderColor = _profile.InterfaceColor,
+            BorderWidthLeft = 1,
+            BorderWidthTop = 1,
+            BorderWidthRight = 1,
+            BorderWidthBottom = 1,
+        });
+        var margin = new MarginContainer();
+        foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
+            margin.AddThemeConstantOverride(side, Fo3OpeningFlowNumericContracts.SeparationPixels);
+        overlay.AddChild(margin);
+        var status = new VBoxContainer();
+        status.AddThemeConstantOverride("separation", Fo3OpeningFlowNumericContracts.SeparationPixels);
+        margin.AddChild(status);
+        status.AddChild(Label(
+            "OWNED VAULT 101  •  BOUNDED STAGE-62 PREVIEW",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        status.AddChild(Label(
+            $"{playerName}  •  {sex.Label}  •  {selection.Race.Label}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        status.AddChild(Label(
+            $"ENTRY {contract.EntryReferenceFormId}  •  PACKAGE {transition.PackageFormId}",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        status.AddChild(Label(
+            "Exact owned marker/room/Doctor Li presentation. Package execution, player idle, " +
+            "dialogue, camera timing, and quest progression are not running.",
+            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var menu = Button("RETURN TO MAIN MENU  •  ESC");
+        menu.Pressed += ExitVault101Preview;
+        status.AddChild(menu);
+        AddChild(overlay);
+        _vaultPreviewOverlay = overlay;
+        Callable.From(menu.GrabFocus).CallDeferred();
+        GD.Print(
+            $"OPENNV_FO3_CG00_VAULT101_PREVIEW_READY profile={_profile.ProfileId} " +
+            $"stage={transition.SourceStage} package={transition.PackageFormId} " +
+            $"entry={contract.EntryReferenceFormId} cell={contract.CellFormId} " +
+            $"references={coverage.PlacedReferences} actors=1 packageExecuted=0 " +
+            "playerIdleExecuted=0 dialoguePlayback=0 retailTiming=0");
+    }
+
+    private void ExitVault101Preview()
+    {
+        _vaultPreviewOverlay?.QueueFree();
+        _vaultPreviewOverlay = null;
+        _vaultPreviewHost?.QueueFree();
+        _vaultPreviewHost = null;
+        _background.Visible = true;
+        _panel.Visible = true;
+        StartMenuMusicAfterStop();
+        ShowMainMenu();
     }
 
     private void ShowSection4PackageActive(

@@ -203,6 +203,9 @@ public partial class RuntimeCoordinator : Node3D
             var hasFo1CampaignPresentation = _options.ContainsKey("fo1-campaign-presentation");
             var hasFo2TemplePresentation = _options.ContainsKey("fo2-temple-cache");
             var hasFo3Profile = _options.ContainsKey("fo3-profile");
+            if (_options.ContainsKey("fo3-birth-presentation") && !hasFo3Profile)
+                throw new ArgumentException(
+                    "--fo3-birth-presentation requires --fo3-profile.");
             var hasJamProfile = _options.ContainsKey("jam-profile");
             if (hasJamProfile && (!hasDataRoot && !hasCellScene))
                 throw new ArgumentException(
@@ -657,11 +660,23 @@ public partial class RuntimeCoordinator : Node3D
         IReadOnlyDictionary<string, string> options)
     {
         var profile = Fo3OwnedProfile.Load(profilePath);
+        var birthPresentation = options.TryGetValue(
+                "fo3-birth-presentation",
+                out var configuredBirthPresentation)
+            ? Fo3Vault101BirthPresentationContract.Load(
+                profile.BirthSlice,
+                ResolveRuntimePath(configuredBirthPresentation))
+            : null;
         var savePath = options.TryGetValue("save-path", out var configuredSavePath)
             ? ResolveRuntimePath(configuredSavePath)
             : ResolveRuntimePath("user://profiles/fallout3/cg00-character-v2.json");
         var opening = new Fo3OpeningFlow();
-        opening.Configure(profile, savePath, options.ContainsKey("fo3-appearance-proof"));
+        opening.Configure(
+            profile,
+            savePath,
+            this,
+            birthPresentation,
+            options.ContainsKey("fo3-appearance-proof"));
         AddChild(opening);
         if (options.ContainsKey("quit-after-load") && !options.ContainsKey("fo3-appearance-proof"))
             GetTree().Quit(0);

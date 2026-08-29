@@ -100,7 +100,17 @@ if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v2" -or
     -not $report.doctorActorFrame.visualGatePassed -or
     $report.doctorActorFrame.runtimeSurfaces -ne 18 -or
     -not (Test-Path -LiteralPath $framePath -PathType Leaf) -or
-    -not (Test-Path -LiteralPath $actorFramePath -PathType Leaf)) {
+    -not (Test-Path -LiteralPath $actorFramePath -PathType Leaf) -or
+    $report.characterSelectionHandoff.sourceStage -ne 62 -or
+    $report.characterSelectionHandoff.packageFormId -ne "0006a818" -or
+    $report.characterSelectionHandoff.packageLocationReferenceFormId -ne "00039562" -or
+    $report.characterSelectionHandoff.entryReferenceFormId -ne "00039562" -or
+    -not $report.characterSelectionHandoff.boundedPresentationOnly -or
+    $report.characterSelectionHandoff.packageExecuted -or
+    $report.characterSelectionHandoff.playerIdleExecuted -or
+    $report.characterSelectionHandoff.dialoguePlayback -or
+    $report.characterSelectionHandoff.retailTimingApplied -or
+    -not $report.promotion.characterSelectionJoinedToScene) {
     throw "Fallout 3 Vault 101 render report promotion boundary is invalid."
 }
 

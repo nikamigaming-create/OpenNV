@@ -31,6 +31,13 @@ internal partial class Fo3Vault101BirthProof : Node3D
             var contract = Fo3Vault101BirthPresentationContract.Load(
                 profile.BirthSlice,
                 presentationPath);
+            var handoff = profile.Section4Transition;
+            if (handoff.SourceStage != profile.Appearance.AcceptedStage ||
+                !handoff.LocationReferenceFormId.Equals(
+                    contract.EntryReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Fallout 3 stage-62 package location does not join the owned player marker.");
             var coverage = Fo3Vault101BirthScene.Build(this, contract);
             for (var frame = 0; frame < WarmupFrames; frame++)
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -145,6 +152,22 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     positionGodotMeters = Vector(entryCameraPosition),
                     cameraProjection = "recipe-proof-only-not-retail-parity",
                     verticalFovDegrees = entryCameraFov,
+                },
+                characterSelectionHandoff = new
+                {
+                    authority =
+                        "owned stage-62 command/package location joined to owned player marker",
+                    sourceStage = handoff.SourceStage,
+                    acceptedStageCommand = handoff.Command,
+                    packageFormId = handoff.PackageFormId,
+                    packageEditorId = handoff.PackageEditorId,
+                    packageLocationReferenceFormId = handoff.LocationReferenceFormId,
+                    entryReferenceFormId = contract.EntryReferenceFormId,
+                    boundedPresentationOnly = true,
+                    packageExecuted = false,
+                    playerIdleExecuted = false,
+                    dialoguePlayback = false,
+                    retailTimingApplied = false,
                 },
                 geometry = new
                 {
@@ -265,7 +288,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     doctorLiRendered = failure is null &&
                         actorFailure is null,
                     questCommandsExecuted = false,
-                    characterSelectionJoinedToScene = false,
+                    characterSelectionJoinedToScene = true,
                     collisionConsumed = false,
                     texturesBound = failure is null &&
                         coverage.LoadedTextures == contract.ResolvedUniqueTextures &&
