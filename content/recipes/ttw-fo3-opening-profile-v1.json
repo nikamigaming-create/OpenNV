@@ -1,0 +1,117 @@
+{
+  "schema": "opennv-ttw-fo3-opening-recipe/v1",
+  "id": "ttw-fo3-opening-profile-v1",
+  "campaign": "Fallout3",
+  "edition": "TTW",
+  "sourceProfileSchema": "opennv-ttw-profile/v1",
+  "provenance": {
+    "classification": "owned-data-bounded-effective-record-contract",
+    "scope": "TTW CG00 stage 0/60/100 through synchronously nested CG01 stage 5",
+    "cacheBoundary": "dedicated-ttw-profile-never-standalone-fallout3-cache"
+  },
+  "forms": {
+    "player": {
+      "formKey": "FalloutNV.esm:000007",
+      "recordType": "NPC_",
+      "editorId": "Player",
+      "winnerPlugin": "TaleOfTwoWastelands.esm"
+    },
+    "vault101d": {
+      "formKey": "Fallout3.esm:028138",
+      "recordType": "CELL",
+      "editorId": "Vault101d",
+      "winnerPlugin": "TaleOfTwoWastelands.esm"
+    },
+    "cg00Quest": {
+      "formKey": "FalloutNV.esm:01f388",
+      "recordType": "QUST",
+      "editorId": "CG00",
+      "winnerPlugin": "TaleOfTwoWastelands.esm"
+    },
+    "cg00Script": {
+      "formKey": "FalloutNV.esm:03a17c",
+      "recordType": "SCPT",
+      "editorId": "CG00SCRIPT",
+      "winnerPlugin": "TaleOfTwoWastelands.esm"
+    },
+    "cg01Quest": {
+      "formKey": "Fallout3.esm:014e83",
+      "recordType": "QUST",
+      "editorId": "CG01",
+      "winnerPlugin": "TaleOfTwoWastelands.esm"
+    },
+    "cg01Script": {
+      "formKey": "Fallout3.esm:030769",
+      "recordType": "SCPT",
+      "editorId": "CG01SCRIPT",
+      "winnerPlugin": "Fallout3.esm"
+    }
+  },
+  "operands": {
+    "CG00DoctorLiREF": { "formKey": "Fallout3.esm:0290a5", "recordType": "ACHR", "parentCell": "Fallout3.esm:028138" },
+    "CG00DoctorLiStartMarker": { "formKey": "Fallout3.esm:0290a4", "recordType": "REFR", "parentCell": "Fallout3.esm:028138" },
+    "CG00DadREF": { "formKey": "Fallout3.esm:0290a7", "recordType": "ACHR", "parentCell": "Fallout3.esm:028138" },
+    "CG00DadStartMarker": { "formKey": "Fallout3.esm:03a17b", "recordType": "REFR", "parentCell": "Fallout3.esm:028138" },
+    "CG00MomREF": { "formKey": "Fallout3.esm:05ede0", "recordType": "ACHR", "parentCell": "Fallout3.esm:028138" },
+    "CG00MomStartMarker": { "formKey": "Fallout3.esm:06a810", "recordType": "REFR", "parentCell": "Fallout3.esm:028138" },
+    "CG00PlayerStartMarker": { "formKey": "Fallout3.esm:039562", "recordType": "REFR", "parentCell": "Fallout3.esm:028138" },
+    "CG00BirthBaseISFX": { "formKey": "FalloutNV.esm:035a20", "recordType": "IMAD" },
+    "CG01DadREF": { "formKey": "Fallout3.esm:02ea4d", "recordType": "ACHR", "parentCell": "Fallout3.esm:028138" },
+    "CG01DadStartMarker": { "formKey": "Fallout3.esm:02ea4e", "recordType": "REFR", "parentCell": "Fallout3.esm:028138" },
+    "CG01PlayerStartMarker": { "formKey": "Fallout3.esm:02ea4f", "recordType": "REFR", "parentCell": "Fallout3.esm:028138" },
+    "CG02DadREF": { "formKey": "Fallout3.esm:0300ef", "recordType": "ACHR" },
+    "PHYBabyRattle": { "formKey": "FalloutNV.esm:047758", "recordType": "SOUN" },
+    "QSTBabyBabble": { "formKey": "FalloutNV.esm:089b4c", "recordType": "SOUN" }
+  },
+  "commandDialects": {
+    "cg00Stage0": [
+      "playBink",
+      "setLocationSpecificLoadScreensOnly",
+      "setInCharGen",
+      "moveToReference",
+      "moveToReference",
+      "moveToReference",
+      "setStage",
+      "moveToReference",
+      "setNumericGameSetting",
+      "setNumericGameSetting"
+    ],
+    "cg00Stage60": ["showTtwGeneProjector", "setScriptVariable"],
+    "cg00Stage100": [
+      "removeScriptPackage",
+      "setScriptVariable",
+      "setScriptVariable",
+      "removeImageSpaceModifier",
+      "disable",
+      "stopQuest",
+      "setPlayerYoung",
+      "setStage"
+    ],
+    "cg01Stage0": [
+      "setSoundSourceFile",
+      "moveToReference",
+      "setStage",
+      "setPlayerScale",
+      "moveToReference"
+    ],
+    "cg01Stage5": [
+      "setLocationSpecificLoadScreensOnly",
+      "setInCharGen",
+      "enable",
+      "enable",
+      "setScriptVariable",
+      "setScriptVariable",
+      "enablePlayerControls",
+      "disablePlayerControls",
+      "autoDisplayObjectives",
+      "setNoActivationSound",
+      "setPlayerToddler",
+      "setPlayerYoung",
+      "playBink"
+    ]
+  },
+  "movies": {
+    "intro": "Video/Fallout INTRO Vsk.bik",
+    "cg01Stage5": "Video/1 year later.bik"
+  }
+}
