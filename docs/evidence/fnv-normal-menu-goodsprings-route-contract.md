@@ -1,7 +1,6 @@
 # New Vegas normal-menu Goodsprings route contract
 
-Status: **historical bounded forward flat proof retained; current-source route
-reaches the Prospector Saloon final approach and remains fail-closed**.
+Status: **current-source bounded forward flat route and cold Continue pass**.
 
 The default owned-data recipe compiles one hash-bound chain from the player's
 legal `FalloutNV.esm` and archive stack:
@@ -35,10 +34,10 @@ process emits the owned Continue button again and must restore the unchanged sav
 active saloon identity, and equivalent transform without replaying a transition.
 Neither phase uses Windows app control or injected foreground input.
 
-This historical evidence proves only the bounded eagerly instantiated forward
-flat route from a completed save. A later direct native proof establishes
-current-plus-neighbor resource suspension. Current-source normal-route
-reacceptance still awaits a passing first-run/cold pair. It does **not**
+This evidence proves only the bounded eagerly instantiated forward flat route
+from a completed save. A later direct native proof establishes current-plus-
+neighbor resource suspension, and the current-source r20 pair reaccepts the
+normal route and cold Continue. It does **not**
 prove reverse traversal, neighboring exterior-grid streaming/load-unload,
 an uninterrupted New Game-to-saloon run, Sunny dialogue/package AI, visual
 parity, integrated OpenXR acceptance, or a complete campaign.
@@ -62,15 +61,24 @@ strict 0.18-metre direct sweeps for the final three waypoints. Non-door stalls
 consume only the existing three-replan budget; wrong-cell and XTEL blockers
 still fail immediately.
 
-The latest run is
-`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r10`.
-It passed the gate, then accepted the Prospector Saloon waypoint-57 edge in X/Z
-without completing its 0.257-metre rise. At final approach waypoint 62/64, the
-player capsule was still 0.333 metres below and overlapping the upper landing of
-the correctly placed authored collision for REFR `001055e0`. The player remained
-1.304 metres from that waypoint and 4.889 metres from the portal. No first-run
-report was emitted, so the validator, cold Continue, and video capture were not
-run. This is the exact resume boundary, not route acceptance or parity.
+The accepted pair is
+`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r20`.
+The runtime now treats authored packed Havok triangle soup as two-sided for body
+motion, keeps interaction rays front-face-only, and requires the existing
+0.18-metre vertical convergence alongside intermediate X/Z tolerance. The
+first process climbed the source-backed saloon porch, recorded both ordered
+XTEL transitions, saved in CELL `00106185`, and emitted
+`OPENNV_FLAT_ROUTE_TRAVEL_PASS phase=first-run`. A second process emitted
+`phase=cold-reload`, restored the saloon/player state, and recorded zero replayed
+transitions. Both reports passed their manifest-backed validator modes. The
+private evidence hashes are:
+
+- first-run report: `fec9375c103ead6a6a5b57274e55ab7643503165fcfa25c34c9ba45583d8a1bc`;
+- cold-reload report: `e8b95f2ccc3d83b927fc164bacccb609b05e0e70e538058eb3a7f003578b2342`;
+- resulting save: `30abf2b0260e963213cb4886fe4406f3d551c595bfffeb9c6a8f4e7215215998`.
+
+This is route acceptance, not reverse traversal, full campaign coverage,
+OpenXR acceptance, actor behavior, or retail visual parity.
 
 ## Bound local acceptance
 

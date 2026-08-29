@@ -34,12 +34,12 @@ suspends distant resources. Current code bounds NAVM replanning, activates the
 actual blocking authored door, and preserves controller-owned Open/Close
 articulation for joined moving visuals and collision. Mass-zero authored convex
 door bodies now remain target-local and produce deterministic runtime convex
-shapes. A fresh four-family cache is admitted. The current configured-input run
-passes the Doc portal and animated Goodsprings gate. At the saloon porch, loose
-horizontal tolerance accepts an intermediate NAVM edge before the capsule
-completes its 0.257-metre vertical rise; the later strict approach fails closed
-from that invalid under-height state. Route/cold-Continue reacceptance remains
-pending.
+shapes. A fresh four-family cache is admitted. Authored packed Havok triangle
+collision is two-sided for body motion while interaction rays remain front-
+face-only. Intermediate NAVM edges require vertical convergence as well as X/Z
+proximity. The current configured-input run crosses the Doc portal and animated
+Goodsprings gate, climbs the saloon porch, enters saloon CELL `00106185`, saves,
+and cold-restores that state without replaying a transition.
 OpenXR remains experimental with no physical-headset acceptance.
 Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
 Pip-Boy surface through Godot's input-event path. The accepted surface uses the

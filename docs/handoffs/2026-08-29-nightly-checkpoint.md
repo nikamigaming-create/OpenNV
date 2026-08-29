@@ -40,11 +40,14 @@ These 2026-08-29 slices are on `origin/main`:
   semantics, and keeps door/non-door recovery inside the bounded replan budget;
   and
 - `45ff582` treats intermediate NAVM shared edges as tolerance regions while
-  keeping the final three waypoints strict.
+  keeping the final three waypoints strict; and
+- `82a2054` requires vertical convergence at intermediate edges, gives authored
+  Havok triangle soup two-sided body collision, keeps activation rays front-
+  face-only, and completes the source-backed saloon porch/door route.
 
-The last implementation commit is `45ff582`. Focused producer tests, Python
-compilation, Debug/Release C# builds, and formatting verification passed before
-the fresh owned-data build. No proprietary asset or generated cache is tracked.
+The last implementation commit is `82a2054`. Debug/Release C# builds, formatting
+verification, a native first-run, a native cold Continue, and both manifest-
+backed report validators pass. No proprietary asset or generated cache is tracked.
 
 ## Honest game status
 
@@ -59,12 +62,11 @@ the fresh owned-data build. No proprietary asset or generated cache is tracked.
   This is not a freely playable Vault 101 route.
 - New Vegas: one fresh full four-family cache is admitted. Ordinary stage-200
   Continue reaches the physical Pip-Boy setup, Doc-house portal, and
-  source-animated Goodsprings gate. It does not yet prove the Prospector Saloon
-  stair: loose X/Z tolerance accepted waypoint 57 without completing the
-  0.257-metre rise. The later run fails closed at waypoint 62/64 from that
-  invalid under-height state, 4.889 metres from the portal. It emitted no route
-  report, so cold Continue and video were not run. Do not describe the route,
-  actors, renderer, TTW, JAM, or OpenXR as complete or retail-parity.
+  source-animated Goodsprings gate. r20 climbs the source-backed Prospector
+  Saloon porch, crosses the second XTEL pair, saves in the saloon, and cold-
+  restores with zero replayed transitions. Both reports validate. Do not
+  describe the actors, renderer, campaign, TTW, JAM, or OpenXR as complete or
+  retail-parity.
 
 ## Exact terminal FNV boundary
 
@@ -77,44 +79,34 @@ four closed compiler-family identities. The owned Data tree stayed unchanged at
 321 files, 48 directories, 9,875,907,799 bytes, with size/mtime digest
 `b2e21cd1d34d9e9a5b62dc68790fb8e390bdaaf0a442d764260469cb270c3bfc`.
 
-The latest route proof root is:
+The accepted route proof root is:
 
-`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r10`
+`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r20`
 
-It passed the Doc portal and exact one-second `0010757e` gate articulation. At
-the saloon porch, waypoint 57 was accepted by loose horizontal tolerance before
-the player completed the source/NAVM-backed 0.257-metre rise. By exterior
-waypoint 62/64, the capsule center was 0.430 metres below the target and its
-bottom overlapped the upper landing by 0.333 metres. The correctly placed packed
-collision belongs to REFR `001055e0`, base `0010243e` `NVProspectorSaloon`, asset
-`351f418a5cca45d12b71`; the door, XTEL pair, NAVM tail, and collision placement
-all audited correctly. The remaining waypoint distance was 1.304 metres and the
-portal was 4.889 metres away. No report was emitted. A candidate generic fix—
-require the existing 0.18-metre vertical convergence alongside loose
-intermediate X/Z tolerance, with the fresh blocked sweep normal available only
-for recovery—built cleanly but was reverted because two native-window proofs
-were throttled before acceptance began. Their incomplete `r11` and `r12` roots
-were recycled. Do not run cold Continue or make a route video until a fresh
-first-run proof and validator pass.
+It passed the Doc portal, exact one-second `0010757e` gate articulation, source-
+backed porch rise, saloon portal, save, and cold Continue. Authored packed Havok
+triangle soup remains source-wound and is two-sided only at the body-collision
+boundary; interaction rays remain front-face-only. The first-run and cold
+reports and resulting save have SHA-256 values
+`fec9375c103ead6a6a5b57274e55ab7643503165fcfa25c34c9ba45583d8a1bc`,
+`e8b95f2ccc3d83b927fc164bacccb609b05e0e70e538058eb3a7f003578b2342`, and
+`30abf2b0260e963213cb4886fe4406f3d551c595bfffeb9c6a8f4e7215215998`.
+Both manifest-backed validators pass. Earlier r11/r12 launches omitted the
+engine/user argument separator, so acceptance never began; they were not
+throttled native proofs and their incomplete roots were recycled.
 
 ## Exact resume order
 
 1. Read this file, `docs/architecture.md`, and both FNV evidence contracts;
    inspect `git status --short` and preserve the two unrelated Fallout 1 files.
-2. Apply the audited generic reach rule against the admitted cache: loose
-   intermediate X/Z tolerance must also require vertical convergence within the
-   existing 0.18-metre limit. A fresh sweep normal may guide recovery only; it
-   must never waive the height gate. Do not rebuild the cache.
-3. Fix only that evidence-backed navigation/step mismatch. Do not disable
-   the saloon collision, enlarge final tolerance, teleport the player, skip a
-   waypoint, or special-case a FormID.
-4. Run Debug/Release, format/diff checks, then one new unique first-run proof.
-   Require `OPENNV_FLAT_ROUTE_TRAVEL_PASS phase=first-run`, no errors, and the
-   manifest-backed `flat-route-travel` validator.
-5. Only after first-run passes, run one cold process against the same save and
-   require the `flat-route-reload` validator. Then capture an honest bounded
-   Pip-Boy/route video.
-6. Resume FO2/FO3/FO1 work after recording this FNV boundary or closing it.
+2. Reuse the admitted cache and r20 evidence; do not rebuild the cache unless a
+   compiler/source identity actually changes.
+3. The next honest FNV media slice may show owned Continue, the populated
+   Pip-Boy/HUD, Doc-house exit, animated Goodsprings gate, porch climb, saloon
+   entry, and cold Continue. Label it as bounded route evidence, not parity.
+4. Resume bounded FO2/FO3/FO1 work after recording or deliberately deferring
+   that clip. FNV reverse traversal, grid streaming, integrated OpenXR, actors,
+   and retail visual parity remain separate gates.
 
 ## Preserved local media
 
