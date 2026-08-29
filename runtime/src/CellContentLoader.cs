@@ -386,6 +386,7 @@ internal static class CellContentLoader
                     ?? throw new InvalidOperationException($"Could not duplicate cell asset: {assetId}");
                 Node3D visual = instance;
                 Node3D? articulationTarget = null;
+                Node3D? verifiedAuthoredCollision = null;
                 if (doorArticulation is null)
                 {
                     placement.AddChild(instance);
@@ -493,6 +494,7 @@ internal static class CellContentLoader
                         ?? throw new InvalidOperationException($"Could not duplicate authored collision: {assetId}");
                     collisionInstance.Name = $"AUTHORED_COLLISION_{assetId}";
                     placement.AddChild(collisionInstance);
+                    verifiedAuthoredCollision = collisionInstance;
                     if (baseEditorId.StartsWith(
                             "WastelandRoad",
                             StringComparison.OrdinalIgnoreCase))
@@ -534,7 +536,8 @@ internal static class CellContentLoader
                     ValidateSinglePieceDoor(
                         referenceFormId,
                         instance,
-                        prototypes[assetId].CollisionScene);
+                        verifiedAuthoredCollision,
+                        buildCollision);
                     ordinaryDoor.RestoreOpenState(session.IsDoorOpen(referenceFormId));
                 }
                 loadedReferences++;
@@ -1047,7 +1050,7 @@ internal static class CellContentLoader
                     shape = new ConvexPolygonShape3D
                     {
                         Points = sourceConvexBody.PointsGodotGameUnits.ToArray(),
-                        Margin = sourceConvexBody.RadiusGameUnits,
+                        Margin = 0.0f,
                     };
                     convexBody = sourceConvexBody;
                     consumedConvexBodies++;
@@ -1161,11 +1164,40 @@ internal static class CellContentLoader
     private static void ValidateSinglePieceDoor(
         string referenceFormId,
         Node3D visual,
-        Node3D? collision)
+        Node3D? verifiedAuthoredCollision,
+        bool buildCollision)
     {
-        if (Descendants<MeshInstance3D>(visual).Count() != 1 ||
-            collision is null ||
-            Descendants<MeshInstance3D>(collision).Count() != 1)
+        if (Descendants<MeshInstance3D>(visual).Count() != 1)
+            throw new InvalidOperationException(
+                $"Non-controller door is not a single-piece visual/collision pair: {referenceFormId}");
+        if (!buildCollision)
+            return;
+
+        var generatedBodies = Descendants<StaticBody3D>(visual).ToArray();
+        var generatedShapes = Descendants<CollisionShape3D>(visual).ToArray();
+        var hasGeneratedCollision =
+            generatedBodies.Length == 1 &&
+            generatedShapes.Length == 1 &&
+            generatedShapes[0].GetParent() == generatedBodies[0] &&
+            generatedShapes[0].Shape is not null;
+
+        var authoredMeshes = verifiedAuthoredCollision is null
+            ? Array.Empty<MeshInstance3D>()
+            : Descendants<MeshInstance3D>(verifiedAuthoredCollision).ToArray();
+        var authoredBodies = verifiedAuthoredCollision is null
+            ? Array.Empty<StaticBody3D>()
+            : Descendants<StaticBody3D>(verifiedAuthoredCollision).ToArray();
+        var authoredShapes = verifiedAuthoredCollision is null
+            ? Array.Empty<CollisionShape3D>()
+            : Descendants<CollisionShape3D>(verifiedAuthoredCollision).ToArray();
+        var hasAuthoredCollision =
+            authoredMeshes.Length == 1 &&
+            authoredBodies.Length == 1 &&
+            authoredShapes.Length == 1 &&
+            authoredShapes[0].GetParent() == authoredBodies[0] &&
+            authoredShapes[0].Shape is not null;
+
+        if (hasGeneratedCollision == hasAuthoredCollision)
             throw new InvalidOperationException(
                 $"Non-controller door is not a single-piece visual/collision pair: {referenceFormId}");
     }
