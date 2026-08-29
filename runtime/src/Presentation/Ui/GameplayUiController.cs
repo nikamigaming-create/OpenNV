@@ -87,7 +87,7 @@ internal partial class GameplayUiController : CanvasLayer
             else
                 BuildOwnedDesktopHud();
         }
-        if (_showHud)
+        if (_showHud && !_useXr)
         {
             if (_ownedPresentation is null || _useClassicDiorama)
                 BuildPipBoy();
@@ -444,6 +444,9 @@ internal partial class GameplayUiController : CanvasLayer
         OwnedGameplayUiPresentation presentation)
     {
         var contract = presentation.PhysicalDevice;
+        VerifiedGltfLoader.VerifyHash(contract.ModelPath, contract.ModelSha256);
+        VerifiedGltfLoader.VerifyHash(contract.SidecarPath, contract.SidecarSha256);
+        VerifiedGltfLoader.VerifyHash(contract.BufferPath, contract.BufferSha256);
         var loaded = VerifiedGltfLoader.Load(contract.ModelPath, contract.SidecarPath);
         loaded.CollisionScene?.Free();
         if (!loaded.SourceSha256.Equals(contract.SourceSha256, StringComparison.OrdinalIgnoreCase))

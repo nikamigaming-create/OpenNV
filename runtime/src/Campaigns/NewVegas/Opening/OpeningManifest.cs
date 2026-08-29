@@ -245,11 +245,43 @@ internal sealed record OpeningManifest(
                 "opennv-static-material-manifest/v1")
             throw new InvalidOperationException(
                 "Owned physical Pip-Boy material manifest has an unexpected contract.");
+        var modelPath = source.GetProperty("model").GetString()!;
+        var modelSha256 = source.GetProperty("modelSha256").GetString()!;
+        var sidecarPath = source.GetProperty("sidecar").GetString()!;
+        var sidecarSha256 = source.GetProperty("sidecarSha256").GetString()!;
+        var bufferPath = source.GetProperty("buffer").GetString()!;
+        var bufferSha256 = source.GetProperty("bufferSha256").GetString()!;
+        VerifyHash(modelPath, modelSha256);
+        VerifyHash(sidecarPath, sidecarSha256);
+        VerifyHash(bufferPath, bufferSha256);
+        using var sidecarDocument = JsonDocument.Parse(File.ReadAllText(sidecarPath));
+        var sidecar = sidecarDocument.RootElement;
+        var sidecarSourceSha256 = sidecar.GetProperty("source").GetProperty("sha256").GetString();
+        var outputs = sidecar.GetProperty("outputs");
+        var expectedBufferPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+            System.IO.Path.GetDirectoryName(modelPath)!,
+            outputs.GetProperty("buffer").GetProperty("file").GetString()!));
+        if (!sourceSha256.Equals(sidecarSourceSha256, StringComparison.OrdinalIgnoreCase) ||
+            !modelSha256.Equals(
+                outputs.GetProperty("gltf").GetProperty("sha256").GetString(),
+                StringComparison.OrdinalIgnoreCase) ||
+            !bufferSha256.Equals(
+                outputs.GetProperty("buffer").GetProperty("sha256").GetString(),
+                StringComparison.OrdinalIgnoreCase) ||
+            !System.IO.Path.GetFullPath(bufferPath).Equals(
+                expectedBufferPath,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Owned physical Pip-Boy model/sidecar/buffer identities disagree.");
         var result = new OwnedPhysicalPipBoy(
             source.GetProperty("logicalPath").GetString()!,
             sourceSha256,
-            System.IO.Path.GetFullPath(source.GetProperty("model").GetString()!),
-            System.IO.Path.GetFullPath(source.GetProperty("sidecar").GetString()!),
+            System.IO.Path.GetFullPath(modelPath),
+            modelSha256,
+            System.IO.Path.GetFullPath(sidecarPath),
+            sidecarSha256,
+            System.IO.Path.GetFullPath(bufferPath),
+            bufferSha256,
             System.IO.Path.GetFullPath(materialManifestPath),
             materialManifestSha256,
             source.GetProperty("screenSurface").GetString()!,

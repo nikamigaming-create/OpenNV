@@ -1623,6 +1623,9 @@ def _prepare_gameplay_physical_device(
             "asset": asset,
         },
     )
+    model_sha256 = str(sidecar["outputs"]["gltf"]["sha256"])
+    buffer_row = dict(sidecar["outputs"]["buffer"])
+    buffer_path = output_root / str(buffer_row["file"])
     return {
         "schema": "opennv-owned-physical-pipboy/v1",
         "logicalPath": logical_path,
@@ -1631,7 +1634,11 @@ def _prepare_gameplay_physical_device(
         "sourceArchive": member.source_archive,
         "sourceArchiveSha256": member.source_archive_sha256,
         "model": str(model_path.resolve()),
+        "modelSha256": model_sha256,
         "sidecar": str(sidecar_path.resolve()),
+        "sidecarSha256": file_sha256(sidecar_path),
+        "buffer": str(buffer_path.resolve()),
+        "bufferSha256": str(buffer_row["sha256"]),
         "materialManifest": str(material_manifest_path.resolve()),
         "materialManifestSha256": file_sha256(material_manifest_path),
         "screenSurface": screen_surface,

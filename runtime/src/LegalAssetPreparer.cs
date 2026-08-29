@@ -222,6 +222,15 @@ internal static class LegalAssetPreparer
         VerifyHash(
             physicalDevice.GetProperty("materialManifest").GetString()!,
             physicalDevice.GetProperty("materialManifestSha256").GetString()!);
+        VerifyHash(
+            physicalDevice.GetProperty("model").GetString()!,
+            physicalDevice.GetProperty("modelSha256").GetString()!);
+        VerifyHash(
+            physicalDevice.GetProperty("sidecar").GetString()!,
+            physicalDevice.GetProperty("sidecarSha256").GetString()!);
+        VerifyHash(
+            physicalDevice.GetProperty("buffer").GetString()!,
+            physicalDevice.GetProperty("bufferSha256").GetString()!);
         var requiredLayoutTiles = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
             ["hud"] = ["QuestReminder", "Messages", "Info", "ReticleCenter"],

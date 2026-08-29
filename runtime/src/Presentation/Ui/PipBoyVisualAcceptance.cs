@@ -36,6 +36,7 @@ internal static class PipBoyVisualAcceptance
                 RuntimeCoordinator.RequireOption(options, "pipboy-screenshot"));
             Directory.CreateDirectory(Path.GetDirectoryName(screenshot)!);
             var heldImage = host.GetViewport().GetTexture().GetImage();
+            heldImage.Convert(Image.Format.Rgba8);
             if (heldImage.IsEmpty() || heldImage.SavePng(screenshot) != Error.Ok)
                 throw new InvalidOperationException(
                     $"Could not save the open Pip-Boy screenshot: {screenshot}");
@@ -57,19 +58,41 @@ internal static class PipBoyVisualAcceptance
                 Path.GetDirectoryName(screenshot)!,
                 Path.GetFileNameWithoutExtension(screenshot) + "-lowered.png");
             var loweredImage = host.GetViewport().GetTexture().GetImage();
+            loweredImage.Convert(Image.Format.Rgba8);
             if (loweredImage.IsEmpty() || loweredImage.SavePng(loweredScreenshot) != Error.Ok)
                 throw new InvalidOperationException(
                     $"Could not save the lowered Pip-Boy screenshot: {loweredScreenshot}");
             using var loweredStream = File.OpenRead(loweredScreenshot);
             var loweredSha256 = Convert.ToHexString(SHA256.HashData(loweredStream))
                 .ToLowerInvariant();
+            var heldPixels = heldImage.GetData();
+            var loweredPixels = loweredImage.GetData();
+            if (heldImage.GetSize() != loweredImage.GetSize() ||
+                heldPixels.Length != loweredPixels.Length)
+                throw new InvalidOperationException(
+                    "Held and lowered Pip-Boy frames have different dimensions.");
+            var changedPixels = 0;
+            for (var offset = 0; offset < heldPixels.Length; offset += 4)
+            {
+                if (heldPixels[offset] != loweredPixels[offset] ||
+                    heldPixels[offset + 1] != loweredPixels[offset + 1] ||
+                    heldPixels[offset + 2] != loweredPixels[offset + 2])
+                    changedPixels++;
+            }
+            if (changedPixels == 0)
+                throw new InvalidOperationException(
+                    "Held and lowered Pip-Boy captures contain no changed pixels.");
+            var changedPixelFraction = (double)changedPixels /
+                (heldImage.GetWidth() * heldImage.GetHeight());
 
             RuntimeCoordinator.WriteReport(
                 RuntimeCoordinator.RequireOption(options, "report"),
                 new
                 {
                     schema = "opennv-pipboy-visual-acceptance/v1",
-                    status = "pass",
+                    status = "input-pass-visual-inspection-required",
+                    inputStatus = "pass",
+                    visualStatus = "inspection-required",
                     scene = scenePath,
                     inputTransport = "godot-input-map-plus-parse-input-event",
                     openBinding = input.PipBoy.PhysicalKey,
@@ -93,11 +116,17 @@ internal static class PipBoyVisualAcceptance
                         height = loweredImage.GetHeight(),
                         sha256 = loweredSha256,
                     },
+                    heldLoweredDifference = new
+                    {
+                        changedPixels,
+                        changedPixelFraction,
+                    },
                     windowsAppControlUsed = false,
                     foregroundInputInjected = false,
                 });
             GD.Print(
-                $"OPENNV_PIPBOY_VISUAL_PASS inventory={snapshot.Inventory.Count} " +
+                $"OPENNV_PIPBOY_INPUT_PASS_VISUAL_REVIEW_REQUIRED " +
+                $"inventory={snapshot.Inventory.Count} changedPixels={changedPixels} " +
                 $"screenshot={screenshot}");
         }
         finally
