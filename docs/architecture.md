@@ -56,7 +56,10 @@ room progression through stage 100. The ordinary route plays the exact stage-65
 Dad cue, applies stage-80/85 results and stage-90 INFO `0001f379`, presents the
 owned white fade/sound, then applies seven of the eight exact stage-100 commands
 through `SetPCYoung 1` and cold-restores that state without replaying the cue.
-CG01 stage 0 remains an explicit unapplied boundary. It has no freely playable
+The profile producer compiles the exact four-command CG01 stage-0 result and
+its synchronously nested thirteen-command stage-5 result with source-bound
+references, transforms, script variables, control masks, sound, and movie
+operands. CG01 stage 0 remains an explicit runtime-unapplied boundary. It has no freely playable
 Vault 101 route or general package/dialogue runtime.
 TTW runtime support is absent, and JAM remains dependency- and
 portable-semantic-gated. These routes consume the shared authoritative state in

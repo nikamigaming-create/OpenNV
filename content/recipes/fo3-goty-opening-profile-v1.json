@@ -124,6 +124,19 @@
         "nextQuestEditorId": "CG01",
         "nextQuestFormId": "00014e83",
         "nextQuestStage": 0
+      },
+      "cg01Stage0Transition": {
+        "questEditorId": "CG01",
+        "questFormId": "00014e83",
+        "entryStage": 0,
+        "nestedStage": 5,
+        "cellFormId": "00028138",
+        "dadReferenceFormId": "0002ea4d",
+        "dadStartMarkerFormId": "0002ea4e",
+        "playerStartMarkerFormId": "0002ea4f",
+        "nextDadReferenceFormId": "000300ef",
+        "noActivationSoundFormId": "00089b4c",
+        "transitionVideo": "1 year later.bik"
       }
     },
     "appearanceUi": {

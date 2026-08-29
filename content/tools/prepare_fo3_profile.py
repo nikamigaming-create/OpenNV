@@ -16,6 +16,7 @@ from pathlib import Path
 
 from actor_catalog import scan_actor_catalog
 from bsa_archive import BsaArchive, canonical_member_path
+from cell_catalog import cell_parent_form_id
 from environment_catalog import parse_image_space_modifier
 from facegen import compose_facegen_coordinates
 from opening_catalog import _prepare_runtime_video
@@ -46,7 +47,9 @@ PACKAGE_RECORD = "PACK"
 IDLE_RECORD = "IDLE"
 GLOBAL_RECORD = "GLOB"
 ACTOR_REFERENCE_RECORD = "ACHR"
+PLACED_REFERENCE_RECORD = "REFR"
 ACTOR_BASE_RECORD = "NPC_"
+STATIC_RECORD = "STAT"
 DIALOGUE_TOPIC_RECORD = "DIAL"
 DIALOGUE_INFO_RECORD = "INFO"
 VOICE_TYPE_RECORD = "VTYP"
@@ -113,6 +116,46 @@ STOP_QUEST_PATTERN = re.compile(
     re.IGNORECASE,
 )
 SET_PC_YOUNG_PATTERN = re.compile(r"^SetPCYoung\s+(?P<value>\d+)$", re.IGNORECASE)
+MOVE_TO_REFERENCE_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.moveto\s+"
+    r"(?P<target>[A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+SET_PLAYER_SCALE_PATTERN = re.compile(
+    r"^player\.setscale\s+(?P<value>(?:\d+(?:\.\d*)?|\.\d+))$",
+    re.IGNORECASE,
+)
+SET_LOCATION_LOAD_SCREENS_PATTERN = re.compile(
+    r"^SetLocationSpecificLoadScreensOnly\s+(?P<value>\d+)$",
+    re.IGNORECASE,
+)
+SET_IN_CHAR_GEN_PATTERN = re.compile(
+    r"^SetInCharGen\s+(?P<value>\d+)$",
+    re.IGNORECASE,
+)
+PLAYER_CONTROLS_PATTERN = re.compile(
+    r"^(?P<command>EnablePlayerControls|DisablePlayerControls)\s+"
+    r"(?P<arguments>\d+(?:\s+\d+)*)$",
+    re.IGNORECASE,
+)
+AUTO_DISPLAY_OBJECTIVES_PATTERN = re.compile(
+    r"^AutoDisplayObjectives\s+(?P<value>\d+)$",
+    re.IGNORECASE,
+)
+SET_NO_ACTIVATION_SOUND_PATTERN = re.compile(
+    r"^SetNoActivationSound\s+(?P<sound>[A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+SET_PC_TODDLER_PATTERN = re.compile(r"^SetPCToddler\s+(?P<value>\d+)$", re.IGNORECASE)
+PLAY_BINK_COMMAND_PATTERN = re.compile(
+    r'^playBink\s+"(?P<path>[^"]+\.bik)"\s+'
+    r"(?P<arguments>\d+(?:\s+\d+){3})$",
+    re.IGNORECASE,
+)
+REFERENCE_TRANSFORM_FLOATS = 6
+REFERENCE_TRANSFORM_BYTES = REFERENCE_TRANSFORM_FLOATS * 4
+REFERENCE_SCALE_BYTES = 4
+DEFAULT_REFERENCE_SCALE = 1.0
 CG00_TIMER_CHAIN_PATTERN = re.compile(
     r"\bif\s+runTimer\s*==\s*1\b.*?"
     r"\bif\s+timer\s*>\s*0\b\s*"
@@ -293,6 +336,42 @@ def _single_subrecord(record: object, signature: str) -> bytes:
             f"has {len(matches)} {signature} values"
         )
     return matches[0]
+
+
+def _reference_transform_contract(record: object) -> dict[str, object]:
+    raw = _single_subrecord(record, "DATA")
+    if len(raw) != REFERENCE_TRANSFORM_BYTES:
+        raise ValueError(
+            f"Fallout 3 {record.signature} {_form_id(record.form_id)} "
+            "has a malformed reference transform"
+        )
+    values = struct.unpack(f"<{REFERENCE_TRANSFORM_FLOATS}f", raw)
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError(
+            f"Fallout 3 {record.signature} {_form_id(record.form_id)} "
+            "has a non-finite reference transform"
+        )
+    scale_values = [
+        subrecord.data
+        for subrecord in iter_subrecords(record)
+        if subrecord.signature == "XSCL"
+    ]
+    if len(scale_values) > 1 or (
+        scale_values and len(scale_values[0]) != REFERENCE_SCALE_BYTES
+    ):
+        raise ValueError(
+            f"Fallout 3 {record.signature} {_form_id(record.form_id)} has malformed XSCL"
+        )
+    scale = struct.unpack("<f", scale_values[0])[0] if scale_values else DEFAULT_REFERENCE_SCALE
+    if not math.isfinite(scale) or scale <= 0:
+        raise ValueError(
+            f"Fallout 3 {record.signature} {_form_id(record.form_id)} has invalid scale"
+        )
+    return {
+        "positionGameUnits": list(values[:3]),
+        "rotationRadians": list(values[3:]),
+        "scale": scale,
+    }
 
 
 def _form_id_list(record: object, signature: str) -> list[int]:
@@ -1275,6 +1354,130 @@ def _parse_stage100_commands(source: str) -> list[dict[str, object]]:
     return commands
 
 
+def _parse_cg01_stage0_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := MOVE_TO_REFERENCE_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "moveToReference",
+                    "subject": match.group("subject"),
+                    "target": match.group("target"),
+                }
+            )
+            continue
+        if match := SET_STAGE_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "setStage",
+                    "questEditorId": match.group("quest"),
+                    "stage": int(match.group("stage")),
+                }
+            )
+            continue
+        if match := SET_PLAYER_SCALE_PATTERN.fullmatch(text):
+            commands.append({"kind": "setPlayerScale", "value": float(match.group("value"))})
+            continue
+        raise ValueError(f"Fallout 3 CG01 stage 0 uses an unsupported command: {text}")
+    expected = ["moveToReference", "setStage", "setPlayerScale", "moveToReference"]
+    if [str(command["kind"]) for command in commands] != expected:
+        raise ValueError("Fallout 3 CG01 stage 0 command order differs")
+    return commands
+
+
+def _parse_cg01_stage5_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := SET_LOCATION_LOAD_SCREENS_PATTERN.fullmatch(text):
+            commands.append(
+                {"kind": "setLocationSpecificLoadScreensOnly", "value": int(match.group("value"))}
+            )
+            continue
+        if match := SET_IN_CHAR_GEN_PATTERN.fullmatch(text):
+            commands.append({"kind": "setInCharGen", "value": int(match.group("value"))})
+            continue
+        if match := REFERENCE_COMMAND_PATTERN.fullmatch(text):
+            if match.group("command").casefold() != "enable":
+                raise ValueError(f"Fallout 3 CG01 stage 5 uses an unsupported command: {text}")
+            commands.append({"kind": "enable", "subject": match.group("subject")})
+            continue
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            raw_value = match.group("value")
+            value: int | float = float(raw_value) if "." in raw_value else int(raw_value)
+            commands.append(
+                {
+                    "kind": "setScriptVariable",
+                    "subject": match.group("subject"),
+                    "variable": match.group("variable"),
+                    "value": value,
+                }
+            )
+            continue
+        if match := PLAYER_CONTROLS_PATTERN.fullmatch(text):
+            command = match.group("command").casefold()
+            commands.append(
+                {
+                    "kind": (
+                        "enablePlayerControls"
+                        if command == "enableplayercontrols"
+                        else "disablePlayerControls"
+                    ),
+                    "arguments": [int(value) for value in match.group("arguments").split()],
+                }
+            )
+            continue
+        if match := AUTO_DISPLAY_OBJECTIVES_PATTERN.fullmatch(text):
+            commands.append(
+                {"kind": "autoDisplayObjectives", "value": int(match.group("value"))}
+            )
+            continue
+        if match := SET_NO_ACTIVATION_SOUND_PATTERN.fullmatch(text):
+            commands.append(
+                {"kind": "setNoActivationSound", "soundEditorId": match.group("sound")}
+            )
+            continue
+        if match := SET_PC_TODDLER_PATTERN.fullmatch(text):
+            commands.append({"kind": "setPlayerToddler", "value": int(match.group("value"))})
+            continue
+        if match := SET_PC_YOUNG_PATTERN.fullmatch(text):
+            commands.append({"kind": "setPlayerYoung", "value": int(match.group("value"))})
+            continue
+        if match := PLAY_BINK_COMMAND_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "playBink",
+                    "logicalPath": match.group("path"),
+                    "arguments": [int(value) for value in match.group("arguments").split()],
+                }
+            )
+            continue
+        raise ValueError(f"Fallout 3 CG01 stage 5 uses an unsupported command: {text}")
+    expected = [
+        "setLocationSpecificLoadScreensOnly",
+        "setInCharGen",
+        "enable",
+        "enable",
+        "setScriptVariable",
+        "setScriptVariable",
+        "enablePlayerControls",
+        "disablePlayerControls",
+        "autoDisplayObjectives",
+        "setNoActivationSound",
+        "setPlayerToddler",
+        "setPlayerYoung",
+        "playBink",
+    ]
+    if [str(command["kind"]) for command in commands] != expected:
+        raise ValueError("Fallout 3 CG01 stage 5 command order differs")
+    if commands[6]["arguments"] != [0, 0, 0, 0, 1]:
+        raise ValueError("Fallout 3 CG01 stage 5 enabled-control mask differs")
+    if commands[7]["arguments"] != [1, 1, 1, 1, 0, 0, 1]:
+        raise ValueError("Fallout 3 CG01 stage 5 disabled-control mask differs")
+    if commands[12]["arguments"] != [0, 0, 1, 0]:
+        raise ValueError("Fallout 3 CG01 stage 5 movie arguments differ")
+    return commands
+
+
 def _compile_post_stage65_dialogue(
     records: tuple[object, ...],
     selection: dict[str, object],
@@ -2083,6 +2286,324 @@ def _compile_stage100_transition(
     }
 
 
+def _compile_cg01_stage0_transition(
+    records: tuple[object, ...],
+    selection: dict[str, object],
+    stage100_transition: dict[str, object],
+) -> dict[str, object]:
+    definition = dict(selection["cg01Stage0Transition"])
+    quest_editor_id = str(definition["questEditorId"])
+    quest_form_id = int(str(definition["questFormId"]), FORM_ID_RADIX)
+    entry_stage = int(definition["entryStage"])
+    nested_stage = int(definition["nestedStage"])
+    cell_form_id = int(str(definition["cellFormId"]), FORM_ID_RADIX)
+    expected_reference_forms = {
+        "dad": int(str(definition["dadReferenceFormId"]), FORM_ID_RADIX),
+        "dadMarker": int(str(definition["dadStartMarkerFormId"]), FORM_ID_RADIX),
+        "playerMarker": int(str(definition["playerStartMarkerFormId"]), FORM_ID_RADIX),
+        "nextDad": int(str(definition["nextDadReferenceFormId"]), FORM_ID_RADIX),
+    }
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    def unique_record(editor_id: str, signature: str, label: str) -> object:
+        matches = [
+            record
+            for record in by_editor.get(editor_id.casefold(), [])
+            if record.signature == signature
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"Fallout 3 CG01 {label} is ambiguous: {editor_id}")
+        return matches[0]
+
+    def reference_contract(
+        editor_id: str,
+        signature: str,
+        expected_form_id: int,
+        label: str,
+    ) -> tuple[object, object, dict[str, object]]:
+        reference = unique_record(editor_id, signature, label)
+        if reference.form_id != expected_form_id:
+            raise ValueError(f"Fallout 3 CG01 {label} FormID differs")
+        parent_cell = cell_parent_form_id(reference)
+        if parent_cell != cell_form_id:
+            raise ValueError(f"Fallout 3 CG01 {label} CELL differs")
+        base_form_id = struct.unpack("<I", _single_subrecord(reference, "NAME"))[0]
+        base = by_form.get(base_form_id)
+        expected_base_type = (
+            ACTOR_BASE_RECORD if signature == ACTOR_REFERENCE_RECORD else STATIC_RECORD
+        )
+        if base is None or base.signature != expected_base_type:
+            raise ValueError(f"Fallout 3 CG01 {label} base is absent")
+        contract = {
+            "recordType": reference.signature,
+            "formId": _form_id(reference.form_id),
+            "editorId": _editor_id(reference),
+            "recordSha256": hashlib.sha256(reference.data).hexdigest(),
+            "base": {
+                "recordType": base.signature,
+                "formId": _form_id(base.form_id),
+                "editorId": _editor_id(base),
+                "recordSha256": hashlib.sha256(base.data).hexdigest(),
+            },
+            "cellFormId": _form_id(parent_cell),
+            "flags": reference.flags,
+            "initiallyDisabled": bool(reference.flags & INITIALLY_DISABLED_RECORD_FLAG),
+            "sourceTransform": _reference_transform_contract(reference),
+        }
+        return reference, base, contract
+
+    quest = unique_record(quest_editor_id, QUEST_RECORD, "quest")
+    if quest.form_id != quest_form_id:
+        raise ValueError("Fallout 3 CG01 quest FormID differs")
+    script_form_id = struct.unpack("<I", _single_subrecord(quest, "SCRI"))[0]
+    quest_script = by_form.get(script_form_id)
+    if quest_script is None or quest_script.signature != SCRIPT_RECORD:
+        raise ValueError("Fallout 3 CG01 quest script is absent")
+    quest_script_source = _script_source(quest_script)
+    stage_sources: dict[int, list[str]] = {}
+    current_stage = None
+    for subrecord in iter_subrecords(quest):
+        if subrecord.signature == "INDX":
+            if len(subrecord.data) not in STAGE_INDEX_BYTES:
+                raise ValueError("Fallout 3 CG01 stage index has an unexpected size")
+            current_stage = int.from_bytes(subrecord.data, "little")
+        elif subrecord.signature == "SCTX" and current_stage is not None:
+            stage_sources.setdefault(current_stage, []).append(zstring(subrecord.data))
+    entry_sources = stage_sources.get(entry_stage, [])
+    nested_sources = stage_sources.get(nested_stage, [])
+    if len(entry_sources) != 1:
+        raise ValueError("Fallout 3 CG01 stage 0 result is ambiguous")
+    if len(nested_sources) != 1:
+        raise ValueError("Fallout 3 CG01 stage 5 result is ambiguous")
+    entry_source = entry_sources[0]
+    nested_source = nested_sources[0]
+    stage0_commands = _parse_cg01_stage0_commands(entry_source)
+    stage5_commands = _parse_cg01_stage5_commands(nested_source)
+
+    dad_reference, dad_base, dad = reference_contract(
+        str(stage0_commands[0]["subject"]),
+        ACTOR_REFERENCE_RECORD,
+        expected_reference_forms["dad"],
+        "Dad reference",
+    )
+    _, _, dad_marker = reference_contract(
+        str(stage0_commands[0]["target"]),
+        PLACED_REFERENCE_RECORD,
+        expected_reference_forms["dadMarker"],
+        "Dad start marker",
+    )
+    if str(stage0_commands[1]["questEditorId"]).casefold() != quest_editor_id.casefold():
+        raise ValueError("Fallout 3 CG01 stage 0 nested quest differs")
+    if int(stage0_commands[1]["stage"]) != nested_stage:
+        raise ValueError("Fallout 3 CG01 stage 0 nested stage differs")
+    player_scale = float(stage0_commands[2]["value"])
+    if not math.isfinite(player_scale) or player_scale != 0.4:
+        raise ValueError("Fallout 3 CG01 stage 0 player scale differs")
+    if str(stage0_commands[3]["subject"]).casefold() != "player":
+        raise ValueError("Fallout 3 CG01 stage 0 player MoveTo subject differs")
+    _, _, player_marker = reference_contract(
+        str(stage0_commands[3]["target"]),
+        PLACED_REFERENCE_RECORD,
+        expected_reference_forms["playerMarker"],
+        "player start marker",
+    )
+
+    resolved_stage5 = []
+    enabled_references: list[dict[str, object]] = []
+    for index, command in enumerate(stage5_commands):
+        kind = str(command["kind"])
+        resolved: dict[str, object] = {"index": index, "kind": kind}
+        if kind in {
+            "setLocationSpecificLoadScreensOnly",
+            "setInCharGen",
+            "autoDisplayObjectives",
+            "setPlayerToddler",
+            "setPlayerYoung",
+        }:
+            value = int(command["value"])
+            if value != 1:
+                raise ValueError(f"Fallout 3 CG01 stage 5 {kind} value differs")
+            resolved["value"] = value
+        elif kind == "enable":
+            expected_key = "dad" if index == 2 else "nextDad"
+            _, _, actor = reference_contract(
+                str(command["subject"]),
+                ACTOR_REFERENCE_RECORD,
+                expected_reference_forms[expected_key],
+                f"enabled actor command {index}",
+            )
+            if not actor["initiallyDisabled"]:
+                raise ValueError("Fallout 3 CG01 enabled actor does not start disabled")
+            resolved["reference"] = actor
+            enabled_references.append(actor)
+        elif kind == "setScriptVariable":
+            reference = unique_record(
+                str(command["subject"]), ACTOR_REFERENCE_RECORD, "variable actor reference"
+            )
+            if reference.form_id != dad_reference.form_id:
+                raise ValueError("Fallout 3 CG01 variable actor differs from moved Dad")
+            base_form_id = struct.unpack("<I", _single_subrecord(reference, "NAME"))[0]
+            base = by_form.get(base_form_id)
+            if base is None or base.form_id != dad_base.form_id:
+                raise ValueError("Fallout 3 CG01 variable actor base differs")
+            actor_script_form_id = struct.unpack("<I", _single_subrecord(base, "SCRI"))[0]
+            actor_script = by_form.get(actor_script_form_id)
+            if actor_script is None or actor_script.signature != SCRIPT_RECORD:
+                raise ValueError("Fallout 3 CG01 Dad script is absent")
+            variable = str(command["variable"])
+            declarations = [
+                match.group("type").casefold()
+                for match in re.finditer(
+                    rf"^\s*(?P<type>short|float)\s+{re.escape(variable)}\b",
+                    _script_source(actor_script),
+                    re.IGNORECASE | re.MULTILINE,
+                )
+            ]
+            if declarations != ["short"]:
+                raise ValueError(f"Fallout 3 CG01 Dad variable differs: {variable}")
+            resolved.update(
+                {
+                    "reference": dad,
+                    "script": {
+                        "formId": _form_id(actor_script.form_id),
+                        "editorId": _editor_id(actor_script),
+                        "recordSha256": hashlib.sha256(actor_script.data).hexdigest(),
+                        "sourceSha256": hashlib.sha256(
+                            _script_source(actor_script).encode("cp1252")
+                        ).hexdigest(),
+                    },
+                    "variable": variable,
+                    "variableType": "short",
+                    "value": int(command["value"]),
+                }
+            )
+        elif kind in {"enablePlayerControls", "disablePlayerControls"}:
+            resolved["arguments"] = list(command["arguments"])
+        elif kind == "setNoActivationSound":
+            sound_editor_id = str(command["soundEditorId"])
+            sound = unique_record(sound_editor_id, SOUND_RECORD, "no-activation sound")
+            expected_sound_form = int(str(definition["noActivationSoundFormId"]), FORM_ID_RADIX)
+            if sound.form_id != expected_sound_form:
+                raise ValueError("Fallout 3 CG01 no-activation sound FormID differs")
+            sound_paths = _text_values(sound, "FNAM")
+            sound_data = [
+                subrecord.data
+                for subrecord in iter_subrecords(sound)
+                if subrecord.signature == "SNDD"
+            ]
+            if len(sound_paths) != 1 or len(sound_data) != 1:
+                raise ValueError("Fallout 3 CG01 no-activation sound layout is unsupported")
+            resolved["sound"] = {
+                "formId": _form_id(sound.form_id),
+                "editorId": _editor_id(sound),
+                "recordSha256": hashlib.sha256(sound.data).hexdigest(),
+                "soundDataSha256": hashlib.sha256(sound_data[0]).hexdigest(),
+                "logicalPath": canonical_member_path(f"sound\\{sound_paths[0]}"),
+                "selectionPolicy": "source-folder-variant-set-not-yet-bound",
+            }
+        elif kind == "playBink":
+            expected_video = str(definition["transitionVideo"])
+            if str(command["logicalPath"]).casefold() != expected_video.casefold():
+                raise ValueError("Fallout 3 CG01 transition movie differs")
+            resolved.update(
+                {
+                    "logicalPath": str(command["logicalPath"]),
+                    "arguments": list(command["arguments"]),
+                }
+            )
+        else:
+            raise ValueError(f"Fallout 3 CG01 stage 5 command is not resolved: {kind}")
+        resolved_stage5.append(resolved)
+
+    if [actor["formId"] for actor in enabled_references] != [
+        _form_id(expected_reference_forms["dad"]),
+        _form_id(expected_reference_forms["nextDad"]),
+    ]:
+        raise ValueError("Fallout 3 CG01 enabled actor order differs")
+    stage5_result = {
+        "schema": "opennv-fo3-cg01-stage-5-result/v1",
+        "questFormId": _form_id(quest.form_id),
+        "questEditorId": _editor_id(quest),
+        "stage": nested_stage,
+        "stageSourceSha256": hashlib.sha256(nested_source.encode("cp1252")).hexdigest(),
+        "accountedCommandCount": len(resolved_stage5),
+        "commands": resolved_stage5,
+    }
+    resolved_stage0 = [
+        {
+            "index": 0,
+            "kind": "moveToReference",
+            "subject": dad,
+            "target": dad_marker,
+        },
+        {
+            "index": 1,
+            "kind": "setStage",
+            "questFormId": _form_id(quest.form_id),
+            "questEditorId": _editor_id(quest),
+            "stage": nested_stage,
+            "stageResult": stage5_result,
+        },
+        {"index": 2, "kind": "setPlayerScale", "value": player_scale},
+        {
+            "index": 3,
+            "kind": "moveToReference",
+            "subject": {"role": "player"},
+            "target": player_marker,
+        },
+    ]
+    stage0_result = {
+        "stage": entry_stage,
+        "stageSourceSha256": hashlib.sha256(entry_source.encode("cp1252")).hexdigest(),
+        "accountedCommandCount": len(resolved_stage0),
+        "commands": resolved_stage0,
+    }
+    if (
+        int(stage100_transition["stage"]) != 100
+        or int(dict(stage100_transition["nextBoundary"])["commandIndex"]) != 7
+        or bool(dict(stage100_transition["nextBoundary"])["applied"])
+    ):
+        raise ValueError("Fallout 3 CG01 transition trigger boundary differs")
+    return {
+        "schema": "opennv-fo3-cg01-stage-0-to-5-transition/v1",
+        "status": "source-backed-nested-stage-result-runtime-unapplied",
+        "trigger": {
+            "sourceSchema": str(stage100_transition["schema"]),
+            "commandIndex": 7,
+        },
+        "quest": {
+            "formId": _form_id(quest.form_id),
+            "editorId": _editor_id(quest),
+            "recordSha256": hashlib.sha256(quest.data).hexdigest(),
+            "scriptFormId": _form_id(quest_script.form_id),
+            "scriptEditorId": _editor_id(quest_script),
+            "scriptRecordSha256": hashlib.sha256(quest_script.data).hexdigest(),
+            "scriptSourceSha256": hashlib.sha256(
+                quest_script_source.encode("cp1252")
+            ).hexdigest(),
+        },
+        "cellFormId": _form_id(cell_form_id),
+        "entryStage": entry_stage,
+        "resultingStage": nested_stage,
+        "accountedCommandCount": len(resolved_stage0) + len(resolved_stage5),
+        "stage0Result": stage0_result,
+        "nestedExecution": {
+            "stage0CommandIndex": 1,
+            "stage": nested_stage,
+            "resultSchema": stage5_result["schema"],
+        },
+        "nextBoundary": {
+            "applied": False,
+            "blocker": "fo3-cg01-stage-0-runtime-application-not-implemented",
+        },
+    }
+
+
 def _compile_cg00_section4_transition(
     records: tuple[object, ...],
     selection: dict[str, object],
@@ -2421,7 +2942,9 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     IMAGE_SPACE_MODIFIER_RECORD,
                     SOUND_RECORD,
                     ACTOR_REFERENCE_RECORD,
+                    PLACED_REFERENCE_RECORD,
                     ACTOR_BASE_RECORD,
+                    STATIC_RECORD,
                 }
             ),
         )
@@ -2618,6 +3141,30 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         quest_script_source,
         stage_sources,
     )
+    cg01_stage0_transition = _compile_cg01_stage0_transition(
+        records,
+        selection,
+        stage100_transition,
+    )
+    cg01_contract_sha256 = hashlib.sha256(
+        json.dumps(
+            cg01_stage0_transition,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    stage100_commands = [dict(command) for command in stage100_transition["commands"]]
+    stage100_commands[-1]["stageResultContract"] = {
+        "schema": cg01_stage0_transition["schema"],
+        "sha256": cg01_contract_sha256,
+    }
+    stage100_transition["commands"] = stage100_commands
+    stage100_boundary = dict(stage100_transition["nextBoundary"])
+    stage100_boundary["transitionContract"] = {
+        "schema": cg01_stage0_transition["schema"],
+        "sha256": cg01_contract_sha256,
+    }
+    stage100_transition["nextBoundary"] = stage100_boundary
     stage90_transition["nextBoundary"] = stage100_transition["schema"]
 
     character_selection = {
@@ -2657,6 +3204,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         "postStage85Dialogue": post_stage85_dialogue,
         "stage90Transition": stage90_transition,
         "stage100Transition": stage100_transition,
+        "cg01Stage0Transition": cg01_stage0_transition,
     }
     return quest_rows, character_selection
 

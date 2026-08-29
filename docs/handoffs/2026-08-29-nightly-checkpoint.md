@@ -73,8 +73,10 @@ No proprietary asset or generated cache is tracked.
   Its clip is development footage; fixed-Y FRM billboards and black map-edge
   diamonds remain visible. FPS/OpenXR and campaign systems are absent.
 - Fallout 3: ordinary CG00 flow reaches and cold-restores stage 100. Seven of
-  eight stage-100 commands are applied; CG01 stage 0 is the explicit boundary.
-  This is not a freely playable Vault 101 route.
+  eight stage-100 commands are applied. The producer now emits the typed,
+  source-bound four-command CG01 stage-0 result with its synchronously nested
+  thirteen-command stage-5 result, but runtime/save application remains the
+  explicit boundary. This is not a freely playable Vault 101 route.
 - New Vegas: one fresh full four-family cache is admitted. Ordinary stage-200
   Continue reaches the physical Pip-Boy setup, Doc-house portal, and
   source-animated Goodsprings gate. r25 climbs the source-backed Prospector
@@ -158,11 +160,12 @@ quest `00014e83`. Its owned stage-0 result contains four commands in order:
 3. `player.setscale .4`; and
 4. `player.moveto CG01PlayerStartMarker`.
 
-Do not flip the current boundary to applied. First extend the FO3 profile
-producer to emit a versioned, typed CG01 stage-0 result with exact reference,
-marker, source-transform, and hash identities, including the nested CG01 stage-5
-result closure. Add the focused producer regression before adding runtime/save
-application or the separately source-bound CG01 Dad actor.
+Do not flip the current boundary to applied. The FO3 profile producer and its
+focused regression now own the exact typed stage-0/stage-5 command tree,
+reference and marker transforms, script-variable identities, control masks,
+sound record, and transition-movie command. Resume with runtime/save application
+and a separately source-bound CG01 Dad actor; the sound-folder variant set and
+movie playback timing remain explicit evidence boundaries.
 
 ### Fallout 2
 

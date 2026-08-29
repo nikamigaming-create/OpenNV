@@ -12,6 +12,7 @@ sys.path.insert(0, str(TOOLS))
 
 from plugin_records import GroupContext, Record  # noqa: E402
 from prepare_fo3_profile import (  # noqa: E402
+    _compile_cg01_stage0_transition,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
     _compile_post_stage80_dialogue,
@@ -396,7 +397,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             transition["commands"][3]["sound"]["logicalPath"],
         )
 
-    def test_compiles_exact_stage90_timer_and_stage100_boundary(self) -> None:
+    def test_compiles_stage100_boundary_and_nested_cg01_stage5_closure(self) -> None:
         quest_script_source = "\n".join(
             (
                 "scn CG00SCRIPT",
@@ -478,6 +479,104 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             subrecord("EDID", b"CG00\0"),
             (),
         )
+        cell_groups = (GroupContext(struct.pack("<I", 0x00028138), 6),)
+
+        def placed_reference(
+            signature: str,
+            form_id: int,
+            editor_id: str,
+            base_form_id: int,
+            flags: int,
+            transform: tuple[float, float, float, float, float, float],
+        ) -> Record:
+            return Record(
+                signature,
+                form_id,
+                flags,
+                subrecord("EDID", editor_id.encode("ascii") + b"\0")
+                + subrecord("NAME", struct.pack("<I", base_form_id))
+                + subrecord("DATA", struct.pack("<6f", *transform)),
+                cell_groups,
+            )
+
+        cg01_dad_script = Record(
+            "SCPT",
+            0x0002EA3B,
+            0,
+            subrecord("EDID", b"CG01DadSCRIPT\0")
+            + subrecord("SCTX", b"short doTalk\nshort talking\0"),
+            (),
+        )
+        cg01_script = Record(
+            "SCPT",
+            0x00030769,
+            0,
+            subrecord("EDID", b"CG01SCRIPT\0") + subrecord("SCTX", b"short runTimer\0"),
+            (),
+        )
+        cg01_dad_base = Record(
+            "NPC_",
+            0x0002EA46,
+            0,
+            subrecord("EDID", b"CG01Dad\0")
+            + subrecord("SCRI", struct.pack("<I", cg01_dad_script.form_id)),
+            (),
+        )
+        cg02_dad_base = Record(
+            "NPC_",
+            0x0002FDCF,
+            0,
+            subrecord("EDID", b"CG02Dad\0"),
+            (),
+        )
+        marker_base = Record(
+            "STAT",
+            0x00000034,
+            0,
+            subrecord("EDID", b"XMarkerHeading\0"),
+            (),
+        )
+        cg01_dad_ref = placed_reference(
+            "ACHR",
+            0x0002EA4D,
+            "CG01DadREF",
+            cg01_dad_base.form_id,
+            0x00000C00,
+            (-2620.4392, -5482.714, 7424.0, 0.0, 0.0, 3.1415935),
+        )
+        cg01_dad_marker = placed_reference(
+            "REFR",
+            0x0002EA4E,
+            "CG01DadStartMarker",
+            marker_base.form_id,
+            0x00000400,
+            (-2601.1814, -5426.611, 7424.0, 0.0, 0.0, 3.175226),
+        )
+        cg01_player_marker = placed_reference(
+            "REFR",
+            0x0002EA4F,
+            "CG01PlayerStartMarker",
+            marker_base.form_id,
+            0x00000400,
+            (-2582.588, -5798.251, 7424.0, 0.0, 0.0, 0.0460234),
+        )
+        cg02_dad_ref = placed_reference(
+            "ACHR",
+            0x000300EF,
+            "CG02DadREF",
+            cg02_dad_base.form_id,
+            0x00000C00,
+            (1815.2443, -10371.58, 7552.0, 0.0, 0.0, 0.2124003),
+        )
+        baby_babble = Record(
+            "SOUN",
+            0x00089B4C,
+            0,
+            subrecord("EDID", b"QSTBabyBabble\0")
+            + subrecord("FNAM", b"fx\\qst\\baby\\babble\\\0")
+            + subrecord("SNDD", bytes(36)),
+            (),
+        )
         cg01_source = "\n".join(
             (
                 "CG01DadREF.moveto CG01DadStartMarker",
@@ -486,13 +585,33 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "player.moveto CG01PlayerStartMarker",
             )
         )
+        cg01_stage5_source = "\n".join(
+            (
+                "SetLocationSpecificLoadScreensOnly 1",
+                "SetInCharGen 1 ; no leveling during chargen",
+                "CG01DadRef.enable",
+                "CG02DadRef.enable",
+                "set CG01DadREF.doTalk to 1",
+                "set CG01DadREF.talking to 0",
+                "EnablePlayerControls 0 0 0 0 1",
+                "DisablePlayerControls 1 1 1 1 0 0 1",
+                "AutoDisplayObjectives 1",
+                "SetNoActivationSound QSTBabyBabble",
+                "SetPCToddler 1",
+                "SetPCYoung 1",
+                'playBink "1 year later.bik" 0 0 1 0',
+            )
+        )
         cg01 = Record(
             "QUST",
             0x00014E83,
             0,
             subrecord("EDID", b"CG01\0")
+            + subrecord("SCRI", struct.pack("<I", cg01_script.form_id))
             + subrecord("INDX", struct.pack("<H", 0))
-            + subrecord("SCTX", cg01_source.encode("cp1252") + b"\0"),
+            + subrecord("SCTX", cg01_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 5))
+            + subrecord("SCTX", cg01_stage5_source.encode("cp1252") + b"\0"),
             (),
         )
         modifier = Record(
@@ -523,22 +642,46 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "nextQuestEditorId": "CG01",
                 "nextQuestFormId": "00014e83",
                 "nextQuestStage": 0,
-            }
+            },
+            "cg01Stage0Transition": {
+                "questEditorId": "CG01",
+                "questFormId": "00014e83",
+                "entryStage": 0,
+                "nestedStage": 5,
+                "cellFormId": "00028138",
+                "dadReferenceFormId": "0002ea4d",
+                "dadStartMarkerFormId": "0002ea4e",
+                "playerStartMarkerFormId": "0002ea4f",
+                "nextDadReferenceFormId": "000300ef",
+                "noActivationSoundFormId": "00089b4c",
+                "transitionVideo": "1 year later.bik",
+            },
         }
 
+        records = (
+            quest_script,
+            mom_script,
+            dad_script,
+            mom_base,
+            dad_base,
+            mom_ref,
+            dad_ref,
+            cg00,
+            cg01,
+            cg01_script,
+            cg01_dad_script,
+            cg01_dad_base,
+            cg02_dad_base,
+            marker_base,
+            cg01_dad_ref,
+            cg01_dad_marker,
+            cg01_player_marker,
+            cg02_dad_ref,
+            baby_babble,
+            modifier,
+        )
         contract = _compile_stage100_transition(
-            (
-                quest_script,
-                mom_script,
-                dad_script,
-                mom_base,
-                dad_base,
-                mom_ref,
-                dad_ref,
-                cg00,
-                cg01,
-                modifier,
-            ),
+            records,
             selection,
             QUEST_FORM,
             quest_script,
@@ -552,6 +695,78 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("000290a7", contract["commands"][4]["referenceFormId"])
         self.assertEqual("00014e83", contract["nextBoundary"]["questFormId"])
         self.assertFalse(contract["nextBoundary"]["applied"])
+
+        cg01_contract = _compile_cg01_stage0_transition(records, selection, contract)
+        self.assertEqual(
+            "opennv-fo3-cg01-stage-0-to-5-transition/v1",
+            cg01_contract["schema"],
+        )
+        self.assertEqual(17, cg01_contract["accountedCommandCount"])
+        stage0 = cg01_contract["stage0Result"]
+        self.assertEqual(4, stage0["accountedCommandCount"])
+        self.assertEqual(
+            ["moveToReference", "setStage", "setPlayerScale", "moveToReference"],
+            [command["kind"] for command in stage0["commands"]],
+        )
+        self.assertEqual(0.4, stage0["commands"][2]["value"])
+        self.assertEqual(
+            "0002ea4e",
+            stage0["commands"][0]["target"]["formId"],
+        )
+        self.assertEqual(
+            "0002ea4f",
+            stage0["commands"][3]["target"]["formId"],
+        )
+        self.assertAlmostEqual(
+            -2601.1814,
+            stage0["commands"][0]["target"]["sourceTransform"]["positionGameUnits"][0],
+            places=3,
+        )
+        stage5 = stage0["commands"][1]["stageResult"]
+        self.assertEqual(13, stage5["accountedCommandCount"])
+        self.assertEqual(
+            [
+                "setLocationSpecificLoadScreensOnly",
+                "setInCharGen",
+                "enable",
+                "enable",
+                "setScriptVariable",
+                "setScriptVariable",
+                "enablePlayerControls",
+                "disablePlayerControls",
+                "autoDisplayObjectives",
+                "setNoActivationSound",
+                "setPlayerToddler",
+                "setPlayerYoung",
+                "playBink",
+            ],
+            [command["kind"] for command in stage5["commands"]],
+        )
+        self.assertEqual([0, 0, 0, 0, 1], stage5["commands"][6]["arguments"])
+        self.assertEqual([1, 1, 1, 1, 0, 0, 1], stage5["commands"][7]["arguments"])
+        self.assertEqual("00089b4c", stage5["commands"][9]["sound"]["formId"])
+        self.assertEqual("1 year later.bik", stage5["commands"][12]["logicalPath"])
+        self.assertEqual([0, 0, 1, 0], stage5["commands"][12]["arguments"])
+        moved_dad = stage0["commands"][0]["subject"]["formId"]
+        self.assertEqual(moved_dad, stage5["commands"][2]["reference"]["formId"])
+        self.assertEqual(moved_dad, stage5["commands"][4]["reference"]["formId"])
+        self.assertFalse(cg01_contract["nextBoundary"]["applied"])
+
+        cg01_without_stage5 = Record(
+            "QUST",
+            cg01.form_id,
+            0,
+            subrecord("EDID", b"CG01\0")
+            + subrecord("SCRI", struct.pack("<I", cg01_script.form_id))
+            + subrecord("INDX", struct.pack("<H", 0))
+            + subrecord("SCTX", cg01_source.encode("cp1252") + b"\0"),
+            (),
+        )
+        records_without_stage5 = tuple(
+            cg01_without_stage5 if record is cg01 else record for record in records
+        )
+        with self.assertRaisesRegex(ValueError, "CG01 stage 5 result is ambiguous"):
+            _compile_cg01_stage0_transition(records_without_stage5, selection, contract)
 
     def test_compiles_owned_package_activation_and_stops_before_stage_65(self) -> None:
         stage_65 = "\n".join(
