@@ -83,6 +83,7 @@ rotate the whole REFR.
 
 The run exited once with code 2 after 245.365 seconds, atomically emitted no
 sidecar or install manifest, and therefore admitted no cache or compiler-family
-closure. The partial output is disposable and must not be restored. After the
-bounded convex-body fix, one new unique cache build and an ordinary route/cold-
-Continue pair are required before this path can be promoted.
+closure. The partial output was moved to the Windows Recycle Bin after its
+failure evidence was retained and must not be restored. After the bounded
+convex-body fix, one new unique cache build and an ordinary route/cold-Continue
+pair are required before this path can be promoted.

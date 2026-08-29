@@ -69,10 +69,12 @@ The compiler error was:
 
 `Controller-bearing DOOR target has no joined authored collision`
 
-The partial target contains 1,334 files / 218,620,063 bytes and no
-`install-manifest.json`; it is not an admitted cache and must never be restored
-or used as evidence. The owned Data tree was unchanged before/after: 321 files,
-48 directories, 9,875,907,799 bytes, size/mtime digest
+The partial target contained 1,334 files / 218,620,063 bytes and no
+`install-manifest.json`; it was not an admitted cache. It was moved to the
+Windows Recycle Bin after the retained evidence was written, so it remains
+recoverable but must never be restored or used as evidence. The owned Data tree
+was unchanged before/after: 321 files, 48 directories, 9,875,907,799 bytes,
+size/mtime digest
 `25abe0156faaaad8f831b0bfc33745dc9a35cb0da65ac91e77eaab1c0323efbb`.
 Run evidence is retained outside the repository at
 `D:\Builds\OpenNV-fnv-articulated-door-cache-20260829-r1-evidence`.

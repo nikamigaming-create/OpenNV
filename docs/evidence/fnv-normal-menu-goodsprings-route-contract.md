@@ -67,8 +67,9 @@ after 245.365 seconds on
 the target owns a mass-zero convex collision body, but the current static
 collision exporter admits only MOPP packed triangles and therefore could not
 join that authored body. The partial cache has no `install-manifest.json`, is
-not admitted, and must not be used for runtime evidence. The owned Data tree
-remained unchanged at 321 files, 9,875,907,799 bytes, with size/mtime digest
+not admitted, and was moved to the Windows Recycle Bin after its failure
+evidence was retained. The owned Data tree remained unchanged at 321 files,
+9,875,907,799 bytes, with size/mtime digest
 `25abe0156faaaad8f831b0bfc33745dc9a35cb0da65ac91e77eaab1c0323efbb`.
 No retry or Godot acceptance followed. The next slice is to represent this exact
 authored convex collision without weakening the join, rebuild once into a new
