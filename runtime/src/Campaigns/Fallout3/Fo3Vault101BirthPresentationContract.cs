@@ -77,6 +77,15 @@ internal sealed record Fo3Vault101DadActor(
     int Textures,
     int FaceGenMorphTargets);
 
+internal sealed record Fo3Vault101Cg01DadActorVariant(
+    string PlayerRaceFormId,
+    string PlayerSex,
+    string Stage65AppearanceSha256,
+    string SymmetricGeometrySha256,
+    string AsymmetricGeometrySha256,
+    string SymmetricTextureSha256,
+    Fo3Vault101DadActor Actor);
+
 internal sealed record Fo3Vault101BirthPresentationContract(
     string ManifestPath,
     string ManifestSha256,
@@ -109,13 +118,13 @@ internal sealed record Fo3Vault101BirthPresentationContract(
     int ResolvedUniqueTextures,
     Fo3Vault101DoctorActor DoctorActor,
     Fo3Vault101DadActor DadActor,
-    Fo3Vault101DadActor Cg01DadActor,
+    IReadOnlyDictionary<string, Fo3Vault101Cg01DadActorVariant> Cg01DadActors,
     IReadOnlyDictionary<string, Fo3Vault101BirthAsset> Assets,
     IReadOnlyList<Fo3Vault101BirthReference> References)
 {
-    internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v6";
+    internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v7";
     private const string ExpectedStatus =
-        "prepared-owned-materials-doctor-cg00-dad-and-cg01-dad-not-yet-rendered";
+        "prepared-owned-materials-and-stage65-cg01-dad-matrix-not-yet-rendered";
     private const string ExpectedCellEditorId = "Vault101d";
     private const string ExpectedLightingAuthority =
         "recipe-proof-only-not-retail-CELL-lighting";
@@ -127,8 +136,6 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         "Mom, player body, and all actors except Doctor Li, CG00 Dad, and CG01 Dad";
     private const string RequiredUnsupportedActorBehavior =
         "automatic CG00 dialogue timing, package state, and animation selection";
-    private const string RequiredUnsupportedCg01DadAppearance =
-        "CG01 Dad stage-65 matched race and FaceGen geometry presentation";
     private const string RequiredUnsupportedCommands = "quest and package command execution";
     private const int Sha256HexCharacters = 64;
     private const int FormIdHexCharacters = 8;
@@ -136,6 +143,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
     internal static Fo3Vault101BirthPresentationContract Load(
         Fo3BirthSliceContract birthSlice,
         Fo3Cg01Stage0Transition cg01Transition,
+        Fo3Stage65AppearanceTransition stage65Appearance,
         string manifestPath)
     {
         var path = Path.GetFullPath(manifestPath);
@@ -248,10 +256,11 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             RequiredObject(root, "dadActor"),
             cacheRoot,
             origin);
-        var cg01DadActor = ReadCg01DadActor(
+        var cg01DadActors = ReadCg01DadActors(
             birthSlice,
             cg01Transition,
-            RequiredObject(root, "cg01DadActor"),
+            stage65Appearance,
+            RequiredObject(root, "cg01DadActors"),
             cacheRoot,
             origin);
 
@@ -317,6 +326,8 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             RequiredInteger(coverage, "nonPresentationAssets") != 0 ||
             RequiredInteger(coverage, "resolvedUniqueTextures") != textureIds.Length ||
             RequiredInteger(coverage, "unresolvedUniqueTextures") != 0 ||
+            RequiredPositiveInteger(coverage, "cg01DadStage65Variants") !=
+                cg01DadActors.Count ||
             RequiredPositiveInteger(coverage, "authoredTextureBindingRequests") <
                 textureIds.Length)
             throw new InvalidOperationException(
@@ -327,7 +338,6 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             .ToHashSet(StringComparer.Ordinal);
         if (!unsupported.Contains(RequiredUnsupportedActors) ||
             !unsupported.Contains(RequiredUnsupportedActorBehavior) ||
-            !unsupported.Contains(RequiredUnsupportedCg01DadAppearance) ||
             !unsupported.Contains(RequiredUnsupportedCommands))
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 unsupported behavior boundary is incomplete.");
@@ -364,9 +374,32 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             textureIds.Length,
             doctorActor,
             dadActor,
-            cg01DadActor,
+            cg01DadActors,
             assets,
             references);
+    }
+
+    internal Fo3Vault101Cg01DadActorVariant Cg01DadActorFor(
+        string playerRaceFormId,
+        string playerSex,
+        Fo3Stage65AppearanceState stage65)
+    {
+        if (!Cg01DadActors.TryGetValue(
+                SelectionKey(playerRaceFormId, playerSex),
+                out var variant))
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad has no compiled stage-65 appearance variant.");
+        var parent = stage65.Parents.Single(value =>
+            value.ReferenceFormId.Equals(
+                variant.Actor.ReferenceFormId,
+                StringComparison.OrdinalIgnoreCase));
+        if (parent.RaceFormId != variant.PlayerRaceFormId ||
+            parent.SymmetricGeometrySha256 != variant.SymmetricGeometrySha256 ||
+            parent.AsymmetricGeometrySha256 != variant.AsymmetricGeometrySha256 ||
+            parent.SymmetricTextureSha256 != variant.SymmetricTextureSha256)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad compiled geometry differs from stage-65 state.");
+        return variant;
     }
 
     private static Fo3Vault101DoctorActor ReadDoctorActor(
@@ -715,10 +748,84 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             morphTargets);
     }
 
-    private static Fo3Vault101DadActor ReadCg01DadActor(
+    private static IReadOnlyDictionary<string, Fo3Vault101Cg01DadActorVariant>
+        ReadCg01DadActors(
         Fo3BirthSliceContract birthSlice,
         Fo3Cg01Stage0Transition transition,
+        Fo3Stage65AppearanceTransition stage65Appearance,
         JsonElement source,
+        string cacheRoot,
+        Vector3 origin)
+    {
+        const string matrixSchema = "opennv-fo3-cg01-dad-stage65-matrix/v1";
+        const string sourceAuthority =
+            "source-stage-65-CG01Dad-MatchRace-and-MatchFaceGeometry";
+        const string poseAuthority =
+            "owned mtidle compiler input and exact CG01 stage-0 MoveTo marker; " +
+            "stage-5 enable is runtime-applied; stage-65 MatchRace and 50-percent " +
+            "player MatchFaceGeometry are compiled before actor visibility";
+        if (RequiredString(source, "schema") != matrixSchema ||
+            RequiredString(source, "source") != sourceAuthority ||
+            RequiredString(source, "poseAuthority") != poseAuthority ||
+            RequiredSha256(source, "stage65AppearanceSha256") !=
+                stage65Appearance.ContractSha256)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad stage-65 matrix authority differs.");
+        var variants = new Dictionary<string, Fo3Vault101Cg01DadActorVariant>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var row in RequiredArray(source, "variants").EnumerateArray())
+        {
+            var playerRaceFormId = RequiredFormId(row, "playerRaceFormId");
+            var playerSex = RequiredString(row, "playerSex");
+            if (playerSex is not "male" and not "female" ||
+                !stage65Appearance.SelectionResults.TryGetValue(
+                    SelectionKey(playerRaceFormId, playerSex),
+                    out var selection))
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 Dad stage-65 selection is unsupported.");
+            var parent = selection.Parents.Single(value =>
+                value.ReferenceFormId.Equals(
+                    transition.Dad.FormId,
+                    StringComparison.OrdinalIgnoreCase));
+            var actor = ReadCg01DadActorVariant(
+                birthSlice,
+                transition,
+                source,
+                row,
+                parent,
+                cacheRoot,
+                origin);
+            var faceGen = RequiredObject(row, "faceGen");
+            var variant = new Fo3Vault101Cg01DadActorVariant(
+                playerRaceFormId,
+                playerSex,
+                RequiredSha256(row, "stage65AppearanceSha256"),
+                RequiredSha256(faceGen, "symmetricGeometrySha256"),
+                RequiredSha256(faceGen, "asymmetricGeometrySha256"),
+                RequiredSha256(faceGen, "symmetricTextureSha256"),
+                actor);
+            if (variant.Stage65AppearanceSha256 != stage65Appearance.ContractSha256 ||
+                variant.SymmetricGeometrySha256 != parent.SymmetricGeometrySha256 ||
+                variant.AsymmetricGeometrySha256 != parent.AsymmetricGeometrySha256 ||
+                variant.SymmetricTextureSha256 != parent.SymmetricTextureSha256 ||
+                !variants.TryAdd(SelectionKey(playerRaceFormId, playerSex), variant))
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 Dad stage-65 derivative identity differs.");
+        }
+        if (variants.Count != stage65Appearance.SelectionResults.Count ||
+            !variants.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(
+                stage65Appearance.SelectionResults.Keys))
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad stage-65 derivative matrix is incomplete.");
+        return variants;
+    }
+
+    private static Fo3Vault101DadActor ReadCg01DadActorVariant(
+        Fo3BirthSliceContract birthSlice,
+        Fo3Cg01Stage0Transition transition,
+        JsonElement matrix,
+        JsonElement source,
+        Fo3Stage65ParentAppearance expectedAppearance,
         string cacheRoot,
         Vector3 origin)
     {
@@ -730,12 +837,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         const string bodySurfaceTextureSource =
             "owned-race-base-diffuse-no-body-mod";
 
-        if (RequiredString(source, "source") !=
-                "source-stage-0-CG01Dad-ACHR-NPC-raw-authored-appearance" ||
-            RequiredString(source, "poseAuthority") !=
-                "owned mtidle compiler input and exact CG01 stage-0 MoveTo marker; " +
-                "stage-5 enable is runtime-applied; stage-65 matched race and FaceGen " +
-                "geometry are not applied to this raw authored actor" ||
+        if (RequiredString(source, "playerRaceFormId") != expectedAppearance.RaceFormId ||
             RequiredString(source, "bodyModPolicy") != bodyModPolicy ||
             RequiredString(source, "bodySurfaceTextureSource") != bodySurfaceTextureSource)
             throw new InvalidOperationException(
@@ -746,11 +848,11 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             RequiredString(source, "scene"));
         var sceneSha256 = RequiredSha256(source, "sha256");
         VerifyFile(scenePath, sceneSha256);
-        var recipe = RequiredObject(source, "recipe");
+        var recipe = RequiredObject(matrix, "recipe");
         var actorRecipeId = RequiredString(recipe, "id");
         VerifyFile(RequiredString(recipe, "path"), RequiredSha256(recipe, "sha256"));
 
-        var recordBindings = RequiredObject(source, "sourceRecordBindings");
+        var recordBindings = RequiredObject(matrix, "sourceRecordBindings");
         if (RequiredFormId(recordBindings, "referenceFormId") !=
                 transition.Dad.FormId ||
             RequiredSha256(recordBindings, "referenceRecordSha256") !=
@@ -764,6 +866,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
 
         using var actorDocument = JsonDocument.Parse(File.ReadAllBytes(scenePath));
         var actorRoot = actorDocument.RootElement;
+        var appearanceOverride = RequiredObject(actorRoot, "appearanceOverride");
         if (RequiredString(actorRoot, "schema") != actorSceneSchema ||
             RequiredString(actorRoot, "status") != actorSceneStatus ||
             RequiredString(actorRoot, "recipe") != actorRecipeId ||
@@ -772,7 +875,23 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             RequiredString(actorRoot, "bodySurfaceTextureSource") !=
                 bodySurfaceTextureSource ||
             !actorRoot.TryGetProperty("bodyModLogicalPath", out var bodyModPath) ||
-            bodyModPath.ValueKind != JsonValueKind.Null)
+            bodyModPath.ValueKind != JsonValueKind.Null ||
+            RequiredString(appearanceOverride, "authority") !=
+                "owned-stage-65-MatchRace-and-50-percent-MatchFaceGeometry" ||
+            RequiredSha256(appearanceOverride, "sourceSha256") !=
+                RequiredSha256(source, "stage65AppearanceSha256") ||
+            RequiredFormId(appearanceOverride, "referenceFormId") !=
+                transition.Dad.FormId ||
+            RequiredFormId(appearanceOverride, "baseFormId") !=
+                transition.Dad.BaseFormId ||
+            RequiredFormId(appearanceOverride, "raceFormId") !=
+                expectedAppearance.RaceFormId ||
+            RequiredSha256(appearanceOverride, "symmetricGeometrySha256") !=
+                expectedAppearance.SymmetricGeometrySha256 ||
+            RequiredSha256(appearanceOverride, "asymmetricGeometrySha256") !=
+                expectedAppearance.AsymmetricGeometrySha256 ||
+            RequiredSha256(appearanceOverride, "symmetricTextureSha256") !=
+                expectedAppearance.SymmetricTextureSha256)
             throw new InvalidOperationException(
                 "Fallout 3 CG01 Dad compiled scene identity differs.");
 
@@ -801,6 +920,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             RequiredString(actor, "editorId") != transition.Dad.BaseEditorId ||
             RequiredString(actor, "name") != actorName ||
             RequiredBoolean(actor, "female") ||
+            RequiredFormId(actor, "raceFormId") != expectedAppearance.RaceFormId ||
             RequiredFormId(actor, "raceFormId") !=
                 RequiredFormId(declaredActor, "raceFormId") ||
             RequiredFormId(actor, "hairFormId") !=
@@ -810,7 +930,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             throw new InvalidOperationException(
                 "Fallout 3 CG01 Dad actor identity or authored transform differs.");
 
-        var marker = RequiredObject(source, "startMarker");
+        var marker = RequiredObject(matrix, "startMarker");
         var markerPosition = ReadVector3(marker, "positionGameUnits");
         var markerLocalPosition = ReadVector3(marker, "positionGodotGameUnits");
         var markerRotation = ReadVector3(marker, "rotationRadians");
@@ -974,6 +1094,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             !RequiredBoolean(promotion, "doctorActorPrepared") ||
             !RequiredBoolean(promotion, "dadActorPrepared") ||
             !RequiredBoolean(promotion, "cg01DadActorPrepared") ||
+            !RequiredBoolean(promotion, "cg01DadStage65AppearanceCompiled") ||
             RequiredBoolean(promotion, "runtimeManifestValidated") ||
             RequiredBoolean(promotion, "runtimeSceneConstructed") ||
             RequiredBoolean(promotion, "rendered") ||
@@ -1064,6 +1185,9 @@ internal sealed record Fo3Vault101BirthPresentationContract(
                 $"Fallout 3 Vault 101 color {name} is invalid.");
         return new Color(values[0], values[1], values[2]);
     }
+
+    private static string SelectionKey(string playerRaceFormId, string playerSex) =>
+        $"{playerRaceFormId}:{playerSex}";
 
     private static JsonElement RequiredObject(JsonElement parent, string name)
     {

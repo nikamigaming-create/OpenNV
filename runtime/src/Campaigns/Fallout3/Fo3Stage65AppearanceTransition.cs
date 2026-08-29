@@ -34,7 +34,8 @@ internal sealed record Fo3Stage65AppearanceTransition(
     int Stage,
     int AccountedCommandCount,
     IReadOnlyDictionary<string, Fo3Stage65SelectionResult> SelectionResults,
-    string NextBoundary)
+    string NextBoundary,
+    string ContractSha256)
 {
     internal const string ExpectedSchema = "opennv-fo3-cg00-stage-65-appearance/v1";
     private const string ExpectedStatus = "source-backed-command-application";
@@ -193,7 +194,9 @@ internal sealed record Fo3Stage65AppearanceTransition(
             stage,
             accountedCommandCount,
             results,
-            RequiredString(source, "nextBoundary"));
+            RequiredString(source, "nextBoundary"),
+            Convert.ToHexString(SHA256.HashData(
+                JsonSerializer.SerializeToUtf8Bytes(source))).ToLowerInvariant());
     }
 
     internal Fo3Stage65AppearanceState Apply(

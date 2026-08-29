@@ -8,9 +8,15 @@ import hashlib
 import json
 import math
 import os
+import struct
 import sys
 from pathlib import Path
 
+from actor_catalog import (
+    FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+    FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+    FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
+)
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_scene import godot_position, godot_rotation_quaternion, godot_yaw_radians
 from export_static_nif_gltf import (
@@ -18,16 +24,19 @@ from export_static_nif_gltf import (
     export_static_nif,
 )
 from material_contract import material_bindings, texture_binding_requests
-from prepare_actor import prepare_actor
+from prepare_actor import ActorAppearanceOverride, prepare_actor
 from runtime_configuration import load_runtime_configuration
 from texture_pipeline import TexturePipeline
 
 
 RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
-OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v6"
+OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v7"
 PROFILE_SCHEMA = "opennv-owned-game-profile/v1"
 OUTPUT_NAME = "fo3-vault101-birth-presentation.json"
 SHA256_HEX_CHARACTERS = 64
+FORM_ID_HEX_CHARACTERS = 8
+FORM_ID_RADIX = 16
+VARIANT_HASH_PREFIX_CHARACTERS = 12
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -75,6 +84,23 @@ def _required_sha256(source: dict[str, object], name: str) -> str:
     ):
         raise ValueError(f"SHA-256 field is invalid: {name}")
     return value
+
+
+def _facegen_values(
+    source: dict[str, object],
+    expected_count: int,
+) -> tuple[tuple[float, ...], str]:
+    values = tuple(float(value) for value in _required_list(source, "values"))
+    if (
+        int(source.get("count", -1)) != expected_count
+        or len(values) != expected_count
+        or any(not math.isfinite(value) for value in values)
+    ):
+        raise ValueError("Fallout 3 stage-65 FaceGen value contract differs")
+    sha256 = hashlib.sha256(struct.pack(f"<{len(values)}f", *values)).hexdigest()
+    if sha256 != _required_sha256(source, "sha256"):
+        raise ValueError("Fallout 3 stage-65 FaceGen value hash differs")
+    return values, sha256
 
 
 def _atomic_bytes(path: Path, payload: bytes) -> None:
@@ -351,6 +377,19 @@ def prepare(
         raise ValueError("Fallout 3 CG00 Dad recipe does not bind the owned birth slice")
 
     character_selection = _required_object(opening, "characterSelection")
+    stage65_appearance = _required_object(character_selection, "stage65Appearance")
+    if (
+        stage65_appearance.get("schema")
+        != "opennv-fo3-cg00-stage-65-appearance/v1"
+        or stage65_appearance.get("status") != "source-backed-command-application"
+    ):
+        raise ValueError("Fallout 3 stage-65 appearance contract is unsupported")
+    stage65_payload = json.dumps(
+        stage65_appearance,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    stage65_sha256 = _sha256_bytes(stage65_payload)
     cg01_transition = _required_object(character_selection, "cg01Stage0Transition")
     stage0_result = _required_object(cg01_transition, "stage0Result")
     stage0_commands = _required_list(stage0_result, "commands")
@@ -795,54 +834,151 @@ def prepare(
         raise ValueError("Compiled CG00 Dad differs from the direct owned NPC")
     dad_scene_path = Path(_required_string(dad_manifest, "manifest")).resolve()
 
-    cg01_dad_manifest = prepare_actor(
-        Path(_required_string(source, "dataRoot")).resolve(),
-        cache_root.resolve(),
-        _required_string(cg01_dad_actor_recipe, "id"),
-        recipe_document=cg01_dad_actor_recipe,
-    )
-    cg01_dad_reference = _required_object(cg01_dad_manifest, "reference")
-    cg01_dad_identity = _required_object(cg01_dad_manifest, "actor")
-    cg01_dad_coverage = _required_object(cg01_dad_manifest, "coverage")
     cg01_dad_transform = _required_object(cg01_dad_source, "sourceTransform")
     cg01_dad_marker_transform = _required_object(
         cg01_dad_marker, "sourceTransform"
     )
-    if (
-        cg01_dad_manifest.get("schema") != "opennv-actor-scene/v5"
-        or cg01_dad_manifest.get("status") != "skinned-animated"
-        or cg01_dad_manifest.get("cellFormId") != cell.get("formId")
-        or cg01_dad_manifest.get("bodyModLogicalPath") is not None
-        or cg01_dad_manifest.get("bodyModPolicy")
-        != "owned-race-base-diffuse-when-precomputed-absent"
-        or cg01_dad_manifest.get("bodySurfaceTextureSource")
-        != "owned-race-base-diffuse-no-body-mod"
-        or cg01_dad_reference.get("formId") != cg01_dad_source.get("formId")
-        or cg01_dad_reference.get("baseFormId") != cg01_dad_base.get("formId")
-        or cg01_dad_reference.get("initiallyDisabled") is not True
-        or cg01_dad_reference.get("positionGameUnits")
-        != cg01_dad_transform.get("positionGameUnits")
-        or cg01_dad_reference.get("rotationRadians")
-        != cg01_dad_transform.get("rotationRadians")
-        or cg01_dad_reference.get("scale") != cg01_dad_transform.get("scale")
-        or cg01_dad_identity.get("editorId") != cg01_dad_base.get("editorId")
-        or cg01_dad_identity.get("name") != "Dad"
-        or cg01_dad_identity.get("female") is not False
-        or int(cg01_dad_coverage.get("components", 0)) <= 0
-        or int(cg01_dad_coverage.get("skins", 0)) <= 0
-        or int(cg01_dad_coverage.get("surfaces", 0)) <= 0
-        or int(cg01_dad_coverage.get("textures", 0)) <= 0
-        or int(cg01_dad_coverage.get("faceGenMorphTargets", 0)) <= 0
-        or int(cg01_dad_coverage.get("omittedSurfaces", -1)) != 0
-    ):
-        raise ValueError("Compiled CG01 Dad differs from the source stage-0 actor")
-    cg01_dad_scene_path = Path(
-        _required_string(cg01_dad_manifest, "manifest")
-    ).resolve()
+    cg01_dad_variants: list[dict[str, object]] = []
+    variant_keys: set[tuple[str, str]] = set()
+    for selection_result in _required_list(stage65_appearance, "selectionResults"):
+        if not isinstance(selection_result, dict):
+            raise ValueError("Fallout 3 stage-65 selection row is malformed")
+        player_race_form_id = _required_string(selection_result, "playerRaceFormId")
+        player_sex = _required_string(selection_result, "playerSex")
+        key = (player_race_form_id, player_sex)
+        if (
+            len(player_race_form_id) != FORM_ID_HEX_CHARACTERS
+            or any(character not in "0123456789abcdef" for character in player_race_form_id)
+            or player_sex not in {"male", "female"}
+            or key in variant_keys
+        ):
+            raise ValueError("Fallout 3 stage-65 selection identity is invalid")
+        variant_keys.add(key)
+        parents = [
+            row
+            for row in _required_list(selection_result, "parents")
+            if isinstance(row, dict)
+            and row.get("referenceFormId") == cg01_dad_source.get("formId")
+        ]
+        if len(parents) != 1:
+            raise ValueError("Fallout 3 stage-65 CG01 Dad result is absent or ambiguous")
+        parent = parents[0]
+        facegen = _required_object(parent, "faceGen")
+        symmetric, symmetric_sha256 = _facegen_values(
+            _required_object(facegen, "symmetricGeometry"),
+            FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+        )
+        asymmetric, asymmetric_sha256 = _facegen_values(
+            _required_object(facegen, "asymmetricGeometry"),
+            FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+        )
+        texture, texture_sha256 = _facegen_values(
+            _required_object(facegen, "symmetricTexture"),
+            FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
+        )
+        if (
+            parent.get("baseFormId") != cg01_dad_base.get("formId")
+            or parent.get("raceFormId") != player_race_form_id
+            or facegen.get("texturePolicy")
+            != "matched-race-default-not-face-geometry-morphed"
+        ):
+            raise ValueError("Fallout 3 stage-65 CG01 Dad identity differs")
+        variant_id = (
+            "stage65-"
+            f"{player_race_form_id}-{player_sex}-"
+            f"{symmetric_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}"
+        )
+        appearance_override = ActorAppearanceOverride(
+            variant_id=variant_id,
+            authority="owned-stage-65-MatchRace-and-50-percent-MatchFaceGeometry",
+            source_sha256=stage65_sha256,
+            reference_form_id=int(
+                _required_string(cg01_dad_source, "formId"), FORM_ID_RADIX
+            ),
+            base_form_id=int(
+                _required_string(cg01_dad_base, "formId"), FORM_ID_RADIX
+            ),
+            race_form_id=int(player_race_form_id, FORM_ID_RADIX),
+            symmetric_geometry=symmetric,
+            asymmetric_geometry=asymmetric,
+            symmetric_texture=texture,
+        )
+        manifest = prepare_actor(
+            Path(_required_string(source, "dataRoot")).resolve(),
+            cache_root.resolve(),
+            _required_string(cg01_dad_actor_recipe, "id"),
+            recipe_document=cg01_dad_actor_recipe,
+            appearance_override=appearance_override,
+        )
+        reference = _required_object(manifest, "reference")
+        actor = _required_object(manifest, "actor")
+        coverage = _required_object(manifest, "coverage")
+        compiled_override = _required_object(manifest, "appearanceOverride")
+        if (
+            manifest.get("schema") != "opennv-actor-scene/v5"
+            or manifest.get("status") != "skinned-animated"
+            or manifest.get("cellFormId") != cell.get("formId")
+            or manifest.get("bodyModLogicalPath") is not None
+            or manifest.get("bodyModPolicy")
+            != "owned-race-base-diffuse-when-precomputed-absent"
+            or manifest.get("bodySurfaceTextureSource")
+            != "owned-race-base-diffuse-no-body-mod"
+            or reference.get("formId") != cg01_dad_source.get("formId")
+            or reference.get("baseFormId") != cg01_dad_base.get("formId")
+            or reference.get("initiallyDisabled") is not True
+            or reference.get("positionGameUnits")
+            != cg01_dad_transform.get("positionGameUnits")
+            or reference.get("rotationRadians")
+            != cg01_dad_transform.get("rotationRadians")
+            or reference.get("scale") != cg01_dad_transform.get("scale")
+            or actor.get("editorId") != cg01_dad_base.get("editorId")
+            or actor.get("name") != "Dad"
+            or actor.get("female") is not False
+            or actor.get("raceFormId") != player_race_form_id
+            or compiled_override.get("variantId") != variant_id
+            or compiled_override.get("authority") != appearance_override.authority
+            or compiled_override.get("sourceSha256") != stage65_sha256
+            or compiled_override.get("symmetricGeometrySha256") != symmetric_sha256
+            or compiled_override.get("asymmetricGeometrySha256") != asymmetric_sha256
+            or compiled_override.get("symmetricTextureSha256") != texture_sha256
+            or int(coverage.get("components", 0)) <= 0
+            or int(coverage.get("skins", 0)) <= 0
+            or int(coverage.get("surfaces", 0)) <= 0
+            or int(coverage.get("textures", 0)) <= 0
+            or int(coverage.get("faceGenMorphTargets", 0)) <= 0
+            or int(coverage.get("omittedSurfaces", -1)) != 0
+        ):
+            raise ValueError("Compiled CG01 Dad differs from the stage-65 appearance")
+        scene_path = Path(_required_string(manifest, "manifest")).resolve()
+        cg01_dad_variants.append(
+            {
+                "playerRaceFormId": player_race_form_id,
+                "playerSex": player_sex,
+                "stage65AppearanceSha256": stage65_sha256,
+                "faceGen": {
+                    "symmetricGeometrySha256": symmetric_sha256,
+                    "asymmetricGeometrySha256": asymmetric_sha256,
+                    "symmetricTextureSha256": texture_sha256,
+                    "texturePolicy": facegen["texturePolicy"],
+                },
+                "scene": _cache_relative_derivative(cache_root, scene_path),
+                "sha256": _sha256_file(scene_path),
+                "reference": reference,
+                "actor": actor,
+                "coverage": coverage,
+                "bodySurfaceTextureSource": _required_string(
+                    manifest, "bodySurfaceTextureSource"
+                ),
+                "bodyModPolicy": _required_string(manifest, "bodyModPolicy"),
+                "appearanceOverride": compiled_override,
+            }
+        )
+    if not cg01_dad_variants:
+        raise ValueError("Fallout 3 stage-65 CG01 Dad variant matrix is empty")
 
     document: dict[str, object] = {
         "schema": OUTPUT_SCHEMA,
-        "status": "prepared-owned-materials-doctor-cg00-dad-and-cg01-dad-not-yet-rendered",
+        "status": "prepared-owned-materials-and-stage65-cg01-dad-matrix-not-yet-rendered",
         "recipe": {
             "id": _required_string(recipe, "id"),
             "path": str(recipe_path.resolve()),
@@ -988,10 +1124,10 @@ def prepare(
                 "CG00 package idle selection is not implemented"
             ),
         },
-        "cg01DadActor": {
-            "source": "source-stage-0-CG01Dad-ACHR-NPC-raw-authored-appearance",
-            "scene": _cache_relative_derivative(cache_root, cg01_dad_scene_path),
-            "sha256": _sha256_file(cg01_dad_scene_path),
+        "cg01DadActors": {
+            "schema": "opennv-fo3-cg01-dad-stage65-matrix/v1",
+            "source": "source-stage-65-CG01Dad-MatchRace-and-MatchFaceGeometry",
+            "stage65AppearanceSha256": stage65_sha256,
             "recipe": {
                 "id": _required_string(cg01_dad_actor_recipe, "id"),
                 "path": str(cg01_dad_actor_recipe_path.resolve()),
@@ -1007,13 +1143,6 @@ def prepare(
                     cg01_dad_base, "recordSha256"
                 ),
             },
-            "reference": cg01_dad_reference,
-            "actor": cg01_dad_identity,
-            "coverage": cg01_dad_coverage,
-            "bodySurfaceTextureSource": _required_string(
-                cg01_dad_manifest, "bodySurfaceTextureSource"
-            ),
-            "bodyModPolicy": _required_string(cg01_dad_manifest, "bodyModPolicy"),
             "startMarker": {
                 "referenceFormId": _required_string(cg01_dad_marker, "formId"),
                 "referenceRecordSha256": _required_sha256(
@@ -1045,8 +1174,15 @@ def prepare(
             },
             "poseAuthority": (
                 "owned mtidle compiler input and exact CG01 stage-0 MoveTo marker; "
-                "stage-5 enable is runtime-applied; stage-65 matched race and FaceGen "
-                "geometry are not applied to this raw authored actor"
+                "stage-5 enable is runtime-applied; stage-65 MatchRace and 50-percent "
+                "player MatchFaceGeometry are compiled before actor visibility"
+            ),
+            "variants": sorted(
+                cg01_dad_variants,
+                key=lambda value: (
+                    str(value["playerRaceFormId"]),
+                    str(value["playerSex"]),
+                ),
             ),
         },
         "presentation": {
@@ -1077,6 +1213,7 @@ def prepare(
             "authoredTextureBindingRequests": sum(len(rows) for rows in binding_uses.values()),
             "resolvedUniqueTextures": len(texture_artifacts),
             "unresolvedUniqueTextures": len(unresolved_texture_bindings),
+            "cg01DadStage65Variants": len(cg01_dad_variants),
             "excludedReferencesByReason": dict(sorted(excluded.items())),
         },
         "nonPresentationAssets": non_presentation,
@@ -1086,6 +1223,7 @@ def prepare(
             "doctorActorPrepared": True,
             "dadActorPrepared": True,
             "cg01DadActorPrepared": True,
+            "cg01DadStage65AppearanceCompiled": True,
             "runtimeManifestValidated": False,
             "runtimeSceneConstructed": False,
             "rendered": False,

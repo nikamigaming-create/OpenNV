@@ -23,6 +23,7 @@ internal sealed record Fo3Vault101BirthSceneCoverage(
     Fo3Vault101ActorGrounding DadGrounding,
     CellReferenceLedger.Geometry DadActorGeometry,
     int ProofLitDadActorMaterials,
+    Fo3Vault101Cg01DadActorVariant Cg01DadAppearance,
     CellActorLoader.PlacedActor Cg01DadActor,
     Fo3Vault101ActorGrounding Cg01DadGrounding,
     CellReferenceLedger.Geometry Cg01DadActorGeometry,
@@ -51,8 +52,10 @@ internal static class Fo3Vault101BirthScene
 {
     internal static Fo3Vault101BirthSceneCoverage Build(
         Node3D host,
-        Fo3Vault101BirthPresentationContract contract)
+        Fo3Vault101BirthPresentationContract contract,
+        Fo3Vault101Cg01DadActorVariant cg01DadAppearance)
     {
+        var cg01DadContract = cg01DadAppearance.Actor;
         using var presentationDocument = JsonDocument.Parse(
             File.ReadAllBytes(contract.ManifestPath));
         var presentation = presentationDocument.RootElement;
@@ -260,7 +263,7 @@ internal static class Fo3Vault101BirthScene
                 "CG00 Dad");
 
             var cg01DadActor = CellActorLoader.Load(
-                    contract.Cg01DadActor.ScenePath,
+                    cg01DadContract.ScenePath,
                     new HashSet<string>([contract.CellFormId], StringComparer.OrdinalIgnoreCase),
                     root,
                     contract.EntryPositionGameUnits,
@@ -268,38 +271,38 @@ internal static class Fo3Vault101BirthScene
                     proofEnableInitiallyDisabled: true)
                 ?? throw new InvalidOperationException(
                     "Fallout 3 CG01 Dad stage-5 actor was not proof-enabled.");
-            if (cg01DadActor.ReferenceFormId != contract.Cg01DadActor.ReferenceFormId ||
-                cg01DadActor.BaseFormId != contract.Cg01DadActor.BaseFormId ||
-                cg01DadActor.RaceFormId != contract.Cg01DadActor.RaceFormId ||
-                cg01DadActor.HairFormId != contract.Cg01DadActor.HairFormId ||
-                cg01DadActor.EyesFormId != contract.Cg01DadActor.EyesFormId ||
+            if (cg01DadActor.ReferenceFormId != cg01DadContract.ReferenceFormId ||
+                cg01DadActor.BaseFormId != cg01DadContract.BaseFormId ||
+                cg01DadActor.RaceFormId != cg01DadContract.RaceFormId ||
+                cg01DadActor.HairFormId != cg01DadContract.HairFormId ||
+                cg01DadActor.EyesFormId != cg01DadContract.EyesFormId ||
                 !cg01DadActor.HeadPartFormIds.SequenceEqual(
-                    contract.Cg01DadActor.HeadPartFormIds) ||
+                    cg01DadContract.HeadPartFormIds) ||
                 !cg01DadActor.OutfitFormIds.SequenceEqual(
-                    contract.Cg01DadActor.OutfitFormIds) ||
+                    cg01DadContract.OutfitFormIds) ||
                 !cg01DadActor.Placement.Position.IsEqualApprox(
-                    contract.Cg01DadActor.AuthoredPositionGodotGameUnits) ||
+                    cg01DadContract.AuthoredPositionGodotGameUnits) ||
                 !cg01DadActor.Placement.Quaternion.IsEqualApprox(
-                    contract.Cg01DadActor.AuthoredRotationGodotQuaternion) ||
+                    cg01DadContract.AuthoredRotationGodotQuaternion) ||
                 !cg01DadActor.Placement.Scale.IsEqualApprox(
-                    Vector3.One * contract.Cg01DadActor.Scale) ||
-                cg01DadActor.Actor.AuthoredSurfaces != contract.Cg01DadActor.Surfaces ||
-                cg01DadActor.Actor.AuthoredTextures != contract.Cg01DadActor.Textures ||
-                cg01DadActor.Actor.Surfaces.Count != contract.Cg01DadActor.Surfaces ||
+                    Vector3.One * cg01DadContract.Scale) ||
+                cg01DadActor.Actor.AuthoredSurfaces != cg01DadContract.Surfaces ||
+                cg01DadActor.Actor.AuthoredTextures != cg01DadContract.Textures ||
+                cg01DadActor.Actor.Surfaces.Count != cg01DadContract.Surfaces ||
                 cg01DadActor.Actor.AnimationLogicalPath !=
-                    contract.Cg01DadActor.IdleAnimationPath)
+                    cg01DadContract.IdleAnimationPath)
                 throw new InvalidOperationException(
-                    "Fallout 3 CG01 Dad runtime actor differs from its provisional owned contract.");
+                    "Fallout 3 CG01 Dad runtime actor differs from its stage-65 contract.");
             cg01DadActor.Placement.Position =
-                contract.Cg01DadActor.StartMarkerPositionGodotGameUnits;
+                cg01DadContract.StartMarkerPositionGodotGameUnits;
             cg01DadActor.Placement.Quaternion =
-                contract.Cg01DadActor.StartMarkerRotationGodotQuaternion;
+                cg01DadContract.StartMarkerRotationGodotQuaternion;
             var cg01DadGrounding = GroundActor(
                 root,
                 cg01DadActor,
-                contract.Cg01DadActor.StartMarkerPositionGodotGameUnits,
-                contract.Cg01DadActor.StartMarkerRotationGodotQuaternion,
-                contract.Cg01DadActor.Scale,
+                cg01DadContract.StartMarkerPositionGodotGameUnits,
+                cg01DadContract.StartMarkerRotationGodotQuaternion,
+                cg01DadContract.Scale,
                 contract,
                 "CG01 Dad");
 
@@ -407,11 +410,11 @@ internal static class Fo3Vault101BirthScene
                 cg01DadGrounding.GroundedBounds.GetCenter());
             if (!cg01DadActorGeometry.RenderLayerVisible ||
                 !cg01DadActorGeometry.AabbValid ||
-                cg01DadActorGeometry.Surfaces != contract.Cg01DadActor.Surfaces ||
+                cg01DadActorGeometry.Surfaces != cg01DadContract.Surfaces ||
                 cg01DadActorGeometry.Vertices <= 0 ||
                 cg01DadActorGeometry.Triangles <= 0)
                 throw new InvalidOperationException(
-                    "Fallout 3 CG01 Dad provisional actor geometry is incomplete.");
+                    "Fallout 3 CG01 Dad stage-65 actor geometry is incomplete.");
             cg01DadActor.Placement.Visible = false;
             cg01DadActor.Placement.ProcessMode = Node.ProcessModeEnum.Disabled;
             if (meshInstances == 0 || surfaces == 0 || vertices == 0 || triangles == 0 ||
@@ -438,6 +441,7 @@ internal static class Fo3Vault101BirthScene
                 dadGrounding,
                 dadActorGeometry,
                 proofLitDadActorMaterials,
+                cg01DadAppearance,
                 cg01DadActor,
                 cg01DadGrounding,
                 cg01DadActorGeometry,

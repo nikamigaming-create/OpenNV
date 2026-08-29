@@ -737,15 +737,18 @@ internal partial class Fo3OpeningFlow : CanvasLayer
              !_birthPresentation.DadActor.ReferenceFormId.Equals(
                  _profile.Stage100Transition.DisabledDad.FormId,
                  StringComparison.OrdinalIgnoreCase) ||
-             !_birthPresentation.Cg01DadActor.ReferenceFormId.Equals(
-                 _profile.Cg01Stage0Transition.Dad.FormId,
-                 StringComparison.OrdinalIgnoreCase) ||
-             !_birthPresentation.Cg01DadActor.BaseFormId.Equals(
-                 _profile.Cg01Stage0Transition.Dad.BaseFormId,
-                 StringComparison.OrdinalIgnoreCase) ||
-             !_birthPresentation.Cg01DadActor.StartMarkerReferenceFormId.Equals(
-                 _profile.Cg01Stage0Transition.DadStartMarker.FormId,
-                 StringComparison.OrdinalIgnoreCase)))
+             _birthPresentation.Cg01DadActors.Count !=
+                 _profile.Stage65Appearance.SelectionResults.Count ||
+             _birthPresentation.Cg01DadActors.Values.Any(value =>
+                 !value.Actor.ReferenceFormId.Equals(
+                     _profile.Cg01Stage0Transition.Dad.FormId,
+                     StringComparison.OrdinalIgnoreCase) ||
+                 !value.Actor.BaseFormId.Equals(
+                     _profile.Cg01Stage0Transition.Dad.BaseFormId,
+                     StringComparison.OrdinalIgnoreCase) ||
+                 !value.Actor.StartMarkerReferenceFormId.Equals(
+                     _profile.Cg01Stage0Transition.DadStartMarker.FormId,
+                     StringComparison.OrdinalIgnoreCase))))
             throw new InvalidOperationException(
                 "Fallout 3 stage-62 package or stage-100 Dad does not join the owned Vault 101 scene.");
         _runAppearanceProof = runAppearanceProof;
@@ -1542,7 +1545,15 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Vault101BirthSceneCoverage coverage;
         try
         {
-            coverage = Fo3Vault101BirthScene.Build(previewHost, contract);
+            var cg01DadAppearance = contract.Cg01DadActorFor(
+                selection.Race.FormId,
+                sex.EngineSex,
+                stage65 ?? throw new InvalidOperationException(
+                    "Fallout 3 stage-65 appearance state is absent."));
+            coverage = Fo3Vault101BirthScene.Build(
+                previewHost,
+                contract,
+                cg01DadAppearance);
         }
         catch
         {
@@ -1992,7 +2003,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     {
         var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
             "Fallout 3 CG01 stage-5 presentation has no owned Vault 101 scene.");
-        var rawMarker = coverage.Contract.Cg01DadActor.StartMarkerPositionGodotGameUnits;
+        var appearance = coverage.Cg01DadAppearance;
+        var actorContract = appearance.Actor;
+        var rawMarker = actorContract.StartMarkerPositionGodotGameUnits;
         var groundedMarker = coverage.Cg01DadGrounding.PresentationPlacementGodotGameUnits;
         if (!coverage.Cg01DadActor.ReferenceFormId.Equals(
                 stage5.Dad.Reference.FormId,
@@ -2010,13 +2023,22 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 rawMarker.Y +
                     coverage.Cg01DadGrounding.VerticalCorrectionGodotGameUnits) ||
             !coverage.Cg01DadActor.Placement.Quaternion.IsEqualApprox(
-                coverage.Contract.Cg01DadActor.StartMarkerRotationGodotQuaternion))
+                actorContract.StartMarkerRotationGodotQuaternion))
             throw new InvalidOperationException(
                 "Fallout 3 CG01 stage-5 Dad actor or MoveTo marker differs.");
         var matchedAppearance = stage65.Parents.Single(value =>
             value.ReferenceFormId.Equals(
                 stage5.Dad.Reference.FormId,
                 StringComparison.OrdinalIgnoreCase));
+        if (actorContract.RaceFormId != matchedAppearance.RaceFormId ||
+            appearance.SymmetricGeometrySha256 !=
+                matchedAppearance.SymmetricGeometrySha256 ||
+            appearance.AsymmetricGeometrySha256 !=
+                matchedAppearance.AsymmetricGeometrySha256 ||
+            appearance.SymmetricTextureSha256 !=
+                matchedAppearance.SymmetricTextureSha256)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad stage-65 geometry was not applied before visibility.");
         coverage.DoctorActor.Placement.Visible = false;
         coverage.DoctorActor.Placement.ProcessMode = ProcessModeEnum.Disabled;
         coverage.DadActor.Placement.Visible = false;
@@ -2033,7 +2055,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"rawMarker={rawMarker} groundedMarker={groundedMarker} " +
             $"groundingDelta={coverage.Cg01DadGrounding.VerticalCorrectionGodotGameUnits:F6} " +
             $"enabled={(stage5.Dad.Enabled ? 1 : 0)} previousDoctorVisible=0 " +
-            $"previousCg00DadVisible=0 appearance=provisional-stage65-unapplied " +
+            $"previousCg00DadVisible=0 " +
+            $"appearance=source-stage65-match-race-50-percent-facegen-applied " +
             $"matchedRace={matchedAppearance.RaceFormId} " +
             $"matchedFace={matchedAppearance.SymmetricGeometrySha256}");
     }
@@ -2067,7 +2090,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             !_cg01DadDialogueGeometry.RenderLayerVisible ||
             !_cg01DadDialogueGeometry.AabbValid ||
             !_cg01DadDialogueGeometry.FrustumIntersection ||
-            _cg01DadDialogueGeometry.Surfaces != coverage.Contract.Cg01DadActor.Surfaces ||
+            _cg01DadDialogueGeometry.Surfaces !=
+                coverage.Cg01DadAppearance.Actor.Surfaces ||
             _cg01DadDialogueGeometry.Vertices <= 0 ||
             _cg01DadDialogueGeometry.Triangles <= 0)
             throw new InvalidOperationException(
@@ -2420,7 +2444,14 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _worldHost.AddChild(previewHost);
         try
         {
-            _vaultBirthCoverage = Fo3Vault101BirthScene.Build(previewHost, presentation);
+            var cg01DadAppearance = presentation.Cg01DadActorFor(
+                context.Selection.Race.FormId,
+                context.Sex.EngineSex,
+                context.Stage65);
+            _vaultBirthCoverage = Fo3Vault101BirthScene.Build(
+                previewHost,
+                presentation,
+                cg01DadAppearance);
         }
         catch
         {
@@ -2438,7 +2469,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"collisionBodies={_vaultBirthCoverage.AuthoredCollisionBodies} " +
             $"cg01DadPrepared=1 cg01Dad={_vaultBirthCoverage.Cg01DadActor.ReferenceFormId} " +
             "cg01DadVisible=0 stage5PresentationApplied=0 " +
-            "appearance=provisional-stage65-unapplied");
+            "appearance=source-stage65-match-race-50-percent-facegen-applied");
     }
 
     private void CompleteCg01ToddlerTrigger(
@@ -3006,8 +3037,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             "Saved Fallout 3 birth runtime has no owned presentation contract.");
         var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
             "Saved Fallout 3 birth runtime has no constructed presentation.");
+        var cg01DadAppearance = coverage.Cg01DadAppearance;
+        var cg01DadActor = cg01DadAppearance.Actor;
         var transition = _profile.Section4Transition;
-        if (RequiredSaveString(source, "schema") != "opennv-fo3-cg00-birth-runtime/v1" ||
+        if (RequiredSaveString(source, "schema") != "opennv-fo3-cg00-birth-runtime/v2" ||
             RequiredSaveString(source, "cellFormId") != contract.CellFormId ||
             RequiredSaveString(source, "entryReferenceFormId") != contract.EntryReferenceFormId ||
             RequiredSaveString(source, "doctorLiReferenceFormId") !=
@@ -3015,9 +3048,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             RequiredSaveString(source, "dadReferenceFormId") !=
                 contract.DadActor.ReferenceFormId ||
             RequiredSaveString(source, "cg01DadReferenceFormId") !=
-                contract.Cg01DadActor.ReferenceFormId ||
+                cg01DadActor.ReferenceFormId ||
             !RequiredSaveVector3(source, "cg01DadRawMarkerPositionGodotGameUnits")
-                .IsEqualApprox(contract.Cg01DadActor.StartMarkerPositionGodotGameUnits) ||
+                .IsEqualApprox(cg01DadActor.StartMarkerPositionGodotGameUnits) ||
             !RequiredSaveVector3(source, "cg01DadPresentationPositionGodotGameUnits")
                 .IsEqualApprox(
                     coverage.Cg01DadGrounding.PresentationPlacementGodotGameUnits) ||
@@ -3025,7 +3058,18 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 RequiredSaveSingle(source, "cg01DadGroundingCorrectionGodotGameUnits"),
                 coverage.Cg01DadGrounding.VerticalCorrectionGodotGameUnits) ||
             RequiredSaveString(source, "cg01DadAppearance") !=
-                "provisional-raw-owned-stage65-match-unapplied" ||
+                "source-stage65-match-race-50-percent-facegen-applied" ||
+            RequiredSaveString(source, "cg01DadPlayerRaceFormId") !=
+                cg01DadAppearance.PlayerRaceFormId ||
+            RequiredSaveString(source, "cg01DadPlayerSex") != cg01DadAppearance.PlayerSex ||
+            RequiredSaveString(source, "cg01DadSceneSha256") !=
+                cg01DadActor.SceneSha256 ||
+            RequiredSaveString(source, "cg01DadSymmetricGeometrySha256") !=
+                cg01DadAppearance.SymmetricGeometrySha256 ||
+            RequiredSaveString(source, "cg01DadAsymmetricGeometrySha256") !=
+                cg01DadAppearance.AsymmetricGeometrySha256 ||
+            RequiredSaveString(source, "cg01DadSymmetricTextureSha256") !=
+                cg01DadAppearance.SymmetricTextureSha256 ||
             RequiredSaveString(source, "beginEventIdleFormId") !=
                 transition.BeginEventIdleFormId ||
             RequiredSaveString(source, "changeEventIdleFormId") !=
@@ -3050,20 +3094,22 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             "Fallout 3 birth runtime has no owned presentation contract.");
         var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
             "Fallout 3 birth runtime has no constructed presentation.");
+        var cg01DadAppearance = coverage.Cg01DadAppearance;
+        var cg01DadActor = cg01DadAppearance.Actor;
         var transition = _profile.Section4Transition;
         return new Dictionary<string, object?>
         {
-            ["schema"] = "opennv-fo3-cg00-birth-runtime/v1",
+            ["schema"] = "opennv-fo3-cg00-birth-runtime/v2",
             ["cellFormId"] = contract.CellFormId,
             ["entryReferenceFormId"] = contract.EntryReferenceFormId,
             ["doctorLiReferenceFormId"] = contract.DoctorActor.ReferenceFormId,
             ["dadReferenceFormId"] = contract.DadActor.ReferenceFormId,
-            ["cg01DadReferenceFormId"] = contract.Cg01DadActor.ReferenceFormId,
+            ["cg01DadReferenceFormId"] = cg01DadActor.ReferenceFormId,
             ["cg01DadRawMarkerPositionGodotGameUnits"] = new[]
             {
-                contract.Cg01DadActor.StartMarkerPositionGodotGameUnits.X,
-                contract.Cg01DadActor.StartMarkerPositionGodotGameUnits.Y,
-                contract.Cg01DadActor.StartMarkerPositionGodotGameUnits.Z,
+                cg01DadActor.StartMarkerPositionGodotGameUnits.X,
+                cg01DadActor.StartMarkerPositionGodotGameUnits.Y,
+                cg01DadActor.StartMarkerPositionGodotGameUnits.Z,
             },
             ["cg01DadPresentationPositionGodotGameUnits"] = new[]
             {
@@ -3074,7 +3120,16 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             ["cg01DadGroundingCorrectionGodotGameUnits"] =
                 coverage.Cg01DadGrounding.VerticalCorrectionGodotGameUnits,
             ["cg01DadAppearance"] =
-                "provisional-raw-owned-stage65-match-unapplied",
+                "source-stage65-match-race-50-percent-facegen-applied",
+            ["cg01DadPlayerRaceFormId"] = cg01DadAppearance.PlayerRaceFormId,
+            ["cg01DadPlayerSex"] = cg01DadAppearance.PlayerSex,
+            ["cg01DadSceneSha256"] = cg01DadActor.SceneSha256,
+            ["cg01DadSymmetricGeometrySha256"] =
+                cg01DadAppearance.SymmetricGeometrySha256,
+            ["cg01DadAsymmetricGeometrySha256"] =
+                cg01DadAppearance.AsymmetricGeometrySha256,
+            ["cg01DadSymmetricTextureSha256"] =
+                cg01DadAppearance.SymmetricTextureSha256,
             ["beginEventIdleFormId"] = transition.BeginEventIdleFormId,
             ["endEventIdleFormId"] = transition.EndEventIdleFormId,
             ["changeEventIdleFormId"] = transition.ChangeEventIdleFormId,
@@ -3772,7 +3827,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         var cues = _profile.Cg01Stage10Transition.DialogueFor(engineSex);
         var report = new
         {
-            schema = "opennv-fo3-cg01-runtime-proof/v5",
+            schema = "opennv-fo3-cg01-runtime-proof/v6",
             profileId = _profile.ProfileId,
             profileSha256 = _profile.Sha256,
             phase,
@@ -3812,16 +3867,16 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 referenceFormId = _vaultBirthCoverage?.Cg01DadActor.ReferenceFormId,
                 baseFormId = _vaultBirthCoverage?.Cg01DadActor.BaseFormId,
                 startMarkerReferenceFormId =
-                    _vaultBirthCoverage?.Contract.Cg01DadActor.StartMarkerReferenceFormId,
+                    _vaultBirthCoverage?.Cg01DadAppearance.Actor.StartMarkerReferenceFormId,
                 rawMarkerPositionGodotGameUnits = _vaultBirthCoverage is null
                     ? null
                     : new[]
                     {
-                        _vaultBirthCoverage.Contract.Cg01DadActor
+                        _vaultBirthCoverage.Cg01DadAppearance.Actor
                             .StartMarkerPositionGodotGameUnits.X,
-                        _vaultBirthCoverage.Contract.Cg01DadActor
+                        _vaultBirthCoverage.Cg01DadAppearance.Actor
                             .StartMarkerPositionGodotGameUnits.Y,
-                        _vaultBirthCoverage.Contract.Cg01DadActor
+                        _vaultBirthCoverage.Cg01DadAppearance.Actor
                             .StartMarkerPositionGodotGameUnits.Z,
                     },
                 presentationPositionGodotGameUnits = _vaultBirthCoverage is null
@@ -3845,9 +3900,18 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 activeCameraName = _vaultBirthCoverage?.Camera.Name.ToString(),
                 activeCameraFramesDad = _cg01DadDialogueGeometry?.FrustumIntersection,
                 activeCameraDadSurfaces = _cg01DadDialogueGeometry?.Surfaces,
-                appearance = "provisional-raw-owned-stage65-match-unapplied",
-                stage65MatchedRaceApplied = false,
-                stage65MatchedFaceGeometryApplied = false,
+                appearance = "source-stage65-match-race-50-percent-facegen-applied",
+                playerRaceFormId = _vaultBirthCoverage?.Cg01DadAppearance.PlayerRaceFormId,
+                playerSex = _vaultBirthCoverage?.Cg01DadAppearance.PlayerSex,
+                sceneSha256 = _vaultBirthCoverage?.Cg01DadAppearance.Actor.SceneSha256,
+                symmetricGeometrySha256 =
+                    _vaultBirthCoverage?.Cg01DadAppearance.SymmetricGeometrySha256,
+                asymmetricGeometrySha256 =
+                    _vaultBirthCoverage?.Cg01DadAppearance.AsymmetricGeometrySha256,
+                symmetricTextureSha256 =
+                    _vaultBirthCoverage?.Cg01DadAppearance.SymmetricTextureSha256,
+                stage65MatchedRaceApplied = true,
+                stage65MatchedFaceGeometryApplied = true,
             },
             stage10Commands = new
             {

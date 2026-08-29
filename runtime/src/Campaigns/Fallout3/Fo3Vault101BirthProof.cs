@@ -53,6 +53,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
             var contract = Fo3Vault101BirthPresentationContract.Load(
                 profile.BirthSlice,
                 profile.Cg01Stage0Transition,
+                profile.Stage65Appearance,
                 presentationPath);
             var handoff = profile.Section4Transition;
             if (handoff.SourceStage != profile.Appearance.AcceptedStage ||
@@ -61,7 +62,19 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
                     "Fallout 3 stage-62 package location does not join the owned player marker.");
-            var coverage = Fo3Vault101BirthScene.Build(this, contract);
+            var proofSex = profile.SexChoices.Single(value => value.EngineSex == "male");
+            var proofSelection = profile.Appearance.DefaultSelection(proofSex.EngineSex);
+            var proofStage65 = profile.Stage65Appearance.Apply(
+                proofSex.EngineSex,
+                proofSelection.Race.FormId,
+                proofSelection.Sex.FaceGen);
+            var coverage = Fo3Vault101BirthScene.Build(
+                this,
+                contract,
+                contract.Cg01DadActorFor(
+                    proofSelection.Race.FormId,
+                    proofSex.EngineSex,
+                    proofStage65));
             for (var frame = 0; frame < WarmupFrames; frame++)
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
 

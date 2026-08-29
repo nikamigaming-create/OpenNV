@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
+import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
@@ -85,6 +87,65 @@ RETAIL_ROLE_BY_COMPONENT_ROLE = {
     "tongue": "headPart",
     "hair": "hair",
 }
+SHA256_HEX_CHARACTERS = 64
+
+
+@dataclass(frozen=True)
+class ActorAppearanceOverride:
+    """Exact source-authored runtime appearance for one actor derivative."""
+
+    variant_id: str
+    authority: str
+    source_sha256: str
+    reference_form_id: int
+    base_form_id: int
+    race_form_id: int
+    symmetric_geometry: tuple[float, ...]
+    asymmetric_geometry: tuple[float, ...]
+    symmetric_texture: tuple[float, ...]
+
+
+def _facegen_values_sha256(values: tuple[float, ...]) -> str:
+    return hashlib.sha256(struct.pack(f"<{len(values)}f", *values)).hexdigest()
+
+
+def _validate_appearance_override(
+    override: ActorAppearanceOverride,
+    reference: ActorReference,
+    actor: HumanoidActor,
+    catalog: ActorCatalog,
+) -> None:
+    if (
+        not override.variant_id
+        or any(
+            character not in "abcdefghijklmnopqrstuvwxyz0123456789-"
+            for character in override.variant_id
+        )
+        or not override.authority
+        or len(override.source_sha256) != SHA256_HEX_CHARACTERS
+        or any(character not in "0123456789abcdef" for character in override.source_sha256)
+    ):
+        raise ValueError("Actor appearance override identity is invalid")
+    if (
+        override.reference_form_id != reference.form_id
+        or override.base_form_id != actor.form_id
+        or override.race_form_id not in catalog.races
+    ):
+        raise ValueError("Actor appearance override record identity differs")
+    expected_counts = (
+        FACEGEN_SYMMETRIC_GEOMETRY_FLOATS,
+        FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS,
+        FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
+    )
+    values = (
+        override.symmetric_geometry,
+        override.asymmetric_geometry,
+        override.symmetric_texture,
+    )
+    if tuple(len(row) for row in values) != expected_counts or any(
+        not math.isfinite(value) for row in values for value in row
+    ):
+        raise ValueError("Actor appearance override FaceGen coordinates are invalid")
 
 
 def file_sha256(path: Path) -> str:
@@ -655,6 +716,7 @@ def prepare_actor(
     runtime_animation_objects: Sequence[dict[str, object]] = (),
     runtime_accumulation_root_animations: dict[str, str] | None = None,
     family_compiler: dict[str, str] | None = None,
+    appearance_override: ActorAppearanceOverride | None = None,
 ) -> dict[str, object]:
     recipe = load_recipe(recipe_id) if recipe_document is None else recipe_document
     if recipe.get("schema") != RECIPE_SCHEMA or not str(recipe.get("id", "")).strip():
@@ -668,9 +730,9 @@ def prepare_actor(
     )
     base_record_type = str(recipe.get("baseRecordType", HUMANOID_BASE_RECORD_TYPE))
     if reference_record_type == CREATURE_REFERENCE_RECORD_TYPE:
-        if runtime_accumulation_root_animations:
+        if runtime_accumulation_root_animations or appearance_override is not None:
             raise ValueError(
-                "Creature runtime accumulation-root retention is unsupported"
+                "Creature runtime accumulation-root retention or appearance override is unsupported"
             )
         return _prepare_creature_actor(
             cache_root,
@@ -703,6 +765,8 @@ def prepare_actor(
             "Actor recipe reference resolves another base: "
             f"expected={form_id(str(expected_base)):08x} actual={actor.form_id:08x}"
         )
+    if appearance_override is not None:
+        _validate_appearance_override(appearance_override, reference, actor, catalog)
     if "actorState" in recipe:
         raise ValueError(
             "Per-actor compiler state is unsupported; use the shared owned-animation profile"
@@ -760,7 +824,12 @@ def prepare_actor(
         origin = tuple(float(value) for value in configured_origin)
         if len(origin) != 3:
             raise ValueError("Actor recipe originGameUnits must contain three values")
-    race = catalog.races.get(actor.race_form_id)
+    appearance_race_form_id = (
+        actor.race_form_id
+        if appearance_override is None
+        else appearance_override.race_form_id
+    )
+    race = catalog.races.get(appearance_race_form_id)
     head_models = race.female_head_models if actor.female and race is not None else (
         race.male_head_models if race is not None else ()
     )
@@ -868,19 +937,32 @@ def prepare_actor(
         FACEGEN_SYMMETRIC_TEXTURE_FLOATS,
     ):
         raise ValueError("Proof actor race has incomplete sex-specific FaceGen baseline coordinates")
-    symmetric_geometry = compose_facegen_coordinates(
-        actor.face_symmetric_geometry,
-        race_face_symmetric_geometry,
+    symmetric_geometry = (
+        compose_facegen_coordinates(
+            actor.face_symmetric_geometry,
+            race_face_symmetric_geometry,
+        )
+        if appearance_override is None
+        else appearance_override.symmetric_geometry
     )
-    asymmetric_geometry = compose_facegen_coordinates(
-        actor.face_asymmetric_geometry,
-        race_face_asymmetric_geometry,
+    asymmetric_geometry = (
+        compose_facegen_coordinates(
+            actor.face_asymmetric_geometry,
+            race_face_asymmetric_geometry,
+        )
+        if appearance_override is None
+        else appearance_override.asymmetric_geometry
+    )
+    symmetric_texture = (
+        actor.face_symmetric_texture
+        if appearance_override is None
+        else appearance_override.symmetric_texture
     )
     texture_owner = master.name.casefold()
     face_mod_path = (
         f"textures\\characters\\facemods\\{texture_owner}\\{actor.form_id:08x}_0.dds"
     )
-    if has_texture(texture_archives, face_mod_path):
+    if appearance_override is None and has_texture(texture_archives, face_mod_path):
         face_detail_path = face_mod_path
         generated_face_detail = None
         face_detail_source = "retail-precomputed"
@@ -888,7 +970,7 @@ def prepare_actor(
         face_detail_path = None
         generated_face_detail = synthesize_texture_detail(
             mesh(head_egt),
-            actor.face_symmetric_texture,
+            symmetric_texture,
         )
         face_detail_source = "direct-egt-synthesis"
     head_diffuse_path = texture_member(head_texture)
@@ -913,7 +995,7 @@ def prepare_actor(
         "owned-race-base-diffuse-when-precomputed-absent",
     }:
         raise ValueError(f"Unsupported actor body-mod policy: {body_mod_policy}")
-    if has_texture(texture_archives, body_mod_path):
+    if appearance_override is None and has_texture(texture_archives, body_mod_path):
         body_mod = decode_dds(extract_texture(texture_archives, body_mod_path), False)
         body_surface_texture_source = "retail-precomputed-body-mod-composite"
     elif (
@@ -1170,7 +1252,12 @@ def prepare_actor(
             )
         )
 
-    output_root = cache_root / "generated" / "actors" / recipe_id
+    output_identity = (
+        recipe_id
+        if appearance_override is None
+        else f"{recipe_id}-{appearance_override.variant_id}"
+    )
+    output_root = cache_root / "generated" / "actors" / output_identity
     gltf_path = output_root / "actor.gltf"
     sidecar_path = output_root / "actor.opennv.json"
     for row in recipe.get("additionalAnimations", []):
@@ -1229,13 +1316,37 @@ def prepare_actor(
                 actor.form_id
             ],
             "female": actor.female,
-            "raceFormId": f"{actor.race_form_id:08x}",
+            "raceFormId": f"{appearance_race_form_id:08x}",
             "hairFormId": f"{actor.hair_form_id:08x}",
             "eyesFormId": f"{actor.eyes_form_id:08x}",
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
             "outfitFormIds": [f"{outfit_form:08x}" for outfit_form in outfit_forms],
             "recordType": HUMANOID_BASE_RECORD_TYPE,
         },
+        **(
+            {
+                "appearanceOverride": {
+                    "variantId": appearance_override.variant_id,
+                    "authority": appearance_override.authority,
+                    "sourceSha256": appearance_override.source_sha256,
+                    "referenceFormId": f"{appearance_override.reference_form_id:08x}",
+                    "baseFormId": f"{appearance_override.base_form_id:08x}",
+                    "authoredRaceFormId": f"{actor.race_form_id:08x}",
+                    "raceFormId": f"{appearance_override.race_form_id:08x}",
+                    "symmetricGeometrySha256": _facegen_values_sha256(
+                        appearance_override.symmetric_geometry
+                    ),
+                    "asymmetricGeometrySha256": _facegen_values_sha256(
+                        appearance_override.asymmetric_geometry
+                    ),
+                    "symmetricTextureSha256": _facegen_values_sha256(
+                        appearance_override.symmetric_texture
+                    ),
+                }
+            }
+            if appearance_override is not None
+            else {}
+        ),
         "idleAnimation": actor_animation_path,
         "retailPresentation": (
             {

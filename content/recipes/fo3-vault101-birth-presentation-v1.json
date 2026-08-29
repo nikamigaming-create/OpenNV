@@ -65,7 +65,6 @@
   "unsupported": [
     "Mom, player body, and all actors except Doctor Li, CG00 Dad, and CG01 Dad",
     "automatic CG00 dialogue timing, package state, and animation selection",
-    "CG01 Dad stage-65 matched race and FaceGen geometry presentation",
     "quest and package command execution",
     "CELL lighting and image-space effects",
     "collision and interaction",
