@@ -15,6 +15,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
     _compile_post_stage80_dialogue,
+    _compile_post_stage85_dialogue,
     _compile_stage65_appearance_contract,
     _float_contract,
 )
@@ -273,6 +274,125 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual(
             "fo3-cg00-post-stage-85-dialogue-trigger-not-compiled",
             transition["nextBoundary"],
+        )
+
+    def test_compiles_post_stage85_info_and_exact_stage90_result(self) -> None:
+        topic = Record(
+            "DIAL",
+            TOPIC_FORM,
+            0,
+            subrecord("EDID", b"CG00DadSpeech\0")
+            + subrecord("QSTI", struct.pack("<I", QUEST_FORM)),
+            (),
+        )
+        voice = Record(
+            "VTYP",
+            VOICE_FORM,
+            0,
+            subrecord("EDID", b"MaleUniqueDad\0"),
+            (),
+        )
+        info = Record(
+            "INFO",
+            0x0001F379,
+            0,
+            subrecord("QSTI", struct.pack("<I", QUEST_FORM))
+            + subrecord("NAM1", b"Hang on, Catherine! Hang on....\0")
+            + subrecord("CTDA", condition(427, VOICE_FORM))
+            + subrecord(
+                "CTDA",
+                condition(58, QUEST_FORM, operator_flags=0x60, comparison=80.0),
+            )
+            + subrecord("SCTX", b"setstage CG00 90\0")
+            + subrecord("NEXT"),
+            (GroupContext(struct.pack("<I", TOPIC_FORM), 7),),
+        )
+        quest_script = Record(
+            "SCPT",
+            0x0003A17C,
+            0,
+            subrecord("EDID", b"CG00SCRIPT\0")
+            + subrecord("SCTX", b"float timer\r\nshort runTimer\r\n\0"),
+            (),
+        )
+        image_space = Record(
+            "IMAD",
+            0x0002D14C,
+            0,
+            subrecord("EDID", b"FadeToWhiteAndBackISFX\0")
+            + subrecord("DNAM", struct.pack("<If", 1, 8.0))
+            + subrecord(
+                "NAM3",
+                struct.pack(
+                    "<10f",
+                    0.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    0.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    0.0,
+                ),
+            ),
+            (),
+        )
+        sound = Record(
+            "SOUN",
+            0x000BC424,
+            0,
+            subrecord("EDID", b"QSTFadeToWhiteA\0")
+            + subrecord("FNAM", b"fx\\qst\\qst_fadetowhite_a.wav\0")
+            + subrecord("SNDD", bytes(36)),
+            (),
+        )
+        selection = {
+            "postStage85Dialogue": {
+                "topicEditorId": "CG00DadSpeech",
+                "topicFormId": f"{TOPIC_FORM:08x}",
+                "resultInfoFormId": "0001f379",
+                "minimumStage": 80,
+                "targetStage": 90,
+            }
+        }
+        stage90_source = "\n".join(
+            (
+                "set CG00.timer to 2.2",
+                "set CG00.runTimer to 1",
+                "imod FadeToWhiteAndBackISFX",
+                "playSound QSTFadeToWhiteA",
+            )
+        )
+
+        dialogue, transition = _compile_post_stage85_dialogue(
+            (topic, voice, info, quest_script, image_space, sound),
+            selection,
+            QUEST_FORM,
+            quest_script,
+            {90: [stage90_source]},
+        )
+
+        self.assertEqual("0001f379", dialogue["branches"][0]["infoFormId"])
+        self.assertEqual(1, dialogue["branches"][0]["continuationMarkerCount"])
+        self.assertEqual(90, dialogue["targetStage"])
+        self.assertEqual(
+            [
+                "setQuestVariable",
+                "setQuestVariable",
+                "applyImageSpaceModifier",
+                "playSound",
+            ],
+            [command["kind"] for command in transition["commands"]],
+        )
+        self.assertEqual(
+            "0002d14c",
+            transition["commands"][2]["modifier"]["formId"],
+        )
+        self.assertEqual(
+            "sound\\fx\\qst\\qst_fadetowhite_a.wav",
+            transition["commands"][3]["sound"]["logicalPath"],
         )
 
     def test_compiles_owned_package_activation_and_stops_before_stage_65(self) -> None:

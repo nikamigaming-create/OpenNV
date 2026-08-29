@@ -108,6 +108,13 @@
         "topicFormId": "0001f378",
         "resultInfoFormId": "0001f37b",
         "targetStage": 85
+      },
+      "postStage85Dialogue": {
+        "topicEditorId": "CG00DadSpeech",
+        "topicFormId": "0001f378",
+        "resultInfoFormId": "0001f379",
+        "minimumStage": 80,
+        "targetStage": 90
       }
     },
     "appearanceUi": {

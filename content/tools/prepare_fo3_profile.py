@@ -16,6 +16,7 @@ from pathlib import Path
 
 from actor_catalog import scan_actor_catalog
 from bsa_archive import BsaArchive, canonical_member_path
+from environment_catalog import parse_image_space_modifier
 from facegen import compose_facegen_coordinates
 from opening_catalog import _prepare_runtime_video
 from plugin_records import iter_plugin_records, iter_subrecords, zstring
@@ -49,6 +50,8 @@ ACTOR_BASE_RECORD = "NPC_"
 DIALOGUE_TOPIC_RECORD = "DIAL"
 DIALOGUE_INFO_RECORD = "INFO"
 VOICE_TYPE_RECORD = "VTYP"
+IMAGE_SPACE_MODIFIER_RECORD = "IMAD"
+SOUND_RECORD = "SOUN"
 PLAY_BINK_PATTERN = re.compile(r'\bplayBink\s+"(?P<path>[^"]+\.bik)"', re.IGNORECASE)
 SEX_CHANGE_PATTERN = re.compile(
     r"\b(?:if|elseif)\s+button\s*==\s*(?P<index>\d+)\s+"
@@ -83,6 +86,14 @@ PACKAGE_IDLE_TIMER_BYTES = 4
 PACKAGE_EVENT_NAMES = {"POBA": "begin", "POEA": "end", "POCA": "change"}
 SET_STAGE_PATTERN = re.compile(
     r"^setstage\s+(?P<quest>[A-Za-z_][A-Za-z0-9_]*)\s+(?P<stage>\d+)$",
+    re.IGNORECASE,
+)
+IMAGE_SPACE_MODIFIER_PATTERN = re.compile(
+    r"^imod\s+(?P<modifier>[A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+PLAY_SOUND_PATTERN = re.compile(
+    r"^playSound\s+(?P<sound>[A-Za-z_][A-Za-z0-9_]*)$",
     re.IGNORECASE,
 )
 SET_REFERENCE_VARIABLE_PATTERN = re.compile(
@@ -1140,6 +1151,40 @@ def _parse_stage80_commands(source: str) -> list[dict[str, object]]:
     return commands
 
 
+def _parse_stage90_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            raw_value = match.group("value")
+            value: int | float = float(raw_value) if "." in raw_value else int(raw_value)
+            commands.append(
+                {
+                    "kind": "setQuestVariable",
+                    "subject": match.group("subject"),
+                    "variable": match.group("variable"),
+                    "value": value,
+                }
+            )
+            continue
+        if match := IMAGE_SPACE_MODIFIER_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "applyImageSpaceModifier",
+                    "modifierEditorId": match.group("modifier"),
+                }
+            )
+            continue
+        if match := PLAY_SOUND_PATTERN.fullmatch(text):
+            commands.append(
+                {"kind": "playSound", "soundEditorId": match.group("sound")}
+            )
+            continue
+        raise ValueError(f"Fallout 3 CG00 stage 90 uses an unsupported command: {text}")
+    if len(commands) != 4:
+        raise ValueError("Fallout 3 CG00 stage 90 command count differs")
+    return commands
+
+
 def _compile_post_stage65_dialogue(
     records: tuple[object, ...],
     selection: dict[str, object],
@@ -1449,6 +1494,265 @@ def _compile_post_stage80_dialogue(
     return dialogue, transition
 
 
+def _compile_post_stage85_dialogue(
+    records: tuple[object, ...],
+    selection: dict[str, object],
+    quest_form_id: int,
+    quest_script: object,
+    stage_sources: dict[int, list[str]],
+) -> tuple[dict[str, object], dict[str, object]]:
+    definition = dict(selection["postStage85Dialogue"])
+    source_stage = 85
+    minimum_stage = int(definition["minimumStage"])
+    target_stage = int(definition["targetStage"])
+    topic_form_id = int(str(definition["topicFormId"]), FORM_ID_RADIX)
+    info_form_id = int(str(definition["resultInfoFormId"]), FORM_ID_RADIX)
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    topic = by_form.get(topic_form_id)
+    if (
+        topic is None
+        or topic.signature != DIALOGUE_TOPIC_RECORD
+        or (_editor_id(topic) or "").casefold()
+        != str(definition["topicEditorId"]).casefold()
+        or struct.unpack("<I", _single_subrecord(topic, "QSTI"))[0] != quest_form_id
+    ):
+        raise ValueError("Fallout 3 post-stage-85 dialogue topic identity differs")
+    info = by_form.get(info_form_id)
+    if info is None or info.signature != DIALOGUE_INFO_RECORD:
+        raise ValueError("Fallout 3 post-stage-85 result INFO is absent")
+    if not any(
+        group.group_type == DIALOGUE_CHILD_GROUP_TYPE
+        and group.label_u32 == topic_form_id
+        for group in info.groups
+    ):
+        raise ValueError("Fallout 3 post-stage-85 INFO topic ownership differs")
+    if struct.unpack("<I", _single_subrecord(info, "QSTI"))[0] != quest_form_id:
+        raise ValueError("Fallout 3 post-stage-85 INFO quest ownership differs")
+    continuation_count = sum(
+        1 for subrecord in iter_subrecords(info) if subrecord.signature == "NEXT"
+    )
+    if continuation_count != 1:
+        raise ValueError("Fallout 3 post-stage-85 INFO continuation marker differs")
+    source = _script_source(info)
+    source_commands = _source_commands(source)
+    if len(source_commands) != 1:
+        raise ValueError("Fallout 3 post-stage-85 INFO result is ambiguous")
+    match = SET_STAGE_PATTERN.fullmatch(source_commands[0])
+    if (
+        match is None
+        or match.group("quest").casefold() != "cg00"
+        or int(match.group("stage")) != target_stage
+    ):
+        raise ValueError("Fallout 3 post-stage-85 INFO result differs")
+
+    conditions = [
+        _dialogue_condition(subrecord.data)
+        for subrecord in iter_subrecords(info)
+        if subrecord.signature == "CTDA"
+    ]
+    if len(conditions) != 2:
+        raise ValueError("Fallout 3 post-stage-85 INFO conditions are incomplete")
+    by_function = {int(row["function"]): row for row in conditions}
+    if set(by_function) != {GET_STAGE_FUNCTION, GET_IS_VOICE_TYPE_FUNCTION}:
+        raise ValueError("Fallout 3 post-stage-85 INFO condition functions differ")
+    stage_condition = by_function[GET_STAGE_FUNCTION]
+    if (
+        stage_condition["operatorFlags"] != 0x60
+        or stage_condition["comparisonValue"] != float(minimum_stage)
+        or stage_condition["parameter1"] != quest_form_id
+        or stage_condition["parameter2"] != 0
+        or stage_condition["runOn"] != 0
+        or stage_condition["reference"] != 0
+        or minimum_stage >= source_stage
+    ):
+        raise ValueError("Fallout 3 post-stage-85 INFO quest-stage condition differs")
+    voice_condition = by_function[GET_IS_VOICE_TYPE_FUNCTION]
+    voice_form_id = int(voice_condition["parameter1"])
+    voice = by_form.get(voice_form_id)
+    if (
+        voice is None
+        or voice.signature != VOICE_TYPE_RECORD
+        or voice_condition["operatorFlags"] != 0
+        or voice_condition["comparisonValue"] != 1.0
+        or voice_condition["parameter2"] != 0
+        or voice_condition["runOn"] != 0
+        or voice_condition["reference"] != 0
+    ):
+        raise ValueError("Fallout 3 post-stage-85 INFO voice condition differs")
+    response_lines = [value for value in _text_values(info, "NAM1") if value]
+    if len(response_lines) != 1:
+        raise ValueError("Fallout 3 post-stage-85 response text is absent or ambiguous")
+    response_text = response_lines[0]
+
+    target_sources = stage_sources.get(target_stage, [])
+    if len(target_sources) != 1:
+        raise ValueError("Fallout 3 CG00 stage 90 result source is ambiguous")
+    target_source = target_sources[0]
+    source_stage_commands = _parse_stage90_commands(target_source)
+    expected_kinds = [
+        "setQuestVariable",
+        "setQuestVariable",
+        "applyImageSpaceModifier",
+        "playSound",
+    ]
+    if [str(command["kind"]) for command in source_stage_commands] != expected_kinds:
+        raise ValueError("Fallout 3 CG00 stage 90 command order differs")
+
+    quest_script_source = _script_source(quest_script)
+    quest_script_hash = hashlib.sha256(quest_script_source.encode("cp1252")).hexdigest()
+    resolved_commands = []
+    for index, command in enumerate(source_stage_commands):
+        kind = str(command["kind"])
+        if kind == "setQuestVariable":
+            if str(command["subject"]).casefold() != "cg00":
+                raise ValueError("Fallout 3 stage 90 variable owner differs")
+            variable = str(command["variable"])
+            declarations = [
+                declaration.group("type").casefold()
+                for declaration in re.finditer(
+                    rf"^\s*(?P<type>short|float)\s+{re.escape(variable)}\b",
+                    quest_script_source,
+                    re.IGNORECASE | re.MULTILINE,
+                )
+            ]
+            if len(declarations) != 1:
+                raise ValueError("Fallout 3 stage 90 quest variable is ambiguous")
+            resolved_commands.append(
+                {
+                    "index": index,
+                    "kind": kind,
+                    "questFormId": _form_id(quest_form_id),
+                    "questEditorId": "CG00",
+                    "scriptFormId": _form_id(quest_script.form_id),
+                    "scriptEditorId": _editor_id(quest_script),
+                    "scriptSourceSha256": quest_script_hash,
+                    "variable": variable,
+                    "variableType": declarations[0],
+                    "value": command["value"],
+                }
+            )
+            continue
+        if kind == "applyImageSpaceModifier":
+            editor_id = str(command["modifierEditorId"])
+            matches = [
+                record
+                for record in by_editor.get(editor_id.casefold(), [])
+                if record.signature == IMAGE_SPACE_MODIFIER_RECORD
+            ]
+            if len(matches) != 1:
+                raise ValueError("Fallout 3 stage 90 image-space modifier is ambiguous")
+            parsed = parse_image_space_modifier(matches[0]).manifest()
+            resolved_commands.append(
+                {
+                    "index": index,
+                    "kind": kind,
+                    "modifier": {
+                        **parsed,
+                        "formId": _form_id(matches[0].form_id),
+                    },
+                }
+            )
+            continue
+        editor_id = str(command["soundEditorId"])
+        matches = [
+            record
+            for record in by_editor.get(editor_id.casefold(), [])
+            if record.signature == SOUND_RECORD
+        ]
+        if len(matches) != 1:
+            raise ValueError("Fallout 3 stage 90 sound identity is ambiguous")
+        sound = matches[0]
+        sound_path = _text_values(sound, "FNAM")
+        sound_data = [
+            subrecord.data
+            for subrecord in iter_subrecords(sound)
+            if subrecord.signature == "SNDD"
+        ]
+        if len(sound_path) != 1 or len(sound_data) != 1:
+            raise ValueError("Fallout 3 stage 90 sound record layout is unsupported")
+        resolved_commands.append(
+            {
+                "index": index,
+                "kind": kind,
+                "sound": {
+                    "formId": _form_id(sound.form_id),
+                    "editorId": editor_id,
+                    "logicalPath": canonical_member_path(f"sound\\{sound_path[0]}"),
+                    "recordSha256": hashlib.sha256(sound.data).hexdigest(),
+                    "soundDataSha256": hashlib.sha256(sound_data[0]).hexdigest(),
+                },
+            }
+        )
+
+    stage_schema = "opennv-fo3-cg00-stage-90-transition/v1"
+    stage_source_hash = hashlib.sha256(target_source.encode("cp1252")).hexdigest()
+    dialogue = {
+        "schema": "opennv-fo3-cg00-post-stage-85-dialogue/v1",
+        "status": "source-backed-info-result-trigger",
+        "sourceStage": source_stage,
+        "minimumQuestStage": minimum_stage,
+        "topic": {
+            "formId": _form_id(topic.form_id),
+            "editorId": _editor_id(topic),
+            "recordSha256": hashlib.sha256(topic.data).hexdigest(),
+            "questFormId": _form_id(quest_form_id),
+        },
+        "voiceType": {
+            "formId": _form_id(voice.form_id),
+            "editorId": _editor_id(voice),
+            "recordSha256": hashlib.sha256(voice.data).hexdigest(),
+        },
+        "branches": [
+            {
+                "infoFormId": _form_id(info.form_id),
+                "recordSha256": hashlib.sha256(info.data).hexdigest(),
+                "resultSourceSha256": hashlib.sha256(source.encode("cp1252")).hexdigest(),
+                "targetStage": target_stage,
+                "continuationMarkerCount": continuation_count,
+                "response": {
+                    "index": 1,
+                    "text": response_text,
+                    "textSha256": hashlib.sha256(response_text.encode("utf-8")).hexdigest(),
+                },
+                "conditions": [
+                    {
+                        **row,
+                        "parameter1": _form_id(int(row["parameter1"])),
+                        "reference": _form_id(int(row["reference"])),
+                    }
+                    for row in conditions
+                ],
+            }
+        ],
+        "dialoguePlaybackImplemented": False,
+        "targetStage": target_stage,
+        "stageResult": {
+            "stageSourceSha256": stage_source_hash,
+            "commands": source_stage_commands,
+            "runtimeReady": True,
+            "contractSchema": stage_schema,
+        },
+    }
+    transition = {
+        "schema": stage_schema,
+        "status": "source-backed-stage-result-contract",
+        "sourceStage": source_stage,
+        "stage": target_stage,
+        "dialogueTriggerSchema": dialogue["schema"],
+        "stageSourceSha256": stage_source_hash,
+        "accountedCommandCount": len(resolved_commands),
+        "commands": resolved_commands,
+        "nextBoundary": "fo3-cg00-stage-90-timer-to-stage-100-not-implemented",
+    }
+    return dialogue, transition
+
+
 def _compile_cg00_section4_transition(
     records: tuple[object, ...],
     selection: dict[str, object],
@@ -1675,7 +1979,7 @@ def _bind_cg00_package_animations(
     transition[package_key] = package
 
 
-def _bind_post_stage65_dialogue_audio(
+def _bind_owned_dad_dialogue_audio(
     dialogue: dict[str, object],
     voices_archive: BsaArchive,
     voices_archive_sha256: str,
@@ -1684,7 +1988,7 @@ def _bind_post_stage65_dialogue_audio(
     voice_type = dict(dialogue["voiceType"])
     voice_editor_id = str(voice_type["editorId"])
     if not voice_editor_id:
-        raise ValueError("Fallout 3 post-stage-65 voice type has no editor ID")
+        raise ValueError("Fallout 3 owned Dad voice type has no editor ID")
     namespace = canonical_member_path(
         f"sound\\voice\\fallout3.esm\\{voice_editor_id}"
     )
@@ -1702,14 +2006,14 @@ def _bind_post_stage65_dialogue_audio(
         ]
         if len(matches) != 1:
             raise ValueError(
-                "Fallout 3 post-stage-65 owned voice is absent or ambiguous: "
+                "Fallout 3 owned Dad voice is absent or ambiguous: "
                 f"info={info_form_id} response={response_index}"
             )
         voice_path = matches[0]
         lip_path = voice_path.removesuffix(".ogg") + ".lip"
         if lip_path not in voices_archive.members:
             raise ValueError(
-                "Fallout 3 post-stage-65 owned lip data is absent: "
+                "Fallout 3 owned Dad lip data is absent: "
                 f"info={info_form_id} response={response_index}"
             )
 
@@ -1739,6 +2043,36 @@ def _bind_post_stage65_dialogue_audio(
     dialogue["voiceType"] = {**voice_type, "memberNamespace": namespace}
 
 
+def _bind_stage90_sound(
+    transition: dict[str, object],
+    sound_archive: BsaArchive,
+    sound_archive_sha256: str,
+    profile_root: Path,
+) -> None:
+    commands = [dict(command) for command in transition["commands"]]
+    sound_commands = [command for command in commands if command["kind"] == "playSound"]
+    if len(sound_commands) != 1:
+        raise ValueError("Fallout 3 stage 90 sound command is ambiguous")
+    command = sound_commands[0]
+    sound = dict(command["sound"])
+    member = sound_archive.extract(str(sound["logicalPath"]))
+    output = profile_root / "generated" / "fallout3" / "sound" / Path(
+        member.logical_path.replace("\\", "/")
+    )
+    if not output.is_file() or file_sha256(output) != member.sha256:
+        atomic_bytes(output, member.data)
+    sound["asset"] = {
+        "logicalPath": member.logical_path,
+        "source": str(output.resolve()),
+        "bytes": len(member.data),
+        "sha256": member.sha256,
+        "sourceArchive": sound_archive.archive.name,
+        "sourceArchiveSha256": sound_archive_sha256,
+    }
+    command["sound"] = sound
+    transition["commands"] = commands
+
+
 def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dict[str, object]], dict[str, object]]:
     records = tuple(
         iter_plugin_records(
@@ -1754,6 +2088,8 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     DIALOGUE_TOPIC_RECORD,
                     DIALOGUE_INFO_RECORD,
                     VOICE_TYPE_RECORD,
+                    IMAGE_SPACE_MODIFIER_RECORD,
+                    SOUND_RECORD,
                 }
             ),
         )
@@ -1766,7 +2102,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
             by_editor.setdefault(editor_id.casefold(), []).append(record)
 
     quest_rows = []
-    scripts_by_quest: dict[str, tuple[str, dict[int, list[str]]]] = {}
+    scripts_by_quest: dict[str, tuple[object, str, dict[int, list[str]]]] = {}
     for expected in opening["quests"]:
         definition = dict(expected)
         editor_id = str(definition["editorId"])
@@ -1849,11 +2185,17 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                 "transitionVideos": authored_videos,
             }
         )
-        scripts_by_quest[editor_id.casefold()] = (quest_script_source, stage_sources)
+        scripts_by_quest[editor_id.casefold()] = (
+            quest_script,
+            quest_script_source,
+            stage_sources,
+        )
 
     selection = dict(opening["characterSelection"])
     selection_quest = str(selection["questEditorId"])
-    quest_script_source, stage_sources = scripts_by_quest[selection_quest.casefold()]
+    quest_script, quest_script_source, stage_sources = scripts_by_quest[
+        selection_quest.casefold()
+    ]
     sex_message_id = str(selection["sexMessageEditorId"])
     sex_messages = [
         record
@@ -1929,6 +2271,13 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         selection_quest_form_id,
         stage_sources,
     )
+    post_stage85_dialogue, stage90_transition = _compile_post_stage85_dialogue(
+        records,
+        selection,
+        selection_quest_form_id,
+        quest_script,
+        stage_sources,
+    )
 
     character_selection = {
         "questEditorId": selection_quest,
@@ -1964,6 +2313,8 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         "postStage65Dialogue": post_stage65_dialogue,
         "postStage80Dialogue": post_stage80_dialogue,
         "stage85Transition": stage85_transition,
+        "postStage85Dialogue": post_stage85_dialogue,
+        "stage90Transition": stage90_transition,
     }
     return quest_rows, character_selection
 
@@ -2122,13 +2473,21 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     character_selection["section4Transition"] = section4_transition
     voices_role = "voices"
     post_stage65_dialogue = dict(character_selection["postStage65Dialogue"])
-    _bind_post_stage65_dialogue_audio(
+    _bind_owned_dad_dialogue_audio(
         post_stage65_dialogue,
         BsaArchive(archive_by_role[voices_role]),
         next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
         profile_root,
     )
     character_selection["postStage65Dialogue"] = post_stage65_dialogue
+    post_stage85_dialogue = dict(character_selection["postStage85Dialogue"])
+    _bind_owned_dad_dialogue_audio(
+        post_stage85_dialogue,
+        BsaArchive(archive_by_role[voices_role]),
+        next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
+        profile_root,
+    )
+    character_selection["postStage85Dialogue"] = post_stage85_dialogue
     appearance_contract = _appearance_inventory(
         master,
         recipe,
@@ -2151,6 +2510,15 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         "addedPlayerPackage",
     )
     character_selection["stage80Transition"] = stage80_transition
+    stage90_transition = dict(character_selection["stage90Transition"])
+    sound_role = "sound"
+    _bind_stage90_sound(
+        stage90_transition,
+        BsaArchive(archive_by_role[sound_role]),
+        next(str(row["sha256"]) for row in archives if row["role"] == sound_role),
+        profile_root,
+    )
+    character_selection["stage90Transition"] = stage90_transition
     video_root = _case_insensitive_directory(resolved_data_root, str(opening["videoDirectoryName"]))
     if video_root is None:
         raise FileNotFoundError("Fallout 3 opening Video directory is absent")
@@ -2259,11 +2627,12 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "cg00Stage65AppearanceContractReady": True,
             "cg00Stage80ContractReady": True,
             "cg00Stage85ContractReady": True,
+            "cg00Stage90ContractReady": True,
             "vault101BirthGraphCompiled": True,
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg00-post-stage-85-dialogue-trigger-not-compiled",
+            "fo3-cg00-stage-90-timer-to-stage-100-not-implemented",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
         ],
