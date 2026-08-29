@@ -64,7 +64,7 @@ internal sealed class CellEnvironmentSet
             state.WeatherEditorId,
             state.AtmosphereSourceSha256,
             state.CloudsSourceSha256,
-            state.CloudLayers))
+            state.BoundCloudTextureLayers))
         .ToArray();
 
     private static State BuildInterior(
@@ -167,7 +167,7 @@ internal sealed class CellEnvironmentSet
         string? WeatherEditorId,
         string? AtmosphereSourceSha256,
         string? CloudsSourceSha256,
-        int CloudLayers);
+        int BoundCloudTextureLayers);
 
     private readonly record struct State(
         string CellFormId,
@@ -178,5 +178,5 @@ internal sealed class CellEnvironmentSet
         string? WeatherEditorId,
         string? AtmosphereSourceSha256,
         string? CloudsSourceSha256,
-        int CloudLayers);
+        int BoundCloudTextureLayers);
 }

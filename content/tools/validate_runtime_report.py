@@ -548,6 +548,108 @@ def validate_flat_route_travel_report(
         "Enabled owned Sunny state differs",
     )
 
+    scenes = [primary, *linked]
+    environment_set = report.get("environmentSet")
+    _require(isinstance(environment_set, dict), "Route world-environment evidence is missing")
+    _require(
+        environment_set.get("policy")
+        == "current-cell-world-environment-plus-owned-exterior-sky",
+        "Route world-environment policy differs",
+    )
+    _require(
+        environment_set.get("surfaceLightingPolicy")
+        == "existing-compiled-cell-lighting-not-switched",
+        "Route surface-lighting boundary differs",
+    )
+    _require(
+        environment_set.get("activeCellFormId") == expected_active,
+        "Route world-environment active CELL differs",
+    )
+    actual_spaces = {
+        str(row["cellFormId"]): row for row in environment_set.get("spaces", [])
+    }
+    _require(
+        set(actual_spaces) == {str(scene["cell"]["formId"]) for scene in scenes},
+        "Route world-environment CELL set differs",
+    )
+    exterior_scenes = [scene for scene in scenes if not bool(scene["cell"]["interior"])]
+    _require(len(exterior_scenes) == 1, "Route requires exactly one exterior environment")
+    exterior = exterior_scenes[0]
+    catalog = exterior["environmentCatalog"]
+    default_weather_entries = [
+        row
+        for row in catalog["climate"]["weatherEntries"]
+        if row["globalFormId"] is None and int(row["chance"]) == 100
+    ]
+    _require(
+        len(default_weather_entries) == 1,
+        "Owned route climate has no unique unconditional weather",
+    )
+    weather_form = str(default_weather_entries[0]["weatherFormId"])[2:].lower()
+    weather_rows = [
+        row for row in catalog["weather"]
+        if str(row["formId"])[2:].lower() == weather_form
+    ]
+    _require(len(weather_rows) == 1, "Owned route default weather is missing")
+    weather = weather_rows[0]
+    atmosphere_sidecar = _read(Path(str(catalog["skyModels"]["atmosphere"]["sidecar"])))
+    clouds_sidecar = _read(Path(str(catalog["skyModels"]["clouds"]["sidecar"])))
+    exterior_space = actual_spaces[str(exterior["cell"]["formId"])]
+    _require(
+        exterior_space.get("mode") == configuration.document["exteriorEnvironment"]["mode"],
+        "Route exterior mode differs",
+    )
+    _require(
+        math.isclose(
+            float(exterior_space["gameHour"]),
+            float(catalog["climate"]["timing"]["sunriseEndHour"]),
+            abs_tol=FLOAT_COMPARISON_TOLERANCE,
+        ),
+        "Route exterior configured day sample differs",
+    )
+    _require(exterior_space.get("weatherFormId") == weather_form, "Route WTHR differs")
+    _require(
+        exterior_space.get("weatherEditorId") == weather["editorId"],
+        "Route WTHR editor ID differs",
+    )
+    _require(
+        str(exterior_space.get("atmosphereSourceSha256", "")).lower()
+        == str(atmosphere_sidecar["source"]["sha256"]).lower(),
+        "Route atmosphere source differs",
+    )
+    _require(
+        str(exterior_space.get("cloudsSourceSha256", "")).lower()
+        == str(clouds_sidecar["source"]["sha256"]).lower(),
+        "Route clouds source differs",
+    )
+    _require(
+        int(exterior_space.get("boundCloudTextureLayers", -1))
+        == sum(bool(path) for path in weather["cloudTextures"]),
+        "Route bound cloud texture count differs",
+    )
+    for scene in scenes:
+        if not bool(scene["cell"]["interior"]):
+            continue
+        space = actual_spaces[str(scene["cell"]["formId"])]
+        _require(space.get("mode") == "interior-xcll", "Route interior XCLL mode differs")
+        _require(
+            space.get("weatherFormId") is None
+            and space.get("atmosphereSourceSha256") is None
+            and space.get("cloudsSourceSha256") is None
+            and int(space.get("boundCloudTextureLayers", -1)) == 0,
+            "Route interior unexpectedly reports exterior sky state",
+        )
+    expected_environment_updates = [str(primary["cell"]["formId"])]
+    if expected_phase == "first-run":
+        expected_environment_updates.extend(portal["toCellFormId"] for portal in expected_portals)
+    else:
+        expected_environment_updates = [expected_active]
+    _require(
+        [str(row["cellFormId"]) for row in environment_set.get("updates", [])]
+        == expected_environment_updates,
+        "Route world-environment update order differs",
+    )
+
     transitions = report["transitions"]
     if expected_phase == "first-run":
         _require(

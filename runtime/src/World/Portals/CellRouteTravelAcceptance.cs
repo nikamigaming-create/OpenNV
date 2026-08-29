@@ -791,7 +791,8 @@ internal static class CellRouteTravelAcceptance
                     ? null
                     : new
                     {
-                        policy = "current-cell-owned-environment",
+                        policy = "current-cell-world-environment-plus-owned-exterior-sky",
+                        surfaceLightingPolicy = "existing-compiled-cell-lighting-not-switched",
                         activeCellFormId = loaded.EnvironmentSet.ActiveCellFormId,
                         spaces = loaded.EnvironmentSet.Snapshot().Select(space => new
                         {
@@ -803,7 +804,7 @@ internal static class CellRouteTravelAcceptance
                             weatherEditorId = space.WeatherEditorId,
                             atmosphereSourceSha256 = space.AtmosphereSourceSha256,
                             cloudsSourceSha256 = space.CloudsSourceSha256,
-                            cloudLayers = space.CloudLayers,
+                            boundCloudTextureLayers = space.BoundCloudTextureLayers,
                         }),
                         updates = loaded.EnvironmentSet.Updates.Select(update => new
                         {
