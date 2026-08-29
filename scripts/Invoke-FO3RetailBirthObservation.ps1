@@ -128,7 +128,29 @@ function Get-HitContext(
         $hitAddress -ge $base -and $hitAddress -lt ($base + [uint64]$_.size)
     }) | Select-Object -First 1
     if ($null -eq $region) {
-        throw ('No committed memory region contains scan hit 0x{0:X}.' -f $hitAddress)
+        $refreshedRegions = @(Invoke-McpTool -Process $Process -NextId $NextId `
+            -Name 'process_regions' -Arguments @{ session_id = $SessionId; max = 4096 })
+        $region = @($refreshedRegions | Where-Object {
+            $base = [uint64]$_.base
+            $hitAddress -ge $base -and $hitAddress -lt ($base + [uint64]$_.size)
+        }) | Select-Object -First 1
+    }
+    if ($null -eq $region) {
+        return [ordered]@{
+            hit_va = $hitAddress
+            hit_preview_hex = $Hit.preview_hex
+            module = if ($Hit.PSObject.Properties.Name -contains 'module') {
+                $Hit.module
+            } else { $null }
+            rva = if ($Hit.PSObject.Properties.Name -contains 'rva') {
+                $Hit.rva
+            } else { $null }
+            region = $null
+            context_start_va = $null
+            context_bytes_read = 0
+            context_hex = $null
+            context_unavailable = 'scan-hit-outside-refreshed-region-snapshot'
+        }
     }
     $regionBase = [uint64]$region.base
     $regionEnd = $regionBase + [uint64]$region.size
