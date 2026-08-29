@@ -1,6 +1,6 @@
 # Fallout: New Vegas owned door-articulation contract
 
-Status: **producer and runtime contract implemented; route acceptance pending**.
+Status: **producer/runtime contract and bounded forward route accepted**.
 
 This boundary preserves an owned NIF door controller without rotating the whole
 placed reference or inventing an OpenNV hinge. It applies only when a DOOR model
@@ -57,7 +57,8 @@ The Close initial angle differs from the Open terminal by
 owned behavior. Two exact local exports were byte-identical and produced
 articulation hash
 `998387cd8e7b94ffd2864ab069415693069261a551251ff91f5dddc7c049ec5b`.
-This is contract evidence, not a passed gameplay route or visual-parity claim.
+This contract is now exercised by the bounded forward route described below;
+it remains separate from visual-parity evidence.
 
 ## Resolved convex pattern and current route boundary
 
@@ -85,9 +86,11 @@ one-second Open terminal with moving body 21 under `BGate`, while its solid leaf
 and static posts remain physical. Acceptance waits for the terminal and uses
 bounded replanning around that owned geometry.
 
-This does not yet promote the whole route. The latest ordinary run passed the
-Doc-house portal and the gate. It did not prove the Prospector Saloon stair:
-horizontal-only intermediate tolerance accepted waypoint 57 before the capsule
-completed the 0.257-metre rise. At waypoint 62/64 the capsule was still 0.333
-metres below the upper landing and stopped fail-closed, 4.889 metres from the
-portal. Cold Continue and video capture were withheld.
+The current r25 ordinary run passes the Doc-house portal and exact animated
+gate, requires vertical as well as horizontal convergence at intermediate NAVM
+edges, climbs the source-backed Prospector Saloon porch, resolves exact exterior
+door `0010636f`, enters the saloon, saves, and cold-restores without replaying a
+transition. Portal-frame sampling uses the synchronous closed articulation
+terminal, so linked-space alignment and interaction targeting cannot capture an
+in-flight open pose. This promotes only that bounded forward route and does not
+claim visual parity, reverse traversal, OpenXR acceptance, or a full campaign.

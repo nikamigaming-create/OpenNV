@@ -37,9 +37,15 @@ door bodies now remain target-local and produce deterministic runtime convex
 shapes. A fresh four-family cache is admitted. Authored packed Havok triangle
 collision is two-sided for body motion while interaction rays remain front-
 face-only. Intermediate NAVM edges require vertical convergence as well as X/Z
-proximity. The current configured-input run crosses the Doc portal and animated
-Goodsprings gate, climbs the saloon porch, enters saloon CELL `00106185`, saves,
-and cold-restores that state without replaying a transition.
+proximity. Portal frames and linked-space alignment sample articulated doors at
+their synchronous closed terminal instead of an in-flight close tween. Normal
+activation rejects a non-door collision; an empty ray can select only one facing
+portal and records the exact selected source door for the acceptance gate. The
+current r25 configured-input run crosses the Doc portal and animated Goodsprings
+gate, climbs the saloon porch, resolves exterior door `0010636f`, enters saloon
+CELL `00106185`, saves, and cold-restores that state without replaying a
+transition. The earlier r20 result is superseded because it did not record the
+selected portal identity and allowed a non-door hit to reach facing fallback.
 OpenXR remains experimental with no physical-headset acceptance.
 Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
 Pip-Boy surface through Godot's input-event path. The accepted surface uses the
@@ -536,13 +542,13 @@ reuses and eagerly instantiates that exterior/saloon content. A source-portal-
 derived active set keeps the authoritative current CELL and its direct neighbors
 live while suspending distant prepared roots, processing, collision layers,
 rigid bodies, and lights. Historical evidence completed one bounded forward
-route and cold restore. Current-source configured input reaches the exterior and
-activates the exact source-articulated gate. It does not yet prove the saloon
-stair: horizontal-only intermediate tolerance accepts the NAVM edge while the
-capsule is still below the landing, and the later approach fails closed. It has
-not yet produced a current first-run report or cold-Continue pair.
-Campaign save v6 owns saloon CELL `00106185`, container remaining counts, and
-the player transform, but those current-source transitions remain unaccepted.
+route and cold restore. The current-source r25 first process reaches the
+exterior, activates the exact source-articulated gate, completes the vertically
+bounded saloon-porch route, resolves the exact exterior portal door, enters
+saloon CELL `00106185`, and saves. A fresh process cold-restores that saloon/
+player state with zero replayed transitions. Both manifest-backed validators
+pass. Campaign save v6 owns saloon CELL `00106185`, container remaining counts,
+and the player transform.
 The lifecycle is not demand streaming or unloading: all three
 prepared spaces still instantiate before the distant one is suspended. This
 does not promote reverse traversal, neighboring exterior-grid streaming, Sunny

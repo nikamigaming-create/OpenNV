@@ -79,8 +79,8 @@ completed stage-200 save, configured flat input traverses both forward XTEL
 links; campaign save v6 records source-derived Level/HP/AP/XP plus saloon CELL
 `00106185`, and a fresh owned-menu Continue restores the unchanged save and
 player transform there. A source-portal active set suspends distant resources,
-but the retained direct lifecycle proof cache has an older compiler identity and
-normal restore fails closed until explicit migration. Reverse traversal,
+and the current r25 first-run/cold-Continue pair passes against the admitted
+four-family cache with exact selected source-door identity. Reverse traversal,
 neighboring exterior-grid streaming, and integrated-route OpenXR acceptance
 remain pending. The registered
 Fallout 3 development frontend opens its
@@ -90,9 +90,10 @@ Escape or the Skip button on CG00 sex/name selection, a persistent stage-60
 character, and source-backed race/hair/eye selection persisted at stage 62.
 The bounded ordinary route enters the owned Vault 101 birth room, executes the
 exact stage-65 Dad cue and stage-80/85 results, applies stage-90 INFO `0001f379`
-with its owned fade/sound, and cold-restores stage 90 without replaying the
-one-shot effects. It does not yet advance the stage-90 timer to stage 100 or
-provide a freely playable Vault 101 route.
+with its owned fade/sound, then executes seven of eight exact stage-100 commands
+through `SetPCYoung 1`. It cold-restores stage 100 without replaying the one-shot
+effects. CG01 stage 0, the eighth stage-100 command, and a freely playable Vault
+101 route remain unimplemented.
 The current preview shows verified owned source textures rather than a 3D
 FaceGen actor. Fallout 1 OpenXR has a shared-state V13ENT simulator adapter that
 passes locomotion, snap turn, fire, reload, and save. XR door use,

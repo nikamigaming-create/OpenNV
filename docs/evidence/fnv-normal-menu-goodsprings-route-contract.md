@@ -36,7 +36,7 @@ Neither phase uses Windows app control or injected foreground input.
 
 This evidence proves only the bounded eagerly instantiated forward flat route
 from a completed save. A later direct native proof establishes current-plus-
-neighbor resource suspension, and the current-source r20 pair reaccepts the
+neighbor resource suspension, and the current-source r25 pair reaccepts the
 normal route and cold Continue. It does **not**
 prove reverse traversal, neighboring exterior-grid streaming/load-unload,
 an uninterrupted New Game-to-saloon run, Sunny dialogue/package AI, visual
@@ -62,20 +62,28 @@ consume only the existing three-replan budget; wrong-cell and XTEL blockers
 still fail immediately.
 
 The accepted pair is
-`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r20`.
+`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r25`.
 The runtime now treats authored packed Havok triangle soup as two-sided for body
 motion, keeps interaction rays front-face-only, and requires the existing
-0.18-metre vertical convergence alongside intermediate X/Z tolerance. The
-first process climbed the source-backed saloon porch, recorded both ordered
+0.18-metre vertical convergence alongside intermediate X/Z tolerance. Portal
+setup restores each articulated door synchronously to its closed terminal before
+sampling proof frames and linked-space alignment. Activation fails on a real
+non-door collider; an empty ray can select only one facing portal and records
+the exact selected source-door identity. The first process climbed the source-
+backed saloon porch, resolved exterior door `0010636f`, recorded both ordered
 XTEL transitions, saved in CELL `00106185`, and emitted
 `OPENNV_FLAT_ROUTE_TRAVEL_PASS phase=first-run`. A second process emitted
 `phase=cold-reload`, restored the saloon/player state, and recorded zero replayed
 transitions. Both reports passed their manifest-backed validator modes. The
 private evidence hashes are:
 
-- first-run report: `fec9375c103ead6a6a5b57274e55ab7643503165fcfa25c34c9ba45583d8a1bc`;
-- cold-reload report: `e8b95f2ccc3d83b927fc164bacccb609b05e0e70e538058eb3a7f003578b2342`;
-- resulting save: `30abf2b0260e963213cb4886fe4406f3d551c595bfffeb9c6a8f4e7215215998`.
+- first-run report: `8701da0500a9b7ca5620c81b1c53236d1898deeb2bf72e93021286be571908e9`;
+- cold-reload report: `fca248ad7f36e2caa172940559b6f7136fab5412aedced90963d35e4eb1eb3bc`;
+- resulting save: `c8f6765e215f6221814cd602ee944d8411285b5d331879b246d1e41d1f22298f`.
+
+The r20 pair is superseded. It crossed the second portal only because a
+non-door saloon-shell hit was allowed to fall through to proximity/facing
+activation, and its report did not bind the selected door identity.
 
 This is route acceptance, not reverse traversal, full campaign coverage,
 OpenXR acceptance, actor behavior, or retail visual parity.

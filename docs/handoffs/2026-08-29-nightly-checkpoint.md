@@ -43,11 +43,14 @@ These 2026-08-29 slices are on `origin/main`:
   keeping the final three waypoints strict; and
 - `82a2054` requires vertical convergence at intermediate edges, gives authored
   Havok triangle soup two-sided body collision, keeps activation rays front-
-  face-only, and completes the source-backed saloon porch/door route.
+  face-only, and reaches the source-backed saloon porch/door route; and
+- `6e73bd3` samples portal frames at synchronous closed articulation terminals,
+  rejects facing fallback after non-door hits, requires a unique empty-ray
+  portal candidate, and gates acceptance on the exact selected source door.
 
-The last implementation commit is `82a2054`. Debug/Release C# builds, formatting
-verification, a native first-run, a native cold Continue, and both manifest-
-backed report validators pass. No proprietary asset or generated cache is tracked.
+The last implementation commit is `6e73bd3`. The current Debug C# build, native
+first-run, native cold Continue, and both manifest-backed report validators pass.
+No proprietary asset or generated cache is tracked.
 
 ## Honest game status
 
@@ -62,7 +65,7 @@ backed report validators pass. No proprietary asset or generated cache is tracke
   This is not a freely playable Vault 101 route.
 - New Vegas: one fresh full four-family cache is admitted. Ordinary stage-200
   Continue reaches the physical Pip-Boy setup, Doc-house portal, and
-  source-animated Goodsprings gate. r20 climbs the source-backed Prospector
+  source-animated Goodsprings gate. r25 climbs the source-backed Prospector
   Saloon porch, crosses the second XTEL pair, saves in the saloon, and cold-
   restores with zero replayed transitions. Both reports validate. Do not
   describe the actors, renderer, campaign, TTW, JAM, or OpenXR as complete or
@@ -81,25 +84,26 @@ four closed compiler-family identities. The owned Data tree stayed unchanged at
 
 The accepted route proof root is:
 
-`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r20`
+`D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r25`
 
 It passed the Doc portal, exact one-second `0010757e` gate articulation, source-
 backed porch rise, saloon portal, save, and cold Continue. Authored packed Havok
 triangle soup remains source-wound and is two-sided only at the body-collision
 boundary; interaction rays remain front-face-only. The first-run and cold
 reports and resulting save have SHA-256 values
-`fec9375c103ead6a6a5b57274e55ab7643503165fcfa25c34c9ba45583d8a1bc`,
-`e8b95f2ccc3d83b927fc164bacccb609b05e0e70e538058eb3a7f003578b2342`, and
-`30abf2b0260e963213cb4886fe4406f3d551c595bfffeb9c6a8f4e7215215998`.
-Both manifest-backed validators pass. Earlier r11/r12 launches omitted the
-engine/user argument separator, so acceptance never began; they were not
-throttled native proofs and their incomplete roots were recycled.
+`8701da0500a9b7ca5620c81b1c53236d1898deeb2bf72e93021286be571908e9`,
+`fca248ad7f36e2caa172940559b6f7136fab5412aedced90963d35e4eb1eb3bc`, and
+`c8f6765e215f6221814cd602ee944d8411285b5d331879b246d1e41d1f22298f`.
+Both manifest-backed validators pass. r20 is superseded: it allowed a saloon-
+shell hit to fall through to facing activation and did not bind the selected
+door identity. r25 instead resolves exact source door `0010636f` after sampling
+the articulated portal at its synchronous closed terminal.
 
 ## Exact resume order
 
 1. Read this file, `docs/architecture.md`, and both FNV evidence contracts;
    inspect `git status --short` and preserve the two unrelated Fallout 1 files.
-2. Reuse the admitted cache and r20 evidence; do not rebuild the cache unless a
+2. Reuse the admitted cache and r25 evidence; do not rebuild the cache unless a
    compiler/source identity actually changes.
 3. The next honest FNV media slice may show owned Continue, the populated
    Pip-Boy/HUD, Doc-house exit, animated Goodsprings gate, porch climb, saloon

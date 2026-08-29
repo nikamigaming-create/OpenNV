@@ -80,7 +80,10 @@ lifecycle together with exact controller-door articulation and target-local
 static convex collision. The current configured-input route requires vertical
 as well as horizontal convergence at intermediate NAVM edges, climbs the
 source-backed saloon porch, crosses both XTEL pairs, saves in the saloon, and
-cold-restores that state with zero replayed transitions. Sunny
+cold-restores that state with zero replayed transitions. Portal setup samples
+articulated doors at their synchronous closed terminal; activation rejects any
+non-door collider, while an empty ray may resolve only one facing portal and
+records that exact source-door identity. Sunny
 `00104e85` loads once in her authored enabled
 state without a proof override. OpenNV compiles the installed
 `hud_main_menu.xml`, `stats_menu.xml`,
