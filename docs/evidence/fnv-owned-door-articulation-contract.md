@@ -86,7 +86,8 @@ and static posts remain physical. Acceptance waits for the terminal and uses
 bounded replanning around that owned geometry.
 
 This does not yet promote the whole route. The latest ordinary run passed the
-Doc-house portal, the gate, and the owned Prospector Saloon stair transition.
-It then stopped fail-closed on the same building's authored collision during
-the strict final approach at waypoint 62/64, 4.889 metres from the portal. Cold
-Continue and video capture were withheld.
+Doc-house portal and the gate. It did not prove the Prospector Saloon stair:
+horizontal-only intermediate tolerance accepted waypoint 57 before the capsule
+completed the 0.257-metre rise. At waypoint 62/64 the capsule was still 0.333
+metres below the upper landing and stopped fail-closed, 4.889 metres from the
+portal. Cold Continue and video capture were withheld.

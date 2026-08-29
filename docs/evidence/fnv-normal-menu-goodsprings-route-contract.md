@@ -64,9 +64,10 @@ still fail immediately.
 
 The latest run is
 `D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r10`.
-It passed the gate and the exact 0.257-metre Prospector Saloon stair transition,
-then stopped fail-closed against the correctly placed authored collision for
-REFR `001055e0` during final approach at waypoint 62/64. The player remained
+It passed the gate, then accepted the Prospector Saloon waypoint-57 edge in X/Z
+without completing its 0.257-metre rise. At final approach waypoint 62/64, the
+player capsule was still 0.333 metres below and overlapping the upper landing of
+the correctly placed authored collision for REFR `001055e0`. The player remained
 1.304 metres from that waypoint and 4.889 metres from the portal. No first-run
 report was emitted, so the validator, cold Continue, and video capture were not
 run. This is the exact resume boundary, not route acceptance or parity.

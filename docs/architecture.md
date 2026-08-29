@@ -35,9 +35,11 @@ actual blocking authored door, and preserves controller-owned Open/Close
 articulation for joined moving visuals and collision. Mass-zero authored convex
 door bodies now remain target-local and produce deterministic runtime convex
 shapes. A fresh four-family cache is admitted. The current configured-input run
-passes the Doc portal, animated Goodsprings gate, and saloon stair transition,
-then fails closed against authored Prospector Saloon collision during the strict
-final approach. Route/cold-Continue reacceptance remains pending.
+passes the Doc portal and animated Goodsprings gate. At the saloon porch, loose
+horizontal tolerance accepts an intermediate NAVM edge before the capsule
+completes its 0.257-metre vertical rise; the later strict approach fails closed
+from that invalid under-height state. Route/cold-Continue reacceptance remains
+pending.
 OpenXR remains experimental with no physical-headset acceptance.
 Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
 Pip-Boy surface through Godot's input-event path. The accepted surface uses the
@@ -534,10 +536,11 @@ reuses and eagerly instantiates that exterior/saloon content. A source-portal-
 derived active set keeps the authoritative current CELL and its direct neighbors
 live while suspending distant prepared roots, processing, collision layers,
 rigid bodies, and lights. Historical evidence completed one bounded forward
-route and cold restore. Current-source configured input reaches the exterior,
-activates the exact source-articulated gate, and crosses the saloon stair before
-failing closed on authored building collision during the strict final approach;
-it has not yet produced a current first-run report or cold-Continue pair.
+route and cold restore. Current-source configured input reaches the exterior and
+activates the exact source-articulated gate. It does not yet prove the saloon
+stair: horizontal-only intermediate tolerance accepts the NAVM edge while the
+capsule is still below the landing, and the later approach fails closed. It has
+not yet produced a current first-run report or cold-Continue pair.
 Campaign save v6 owns saloon CELL `00106185`, container remaining counts, and
 the player transform, but those current-source transitions remain unaccepted.
 The lifecycle is not demand streaming or unloading: all three

@@ -38,7 +38,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
 | Fallout 2 Hex | Registered-profile launcher route into the owned Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL; Take enters Map 3 at tile 28707 with PRO-linked sex-correct HMWARR/HFPRIM AA idle and directional AB walking. Ordinary grounded movement can follow the exact 13-step source path to exit serial 1738, enter owned ARTEMPLE Map 126 at tile 16486, save as v3, and cold-restore the same grounded position/facing. The non-source opaque wall proxy is removed while all 45 owned wall FRMs and source-derived collision remain | Tag/trait editing, other animations, remaining exits, scripts, actors, combat, inventory, campaign-wide persistence, full campaign, and parity remain absent; classic fixed-Y sprite composition is still visibly incomplete; FPS and OpenXR stay disabled |
-| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. A fresh four-family cache admits controller-door articulation, target-local static convex collision, and current-plus-neighbor suspension | Current configured input passes the Doc portal, animated Goodsprings gate, and saloon stair, then fails closed against authored Prospector Saloon collision during the strict final approach. No current-source first-run/cold pair exists. Player deposits, Pip-Boy tab navigation, reverse traversal, neighboring exterior-grid streaming, Sunny AI/dialogue, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven |
+| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. A fresh four-family cache admits controller-door articulation, target-local static convex collision, and current-plus-neighbor suspension | Current configured input passes the Doc portal and animated Goodsprings gate. At the saloon porch, an intermediate NAVM edge was accepted in X/Z without completing its 0.257-metre rise; the route later fails closed from an invalid under-height capsule state. No current-source first-run/cold pair exists. Player deposits, Pip-Boy tab navigation, reverse traversal, neighboring exterior-grid streaming, Sunny AI/dialogue, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and normal persistent CG00 progression into the owned Vault 101 birth room through stage 100. The bounded route plays the stage-65 Dad cue, applies stage-80/85 and stage-90 INFO `0001f379`, then executes seven of eight exact stage-100 commands through `SetPCYoung 1`; cold Continue restores without replaying one-shot cue/effects | No freely playable first-person Vault 101 route or general package/dialogue interpreter exists; CG01 stage 0, the eighth stage-100 command, lip/idle/package AI, Mom/player presentation, Hex, VR, and retail parity remain absent |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
@@ -78,8 +78,9 @@ the authoritative CELL plus direct neighbors active, and suspends distant
 presentation/physics resources. A fresh four-family cache now admits that
 lifecycle together with exact controller-door articulation and target-local
 static convex collision. The current configured-input route passes the Doc
-portal, animated Goodsprings gate, and saloon stair, then fails closed during the
-strict Prospector Saloon final approach; cold Continue was not run. Sunny
+portal and animated Goodsprings gate. Its loose intermediate X/Z tolerance then
+accepts the saloon porch edge before the capsule completes the vertical rise,
+and the later strict approach fails closed; cold Continue was not run. Sunny
 `00104e85` loads once in her authored enabled
 state without a proof override. OpenNV compiles the installed
 `hud_main_menu.xml`, `stats_menu.xml`,
@@ -315,10 +316,11 @@ sneaking bits still lack runtime consumers. The
 bounded default cache joins the reciprocal Doc Mitchell house/exterior and
 Goodsprings exterior/saloon pairs in one eagerly instantiated bounded composite.
 From a completed stage-200 save, the owned Continue button signal restores the
-Doc route. A fresh four-family cache passes the first portal, the exact animated
-Goodsprings gate, and the Prospector Saloon stair transition, then stops
-fail-closed against authored building collision during the strict final
-approach. It has not yet traversed `0010636f` → `0010618e` or produced a current
+Doc route. A fresh four-family cache passes the first portal and the exact
+animated Goodsprings gate. At the Prospector Saloon porch it accepts an
+intermediate edge horizontally before completing the 0.257-metre rise, then
+stops fail-closed from the resulting under-height state. It has not yet
+traversed `0010636f` → `0010618e` or produced a current
 first-run/cold-Continue report pair. All three spaces remain instantiated, but
 only the current CELL and its direct portal neighbors remain active for
 visibility, processing, physics, and lights. Normal-route reacceptance remains

@@ -58,12 +58,13 @@ the fresh owned-data build. No proprietary asset or generated cache is tracked.
   eight stage-100 commands are applied; CG01 stage 0 is the explicit boundary.
   This is not a freely playable Vault 101 route.
 - New Vegas: one fresh full four-family cache is admitted. Ordinary stage-200
-  Continue reaches the physical Pip-Boy setup, Doc-house portal, source-animated
-  Goodsprings gate, and Prospector Saloon stair. The latest run fails closed on
-  the same building's authored collision during strict final approach at
-  waypoint 62/64, 4.889 metres from the portal. It emitted no route report, so
-  cold Continue and video were not run. Do not describe the route, actors,
-  renderer, TTW, JAM, or OpenXR as complete or retail-parity.
+  Continue reaches the physical Pip-Boy setup, Doc-house portal, and
+  source-animated Goodsprings gate. It does not yet prove the Prospector Saloon
+  stair: loose X/Z tolerance accepted waypoint 57 without completing the
+  0.257-metre rise. The later run fails closed at waypoint 62/64 from that
+  invalid under-height state, 4.889 metres from the portal. It emitted no route
+  report, so cold Continue and video were not run. Do not describe the route,
+  actors, renderer, TTW, JAM, or OpenXR as complete or retail-parity.
 
 ## Exact terminal FNV boundary
 
@@ -80,24 +81,31 @@ The latest route proof root is:
 
 `D:\Builds\OpenNV-fnv-articulated-convex-route-acceptance-20260829-r10`
 
-It passed the Doc portal, exact one-second `0010757e` gate articulation, and the
-source/NAVM-backed 0.257-metre Prospector Saloon stair transition. It then failed
-closed at exterior waypoint 62/64 against the correctly placed packed collision
-of REFR `001055e0`, base `0010243e` `NVProspectorSaloon`, asset
-`351f418a5cca45d12b71`. The remaining waypoint distance was 1.304 metres and the
-portal was 4.889 metres away. The fail-closed sweep retained the full movement
-remainder and identified the exact authored collision node. No report was
-emitted; do not run cold Continue or make a route video until this final approach
-is physically traversed and the first-run validator passes.
+It passed the Doc portal and exact one-second `0010757e` gate articulation. At
+the saloon porch, waypoint 57 was accepted by loose horizontal tolerance before
+the player completed the source/NAVM-backed 0.257-metre rise. By exterior
+waypoint 62/64, the capsule center was 0.430 metres below the target and its
+bottom overlapped the upper landing by 0.333 metres. The correctly placed packed
+collision belongs to REFR `001055e0`, base `0010243e` `NVProspectorSaloon`, asset
+`351f418a5cca45d12b71`; the door, XTEL pair, NAVM tail, and collision placement
+all audited correctly. The remaining waypoint distance was 1.304 metres and the
+portal was 4.889 metres away. No report was emitted. A candidate generic fix—
+require the existing 0.18-metre vertical convergence alongside loose
+intermediate X/Z tolerance, with the fresh blocked sweep normal available only
+for recovery—built cleanly but was reverted because two native-window proofs
+were throttled before acceptance began. Their incomplete `r11` and `r12` roots
+were recycled. Do not run cold Continue or make a route video until a fresh
+first-run proof and validator pass.
 
 ## Exact resume order
 
 1. Read this file, `docs/architecture.md`, and both FNV evidence contracts;
    inspect `git status --short` and preserve the two unrelated Fallout 1 files.
-2. Reproduce only the r10 final-approach boundary against the admitted cache; do
-   not rebuild it. Audit the final four-point NAVM path, portal plane, saloon
-   exterior door placement, and exact `001055e0` collision around waypoint 2/4.
-3. Fix only an evidence-backed navigation/step/approach mismatch. Do not disable
+2. Apply the audited generic reach rule against the admitted cache: loose
+   intermediate X/Z tolerance must also require vertical convergence within the
+   existing 0.18-metre limit. A fresh sweep normal may guide recovery only; it
+   must never waive the height gate. Do not rebuild the cache.
+3. Fix only that evidence-backed navigation/step mismatch. Do not disable
    the saloon collision, enlarge final tolerance, teleport the player, skip a
    waypoint, or special-case a FormID.
 4. Run Debug/Release, format/diff checks, then one new unique first-run proof.
