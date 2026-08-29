@@ -21,8 +21,10 @@ internal static class Fo2CharacterStartPersistenceProof
                 throw new InvalidOperationException(
                     "Fallout 2 write proof requires an empty save boundary.");
             host.Picker.Select(2);
-            var selected = host.Picker.Selected;
+            var selectedSource = host.Picker.Selected;
             host.Picker.ChooseCurrent();
+            var selected = host.SelectedCharacter ?? throw new InvalidOperationException(
+                "Fallout 2 persistence proof did not retain its character selection.");
             var runtime = host.Runtime ?? throw new InvalidOperationException(
                 "Fallout 2 persistence proof did not enter Arroyo.");
             for (var frame = 0; frame < GroundingFrames && !runtime.Player.IsOnFloor(); frame++)
@@ -46,7 +48,8 @@ internal static class Fo2CharacterStartPersistenceProof
             for (var frame = 0; frame < SettleFrames; frame++)
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);
             var saved = host.PersistCurrentState();
-            var passed = selected.Id == "diplomat" &&
+            var passed = selected.Mode == Fo2CharacterSelection.PremadeMode &&
+                selected.Source == selectedSource && selected.Id == "diplomat" &&
                 selected.Profile.Name == "Chitsa" &&
                 saved.Character == selected &&
                 saved.MapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
@@ -169,10 +172,12 @@ internal static class Fo2CharacterStartPersistenceProof
         }
     }
 
-    private static object CharacterReport(Fo2PremadeCharacter character) => new
+    private static object CharacterReport(Fo2CharacterSelection character) => new
     {
+        character.Mode,
         character.Id,
         character.Role,
+        sourceId = character.Source.Id,
         character.Profile.Name,
         character.Profile.Age,
         character.Profile.Sex,

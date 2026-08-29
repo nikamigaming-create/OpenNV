@@ -89,15 +89,20 @@ internal sealed partial class Fo2CharacterPicker : Control
         AddButton("▶", 335.0f, 303.0f, 35.0f, 35.0f, () => Select(_index + 1));
         AddButton("", 65.0f, 301.0f, 181.0f, 79.0f, ChooseCurrent)
             .TooltipText = "Take this owned Fallout 2 premade";
+        AddButton("", 443.0f, 301.0f, 153.0f, 79.0f, () => OpenCustom(true))
+            .TooltipText = "Modify this owned Fallout 2 premade";
+        AddButton("", 65.0f, 397.0f, 181.0f, 63.0f, () => OpenCustom(false))
+            .TooltipText = "Create a custom Chosen One from the owned rules";
         AddButton("", 443.0f, 397.0f, 153.0f, 63.0f, () => BackRequested?.Invoke())
             .TooltipText = "Back";
         Select(0);
     }
 
-    internal event Action<Fo2PremadeCharacter>? CharacterChosen;
+    internal event Action<Fo2CharacterSelection>? CharacterChosen;
     internal event Action? BackRequested;
     internal int SelectedIndex => _index;
     internal Fo2PremadeCharacter Selected => _catalog.Characters[_index];
+    internal Fo2CustomCharacterEditor? CustomEditor { get; private set; }
 
     public override void _Ready() => FitCanvas();
 
@@ -168,7 +173,36 @@ internal sealed partial class Fo2CharacterPicker : Control
     internal void ChooseCurrent()
     {
         Selected.Profile.Validate();
-        CharacterChosen?.Invoke(Selected);
+        CharacterChosen?.Invoke(Fo2CharacterSelection.FromPremade(Selected));
+    }
+
+    internal Fo2CustomCharacterEditor OpenCustom(bool modify)
+    {
+        if (CustomEditor is not null)
+            throw new InvalidOperationException(
+                "Fallout 2 custom character editor is already open.");
+        SetProcessInput(false);
+        _canvas.Visible = false;
+        var editor = new Fo2CustomCharacterEditor(_catalog, Selected, modify);
+        editor.Confirmed += selection =>
+        {
+            selection.Validate(_catalog);
+            CharacterChosen?.Invoke(selection);
+        };
+        editor.Cancelled += CloseCustom;
+        CustomEditor = editor;
+        AddChild(editor);
+        return editor;
+    }
+
+    private void CloseCustom()
+    {
+        if (CustomEditor is null)
+            return;
+        CustomEditor.QueueFree();
+        CustomEditor = null;
+        _canvas.Visible = true;
+        SetProcessInput(true);
     }
 
     private Button AddButton(

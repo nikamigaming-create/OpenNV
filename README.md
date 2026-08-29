@@ -37,7 +37,7 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 Hex | Registered-cache launcher route through the OpenNV menu, character picker, owned Overseer movie, and bounded Godot V13ENT/Vault 13 slice | Only V13ENT is playable; this is not the complete Fallout 1 campaign |
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
-| Fallout 2 Hex | Registered-profile launcher route into the bounded owned Narg/Mingan/Chitsa selector; Take enters Map 3 at tile 28707 with sex-correct HMWARR/HFPRIM art, grounded source-walk-gated movement, and atomic cold restore of the selected state plus current Map 3 transform/mode | Modify/Create, editable name/sex/stats, reciprocal exits, scripts, actors, combat, inventory, campaign-wide persistence, full campaign, and parity remain absent; FPS and OpenXR stay disabled |
+| Fallout 2 Hex | Registered-profile launcher route into the owned Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL; Take enters Map 3 at tile 28707 with sex-correct HMWARR/HFPRIM art, grounded source-walk-gated movement, and atomic cold restore | Tag/trait editing, reciprocal exits, scripts, actors, combat, inventory, campaign-wide persistence, full campaign, and parity remain absent; FPS and OpenXR stay disabled |
 | New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; from a completed stage-200 Continue, configured flat input traverses both forward XTEL links and campaign save v5 cold-restores saloon CELL `00106185`; owned containers retain remaining item counts after Take One/Take All; configured `Tab` now opens the populated owned campaign Pip-Boy surface and `Escape` closes it through Godot's input-event path; original flat and experimental OpenXR routes are launchable | Player-to-container deposits, Pip-Boy tab-navigation acceptance, reverse-traversal acceptance, neighboring CELL streaming, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and persistent CG00 stage 62; exact later state contracts compile and validate | No first-person Vault 101 world or authored package/dialogue trigger execution exists, so FPS, Hex, and VR stay disabled |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
@@ -197,14 +197,21 @@ Godot consumes that bounded Map 3 cache in a rendered 3D hex scene.
 premades Narg, Mingan, and Chitsa from their GCD/BIO records and decodes the
 owned picker, portraits, and male/female idle FRMs into a disposable local
 cache. `scripts/Start-OpenNVFallout2Arroyo.ps1` opens that selector; keyboard or
-mouse can choose a premade, and Take hands the selected source state and
-sex-correct FRM to the grounded Map 3 player at exact tile 28707. Its atomic
-OpenNV user-data save retains the selected profile state and GCD/BIO identities plus Map 3,
+mouse can Take a premade, Modify it, or Create a custom state. Modify/Create edit
+name (1–11 characters), sex, age (16–35), and seven SPECIAL values (1–10 each,
+exactly 40 total). Modify preserves the source premade's tags/traits unchanged;
+Create leaves them explicitly unselected because their editing rules are not yet
+transported. Confirm hands the state and sex-correct FRM to the grounded Map 3
+player at exact tile 28707. Its version-2 atomic OpenNV user-data save retains
+the selected mode, owned GCD/BIO source basis, custom profile state, plus Map 3,
 elevation, tile, facing, transform, and bounded movement/presentation modes; a
 fresh process validates those identities and restores the same player. The
 launcher passes these exact five hash-matched local artifacts and the isolated
-save path to the same character-start scene. This is bounded Hex playability,
-not custom character creation, a complete campaign save, FPS/VR, or retail parity.
+save path to the same character-start scene. This is bounded custom character
+creation and Hex playability, not a complete campaign save, FPS/VR, or retail parity.
+`scripts/Test-OpenNVFallout2CustomCharacters.ps1` captures a modified male and
+created female path and cold-restores each in a separate process; its owned
+screenshots and saves remain private under `%LOCALAPPDATA%\OpenNV\proofs`.
 
 ## Character path is a real choice
 
@@ -214,7 +221,7 @@ profile and save boundary.
 | Path | Character | JAM rule |
 | --- | --- | --- |
 | Fallout 1 | One Vault Dweller state shared by hex, FPS, and eventually VR presentations | Separate from the Gamebryo-family profiles. |
-| Fallout 2 | One bounded Chosen One premade state for the current Hex development route; future FPS/VR adapters must consume that authority | The atomic OpenNV save cold-restores the selected owned premade and current Map 3 transform/mode. Custom creation and campaign-wide state remain absent. |
+| Fallout 2 | One bounded premade, modified, or custom Chosen One state for the Hex route; future FPS/VR adapters must consume that authority | The atomic OpenNV save cold-restores character mode/profile/source basis and current Map 3 transform/mode. Tag/trait editing and campaign-wide state remain absent. |
 | New Vegas | Separate standalone Mojave character | Base route today; JAM remains disabled until its dependencies and portable semantics pass. |
 | Fallout 3 | Separate standalone Capital Wasteland character | Standalone CG00 profile today; TTW is a future separate path and is currently disabled. |
 | TTW | One future Capital Wasteland-to-Mojave character | Runtime support is absent. It cannot later adopt an existing standalone save. |

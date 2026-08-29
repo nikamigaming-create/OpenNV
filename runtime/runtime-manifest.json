@@ -72,7 +72,7 @@
             "openxr": { "ready": false, "status": "not-implemented" }
           },
           "requiresProfile": "opennv-fo2-owned-profile/v1",
-          "message": "The bounded Hex first slice selects owned Narg, Mingan, or Chitsa source state, hands Take to Map 3 tile 28707, renders the sex-correct owned idle FRM, permits grounded source-walk-gated movement, and atomically cold-restores that selected state plus current Map 3 transform/mode. Modify/Create, editable fields, scripts, actors, combat, inventory, reciprocal exits, campaign-wide persistence, the full campaign, FPS, OpenXR, and retail parity remain unavailable."
+          "message": "The bounded Hex first slice selects owned Narg, Mingan, or Chitsa or uses the source-backed Modify/Create surface for name, sex, age 16-35, and seven 1-10 SPECIAL values totaling 40. Modify preserves source tags/traits; Create leaves them explicitly unselected. Take hands the state to Map 3 tile 28707 with sex-correct owned idle FRM, grounded source-walk-gated movement, and atomic cold restore. Tag/trait editing, scripts, actors, combat, inventory, reciprocal exits, campaign-wide persistence, the full campaign, FPS, OpenXR, and retail parity remain unavailable."
         }
       }
     },
@@ -157,6 +157,7 @@
     "shared-flat-openxr-pool-simulation",
     "persistent-pool-ball-motion-and-pocket-state",
     "retail-actor-set-sunny-settler-easy-pete",
-    "fo2-owned-premade-arroyo-cold-restore"
+    "fo2-owned-premade-arroyo-cold-restore",
+    "fo2-custom-character-arroyo-cold-restore"
   ]
 }

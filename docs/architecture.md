@@ -1,6 +1,6 @@
 # OpenNV architecture and code accountability
 
-Status: **launcher-routed bounded Fallout 1 V13ENT, Fallout 2 premade-to-Arroyo
+Status: **launcher-routed bounded Fallout 1 V13ENT, Fallout 2 character-to-Arroyo
 Hex, and New Vegas opening/Goodsprings slices, plus a non-playable Fallout 3
 CG00 development frontend; no full campaign**.
 
@@ -9,12 +9,12 @@ Godot Vault 13/V13ENT opening slice in Hex and FPS; its OpenXR adapter is
 simulator-only and launcher-disabled. Fallout 2 admits the owned Map 126 and Map 3
 MAP/PRO/FRM source graphs and renders Arroyo Caves in Godot's 3D hex space. Its
 bounded character-start surface selects Narg, Mingan, or Chitsa from owned
-GCD/BIO/panel data, applies sex-correct HMWARR/HFPRIM presentation, and hands
-Take to the grounded source-walk-gated player at Map 3 tile 28707. Its atomic
-OpenNV user-data save cold-restores the selected source state and current Map 3
-transform/mode. The compact launcher enables only this Hex route when all five
-disposable artifacts match the registered owned profile. Modify/Create,
-campaign-wide persistence, script/campaign systems, reciprocal exits,
+GCD/BIO/panel data or uses the same source surface to Modify/Create name, sex,
+age, and exact SPECIAL allocation. Modify preserves source tags/traits; Create
+leaves them unselected. Take applies sex-correct HMWARR/HFPRIM presentation and
+hands the state to the grounded Map 3 tile 28707 player. Its atomic version-2
+save cold-restores character source/custom state and current transform/mode.
+Tag/trait editing, campaign-wide persistence, scripts, reciprocal exits,
 FPS/OpenXR, and parity remain absent.
 New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
 hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
@@ -421,7 +421,7 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionRuntime.cs` | Fail-closed nonvisual exit-grid destination-state application after exact component movement | Destination loading, doors, script execution, actors, or save state |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, MAP-header entry marker, and topology composition in Godot's 3D hex coordinate space | Scripts, character creation, interaction, or playability |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference construction plus exact floor/wall physics-ray report | Rendered-frame, interaction, parity, or launcher claims |
-| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned premade/picker cache validation, visible Narg/Mingan/Chitsa selection, Take handoff, and atomic bounded character/Map 3 save validation plus cold restore | Modify/Create, editable fields, scripts, campaign-wide progression/save state, FPS/OpenXR, parity, or full-campaign readiness |
+| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; premade or custom name/sex/age/exact-SPECIAL selection; sex-correct Take handoff; version-2 bounded character/Map 3 save plus legacy-v1 read and cold restore | Tag/trait editing, scripts, campaign-wide progression/save state, FPS/OpenXR, parity, or full-campaign readiness |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs` | Grounded source-walk-gated Map 3 arrival body with selected sex-correct owned idle-FRM presentation plus validated transform/facing restore and persistence-boundary publication | AP/combat, animation playback, scripts, inventory, campaign-wide persistence, full campaign, or parity |
 | `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
 | `runtime/src/Compatibility/Jam/JamProfileContract.cs` | Shared hash-bound JAM profile/plugin identity and transported-capability admission | Native DLL loading, script interpretation, or complete compatibility |
@@ -454,18 +454,17 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 
 ## Current truth and deliberate gaps
 
-The bounded Fallout 2 launcher Hex route renders the owned premade picker and
-the exact combat, stealth, and diplomat panels, while the runtime text comes
-from the corresponding GCD/BIO records. Taking Narg, Mingan, or Chitsa applies
-that source state and the matching male or female idle FRM to the Map 3 arrival
-body at elevation 0, tile 28707. Keyboard/mouse selection and grounded bounded
-movement are directly proven. The route writes an atomic OpenNV user-data save
-containing the selected profile state and GCD/BIO identities plus Map 3/elevation/tile/facing,
-the current transform, and the bounded runtime modes. A fresh process validates
-the owned source/profile/map/walk-mask identities and restores the same
-sex-correct player. There is no Modify/Create implementation, editable
-name/sex/stats, campaign-wide persistence, Temple script execution, animation
-playback, complete campaign, FPS/OpenXR route, or parity claim.
+The bounded Fallout 2 launcher Hex route renders the owned picker and combat,
+stealth, and diplomat panels. Take selects a premade; Modify and Create expose
+name, sex, age 16–35, and seven SPECIAL values bounded 1–10 and totaling 40.
+Modify retains the source GCD's tags/traits unchanged, while Create records both
+as unselected. Confirm applies the matching male or female idle FRM at Map 3,
+elevation 0, tile 28707. The atomic version-2 save binds the source basis and
+custom state plus Map 3/elevation/tile/facing, transform, and runtime modes; it
+also reads the earlier premade-only version-1 save. Separate male and female
+process pairs prove write and exact cold restore. Tag/trait editing,
+campaign-wide persistence, Temple scripts, animation playback, complete
+campaign, FPS/OpenXR, and parity remain absent.
 
 Implemented in the independently playable saloon/exterior component: direct owned
 ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 504

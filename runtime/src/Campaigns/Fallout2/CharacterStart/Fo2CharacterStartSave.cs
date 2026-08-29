@@ -8,7 +8,7 @@ internal sealed record Fo2CharacterStartSaveState(
     string Path,
     string Sha256,
     string SourceProfileId,
-    Fo2PremadeCharacter Character,
+    Fo2CharacterSelection Character,
     string RuntimeProfileId,
     string RuntimeProfileSha256,
     string MapSha256,
@@ -23,8 +23,10 @@ internal sealed record Fo2CharacterStartSaveState(
     string BlockedMovementMode,
     string PresentationMode)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v1";
-    internal const string RouteMode = "owned-premade-taken-to-arroyo-map-3";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v2";
+    internal const string RouteMode = "chosen-one-taken-to-arroyo-map-3";
+    private const string LegacySchema = "opennv-fo2-character-arroyo-save/v1";
+    private const string LegacyRouteMode = "owned-premade-taken-to-arroyo-map-3";
 
     internal static string DefaultPath => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
@@ -40,16 +42,15 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterStartCatalog characterStart,
         Fo2ArroyoCavesPresentationCatalog arroyo,
         Fo2ArroyoCavesPlayerRuntimeCoverage runtime,
-        Fo2PremadeCharacter character)
+        Fo2CharacterSelection character)
     {
-        if (!characterStart.Characters.Contains(character) ||
-            characterStart.SourceProfileId != arroyo.SourceProfileId ||
+        character.Validate(characterStart);
+        if (characterStart.SourceProfileId != arroyo.SourceProfileId ||
             runtime.Profile.Id != "fo2-arroyo-map-3-player-runtime-v1" ||
             runtime.Player.MotionMode != CharacterBody3D.MotionModeEnum.Grounded ||
             !runtime.Player.CanOccupy(runtime.Player.CurrentTile))
             throw new InvalidOperationException(
                 "Fallout 2 character/Arroyo save state is not authoritative.");
-        character.Profile.Validate();
         var position = runtime.Player.Position;
         if (!Finite(position) ||
             Fo1HexMath.NearestTile(new Vector3(position.X, 0.0f, position.Z)) !=
@@ -91,8 +92,11 @@ internal sealed record Fo2CharacterStartSaveState(
                 sourceProfileId = SourceProfileId,
                 character = new
                 {
+                    Character.Mode,
                     Character.Id,
                     Character.Role,
+                    SourceId = Character.Source.Id,
+                    SourceRole = Character.Source.Role,
                     Character.GcdSha256,
                     Character.BioSha256,
                     Character.Profile.Name,
@@ -147,32 +151,44 @@ internal sealed record Fo2CharacterStartSaveState(
         var path = ResolvePath(configuredPath);
         using var document = JsonDocument.Parse(File.ReadAllBytes(path));
         var root = document.RootElement;
-        if (RequiredString(root, "schema") != Schema ||
+        var schema = RequiredString(root, "schema");
+        var legacy = schema == LegacySchema;
+        if (schema != Schema && schema != LegacySchema ||
             RequiredString(root, "campaign") != "Fallout2" ||
-            RequiredString(root, "routeMode") != RouteMode ||
+            RequiredString(root, "routeMode") != (legacy ? LegacyRouteMode : RouteMode) ||
             RequiredString(root, "sourceProfileId") != characterStart.SourceProfileId ||
             characterStart.SourceProfileId != arroyo.SourceProfileId)
             throw new InvalidOperationException(
                 "Fallout 2 save does not match the active owned source profile.");
 
         var savedCharacter = root.GetProperty("character");
-        var id = RequiredString(savedCharacter, "Id");
-        var character = characterStart.Characters.SingleOrDefault(row => row.Id == id) ??
+        var mode = legacy
+            ? Fo2CharacterSelection.PremadeMode
+            : RequiredString(savedCharacter, "Mode");
+        var sourceId = legacy
+            ? RequiredString(savedCharacter, "Id")
+            : RequiredString(savedCharacter, "SourceId");
+        var source = characterStart.Characters.SingleOrDefault(row => row.Id == sourceId) ??
             throw new InvalidOperationException(
-                $"Fallout 2 save names an unavailable owned premade: {id}");
-        var profile = character.Profile;
-        if (RequiredString(savedCharacter, "Role") != character.Role ||
-            RequiredString(savedCharacter, "GcdSha256") != character.GcdSha256 ||
-            RequiredString(savedCharacter, "BioSha256") != character.BioSha256 ||
-            RequiredString(savedCharacter, "Name") != profile.Name ||
-            savedCharacter.GetProperty("Age").GetInt32() != profile.Age ||
-            RequiredString(savedCharacter, "Sex") != profile.Sex ||
-            !ReadInts(savedCharacter.GetProperty("special")).SequenceEqual(profile.Special) ||
-            !ReadStrings(savedCharacter.GetProperty("taggedSkills"))
-                .SequenceEqual(profile.TaggedSkills) ||
-            !ReadStrings(savedCharacter.GetProperty("traits")).SequenceEqual(profile.Traits))
+                $"Fallout 2 save names an unavailable owned source basis: {sourceId}");
+        if (RequiredString(savedCharacter, legacy ? "Role" : "SourceRole") != source.Role ||
+            RequiredString(savedCharacter, "GcdSha256") != source.GcdSha256 ||
+            RequiredString(savedCharacter, "BioSha256") != source.BioSha256)
             throw new InvalidOperationException(
-                "Fallout 2 saved premade state differs from its owned GCD/BIO source.");
+                "Fallout 2 saved character source basis differs from its owned GCD/BIO state.");
+        var profile = new Fo2CharacterProfile(
+            RequiredString(savedCharacter, "Name"),
+            savedCharacter.GetProperty("Age").GetInt32(),
+            RequiredString(savedCharacter, "Sex"),
+            ReadInts(savedCharacter.GetProperty("special")),
+            ReadStrings(savedCharacter.GetProperty("taggedSkills")),
+            ReadStrings(savedCharacter.GetProperty("traits")));
+        var character = new Fo2CharacterSelection(mode, source, profile);
+        character.Validate(characterStart);
+        if (RequiredString(savedCharacter, "Id") != character.Id ||
+            RequiredString(savedCharacter, "Role") != character.Role)
+            throw new InvalidOperationException(
+                "Fallout 2 saved character route identity drifted.");
 
         var world = root.GetProperty("world");
         var mapIndex = world.GetProperty("mapIndex").GetInt32();

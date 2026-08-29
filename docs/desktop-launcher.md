@@ -15,7 +15,7 @@ game button. Those choices resolve to five isolated character/save paths:
 | ID | Path | Save boundary |
 | --- | --- | --- |
 | `fallout1` | Fallout 1 | One Vault Dweller state shared by hex/FPS and later OpenXR presentation adapters |
-| `fallout2` | Fallout 2 | One bounded Chosen One premade save now cold-restores the selected owned state and current Map 3 transform/mode; future FPS/OpenXR adapters must consume that same authority |
+| `fallout2` | Fallout 2 | One bounded premade, modified, or custom Chosen One save cold-restores source/custom state and current Map 3 transform/mode; future FPS/OpenXR adapters must consume that same authority |
 | `newvegas` | Standalone New Vegas | Mojave-only character |
 | `fallout3` | Standalone Fallout 3 | Capital Wasteland-only character |
 | `ttw` | Combined TTW edition | One Capital Wasteland-to-Mojave character |
@@ -56,11 +56,13 @@ through persistent stage 62. Fallout 2 is a
 fourth visible game card whose owned DAT2 installation and exact Map 126/Map 3 source
 graph can be admitted. Its bounded Hex route selects the owned
 Narg, Mingan, or Chitsa premade, applies source stats/biography/portrait and
-sex-correct idle FRM presentation, and hands Take to the grounded Map 3 player
-at tile 28707. An atomic user-data save cold-restores the selected source state,
-tile, facing, transform, and bounded runtime modes. The launcher enables Hex
+also exposes source-backed Modify/Create for name, sex, age, and exact SPECIAL.
+Modify retains source tags/traits; Create leaves them unselected. Confirm applies
+sex-correct idle FRM presentation and hands the state to the grounded Map 3
+player at tile 28707. An atomic version-2 save cold-restores the character mode,
+source basis, custom state, tile, facing, transform, and bounded modes. The launcher enables Hex
 only after all five local slice artifacts match the registered profile; FPS and
-VR remain disabled. Modify/Create, scripting, campaign-wide state, and parity
+VR remain disabled. Tag/trait editing, scripting, campaign-wide state, and parity
 remain open. The Fallout 3
 intro is converted locally to a hash-verified Theora cache during profile
 registration; Escape and the visible Skip action enter the same CG00 state.

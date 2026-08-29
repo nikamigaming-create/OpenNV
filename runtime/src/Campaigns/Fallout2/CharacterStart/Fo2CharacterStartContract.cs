@@ -11,18 +11,18 @@ internal sealed record Fo2CharacterProfile(
     IReadOnlyList<string> TaggedSkills,
     IReadOnlyList<string> Traits)
 {
-    internal void Validate()
+    internal void Validate(bool allowUnselectedTags = false)
     {
         if (string.IsNullOrWhiteSpace(Name) || Name.Length > 11 ||
             Age is < 16 or > 35 ||
             Sex is not "Male" and not "Female" ||
             Special.Count != 7 || Special.Any(value => value is < 1 or > 10) ||
             Special.Sum() != 40 ||
-            TaggedSkills.Count != 3 ||
-            TaggedSkills.Distinct(StringComparer.Ordinal).Count() != 3 ||
+            TaggedSkills.Count != 3 && !(allowUnselectedTags && TaggedSkills.Count == 0) ||
+            TaggedSkills.Distinct(StringComparer.Ordinal).Count() != TaggedSkills.Count ||
             Traits.Count > 2 ||
             Traits.Distinct(StringComparer.Ordinal).Count() != Traits.Count)
-            throw new InvalidOperationException("Fallout 2 premade character state is invalid.");
+            throw new InvalidOperationException("Fallout 2 character state is invalid.");
     }
 }
 
@@ -56,6 +56,48 @@ internal sealed record Fo2PremadeCharacter(
     string Biography,
     Fo2CharacterStartAsset Panel,
     Fo2CharacterProfile Profile);
+
+internal sealed record Fo2CharacterSelection(
+    string Mode,
+    Fo2PremadeCharacter Source,
+    Fo2CharacterProfile Profile)
+{
+    internal const string PremadeMode = "owned-premade";
+    internal const string ModifyMode = "modified-owned-premade";
+    internal const string CreateMode = "custom-created-from-owned-rules";
+
+    internal string Id => Mode == PremadeMode ? Source.Id : "custom";
+    internal string Role => Mode == PremadeMode ? Source.Role : "Custom";
+    internal string GcdSha256 => Source.GcdSha256;
+    internal string BioSha256 => Source.BioSha256;
+
+    internal static Fo2CharacterSelection FromPremade(Fo2PremadeCharacter source) =>
+        new(PremadeMode, source, source.Profile);
+
+    internal void Validate(Fo2CharacterStartCatalog catalog)
+    {
+        if (!catalog.Characters.Contains(Source) ||
+            Mode != PremadeMode && Mode != ModifyMode && Mode != CreateMode)
+            throw new InvalidOperationException(
+                "Fallout 2 character selection source binding is invalid.");
+        Source.Profile.Validate();
+        Profile.Validate(Mode == CreateMode);
+        if (Mode == PremadeMode && !SameProfile(Profile, Source.Profile) ||
+            Mode == ModifyMode &&
+                (!Profile.TaggedSkills.SequenceEqual(Source.Profile.TaggedSkills) ||
+                 !Profile.Traits.SequenceEqual(Source.Profile.Traits)) ||
+            Mode == CreateMode &&
+                (Profile.TaggedSkills.Count != 0 || Profile.Traits.Count != 0))
+            throw new InvalidOperationException(
+                "Fallout 2 custom character changed an unsupported source rule.");
+    }
+
+    private static bool SameProfile(Fo2CharacterProfile left, Fo2CharacterProfile right) =>
+        left.Name == right.Name && left.Age == right.Age && left.Sex == right.Sex &&
+        left.Special.SequenceEqual(right.Special) &&
+        left.TaggedSkills.SequenceEqual(right.TaggedSkills) &&
+        left.Traits.SequenceEqual(right.Traits);
+}
 
 internal sealed class Fo2CharacterStartCatalog
 {
@@ -109,11 +151,11 @@ internal sealed class Fo2CharacterStartCatalog
     internal int VerifiedResources { get; }
 
     internal Fo2ArroyoPlayerPresentationSource PresentationFor(
-        Fo2PremadeCharacter character,
+        Fo2CharacterSelection character,
         Fo2ArroyoPlayerPresentationCatalog malePresentation)
     {
-        if (!Characters.Contains(character) ||
-            malePresentation.SourceProfileId != SourceProfileId)
+        character.Validate(this);
+        if (malePresentation.SourceProfileId != SourceProfileId)
             throw new InvalidOperationException(
                 "Fallout 2 selected character presentation binding drifted.");
         return character.Profile.Sex == "Female"
