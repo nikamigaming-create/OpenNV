@@ -142,6 +142,12 @@ AUTO_DISPLAY_OBJECTIVES_PATTERN = re.compile(
     r"^AutoDisplayObjectives\s+(?P<value>\d+)$",
     re.IGNORECASE,
 )
+SET_OBJECTIVE_DISPLAYED_PATTERN = re.compile(
+    r"^setObjectiveDisplayed\s+(?P<quest>[A-Za-z_][A-Za-z0-9_]*)\s+"
+    r"(?P<index>\d+)\s+(?P<value>\d+)$",
+    re.IGNORECASE,
+)
+AUTOSAVE_PATTERN = re.compile(r"^autosave$", re.IGNORECASE)
 SET_NO_ACTIVATION_SOUND_PATTERN = re.compile(
     r"^SetNoActivationSound\s+(?P<sound>[A-Za-z_][A-Za-z0-9_]*)$",
     re.IGNORECASE,
@@ -188,9 +194,29 @@ CONDITION_REFERENCE_OFFSET = 24
 GET_IS_SEX_FUNCTION = 70
 GET_STAGE_FUNCTION = 58
 GET_IS_VOICE_TYPE_FUNCTION = 427
+GET_PC_IS_SEX_FUNCTION = 131
+GET_IS_ID_FUNCTION = 72
 DIALOGUE_CHILD_GROUP_TYPE = 7
 INITIALLY_DISABLED_RECORD_FLAG = 0x00000800
 RACE_DATA_BYTES = 36
+
+FO3_VIDEO_IMPORT_POLICY = {
+    "transcoderKind": "ffmpeg2theora",
+    "transcoderExecutable": "ffmpeg2theora",
+    "transcoderSha256": "a1e0f97bde8b1b8874480a2f153651258e0f35b86d1d24a8a911bd4a841b8308",
+    "outputExtension": ".ogv",
+    "videoQuality": 7,
+    "audioQuality": 5,
+    "disableSkeleton": True,
+    "stripMetadata": True,
+    "validatorExecutable": "ffmpeg",
+    "windowsBootstrap": {
+        "sourceUrl": "http://v2v.cc/~j/ffmpeg2theora/ffmpeg2theora-0.29.exe",
+        "cacheRelativePath": (
+            "OpenNV/tools/ffmpeg2theora/0.29-a1e0f97b/ffmpeg2theora.exe"
+        ),
+    },
+}
 RACE_FLAGS_OFFSET = 32
 RACE_PLAYABLE_FLAG = 0x01
 HAIR_PLAYABLE_FLAG = 0x01
@@ -286,6 +312,16 @@ def load_recipe(path: Path) -> dict[str, object]:
         or not opening["quests"]
     ):
         raise ValueError(f"Fallout 3 owned-profile recipe is incomplete: {path}")
+    configured_video_import = document.get("videoImport")
+    if (
+        not isinstance(configured_video_import, dict)
+        or json.dumps(configured_video_import, sort_keys=True, separators=(",", ":"))
+        != json.dumps(FO3_VIDEO_IMPORT_POLICY, sort_keys=True, separators=(",", ":"))
+    ):
+        raise ValueError(
+            "Fallout 3 owned-profile recipe video-import policy differs from its "
+            "pinned ffmpeg2theora contract"
+        )
     return document
 
 
@@ -1478,6 +1514,403 @@ def _parse_cg01_stage5_commands(source: str) -> list[dict[str, object]]:
     return commands
 
 
+def _parse_cg01_stage10_commands(source: str) -> list[dict[str, object]]:
+    commands = []
+    for text in _source_commands(source):
+        if match := SET_OBJECTIVE_DISPLAYED_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "setObjectiveDisplayed",
+                    "questEditorId": match.group("quest"),
+                    "index": int(match.group("index")),
+                    "value": int(match.group("value")),
+                }
+            )
+            continue
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            commands.append(
+                {
+                    "kind": "setScriptVariable",
+                    "subject": match.group("subject"),
+                    "variable": match.group("variable"),
+                    "value": float(match.group("value")),
+                }
+            )
+            continue
+        if match := PLAYER_CONTROLS_PATTERN.fullmatch(text):
+            if match.group("command").casefold() != "enableplayercontrols":
+                raise ValueError(
+                    f"Fallout 3 CG01 stage 10 uses an unsupported command: {text}"
+                )
+            commands.append(
+                {
+                    "kind": "enablePlayerControls",
+                    "arguments": [int(value) for value in match.group("arguments").split()],
+                }
+            )
+            continue
+        if AUTOSAVE_PATTERN.fullmatch(text):
+            commands.append({"kind": "autosave"})
+            continue
+        raise ValueError(f"Fallout 3 CG01 stage 10 uses an unsupported command: {text}")
+    expected = [
+        "setObjectiveDisplayed",
+        "setScriptVariable",
+        "enablePlayerControls",
+        "autosave",
+    ]
+    if [str(command["kind"]) for command in commands] != expected:
+        raise ValueError("Fallout 3 CG01 stage 10 command order differs")
+    if commands[2]["arguments"] != [1, 0, 0, 0, 1, 1, 0]:
+        raise ValueError("Fallout 3 CG01 stage 10 enabled-control mask differs")
+    return commands
+
+
+def _compile_cg01_post_stage5_transition(
+    records: tuple[object, ...],
+    definition: dict[str, object],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    dad_reference: object,
+    dad_base: object,
+    dad_script: object,
+) -> dict[str, object]:
+    source_stage = int(definition["nestedStage"])
+    target_stage = int(definition["dialogueTargetStage"])
+    if source_stage != 5 or target_stage != 10:
+        raise ValueError("Fallout 3 CG01 Dad dialogue stage join differs")
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    topic_editor_id = str(definition["dadSpeechTopicEditorId"])
+    topic_form_id = int(str(definition["dadSpeechTopicFormId"]), FORM_ID_RADIX)
+    topics = [
+        record
+        for record in by_editor.get(topic_editor_id.casefold(), [])
+        if record.signature == DIALOGUE_TOPIC_RECORD
+    ]
+    if len(topics) != 1 or topics[0].form_id != topic_form_id:
+        raise ValueError("Fallout 3 CG01 Dad dialogue topic identity differs")
+    topic = topics[0]
+    if struct.unpack("<I", _single_subrecord(topic, "QSTI"))[0] != quest.form_id:
+        raise ValueError("Fallout 3 CG01 Dad dialogue topic quest differs")
+
+    dad_script_source = _script_source(dad_script)
+    required_variables = {"doTalk": "short", "talking": "short", "timer": "float"}
+    for variable, variable_type in required_variables.items():
+        declarations = [
+            match.group("type").casefold()
+            for match in re.finditer(
+                rf"^\s*(?P<type>short|float)\s+{re.escape(variable)}\b",
+                dad_script_source,
+                re.IGNORECASE | re.MULTILINE,
+            )
+        ]
+        if declarations != [variable_type]:
+            raise ValueError(f"Fallout 3 CG01 Dad dialogue variable differs: {variable}")
+    if (
+        re.search(
+            r"\bif\s+doTalk\s*==\s*1\s*&&\s*talking\s*==\s*0\b",
+            dad_script_source,
+            re.IGNORECASE,
+        )
+        is None
+        or re.search(
+            rf"\bSayTo\s+player\s+{re.escape(topic_editor_id)}\s+1\b",
+            dad_script_source,
+            re.IGNORECASE,
+        )
+        is None
+        or re.search(
+            r"\bset\s+timer\s+to\s+timer\s*-\s*GetSecondsPassed\b",
+            dad_script_source,
+            re.IGNORECASE,
+        )
+        is None
+    ):
+        raise ValueError("Fallout 3 CG01 Dad dialogue trigger script differs")
+
+    voice_links = [
+        struct.unpack("<I", subrecord.data)[0]
+        for subrecord in iter_subrecords(dad_base)
+        if subrecord.signature == "VTCK" and len(subrecord.data) == FORM_ID_BYTES
+    ]
+    if len(voice_links) != 1:
+        raise ValueError("Fallout 3 CG01 Dad voice type is ambiguous")
+    voice = by_form.get(voice_links[0])
+    if voice is None or voice.signature != VOICE_TYPE_RECORD:
+        raise ValueError("Fallout 3 CG01 Dad voice type is absent")
+
+    pass_definitions = (
+        (0, definition["dadSpeechPreludeInfoFormIds"]),
+        (1, definition["dadSpeechStageInfoFormIds"]),
+    )
+    branches = []
+    for sequence, raw_form_ids in pass_definitions:
+        expected_info_forms = {
+            int(str(value), FORM_ID_RADIX) for value in raw_form_ids
+        }
+        if len(expected_info_forms) != 2:
+            raise ValueError("Fallout 3 CG01 Dad dialogue pass is incomplete")
+        for info_form_id in sorted(expected_info_forms):
+            info = by_form.get(info_form_id)
+            if info is None or info.signature != DIALOGUE_INFO_RECORD:
+                raise ValueError(
+                    f"Fallout 3 CG01 Dad INFO is absent: {_form_id(info_form_id)}"
+                )
+            if not any(
+                group.group_type == DIALOGUE_CHILD_GROUP_TYPE
+                and group.label_u32 == topic.form_id
+                for group in info.groups
+            ):
+                raise ValueError("Fallout 3 CG01 Dad INFO topic ownership differs")
+            if struct.unpack("<I", _single_subrecord(info, "QSTI"))[0] != quest.form_id:
+                raise ValueError("Fallout 3 CG01 Dad INFO quest ownership differs")
+            conditions = [
+                _dialogue_condition(subrecord.data)
+                for subrecord in iter_subrecords(info)
+                if subrecord.signature == "CTDA"
+            ]
+            by_function = {int(row["function"]): row for row in conditions}
+            if len(conditions) != 2 or set(by_function) != {
+                GET_PC_IS_SEX_FUNCTION,
+                GET_IS_ID_FUNCTION,
+            }:
+                raise ValueError("Fallout 3 CG01 Dad INFO conditions differ")
+            sex_condition = by_function[GET_PC_IS_SEX_FUNCTION]
+            identity_condition = by_function[GET_IS_ID_FUNCTION]
+            sex_value = int(sex_condition["parameter1"])
+            if (
+                sex_value not in {0, 1}
+                or sex_condition["operatorFlags"] != 0
+                or sex_condition["comparisonValue"] != 1.0
+                or sex_condition["parameter2"] != 0
+                or sex_condition["runOn"] != 0
+                or sex_condition["reference"] != 0
+            ):
+                raise ValueError("Fallout 3 CG01 Dad INFO sex condition differs")
+            if (
+                identity_condition["operatorFlags"] != 0
+                or identity_condition["comparisonValue"] != 1.0
+                or identity_condition["parameter1"] != dad_base.form_id
+                or identity_condition["parameter2"] != 0
+                or identity_condition["runOn"] != 0
+                or identity_condition["reference"] != 0
+            ):
+                raise ValueError("Fallout 3 CG01 Dad INFO identity condition differs")
+
+            source_rows = _text_values(info, "SCTX")
+            if not source_rows:
+                raise ValueError("Fallout 3 CG01 Dad INFO result is absent")
+            source = "\n".join(source_rows)
+            source_commands = _source_commands(source)
+            effects = []
+            if sequence == 0:
+                if len(source_commands) != 1:
+                    raise ValueError("Fallout 3 CG01 Dad prelude result is ambiguous")
+                timer_match = SET_REFERENCE_VARIABLE_PATTERN.fullmatch(source_commands[0])
+                if (
+                    timer_match is None
+                    or timer_match.group("subject").casefold()
+                    != (_editor_id(dad_reference) or "").casefold()
+                    or timer_match.group("variable").casefold() != "timer"
+                    or float(timer_match.group("value")) != 1.0
+                ):
+                    raise ValueError("Fallout 3 CG01 Dad prelude timer differs")
+                effects.append(
+                    {
+                        "kind": "setScriptVariable",
+                        "referenceFormId": _form_id(dad_reference.form_id),
+                        "referenceEditorId": _editor_id(dad_reference),
+                        "variable": "timer",
+                        "variableType": "float",
+                        "value": 1.0,
+                    }
+                )
+            else:
+                if len(source_commands) != 2:
+                    raise ValueError("Fallout 3 CG01 Dad stage result is ambiguous")
+                expected_results = (
+                    (
+                        str(definition["questEditorId"]),
+                        quest.form_id,
+                        target_stage,
+                    ),
+                    (
+                        str(definition["tutorialQuestEditorId"]),
+                        int(str(definition["tutorialQuestFormId"]), FORM_ID_RADIX),
+                        int(definition["tutorialQuestStage"]),
+                    ),
+                )
+                for result_source, (editor_id, form_id, stage) in zip(
+                    source_commands, expected_results
+                ):
+                    match = SET_STAGE_PATTERN.fullmatch(result_source)
+                    target_quest = by_form.get(form_id)
+                    if (
+                        match is None
+                        or match.group("quest").casefold() != editor_id.casefold()
+                        or int(match.group("stage")) != stage
+                        or target_quest is None
+                        or target_quest.signature != QUEST_RECORD
+                        or (_editor_id(target_quest) or "").casefold() != editor_id.casefold()
+                    ):
+                        raise ValueError("Fallout 3 CG01 Dad stage command differs")
+                    effects.append(
+                        {
+                            "kind": "setStage",
+                            "questFormId": _form_id(target_quest.form_id),
+                            "questEditorId": _editor_id(target_quest),
+                            "stage": stage,
+                        }
+                    )
+
+            response_lines = [value for value in _text_values(info, "NAM1") if value]
+            if len(response_lines) != 1:
+                raise ValueError("Fallout 3 CG01 Dad response is absent or ambiguous")
+            response_text = response_lines[0]
+            branches.append(
+                {
+                    "sequence": sequence,
+                    "engineSex": "female" if sex_value == 1 else "male",
+                    "infoFormId": _form_id(info.form_id),
+                    "recordSha256": hashlib.sha256(info.data).hexdigest(),
+                    "resultSourceSha256": hashlib.sha256(
+                        source.encode("cp1252")
+                    ).hexdigest(),
+                    "effects": effects,
+                    "conditions": [
+                        {
+                            **row,
+                            "parameter1": _form_id(int(row["parameter1"])),
+                            "reference": _form_id(int(row["reference"])),
+                        }
+                        for row in conditions
+                    ],
+                    "response": {
+                        "index": 1,
+                        "text": response_text,
+                        "textSha256": hashlib.sha256(
+                            response_text.encode("utf-8")
+                        ).hexdigest(),
+                    },
+                }
+            )
+    if {
+        (int(row["sequence"]), str(row["engineSex"])) for row in branches
+    } != {(0, "male"), (0, "female"), (1, "male"), (1, "female")}:
+        raise ValueError("Fallout 3 CG01 Dad dialogue branches are incomplete")
+
+    target_sources = stage_sources.get(target_stage, [])
+    if len(target_sources) != 1:
+        raise ValueError("Fallout 3 CG01 stage 10 result is ambiguous")
+    target_source = target_sources[0]
+    stage_commands = _parse_cg01_stage10_commands(target_source)
+    resolved_commands = []
+    for index, command in enumerate(stage_commands):
+        kind = str(command["kind"])
+        resolved: dict[str, object] = {"index": index, "kind": kind}
+        if kind == "setObjectiveDisplayed":
+            if (
+                str(command["questEditorId"]).casefold()
+                != (_editor_id(quest) or "").casefold()
+                or int(command["index"]) != 10
+                or int(command["value"]) != 1
+            ):
+                raise ValueError("Fallout 3 CG01 stage 10 objective differs")
+            resolved.update(
+                {
+                    "questFormId": _form_id(quest.form_id),
+                    "questEditorId": _editor_id(quest),
+                    "objectiveIndex": 10,
+                    "displayed": True,
+                }
+            )
+        elif kind == "setScriptVariable":
+            if (
+                str(command["subject"]).casefold()
+                != (_editor_id(dad_reference) or "").casefold()
+                or str(command["variable"]).casefold() != "timer"
+                or float(command["value"]) != 5.0
+            ):
+                raise ValueError("Fallout 3 CG01 stage 10 Dad timer differs")
+            resolved.update(
+                {
+                    "referenceFormId": _form_id(dad_reference.form_id),
+                    "referenceEditorId": _editor_id(dad_reference),
+                    "scriptFormId": _form_id(dad_script.form_id),
+                    "scriptEditorId": _editor_id(dad_script),
+                    "scriptRecordSha256": hashlib.sha256(dad_script.data).hexdigest(),
+                    "scriptSourceSha256": hashlib.sha256(
+                        dad_script_source.encode("cp1252")
+                    ).hexdigest(),
+                    "variable": "timer",
+                    "variableType": "float",
+                    "value": 5.0,
+                }
+            )
+        elif kind == "enablePlayerControls":
+            resolved["arguments"] = list(command["arguments"])
+        elif kind == "autosave":
+            resolved["requestCount"] = 1
+        else:
+            raise ValueError(f"Fallout 3 CG01 stage 10 command is not resolved: {kind}")
+        resolved_commands.append(resolved)
+
+    return {
+        "schema": "opennv-fo3-cg01-stage-5-to-10-transition/v1",
+        "status": "source-backed-dad-dialogue-and-stage-result-runtime-unapplied",
+        "sourceStage": source_stage,
+        "targetStage": target_stage,
+        "dadScript": {
+            "formId": _form_id(dad_script.form_id),
+            "editorId": _editor_id(dad_script),
+            "recordSha256": hashlib.sha256(dad_script.data).hexdigest(),
+            "sourceSha256": hashlib.sha256(dad_script_source.encode("cp1252")).hexdigest(),
+            "requiredVariables": [
+                {"name": "doTalk", "type": "short", "value": 1},
+                {"name": "talking", "type": "short", "value": 0},
+            ],
+            "timerVariable": {"name": "timer", "type": "float"},
+            "decrementFunction": "GetSecondsPassed",
+        },
+        "dialogue": {
+            "topic": {
+                "formId": _form_id(topic.form_id),
+                "editorId": _editor_id(topic),
+                "recordSha256": hashlib.sha256(topic.data).hexdigest(),
+                "questFormId": _form_id(quest.form_id),
+            },
+            "voiceType": {
+                "formId": _form_id(voice.form_id),
+                "editorId": _editor_id(voice),
+                "recordSha256": hashlib.sha256(voice.data).hexdigest(),
+            },
+            "branches": sorted(
+                branches,
+                key=lambda row: (int(row["sequence"]), str(row["engineSex"])),
+            ),
+            "dialoguePlaybackPrepared": False,
+            "dialoguePlaybackImplemented": False,
+        },
+        "stageResult": {
+            "stageSourceSha256": hashlib.sha256(
+                target_source.encode("cp1252")
+            ).hexdigest(),
+            "accountedCommandCount": len(resolved_commands),
+            "commands": resolved_commands,
+        },
+        "nextBoundary": {
+            "applied": False,
+            "blocker": "fo3-cg01-post-stage-10-toddler-world-interaction-not-implemented",
+        },
+    }
+
+
 def _compile_post_stage65_dialogue(
     records: tuple[object, ...],
     selection: dict[str, object],
@@ -2391,6 +2824,10 @@ def _compile_cg01_stage0_transition(
         expected_reference_forms["dad"],
         "Dad reference",
     )
+    dad_script_form_id = struct.unpack("<I", _single_subrecord(dad_base, "SCRI"))[0]
+    dad_script = by_form.get(dad_script_form_id)
+    if dad_script is None or dad_script.signature != SCRIPT_RECORD:
+        raise ValueError("Fallout 3 CG01 Dad script is absent")
     _, _, dad_marker = reference_contract(
         str(stage0_commands[0]["target"]),
         PLACED_REFERENCE_RECORD,
@@ -2563,6 +3000,15 @@ def _compile_cg01_stage0_transition(
         "accountedCommandCount": len(resolved_stage0),
         "commands": resolved_stage0,
     }
+    post_stage5_transition = _compile_cg01_post_stage5_transition(
+        records,
+        definition,
+        quest,
+        stage_sources,
+        dad_reference,
+        dad_base,
+        dad_script,
+    )
     if (
         int(stage100_transition["stage"]) != 100
         or int(dict(stage100_transition["nextBoundary"])["commandIndex"]) != 7
@@ -2592,6 +3038,7 @@ def _compile_cg01_stage0_transition(
         "resultingStage": nested_stage,
         "accountedCommandCount": len(resolved_stage0) + len(resolved_stage5),
         "stage0Result": stage0_result,
+        "postStage5Transition": post_stage5_transition,
         "nestedExecution": {
             "stage0CommandIndex": 1,
             "stage": nested_stage,
@@ -3309,6 +3756,7 @@ def _case_insensitive_descendant(root: Path, relative_path: str) -> Path:
 
 def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> dict[str, object]:
     recipe = load_recipe(recipe_path)
+    video_import_policy = dict(recipe["videoImport"])
     configuration = load_runtime_configuration()
     install_root, resolved_data_root = resolve_installation(data_root, recipe)
     install = dict(recipe["install"])
@@ -3432,6 +3880,18 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         profile_root,
     )
     character_selection["postStage85Dialogue"] = post_stage85_dialogue
+    cg01_transition = dict(character_selection["cg01Stage0Transition"])
+    post_stage5_transition = dict(cg01_transition["postStage5Transition"])
+    cg01_dad_dialogue = dict(post_stage5_transition["dialogue"])
+    _bind_owned_dad_dialogue_audio(
+        cg01_dad_dialogue,
+        BsaArchive(archive_by_role[voices_role]),
+        next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
+        profile_root,
+    )
+    post_stage5_transition["dialogue"] = cg01_dad_dialogue
+    cg01_transition["postStage5Transition"] = post_stage5_transition
+    character_selection["cg01Stage0Transition"] = cg01_transition
     appearance_contract = _appearance_inventory(
         master,
         recipe,
@@ -3479,6 +3939,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         Path(str(videos[0]["source"])),
         profile_root,
         configuration,
+        video_import_policy,
     )
     cg01_transition = dict(character_selection["cg01Stage0Transition"])
     stage0_commands = [
@@ -3507,6 +3968,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         Path(str(transition_source["source"])),
         profile_root,
         configuration,
+        video_import_policy,
     )
     prepared_transition_video = {
         **transition_source,
@@ -3611,11 +4073,12 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "cg00Stage90ContractReady": True,
             "cg00Stage100ContractReady": True,
             "cg01Stage0ContractReady": True,
+            "cg01Stage10ContractReady": True,
             "vault101BirthGraphCompiled": True,
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg01-post-stage-5-world-ai-not-implemented",
+            "fo3-cg01-post-stage-10-toddler-world-interaction-not-implemented",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
         ],

@@ -350,6 +350,7 @@ internal sealed record Fo3OwnedProfile(
     Fo3Stage90Transition Stage90Transition,
     Fo3Stage100Transition Stage100Transition,
     Fo3Cg01Stage0Transition Cg01Stage0Transition,
+    Fo3Cg01Stage10Transition Cg01Stage10Transition,
     string MainMenuMusicPath,
     string IntroVideoPath,
     Color InterfaceColor)
@@ -380,6 +381,7 @@ internal sealed record Fo3OwnedProfile(
             !RequiredBoolean(capabilities, "cg00Stage90ContractReady") ||
             !RequiredBoolean(capabilities, "cg00Stage100ContractReady") ||
             !RequiredBoolean(capabilities, "cg01Stage0ContractReady") ||
+            !RequiredBoolean(capabilities, "cg01Stage10ContractReady") ||
             !RequiredBoolean(capabilities, "vault101BirthGraphCompiled") ||
             !RequiredBoolean(capabilities, "mainMenuRuntimeReady") ||
             !RequiredBoolean(capabilities, "introVideoRuntimeReady") ||
@@ -443,9 +445,13 @@ internal sealed record Fo3OwnedProfile(
             RequiredObject(selection, "stage100Transition"),
             stage90Transition,
             RequiredString(quest, "formId"));
+        var cg01Source = RequiredObject(selection, "cg01Stage0Transition");
         var cg01Stage0Transition = Fo3Cg01Stage0Transition.Load(
-            RequiredObject(selection, "cg01Stage0Transition"),
+            cg01Source,
             stage100Transition);
+        var cg01Stage10Transition = Fo3Cg01Stage10Transition.Load(
+            RequiredObject(cg01Source, "postStage5Transition"),
+            cg01Stage0Transition);
         if (!stages.Contains(stage65Appearance.Stage) ||
             !stages.Contains(stage80Transition.Stage) ||
             !stages.Contains(stage85Transition.Stage) ||
@@ -504,6 +510,7 @@ internal sealed record Fo3OwnedProfile(
             stage90Transition,
             stage100Transition,
             cg01Stage0Transition,
+            cg01Stage10Transition,
             RequiredString(mainMenuMusic, "source"),
             RequiredString(runtimeIntroVideo, "output"),
             interfaceColor);
@@ -669,8 +676,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private bool _introCompleted;
     private Fo3OwnedVideoMode _ownedVideoMode;
     private Fo3Cg01Stage0State? _activeCg01MovieState;
+    private Fo3Cg01RuntimeContext? _activeCg01MovieContext;
     private string? _cg01ProofMode;
     private string? _cg01ProofReportPath;
+    private bool _cg01ProofMovieEscapeSkipped;
 
     internal void Configure(
         Fo3OwnedProfile profile,
@@ -1134,14 +1143,31 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 RequiredSaveObject(root, "stage100Transition"),
                 stage100);
             Fo3Cg01Stage0State? cg01 = null;
+            Fo3Cg01Stage10State? cg01Stage10 = null;
             if (root.TryGetProperty("cg01Stage0Transition", out var savedCg01) &&
                 savedCg01.ValueKind == JsonValueKind.Object)
             {
                 cg01 = _profile.Cg01Stage0Transition.Apply(stage100);
                 _profile.Cg01Stage0Transition.ValidateSavedState(savedCg01, cg01);
-                ValidateBirthRuntimeState(
-                    RequiredSaveObject(root, "birthRuntime"),
-                    "cg01-stage0-stage5-applied-post-stage5-blocked");
+                if (root.TryGetProperty("cg01Stage10Transition", out var savedCg01Stage10) &&
+                    savedCg01Stage10.ValueKind == JsonValueKind.Object)
+                {
+                    cg01Stage10 = _profile.Cg01Stage10Transition.Apply(
+                        cg01,
+                        _selectedSex.EngineSex);
+                    _profile.Cg01Stage10Transition.ValidateSavedState(
+                        savedCg01Stage10,
+                        cg01Stage10);
+                    ValidateBirthRuntimeState(
+                        RequiredSaveObject(root, "birthRuntime"),
+                        "cg01-stage10-applied-post-stage10-blocked");
+                }
+                else
+                {
+                    ValidateBirthRuntimeState(
+                        RequiredSaveObject(root, "birthRuntime"),
+                        "cg01-stage0-stage5-applied-dad-dialogue-pending");
+                }
             }
             else
             {
@@ -1158,7 +1184,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 stage85,
                 stage90,
                 stage100,
-                cg01);
+                cg01,
+                cg01Stage10);
         }
         catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
         {
@@ -1313,7 +1340,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Stage85State? resumedStage85 = null,
         Fo3Stage90State? resumedStage90 = null,
         Fo3Stage100State? resumedStage100 = null,
-        Fo3Cg01Stage0State? resumedCg01 = null)
+        Fo3Cg01Stage0State? resumedCg01 = null,
+        Fo3Cg01Stage10State? resumedCg01Stage10 = null)
     {
         var contract = _birthPresentation ?? throw new InvalidOperationException(
             "Fallout 3 Vault 101 birth room has no owned presentation contract.");
@@ -1354,7 +1382,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             (resumedStage100 is not null &&
                 (resumedStage90 is null ||
                  resumedStage100.Stage != _profile.Stage100Transition.Stage)) ||
-            (resumedCg01 is not null && resumedStage100 is null))
+            (resumedCg01 is not null && resumedStage100 is null) ||
+            (resumedCg01Stage10 is not null && resumedCg01 is null))
             throw new InvalidOperationException(
                 "Fallout 3 resumed birth-room stage chain is incomplete.");
 
@@ -1421,7 +1450,22 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         {
             ApplyStage100Presentation(resumedStage100);
             if (resumedCg01 is not null)
-                ShowCg01PostStage5Boundary(resumedCg01, resumed: true);
+            {
+                var cg01Context = new Fo3Cg01RuntimeContext(
+                    playerName,
+                    sex,
+                    selection,
+                    transition.Activate(),
+                    stage65,
+                    resumedStage80!,
+                    resumedStage85!,
+                    resumedStage90!,
+                    resumedStage100);
+                if (resumedCg01Stage10 is not null)
+                    ShowCg01PostStage10Boundary(resumedCg01Stage10, resumed: true);
+                else
+                    BeginCg01DadDialogue(resumedCg01, cg01Context, resumed: true);
+            }
             else
                 ApplyCg01AfterStage100(new Fo3Cg01RuntimeContext(
                     playerName,
@@ -1444,7 +1488,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 resumedStage80!,
                 resumedStage85!,
                 resumedStage90));
-        var activeStage = resumedCg01?.ActiveStage ?? resumedStage100?.Stage ??
+        var activeStage = resumedCg01Stage10?.ActiveStage ?? resumedCg01?.ActiveStage ??
+            resumedStage100?.Stage ??
             resumedStage90?.Stage ?? resumedStage85?.Stage ??
             resumedStage80?.Stage ?? stage65.Stage;
         GD.Print(
@@ -1463,6 +1508,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"stage90Applied={(resumedStage90 is null ? 0 : 1)} " +
             $"stage100Applied={(resumedStage100 is null ? 0 : 1)} " +
             $"cg01Stage0Applied={(resumedCg01 is null ? 0 : 1)} " +
+            $"cg01Stage10Applied={(resumedCg01Stage10 is null ? 0 : 1)} " +
             $"cg01MovieReplayed={(resumedCg01 is null ? "n/a" : "0")} " +
             $"dadEnabled={(resumedStage100 is null ? 1 : 0)}");
     }
@@ -1750,7 +1796,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             context.Stage90,
             context.Stage100,
             state);
-        StartCg01TransitionMovie(state);
+        StartCg01TransitionMovie(state, context);
         GD.Print(
             $"OPENNV_FO3_CG01_STAGE0_STAGE5_APPLIED quest={state.ActiveQuestFormId} " +
             $"stage={state.ActiveStage} commands={state.AppliedCommandCount} " +
@@ -1773,12 +1819,15 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         coverage.DadActor.Placement.ProcessMode = ProcessModeEnum.Disabled;
     }
 
-    private void StartCg01TransitionMovie(Fo3Cg01Stage0State state)
+    private void StartCg01TransitionMovie(
+        Fo3Cg01Stage0State state,
+        Fo3Cg01RuntimeContext? context = null)
     {
         if (_video is not null || _ownedVideoMode != Fo3OwnedVideoMode.None)
             throw new InvalidOperationException("Fallout 3 CG01 transition movie is already active.");
         _ownedVideoMode = Fo3OwnedVideoMode.Cg01Transition;
         _activeCg01MovieState = state;
+        _activeCg01MovieContext = context;
         _introLayer = new Control { Name = "Fallout3OwnedCg01Transition" };
         _introLayer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         AddChild(_introLayer);
@@ -1818,32 +1867,139 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             _activeCg01MovieState is null)
             return;
         var state = _activeCg01MovieState;
+        var context = _activeCg01MovieContext;
         _activeCg01MovieState = null;
+        _activeCg01MovieContext = null;
         ClearOwnedVideo();
         if (_cg01ProofMode == "apply")
-        {
-            WriteCg01ProofReport(
-                state,
-                "apply",
-                movieSurfaceRequested: true,
-                escapeSkipped: skipped,
-                movieReplayed: false);
-            GetTree().Quit(0);
-            return;
-        }
-        ShowCg01PostStage5Boundary(state, resumed: false);
+            _cg01ProofMovieEscapeSkipped = skipped;
+        BeginCg01DadDialogue(
+            state,
+            context ?? throw new InvalidOperationException(
+                "Fallout 3 CG01 Dad dialogue has no runtime context."),
+            resumed: false);
         GD.Print(
             $"OPENNV_FO3_CG01_TRANSITION_MOVIE_COMPLETE " +
             $"mode={(skipped ? "skipped" : "watched")} stage={state.ActiveStage} " +
             $"nextApplied=0 blocker={state.NextBoundary.Blocker}");
     }
 
-    private void ShowCg01PostStage5Boundary(Fo3Cg01Stage0State state, bool resumed)
+    private void BeginCg01DadDialogue(
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01RuntimeContext context,
+        bool resumed)
+    {
+        _vaultPreviewOverlay?.QueueFree();
+        var subtitle = AddVaultDialogueOverlay("FO3_CG01_STAGE5_DAD_DIALOGUE");
+        var cues = _profile.Cg01Stage10Transition.DialogueFor(context.Sex.EngineSex);
+        PlayCg01DadCue(stage5, context, cues, 0, subtitle);
+        GD.Print(
+            $"OPENNV_FO3_CG01_DAD_DIALOGUE_STARTED stage={stage5.ActiveStage} " +
+            $"sex={context.Sex.EngineSex} cues={cues.Count} resumed={(resumed ? 1 : 0)} " +
+            "movieReplayed=0");
+    }
+
+    private void PlayCg01DadCue(
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01RuntimeContext context,
+        IReadOnlyList<Fo3Cg01DadSpeechCue> cues,
+        int index,
+        Label subtitle)
+    {
+        if (index < 0 || index >= cues.Count)
+            throw new InvalidOperationException("Fallout 3 CG01 Dad dialogue cursor differs.");
+        var cue = cues[index];
+        _vaultDialogueVoice?.Stop();
+        _vaultDialogueVoice?.QueueFree();
+        var stream = AudioStreamOggVorbis.LoadFromFile(cue.Response.Voice.SourcePath)
+            ?? throw new InvalidOperationException(
+                $"Fallout 3 CG01 Dad voice could not be decoded: " +
+                cue.Response.Voice.LogicalPath);
+        var durationSeconds = stream.GetLength();
+        if (!double.IsFinite(durationSeconds) || durationSeconds <= 0.0)
+            throw new InvalidOperationException("Fallout 3 CG01 Dad voice has no duration.");
+        _vaultDialogueVoice = new AudioStreamPlayer
+        {
+            Name = $"Fallout3Cg01DadVoice{cue.Sequence}",
+            Stream = stream,
+        };
+        _vaultDialogueVoice.Finished += () =>
+        {
+            _vaultDialogueVoice?.QueueFree();
+            _vaultDialogueVoice = null;
+            if (index + 1 < cues.Count)
+            {
+                var timer = GetTree().CreateTimer(cue.DadTimerAfterSeconds);
+                timer.Timeout += () => PlayCg01DadCue(
+                    stage5,
+                    context,
+                    cues,
+                    index + 1,
+                    subtitle);
+                GD.Print(
+                    $"OPENNV_FO3_CG01_DAD_TIMER_SET info={cue.InfoFormId} " +
+                    $"seconds={cue.DadTimerAfterSeconds:F1}");
+                return;
+            }
+            CompleteCg01DadDialogue(stage5, context, cues, subtitle);
+        };
+        AddChild(_vaultDialogueVoice);
+        subtitle.Text = $"DAD: {cue.Response.Text}";
+        subtitle.Visible = true;
+        _vaultDialogueVoice.Play();
+        GD.Print(
+            $"OPENNV_FO3_CG01_DAD_CUE_STARTED sequence={cue.Sequence} " +
+            $"info={cue.InfoFormId} duration={durationSeconds:F3} " +
+            $"voice={cue.Response.Voice.LogicalPath} lip={cue.Response.Lip.LogicalPath}");
+    }
+
+    private void CompleteCg01DadDialogue(
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01RuntimeContext context,
+        IReadOnlyList<Fo3Cg01DadSpeechCue> cues,
+        Label subtitle)
+    {
+        subtitle.Visible = false;
+        _vaultPreviewOverlay?.QueueFree();
+        _vaultPreviewOverlay = null;
+        var state = _profile.Cg01Stage10Transition.Apply(stage5, context.Sex.EngineSex);
+        if (!state.AppliedInfoFormIds.SequenceEqual(cues.Select(value => value.InfoFormId)))
+            throw new InvalidOperationException("Fallout 3 CG01 applied INFO sequence differs.");
+        PersistCg01Stage10Transition(context, stage5, state);
+        if (_cg01ProofMode == "apply")
+        {
+            WriteCg01ProofReport(
+                stage5,
+                state,
+                context.Sex.EngineSex,
+                "apply",
+                movieSurfaceRequested: true,
+                escapeSkipped: _cg01ProofMovieEscapeSkipped,
+                movieReplayed: false,
+                dialoguePlayed: true);
+            GD.Print(
+                $"OPENNV_FO3_CG01_STAGE10_PROOF_APPLY stage={state.ActiveStage} " +
+                $"infos={string.Join(',', state.AppliedInfoFormIds)} movieSkipped=" +
+                $"{(_cg01ProofMovieEscapeSkipped ? 1 : 0)} dialoguePlayed=1 " +
+                $"autosave={state.AutosaveRequestCount}");
+            GetTree().Quit(0);
+            return;
+        }
+        ShowCg01PostStage10Boundary(state, resumed: false);
+        GD.Print(
+            $"OPENNV_FO3_CG01_STAGE10_APPLIED quest={state.ActiveQuestFormId} " +
+            $"stage={state.ActiveStage} infos={string.Join(',', state.AppliedInfoFormIds)} " +
+            $"commands={state.AppliedCommandCount} dadTimer={state.DadTimerSeconds:F1} " +
+            $"objective={state.DisplayedObjectiveIndex} tutorial={state.TutorialQuestStage} " +
+            $"autosave={state.AutosaveRequestCount} blocker={state.NextBoundary.Blocker}");
+    }
+
+    private void ShowCg01PostStage10Boundary(Fo3Cg01Stage10State state, bool resumed)
     {
         _vaultPreviewOverlay?.QueueFree();
         var overlay = new PanelContainer
         {
-            Name = "FO3_CG01_POST_STAGE5_BOUNDARY",
+            Name = "FO3_CG01_POST_STAGE10_BOUNDARY",
             AnchorLeft = 0.0f,
             AnchorTop = 1.0f,
             AnchorRight = 1.0f,
@@ -1872,11 +2028,11 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             $"{state.ActiveQuestEditorId}  •  STAGE {state.ActiveStage}",
             Fo3OpeningFlowNumericContracts.TitleFontPixels));
         content.AddChild(Label(
-            $"{state.AppliedCommandCount} SOURCE-BOUND COMMANDS APPLIED  •  SAVE CURRENT",
+            $"{state.AppliedCommandCount} DIALOGUE/STAGE COMMANDS APPLIED  •  AUTOSAVE CURRENT",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         content.AddChild(Label(
-            "The one-year transition is complete. Post-stage-5 packages, dialogue, animation, " +
-            "and wider Vault 101 world AI remain deliberately stopped.",
+            "Dad's two source-authored cues completed and stage 10 is saved. Toddler movement, " +
+            "package AI, and the wider Vault 101 route remain deliberately stopped.",
             Fo3OpeningFlowNumericContracts.BodyFontPixels));
         var exit = Button("RETURN TO MAIN MENU");
         exit.Pressed += ExitVault101Preview;
@@ -1889,7 +2045,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             GD.Print(
                 $"OPENNV_FO3_CG01_COLD_RESTORE quest={state.ActiveQuestFormId} " +
                 $"stage={state.ActiveStage} commands={state.AppliedCommandCount} " +
-                $"movieReplayed=0 transitionEffectsReplayed=0 " +
+                $"movieReplayed=0 dialogueReplayed=0 transitionEffectsReplayed=0 " +
                 $"nextApplied=0 blocker={state.NextBoundary.Blocker}");
         }
     }
@@ -2509,7 +2665,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Stage85State? stage85 = null,
         Fo3Stage90State? stage90 = null,
         Fo3Stage100State? stage100 = null,
-        Fo3Cg01Stage0State? cg01 = null)
+        Fo3Cg01Stage0State? cg01 = null,
+        Fo3Cg01Stage10State? cg01Stage10 = null)
     {
         var state = new
         {
@@ -2518,7 +2675,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             profileSha256 = _profile.Sha256,
             questEditorId = _profile.QuestEditorId,
             questFormId = _profile.QuestFormId,
-            stage = stage100?.Stage ?? stage90?.Stage ?? stage85?.Stage ?? stage80.Stage,
+            stage = cg01Stage10?.ActiveStage ?? cg01?.ActiveStage ??
+                stage100?.Stage ?? stage90?.Stage ?? stage85?.Stage ?? stage80.Stage,
             activeQuest = cg01 is null
                 ? null
                 : new
@@ -2707,8 +2865,13 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             cg01Stage0Transition = cg01 is null
                 ? null
                 : _profile.Cg01Stage0Transition.SavedState(cg01),
-            birthRuntime = BirthRuntimeState(cg01 is not null
-                ? "cg01-stage0-stage5-applied-post-stage5-blocked"
+            cg01Stage10Transition = cg01Stage10 is null
+                ? null
+                : _profile.Cg01Stage10Transition.SavedState(cg01Stage10),
+            birthRuntime = BirthRuntimeState(cg01Stage10 is not null
+                ? "cg01-stage10-applied-post-stage10-blocked"
+                : cg01 is not null
+                ? "cg01-stage0-stage5-applied-dad-dialogue-pending"
                 : stage100 is not null
                 ? "stage90-timer-finished-stage100-applied"
                 : stage90 is not null
@@ -2801,6 +2964,23 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             stage100,
             cg01);
 
+    private void PersistCg01Stage10Transition(
+        Fo3Cg01RuntimeContext context,
+        Fo3Cg01Stage0State cg01,
+        Fo3Cg01Stage10State cg01Stage10) =>
+        PersistStage80Transition(
+            context.PlayerName,
+            context.Sex,
+            context.Selection,
+            context.Section4Package,
+            context.Stage65,
+            context.Stage80,
+            context.Stage85,
+            context.Stage90,
+            context.Stage100,
+            cg01,
+            cg01Stage10);
+
     private void WriteState(object state)
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_savePath)!);
@@ -2864,7 +3044,18 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 stage90,
                 stage100,
                 cg01);
-            StartCg01TransitionMovie(cg01);
+            StartCg01TransitionMovie(
+                cg01,
+                new Fo3Cg01RuntimeContext(
+                    _profile.Appearance.PlayerEditorId,
+                    sex,
+                    selection,
+                    package,
+                    stage65,
+                    stage80,
+                    stage85,
+                    stage90,
+                    stage100));
             Callable.From(() => Input.ParseInputEvent(new InputEventKey
             {
                 Keycode = Key.Escape,
@@ -2886,62 +3077,105 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _profile.Cg01Stage0Transition.ValidateSavedState(
             RequiredSaveObject(root, "cg01Stage0Transition"),
             cg01);
+        var cg01Stage10 = _profile.Cg01Stage10Transition.Apply(cg01, sex.EngineSex);
+        _profile.Cg01Stage10Transition.ValidateSavedState(
+            RequiredSaveObject(root, "cg01Stage10Transition"),
+            cg01Stage10);
         ValidateBirthRuntimeState(
             RequiredSaveObject(root, "birthRuntime"),
-            "cg01-stage0-stage5-applied-post-stage5-blocked");
+            "cg01-stage10-applied-post-stage10-blocked");
         WriteCg01ProofReport(
             cg01,
+            cg01Stage10,
+            sex.EngineSex,
             "restore",
             movieSurfaceRequested: false,
             escapeSkipped: false,
-            movieReplayed: false);
+            movieReplayed: false,
+            dialoguePlayed: false);
         GD.Print(
-            $"OPENNV_FO3_CG01_PROOF_RESTORE stage={cg01.ActiveStage} " +
-            "movieReplayed=0 transitionEffectsReplayed=0");
+            $"OPENNV_FO3_CG01_STAGE10_PROOF_RESTORE stage={cg01Stage10.ActiveStage} " +
+            "movieReplayed=0 dialogueReplayed=0 transitionEffectsReplayed=0");
         GetTree().Quit(0);
     }
 
     private void WriteCg01ProofReport(
-        Fo3Cg01Stage0State state,
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01Stage10State stage10,
+        string engineSex,
         string phase,
         bool movieSurfaceRequested,
         bool escapeSkipped,
-        bool movieReplayed)
+        bool movieReplayed,
+        bool dialoguePlayed)
     {
         var path = _cg01ProofReportPath ?? throw new InvalidOperationException(
             "Fallout 3 CG01 proof report path is absent.");
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        var cues = _profile.Cg01Stage10Transition.DialogueFor(engineSex);
         var report = new
         {
-            schema = "opennv-fo3-cg01-runtime-proof/v1",
+            schema = "opennv-fo3-cg01-runtime-proof/v2",
             profileId = _profile.ProfileId,
+            profileSha256 = _profile.Sha256,
             phase,
             savePath = _savePath,
             activeQuest = new
             {
-                formId = state.ActiveQuestFormId,
-                editorId = state.ActiveQuestEditorId,
-                stage = state.ActiveStage,
+                formId = stage10.ActiveQuestFormId,
+                editorId = stage10.ActiveQuestEditorId,
+                stage = stage10.ActiveStage,
             },
-            commands = new
+            stage5Commands = new
             {
-                accounted = state.AccountedCommandCount,
-                applied = state.AppliedCommandCount,
-                trace = state.AppliedExecutionTrace,
+                accounted = stage5.AccountedCommandCount,
+                applied = stage5.AppliedCommandCount,
+                trace = stage5.AppliedExecutionTrace,
+            },
+            dialogue = new
+            {
+                engineSex,
+                infoFormIds = stage10.AppliedInfoFormIds,
+                sourceTimerSeconds = cues[0].DadTimerAfterSeconds,
+                playedThisProcess = dialoguePlayed,
+                replayed = false,
+                assets = cues.Select(cue => new
+                {
+                    cue.Sequence,
+                    cue.InfoFormId,
+                    voiceSha256 = cue.Response.Voice.Sha256,
+                    lipSha256 = cue.Response.Lip.Sha256,
+                }),
+            },
+            stage10Commands = new
+            {
+                accounted = stage10.AccountedCommandCount,
+                applied = stage10.AppliedCommandCount,
+                trace = stage10.AppliedExecutionTrace,
+                dadTimerSeconds = stage10.DadTimerSeconds,
+                displayedObjectiveIndex = stage10.DisplayedObjectiveIndex,
+                enabledPlayerControls = stage10.EnabledPlayerControls,
+                tutorialQuest = new
+                {
+                    formId = stage10.TutorialQuestFormId,
+                    editorId = stage10.TutorialQuestEditorId,
+                    stage = stage10.TutorialQuestStage,
+                },
+                autosaveRequestCount = stage10.AutosaveRequestCount,
             },
             movie = new
             {
-                logicalPath = state.TransitionMovie.LogicalPath,
-                runtimeOutputSha256 = state.TransitionMovie.RuntimeOutputSha256,
-                requestCount = state.TransitionMovieRequestCount,
+                logicalPath = stage5.TransitionMovie.LogicalPath,
+                runtimeOutputSha256 = stage5.TransitionMovie.RuntimeOutputSha256,
+                requestCount = stage5.TransitionMovieRequestCount,
                 surfaceRequested = movieSurfaceRequested,
                 escapeSkipped,
                 replayed = movieReplayed,
             },
             nextBoundary = new
             {
-                applied = state.NextBoundary.Applied,
-                blocker = state.NextBoundary.Blocker,
+                applied = stage10.NextBoundary.Applied,
+                blocker = stage10.NextBoundary.Blocker,
             },
         };
         var temporary = path + ".tmp";

@@ -2,6 +2,21 @@
   "schema": "opennv-fo3-owned-profile-recipe/v1",
   "id": "fo3-goty-opening-profile-v1",
   "campaign": "Fallout3",
+  "videoImport": {
+    "transcoderKind": "ffmpeg2theora",
+    "transcoderExecutable": "ffmpeg2theora",
+    "transcoderSha256": "a1e0f97bde8b1b8874480a2f153651258e0f35b86d1d24a8a911bd4a841b8308",
+    "outputExtension": ".ogv",
+    "videoQuality": 7,
+    "audioQuality": 5,
+    "disableSkeleton": true,
+    "stripMetadata": true,
+    "validatorExecutable": "ffmpeg",
+    "windowsBootstrap": {
+      "sourceUrl": "http://v2v.cc/~j/ffmpeg2theora/ffmpeg2theora-0.29.exe",
+      "cacheRelativePath": "OpenNV/tools/ffmpeg2theora/0.29-a1e0f97b/ffmpeg2theora.exe"
+    }
+  },
   "provenance": {
     "classification": "owned-data-profile-selection",
     "status": "opening-input-inventory",
@@ -130,13 +145,21 @@
         "questFormId": "00014e83",
         "entryStage": 0,
         "nestedStage": 5,
+        "dialogueTargetStage": 10,
         "cellFormId": "00028138",
         "dadReferenceFormId": "0002ea4d",
         "dadStartMarkerFormId": "0002ea4e",
         "playerStartMarkerFormId": "0002ea4f",
         "nextDadReferenceFormId": "000300ef",
         "noActivationSoundFormId": "00089b4c",
-        "transitionVideo": "1 year later.bik"
+        "transitionVideo": "1 year later.bik",
+        "dadSpeechTopicEditorId": "CG01DadSpeech",
+        "dadSpeechTopicFormId": "0001f3d8",
+        "dadSpeechPreludeInfoFormIds": ["0001f3e8", "0001f3e9"],
+        "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
+        "tutorialQuestEditorId": "CGTutorial",
+        "tutorialQuestFormId": "00059c85",
+        "tutorialQuestStage": 2
       }
     },
     "appearanceUi": {

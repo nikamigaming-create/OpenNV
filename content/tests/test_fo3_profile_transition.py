@@ -23,6 +23,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_stage65_appearance_contract,
     _compile_stage100_transition,
     _float_contract,
+    load_recipe,
 )
 
 
@@ -33,6 +34,9 @@ SECTION5_IDLE_FORM = 0x00069EFD
 QUEST_FORM = 0x0001F388
 TOPIC_FORM = 0x0001F378
 VOICE_FORM = 0x00019FDF
+FO3_RECIPE = Path(__file__).resolve().parents[1] / "recipes" / (
+    "fo3-goty-opening-profile-v1.json"
+)
 
 
 def subrecord(signature: str, data: bytes = b"") -> bytes:
@@ -136,6 +140,17 @@ def selection() -> dict[str, object]:
 
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
+    def test_recipe_pins_ffmpeg2theora_video_import(self) -> None:
+        video_import = dict(load_recipe(FO3_RECIPE)["videoImport"])
+
+        self.assertEqual("ffmpeg2theora", video_import["transcoderKind"])
+        self.assertEqual(
+            "a1e0f97bde8b1b8874480a2f153651258e0f35b86d1d24a8a911bd4a841b8308",
+            video_import["transcoderSha256"],
+        )
+        self.assertTrue(video_import["disableSkeleton"])
+        self.assertTrue(video_import["stripMetadata"])
+
     def test_compiles_sex_specific_info_results_and_exact_stage80_commands(self) -> None:
         topic = Record(
             "DIAL",
@@ -507,7 +522,28 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             0x0002EA3B,
             0,
             subrecord("EDID", b"CG01DadSCRIPT\0")
-            + subrecord("SCTX", b"short doTalk\nshort talking\0"),
+            + subrecord(
+                "SCTX",
+                "\n".join(
+                    (
+                        "scn CG01DadSCRIPT",
+                        "short doTalk",
+                        "short talking",
+                        "float timer",
+                        "begin gamemode",
+                        "if doTalk == 1 && talking == 0",
+                        "if timer > 0",
+                        "set timer to timer - GetSecondsPassed",
+                        "else",
+                        "SayTo player CG01DadSpeech 1",
+                        "set talking to 1",
+                        "endif",
+                        "endif",
+                        "end",
+                    )
+                ).encode("cp1252")
+                + b"\0",
+            ),
             (),
         )
         cg01_script = Record(
@@ -522,6 +558,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             0x0002EA46,
             0,
             subrecord("EDID", b"CG01Dad\0")
+            + subrecord("VTCK", struct.pack("<I", VOICE_FORM))
             + subrecord("SCRI", struct.pack("<I", cg01_dad_script.form_id)),
             (),
         )
@@ -605,6 +642,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 'playBink "1 year later.bik" 0 0 1 0',
             )
         )
+        cg01_stage10_source = "\n".join(
+            (
+                "setObjectiveDisplayed CG01 10 1",
+                "set CG01DadREF.timer to 5",
+                "EnablePlayerControls 1 0 0 0 1 1 0",
+                "autosave",
+            )
+        )
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -614,8 +659,80 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("INDX", struct.pack("<H", 0))
             + subrecord("SCTX", cg01_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", 5))
-            + subrecord("SCTX", cg01_stage5_source.encode("cp1252") + b"\0"),
+            + subrecord("SCTX", cg01_stage5_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 10))
+            + subrecord("SCTX", cg01_stage10_source.encode("cp1252") + b"\0"),
             (),
+        )
+        tutorial = Record(
+            "QUST",
+            0x00059C85,
+            0,
+            subrecord("EDID", b"CGTutorial\0"),
+            (),
+        )
+        voice = Record(
+            "VTYP",
+            VOICE_FORM,
+            0,
+            subrecord("EDID", b"MaleUniqueDad\0"),
+            (),
+        )
+        cg01_dad_topic = Record(
+            "DIAL",
+            0x0001F3D8,
+            0,
+            subrecord("EDID", b"CG01DadSpeech\0")
+            + subrecord("QSTI", struct.pack("<I", cg01.form_id)),
+            (),
+        )
+
+        def cg01_dad_info(
+            form_id: int,
+            sex_value: int,
+            text: str,
+            sources: tuple[str, ...],
+        ) -> Record:
+            return Record(
+                "INFO",
+                form_id,
+                0,
+                subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord("NAM1", text.encode("cp1252") + b"\0")
+                + subrecord("CTDA", condition(131, sex_value))
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id))
+                + b"".join(
+                    subrecord("SCTX", source.encode("cp1252") + b"\0")
+                    for source in sources
+                ),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            )
+
+        cg01_dad_infos = (
+            cg01_dad_info(
+                0x0001F3E8,
+                1,
+                "Don't look straight into the light, honey.",
+                ("set CG01DadREF.timer to 1",),
+            ),
+            cg01_dad_info(
+                0x0001F3E9,
+                0,
+                "Don't look straight into the light, pal.",
+                ("set CG01DadREF.timer to 1",),
+            ),
+            cg01_dad_info(
+                0x0001F3E6,
+                1,
+                "Come on over here, sweetie. Come on! Walk to Daddy!",
+                ("setstage CG01 10", "setstage CGTutorial 2"),
+            ),
+            cg01_dad_info(
+                0x0001F3E7,
+                0,
+                "Come on over here, son. Come on! Walk to Daddy!",
+                ("setstage CG01 10", "setstage CGTutorial 2"),
+            ),
         )
         modifier = Record(
             "IMAD",
@@ -651,6 +768,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "questFormId": "00014e83",
                 "entryStage": 0,
                 "nestedStage": 5,
+                "dialogueTargetStage": 10,
                 "cellFormId": "00028138",
                 "dadReferenceFormId": "0002ea4d",
                 "dadStartMarkerFormId": "0002ea4e",
@@ -658,6 +776,13 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "nextDadReferenceFormId": "000300ef",
                 "noActivationSoundFormId": "00089b4c",
                 "transitionVideo": "1 year later.bik",
+                "dadSpeechTopicEditorId": "CG01DadSpeech",
+                "dadSpeechTopicFormId": "0001f3d8",
+                "dadSpeechPreludeInfoFormIds": ["0001f3e8", "0001f3e9"],
+                "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
+                "tutorialQuestEditorId": "CGTutorial",
+                "tutorialQuestFormId": "00059c85",
+                "tutorialQuestStage": 2,
             },
         }
 
@@ -671,9 +796,13 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             dad_ref,
             cg00,
             cg01,
+            tutorial,
             cg01_script,
             cg01_dad_script,
             cg01_dad_base,
+            voice,
+            cg01_dad_topic,
+            *cg01_dad_infos,
             cg02_dad_base,
             marker_base,
             cg01_dad_ref,
@@ -754,6 +883,33 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual(moved_dad, stage5["commands"][2]["reference"]["formId"])
         self.assertEqual(moved_dad, stage5["commands"][4]["reference"]["formId"])
         self.assertFalse(cg01_contract["nextBoundary"]["applied"])
+        post_stage5 = cg01_contract["postStage5Transition"]
+        self.assertEqual(
+            "opennv-fo3-cg01-stage-5-to-10-transition/v1",
+            post_stage5["schema"],
+        )
+        self.assertEqual(10, post_stage5["targetStage"])
+        self.assertEqual(
+            [0, 0, 1, 1],
+            [branch["sequence"] for branch in post_stage5["dialogue"]["branches"]],
+        )
+        self.assertEqual(
+            ["female", "male", "female", "male"],
+            [branch["engineSex"] for branch in post_stage5["dialogue"]["branches"]],
+        )
+        self.assertEqual(
+            [
+                "setObjectiveDisplayed",
+                "setScriptVariable",
+                "enablePlayerControls",
+                "autosave",
+            ],
+            [command["kind"] for command in post_stage5["stageResult"]["commands"]],
+        )
+        self.assertEqual(
+            [1, 0, 0, 0, 1, 1, 0],
+            post_stage5["stageResult"]["commands"][2]["arguments"],
+        )
 
         transition_video = {
             "file": "1 year later.bik",

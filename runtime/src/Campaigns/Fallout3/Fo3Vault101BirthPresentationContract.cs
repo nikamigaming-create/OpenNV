@@ -770,9 +770,8 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         Fo3BirthSliceContract birthSlice,
         JsonElement source)
     {
-        if (!Path.GetFullPath(RequiredString(source, "birthSlice"))
-                .Equals(Path.GetFullPath(birthSlice.Path), StringComparison.OrdinalIgnoreCase) ||
-            !RequiredSha256(source, "birthSliceSha256")
+        _ = Path.GetFullPath(RequiredString(source, "birthSlice"));
+        if (!RequiredSha256(source, "birthSliceSha256")
                 .Equals(birthSlice.Sha256, StringComparison.OrdinalIgnoreCase) ||
             RequiredString(source, "birthSliceRecipeId") != birthSlice.RecipeId)
             throw new InvalidOperationException(
