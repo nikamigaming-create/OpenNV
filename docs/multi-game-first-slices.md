@@ -59,9 +59,12 @@ retail startup-logo and original-menu presentation remain absent.
    LAND, actors, and both reciprocal XTEL pairs with shared gameplay/save state.
    A source-bound HUD/STATS/ITEMS/DATA and Pip-Boy shell
    now consumes that same state; STATS explicitly reuses the verified ITEMS
-   frame until its remaining layout expressions execute. Complete tile
-   interaction, ordinary player-driven end-to-end traversal, active-CELL
-   restoration, integrated-route OpenXR acceptance, and retail visual parity remain open.
+   frame until its remaining layout expressions execute. From a completed
+   stage-200 Continue, configured flat input traverses both forward XTEL links;
+   campaign save v4 persists saloon CELL `00106185`, and a fresh owned-menu
+   Continue restores the unchanged save and player transform there. Complete
+   tile interaction, reverse traversal, neighboring CELL streaming,
+   integrated-route OpenXR acceptance, and retail visual parity remain open.
    An uninterrupted whole-campaign route is not proven.
 5. Available now: `scripts/Register-OpenNVFallout2.ps1` validates the legally
    owned `master.dat`, `critter.dat`, and `patch000.dat` DAT2 archives and emits
@@ -176,8 +179,8 @@ is supported for the selected base profile.
 | --- | --- |
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
-| Fallout 2 | Exact Temple/Arroyo Caves source transport, selective caches, Map 126 construction/topology, nonvisual movement, and owned exit state work headlessly; Godot Map 3 consumption, reciprocal runtime execution, INT, actors, rendered/player-controlled Hex, character creation, combat, shared gameplay/save state, FPS, and VR remain absent, so all modes stay disabled |
-| New Vegas first slice | Menu/intro/Doc house, the source-bound HUD/Pip-Boy runtime shell, and the bounded Doc/exterior/saloon composite with both reciprocal XTEL pairs load and pass diagnostic portal checks; ordinary end-to-end travel, active-CELL restoration, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
+| Fallout 2 | Exact Temple/Arroyo Caves source transport, selective caches, Map 126 construction/topology, and owned exit state are joined by a rendered Map 3 scene with a grounded input-driven player at the exact arrival hex; the bounded proof crosses source-walkable neighbors and rejects a source-blocked hex. Character art, player-authored free play, reciprocal runtime exit execution, INT, actors, character creation, combat, inventory, shared gameplay/save state, FPS, and VR remain absent, so all modes stay disabled |
+| New Vegas first slice | Menu/intro/Doc house, the source-bound HUD/Pip-Boy runtime shell, and the bounded preloaded Doc/exterior/saloon composite load; diagnostic portal checks pass, and completed-save owned Continue drives configured flat input through both forward XTEL links before v4 cold-restores saloon CELL `00106185`; reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
 | Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance through stage 62 work; later state contracts validate, but FPS/Hex/VR, authored trigger execution, dialogue/KF, actors, and Vault 101 remain |
 | TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |
 | JAM | Dependency registrar plus bounded JVS sprint and JBT time-dilation semantics work; missing dependencies and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM semantics keep the launcher toggle disabled |

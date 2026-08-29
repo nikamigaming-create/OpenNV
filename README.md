@@ -37,8 +37,8 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 | Fallout 1 Hex | Registered-cache launcher route through the OpenNV menu, character picker, owned Overseer movie, and bounded Godot V13ENT/Vault 13 slice | Only V13ENT is playable; this is not the complete Fallout 1 campaign |
 | Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
-| Fallout 2 Hex/FPS/VR | Owned Map 126 Temple and Map 3 Arroyo Caves source graphs/caches, exact Temple topology, nonvisual movement, and exit state pass | The proof is headless/nonvisual; no Godot Map 3 consumer, reciprocal runtime transition, INT execution, actors, controls, gameplay, or saves exist, so all three modes stay disabled |
-| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; original flat and experimental OpenXR routes are launchable | Ordinary end-to-end player travel, active-CELL save restoration, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
+| Fallout 2 Hex/FPS/VR | Owned Map 126 Temple and Map 3 Arroyo Caves source graphs/caches, exact Temple topology, a rendered Map 3 scene, and a grounded input-driven player that spawns at the owned arrival hex, crosses source-walkable neighbors, and stops at a source-blocked hex | Character art, player-authored free play, reciprocal exit execution, INT scripts, actors, combat, inventory, saves, FPS/OpenXR adapters, and launcher readiness remain absent, so all three modes stay disabled |
+| New Vegas | Owned menu, skippable intro, Doc Mitchell opening state, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny; from a completed stage-200 Continue, configured flat input traverses both forward XTEL links and campaign save v4 cold-restores saloon CELL `00106185`; original flat and experimental OpenXR routes are launchable | Reverse-traversal acceptance, neighboring CELL streaming, Sunny dialogue/package AI, complete Gamebryo tile behavior, retail-pixel parity, integrated-route OpenXR acceptance, Hex, physical-headset acceptance, and the uninterrupted full campaign remain unproven |
 | Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and persistent CG00 stage 62; exact later state contracts compile and validate | No first-person Vault 101 world or authored package/dialogue trigger execution exists, so FPS, Hex, and VR stay disabled |
 | TTW | Local profile inspection/registration only | Runtime support is absent and the edition remains disabled |
 | JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
@@ -68,8 +68,11 @@ Vegas** and **Play** for the normal owned main menu;
 opening state as watching it through. The default owned-data cache now binds an
 ordered Doc house → Goodsprings exterior → saloon chain. It aligns and links
 `00103e61 ↔ 00103e69` and `0010636f ↔ 0010618e`, exercises ray/projectile/
-capsule continuity at each pair, and loads Sunny `00104e85` once in her authored
-enabled state without a proof override. OpenNV compiles the installed
+capsule continuity at each pair, and separately accepts configured flat movement
+and activation through both forward XTEL links. Campaign save v4 records saloon
+CELL `00106185`, and a fresh owned-menu Continue restores the unchanged save and
+player transform there. Sunny `00104e85` loads once in her authored enabled
+state without a proof override. OpenNV compiles the installed
 `hud_main_menu.xml`, `stats_menu.xml`,
 `inventory_menu.xml`, and `map_menu.xml` closures, their four selected owned
 bitmap fonts, and the owned Pip-Boy background into a hash-verified gameplay-UI
@@ -194,7 +197,7 @@ profile and save boundary.
 | Path | Character | JAM rule |
 | --- | --- | --- |
 | Fallout 1 | One Vault Dweller state shared by hex, FPS, and eventually VR presentations | Separate from the Gamebryo-family profiles. |
-| Fallout 2 | One future Chosen One state shared by hex, FPS, and VR presentations | Bounded headless runtime proofs are promoted; no player-controlled presentation or save is promoted yet. |
+| Fallout 2 | One future Chosen One state shared by hex, FPS, and VR presentations | A bounded rendered arrival/movement proof exists; no character-art-backed player-controlled presentation, campaign state, or save is promoted yet. |
 | New Vegas | Separate standalone Mojave character | Base route today; JAM remains disabled until its dependencies and portable semantics pass. |
 | Fallout 3 | Separate standalone Capital Wasteland character | Standalone CG00 profile today; TTW is a future separate path and is currently disabled. |
 | TTW | One future Capital Wasteland-to-Mojave character | Runtime support is absent. It cannot later adopt an existing standalone save. |
@@ -268,12 +271,15 @@ activation, and fighting bits back onto `CellPlayer`, including the authored
 disabled-combat state. Pip-Boy visibility is restored separately; saved POV and
 sneaking bits still lack runtime consumers. The
 bounded default cache joins the reciprocal Doc Mitchell house/exterior and
-Goodsprings exterior/saloon pairs in one preloaded bounded composite. A normal
-Continue restores the completed opening state before the programmatic ordered
-portal gate. Ordinary player-driven travel through the complete chain is not
-yet an acceptance claim.
-The current save does not yet restore an independently streamed active CELL, so
-an uninterrupted whole-campaign route remains unproven. See the
+Goodsprings exterior/saloon pairs in one preloaded bounded composite. From a
+completed stage-200 save, the owned Continue button signal restores the Doc
+route; configured Godot movement and activation then traverse `00103e61` →
+`00103e69` and `0010636f` → `0010618e` in order. Campaign save v4 persists
+saloon CELL `00106185` and the player transform, and a fresh process using the
+owned Continue button restores the unchanged save and transform there. All three
+spaces remain preloaded: reverse traversal, neighboring CELL streaming,
+integrated-route OpenXR, Sunny behavior, and an uninterrupted whole campaign
+remain unproven. See the
 [canonical whole-game delivery plan](docs/whole-game-delivery-plan.md),
 [multi-game first-slice plan](docs/multi-game-first-slices.md),
 [single-page architecture](docs/architecture.md),
