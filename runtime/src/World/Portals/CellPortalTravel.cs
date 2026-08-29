@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Streaming;
 
 namespace OpenNV.Runtime.World.Portals;
 
@@ -8,14 +9,17 @@ internal sealed class CellPortalTravel
     private const float MinimumFacingDot = 0.95f;
 
     private readonly GameplaySession _session;
+    private readonly CellActiveSet _activeSet;
     private readonly IReadOnlyList<Passage> _passages;
     private readonly List<Transition> _transitions = new();
 
     internal CellPortalTravel(
         IEnumerable<CellSceneLoader.PortalLink> links,
-        GameplaySession session)
+        GameplaySession session,
+        CellActiveSet activeSet)
     {
         _session = session;
+        _activeSet = activeSet;
         _passages = links.Select(link => new Passage(
             Endpoint.Create(
                 link.FromCellFormId,
@@ -84,6 +88,7 @@ internal sealed class CellPortalTravel
             destination);
         player.CollisionMask = target.CollisionLayer;
         _session.CrossPortal(source.CellFormId, target.CellFormId, source.Door);
+        _activeSet.Activate(target.CellFormId);
         _transitions.Add(new Transition(
             source.CellFormId,
             target.CellFormId,

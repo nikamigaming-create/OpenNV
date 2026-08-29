@@ -1598,6 +1598,32 @@ public partial class RuntimeCoordinator : Node3D
                 normalAgreement = portal.NormalAgreement,
                 bothOpen = portal.FromDoor.IsOpen && portal.ToDoor.IsOpen,
             }).ToArray(),
+            activeSet = new
+            {
+                policy = "current-cell-plus-direct-portal-neighbors",
+                currentCellFormId = loaded.Session.ActiveCellFormId,
+                activeCellFormIds = loaded.ActiveSet.ActiveCellFormIds
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
+                spaces = loaded.ActiveSet.Snapshot().Select(space => new
+                {
+                    cellFormId = space.FormId,
+                    space.Active,
+                    roots = space.Roots,
+                    sourceVisibleRoots = space.SourceVisibleRoots,
+                    visibleRoots = space.VisibleRoots,
+                    sourceProcessingRoots = space.SourceProcessingRoots,
+                    processingRoots = space.ProcessingRoots,
+                    collisionObjects = space.CollisionObjects,
+                    sourceEnabledCollisionObjects = space.SourceEnabledCollisionObjects,
+                    enabledCollisionObjects = space.EnabledCollisionObjects,
+                    rigidBodies = space.RigidBodies,
+                    sourceFrozenRigidBodies = space.SourceFrozenRigidBodies,
+                    frozenRigidBodies = space.FrozenRigidBodies,
+                    lights = space.Lights,
+                    sourceVisibleLights = space.SourceVisibleLights,
+                    visibleLights = space.VisibleLights,
+                }),
+            },
             xrPresentation = !loaded.Player.UsesXr
                 ? null
                 : new

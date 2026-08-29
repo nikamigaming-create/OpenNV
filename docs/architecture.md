@@ -364,7 +364,7 @@ retail data, or promotion verdict.
 | `runtime/src/Presentation/Ui/GameplayUiController.cs` | Flat HUD/Pip-Boy and status-only shared-state wrist presentation; New Vegas flat UI consumes the owned XML/font/texture/rectangle role contract, STATS explicitly reuses the verified ITEMS frame, and the wrist consumes its owned font/theme path | Campaign state, asset extraction, native STATS rectangle evaluation, ITEMS/DATA wrist navigation, full Gamebryo tile execution, or retail-parity claims |
 | `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
 | `CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
-| `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal composition, active collision-layer selection, and proof queries | Binary parsing or portal gameplay decisions |
+| `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal composition, activity-space ownership, active collision-layer selection, and proof queries | Binary parsing or portal gameplay decisions |
 | `RuntimeMaterialLoader.cs` | Hash-verified 2D/cubemap load and name-keyed retail material passes | DDS/BSA parsing |
 | `StaticCellCompileArtifact.cs` | Static compile schema/configuration/hash/path/count verification and immutable row load | Godot node construction |
 | `StaticCellCompileLoader.cs` | Verified relative artifact load, profile-typed static/point-light placement instantiation, CELL lighting, and authored collision | Record parsing, actors, gameplay, or parity claims |
@@ -384,6 +384,7 @@ retail data, or promotion verdict.
 | `runtime/src/Gameplay/Containers/` | Source-named two-column container view plus authoritative per-reference remaining counts and transfer operations | Player-to-container deposits, barter, or retail-pixel parity |
 | `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
 | `runtime/src/World/Portals/CellPortalTravel.cs` | Production reciprocal-XTEL activation, owned arrival transform, active collision layer, and authoritative CELL transition | Input synthesis, save serialization, or content parsing |
+| `runtime/src/World/Streaming/CellActiveSet.cs` | Prepared-route current-CELL-plus-direct-neighbor visibility, processing, collision, rigid-body, and light lifecycle | CELL compilation, demand loading/unloading, environment switching, or adjacency invention |
 | `DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
 | `FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |
 | `PlayerControlTelemetry.cs` | Simulator-only pose, locomotion, floor-height, snap-pivot, and action acceptance measurements | Input synthesis or gameplay mutation |
@@ -477,15 +478,20 @@ supported authored packed-triangle collision,
 movement, configured flat input, HUD, inventory, authored `.357` and 10mm
 damage/clip data, firing/reload, objectives,
 doors, atomic save, cold reload, and sandbox play. The default Doc-house route
-reuses and preloads that exterior/saloon content. Its joined flat form is now
+reuses and eagerly instantiates that exterior/saloon content. A source-portal-
+derived active set keeps the authoritative current CELL and its direct neighbors
+live while suspending distant prepared roots, processing, collision layers,
+rigid bodies, and lights. Its joined flat form is now
 interactive on one bounded forward route: from a completed stage-200 owned
 Continue, configured Godot movement follows owned NAVM to each source door,
 normal activation applies the two source-derived XTEL arrivals in order, and
-campaign save v5 persists saloon CELL `00106185`, container remaining counts,
+campaign save v6 persists saloon CELL `00106185`, container remaining counts,
 and the player transform. A
 fresh process using the owned Continue button restores the unchanged save and
-transform there. This does not promote reverse traversal, neighboring CELL
-streaming, Sunny behavior, or the joined OpenXR route.
+transform there. The lifecycle is not demand streaming or unloading: all three
+prepared spaces still instantiate before the distant one is suspended. This
+does not promote reverse traversal, neighboring exterior-grid streaming, Sunny
+behavior, or the joined OpenXR route.
 The Doc door pair `00103e61`/`00103e69` and saloon pair
 `0010636f`/`0010618e` form a fail-closed ordered chain. Each target scene and
 recipe is hash-bound, each source door must belong to the immediately preceding

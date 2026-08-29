@@ -71,6 +71,7 @@ internal static class CellRouteTravelAcceptance
             throw new InvalidOperationException(
                 $"First route pass did not begin in the root CELL: " +
                 $"{loaded.Session.ActiveCellFormId}");
+        VerifyActiveSet(loaded);
 
         await FlatControlsAcceptance.PulseMouseBinding(
             host,
@@ -132,6 +133,7 @@ internal static class CellRouteTravelAcceptance
                     $"Configured activation did not travel through XTEL portal " +
                     $"{link.FromDoor.ReferenceFormId} -> {link.ToDoor.ReferenceFormId} " +
                     $"into {link.ToCellFormId}.");
+            VerifyActiveSet(loaded);
         }
 
         if (loaded.Player.PortalTransitions.Count != loaded.PortalLinks.Count)
@@ -156,11 +158,55 @@ internal static class CellRouteTravelAcceptance
             throw new InvalidOperationException(
                 $"Cold Continue did not restore the final active CELL: " +
                 $"expected={expectedCellFormId} actual={loaded.Session.ActiveCellFormId}.");
+        VerifyActiveSet(loaded);
         var report = loaded.Session.Report();
         var reportJson = JsonSerializer.SerializeToElement(report);
         if (!reportJson.GetProperty("playerTransformRestored").GetBoolean())
             throw new InvalidOperationException(
                 "Cold Continue did not restore the saved player transform.");
+    }
+
+    private static void VerifyActiveSet(CellSceneLoader.LoadedCell loaded)
+    {
+        var current = loaded.Session.ActiveCellFormId;
+        var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            current,
+        };
+        foreach (var portal in loaded.PortalLinks)
+        {
+            if (portal.FromCellFormId.Equals(current, StringComparison.OrdinalIgnoreCase))
+                expected.Add(portal.ToCellFormId);
+            else if (portal.ToCellFormId.Equals(current, StringComparison.OrdinalIgnoreCase))
+                expected.Add(portal.FromCellFormId);
+        }
+        if (!expected.SetEquals(loaded.ActiveSet.ActiveCellFormIds))
+            throw new InvalidOperationException(
+                $"CELL active set differs from current-plus-neighbors: " +
+                $"expected={string.Join(',', expected.OrderBy(value => value))} " +
+                $"actual={string.Join(',', loaded.ActiveSet.ActiveCellFormIds.OrderBy(value => value))}");
+
+        foreach (var space in loaded.ActiveSet.Snapshot())
+        {
+            if (space.Active)
+            {
+                if (space.VisibleRoots != space.SourceVisibleRoots ||
+                    space.ProcessingRoots != space.SourceProcessingRoots ||
+                    space.EnabledCollisionObjects != space.SourceEnabledCollisionObjects ||
+                    space.FrozenRigidBodies != space.SourceFrozenRigidBodies ||
+                    space.VisibleLights != space.SourceVisibleLights)
+                    throw new InvalidOperationException(
+                        $"Active CELL resources are not fully enabled: {space.FormId}");
+            }
+            else if (space.VisibleRoots != 0 || space.ProcessingRoots != 0 ||
+                     space.EnabledCollisionObjects != 0 ||
+                     space.FrozenRigidBodies != space.RigidBodies ||
+                     space.VisibleLights != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Distant CELL resources remain active: {space.FormId}");
+            }
+        }
     }
 
     private static async Task WalkToPortalApproach(
@@ -499,6 +545,37 @@ internal static class CellRouteTravelAcceptance
                     toDoorReferenceFormId = transition.ToDoorReferenceFormId,
                     arrivalPosition = Vector(transition.ArrivalPosition),
                 }),
+                activeSet = new
+                {
+                    policy = "current-cell-plus-direct-portal-neighbors",
+                    activeCellFormIds = loaded.ActiveSet.ActiveCellFormIds
+                        .OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
+                    spaces = loaded.ActiveSet.Snapshot().Select(space => new
+                    {
+                        cellFormId = space.FormId,
+                        space.Active,
+                        roots = space.Roots,
+                        sourceVisibleRoots = space.SourceVisibleRoots,
+                        visibleRoots = space.VisibleRoots,
+                        sourceProcessingRoots = space.SourceProcessingRoots,
+                        processingRoots = space.ProcessingRoots,
+                        collisionObjects = space.CollisionObjects,
+                        sourceEnabledCollisionObjects = space.SourceEnabledCollisionObjects,
+                        enabledCollisionObjects = space.EnabledCollisionObjects,
+                        rigidBodies = space.RigidBodies,
+                        sourceFrozenRigidBodies = space.SourceFrozenRigidBodies,
+                        frozenRigidBodies = space.FrozenRigidBodies,
+                        lights = space.Lights,
+                        sourceVisibleLights = space.SourceVisibleLights,
+                        visibleLights = space.VisibleLights,
+                    }),
+                    updates = loaded.ActiveSet.Updates.Select(update => new
+                    {
+                        currentCellFormId = update.CurrentCellFormId,
+                        activeCellFormIds = update.ActiveCellFormIds,
+                        suspendedCellFormIds = update.SuspendedCellFormIds,
+                    }),
+                },
                 playerTransform = new
                 {
                     position = Vector(transform.Origin),

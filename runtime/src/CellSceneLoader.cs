@@ -3,6 +3,7 @@ using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Portals;
+using OpenNV.Runtime.World.Streaming;
 
 namespace OpenNV.Runtime;
 
@@ -229,12 +230,35 @@ internal static class CellSceneLoader
             useXr,
             applyCellEnvironment,
             useClassicDiorama,
-            renderBounds);
+            renderBounds,
+            out var mainLights);
         session.ConfigureWorldContext(
             player,
             new[] { main }.Concat(linkedCells.Select(value => value.Content)),
             portalLinks.Select(link => (link.FromCellFormId, link.ToCellFormId)));
-        player.ConfigurePortalTravel(new CellPortalTravel(portalLinks, session));
+        var activeSpaces = new List<CellActiveSet.Space>
+        {
+            new(main.FormId, ActivityRoots(main), mainLights),
+        };
+        foreach (var linked in linkedCells)
+        {
+            var lights = AddCellLights(
+                parent,
+                linked.Content,
+                configuration,
+                linked.RenderLayer,
+                true,
+                applyCellEnvironment);
+            activeSpaces.Add(new CellActiveSet.Space(
+                linked.Content.FormId,
+                ActivityRoots(linked.Content),
+                lights));
+        }
+        var activeSet = new CellActiveSet(
+            activeSpaces,
+            portalLinks.Select(link => (link.FromCellFormId, link.ToCellFormId)));
+        activeSet.Activate(session.ActiveCellFormId);
+        player.ConfigurePortalTravel(new CellPortalTravel(portalLinks, session, activeSet));
         player.CollisionMask = main.FormId.Equals(
                 session.ActiveCellFormId,
                 StringComparison.OrdinalIgnoreCase)
@@ -252,15 +276,6 @@ internal static class CellSceneLoader
                     main.UnitsToMeters,
                     main.MuzzlePosition);
         }
-        foreach (var linked in linkedCells)
-            AddCellLights(
-                parent,
-                linked.Content,
-                configuration,
-                linked.RenderLayer,
-                true,
-                applyCellEnvironment);
-
         var allPickups = main.Pickups
             .Concat(linkedCells.SelectMany(value => value.Content.Pickups))
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
@@ -299,6 +314,7 @@ internal static class CellSceneLoader
             allActors,
             linkedCells,
             portalLinks,
+            activeSet,
             main);
     }
 
@@ -311,7 +327,8 @@ internal static class CellSceneLoader
         bool useXr,
         bool applyCellEnvironment,
         bool useClassicDiorama,
-        Aabb? renderBounds)
+        Aabb? renderBounds,
+        out IReadOnlyList<Light3D> lights)
     {
         var lighting = main.Lighting;
         Godot.Environment? environment = null;
@@ -336,7 +353,7 @@ internal static class CellSceneLoader
             };
             parent.AddChild(new WorldEnvironment { Environment = environment });
         }
-        AddCellLights(parent, main, configuration, 1u, true, applyCellEnvironment);
+        lights = AddCellLights(parent, main, configuration, 1u, true, applyCellEnvironment);
         var player = new CellPlayer();
         player.Configure(yaw, session, configuration, useXr, useClassicDiorama);
         parent.AddChild(player);
@@ -399,7 +416,18 @@ internal static class CellSceneLoader
         return new Aabb(minimum, maximum - minimum);
     }
 
-    private static void AddCellLights(
+    private static IReadOnlyList<Node3D> ActivityRoots(
+        CellContentLoader.LoadedContent content) =>
+        new[] { content.Root }
+            .Concat(content.PlacedReferences
+                .Select(reference => reference.Placement)
+                .Where(placement =>
+                    placement != content.Root &&
+                    !content.Root.IsAncestorOf(placement)))
+            .Distinct()
+            .ToArray();
+
+    private static IReadOnlyList<Light3D> AddCellLights(
         Node3D parent,
         CellContentLoader.LoadedContent content,
         RuntimeConfiguration configuration,
@@ -407,6 +435,7 @@ internal static class CellSceneLoader
         bool addAuthoredLights,
         bool applyEnvironmentLighting)
     {
+        var added = new List<Light3D>();
         var lighting = content.Lighting;
         if (applyEnvironmentLighting)
         {
@@ -440,7 +469,7 @@ internal static class CellSceneLoader
             var surfaceToLight = RetailLighting.SurfaceToLightFromXcllDegrees(
                 lighting.DirectionalRotationDegrees.X,
                 lighting.DirectionalRotationDegrees.Y);
-            parent.AddChild(new DirectionalLight3D
+            var directional = new DirectionalLight3D
             {
                 Name = $"CELL_{content.FormId}_Directional",
                 Transform = new Transform3D(
@@ -451,13 +480,15 @@ internal static class CellSceneLoader
                     configuration.Renderer.DirectionalEnergyScale,
                 ShadowEnabled = configuration.ActorReview.DirectionalShadows,
                 LightCullMask = renderLayer,
-            });
+            };
+            parent.AddChild(directional);
+            added.Add(directional);
         }
         if (!addAuthoredLights)
-            return;
+            return added;
         foreach (var light in lighting.Lights)
         {
-            parent.AddChild(new OmniLight3D
+            var point = new OmniLight3D
             {
                 Name = $"LIGH_{light.FormId}_{light.EditorId}",
                 Position = content.Root.ToGlobal(light.PositionGodotUnits),
@@ -469,8 +500,11 @@ internal static class CellSceneLoader
                 OmniAttenuation = RetailLighting.GodotOmniDecayForRetailRemap,
                 ShadowEnabled = configuration.Renderer.AuthoredPointLightShadows,
                 LightCullMask = renderLayer,
-            });
+            };
+            parent.AddChild(point);
+            added.Add(point);
         }
+        return added;
     }
 
     internal static DoorRay BuildProofRay(DoorInstance door, ProofConfiguration proof)
@@ -605,6 +639,7 @@ internal static class CellSceneLoader
         IReadOnlyList<CellActorLoader.PlacedActor> Actors,
         IReadOnlyList<LinkedCell> LinkedCells,
         IReadOnlyList<PortalLink> PortalLinks,
+        CellActiveSet ActiveSet,
         CellContentLoader.LoadedContent MainContent)
     {
         internal Vector3 GameToCellUnits(Vector3 position) => new(
