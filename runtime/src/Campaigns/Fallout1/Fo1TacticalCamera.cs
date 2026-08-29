@@ -132,6 +132,11 @@ internal partial class Fo1TacticalCamera : Node3D
 
     public override void _Process(double delta)
     {
+        if (_session.InventoryOpen)
+        {
+            _session.SetHoveredTile(-1);
+            return;
+        }
         if (_firstPersonMode)
             UpdateFirstPersonLocomotion((float)delta);
         var weight = Math.Clamp((float)delta * _profile.SmoothingPerSecond, 0.0f, 1.0f);
@@ -176,6 +181,15 @@ internal partial class Fo1TacticalCamera : Node3D
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
+        if (_session.InventoryOpen)
+        {
+            if (inputEvent is InputEventKey inventoryKey && inventoryKey.Pressed &&
+                !inventoryKey.Echo &&
+                (inventoryKey.PhysicalKeycode == Key.Escape ||
+                 inventoryKey.PhysicalKeycode == _session.InventoryKey))
+                _session.CloseInventory();
+            return;
+        }
         if (inputEvent is InputEventKey key && key.Pressed && !key.Echo)
         {
             if (key.PhysicalKeycode == Key.C)
@@ -219,6 +233,8 @@ internal partial class Fo1TacticalCamera : Node3D
                 _session.Toggle3DBlockout();
             else if (key.PhysicalKeycode == Key.P)
                 _session.TogglePipBoy();
+            else if (key.PhysicalKeycode == _session.InventoryKey)
+                _session.ToggleInventory();
             else if (key.PhysicalKeycode == Key.Escape)
             {
                 _orbitDragging = false;

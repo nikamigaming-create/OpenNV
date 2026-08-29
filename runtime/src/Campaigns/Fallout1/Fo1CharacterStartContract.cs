@@ -13,6 +13,7 @@ internal static class Fo1CharacterStartContractNumericContracts
     internal const double SourcePresentationDouble100Point0 = 100.0;
     internal const int SourcePresentationInt11 = 11;
     internal const int SourcePresentationInt12 = 12;
+    internal const int SourcePresentationInt13 = 13;
     internal const double SourcePresentationDouble130Point0 = 130.0;
     internal const int SourcePresentationInt14 = 14;
     internal const int SourcePresentationInt15 = 15;
@@ -27,6 +28,7 @@ internal static class Fo1CharacterStartContractNumericContracts
     internal const int SourcePresentationInt21 = 21;
     internal const int SourcePresentationInt212 = 212;
     internal const int SourcePresentationInt22 = 22;
+    internal const int SourcePresentationInt23 = 23;
     internal const int SourcePresentationInt24 = 24;
     internal const int SourcePresentationInt248 = 248;
     internal const int SourcePresentationInt255 = 255;
@@ -37,11 +39,13 @@ internal static class Fo1CharacterStartContractNumericContracts
     internal const int SourcePresentationInt336 = 336;
     internal const int SourcePresentationInt34 = 34;
     internal const int SourcePresentationInt360 = 360;
+    internal const int SourcePresentationInt377 = 377;
     internal const int SourcePresentationInt38 = 38;
     internal const int SourcePresentationInt41 = 41;
     internal const int SourcePresentationInt428 = 428;
     internal const int SourcePresentationInt432 = 432;
     internal const int SourcePresentationInt480 = 480;
+    internal const int SourcePresentationInt499 = 499;
     internal const int SourcePresentationInt5 = 5;
     internal const int SourcePresentationInt52 = 52;
     internal const int SourcePresentationInt57 = 57;
@@ -337,6 +341,59 @@ internal sealed record Fo1ClassicInterfaceAssets(
     }
 }
 
+internal sealed record Fo1ClassicInventoryLayout(
+    int Width,
+    int Height,
+    Fo1HudRect InventoryList,
+    int VisibleRows,
+    Fo1HudPoint ScrollUp,
+    Fo1HudPoint ScrollDown,
+    Fo1HudRect Portrait,
+    Fo1HudRect SelectedItem,
+    Fo1HudRect SelectedText,
+    Fo1HudRect Item1,
+    Fo1HudRect Item2,
+    Fo1HudRect Done);
+
+internal sealed record Fo1ClassicInventoryAssets(
+    IReadOnlyDictionary<string, Fo1OwnedUiTexture> Textures,
+    IReadOnlyDictionary<string, Fo1OwnedUiTexture> ItemInventoryBySymbol,
+    Fo1OwnedBitmapFont MessageFont,
+    Key PhysicalKey,
+    Fo1ClassicInventoryLayout Layout)
+{
+    internal Fo1OwnedUiTexture Background => Texture("background");
+    internal Fo1OwnedUiTexture ScrollUp => Texture("scrollUp");
+    internal Fo1OwnedUiTexture ScrollDown => Texture("scrollDown");
+
+    internal Fo1OwnedUiTexture ItemInventory(string symbol)
+    {
+        if (!ItemInventoryBySymbol.TryGetValue(symbol, out var texture))
+            throw new InvalidOperationException(
+                $"Prepared Fallout classic inventory has no owned art for {symbol}.");
+        return texture;
+    }
+
+    internal object Report() => new
+    {
+        source = "owned Fallout 1 INVBOX/INVEN FRMs and FONT1.AAF",
+        background = Background.Report(),
+        items = ItemInventoryBySymbol.OrderBy(row => row.Key)
+            .ToDictionary(row => row.Key, row => row.Value.Report()),
+        input = PhysicalKey.ToString(),
+        layout = Layout,
+        stateAuthority = "Fo1TacticalSession inventoryObjects",
+    };
+
+    private Fo1OwnedUiTexture Texture(string id)
+    {
+        if (!Textures.TryGetValue(id, out var texture))
+            throw new InvalidOperationException(
+                $"Prepared Fallout classic inventory texture is missing: {id}.");
+        return texture;
+    }
+}
+
 internal sealed record Fo1CharacterStartContract(
     string ManifestPath,
     string ManifestSha256,
@@ -346,6 +403,7 @@ internal sealed record Fo1CharacterStartContract(
     Fo1OwnedUiTexture CharacterPicker,
     IReadOnlyList<Fo1PremadeCharacter> PremadeCharacters,
     Fo1ClassicInterfaceAssets InterfaceHud,
+    Fo1ClassicInventoryAssets ClassicInventory,
     Fo1PipBoyAssets PipBoy,
     string OpeningFramesPath,
     string OpeningFramesSha256,
@@ -571,6 +629,71 @@ internal sealed record Fo1CharacterStartContract(
             interfaceFont,
             interfaceLayout);
 
+        var classicInventoryRow = root.GetProperty("classicInventory");
+        var classicInventoryAssetRows = classicInventoryRow.GetProperty("assets");
+        var classicInventoryTextures = new Dictionary<string, Fo1OwnedUiTexture>(
+            StringComparer.Ordinal);
+        foreach (var (id, dimensions) in new Dictionary<string, (int Width, int Height)>
+        {
+            ["background"] = (
+                         Fo1CharacterStartContractNumericContracts.SourcePresentationInt499,
+                         Fo1CharacterStartContractNumericContracts.SourcePresentationInt377),
+            ["scrollUp"] = (
+                         Fo1CharacterStartContractNumericContracts.SourcePresentationInt22,
+                         Fo1CharacterStartContractNumericContracts.SourcePresentationInt23),
+            ["scrollDown"] = (
+                         Fo1CharacterStartContractNumericContracts.SourcePresentationInt22,
+                         Fo1CharacterStartContractNumericContracts.SourcePresentationInt23),
+        })
+        {
+            var texture = ReadTexture(
+                $"classic-inventory-{id}",
+                classicInventoryAssetRows.GetProperty(id));
+            if (texture.Width != dimensions.Width || texture.Height != dimensions.Height)
+                throw new InvalidOperationException(
+                    $"Fallout classic inventory texture dimensions drifted: {id}.");
+            classicInventoryTextures.Add(id, texture);
+        }
+        var classicInventoryItemTextures = new Dictionary<string, Fo1OwnedUiTexture>(
+            StringComparer.Ordinal);
+        foreach (var row in classicInventoryRow.GetProperty("itemInventoryBySymbol")
+                     .EnumerateObject())
+        {
+            if (string.IsNullOrWhiteSpace(row.Name) ||
+                !classicInventoryItemTextures.TryAdd(
+                    row.Name,
+                    ReadTexture($"classic-inventory-item-{row.Name}", row.Value)))
+                throw new InvalidOperationException(
+                    "Fallout classic inventory item-art symbols drifted.");
+        }
+        if (classicInventoryItemTextures.Count !=
+            Fo1CharacterStartContractNumericContracts.SourcePresentationInt13)
+            throw new InvalidOperationException(
+                "Fallout classic inventory item-art coverage drifted.");
+        var classicInventoryFont = ReadBitmapFont(
+            classicInventoryRow.GetProperty("messageFont"));
+        if (classicInventoryFont.AtlasSha256 != interfaceFont.AtlasSha256 ||
+            classicInventoryFont.SourceAafSha256 != interfaceFont.SourceAafSha256)
+            throw new InvalidOperationException(
+                "Fallout classic inventory font disagrees with the gameplay interface.");
+        var physicalKeyText = classicInventoryRow.GetProperty("input")
+            .GetProperty("physicalKey").GetString();
+        if (!Enum.TryParse<Key>(physicalKeyText, true, out var physicalKey) ||
+            physicalKey != Key.I)
+            throw new InvalidOperationException(
+                "Fallout classic inventory input contract drifted.");
+        var classicInventoryLayout = ReadInventoryLayout(
+            classicInventoryRow.GetProperty("layout"));
+        ValidateInventoryLayout(
+            classicInventoryLayout,
+            classicInventoryTextures);
+        var classicInventory = new Fo1ClassicInventoryAssets(
+            classicInventoryTextures,
+            classicInventoryItemTextures,
+            classicInventoryFont,
+            physicalKey,
+            classicInventoryLayout);
+
         var pipBoyRow = root.GetProperty("pipBoy");
         if (pipBoyRow.GetProperty("model").GetString() != "Pip-Boy 2000")
             throw new InvalidOperationException("Fallout UI contract is not the Pip-Boy 2000.");
@@ -619,6 +742,7 @@ internal sealed record Fo1CharacterStartContract(
             picker,
             premades,
             interfaceHud,
+            classicInventory,
             pipBoy,
             openingFramesPath,
             openingFramesSha256,
@@ -657,6 +781,7 @@ internal sealed record Fo1CharacterStartContract(
         premadeCharacters = PremadeCharacters.Select(row => row.Report()).ToArray(),
         customCharacter = true,
         interfaceHud = InterfaceHud.Report(),
+        classicInventory = ClassicInventory.Report(),
         pipBoy = PipBoy.Report(),
         originalOverseerMveSha256 = SourceMveSha256,
         originalOverseerTextSha256 = SourceTextSha256,
@@ -777,6 +902,55 @@ internal sealed record Fo1CharacterStartContract(
                 ReadPoint(buttons.GetProperty("automap")),
                 ReadPoint(buttons.GetProperty("character")),
                 ReadRect(buttons.GetProperty("pipBoy"))));
+    }
+
+    private static Fo1ClassicInventoryLayout ReadInventoryLayout(JsonElement row)
+    {
+        var canvas = row.GetProperty("canvas");
+        var inventoryList = row.GetProperty("inventoryList");
+        return new Fo1ClassicInventoryLayout(
+            canvas.GetProperty("width").GetInt32(),
+            canvas.GetProperty("height").GetInt32(),
+            ReadRect(inventoryList),
+            inventoryList.GetProperty("visibleRows").GetInt32(),
+            ReadPoint(row.GetProperty("scrollUp")),
+            ReadPoint(row.GetProperty("scrollDown")),
+            ReadRect(row.GetProperty("portrait")),
+            ReadRect(row.GetProperty("selectedItem")),
+            ReadRect(row.GetProperty("selectedText")),
+            ReadRect(row.GetProperty("item1")),
+            ReadRect(row.GetProperty("item2")),
+            ReadRect(row.GetProperty("done")));
+    }
+
+    private static void ValidateInventoryLayout(
+        Fo1ClassicInventoryLayout layout,
+        IReadOnlyDictionary<string, Fo1OwnedUiTexture> textures)
+    {
+        if (layout.Width != Fo1CharacterStartContractNumericContracts.SourcePresentationInt499 ||
+            layout.Height != Fo1CharacterStartContractNumericContracts.SourcePresentationInt377 ||
+            layout.VisibleRows <= 0 ||
+            !layout.InventoryList.Fits(layout.Width, layout.Height) ||
+            !layout.Portrait.Fits(layout.Width, layout.Height) ||
+            !layout.SelectedItem.Fits(layout.Width, layout.Height) ||
+            !layout.SelectedText.Fits(layout.Width, layout.Height) ||
+            !layout.Item1.Fits(layout.Width, layout.Height) ||
+            !layout.Item2.Fits(layout.Width, layout.Height) ||
+            !layout.Done.Fits(layout.Width, layout.Height) ||
+            !new Fo1HudRect(
+                    layout.ScrollUp.X,
+                    layout.ScrollUp.Y,
+                    textures["scrollUp"].Width,
+                    textures["scrollUp"].Height)
+                .Fits(layout.Width, layout.Height) ||
+            !new Fo1HudRect(
+                    layout.ScrollDown.X,
+                    layout.ScrollDown.Y,
+                    textures["scrollDown"].Width,
+                    textures["scrollDown"].Height)
+                .Fits(layout.Width, layout.Height))
+            throw new InvalidOperationException(
+                "Fallout classic inventory source layout drifted.");
     }
 
     private static Fo1HudPoint ReadPoint(

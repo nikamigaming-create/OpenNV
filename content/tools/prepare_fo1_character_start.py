@@ -596,6 +596,54 @@ def prepare(
                 "sourceFrmSha256": member.sha256,
             }
 
+        classic_inventory_source = source["classicInventory"]
+        classic_inventory_assets = {}
+        for asset_id, filename in {
+            "background": "INVBOX.png",
+            "scrollUp": "INVUPOUT.png",
+            "scrollDown": "INVDNOUT.png",
+        }.items():
+            asset_source = classic_inventory_source[asset_id]
+            member = verified_member(archive, asset_source)
+            asset_path = staging / filename
+            asset = decode_interface_frame(
+                member,
+                asset_source,
+                colors,
+                asset_path,
+                f"classic inventory {asset_id}",
+                opaque=asset_id == "background",
+            )
+            classic_inventory_assets[asset_id] = {
+                "png": str((output_root / filename).resolve()),
+                "pngSha256": asset["pngSha256"],
+                "width": asset["width"],
+                "height": asset["height"],
+                "sourceFrmSha256": member.sha256,
+            }
+
+        classic_inventory_item_assets = {}
+        for symbol, asset_source in sorted(
+            classic_inventory_source["itemInventoryBySymbol"].items()
+        ):
+            member = verified_member(archive, asset_source)
+            filename = f"INVBOX-{symbol}.png"
+            asset_path = staging / filename
+            asset = decode_interface_frame(
+                member,
+                asset_source,
+                colors,
+                asset_path,
+                f"classic inventory item {symbol}",
+            )
+            classic_inventory_item_assets[symbol] = {
+                "png": str((output_root / filename).resolve()),
+                "pngSha256": asset["pngSha256"],
+                "width": asset["width"],
+                "height": asset["height"],
+                "sourceFrmSha256": member.sha256,
+            }
+
         font_source = source["interfaceHud"]["messageFont"]
         font_member = verified_member(archive, font_source)
         message_color = color_table_rgb(
@@ -784,6 +832,15 @@ def prepare(
                 "layout": source["interfaceHud"]["layout"],
                 "pipBoyAccess": "P key or PIP control",
             },
+            "classicInventory": {
+                "source": "owned Fallout 1 ART/INTRFACE/INVBOX.FRM and ART/INVEN FRMs",
+                "assets": classic_inventory_assets,
+                "itemInventoryBySymbol": classic_inventory_item_assets,
+                "messageFont": interface_font,
+                "input": classic_inventory_source["input"],
+                "layout": classic_inventory_source["layout"],
+                "stateAuthority": "Fo1TacticalSession inventoryObjects",
+            },
             "opening": {
                 "sourceMve": str((output_root / mve_path.name).resolve()),
                 "sourceMveSha256": movie.sha256,
@@ -831,6 +888,8 @@ def prepare(
             "pipBoyMainSha256": manifest["pipBoy"]["assets"]["main"]["pngSha256"],
             "interfaceHudSha256": manifest["interfaceHud"]["assets"]["main"]["pngSha256"],
             "interfaceWeaponSymbols": sorted(manifest["interfaceHud"]["weaponInventoryBySymbol"]),
+            "classicInventorySha256": manifest["classicInventory"]["assets"]["background"]["pngSha256"],
+            "classicInventorySymbols": sorted(manifest["classicInventory"]["itemInventoryBySymbol"]),
             "interfaceFontSha256": manifest["interfaceHud"]["messageFont"]["atlasPngSha256"],
             "openingFramesSha256": manifest["opening"]["playbackFramesSha256"],
             "openingAudioSha256": manifest["opening"]["playbackAudioSha256"],

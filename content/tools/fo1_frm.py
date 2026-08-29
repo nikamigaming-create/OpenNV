@@ -27,13 +27,19 @@ FO1_FRM_FORMAT_CONTRACT_INTEGER_24 = 24
 FO1_FRM_FORMAT_CONTRACT_INTEGER_255 = 255
 FO1_FRM_FORMAT_CONTRACT_INTEGER_256 = 256
 FO1_FRM_FORMAT_CONTRACT_INTEGER_260 = 260
+FO1_FRM_FORMAT_CONTRACT_INTEGER_3 = 3
 FO1_FRM_FORMAT_CONTRACT_INTEGER_300 = 300
 FO1_FRM_FORMAT_CONTRACT_INTEGER_320 = 320
 FO1_FRM_FORMAT_CONTRACT_INTEGER_340 = 340
+FO1_FRM_FORMAT_CONTRACT_INTEGER_4 = 4
 FO1_FRM_FORMAT_CONTRACT_INTEGER_6 = 6
 FO1_FRM_FORMAT_CONTRACT_INTEGER_63 = 63
 FO1_FRM_FORMAT_CONTRACT_INTEGER_768 = 768
 FO1_FRM_FORMAT_CONTRACT_INTEGER_8 = 8
+
+SUPPORTED_FRM_VERSIONS = frozenset(
+    (FO1_FRM_FORMAT_CONTRACT_INTEGER_3, FO1_FRM_FORMAT_CONTRACT_INTEGER_4)
+)
 
 
 
@@ -72,7 +78,7 @@ def decode_frm_frame(
     if len(data) < FO1_FRM_FORMAT_CONTRACT_HEX_3E:
         raise ValueError("FRM header is truncated")
     version, fps, action_frame, frame_count = struct.unpack_from(">IHHH", data, 0)
-    if version != 4 or frame_count <= 0:
+    if version not in SUPPORTED_FRM_VERSIONS or frame_count <= 0:
         raise ValueError(f"unsupported FRM header: version={version} frames={frame_count}")
     if not 0 <= rotation < FO1_FRM_FORMAT_CONTRACT_INTEGER_6:
         raise ValueError(f"FRM rotation is outside 0..5: {rotation}")
@@ -127,7 +133,7 @@ def decode_frm(data: bytes, colors: list[tuple[int, int, int, int]]) -> dict[str
     if len(data) < FO1_FRM_FORMAT_CONTRACT_HEX_3E:
         raise ValueError("FRM header is truncated")
     version, fps, action_frame, frame_count = struct.unpack_from(">IHHH", data, 0)
-    if version != 4 or frame_count <= 0:
+    if version not in SUPPORTED_FRM_VERSIONS or frame_count <= 0:
         raise ValueError(f"unsupported FRM header: version={version} frames={frame_count}")
     x_offsets = struct.unpack_from(">6h", data, FO1_FRM_FORMAT_CONTRACT_HEX_0A)
     y_offsets = struct.unpack_from(">6h", data, FO1_FRM_FORMAT_CONTRACT_HEX_16)

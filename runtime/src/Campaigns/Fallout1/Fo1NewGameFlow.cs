@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
@@ -459,7 +460,46 @@ internal static class Fo1NewGameFlow
         stage.Text = "01  CHARACTER PROFILE SURVIVED THE OPENING  •  LIVE HP / AP / AC / SEQUENCE";
         loaded.Session.SetCameraStatus(
             $"{profile.Name}  •  V13ENT  •  exact tile {loaded.EntryTile}  •  " +
-            "P opens Pip-Boy 2000");
+            "I opens Inventory • P opens Pip-Boy 2000");
+        var inventoryBefore = loaded.Session.InventorySnapshot();
+        var inventorySaveSha256Before = FileSha256(loaded.Session.SavePath);
+        loaded.Camera._UnhandledInput(new InputEventKey
+        {
+            Pressed = true,
+            PhysicalKeycode = loaded.Session.InventoryKey,
+        });
+        await WaitFrames(host, 1);
+        var inventory = loaded.Session.ClassicInventory;
+        if (inventory is null || !inventory.IsOpen || inventory.OpenedCount != 1 ||
+            inventory.VisibleStackCount != inventoryBefore.Count ||
+            string.IsNullOrWhiteSpace(inventory.SelectedSymbol))
+            throw new InvalidOperationException(
+                "Fallout classic inventory failed to open from its configured input.");
+        loaded.Camera._UnhandledInput(new InputEventKey
+        {
+            Pressed = true,
+            PhysicalKeycode = Key.Escape,
+        });
+        var inventoryAfter = loaded.Session.InventorySnapshot();
+        var inventorySaveSha256After = FileSha256(loaded.Session.SavePath);
+        if (inventory.IsOpen || inventory.ClosedCount != 1 ||
+            !inventoryBefore.SequenceEqual(inventoryAfter) ||
+            inventorySaveSha256Before != inventorySaveSha256After)
+            throw new InvalidOperationException(
+                "Fallout classic inventory changed gameplay or save truth.");
+        var inventoryProof = new
+        {
+            input = loaded.Session.InventoryKey.ToString(),
+            openedCount = inventory.OpenedCount,
+            closedCount = inventory.ClosedCount,
+            stackCount = inventory.VisibleStackCount,
+            selectedSymbol = inventory.SelectedSymbol,
+            inventoryBefore,
+            inventoryAfter,
+            saveSha256Before = inventorySaveSha256Before,
+            saveSha256After = inventorySaveSha256After,
+            unchanged = true,
+        };
         loaded.Session.TogglePipBoy();
         await WaitFrames(host, showcase.LandingHoldFrames);
         loaded.Session.TogglePipBoy();
@@ -593,13 +633,16 @@ internal static class Fo1NewGameFlow
         loaded.Session.WeaponActionPointCost != 4 || loaded.Camera.ExplorationMode ||
         loaded.Camera.FirstPersonMode || !loaded.Session.PlayerToken.Visible ||
         !loaded.Door.Controller.IsOpen || !loaded.Session.ClassicInterfaceAttached ||
+        loaded.Session.ClassicInventory is null || loaded.Session.ClassicInventory.IsOpen ||
+        loaded.Session.ClassicInventory.OpenedCount != 1 ||
+        loaded.Session.ClassicInventory.ClosedCount != 1 ||
         loaded.Session.PipBoy is null || loaded.Session.PipBoy.OpenedCount != 1 ||
         loaded.Session.PipBoy.IsOpen)
             throw new InvalidOperationException(
                 "Fallout end-to-end new-game/equipment/combat gate failed.");
         var report = new
         {
-            schema = "opennv-fo1-new-game-demo/v6",
+            schema = "opennv-fo1-new-game-demo/v7",
             status = "pass",
             fixedFpsExpected = showcase.FixedFramesPerSecond,
             openingPlaybackScale = opening.PlaybackScale,
@@ -622,6 +665,7 @@ internal static class Fo1NewGameFlow
                 opening.Skipped ? "owned-original-overseer-mve-skipped" : "owned-original-overseer-mve",
                 "owned-frame-fade-to-exact-live-first-person-v13ent",
                 "owned-original-iface-frm-live-gameplay-hud",
+                "owned-original-invbox-inventory-open-and-escape-close-with-unchanged-state",
                 "pip-boy-2000-attached-opened-status-and-closed",
                 "first-person-open-vault-door-corridor-lookback",
                 "first-person-continuous-source-walk-mask-walk",
@@ -636,6 +680,7 @@ internal static class Fo1NewGameFlow
             },
             characterStart = contract.Report(),
             character = profile.Report(),
+            inventory = inventoryProof,
             handoff = new
             {
                 map = "V13ENT",
@@ -702,6 +747,9 @@ internal static class Fo1NewGameFlow
             $"melee={loaded.Session.MeleeAttacks} reloads={loaded.Session.Reloads}");
         host.GetTree().Quit(0);
     }
+
+    private static string FileSha256(string path) =>
+        Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
 
     private static async Task KillRatFirstPerson(
         Node host,

@@ -42,6 +42,7 @@ internal partial class Fo1ClassicHud : Control
     internal void Configure(
         Fo1ClassicInterfaceAssets assets,
         Action openPipBoy,
+        Action openInventory,
         Action swapWeapon)
     {
         _assets = assets;
@@ -80,6 +81,24 @@ internal partial class Fo1ClassicHud : Control
         PlaceOnSurface(pipButton, _layout.Buttons.PipBoy);
         pipButton.Pressed += openPipBoy;
         _surface.AddChild(pipButton);
+
+        var inventoryButton = new Button
+        {
+            Name = "OwnedIfaceInventoryButton",
+            Flat = true,
+            FocusMode = FocusModeEnum.None,
+            MouseDefaultCursorShape = CursorShape.PointingHand,
+            TooltipText = "Open inventory (I)",
+        };
+        PlaceOnSurface(
+            inventoryButton,
+            new Fo1HudRect(
+                _layout.Buttons.Inventory.X,
+                _layout.Buttons.Inventory.Y,
+                assets.InventoryButton.Width,
+                assets.InventoryButton.Height));
+        inventoryButton.Pressed += openInventory;
+        _surface.AddChild(inventoryButton);
 
         var swapButton = new Button
         {
@@ -168,6 +187,7 @@ internal partial class Fo1ClassicHud : Control
             .OrderBy(value => value).ToArray(),
         weaponArtSwitches = _weaponArtSwitches,
         swapHandsAccess = "exact retail swap-hands red-button rectangle",
+        inventoryAccess = "I key or exact retail INV control rectangle",
         pipBoyAccess = "P key or exact retail PIP control rectangle",
     };
 

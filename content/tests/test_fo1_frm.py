@@ -13,9 +13,9 @@ sys.path.insert(0, str(TOOLS))
 from fo1_frm import decode_frm, palette_rgba, save_preview  # noqa: E402
 
 
-def synthetic_frm() -> bytes:
+def synthetic_frm(version: int = 4) -> bytes:
     header = bytearray(0x3E)
-    struct.pack_into(">IHHH", header, 0, 4, 0, 0, 1)
+    struct.pack_into(">IHHH", header, 0, version, 0, 0, 1)
     struct.pack_into(">6h", header, 0x0A, 1, 2, 3, 4, 5, 6)
     struct.pack_into(">6h", header, 0x16, -1, -2, -3, -4, -5, -6)
     struct.pack_into(">6I", header, 0x22, 0, 0, 0, 0, 0, 0)
@@ -55,6 +55,12 @@ class Fo1FrmTest(unittest.TestCase):
     def test_truncated_frame_fails_closed(self) -> None:
         with self.assertRaises(ValueError):
             decode_frm(synthetic_frm()[:-1], [(0, 0, 0, 0)] * 256)
+
+    def test_version_three_inventory_frame_uses_the_same_bounded_layout(self) -> None:
+        decoded = decode_frm(synthetic_frm(version=3), [(0, 0, 0, 0)] * 256)
+        self.assertEqual(decoded["version"], 3)
+        self.assertEqual(decoded["framesPerDirection"], 1)
+        self.assertEqual(decoded["directions"][0]["frames"][0]["width"], 2)
 
 
 if __name__ == "__main__":

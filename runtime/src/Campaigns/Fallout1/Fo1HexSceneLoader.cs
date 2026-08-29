@@ -193,6 +193,10 @@ internal static class Fo1HexSceneLoader
             RequiredString(playerInventory, "equippedMeleeSymbol"),
             ammoSymbol,
             ammoItem.GetProperty("profile").GetProperty("roundsPerObject").GetInt32(),
+            inventoryItems.ToDictionary(
+                row => row.Key,
+                row => RequiredString(row.Value, "displayName"),
+                StringComparer.Ordinal),
             playerInventory.GetProperty("base").EnumerateArray()
                 .Select(ReadInventoryStack)
                 .ToArray(),

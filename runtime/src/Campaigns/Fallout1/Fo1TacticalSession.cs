@@ -121,6 +121,7 @@ internal partial class Fo1TacticalSession : Node
     private Label _controlsLabel = null!;
     private Control _debugHudRoot = null!;
     private Fo1ClassicHud? _classicHud;
+    private Fo1ClassicInventoryScreen? _classicInventory;
     private Control _targetReticle = null!;
     private Label _targetReticleLabel = null!;
     private Control _fpsCrosshair = null!;
@@ -223,6 +224,9 @@ internal partial class Fo1TacticalSession : Node
     internal int FpsKills => _fpsKills;
     internal Fo1PipBoy2000? PipBoy => _pipBoy;
     internal bool ClassicInterfaceAttached => _classicHud is not null;
+    internal Fo1ClassicInventoryScreen? ClassicInventory => _classicInventory;
+    internal bool InventoryOpen => _classicInventory?.IsOpen == true;
+    internal Key InventoryKey => _classicInventory?.PhysicalKey ?? Key.None;
     internal Fo1CombatPresentation? CombatPresentation => _combatPresentation;
     internal string SavePath => _savePath;
 
@@ -1123,6 +1127,10 @@ internal partial class Fo1TacticalSession : Node
 
     private int InventoryObjects(string symbol) => _inventoryObjects.GetValueOrDefault(symbol);
 
+    internal IReadOnlyDictionary<string, int> InventorySnapshot() =>
+        _inventoryObjects.OrderBy(row => row.Key, StringComparer.Ordinal)
+            .ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
+
     internal void SetCinematicPlayerAnimation(bool active, bool moving)
     {
         if (_playerAnimationPlayer is null)
@@ -1172,9 +1180,28 @@ internal partial class Fo1TacticalSession : Node
         if (_pipBoy is null)
             throw new InvalidOperationException(
                 "Fallout classic interface requires the player's Pip-Boy 2000 to be attached first.");
+        if (_characterProfile is null)
+            throw new InvalidOperationException(
+                "Fallout classic interface requires a selected character.");
+        var classicInventory = new Fo1ClassicInventoryScreen();
+        classicInventory.Configure(
+            contract.ClassicInventory,
+            _characterProfile,
+            contract.PremadeCharacters,
+            _playerProfile.Inventory.DisplayNames,
+            InventorySnapshot,
+            () => EquippedWeaponSymbol,
+            () => { CloseInventory(); });
+        Hud.AddChild(classicInventory);
+        _classicInventory = classicInventory;
         var classicHud = new Fo1ClassicHud();
-        classicHud.Configure(contract.InterfaceHud, TogglePipBoy, SwapEquippedWeapon);
+        classicHud.Configure(
+            contract.InterfaceHud,
+            TogglePipBoy,
+            ToggleInventory,
+            SwapEquippedWeapon);
         Hud.AddChild(classicHud);
+        Hud.MoveChild(classicInventory, Hud.GetChildCount() - 1);
         _classicHud = classicHud;
         _debugHudRoot.Visible = false;
         RefreshHud();
@@ -1188,8 +1215,30 @@ internal partial class Fo1TacticalSession : Node
             RefreshHud();
             return;
         }
+        if (_classicInventory?.IsOpen == true)
+            _classicInventory.Close();
         _pipBoy.Toggle();
     }
+
+    internal void ToggleInventory()
+    {
+        if (_classicInventory is null)
+        {
+            _status = "Inventory becomes available after character selection";
+            RefreshHud();
+            return;
+        }
+        if (_classicInventory.IsOpen)
+        {
+            CloseInventory();
+            return;
+        }
+        if (_pipBoy?.IsOpen == true)
+            _pipBoy.SetOpen(false);
+        _classicInventory.Open();
+    }
+
+    internal bool CloseInventory() => _classicInventory?.Close() == true;
 
     internal ActorModelSlice.LoadedActor AttachOwnedPlayer(
         string modelPath,
@@ -1389,6 +1438,7 @@ internal partial class Fo1TacticalSession : Node
         savePath = _savePath,
         character = _characterProfile?.Report(),
         classicInterface = _classicHud?.Report(),
+        classicInventory = _classicInventory?.Report(),
         pipBoy = _pipBoy?.Report(),
         combatPresentation = _combatPresentation?.Report(),
         playerPresentation = new
@@ -1630,8 +1680,8 @@ internal partial class Fo1TacticalSession : Node
     }
 
     private string ControlsText() => _firstPersonModeActive
-        ? "FPS • WASD move • Mouse look • LMB 10mm • RMB knife • R reload • C tactical • P Pip-Boy • Esc mouse"
-        : "TACTICAL • LMB move/select • Tab target • X ranged • Z melee • R reload • C shoulder/FPS • MMB orbit • RMB pan • Wheel zoom • G grid • P Pip-Boy • Space turn • F5 save";
+        ? "FPS • WASD move • Mouse look • LMB 10mm • RMB knife • R reload • C tactical • I inventory • P Pip-Boy • Esc mouse"
+        : "TACTICAL • LMB move/select • Tab target • X ranged • Z melee • R reload • C shoulder/FPS • MMB orbit • RMB pan • Wheel zoom • G grid • I inventory • P Pip-Boy • Space turn • F5 save";
 
     private void BuildFpsCrosshair()
     {
@@ -2086,6 +2136,7 @@ internal partial class Fo1TacticalSession : Node
         string EquippedMeleeSymbol,
         string AmmunitionSymbol,
         int AmmunitionRoundsPerObject,
+        IReadOnlyDictionary<string, string> DisplayNames,
         IReadOnlyList<InventoryStack> Base,
         IReadOnlyList<InventoryTagBonus> TagBonuses)
     {
@@ -2094,7 +2145,9 @@ internal partial class Fo1TacticalSession : Node
             if (string.IsNullOrWhiteSpace(EquippedRangedSymbol) ||
                 string.IsNullOrWhiteSpace(EquippedMeleeSymbol) ||
                 string.IsNullOrWhiteSpace(AmmunitionSymbol) ||
-                AmmunitionRoundsPerObject <= 0 || Base.Count == 0 ||
+                AmmunitionRoundsPerObject <= 0 || DisplayNames.Count == 0 ||
+                DisplayNames.Any(row => string.IsNullOrWhiteSpace(row.Key) ||
+                    string.IsNullOrWhiteSpace(row.Value)) || Base.Count == 0 ||
                 Base.Any(row => row.Objects <= 0) ||
                 !Base.Any(row => row.Symbol == EquippedRangedSymbol) ||
                 !Base.Any(row => row.Symbol == EquippedMeleeSymbol) ||
@@ -2102,7 +2155,9 @@ internal partial class Fo1TacticalSession : Node
                 TagBonuses.Select(row => row.Skill).Distinct(StringComparer.Ordinal).Count() !=
                     TagBonuses.Count ||
                 TagBonuses.Any(row => string.IsNullOrWhiteSpace(row.Skill) ||
-                    row.Items.Count == 0 || row.Items.Any(item => item.Objects <= 0)))
+                    row.Items.Count == 0 || row.Items.Any(item => item.Objects <= 0)) ||
+                Base.Concat(TagBonuses.SelectMany(row => row.Items))
+                    .Any(row => !DisplayNames.ContainsKey(row.Symbol)))
                 throw new InvalidOperationException("Fallout starting inventory profile is invalid.");
         }
     }

@@ -267,6 +267,121 @@
         }
       }
     },
+    "classicInventory": {
+      "background": {
+        "logicalPath": "ART/INTRFACE/INVBOX.FRM",
+        "sha256": "ae347b83f24d00fbf5806f80a9084855d6ae275f31388cfabee90b700903a657",
+        "width": 499,
+        "height": 377
+      },
+      "scrollUp": {
+        "logicalPath": "ART/INTRFACE/INVUPOUT.FRM",
+        "sha256": "0b096889eea01ddefbe58254747054c8d124c65479f18db26836851b53191947",
+        "width": 22,
+        "height": 23
+      },
+      "scrollDown": {
+        "logicalPath": "ART/INTRFACE/INVDNOUT.FRM",
+        "sha256": "9ce0041ebe294d36a5c145adc5c843fc58633e7730bf2f73877b5d3019e0a9a4",
+        "width": 22,
+        "height": 23
+      },
+      "itemInventoryBySymbol": {
+        "PID_KNIFE": {
+          "logicalPath": "ART/INVEN/OKNIFE.FRM",
+          "sha256": "cb83d29ba45ac19b00baa123eaed2c2397248cab8c5326d7bf225c582dfccb6f",
+          "width": 88,
+          "height": 33
+        },
+        "PID_10MM_PISTOL": {
+          "logicalPath": "ART/INVEN/PISTOL.FRM",
+          "sha256": "5b429346d20453b0fd057929e25b23287dd27e4f09ad4145b8ac5dea64525e34",
+          "width": 70,
+          "height": 63
+        },
+        "PID_10MM_JHP": {
+          "logicalPath": "ART/INVEN/10MMJHP.FRM",
+          "sha256": "8c61c0f046c96fe97c6f447f1b57300e7f630dbb30077553e158a228fad3ab76",
+          "width": 83,
+          "height": 58
+        },
+        "PID_STIMPAK": {
+          "logicalPath": "ART/INVEN/STIMX.FRM",
+          "sha256": "dc37307f667fc5a5bef507e9e367155542e8fdcb3f4545ed35467b4d6d3054cd",
+          "width": 89,
+          "height": 61
+        },
+        "PID_FLARE": {
+          "logicalPath": "ART/INVEN/FLARE.FRM",
+          "sha256": "5b19016eadc2f00eb5508b3193d90f1b5d2e691fbe2df7f3751bc7c47657155e",
+          "width": 92,
+          "height": 58
+        },
+        "PID_LOCKPICKS": {
+          "logicalPath": "ART/INVEN/LOCKPIC2.FRM",
+          "sha256": "eefafef2b350c6323cd71c0caf6003173fcaa3d6f22370c278a9747dd5c4e125",
+          "width": 91,
+          "height": 63
+        },
+        "PID_BRASS_KNUCKLES": {
+          "logicalPath": "ART/INVEN/BRSNUCK.FRM",
+          "sha256": "de02e3481beafd835adb327c0140bb9ccf43fa9d8461b026469c6809fdad00b7",
+          "width": 81,
+          "height": 65
+        },
+        "PID_FIRST_AID_KIT": {
+          "logicalPath": "ART/INVEN/1STAID.FRM",
+          "sha256": "2d5530f5904e9b7ba971191b721acf9a01375ca781bb67c609f3820cbf83d090",
+          "width": 94,
+          "height": 65
+        },
+        "PID_THROWING_KNIFE": {
+          "logicalPath": "ART/INVEN/KNIFE2.FRM",
+          "sha256": "3b686007da2f25644be14fb678caf0ad36410aa33b26278643e32f5939bfcedb",
+          "width": 93,
+          "height": 62
+        },
+        "PID_MULTI_TOOL": {
+          "logicalPath": "ART/INVEN/CUTTER.FRM",
+          "sha256": "970fd2dd3ee1785dbaf0485da3dc746dc7917d959ae754c0c00ceef98bc28969",
+          "width": 93,
+          "height": 54
+        },
+        "PID_WATER_FLASK": {
+          "logicalPath": "ART/INVEN/FLASK.FRM",
+          "sha256": "7d649d7907438acc852477b5d91b7ba41224eecaf1274834d3f0d919881393ff",
+          "width": 55,
+          "height": 64
+        },
+        "PID_MENTATS": {
+          "logicalPath": "ART/INVEN/SYRING2.FRM",
+          "sha256": "ef865e7e997fe6f1322f534f22767d1a696a58d876966010ec3d96c52c3a1ce7",
+          "width": 85,
+          "height": 57
+        },
+        "PID_BUFFOUT": {
+          "logicalPath": "ART/INVEN/DXBOOST2.FRM",
+          "sha256": "12160e8ed75fef1b531dbd9fd8d0ebbdabd47cbb2eb418014f29d2cd0ece051a",
+          "width": 84,
+          "height": 62
+        }
+      },
+      "input": {
+        "physicalKey": "I"
+      },
+      "layout": {
+        "canvas": { "width": 499, "height": 377 },
+        "inventoryList": { "x": 42, "y": 38, "width": 72, "height": 300, "visibleRows": 6 },
+        "scrollUp": { "x": 119, "y": 48 },
+        "scrollDown": { "x": 119, "y": 306 },
+        "portrait": { "x": 155, "y": 39, "width": 103, "height": 94 },
+        "selectedItem": { "x": 288, "y": 43, "width": 158, "height": 197 },
+        "selectedText": { "x": 286, "y": 242, "width": 168, "height": 54 },
+        "item1": { "x": 149, "y": 282, "width": 94, "height": 68 },
+        "item2": { "x": 246, "y": 282, "width": 94, "height": 68 },
+        "done": { "x": 358, "y": 319, "width": 102, "height": 35 }
+      }
+    },
     "premadeCharacters": [
       {
         "id": "max-stone",
@@ -418,11 +533,12 @@
     "original owned Overseer MVE video/audio and source subtitle timing",
     "authored briefing-to-V13ENT tile 17690 rotation 2 handoff",
     "original owned Fallout 1 640x100 gameplay HUD composed at source-pixel coordinates with live HP, AP, AC, item art, bitmap message font, combat curtain, and PIP access",
+    "original owned Fallout 1 INVBOX inventory chrome with authoritative starting/tag-bonus stacks, owned item art, I/HUD open, Escape/Done close, and no gameplay mutation",
     "original owned Fallout 1 Pip-Boy 2000 chrome with live bounded character, status, automap, and archive pages"
   ],
   "unsupported": [
     "retail cursor sprites, click sounds, button-down animation, and per-control timing parity",
     "complete downstream runtime effects for every selectable trait",
-    "retail combat to-hit, critical tables, inventory, perks, and leveling"
+    "retail combat to-hit, critical tables, full inventory item-use/drop/equip semantics, perks, and leveling"
   ]
 }

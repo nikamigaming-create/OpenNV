@@ -49,6 +49,36 @@ class Fo1CharacterStartTest(unittest.TestCase):
             "ART/INVEN/KNIFE.FRM",
         )
 
+        inventory = recipe["source"]["classicInventory"]
+        self.assertEqual(
+            inventory["background"]["logicalPath"],
+            "ART/INTRFACE/INVBOX.FRM",
+        )
+        self.assertEqual((inventory["background"]["width"], inventory["background"]["height"]), (499, 377))
+        self.assertEqual(inventory["input"]["physicalKey"], "I")
+        self.assertEqual(
+            set(inventory["itemInventoryBySymbol"]),
+            {
+                "PID_KNIFE",
+                "PID_10MM_PISTOL",
+                "PID_10MM_JHP",
+                "PID_STIMPAK",
+                "PID_FLARE",
+                "PID_LOCKPICKS",
+                "PID_BRASS_KNUCKLES",
+                "PID_FIRST_AID_KIT",
+                "PID_THROWING_KNIFE",
+                "PID_MULTI_TOOL",
+                "PID_WATER_FLASK",
+                "PID_MENTATS",
+                "PID_BUFFOUT",
+            },
+        )
+        self.assertEqual(
+            inventory["itemInventoryBySymbol"]["PID_KNIFE"]["logicalPath"],
+            "ART/INVEN/OKNIFE.FRM",
+        )
+
     @staticmethod
     def _premade_gcd() -> bytes:
         values = [0] * 107
