@@ -67,6 +67,9 @@ internal static class Fo2CustomCharacterPersistenceProof
                 ? Fo2CharacterStartCatalog.FemaleLogicalPath
                 : Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath;
             var passed = Matches(selection, expected) && saved.Character == selection &&
+                selection.Appearance.CustomFaceEdited &&
+                selection.Appearance.CustomPortraitGenerated &&
+                File.Exists(selection.Appearance.GeneratedPortraitPath) &&
                 saved.MapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
                 saved.Elevation == Fo2ArroyoCavesPresentationCatalog.Elevation &&
                 saved.ArrivalTile == 28707 && saved.CurrentTile == 28707 &&
@@ -146,6 +149,9 @@ internal static class Fo2CustomCharacterPersistenceProof
             var passed = host.RestoredFromSave && Matches(selection, expected) &&
                 selection == saved.Character && exactInitialPosition && exactInitialTile &&
                 exactInitialRotation && runtime.Player.IsOnFloor() &&
+                selection.Appearance.CustomFaceEdited &&
+                selection.Appearance.CustomPortraitGenerated &&
+                File.Exists(selection.Appearance.GeneratedPortraitPath) &&
                 runtime.Player.Presentation.Visible &&
                 runtime.SelectedPlayerPresentation.Fid == expectedFid &&
                 saved.Sha256.Length == 64;
@@ -224,6 +230,7 @@ internal static class Fo2CustomCharacterPersistenceProof
         traits = character.Profile.Traits,
         character.GcdSha256,
         character.BioSha256,
+        appearance = character.Appearance,
     };
 
     private static object WorldReport(Fo2CharacterStartSaveState saved) => new

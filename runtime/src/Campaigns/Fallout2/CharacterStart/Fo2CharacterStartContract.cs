@@ -66,10 +66,19 @@ internal sealed record Fo2CharacterAppearanceContract(
     string PreviewMode,
     string PortraitState,
     bool CustomFaceEdited,
-    bool CustomPortraitGenerated)
+    bool CustomPortraitGenerated,
+    string FaceShapeId,
+    string PortraitGeneratorId,
+    string GeneratedPortraitPath,
+    string GeneratedPortraitSha256,
+    int GeneratedPortraitWidth,
+    int GeneratedPortraitHeight)
 {
-    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v1";
+    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v2";
     internal const string OwnedReliefPreview = "owned-panel-curved-relief-v1";
+    internal const string GeneratedPortraitPreview = "opennv-local-classic-green-portrait-v1";
+    internal const string OwnedPanelFaceShape = "owned-premade-panel";
+    internal const string NoPortraitGenerator = "none";
 
     internal static Fo2CharacterAppearanceContract FromSelection(
         Fo2CharacterSelection selection) => new(
@@ -89,21 +98,38 @@ internal sealed record Fo2CharacterAppearanceContract(
                 "Fallout 2 appearance has an unsupported character mode."),
         },
         false,
-        false);
+        false,
+        OwnedPanelFaceShape,
+        NoPortraitGenerator,
+        "",
+        "",
+        0,
+        0);
 
     internal void Validate(Fo2CharacterSelection selection)
     {
-        var expected = FromSelection(selection);
-        if (this != expected)
+        if (Schema != ExpectedSchema || BasisPremadeId != selection.Source.Id ||
+            SourcePanelLogicalPath != selection.Source.Panel.LogicalPath ||
+            SourcePanelSha256 != selection.Source.Panel.SourceSha256 ||
+            LocalPanelPngSha256 != selection.Source.Panel.PngSha256)
             throw new InvalidOperationException(
                 "Fallout 2 appearance/portrait contract differs from its owned source basis.");
+        if (selection.Mode == Fo2CharacterSelection.PremadeMode)
+        {
+            if (PreviewMode != OwnedReliefPreview || this != FromSelection(selection))
+                throw new InvalidOperationException(
+                    "Fallout 2 premade appearance differs from its owned panel contract.");
+            return;
+        }
+        Fo2ProceduralPortrait.Validate(this);
     }
 }
 
 internal sealed record Fo2CharacterSelection(
     string Mode,
     Fo2PremadeCharacter Source,
-    Fo2CharacterProfile Profile)
+    Fo2CharacterProfile Profile,
+    Fo2CharacterAppearanceContract? AppearanceState = null)
 {
     internal const string PremadeMode = "owned-premade";
     internal const string ModifyMode = "modified-owned-premade";
@@ -113,7 +139,7 @@ internal sealed record Fo2CharacterSelection(
     internal string Role => Mode == PremadeMode ? Source.Role : "Custom";
     internal string GcdSha256 => Source.GcdSha256;
     internal string BioSha256 => Source.BioSha256;
-    internal Fo2CharacterAppearanceContract Appearance =>
+    internal Fo2CharacterAppearanceContract Appearance => AppearanceState ??
         Fo2CharacterAppearanceContract.FromSelection(this);
 
     internal static Fo2CharacterSelection FromPremade(Fo2PremadeCharacter source) =>

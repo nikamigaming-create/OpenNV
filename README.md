@@ -224,7 +224,7 @@ parity remain unimplemented. One deliberately bounded confrontation adapter
 binds MAP critter serial 379/PID `01000003`/SID `04000001`, its owned Villager
 PRO/MSG stats, and nested Spear serial 378/PID `00000007`. Adjacent player melee
 uses visible derived HP/AP, deterministic damage, defeat-to-loot, inventory
-visibility, and version-5 save/cold restore; it never executes `ARTemple.int` or
+visibility, and version-6 save/cold restore; it never executes `ARTemple.int` or
 claims retail combat parity. A separate asset-free transition
 contract proves that Map 126 has no door-prototype objects and binds its source
 exit grids without executing `ARTemple.int`. The destination compiler independently binds
@@ -244,15 +244,19 @@ Create leaves them explicitly unselected because their editing rules are not yet
 transported. A single `LIVE 3D`/`PORTRAIT` button (or `V`) switches each exact
 owned Narg/Mingan/Chitsa panel to a gently curved live 3D surface while the
 original picker remains intact. This is an owned-reference relief, not rebuilt
-head geometry. Confirm hands the state and sex-correct FRM to the grounded Map 3
-player at exact tile 28707. Its version-5 atomic OpenNV user-data save retains
+head geometry. Modify/Create now adds one explicitly OpenNV-local face-shape
+control (`ROUND`, `OVAL`, or `ANGULAR`) with a live procedural classic-green
+preview. Confirm deterministically writes the matching 128×128 portrait under
+the OpenNV user-data portrait directory; the hash-named PNG contains no owned
+pixels. Confirm then hands the state and sex-correct FRM to the grounded Map 3
+player at exact tile 28707. Its version-6 atomic OpenNV user-data save retains
 the selected mode, owned GCD/BIO source basis, custom profile state, current map,
 elevation, tile, facing, transform, bounded movement/presentation modes, and the
 source exit transition identity plus the bounded Temple target HP/AP/combat and
-Spear-loot state and an explicit source-panel appearance contract. Custom face,
-hair, skin, and portrait-generation fields remain false until a real editor owns
-them; a fresh process validates those identities and restores the
-same player. The
+Spear-loot state and an explicit source-panel/generated-portrait appearance
+contract. Hair and skin editing remain absent; a fresh process validates the
+portrait path, SHA-256, dimensions, generator, and face shape before restoring
+the same player. The
 launcher passes these exact five hash-matched local artifacts and the isolated
 save path to the same character-start scene. This is bounded custom character
 creation and Hex playability, not a complete campaign save, FPS/VR, or retail parity.
@@ -265,13 +269,13 @@ screenshots and saves remain private under `%LOCALAPPDATA%\OpenNV\proofs`.
 Choose the path **before creating a character**. Each choice has its own
 profile and save boundary.
 
-| Path | Character | JAM rule |
-| --- | --- | --- |
-| Fallout 1 | One Vault Dweller state shared by hex, FPS, and eventually VR presentations | Separate from the Gamebryo-family profiles. |
-| Fallout 2 | One bounded premade, modified, or custom Chosen One state for the Hex route; future FPS/VR adapters must consume that authority | The atomic OpenNV save cold-restores character mode/profile/source basis, Map 3/Temple transform, and the bounded Temple Villager/Spear state. Tag/trait editing and campaign-wide state remain absent. |
-| New Vegas | Separate standalone Mojave character | Base route today; JAM remains disabled until its dependencies and portable semantics pass. |
-| Fallout 3 | Separate standalone Capital Wasteland character | Standalone CG00 profile today; TTW is a future separate path and is currently disabled. |
-| TTW | One future Capital Wasteland-to-Mojave character | Runtime support is absent. It cannot later adopt an existing standalone save. |
+| Path | Selector and shared-state rule | Current implementation boundary | JAM / edition rule |
+| --- | --- | --- | --- |
+| Fallout 1 | Normal/FPS retains the classic native picker. Hex uses the classic picker template with only the small Portrait/Live 3D toggle and local Custom-face extension. VR reuses the normal/FPS creator and character state; it never gets a separate picker. | FPS and Hex are launcher-visible development presentations; VR remains pending and the campaign is not claimed complete. | Separate from the Gamebryo-family profiles. |
+| Fallout 2 | Normal/FPS must retain the classic native picker. Hex keeps the owned classic picker with only Portrait/Live 3D and the local Custom-face extension. VR must reuse the normal/FPS creator and character state; it never gets a separate picker. | Only the bounded Hex route is enabled. Its version-6 save cold-restores the owned source basis, local portrait, Map 3/Temple transform, and Villager/Spear state; tag/trait editing and campaign-wide state remain absent. | No JAM layer. |
+| New Vegas | Normal/FPS uses the native Doc Mitchell creator. A future Hex route uses the classic Hex picker template plus Custom. VR shares the normal/FPS Doc creator and save state; it never gets a separate picker. | The standalone opening is still a bounded development route; Hex and fully validated VR character creation are not implemented. | Standalone Mojave save; JAM is optional only after its dependencies and portable semantics validate. |
+| Fallout 3 | Normal/FPS uses the native Vault 101 creator. A future Hex route uses the classic Hex picker template plus Custom. VR shares the normal/FPS Vault creator and save state; it never gets a separate picker. | The standalone CG00/CG01 work remains a bounded development route; Hex and fully validated VR character creation are not implemented. | Standalone Capital Wasteland save; TTW is a distinct edition/path. |
+| TTW | One Capital Wasteland-to-Mojave identity follows the Fallout 3 native creator contract; future VR shares it rather than creating another character. | Runtime support remains bounded and cannot claim the combined campaign complete. | A TTW save cannot adopt an existing standalone FO3 or FNV character. |
 
 This makes the important distinction visible rather than hiding it in mod
 files: JAM is modular; TTW is a character-path decision.

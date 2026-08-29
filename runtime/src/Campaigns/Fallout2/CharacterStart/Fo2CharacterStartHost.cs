@@ -121,6 +121,14 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     "fo2-temple-confrontation-restore-proof",
                     out var confrontationRestoreRoot))
                 _ = Fo2TempleConfrontationProof.RunRestore(this, confrontationRestoreRoot);
+            else if (options.TryGetValue(
+                    "fo2-custom-portrait-write-proof",
+                    out var portraitWriteRoot))
+                Fo2ProceduralPortraitProof.RunWrite(this, portraitWriteRoot);
+            else if (options.TryGetValue(
+                    "fo2-custom-portrait-restore-proof",
+                    out var portraitRestoreRoot))
+                Fo2ProceduralPortraitProof.RunRestore(this, portraitRestoreRoot);
         }
         catch (Exception exception)
         {
@@ -196,6 +204,10 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         player.SetMeta("selected_character_mode", character.Mode);
         player.SetMeta("selected_character_source_id", character.Source.Id);
         player.SetMeta("selected_gcd_sha256", character.GcdSha256);
+        player.SetMeta("selected_face_shape", character.Appearance.FaceShapeId);
+        player.SetMeta(
+            "selected_generated_portrait_sha256",
+            character.Appearance.GeneratedPortraitSha256);
         if (_persistenceEnabled)
             player.PersistenceBoundaryReached += OnPlayerPersistenceBoundary;
         if (_persistenceEnabled && restoredState is null)

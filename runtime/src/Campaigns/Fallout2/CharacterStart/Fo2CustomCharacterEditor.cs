@@ -6,12 +6,22 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
 {
     private const float SourceWidth = 640.0f;
     private const float SourceHeight = 480.0f;
+    private const float PortraitX = 57.0f;
+    private const float PortraitY = 37.0f;
+    private const float PortraitSize = 192.0f;
+    private const float FaceControlY = 244.0f;
+    private const float FaceButtonSize = 24.0f;
+    private const float FaceLabelX = 94.0f;
+    private const float FaceLabelWidth = 118.0f;
+    private const int FaceLabelFontSize = 9;
     private static readonly string[] SpecialNames = ["ST", "PE", "EN", "CH", "IN", "AG", "LK"];
     private readonly Fo2CharacterStartCatalog _catalog;
     private readonly Fo2PremadeCharacter _source;
     private readonly bool _modify;
     private readonly Control _canvas;
     private readonly LineEdit _name;
+    private readonly TextureRect _portrait;
+    private readonly Label _faceShape;
     private readonly Button _sex;
     private readonly Label _age;
     private readonly Label[] _specialValues = new Label[7];
@@ -20,6 +30,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private readonly Button _confirm;
     private readonly int[] _special;
     private int _ageValue;
+    private int _faceShapeIndex = 1;
     private string _sexValue;
 
     internal Fo2CustomCharacterEditor(
@@ -81,6 +92,40 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             Color = new Color(0.0f, 0.0f, 0.0f, 0.78f),
             MouseFilter = MouseFilterEnum.Ignore,
         });
+        _portrait = new TextureRect
+        {
+            Name = "OpenNvLocalClassicGreenPortraitPreview",
+            Position = new Vector2(PortraitX, PortraitY),
+            Size = new Vector2(PortraitSize, PortraitSize),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        _canvas.AddChild(_portrait);
+        AddButton(
+            "◀",
+            PortraitX,
+            FaceControlY,
+            FaceButtonSize,
+            FaceButtonSize,
+            () => SetFaceShapeIndex(_faceShapeIndex - 1),
+            FaceLabelFontSize);
+        _faceShape = AddText(
+            "",
+            FaceLabelX,
+            FaceControlY,
+            FaceLabelWidth,
+            FaceButtonSize,
+            FaceLabelFontSize,
+            HorizontalAlignment.Center);
+        AddButton(
+            "▶",
+            PortraitX + PortraitSize - FaceButtonSize,
+            FaceControlY,
+            FaceButtonSize,
+            FaceButtonSize,
+            () => SetFaceShapeIndex(_faceShapeIndex + 1),
+            FaceLabelFontSize);
         AddText(
             modify ? "MODIFY CHOSEN ONE" : "CREATE CHOSEN ONE",
             304.0f,
@@ -150,6 +195,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     internal string CharacterName => _name.Text.Trim();
     internal string Sex => _sexValue;
     internal int Age => _ageValue;
+    internal string FaceShapeId => Fo2ProceduralPortrait.Shapes[_faceShapeIndex];
     internal IReadOnlyList<int> Special => _special;
     internal int AllocatedSpecial => _special.Sum();
     internal bool CanConfirm =>
@@ -192,6 +238,14 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         Refresh();
     }
 
+    internal void SetFaceShape(string value)
+    {
+        var index = Fo2ProceduralPortrait.ShapeIndex(value);
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        SetFaceShapeIndex(index);
+    }
+
     internal void SetAge(int value)
     {
         _ageValue = Math.Clamp(value, 16, 35);
@@ -219,10 +273,17 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             _special.ToArray(),
             _modify ? _source.Profile.TaggedSkills.ToArray() : Array.Empty<string>(),
             _modify ? _source.Profile.Traits.ToArray() : Array.Empty<string>());
-        var selection = new Fo2CharacterSelection(
+        var provisional = new Fo2CharacterSelection(
             _modify ? Fo2CharacterSelection.ModifyMode : Fo2CharacterSelection.CreateMode,
             _source,
             profile);
+        var selection = provisional with
+        {
+            AppearanceState = Fo2ProceduralPortrait.Commit(
+                _source,
+                profile.Sex,
+                FaceShapeId),
+        };
         selection.Validate(_catalog);
         return selection;
     }
@@ -241,6 +302,13 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
 
     private void ToggleSex() => SetSex(_sexValue == "Male" ? "Female" : "Male");
 
+    private void SetFaceShapeIndex(int index)
+    {
+        var count = Fo2ProceduralPortrait.Shapes.Count;
+        _faceShapeIndex = (index % count + count) % count;
+        Refresh();
+    }
+
     private void AdjustSpecial(int index, int delta)
     {
         if (index is < 0 or >= 7 || delta is < -1 or > 1)
@@ -255,6 +323,9 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private void Refresh()
     {
         _sex.Text = _sexValue.ToUpperInvariant();
+        _faceShape.Text = $"FACE: {FaceShapeId.ToUpperInvariant()}";
+        _portrait.Texture = ImageTexture.CreateFromImage(
+            Fo2ProceduralPortrait.Render(_sexValue, FaceShapeId));
         _age.Text = _ageValue.ToString();
         for (var index = 0; index < _special.Length; index++)
             _specialValues[index].Text = _special[index].ToString("00");
@@ -272,6 +343,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         SetMeta("custom_name", CharacterName);
         SetMeta("custom_sex", _sexValue);
         SetMeta("custom_age", _ageValue);
+        SetMeta("custom_face_shape", FaceShapeId);
+        SetMeta("custom_portrait_generator", Fo2ProceduralPortrait.GeneratorId);
         SetMeta("custom_special", string.Join(",", _special));
         SetMeta("custom_special_total", AllocatedSpecial);
         SetMeta("custom_tags_traits_policy", _modify ? "source-unchanged" : "unselected");
