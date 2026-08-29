@@ -65,7 +65,7 @@ $receiptLine = @(
         Where-Object { $_.TrimStart().StartsWith("{") }
 )[-1]
 $receipt = $receiptLine | ConvertFrom-Json
-if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v4" -or
+if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v5" -or
     -not (Test-Path -LiteralPath $receipt.output -PathType Leaf)) {
     throw "Fallout 3 Vault 101 preparation receipt is invalid."
 }

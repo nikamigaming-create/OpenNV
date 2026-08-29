@@ -112,7 +112,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
     IReadOnlyDictionary<string, Fo3Vault101BirthAsset> Assets,
     IReadOnlyList<Fo3Vault101BirthReference> References)
 {
-    internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v4";
+    internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v5";
     private const string ExpectedStatus =
         "prepared-owned-materials-doctor-and-cg00-dad-not-yet-rendered";
     private const string ExpectedCellEditorId = "Vault101d";
@@ -383,8 +383,9 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             throw new InvalidOperationException(
                 "Fallout 3 Doctor Li ownership or pose authority is unsupported.");
 
-        var scenePath = Path.GetFullPath(RequiredString(source, "scene"));
-        VerifyCacheLocalDerivative(cacheRoot, scenePath);
+        var scenePath = ResolveCacheRelativeDerivative(
+            cacheRoot,
+            RequiredString(source, "scene"));
         var sceneSha256 = RequiredSha256(source, "sha256");
         VerifyFile(scenePath, sceneSha256);
         var recipe = RequiredObject(source, "recipe");
@@ -554,8 +555,9 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             throw new InvalidOperationException(
                 "Fallout 3 CG00 Dad ownership or presentation authority is unsupported.");
 
-        var scenePath = Path.GetFullPath(RequiredString(source, "scene"));
-        VerifyCacheLocalDerivative(cacheRoot, scenePath);
+        var scenePath = ResolveCacheRelativeDerivative(
+            cacheRoot,
+            RequiredString(source, "scene"));
         var sceneSha256 = RequiredSha256(source, "sha256");
         VerifyFile(scenePath, sceneSha256);
         var recipe = RequiredObject(source, "recipe");
@@ -822,6 +824,16 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             !File.Exists(path))
             throw new InvalidOperationException(
                 $"Fallout 3 Vault 101 derivative escapes its local cache: {path}");
+    }
+
+    private static string ResolveCacheRelativeDerivative(string cacheRoot, string relativePath)
+    {
+        if (Path.IsPathRooted(relativePath))
+            throw new InvalidOperationException(
+                $"Fallout 3 Vault 101 derivative path is not cache-relative: {relativePath}");
+        var path = Path.GetFullPath(Path.Combine(cacheRoot, relativePath));
+        VerifyCacheLocalDerivative(cacheRoot, path);
+        return path;
     }
 
     private static void VerifyFile(string path, string expectedSha256)

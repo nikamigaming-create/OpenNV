@@ -24,7 +24,7 @@ from texture_pipeline import TexturePipeline
 
 
 RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
-OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v4"
+OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v5"
 PROFILE_SCHEMA = "opennv-owned-game-profile/v1"
 OUTPUT_NAME = "fo3-vault101-birth-presentation.json"
 SHA256_HEX_CHARACTERS = 64
@@ -89,6 +89,20 @@ def _atomic_json(path: Path, document: dict[str, object]) -> None:
         path,
         (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8"),
     )
+
+
+def _cache_relative_derivative(cache_root: Path, path: Path) -> str:
+    root = cache_root.resolve()
+    candidate = path.resolve()
+    try:
+        relative = candidate.relative_to(root)
+    except ValueError as error:
+        raise ValueError(
+            f"Fallout 3 derivative escapes its local cache: {candidate}"
+        ) from error
+    if relative == Path("."):
+        raise ValueError("Fallout 3 derivative path is the cache root")
+    return relative.as_posix()
 
 
 def _default_recipe_path() -> Path:
@@ -765,7 +779,7 @@ def prepare(
         },
         "doctorActor": {
             "source": "transported-owned-ACHR-NPC-template-and-appearance-closure",
-            "scene": str(actor_scene_path),
+            "scene": _cache_relative_derivative(cache_root, actor_scene_path),
             "sha256": _sha256_file(actor_scene_path),
             "recipe": {
                 "id": _required_string(actor_recipe, "id"),
@@ -799,7 +813,7 @@ def prepare(
         },
         "dadActor": {
             "source": "direct-owned-CG00Dad-ACHR-NPC-race-and-FaceGen",
-            "scene": str(dad_scene_path),
+            "scene": _cache_relative_derivative(cache_root, dad_scene_path),
             "sha256": _sha256_file(dad_scene_path),
             "recipe": {
                 "id": _required_string(dad_actor_recipe, "id"),
