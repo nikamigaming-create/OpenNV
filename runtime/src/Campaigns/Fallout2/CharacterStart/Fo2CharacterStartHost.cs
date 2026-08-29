@@ -84,6 +84,20 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     this,
                     customRestoreRoot,
                     Fo2ArroyoCavesProofOptions.Require(options, "fo2-custom-character-sex"));
+            else if (options.TryGetValue(
+                    "fo2-walk-animation-write-proof",
+                    out var walkWriteRoot))
+                _ = Fo2WalkAnimationProof.RunWrite(
+                    this,
+                    walkWriteRoot,
+                    Fo2ArroyoCavesProofOptions.Require(options, "fo2-walk-animation-sex"));
+            else if (options.TryGetValue(
+                    "fo2-walk-animation-restore-proof",
+                    out var walkRestoreRoot))
+                _ = Fo2WalkAnimationProof.RunRestore(
+                    this,
+                    walkRestoreRoot,
+                    Fo2ArroyoCavesProofOptions.Require(options, "fo2-walk-animation-sex"));
         }
         catch (Exception exception)
         {

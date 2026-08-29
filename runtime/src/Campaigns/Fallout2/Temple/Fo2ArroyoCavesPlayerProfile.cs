@@ -90,7 +90,7 @@ internal sealed record Fo2ArroyoPlayerProfile(
             RequiredString(semantics, "multihexCoverage") !=
                 "central-source-hex-only-unresolved" ||
             RequiredString(presentation, "mode") !=
-                "owned-critter-frm-direction-frame-zero" ||
+                "owned-critter-frm-idle-and-ab-walk" ||
             RequiredString(presentation, "recipeId") !=
                 Fo2ArroyoPlayerPresentationCatalog.ExpectedRecipeId ||
             RequiredString(presentation, "fid") !=
@@ -99,10 +99,17 @@ internal sealed record Fo2ArroyoPlayerProfile(
                 Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath ||
             presentation.GetProperty("frame").GetInt32() !=
                 Fo2ArroyoPlayerPresentationCatalog.IdleFrame ||
+            RequiredString(presentation, "walkLogicalPath") !=
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedWalkLogicalPath ||
+            RequiredString(presentation, "walkAnimationCode") != "AB" ||
+            presentation.GetProperty("walkFramesPerDirection").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection ||
+            presentation.GetProperty("walkFramesPerSecond").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerSecond ||
             RequiredString(presentation, "directionMode") !=
                 "nearest-source-hex-direction-from-input" ||
             RequiredString(presentation, "billboard") != "fixed-y" ||
-            presentation.GetProperty("animationPlayback").GetBoolean() ||
+            !presentation.GetProperty("animationPlayback").GetBoolean() ||
             RequiredString(camera, "projection") != "orthographic-follow" ||
             promotion.GetProperty("runtimeReady").GetBoolean() ||
             promotion.GetProperty("persistentInteraction").GetBoolean() ||

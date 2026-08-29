@@ -105,14 +105,16 @@ retail startup-logo and original-menu presentation remain absent.
     runtime execution remains absent.
 11. Available now: an exact 432-byte GCD compiler plus disposable local cache
     binds the owned Narg, Mingan, and Chitsa profiles, BIO text, picker/panels,
-    and male/female idle FRMs. The visible Godot selector supports keyboard and
+    and PRO/FID-linked male/female AA idle plus 6-direction, 8-frame AB walk
+    FRMs. The visible Godot selector supports keyboard and
     mouse choice. Modify/Create edit name, sex, age 16–35, and seven 1–10
     SPECIAL values totaling 40. Modify preserves source tags/traits and Create
     leaves them unselected. Confirm applies the sex-correct FRM before Map 3.
     The version-2 atomic save preserves character mode, source basis, custom
     profile, Map 3/elevation/tile/facing, transform, and bounded modes; fresh
-    male and female processes cold-restore the same state and owned FRM. Tag/trait
-    editing, animation, campaign-wide state, and campaign play remain absent.
+    male and female processes prove two directions, return to owned AA idle,
+    and cold-restore the same state. Tag/trait editing, other animations,
+    campaign-wide state, and campaign play remain absent.
 
 Current result: a normal launcher starts either registered Fallout 1 view, the
 registered and prepared Fallout 2 Hex character-to-Arroyo slice, or the bounded

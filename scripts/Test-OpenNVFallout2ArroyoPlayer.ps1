@@ -53,12 +53,21 @@ if ($report.schema -ne 'opennv-fo2-arroyo-player-runtime-proof/v1' -or
     -not $report.promotion.physicalFloorSupport -or
     -not $report.promotion.sourceMaskCollisionGate -or
     -not $report.promotion.characterArtLoaded -or
+    -not $report.promotion.sourceWalkAnimationPlayed -or
     -not $report.promotion.humanInteractiveEntryAvailable -or
     $report.playerPresentation.fid -ne '0100003e' -or
     $report.playerPresentation.logicalPath -ne 'art\critters\hmwarraa.frm' -or
+    $report.playerPresentation.prototypePid -ne '01000001' -or
+    $report.playerPresentation.prototypeLogicalPath -ne 'proto\critters\00000001.pro' -or
+    $report.playerPresentation.walkLogicalPath -ne 'art\critters\hmwarrab.frm' -or
+    $report.playerPresentation.walkFps -ne 10 -or
+    $report.playerPresentation.walkFramesPerDirection -ne 8 -or
     $report.playerPresentation.sourceDirections -ne 6 -or
     $report.playerPresentation.admittedFrame -ne 0 -or
-    $report.playerPresentation.animationPlayback -or
+    -not $report.playerPresentation.animationPlayback -or
+    $report.playerPresentation.walkFrameAdvances -le 0 -or
+    $report.playerPresentation.completedWalkCycles -le 0 -or
+    -not $report.playerPresentation.idleResumedAtEnd -or
     -not $report.playerPresentation.visible -or
     $report.promotion.playerStatePersistent -or
     $report.promotion.interactive -or

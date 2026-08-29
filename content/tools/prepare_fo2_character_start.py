@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from corpus_io import atomic_json
-from fo1_frm import decode_frm_frame, palette_rgba_bytes
+from fo1_frm import decode_frm, decode_frm_frame, palette_rgba_bytes
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError
 from fo2_first_slice import PROFILE_SCHEMA, _archive_paths
@@ -109,9 +109,18 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         or female.get("artIndex") != 61
         or female.get("artListEntry") != "hfprim,11,1"
         or female.get("fid") != "0100003d"
+        or female.get("prototypeListLogicalPath") != "proto\\critters\\critters.lst"
+        or female.get("prototypeListIndex") != 2
+        or female.get("prototypeListEntry") != "00000002.pro"
+        or female.get("prototypeLogicalPath") != "proto\\critters\\00000002.pro"
+        or female.get("prototypePid") != "01000002"
         or female.get("logicalPath") != "art\\critters\\hfprimaa.frm"
         or female.get("frame") != 0
         or female.get("directions") != list(range(6))
+        or female.get("walkAnimationCode") != "AB"
+        or female.get("walkLogicalPath") != "art\\critters\\hfprimab.frm"
+        or female.get("walkFrames") != list(range(8))
+        or female.get("walkFps") != 10
         or not isinstance(presentation, dict)
         or presentation.get("viewport") != [640, 480]
         or presentation.get("panel") != [24, 20, 592, 260]
@@ -321,6 +330,21 @@ def prepare_fo2_character_start(
                 or resolver.placed_idle_frm_path(fid) != female["logicalPath"]
             ):
                 raise Fo1ProfileError("Fallout 2 female player source resolution drifted")
+            prototype = resolver.prototype(int(female["prototypePid"], 16))
+            prototype_list = resolver.list_lines(female["prototypeListLogicalPath"])
+            prototype_list_resource = resolver.read(female["prototypeListLogicalPath"])
+            prototype_entry = prototype_list[female["prototypeListIndex"] - 1].strip()
+            if (
+                prototype.list_index != female["prototypeListIndex"]
+                or prototype_entry != female["prototypeListEntry"]
+                or prototype.filename != female["prototypeListEntry"]
+                or prototype.fid != fid
+                or prototype.pid != int(female["prototypePid"], 16)
+            ):
+                raise Fo1ProfileError("Fallout 2 female player PRO/FID identity drifted")
+            prototype_resource = resolver.read(female["prototypeLogicalPath"])
+            if prototype.sha256 != prototype_resource.sha256:
+                raise Fo1ProfileError("Fallout 2 female player PRO resource identity drifted")
             female_frm = resolver.read(female["logicalPath"])
             female_artifacts = [
                 _save_admitted_frame(
@@ -333,6 +357,34 @@ def prepare_fo2_character_start(
                     staging=staging,
                 )
                 for direction in female["directions"]
+            ]
+            art_base = female["artListEntry"].split(",", 1)[0].casefold()
+            walk_logical_path = (
+                f"art\\critters\\{art_base}{female['walkAnimationCode'].casefold()}.frm"
+            )
+            if walk_logical_path != female["walkLogicalPath"]:
+                raise Fo1ProfileError("Fallout 2 female AB walk path resolution drifted")
+            female_walk_frm = resolver.read(walk_logical_path)
+            female_walk_decoded = decode_frm(female_walk_frm.data, colors)
+            if (
+                female_walk_decoded["fps"] != female["walkFps"]
+                or female_walk_decoded["framesPerDirection"] != len(female["walkFrames"])
+                or female_walk_decoded["actionFrame"] != 0
+                or len(female_walk_decoded["directions"]) != len(female["directions"])
+            ):
+                raise Fo1ProfileError("Fallout 2 female AB walk animation contract drifted")
+            female_walk_artifacts = [
+                _save_admitted_frame(
+                    kind="female-player-walk",
+                    logical_path=walk_logical_path,
+                    source=female_walk_frm,
+                    colors=colors,
+                    rotation=direction,
+                    frame_index=frame,
+                    staging=staging,
+                )
+                for direction in female["directions"]
+                for frame in female["walkFrames"]
             ]
 
         resources = [
@@ -377,6 +429,18 @@ def prepare_fo2_character_start(
                 "critterListSha256": critter_list.sha256,
                 "artIndex": female["artIndex"],
                 "artListEntry": female["artListEntry"],
+                "prototype": {
+                    "listLogicalPath": female["prototypeListLogicalPath"],
+                    "listIndex": prototype.list_index,
+                    "listEntry": prototype_entry,
+                    "listSha256": prototype_list_resource.sha256,
+                    "logicalPath": female["prototypeLogicalPath"],
+                    "pid": f"{prototype.pid:08x}",
+                    "fid": f"{prototype.fid:08x}",
+                    "source": prototype_resource.source,
+                    "bytes": len(prototype_resource.data),
+                    "sha256": prototype_resource.sha256,
+                },
                 "logicalPath": female["logicalPath"],
                 "source": female_frm.source,
                 "sourceBytes": len(female_frm.data),
@@ -384,12 +448,25 @@ def prepare_fo2_character_start(
                 "frame": female["frame"],
                 "directions": female_artifacts,
                 "animationPlayback": False,
+                "walkArt": {
+                    "animationCode": female["walkAnimationCode"],
+                    "logicalPath": walk_logical_path,
+                    "source": female_walk_frm.source,
+                    "sourceBytes": len(female_walk_frm.data),
+                    "sourceSha256": female_walk_frm.sha256,
+                    "fps": female_walk_decoded["fps"],
+                    "actionFrame": female_walk_decoded["actionFrame"],
+                    "framesPerDirection": female_walk_decoded["framesPerDirection"],
+                    "directions": female_walk_artifacts,
+                    "animationPlayback": True,
+                },
             },
             "resources": resources,
             "counts": {
                 "premades": len(characters),
                 "uiPngs": 1 + len(characters),
                 "femaleDirectionPngs": len(female_artifacts),
+                "femaleWalkFramePngs": len(female_walk_artifacts),
                 "sourceResources": len(resources),
             },
             "promotion": {
@@ -402,8 +479,8 @@ def prepare_fo2_character_start(
             "runtimeCompatibility": {
                 "ready": False,
                 "firstSliceBlocker": (
-                    "The three owned premades and female idle art are decoded, but selection, "
-                    "handoff, and persistence are runtime responsibilities."
+                    "The three owned premades plus female idle and AB walk art are decoded, "
+                    "but selection, handoff, and persistence are runtime responsibilities."
                 ),
             },
             "cachePolicy": {
@@ -445,6 +522,7 @@ def main() -> int:
                 "cache": str(args.output_root.resolve()),
                 "premades": document["counts"]["premades"],
                 "femaleDirectionPngs": document["counts"]["femaleDirectionPngs"],
+                "femaleWalkFramePngs": document["counts"]["femaleWalkFramePngs"],
                 "runtimeReady": False,
             },
             sort_keys=True,

@@ -19,6 +19,7 @@ from prepare_fo2_character_start import (  # noqa: E402
     prepare_fo2_character_start,
 )
 from content.tests.test_fo2_first_slice import synthetic_dat2, synthetic_frm  # noqa: E402
+from content.tests.test_fo2_player_presentation import synthetic_walk_frm  # noqa: E402
 
 
 def gcd(name: str, sex: int, special: list[int], tags: list[int], traits: list[int]) -> bytes:
@@ -43,6 +44,7 @@ class Fo2CharacterStartTest(unittest.TestCase):
             install = root / "Fallout 2"
             install.mkdir()
             frm = synthetic_frm()
+            walk_frm = synthetic_walk_frm()
             palette = bytearray(768)
             palette[3:6] = bytes((12, 24, 36))
             profiles = {
@@ -54,7 +56,16 @@ class Fo2CharacterStartTest(unittest.TestCase):
             critter_lines = [f"unused{index:03d}" for index in range(61)] + [
                 "hfprim,11,1"
             ]
-            master_members = [("color.pal", bytes(palette), False)]
+            female_prototype = struct.pack(">III", 0x01000002, 101, 0x0100003D)
+            master_members = [
+                ("color.pal", bytes(palette), False),
+                (
+                    "proto\\critters\\critters.lst",
+                    b"00000001.pro\r\n00000002.pro\r\n",
+                    False,
+                ),
+                ("proto\\critters\\00000002.pro", female_prototype, False),
+            ]
             for asset in ("pickchar", "combat", "stealth", "diplomat"):
                 master_members.append((f"art\\intrface\\{asset}.frm", frm, True))
             for identity, data in profiles.items():
@@ -74,6 +85,7 @@ class Fo2CharacterStartTest(unittest.TestCase):
                             False,
                         ),
                         ("art\\critters\\hfprimaa.frm", frm, True),
+                        ("art\\critters\\hfprimab.frm", walk_frm, True),
                     ]
                 )
             )
@@ -143,9 +155,18 @@ class Fo2CharacterStartTest(unittest.TestCase):
                             "artIndex": 61,
                             "artListEntry": "hfprim,11,1",
                             "fid": "0100003d",
+                            "prototypeListLogicalPath": "proto\\critters\\critters.lst",
+                            "prototypeListIndex": 2,
+                            "prototypeListEntry": "00000002.pro",
+                            "prototypeLogicalPath": "proto\\critters\\00000002.pro",
+                            "prototypePid": "01000002",
                             "logicalPath": "art\\critters\\hfprimaa.frm",
                             "frame": 0,
                             "directions": list(range(6)),
+                            "walkAnimationCode": "AB",
+                            "walkLogicalPath": "art\\critters\\hfprimab.frm",
+                            "walkFrames": list(range(8)),
+                            "walkFps": 10,
                         },
                         "presentation": {
                             "viewport": [640, 480],
@@ -177,6 +198,14 @@ class Fo2CharacterStartTest(unittest.TestCase):
             self.assertEqual(first["characters"][2]["profile"]["allocatedSpecial"], [4, 5, 4, 10, 7, 6, 4])
             self.assertEqual(first["femalePresentation"]["fid"], "0100003d")
             self.assertEqual(len(first["femalePresentation"]["directions"]), 6)
+            self.assertEqual(first["femalePresentation"]["prototype"]["pid"], "01000002")
+            self.assertEqual(first["femalePresentation"]["prototype"]["fid"], "0100003d")
+            self.assertEqual(first["femalePresentation"]["walkArt"]["fps"], 10)
+            self.assertEqual(first["femalePresentation"]["walkArt"]["framesPerDirection"], 8)
+            self.assertEqual(
+                len(first["femalePresentation"]["walkArt"]["directions"]),
+                48,
+            )
             self.assertEqual(
                 [row["pngSha256"] for row in first["femalePresentation"]["directions"]],
                 [row["pngSha256"] for row in second["femalePresentation"]["directions"]],

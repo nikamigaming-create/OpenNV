@@ -233,15 +233,10 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         var desired = new Vector3(input.X, 0.0f, input.Y);
         if (desired.LengthSquared() > 1.0f)
             desired = desired.Normalized();
-        if (!desired.IsZeroApprox())
-        {
-            var direction = DirectionForMovement(CurrentTile, desired);
-            if (Presentation.Direction != direction)
-            {
-                Presentation.SetDirection(direction);
-                PersistenceBoundaryReached?.Invoke();
-            }
-        }
+        var direction = desired.IsZeroApprox()
+            ? (int?)null
+            : DirectionForMovement(CurrentTile, desired);
+        var previousDirection = Presentation.Direction;
         var before = Position;
         var horizontal = desired * _profile.SpeedMetersPerSecond;
         var candidatePosition = before + horizontal * (float)delta;
@@ -269,6 +264,17 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
             LastRejectedCandidateTile = movedTile;
             movedTile = CurrentTile;
         }
+        var movedHorizontally = !new Vector2(
+            Position.X - before.X,
+            Position.Z - before.Z).IsZeroApprox();
+        if (movedHorizontally && direction.HasValue)
+            Presentation.StartWalking(direction.Value);
+        else if (direction.HasValue && previousDirection != direction.Value)
+            Presentation.SetDirection(direction.Value);
+        else
+            Presentation.StopWalking();
+        if (direction.HasValue && previousDirection != direction.Value)
+            PersistenceBoundaryReached?.Invoke();
         if (movedTile != CurrentTile)
         {
             CurrentTile = movedTile;

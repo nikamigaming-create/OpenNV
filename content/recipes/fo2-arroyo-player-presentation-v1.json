@@ -15,13 +15,22 @@
     "artListEntry": "hmwarr,11,1",
     "objectType": 1,
     "fid": "0100003e",
+    "prototypeListLogicalPath": "proto\\critters\\critters.lst",
+    "prototypeListIndex": 1,
+    "prototypeListEntry": "00000001.pro",
+    "prototypeLogicalPath": "proto\\critters\\00000001.pro",
+    "prototypePid": "01000001",
     "idleFrmLogicalPath": "art\\critters\\hmwarraa.frm",
     "frame": 0,
-    "directions": [0, 1, 2, 3, 4, 5]
+    "directions": [0, 1, 2, 3, 4, 5],
+    "walkAnimationCode": "AB",
+    "walkFrmLogicalPath": "art\\critters\\hmwarrab.frm",
+    "walkFrames": [0, 1, 2, 3, 4, 5, 6, 7],
+    "walkFps": 10
   },
   "unsupported": [
     "sex or appearance selection and character creation",
-    "animation playback beyond source idle frame zero",
+    "animations beyond source idle frame zero and the admitted directional AB walk cycle",
     "stats, inventory, combat, scripts, quests, audio, HUD, Pip-Boy, and save state",
     "retail parity, FPS, OpenXR, and launcher playability"
   ]

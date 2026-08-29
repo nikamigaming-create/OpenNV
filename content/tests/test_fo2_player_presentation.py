@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
 import sys
 import tempfile
 import unittest
@@ -17,6 +18,20 @@ from prepare_fo2_player_presentation import (  # noqa: E402
     prepare_fo2_player_presentation,
 )
 from content.tests.test_fo2_first_slice import synthetic_dat2, synthetic_frm  # noqa: E402
+
+
+def synthetic_walk_frm() -> bytes:
+    header = bytearray(0x3E)
+    struct.pack_into(">IHHH", header, 0, 4, 10, 0, 8)
+    struct.pack_into(">6h", header, 0x0A, 0, 0, 0, 0, 0, 0)
+    struct.pack_into(">6h", header, 0x16, 0, 0, 0, 0, 0, 0)
+    struct.pack_into(">6I", header, 0x22, 0, 0, 0, 0, 0, 0)
+    frames = b"".join(
+        struct.pack(">HHIhh", 1, 1, 1, frame, -frame) + bytes((frame + 1,))
+        for frame in range(8)
+    )
+    struct.pack_into(">I", header, 0x3A, len(frames))
+    return bytes(header) + frames
 
 
 def recipe(path: Path) -> None:
@@ -39,9 +54,18 @@ def recipe(path: Path) -> None:
                     "artListEntry": "hmwarr,11,1",
                     "objectType": 1,
                     "fid": "0100003e",
+                    "prototypeListLogicalPath": "proto\\critters\\critters.lst",
+                    "prototypeListIndex": 1,
+                    "prototypeListEntry": "00000001.pro",
+                    "prototypeLogicalPath": "proto\\critters\\00000001.pro",
+                    "prototypePid": "01000001",
                     "idleFrmLogicalPath": "art\\critters\\hmwarraa.frm",
                     "frame": 0,
                     "directions": [0, 1, 2, 3, 4, 5],
+                    "walkAnimationCode": "AB",
+                    "walkFrmLogicalPath": "art\\critters\\hmwarrab.frm",
+                    "walkFrames": list(range(8)),
+                    "walkFps": 10,
                 },
                 "unsupported": ["gameplay"],
             }
@@ -63,14 +87,23 @@ class Fo2PlayerPresentationTest(unittest.TestCase):
             ]
             critter_list = ("\r\n".join(critter_lines) + "\r\n").encode("ascii")
             frm = synthetic_frm()
+            walk_frm = synthetic_walk_frm()
+            prototype = struct.pack(">III", 0x01000001, 100, 0x0100003E)
             (install / "master.dat").write_bytes(
-                synthetic_dat2([("color.pal", bytes(palette), False)])
+                synthetic_dat2(
+                    [
+                        ("color.pal", bytes(palette), False),
+                        ("proto\\critters\\critters.lst", b"00000001.pro\r\n", False),
+                        ("proto\\critters\\00000001.pro", prototype, False),
+                    ]
+                )
             )
             (install / "critter.dat").write_bytes(
                 synthetic_dat2(
                     [
                         ("art\\critters\\critters.lst", critter_list, False),
                         ("art\\critters\\hmwarraa.frm", frm, True),
+                        ("art\\critters\\hmwarrab.frm", walk_frm, True),
                     ]
                 )
             )
@@ -101,9 +134,16 @@ class Fo2PlayerPresentationTest(unittest.TestCase):
             self.assertEqual(first["idleArt"]["sha256"], hashlib.sha256(frm).hexdigest())
             self.assertEqual(first["idleArt"]["admittedDirections"], list(range(6)))
             self.assertFalse(first["idleArt"]["animationPlayback"])
+            self.assertEqual(first["prototype"]["pid"], "01000001")
+            self.assertEqual(first["prototype"]["fid"], "0100003e")
+            self.assertEqual(first["walkArt"]["logicalPath"], "art\\critters\\hmwarrab.frm")
+            self.assertEqual(first["walkArt"]["framesPerDirection"], 8)
+            self.assertEqual(first["walkArt"]["fps"], 10)
+            self.assertTrue(first["walkArt"]["animationPlayback"])
             self.assertEqual(
                 [(row["rotation"], row["frame"]) for row in first["artifacts"]],
-                [(direction, 0) for direction in range(6)],
+                [(direction, 0) for direction in range(6)]
+                + [(direction, frame) for direction in range(6) for frame in range(8)],
             )
             self.assertEqual(
                 [row["pngSha256"] for row in first["artifacts"]],
@@ -112,7 +152,7 @@ class Fo2PlayerPresentationTest(unittest.TestCase):
             self.assertFalse(first["cachePolicy"]["distributionAllowed"])
             self.assertTrue(first["cachePolicy"]["containsDerivedOwnedPixels"])
             self.assertTrue((root / "cache-a" / CACHE_MANIFEST_NAME).is_file())
-            self.assertEqual(len(list((root / "cache-a" / "assets").rglob("*.png"))), 6)
+            self.assertEqual(len(list((root / "cache-a" / "assets").rglob("*.png"))), 54)
 
             changed_lines = critter_lines.copy()
             changed_lines[62] = "not-hmwarr"
@@ -122,6 +162,7 @@ class Fo2PlayerPresentationTest(unittest.TestCase):
                     [
                         ("art\\critters\\critters.lst", changed_list, False),
                         ("art\\critters\\hmwarraa.frm", frm, True),
+                        ("art\\critters\\hmwarrab.frm", walk_frm, True),
                     ]
                 )
             )

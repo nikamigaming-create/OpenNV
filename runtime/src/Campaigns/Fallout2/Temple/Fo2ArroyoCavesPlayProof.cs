@@ -48,6 +48,8 @@ internal static class Fo2ArroyoCavesPlayProof
             var startFrame = Capture(host, output, "player-arrival-start.png");
             var startDirection = presentation.Direction;
             var startPlayerPngSha256 = presentation.CurrentFrame.PngSha256;
+            var startWalkFrameAdvances = presentation.WalkFrameAdvances;
+            var startWalkCycles = presentation.CompletedWalkCycles;
 
             var startPosition = player.Position;
             var firstNeighborReached = false;
@@ -99,6 +101,13 @@ internal static class Fo2ArroyoCavesPlayProof
                 presentation.Texture is not null &&
                 startDirection == catalog.ArrivalRotation &&
                 presentation.Direction == expectedEndDirection &&
+                presentation.WalkFrameAdvances > startWalkFrameAdvances &&
+                presentation.CompletedWalkCycles > startWalkCycles &&
+                !presentation.IsWalking &&
+                presentation.AnimationCode == "AA" &&
+                presentation.AnimationFrame == Fo2ArroyoPlayerPresentationCatalog.IdleFrame &&
+                presentation.CurrentFrame.LogicalPath ==
+                    Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath &&
                 startPlayerPngSha256 != presentation.CurrentFrame.PngSha256 &&
                 startFrame.Sha256 != endFrame.Sha256;
             var report = new
@@ -137,10 +146,24 @@ internal static class Fo2ArroyoCavesPlayProof
                     fid = Fo2ArroyoPlayerPresentationCatalog.ExpectedFid,
                     logicalPath = Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath,
                     sourceSha256 = runtime.PlayerPresentation.SourceSha256,
+                    prototypePid = runtime.SelectedPlayerPresentation.PrototypePid,
+                    prototypeLogicalPath =
+                        runtime.SelectedPlayerPresentation.PrototypeLogicalPath,
+                    prototypeSha256 = runtime.SelectedPlayerPresentation.PrototypeSha256,
+                    walkLogicalPath = runtime.SelectedPlayerPresentation.Walk.LogicalPath,
+                    walkSourceSha256 = runtime.SelectedPlayerPresentation.Walk.SourceSha256,
+                    walkFps = runtime.SelectedPlayerPresentation.Walk.FramesPerSecond,
+                    walkFramesPerDirection = runtime.SelectedPlayerPresentation.Walk
+                        .Directions.Values.First().Count,
                     sourceDirections = runtime.PlayerPresentation.Directions.Count,
                     sourceFramesPerDirection = runtime.PlayerPresentation.FramesPerDirection,
                     admittedFrame = Fo2ArroyoPlayerPresentationCatalog.IdleFrame,
-                    animationPlayback = false,
+                    walkFrameAdvances = presentation.WalkFrameAdvances -
+                        startWalkFrameAdvances,
+                    completedWalkCycles = presentation.CompletedWalkCycles - startWalkCycles,
+                    animationPlayback = true,
+                    idleResumedAtEnd = !presentation.IsWalking &&
+                        presentation.AnimationCode == "AA" && presentation.AnimationFrame == 0,
                     billboard = profile.PlayerBillboardMode,
                     directionMode = profile.PlayerDirectionMode,
                     startDirection,
@@ -204,6 +227,7 @@ internal static class Fo2ArroyoCavesPlayProof
                     physicalFloorSupport = passed,
                     sourceMaskCollisionGate = passed,
                     characterArtLoaded = passed,
+                    sourceWalkAnimationPlayed = passed,
                     playerStatePersistent = false,
                     interactive = false,
                     humanInteractiveEntryAvailable = true,

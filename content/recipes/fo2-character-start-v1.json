@@ -86,9 +86,18 @@
     "artIndex": 61,
     "artListEntry": "hfprim,11,1",
     "fid": "0100003d",
+    "prototypeListLogicalPath": "proto\\critters\\critters.lst",
+    "prototypeListIndex": 2,
+    "prototypeListEntry": "00000002.pro",
+    "prototypeLogicalPath": "proto\\critters\\00000002.pro",
+    "prototypePid": "01000002",
     "logicalPath": "art\\critters\\hfprimaa.frm",
     "frame": 0,
-    "directions": [0, 1, 2, 3, 4, 5]
+    "directions": [0, 1, 2, 3, 4, 5],
+    "walkAnimationCode": "AB",
+    "walkLogicalPath": "art\\critters\\hfprimab.frm",
+    "walkFrames": [0, 1, 2, 3, 4, 5, 6, 7],
+    "walkFps": 10
   },
   "presentation": {
     "viewport": [640, 480],
@@ -96,9 +105,8 @@
     "layoutStatus": "owned-retail-art-with-adapted-controls-not-parity-reviewed"
   },
   "unsupported": [
-    "Modify and Create Character routes",
-    "editable name, age, sex, SPECIAL, skills, and traits",
-    "character-state persistence and Temple new-game script execution",
+    "tagged-skill and trait editing plus appearance variants beyond the admitted male/female bases",
+    "Temple new-game script execution and campaign-wide save state",
     "retail input, layout, timing, audio, and pixel parity"
   ]
 }

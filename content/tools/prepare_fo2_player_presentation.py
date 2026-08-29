@@ -59,9 +59,18 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         or player.get("artListEntry") != "hmwarr,11,1"
         or player.get("objectType") != 1
         or player.get("fid") != "0100003e"
+        or player.get("prototypeListLogicalPath") != "proto\\critters\\critters.lst"
+        or player.get("prototypeListIndex") != 1
+        or player.get("prototypeListEntry") != "00000001.pro"
+        or player.get("prototypeLogicalPath") != "proto\\critters\\00000001.pro"
+        or player.get("prototypePid") != "01000001"
         or player.get("idleFrmLogicalPath") != "art\\critters\\hmwarraa.frm"
         or player.get("frame") != 0
         or player.get("directions") != list(range(6))
+        or player.get("walkAnimationCode") != "AB"
+        or player.get("walkFrmLogicalPath") != "art\\critters\\hmwarrab.frm"
+        or player.get("walkFrames") != list(range(8))
+        or player.get("walkFps") != 10
         or not isinstance(recipe.get("unsupported"), list)
         or not recipe["unsupported"]
     ):
@@ -116,6 +125,21 @@ def prepare_fo2_player_presentation(
                 )
             if resolver.art_filename(fid) != player["artListEntry"]:
                 raise Fo1ProfileError("Fallout 2 player FID/list resolution drifted")
+            prototype = resolver.prototype(int(player["prototypePid"], 16))
+            prototype_list = resolver.list_lines(player["prototypeListLogicalPath"])
+            prototype_list_resource = resolver.read(player["prototypeListLogicalPath"])
+            prototype_entry = prototype_list[player["prototypeListIndex"] - 1].strip()
+            if (
+                prototype.list_index != player["prototypeListIndex"]
+                or prototype_entry != player["prototypeListEntry"]
+                or prototype.filename != player["prototypeListEntry"]
+                or prototype.fid != fid
+                or prototype.pid != int(player["prototypePid"], 16)
+            ):
+                raise Fo1ProfileError("Fallout 2 player PRO/FID identity drifted")
+            prototype_resource = resolver.read(player["prototypeLogicalPath"])
+            if prototype.sha256 != prototype_resource.sha256:
+                raise Fo1ProfileError("Fallout 2 player PRO resource identity drifted")
             logical_path = resolver.placed_idle_frm_path(fid)
             if logical_path != player["idleFrmLogicalPath"]:
                 raise Fo1ProfileError(
@@ -130,7 +154,7 @@ def prepare_fo2_player_presentation(
                 or len(decoded["directions"]) != len(player["directions"])
             ):
                 raise Fo1ProfileError("Fallout 2 player idle FRM direction/frame contract drifted")
-            artifacts = [
+            idle_artifacts = [
                 _save_admitted_frame(
                     kind="player",
                     logical_path=logical_path,
@@ -142,6 +166,35 @@ def prepare_fo2_player_presentation(
                 )
                 for direction in player["directions"]
             ]
+            art_base = list_entry.split(",", 1)[0].casefold()
+            walk_logical_path = (
+                f"art\\critters\\{art_base}{player['walkAnimationCode'].casefold()}.frm"
+            )
+            if walk_logical_path != player["walkFrmLogicalPath"]:
+                raise Fo1ProfileError("Fallout 2 player AB walk path resolution drifted")
+            walk_frm = resolver.read(walk_logical_path)
+            walk_decoded = decode_frm(walk_frm.data, colors)
+            if (
+                walk_decoded["fps"] != player["walkFps"]
+                or walk_decoded["framesPerDirection"] != len(player["walkFrames"])
+                or walk_decoded["actionFrame"] != 0
+                or len(walk_decoded["directions"]) != len(player["directions"])
+            ):
+                raise Fo1ProfileError("Fallout 2 player AB walk animation contract drifted")
+            walk_artifacts = [
+                _save_admitted_frame(
+                    kind="player-walk",
+                    logical_path=walk_logical_path,
+                    source=walk_frm,
+                    colors=colors,
+                    rotation=direction,
+                    frame_index=frame,
+                    staging=staging,
+                )
+                for direction in player["directions"]
+                for frame in player["walkFrames"]
+            ]
+            artifacts = idle_artifacts + walk_artifacts
 
         resources = [
             {
@@ -179,6 +232,18 @@ def prepare_fo2_player_presentation(
                 "artIndex": player["artIndex"],
                 "entry": list_entry,
             },
+            "prototype": {
+                "listLogicalPath": player["prototypeListLogicalPath"],
+                "listIndex": prototype.list_index,
+                "listEntry": prototype_entry,
+                "listSha256": prototype_list_resource.sha256,
+                "logicalPath": player["prototypeLogicalPath"],
+                "pid": f"{prototype.pid:08x}",
+                "fid": f"{prototype.fid:08x}",
+                "source": prototype_resource.source,
+                "bytes": len(prototype_resource.data),
+                "sha256": prototype_resource.sha256,
+            },
             "idleArt": {
                 "role": player["role"],
                 "fid": player["fid"],
@@ -194,6 +259,22 @@ def prepare_fo2_player_presentation(
                 "admittedDirections": player["directions"],
                 "animationPlayback": False,
             },
+            "walkArt": {
+                "role": player["role"],
+                "fid": player["fid"],
+                "animationCode": player["walkAnimationCode"],
+                "logicalPath": walk_logical_path,
+                "source": walk_frm.source,
+                "bytes": len(walk_frm.data),
+                "sha256": walk_frm.sha256,
+                "fps": walk_decoded["fps"],
+                "actionFrame": walk_decoded["actionFrame"],
+                "framesPerDirection": walk_decoded["framesPerDirection"],
+                "decodedDirections": len(walk_decoded["directions"]),
+                "admittedFrames": player["walkFrames"],
+                "admittedDirections": player["directions"],
+                "animationPlayback": True,
+            },
             "palette": {
                 "logicalPath": palette.logical_path,
                 "source": palette.source,
@@ -205,7 +286,8 @@ def prepare_fo2_player_presentation(
             "resources": resources,
             "counts": {
                 "sourceResources": len(resources),
-                "idleDirectionArtifacts": len(artifacts),
+                "idleDirectionArtifacts": len(idle_artifacts),
+                "walkFrameArtifacts": len(walk_artifacts),
             },
             "promotion": {
                 "transported": True,
@@ -218,8 +300,9 @@ def prepare_fo2_player_presentation(
             "runtimeCompatibility": {
                 "ready": False,
                 "firstSliceBlocker": (
-                    "Six exact owned HMWARR idle directions are decoded, but this cache alone "
-                    "does not provide character creation, animation, gameplay, or save state."
+                    "Six exact owned HMWARR idle directions and the 6x8 AB walk frames are "
+                    "decoded, but this cache alone does not provide character creation, "
+                    "gameplay, or save state."
                 ),
             },
             "cachePolicy": {
@@ -261,6 +344,7 @@ def main() -> int:
                 "cache": str(args.output_root.resolve()),
                 "sourceProfileId": document["sourceProfile"]["sourceProfileId"],
                 "idleDirectionArtifacts": document["counts"]["idleDirectionArtifacts"],
+                "walkFrameArtifacts": document["counts"]["walkFrameArtifacts"],
                 "runtimeReady": False,
             },
             sort_keys=True,

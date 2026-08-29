@@ -180,8 +180,8 @@ stateDiagram-v2
 
 The New Vegas opening is compiled from the owned QUST, INFO, script-command,
 reference, item, global, package, animation, voice, LIP, and NAVM graph. The
-compiler emits `opennv-owned-new-game-flow/v5` plus an exact command-contract
-inventory. Every command kind is accounted for, and every declared item, quest,
+compiler emits `opennv-owned-new-game-flow/v6` plus exact command and opening-
+vitals contracts. Every command kind is accounted for, and every declared item, quest,
 global, owner, and placed-reference editor identity is joined to one stable
 FormID and record type before the cache can be promoted. The runtime independently
 recounts that contract and rejects missing identities, unsupported operations,
@@ -422,8 +422,8 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionRuntime.cs` | Fail-closed nonvisual exit-grid destination-state application after exact component movement | Destination loading, doors, script execution, actors, or save state |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, MAP-header entry marker, and topology composition in Godot's 3D hex coordinate space | Scripts, character creation, interaction, or playability |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference construction plus exact floor/wall physics-ray report | Rendered-frame, interaction, parity, or launcher claims |
-| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; premade or custom name/sex/age/exact-SPECIAL selection; sex-correct Take handoff; version-2 bounded character/Map 3 save plus legacy-v1 read and cold restore | Tag/trait editing, scripts, campaign-wide progression/save state, FPS/OpenXR, parity, or full-campaign readiness |
-| `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs` | Grounded source-walk-gated Map 3 arrival body with selected sex-correct owned idle-FRM presentation plus validated transform/facing restore and persistence-boundary publication | AP/combat, animation playback, scripts, inventory, campaign-wide persistence, full campaign, or parity |
+| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; premade or custom name/sex/age/exact-SPECIAL selection; sex-correct PRO/FID Take handoff; version-2 bounded character/Map 3 save plus legacy-v1 read and cold restore | Tag/trait editing, scripts, campaign-wide progression/save state, FPS/OpenXR, parity, or full-campaign readiness |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs` | Grounded source-walk-gated Map 3 arrival body with selected sex-correct owned AA idle and 6-direction/8-frame AB walk playback plus validated transform/facing restore and persistence-boundary publication | AP/combat, animations beyond admitted AA/AB, scripts, inventory, campaign-wide persistence, full campaign, or parity |
 | `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
 | `runtime/src/Compatibility/Jam/JamProfileContract.cs` | Shared hash-bound JAM profile/plugin identity and transported-capability admission | Native DLL loading, script interpretation, or complete compatibility |
 | `runtime/src/Compatibility/Jam/JamJvsSprintContract.cs` | Hash-bound transport and validation of JAM 4.6 JVS hold-to-sprint settings | Native DLL loading, xNVSE interpretation, or complete JAM compatibility |
@@ -459,12 +459,14 @@ The bounded Fallout 2 launcher Hex route renders the owned picker and combat,
 stealth, and diplomat panels. Take selects a premade; Modify and Create expose
 name, sex, age 16–35, and seven SPECIAL values bounded 1–10 and totaling 40.
 Modify retains the source GCD's tags/traits unchanged, while Create records both
-as unselected. Confirm applies the matching male or female idle FRM at Map 3,
+as unselected. Confirm applies the matching male or female PRO-linked idle and
+AB walk FRMs at Map 3,
 elevation 0, tile 28707. The atomic version-2 save binds the source basis and
 custom state plus Map 3/elevation/tile/facing, transform, and runtime modes; it
 also reads the earlier premade-only version-1 save. Separate male and female
-process pairs prove write and exact cold restore. Tag/trait editing,
-campaign-wide persistence, Temple scripts, animation playback, complete
+process pairs prove two movement directions, idle resumption, and exact cold
+restore. Tag/trait editing, other animations, campaign-wide persistence,
+Temple scripts, complete
 campaign, FPS/OpenXR, and parity remain absent.
 
 Implemented in the independently playable saloon/exterior component: direct owned

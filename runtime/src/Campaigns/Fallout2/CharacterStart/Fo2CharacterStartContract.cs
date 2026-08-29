@@ -107,6 +107,9 @@ internal sealed class Fo2CharacterStartCatalog
     internal const string RecipeId = "fo2-character-start-v1";
     internal const string FemaleFid = "0100003d";
     internal const string FemaleLogicalPath = "art\\critters\\hfprimaa.frm";
+    internal const string FemaleWalkLogicalPath = "art\\critters\\hfprimab.frm";
+    internal const string FemalePrototypeLogicalPath = "proto\\critters\\00000002.pro";
+    internal const string FemalePrototypePid = "01000002";
     private static readonly string[] SkillNames =
     [
         "Small Guns", "Big Guns", "Energy Weapons", "Unarmed", "Melee Weapons",
@@ -259,8 +262,9 @@ internal sealed class Fo2CharacterStartCatalog
             throw new InvalidOperationException(
                 "Fallout 2 source premade roster drifted.");
 
+        var femaleRow = cache.GetProperty("femalePresentation");
         var female = LoadFemalePresentation(
-            cache.GetProperty("femalePresentation"),
+            femaleRow,
             recipe.GetProperty("femalePresentation"),
             cacheRoot,
             expectedSourceProfileId);
@@ -277,6 +281,17 @@ internal sealed class Fo2CharacterStartCatalog
             })
             .Append($"{picker.LogicalPath}|{picker.SourceSha256}")
             .Append($"{female.LogicalPath}|{female.SourceSha256}")
+            .Append($"{female.Walk.LogicalPath}|{female.Walk.SourceSha256}")
+            .Append(
+                $"proto\\critters\\critters.lst|" +
+                Fo2TemplePresentationCatalog.RequiredHash(
+                    femaleRow.GetProperty("prototype"),
+                    "listSha256"))
+            .Append(
+                $"{FemalePrototypeLogicalPath}|" +
+                Fo2TemplePresentationCatalog.RequiredHash(
+                    femaleRow.GetProperty("prototype"),
+                    "sha256"))
             .ToArray();
         if (identities.Count != resources.Length || required.Any(row => !identities.Contains(row)))
             throw new InvalidOperationException(
@@ -286,6 +301,8 @@ internal sealed class Fo2CharacterStartCatalog
             counts.GetProperty("uiPngs").GetInt32() != 1 + characters.Count ||
             counts.GetProperty("femaleDirectionPngs").GetInt32() !=
                 female.Directions.Count ||
+            counts.GetProperty("femaleWalkFramePngs").GetInt32() !=
+                female.Walk.Directions.Values.Sum(row => row.Count) ||
             counts.GetProperty("sourceResources").GetInt32() != resources.Length)
             throw new InvalidOperationException(
                 "Fallout 2 character-start cache counts drifted.");
@@ -447,45 +464,58 @@ internal sealed class Fo2CharacterStartCatalog
             Fo2TemplePresentationCatalog.RequiredString(row, "logicalPath") !=
                 FemaleLogicalPath ||
             row.GetProperty("frame").GetInt32() != 0 ||
-            row.GetProperty("animationPlayback").GetBoolean())
+            row.GetProperty("animationPlayback").GetBoolean() ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expected,
+                "prototypeListLogicalPath") != "proto\\critters\\critters.lst" ||
+            expected.GetProperty("prototypeListIndex").GetInt32() != 2 ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expected,
+                "prototypeListEntry") != "00000002.pro" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expected,
+                "prototypeLogicalPath") != FemalePrototypeLogicalPath ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expected,
+                "prototypePid") != FemalePrototypePid ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expected,
+                "walkAnimationCode") != "AB" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expected,
+                "walkLogicalPath") != FemaleWalkLogicalPath ||
+            !ReadInts(expected.GetProperty("walkFrames")).SequenceEqual(
+                Enumerable.Range(0, Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection)) ||
+            expected.GetProperty("walkFps").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerSecond)
             throw new InvalidOperationException(
                 "Fallout 2 female player source binding drifted.");
+        var prototype = row.GetProperty("prototype");
+        if (Fo2TemplePresentationCatalog.RequiredString(
+                prototype,
+                "listLogicalPath") != "proto\\critters\\critters.lst" ||
+            prototype.GetProperty("listIndex").GetInt32() != 2 ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                prototype,
+                "listEntry") != "00000002.pro" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                prototype,
+                "logicalPath") != FemalePrototypeLogicalPath ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                prototype,
+                "pid") != FemalePrototypePid ||
+            Fo2TemplePresentationCatalog.RequiredString(prototype, "fid") != FemaleFid ||
+            prototype.GetProperty("bytes").GetInt64() <= 0)
+            throw new InvalidOperationException(
+                "Fallout 2 female player PRO/FID binding drifted.");
         var frames = new Dictionary<int, Fo2ArroyoPlayerFrame>();
         foreach (var artifact in row.GetProperty("directions").EnumerateArray())
         {
             var direction = artifact.GetProperty("rotation").GetInt32();
-            var relative = Fo2TemplePresentationCatalog.RequiredString(artifact, "png");
-            var path = Path.GetFullPath(Path.Combine(
+            var frame = Fo2ArroyoPlayerPresentationCatalog.LoadFrame(
+                artifact,
                 cacheRoot,
-                relative.Replace('/', Path.DirectorySeparatorChar)));
-            if (Path.IsPathRooted(relative) ||
-                !path.StartsWith(
-                    cacheRoot + Path.DirectorySeparatorChar,
-                    StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    "Fallout 2 female player PNG path escapes its cache.");
-            var pngBytes = artifact.GetProperty("pngBytes").GetInt64();
-            var pngSha256 = Fo2TemplePresentationCatalog.RequiredHash(artifact, "pngSha256");
-            Fo2TemplePresentationCatalog.VerifyFile(
-                path,
-                pngSha256,
-                pngBytes,
-                $"Fallout 2 female player PNG direction {direction}");
-            var frame = new Fo2ArroyoPlayerFrame(
-                Fo2TemplePresentationCatalog.RequiredString(artifact, "id"),
-                Fo2TemplePresentationCatalog.RequiredString(artifact, "logicalPath"),
-                path,
-                Fo2TemplePresentationCatalog.RequiredHash(artifact, "sourceSha256"),
-                pngSha256,
-                pngBytes,
-                artifact.GetProperty("width").GetInt32(),
-                artifact.GetProperty("height").GetInt32(),
-                direction,
-                artifact.GetProperty("frame").GetInt32(),
-                Fo2TemplePresentationCatalog.ReadVector2I(
-                    artifact.GetProperty("directionOffset")),
-                Fo2TemplePresentationCatalog.ReadVector2I(
-                    artifact.GetProperty("frameOffset")));
+                $"Fallout 2 female idle PNG direction {direction}");
             if (Fo2TemplePresentationCatalog.RequiredString(artifact, "kind") !=
                     "female-player" ||
                 frame.LogicalPath != FemaleLogicalPath ||
@@ -499,13 +529,82 @@ internal sealed class Fo2CharacterStartCatalog
         if (!frames.Keys.Order().SequenceEqual(Enumerable.Range(0, 6)))
             throw new InvalidOperationException(
                 "Fallout 2 female player direction coverage drifted.");
+        var walkArt = row.GetProperty("walkArt");
+        var walkSourceSha256 = Fo2TemplePresentationCatalog.RequiredHash(
+            walkArt,
+            "sourceSha256");
+        if (Fo2TemplePresentationCatalog.RequiredString(
+                walkArt,
+                "animationCode") != "AB" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                walkArt,
+                "logicalPath") != FemaleWalkLogicalPath ||
+            walkArt.GetProperty("sourceBytes").GetInt64() <= 0 ||
+            walkArt.GetProperty("fps").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerSecond ||
+            walkArt.GetProperty("actionFrame").GetInt32() != 0 ||
+            walkArt.GetProperty("framesPerDirection").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection ||
+            !walkArt.GetProperty("animationPlayback").GetBoolean())
+            throw new InvalidOperationException(
+                "Fallout 2 female AB walk binding drifted.");
+        var walkFrames = new Dictionary<int, Dictionary<int, Fo2ArroyoPlayerFrame>>();
+        foreach (var artifact in walkArt.GetProperty("directions").EnumerateArray())
+        {
+            var frame = Fo2ArroyoPlayerPresentationCatalog.LoadFrame(
+                artifact,
+                cacheRoot,
+                "Fallout 2 female walk PNG");
+            if (Fo2TemplePresentationCatalog.RequiredString(artifact, "kind") !=
+                    "female-player-walk" ||
+                frame.LogicalPath != FemaleWalkLogicalPath ||
+                frame.SourceSha256 != walkSourceSha256 ||
+                frame.Direction is < 0 or >= Fo1HexMath.DirectionCount ||
+                frame.Frame is < 0 or >=
+                    Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection ||
+                frame.Width <= 0 || frame.Height <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 2 female walk artifact drifted.");
+            if (!walkFrames.TryGetValue(frame.Direction, out var directionFrames))
+            {
+                directionFrames = new Dictionary<int, Fo2ArroyoPlayerFrame>();
+                walkFrames.Add(frame.Direction, directionFrames);
+            }
+            if (!directionFrames.TryAdd(frame.Frame, frame))
+                throw new InvalidOperationException(
+                    "Duplicate Fallout 2 female walk artifact.");
+        }
+        var walkDirections = walkFrames.ToDictionary(
+            row => row.Key,
+            row => (IReadOnlyList<Fo2ArroyoPlayerFrame>)row.Value
+                .OrderBy(frame => frame.Key).Select(frame => frame.Value).ToArray());
+        if (!walkDirections.Keys.Order().SequenceEqual(
+                Enumerable.Range(0, Fo1HexMath.DirectionCount)) ||
+            walkDirections.Values.Any(direction =>
+                direction.Count != Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection ||
+                !direction.Select(frame => frame.Frame).SequenceEqual(
+                    Enumerable.Range(
+                        0,
+                        Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection))))
+            throw new InvalidOperationException(
+                "Fallout 2 female walk direction/frame coverage drifted.");
         return new Fo2ArroyoPlayerPresentationSource(
             sourceProfileId,
-            "CHOSEN_ONE_OWNED_HFPRIM_IDLE_FRAME_ZERO",
+            "CHOSEN_ONE_OWNED_HFPRIM_DIRECTIONAL_FRM",
             FemaleFid,
+            FemalePrototypePid,
+            FemalePrototypeLogicalPath,
+            Fo2TemplePresentationCatalog.RequiredHash(prototype, "sha256"),
             FemaleLogicalPath,
             sourceSha256,
-            frames);
+            frames,
+            new Fo2ArroyoPlayerAnimation(
+                "AB",
+                FemaleWalkLogicalPath,
+                walkSourceSha256,
+                walkArt.GetProperty("fps").GetInt32(),
+                walkArt.GetProperty("actionFrame").GetInt32(),
+                walkDirections));
     }
 
     private static int[] ReadInts(JsonElement source) =>

@@ -21,14 +21,18 @@
     "multihexCoverage": "central-source-hex-only-unresolved"
   },
   "presentation": {
-    "mode": "owned-critter-frm-direction-frame-zero",
+    "mode": "owned-critter-frm-idle-and-ab-walk",
     "recipeId": "fo2-arroyo-player-presentation-v1",
     "fid": "0100003e",
     "logicalPath": "art\\critters\\hmwarraa.frm",
     "frame": 0,
+    "walkLogicalPath": "art\\critters\\hmwarrab.frm",
+    "walkAnimationCode": "AB",
+    "walkFramesPerDirection": 8,
+    "walkFramesPerSecond": 10,
     "directionMode": "nearest-source-hex-direction-from-input",
     "billboard": "fixed-y",
-    "animationPlayback": false
+    "animationPlayback": true
   },
   "player": {
     "capsuleRadiusMeters": 0.28,
@@ -79,7 +83,7 @@
     "walkabilityParity": false
   },
   "unsupported": [
-    "Chosen One custom character creation, appearance editing, animation beyond idle frame zero, inventory, combat, scripts, quests, audio, HUD, and Pip-Boy",
+    "tag/trait editing, appearance editing, animation beyond owned AA idle and AB walk, inventory, combat, scripts, quests, audio, HUD, and Pip-Boy",
     "multihex footprint expansion beyond the stored central source hex",
     "retail collision and walkability parity",
     "FPS and OpenXR interaction",
