@@ -1,0 +1,493 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using Godot;
+using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
+
+namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
+
+internal sealed record Fo2TempleConfrontationInput(
+    string Action,
+    Key PhysicalKey,
+    JoyButton JoyButton);
+
+internal sealed record Fo2TempleConfrontationProfile(
+    string ResourcePath,
+    string Sha256,
+    string Id,
+    string AdapterIdentity,
+    int InteractionRangeHexes,
+    int AttackActionPointCost,
+    string HitResolution,
+    Fo2TempleConfrontationInput Combat,
+    Fo2TempleConfrontationInput Attack,
+    Fo2TempleConfrontationInput EndTurn,
+    Fo2TempleConfrontationInput Loot,
+    Fo2TempleConfrontationInput Inventory,
+    string Title,
+    string Boundary,
+    Vector2 OffsetPixels,
+    float WidthPixels,
+    int FontSizePixels)
+{
+    private const string Resource = "res://config/fo2-temple-confrontation-runtime-v1.json";
+
+    internal static Fo2TempleConfrontationProfile Load(
+        Fo2TempleConfrontationContract contract)
+    {
+        var bytes = Godot.FileAccess.GetFileAsBytes(Resource);
+        if (bytes.Length == 0)
+            throw new FileNotFoundException(
+                "Fallout 2 Temple confrontation runtime profile is missing.",
+                Resource);
+        using var document = JsonDocument.Parse(bytes);
+        var root = document.RootElement;
+        var source = root.GetProperty("source");
+        var adapter = root.GetProperty("adapter");
+        var input = root.GetProperty("input");
+        var ui = root.GetProperty("ui");
+        var promotion = root.GetProperty("promotion");
+        if (RequiredString(root, "schema") !=
+                "opennv-fo2-temple-confrontation-runtime/v1" ||
+            RequiredString(root, "campaign") != "Fallout2" ||
+            source.GetProperty("mapIndex").GetInt32() != Fo2TemplePresentationCatalog.MapIndex ||
+            source.GetProperty("critterSerial").GetInt32() != contract.Critter.Serial ||
+            RequiredString(source, "critterPid") != contract.Critter.Pid ||
+            RequiredString(source, "critterSid") != contract.Critter.Sid ||
+            source.GetProperty("lootSerial").GetInt32() != contract.DefeatLoot.Serial ||
+            RequiredString(source, "lootPid") != contract.DefeatLoot.Pid ||
+            adapter.GetProperty("targetTurns").GetBoolean() ||
+            adapter.GetProperty("generalIntScripts").GetBoolean() ||
+            RequiredString(adapter, "playerActionPointFormula") !=
+                "5 + effectiveAgility / 2 - bruiserPenalty" ||
+            RequiredString(adapter, "playerHitPointFormula") !=
+                "15 + 2 * effectiveEndurance + effectiveStrength" ||
+            RequiredString(adapter, "playerMeleeDamageFormula") !=
+                "1 + max(1, effectiveStrength - 5) + heavyHandedBonus" ||
+            !promotion.GetProperty("interactive").GetBoolean() ||
+            !promotion.GetProperty("persistent").GetBoolean() ||
+            promotion.GetProperty("retailCombatParity").GetBoolean() ||
+            promotion.GetProperty("scriptParity").GetBoolean() ||
+            promotion.GetProperty("campaignComplete").GetBoolean())
+            throw new InvalidOperationException(
+                "Unexpected Fallout 2 Temple confrontation runtime profile.");
+        var result = new Fo2TempleConfrontationProfile(
+            Resource,
+            Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            RequiredString(root, "id"),
+            RequiredString(adapter, "identity"),
+            adapter.GetProperty("interactionRangeHexes").GetInt32(),
+            adapter.GetProperty("attackActionPointCost").GetInt32(),
+            RequiredString(adapter, "hitResolution"),
+            ReadInput(input, "combat"),
+            ReadInput(input, "attack"),
+            ReadInput(input, "endTurn"),
+            ReadInput(input, "loot"),
+            ReadInput(input, "inventory"),
+            RequiredString(ui, "title"),
+            RequiredString(ui, "boundary"),
+            ReadVector2(ui.GetProperty("offsetPixels")),
+            ui.GetProperty("widthPixels").GetSingle(),
+            ui.GetProperty("fontSizePixels").GetInt32());
+        var bindings = new[]
+        {
+            result.Combat,
+            result.Attack,
+            result.EndTurn,
+            result.Loot,
+            result.Inventory,
+        };
+        if (result.Id != "fo2-temple-guardian-bounded-combat-v1" ||
+            result.AdapterIdentity != "bounded-player-turn-melee-no-target-ai-v1" ||
+            result.InteractionRangeHexes != 1 || result.AttackActionPointCost <= 0 ||
+            result.HitResolution != "deterministic-hit-no-roll" ||
+            result.WidthPixels <= 0.0f || result.FontSizePixels <= 0 ||
+            bindings.Select(row => row.Action).Distinct(StringComparer.Ordinal).Count() !=
+                bindings.Length ||
+            bindings.Select(row => row.PhysicalKey).Distinct().Count() != bindings.Length ||
+            bindings.Select(row => row.JoyButton).Distinct().Count() != bindings.Length)
+            throw new InvalidOperationException(
+                "Fallout 2 Temple confrontation profile values are invalid.");
+        return result;
+    }
+
+    internal void ConfigureInput()
+    {
+        foreach (var binding in new[] { Combat, Attack, EndTurn, Loot, Inventory })
+        {
+            if (InputMap.HasAction(binding.Action))
+                InputMap.EraseAction(binding.Action);
+            InputMap.AddAction(binding.Action);
+            InputMap.ActionAddEvent(binding.Action, new InputEventKey
+            {
+                PhysicalKeycode = binding.PhysicalKey,
+            });
+            InputMap.ActionAddEvent(binding.Action, new InputEventJoypadButton
+            {
+                ButtonIndex = binding.JoyButton,
+            });
+        }
+    }
+
+    private static Fo2TempleConfrontationInput ReadInput(
+        JsonElement source,
+        string property)
+    {
+        var value = source.GetProperty(property);
+        return new Fo2TempleConfrontationInput(
+            RequiredString(value, "action"),
+            Enum.TryParse<Key>(RequiredString(value, "physicalKey"), true, out var key) &&
+                key != Key.None
+                ? key
+                : throw new InvalidOperationException(
+                    $"Fallout 2 Temple input key is invalid: {property}"),
+            Enum.TryParse<JoyButton>(RequiredString(value, "joyButton"), true, out var button) &&
+                button != JoyButton.Invalid
+                ? button
+                : throw new InvalidOperationException(
+                    $"Fallout 2 Temple joypad button is invalid: {property}"));
+    }
+
+    private static string RequiredString(JsonElement source, string property)
+    {
+        var value = source.GetProperty(property).GetString();
+        return !string.IsNullOrWhiteSpace(value)
+            ? value
+            : throw new InvalidOperationException(
+                $"Fallout 2 Temple confrontation string is empty: {property}");
+    }
+
+    private static Vector2 ReadVector2(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(row => row.GetSingle()).ToArray();
+        if (values.Length != 2 || values.Any(value => !float.IsFinite(value)))
+            throw new InvalidOperationException(
+                "Fallout 2 Temple confrontation vector is invalid.");
+        return new Vector2(values[0], values[1]);
+    }
+}
+
+internal sealed record Fo2TempleConfrontationState(
+    int TargetHitPoints,
+    int PlayerActionPoints,
+    bool CombatActive,
+    bool SpearLooted)
+{
+    internal void Validate(
+        Fo2TempleConfrontationContract contract,
+        int maximumPlayerActionPoints)
+    {
+        if (TargetHitPoints is < 0 || TargetHitPoints > contract.Critter.CurrentHitPoints ||
+            PlayerActionPoints is < 0 || PlayerActionPoints > maximumPlayerActionPoints ||
+            CombatActive && TargetHitPoints == 0 || SpearLooted && TargetHitPoints != 0)
+            throw new InvalidOperationException(
+                "Fallout 2 Temple confrontation save state is invalid.");
+    }
+}
+
+internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
+{
+    private const int HudLayer = 20;
+    private const int StrengthSpecialIndex = 0;
+    private const int EnduranceSpecialIndex = 2;
+    private const int AgilitySpecialIndex = 5;
+    private const int BaseActionPoints = 5;
+    private const int BaseHitPoints = 15;
+    private const int NeutralSpecialValue = 5;
+    private const int MaximumSpecialValue = 10;
+    private const float DefeatedColorChannel = 0.35f;
+    private const float DefeatedAlpha = 0.65f;
+    private readonly Fo2TempleConfrontationContract _contract;
+    private readonly Fo2TempleConfrontationProfile _profile;
+    private readonly Fo2ArroyoCavesPlayerBody _player;
+    private readonly Sprite3D _targetSprite;
+    private readonly int _maximumPlayerHitPoints;
+    private readonly int _maximumPlayerActionPoints;
+    private readonly int _playerMeleeDamage;
+    private readonly Label _vitals;
+    private readonly Label _status;
+    private readonly Label _inventory;
+    private Fo2TempleConfrontationState _state;
+    private bool _inventoryExpanded;
+
+    internal event Action? StateChanged;
+    internal Fo2TempleConfrontationState State => _state;
+    internal int MaximumPlayerActionPoints => _maximumPlayerActionPoints;
+    internal int MaximumPlayerHitPoints => _maximumPlayerHitPoints;
+    internal bool TargetVisible => _targetSprite.Visible;
+
+    private Fo2TempleConfrontationRuntime(
+        Fo2TempleConfrontationContract contract,
+        Fo2TempleConfrontationProfile profile,
+        Fo2ArroyoCavesPlayerBody player,
+        Sprite3D targetSprite,
+        Fo2CharacterSelection character,
+        Fo2TempleConfrontationState? restored)
+    {
+        _contract = contract;
+        _profile = profile;
+        _player = player;
+        _targetSprite = targetSprite;
+        _maximumPlayerHitPoints = MaximumHitPoints(character);
+        _maximumPlayerActionPoints = MaximumActionPoints(character);
+        _playerMeleeDamage = MeleeDamage(character);
+        _state = restored ?? new Fo2TempleConfrontationState(
+            contract.Critter.CurrentHitPoints,
+            _maximumPlayerActionPoints,
+            false,
+            false);
+        _state.Validate(contract, _maximumPlayerActionPoints);
+        Name = "FO2_TEMPLE_BOUNDED_CONFRONTATION";
+        Layer = HudLayer;
+        var panel = new PanelContainer
+        {
+            Name = "FO2_TEMPLE_COMBAT_HUD",
+            Position = profile.OffsetPixels,
+            CustomMinimumSize = new Vector2(profile.WidthPixels, 0.0f),
+        };
+        var content = new VBoxContainer();
+        panel.AddChild(content);
+        content.AddChild(Label(profile.Title));
+        _vitals = Label("");
+        content.AddChild(_vitals);
+        _status = Label(profile.Boundary);
+        _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        content.AddChild(_status);
+        _inventory = Label("");
+        content.AddChild(_inventory);
+        content.AddChild(Label(
+            "C/X: Combat   Space/A: Attack   Enter/Start: End Turn   E/B: Loot   I/Y: Inventory"));
+        AddChild(panel);
+        RefreshPresentation();
+    }
+
+    internal static Fo2TempleConfrontationRuntime Build(
+        Fo2TemplePresentationCatalog catalog,
+        Fo2TempleSceneCoverage scene,
+        Fo2ArroyoCavesPlayerBody player,
+        Fo2CharacterSelection character,
+        Fo2TempleConfrontationState? restored = null)
+    {
+        if (player.CurrentMapIndex != Fo2TemplePresentationCatalog.MapIndex ||
+            player.CurrentMapSha256 != catalog.MapSha256)
+            throw new InvalidOperationException(
+                "Fallout 2 Temple confrontation requires the active owned Temple map.");
+        var profile = Fo2TempleConfrontationProfile.Load(catalog.Confrontation);
+        profile.ConfigureInput();
+        var targets = Descendants<Sprite3D>(scene.Root)
+            .Where(sprite => sprite.HasMeta("map_serial") &&
+                sprite.GetMeta("map_serial").AsInt32() == catalog.Confrontation.Critter.Serial)
+            .ToArray();
+        if (targets.Length != 1 ||
+            targets[0].GetMeta("source_pid").AsString() != catalog.Confrontation.Critter.Pid ||
+            targets[0].GetMeta("source_sid").AsString() != catalog.Confrontation.Critter.Sid)
+            throw new InvalidOperationException(
+                "Fallout 2 Temple confrontation target sprite identity is absent.");
+        var runtime = new Fo2TempleConfrontationRuntime(
+            catalog.Confrontation,
+            profile,
+            player,
+            targets[0],
+            character,
+            restored);
+        scene.Root.AddChild(runtime);
+        return runtime;
+    }
+
+    public override void _Process(double delta)
+    {
+        _ = delta;
+        if (Input.IsActionJustPressed(_profile.Combat.Action))
+            ToggleCombat();
+        if (Input.IsActionJustPressed(_profile.Attack.Action))
+            Attack();
+        if (Input.IsActionJustPressed(_profile.EndTurn.Action))
+            EndTurn();
+        if (Input.IsActionJustPressed(_profile.Loot.Action))
+            Loot();
+        if (Input.IsActionJustPressed(_profile.Inventory.Action))
+        {
+            _inventoryExpanded = !_inventoryExpanded;
+            RefreshPresentation();
+        }
+    }
+
+    internal bool ToggleCombat()
+    {
+        if (_state.TargetHitPoints == 0)
+        {
+            SetStatus("The guardian is defeated; use Loot from an adjacent hex.");
+            return false;
+        }
+        _state = _state with { CombatActive = !_state.CombatActive };
+        SetStatus(_state.CombatActive
+            ? "Combat active. This bounded adapter owns player AP only; target AI is unresolved."
+            : "Combat inactive.");
+        Changed();
+        return true;
+    }
+
+    internal bool Attack()
+    {
+        if (!_state.CombatActive || _state.TargetHitPoints == 0)
+        {
+            SetStatus("Enter combat before attacking a live target.");
+            return false;
+        }
+        if (!Adjacent())
+        {
+            SetStatus("Move to a source-walkable hex adjacent to the guardian.");
+            return false;
+        }
+        if (_state.PlayerActionPoints < _profile.AttackActionPointCost)
+        {
+            SetStatus("Not enough AP. End Turn to restore player AP.");
+            return false;
+        }
+        var remaining = Math.Max(0, _state.TargetHitPoints - _playerMeleeDamage);
+        _state = _state with
+        {
+            TargetHitPoints = remaining,
+            PlayerActionPoints = _state.PlayerActionPoints - _profile.AttackActionPointCost,
+            CombatActive = remaining > 0,
+        };
+        SetStatus(remaining > 0
+            ? $"Deterministic bounded hit: {_playerMeleeDamage} damage."
+            : $"{_contract.Critter.DisplayName} defeated. The exact nested loot is now available.");
+        Changed();
+        return true;
+    }
+
+    internal bool EndTurn()
+    {
+        if (_state.TargetHitPoints == 0)
+        {
+            SetStatus("Combat is complete.");
+            return false;
+        }
+        _state = _state with { PlayerActionPoints = _maximumPlayerActionPoints };
+        SetStatus("Player AP restored. Target turns/AI are not implemented in this adapter.");
+        Changed();
+        return true;
+    }
+
+    internal bool Loot()
+    {
+        if (_state.TargetHitPoints != 0 || _state.SpearLooted || !Adjacent())
+        {
+            SetStatus(_state.TargetHitPoints != 0
+                ? "The source-owned loot remains on the live guardian."
+                : _state.SpearLooted
+                    ? "The exact spear is already in inventory."
+                    : "Move adjacent before looting.");
+            return false;
+        }
+        _state = _state with { SpearLooted = true };
+        _inventoryExpanded = true;
+        SetStatus($"Looted {_contract.DefeatLoot.Quantity} × {_contract.DefeatLoot.DisplayName}.");
+        Changed();
+        return true;
+    }
+
+    internal static int MaximumActionPoints(Fo2CharacterSelection character)
+    {
+        var agility = Effective(character.Profile, AgilitySpecialIndex);
+        var bruiserPenalty = character.Profile.Traits.Contains("Bruiser", StringComparer.Ordinal)
+            ? 2
+            : 0;
+        return Math.Max(1, BaseActionPoints + agility / 2 - bruiserPenalty);
+    }
+
+    internal static int MaximumHitPoints(Fo2CharacterSelection character)
+    {
+        var strength = Effective(character.Profile, StrengthSpecialIndex);
+        var endurance = Effective(character.Profile, EnduranceSpecialIndex);
+        return BaseHitPoints + 2 * endurance + strength;
+    }
+
+    private static int MeleeDamage(Fo2CharacterSelection character)
+    {
+        var strength = Effective(character.Profile, StrengthSpecialIndex);
+        var heavyHandedBonus = character.Profile.Traits.Contains(
+                "Heavy Handed",
+                StringComparer.Ordinal)
+            ? 4
+            : 0;
+        return 1 + Math.Max(1, strength - NeutralSpecialValue) + heavyHandedBonus;
+    }
+
+    private bool Adjacent() =>
+        Fo1HexMath.Distance(_player.CurrentTile, _contract.Critter.Tile) <=
+        _profile.InteractionRangeHexes;
+
+    private void Changed()
+    {
+        _state.Validate(_contract, _maximumPlayerActionPoints);
+        RefreshPresentation();
+        StateChanged?.Invoke();
+    }
+
+    private void SetStatus(string value)
+    {
+        _status.Text = value;
+        RefreshPresentation();
+    }
+
+    private void RefreshPresentation()
+    {
+        _targetSprite.Visible = !_state.SpearLooted;
+        _targetSprite.Modulate = _state.TargetHitPoints == 0
+            ? new Color(
+                DefeatedColorChannel,
+                DefeatedColorChannel,
+                DefeatedColorChannel,
+                DefeatedAlpha)
+            : Colors.White;
+        _vitals.Text =
+            $"HP {_maximumPlayerHitPoints}/{_maximumPlayerHitPoints}   " +
+            $"AP {_state.PlayerActionPoints}/{_maximumPlayerActionPoints}   " +
+            $"{_contract.Critter.DisplayName} HP {_state.TargetHitPoints}/" +
+            $"{_contract.Critter.CurrentHitPoints}   " +
+            $"Combat {(_state.CombatActive ? "ON" : "OFF")}";
+        _inventory.Text = _inventoryExpanded
+            ? _state.SpearLooted
+                ? $"INVENTORY\n{_contract.DefeatLoot.Quantity} × " +
+                  $"{_contract.DefeatLoot.DisplayName} " +
+                  $"({_contract.DefeatLoot.Weapon.MinimumDamage}–" +
+                  $"{_contract.DefeatLoot.Weapon.MaximumDamage} damage, " +
+                  $"{_contract.DefeatLoot.Weapon.ActionPointCostPrimary} AP primary)"
+                : "INVENTORY\n(empty in this bounded slice)"
+            : "Inventory hidden";
+    }
+
+    private Label Label(string text)
+    {
+        var label = new Label { Text = text };
+        label.AddThemeFontSizeOverride("font_size", _profile.FontSizePixels);
+        return label;
+    }
+
+    private static int Effective(Fo2CharacterProfile profile, int index)
+    {
+        var value = profile.Special[index];
+        if (profile.Traits.Contains("Gifted", StringComparer.Ordinal))
+            value++;
+        if (index == StrengthSpecialIndex &&
+            profile.Traits.Contains("Bruiser", StringComparer.Ordinal))
+            value += 2;
+        if (index == AgilitySpecialIndex &&
+            profile.Traits.Contains("Small Frame", StringComparer.Ordinal))
+            value++;
+        return Math.Clamp(value, 1, MaximumSpecialValue);
+    }
+
+    private static IEnumerable<T> Descendants<T>(Node root) where T : Node
+    {
+        foreach (var child in root.GetChildren())
+        {
+            if (child is T typed)
+                yield return typed;
+            foreach (var descendant in Descendants<T>(child))
+                yield return descendant;
+        }
+    }
+}

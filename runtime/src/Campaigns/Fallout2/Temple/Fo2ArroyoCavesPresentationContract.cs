@@ -186,7 +186,7 @@ internal sealed class Fo2ArroyoCavesPresentationCatalog
         {
             var recipe = recipeDocument.RootElement;
             if (Fo2TemplePresentationCatalog.RequiredString(recipe, "schema") !=
-                    "opennv-fo2-first-slice-recipe/v1" ||
+                    "opennv-fo2-first-slice-recipe/v2" ||
                 Fo2TemplePresentationCatalog.RequiredString(recipe, "id") !=
                     Fo2TemplePresentationCatalog.RequiredString(recipeDescriptor, "id") ||
                 Fo2TemplePresentationCatalog.RequiredString(recipe, "campaign") != "Fallout2")

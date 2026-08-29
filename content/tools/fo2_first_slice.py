@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict
 import json
+import re
+import struct
 import sys
 from pathlib import Path
 from typing import Any
@@ -28,12 +30,48 @@ from fo1_profile import Fo1ProfileError, map_layout_manifest, parse_map_layout
 from plugin_stack import file_sha256
 
 
-SCHEMA = "opennv-fo2-first-slice/v1"
-RECIPE_SCHEMA = "opennv-fo2-first-slice-recipe/v1"
+SCHEMA = "opennv-fo2-first-slice/v2"
+RECIPE_SCHEMA = "opennv-fo2-first-slice-recipe/v2"
 PROFILE_SCHEMA = "opennv-fo2-owned-profile/v1"
 FORM_ID_RADIX = 16
 FRM_PALETTE_SIZE = 256
 MAP_WIDTH_TILES = 200
+CONFRONTATION_SCHEMA = "opennv-fo2-temple-confrontation/v1"
+CONFRONTATION_RECIPE_SCHEMA = "opennv-fo2-temple-confrontation-recipe/v1"
+MESSAGE_ROW = re.compile(r"^\{(-?[0-9]+)\}\{[^}]*\}\{(.*)\}$")
+CRITTER_PRO_SUPPORTED_SIZES = frozenset({0x19C, 0x1A0})
+CRITTER_PRO_HEADER_OFFSET = 0x20
+CRITTER_PRO_HEADER_FIELD_COUNT = 3
+CRITTER_PRO_BASE_STATS_OFFSET = 0x30
+CRITTER_PRO_BONUS_STATS_OFFSET = 0xBC
+CRITTER_PRO_STAT_COUNT = 35
+CRITTER_STAT_STRENGTH = 0
+CRITTER_STAT_PERCEPTION = 1
+CRITTER_STAT_ENDURANCE = 2
+CRITTER_STAT_CHARISMA = 3
+CRITTER_STAT_INTELLIGENCE = 4
+CRITTER_STAT_AGILITY = 5
+CRITTER_STAT_LUCK = 6
+CRITTER_STAT_HIT_POINTS = 7
+CRITTER_STAT_ACTION_POINTS = 8
+CRITTER_STAT_ARMOR_CLASS = 9
+CRITTER_STAT_UNARMED_DAMAGE = 10
+CRITTER_STAT_MELEE_DAMAGE = 11
+CRITTER_STAT_SEQUENCE = 13
+CRITTER_STAT_CRITICAL_CHANCE = 15
+CRITTER_OBJECT_TYPE = 1
+CRITTER_INSTANCE_VALUE_COUNT = 11
+CRITTER_INSTANCE_CURRENT_AP = 3
+CRITTER_INSTANCE_AI_PACKET = 5
+CRITTER_INSTANCE_TEAM = 6
+CRITTER_INSTANCE_CURRENT_HP = 8
+WEAPON_PRO_SIZE = 122
+WEAPON_PRO_SUBTYPE_OFFSET = 0x20
+WEAPON_PRO_SUBTYPE = 3
+WEAPON_PRO_OBJECT_TYPE_SHIFT = 24
+WEAPON_PRO_VALUES_OFFSET = 0x39
+WEAPON_PRO_VALUE_COUNT = 16
+WEAPON_PRO_SOUND_CODE_OFFSET = 0x79
 
 
 def default_recipe_path() -> Path:
@@ -69,7 +107,239 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         raise Fo1ProfileError("Fallout 2 DAT2 overlay order changed")
     if not isinstance(recipe.get("unsupported"), list) or not recipe["unsupported"]:
         raise Fo1ProfileError("Fallout 2 first-slice unsupported boundary is missing")
+    confrontation = recipe.get("boundedConfrontation")
+    if (
+        not isinstance(confrontation, dict)
+        or confrontation.get("schema") != CONFRONTATION_RECIPE_SCHEMA
+        or not isinstance(confrontation.get("critter"), dict)
+        or not isinstance(confrontation.get("loot"), dict)
+        or not isinstance(confrontation.get("messageCatalogs"), dict)
+    ):
+        raise Fo1ProfileError("Fallout 2 bounded confrontation recipe is incomplete")
     return recipe
+
+
+def _parse_message_catalog(data: bytes) -> dict[int, str]:
+    try:
+        text = data.decode("cp1252")
+    except UnicodeDecodeError as error:
+        raise Fo1ProfileError("Fallout 2 prototype message catalog is not cp1252") from error
+    result: dict[int, str] = {}
+    for source_line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = source_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = MESSAGE_ROW.match(line)
+        if match is None:
+            raise Fo1ProfileError(f"unsupported Fallout 2 MSG row: {line!r}")
+        number = int(match.group(1))
+        if number in result:
+            raise Fo1ProfileError(f"duplicate Fallout 2 MSG number: {number}")
+        result[number] = match.group(2)
+    if not result:
+        raise Fo1ProfileError("Fallout 2 prototype message catalog is empty")
+    return result
+
+
+def _parse_critter_pro(data: bytes) -> dict[str, int]:
+    if len(data) not in CRITTER_PRO_SUPPORTED_SIZES:
+        raise Fo1ProfileError(f"unsupported Fallout 2 critter PRO size: 0x{len(data):x}")
+    base = struct.unpack_from(
+        f">{CRITTER_PRO_STAT_COUNT}i", data, CRITTER_PRO_BASE_STATS_OFFSET
+    )
+    bonus = struct.unpack_from(
+        f">{CRITTER_PRO_STAT_COUNT}i", data, CRITTER_PRO_BONUS_STATS_OFFSET
+    )
+    stats = [
+        base[index] + bonus[index] for index in range(CRITTER_PRO_STAT_COUNT)
+    ]
+    head_fid, ai_packet, team = struct.unpack_from(
+        f">{CRITTER_PRO_HEADER_FIELD_COUNT}i", data, CRITTER_PRO_HEADER_OFFSET
+    )
+    return {
+        "headFid": head_fid,
+        "aiPacket": ai_packet,
+        "team": team,
+        "strength": stats[CRITTER_STAT_STRENGTH],
+        "perception": stats[CRITTER_STAT_PERCEPTION],
+        "endurance": stats[CRITTER_STAT_ENDURANCE],
+        "charisma": stats[CRITTER_STAT_CHARISMA],
+        "intelligence": stats[CRITTER_STAT_INTELLIGENCE],
+        "agility": stats[CRITTER_STAT_AGILITY],
+        "luck": stats[CRITTER_STAT_LUCK],
+        "hitPoints": stats[CRITTER_STAT_HIT_POINTS],
+        "actionPoints": stats[CRITTER_STAT_ACTION_POINTS],
+        "armorClass": stats[CRITTER_STAT_ARMOR_CLASS],
+        "unarmedDamage": stats[CRITTER_STAT_UNARMED_DAMAGE],
+        "meleeDamage": stats[CRITTER_STAT_MELEE_DAMAGE],
+        "sequence": stats[CRITTER_STAT_SEQUENCE],
+        "criticalChance": stats[CRITTER_STAT_CRITICAL_CHANCE],
+    }
+
+
+def _parse_weapon_pro(data: bytes) -> dict[str, int | str]:
+    if len(data) != WEAPON_PRO_SIZE:
+        raise Fo1ProfileError(f"unsupported Fallout 2 weapon PRO size: 0x{len(data):x}")
+    pid = struct.unpack_from(">I", data, 0)[0]
+    subtype = struct.unpack_from(">i", data, WEAPON_PRO_SUBTYPE_OFFSET)[0]
+    if pid >> WEAPON_PRO_OBJECT_TYPE_SHIFT != 0 or subtype != WEAPON_PRO_SUBTYPE:
+        raise Fo1ProfileError(f"Fallout 2 confrontation loot is not a weapon: {pid:08x}")
+    values = struct.unpack_from(
+        f">{WEAPON_PRO_VALUE_COUNT}i", data, WEAPON_PRO_VALUES_OFFSET
+    )
+    fields = (
+        "animationCode",
+        "minimumDamage",
+        "maximumDamage",
+        "damageType",
+        "maximumRangePrimary",
+        "maximumRangeSecondary",
+        "projectilePid",
+        "minimumStrength",
+        "actionPointCostPrimary",
+        "actionPointCostSecondary",
+        "criticalFailureType",
+        "perk",
+        "roundsPerAttack",
+        "caliber",
+        "ammunitionPid",
+        "ammunitionCapacity",
+    )
+    return {
+        "pid": f"{pid:08x}",
+        **dict(zip(fields, values)),
+        "soundCode": data[WEAPON_PRO_SOUND_CODE_OFFSET],
+    }
+
+
+def _compile_bounded_confrontation(
+    flat_objects: list[dict[str, Any]],
+    resolver: Fo1ResourceResolver,
+    configured: dict[str, Any],
+) -> dict[str, Any]:
+    critter_rule = dict(configured["critter"])
+    loot_rule = dict(configured["loot"])
+    matches = [row for row in flat_objects if row["serial"] == int(critter_rule["serial"])]
+    if len(matches) != 1:
+        raise Fo1ProfileError("Fallout 2 bounded confrontation critter is ambiguous")
+    critter = matches[0]
+    prototype = critter["prototype"]
+    expected_critter = {
+        "tile": int(critter_rule["tile"]),
+        "pid": str(critter_rule["pid"]).casefold(),
+        "sid": str(critter_rule["sid"]).casefold(),
+        "prototypeSha256": str(critter_rule["prototypeSha256"]).casefold(),
+    }
+    actual_critter = {
+        "tile": int(critter["tile"]),
+        "pid": str(critter["pid"]).casefold(),
+        "sid": str(critter["sid"]).casefold(),
+        "prototypeSha256": str(prototype["sha256"]).casefold(),
+    }
+    if actual_critter != expected_critter or prototype["object_type"] != CRITTER_OBJECT_TYPE:
+        raise Fo1ProfileError("Fallout 2 bounded confrontation critter identity drifted")
+    inventory_matches = [
+        row
+        for row in critter["inventory"]
+        if row["object"]["serial"] == int(loot_rule["serial"])
+    ]
+    if len(inventory_matches) != 1:
+        raise Fo1ProfileError("Fallout 2 bounded confrontation loot is ambiguous")
+    inventory = inventory_matches[0]
+    loot = inventory["object"]
+    loot_prototype = loot["prototype"]
+    if (
+        loot["pid"].casefold() != str(loot_rule["pid"]).casefold()
+        or inventory["quantity"] != int(loot_rule["quantity"])
+        or loot_prototype["sha256"].casefold()
+        != str(loot_rule["prototypeSha256"]).casefold()
+        or loot_prototype["subtype_name"] != "weapon"
+    ):
+        raise Fo1ProfileError("Fallout 2 bounded confrontation loot identity drifted")
+
+    critter_pro_path = f"proto\\critters\\{prototype['filename']}".casefold()
+    loot_pro_path = f"proto\\items\\{loot_prototype['filename']}".casefold()
+    critter_pro = resolver.read(critter_pro_path)
+    loot_pro = resolver.read(loot_pro_path)
+    critter_stats = _parse_critter_pro(critter_pro.data)
+    weapon_stats = _parse_weapon_pro(loot_pro.data)
+    if (
+        len(critter["instanceValues"]) != CRITTER_INSTANCE_VALUE_COUNT
+        or critter["instanceValues"][CRITTER_INSTANCE_CURRENT_HP] <= 0
+        or critter["instanceValues"][CRITTER_INSTANCE_CURRENT_AP] < 0
+        or critter_stats["hitPoints"] <= 0
+        or critter_stats["actionPoints"] <= 0
+        or weapon_stats["minimumDamage"] <= 0
+        or weapon_stats["maximumDamage"] < weapon_stats["minimumDamage"]
+        or weapon_stats["actionPointCostPrimary"] <= 0
+    ):
+        raise Fo1ProfileError("Fallout 2 bounded confrontation gameplay values are invalid")
+    catalogs = dict(configured["messageCatalogs"])
+    critter_messages_resource = resolver.read(str(catalogs["critter"]))
+    item_messages_resource = resolver.read(str(catalogs["item"]))
+    critter_messages = _parse_message_catalog(critter_messages_resource.data)
+    item_messages = _parse_message_catalog(item_messages_resource.data)
+    critter_name = critter_messages.get(int(prototype["message_number"]), "").strip()
+    loot_name = item_messages.get(int(loot_prototype["message_number"]), "").strip()
+    if not critter_name or not loot_name:
+        raise Fo1ProfileError("Fallout 2 bounded confrontation display name is absent")
+    return {
+        "schema": CONFRONTATION_SCHEMA,
+        "authority": "owned MAP object/inventory graph plus hash-bound PRO and MSG records",
+        "critter": {
+            "serial": critter["serial"],
+            "objectId": critter["id"],
+            "tile": critter["tile"],
+            "elevation": critter["elevation"],
+            "rotation": critter["rotation"],
+            "fid": critter["fid"],
+            "pid": critter["pid"],
+            "sid": critter["sid"],
+            "scriptIndex": critter["scriptIndex"],
+            "displayName": critter_name,
+            "currentHitPoints": critter["instanceValues"][CRITTER_INSTANCE_CURRENT_HP],
+            "currentActionPoints": critter["instanceValues"][CRITTER_INSTANCE_CURRENT_AP],
+            "runtimeAiPacket": critter["instanceValues"][CRITTER_INSTANCE_AI_PACKET],
+            "runtimeTeam": critter["instanceValues"][CRITTER_INSTANCE_TEAM],
+            "prototype": {
+                "logicalPath": critter_pro.logical_path,
+                "source": critter_pro.source,
+                "sha256": critter_pro.sha256,
+                "messageNumber": prototype["message_number"],
+                "stats": critter_stats,
+            },
+            "messageCatalog": {
+                "logicalPath": critter_messages_resource.logical_path,
+                "source": critter_messages_resource.source,
+                "sha256": critter_messages_resource.sha256,
+            },
+        },
+        "defeatLoot": {
+            "serial": loot["serial"],
+            "quantity": inventory["quantity"],
+            "fid": loot["fid"],
+            "pid": loot["pid"],
+            "displayName": loot_name,
+            "prototype": {
+                "logicalPath": loot_pro.logical_path,
+                "source": loot_pro.source,
+                "sha256": loot_pro.sha256,
+                "messageNumber": loot_prototype["message_number"],
+                "weapon": weapon_stats,
+            },
+            "messageCatalog": {
+                "logicalPath": item_messages_resource.logical_path,
+                "source": item_messages_resource.source,
+                "sha256": item_messages_resource.sha256,
+            },
+        },
+        "scriptBoundary": {
+            "sid": critter["sid"],
+            "scriptIndex": critter["scriptIndex"],
+            "executed": False,
+            "reason": "general Fallout 2 INT script execution is outside this bounded adapter",
+        },
+    }
 
 
 def _archive_paths(profile: dict[str, Any], recipe: dict[str, Any]) -> list[Path]:
@@ -226,6 +496,11 @@ def compile_fo2_first_slice(
             )
 
         flat_objects = _flatten_objects(objects)
+        bounded_confrontation = _compile_bounded_confrontation(
+            flat_objects,
+            resolver,
+            dict(recipe["boundedConfrontation"]),
+        )
         prototypes: dict[str, dict[str, Any]] = {}
         frm_placements: dict[str, list[dict[str, Any]]] = {}
         for obj in flat_objects:
@@ -330,6 +605,7 @@ def compile_fo2_first_slice(
         },
         "prototypes": [prototypes[pid] for pid in sorted(prototypes)],
         "frms": frms,
+        "boundedConfrontation": bounded_confrontation,
         "resources": [
             {
                 "logicalPath": resolver.resources[path].logical_path,
@@ -354,13 +630,13 @@ def compile_fo2_first_slice(
                 "openxr": False,
             },
             "firstSliceBlocker": (
-                "The exact Temple MAP/PRO/FRM source graph is transported, but no Godot runtime "
-                "consumes it and character creation, script execution, gameplay, and save state are absent."
+                "The exact Temple MAP/PRO/FRM source graph and one bounded confrontation are "
+                "transported, but general script execution and campaign gameplay remain absent."
             ),
         },
         "nextRuntimeOwner": (
-            "A bounded Godot Fallout 2 Temple loader over this manifest and one shared Chosen One "
-            "gameplay/save state; no runtime owner is implemented yet."
+            "The bounded Godot Temple confrontation owner consumes this manifest; general MAP "
+            "scripts, actors, combat, quests, inventory, and campaign state remain separate work."
         ),
         "unsupported": recipe["unsupported"],
         "retailOrDerivedAssetsPackaged": False,

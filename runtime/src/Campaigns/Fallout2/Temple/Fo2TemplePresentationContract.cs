@@ -61,7 +61,7 @@ internal sealed record Fo2MapObjectPlacement(
 internal sealed class Fo2TemplePresentationCatalog
 {
     private const string CacheSchema = "opennv-fo2-temple-presentation-cache/v1";
-    private const string SourceSchema = "opennv-fo2-first-slice/v1";
+    private const string SourceSchema = "opennv-fo2-first-slice/v2";
     private const string ProfileSchema = "opennv-fo2-owned-profile/v1";
     internal const int MapIndex = 126;
     private const int DefaultTileId = 1;
@@ -90,6 +90,7 @@ internal sealed class Fo2TemplePresentationCatalog
         IReadOnlyDictionary<string, Fo2MapArtifact> artifacts,
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
         IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
+        Fo2TempleConfrontationContract confrontation,
         int inventoryObjects,
         int verifiedResources)
     {
@@ -106,6 +107,7 @@ internal sealed class Fo2TemplePresentationCatalog
         Artifacts = artifacts;
         TileBindings = tileBindings;
         ObjectPlacements = objectPlacements;
+        Confrontation = confrontation;
         InventoryObjects = inventoryObjects;
         VerifiedResources = verifiedResources;
     }
@@ -124,6 +126,7 @@ internal sealed class Fo2TemplePresentationCatalog
     internal IReadOnlyDictionary<string, Fo2MapArtifact> Artifacts { get; }
     internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
     internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
+    internal Fo2TempleConfrontationContract Confrontation { get; }
     internal int InventoryObjects { get; }
     internal int VerifiedResources { get; }
 
@@ -198,7 +201,7 @@ internal sealed class Fo2TemplePresentationCatalog
         using (var recipeDocument = JsonDocument.Parse(recipeBytes))
         {
             var recipe = recipeDocument.RootElement;
-            if (RequiredString(recipe, "schema") != "opennv-fo2-first-slice-recipe/v1" ||
+            if (RequiredString(recipe, "schema") != "opennv-fo2-first-slice-recipe/v2" ||
                 RequiredString(recipe, "id") != RequiredString(recipeDescriptor, "id") ||
                 RequiredString(recipe, "campaign") != "Fallout2")
                 throw new InvalidOperationException("Fallout 2 Temple recipe binding drifted.");
@@ -271,6 +274,10 @@ internal sealed class Fo2TemplePresentationCatalog
                 $"{artifact.LogicalPath}|{artifact.SourceSha256}")))
             throw new InvalidOperationException("Fallout 2 Temple artifact/resource identity closure failed.");
         VerifyCounts(cache.GetProperty("counts"), artifacts, tileBindings, objectPlacements, source);
+        var confrontation = Fo2TempleConfrontationContract.Parse(
+            source.GetProperty("boundedConfrontation"),
+            source.GetProperty("resources"),
+            objectPlacements);
 
         return new Fo2TemplePresentationCatalog(
             manifestPath,
@@ -286,6 +293,7 @@ internal sealed class Fo2TemplePresentationCatalog
             artifacts,
             tileBindings,
             objectPlacements,
+            confrontation,
             objectRows.Values.Count(row => !row.TopLevel),
             resources.Length);
     }

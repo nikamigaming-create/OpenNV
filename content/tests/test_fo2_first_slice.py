@@ -81,24 +81,137 @@ def synthetic_map() -> bytes:
     return bytes(header) + tiles + scripts + objects
 
 
+def synthetic_critter_pro() -> bytes:
+    result = bytearray(0x1A0)
+    struct.pack_into(">III", result, 0, 0x01000003, 300, 0x01000040)
+    struct.pack_into(">3i", result, 0x20, -1, 1, 1)
+    stats = [8, 5, 5, 5, 5, 8, 5, 50, 9, 8, 0, 3, 0, 15, 0, 5] + [0] * 19
+    struct.pack_into(">35i", result, 0x30, *stats)
+    struct.pack_into(">35i", result, 0xBC, *([0] * 35))
+    return bytes(result)
+
+
+def synthetic_weapon_pro() -> bytes:
+    result = bytearray(122)
+    struct.pack_into(">III", result, 0, 0x00000007, 700, 0x0000002A)
+    struct.pack_into(">i", result, 0x20, 3)
+    struct.pack_into(
+        ">16i",
+        result,
+        0x39,
+        4,
+        3,
+        10,
+        0,
+        2,
+        8,
+        0x05000007,
+        4,
+        4,
+        6,
+        1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+    )
+    result[0x79] = 56
+    return bytes(result)
+
+
+def synthetic_confrontation_map() -> bytes:
+    data = synthetic_map()
+    header_and_tiles_and_scripts = data[: 0xEC + 10000 * 4 + 20]
+    critter_base = struct.pack(
+        ">21i",
+        1,
+        21101,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        0x01004040,
+        0x20000000,
+        0,
+        0x01000003,
+        -1,
+        0,
+        0,
+        0,
+        0x04000001,
+        750,
+        1,
+        10,
+        0,
+    )
+    critter_instance = struct.pack(">11i", 0, 0, 0, 9, 0, 1, 1, -1, 50, 0, 0)
+    weapon_base = struct.pack(
+        ">21i",
+        2,
+        -1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0x0000002A,
+        0x02000008,
+        0,
+        0x00000007,
+        -1,
+        0,
+        0,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        0,
+    )
+    weapon_instance = struct.pack(">3i", 0, 0, -1)
+    objects = (
+        struct.pack(">2i", 1, 1)
+        + critter_base
+        + critter_instance
+        + struct.pack(">i", 1)
+        + weapon_base
+        + weapon_instance
+        + struct.pack(">2i", 0, 0)
+    )
+    return header_and_tiles_and_scripts + objects
+
+
 class Fo2FirstSliceTest(unittest.TestCase):
     def test_compiles_exact_map_object_pro_and_frm_graph_without_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             install = root / "Fallout 2"
             install.mkdir()
-            map_data = synthetic_map()
-            prototype = bytearray(0x24)
-            struct.pack_into(">III", prototype, 0, 0x02000001, 100, 0x02000000)
-            struct.pack_into(">i", prototype, 0x20, 5)
+            map_data = synthetic_confrontation_map()
+            critter_pro = synthetic_critter_pro()
+            weapon_pro = synthetic_weapon_pro()
+            critter_list = b"unused.pro\r\nunused.pro\r\n00000003.pro\r\n"
+            item_list = b"unused.pro\r\n" * 6 + b"00000013.pro\r\n"
+            critter_art_list = b"unused.frm\r\n" * 64 + b"nmwarr,11,1\r\n"
+            item_art_list = b"unused.frm\r\n" * 42 + b"spear.frm\r\n"
             (install / "master.dat").write_bytes(
                 synthetic_dat2(
                     [
                         ("maps\\artemple.map", map_data, True),
-                        ("proto\\scenery\\scenery.lst", b"test.pro\r\n", False),
-                        ("proto\\scenery\\test.pro", bytes(prototype), False),
-                        ("art\\scenery\\scenery.lst", b"test.frm\r\n", False),
-                        ("art\\scenery\\test.frm", synthetic_frm(), True),
+                        ("proto\\critters\\critters.lst", critter_list, False),
+                        ("proto\\critters\\00000003.pro", critter_pro, False),
+                        ("proto\\items\\items.lst", item_list, False),
+                        ("proto\\items\\00000013.pro", weapon_pro, False),
+                        ("art\\critters\\critters.lst", critter_art_list, False),
+                        ("art\\critters\\nmwarrga.frm", synthetic_frm(), True),
+                        ("art\\items\\items.lst", item_art_list, False),
+                        ("art\\items\\spear.frm", synthetic_frm(), True),
+                        ("text\\english\\game\\pro_crit.msg", b"{300}{}{Villager}\r\n", False),
+                        ("text\\english\\game\\pro_item.msg", b"{700}{}{Spear}\r\n", False),
                     ]
                 )
             )
@@ -124,7 +237,7 @@ class Fo2FirstSliceTest(unittest.TestCase):
             recipe_path.write_text(
                 json.dumps(
                     {
-                        "schema": "opennv-fo2-first-slice-recipe/v1",
+                        "schema": "opennv-fo2-first-slice-recipe/v2",
                         "id": recipe_path.stem,
                         "campaign": "Fallout2",
                         "sourceProfileSchema": "opennv-fo2-owned-profile/v1",
@@ -158,6 +271,26 @@ class Fo2FirstSliceTest(unittest.TestCase):
                             },
                             "presentElevations": [0],
                         },
+                        "boundedConfrontation": {
+                            "schema": "opennv-fo2-temple-confrontation-recipe/v1",
+                            "critter": {
+                                "serial": 2,
+                                "tile": 21101,
+                                "pid": "01000003",
+                                "sid": "04000001",
+                                "prototypeSha256": hashlib.sha256(critter_pro).hexdigest(),
+                            },
+                            "loot": {
+                                "serial": 1,
+                                "pid": "00000007",
+                                "quantity": 1,
+                                "prototypeSha256": hashlib.sha256(weapon_pro).hexdigest(),
+                            },
+                            "messageCatalogs": {
+                                "critter": "text\\english\\game\\pro_crit.msg",
+                                "item": "text\\english\\game\\pro_item.msg",
+                            },
+                        },
                         "declaredRole": "synthetic Temple source slice",
                         "unsupported": ["runtime"],
                     }
@@ -171,9 +304,17 @@ class Fo2FirstSliceTest(unittest.TestCase):
             self.assertEqual(document["newGameStart"]["playerEntry"]["tile"], 18492)
             self.assertFalse(document["newGameStart"]["playerEntry"]["placedPlayerObject"])
             self.assertEqual(document["map"]["objects"]["totalTopLevelObjects"], 1)
-            self.assertEqual(document["map"]["allObjectCount"], 1)
-            self.assertEqual(document["prototypes"][0]["logicalPath"], "proto\\scenery\\test.pro")
-            self.assertEqual(document["frms"][0]["logicalPath"], "art\\scenery\\test.frm")
+            self.assertEqual(document["map"]["allObjectCount"], 2)
+            confrontation = document["boundedConfrontation"]
+            self.assertEqual(confrontation["critter"]["serial"], 2)
+            self.assertEqual(confrontation["critter"]["currentHitPoints"], 50)
+            self.assertEqual(confrontation["critter"]["prototype"]["stats"]["actionPoints"], 9)
+            self.assertEqual(confrontation["defeatLoot"]["serial"], 1)
+            self.assertEqual(confrontation["defeatLoot"]["displayName"], "Spear")
+            self.assertEqual(
+                confrontation["defeatLoot"]["prototype"]["weapon"]["actionPointCostPrimary"],
+                4,
+            )
             self.assertTrue(document["promotion"]["transported"])
             self.assertFalse(document["runtimeCompatibility"]["ready"])
             self.assertFalse(document["retailOrDerivedAssetsPackaged"])

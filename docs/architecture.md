@@ -1,6 +1,6 @@
 # OpenNV architecture and code accountability
 
-Status: **launcher-routed bounded Fallout 1 V13ENT, Fallout 2 character-to-Arroyo
+Status: **launcher-routed bounded Fallout 1 V13ENT, Fallout 2 character-to-Temple
 Hex, and New Vegas opening/Goodsprings slices, plus a non-playable Fallout 3
 CG00 development frontend; no full campaign**.
 
@@ -12,12 +12,16 @@ bounded character-start surface selects Narg, Mingan, or Chitsa from owned
 GCD/BIO/panel data or uses the same source surface to Modify/Create name, sex,
 age, and exact SPECIAL allocation. Modify preserves source tags/traits; Create
 leaves them unselected. Take applies sex-correct HMWARR/HFPRIM presentation and
-hands the state to the grounded Map 3 tile 28707 player. Its atomic version-3
-save cold-restores character source/custom state and current transform/mode.
+hands the state to the grounded Map 3 tile 28707 player. Its atomic version-4
+save cold-restores character source/custom state, current transform/mode, and
+the bounded Temple confrontation state.
 Ordinary grounded movement follows the exact owned exit path into ARTEMPLE Map
 126 tile 16486; the non-source opaque wall proxy is gone while its collision and
-all 45 owned wall FRMs remain. Tag/trait editing, campaign-wide persistence,
-scripts, remaining exits, FPS/OpenXR, and parity remain absent.
+all 45 owned wall FRMs remain. One exact MAP/PRO/MSG-bound Villager can be
+defeated with a visible player-AP melee adapter and yields its exact nested
+Spear to visible inventory state. Target AI/turns, INT execution, dialogue,
+retail combat parity, tag/trait editing, campaign-wide persistence, remaining
+exits, FPS/OpenXR, and parity remain absent.
 New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
 hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
 XML closures, and the bounded ordered Doc house → Goodsprings exterior → saloon
@@ -410,7 +414,7 @@ retail data, or promotion verdict.
 | `bsa_archive.py` | Indexed BSA v104 member lookup and extraction | Record or scene semantics |
 | `dat2_archive.py` | Indexed Fallout DAT2 member lookup, decompression, and hash identity | MAP/PRO/FRM semantics |
 | `fo2_profile.py` | Read-only Fallout 2 root-archive DAT2/index identity and source-only launcher profile | Member extraction, caches, runtime readiness, or playability |
-| `fo2_first_slice.py` | Effective patch/critter/master overlay resolution and exact asset-free Temple MAP header/elevation, entry marker, placed-object, PRO, and FRM identity manifest | Character creation, new-game executable policy, Godot loading, gameplay, saves, runtime readiness, or playability |
+| `fo2_first_slice.py` | Effective patch/critter/master overlay resolution and exact asset-free Temple MAP header/elevation, entry marker, placed-object, PRO/MSG/FRM identities, including one strict Villager-to-nested-Spear source contract | Character creation, new-game executable policy, Godot loading, gameplay execution, saves, runtime readiness, or broad playability |
 | `prepare_fo2_temple_presentation.py` | Deterministic disposable local PNG cache for exact Map 126/Map 3 floor/roof tile frames and MAP-admitted object frame/rotation pairs; owned 80×36 isometric floor pixels are source-bound and unprojected to opaque square textures while MAP placement remains authoritative | Source selection, invented art, Godot loading, gameplay, packaging, runtime readiness, or playability |
 | `prepare_fo2_character_start.py` | Exact 432-byte premade GCD parsing and disposable local picker/panel/biography plus sex-correct idle-FRM cache generation | Custom character policy, runtime selection, persistence, packaging, or playability |
 | `export_static_nif_gltf.py` | NIF static geometry, winding/stencil culling metadata, glTF, and provenance | World placement or gameplay |
@@ -522,8 +526,10 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionRuntime.cs` | Fail-closed nonvisual exit-grid destination-state application after exact component movement | Destination loading, doors, script execution, actors, or save state |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, MAP-header entry marker, and topology composition in Godot's 3D hex coordinate space | Scripts, character creation, interaction, or playability |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference construction plus exact floor/wall physics-ray report | Rendered-frame, interaction, parity, or launcher claims |
-| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; premade or custom name/sex/age/exact-SPECIAL selection; sex-correct PRO/FID Take handoff; version-2 bounded character/Map 3 save plus legacy-v1 read and cold restore | Tag/trait editing, scripts, campaign-wide progression/save state, FPS/OpenXR, parity, or full-campaign readiness |
+| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; premade or custom name/sex/age/exact-SPECIAL selection; sex-correct PRO/FID Take handoff; version-4 bounded Map 3/Temple save with legacy reads and cold restore | Tag/trait editing, scripts, campaign-wide progression/save state, FPS/OpenXR, parity, or full-campaign readiness |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs` | Grounded source-walk-gated Map 3 arrival body with selected sex-correct owned AA idle and 6-direction/8-frame AB walk playback plus validated transform/facing restore and persistence-boundary publication | AP/combat, animations beyond admitted AA/AB, scripts, inventory, campaign-wide persistence, full campaign, or parity |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs` | Strict join of one owned MAP critter/inventory pair to hash-bound PRO/MSG identities and stats | General actor admission, INT execution, AI, or retail combat behavior |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationRuntime.cs` | Visible player HP/AP, adjacent deterministic melee, exact target defeat/Spear loot, inventory state, and save publication for that one contract | Target turns/AI, dialogue, general inventory, retail formulas, general combat, or parity |
 | `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
 | `runtime/src/Compatibility/Jam/JamProfileContract.cs` | Shared hash-bound JAM profile/plugin identity and transported-capability admission | Native DLL loading, script interpretation, or complete compatibility |
 | `runtime/src/Compatibility/Jam/JamJvsSprintContract.cs` | Hash-bound transport and validation of JAM 4.6 JVS hold-to-sprint settings | Native DLL loading, xNVSE interpretation, or complete JAM compatibility |
@@ -568,12 +574,15 @@ name, sex, age 16–35, and seven SPECIAL values bounded 1–10 and totaling 40.
 Modify retains the source GCD's tags/traits unchanged, while Create records both
 as unselected. Confirm applies the matching male or female PRO-linked idle and
 AB walk FRMs at Map 3,
-elevation 0, tile 28707. The atomic version-2 save binds the source basis and
-custom state plus Map 3/elevation/tile/facing, transform, and runtime modes; it
-also reads the earlier premade-only version-1 save. Separate male and female
+elevation 0, tile 28707. The atomic version-4 save binds the source basis and
+custom state plus Map 3/Temple elevation/tile/facing, transform, runtime modes,
+and bounded confrontation state; it also reads earlier bounded save schemas.
+Separate male and female
 process pairs prove two movement directions, idle resumption, and exact cold
-restore. Tag/trait editing, other animations, campaign-wide persistence,
-Temple scripts, complete
+restore. Inside Temple, the strict source-bound Villager/Spear adapter exposes
+player HP/AP, adjacent deterministic melee, defeat, loot, and cold restore.
+Target AI/turns, INT execution, retail combat parity, tag/trait editing, other
+animations, campaign-wide persistence, Temple scripts, complete
 campaign, FPS/OpenXR, and parity remain absent.
 
 Implemented in the independently playable saloon/exterior component: direct owned

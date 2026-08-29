@@ -1,5 +1,5 @@
 {
-  "schema": "opennv-fo2-first-slice-recipe/v1",
+  "schema": "opennv-fo2-first-slice-recipe/v2",
   "id": "fo2-temple-of-trials-v1",
   "campaign": "Fallout2",
   "sourceProfileSchema": "opennv-fo2-owned-profile/v1",
@@ -33,11 +33,31 @@
     },
     "presentElevations": [0]
   },
+  "boundedConfrontation": {
+    "schema": "opennv-fo2-temple-confrontation-recipe/v1",
+    "critter": {
+      "serial": 379,
+      "tile": 21101,
+      "pid": "01000003",
+      "sid": "04000001",
+      "prototypeSha256": "007c315e135015cd2b9174169c8147ffc7a967e39e48efbe69fafa267be3817b"
+    },
+    "loot": {
+      "serial": 378,
+      "pid": "00000007",
+      "quantity": 1,
+      "prototypeSha256": "530d914a458bef87844218714e2e9d2116df04b7842c525bcc0aabc27b60622f"
+    },
+    "messageCatalogs": {
+      "critter": "text\\english\\game\\pro_crit.msg",
+      "item": "text\\english\\game\\pro_item.msg"
+    }
+  },
   "declaredRole": "new-game Temple of Trials source slice",
   "unsupported": [
     "executable-owned new-game map-selection policy",
     "character creation and Chosen One state construction",
-    "MAP script execution, doors, collision, combat, and save/reload",
+    "general MAP script execution, doors, collision, combat, and save/reload beyond the bounded confrontation adapter",
     "Godot Hex, FPS, or OpenXR rendering",
     "retail parity or playability"
   ]

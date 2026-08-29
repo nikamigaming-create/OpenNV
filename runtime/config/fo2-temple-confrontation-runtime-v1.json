@@ -1,0 +1,45 @@
+{
+  "schema": "opennv-fo2-temple-confrontation-runtime/v1",
+  "id": "fo2-temple-guardian-bounded-combat-v1",
+  "campaign": "Fallout2",
+  "source": {
+    "mapIndex": 126,
+    "critterSerial": 379,
+    "critterPid": "01000003",
+    "critterSid": "04000001",
+    "lootSerial": 378,
+    "lootPid": "00000007"
+  },
+  "adapter": {
+    "identity": "bounded-player-turn-melee-no-target-ai-v1",
+    "interactionRangeHexes": 1,
+    "playerActionPointFormula": "5 + effectiveAgility / 2 - bruiserPenalty",
+    "playerHitPointFormula": "15 + 2 * effectiveEndurance + effectiveStrength",
+    "playerMeleeDamageFormula": "1 + max(1, effectiveStrength - 5) + heavyHandedBonus",
+    "attackActionPointCost": 4,
+    "hitResolution": "deterministic-hit-no-roll",
+    "targetTurns": false,
+    "generalIntScripts": false
+  },
+  "input": {
+    "combat": { "action": "fo2_temple_combat", "physicalKey": "C", "joyButton": "X" },
+    "attack": { "action": "fo2_temple_attack", "physicalKey": "Space", "joyButton": "A" },
+    "endTurn": { "action": "fo2_temple_end_turn", "physicalKey": "Enter", "joyButton": "Start" },
+    "loot": { "action": "fo2_temple_loot", "physicalKey": "E", "joyButton": "B" },
+    "inventory": { "action": "fo2_temple_inventory", "physicalKey": "I", "joyButton": "Y" }
+  },
+  "ui": {
+    "title": "TEMPLE CONFRONTATION",
+    "boundary": "Bounded combat adapter — guardian AI/dialogue/INT script not executed",
+    "offsetPixels": [20, 20],
+    "widthPixels": 520,
+    "fontSizePixels": 18
+  },
+  "promotion": {
+    "interactive": true,
+    "persistent": true,
+    "retailCombatParity": false,
+    "scriptParity": false,
+    "campaignComplete": false
+  }
+}

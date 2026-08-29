@@ -107,8 +107,10 @@ retail startup-logo and original-menu presentation remain absent.
    wall-shell collision from owned MAP fields; headless rays prove the floor and
    wall colliders. A source-bound nonvisual cursor proves adjacent movement and
    boundary rejection inside the exact entry component. Multihex footprints,
-   Temple player controls, scripts, interaction, gameplay, save, FPS, and
-   OpenXR remain unresolved.
+   General Temple scripts, target AI, broad interaction/gameplay, FPS, and
+   OpenXR remain unresolved. One later strict source-bound Villager/Spear
+   adapter now supplies player-controlled AP melee, defeat/loot, visible state,
+   and save/cold restore without claiming those broader systems.
 9. Available now: an asset-free transition compiler binds all 18 Map 126 exit
    grids, the zero door-prototype count, `ARTemple.int`, and three live MAP
    script records. The ordinary runtime follows the exact source walk path from
@@ -128,14 +130,17 @@ retail startup-logo and original-menu presentation remain absent.
     mouse choice. Modify/Create edit name, sex, age 16–35, and seven 1–10
     SPECIAL values totaling 40. Modify preserves source tags/traits and Create
     leaves them unselected. Confirm applies the sex-correct FRM before Map 3.
-    The version-3 atomic save preserves character mode, source basis, custom
+    The version-4 atomic save preserves character mode, source basis, custom
     profile, map/elevation/tile/facing, transform, bounded modes, and the exact
     source exit identity. Ordinary grounded movement follows the 13-step path
     from Map 3 tile 28707 through exit serial 1738 into ARTEMPLE Map 126 tile
     16486; fresh
     male and female processes prove two directions, return to owned AA idle,
     and cold-restore the same state. Tag/trait editing, other animations,
-    campaign-wide state, remaining exits, and campaign play remain absent. The
+    campaign-wide state, remaining exits, and campaign play remain absent. One
+    exact MAP/PRO/MSG-bound Villager supports bounded player HP/AP melee and
+    defeat-to-nested-Spear loot with cold restore; target AI/turns, INT/dialogue,
+    general combat/inventory, and retail parity remain absent. The
     non-source opaque Temple wall proxy is removed while source-derived collision
     and all 45 owned wall FRMs remain; classic fixed-Y composition is non-parity.
 
@@ -236,7 +241,7 @@ is supported for the selected base profile.
 | --- | --- |
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
-| Fallout 2 | The launcher enables the bounded Hex premade-or-custom-to-Arroyo slice when all owned-profile/cache identities match; exact Map 3 exit serial 1738 loads ARTEMPLE Map 126 and cold-restores. Tag/trait editing, campaign-wide persistence, remaining exits, INT, actors, combat, inventory, full campaign, FPS, VR, and parity remain absent |
+| Fallout 2 | The launcher enables the bounded Hex premade-or-custom route when all owned-profile/cache identities match; exact Map 3 exit serial 1738 loads ARTEMPLE Map 126 and cold-restores. One strict source-bound Villager/Spear adapter provides visible player HP/AP, deterministic adjacent melee, defeat/loot inventory, and v4 cold restore. Target AI/turns, INT/dialogue, general actors/combat/inventory, tag/trait editing, campaign-wide persistence, remaining exits, full campaign, FPS, VR, and parity remain absent |
 | New Vegas first slice | Menu/intro/Doc house, source-ordered Doc speech/quest beats, source-derived Level/HP/AP/XP, the source-bound HUD/Pip-Boy runtime shell, and the bounded eagerly instantiated Doc/exterior/saloon composite load; the current configured-input route and cold Continue pass against the admitted four-family cache. Current-CELL-only render/collision activation prevents linked interior/exterior shells from presenting together, and one-time source-collision grounding reports actor corrections. The owned TextEdit/RaceSex backgrounds are bound; the current stage-10 frame is `D:\Builds\OpenNV-fnv-doc-opening-20260829-r3-owned-menu-nav\stage10-owned-menu-nav.png`, SHA-256 `5096233bbcf0293191c83dd4fbdaf0ce5f5d3aed16ba380eb31f1c3d7e744c28`. Doc no longer receives raw chair elevation. A native furniture proof preserves his authored ACHR/FURN occupancy and releases it at stage 40, but exact seated-loop/entry/exit visuals remain unsupported. A second native proof binds cigarette `ANIO 00083519` to `IDLE 00071ee3` with default-hidden and exit-hide behavior; no source-backed smoke emitter was found or implemented. The [source package audit](evidence/fnv-goodsprings-actor-package-contract.md) pins Doc, Pete, Trudy, settler, Sunny, and Cheyenne schedules and conditions, but those generic package/quest executors are not implemented. The exact startup player-root/camera, complete population/package AI, exterior surface/directional lighting, dynamic time/weather, reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual parity remain |
 | Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance enter the bounded Vault 101 birth room and reach/cold-restore stage 100 through seven of eight exact stage-100 commands. A fresh pinned-Theora profile compiles the CG01 stage-0/stage-5 and Dad-speech → stage-10 contracts; the portable native stage-10 apply and cold-restore reports pass. FPS/Hex/VR, the post-stage-10 toddler world interaction, general package/dialogue/KF AI, the eighth stage-100 command, and freely playable Vault 101 remain |
 | TTW | The strict profile/effective-source namespace and bounded FO3 CG00→CG01-stage-5 command/movie contract compile and validate against the installed stack; the isolated executor applies and cold-restores 38 exact source commands under dedicated TTW cache/save identities. `runtimeReady` remains false because Vault 101 cell-resource compilation, reference-transform/world application, owned-movie transcode/playback, CG01 stage 10 and later gameplay, and xNVSE/JAM native-plugin semantics remain absent |

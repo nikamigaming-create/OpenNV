@@ -16,6 +16,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     internal Fo2CharacterSelection? SelectedCharacter { get; private set; }
     internal Fo2ArroyoCavesSceneCoverage? Scene { get; private set; }
     internal Fo2TempleSceneCoverage? TempleScene { get; private set; }
+    internal Fo2TempleConfrontationRuntime? TempleConfrontation { get; private set; }
     internal Fo2ArroyoCavesPlayerRuntimeCoverage? Runtime { get; private set; }
     internal Fo2CharacterStartSaveState? CurrentSave { get; private set; }
     internal bool RestoredFromSave { get; private set; }
@@ -111,6 +112,14 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     "fo2-exit-transition-restore-proof",
                     out var exitRestoreRoot))
                 _ = Fo2ExitTransitionProof.RunRestore(this, exitRestoreRoot);
+            else if (options.TryGetValue(
+                    "fo2-temple-confrontation-write-proof",
+                    out var confrontationWriteRoot))
+                _ = Fo2TempleConfrontationProof.RunWrite(this, confrontationWriteRoot);
+            else if (options.TryGetValue(
+                    "fo2-temple-confrontation-restore-proof",
+                    out var confrontationRestoreRoot))
+                _ = Fo2TempleConfrontationProof.RunRestore(this, confrontationRestoreRoot);
         }
         catch (Exception exception)
         {
@@ -164,7 +173,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                     Fo1HexMath.Center(exit.SourceTile) +
                         Vector3.Up * Runtime.Profile.SpawnCenterHeightMeters,
                     exit.TargetRotation);
-                EnterTemple(exit);
+                EnterTemple(exit, restoredState.TempleConfrontation);
             }
             if (restoredState.MapSha256 != player.CurrentMapSha256 ||
                 restoredState.WalkMaskSha256 != player.CurrentWalkMaskSha256 ||
@@ -202,11 +211,13 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             "Fallout 2 player persistence boundary has no runtime.");
         if (player.CurrentMapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
             player.CurrentTile == _arroyo.LiveExit.SourceTile)
-            EnterTemple(_arroyo.LiveExit);
+            EnterTemple(_arroyo.LiveExit, null);
         PersistCurrentState();
     }
 
-    private void EnterTemple(Fo2ArroyoExitTransition exit)
+    private void EnterTemple(
+        Fo2ArroyoExitTransition exit,
+        Fo2TempleConfrontationState? restoredConfrontation)
     {
         if (Runtime is null || Scene is null || TempleScene is not null ||
             exit != _arroyo.LiveExit ||
@@ -218,6 +229,15 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         var sourceRoot = Scene.Root;
         TempleScene = Fo2TempleScene.Build(_temple, this);
         Runtime.Player.EnterTemple(TempleScene, exit);
+        TempleConfrontation = Fo2TempleConfrontationRuntime.Build(
+            _temple,
+            TempleScene,
+            Runtime.Player,
+            SelectedCharacter ?? throw new InvalidOperationException(
+                "Fallout 2 Temple confrontation has no selected character."),
+            restoredConfrontation);
+        if (_persistenceEnabled)
+            TempleConfrontation.StateChanged += OnTempleConfrontationStateChanged;
         LastTransition = exit;
         sourceRoot.QueueFree();
         GD.Print(
@@ -226,6 +246,8 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             $"target={exit.TargetMapIndex}:{exit.TargetTile} " +
             $"elevation={exit.TargetElevation} rotation={exit.TargetRotation}");
     }
+
+    private void OnTempleConfrontationStateChanged() => PersistCurrentState();
 
     internal Fo2CharacterStartSaveState PersistCurrentState()
     {
@@ -238,11 +260,13 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 _arroyo,
                 _temple,
                 Runtime,
-                SelectedCharacter)
+                SelectedCharacter,
+                TempleConfrontation?.State)
             .Write();
         return CurrentSave;
     }
 
     internal Fo2CharacterStartCatalog CharacterStart => _characterStart;
     internal Fo2ArroyoCavesPresentationCatalog Arroyo => _arroyo;
+    internal Fo2TemplePresentationCatalog Temple => _temple;
 }

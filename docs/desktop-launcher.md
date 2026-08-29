@@ -59,13 +59,17 @@ Narg, Mingan, or Chitsa premade, applies source stats/biography/portrait and
 also exposes source-backed Modify/Create for name, sex, age, and exact SPECIAL.
 Modify retains source tags/traits; Create leaves them unselected. Confirm applies
 sex-correct idle FRM presentation and hands the state to the grounded Map 3
-player at tile 28707. An atomic version-3 save cold-restores the character mode,
+player at tile 28707. An atomic version-4 save cold-restores the character mode,
 source basis, custom state, tile, facing, transform, bounded modes, and the exact
-Map 3 exit-to-ARTEMPLE Map 126 arrival. The launcher enables Hex
+Map 3 exit-to-ARTEMPLE Map 126 arrival plus the bounded source-identified
+Villager HP/AP/defeat and exact nested-Spear loot state. The Temple HUD exposes
+player HP/AP, deterministic adjacent melee, and the bounded inventory. The
+launcher enables Hex
 only after all five local slice artifacts match the registered profile; FPS and
 VR remain disabled. The non-source opaque Temple wall proxy is removed while
 the owned wall FRMs and source-derived collision remain; Tag/trait editing,
-scripting, classic fixed-Y composition, campaign-wide state, and parity
+target AI/turns, general scripting/combat/inventory, classic fixed-Y
+composition, campaign-wide state, and parity
 remain open. The Fallout 3
 intro is converted locally to a hash-verified Theora cache during profile
 registration; Escape and the visible Skip action enter the same CG00 state.

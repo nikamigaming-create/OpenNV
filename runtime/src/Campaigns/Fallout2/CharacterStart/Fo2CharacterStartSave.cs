@@ -22,10 +22,12 @@ internal sealed record Fo2CharacterStartSaveState(
     string MotionMode,
     string BlockedMovementMode,
     string PresentationMode,
-    Fo2ArroyoExitTransition? LastTransition)
+    Fo2ArroyoExitTransition? LastTransition,
+    Fo2TempleConfrontationState? TempleConfrontation)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v3";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v4";
     internal const string RouteMode = "chosen-one-source-exit-route-v1";
+    private const string RouteSchema = "opennv-fo2-character-arroyo-save/v3";
     private const string PreviousSchema = "opennv-fo2-character-arroyo-save/v2";
     private const string PreviousRouteMode = "chosen-one-taken-to-arroyo-map-3";
     private const string LegacySchema = "opennv-fo2-character-arroyo-save/v1";
@@ -46,7 +48,8 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2ArroyoCavesPresentationCatalog arroyo,
         Fo2TemplePresentationCatalog temple,
         Fo2ArroyoCavesPlayerRuntimeCoverage runtime,
-        Fo2CharacterSelection character)
+        Fo2CharacterSelection character,
+        Fo2TempleConfrontationState? templeConfrontation)
     {
         character.Validate(characterStart);
         if (characterStart.SourceProfileId != arroyo.SourceProfileId ||
@@ -73,6 +76,15 @@ internal sealed record Fo2CharacterStartSaveState(
             _ => throw new InvalidOperationException(
                 "Fallout 2 active map is outside the admitted Arroyo/Temple route."),
         };
+        if (player.CurrentMapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
+                templeConfrontation is not null ||
+            player.CurrentMapIndex == Fo2TemplePresentationCatalog.MapIndex &&
+                templeConfrontation is null)
+            throw new InvalidOperationException(
+                "Fallout 2 confrontation state does not match the active map.");
+        templeConfrontation?.Validate(
+            temple.Confrontation,
+            Fo2TempleConfrontationRuntime.MaximumActionPoints(character));
         return new Fo2CharacterStartSaveState(
             ResolvePath(configuredPath),
             "",
@@ -91,7 +103,8 @@ internal sealed record Fo2CharacterStartSaveState(
             runtime.Player.MotionMode.ToString(),
             runtime.Profile.BlockedMovementMode,
             runtime.Profile.PlayerPresentationMode,
-            lastTransition);
+            lastTransition,
+            templeConfrontation);
     }
 
     internal Fo2CharacterStartSaveState Write()
@@ -158,6 +171,13 @@ internal sealed record Fo2CharacterStartSaveState(
                     targetElevation = LastTransition.TargetElevation,
                     targetRotation = LastTransition.TargetRotation,
                 },
+                templeConfrontation = TempleConfrontation is null ? null : new
+                {
+                    targetHitPoints = TempleConfrontation.TargetHitPoints,
+                    playerActionPoints = TempleConfrontation.PlayerActionPoints,
+                    combatActive = TempleConfrontation.CombatActive,
+                    spearLooted = TempleConfrontation.SpearLooted,
+                },
             };
             File.WriteAllText(
                 temporary,
@@ -188,7 +208,9 @@ internal sealed record Fo2CharacterStartSaveState(
         var schema = RequiredString(root, "schema");
         var legacy = schema == LegacySchema;
         var previous = schema == PreviousSchema;
-        if (schema != Schema && schema != PreviousSchema && schema != LegacySchema ||
+        var route = schema == RouteSchema;
+        if (schema != Schema && schema != RouteSchema &&
+                schema != PreviousSchema && schema != LegacySchema ||
             RequiredString(root, "campaign") != "Fallout2" ||
             RequiredString(root, "routeMode") !=
                 (legacy ? LegacyRouteMode : previous ? PreviousRouteMode : RouteMode) ||
@@ -235,6 +257,12 @@ internal sealed record Fo2CharacterStartSaveState(
         var rotation = world.GetProperty("rotation").GetInt32();
         var position = ReadVector(world.GetProperty("position"));
         var lastTransition = ReadLastTransition(root, schema, arroyo);
+        var templeConfrontation = ReadTempleConfrontation(
+            root,
+            schema,
+            mapIndex,
+            character,
+            temple);
         var tileInRange = currentTile is >= 0 and < Fo1HexMath.Width * Fo1HexMath.Height;
         var mapIdentityValid = mapIndex switch
         {
@@ -245,7 +273,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 RequiredString(world, "walkMaskSha256") == arroyo.WalkMaskSha256 &&
                 tileInRange && arroyo.Walkable[currentTile] && lastTransition is null,
             Fo2TemplePresentationCatalog.MapIndex =>
-                schema == Schema &&
+                (schema == Schema || route) &&
                 elevation == arroyo.LiveExit.TargetElevation &&
                 arrivalTile == arroyo.LiveExit.TargetTile &&
                 RequiredString(world, "mapSha256") == temple.MapSha256 &&
@@ -291,7 +319,8 @@ internal sealed record Fo2CharacterStartSaveState(
             motionMode,
             blockedMovementMode,
             presentationMode,
-            lastTransition);
+            lastTransition,
+            templeConfrontation);
     }
 
     private static Fo2ArroyoExitTransition? ReadLastTransition(
@@ -299,7 +328,7 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoCavesPresentationCatalog arroyo)
     {
-        if (schema != Schema)
+        if (schema != Schema && schema != RouteSchema)
             return null;
         var value = root.GetProperty("lastTransition");
         if (value.ValueKind == JsonValueKind.Null)
@@ -322,6 +351,38 @@ internal sealed record Fo2CharacterStartSaveState(
             throw new InvalidOperationException(
                 "Fallout 2 saved transition differs from the owned exit-grid contract.");
         return expected;
+    }
+
+    private static Fo2TempleConfrontationState? ReadTempleConfrontation(
+        JsonElement root,
+        string schema,
+        int mapIndex,
+        Fo2CharacterSelection character,
+        Fo2TemplePresentationCatalog temple)
+    {
+        if (schema != Schema)
+            return null;
+        var value = root.GetProperty("templeConfrontation");
+        if (mapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex)
+        {
+            if (value.ValueKind != JsonValueKind.Null)
+                throw new InvalidOperationException(
+                    "Fallout 2 Arroyo save contains Temple confrontation state.");
+            return null;
+        }
+        if (mapIndex != Fo2TemplePresentationCatalog.MapIndex ||
+            value.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException(
+                "Fallout 2 Temple save is missing confrontation state.");
+        var state = new Fo2TempleConfrontationState(
+            value.GetProperty("targetHitPoints").GetInt32(),
+            value.GetProperty("playerActionPoints").GetInt32(),
+            value.GetProperty("combatActive").GetBoolean(),
+            value.GetProperty("spearLooted").GetBoolean());
+        state.Validate(
+            temple.Confrontation,
+            Fo2TempleConfrontationRuntime.MaximumActionPoints(character));
+        return state;
     }
 
     private static string ResolvePath(string configuredPath)

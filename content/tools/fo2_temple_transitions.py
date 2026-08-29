@@ -18,7 +18,7 @@ from plugin_stack import file_sha256
 
 
 SCHEMA = "opennv-fo2-temple-transitions/v1"
-SOURCE_SCHEMA = "opennv-fo2-first-slice/v1"
+SOURCE_SCHEMA = "opennv-fo2-first-slice/v2"
 MAP_WIDTH = 200
 NO_BLOCK_FLAG = 0x10
 EXIT_GRID_OBJECT_TYPE = 5

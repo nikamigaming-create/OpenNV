@@ -117,7 +117,7 @@ class Fo2TemplePresentationTest(unittest.TestCase):
             object_sha = hashlib.sha256(object_frm).hexdigest()
             source_path = root / "temple-source.json"
             source = {
-                "schema": "opennv-fo2-first-slice/v1",
+                "schema": "opennv-fo2-first-slice/v2",
                 "status": "transported-source-manifest",
                 "campaign": "Fallout2",
                 "slice": "TempleOfTrials",
