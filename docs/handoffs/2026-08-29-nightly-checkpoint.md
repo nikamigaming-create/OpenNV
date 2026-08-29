@@ -17,6 +17,10 @@ slices without distributing proprietary assets.
 The matching Codex goal remains active. This file is a stopping point, not a
 completion or parity claim.
 
+The source baseline at the final stopping pass is
+`0ccb05dfca367533e6b3bcce252d57aed166ce3d`, already synchronized between
+`main` and `origin/main` before this handoff-only update.
+
 ## Pushed implementation boundary
 
 These 2026-08-29 slices are on `origin/main`:
@@ -138,6 +142,49 @@ lighting, and it is not a dynamic weather, image-space, or retail-parity claim.
 4. Resume bounded FO2/FO3/FO1 work. FNV dynamic time/weather, reverse traversal,
    grid streaming, integrated OpenXR, actors, and retail visual parity remain
    separate gates.
+
+## Audited first moves for the next session
+
+These are read-only audit conclusions. No implementation, build, runtime, or
+cache work was started after the stopping pass.
+
+### Fallout 3
+
+The exact unapplied eighth CG00 stage-100 command is `SetStage CG01 0` for
+quest `00014e83`. Its owned stage-0 result contains four commands in order:
+
+1. `CG01DadREF.moveto CG01DadStartMarker`;
+2. `setstage CG01 5`;
+3. `player.setscale .4`; and
+4. `player.moveto CG01PlayerStartMarker`.
+
+Do not flip the current boundary to applied. First extend the FO3 profile
+producer to emit a versioned, typed CG01 stage-0 result with exact reference,
+marker, source-transform, and hash identities, including the nested CG01 stage-5
+result closure. Add the focused producer regression before adding runtime/save
+application or the separately source-bound CG01 Dad actor.
+
+### Fallout 2
+
+The highest-value next bounded owner is the source-scripted ARTEMPLE actor at
+Map 126 object serial 379, script `ACKlint.int`. Existing source evidence binds
+its exact tile/rotation, PID/FID, `nmwarrga.frm`, script identity, and child
+`spear.frm` inventory object. First compile its owned INT, scripts-list, MSG,
+event, condition, and effect dependencies into a fail-closed implementation-
+neutral contract. Do not infer an NPC name, dialogue, spear transfer, or generic
+Fallout 2 VM behavior until the owned sources prove each claim.
+
+### Fallout: New Vegas
+
+The next renderer owner remains `CellEnvironmentSet.BuildExterior`, using the
+already selected `RetailExteriorEnvironment.ResolvedEnvironment`; do not add a
+second WTHR selector. Before replacing provisional exterior surface and
+directional lighting, capture one bounded retail observation in Goodsprings
+CELL `000daebb` with effective WTHR `000ffc88` at GameHour 8 after the weather
+transition completes. Capture the active IMAD slots and an identity-basis road
+light vector. That evidence should resolve both the exact sun direction and
+directional energy. Reuse the admitted cache; this observation does not require
+a rebuild.
 
 ## Preserved local media
 
