@@ -323,6 +323,17 @@ convex bodies, shared flat/OpenXR strike simulation, and v2 save state are
 software-gated. Full eight-ball rules and physical headset acceptance are not
 claimed.
 
+### Reproducible development sneak peeks
+
+`scripts/build_opennv_sneak_peek.py` builds a hash-bound current-development
+reel from a private shot manifest. The versioned policy in
+`content/recipes/opennv-sneak-peek-video-v1.json` emits 1080p and phone-vertical
+H.264/AAC copies plus a report containing every source/output hash and media
+probe. Owned screenshots, movies, the private manifest, intermediate segments,
+and finished reels remain outside the repository. A successful edit is not a
+retail-parity or full-campaign claim; those fields remain explicitly false in
+the report.
+
 ## Release contents
 
 Future runtime releases will contain the exported Godot runtime, direct content
