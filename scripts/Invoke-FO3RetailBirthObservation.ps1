@@ -336,10 +336,30 @@ try {
     $startInfo.RedirectStandardInput = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    $utf8NoBom = [Text.UTF8Encoding]::new($false)
+    $originalConsoleInputEncoding = $null
+    if ($null -ne $startInfo.PSObject.Properties['StandardInputEncoding']) {
+        $startInfo.StandardInputEncoding = $utf8NoBom
+    }
+    else {
+        $originalConsoleInputEncoding = [Console]::InputEncoding
+        [Console]::InputEncoding = $utf8NoBom
+    }
     $mcp = [Diagnostics.Process]::new()
     $mcp.StartInfo = $startInfo
-    if (-not $mcp.Start()) {
-        throw 'Failed to start the private Win32 Ghidrust MCP.'
+    try {
+        if (-not $mcp.Start()) {
+            throw 'Failed to start the private Win32 Ghidrust MCP.'
+        }
+        # Windows PowerShell 5.1 lacks ProcessStartInfo.StandardInputEncoding,
+        # so materialize the redirected writer while Console.InputEncoding is
+        # temporarily configured as BOM-free UTF-8.
+        $null = $mcp.StandardInput
+    }
+    finally {
+        if ($null -ne $originalConsoleInputEncoding) {
+            [Console]::InputEncoding = $originalConsoleInputEncoding
+        }
     }
 
     $init = Send-McpRequest -Process $mcp -Id $nextId -Method 'initialize' -Params @{
