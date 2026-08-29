@@ -156,14 +156,21 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         if ((!stopAtCheckpoint && !completeAfterResume) ||
             string.IsNullOrWhiteSpace(playerName) || timeoutSeconds <= 0.0)
             throw new ArgumentException("Opening acceptance arguments are invalid.");
-        if (completeAfterResume && _loaded.Session.OpeningState is not { Completed: false })
+        var initialState = _loaded.Session.OpeningState;
+        if (completeAfterResume && initialState is not { Completed: false })
             throw new InvalidOperationException(
                 "Opening resume acceptance requires an incomplete saved opening.");
+        var checkpointStage = AuthoredCheckpointStage();
+        var proveFirstPlayerAction = completeAfterResume &&
+            initialState!.Stage == checkpointStage;
         var startMilliseconds = Time.GetTicksMsec();
         var navigationStage = int.MinValue;
         IReadOnlyList<Vector3> navigationPath = Array.Empty<Vector3>();
         var navigationIndex = 0;
         DesktopKeyBindingConfiguration? movementHeld = null;
+        DesktopKeyBindingConfiguration? firstPlayerAction = null;
+        Vector3? firstPlayerActionOrigin = null;
+        var firstPlayerActionProven = !proveFirstPlayerAction;
         var activateHeld = false;
         try
         {
@@ -184,6 +191,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 }
                 if (completeAfterResume && saved is { Completed: true })
                 {
+                    if (!firstPlayerActionProven)
+                        throw new InvalidOperationException(
+                            "Opening completed without a configured first player action.");
                     ValidateCompletedState(_flow, saved);
                     return saved;
                 }
@@ -194,6 +204,29 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                         $"Opening acceptance timed out at stage {_stage} after {elapsedSeconds:F1}s.");
 
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                if (!firstPlayerActionProven &&
+                    firstPlayerAction is not null &&
+                    firstPlayerActionOrigin is { } actionOrigin)
+                {
+                    var progress = HorizontalDistance(
+                        actionOrigin,
+                        _loaded.Player.GlobalPosition);
+                    var minimum = _configuration.Player.DesktopInput.Acceptance
+                        .MinimumLocomotionMeters;
+                    if (progress >= minimum)
+                    {
+                        firstPlayerActionProven = true;
+                        GD.Print(
+                            $"OPENNV_OPENING_FIRST_PLAYER_ACTION_PASS " +
+                            $"fromStage={checkpointStage} observedStage={_stage} " +
+                            $"action={firstPlayerAction.Action} " +
+                            $"physicalKey={firstPlayerAction.PhysicalKey} " +
+                            $"before={actionOrigin} after={_loaded.Player.GlobalPosition} " +
+                            $"distanceMeters={progress:F3} minimumMeters={minimum:F3} " +
+                            "transport=configured-desktop-input-event " +
+                            "movement=owned-navigation");
+                    }
+                }
                 if (_activeModal is not null)
                 {
                     SetAcceptanceMovement(null, ref movementHeld);
@@ -250,9 +283,29 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     navigationIndex++;
                 var waypoint = navigationPath[Math.Min(navigationIndex, navigationPath.Count - 1)];
                 FaceAcceptanceWaypoint(waypoint);
-                SetAcceptanceMovement(
-                    SelectAcceptanceMovementBinding(waypoint),
-                    ref movementHeld);
+                var requestedMovement = SelectAcceptanceMovementBinding(waypoint);
+                if (proveFirstPlayerAction && firstPlayerAction is null)
+                {
+                    var currentControls = _playerControls
+                        .Select(value => value ? EnabledControlValue : DisabledControlValue)
+                        .ToArray();
+                    if (!_playerControls[MovementControlIndex] ||
+                        _activePlayerPackage is not null ||
+                        initialState is null ||
+                        !currentControls.SequenceEqual(initialState.PlayerControls))
+                        throw new InvalidOperationException(
+                            "Opening checkpoint did not cleanly release authored player controls.");
+                    firstPlayerAction = requestedMovement;
+                    firstPlayerActionOrigin = _loaded.Player.GlobalPosition;
+                    GD.Print(
+                        $"OPENNV_OPENING_FIRST_PLAYER_ACTION_READY " +
+                        $"stage={_stage} action={firstPlayerAction.Action} " +
+                        $"physicalKey={firstPlayerAction.PhysicalKey} " +
+                        $"controls={string.Join(',', currentControls)} " +
+                        $"configuration={_configuration.Sha256} " +
+                        "modal=none playerPackage=none");
+                }
+                SetAcceptanceMovement(requestedMovement, ref movementHeld);
             }
         }
         finally
@@ -479,14 +532,22 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void ValidateCheckpointState(OpeningCampaignState state)
     {
-        var checkpointStages = _flow.Stages.Values
-            .Where(program => program.Commands.Any(command => command.Kind == "autosave"))
-            .Select(program => program.Stage)
-            .ToArray();
-        if (checkpointStages.Length != 1 || state.Stage != checkpointStages[0] ||
+        if (state.Stage != AuthoredCheckpointStage() ||
             state.Completed || string.IsNullOrWhiteSpace(state.PlayerName))
             throw new InvalidOperationException(
                 "Opening autosave did not preserve the authored checkpoint state.");
+    }
+
+    private int AuthoredCheckpointStage()
+    {
+        var stages = _flow.Stages.Values
+            .Where(program => program.Commands.Any(command => command.Kind == "autosave"))
+            .Select(program => program.Stage)
+            .ToArray();
+        if (stages.Length != 1)
+            throw new InvalidOperationException(
+                "Owned opening flow must have one authored checkpoint stage.");
+        return stages[0];
     }
 
     private static void ValidateCompletedState(
