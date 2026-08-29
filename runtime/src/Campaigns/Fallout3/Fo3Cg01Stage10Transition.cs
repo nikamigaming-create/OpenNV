@@ -445,7 +445,7 @@ internal sealed record Fo3Cg01Stage10Transition(
         first.SourceBytes == second.SourceBytes &&
         first.SourceSha256.Equals(second.SourceSha256, StringComparison.OrdinalIgnoreCase);
 
-    private static Fo3OwnedDialogueAsset LoadDialogueAsset(
+    internal static Fo3OwnedDialogueAsset LoadDialogueAsset(
         JsonElement source,
         string expectedSuffix)
     {

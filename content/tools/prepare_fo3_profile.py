@@ -175,6 +175,8 @@ TRIGGER_PRIMITIVE_COLOR_START = 3
 TRIGGER_PRIMITIVE_TYPE_INDEX = TRIGGER_PRIMITIVE_FLOATS
 CG01_WALK_OBJECTIVE_INDEX = 10
 CG01_WALK_TARGET_STAGE = 12
+CG01_DAD_COMPLETION_CONDITIONAL_SOURCE_STAGE = 75
+CG01_DAD_COMPLETION_CONDITIONAL_TARGET_STAGE = 80
 PERSPECTIVE_MAXIMUM_DEGREES = 180.0
 CG00_TIMER_CHAIN_PATTERN = re.compile(
     r"\bif\s+runTimer\s*==\s*1\b.*?"
@@ -224,6 +226,8 @@ GET_IS_VOICE_TYPE_FUNCTION = 427
 GET_PC_IS_SEX_FUNCTION = 131
 GET_IS_ID_FUNCTION = 72
 DIALOGUE_CHILD_GROUP_TYPE = 7
+DIALOGUE_INFO_DATA_BYTES = 4
+DIALOGUE_INFO_SAY_ONCE_FLAG = 0x0004
 INITIALLY_DISABLED_RECORD_FLAG = 0x00000800
 RACE_DATA_BYTES = 36
 
@@ -1872,6 +1876,252 @@ def _compile_cg01_walk_to_dad_transition(
     }
 
 
+def _compile_cg01_stage12_dad_response(
+    records: tuple[object, ...],
+    definition: dict[str, object],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    dad_reference: object,
+    dad_base: object,
+    dad_script: object,
+    topic: object,
+) -> dict[str, object]:
+    source_stage = CG01_WALK_TARGET_STAGE
+    target_stage = int(definition["stage12DadResponseTargetStage"])
+    expected_forms = [
+        int(str(value), FORM_ID_RADIX)
+        for value in definition["stage12DadResponseInfoFormIds"]
+    ]
+    if len(expected_forms) != 2 or len(set(expected_forms)) != len(expected_forms):
+        raise ValueError("Fallout 3 CG01 stage-12 Dad response selection differs")
+    by_form = {record.form_id: record for record in records}
+    voice_links = [
+        struct.unpack("<I", subrecord.data)[0]
+        for subrecord in iter_subrecords(dad_base)
+        if subrecord.signature == "VTCK" and len(subrecord.data) == FORM_ID_BYTES
+    ]
+    if len(voice_links) != 1:
+        raise ValueError("Fallout 3 CG01 stage-12 Dad voice type is ambiguous")
+    voice = by_form.get(voice_links[0])
+    if voice is None or voice.signature != VOICE_TYPE_RECORD:
+        raise ValueError("Fallout 3 CG01 stage-12 Dad voice type is absent")
+    infos = [by_form.get(form_id) for form_id in expected_forms]
+    if any(info is None or info.signature != DIALOGUE_INFO_RECORD for info in infos):
+        raise ValueError("Fallout 3 CG01 stage-12 Dad response INFO is absent")
+    record_order = {record.form_id: index for index, record in enumerate(records)}
+    if [record_order[info.form_id] for info in infos] != sorted(
+        record_order[info.form_id] for info in infos
+    ):
+        raise ValueError("Fallout 3 CG01 stage-12 Dad response order differs")
+
+    cues = []
+    shared_idle_form_id: int | None = None
+    for sequence, info in enumerate(infos):
+        if not any(
+            group.group_type == DIALOGUE_CHILD_GROUP_TYPE
+            and group.label_u32 == topic.form_id
+            for group in info.groups
+        ) or struct.unpack("<I", _single_subrecord(info, "QSTI"))[0] != quest.form_id:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response ownership differs")
+        dialogue_data = _single_subrecord(info, "DATA")
+        if len(dialogue_data) != DIALOGUE_INFO_DATA_BYTES:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response flags differ")
+        response_type, unused, flags = struct.unpack("<BBH", dialogue_data)
+        if response_type != 1 or unused != 0 or flags != DIALOGUE_INFO_SAY_ONCE_FLAG:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response is not exact say-once")
+        conditions = [
+            _dialogue_condition(subrecord.data)
+            for subrecord in iter_subrecords(info)
+            if subrecord.signature == "CTDA"
+        ]
+        by_function = {int(row["function"]): row for row in conditions}
+        if len(conditions) != 2 or set(by_function) != {
+            GET_IS_ID_FUNCTION,
+            GET_STAGE_FUNCTION,
+        }:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response conditions differ")
+        identity = by_function[GET_IS_ID_FUNCTION]
+        stage = by_function[GET_STAGE_FUNCTION]
+        if (
+            identity["operatorFlags"] != 0
+            or identity["comparisonValue"] != 1.0
+            or identity["parameter1"] != dad_base.form_id
+            or identity["parameter2"] != 0
+            or identity["runOn"] != 0
+            or identity["reference"] != 0
+            or stage["operatorFlags"] != 0
+            or stage["comparisonValue"] != float(source_stage)
+            or stage["parameter1"] != quest.form_id
+            or stage["parameter2"] != 0
+            or stage["runOn"] != 0
+            or stage["reference"] != 0
+        ):
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response condition values differ")
+        idle_links = [
+            struct.unpack("<I", subrecord.data)[0]
+            for subrecord in iter_subrecords(info)
+            if subrecord.signature == "SNAM" and len(subrecord.data) == FORM_ID_BYTES
+        ]
+        if len(idle_links) != 1:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response idle is ambiguous")
+        if shared_idle_form_id is None:
+            shared_idle_form_id = idle_links[0]
+        elif shared_idle_form_id != idle_links[0]:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response idle differs")
+        idle = by_form.get(idle_links[0])
+        idle_models = [] if idle is None else _text_values(idle, "MODL")
+        if idle is None or idle.signature != IDLE_RECORD or len(idle_models) != 1:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response idle is absent")
+
+        source_rows = _text_values(info, "SCTX")
+        commands = [command for source in source_rows for command in _source_commands(source)]
+        effects = []
+        if sequence == 0:
+            if commands:
+                raise ValueError("Fallout 3 CG01 first stage-12 Dad response has effects")
+        else:
+            if len(commands) != 1:
+                raise ValueError("Fallout 3 CG01 final stage-12 Dad response result differs")
+            stage_match = SET_STAGE_PATTERN.fullmatch(commands[0])
+            if (
+                stage_match is None
+                or stage_match.group("quest").casefold()
+                != (_editor_id(quest) or "").casefold()
+                or int(stage_match.group("stage")) != target_stage
+            ):
+                raise ValueError("Fallout 3 CG01 stage-12 Dad response target differs")
+            effects.append(
+                {
+                    "kind": "setStage",
+                    "questFormId": _form_id(quest.form_id),
+                    "questEditorId": _editor_id(quest),
+                    "stage": target_stage,
+                }
+            )
+        response_lines = [value for value in _text_values(info, "NAM1") if value]
+        if len(response_lines) != 1:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad response text differs")
+        response_text = response_lines[0]
+        result_source = "\n".join(source_rows)
+        cues.append(
+            {
+                "sequence": sequence,
+                "infoFormId": _form_id(info.form_id),
+                "recordSha256": hashlib.sha256(info.data).hexdigest(),
+                "resultSourceSha256": hashlib.sha256(
+                    result_source.encode("cp1252")
+                ).hexdigest(),
+                "sayOnce": True,
+                "conditions": [
+                    {
+                        **row,
+                        "parameter1": _form_id(int(row["parameter1"])),
+                        "reference": _form_id(int(row["reference"])),
+                    }
+                    for row in conditions
+                ],
+                "effects": effects,
+                "speakerIdle": {
+                    "formId": _form_id(idle.form_id),
+                    "editorId": _editor_id(idle),
+                    "recordSha256": hashlib.sha256(idle.data).hexdigest(),
+                    "modelPath": canonical_member_path(f"meshes\\{idle_models[0]}"),
+                },
+                "response": {
+                    "index": 1,
+                    "text": response_text,
+                    "textSha256": hashlib.sha256(
+                        response_text.encode("utf-8")
+                    ).hexdigest(),
+                },
+            }
+        )
+
+    dad_script_source = _script_source(dad_script)
+    completion = re.search(
+        rf"\bbegin\s+SayToDone\s+{re.escape(_editor_id(topic) or '')}\b"
+        r"(?P<body>.*?)\bend\b",
+        dad_script_source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if completion is None:
+        raise ValueError("Fallout 3 CG01 Dad SayToDone block is absent")
+    completion_commands = _source_commands(completion.group("body"))
+    if [command.casefold() for command in completion_commands[:2]] != [
+        "set talking to 0",
+        "look player",
+    ]:
+        raise ValueError("Fallout 3 CG01 Dad SayToDone completion differs")
+
+    target_sources = stage_sources.get(target_stage, [])
+    if len(target_sources) != 1:
+        raise ValueError("Fallout 3 CG01 stage-14 result is ambiguous")
+    target_commands = _source_commands(target_sources[0])
+    if len(target_commands) != 1:
+        raise ValueError("Fallout 3 CG01 stage-14 command count differs")
+    package_match = REFERENCE_COMMAND_PATTERN.fullmatch(target_commands[0])
+    if (
+        package_match is None
+        or package_match.group("subject").casefold()
+        != (_editor_id(dad_reference) or "").casefold()
+        or package_match.group("command").casefold() != "evp"
+    ):
+        raise ValueError("Fallout 3 CG01 stage-14 package command differs")
+    return {
+        "schema": "opennv-fo3-cg01-stage-12-to-14-dad-response/v1",
+        "status": "source-backed-say-once-dad-response-runtime-unapplied",
+        "sourceStage": source_stage,
+        "targetStage": target_stage,
+        "topicFormId": _form_id(topic.form_id),
+        "topicEditorId": _editor_id(topic),
+        "dadReferenceFormId": _form_id(dad_reference.form_id),
+        "dadScriptFormId": _form_id(dad_script.form_id),
+        "dadScriptSourceSha256": hashlib.sha256(
+            dad_script_source.encode("cp1252")
+        ).hexdigest(),
+        "sayToDone": {
+            "talking": 0,
+            "lookAt": "player",
+            "conditionalStageSource": CG01_DAD_COMPLETION_CONDITIONAL_SOURCE_STAGE,
+            "conditionalStageTarget": CG01_DAD_COMPLETION_CONDITIONAL_TARGET_STAGE,
+        },
+        "dialogue": {
+            "topic": {
+                "formId": _form_id(topic.form_id),
+                "editorId": _editor_id(topic),
+                "recordSha256": hashlib.sha256(topic.data).hexdigest(),
+                "questFormId": _form_id(quest.form_id),
+            },
+            "voiceType": {
+                "formId": _form_id(voice.form_id),
+                "editorId": _editor_id(voice),
+                "recordSha256": hashlib.sha256(voice.data).hexdigest(),
+            },
+            "branches": cues,
+            "dialoguePlaybackPrepared": False,
+            "dialoguePlaybackImplemented": False,
+        },
+        "stageResult": {
+            "stageSourceSha256": hashlib.sha256(
+                target_sources[0].encode("cp1252")
+            ).hexdigest(),
+            "accountedCommandCount": 1,
+            "commands": [
+                {
+                    "index": 0,
+                    "kind": "evaluatePackage",
+                    "referenceFormId": _form_id(dad_reference.form_id),
+                    "referenceEditorId": _editor_id(dad_reference),
+                }
+            ],
+        },
+        "nextBoundary": {
+            "applied": False,
+            "blocker": "fo3-cg01-stage-14-dad-package-runtime-not-implemented",
+        },
+    }
+
+
 def _compile_cg01_post_stage5_transition(
     records: tuple[object, ...],
     definition: dict[str, object],
@@ -2197,6 +2447,16 @@ def _compile_cg01_post_stage5_transition(
         dad_script,
         target_stage,
     )
+    stage12_dad_response = _compile_cg01_stage12_dad_response(
+        records,
+        definition,
+        quest,
+        stage_sources,
+        dad_reference,
+        dad_base,
+        dad_script,
+        topic,
+    )
     return {
         "schema": "opennv-fo3-cg01-stage-5-to-10-transition/v1",
         "status": "source-backed-dad-dialogue-and-stage-result-runtime-unapplied",
@@ -2241,6 +2501,7 @@ def _compile_cg01_post_stage5_transition(
             "commands": resolved_commands,
         },
         "postStage10TriggerTransition": walk_to_dad,
+        "postStage12DadResponse": stage12_dad_response,
         "nextBoundary": {
             "applied": False,
             "blocker": "fo3-cg01-stage-10-walk-to-dad-trigger-runtime-not-implemented",
@@ -4366,6 +4627,21 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         profile_root,
     )
     post_stage5_transition["dialogue"] = cg01_dad_dialogue
+    stage12_dad_response = dict(post_stage5_transition["postStage12DadResponse"])
+    stage12_dad_dialogue = dict(stage12_dad_response["dialogue"])
+    _bind_owned_dad_dialogue_animations(
+        stage12_dad_dialogue,
+        meshes_archive,
+        meshes_archive_sha256,
+    )
+    _bind_owned_dad_dialogue_audio(
+        stage12_dad_dialogue,
+        BsaArchive(archive_by_role[voices_role]),
+        next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
+        profile_root,
+    )
+    stage12_dad_response["dialogue"] = stage12_dad_dialogue
+    post_stage5_transition["postStage12DadResponse"] = stage12_dad_response
     cg01_transition["postStage5Transition"] = post_stage5_transition
     character_selection["cg01Stage0Transition"] = cg01_transition
     _bind_cg01_toddler_world(

@@ -729,6 +729,7 @@ public partial class RuntimeCoordinator : Node3D
                 profile.Cg01Stage0Transition,
                 profile.Stage65Appearance,
                 profile.Cg01Stage10Transition,
+                profile.Cg01Stage12DadResponse,
                 ResolveRuntimePath(configuredBirthPresentation))
             : null;
         var savePath = options.TryGetValue("save-path", out var configuredSavePath)

@@ -30,7 +30,7 @@ from texture_pipeline import TexturePipeline
 
 
 RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
-OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v8"
+OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v9"
 PROFILE_SCHEMA = "opennv-owned-game-profile/v1"
 OUTPUT_NAME = "fo3-vault101-birth-presentation.json"
 SHA256_HEX_CHARACTERS = 64
@@ -399,6 +399,14 @@ def prepare(
     ):
         raise ValueError("Fallout 3 CG01 Dad dialogue assets are not prepared")
     cg01_dialogue_branches = _required_list(cg01_dialogue, "branches")
+    stage12_response = _required_object(cg01_post_stage5, "postStage12DadResponse")
+    stage12_dialogue = _required_object(stage12_response, "dialogue")
+    if (
+        stage12_dialogue.get("dialoguePlaybackPrepared") is not True
+        or stage12_dialogue.get("dialoguePlaybackImplemented") is not True
+    ):
+        raise ValueError("Fallout 3 CG01 stage-12 Dad response assets are not prepared")
+    stage12_dialogue_branches = _required_list(stage12_dialogue, "branches")
     stage0_result = _required_object(cg01_transition, "stage0Result")
     stage0_commands = _required_list(stage0_result, "commands")
     cg01_move_commands = [
@@ -914,6 +922,40 @@ def prepare(
                     "speakerIdle": speaker_idle,
                 }
             )
+        stage12_dialogue_animations: list[dict[str, object]] = []
+        for branch in sorted(
+            (row for row in stage12_dialogue_branches if isinstance(row, dict)),
+            key=lambda value: int(value.get("sequence", -1)),
+        ):
+            speaker_idle = _required_object(branch, "speakerIdle")
+            model_path = canonical_member_path(
+                _required_string(speaker_idle, "modelPath")
+            )
+            if (
+                not model_path.startswith("meshes\\characters\\_male\\idleanims\\")
+                or not model_path.endswith(".kf")
+                or speaker_idle.get("sourceArchive") != meshes_path.name
+                or _required_sha256(speaker_idle, "sourceArchiveSha256")
+                != _required_sha256(meshes_row, "sha256")
+            ):
+                raise ValueError("Fallout 3 CG01 stage-12 Dad speaker idle ownership differs")
+            member = archive.extract(model_path)
+            if (
+                len(member.data) != int(speaker_idle.get("sourceBytes", 0))
+                or member.sha256 != _required_sha256(speaker_idle, "sourceSha256")
+            ):
+                raise ValueError("Fallout 3 CG01 stage-12 Dad speaker idle source changed")
+            if model_path not in runtime_animation_paths:
+                runtime_animation_paths.append(model_path)
+            stage12_dialogue_animations.append(
+                {
+                    "sequence": int(branch["sequence"]),
+                    "infoFormId": _required_string(branch, "infoFormId"),
+                    "speakerIdle": speaker_idle,
+                }
+            )
+        if [row["sequence"] for row in stage12_dialogue_animations] != [0, 1]:
+            raise ValueError("Fallout 3 CG01 stage-12 Dad animation sequence differs")
         facegen = _required_object(parent, "faceGen")
         symmetric, symmetric_sha256 = _facegen_values(
             _required_object(facegen, "symmetricGeometry"),
@@ -941,11 +983,19 @@ def prepare(
                 separators=(",", ":"),
             ).encode("utf-8")
         )
+        stage12_dialogue_animation_sha256 = _sha256_bytes(
+            json.dumps(
+                stage12_dialogue_animations,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
         variant_id = (
             "stage65-"
             f"{player_race_form_id}-{player_sex}-"
             f"{symmetric_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}-"
-            f"cg01speech-{dialogue_animation_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}"
+            f"cg01speech-{dialogue_animation_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}-"
+            f"walked-{stage12_dialogue_animation_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}"
         )
         appearance_override = ActorAppearanceOverride(
             variant_id=variant_id,
@@ -1006,7 +1056,7 @@ def prepare(
             or int(coverage.get("surfaces", 0)) <= 0
             or int(coverage.get("textures", 0)) <= 0
             or int(coverage.get("faceGenMorphTargets", 0)) <= 0
-            or int(coverage.get("animations", 0)) != len(dialogue_animations) + 1
+            or int(coverage.get("animations", 0)) != len(runtime_animation_paths) + 1
             or int(coverage.get("omittedSurfaces", -1)) != 0
         ):
             raise ValueError("Compiled CG01 Dad differs from the stage-65 appearance")
@@ -1025,9 +1075,12 @@ def prepare(
             for row in _required_list(actor_sidecar, "animations")
             if isinstance(row, dict)
         }
-        if len(compiled_animations) != len(dialogue_animations) + 1:
+        if len(compiled_animations) != len(runtime_animation_paths) + 1:
             raise ValueError("Compiled CG01 Dad animation coverage differs")
-        for dialogue_animation in dialogue_animations:
+        for dialogue_animation in [
+            *dialogue_animations,
+            *stage12_dialogue_animations,
+        ]:
             speaker_idle = _required_object(dialogue_animation, "speakerIdle")
             model_path = canonical_member_path(
                 _required_string(speaker_idle, "modelPath")
@@ -1065,6 +1118,9 @@ def prepare(
                 "appearanceOverride": compiled_override,
                 "dialogueAnimationContractSha256": dialogue_animation_sha256,
                 "dialogueAnimations": dialogue_animations,
+                "stage12DialogueAnimationContractSha256":
+                    stage12_dialogue_animation_sha256,
+                "stage12DialogueAnimations": stage12_dialogue_animations,
             }
         )
     if not cg01_dad_variants:
@@ -1073,7 +1129,7 @@ def prepare(
     document: dict[str, object] = {
         "schema": OUTPUT_SCHEMA,
         "status": (
-            "prepared-owned-materials-stage65-and-cg01-dialogue-idles-"
+            "prepared-owned-materials-stage65-and-cg01-stage5-stage12-dialogue-idles-"
             "not-yet-rendered"
         ),
         "recipe": {
@@ -1323,6 +1379,7 @@ def prepare(
             "cg01DadActorPrepared": True,
             "cg01DadStage65AppearanceCompiled": True,
             "cg01DadDialogueAnimationsCompiled": True,
+            "cg01DadStage12DialogueAnimationsCompiled": True,
             "runtimeManifestValidated": False,
             "runtimeSceneConstructed": False,
             "rendered": False,

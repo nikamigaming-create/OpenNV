@@ -361,6 +361,7 @@ internal sealed record Fo3OwnedProfile(
     Fo3Cg01Stage0Transition Cg01Stage0Transition,
     Fo3Cg01Stage10Transition Cg01Stage10Transition,
     Fo3Cg01Stage12Transition Cg01Stage12Transition,
+    Fo3Cg01Stage12DadResponse Cg01Stage12DadResponse,
     Fo3Cg01ToddlerWorldContract Cg01ToddlerWorld,
     string MainMenuMusicPath,
     string IntroVideoPath,
@@ -471,6 +472,12 @@ internal sealed record Fo3OwnedProfile(
                 "postStage10TriggerTransition"),
             cg01Stage0Transition,
             cg01Stage10Transition);
+        var cg01Stage12DadResponse = Fo3Cg01Stage12DadResponse.Load(
+            RequiredObject(
+                RequiredObject(cg01Source, "postStage5Transition"),
+                "postStage12DadResponse"),
+            cg01Stage0Transition,
+            cg01Stage12Transition);
         var cg01ToddlerWorld = Fo3Cg01ToddlerWorldContract.Load(
             RequiredObject(cg01Source, "toddlerWorld"),
             cg01Stage0Transition,
@@ -536,6 +543,7 @@ internal sealed record Fo3OwnedProfile(
             cg01Stage0Transition,
             cg01Stage10Transition,
             cg01Stage12Transition,
+            cg01Stage12DadResponse,
             cg01ToddlerWorld,
             RequiredString(mainMenuMusic, "source"),
             RequiredString(runtimeIntroVideo, "output"),

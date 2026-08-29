@@ -157,6 +157,8 @@
         "dadSpeechTopicFormId": "0001f3d8",
         "dadSpeechPreludeInfoFormIds": ["0001f3e8", "0001f3e9"],
         "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
+        "stage12DadResponseInfoFormIds": ["0001f3e0", "0001f3df"],
+        "stage12DadResponseTargetStage": 14,
         "tutorialQuestEditorId": "CGTutorial",
         "tutorialQuestFormId": "00059c85",
         "tutorialQuestStage": 2,

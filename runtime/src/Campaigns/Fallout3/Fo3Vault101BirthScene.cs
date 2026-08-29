@@ -294,6 +294,8 @@ internal static class Fo3Vault101BirthScene
                 throw new InvalidOperationException(
                     "Fallout 3 CG01 Dad runtime actor differs from its stage-65 contract.");
             var expectedDialogueAnimations = cg01DadAppearance.DialogueAnimations;
+            var expectedStage12DialogueAnimations =
+                cg01DadAppearance.Stage12DialogueAnimations;
             var loadedAnimations = cg01DadActor.Actor.LoadedAnimations;
             var primaryAnimations = loadedAnimations.Where(value =>
                 ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
@@ -301,9 +303,15 @@ internal static class Fo3Vault101BirthScene
                         cg01DadContract.IdleAnimationPath),
                     StringComparison.OrdinalIgnoreCase)).ToArray();
             if (expectedDialogueAnimations.Count != 2 ||
-                loadedAnimations.Count != expectedDialogueAnimations.Count + 1 ||
+                expectedStage12DialogueAnimations.Count != 2 ||
+                loadedAnimations.Count != expectedDialogueAnimations
+                    .Concat(expectedStage12DialogueAnimations)
+                    .Select(value => ActorModelSlice.NormalizeAnimationPath(
+                        value.SpeakerIdle.ModelPath))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count() + 1 ||
                 primaryAnimations.Length != 1 ||
-                expectedDialogueAnimations.Any(expected =>
+                expectedDialogueAnimations.Concat(expectedStage12DialogueAnimations).Any(expected =>
                     loadedAnimations.Count(value =>
                         ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
                             ActorModelSlice.NormalizeAnimationPath(

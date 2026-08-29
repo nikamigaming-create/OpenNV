@@ -43,6 +43,7 @@ CG01_DAD_TRIGGER_REFERENCE_FORM = 0x0002EA54
 CG01_DAD_TALK_IDLE_FORM = 0x0003D33B
 CG01_DAD_BECKON_FEMALE_IDLE_FORM = 0x0005943A
 CG01_DAD_BECKON_MALE_IDLE_FORM = 0x0005943B
+CG01_DAD_WALKED_IDLE_FORM = 0x0005943D
 CG01_WALK_OBJECTIVE_INDEX = 10
 CG01_WALK_TARGET_STAGE = 12
 CG01_TRIGGER_COLLISION_LAYERS = 12
@@ -555,6 +556,13 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                         "endif",
                         "endif",
                         "end",
+                        "begin SayToDone CG01DadSpeech",
+                        "set talking to 0",
+                        "look player",
+                        "if getStage CG01 == 75",
+                        "setstage CG01 80",
+                        "endif",
+                        "end",
                     )
                 ).encode("cp1252")
                 + b"\0",
@@ -673,6 +681,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "set CG01DadREF.timer to 0",
             )
         )
+        cg01_stage14_source = "CG01DadREF.evp"
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -687,6 +696,8 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("SCTX", cg01_stage10_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", CG01_WALK_TARGET_STAGE))
             + subrecord("SCTX", cg01_stage12_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 14))
+            + subrecord("SCTX", cg01_stage14_source.encode("cp1252") + b"\0")
             + subrecord("QOBJ", struct.pack("<I", CG01_WALK_OBJECTIVE_INDEX))
             + subrecord("NNAM", b"Walk to Dad.\0"),
             (),
@@ -819,6 +830,43 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 CG01_DAD_BECKON_MALE_IDLE_FORM,
             ),
         )
+        cg01_stage12_dad_infos = (
+            Record(
+                "INFO",
+                0x0001F3E0,
+                0,
+                subrecord("DATA", struct.pack("<BBH", 1, 0, 4))
+                + subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord(
+                    "NAM1",
+                    b"There you go! My goodness! Just a year old, and already walking "
+                    b"like a pro.\0",
+                )
+                + subrecord("SNAM", struct.pack("<I", CG01_DAD_WALKED_IDLE_FORM))
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id))
+                + subrecord(
+                    "CTDA",
+                    condition(58, cg01.form_id, comparison=12.0),
+                ),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            ),
+            Record(
+                "INFO",
+                0x0001F3DF,
+                0,
+                subrecord("DATA", struct.pack("<BBH", 1, 0, 4))
+                + subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord("NAM1", b"Your mother would have been so proud.\0")
+                + subrecord("SNAM", struct.pack("<I", CG01_DAD_WALKED_IDLE_FORM))
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id))
+                + subrecord(
+                    "CTDA",
+                    condition(58, cg01.form_id, comparison=12.0),
+                )
+                + subrecord("SCTX", b"setstage CG01 14\0"),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            ),
+        )
         modifier = Record(
             "IMAD",
             0x00035A20,
@@ -865,6 +913,8 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "dadSpeechTopicFormId": "0001f3d8",
                 "dadSpeechPreludeInfoFormIds": ["0001f3e8", "0001f3e9"],
                 "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
+                "stage12DadResponseInfoFormIds": ["0001f3e0", "0001f3df"],
+                "stage12DadResponseTargetStage": 14,
                 "tutorialQuestEditorId": "CGTutorial",
                 "tutorialQuestFormId": "00059c85",
                 "tutorialQuestStage": 2,
@@ -891,6 +941,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             voice,
             cg01_dad_topic,
             *cg01_dad_infos,
+            *cg01_stage12_dad_infos,
             idle(
                 CG01_DAD_TALK_IDLE_FORM,
                 "ttnpcNTRLHandsDownTalkA",
@@ -905,6 +956,11 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 CG01_DAD_BECKON_MALE_IDLE_FORM,
                 "LooseBeckoningToChildB",
                 r"Characters\_Male\IdleAnims\BeckoningToChildB.kf",
+            ),
+            idle(
+                CG01_DAD_WALKED_IDLE_FORM,
+                "LooseCrouchTalkToBaby",
+                r"Characters\_Male\IdleAnims\BeckoningToChildTalk.kf",
             ),
             cg02_dad_base,
             marker_base,
@@ -1015,6 +1071,30 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual(
             r"meshes\characters\_male\idleanims\beckoningtochildb.kf",
             post_stage5["dialogue"]["branches"][3]["speakerIdle"]["modelPath"],
+        )
+        stage12_response = post_stage5["postStage12DadResponse"]
+        self.assertEqual(
+            "opennv-fo3-cg01-stage-12-to-14-dad-response/v1",
+            stage12_response["schema"],
+        )
+        self.assertEqual(
+            ["0001f3e0", "0001f3df"],
+            [row["infoFormId"] for row in stage12_response["dialogue"]["branches"]],
+        )
+        self.assertTrue(
+            all(row["sayOnce"] for row in stage12_response["dialogue"]["branches"])
+        )
+        self.assertEqual(
+            "0005943d",
+            stage12_response["dialogue"]["branches"][0]["speakerIdle"]["formId"],
+        )
+        self.assertEqual(
+            14,
+            stage12_response["dialogue"]["branches"][1]["effects"][0]["stage"],
+        )
+        self.assertEqual(
+            "evaluatePackage",
+            stage12_response["stageResult"]["commands"][0]["kind"],
         )
         self.assertEqual(
             [
