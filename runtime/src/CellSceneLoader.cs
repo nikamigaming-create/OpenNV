@@ -22,7 +22,7 @@ internal static class CellSceneLoaderNumericContracts
 
 internal static class CellSceneLoader
 {
-    private const string CellSceneSchema = "opennv-cell-scene/v13";
+    private const string CellSceneSchema = "opennv-cell-scene/v14";
 
     internal static LoadedCell Load(
         string scenePath,
