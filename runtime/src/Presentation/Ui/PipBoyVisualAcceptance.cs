@@ -35,12 +35,12 @@ internal static class PipBoyVisualAcceptance
             var screenshot = Path.GetFullPath(
                 RuntimeCoordinator.RequireOption(options, "pipboy-screenshot"));
             Directory.CreateDirectory(Path.GetDirectoryName(screenshot)!);
-            var image = host.GetViewport().GetTexture().GetImage();
-            if (image.IsEmpty() || image.SavePng(screenshot) != Error.Ok)
+            var heldImage = host.GetViewport().GetTexture().GetImage();
+            if (heldImage.IsEmpty() || heldImage.SavePng(screenshot) != Error.Ok)
                 throw new InvalidOperationException(
                     $"Could not save the open Pip-Boy screenshot: {screenshot}");
             using var stream = File.OpenRead(screenshot);
-            var sha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            var heldSha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
             var snapshot = loaded.Session.BuildUiSnapshot();
 
             await FlatControlsAcceptance.PulseKeyBinding(
@@ -49,6 +49,20 @@ internal static class PipBoyVisualAcceptance
                 input.Acceptance.SettleFrames);
             if (loaded.Session.IsPipBoyOpen)
                 throw new InvalidOperationException("Configured Escape input did not close the Pip-Boy.");
+            for (var frame = 0; frame < input.Acceptance.RenderedFramesBeforeScreenshot; frame++)
+                await host.ToSignal(
+                    RenderingServer.Singleton,
+                    RenderingServer.SignalName.FramePostDraw);
+            var loweredScreenshot = Path.Combine(
+                Path.GetDirectoryName(screenshot)!,
+                Path.GetFileNameWithoutExtension(screenshot) + "-lowered.png");
+            var loweredImage = host.GetViewport().GetTexture().GetImage();
+            if (loweredImage.IsEmpty() || loweredImage.SavePng(loweredScreenshot) != Error.Ok)
+                throw new InvalidOperationException(
+                    $"Could not save the lowered Pip-Boy screenshot: {loweredScreenshot}");
+            using var loweredStream = File.OpenRead(loweredScreenshot);
+            var loweredSha256 = Convert.ToHexString(SHA256.HashData(loweredStream))
+                .ToLowerInvariant();
 
             RuntimeCoordinator.WriteReport(
                 RuntimeCoordinator.RequireOption(options, "report"),
@@ -68,9 +82,16 @@ internal static class PipBoyVisualAcceptance
                     screenshot = new
                     {
                         path = screenshot,
-                        width = image.GetWidth(),
-                        height = image.GetHeight(),
-                        sha256,
+                        width = heldImage.GetWidth(),
+                        height = heldImage.GetHeight(),
+                        sha256 = heldSha256,
+                    },
+                    loweredScreenshot = new
+                    {
+                        path = loweredScreenshot,
+                        width = loweredImage.GetWidth(),
+                        height = loweredImage.GetHeight(),
+                        sha256 = loweredSha256,
                     },
                     windowsAppControlUsed = false,
                     foregroundInputInjected = false,

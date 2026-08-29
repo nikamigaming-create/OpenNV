@@ -12,6 +12,8 @@ internal static class RuntimeMaterialLoader
     private const int LandscapeWeightsPerMap = 4;
     private const int LandscapeWeightVertexSide = 17;
     private const int LandscapeWeightLastVertex = LandscapeWeightVertexSide - 1;
+    private const int NifBlendModeOne = 0;
+    private const int NifBlendModeSourceAlpha = 6;
     private const string LandscapeWeightMapRole = "vertex-weight-rgba32f";
     private const string LandscapeMaterialContractSchema =
         "opennv-landscape-layer-material/v3";
@@ -445,7 +447,28 @@ internal static class RuntimeMaterialLoader
                 var alpha = binding.GetProperty("alphaContract");
                 var alphaMode = alpha.GetProperty("mode").GetString();
                 if (alphaMode == "BLEND")
-                    standard.Transparency = BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass;
+                {
+                    var authoredAdditive =
+                        alpha.TryGetProperty("sourceBlendMode", out var sourceBlendMode) &&
+                        sourceBlendMode.ValueKind == JsonValueKind.Number &&
+                        sourceBlendMode.GetInt32() == NifBlendModeSourceAlpha &&
+                        alpha.TryGetProperty(
+                            "destinationBlendMode",
+                            out var destinationBlendMode) &&
+                        destinationBlendMode.ValueKind == JsonValueKind.Number &&
+                        destinationBlendMode.GetInt32() == NifBlendModeOne;
+                    if (authoredAdditive)
+                    {
+                        // NiAlphaProperty SRC_ALPHA + ONE is an authored
+                        // additive light/glare pass. AlphaDepthPrePass turns
+                        // its opaque black texels into an occluder instead.
+                        standard.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                        standard.BlendMode = BaseMaterial3D.BlendModeEnum.Add;
+                        standard.DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled;
+                    }
+                    else
+                        standard.Transparency = BaseMaterial3D.TransparencyEnum.AlphaDepthPrePass;
+                }
                 else if (alphaMode == "MASK")
                 {
                     standard.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;

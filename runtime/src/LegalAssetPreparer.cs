@@ -209,6 +209,19 @@ internal static class LegalAssetPreparer
             gameplaySchema.GetString() != "opennv-owned-gameplay-ui/v1")
             throw new InvalidOperationException(
                 "Prepared opening manifest lacks the current owned gameplay UI contract.");
+        if (!gameplayPresentation.TryGetProperty("physicalDevice", out var physicalDevice) ||
+            physicalDevice.ValueKind != JsonValueKind.Object ||
+            physicalDevice.GetProperty("schema").GetString() !=
+                "opennv-owned-physical-pipboy/v1" ||
+            physicalDevice.GetProperty("screenSurface").GetString() != "pipboyscreen:0")
+            throw new InvalidOperationException(
+                "Prepared opening manifest lacks the owned physical Pip-Boy contract.");
+        VerifyHash(
+            physicalDevice.GetProperty("source").GetString()!,
+            physicalDevice.GetProperty("sourceSha256").GetString()!);
+        VerifyHash(
+            physicalDevice.GetProperty("materialManifest").GetString()!,
+            physicalDevice.GetProperty("materialManifestSha256").GetString()!);
         var requiredLayoutTiles = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
             ["hud"] = ["QuestReminder", "Messages", "Info", "ReticleCenter"],

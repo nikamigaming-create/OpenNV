@@ -18,6 +18,8 @@ from actor_gltf import sample_root_motion, sample_transform_animation
 from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
+from export_static_nif_gltf import export_static_nif
+from material_contract import material_bindings, texture_binding_requests
 from owned_archive_stack import OwnedArchiveStack
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 from runtime_configuration import RuntimeConfiguration
@@ -1536,6 +1538,112 @@ def _gameplay_ui_contract(
     )
 
 
+def _prepare_gameplay_physical_device(
+    configured: dict[str, object],
+    owned_archives: OwnedArchiveStack,
+    cache_root: Path,
+    configuration: RuntimeConfiguration,
+) -> dict[str, object]:
+    logical_path = canonical_member_path(str(configured["modelAsset"]))
+    if not logical_path.startswith("meshes\\") or not logical_path.endswith(".nif"):
+        raise ValueError("Owned Pip-Boy physical device must be one NIF under meshes")
+    if not isinstance(configured.get("exportStrict"), bool):
+        raise ValueError("Owned Pip-Boy exportStrict policy must be explicit")
+    aliases = configured.get("textureAliases")
+    if not isinstance(aliases, dict):
+        raise ValueError("Owned Pip-Boy textureAliases policy must be explicit")
+    screen_surface = str(configured["screenSurface"])
+    if not screen_surface:
+        raise ValueError("Owned Pip-Boy screen surface identity is empty")
+
+    member = owned_archives.extract(logical_path)
+    source_path = cache_root / "source" / Path(logical_path.replace("\\", "/"))
+    atomic_bytes(source_path, member.data)
+    asset_id = hashlib.sha256(
+        f"{logical_path}:{member.sha256}".encode("utf-8")
+    ).hexdigest()[:configuration.content_compiler.asset_id_hex_characters]
+    output_root = cache_root / "generated" / "opening" / "pipboy3000"
+    model_path = output_root / f"{asset_id}.gltf"
+    sidecar_path = output_root / f"{asset_id}.opennv.json"
+    sidecar = export_static_nif(
+        source_path,
+        logical_path,
+        model_path,
+        sidecar_path,
+        configuration.content_compiler,
+        strict=bool(configured["exportStrict"]),
+    )
+    screen_matches = [
+        surface for surface in sidecar["surfaces"] if surface["name"] == screen_surface
+    ]
+    if len(screen_matches) != 1:
+        raise ValueError(
+            "Owned Pip-Boy CRT surface does not resolve uniquely: "
+            f"{screen_surface} matches={len(screen_matches)}"
+        )
+
+    binding_paths = sorted(
+        {
+            request["path"]
+            for surface in sidecar["surfaces"]
+            for request in texture_binding_requests(surface)
+        }
+    )
+    texture_pipeline = OwnedTexturePipeline(
+        owned_archives,
+        cache_root,
+        {str(source): str(target) for source, target in aliases.items()},
+        configuration.content_compiler,
+    )
+    missing = [
+        path for path in binding_paths if texture_pipeline.member_source_count(path) != 1
+    ]
+    if missing:
+        raise FileNotFoundError(
+            "Owned Pip-Boy active texture bindings are incomplete: "
+            + ", ".join(missing)
+        )
+    textures = {path: texture_pipeline.prepare(path) for path in binding_paths}
+    asset = {
+        "id": asset_id,
+        "logicalPath": logical_path,
+        "sourceSha256": member.sha256,
+        "materials": material_bindings(
+            sidecar,
+            {path: artifact.asset_id for path, artifact in textures.items()},
+            configuration.content_compiler,
+        ),
+    }
+    material_manifest_path = output_root / f"{asset_id}.materials.json"
+    atomic_json(
+        material_manifest_path,
+        {
+            "schema": "opennv-static-material-manifest/v1",
+            "textures": [textures[path].manifest() for path in binding_paths],
+            "asset": asset,
+        },
+    )
+    return {
+        "schema": "opennv-owned-physical-pipboy/v1",
+        "logicalPath": logical_path,
+        "source": str(source_path.resolve()),
+        "sourceSha256": member.sha256,
+        "sourceArchive": member.source_archive,
+        "sourceArchiveSha256": member.source_archive_sha256,
+        "model": str(model_path.resolve()),
+        "sidecar": str(sidecar_path.resolve()),
+        "materialManifest": str(material_manifest_path.resolve()),
+        "materialManifestSha256": file_sha256(material_manifest_path),
+        "screenSurface": screen_surface,
+        "surfaces": len(sidecar["surfaces"]),
+        "vertices": sum(
+            int(surface["vertices"]) for surface in sidecar["surfaces"]
+        ),
+        "textures": len(textures),
+        "compiler": sidecar["compiler"],
+    }
+
+
 def compile_ui(
     data_root: Path,
     default_ini_path: Path,
@@ -1613,6 +1721,12 @@ def compile_ui(
         trees,
         documents,
         resolved_includes,
+    )
+    gameplay["physicalDevice"] = _prepare_gameplay_physical_device(
+        dict(dict(recipe_ui["gameplayPresentation"])["physicalDevice"]),
+        owned_archives,
+        cache_root,
+        configuration,
     )
     boot_closure = set()
     queue = deque([boot_document, confirmation_document])

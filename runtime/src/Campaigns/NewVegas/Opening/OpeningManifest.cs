@@ -201,6 +201,7 @@ internal sealed record OpeningManifest(
         var result = new OwnedGameplayUiPresentation(
             ReadVector(source.GetProperty("referenceCanvasSize")),
             ParseTexture(source.GetProperty("background")),
+            ParsePhysicalPipBoy(source.GetProperty("physicalDevice")),
             systemColor,
             style,
             roles,
@@ -226,6 +227,44 @@ internal sealed record OpeningManifest(
                 !result.Fonts.ContainsKey(role.BodyFontId) ||
                 !result.Fonts.ContainsKey(role.TitleFontId)))
             throw new InvalidOperationException("Owned gameplay UI presentation is incomplete.");
+        return result;
+    }
+
+    private static OwnedPhysicalPipBoy ParsePhysicalPipBoy(JsonElement source)
+    {
+        if (source.GetProperty("schema").GetString() != "opennv-owned-physical-pipboy/v1")
+            throw new InvalidOperationException("Owned physical Pip-Boy has an unexpected contract.");
+        var sourcePath = source.GetProperty("source").GetString()!;
+        var sourceSha256 = source.GetProperty("sourceSha256").GetString()!;
+        VerifyHash(sourcePath, sourceSha256);
+        var materialManifestPath = source.GetProperty("materialManifest").GetString()!;
+        var materialManifestSha256 = source.GetProperty("materialManifestSha256").GetString()!;
+        VerifyHash(materialManifestPath, materialManifestSha256);
+        using var materialDocument = JsonDocument.Parse(File.ReadAllText(materialManifestPath));
+        if (materialDocument.RootElement.GetProperty("schema").GetString() !=
+                "opennv-static-material-manifest/v1")
+            throw new InvalidOperationException(
+                "Owned physical Pip-Boy material manifest has an unexpected contract.");
+        var result = new OwnedPhysicalPipBoy(
+            source.GetProperty("logicalPath").GetString()!,
+            sourceSha256,
+            System.IO.Path.GetFullPath(source.GetProperty("model").GetString()!),
+            System.IO.Path.GetFullPath(source.GetProperty("sidecar").GetString()!),
+            System.IO.Path.GetFullPath(materialManifestPath),
+            materialManifestSha256,
+            source.GetProperty("screenSurface").GetString()!,
+            source.GetProperty("surfaces").GetInt32(),
+            source.GetProperty("vertices").GetInt32(),
+            source.GetProperty("textures").GetInt32());
+        if (!result.LogicalPath.Equals(
+                "meshes\\pipboy3000\\pipboyarm.nif",
+                StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(result.SourceSha256) ||
+            string.IsNullOrWhiteSpace(result.ScreenSurface) ||
+            result.Surfaces < 1 ||
+            result.Vertices < 1 ||
+            result.Textures < 1)
+            throw new InvalidOperationException("Owned physical Pip-Boy presentation is incomplete.");
         return result;
     }
 

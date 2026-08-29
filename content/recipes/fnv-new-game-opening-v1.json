@@ -116,6 +116,12 @@
     "gameplayPresentation": {
       "referenceCanvasSize": [1024, 768],
       "backgroundAsset": "textures\\interface\\shared\\background\\pipboy.dds",
+      "physicalDevice": {
+        "modelAsset": "meshes\\pipboy3000\\pipboyarm.nif",
+        "screenSurface": "pipboyscreen:0",
+        "exportStrict": false,
+        "textureAliases": {}
+      },
       "roles": {
         "hud": {
           "document": "menus\\main\\hud_main_menu.xml",

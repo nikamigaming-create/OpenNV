@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Godot;
 
 namespace OpenNV.Runtime.Presentation.Ui;
@@ -316,20 +317,56 @@ internal partial class GameplayUiController : CanvasLayer
             Name = "OwnedNewVegasPipBoy",
             Visible = false,
         };
-        _pipBoyPanel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = Colors.Black,
-        });
+        _pipBoyPanel.AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
         AddChild(_pipBoyPanel);
         _pipBoyPanel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+
+        var deviceContainer = new SubViewportContainer
+        {
+            Name = "OwnedPipBoyPhysicalDevice",
+            Stretch = true,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _pipBoyPanel.AddChild(deviceContainer);
+        deviceContainer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        var visibleSize = GetViewport().GetVisibleRect().Size;
+        var deviceViewport = new SubViewport
+        {
+            Name = "OwnedPipBoyPhysicalPixels",
+            Size = new Vector2I(
+                Mathf.Max(1, Mathf.RoundToInt(visibleSize.X)),
+                Mathf.Max(1, Mathf.RoundToInt(visibleSize.Y))),
+            TransparentBg = true,
+            OwnWorld3D = true,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            HandleInputLocally = false,
+        };
+        deviceContainer.AddChild(deviceViewport);
+        deviceContainer.Resized += () =>
+        {
+            deviceViewport.Size = new Vector2I(
+                Mathf.Max(1, Mathf.RoundToInt(deviceContainer.Size.X)),
+                Mathf.Max(1, Mathf.RoundToInt(deviceContainer.Size.Y)));
+        };
+
+        var crtViewport = new SubViewport
+        {
+            Name = "OwnedPipBoyCrtPixels",
+            Size = new Vector2I(
+                Mathf.RoundToInt(presentation.CanvasSize.X),
+                Mathf.RoundToInt(presentation.CanvasSize.Y)),
+            TransparentBg = false,
+            Disable3D = true,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            HandleInputLocally = false,
+        };
+        _pipBoyPanel.AddChild(crtViewport);
         _ownedPipBoyCanvas = new Control
         {
             Name = "OwnedNewVegasPipBoyCanvas",
             Size = presentation.CanvasSize,
         };
-        _pipBoyPanel.AddChild(_ownedPipBoyCanvas);
-        _pipBoyPanel.Resized += ScaleOwnedPipBoyCanvas;
-        ScaleOwnedPipBoyCanvas();
+        crtViewport.AddChild(_ownedPipBoyCanvas);
 
         var background = new TextureRect
         {
@@ -395,7 +432,224 @@ internal partial class GameplayUiController : CanvasLayer
         _pipBoyFooter.HorizontalAlignment = HorizontalAlignment.Right;
         screen.AddChild(_pipBoyFooter);
         ApplyOwnedPipBoyRole();
+        BuildOwnedPhysicalPipBoy(
+            deviceViewport,
+            crtViewport.GetTexture(),
+            presentation);
     }
+
+    private void BuildOwnedPhysicalPipBoy(
+        SubViewport viewport,
+        Texture2D crtTexture,
+        OwnedGameplayUiPresentation presentation)
+    {
+        var contract = presentation.PhysicalDevice;
+        var loaded = VerifiedGltfLoader.Load(contract.ModelPath, contract.SidecarPath);
+        loaded.CollisionScene?.Free();
+        if (!loaded.SourceSha256.Equals(contract.SourceSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Owned physical Pip-Boy source identity changed.");
+        var model = loaded.Scene;
+        model.Name = "OwnedPipBoy3000";
+        viewport.AddChild(model);
+
+        VerifiedGltfLoader.VerifyHash(
+            contract.MaterialManifestPath,
+            contract.MaterialManifestSha256);
+        using var document = JsonDocument.Parse(File.ReadAllText(contract.MaterialManifestPath));
+        var materialManifest = document.RootElement;
+        if (materialManifest.GetProperty("schema").GetString() !=
+                "opennv-static-material-manifest/v1")
+            throw new InvalidOperationException(
+                "Owned physical Pip-Boy material manifest changed.");
+        var textures = RuntimeMaterialLoader.LoadTextures(
+            materialManifest,
+            _configuration.Renderer);
+        var materialBindings = RuntimeMaterialLoader.Apply(
+            model,
+            materialManifest.GetProperty("asset"),
+            textures,
+            _configuration.Renderer,
+            _configuration.ContentCompiler.RetailGrass);
+        var surfaces = Descendants<MeshInstance3D>(model)
+            .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh?.GetSurfaceCount() ?? 0)
+                .Select(surface => (Mesh: mesh, Surface: surface)))
+            .ToArray();
+        if (surfaces.Length != contract.Surfaces || materialBindings != contract.Surfaces)
+            throw new InvalidOperationException(
+                "Owned physical Pip-Boy surface/material coverage changed.");
+        var screenMatches = surfaces.Where(surface =>
+                RuntimeMaterialLoader.SourceSurfaceIdentity(surface.Mesh, surface.Surface)
+                    ?.Equals(contract.ScreenSurface, StringComparison.Ordinal) == true)
+            .ToArray();
+        if (screenMatches.Length != 1)
+            throw new InvalidOperationException(
+                "Owned physical Pip-Boy CRT surface does not resolve uniquely.");
+        var frame = DerivePipBoyFrame(
+            model,
+            screenMatches[0].Mesh,
+            screenMatches[0].Surface,
+            viewport.Size);
+        screenMatches[0].Mesh.SetSurfaceOverrideMaterial(
+            screenMatches[0].Surface,
+            new StandardMaterial3D
+            {
+                ResourceName = "OpenNV_OwnedPipBoyDynamicCrt",
+                AlbedoTexture = crtTexture,
+                AlbedoTextureForceSrgb = true,
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            });
+
+        var preview = _configuration.DiagnosticPreview;
+        var ambient = preview.AmbientColorRgba.Color();
+        ambient.R *= preview.AmbientEnergy;
+        ambient.G *= preview.AmbientEnergy;
+        ambient.B *= preview.AmbientEnergy;
+        RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
+            model,
+            ambient,
+            Colors.Black,
+            frame.Far * 2.0f,
+            frame.Far * 4.0f,
+            1.0f,
+            1.0f);
+        viewport.AddChild(new WorldEnvironment
+        {
+            Environment = new Godot.Environment
+            {
+                BackgroundMode = Godot.Environment.BGMode.Color,
+                BackgroundColor = Colors.Transparent,
+                AmbientLightSource = Godot.Environment.AmbientSource.Color,
+                AmbientLightColor = preview.AmbientColorRgba.Color(),
+                AmbientLightEnergy = preview.AmbientEnergy,
+                TonemapMode = RuntimeRendering.ParseToneMapper(_configuration.Renderer.ToneMapper),
+            },
+        });
+        var keyLight = new DirectionalLight3D
+        {
+            Position = frame.CameraPosition,
+            LightEnergy = preview.LightEnergy,
+            ShadowEnabled = true,
+        };
+        viewport.AddChild(keyLight);
+        keyLight.LookAt(frame.Target, frame.Up);
+        var camera = new Camera3D
+        {
+            Projection = Camera3D.ProjectionType.Orthogonal,
+            Size = frame.OrthographicHeight,
+            Position = frame.CameraPosition,
+            Near = frame.Near,
+            Far = frame.Far,
+            Current = true,
+        };
+        viewport.AddChild(camera);
+        camera.LookAt(frame.Target, frame.Up);
+        GD.Print(
+            $"OPENNV_OWNED_PIPBOY_PHYSICAL_READY source={contract.LogicalPath} " +
+            $"surfaces={contract.Surfaces} vertices={contract.Vertices} " +
+            $"textures={contract.Textures} screen={contract.ScreenSurface}");
+    }
+
+    private static PipBoyReferenceFrame DerivePipBoyFrame(
+        Node3D model,
+        MeshInstance3D screenMesh,
+        int screenSurface,
+        Vector2I viewportSize)
+    {
+        var mesh = screenMesh.Mesh
+            ?? throw new InvalidOperationException("Owned Pip-Boy CRT has no mesh.");
+        var arrays = mesh.SurfaceGetArrays(screenSurface);
+        var localVertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        var localNormals = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
+        var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
+        if (localVertices.Length < 3 ||
+            localNormals.Length != localVertices.Length ||
+            uvs.Length != localVertices.Length)
+            throw new InvalidOperationException(
+                "Owned Pip-Boy CRT geometry lacks complete position/normal/UV evidence.");
+        var vertices = localVertices.Select(screenMesh.ToGlobal).ToArray();
+        var center = vertices.Aggregate(Vector3.Zero, (sum, value) => sum + value) /
+            vertices.Length;
+        var meanUv = uvs.Aggregate(Vector2.Zero, (sum, value) => sum + value) / uvs.Length;
+        var normal = localNormals
+            .Select(value => (screenMesh.GlobalBasis * value).Normalized())
+            .Aggregate(Vector3.Zero, (sum, value) => sum + value)
+            .Normalized();
+        var uAxis = Vector3.Zero;
+        foreach (var index in Enumerable.Range(0, vertices.Length))
+        {
+            var delta = vertices[index] - center;
+            uAxis += delta * (uvs[index].X - meanUv.X);
+        }
+        uAxis -= normal * uAxis.Dot(normal);
+        if (normal.LengthSquared() <= 0.0f || uAxis.LengthSquared() <= 0.0f)
+            throw new InvalidOperationException(
+                "Owned Pip-Boy CRT frame cannot be derived from its source geometry.");
+        var right = uAxis.Normalized();
+        var viewDirection = -normal;
+        var up = right.Cross(viewDirection).Normalized();
+
+        var points = Descendants<MeshInstance3D>(model)
+            .SelectMany(value =>
+            {
+                var bounds = value.GetAabb();
+                return new[]
+                {
+                    new Vector3(bounds.Position.X, bounds.Position.Y, bounds.Position.Z),
+                    new Vector3(bounds.End.X, bounds.Position.Y, bounds.Position.Z),
+                    new Vector3(bounds.Position.X, bounds.End.Y, bounds.Position.Z),
+                    new Vector3(bounds.End.X, bounds.End.Y, bounds.Position.Z),
+                    new Vector3(bounds.Position.X, bounds.Position.Y, bounds.End.Z),
+                    new Vector3(bounds.End.X, bounds.Position.Y, bounds.End.Z),
+                    new Vector3(bounds.Position.X, bounds.End.Y, bounds.End.Z),
+                    bounds.End,
+                }.Select(value.ToGlobal);
+            })
+            .ToArray();
+        if (points.Length == 0)
+            throw new InvalidOperationException("Owned Pip-Boy model has no bounds.");
+        var rightExtents = points.Select(point => (point - center).Dot(right)).ToArray();
+        var upExtents = points.Select(point => (point - center).Dot(up)).ToArray();
+        var depthExtents = points.Select(point => (point - center).Dot(normal)).ToArray();
+        var width = rightExtents.Max() - rightExtents.Min();
+        var height = upExtents.Max() - upExtents.Min();
+        var depth = depthExtents.Max() - depthExtents.Min();
+        var aspect = viewportSize.Y > 0
+            ? (float)viewportSize.X / viewportSize.Y
+            : 1.0f;
+        var orthographicHeight = MathF.Max(height, width / MathF.Max(aspect, 0.01f));
+        var target = center +
+            right * ((rightExtents.Min() + rightExtents.Max()) * 0.5f) +
+            up * ((upExtents.Min() + upExtents.Max()) * 0.5f);
+        var cameraDistance = depthExtents.Max() + orthographicHeight;
+        return new PipBoyReferenceFrame(
+            target + normal * cameraDistance,
+            target,
+            up,
+            orthographicHeight,
+            MathF.Max(0.01f, orthographicHeight * 0.01f),
+            MathF.Max(1.0f, cameraDistance + depth + orthographicHeight));
+    }
+
+    private static IEnumerable<T> Descendants<T>(Node node)
+        where T : Node
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is T match)
+                yield return match;
+            foreach (var descendant in Descendants<T>(child))
+                yield return descendant;
+        }
+    }
+
+    private readonly record struct PipBoyReferenceFrame(
+        Vector3 CameraPosition,
+        Vector3 Target,
+        Vector3 Up,
+        float OrthographicHeight,
+        float Near,
+        float Far);
 
     private Label BuildOwnedLabel(FontFile font)
     {
@@ -501,13 +755,6 @@ internal partial class GameplayUiController : CanvasLayer
         var font = OwnedUiTheme.BuildFont(_ownedPresentation.Font(role.BodyFontId));
         _pipBoyContent.AddThemeFontOverride("font", font);
         _pipBoyContent.AddThemeFontSizeOverride("font_size", font.FixedSize);
-    }
-
-    private void ScaleOwnedPipBoyCanvas()
-    {
-        if (_pipBoyPanel is null || _ownedPipBoyCanvas is null || _ownedPresentation is null)
-            return;
-        ScaleOwnedCanvas(_pipBoyPanel, _ownedPipBoyCanvas, _ownedPresentation.CanvasSize);
     }
 
     private static void ScaleOwnedCanvas(Control viewport, Control canvas, Vector2 authoredSize)
