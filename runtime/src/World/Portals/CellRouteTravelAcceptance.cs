@@ -14,6 +14,7 @@ internal static class CellRouteTravelAcceptance
     private const float ObstacleBoundaryOutwardBias = 0.25f;
     private const int StalledFrameLimit = 180;
     private const int MinimumWaypointFrameBudget = 240;
+    private const int MaximumOwnedNavigationReplans = 3;
 
     internal static async Task Run(
         RuntimeCoordinator host,
@@ -225,18 +226,70 @@ internal static class CellRouteTravelAcceptance
         var desiredWorld = center + normal * side * PortalApproachDistanceMeters;
         var destinationGame = content.Navigation.FindNearestPoint(
             content.WorldToGame(desiredWorld));
-        var playerFoot = player.GlobalPosition -
-            Vector3.Up * configuration.Player.SpawnCenterHeightMeters;
-        var path = content.Navigation.FindPath(
-            content.WorldToGame(playerFoot),
-            destinationGame);
+        NavigationStall? lastStall = null;
+        for (var replan = 0; replan <= MaximumOwnedNavigationReplans; replan++)
+        {
+            var playerFoot = player.GlobalPosition -
+                Vector3.Up * configuration.Player.SpawnCenterHeightMeters;
+            var path = content.Navigation.FindPath(
+                content.WorldToGame(playerFoot),
+                destinationGame);
+            if (replan > 0)
+                GD.Print(
+                    $"OPENNV_FLAT_ROUTE_NAVM_REPLAN attempt={replan}/" +
+                    $"{MaximumOwnedNavigationReplans} waypoints={path.Count} " +
+                    $"player={player.GlobalPosition}");
+            lastStall = await WalkNavigationPath(
+                host,
+                player,
+                content,
+                path,
+                center,
+                input,
+                configuration);
+            if (lastStall is null)
+                return;
+            if (player.Camera.GlobalPosition.DistanceTo(center) <=
+                configuration.Player.ActivationDistanceMeters)
+                return;
+            if (replan < MaximumOwnedNavigationReplans)
+                GD.Print(
+                    $"OPENNV_FLAT_ROUTE_NAVM_STALL " +
+                    $"waypoint={lastStall.Value.WaypointIndex + 1}/" +
+                    $"{lastStall.Value.WaypointCount} " +
+                    $"remaining={lastStall.Value.RemainingMeters:F3} " +
+                    $"replan={replan + 1}/{MaximumOwnedNavigationReplans}");
+        }
+
+        var stalled = lastStall ?? throw new InvalidOperationException(
+            "Owned NAVM route exhausted replans without a recorded stall.");
+        throw new InvalidOperationException(
+            $"Configured movement exhausted {MaximumOwnedNavigationReplans} owned NAVM replans " +
+            $"at waypoint {stalled.WaypointIndex + 1}/{stalled.WaypointCount}: " +
+            $"remaining={stalled.RemainingMeters:F3} " +
+            $"doorDistance={player.Camera.GlobalPosition.DistanceTo(center):F3} " +
+            $"player={player.GlobalPosition} target={stalled.Target} " +
+            $"step={player.LastStepAttempt} movement={player.LastMovementState} " +
+            $"motionCollision={player.LastMovementCollision} " +
+            $"collision={DescribeSlideCollisions(player)} metres.");
+    }
+
+    private static async Task<NavigationStall?> WalkNavigationPath(
+        RuntimeCoordinator host,
+        CellPlayer player,
+        CellContentLoader.LoadedContent content,
+        IReadOnlyList<Vector3> path,
+        Vector3 portalCenter,
+        DesktopInputConfiguration input,
+        RuntimeConfiguration configuration)
+    {
         for (var waypointIndex = 0; waypointIndex < path.Count; waypointIndex++)
         {
             if (waypointIndex == path.Count - 2)
             {
                 var finalCenter = content.GameToWorld(path[^1]) +
                     Vector3.Up * configuration.Player.SpawnCenterHeightMeters;
-                if (player.CanSweepTo(finalCenter))
+                if (CanAdvanceCapsule(player, finalCenter))
                 {
                     GD.Print(
                         $"OPENNV_FLAT_ROUTE_FINAL_SHORTCUT " +
@@ -270,26 +323,24 @@ internal static class CellRouteTravelAcceptance
                 continue;
             var waypointDistance = HorizontalDistance(player.GlobalPosition, waypointCenter);
             if (waypointIndex + 3 < path.Count &&
-                waypointDistance <= configuration.Player.ActivationDistanceMeters)
+                waypointDistance <= configuration.Player.ActivationDistanceMeters &&
+                CanAdvanceCapsule(player, waypointCenter))
             {
                 GD.Print(
                     $"OPENNV_FLAT_ROUTE_CORRIDOR_ADVANCE index={waypointIndex + 1} " +
                     $"distance={waypointDistance:F3}");
                 continue;
             }
-            var doorDistance = player.Camera.GlobalPosition.DistanceTo(center);
+            var doorDistance = player.Camera.GlobalPosition.DistanceTo(portalCenter);
             if (doorDistance <= configuration.Player.ActivationDistanceMeters)
-                return;
-            throw new InvalidOperationException(
-                $"Configured movement stalled on owned NAVM waypoint " +
-                $"{waypointIndex + 1}/{path.Count}: " +
-                $"remaining={waypointDistance:F3} " +
-                $"doorDistance={doorDistance:F3} player={player.GlobalPosition} " +
-                $"target={waypointCenter} step={player.LastStepAttempt} " +
-                $"movement={player.LastMovementState} " +
-                $"motionCollision={player.LastMovementCollision} " +
-                $"collision={DescribeSlideCollisions(player)} metres.");
+                return null;
+            return new NavigationStall(
+                waypointIndex,
+                path.Count,
+                waypointDistance,
+                waypointCenter);
         }
+        return null;
     }
 
     private static async Task<bool> WalkToWaypoint(
@@ -314,7 +365,7 @@ internal static class CellRouteTravelAcceptance
             for (var frame = 0; frame < frameBudget; frame++)
             {
                 var distance = HorizontalDistance(player.GlobalPosition, target);
-                if (distance <= toleranceMeters)
+                if (distance <= toleranceMeters && CanAdvanceCapsule(player, target))
                     return true;
                 FlatControlsAcceptance.ApplyMouseYaw(player, target, configuration.Player);
                 await FlatControlsAcceptance.WaitPhysicsFrames(host, 1);
@@ -442,7 +493,7 @@ internal static class CellRouteTravelAcceptance
                 await FlatControlsAcceptance.WaitPhysicsFrames(host, 1);
                 if (HorizontalDistance(start, player.GlobalPosition) >=
                         configuration.Player.CapsuleRadiusMeters &&
-                    player.CanSweepTo(target))
+                    CanAdvanceCapsule(player, target))
                 {
                     targetSweepClear = true;
                     break;
@@ -485,6 +536,9 @@ internal static class CellRouteTravelAcceptance
         delta.Y = 0.0f;
         return delta.Length();
     }
+
+    private static bool CanAdvanceCapsule(CellPlayer player, Vector3 target) =>
+        player.CanSweepTo(new Vector3(target.X, player.GlobalPosition.Y, target.Z));
 
     private static string DescribeSlideCollisions(CellPlayer player)
     {
@@ -600,6 +654,12 @@ internal static class CellRouteTravelAcceptance
     }
 
     private static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
+
+    private readonly record struct NavigationStall(
+        int WaypointIndex,
+        int WaypointCount,
+        float RemainingMeters,
+        Vector3 Target);
 
     private static float[] Quaternion(Quaternion value) =>
         [value.X, value.Y, value.Z, value.W];
