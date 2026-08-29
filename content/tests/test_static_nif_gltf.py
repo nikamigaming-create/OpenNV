@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import struct
 import sys
 import tempfile
@@ -9,6 +10,8 @@ import unittest
 import zlib
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 if not hasattr(time, "clock"):
     time.clock = time.perf_counter
@@ -126,6 +129,146 @@ def write_synthetic_nif(path: Path) -> None:
     document.roots = [root]
     with path.open("wb") as stream:
         document.write(stream)
+
+
+def synthetic_controller_door_document() -> tuple[object, object]:
+    root = NifFormat.NiNode()
+    root.name = "Synthetic Door Root"
+    identity_transform(root)
+
+    gate = NifFormat.NiNode()
+    gate.name = "BGate"
+    identity_transform(gate)
+    gate.translation.x = 5.0
+    gate.translation.z = 2.0
+    root.add_child(gate)
+
+    posts = NifFormat.NiNode()
+    posts.name = "BPosts"
+    identity_transform(posts)
+    root.add_child(posts)
+
+    def add_surface(parent: object, name: str) -> None:
+        shape = NifFormat.NiTriShape()
+        shape.name = name
+        identity_transform(shape)
+        shape.add_property(NifFormat.NiTexturingProperty())
+        mesh = NifFormat.NiTriShapeData()
+        shape.data = mesh
+        mesh.num_vertices = 3
+        mesh.has_vertices = True
+        mesh.vertices.update_size()
+        for vertex, values in zip(
+            mesh.vertices,
+            ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
+        ):
+            vertex.x, vertex.y, vertex.z = values
+        mesh.has_normals = True
+        mesh.normals.update_size()
+        for normal in mesh.normals:
+            normal.x, normal.y, normal.z = (0.0, -1.0, 0.0)
+        mesh.num_uv_sets = 1
+        mesh.has_uv = True
+        mesh.uv_sets.update_size()
+        for uv, values in zip(mesh.uv_sets[0], ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))):
+            uv.u, uv.v = values
+        mesh.set_triangles([(0, 1, 2)])
+        mesh.update_center_radius()
+        parent.add_child(shape)
+
+    def add_collision(target: object) -> object:
+        collision = NifFormat.bhkCollisionObject()
+        collision.target = target
+        target.collision_object = collision
+        body = NifFormat.bhkRigidBodyT()
+        collision.body = body
+        body.rotation.w = 1.0
+        mopp = NifFormat.bhkMoppBvTreeShape()
+        body.shape = mopp
+        packed = NifFormat.bhkPackedNiTriStripsShape()
+        mopp.shape = packed
+        packed.scale.x = 1.0
+        packed.scale.y = 1.0
+        packed.scale.z = 1.0
+        data = NifFormat.hkPackedNiTriStripsData()
+        packed.data = data
+        data.num_vertices = 3
+        data.vertices.update_size()
+        for vertex, values in zip(
+            data.vertices,
+            ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
+        ):
+            vertex.x, vertex.y, vertex.z = values
+        data.num_triangles = 1
+        data.triangles.update_size()
+        data.triangles[0].triangle.v_1 = 0
+        data.triangles[0].triangle.v_2 = 1
+        data.triangles[0].triangle.v_3 = 2
+        data.num_sub_shapes = 1
+        data.sub_shapes.update_size()
+        data.sub_shapes[0].num_vertices = 3
+        return collision
+
+    add_surface(gate, "BGate:0")
+    add_surface(posts, "BPosts:0")
+    gate_collision = add_collision(gate)
+    add_collision(posts)
+
+    manager = NifFormat.NiControllerManager()
+    manager.target = root
+    root.controller = manager
+    controller = NifFormat.NiMultiTargetTransformController()
+    controller.target = root
+    controller.num_extra_targets = 1
+    controller.extra_targets.update_size()
+    controller.extra_targets[0] = gate
+    manager.next_controller = controller
+    manager.num_controller_sequences = 2
+    manager.controller_sequences.update_size()
+    for sequence_index, (name, stop, start_z, stop_z) in enumerate(
+        (("Open", 1.0, 0.0, 1.0), ("Close", 0.9, 0.95, 0.0))
+    ):
+        sequence = NifFormat.NiControllerSequence()
+        sequence.name = name
+        sequence.start_time = 0.0
+        sequence.stop_time = stop
+        sequence.manager = manager
+        sequence.num_controlled_blocks = 1
+        sequence.controlled_blocks.update_size()
+        controlled = sequence.controlled_blocks[0]
+        controlled.node_name = "BGate"
+        controlled.controller_type = "NiTransformController"
+        controlled.controller = controller
+        interpolator = NifFormat.NiTransformInterpolator()
+        controlled.interpolator = interpolator
+        transform_data = NifFormat.NiTransformData()
+        interpolator.data = transform_data
+        transform_data.num_rotation_keys = 1
+        transform_data.rotation_type = 4
+        for axis_index, group in enumerate(transform_data.xyz_rotations):
+            group.interpolation = 2
+            group.num_keys = 2
+            group.keys.update_size()
+            for key_index, (time_value, key_value) in enumerate(
+                (
+                    (0.0, start_z if axis_index == 2 else 0.0),
+                    (stop, stop_z if axis_index == 2 else 0.0),
+                )
+            ):
+                group.keys[key_index].time = time_value
+                group.keys[key_index].value = key_value
+        transform_data.translations.interpolation = 1
+        transform_data.scales.interpolation = 2
+        transform_data.scales.num_keys = 2
+        transform_data.scales.keys.update_size()
+        for key_index, time_value in enumerate((0.0, stop)):
+            transform_data.scales.keys[key_index].time = time_value
+            transform_data.scales.keys[key_index].value = 1.0
+        manager.controller_sequences[sequence_index] = sequence
+
+    document = NifFormat.Data(version=0x14020007, user_version=12, user_version_2=83)
+    document.roots = [root]
+    return document, gate_collision
 
 
 def write_editor_marker_only_nif(path: Path) -> None:
@@ -444,6 +587,116 @@ class StaticNifGltfTest(unittest.TestCase):
             self.assertEqual(first_gltf["asset"]["version"], "2.0")
             self.assertEqual(first_gltf["accessors"][0]["min"], [-1.0, 0.0, -0.0])
             self.assertEqual(first_gltf["accessors"][0]["max"], [1.0, 2.0, -0.0])
+
+    def test_controller_door_groups_only_authored_target_visual_and_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            source = directory / "controller-door.nif"
+            source.write_bytes(b"synthetic decoded controller door")
+            document, gate_collision = synthetic_controller_door_document()
+            decoded = SimpleNamespace(
+                document=document,
+                evidence=lambda: {"status": "synthetic-in-memory-contract"},
+            )
+            with patch("export_static_nif_gltf.decode_nif", return_value=decoded):
+                result = export_static_nif(
+                    source,
+                    "meshes/open-nv-tests/controller-door.nif",
+                    directory / "controller-door.gltf",
+                    directory / "controller-door.opennv.json",
+                    load_runtime_configuration().content_compiler,
+                    strict=False,
+                    require_door_articulation=True,
+                )
+
+            articulation = result["articulation"]
+            canonical = dict(articulation)
+            canonical_hash = canonical.pop("canonicalSha256")
+            self.assertEqual(
+                canonical_hash,
+                hashlib.sha256(
+                    json.dumps(
+                        canonical,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=True,
+                    ).encode("utf-8")
+                ).hexdigest(),
+            )
+            self.assertNotEqual(
+                articulation["sequences"]["open"]["terminalLocalTransform"],
+                articulation["sequences"]["close"]["initialLocalTransform"],
+            )
+            self.assertEqual(
+                articulation["sequences"]["close"]["terminalLocalTransform"],
+                articulation["closedLocalTransform"],
+            )
+            target_id = articulation["target"]["targetId"]
+            self.assertEqual(
+                [surface["name"] for surface in result["surfaces"] if surface["articulationTargetId"] == target_id],
+                ["BGate:0"],
+            )
+            self.assertEqual(
+                [surface["name"] for surface in result["surfaces"] if surface["articulationTargetId"] is None],
+                ["BPosts:0"],
+            )
+            collision_rows = result["coverage"]["collisionBodies"]
+            self.assertEqual(
+                [row["targetName"] for row in collision_rows if row["ownerTargetId"] == target_id],
+                ["BGate"],
+            )
+            self.assertEqual(
+                [row["targetName"] for row in collision_rows if row["ownerTargetId"] is None],
+                ["BPosts"],
+            )
+
+            visual = json.loads((directory / "controller-door.gltf").read_text())
+            visual_wrapper = next(
+                node
+                for node in visual["nodes"]
+                if node["name"] == articulation["target"]["visualNodeName"]
+            )
+            self.assertNotIn("mesh", visual_wrapper)
+            self.assertEqual(
+                sorted(visual["nodes"][index]["name"] for index in visual_wrapper["children"]),
+                articulation["target"]["visualDescendantNodeNames"],
+            )
+            collision = json.loads(
+                (directory / "controller-door.collision.gltf").read_text()
+            )
+            collision_wrapper = next(
+                node
+                for node in collision["nodes"]
+                if node["name"] == articulation["target"]["collisionNodeName"]
+            )
+            self.assertNotIn("mesh", collision_wrapper)
+            self.assertEqual(
+                sorted(
+                    collision["nodes"][index]["name"]
+                    for index in collision_wrapper["children"]
+                ),
+                articulation["target"]["collisionDescendantNodeNames"],
+            )
+
+            gate_collision.target = next(
+                block
+                for block in document.get_global_iterator()
+                if isinstance(block, NifFormat.NiNode) and bytes(block.name) == b"BPosts"
+            )
+            with patch("export_static_nif_gltf.decode_nif", return_value=decoded):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "target has no joined authored collision",
+                ):
+                    export_static_nif(
+                        source,
+                        "meshes/open-nv-tests/controller-door.nif",
+                        directory / "incomplete.gltf",
+                        directory / "incomplete.opennv.json",
+                        load_runtime_configuration().content_compiler,
+                        strict=False,
+                        require_door_articulation=True,
+                    )
 
     def test_static_shape_prefix_filter_is_explicit_and_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:

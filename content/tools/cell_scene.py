@@ -32,7 +32,7 @@ from owned_archive_stack import OwnedArchiveStack
 from compiler_provenance import compiler_provenance
 
 
-CELL_SCENE_SCHEMA = "opennv-cell-scene/v13"
+CELL_SCENE_SCHEMA = "opennv-cell-scene/v14"
 CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v1"
 ORDERED_CELL_RECIPE_SCHEMA = "opennv-cell-recipe/v2"
 EXTERIOR_RECIPE_SCHEMA = "opennv-exterior-recipe/v1"

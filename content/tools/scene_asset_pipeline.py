@@ -209,6 +209,11 @@ def prepare_scene_assets(
         {base.model_path for _, base in selected if base.model_path}
         | (extra_model_paths or set())
     )
+    door_model_paths = {
+        base.model_path
+        for _, base in selected
+        if base.record_type == "DOOR" and base.model_path
+    }
     for model_path in models:
         model_suffix = Path(model_path).suffix.lower()
         logical_candidates = (
@@ -261,6 +266,7 @@ def prepare_scene_assets(
                     compiler_configuration,
                     strict=bool(recipe["exportStrict"]),
                     presentation_clip=presentation_clip,
+                    require_door_articulation=model_path in door_model_paths,
                 )
         except NoStaticPresentationGeometryError as error:
             if model_path in (extra_model_paths or set()):
@@ -334,6 +340,8 @@ def prepare_scene_assets(
                 ],
             },
         }
+        if sidecar.get("articulation") is not None:
+            assets[model_path]["articulation"] = sidecar["articulation"]
         asset_sidecars[model_path] = sidecar
 
     binding_uses: dict[str, list[dict[str, object]]] = {}

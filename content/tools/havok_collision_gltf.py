@@ -184,6 +184,10 @@ def collision_contract(
     blocks: list[object],
     root: object,
     block_index: dict[int, int],
+    *,
+    articulation_target: object | None = None,
+    articulation_target_id: str | None = None,
+    articulation_descendant_ids: set[int] | None = None,
 ) -> tuple[list[dict[str, object]], str | None]:
     collision_types = sorted({type(block).__name__ for block in blocks if type(block).__name__.startswith("bhk")})
     if not collision_types:
@@ -194,6 +198,7 @@ def collision_contract(
     if not collision_objects:
         return [], "no-bhkCollisionObject-root"
     bodies = []
+    articulation_descendant_ids = articulation_descendant_ids or set()
     for collision in collision_objects:
         body = collision.body
         if not isinstance(body, (NifFormat.bhkRigidBody, NifFormat.bhkRigidBodyT)):
@@ -205,8 +210,19 @@ def collision_contract(
         if not isinstance(packed, NifFormat.bhkPackedNiTriStripsShape) or packed.data is None:
             return [], f"unsupported-mopp-child:{type(packed).__name__}"
         data = packed.data
+        if collision.target is None:
+            return [], "collision-object-has-no-target"
+        owns_articulation = id(collision.target) in articulation_descendant_ids
+        if owns_articulation and articulation_target is None:
+            return [], "articulation-collision-has-no-target-root"
+        transform_parent = articulation_target if owns_articulation else root
         positions = [
-            _collision_position(vertex, packed, body, collision.target.get_transform(root))
+            _collision_position(
+                vertex,
+                packed,
+                body,
+                collision.target.get_transform(transform_parent),
+            )
             for vertex in data.vertices
         ]
         triangles = [
@@ -244,6 +260,7 @@ def collision_contract(
                 "packedShapeBlock": block_index[id(packed)],
                 "targetBlock": block_index[id(collision.target)],
                 "targetName": _decode_text(collision.target.name),
+                "ownerTargetId": articulation_target_id if owns_articulation else None,
                 "motionSystem": int(body.motion_system),
                 "qualityType": int(body.quality_type),
                 "layer": int(body.havok_col_filter.layer),
@@ -262,10 +279,19 @@ def write_collision_gltf(
     gltf_path: Path,
     source_hash: str,
     generator: str,
+    *,
+    articulation: dict[str, object] | None = None,
 ) -> dict[str, object]:
     builder = BufferBuilder()
     meshes = []
     nodes = []
+    scene_nodes = []
+    articulation_children = []
+    target_id = (
+        str(articulation["target"]["targetId"])
+        if articulation is not None
+        else None
+    )
     for body_index, body in enumerate(bodies):
         positions = body["positions"]
         triangles = body["triangles"]
@@ -290,9 +316,17 @@ def write_collision_gltf(
             value_type="SCALAR",
             target=GL_ELEMENT_ARRAY_BUFFER,
         )
+        body_target_id = body.get("ownerTargetId")
+        if body_target_id is not None and body_target_id != target_id:
+            raise ValueError("Authored collision body has an unmatched articulation target")
+        node_name = (
+            f"OPENNV_ARTICULATION_COLLISION_BODY_{body['bodyBlock']}"
+            if body_target_id is not None
+            else f"AUTHORED_COLLISION_BODY_{body_index}"
+        )
         meshes.append(
             {
-                "name": f"AUTHORED_COLLISION_BODY_{body_index}",
+                "name": node_name,
                 "primitives": [{
                     "attributes": {"POSITION": position_accessor},
                     "indices": index_accessor,
@@ -300,12 +334,37 @@ def write_collision_gltf(
                 }],
             }
         )
-        nodes.append({"name": f"AUTHORED_COLLISION_BODY_{body_index}", "mesh": body_index})
+        node: dict[str, object] = {"name": node_name, "mesh": body_index}
+        if body_target_id is not None:
+            node["extras"] = {"openNvArticulationTargetId": body_target_id}
+            articulation_children.append(len(nodes))
+        else:
+            scene_nodes.append(len(nodes))
+        nodes.append(node)
+    if articulation is not None:
+        target = articulation["target"]
+        expected_children = sorted(target["collisionDescendantNodeNames"])
+        actual_children = sorted(nodes[index]["name"] for index in articulation_children)
+        if actual_children != expected_children or not actual_children:
+            raise ValueError("Authored collision articulation descendants do not match contract")
+        closed_transform = articulation["closedLocalTransform"]
+        wrapper_index = len(nodes)
+        nodes.append(
+            {
+                "name": target["collisionNodeName"],
+                "translation": closed_transform["translationGodotUnits"],
+                "rotation": closed_transform["rotationGodotQuaternion"],
+                "scale": [closed_transform["scale"]] * 3,
+                "children": articulation_children,
+                "extras": {"openNvArticulationTargetId": target_id},
+            }
+        )
+        scene_nodes.append(wrapper_index)
     binary_name = gltf_path.with_suffix(".bin").name
     gltf = {
         "asset": {"version": "2.0", "generator": f"{generator} authored collision"},
         "scene": 0,
-        "scenes": [{"nodes": list(range(len(nodes)))}],
+        "scenes": [{"nodes": scene_nodes}],
         "nodes": nodes,
         "meshes": meshes,
         "buffers": [{"uri": binary_name, "byteLength": len(builder.data)}],

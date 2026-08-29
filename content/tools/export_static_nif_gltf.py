@@ -47,7 +47,8 @@ from runtime_configuration import (
 )
 
 
-SCHEMA = "opennv-static-nif-gltf/v2"
+SCHEMA = "opennv-static-nif-gltf/v3"
+DOOR_ARTICULATION_SCHEMA = "opennv-controller-door-articulation/v1"
 GENERATOR = "OpenNV direct static NIF exporter v1"
 SUPPORTED_SHAPE_PROPERTIES = {
     "BSShaderPPLightingProperty",
@@ -315,6 +316,425 @@ def canonical_asset_path(value: object) -> str:
     path = decode_text(value).replace("/", "\\").lstrip("\\").lower()
     data_prefix = "data\\"
     return path[len(data_prefix):] if path.startswith(data_prefix) else path
+
+
+def _canonical_sha256(document: dict[str, object]) -> str:
+    return sha256_bytes(
+        json.dumps(
+            document,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+    )
+
+
+def _converted_rotation(value: list[list[float]]) -> list[list[float]]:
+    column = [
+        [value[column_index][row_index] for column_index in range(3)]
+        for row_index in range(3)
+    ]
+    conversion = [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]]
+    inverse = [[conversion[column][row] for column in range(3)] for row in range(3)]
+
+    def multiply(left: list[list[float]], right: list[list[float]]) -> list[list[float]]:
+        return [
+            [
+                sum(
+                    left[row][axis] * right[axis][column]
+                    for axis in range(len(right))
+                )
+                for column in range(len(right[0]))
+            ]
+            for row in range(len(left))
+        ]
+
+    return multiply(conversion, multiply(column, inverse))
+
+
+def _rotation_quaternion(matrix: list[list[float]]) -> list[float]:
+    trace = matrix[0][0] + matrix[1][1] + matrix[2][2]
+    if trace > 0.0:
+        scale = math.sqrt(trace + 1.0) * 2.0
+        result = [
+            (matrix[2][1] - matrix[1][2]) / scale,
+            (matrix[0][2] - matrix[2][0]) / scale,
+            (matrix[1][0] - matrix[0][1]) / scale,
+            0.25 * scale,
+        ]
+    else:
+        axis = max(range(3), key=lambda index: matrix[index][index])
+        following = (axis + 1) % 3
+        remaining = (axis + 2) % 3
+        scale = math.sqrt(
+            1.0
+            + matrix[axis][axis]
+            - matrix[following][following]
+            - matrix[remaining][remaining]
+        ) * 2.0
+        result = [0.0, 0.0, 0.0, 0.0]
+        result[axis] = 0.25 * scale
+        result[3] = (matrix[remaining][following] - matrix[following][remaining]) / scale
+        result[following] = (matrix[following][axis] + matrix[axis][following]) / scale
+        result[remaining] = (matrix[remaining][axis] + matrix[axis][remaining]) / scale
+    length = math.sqrt(sum(value * value for value in result))
+    if length <= NORMALIZATION_EPSILON:
+        raise ValueError("NIF articulation contains a zero quaternion")
+    return [value / length for value in result]
+
+
+def _node_local_transform(node: object) -> dict[str, object]:
+    rotation = _converted_rotation(
+        [
+            [float(node.rotation.m_11), float(node.rotation.m_12), float(node.rotation.m_13)],
+            [float(node.rotation.m_21), float(node.rotation.m_22), float(node.rotation.m_23)],
+            [float(node.rotation.m_31), float(node.rotation.m_32), float(node.rotation.m_33)],
+        ]
+    )
+    return {
+        "translationGodotUnits": [
+            float(node.translation.x),
+            float(node.translation.z),
+            -float(node.translation.y),
+        ],
+        "rotationGodotQuaternion": _rotation_quaternion(rotation),
+        "scale": float(node.scale),
+    }
+
+
+def _euler_xyz_quaternion(
+    angles: tuple[float, float, float],
+) -> tuple[float, float, float, float]:
+    half_x, half_y, half_z = (angle / 2.0 for angle in angles)
+    cx, cy, cz = math.cos(half_x), math.cos(half_y), math.cos(half_z)
+    sx, sy, sz = math.sin(half_x), math.sin(half_y), math.sin(half_z)
+    result = (
+        cx * cy * cz - sx * sy * sz,
+        sx * cy * cz + cx * sy * sz,
+        cx * sy * cz - sx * cy * sz,
+        cx * cy * sz + sx * sy * cz,
+    )
+    length = math.sqrt(sum(value * value for value in result))
+    if length <= NORMALIZATION_EPSILON:
+        raise ValueError("NIF articulation contains a zero Euler quaternion")
+    return tuple(value / length for value in result)
+
+
+def _converted_nif_quaternion(
+    value: tuple[float, float, float, float],
+) -> list[float]:
+    w, x, y, z = value
+    row = [
+        [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + z * w), 2.0 * (x * z - y * w)],
+        [2.0 * (x * y - z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z + x * w)],
+        [2.0 * (x * z + y * w), 2.0 * (y * z - x * w), 1.0 - 2.0 * (x * x + y * y)],
+    ]
+    return _rotation_quaternion(_converted_rotation(row))
+
+
+def _interpolation_name(value: int) -> str:
+    names = {1: "linear", 2: "quadratic", 3: "tbc", 4: "xyz-rotation"}
+    if value not in names:
+        raise ValueError(f"Unsupported NIF articulation key interpolation: {value}")
+    return names[value]
+
+
+def _scalar_key_rows(group: object) -> list[dict[str, object]]:
+    rows = []
+    previous_time = -math.inf
+    for key in group.keys:
+        row: dict[str, object] = {
+            "timeSeconds": float(key.time),
+            "value": float(key.value),
+        }
+        for field in ("forward", "backward", "tension", "bias", "continuity"):
+            if hasattr(key, field):
+                row[field] = float(getattr(key, field))
+        if not all(
+            math.isfinite(float(value))
+            for value in row.values()
+            if isinstance(value, (float, int))
+        ):
+            raise ValueError("NIF articulation scalar keys must be finite")
+        if float(row["timeSeconds"]) <= previous_time:
+            raise ValueError("NIF articulation scalar key times must increase")
+        previous_time = float(row["timeSeconds"])
+        rows.append(row)
+    return rows
+
+
+def _vector_key_rows(group: object) -> list[dict[str, object]]:
+    rows = []
+    previous_time = -math.inf
+    for key in group.keys:
+        value = key.value
+        row: dict[str, object] = {
+            "timeSeconds": float(key.time),
+            "value": [float(value.x), float(value.y), float(value.z)],
+        }
+        if not math.isfinite(float(row["timeSeconds"])) or not all(
+            math.isfinite(component) for component in row["value"]
+        ):
+            raise ValueError("NIF articulation translation keys must be finite")
+        if float(row["timeSeconds"]) <= previous_time:
+            raise ValueError("NIF articulation translation key times must increase")
+        previous_time = float(row["timeSeconds"])
+        rows.append(row)
+    return rows
+
+
+def _sequence_transform_contract(
+    sequence: object,
+    controlled: object,
+    closed_transform: dict[str, object],
+    block_index: dict[int, int],
+) -> dict[str, object]:
+    controller = controlled.controller
+    interpolator = controlled.interpolator
+    if not isinstance(controller, NifFormat.NiMultiTargetTransformController):
+        raise ValueError("DOOR articulation controller is not NiMultiTargetTransformController")
+    if not isinstance(interpolator, NifFormat.NiTransformInterpolator):
+        raise ValueError("DOOR articulation interpolator is not NiTransformInterpolator")
+    data = interpolator.data
+    if not isinstance(data, NifFormat.NiTransformData):
+        raise ValueError("DOOR articulation interpolator has no NiTransformData")
+    if decode_text(controlled.controller_type) != "NiTransformController":
+        raise ValueError("DOOR articulation controlled block is not NiTransformController")
+    if int(data.rotation_type) != 4 or len(data.xyz_rotations) != 3:
+        raise ValueError("DOOR articulation requires authored XYZ rotation keys")
+
+    start = float(sequence.start_time)
+    stop = float(sequence.stop_time)
+    if not math.isfinite(start) or not math.isfinite(stop) or stop <= start:
+        raise ValueError("DOOR articulation sequence duration is invalid")
+    rotation_groups = []
+    rotation_endpoints: list[tuple[float, float]] = []
+    for axis, group in zip("XYZ", data.xyz_rotations):
+        rows = _scalar_key_rows(group)
+        if not rows:
+            raise ValueError("DOOR articulation XYZ rotation axis has no keys")
+        if not math.isclose(float(rows[0]["timeSeconds"]), start, abs_tol=1.0e-5):
+            raise ValueError("DOOR articulation rotation does not start at sequence start")
+        if not math.isclose(float(rows[-1]["timeSeconds"]), stop, abs_tol=1.0e-5):
+            raise ValueError("DOOR articulation rotation does not end at sequence stop")
+        interpolation = _interpolation_name(int(group.interpolation))
+        rotation_groups.append(
+            {"axis": axis, "interpolation": interpolation, "keys": rows}
+        )
+        rotation_endpoints.append((float(rows[0]["value"]), float(rows[-1]["value"])))
+
+    translation_rows = _vector_key_rows(data.translations)
+    if translation_rows and (
+        not math.isclose(float(translation_rows[0]["timeSeconds"]), start, abs_tol=1.0e-5)
+        or not math.isclose(float(translation_rows[-1]["timeSeconds"]), stop, abs_tol=1.0e-5)
+    ):
+        raise ValueError("DOOR articulation translation keys do not span the sequence")
+    scale_rows = _scalar_key_rows(data.scales)
+    if scale_rows and (
+        not math.isclose(float(scale_rows[0]["timeSeconds"]), start, abs_tol=1.0e-5)
+        or not math.isclose(float(scale_rows[-1]["timeSeconds"]), stop, abs_tol=1.0e-5)
+    ):
+        raise ValueError("DOOR articulation scale keys do not span the sequence")
+
+    key_contract = {
+        "rotation": {"representation": "euler-xyz", "groups": rotation_groups},
+        "translation": {
+            "interpolation": (
+                _interpolation_name(int(data.translations.interpolation))
+                if translation_rows
+                else "constant-closed"
+            ),
+            "keys": translation_rows,
+        },
+        "scale": {
+            "interpolation": (
+                _interpolation_name(int(data.scales.interpolation))
+                if scale_rows
+                else "constant-closed"
+            ),
+            "keys": scale_rows,
+        },
+    }
+
+    def endpoint(index: int) -> dict[str, object]:
+        source_translation = (
+            translation_rows[index]["value"]
+            if translation_rows
+            else [
+                float(closed_transform["translationGodotUnits"][0]),
+                -float(closed_transform["translationGodotUnits"][2]),
+                float(closed_transform["translationGodotUnits"][1]),
+            ]
+        )
+        scale = (
+            float(scale_rows[index]["value"])
+            if scale_rows
+            else float(closed_transform["scale"])
+        )
+        source_angles = tuple(values[index] for values in rotation_endpoints)
+        return {
+            "translationGodotUnits": [
+                float(source_translation[0]),
+                float(source_translation[2]),
+                -float(source_translation[1]),
+            ],
+            "rotationGodotQuaternion": _converted_nif_quaternion(
+                _euler_xyz_quaternion(source_angles)
+            ),
+            "scale": scale,
+        }
+
+    return {
+        "sourceName": decode_text(sequence.name),
+        "startSeconds": start,
+        "stopSeconds": stop,
+        "durationSeconds": stop - start,
+        "initialLocalTransform": endpoint(0),
+        "terminalLocalTransform": endpoint(-1),
+        "keyInterpolation": {
+            "rotation": "euler-xyz-" + "+".join(
+                str(group["interpolation"]) for group in rotation_groups
+            ),
+            "translation": str(key_contract["translation"]["interpolation"]),
+            "scale": str(key_contract["scale"]["interpolation"]),
+        },
+        "keySha256": _canonical_sha256(key_contract),
+        "source": {
+            "sequenceBlock": block_index[id(sequence)],
+            "controllerBlock": block_index[id(controller)],
+            "interpolatorBlock": block_index[id(interpolator)],
+            "transformDataBlock": block_index[id(data)],
+        },
+    }
+
+
+def _descendant_ids(node: object) -> set[int]:
+    result = {id(node)}
+    if isinstance(node, NifFormat.NiNode):
+        for child in node.children:
+            if child is not None:
+                result.update(_descendant_ids(child))
+    return result
+
+
+def _resolve_door_articulation(
+    blocks: list[object],
+    root: object,
+    block_index: dict[int, int],
+    source_hash: str,
+    stable_id_hex_characters: int,
+    *,
+    required: bool,
+) -> dict[str, object] | None:
+    if not required:
+        return None
+    managers = [block for block in blocks if isinstance(block, NifFormat.NiControllerManager)]
+    time_controllers = [
+        block for block in blocks if isinstance(block, NifFormat.NiTimeController)
+    ]
+    if not managers and not time_controllers:
+        return None
+    if len(managers) != 1:
+        raise ValueError(f"Controller-bearing DOOR requires one NiControllerManager, found {len(managers)}")
+    manager = managers[0]
+    if manager.target is not root:
+        raise ValueError("DOOR articulation manager target is not the NIF root")
+    sequences_by_name: dict[str, object] = {}
+    for sequence in manager.controller_sequences:
+        name = decode_text(sequence.name).casefold()
+        if name in sequences_by_name:
+            raise ValueError(f"DOOR articulation repeats sequence {name!r}")
+        sequences_by_name[name] = sequence
+    if set(sequences_by_name) != {"open", "close"}:
+        raise ValueError(
+            f"Controller-bearing DOOR requires exact Open/Close sequences, found {sorted(sequences_by_name)}"
+        )
+
+    target = None
+    sequence_contracts: dict[str, object] = {}
+    for name in ("open", "close"):
+        sequence = sequences_by_name[name]
+        if not isinstance(sequence, NifFormat.NiControllerSequence):
+            raise ValueError(f"DOOR articulation {name} block is not NiControllerSequence")
+        controlled_blocks = list(sequence.controlled_blocks)
+        if len(controlled_blocks) != 1:
+            raise ValueError(f"DOOR articulation {name} must control exactly one target")
+        controlled = controlled_blocks[0]
+        controller = controlled.controller
+        if not isinstance(controller, NifFormat.NiMultiTargetTransformController):
+            raise ValueError(f"DOOR articulation {name} has unsupported controller")
+        named_targets = [
+            node
+            for node in blocks
+            if isinstance(node, NifFormat.NiNode)
+            and decode_text(node.name) == decode_text(controlled.node_name)
+        ]
+        if len(named_targets) != 1:
+            raise ValueError(
+                f"DOOR articulation {name} target name does not resolve uniquely: "
+                f"{decode_text(controlled.node_name)!r}"
+            )
+        sequence_target = named_targets[0]
+        controller_targets = [node for node in controller.extra_targets if node is not None]
+        if controller.target is not root or controller_targets != [sequence_target]:
+            raise ValueError(f"DOOR articulation {name} controller target join is incomplete")
+        if target is None:
+            target = sequence_target
+        elif target is not sequence_target:
+            raise ValueError("DOOR articulation Open/Close target different nodes")
+
+    assert target is not None
+    multi_target_controllers = [
+        block for block in blocks
+        if isinstance(block, NifFormat.NiMultiTargetTransformController)
+    ]
+    for controller in multi_target_controllers:
+        extra_targets = [node for node in controller.extra_targets if node is not None]
+        if controller.target is not root or extra_targets != [target]:
+            raise ValueError("DOOR articulation contains an unmatched transform controller")
+    supported_controllers = (NifFormat.NiControllerManager, NifFormat.NiMultiTargetTransformController)
+    unsupported_controllers = [
+        type(block).__name__
+        for block in blocks
+        if isinstance(block, NifFormat.NiTimeController)
+        and not isinstance(block, supported_controllers)
+    ]
+    if unsupported_controllers:
+        raise ValueError(
+            f"Controller-bearing DOOR has unsupported controller blocks: {sorted(set(unsupported_controllers))}"
+        )
+
+    target_name = decode_text(target.name)
+    target_index = block_index[id(target)]
+    target_id = sha256_bytes(
+        f"{source_hash}:{target_index}:{target_name}".encode("utf-8")
+    )[:stable_id_hex_characters]
+    closed_transform = _node_local_transform(target)
+    for name in ("open", "close"):
+        sequence = sequences_by_name[name]
+        sequence_contracts[name] = _sequence_transform_contract(
+            sequence,
+            list(sequence.controlled_blocks)[0],
+            closed_transform,
+            block_index,
+        )
+    return {
+        "target": target,
+        "descendantIds": _descendant_ids(target),
+        "contract": {
+            "schema": DOOR_ARTICULATION_SCHEMA,
+            "status": "owned-open-close-transform-complete",
+            "target": {
+                "targetId": target_id,
+                "sourceBlockIndex": target_index,
+                "sourceName": target_name,
+                "visualNodeName": f"OPENNV_ARTICULATION_{target_id}",
+                "collisionNodeName": f"OPENNV_ARTICULATION_{target_id}",
+            },
+            "closedLocalTransform": closed_transform,
+            "sequences": sequence_contracts,
+        },
+    }
 
 
 def is_editor_marker(value: object) -> bool:
@@ -629,6 +1049,7 @@ def export_static_nif(
     strict: bool = True,
     presentation_clip: dict[str, object] | None = None,
     include_shape_prefixes: tuple[str, ...] | None = None,
+    require_door_articulation: bool = False,
 ) -> dict[str, object]:
     clip_rectangle: tuple[float, float, float, float] | None = None
     clip_coordinate_space = "source-world-game-units-before-scene-origin"
@@ -681,7 +1102,16 @@ def export_static_nif(
 
     blocks = list(data.get_global_iterator())
     block_index = {id(block): index for index, block in enumerate(blocks)}
+    root = data.roots[0]
     controllers = [type(block).__name__ for block in blocks if isinstance(block, NifFormat.NiTimeController)]
+    articulation = _resolve_door_articulation(
+        blocks,
+        root,
+        block_index,
+        source_hash,
+        compiler.stable_id_hex_characters,
+        required=require_door_articulation,
+    )
     all_shapes = [
         block
         for block in blocks
@@ -759,16 +1189,16 @@ def export_static_nif(
                 }
             )
         raise ValueError("NIF contains no supported static geometry")
-    if strict and controllers:
+    if strict and controllers and articulation is None:
         raise ValueError(f"Static slice rejects controller blocks: {sorted(set(controllers))}")
 
     builder = BufferBuilder()
     primitives: list[dict[str, object]] = []
+    primitive_rows: list[dict[str, object]] = []
     materials: list[dict[str, object]] = []
     surface_rows: list[dict[str, object]] = []
     clipped_away_surfaces: list[dict[str, object]] = []
     clip_surface_reports: list[dict[str, int]] = []
-    root = data.roots[0]
     attachment_markers = []
     for block in blocks:
         if not isinstance(block, NifFormat.NiNode) or decode_text(block.name) not in ATTACHMENT_MARKER_NAMES:
@@ -811,7 +1241,16 @@ def export_static_nif(
         if strict and len(mesh.uv_sets) > 2:
             raise ValueError(f"Static slice supports at most two UV sets: {decode_text(shape.name)}")
 
-        matrix = shape.get_transform(root)
+        shape_index = block_index[id(shape)]
+        stable_id = sha256_bytes(
+            f"{source_hash}:{shape_index}:{decode_text(shape.name)}".encode()
+        )[:compiler.stable_id_hex_characters]
+        articulation_target_id = None
+        transform_parent = root
+        if articulation is not None and id(shape) in articulation["descendantIds"]:
+            articulation_target_id = articulation["contract"]["target"]["targetId"]
+            transform_parent = articulation["target"]
+        matrix = shape.get_transform(transform_parent)
         positions = [transform_xyz(value, matrix, direction=False) for value in source_vertices]
         triangles = [tuple(int(index) for index in triangle) for triangle in mesh.get_triangles()]
         if not triangles:
@@ -945,12 +1384,15 @@ def export_static_nif(
         if any(value > 0.0 for value in emissive):
             gltf_material["emissiveFactor"] = emissive
         materials.append(gltf_material)
-        primitives.append({"attributes": attributes, "indices": index_accessor, "material": material_index})
-
-        shape_index = block_index[id(shape)]
-        stable_id = sha256_bytes(
-            f"{source_hash}:{shape_index}:{decode_text(shape.name)}".encode()
-        )[:compiler.stable_id_hex_characters]
+        primitive = {"attributes": attributes, "indices": index_accessor, "material": material_index}
+        primitives.append(primitive)
+        primitive_rows.append(
+            {
+                "primitive": primitive,
+                "stableId": stable_id,
+                "articulationTargetId": articulation_target_id,
+            }
+        )
         surface_rows.append({
             "stableId": stable_id,
             "sourceBlockIndex": shape_index,
@@ -961,7 +1403,8 @@ def export_static_nif(
             "propertyTypes": property_types,
             "textures": texture_paths(shape),
             "material": surface_material,
-            "transformBakedToRoot": True,
+            "transformBakedToRoot": articulation_target_id is None,
+            "articulationTargetId": articulation_target_id,
             "skinSourcePoseBaked": skin_source_pose_baked,
             "tangentSource": tangent_source,
             "normalSource": normal_source,
@@ -971,13 +1414,120 @@ def export_static_nif(
     if not primitives:
         raise ValueError("Static presentation clip removed all supported geometry")
 
+    collision_types = sorted({type(block).__name__ for block in blocks if type(block).__name__.startswith("bhk")})
+    collision_bodies, collision_unsupported = collision_contract(
+        blocks,
+        root,
+        block_index,
+        articulation_target=(articulation["target"] if articulation is not None else None),
+        articulation_target_id=(
+            str(articulation["contract"]["target"]["targetId"])
+            if articulation is not None
+            else None
+        ),
+        articulation_descendant_ids=(
+            articulation["descendantIds"] if articulation is not None else None
+        ),
+    )
+    physics_bodies, physics_unsupported = dynamic_physics_contract(blocks, block_index)
+
+    articulation_contract = None
+    if articulation is not None:
+        articulation_contract = articulation["contract"]
+        target_id = str(articulation_contract["target"]["targetId"])
+        visual_surface_ids = sorted(
+            str(row["stableId"])
+            for row in primitive_rows
+            if row["articulationTargetId"] == target_id
+        )
+        collision_body_blocks = sorted(
+            int(body["bodyBlock"])
+            for body in collision_bodies
+            if body["ownerTargetId"] == target_id
+        )
+        if not visual_surface_ids:
+            raise ValueError("Controller-bearing DOOR target has no joined visual surfaces")
+        if not collision_body_blocks:
+            raise ValueError("Controller-bearing DOOR target has no joined authored collision")
+        target_contract = articulation_contract["target"]
+        target_contract.update(
+            {
+                "visualSurfaceStableIds": visual_surface_ids,
+                "collisionBodyBlocks": collision_body_blocks,
+                "visualDescendantNodeNames": [
+                    f"OPENNV_ARTICULATION_VISUAL_{stable_id}"
+                    for stable_id in visual_surface_ids
+                ],
+                "collisionDescendantNodeNames": [
+                    f"OPENNV_ARTICULATION_COLLISION_BODY_{body_block}"
+                    for body_block in collision_body_blocks
+                ],
+            }
+        )
+        articulation_contract["canonicalSha256"] = _canonical_sha256(articulation_contract)
+
     binary_name = gltf_path.with_suffix(".bin").name
+    meshes: list[dict[str, object]] = []
+    nodes: list[dict[str, object]] = []
+    scene_nodes: list[int] = []
+    if articulation_contract is None:
+        meshes.append({"name": Path(logical_path).stem, "primitives": primitives})
+        nodes.append({"name": Path(logical_path).stem, "mesh": 0})
+        scene_nodes.append(0)
+    else:
+        target_contract = articulation_contract["target"]
+        target_id = str(target_contract["targetId"])
+        static_primitives = [
+            row["primitive"]
+            for row in primitive_rows
+            if row["articulationTargetId"] is None
+        ]
+        if static_primitives:
+            meshes.append(
+                {"name": f"{Path(logical_path).stem}_STATIC", "primitives": static_primitives}
+            )
+            nodes.append({"name": f"{Path(logical_path).stem}_STATIC", "mesh": 0})
+            scene_nodes.append(0)
+        target_children = []
+        for row in sorted(
+            (
+                row
+                for row in primitive_rows
+                if row["articulationTargetId"] == target_id
+            ),
+            key=lambda value: str(value["stableId"]),
+        ):
+            node_name = f"OPENNV_ARTICULATION_VISUAL_{row['stableId']}"
+            mesh_index = len(meshes)
+            node_index = len(nodes)
+            meshes.append({"name": node_name, "primitives": [row["primitive"]]})
+            nodes.append(
+                {
+                    "name": node_name,
+                    "mesh": mesh_index,
+                    "extras": {"openNvArticulationTargetId": target_id},
+                }
+            )
+            target_children.append(node_index)
+        closed_transform = articulation_contract["closedLocalTransform"]
+        wrapper_index = len(nodes)
+        nodes.append(
+            {
+                "name": target_contract["visualNodeName"],
+                "translation": closed_transform["translationGodotUnits"],
+                "rotation": closed_transform["rotationGodotQuaternion"],
+                "scale": [closed_transform["scale"]] * 3,
+                "children": target_children,
+                "extras": {"openNvArticulationTargetId": target_id},
+            }
+        )
+        scene_nodes.append(wrapper_index)
     gltf = {
         "asset": {"version": "2.0", "generator": GENERATOR},
         "scene": 0,
-        "scenes": [{"nodes": [0]}],
-        "nodes": [{"name": Path(logical_path).stem, "mesh": 0}],
-        "meshes": [{"name": Path(logical_path).stem, "primitives": primitives}],
+        "scenes": [{"nodes": scene_nodes}],
+        "nodes": nodes,
+        "meshes": meshes,
         "materials": materials,
         "buffers": [{"uri": binary_name, "byteLength": len(builder.data)}],
         "bufferViews": builder.views,
@@ -989,15 +1539,13 @@ def export_static_nif(
     atomic_write(gltf_path.with_suffix(".bin"), binary_bytes)
     atomic_write(gltf_path, gltf_bytes)
 
-    collision_types = sorted({type(block).__name__ for block in blocks if type(block).__name__.startswith("bhk")})
-    collision_bodies, collision_unsupported = collision_contract(blocks, root, block_index)
-    physics_bodies, physics_unsupported = dynamic_physics_contract(blocks, block_index)
     collision_outputs = (
         write_collision_gltf(
             collision_bodies,
             gltf_path.with_name(f"{gltf_path.stem}.collision.gltf"),
             source_hash,
             GENERATOR,
+            articulation=articulation_contract,
         )
         if collision_bodies
         else None
@@ -1080,6 +1628,8 @@ def export_static_nif(
         "attachmentMarkers": attachment_markers,
         "surfaces": surface_rows,
     }
+    if articulation_contract is not None:
+        sidecar["articulation"] = articulation_contract
     sidecar_bytes = (json.dumps(sidecar, indent=2, sort_keys=True) + "\n").encode()
     atomic_write(sidecar_path, sidecar_bytes)
     return sidecar
