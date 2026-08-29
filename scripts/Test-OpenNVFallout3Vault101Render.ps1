@@ -54,7 +54,7 @@ $receiptLine = @(
         Where-Object { $_.TrimStart().StartsWith("{") }
 )[-1]
 $receipt = $receiptLine | ConvertFrom-Json
-if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v2" -or
+if ($receipt.schema -ne "opennv-fo3-vault101-birth-presentation/v3" -or
     -not (Test-Path -LiteralPath $receipt.output -PathType Leaf)) {
     throw "Fallout 3 Vault 101 preparation receipt is invalid."
 }
@@ -77,7 +77,7 @@ $reportPath = Join-Path $CaptureRoot "vault101-birth-native-render-proof.json"
 $framePath = Join-Path $CaptureRoot "vault101-birth-entry.png"
 $actorFramePath = Join-Path $CaptureRoot "doctor-li-owned-actor.png"
 $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json -Depth 100
-if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v2" -or
+if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v3" -or
     $report.status -ne "pass-rendered-owned-textured-birth-room-and-doctor-li-no-dialogue-scripts-or-gameplay" -or
     -not $report.promotion.rendered -or
     -not $report.promotion.texturesBound -or
@@ -105,6 +105,12 @@ if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v2" -or
     $report.characterSelectionHandoff.packageFormId -ne "0006a818" -or
     $report.characterSelectionHandoff.packageLocationReferenceFormId -ne "00039562" -or
     $report.characterSelectionHandoff.entryReferenceFormId -ne "00039562" -or
+    $report.proofCamera.authority -ne "owned-CG00-support-mesh-top-derived-proof-only-not-retail-camera" -or
+    $report.proofCamera.supportReferenceFormId -ne "00060c92" -or
+    $report.proofCamera.supportBaseEditorId -ne "CG00Gurney" -or
+    $report.proofCamera.supportSurfaceGodotGameUnits -le 0 -or
+    $report.proofCamera.surfaceClearanceGameUnits -le $report.proofCamera.nearGameUnits -or
+    $report.proofCamera.positionGodotGameUnits[1] -le $report.proofCamera.supportSurfaceGodotGameUnits -or
     -not $report.characterSelectionHandoff.boundedPresentationOnly -or
     $report.characterSelectionHandoff.packageExecuted -or
     $report.characterSelectionHandoff.playerIdleExecuted -or

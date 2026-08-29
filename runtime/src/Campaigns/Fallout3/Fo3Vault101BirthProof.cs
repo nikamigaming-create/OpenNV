@@ -57,8 +57,8 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 : metrics.NonBackgroundPixels < MinimumNonBackgroundPixels
                     ? "owned-geometry-not-visible"
                     : null;
-            var entryCameraPosition = coverage.Camera.GlobalPosition;
-            var entryCameraFov = coverage.Camera.Fov;
+            var proofCameraPosition = coverage.Camera.GlobalPosition;
+            var proofCameraFov = coverage.Camera.Fov;
             foreach (var child in coverage.CellRoot.GetChildren().OfType<Node3D>()
                          .Where(child => child.Name.ToString().StartsWith(
                              "REFR_", StringComparison.Ordinal)))
@@ -114,7 +114,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
             var failure = roomFailure ?? actorFailure;
             var report = new
             {
-                schema = "opennv-fo3-vault101-birth-native-render-proof/v2",
+                schema = "opennv-fo3-vault101-birth-native-render-proof/v3",
                 status = failure is null
                     ? "pass-rendered-owned-textured-birth-room-and-doctor-li-no-dialogue-scripts-or-gameplay"
                     : "fail-rendered-owned-birth-room",
@@ -149,9 +149,27 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     referenceFormId = contract.EntryReferenceFormId,
                     positionGameUnits = Vector(contract.EntryPositionGameUnits),
                     rotationRadians = Vector(contract.EntryRotationRadians),
-                    positionGodotMeters = Vector(entryCameraPosition),
-                    cameraProjection = "recipe-proof-only-not-retail-parity",
-                    verticalFovDegrees = entryCameraFov,
+                    positionGodotMeters = Vector(
+                        coverage.CellRoot.ToGlobal(Vector3.Zero)),
+                },
+                proofCamera = new
+                {
+                    authority = contract.ProofCameraAuthority,
+                    supportReferenceFormId = contract.ProofCameraSupportReferenceFormId,
+                    supportBaseEditorId = contract.ProofCameraSupportBaseEditorId,
+                    supportAssetId = contract.ProofCameraSupportAssetId,
+                    supportSurfaceGodotGameUnits =
+                        contract.ProofCameraSupportSurfaceGodotGameUnits,
+                    surfaceClearanceGameUnits =
+                        contract.ProofCameraSurfaceClearanceGameUnits,
+                    nearGameUnits = contract.ProofCameraNearGameUnits,
+                    positionGameUnits = Vector(contract.ProofCameraPositionGameUnits),
+                    positionGodotGameUnits = Vector(
+                        contract.ProofCameraPositionGodotGameUnits),
+                    positionGodotMeters = Vector(proofCameraPosition),
+                    rotationAuthority = "exact owned entry-marker rotation",
+                    projection = "recipe-proof-only-not-retail-parity",
+                    verticalFovDegrees = proofCameraFov,
                 },
                 characterSelectionHandoff = new
                 {

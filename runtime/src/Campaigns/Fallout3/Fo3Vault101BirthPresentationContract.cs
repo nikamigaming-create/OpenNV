@@ -10,7 +10,9 @@ internal sealed record Fo3Vault101BirthAsset(
     string SourceSha256,
     string ModelPath,
     string SidecarPath,
-    int Surfaces);
+    int Surfaces,
+    Vector3 BoundsMinGodotGameUnits,
+    Vector3 BoundsMaxGodotGameUnits);
 
 internal sealed record Fo3Vault101BirthReference(
     string FormId,
@@ -59,6 +61,15 @@ internal sealed record Fo3Vault101BirthPresentationContract(
     Vector3 EntryPositionGameUnits,
     Vector3 EntryRotationRadians,
     Quaternion EntryRotationGodotQuaternion,
+    string ProofCameraAuthority,
+    string ProofCameraSupportReferenceFormId,
+    string ProofCameraSupportBaseEditorId,
+    string ProofCameraSupportAssetId,
+    float ProofCameraSupportSurfaceGodotGameUnits,
+    float ProofCameraSurfaceClearanceGameUnits,
+    float ProofCameraNearGameUnits,
+    Vector3 ProofCameraPositionGameUnits,
+    Vector3 ProofCameraPositionGodotGameUnits,
     float VerticalFovDegrees,
     Color ProofAmbientColor,
     float ProofAmbientEnergy,
@@ -72,7 +83,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
     IReadOnlyDictionary<string, Fo3Vault101BirthAsset> Assets,
     IReadOnlyList<Fo3Vault101BirthReference> References)
 {
-    internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v2";
+    internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v3";
     private const string ExpectedStatus =
         "prepared-owned-materials-and-doctor-actor-not-yet-rendered";
     private const string ExpectedCellEditorId = "Vault101d";
@@ -80,6 +91,8 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         "recipe-proof-only-not-retail-CELL-lighting";
     private const string ExpectedMaterialAuthority =
         "owned-NIF-surface-identity-and-owned-DDS-bindings";
+    private const string ExpectedProofCameraAuthority =
+        "owned-CG00-support-mesh-top-derived-proof-only-not-retail-camera";
     private const string RequiredUnsupportedActors =
         "Dad, Mom, player body, and all actors except Doctor Li";
     private const string RequiredUnsupportedActorBehavior =
@@ -144,6 +157,36 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 entry differs from the owned player marker.");
 
+        var proofCamera = RequiredObject(root, "proofCamera");
+        var proofCameraAuthority = RequiredString(proofCamera, "authority");
+        var proofCameraSupportReferenceFormId = RequiredFormId(
+            proofCamera,
+            "supportReferenceFormId");
+        var proofCameraSupportBaseEditorId = RequiredString(
+            proofCamera,
+            "supportBaseEditorId");
+        var proofCameraSupportAssetId = RequiredString(proofCamera, "supportAssetId");
+        var proofCameraSupportSurface = RequiredPositiveSingle(
+            proofCamera,
+            "supportSurfaceGodotGameUnits");
+        var proofCameraClearance = RequiredPositiveSingle(
+            proofCamera,
+            "surfaceClearanceGameUnits");
+        var proofCameraNear = RequiredPositiveSingle(proofCamera, "nearGameUnits");
+        var proofCameraPosition = ReadVector3(proofCamera, "positionGameUnits");
+        var proofCameraLocalPosition = ReadVector3(
+            proofCamera,
+            "positionGodotGameUnits");
+        var proofCameraQuaternion = ReadQuaternion(
+            proofCamera,
+            "rotationGodotQuaternion");
+        if (proofCameraAuthority != ExpectedProofCameraAuthority ||
+            RequiredFormId(proofCamera, "entryReferenceFormId") != entryReferenceFormId ||
+            proofCameraClearance <= proofCameraNear ||
+            !proofCameraQuaternion.IsEqualApprox(entryQuaternion))
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 proof-camera authority is unsupported.");
+
         var presentation = RequiredObject(root, "presentation");
         if (RequiredString(presentation, "lightingAuthority") != ExpectedLightingAuthority ||
             RequiredString(presentation, "materialAuthority") != ExpectedMaterialAuthority)
@@ -182,6 +225,35 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             references.Any(value => !assets.ContainsKey(value.AssetId)))
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 presentation reference closure is incomplete.");
+        var proofCameraSupports = references
+            .Where(value => value.FormId == proofCameraSupportReferenceFormId)
+            .ToArray();
+        if (proofCameraSupports.Length != 1)
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 proof-camera support reference is absent or ambiguous.");
+        var proofCameraSupport = proofCameraSupports[0];
+        if (proofCameraSupport.BaseEditorId != proofCameraSupportBaseEditorId ||
+            proofCameraSupport.AssetId != proofCameraSupportAssetId ||
+            !assets.TryGetValue(proofCameraSupportAssetId, out var proofCameraSupportAsset) ||
+            !Mathf.IsZeroApprox(proofCameraSupport.RotationRadians.X) ||
+            !Mathf.IsZeroApprox(proofCameraSupport.RotationRadians.Y))
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 proof-camera support identity differs.");
+        var expectedSupportSurface = proofCameraSupport.PositionGodotGameUnits.Y +
+            proofCameraSupportAsset.BoundsMaxGodotGameUnits.Y * proofCameraSupport.Scale;
+        var expectedLocalPosition = new Vector3(
+            0.0f,
+            expectedSupportSurface + proofCameraClearance,
+            0.0f);
+        var expectedGamePosition = entryPosition + new Vector3(
+            0.0f,
+            0.0f,
+            expectedLocalPosition.Y);
+        if (!Mathf.IsEqualApprox(proofCameraSupportSurface, expectedSupportSurface) ||
+            !proofCameraLocalPosition.IsEqualApprox(expectedLocalPosition) ||
+            !proofCameraPosition.IsEqualApprox(expectedGamePosition))
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 proof camera differs from its owned support surface.");
 
         var textureIds = RequiredArray(root, "textures").EnumerateArray()
             .Select(value => VerifyTexture(value, cacheRoot))
@@ -227,6 +299,15 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             entryPosition,
             entryRotation,
             entryQuaternion,
+            proofCameraAuthority,
+            proofCameraSupportReferenceFormId,
+            proofCameraSupportBaseEditorId,
+            proofCameraSupportAssetId,
+            proofCameraSupportSurface,
+            proofCameraClearance,
+            proofCameraNear,
+            proofCameraPosition,
+            proofCameraLocalPosition,
             verticalFovDegrees,
             ambient,
             ambientEnergy,
@@ -415,6 +496,14 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         VerifyCacheLocalDerivative(manifestDirectory, modelPath);
         VerifyCacheLocalDerivative(manifestDirectory, sidecarPath);
         var surfaces = RequiredPositiveInteger(source, "surfaces");
+        var bounds = RequiredObject(source, "boundsGodotGameUnits");
+        var boundsMinimum = ReadVector3(bounds, "min");
+        var boundsMaximum = ReadVector3(bounds, "max");
+        if (boundsMaximum.X < boundsMinimum.X ||
+            boundsMaximum.Y < boundsMinimum.Y ||
+            boundsMaximum.Z < boundsMinimum.Z)
+            throw new InvalidOperationException(
+                "Fallout 3 Vault 101 asset bounds are invalid.");
         var materials = RequiredArray(source, "materials").EnumerateArray().ToArray();
         if (materials.Length != surfaces || materials.Any(material =>
                 RequiredArray(material, "unresolvedTextureRoles").GetArrayLength() != 0))
@@ -426,7 +515,9 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             RequiredSha256(source, "sourceSha256"),
             modelPath,
             sidecarPath,
-            surfaces);
+            surfaces,
+            boundsMinimum,
+            boundsMaximum);
     }
 
     private static string VerifyTexture(JsonElement source, string cacheRoot)

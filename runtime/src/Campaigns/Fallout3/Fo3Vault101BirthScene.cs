@@ -184,15 +184,21 @@ internal static class Fo3Vault101BirthScene
             });
             var camera = new Camera3D
             {
-                Name = $"ENTRY_{contract.EntryReferenceFormId}_SOURCE_MARKER_CAMERA",
-                Position = root.ToGlobal(Vector3.Zero),
+                Name = $"ENTRY_{contract.EntryReferenceFormId}_OWNED_SUPPORT_PROOF_CAMERA",
+                Position = root.ToGlobal(contract.ProofCameraPositionGodotGameUnits),
                 Quaternion = contract.EntryRotationGodotQuaternion,
                 Fov = contract.VerticalFovDegrees,
-                Near = 0.01f,
+                Near = contract.ProofCameraNearGameUnits * contract.UnitsToMeters,
                 Far = 100.0f,
                 Current = true,
             };
-            camera.SetMeta("opennv_source_position_game_units", contract.EntryPositionGameUnits);
+            camera.SetMeta("opennv_entry_position_game_units", contract.EntryPositionGameUnits);
+            camera.SetMeta(
+                "opennv_proof_camera_position_game_units",
+                contract.ProofCameraPositionGameUnits);
+            camera.SetMeta(
+                "opennv_proof_camera_support_reference_form_id",
+                contract.ProofCameraSupportReferenceFormId);
             camera.SetMeta("opennv_source_rotation_radians", contract.EntryRotationRadians);
             host.AddChild(camera);
             var doctorActorGeometry = CellReferenceLedger.MeasureGeometry(

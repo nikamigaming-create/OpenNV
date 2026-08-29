@@ -24,7 +24,7 @@ from texture_pipeline import TexturePipeline
 
 
 RECIPE_SCHEMA = "opennv-fo3-birth-presentation-recipe/v1"
-OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v2"
+OUTPUT_SCHEMA = "opennv-fo3-vault101-birth-presentation/v3"
 PROFILE_SCHEMA = "opennv-owned-game-profile/v1"
 OUTPUT_NAME = "fo3-vault101-birth-presentation.json"
 SHA256_HEX_CHARACTERS = 64
@@ -129,6 +129,45 @@ def _distance(first: list[object], second: list[object]) -> float:
     return math.sqrt(
         sum((float(first[index]) - float(second[index])) ** 2 for index in range(3))
     )
+
+
+def _gltf_position_bounds(path: Path) -> tuple[list[float], list[float]]:
+    document, _payload = _read_json(path)
+    meshes = _required_list(document, "meshes")
+    accessors = _required_list(document, "accessors")
+    minima = [math.inf, math.inf, math.inf]
+    maxima = [-math.inf, -math.inf, -math.inf]
+    positions = 0
+    for mesh in meshes:
+        if not isinstance(mesh, dict):
+            raise ValueError(f"glTF mesh row is malformed: {path}")
+        for primitive in _required_list(mesh, "primitives"):
+            if not isinstance(primitive, dict):
+                raise ValueError(f"glTF primitive row is malformed: {path}")
+            attributes = _required_object(primitive, "attributes")
+            accessor_index = attributes.get("POSITION")
+            if not isinstance(accessor_index, int) or not (
+                0 <= accessor_index < len(accessors)
+            ):
+                raise ValueError(f"glTF POSITION accessor is invalid: {path}")
+            accessor = accessors[accessor_index]
+            if not isinstance(accessor, dict):
+                raise ValueError(f"glTF POSITION accessor row is malformed: {path}")
+            minimum = _required_list(accessor, "min")
+            maximum = _required_list(accessor, "max")
+            if len(minimum) != 3 or len(maximum) != 3:
+                raise ValueError(f"glTF POSITION bounds are not three-dimensional: {path}")
+            for axis in range(3):
+                lower = float(minimum[axis])
+                upper = float(maximum[axis])
+                if not math.isfinite(lower) or not math.isfinite(upper) or upper < lower:
+                    raise ValueError(f"glTF POSITION bounds are invalid: {path}")
+                minima[axis] = min(minima[axis], lower)
+                maxima[axis] = max(maxima[axis], upper)
+            positions += 1
+    if positions == 0:
+        raise ValueError(f"glTF contains no bounded POSITION accessor: {path}")
+    return minima, maxima
 
 
 def prepare(
@@ -351,6 +390,11 @@ def prepare(
                 sidecar["coverage"]["collisionExported"]
             ),
         }
+        bounds_minimum, bounds_maximum = _gltf_position_bounds(gltf_path)
+        assets[model_path]["boundsGodotGameUnits"] = {
+            "min": bounds_minimum,
+            "max": bounds_maximum,
+        }
         asset_sidecars[model_path] = sidecar
     retained = [row for row in selected if row[2] in assets]
     if not retained:
@@ -437,6 +481,70 @@ def prepare(
     entry_rotation = tuple(
         float(value) for value in _required_list(entry_transform, "rotationRadians")
     )
+    support_reference_form_id = _required_string(
+        presentation, "proofCameraSupportReferenceFormId"
+    )
+    support_matches = [
+        row
+        for row in retained
+        if row[0].get("formId") == support_reference_form_id
+    ]
+    if len(support_matches) != 1:
+        raise ValueError(
+            "Fallout 3 proof-camera support reference is absent or ambiguous"
+        )
+    support_reference, support_base, support_model_path = support_matches[0]
+    if (
+        support_base.get("editorId")
+        != _required_string(presentation, "proofCameraSupportBaseEditorId")
+        or support_model_path
+        != _required_string(presentation, "proofCameraSupportModelPath").lower()
+    ):
+        raise ValueError("Fallout 3 proof-camera support identity differs")
+    support_transform = _required_object(support_reference, "transform")
+    support_position = tuple(
+        float(value)
+        for value in _required_list(support_transform, "positionGameUnits")
+    )
+    support_rotation = tuple(
+        float(value)
+        for value in _required_list(support_transform, "rotationRadians")
+    )
+    if abs(support_rotation[0]) > 1.0e-6 or abs(support_rotation[1]) > 1.0e-6:
+        raise ValueError(
+            "Fallout 3 proof-camera support surface is not horizontal"
+        )
+    support_scale = float(support_transform.get("scale", 1.0))
+    if not math.isfinite(support_scale) or support_scale <= 0.0:
+        raise ValueError("Fallout 3 proof-camera support scale is invalid")
+    support_bounds = _required_object(
+        assets[support_model_path], "boundsGodotGameUnits"
+    )
+    support_bounds_maximum = _required_list(support_bounds, "max")
+    support_local_position = godot_position(support_position, origin)
+    support_surface_y = (
+        float(support_local_position[1])
+        + float(support_bounds_maximum[1]) * support_scale
+    )
+    camera_clearance = float(
+        presentation.get("proofCameraSurfaceClearanceGameUnits", 0.0)
+    )
+    camera_near = float(presentation.get("proofCameraNearGameUnits", 0.0))
+    if (
+        not math.isfinite(support_surface_y)
+        or support_surface_y <= 0.0
+        or not math.isfinite(camera_clearance)
+        or camera_clearance <= camera_near
+        or not math.isfinite(camera_near)
+        or camera_near <= 0.0
+    ):
+        raise ValueError("Fallout 3 proof-camera surface clearance is invalid")
+    camera_local_position = [0.0, support_surface_y + camera_clearance, 0.0]
+    camera_game_position = [
+        origin[0],
+        origin[1],
+        origin[2] + camera_local_position[1],
+    ]
     actor_manifest = prepare_actor(
         Path(_required_string(source, "dataRoot")).resolve(),
         cache_root.resolve(),
@@ -554,6 +662,19 @@ def prepare(
             "rotationRadians": list(entry_rotation),
             "rotationGodotQuaternion": godot_rotation_quaternion(entry_rotation),
             "yawGodotRadians": godot_yaw_radians(entry_rotation[2]),
+        },
+        "proofCamera": {
+            "authority": "owned-CG00-support-mesh-top-derived-proof-only-not-retail-camera",
+            "entryReferenceFormId": _required_string(entry, "formId"),
+            "supportReferenceFormId": support_reference_form_id,
+            "supportBaseEditorId": _required_string(support_base, "editorId"),
+            "supportAssetId": assets[support_model_path]["id"],
+            "supportSurfaceGodotGameUnits": support_surface_y,
+            "surfaceClearanceGameUnits": camera_clearance,
+            "nearGameUnits": camera_near,
+            "positionGameUnits": camera_game_position,
+            "positionGodotGameUnits": camera_local_position,
+            "rotationGodotQuaternion": godot_rotation_quaternion(entry_rotation),
         },
         "doctorActor": {
             "source": "transported-owned-ACHR-NPC-template-and-appearance-closure",

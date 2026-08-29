@@ -37,6 +37,11 @@
   },
   "presentation": {
     "exportStrict": false,
+    "proofCameraSupportReferenceFormId": "00060c92",
+    "proofCameraSupportBaseEditorId": "CG00Gurney",
+    "proofCameraSupportModelPath": "furniture\\cg00bed.nif",
+    "proofCameraSurfaceClearanceGameUnits": 4.0,
+    "proofCameraNearGameUnits": 1.0,
     "verticalFovDegrees": 75.0,
     "proofAmbientColor": [
       0.72,
