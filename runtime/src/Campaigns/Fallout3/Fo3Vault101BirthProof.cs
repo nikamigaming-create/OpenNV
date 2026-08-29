@@ -86,7 +86,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
             var actorProofGeometry = CellReferenceLedger.MeasureGeometry(
                 coverage.DoctorActor.Actor.Root,
                 coverage.Camera,
-                coverage.DoctorActor.Placement.GlobalPosition);
+                coverage.DoctorGrounding.GroundedBounds.GetCenter());
             var actorFramePath = Path.Combine(output, "doctor-li-owned-actor.png");
             var actorImage = GetViewport().GetTexture().GetImage();
             actorImage.Convert(Image.Format.Rgba8);
@@ -114,7 +114,7 @@ internal partial class Fo3Vault101BirthProof : Node3D
             var failure = roomFailure ?? actorFailure;
             var report = new
             {
-                schema = "opennv-fo3-vault101-birth-native-render-proof/v3",
+                schema = "opennv-fo3-vault101-birth-native-render-proof/v4",
                 status = failure is null
                     ? "pass-rendered-owned-textured-birth-room-and-doctor-li-no-dialogue-scripts-or-gameplay"
                     : "fail-rendered-owned-birth-room",
@@ -217,7 +217,8 @@ internal partial class Fo3Vault101BirthProof : Node3D
                 doctorActor = new
                 {
                     authority =
-                        "owned ACHR/NPC_/template/appearance closure at authored transform",
+                        "owned ACHR/NPC_/template/appearance closure; authored X/Z/yaw/scale " +
+                        "with owned posed-foot grounding",
                     referenceFormId = coverage.DoctorActor.ReferenceFormId,
                     baseFormId = coverage.DoctorActor.BaseFormId,
                     name = coverage.DoctorActor.Actor.Name,
@@ -227,7 +228,31 @@ internal partial class Fo3Vault101BirthProof : Node3D
                     headPartFormIds = coverage.DoctorActor.HeadPartFormIds,
                     outfitFormIds = coverage.DoctorActor.OutfitFormIds,
                     positionGameUnits = Vector(contract.DoctorActor.PositionGameUnits),
-                    positionGodotGameUnits = Vector(coverage.DoctorActor.Placement.Position),
+                    authoredPositionGodotGameUnits = Vector(
+                        coverage.DoctorGrounding.AuthoredPlacementGodotGameUnits),
+                    presentationPositionGodotGameUnits = Vector(
+                        coverage.DoctorGrounding.PresentationPlacementGodotGameUnits),
+                    grounding = new
+                    {
+                        authority =
+                            "owned utility-room mesh minimum joined to owned posed actor foot bound",
+                        supportReferenceFormId =
+                            coverage.DoctorGrounding.SupportReferenceFormId,
+                        supportBaseEditorId = coverage.DoctorGrounding.SupportBaseEditorId,
+                        supportAssetLogicalPath =
+                            coverage.DoctorGrounding.SupportAssetLogicalPath,
+                        supportGodotGameUnits = coverage.DoctorGrounding.SupportGodotGameUnits,
+                        supportGodotMeters = coverage.DoctorGrounding.SupportGodotMeters,
+                        ungroundedFootMinimumGodotMeters =
+                            coverage.DoctorGrounding.UngroundedFootMinimumGodotMeters,
+                        verticalCorrectionGodotGameUnits =
+                            coverage.DoctorGrounding.VerticalCorrectionGodotGameUnits,
+                        verticalCorrectionGodotMeters =
+                            coverage.DoctorGrounding.VerticalCorrectionGodotMeters,
+                        groundedFootMinimumGodotMeters =
+                            coverage.DoctorGrounding.GroundedBounds.Position.Y,
+                        preservedAuthoredHorizontalTransform = true,
+                    },
                     idleAnimation = coverage.DoctorActor.Actor.AnimationLogicalPath,
                     idleAuthority =
                         "owned mtidle compiler input only; not CG00 package/script selection",

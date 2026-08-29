@@ -77,7 +77,7 @@ $reportPath = Join-Path $CaptureRoot "vault101-birth-native-render-proof.json"
 $framePath = Join-Path $CaptureRoot "vault101-birth-entry.png"
 $actorFramePath = Join-Path $CaptureRoot "doctor-li-owned-actor.png"
 $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json -Depth 100
-if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v3" -or
+if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v4" -or
     $report.status -ne "pass-rendered-owned-textured-birth-room-and-doctor-li-no-dialogue-scripts-or-gameplay" -or
     -not $report.promotion.rendered -or
     -not $report.promotion.texturesBound -or
@@ -95,6 +95,13 @@ if ($report.schema -ne "opennv-fo3-vault101-birth-native-render-proof/v3" -or
     $report.doctorActor.authoredSkins -ne 10 -or
     $report.doctorActor.authoredSurfaces -ne 18 -or
     $report.doctorActor.runtimeSurfaces -ne 18 -or
+    $report.doctorActor.grounding.supportReferenceFormId -ne "0005ed06" -or
+    $report.doctorActor.grounding.supportBaseEditorId -ne "UtlRmWall03" -or
+    $report.doctorActor.grounding.verticalCorrectionGodotGameUnits -ge 0 -or
+    [Math]::Abs(
+        $report.doctorActor.grounding.groundedFootMinimumGodotMeters -
+        $report.doctorActor.grounding.supportGodotMeters) -gt 0.0002 -or
+    -not $report.doctorActor.grounding.preservedAuthoredHorizontalTransform -or
     $report.doctorActor.proofLitMaterials -le 0 -or
     -not $report.doctorActor.frustumIntersection -or
     -not $report.doctorActorFrame.visualGatePassed -or
