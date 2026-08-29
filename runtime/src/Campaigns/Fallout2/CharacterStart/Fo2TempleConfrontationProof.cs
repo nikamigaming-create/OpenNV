@@ -120,9 +120,9 @@ internal static class Fo2TempleConfrontationProof
                 throw new InvalidOperationException(
                     "Fallout 2 configured inventory action did not open the screen.");
             if (confrontation.InventorySourceLogicalPath !=
-                    "art\\intrface\\invbox.frm" ||
+                    host.CharacterStart.Inventory.LogicalPath ||
                 confrontation.InventorySourceSha256 !=
-                    "ae347b83f24d00fbf5806f80a9084855d6ae275f31388cfabee90b700903a657")
+                    host.CharacterStart.Inventory.SourceSha256)
                 throw new InvalidOperationException(
                     "Fallout 2 inventory screen lost its owned INVBOX FRM identity.");
             if (!confrontation.InventoryCharacterText.Contains(

@@ -90,15 +90,22 @@ MVE_FFMPEG_SUCCESS = 0
 MVE_TIMESTAMP_DECIMAL_DIGITS = 9
 SHA256_HEX_LENGTH = 64
 FO2_OPENING_HANDOFF_ARRIVAL_TILE = 28707
-OPENING_RECIPE_ID = "fo2-character-start-v2"
+OPENING_RECIPE_MATCH_COUNT = 1
 
 
 def default_recipe_path() -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    path = base / "recipes" / f"{OPENING_RECIPE_ID}.json"
-    if not path.is_file():
-        raise Fo1ProfileError(f"Fallout 2 character-start recipe is missing: {path}")
-    return path
+    recipes = base / "recipes"
+    candidates = [
+        path
+        for path in sorted(recipes.glob("fo2-character-start-*.json"))
+        if isinstance(_load_json(path).get("openingTail"), dict)
+    ]
+    if len(candidates) != OPENING_RECIPE_MATCH_COUNT:
+        raise Fo1ProfileError(
+            "Fallout 2 opening character-start recipe selection is ambiguous"
+        )
+    return candidates[0]
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -115,7 +122,7 @@ def _load_recipe(path: Path) -> dict[str, Any]:
     presentation = recipe.get("presentation")
     inventory = recipe.get("inventory")
     opening = recipe.get("openingTail")
-    opening_required = recipe.get("id") == OPENING_RECIPE_ID
+    opening_required = opening is not None
     opening_valid = (
         isinstance(opening, dict)
         and isinstance(opening.get("movie"), dict)

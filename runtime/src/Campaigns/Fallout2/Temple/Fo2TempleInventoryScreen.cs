@@ -3,6 +3,30 @@ using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
+internal static class Fo2TempleInventoryScreenNumericContracts
+{
+    internal const int SourceWidth = 499;
+    internal const int SourceHeight = 377;
+    internal const float DimmerAlpha = 0.72f;
+    internal const float CharacterX = 46.0f;
+    internal const float CharacterY = 48.0f;
+    internal const float CharacterWidth = 68.0f;
+    internal const float CharacterHeight = 250.0f;
+    internal const float ItemX = 286.0f;
+    internal const float ItemY = 68.0f;
+    internal const float ItemWidth = 157.0f;
+    internal const float ItemHeight = 182.0f;
+    internal const float DetailsX = 151.0f;
+    internal const float DetailsY = 190.0f;
+    internal const float DetailsWidth = 184.0f;
+    internal const float DetailsHeight = 119.0f;
+    internal const float CloseX = 354.0f;
+    internal const float CloseY = 323.0f;
+    internal const float CloseWidth = 102.0f;
+    internal const float CloseHeight = 28.0f;
+    internal const int MinimumDetailFontSize = 12;
+}
+
 internal sealed partial class Fo2TempleInventoryScreen : Control
 {
     private static readonly Color ClassicText = Colors.PaleGoldenrod;
@@ -32,7 +56,8 @@ internal sealed partial class Fo2TempleInventoryScreen : Control
     {
         if (source.Id != "inventory" ||
             source.LogicalPath != "art\\intrface\\invbox.frm" ||
-            source.Width != 499 || source.Height != 377)
+            source.Width != Fo2TempleInventoryScreenNumericContracts.SourceWidth ||
+            source.Height != Fo2TempleInventoryScreenNumericContracts.SourceHeight)
             throw new InvalidOperationException(
                 "Fallout 2 inventory screen is not bound to the owned INVBOX FRM.");
         character.Profile.Validate(character.Mode == Fo2CharacterSelection.CreateMode);
@@ -46,7 +71,11 @@ internal sealed partial class Fo2TempleInventoryScreen : Control
 
         var dimmer = new ColorRect
         {
-            Color = new Color(0.0f, 0.0f, 0.0f, 0.72f),
+            Color = new Color(
+                0.0f,
+                0.0f,
+                0.0f,
+                Fo2TempleInventoryScreenNumericContracts.DimmerAlpha),
             MouseFilter = MouseFilterEnum.Stop,
         };
         dimmer.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -74,24 +103,44 @@ internal sealed partial class Fo2TempleInventoryScreen : Control
 
         _characterLabel = AddLabel(
             frame,
-            new Vector2(46.0f, 48.0f),
-            new Vector2(68.0f, 250.0f),
+            new Vector2(
+                Fo2TempleInventoryScreenNumericContracts.CharacterX,
+                Fo2TempleInventoryScreenNumericContracts.CharacterY),
+            new Vector2(
+                Fo2TempleInventoryScreenNumericContracts.CharacterWidth,
+                Fo2TempleInventoryScreenNumericContracts.CharacterHeight),
             fontSize);
         _itemLabel = AddLabel(
             frame,
-            new Vector2(286.0f, 68.0f),
-            new Vector2(157.0f, 182.0f),
+            new Vector2(
+                Fo2TempleInventoryScreenNumericContracts.ItemX,
+                Fo2TempleInventoryScreenNumericContracts.ItemY),
+            new Vector2(
+                Fo2TempleInventoryScreenNumericContracts.ItemWidth,
+                Fo2TempleInventoryScreenNumericContracts.ItemHeight),
             fontSize);
         _detailsLabel = AddLabel(
             frame,
-            new Vector2(151.0f, 190.0f),
-            new Vector2(184.0f, 119.0f),
-            Math.Max(12, fontSize - 3));
+            new Vector2(
+                Fo2TempleInventoryScreenNumericContracts.DetailsX,
+                Fo2TempleInventoryScreenNumericContracts.DetailsY),
+            new Vector2(
+                Fo2TempleInventoryScreenNumericContracts.DetailsWidth,
+                Fo2TempleInventoryScreenNumericContracts.DetailsHeight),
+            Math.Max(
+                Fo2TempleInventoryScreenNumericContracts.MinimumDetailFontSize,
+                fontSize - 3));
         var close = AddLabel(
             frame,
-            new Vector2(354.0f, 323.0f),
-            new Vector2(102.0f, 28.0f),
-            Math.Max(12, fontSize - 3));
+            new Vector2(
+                Fo2TempleInventoryScreenNumericContracts.CloseX,
+                Fo2TempleInventoryScreenNumericContracts.CloseY),
+            new Vector2(
+                Fo2TempleInventoryScreenNumericContracts.CloseWidth,
+                Fo2TempleInventoryScreenNumericContracts.CloseHeight),
+            Math.Max(
+                Fo2TempleInventoryScreenNumericContracts.MinimumDetailFontSize,
+                fontSize - 3));
         close.Text = "ESC: CLOSE";
         Refresh(false, false);
         Visible = false;

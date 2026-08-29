@@ -9,6 +9,47 @@ internal sealed record Fo1CustomAppearanceSelection(
     string HairColorId,
     string EyeColorId);
 
+internal static class Fo1CustomAppearanceEditorNumericContracts
+{
+    internal const int FeatureCount = 5;
+    internal const float EditorWidth = 640.0f;
+    internal const float EditorHeight = 480.0f;
+    internal const float TitleX = 32.0f;
+    internal const float TitleY = 18.0f;
+    internal const float TitleWidth = 576.0f;
+    internal const float TitleHeight = 28.0f;
+    internal const int TitleFontSize = 16;
+    internal const float PortraitX = 48.0f;
+    internal const float PortraitY = 74.0f;
+    internal const float PortraitSize = 224.0f;
+    internal const float PreviewButtonX = 106.0f;
+    internal const float PreviewButtonY = 312.0f;
+    internal const float PreviewButtonWidth = 108.0f;
+    internal const float RowStartY = 82.0f;
+    internal const float RowSpacing = 48.0f;
+    internal const float FieldNameX = 318.0f;
+    internal const float FieldNameWidth = 116.0f;
+    internal const float FieldHeight = 22.0f;
+    internal const int FieldFontSize = 10;
+    internal const float PreviousButtonX = 440.0f;
+    internal const float RowButtonWidth = 28.0f;
+    internal const float RowButtonHeight = 26.0f;
+    internal const float ValueX = 470.0f;
+    internal const float ValueWidth = 104.0f;
+    internal const float NextButtonX = 576.0f;
+    internal const float BoundaryX = 48.0f;
+    internal const float BoundaryY = 360.0f;
+    internal const float BoundaryWidth = 544.0f;
+    internal const float BoundaryHeight = 26.0f;
+    internal const int BoundaryFontSize = 9;
+    internal const float CommitButtonX = 170.0f;
+    internal const float CancelButtonX = 338.0f;
+    internal const float FooterButtonY = 410.0f;
+    internal const float FooterButtonWidth = 132.0f;
+    internal const float FooterButtonHeight = 34.0f;
+    internal const int ButtonFontSize = 11;
+}
+
 internal sealed partial class Fo1CustomAppearanceEditor : Control
 {
     private static readonly Color Green = new("78e781");
@@ -17,7 +58,8 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
     private readonly TextureRect _portrait;
     private readonly Fo1ProceduralHeadPreview _head;
     private readonly Button _previewMode;
-    private readonly Label[] _labels = new Label[5];
+    private readonly Label[] _labels =
+        new Label[Fo1CustomAppearanceEditorNumericContracts.FeatureCount];
     private int _face;
     private int _hair;
     private int _skin;
@@ -30,7 +72,9 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
     {
         _sex = sex;
         Name = "FO1_HEX_CUSTOM_APPEARANCE_EDITOR";
-        Size = new Vector2(640.0f, 480.0f);
+        Size = new Vector2(
+            Fo1CustomAppearanceEditorNumericContracts.EditorWidth,
+            Fo1CustomAppearanceEditorNumericContracts.EditorHeight);
         MouseFilter = MouseFilterEnum.Stop;
         var catalog = Fo1ProceduralAppearanceCatalog.Load();
         var selection = current ?? new Fo1CustomAppearanceSelection(
@@ -50,13 +94,24 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
             Color = Colors.Black,
             MouseFilter = MouseFilterEnum.Stop,
         });
-        var title = Text("CUSTOM PORTRAIT + LIVE 3D HEAD", 32, 18, 576, 28, 16, Amber);
+        var title = Text(
+            "CUSTOM PORTRAIT + LIVE 3D HEAD",
+            Fo1CustomAppearanceEditorNumericContracts.TitleX,
+            Fo1CustomAppearanceEditorNumericContracts.TitleY,
+            Fo1CustomAppearanceEditorNumericContracts.TitleWidth,
+            Fo1CustomAppearanceEditorNumericContracts.TitleHeight,
+            Fo1CustomAppearanceEditorNumericContracts.TitleFontSize,
+            Amber);
         title.HorizontalAlignment = HorizontalAlignment.Center;
         _portrait = new TextureRect
         {
             Name = "FO1_HEX_CUSTOM_PORTRAIT",
-            Position = new Vector2(48.0f, 74.0f),
-            Size = new Vector2(224.0f, 224.0f),
+            Position = new Vector2(
+                Fo1CustomAppearanceEditorNumericContracts.PortraitX,
+                Fo1CustomAppearanceEditorNumericContracts.PortraitY),
+            Size = new Vector2(
+                Fo1CustomAppearanceEditorNumericContracts.PortraitSize,
+                Fo1CustomAppearanceEditorNumericContracts.PortraitSize),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
             MouseFilter = MouseFilterEnum.Ignore,
@@ -68,25 +123,75 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
             Size = _portrait.Size,
         };
         AddChild(_head);
-        _previewMode = Button("LIVE 3D", 106, 312, 108, 28, TogglePreview);
+        _previewMode = Button(
+            "LIVE 3D",
+            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonX,
+            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonY,
+            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonWidth,
+            Fo1CustomAppearanceEditorNumericContracts.RowButtonWidth,
+            TogglePreview);
         _previewMode.TooltipText = "Toggle the deterministic green portrait and matching live head";
 
         var names = new[] { "FACE", "HAIR", "SKIN", "HAIR COLOR", "EYES" };
         for (var row = 0; row < names.Length; row++)
         {
             var captured = row;
-            var y = 82 + row * 48;
-            Text(names[row], 318, y, 116, 22, 10, Amber);
-            Button("◀", 440, y - 2, 28, 26, () => Change(captured, -1));
-            _labels[row] = Text("", 470, y, 104, 22, 10, Green);
+            var y = Fo1CustomAppearanceEditorNumericContracts.RowStartY +
+                row * Fo1CustomAppearanceEditorNumericContracts.RowSpacing;
+            Text(
+                names[row],
+                Fo1CustomAppearanceEditorNumericContracts.FieldNameX,
+                y,
+                Fo1CustomAppearanceEditorNumericContracts.FieldNameWidth,
+                Fo1CustomAppearanceEditorNumericContracts.FieldHeight,
+                Fo1CustomAppearanceEditorNumericContracts.FieldFontSize,
+                Amber);
+            Button(
+                "◀",
+                Fo1CustomAppearanceEditorNumericContracts.PreviousButtonX,
+                y - 2,
+                Fo1CustomAppearanceEditorNumericContracts.RowButtonWidth,
+                Fo1CustomAppearanceEditorNumericContracts.RowButtonHeight,
+                () => Change(captured, -1));
+            _labels[row] = Text(
+                "",
+                Fo1CustomAppearanceEditorNumericContracts.ValueX,
+                y,
+                Fo1CustomAppearanceEditorNumericContracts.ValueWidth,
+                Fo1CustomAppearanceEditorNumericContracts.FieldHeight,
+                Fo1CustomAppearanceEditorNumericContracts.FieldFontSize,
+                Green);
             _labels[row].HorizontalAlignment = HorizontalAlignment.Center;
-            Button("▶", 576, y - 2, 28, 26, () => Change(captured, 1));
+            Button(
+                "▶",
+                Fo1CustomAppearanceEditorNumericContracts.NextButtonX,
+                y - 2,
+                Fo1CustomAppearanceEditorNumericContracts.RowButtonWidth,
+                Fo1CustomAppearanceEditorNumericContracts.RowButtonHeight,
+                () => Change(captured, 1));
         }
         Text(
             "HEX EXTENSION • LOCAL GENERATED PORTRAIT • NO RETAIL HEAD GEOMETRY",
-            48, 360, 544, 26, 9, Green).HorizontalAlignment = HorizontalAlignment.Center;
-        Button("USE FACE", 170, 410, 132, 34, Commit);
-        Button("BACK", 338, 410, 132, 34, () => Cancelled?.Invoke());
+            Fo1CustomAppearanceEditorNumericContracts.BoundaryX,
+            Fo1CustomAppearanceEditorNumericContracts.BoundaryY,
+            Fo1CustomAppearanceEditorNumericContracts.BoundaryWidth,
+            Fo1CustomAppearanceEditorNumericContracts.BoundaryHeight,
+            Fo1CustomAppearanceEditorNumericContracts.BoundaryFontSize,
+            Green).HorizontalAlignment = HorizontalAlignment.Center;
+        Button(
+            "USE FACE",
+            Fo1CustomAppearanceEditorNumericContracts.CommitButtonX,
+            Fo1CustomAppearanceEditorNumericContracts.FooterButtonY,
+            Fo1CustomAppearanceEditorNumericContracts.FooterButtonWidth,
+            Fo1CustomAppearanceEditorNumericContracts.FooterButtonHeight,
+            Commit);
+        Button(
+            "BACK",
+            Fo1CustomAppearanceEditorNumericContracts.CancelButtonX,
+            Fo1CustomAppearanceEditorNumericContracts.FooterButtonY,
+            Fo1CustomAppearanceEditorNumericContracts.FooterButtonWidth,
+            Fo1CustomAppearanceEditorNumericContracts.FooterButtonHeight,
+            () => Cancelled?.Invoke());
         Refresh();
     }
 
@@ -223,7 +328,9 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
         };
         button.AddThemeColorOverride("font_color", Green);
         button.AddThemeColorOverride("font_hover_color", Amber);
-        button.AddThemeFontSizeOverride("font_size", 11);
+        button.AddThemeFontSizeOverride(
+            "font_size",
+            Fo1CustomAppearanceEditorNumericContracts.ButtonFontSize);
         button.Pressed += pressed;
         AddChild(button);
         return button;

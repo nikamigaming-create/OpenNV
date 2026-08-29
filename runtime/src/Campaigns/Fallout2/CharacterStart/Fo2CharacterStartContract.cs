@@ -203,7 +203,6 @@ internal sealed class Fo2CharacterStartCatalog
     private const string RecipeSchema = "opennv-fo2-character-start-recipe/v1";
     private const string ProfileSchema = "opennv-fo2-owned-profile/v1";
     internal const string LegacyRecipeId = "fo2-character-start-v1";
-    internal const string OpeningRecipeId = "fo2-character-start-v2";
     internal const string FemaleFid = "0100003d";
     internal const string FemaleLogicalPath = "art\\critters\\hfprimaa.frm";
     internal const string FemaleWalkLogicalPath = "art\\critters\\hfprimab.frm";
@@ -319,10 +318,10 @@ internal sealed class Fo2CharacterStartCatalog
             cacheRoot,
             "inventory");
         var recipeId = Fo2TemplePresentationCatalog.RequiredString(recipe, "id");
-        var openingTail = recipeId == OpeningRecipeId
+        var openingTail = recipe.TryGetProperty("openingTail", out var openingRecipe)
             ? Fo2OpeningTailContract.Load(
                 cache.GetProperty("openingTail"),
-                recipe.GetProperty("openingTail"),
+                openingRecipe,
                 cacheRoot)
             : null;
         if (recipeId == LegacyRecipeId && cache.TryGetProperty("openingTail", out _))
@@ -495,7 +494,9 @@ internal sealed class Fo2CharacterStartCatalog
         var recipeId = Fo2TemplePresentationCatalog.RequiredString(recipe, "id");
         if (Fo2TemplePresentationCatalog.RequiredString(descriptor, "schema") != RecipeSchema ||
             descriptorId != recipeId ||
-            recipeId != LegacyRecipeId && recipeId != OpeningRecipeId ||
+            Path.GetFileNameWithoutExtension(path) != recipeId ||
+            recipeId != LegacyRecipeId &&
+                !recipe.TryGetProperty("openingTail", out _) ||
             Fo2TemplePresentationCatalog.RequiredString(recipe, "schema") != RecipeSchema ||
             Fo2TemplePresentationCatalog.RequiredString(recipe, "campaign") != "Fallout2" ||
             Fo2TemplePresentationCatalog.RequiredString(recipe, "sourceProfileSchema") !=

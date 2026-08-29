@@ -2,9 +2,25 @@ using Godot;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
+internal static class Fo1ClassicInventoryScreenNumericContracts
+{
+    internal const float ClassicGreenRed = 0.24f;
+    internal const float ClassicGreenGreen = 0.97f;
+    internal const float DimmerAlpha = 0.72f;
+    internal const int SelectedItemFontSize = 13;
+    internal const int StackCountRightInset = 24;
+    internal const int StackCountBottomInset = 17;
+    internal const int StackCountWidth = 23;
+    internal const int StackCountHeight = 16;
+    internal const int InventoryFontSize = 12;
+}
+
 internal sealed partial class Fo1ClassicInventoryScreen : Control
 {
-    private static readonly Color ClassicGreen = new(0.24f, 0.97f, 0.0f);
+    private static readonly Color ClassicGreen = new(
+        Fo1ClassicInventoryScreenNumericContracts.ClassicGreenRed,
+        Fo1ClassicInventoryScreenNumericContracts.ClassicGreenGreen,
+        0.0f);
     private readonly List<TextureRect> _rowIcons = [];
     private readonly List<Label> _rowCounts = [];
     private readonly List<Button> _rowButtons = [];
@@ -52,7 +68,11 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
 
         var dimmer = new ColorRect
         {
-            Color = new Color(0.0f, 0.0f, 0.0f, 0.72f),
+            Color = new Color(
+                0.0f,
+                0.0f,
+                0.0f,
+                Fo1ClassicInventoryScreenNumericContracts.DimmerAlpha),
             MouseFilter = MouseFilterEnum.Stop,
         };
         dimmer.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -85,7 +105,10 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
         BuildScrollButton(frame, assets.ScrollDown, assets.Layout.ScrollDown, 1);
 
         _selectedIcon = AddItemSurface(frame, assets.Layout.SelectedItem);
-        _selectedText = AddLabel(frame, assets.Layout.SelectedText, 13);
+        _selectedText = AddLabel(
+            frame,
+            assets.Layout.SelectedText,
+            Fo1ClassicInventoryScreenNumericContracts.SelectedItemFontSize);
         _item1 = AddItemSurface(frame, assets.Layout.Item1);
         _item2 = AddItemSurface(frame, assets.Layout.Item2);
 
@@ -159,8 +182,14 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
             _rowIcons.Add(icon);
             var count = AddLabel(
                 frame,
-                new Fo1HudRect(row.X + row.Width - 24, row.Y + row.Height - 17, 23, 16),
-                12);
+                new Fo1HudRect(
+                    row.X + row.Width -
+                        Fo1ClassicInventoryScreenNumericContracts.StackCountRightInset,
+                    row.Y + row.Height -
+                        Fo1ClassicInventoryScreenNumericContracts.StackCountBottomInset,
+                    Fo1ClassicInventoryScreenNumericContracts.StackCountWidth,
+                    Fo1ClassicInventoryScreenNumericContracts.StackCountHeight),
+                Fo1ClassicInventoryScreenNumericContracts.InventoryFontSize);
             count.HorizontalAlignment = HorizontalAlignment.Right;
             _rowCounts.Add(count);
             var button = AddButton(frame, row, "Select inventory item");
@@ -220,7 +249,10 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
         portrait.Texture = texture;
         if (texture is null)
         {
-            var name = AddLabel(frame, _assets.Layout.Portrait, 12);
+            var name = AddLabel(
+                frame,
+                _assets.Layout.Portrait,
+                Fo1ClassicInventoryScreenNumericContracts.InventoryFontSize);
             name.Text = profile.Name.ToUpperInvariant();
             name.HorizontalAlignment = HorizontalAlignment.Center;
             name.VerticalAlignment = VerticalAlignment.Center;

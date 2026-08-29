@@ -22,6 +22,11 @@ internal sealed partial class Fo1ProceduralHeadPreview : SubViewportContainer
     private const float SideHairX = 0.66f;
     private const float SideHairYFactor = 0.25f;
     private const float MinimumCapsuleHeight = 0.32f;
+    private const float AmbientLightEnergy = 0.72f;
+    private const float KeyLightPitchDegrees = -24.0f;
+    private const float KeyLightYawDegrees = -28.0f;
+    private const float KeyLightEnergy = 1.1f;
+    private const float MaterialRoughness = 0.88f;
     private readonly Fo1ProceduralAppearanceCatalog _catalog;
     private readonly Node3D _identityRoot;
     private readonly MeshInstance3D _head;
@@ -58,13 +63,16 @@ internal sealed partial class Fo1ProceduralHeadPreview : SubViewportContainer
                 BackgroundColor = _catalog.Background,
                 AmbientLightSource = Godot.Environment.AmbientSource.Color,
                 AmbientLightColor = Colors.White,
-                AmbientLightEnergy = 0.72f,
+                AmbientLightEnergy = AmbientLightEnergy,
             },
         });
         viewport.AddChild(new DirectionalLight3D
         {
-            RotationDegrees = new Vector3(-24.0f, -28.0f, 0.0f),
-            LightEnergy = 1.1f,
+            RotationDegrees = new Vector3(
+                KeyLightPitchDegrees,
+                KeyLightYawDegrees,
+                0.0f),
+            LightEnergy = KeyLightEnergy,
             ShadowEnabled = false,
         });
         _identityRoot = new Node3D { Name = "SavedProceduralIdentity" };
@@ -201,7 +209,7 @@ internal sealed partial class Fo1ProceduralHeadPreview : SubViewportContainer
     private static StandardMaterial3D BuildMaterial(Color color) => new()
     {
         AlbedoColor = color,
-        Roughness = 0.88f,
+        Roughness = MaterialRoughness,
         Metallic = 0.0f,
     };
 }

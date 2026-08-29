@@ -61,6 +61,9 @@ internal static class Fo1ProceduralPortrait
     private const int NoseY = 69;
     private const int MouthY = 82;
     private const int OutlineInset = 2;
+    private const int NoseHeight = 7;
+    private const int MouthHalfWidth = 11;
+    private const int MouthWidth = 22;
     private const float FaceBoundary = 1.0f;
     private const float MaleWidthScale = 1.025f;
     private const float FemaleWidthScale = 0.975f;
@@ -116,8 +119,12 @@ internal static class Fo1ProceduralPortrait
         image.FillRect(new Rect2I(NeckX, NeckY, NeckWidth, NeckHeight), skin.PortraitShadow);
         image.FillRect(new Rect2I(LeftEyeX, EyeY, EyeWidth, EyeHeight), eyeColor.PortraitColor);
         image.FillRect(new Rect2I(RightEyeX, EyeY, EyeWidth, EyeHeight), eyeColor.PortraitColor);
-        image.FillRect(new Rect2I(CenterX - 1, NoseY, 2, 7), skin.PortraitShadow);
-        image.FillRect(new Rect2I(CenterX - 11, MouthY, 22, 2), Catalog.Feature);
+        image.FillRect(
+            new Rect2I(CenterX - 1, NoseY, 2, NoseHeight),
+            skin.PortraitShadow);
+        image.FillRect(
+            new Rect2I(CenterX - MouthHalfWidth, MouthY, MouthWidth, 2),
+            Catalog.Feature);
         DrawHair(image, face, hair, hairColor, widthScale);
         return image;
     }
