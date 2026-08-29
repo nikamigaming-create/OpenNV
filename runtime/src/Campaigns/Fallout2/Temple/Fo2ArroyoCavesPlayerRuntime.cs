@@ -5,6 +5,7 @@ namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 internal sealed record Fo2ArroyoCavesPlayerRuntimeCoverage(
     Fo2ArroyoPlayerProfile Profile,
     Fo2ArroyoPlayerPresentationCatalog PlayerPresentation,
+    Fo2ArroyoPlayerPresentationSource SelectedPlayerPresentation,
     string FloorCollisionPath,
     int FloorSupportPatches,
     int FloorCollisionTriangles,
@@ -16,11 +17,16 @@ internal static class Fo2ArroyoCavesPlayerRuntime
     internal static Fo2ArroyoCavesPlayerRuntimeCoverage Build(
         Fo2ArroyoCavesPresentationCatalog catalog,
         Fo2ArroyoCavesSceneCoverage scene,
-        Fo2ArroyoPlayerPresentationCatalog playerPresentation)
+        Fo2ArroyoPlayerPresentationCatalog playerPresentation,
+        Fo2ArroyoPlayerPresentationSource? selectedPlayerPresentation = null)
     {
+        var selectedPresentation = selectedPlayerPresentation ?? playerPresentation.Source;
         if (playerPresentation.SourceProfileId != catalog.SourceProfileId)
             throw new InvalidOperationException(
                 "Fallout 2 Arroyo player/map source profiles differ.");
+        if (selectedPresentation.SourceProfileId != catalog.SourceProfileId)
+            throw new InvalidOperationException(
+                "Fallout 2 selected character/map source profiles differ.");
         var profile = Fo2ArroyoPlayerProfile.Load(catalog);
         var component = EntryComponent(catalog.ArrivalTile, catalog.Walkable);
         if (component.Count != catalog.ArrivalComponentHexes ||
@@ -68,11 +74,12 @@ internal static class Fo2ArroyoCavesPlayerRuntime
             catalog,
             profile,
             component,
-            playerPresentation,
+            selectedPresentation,
             scene.SourcePixelsPerMeter);
         return new Fo2ArroyoCavesPlayerRuntimeCoverage(
             profile,
             playerPresentation,
+            selectedPresentation,
             floorBody.GetPath().ToString(),
             floorPatches.Length,
             floorPatches.Length * 2,
@@ -149,7 +156,7 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         Fo2ArroyoCavesPresentationCatalog catalog,
         Fo2ArroyoPlayerProfile profile,
         HashSet<int> arrivalComponent,
-        Fo2ArroyoPlayerPresentationCatalog playerPresentation,
+        Fo2ArroyoPlayerPresentationSource playerPresentation,
         float sourcePixelsPerMeter)
     {
         if (_profile is not null ||
@@ -179,7 +186,7 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         SetMeta("arrival_tile", ArrivalTile);
         SetMeta("arrival_rotation", catalog.ArrivalRotation);
         SetMeta("character_art_loaded", true);
-        SetMeta("character_fid", Fo2ArroyoPlayerPresentationCatalog.ExpectedFid);
+        SetMeta("character_fid", playerPresentation.Fid);
         SetMeta("character_source_sha256", playerPresentation.SourceSha256);
         AddChild(new CollisionShape3D
         {

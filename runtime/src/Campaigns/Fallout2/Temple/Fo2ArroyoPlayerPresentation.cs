@@ -17,6 +17,14 @@ internal sealed record Fo2ArroyoPlayerFrame(
     Vector2I DirectionOffset,
     Vector2I FrameOffset);
 
+internal sealed record Fo2ArroyoPlayerPresentationSource(
+    string SourceProfileId,
+    string NodeName,
+    string Fid,
+    string LogicalPath,
+    string SourceSha256,
+    IReadOnlyDictionary<int, Fo2ArroyoPlayerFrame> Directions);
+
 internal sealed class Fo2ArroyoPlayerPresentationCatalog
 {
     private const string CacheSchema = "opennv-fo2-player-presentation-cache/v1";
@@ -62,6 +70,13 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
     internal int FramesPerDirection { get; }
     internal IReadOnlyDictionary<int, Fo2ArroyoPlayerFrame> Directions { get; }
     internal int VerifiedResources { get; }
+    internal Fo2ArroyoPlayerPresentationSource Source => new(
+        SourceProfileId,
+        "CHOSEN_ONE_OWNED_HMWARR_IDLE_FRAME_ZERO",
+        ExpectedFid,
+        ExpectedLogicalPath,
+        SourceSha256,
+        Directions);
 
     internal static Fo2ArroyoPlayerPresentationCatalog Load(
         string cacheManifestPath,
@@ -278,7 +293,7 @@ internal sealed partial class Fo2ArroyoPlayerPresentation : Sprite3D
     private readonly IReadOnlyDictionary<int, Texture2D> _textures;
 
     internal Fo2ArroyoPlayerPresentation(
-        Fo2ArroyoPlayerPresentationCatalog catalog,
+        Fo2ArroyoPlayerPresentationSource source,
         float sourcePixelsPerMeter,
         float spawnCenterHeightMeters,
         int initialDirection)
@@ -287,11 +302,11 @@ internal sealed partial class Fo2ArroyoPlayerPresentation : Sprite3D
             !float.IsFinite(spawnCenterHeightMeters) || spawnCenterHeightMeters <= 0.0f)
             throw new InvalidOperationException(
                 "Fallout 2 player source scale or floor anchor is invalid.");
-        _frames = catalog.Directions;
-        _textures = catalog.Directions.ToDictionary(
+        _frames = source.Directions;
+        _textures = source.Directions.ToDictionary(
             row => row.Key,
             row => LoadTexture(row.Value));
-        Name = "CHOSEN_ONE_OWNED_HMWARR_IDLE_FRAME_ZERO";
+        Name = source.NodeName;
         PixelSize = 1.0f / sourcePixelsPerMeter;
         Position = Vector3.Down * spawnCenterHeightMeters;
         Billboard = BaseMaterial3D.BillboardModeEnum.FixedY;
@@ -299,9 +314,9 @@ internal sealed partial class Fo2ArroyoPlayerPresentation : Sprite3D
         DoubleSided = true;
         AlphaCut = AlphaCutMode.OpaquePrepass;
         TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
-        SetMeta("fid", Fo2ArroyoPlayerPresentationCatalog.ExpectedFid);
-        SetMeta("logical_path", Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath);
-        SetMeta("source_sha256", catalog.SourceSha256);
+        SetMeta("fid", source.Fid);
+        SetMeta("logical_path", source.LogicalPath);
+        SetMeta("source_sha256", source.SourceSha256);
         SetMeta("animation_playback", false);
         SetDirection(initialDirection);
     }
