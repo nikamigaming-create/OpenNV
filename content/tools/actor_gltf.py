@@ -407,7 +407,6 @@ def export_actor_gltf(
     nodes: list[dict[str, object]] = [{"name": f"ACTOR_{source.actor_form_id}_{source.actor_name}", "children": []}]
     node_by_name: dict[str, int] = {}
     _append_skeleton_nodes(skeleton_root, 0, nodes, node_by_name)
-    inverse_bind_by_name = gltf_skeleton_inverse_binds(nodes, node_by_name)
     nonaccumulation_root_nodes = [
         name
         for name in node_by_name
@@ -581,7 +580,6 @@ def export_actor_gltf(
                 component_root,
                 shape,
                 node_by_name,
-                inverse_bind_by_name,
                 builder,
                 meshes,
                 skins,
@@ -767,7 +765,7 @@ def export_actor_gltf(
             "omittedSurfaces": len(omitted_surfaces),
             "dismemberCapShapesIncluded": source.include_dismember_cap_shapes,
             "skins": len(skins),
-            "inverseBindContract": "inverse of exact emitted glTF skeleton rest-global matrix",
+            "inverseBindContract": "source NIF skin bind with baked-shape compensation",
             "textures": len(textures.rows),
             "animations": len(animations),
             "animationChannels": animation_channels,
@@ -1173,7 +1171,6 @@ def _append_shape(
     component_root: object,
     shape: object,
     node_by_name: dict[str, int],
-    inverse_bind_by_name: dict[str, list[list[float]]],
     builder: BufferBuilder,
     meshes: list[dict[str, object]],
     skins: list[dict[str, object]],
@@ -1333,7 +1330,6 @@ def _append_shape(
             component.role,
             shape,
             node_by_name,
-            inverse_bind_by_name,
             builder,
             attributes,
             skins,
@@ -1556,7 +1552,6 @@ def _append_skin(
     role: str,
     shape: object,
     node_by_name: dict[str, int],
-    inverse_bind_by_name: dict[str, list[list[float]]],
     builder: BufferBuilder,
     attributes: dict[str, int],
     skins: list[dict[str, object]],
@@ -1594,8 +1589,15 @@ def _append_skin(
     inverse_bind_rows = []
     if len(instance.data.bone_list) != len(bone_names):
         raise ValueError(f"Actor skin bone data count drift: {_text(shape.name)}")
-    for name in bone_names:
-        inverse_bind_rows.append(_gltf_matrix(inverse_bind_by_name[name]))
+    for data in instance.data.bone_list:
+        inverse_bind_rows.append(
+            _gltf_matrix(
+                _compensated_inverse_bind(
+                    data.get_transform(),
+                    baked_shape_transform,
+                )
+            )
+        )
     inverse_bind = builder.add(
         pack_floats(inverse_bind_rows),
         component_type=GL_FLOAT,
