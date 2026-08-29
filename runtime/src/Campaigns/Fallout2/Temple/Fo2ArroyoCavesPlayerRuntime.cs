@@ -145,6 +145,7 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
     internal int CompletedTileTransitions { get; private set; }
     internal int RejectedMovementFrames { get; private set; }
     internal int LastRejectedCandidateTile { get; private set; } = -1;
+    internal event Action? PersistenceBoundaryReached;
     internal Vector3 SpawnWorldMeters => _spawnWorldMeters;
     internal Fo2ArroyoPlayerPresentation Presentation => _presentation ??
         throw new InvalidOperationException("Fallout 2 player presentation is not configured.");
@@ -233,7 +234,14 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         if (desired.LengthSquared() > 1.0f)
             desired = desired.Normalized();
         if (!desired.IsZeroApprox())
-            Presentation.SetDirection(DirectionForMovement(CurrentTile, desired));
+        {
+            var direction = DirectionForMovement(CurrentTile, desired);
+            if (Presentation.Direction != direction)
+            {
+                Presentation.SetDirection(direction);
+                PersistenceBoundaryReached?.Invoke();
+            }
+        }
         var before = Position;
         var horizontal = desired * _profile.SpeedMetersPerSecond;
         var candidatePosition = before + horizontal * (float)delta;
@@ -266,7 +274,28 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
             CurrentTile = movedTile;
             CompletedTileTransitions++;
             SetMeta("current_tile", CurrentTile);
+            PersistenceBoundaryReached?.Invoke();
         }
+    }
+
+    internal void Restore(int tile, Vector3 position, int rotation)
+    {
+        if (_profile is null || _arrivalComponent is null || _presentation is null ||
+            !CanOccupy(tile) ||
+            !float.IsFinite(position.X) || !float.IsFinite(position.Y) ||
+            !float.IsFinite(position.Z) ||
+            Fo1HexMath.NearestTile(new Vector3(position.X, 0.0f, position.Z)) != tile ||
+            MathF.Abs(position.Y - _profile.SpawnCenterHeightMeters) >
+                _profile.FloorSnapLengthMeters ||
+            rotation is < 0 or >= Fo1HexMath.DirectionCount)
+            throw new InvalidOperationException(
+                "Fallout 2 saved player state is outside the admitted Map 3 runtime.");
+        Position = position;
+        Velocity = Vector3.Zero;
+        CurrentTile = tile;
+        _presentation.SetDirection(rotation);
+        SetMeta("current_tile", CurrentTile);
+        SetMeta("restored_from_save", true);
     }
 
     internal bool CanOccupy(int tile) =>

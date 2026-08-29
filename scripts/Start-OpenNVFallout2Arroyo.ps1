@@ -5,7 +5,8 @@ param(
     [string]$TempleTransitions = "$env:LOCALAPPDATA\OpenNV\profiles\fallout2\temple-transitions-v1.json",
     [string]$ArroyoCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-caves-v1\fo2-arroyo-caves-presentation-cache.json",
     [string]$PlayerCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-player-v1\fo2-arroyo-player-presentation-cache.json",
-    [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v1\fo2-character-start-cache.json"
+    [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v1\fo2-character-start-cache.json",
+    [string]$Save = "$env:LOCALAPPDATA\OpenNV\saves\fallout2\character-arroyo-v1.json"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,7 +27,8 @@ foreach ($inputPath in @($Godot, $TempleCache, $TempleTransitions, $ArroyoCache,
     --fo2-temple-transitions $TempleTransitions `
     --fo2-arroyo-cache $ArroyoCache `
     --fo2-player-cache $PlayerCache `
-    --fo2-character-start-cache $CharacterStartCache
+    --fo2-character-start-cache $CharacterStartCache `
+    --fo2-save $Save
 if ($LASTEXITCODE -ne 0) {
     throw "Fallout 2 Arroyo interactive runtime failed with exit code $LASTEXITCODE."
 }

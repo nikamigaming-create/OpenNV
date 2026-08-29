@@ -106,8 +106,11 @@ retail startup-logo and original-menu presentation remain absent.
     binds the owned Narg, Mingan, and Chitsa profiles, BIO text, picker/panels,
     and male/female idle FRMs. The visible Godot selector supports keyboard and
     mouse choice, then Take applies the selected source state and sex-correct
-    FRM before the Map 3 handoff. Modify/Create, editable fields, persistence,
-    animation playback, and campaign play remain absent.
+    FRM before the Map 3 handoff. An atomic OpenNV user-data save preserves the
+    selected profile state and GCD/BIO identities plus Map 3/elevation/tile/facing, the current
+    transform, and bounded movement/presentation modes; a fresh process
+    cold-restores the same sex-correct player. Modify/Create, editable fields,
+    animation playback, campaign-wide state, and campaign play remain absent.
 
 Current result: a normal launcher starts either registered Fallout 1 view
 through its menu/creator/movie path and the bounded New Vegas menu/Doc/exterior/
@@ -115,7 +118,7 @@ saloon composite. Fallout 2 and Fallout 3 remain launcher-disabled;
 Fallout 3 has a registered development menu/CG00 frontend but no playable
 presentation, while Fallout 2's exact source-bound Godot scene can be
 rendered through a visible selectable premade-to-Arroyo development route
-without persistent gameplay or launcher promotion.
+with bounded cold-restorable player state but without launcher promotion.
 
 ### P1 — Fallout 3 first slice
 
@@ -188,7 +191,7 @@ is supported for the selected base profile.
 | --- | --- |
 | Fallout 1 Hex/FPS | Registered cache route works; only V13ENT is playable and the rest of the campaign is not connected |
 | Fallout 1 OpenXR | Shared-state V13ENT adapter passes simulator movement, turn, fire, reload, and save; XR door use, campaign-native hands/weapon/UI, launcher enablement, and physical-headset acceptance remain |
-| Fallout 2 | Exact Temple/Arroyo Caves source transport and a rendered Map 3 arrival now include an owned Narg/Mingan/Chitsa selector, source stats/bios/portraits, sex-correct HMWARR/HFPRIM art, Take handoff to tile 28707, and grounded source-walk-gated movement. Modify/Create, editable fields, persistence, reciprocal runtime exit execution, INT, actors, combat, inventory, full campaign, FPS, VR, parity, and launcher promotion remain absent, so all modes stay disabled |
+| Fallout 2 | Exact Temple/Arroyo Caves source transport and a rendered Map 3 arrival now include an owned Narg/Mingan/Chitsa selector, source stats/bios/portraits, sex-correct HMWARR/HFPRIM art, Take handoff to tile 28707, grounded source-walk-gated movement, and atomic cold restore of the selected state and current Map 3 transform/mode. Modify/Create, editable fields, campaign-wide persistence, reciprocal runtime exit execution, INT, actors, combat, inventory, full campaign, FPS, VR, parity, and launcher promotion remain absent, so all modes stay disabled |
 | New Vegas first slice | Menu/intro/Doc house, the source-bound HUD/Pip-Boy runtime shell, and the bounded preloaded Doc/exterior/saloon composite load; diagnostic portal checks pass, and completed-save owned Continue drives configured flat input through both forward XTEL links before v4 cold-restores saloon CELL `00106185`; reverse traversal, integrated OpenXR acceptance, complete tile interaction, retail UI parity, uninterrupted campaign continuity, neighboring-world streaming, and visual gates remain |
 | Fallout 3 | Owned-profile menu/intro/Escape convergence and persistent CG00 sex/name/appearance through stage 62 work; later state contracts validate, but FPS/Hex/VR, authored trigger execution, dialogue/KF, actors, and Vault 101 remain |
 | TTW | Profile inspection works; runtime support, including archive/loose-file/script/world-transition compilation, is absent |

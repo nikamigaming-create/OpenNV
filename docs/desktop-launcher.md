@@ -15,7 +15,7 @@ game button. Those choices resolve to five isolated character/save paths:
 | ID | Path | Save boundary |
 | --- | --- | --- |
 | `fallout1` | Fallout 1 | One Vault Dweller state shared by hex/FPS and later OpenXR presentation adapters |
-| `fallout2` | Fallout 2 | One future Chosen One state shared by hex/FPS/OpenXR presentation adapters; a bounded local premade-to-Arroyo player route exists, but no authoritative persistent save exists today |
+| `fallout2` | Fallout 2 | One bounded Chosen One premade save now cold-restores the selected owned state and current Map 3 transform/mode; future FPS/OpenXR adapters must consume that same authority |
 | `newvegas` | Standalone New Vegas | Mojave-only character |
 | `fallout3` | Standalone Fallout 3 | Capital Wasteland-only character |
 | `ttw` | Combined TTW edition | One Capital Wasteland-to-Mojave character |
@@ -57,9 +57,11 @@ fourth visible game card whose owned DAT2 installation and exact Map 126/Map 3 s
 graph can be admitted. A separate local development route selects the owned
 Narg, Mingan, or Chitsa premade, applies source stats/biography/portrait and
 sex-correct idle FRM presentation, and hands Take to the grounded Map 3 player
-at tile 28707. Hex, FPS, and VR remain disabled because that no-save bounded
-route lacks Modify/Create, scripting, campaign systems, parity, and the ordinary
-launcher handoff; its runtime proof is not a launcher-ready mode. The Fallout 3
+at tile 28707. An atomic user-data save cold-restores the selected source state,
+tile, facing, transform, and bounded runtime modes. Hex, FPS, and VR remain
+disabled because the route still lacks Modify/Create, scripting, campaign-wide
+state, parity, and the ordinary launcher handoff; its runtime proof is not a
+launcher-ready mode. The Fallout 3
 intro is converted locally to a hash-verified Theora cache during profile
 registration; Escape and the visible Skip action enter the same CG00 state.
 Fallout 1 Hex/FPS remain disabled

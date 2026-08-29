@@ -72,13 +72,14 @@
   "promotion": {
     "runtimeReady": false,
     "persistentInteraction": false,
+    "playerStatePersistent": true,
     "playerArtLoaded": true,
     "playableCampaign": false,
     "collisionParity": false,
     "walkabilityParity": false
   },
   "unsupported": [
-    "Chosen One character creation, appearance selection, animation beyond idle frame zero, stats, inventory, combat, scripts, quests, audio, HUD, Pip-Boy, and save state",
+    "Chosen One custom character creation, appearance editing, animation beyond idle frame zero, inventory, combat, scripts, quests, audio, HUD, and Pip-Boy",
     "multihex footprint expansion beyond the stored central source hex",
     "retail collision and walkability parity",
     "FPS and OpenXR interaction",

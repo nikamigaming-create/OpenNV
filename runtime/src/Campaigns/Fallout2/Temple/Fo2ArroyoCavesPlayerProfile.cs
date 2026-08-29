@@ -106,6 +106,7 @@ internal sealed record Fo2ArroyoPlayerProfile(
             RequiredString(camera, "projection") != "orthographic-follow" ||
             promotion.GetProperty("runtimeReady").GetBoolean() ||
             promotion.GetProperty("persistentInteraction").GetBoolean() ||
+            !promotion.GetProperty("playerStatePersistent").GetBoolean() ||
             !promotion.GetProperty("playerArtLoaded").GetBoolean() ||
             promotion.GetProperty("playableCampaign").GetBoolean() ||
             promotion.GetProperty("collisionParity").GetBoolean() ||
