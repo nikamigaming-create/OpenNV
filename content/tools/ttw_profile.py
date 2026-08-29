@@ -9,7 +9,7 @@ import json
 import sys
 from pathlib import Path
 
-from corpus_io import atomic_json
+from corpus_io import atomic_bytes, atomic_json
 from plugin_records import read_plugin_masters
 from plugin_stack import file_sha256
 
@@ -24,6 +24,8 @@ DEFAULT_REQUIREMENTS_PATH = (
 LOAD_ORDER_COMMENT_PREFIX = "#"
 ACTIVE_PLUGIN_PREFIX = "*"
 PLUGIN_STACK_ID_PREFIX = "opennv-ttw-plugin-stack-v1\0"
+FLATTENED_ORDER_MODE = "flattened-installer-output-plugin-mtime"
+LOAD_ORDER_SNAPSHOT_SUFFIX = ".loadorder.txt"
 
 
 def _decode_text(path: Path) -> str:
@@ -106,7 +108,7 @@ def _effective_files(
     return winners
 
 
-def _plugin_stack_id(plugins: list[dict[str, object]]) -> str:
+def plugin_stack_id(plugins: list[dict[str, object]]) -> str:
     identity = {
         "schema": SCHEMA,
         "plugins": [
@@ -121,6 +123,69 @@ def _plugin_stack_id(plugins: list[dict[str, object]]) -> str:
     }
     encoded = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(PLUGIN_STACK_ID_PREFIX.encode("ascii") + encoded).hexdigest()
+
+
+def derive_flattened_installer_load_order(
+    data_root_path: Path,
+) -> tuple[tuple[str, ...], tuple[dict[str, object], ...]]:
+    """Derive an all-active plugin order from a flattened installer output.
+
+    TTW installer outputs encode their plugin order with strictly increasing
+    modification times.  This mode is deliberately narrower than a mod-manager
+    profile: every top-level plugin is active, duplicate timestamps are
+    ambiguous, and every declared master must already precede its dependent.
+    """
+
+    root = _normalize_data_root(data_root_path)
+    plugin_files = _effective_files((root,), PLUGIN_SUFFIXES)
+    if not plugin_files:
+        raise ValueError(f"Flattened installer output contains no plugins: {root}")
+    ordered = sorted(
+        (path for _, path in plugin_files.values()),
+        key=lambda path: (path.stat().st_mtime_ns, path.name.casefold()),
+    )
+    mtimes = [path.stat().st_mtime_ns for path in ordered]
+    if len(set(mtimes)) != len(mtimes):
+        duplicates = sorted(
+            {
+                timestamp
+                for timestamp in mtimes
+                if mtimes.count(timestamp) > 1
+            }
+        )
+        raise ValueError(
+            "Flattened installer plugin modification times are not strictly ordered: "
+            + ", ".join(str(value) for value in duplicates)
+        )
+    load_order = tuple(path.name for path in ordered)
+    configured = {name.casefold(): index for index, name in enumerate(load_order)}
+    missing_markers = [
+        name for name in load_requirements() if name.casefold() not in configured
+    ]
+    if missing_markers:
+        raise ValueError(
+            "Not a complete TTW profile; missing active generated plugins: "
+            + ", ".join(missing_markers)
+        )
+    evidence: list[dict[str, object]] = []
+    for load_order_index, path in enumerate(ordered):
+        masters = read_plugin_masters(path)
+        for master in masters:
+            master_index = configured.get(master.casefold())
+            if master_index is None:
+                raise ValueError(f"{path.name} requires absent master: {master}")
+            if master_index >= load_order_index:
+                raise ValueError(
+                    f"{path.name} master is not earlier in flattened installer order: "
+                    f"{master}"
+                )
+        evidence.append(
+            {
+                "file": path.name,
+                "lastWriteTimeNs": path.stat().st_mtime_ns,
+            }
+        )
+    return load_order, tuple(evidence)
 
 
 def load_requirements(path: Path = DEFAULT_REQUIREMENTS_PATH) -> tuple[str, ...]:
@@ -144,7 +209,25 @@ def inspect_ttw_profile(
     """Validate TTW markers and the exact effective plugin master closure."""
 
     roots = normalize_data_roots(data_root_paths)
-    load_order = read_active_load_order(load_order_path.resolve())
+    resolved_load_order = load_order_path.resolve()
+    load_order = read_active_load_order(resolved_load_order)
+    return inspect_ttw_profile_order(
+        roots,
+        load_order,
+        resolved_load_order,
+        declared_version,
+    )
+
+
+def inspect_ttw_profile_order(
+    roots: tuple[Path, ...],
+    load_order: tuple[str, ...],
+    load_order_path: Path,
+    declared_version: str | None = None,
+    load_order_derivation: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Validate one already decoded active order over normalized roots."""
+
     plugin_files = _effective_files(roots, PLUGIN_SUFFIXES)
     configured = {name.casefold(): index for index, name in enumerate(load_order)}
     required_plugins = load_requirements()
@@ -202,16 +285,19 @@ def inspect_ttw_profile(
             archive_files.values(), key=lambda value: value[1].name.casefold()
         )
     ]
-    stack_id = _plugin_stack_id(plugin_rows)
+    stack_id = plugin_stack_id(plugin_rows)
+    load_order_source: dict[str, object] = {
+        "file": str(load_order_path.resolve()),
+        "sha256": file_sha256(load_order_path.resolve()),
+    }
+    if load_order_derivation is not None:
+        load_order_source["derivation"] = load_order_derivation
     document: dict[str, object] = {
         "schema": SCHEMA,
         "status": "validated-generated-plugin-profile",
         "kind": "ttw",
         "sourceRoots": [str(root) for root in roots],
-        "loadOrderSource": {
-            "file": str(load_order_path.resolve()),
-            "sha256": file_sha256(load_order_path.resolve()),
-        },
+        "loadOrderSource": load_order_source,
         "declaredTtwVersion": declared_version,
         "pluginStackId": stack_id,
         "saveCompatibilityId": f"ttw:{stack_id}",
@@ -238,27 +324,89 @@ def main() -> int:
         "--data-root",
         action="append",
         type=Path,
-        required=True,
         help=(
             "Effective data layer in low-to-high precedence order; repeat for the "
-            "base New Vegas Data folder and each MO2 mod/output folder."
+            "base New Vegas Data folder and each MO2 mod/output folder. With "
+            "--flattened-installer-output these are lower source layers."
         ),
     )
-    parser.add_argument("--load-order", type=Path, required=True)
+    parser.add_argument("--load-order", type=Path)
+    parser.add_argument(
+        "--flattened-installer-output",
+        type=Path,
+        help=(
+            "Single flattened TTW installer output whose top-level plugin mtimes "
+            "encode one strictly ordered all-active load order; it is always the "
+            "highest-precedence source root."
+        ),
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--ttw-version")
     args = parser.parse_args()
     try:
         output = args.output.resolve()
-        input_roots = normalize_data_roots(args.data_root)
+        if args.flattened_installer_output is not None:
+            if args.load_order is not None:
+                raise ValueError(
+                    "--flattened-installer-output cannot be combined with --load-order"
+                )
+            input_roots = normalize_data_roots(
+                [*(args.data_root or []), args.flattened_installer_output]
+            )
+            flattened_root = _normalize_data_root(args.flattened_installer_output)
+            if input_roots[-1] != flattened_root:
+                raise ValueError(
+                    "Flattened installer output must be the highest-precedence data root"
+                )
+        else:
+            if not args.data_root or args.load_order is None:
+                raise ValueError(
+                    "Layered profile registration requires --data-root and --load-order"
+                )
+            input_roots = normalize_data_roots(args.data_root)
         if any(output.is_relative_to(root) for root in input_roots):
             raise ValueError("Profile manifest output must be outside every owned data root")
-        document = inspect_ttw_profile(
-            list(input_roots),
-            args.load_order,
-            args.ttw_version,
-        )
         output.parent.mkdir(parents=True, exist_ok=True)
+        if args.flattened_installer_output is not None:
+            load_order, order_evidence = derive_flattened_installer_load_order(
+                input_roots[-1]
+            )
+            snapshot = output.with_name(output.stem + LOAD_ORDER_SNAPSHOT_SUFFIX)
+            if any(snapshot.is_relative_to(root) for root in input_roots):
+                raise ValueError(
+                    "Load-order snapshot output must be outside every owned data root"
+                )
+            atomic_bytes(
+                snapshot,
+                ("\n".join(load_order) + "\n").encode("utf-8"),
+            )
+            document = inspect_ttw_profile_order(
+                input_roots,
+                load_order,
+                snapshot,
+                args.ttw_version,
+                {
+                    "mode": FLATTENED_ORDER_MODE,
+                    "allPluginsActive": True,
+                    "strictlyIncreasingPluginModificationTimes": True,
+                    "flattenedSourceRootIndex": len(input_roots) - 1,
+                    "plugins": list(order_evidence),
+                },
+            )
+            flattened_root_index = len(input_roots) - 1
+            if any(
+                row["sourceRootIndex"] != flattened_root_index
+                for row in document["plugins"]
+            ):
+                raise ValueError(
+                    "A flattened installer plugin is shadowed by an ambiguous data root"
+                )
+        else:
+            document = inspect_ttw_profile(
+                list(input_roots),
+                args.load_order,
+                args.ttw_version,
+            )
         atomic_json(output, document)
     except Exception as error:
         print(f"OPENNV_TTW_PROFILE_ERROR {error}", file=sys.stderr)

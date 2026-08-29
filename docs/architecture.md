@@ -61,8 +61,13 @@ its synchronously nested thirteen-command stage-5 result with source-bound
 references, transforms, script variables, control masks, sound, and movie
 operands. CG01 stage 0 remains an explicit runtime-unapplied boundary. It has no freely playable
 Vault 101 route or general package/dialogue runtime.
-TTW runtime support is absent, and JAM remains dependency- and
-portable-semantic-gated. These routes consume the shared authoritative state in
+TTW runtime support is absent. Flattened installer outputs can now derive a
+strict all-active plugin order from unique increasing plugin modification times,
+and the registered base-plus-generated profile can emit a neutral effective
+top-level source namespace. BSA members, nested loose files, override-marker
+semantics, records, scripts, world transitions, and runtime behavior remain
+uncompiled. JAM remains dependency- and portable-semantic-gated. These routes
+consume the shared authoritative state in
 `runtime/src/Gameplay/State`; presentation does not fork inventory, quests,
 objectives, opening completion, or save identity.
 
@@ -499,7 +504,9 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout3/Fo3Stage90Transition.cs` | Exact INFO `0001f379` four-command result, timer/runTimer state, owned white-fade/sound presentation, persistence, and one-shot replay policy | Stage-100 command application, other IMAD channels, general dialogue/package/KF AI, or retail parity |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage100Transition.cs` | Exact timer-triggered stage-100 command order, seven applied state transitions through `SetPCYoung 1`, persistence, and CG01 stage-0 boundary | Eighth command execution, CG01 runtime, general dialogue/package/KF AI, or retail parity |
 | `runtime/src/Campaigns/Fallout3/Fo3PlayerPackageTransition.cs` | Source-bound `CG00PlayerSection4` package, marker, idle/event animation identities, activation, and fail-closed stage-65 boundary | KF playback, package AI, `MatchRace`, `MatchFaceGeometry`, or stage advancement |
-| `ttw_profile.py` / `jam_profile.py` | Read-only installed-profile identity, dependency/master closure, hashes, save boundary, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or runtime-compatibility promotion |
+| `ttw_profile.py` | Read-only layered profile identity, explicit flattened-output mtime order derivation, immutable load-order snapshot, master closure, plugin hashes, archive-name inventory, and save boundary | Archive members, loose-file precedence, records, scripts, or runtime-compatibility promotion |
+| `ttw_source_namespace.py` | Registered-plugin revalidation plus effective top-level loose-file, BSA-v104-header, and zero-byte override-marker winner inventory | BSA member resolution, nested loose files, override-member semantics, records, scripts, or runtime behavior |
+| `jam_profile.py` | Read-only JAM dependency identity, plugin/master closure, hashes, save boundary, bounded portable-capability transport, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or complete runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
 | `Test-GodotRuntime.ps1` | Source, synthetic, retail-opt-in, format, and analyzer gates | Packaging state |

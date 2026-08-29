@@ -61,6 +61,39 @@ uncompiled, so the manifest deliberately reports
 The desktop launcher auto-detects this default output path or accepts it through
 **Set up TTW**. Registration is shown separately from runtime readiness.
 
+For a flattened installer output whose top-level plugin modification times are
+strictly increasing, the inspector can derive the all-active order without an
+MO2 profile. Keep the legal New Vegas Data folder as the lower fallback layer
+and the generated TTW output as the explicit highest-precedence layer:
+
+```powershell
+python content/tools/ttw_profile.py `
+  --data-root "D:\SteamLibrary\steamapps\common\Fallout New Vegas\Data" `
+  --flattened-installer-output "D:\TTW\Installed" `
+  --output "$env:LOCALAPPDATA\OpenNV\profiles\ttw-profile.json" `
+  --ttw-version "3.4"
+```
+
+This mode rejects duplicate plugin timestamps, absent TTW markers, and any
+master that does not precede its dependent. It writes
+`ttw-profile.loadorder.txt` beside the profile and binds that immutable snapshot
+as the launcher's load-order source. It does not derive an order from the lower
+vanilla layer.
+
+The next bounded source inspection revalidates every registered plugin and
+records only effective top-level winners:
+
+```powershell
+python content/tools/ttw_source_namespace.py `
+  --profile "$env:LOCALAPPDATA\OpenNV\profiles\ttw-profile.json" `
+  --output "$env:LOCALAPPDATA\OpenNV\profiles\ttw-effective-source.json"
+```
+
+That neutral contract validates BSA v104 headers and zero-byte `.override`
+markers without interpreting archive-member precedence, nested loose files, or
+override-member semantics. It remains non-playable and reports
+`runtimeCompatibility.ready=false`.
+
 ## JAM and the xNVSE semantic layer
 
 JAM is dependency- and portable-semantic-gated. Two bounded desktop runtime
