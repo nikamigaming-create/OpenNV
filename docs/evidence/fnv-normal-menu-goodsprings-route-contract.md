@@ -1,6 +1,7 @@
 # New Vegas normal-menu Goodsprings route contract
 
-Status: **interactive bounded forward flat route; campaign streaming continuity pending**.
+Status: **historical bounded forward flat proof retained; current-source route
+reacceptance pending**.
 
 The default owned-data recipe compiles one hash-bound chain from the player's
 legal `FalloutNV.esm` and archive stack:
@@ -34,13 +35,44 @@ process emits the owned Continue button again and must restore the unchanged sav
 active saloon identity, and equivalent transform without replaying a transition.
 Neither phase uses Windows app control or injected foreground input.
 
-This proves only the bounded eagerly instantiated forward flat route from a
-completed save. A later direct native proof establishes current-plus-neighbor
-resource suspension, but normal-route reacceptance awaits compiler-family
-migration. It does **not** prove reverse traversal, neighboring exterior-grid
-streaming/load-unload,
+This historical evidence proves only the bounded eagerly instantiated forward
+flat route from a completed save. A later direct native proof establishes
+current-plus-neighbor resource suspension. Current-source normal-route
+reacceptance still awaits an admitted source-articulation cache. It does **not**
+prove reverse traversal, neighboring exterior-grid streaming/load-unload,
 an uninterrupted New Game-to-saloon run, Sunny dialogue/package AI, visual
 parity, integrated OpenXR acceptance, or a complete campaign.
+
+## Current source boundary
+
+The 2026-08-29 compiler-family migration produced one admitted fresh cache and
+one ordinary stage-200 Continue/Pip-Boy acceptance. The first route attempt then
+correctly collided with authored exterior geometry after a stale loose NAVM
+point. Current code advances only across capsule-clear route segments and allows
+at most three bounded replans. The next attempt reached ordinary closed gate
+`0010757e`; current code activates only the actual in-range non-XTEL
+`DoorInstance` returned by the player collision and persists its open state.
+
+That gate still blocked the capsule because its old generated model had flattened
+the animated leaf and static posts. The owned source NIF contains independent
+Open and Close controller sequences for target `BGate`; Close is not exactly the
+reverse of Open. Static export and runtime now preserve a hash-joined
+`opennv-controller-door-articulation/v1` contract so only the target leaf's
+visuals and authored collision move while `BPosts` and the REFR stay fixed.
+
+Exactly one fresh cache build was started for that schema at
+`D:\Builds\OpenNV-fnv-articulated-door-cache-20260829-r1`. It failed closed
+after 245.365 seconds on
+`meshes\dungeons\nv_craftsmanhomesinterior\nvcraftsmanrmdooranimated.nif`:
+the target owns a mass-zero convex collision body, but the current static
+collision exporter admits only MOPP packed triangles and therefore could not
+join that authored body. The partial cache has no `install-manifest.json`, is
+not admitted, and must not be used for runtime evidence. The owned Data tree
+remained unchanged at 321 files, 9,875,907,799 bytes, with size/mtime digest
+`25abe0156faaaad8f831b0bfc33745dc9a35cb0da65ac91e77eaab1c0323efbb`.
+No retry or Godot acceptance followed. The next slice is to represent this exact
+authored convex collision without weakening the join, rebuild once into a new
+unique cache, then run ordinary route and cold-Continue acceptance.
 
 ## Bound local acceptance
 

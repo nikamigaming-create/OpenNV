@@ -23,22 +23,31 @@ hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
 XML closures, and the bounded ordered Doc house → Goodsprings exterior → saloon
 composite with reciprocal exits (`00103e61` ↔ `00103e69`, then
 `0010636f` ↔ `0010618e`) and normally enabled Sunny `00104e85`; flat is
-launchable. From a completed stage-200 Continue, its accepted forward flat route
-uses configured input through both XTEL links and campaign save v6 cold-restores
-saloon CELL `00106185`; save v6 also owns source-derived Level/HP/AP/XP. The
+launchable. Campaign save v6 owns source-derived Level/HP/AP/XP, and a completed
+stage-200 Continue has passed the populated Pip-Boy `Tab`/`Escape` interaction
+against a fresh compiler-family cache. The earlier forward flat-route proof
+used configured input through both XTEL links and cold-restored saloon CELL
+`00106185`, but it predates the current compiler-family and source-controller
+door contracts and is not current route acceptance. The
 source-portal active set keeps the current CELL plus direct neighbors active and
-suspends distant resources, but its retained direct native proof uses an older
-compiler identity that normal restore correctly rejects. OpenXR remains
-experimental with no physical-headset acceptance.
+suspends distant resources. Current code bounds NAVM replanning, activates the
+actual blocking authored door, and preserves controller-owned Open/Close
+articulation for joined moving visuals and collision. The first fresh cache for
+that contract failed closed on a different animated door because the collision
+exporter does not yet admit its mass-zero authored convex body, so the controlled
+target could not be joined. Route/cold-Continue reacceptance remains pending.
+OpenXR remains experimental with no physical-headset acceptance.
 Configured flat `Tab`/`Escape` now opens and closes the populated owned campaign
 Pip-Boy surface through Godot's input-event path. The accepted surface uses the
 owned background, bitmap fonts, and source rectangles, but it does not execute
 the complete Gamebryo tile graph and is not retail-pixel parity.
 Fallout 3 owns its menu, persistent CG00 selection, and bounded Vault 101 birth-
-room progression through stage 90. The ordinary route plays the exact stage-65
+room progression through stage 100. The ordinary route plays the exact stage-65
 Dad cue, applies stage-80/85 results and stage-90 INFO `0001f379`, presents the
-owned white fade/sound, and cold-restores stage 90 without replaying the cue.
-It has no freely playable Vault 101 route or general package/dialogue runtime.
+owned white fade/sound, then applies seven of the eight exact stage-100 commands
+through `SetPCYoung 1` and cold-restores that state without replaying the cue.
+CG01 stage 0 remains an explicit unapplied boundary. It has no freely playable
+Vault 101 route or general package/dialogue runtime.
 TTW runtime support is absent, and JAM remains dependency- and
 portable-semantic-gated. These routes consume the shared authoritative state in
 `runtime/src/Gameplay/State`; presentation does not fork inventory, quests,
@@ -137,6 +146,18 @@ explicit prepare reuses a family only when its compiler identity, owned inputs,
 route recipes, dependency manifests, and every admitted output hash match. A
 failed family is rebuilt together with its real dependents; restore never
 silently starts a compiler.
+
+Controller-bearing DOOR NIFs use a separate source-owned articulation boundary.
+The static sidecar and CELL manifest repeat the canonical
+`opennv-controller-door-articulation/v1` contract. Runtime requires identical
+hashes, exact Open/Close source joins, finite normalized transforms, and exact
+moving visual/collision membership before it reparents those descendants under
+one pivot. Static siblings and the placed REFR transform never move. A
+non-controller fallback may rotate the placement only when visual and collision
+are each verified as a single piece. The current compiler remains fail-closed
+for controlled targets without joined collision; the exact unresolved owned
+pattern is recorded in the
+[door-articulation evidence](evidence/fnv-owned-door-articulation-contract.md).
 
 The actor data boundary is separate from model assembly and rendering:
 

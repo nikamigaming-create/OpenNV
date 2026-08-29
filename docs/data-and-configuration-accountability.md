@@ -186,7 +186,7 @@ fail closed and require one explicit migration build.
 | `world` | Verified Gamebryo world-unit conversion. |
 | `simulation`, `player.desktopInput`, `xr`, `pool`, `hud` | Explicit OpenNV flat/VR policy; physical key/mouse bindings, simulator thresholds, pool input/mount/contact-proof tuning, and hardware/playtest gates are stated separately from retail data. |
 | `renderer` | Honest parity-failing Godot adapter; raw authored XCLL/material inputs remain available. |
-| `door` | Explicit non-parity OpenNV interaction angle; it is never represented as a decoded retail controller track. |
+| `door` | Explicit non-parity fallback angle for verified single-piece, non-controller doors. Controller-bearing doors instead consume hash-joined owned NIF Open/Close transforms and exact moving visual/collision membership; the fallback may not impersonate a decoded controller track. |
 | `capture`, `proof`, `retailActorState`, `actorParity` | Diagnostic-only gates, never world or actor authoring data. |
 | `performance` | Diagnostic-only passive sampling interval for Godot's built-in runtime monitors; it defines no pass/fail threshold. |
 | `diagnosticPreview`, `setupView` | Diagnostic/setup presentation only. |
