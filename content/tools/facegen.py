@@ -91,6 +91,75 @@ def apply_geometry_morphs(
     return [tuple(position) for position in result]
 
 
+def _combine_geometry_basis_deltas(
+    basis_deltas: tuple[tuple[tuple[float, float, float], ...], ...],
+    control_axes: tuple[tuple[float, ...], ...],
+    *,
+    vertex_offset: int,
+    vertex_count: int,
+) -> tuple[tuple[tuple[float, float, float], ...], ...]:
+    """Compose linear FaceGen control axes into per-vertex EGM deltas."""
+    if vertex_offset < 0 or vertex_count <= 0:
+        raise ValueError("FaceGen control geometry range is invalid")
+    if not basis_deltas:
+        raise ValueError("FaceGen control geometry has no symmetric basis")
+    source_vertex_count = len(basis_deltas[0])
+    if any(len(morph) != source_vertex_count for morph in basis_deltas):
+        raise ValueError("FaceGen control geometry basis vertex counts differ")
+    if vertex_offset + vertex_count > source_vertex_count:
+        raise ValueError(
+            "FaceGen control geometry range exceeds EGM vertices: "
+            f"offset={vertex_offset} count={vertex_count} egm={source_vertex_count}"
+        )
+    results = []
+    for control_index, axis in enumerate(control_axes):
+        if len(axis) != len(basis_deltas):
+            raise ValueError(
+                "FaceGen control axis differs from the EGM basis: "
+                f"control={control_index} axis={len(axis)} basis={len(basis_deltas)}"
+            )
+        if not all(math.isfinite(value) for value in axis):
+            raise ValueError(f"FaceGen control axis {control_index} is non-finite")
+        rows = []
+        for vertex_index in range(vertex_offset, vertex_offset + vertex_count):
+            rows.append(
+                tuple(
+                    sum(
+                        axis[basis_index] * basis_deltas[basis_index][vertex_index][component]
+                        for basis_index in range(len(basis_deltas))
+                    )
+                    for component in range(3)
+                )
+            )
+        results.append(tuple(rows))
+    return tuple(results)
+
+
+def facegen_geometry_control_deltas(
+    egm_payload: bytes,
+    control_axes: tuple[tuple[float, ...], ...],
+    *,
+    vertex_offset: int,
+    vertex_count: int,
+) -> tuple[tuple[tuple[float, float, float], ...], ...]:
+    """Decode exact owned EGM modes and compose runtime slider target deltas."""
+    data = EgmFormat.Data()
+    data.read(io.BytesIO(egm_payload))
+    basis = tuple(
+        tuple(
+            tuple(float(component) for component in delta)
+            for delta in morph.get_relative_vertices()
+        )
+        for morph in data.sym_morphs
+    )
+    return _combine_geometry_basis_deltas(
+        basis,
+        control_axes,
+        vertex_offset=vertex_offset,
+        vertex_count=vertex_count,
+    )
+
+
 def synthesize_texture_detail(egt_payload: bytes, weights: tuple[float, ...]) -> Image.Image:
     if len(egt_payload) < EGT_HEADER_BYTES or egt_payload[:EGT_SIGNATURE_BYTES] != b"FREGT003":
         raise ValueError("Unexpected FaceGen EGT signature")

@@ -13,6 +13,7 @@ from actor_gltf import (  # noqa: E402
     NifFormat,
     RetailRenderPart,
     _append_facegen_morph_targets,
+    _append_facegen_geometry_control_targets,
     _append_runtime_surface_node,
     _authored_rigid_attachment_nodes,
     _bake_actor_shape_transform,
@@ -900,6 +901,46 @@ class ActorGltfTest(unittest.TestCase):
         self.assertEqual(len(targets), 2)
         self.assertTrue(all(set(target) == {"POSITION", "NORMAL"} for target in targets))
         self.assertEqual(len(builder.accessors), 4)
+
+    def test_facegen_egm_controls_export_named_position_and_normal_targets(self):
+        component = ActorComponent(
+            "head",
+            "meshes/characters/head/headhuman.nif",
+            b"nif",
+            egm_path="meshes/characters/head/headhuman.egm",
+            egm_payload=b"egm",
+            egm_symmetric_control_names=("sRSMShapeOption01",),
+            egm_symmetric_control_axes=((1.0, 0.0),),
+        )
+        builder = BufferBuilder()
+        with patch(
+            "actor_gltf.facegen_geometry_control_deltas",
+            return_value=(
+                (
+                    (0.0, 0.0, 0.1),
+                    (0.0, 0.0, 0.1),
+                    (0.0, 0.0, 0.1),
+                ),
+            ),
+        ):
+            targets, manifest = _append_facegen_geometry_control_targets(
+                component,
+                [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+                [(0.0, 1.0, 0.0)] * 3,
+                [(0, 1, 2)],
+                object(),
+                False,
+                builder,
+        )
+
+        self.assertEqual(manifest["targetNames"], ["sRSMShapeOption01"])
+        self.assertEqual(
+            manifest["source"],
+            "exact-owned-egm-composed-through-ctl-axis",
+        )
+        self.assertEqual(len(targets), 1)
+        self.assertEqual(set(targets[0]), {"POSITION", "NORMAL"})
+        self.assertEqual(len(builder.accessors), 2)
 
 
 if __name__ == "__main__":

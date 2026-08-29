@@ -31,7 +31,7 @@ internal sealed record OpeningCampaignState(
     OpeningTransformState PlayerTransform,
     OpeningTransformState GuideTransform)
 {
-    internal const string ExpectedSchema = "opennv-opening-campaign-state/v2";
+    internal const string ExpectedSchema = "opennv-opening-campaign-state/v3";
 
     internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
 
@@ -170,7 +170,8 @@ internal sealed record OpeningCharacterAppearanceState(
     string EyesFormId,
     string FaceSymmetricGeometrySha256,
     string FaceAsymmetricGeometrySha256,
-    string FaceSymmetricTextureSha256)
+    string FaceSymmetricTextureSha256,
+    IReadOnlyDictionary<string, float> FaceGeometryControlValues)
 {
     private const int Sha256HexCharacters = 64;
     internal static OpeningCharacterAppearanceState Parse(JsonElement source) => new(
@@ -179,7 +180,12 @@ internal sealed record OpeningCharacterAppearanceState(
         source.GetProperty(nameof(EyesFormId)).GetString()!,
         source.GetProperty(nameof(FaceSymmetricGeometrySha256)).GetString()!,
         source.GetProperty(nameof(FaceAsymmetricGeometrySha256)).GetString()!,
-        source.GetProperty(nameof(FaceSymmetricTextureSha256)).GetString()!);
+        source.GetProperty(nameof(FaceSymmetricTextureSha256)).GetString()!,
+        source.GetProperty(nameof(FaceGeometryControlValues)).EnumerateObject()
+            .ToDictionary(
+                value => value.Name,
+                value => value.Value.GetSingle(),
+                StringComparer.Ordinal));
 
     internal void Validate()
     {
@@ -188,7 +194,10 @@ internal sealed record OpeningCharacterAppearanceState(
             FalloutFormId.Normalize(EyesFormId) != EyesFormId ||
             !ValidSha256(FaceSymmetricGeometrySha256) ||
             !ValidSha256(FaceAsymmetricGeometrySha256) ||
-            !ValidSha256(FaceSymmetricTextureSha256))
+            !ValidSha256(FaceSymmetricTextureSha256) ||
+            FaceGeometryControlValues.Count == 0 ||
+            FaceGeometryControlValues.Keys.Any(string.IsNullOrWhiteSpace) ||
+            FaceGeometryControlValues.Values.Any(value => !float.IsFinite(value)))
             throw new InvalidOperationException(
                 "Saved opening character appearance state is invalid.");
     }

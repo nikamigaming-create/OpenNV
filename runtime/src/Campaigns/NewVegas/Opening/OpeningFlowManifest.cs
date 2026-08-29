@@ -61,6 +61,30 @@ internal sealed record OpeningNewGameFlow(
     private const int FaceGenSymmetricGeometryCount = 50;
     private const int FaceGenAsymmetricGeometryCount = 30;
     private const int FaceGenSymmetricTextureCount = 50;
+    private const int FaceGenAsymmetricTextureCount = 0;
+    private const int FaceGenSymmetricGeometryControlCount = 56;
+    private const int FaceGenAsymmetricGeometryControlCount = 26;
+    private const int FaceGenSymmetricTextureControlCount = 33;
+    private const int FaceGenAsymmetricTextureControlCount = 0;
+    private const int FaceGenNativeGeometryControlCount = 43;
+    private const string ExpectedFaceGenControlSpaceSchema =
+        "opennv-owned-facegen-control-space/v1";
+    private const string ExpectedFaceGenControlSpaceStatus =
+        "source-bound-controls-default-preview-artifact-compiled-one-control-runtime-bound";
+    private const string ExpectedFaceGenControlRuntimeDisposition =
+        "control-axes-and-default-preview-egm-targets-compiled-one-normalized-" +
+        "control-runtime-bound-full-retail-slider-ranges-unimplemented";
+    private const string ExpectedFaceGenEngineBuild = "1.4.0.525";
+    private const string ExpectedPlayerFaceGenPreviewSchema =
+        "opennv-owned-player-facegen-preview/v1";
+    private const string ExpectedPlayerFaceGenPreviewStatus =
+        "compiled-default-male-head-with-ctl-egm-targets-one-normalized-control-runtime-bound";
+    private const string ExpectedPlayerFaceGenPreviewSex = "male";
+    private const string ExpectedPlayerFaceGenPreviewRuntimeDisposition =
+        "owned-default-male-preview-host-and-one-normalized-control-bound-" +
+        "other-identities-and-full-retail-slider-semantics-unimplemented";
+    private const string ExpectedFaceGenPreviewControlSemantics =
+        "first-party-normalized-ctl-axis-preview-not-retail-slider-range";
     private static readonly HashSet<string> RuntimeCommandKinds = new(
         new[]
         {
@@ -753,10 +777,115 @@ internal sealed record OpeningNewGameFlow(
         JsonElement source) => new(
             source.GetProperty("symmetricGeometry").GetProperty("count").GetInt32(),
             source.GetProperty("symmetricGeometry").GetProperty("sha256").GetString()!,
+            ParseFloatArray(source.GetProperty("symmetricGeometry").GetProperty("values")),
             source.GetProperty("asymmetricGeometry").GetProperty("count").GetInt32(),
             source.GetProperty("asymmetricGeometry").GetProperty("sha256").GetString()!,
+            ParseFloatArray(source.GetProperty("asymmetricGeometry").GetProperty("values")),
             source.GetProperty("symmetricTexture").GetProperty("count").GetInt32(),
-            source.GetProperty("symmetricTexture").GetProperty("sha256").GetString()!);
+            source.GetProperty("symmetricTexture").GetProperty("sha256").GetString()!,
+            ParseFloatArray(source.GetProperty("symmetricTexture").GetProperty("values")),
+            ParseFaceGenControlSpace(source.GetProperty("controlSpace")),
+            ParsePlayerFaceGenPreview(source.GetProperty("previewHead")));
+
+    private static IReadOnlyList<float> ParseFloatArray(JsonElement source) =>
+        source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
+
+    private static OpeningFaceGenControlSpace ParseFaceGenControlSpace(
+        JsonElement source)
+    {
+        var format = source.GetProperty("format");
+        var basisCounts = format.GetProperty("basisCounts");
+        var controlCounts = format.GetProperty("linearControlCounts");
+        var exposure = source.GetProperty("nativeGeometryExposure");
+        return new OpeningFaceGenControlSpace(
+            source.GetProperty("schema").GetString()!,
+            source.GetProperty("status").GetString()!,
+            source.GetProperty("source").GetProperty("archive").GetString()!,
+            source.GetProperty("source").GetProperty("archiveSha256").GetString()!,
+            source.GetProperty("source").GetProperty("logicalPath").GetString()!,
+            source.GetProperty("source").GetProperty("bytes").GetInt64(),
+            source.GetProperty("source").GetProperty("sha256").GetString()!,
+            format.GetProperty("formatSignature").GetString()!,
+            format.GetProperty("geometryBasisVersion").GetInt32(),
+            format.GetProperty("textureBasisVersion").GetInt32(),
+            basisCounts.GetProperty("symmetricGeometry").GetInt32(),
+            basisCounts.GetProperty("asymmetricGeometry").GetInt32(),
+            basisCounts.GetProperty("symmetricTexture").GetInt32(),
+            basisCounts.GetProperty("asymmetricTexture").GetInt32(),
+            controlCounts.GetProperty("symmetricGeometry").GetInt32(),
+            controlCounts.GetProperty("asymmetricGeometry").GetInt32(),
+            controlCounts.GetProperty("symmetricTexture").GetInt32(),
+            controlCounts.GetProperty("asymmetricTexture").GetInt32(),
+            format.GetProperty("controls").GetProperty("symmetricGeometry")
+                .EnumerateArray().Select(ParseFaceGenLinearControl).ToArray(),
+            exposure.GetProperty("classification").GetString()!,
+            exposure.GetProperty("engineBuild").GetString()!,
+            exposure.GetProperty("sourceExecutableSha256").GetString()!,
+            exposure.GetProperty("controls").EnumerateArray()
+                .Select(ParseNativeFaceGenGeometryControl).ToArray(),
+            ParseFaceGenPreviewControl(source.GetProperty("runtimePreviewControl")),
+            source.GetProperty("runtimeDisposition").GetString()!);
+    }
+
+    private static OpeningFaceGenLinearControl ParseFaceGenLinearControl(
+        JsonElement source) => new(
+            source.GetProperty("index").GetInt32(),
+            source.GetProperty("sourceLabel").GetString()!,
+            source.GetProperty("axisSha256").GetString()!,
+            ParseFloatArray(source.GetProperty("axis")));
+
+    private static OpeningNativeFaceGenGeometryControl
+        ParseNativeFaceGenGeometryControl(JsonElement source) => new(
+            source.GetProperty("controlIndex").GetInt32(),
+            source.GetProperty("settingEntity").GetString()!,
+            source.GetProperty("sourceLabel").GetString()!,
+            source.GetProperty("axisSha256").GetString()!);
+
+    private static OpeningFaceGenPreviewControl ParseFaceGenPreviewControl(
+        JsonElement source) => new(
+            source.GetProperty("controlIndex").GetInt32(),
+            source.GetProperty("settingEntity").GetString()!,
+            source.GetProperty("sourceLabel").GetString()!,
+            source.GetProperty("axisSha256").GetString()!,
+            source.GetProperty("minimum").GetSingle(),
+            source.GetProperty("maximum").GetSingle(),
+            source.GetProperty("step").GetSingle(),
+            source.GetProperty("resetValue").GetSingle(),
+            source.GetProperty("acceptanceValue").GetSingle(),
+            ParseFaceGenPreviewPresentation(source.GetProperty("presentation")),
+            source.GetProperty("semantics").GetString()!);
+
+    private static OpeningFaceGenPreviewPresentation ParseFaceGenPreviewPresentation(
+        JsonElement source) => new(
+            source.GetProperty("viewportWidthFraction").GetSingle(),
+            source.GetProperty("viewportHeightFraction").GetSingle(),
+            source.GetProperty("verticalFovHalfAngleFactor").GetSingle(),
+            source.GetProperty("depthExtentFraction").GetSingle());
+
+    private static OpeningPlayerFaceGenPreview ParsePlayerFaceGenPreview(
+        JsonElement source)
+    {
+        var outputs = source.GetProperty("outputs");
+        return new OpeningPlayerFaceGenPreview(
+            source.GetProperty("schema").GetString()!,
+            source.GetProperty("status").GetString()!,
+            source.GetProperty("playerFormId").GetString()!,
+            source.GetProperty("raceFormId").GetString()!,
+            source.GetProperty("sex").GetString()!,
+            source.GetProperty("hairFormId").GetString()!,
+            source.GetProperty("eyesFormId").GetString()!,
+            source.GetProperty("headPartFormIds").EnumerateArray()
+                .Select(value => value.GetString()!).ToArray(),
+            source.GetProperty("geometryControlNames").EnumerateArray()
+                .Select(value => value.GetString()!).ToArray(),
+            source.GetProperty("geometryControlCount").GetInt32(),
+            outputs.GetProperty("gltf").GetString()!,
+            outputs.GetProperty("gltfSha256").GetString()!,
+            outputs.GetProperty("sidecar").GetString()!,
+            outputs.GetProperty("sidecarSha256").GetString()!,
+            outputs.GetProperty("bufferSha256").GetString()!,
+            source.GetProperty("runtimeDisposition").GetString()!);
+    }
 
     private static OpeningAppearanceRace ParseAppearanceRace(
         JsonElement source,
@@ -1172,9 +1301,14 @@ internal sealed record OpeningNewGameFlow(
             appearance.FaceGen.SymmetricGeometryCount != FaceGenSymmetricGeometryCount ||
             appearance.FaceGen.AsymmetricGeometryCount != FaceGenAsymmetricGeometryCount ||
             appearance.FaceGen.SymmetricTextureCount != FaceGenSymmetricTextureCount ||
+            appearance.FaceGen.SymmetricGeometryValues.Count != FaceGenSymmetricGeometryCount ||
+            appearance.FaceGen.AsymmetricGeometryValues.Count != FaceGenAsymmetricGeometryCount ||
+            appearance.FaceGen.SymmetricTextureValues.Count != FaceGenSymmetricTextureCount ||
             string.IsNullOrWhiteSpace(appearance.FaceGen.SymmetricGeometrySha256) ||
             string.IsNullOrWhiteSpace(appearance.FaceGen.AsymmetricGeometrySha256) ||
-            string.IsNullOrWhiteSpace(appearance.FaceGen.SymmetricTextureSha256))
+            string.IsNullOrWhiteSpace(appearance.FaceGen.SymmetricTextureSha256) ||
+            !ValidFaceGenControlSpace(appearance.FaceGen.ControlSpace) ||
+            !ValidPlayerFaceGenPreview(appearance))
             return false;
         return appearance.Races.All(race =>
             ValidIdentity(race.EditorId, race.FormId, "RACE", "RACE") &&
@@ -1193,6 +1327,121 @@ internal sealed record OpeningNewGameFlow(
                 sex.HairOptions.All(value => ValidAppearanceOption(value, "HAIR")) &&
                 sex.EyeOptions.All(value => ValidAppearanceOption(value, "EYES"))));
     }
+
+    private static bool ValidPlayerFaceGenPreview(OpeningPlayerAppearance appearance)
+    {
+        var preview = appearance.FaceGen.PreviewHead;
+        var controls = appearance.FaceGen.ControlSpace.NativeGeometryControls;
+        return preview.Schema == ExpectedPlayerFaceGenPreviewSchema &&
+            preview.Status == ExpectedPlayerFaceGenPreviewStatus &&
+            preview.RuntimeDisposition == ExpectedPlayerFaceGenPreviewRuntimeDisposition &&
+            preview.PlayerFormId.Equals(
+                appearance.PlayerFormId,
+                StringComparison.OrdinalIgnoreCase) &&
+            preview.RaceFormId.Equals(
+                appearance.DefaultRaceFormId,
+                StringComparison.OrdinalIgnoreCase) &&
+            preview.Sex == ExpectedPlayerFaceGenPreviewSex &&
+            preview.HairFormId.Equals(
+                appearance.DefaultHairFormId,
+                StringComparison.OrdinalIgnoreCase) &&
+            preview.EyesFormId.Equals(
+                appearance.DefaultEyesFormId,
+                StringComparison.OrdinalIgnoreCase) &&
+            preview.GeometryControlCount == FaceGenNativeGeometryControlCount &&
+            preview.GeometryControlNames.SequenceEqual(
+                controls.Select(value => value.SettingEntity),
+                StringComparer.Ordinal) &&
+            !string.IsNullOrWhiteSpace(preview.GltfPath) &&
+            !string.IsNullOrWhiteSpace(preview.GltfSha256) &&
+            !string.IsNullOrWhiteSpace(preview.SidecarPath) &&
+            !string.IsNullOrWhiteSpace(preview.SidecarSha256) &&
+            !string.IsNullOrWhiteSpace(preview.BufferSha256);
+    }
+
+    private static bool ValidFaceGenControlSpace(
+        OpeningFaceGenControlSpace source)
+    {
+        if (source.Schema != ExpectedFaceGenControlSpaceSchema ||
+            source.Status != ExpectedFaceGenControlSpaceStatus ||
+            source.FormatSignature != "FRCTL001" ||
+            source.EngineBuild != ExpectedFaceGenEngineBuild ||
+            source.RuntimeDisposition != ExpectedFaceGenControlRuntimeDisposition ||
+            source.SourceBytes <= 0 ||
+            string.IsNullOrWhiteSpace(source.SourceArchive) ||
+            string.IsNullOrWhiteSpace(source.SourceArchiveSha256) ||
+            string.IsNullOrWhiteSpace(source.SourceLogicalPath) ||
+            string.IsNullOrWhiteSpace(source.SourceSha256) ||
+            string.IsNullOrWhiteSpace(source.SourceExecutableSha256) ||
+            source.SymmetricGeometryBasisCount != FaceGenSymmetricGeometryCount ||
+            source.AsymmetricGeometryBasisCount != FaceGenAsymmetricGeometryCount ||
+            source.SymmetricTextureBasisCount != FaceGenSymmetricTextureCount ||
+            source.AsymmetricTextureBasisCount != FaceGenAsymmetricTextureCount ||
+            source.SymmetricGeometryControlCount != FaceGenSymmetricGeometryControlCount ||
+            source.AsymmetricGeometryControlCount != FaceGenAsymmetricGeometryControlCount ||
+            source.SymmetricTextureControlCount != FaceGenSymmetricTextureControlCount ||
+            source.AsymmetricTextureControlCount != FaceGenAsymmetricTextureControlCount ||
+            source.SymmetricGeometryControls.Count != FaceGenSymmetricGeometryControlCount ||
+            source.NativeGeometryControls.Count != FaceGenNativeGeometryControlCount)
+            return false;
+
+        var controls = source.SymmetricGeometryControls;
+        if (controls.Select(value => value.Index).Distinct().Count() != controls.Count ||
+            controls.Any(value =>
+                value.Index < 0 ||
+                value.Index >= FaceGenSymmetricGeometryControlCount ||
+                string.IsNullOrWhiteSpace(value.SourceLabel) ||
+                string.IsNullOrWhiteSpace(value.AxisSha256) ||
+                value.Axis.Count != FaceGenSymmetricGeometryCount ||
+                value.Axis.Any(axis => !float.IsFinite(axis))))
+            return false;
+
+        var byIndex = controls.ToDictionary(value => value.Index);
+        var nativeValid = source.NativeGeometryControls
+            .Select(value => value.ControlIndex).Distinct().Count() ==
+                source.NativeGeometryControls.Count &&
+            source.NativeGeometryControls.All(value =>
+                byIndex.TryGetValue(value.ControlIndex, out var control) &&
+                value.SettingEntity == $"sRSMShapeOption{value.ControlIndex + 1:00}" &&
+                value.SourceLabel == control.SourceLabel &&
+                value.AxisSha256 == control.AxisSha256);
+        var preview = source.PreviewControl;
+        return nativeValid &&
+            preview.Semantics == ExpectedFaceGenPreviewControlSemantics &&
+            float.IsFinite(preview.Minimum) &&
+            float.IsFinite(preview.Maximum) &&
+            float.IsFinite(preview.Step) &&
+            float.IsFinite(preview.ResetValue) &&
+            float.IsFinite(preview.AcceptanceValue) &&
+            preview.Minimum < preview.Maximum &&
+            preview.Step > 0.0f &&
+            preview.ResetValue >= preview.Minimum &&
+            preview.ResetValue <= preview.Maximum &&
+            preview.AcceptanceValue >= preview.Minimum &&
+            preview.AcceptanceValue <= preview.Maximum &&
+            preview.AcceptanceValue != preview.ResetValue &&
+            ValidFaceGenPreviewPresentation(preview.Presentation) &&
+            source.NativeGeometryControls.SingleOrDefault(value =>
+                value.ControlIndex == preview.ControlIndex) is { } native &&
+            preview.SettingEntity == native.SettingEntity &&
+            preview.SourceLabel == native.SourceLabel &&
+            preview.AxisSha256 == native.AxisSha256;
+    }
+
+    private static bool ValidFaceGenPreviewPresentation(
+        OpeningFaceGenPreviewPresentation source) =>
+        float.IsFinite(source.ViewportWidthFraction) &&
+        source.ViewportWidthFraction > 0.0f &&
+        source.ViewportWidthFraction <= 1.0f &&
+        float.IsFinite(source.ViewportHeightFraction) &&
+        source.ViewportHeightFraction > 0.0f &&
+        source.ViewportHeightFraction <= 1.0f &&
+        float.IsFinite(source.VerticalFovHalfAngleFactor) &&
+        source.VerticalFovHalfAngleFactor > 0.0f &&
+        source.VerticalFovHalfAngleFactor <= 1.0f &&
+        float.IsFinite(source.DepthExtentFraction) &&
+        source.DepthExtentFraction > 0.0f &&
+        source.DepthExtentFraction <= 1.0f;
 
     private static bool ValidAppearanceOption(
         OpeningAppearanceOption option,
@@ -1763,10 +2012,91 @@ internal sealed record OpeningPlayerAppearance(
 internal sealed record OpeningAppearanceFaceGen(
     int SymmetricGeometryCount,
     string SymmetricGeometrySha256,
+    IReadOnlyList<float> SymmetricGeometryValues,
     int AsymmetricGeometryCount,
     string AsymmetricGeometrySha256,
+    IReadOnlyList<float> AsymmetricGeometryValues,
     int SymmetricTextureCount,
-    string SymmetricTextureSha256);
+    string SymmetricTextureSha256,
+    IReadOnlyList<float> SymmetricTextureValues,
+    OpeningFaceGenControlSpace ControlSpace,
+    OpeningPlayerFaceGenPreview PreviewHead);
+
+internal sealed record OpeningFaceGenControlSpace(
+    string Schema,
+    string Status,
+    string SourceArchive,
+    string SourceArchiveSha256,
+    string SourceLogicalPath,
+    long SourceBytes,
+    string SourceSha256,
+    string FormatSignature,
+    int GeometryBasisVersion,
+    int TextureBasisVersion,
+    int SymmetricGeometryBasisCount,
+    int AsymmetricGeometryBasisCount,
+    int SymmetricTextureBasisCount,
+    int AsymmetricTextureBasisCount,
+    int SymmetricGeometryControlCount,
+    int AsymmetricGeometryControlCount,
+    int SymmetricTextureControlCount,
+    int AsymmetricTextureControlCount,
+    IReadOnlyList<OpeningFaceGenLinearControl> SymmetricGeometryControls,
+    string ExposureClassification,
+    string EngineBuild,
+    string SourceExecutableSha256,
+    IReadOnlyList<OpeningNativeFaceGenGeometryControl> NativeGeometryControls,
+    OpeningFaceGenPreviewControl PreviewControl,
+    string RuntimeDisposition);
+
+internal sealed record OpeningFaceGenLinearControl(
+    int Index,
+    string SourceLabel,
+    string AxisSha256,
+    IReadOnlyList<float> Axis);
+
+internal sealed record OpeningNativeFaceGenGeometryControl(
+    int ControlIndex,
+    string SettingEntity,
+    string SourceLabel,
+    string AxisSha256);
+
+internal sealed record OpeningFaceGenPreviewControl(
+    int ControlIndex,
+    string SettingEntity,
+    string SourceLabel,
+    string AxisSha256,
+    float Minimum,
+    float Maximum,
+    float Step,
+    float ResetValue,
+    float AcceptanceValue,
+    OpeningFaceGenPreviewPresentation Presentation,
+    string Semantics);
+
+internal sealed record OpeningFaceGenPreviewPresentation(
+    float ViewportWidthFraction,
+    float ViewportHeightFraction,
+    float VerticalFovHalfAngleFactor,
+    float DepthExtentFraction);
+
+internal sealed record OpeningPlayerFaceGenPreview(
+    string Schema,
+    string Status,
+    string PlayerFormId,
+    string RaceFormId,
+    string Sex,
+    string HairFormId,
+    string EyesFormId,
+    IReadOnlyList<string> HeadPartFormIds,
+    IReadOnlyList<string> GeometryControlNames,
+    int GeometryControlCount,
+    string GltfPath,
+    string GltfSha256,
+    string SidecarPath,
+    string SidecarSha256,
+    string BufferSha256,
+    string RuntimeDisposition);
 
 internal sealed record OpeningAppearanceRace(
     string FormId,

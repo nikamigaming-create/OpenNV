@@ -40,7 +40,7 @@ from gltf_io import (
     BufferBuilder,
     pack_floats,
 )
-from facegen import apply_geometry_morphs
+from facegen import apply_geometry_morphs, facegen_geometry_control_deltas
 from facegen_animation import FaceGenTri, decode_tri
 from nif_decoder import decode_nif
 from texture_pipeline import decode_dds
@@ -121,6 +121,8 @@ class ActorComponent:
     tint_rgb: tuple[float, float, float] | None = None
     diffuse_aliases: tuple[tuple[str, str], ...] = ()
     egm_vertex_offset: int = 0
+    egm_symmetric_control_names: tuple[str, ...] = ()
+    egm_symmetric_control_axes: tuple[tuple[float, ...], ...] = ()
     source_form_id: str | None = None
     source_slot: int | None = None
     runtime_shape_name: str | None = None
@@ -1443,6 +1445,32 @@ def _append_shape(
         builder,
         compiler,
     )
+    geometry_targets, geometry_manifest = _append_facegen_geometry_control_targets(
+        component,
+        positions,
+        normals,
+        triangles,
+        shape_transform,
+        transform_shape,
+        builder,
+    )
+    duplicate_targets = set(morph_manifest["targetNames"]).intersection(
+        geometry_manifest["targetNames"]
+    )
+    if duplicate_targets:
+        raise ValueError(
+            "Actor FaceGen TRI and EGM control target names overlap: "
+            f"{sorted(duplicate_targets)}"
+        )
+    morph_targets = [*geometry_targets, *morph_targets]
+    morph_manifest = {
+        **morph_manifest,
+        "targetNames": [
+            *geometry_manifest["targetNames"],
+            *morph_manifest["targetNames"],
+        ],
+        "geometryControls": geometry_manifest,
+    }
     tangent_source = "absent"
     if mesh.uv_sets:
         uvs = [(float(value.u), float(value.v)) for value in mesh.uv_sets[0]]
@@ -1648,6 +1676,85 @@ def _append_facegen_morph_targets(
         "targetNames": target_names,
         "differentialTargets": differential_names,
         "staticTargets": static_names,
+    }
+
+
+def _append_facegen_geometry_control_targets(
+    component: ActorComponent,
+    positions: list[tuple[float, float, float]],
+    normals: list[tuple[float, float, float]],
+    triangles: list[tuple[int, int, int]],
+    shape_transform: object,
+    transform_shape: bool,
+    builder: BufferBuilder,
+) -> tuple[list[dict[str, int]], dict[str, object]]:
+    names = component.egm_symmetric_control_names
+    axes = component.egm_symmetric_control_axes
+    if not names and not axes:
+        return [], {
+            "source": "absent",
+            "targetNames": [],
+            "axisSha256": [],
+        }
+    if (
+        component.egm_payload is None
+        or component.egm_path is None
+        or len(names) != len(axes)
+        or len(set(names)) != len(names)
+    ):
+        raise ValueError(
+            f"Actor component {component.role} has an incomplete EGM control contract"
+        )
+    source_controls = facegen_geometry_control_deltas(
+        component.egm_payload,
+        axes,
+        vertex_offset=component.egm_vertex_offset,
+        vertex_count=len(positions),
+    )
+    targets = []
+    for name, source_deltas in zip(names, source_controls, strict=True):
+        deltas = [
+            _transform_delta(delta, shape_transform)
+            if transform_shape
+            else _convert_vector(delta)
+            for delta in source_deltas
+        ]
+        morphed_positions = [
+            tuple(position[axis] + delta[axis] for axis in range(3))
+            for position, delta in zip(positions, deltas, strict=True)
+        ]
+        morphed_normals = _recompute_normals(morphed_positions, triangles)
+        normal_deltas = [
+            tuple(morphed[axis] - base[axis] for axis in range(3))
+            for base, morphed in zip(normals, morphed_normals, strict=True)
+        ]
+        targets.append(
+            {
+                "POSITION": builder.add(
+                    pack_floats(deltas),
+                    component_type=GL_FLOAT,
+                    count=len(deltas),
+                    value_type="VEC3",
+                    target=GL_ARRAY_BUFFER,
+                ),
+                "NORMAL": builder.add(
+                    pack_floats(normal_deltas),
+                    component_type=GL_FLOAT,
+                    count=len(normal_deltas),
+                    value_type="VEC3",
+                    target=GL_ARRAY_BUFFER,
+                ),
+            }
+        )
+    return targets, {
+        "source": "exact-owned-egm-composed-through-ctl-axis",
+        "egmPath": component.egm_path,
+        "egmSha256": hashlib.sha256(component.egm_payload).hexdigest(),
+        "targetNames": list(names),
+        "axisSha256": [
+            hashlib.sha256(struct.pack(f"<{len(axis)}f", *axis)).hexdigest()
+            for axis in axes
+        ],
     }
 
 

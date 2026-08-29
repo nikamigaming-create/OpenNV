@@ -27,8 +27,10 @@ from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from export_static_nif_gltf import export_static_nif
+from facegen_controls import decode_facegen_control_space
 from material_contract import material_bindings, texture_binding_requests
 from owned_archive_stack import OwnedArchiveStack
+from player_facegen_preview import prepare_default_player_facegen_preview
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 from runtime_configuration import RuntimeConfiguration
 from texture_pipeline import OwnedTexturePipeline
@@ -54,6 +56,10 @@ HAIR_MALE_FLAG = 0x04
 FACEGEN_SYMMETRIC_GEOMETRY_FLOATS = 50
 FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS = 30
 FACEGEN_SYMMETRIC_TEXTURE_FLOATS = 50
+FACEGEN_CONTROL_SPACE_SCHEMA = "opennv-owned-facegen-control-space/v1"
+FACEGEN_CONTROL_SPACE_STATUS = (
+    "source-bound-controls-default-preview-artifact-compiled-one-control-runtime-bound"
+)
 FNV_ENGINE_BUILD = "1.4.0.525"
 FNV_ENGINE_DEFAULT_XP_BASE_EVIDENCE = "fnv-1.4.0.525-gmst-ixpbase-v1"
 # FalloutNV.exe owns this default; FalloutNV.esm intentionally has no GMST override.
@@ -3147,9 +3153,145 @@ def _appearance_option(record: Record) -> dict[str, object]:
     }
 
 
+def _compile_facegen_control_space(
+    ui_archive_path: Path,
+    policy: dict[str, object],
+) -> dict[str, object]:
+    logical_path = canonical_member_path(str(policy["memberLogicalPath"]))
+    archive = BsaArchive(ui_archive_path)
+    member = archive.extract(logical_path)
+    expected_member_sha256 = str(policy["memberSha256"]).casefold()
+    if member.sha256 != expected_member_sha256:
+        raise ValueError(
+            "Owned FaceGen CTL member hash differs: "
+            f"expected={expected_member_sha256} actual={member.sha256}"
+        )
+    control_space = decode_facegen_control_space(member.data)
+    expected = dict(policy["expectedFormat"])
+    manifest = control_space.manifest()
+    actual_format = {
+        "formatSignature": manifest["formatSignature"],
+        "geometryBasisVersion": manifest["geometryBasisVersion"],
+        "textureBasisVersion": manifest["textureBasisVersion"],
+        "basisCounts": manifest["basisCounts"],
+        "linearControlCounts": manifest["linearControlCounts"],
+    }
+    if actual_format != expected:
+        raise ValueError("Owned FaceGen CTL format/count contract differs")
+
+    exposure = dict(policy["nativeGeometryExposure"])
+    indices = [int(value) for value in exposure["controlIndices"]]
+    symmetric_geometry = control_space.symmetric_geometry
+    if (
+        not indices
+        or len(indices) != len(set(indices))
+        or indices != sorted(indices)
+        or min(indices) < 0
+        or max(indices) >= len(symmetric_geometry)
+    ):
+        raise ValueError("Native FaceGen geometry control exposure is invalid")
+    setting_template = str(exposure["settingEntityTemplate"])
+    native_controls = [
+        {
+            "controlIndex": index,
+            "settingEntity": setting_template.format(oneBasedIndex=index + 1),
+            "sourceLabel": symmetric_geometry[index].label,
+            "axisSha256": symmetric_geometry[index].axis_sha256,
+        }
+        for index in indices
+    ]
+    preview_policy = dict(policy["runtimePreviewControl"])
+    preview_index = int(preview_policy["controlIndex"])
+    preview_matches = [
+        row for row in native_controls if int(row["controlIndex"]) == preview_index
+    ]
+    preview_minimum = float(preview_policy["minimum"])
+    preview_maximum = float(preview_policy["maximum"])
+    preview_step = float(preview_policy["step"])
+    preview_reset = float(preview_policy["resetValue"])
+    preview_acceptance = float(preview_policy["acceptanceValue"])
+    presentation = {
+        key: float(value)
+        for key, value in dict(preview_policy["presentation"]).items()
+    }
+    expected_presentation_keys = {
+        "viewportWidthFraction",
+        "viewportHeightFraction",
+        "verticalFovHalfAngleFactor",
+        "depthExtentFraction",
+    }
+    if (
+        len(preview_matches) != 1
+        or not all(
+            math.isfinite(value)
+            for value in (
+                preview_minimum,
+                preview_maximum,
+                preview_step,
+                preview_reset,
+                preview_acceptance,
+            )
+        )
+        or preview_minimum >= preview_maximum
+        or preview_step <= 0.0
+        or preview_reset < preview_minimum
+        or preview_reset > preview_maximum
+        or preview_acceptance < preview_minimum
+        or preview_acceptance > preview_maximum
+        or preview_acceptance == preview_reset
+        or set(presentation) != expected_presentation_keys
+        or not all(
+            math.isfinite(value) and 0.0 < value <= 1.0
+            for value in presentation.values()
+        )
+    ):
+        raise ValueError("Native FaceGen preview control policy is invalid")
+    return {
+        "schema": FACEGEN_CONTROL_SPACE_SCHEMA,
+        "status": FACEGEN_CONTROL_SPACE_STATUS,
+        "source": {
+            "archive": ui_archive_path.name,
+            "archiveBytes": ui_archive_path.stat().st_size,
+            "archiveSha256": file_sha256(ui_archive_path),
+            "logicalPath": member.logical_path,
+            "bytes": len(member.data),
+            "sha256": member.sha256,
+            "compressedInArchive": member.compressed,
+            "archiveOffset": member.archive_offset,
+        },
+        "format": manifest,
+        "nativeGeometryExposure": {
+            "classification": exposure["classification"],
+            "engineBuild": exposure["engineBuild"],
+            "sourceExecutableSha256": str(
+                exposure["sourceExecutableSha256"]
+            ).casefold(),
+            "controls": native_controls,
+            "unexposedControlIndices": sorted(
+                set(range(len(symmetric_geometry))) - set(indices)
+            ),
+        },
+        "runtimePreviewControl": {
+            **preview_matches[0],
+            "minimum": preview_minimum,
+            "maximum": preview_maximum,
+            "step": preview_step,
+            "resetValue": preview_reset,
+            "acceptanceValue": preview_acceptance,
+            "presentation": presentation,
+            "semantics": preview_policy["semantics"],
+        },
+        "runtimeDisposition": (
+            "control-axes-and-default-preview-egm-targets-compiled-one-normalized-"
+            "control-runtime-bound-full-retail-slider-ranges-unimplemented"
+        ),
+    }
+
+
 def _compile_player_appearance(
     sources: FlowSourceCatalog,
     quest_script_source: str,
+    facegen_control_space: dict[str, object],
 ) -> tuple[dict[str, object], tuple[str, ...]]:
     if sources.player_base is None:
         raise ValueError("Owned opening player base is absent")
@@ -3177,6 +3319,7 @@ def _compile_player_appearance(
             "values": list(values),
             "sha256": hashlib.sha256(payload).hexdigest(),
         }
+    facegen["controlSpace"] = facegen_control_space
 
     sex_mapping = {
         int(index): engine_sex.casefold()
@@ -4870,6 +5013,7 @@ def _interaction_from_script(
 
 def compile_new_game_flow(
     master_path: Path,
+    ui_archive_path: Path,
     records: list[dict[str, object]],
     flow: dict[str, object],
     owned_archives: OwnedArchiveStack,
@@ -5121,6 +5265,23 @@ def compile_new_game_flow(
     appearance, appearance_texture_paths = _compile_player_appearance(
         sources,
         quest_script_sources[0],
+        _compile_facegen_control_space(
+            ui_archive_path,
+            dict(character_rules["faceGenControlSpace"]),
+        ),
+    )
+    appearance_player = appearance["player"]
+    if not isinstance(appearance_player, dict):
+        raise ValueError("Owned player appearance contract is malformed")
+    appearance_facegen = appearance_player["faceGen"]
+    if not isinstance(appearance_facegen, dict):
+        raise ValueError("Owned player FaceGen contract is malformed")
+    appearance_facegen["previewHead"] = prepare_default_player_facegen_preview(
+        master_path,
+        owned_archives,
+        cache_root,
+        appearance,
+        configuration,
     )
     tag_menu_commands = [
         command
@@ -5599,6 +5760,7 @@ def prepare_opening_manifest(
     flow_definition = dict(recipe["newGameFlow"])
     new_game_flow, flow_texture_paths = compile_new_game_flow(
         master_path,
+        ui_archive_path,
         records,
         flow_definition,
         owned_archives,

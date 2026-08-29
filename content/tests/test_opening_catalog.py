@@ -160,6 +160,7 @@ class OpeningCatalogTest(unittest.TestCase):
             ),
             "if nButton== 0\r\n player.sexChange male 1\r\n"
             "elseif nButton== 1\r\n player.sexChange female 1",
+            {"schema": "synthetic-facegen-control-space/v1"},
         )
 
         self.assertEqual(result["player"]["defaultRaceFormId"], "00000019")
@@ -174,6 +175,10 @@ class OpeningCatalogTest(unittest.TestCase):
             "00000021",
         )
         self.assertEqual(result["player"]["faceGen"]["symmetricGeometry"]["count"], 50)
+        self.assertEqual(
+            result["player"]["faceGen"]["controlSpace"]["schema"],
+            "synthetic-facegen-control-space/v1",
+        )
         self.assertEqual(len(textures), 3)
 
     def test_gameplay_vitals_join_player_actor_values_and_owned_settings(self):

@@ -408,6 +408,53 @@
       "GSDocMitchellExitTriggerScript": "exitDoor"
     },
     "characterRules": {
+      "faceGenControlSpace": {
+        "memberLogicalPath": "facegen\\si.ctl",
+        "memberSha256": "4f3f63d3e0dde33247613753c386c0aaa987affc44f65578336d22e621939964",
+        "expectedFormat": {
+          "formatSignature": "FRCTL001",
+          "geometryBasisVersion": 2001060901,
+          "textureBasisVersion": 81,
+          "basisCounts": {
+            "symmetricGeometry": 50,
+            "asymmetricGeometry": 30,
+            "symmetricTexture": 50,
+            "asymmetricTexture": 0
+          },
+          "linearControlCounts": {
+            "symmetricGeometry": 56,
+            "asymmetricGeometry": 26,
+            "symmetricTexture": 33,
+            "asymmetricTexture": 0
+          }
+        },
+        "nativeGeometryExposure": {
+          "classification": "implementation-neutral-static-control-registration-contract",
+          "engineBuild": "1.4.0.525",
+          "sourceExecutableSha256": "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57",
+          "settingEntityTemplate": "sRSMShapeOption{oneBasedIndex:02d}",
+          "controlIndices": [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            17, 18, 19, 20, 21, 26, 29, 31, 32, 34, 35, 36, 37, 38, 39,
+            40, 41, 42, 44, 45, 46, 47, 49, 50, 52, 53, 54
+          ]
+        },
+        "runtimePreviewControl": {
+          "controlIndex": 0,
+          "minimum": -1.0,
+          "maximum": 1.0,
+          "step": 0.05,
+          "resetValue": 0.0,
+          "acceptanceValue": 0.5,
+          "presentation": {
+            "viewportWidthFraction": 0.5,
+            "viewportHeightFraction": 0.35,
+            "verticalFovHalfAngleFactor": 0.5,
+            "depthExtentFraction": 0.5
+          },
+          "semantics": "first-party-normalized-ctl-axis-preview-not-retail-slider-range"
+        }
+      },
       "special": {
         "minimumValue": 1,
         "initialValue": 5,

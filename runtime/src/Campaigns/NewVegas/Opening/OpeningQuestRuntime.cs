@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Actors;
@@ -61,6 +63,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _referenceEnabledStates =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, float> _faceGeometryControlValues =
+        new(StringComparer.Ordinal);
     private readonly HashSet<int> _achievements = [];
     private readonly bool[] _playerControls =
         Enumerable.Repeat(true, PlayerControlCount).ToArray();
@@ -129,7 +133,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private int _guideArrivalGeneration;
     private bool _openingQuestCompleted;
     private bool _autoDisplayObjectives;
-    private int _acceptanceAppearancePhase;
+    private AcceptanceAppearancePhase _acceptanceAppearancePhase;
 
     internal int Stage => _stage;
     internal string PlayerName => _playerName;
@@ -274,22 +278,81 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             value.Name == "OwnedHairSelector");
         var eyesSelector = Descendants<OptionButton>(_activeModal).SingleOrDefault(value =>
             value.Name == "OwnedEyesSelector");
+        var geometrySlider = Descendants<HSlider>(_activeModal).SingleOrDefault(value =>
+            value.Name == "OwnedFaceGenGeometrySlider");
         if (raceSelector is not null && hairSelector is not null && eyesSelector is not null)
         {
-            if (_acceptanceAppearancePhase == 0 && _flow.Character.SexChoices.Count > 1)
+            if (geometrySlider is null)
+                throw new InvalidOperationException(
+                    "Owned appearance modal has no FaceGen geometry slider.");
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.EditGeometry)
+            {
+                var previewControl =
+                    _flow.Character.Appearance.FaceGen.ControlSpace.PreviewControl;
+                geometrySlider.Value = previewControl.AcceptanceValue;
+                var editedSha256 = CurrentFaceSymmetricGeometrySha256();
+                if (!_faceGeometryControlValues.TryGetValue(
+                        previewControl.SettingEntity,
+                        out var editedValue) ||
+                    !Mathf.IsEqualApprox(editedValue, previewControl.AcceptanceValue) ||
+                    editedSha256.Equals(
+                        _flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Owned FaceGen acceptance slider did not change source coordinates.");
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.ResetGeometry;
+                GD.Print(
+                    $"OPENNV_OPENING_ACCEPTANCE_FACEGEN_INPUT " +
+                    $"control={previewControl.SettingEntity} " +
+                    $"value={previewControl.AcceptanceValue:F4} " +
+                    $"editedSha256={editedSha256} " +
+                    "transport=godot-authored-slider-signal");
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.ResetGeometry)
+            {
+                var previewControl =
+                    _flow.Character.Appearance.FaceGen.ControlSpace.PreviewControl;
+                PressAcceptanceButton(buttons.FirstOrDefault(button =>
+                    button.Name == "OwnedFaceGenGeometryReset"));
+                if (!_faceGeometryControlValues.TryGetValue(
+                        previewControl.SettingEntity,
+                        out var resetValue) ||
+                    !Mathf.IsEqualApprox(resetValue, previewControl.ResetValue) ||
+                    !CurrentFaceSymmetricGeometrySha256().Equals(
+                        _flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Owned FaceGen reset did not restore source coordinates.");
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.RestoreGeometryEdit;
+                GD.Print(
+                    "OPENNV_OPENING_ACCEPTANCE_FACEGEN_RESET " +
+                    "transport=godot-authored-button-signal");
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.RestoreGeometryEdit)
+            {
+                var previewControl =
+                    _flow.Character.Appearance.FaceGen.ControlSpace.PreviewControl;
+                geometrySlider.Value = previewControl.AcceptanceValue;
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.SelectSex;
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.SelectSex &&
+                _flow.Character.SexChoices.Count > 1)
             {
                 var targetSex = (_sexIndex + 1) % _flow.Character.SexChoices.Count;
-                _acceptanceAppearancePhase = 1;
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.SelectParts;
                 PressAcceptanceButton(buttons.FirstOrDefault(button =>
                     button.Text == _flow.Character.SexChoices[targetSex]));
                 return;
             }
-            if (_acceptanceAppearancePhase <= 1)
+            if (_acceptanceAppearancePhase <= AcceptanceAppearancePhase.SelectParts)
             {
                 SelectDifferentOwnedOption(raceSelector);
                 SelectDifferentOwnedOption(hairSelector);
                 SelectDifferentOwnedOption(eyesSelector);
-                _acceptanceAppearancePhase = 2;
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.Complete;
                 GD.Print(
                     $"OPENNV_OPENING_ACCEPTANCE_APPEARANCE_INPUT sex={_sexIndex} " +
                     $"race={_raceFormId} hair={_hairFormId} eyes={_eyesFormId} " +
@@ -498,6 +561,14 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _raceFormId = _flow.Character.Appearance.DefaultRaceFormId;
         _hairFormId = _flow.Character.Appearance.DefaultHairFormId;
         _eyesFormId = _flow.Character.Appearance.DefaultEyesFormId;
+        var previewControl = _flow.Character.Appearance.FaceGen.ControlSpace.PreviewControl;
+        _faceGeometryControlValues[previewControl.SettingEntity] =
+            previewControl.ResetValue;
+        if (!CurrentFaceSymmetricGeometrySha256().Equals(
+                _flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Owned FaceGen default coordinates do not reproduce their source hash.");
         _loaded = loaded;
         _configuration = configuration;
         _loaded.Player.ConfigureOwnedNavigation(
@@ -2023,6 +2094,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             content.AddChild(button);
         }
         var appearance = _flow.Character.Appearance;
+        var faceGen = appearance.FaceGen;
+        var previewControl = faceGen.ControlSpace.PreviewControl;
         var engineSex = appearance.SexEngineValues[_sexIndex];
         var raceSelect = NewOptionButton("OwnedRaceSelector");
         var hairSelect = NewOptionButton("OwnedHairSelector");
@@ -2039,6 +2112,51 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             Alignment = BoxContainer.AlignmentMode.Center,
         };
         content.AddChild(preview);
+        OpeningPlayerFaceGenPreviewHost? previewHost = null;
+        var controlLabel = NewLabel("");
+        controlLabel.Name = "OwnedFaceGenGeometryControlValue";
+        controlLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        content.AddChild(controlLabel);
+        var controlRow = new HBoxContainer
+        {
+            Name = "OwnedFaceGenGeometryControl",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        content.AddChild(controlRow);
+        var controlSlider = new HSlider
+        {
+            Name = "OwnedFaceGenGeometrySlider",
+            MinValue = previewControl.Minimum,
+            MaxValue = previewControl.Maximum,
+            Step = previewControl.Step,
+            Value = _faceGeometryControlValues[previewControl.SettingEntity],
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            FocusMode = Control.FocusModeEnum.All,
+        };
+        controlRow.AddChild(controlSlider);
+        var resetControl = NewButton(_flow.Strings["reset"]);
+        resetControl.Name = "OwnedFaceGenGeometryReset";
+        controlRow.AddChild(resetControl);
+
+        void UpdateControlValue(float value)
+        {
+            if (!float.IsFinite(value) ||
+                value < previewControl.Minimum ||
+                value > previewControl.Maximum)
+                throw new InvalidOperationException(
+                    "Normalized FaceGen preview control value is invalid.");
+            _faceGeometryControlValues[previewControl.SettingEntity] = value;
+            controlLabel.Text =
+                $"{previewControl.SourceLabel} (normalized preview; retail range pending): " +
+                $"{value:+0.00;-0.00;0.00}";
+            previewHost?.Apply(value);
+            GD.Print(
+                $"OPENNV_NEW_GAME_FACEGEN_CONTROL name={previewControl.SettingEntity} " +
+                $"value={value:F4} semantics={previewControl.Semantics}");
+        }
+        controlSlider.ValueChanged += value => UpdateControlValue((float)value);
+        resetControl.Pressed += () => controlSlider.Value = previewControl.ResetValue;
+        UpdateControlValue((float)controlSlider.Value);
 
         void FillPartOptions(
             OptionButton selector,
@@ -2061,6 +2179,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         {
             foreach (var child in preview.GetChildren())
                 child.QueueFree();
+            previewHost = null;
             var hair = sex.HairOptions.Single(value => value.FormId.Equals(
                 _hairFormId,
                 StringComparison.OrdinalIgnoreCase));
@@ -2069,6 +2188,37 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 StringComparison.OrdinalIgnoreCase));
             preview.AddChild(AppearancePreviewTexture("Hair", hair));
             preview.AddChild(AppearancePreviewTexture("Face / Eyes", eyes));
+            if (engineSex == faceGen.PreviewHead.Sex &&
+                _raceFormId.Equals(
+                    faceGen.PreviewHead.RaceFormId,
+                    StringComparison.OrdinalIgnoreCase) &&
+                _hairFormId.Equals(
+                    faceGen.PreviewHead.HairFormId,
+                    StringComparison.OrdinalIgnoreCase) &&
+                _eyesFormId.Equals(
+                    faceGen.PreviewHead.EyesFormId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var menuSize = _flow.Menus["appearance"].Rect?.Size ??
+                    _flow.ReferenceCanvasSize;
+                previewHost = OpeningPlayerFaceGenPreviewHost.Load(
+                    faceGen.PreviewHead,
+                    previewControl,
+                    preview,
+                    _configuration,
+                    new Vector2(
+                        menuSize.X * previewControl.Presentation.ViewportWidthFraction,
+                        menuSize.Y * previewControl.Presentation.ViewportHeightFraction));
+                previewHost.Apply(
+                    _faceGeometryControlValues[previewControl.SettingEntity]);
+                GD.Print(
+                    $"OPENNV_NEW_GAME_FACEGEN_PREVIEW_READY " +
+                    $"player={faceGen.PreviewHead.PlayerFormId} " +
+                    $"race={faceGen.PreviewHead.RaceFormId} " +
+                    $"control={previewControl.SettingEntity} " +
+                    $"boundSurfaces={previewHost.BoundSurfaceCount} " +
+                    $"availableControls={faceGen.PreviewHead.GeometryControlCount}");
+            }
         }
 
         void SelectRace(int index, bool resetParts)
@@ -2121,6 +2271,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 $"OPENNV_NEW_GAME_APPEARANCE_CONFIRMED sex={engineSex} " +
                 $"race={_raceFormId} hair={_hairFormId} eyes={_eyesFormId} " +
                 $"faceGeometry={appearance.FaceGen.SymmetricGeometrySha256} " +
+                $"editedFaceGeometry={CurrentFaceSymmetricGeometrySha256()} " +
+                $"control={previewControl.SettingEntity}:" +
+                $"{_faceGeometryControlValues[previewControl.SettingEntity]:F4} " +
                 $"preview={appearance.PreviewDisposition}");
             CloseModal();
             completed();
@@ -2962,9 +3115,15 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _raceFormId,
             _hairFormId,
             _eyesFormId,
-            _flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
+            CurrentFaceSymmetricGeometrySha256(),
             _flow.Character.Appearance.FaceGen.AsymmetricGeometrySha256,
-            _flow.Character.Appearance.FaceGen.SymmetricTextureSha256),
+            _flow.Character.Appearance.FaceGen.SymmetricTextureSha256,
+            _faceGeometryControlValues
+                .OrderBy(value => value.Key, StringComparer.Ordinal)
+                .ToDictionary(
+                    value => value.Key,
+                    value => value.Value,
+                    StringComparer.Ordinal)),
         _docReaction,
         _specialValues
             .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
@@ -3104,7 +3263,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 state.EyesFormId,
                 StringComparison.OrdinalIgnoreCase)) &&
             state.FaceSymmetricGeometrySha256.Equals(
-                flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
+                FaceSymmetricGeometrySha256(
+                    flow.Character.Appearance.FaceGen,
+                    state.FaceGeometryControlValues),
                 StringComparison.OrdinalIgnoreCase) &&
             state.FaceAsymmetricGeometrySha256.Equals(
                 flow.Character.Appearance.FaceGen.AsymmetricGeometrySha256,
@@ -3112,6 +3273,46 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             state.FaceSymmetricTextureSha256.Equals(
                 flow.Character.Appearance.FaceGen.SymmetricTextureSha256,
                 StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string CurrentFaceSymmetricGeometrySha256() =>
+        FaceSymmetricGeometrySha256(
+            _flow.Character.Appearance.FaceGen,
+            _faceGeometryControlValues);
+
+    private static string FaceSymmetricGeometrySha256(
+        OpeningAppearanceFaceGen faceGen,
+        IReadOnlyDictionary<string, float> values)
+    {
+        var preview = faceGen.ControlSpace.PreviewControl;
+        if (values.Count != 1 ||
+            !values.TryGetValue(preview.SettingEntity, out var value) ||
+            !float.IsFinite(value) ||
+            value < preview.Minimum ||
+            value > preview.Maximum)
+            throw new InvalidOperationException(
+                "Saved normalized FaceGen preview coordinate is invalid.");
+        var sourceControl = faceGen.ControlSpace.SymmetricGeometryControls.SingleOrDefault(
+            control => control.Index == preview.ControlIndex);
+        if (sourceControl is null ||
+            sourceControl.AxisSha256 != preview.AxisSha256 ||
+            sourceControl.Axis.Count != faceGen.SymmetricGeometryValues.Count)
+            throw new InvalidOperationException(
+                "Owned FaceGen preview axis does not match the control-space contract.");
+
+        var payload = new byte[faceGen.SymmetricGeometryValues.Count * sizeof(float)];
+        for (var index = 0; index < faceGen.SymmetricGeometryValues.Count; index++)
+        {
+            var coordinate = faceGen.SymmetricGeometryValues[index] +
+                value * sourceControl.Axis[index];
+            if (!float.IsFinite(coordinate))
+                throw new InvalidOperationException(
+                    "Edited FaceGen geometry coordinate is non-finite.");
+            BinaryPrimitives.WriteSingleLittleEndian(
+                payload.AsSpan(index * sizeof(float), sizeof(float)),
+                coordinate);
+        }
+        return Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
     }
 
     private void RestoreState(OpeningCampaignState state)
@@ -3123,6 +3324,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _raceFormId = state.Appearance.RaceFormId;
         _hairFormId = state.Appearance.HairFormId;
         _eyesFormId = state.Appearance.EyesFormId;
+        Replace(
+            _faceGeometryControlValues,
+            state.Appearance.FaceGeometryControlValues);
         _docReaction = state.DocReaction;
         Replace(_specialValues, state.SpecialValues);
         Replace(_tagSkills, state.TagSkillFormIds);
@@ -3371,5 +3575,15 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         internal OpeningImageSpaceModifier Modifier { get; } = modifier;
         internal double ElapsedSeconds { get; set; }
+    }
+
+    private enum AcceptanceAppearancePhase
+    {
+        EditGeometry,
+        ResetGeometry,
+        RestoreGeometryEdit,
+        SelectSex,
+        SelectParts,
+        Complete,
     }
 }

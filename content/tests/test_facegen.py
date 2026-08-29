@@ -10,6 +10,7 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from facegen import (  # noqa: E402
+    _combine_geometry_basis_deltas,
     apply_geometry_morphs,
     compose_body_albedo,
     compose_facegen_coordinates,
@@ -50,6 +51,29 @@ class FaceGenTest(unittest.TestCase):
             self.assertAlmostEqual(actual, expected, places=3)
         for actual, expected in zip(result[1], (39.5, 54.0, 60.0)):
             self.assertAlmostEqual(actual, expected, places=3)
+
+    def test_control_axes_compose_exact_symmetric_basis_deltas(self) -> None:
+        basis = (
+            ((1.0, 0.0, 0.0), (0.0, 2.0, 0.0)),
+            ((0.0, 0.0, 3.0), (-1.0, 0.0, 0.0)),
+        )
+        result = _combine_geometry_basis_deltas(
+            basis,
+            ((2.0, 0.5),),
+            vertex_offset=0,
+            vertex_count=2,
+        )
+
+        self.assertEqual(result, (((2.0, 0.0, 1.5), (-0.5, 4.0, 0.0)),))
+
+    def test_control_axes_reject_wrong_basis_width(self) -> None:
+        with self.assertRaisesRegex(ValueError, "differs from the EGM basis"):
+            _combine_geometry_basis_deltas(
+                (((1.0, 0.0, 0.0),),),
+                ((1.0, 2.0),),
+                vertex_offset=0,
+                vertex_count=1,
+            )
 
     def test_texture_modes_use_float_scale_and_signed_rgb_deltas(self) -> None:
         header = (
