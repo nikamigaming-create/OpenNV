@@ -83,7 +83,9 @@ internal static class Fo2MapSceneBuilder
         var tileWidths = floorIds
             .Where(id => id != defaultTileId)
             .Distinct()
-            .Select(id => artifacts[tileBindings[id].ArtifactId].Width)
+            .Select(id => artifacts[tileBindings[id].ArtifactId].FloorProjection?.SourceWidth ??
+                throw new InvalidOperationException(
+                    $"Fallout 2 {mapName} floor tile has no source projection contract: {id}"))
             .Distinct()
             .ToArray();
         if (tileWidths.Length != 1)
@@ -209,9 +211,10 @@ internal static class Fo2MapSceneBuilder
                 AlbedoTexture = textures[artifact.Id],
                 AlbedoColor = Colors.White,
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                Transparency = BaseMaterial3D.TransparencyEnum.Disabled,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
+                TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+                TextureRepeat = false,
             };
             var multiMesh = new MultiMesh
             {
@@ -250,6 +253,15 @@ internal static class Fo2MapSceneBuilder
             image.GetWidth() != artifact.Width || image.GetHeight() != artifact.Height)
             throw new InvalidOperationException(
                 $"Fallout 2 PNG dimensions drifted: {artifact.Path}");
+        if (artifact.FloorProjection is not null)
+        {
+            image.Convert(Image.Format.Rgba8);
+            var pixels = image.GetData();
+            for (var index = 3; index < pixels.Length; index += 4)
+                if (pixels[index] != byte.MaxValue)
+                    throw new InvalidOperationException(
+                        $"Fallout 2 floor projection is not opaque: {artifact.Path}");
+        }
         return ImageTexture.CreateFromImage(image);
     }
 

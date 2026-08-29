@@ -17,6 +17,7 @@ from typing import Any
 
 from corpus_io import atomic_json
 from fo1_frm import decode_frm_frame, palette_rgba_bytes
+from prepare_fo1_hex_scene import unproject_floor
 from fo1_map_objects import Fo1ResourceResolver, parse_map_objects, parse_script_section
 from fo1_profile import Fo1ProfileError, map_layout_manifest, parse_map_layout
 from fo2_first_slice import (
@@ -38,6 +39,9 @@ TILE_ID_MASK = 0x0FFF
 ROOF_ID_SHIFT = 16
 ARTIFACT_ID_HEX_LENGTH = 24
 TILE_ENTRY_COUNT = 10000
+FLOOR_PROJECTION_MODE = "classic-fallout-isometric-floor-unproject-v1"
+FLOOR_UNPROJECTED_TEXTURE_SIZE = 128
+FLOOR_ALPHA_FILL = "nearest-owned-opaque-pixel-v1"
 
 
 def _flatten_map_objects(objects: dict[str, Any]) -> list[dict[str, Any]]:
@@ -105,9 +109,19 @@ def _load_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def _artifact_id(kind: str, logical_path: str, source_sha256: str, rotation: int, frame: int) -> str:
-    identity = f"{kind}\0{logical_path}\0{source_sha256}\0{rotation}\0{frame}".encode("ascii")
-    return hashlib.sha256(identity).hexdigest()[:ARTIFACT_ID_HEX_LENGTH]
+def _artifact_id(
+    kind: str,
+    logical_path: str,
+    source_sha256: str,
+    rotation: int,
+    frame: int,
+    presentation: str | None = None,
+) -> str:
+    identity = f"{kind}\0{logical_path}\0{source_sha256}\0{rotation}\0{frame}"
+    if presentation is not None:
+        identity += f"\0{presentation}"
+    encoded = identity.encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()[:ARTIFACT_ID_HEX_LENGTH]
 
 
 def _save_admitted_frame(
@@ -119,17 +133,32 @@ def _save_admitted_frame(
     rotation: int,
     frame_index: int,
     staging: Path,
+    unproject_floor_frame: bool = False,
 ) -> dict[str, Any]:
     decoded = decode_frm_frame(source.data, colors, rotation, frame_index)
     frame = decoded["frame"]
-    artifact_id = _artifact_id(kind, logical_path, source.sha256, rotation, frame_index)
+    source_image = frame["image"]
+    presentation = FLOOR_PROJECTION_MODE if unproject_floor_frame else None
+    artifact_id = _artifact_id(
+        kind,
+        logical_path,
+        source.sha256,
+        rotation,
+        frame_index,
+        presentation,
+    )
     relative = Path("assets") / kind / f"{artifact_id}.png"
     staging_path = staging / relative
     staging_path.parent.mkdir(parents=True, exist_ok=True)
     if staging_path.exists():
         raise Fo1ProfileError(f"Fallout 2 artifact identity collision: {artifact_id}")
-    frame["image"].save(staging_path, format="PNG", optimize=False)
-    return {
+    image = (
+        unproject_floor(source_image, FLOOR_UNPROJECTED_TEXTURE_SIZE)
+        if unproject_floor_frame
+        else source_image
+    )
+    image.save(staging_path, format="PNG", optimize=False)
+    artifact = {
         "id": artifact_id,
         "kind": kind,
         "logicalPath": logical_path,
@@ -140,12 +169,21 @@ def _save_admitted_frame(
         "frame": frame_index,
         "directionOffset": decoded["directionOffset"],
         "frameOffset": [frame["x"], frame["y"]],
-        "width": frame["width"],
-        "height": frame["height"],
+        "width": image.width,
+        "height": image.height,
         "png": relative.as_posix(),
         "pngBytes": staging_path.stat().st_size,
         "pngSha256": file_sha256(staging_path),
     }
+    if unproject_floor_frame:
+        artifact["floorProjection"] = {
+            "mode": FLOOR_PROJECTION_MODE,
+            "sourceWidth": frame["width"],
+            "sourceHeight": frame["height"],
+            "outputSizePixels": FLOOR_UNPROJECTED_TEXTURE_SIZE,
+            "alphaFill": FLOOR_ALPHA_FILL,
+        }
+    return artifact
 
 
 def prepare_fo2_map_presentation(
@@ -300,6 +338,7 @@ def prepare_fo2_map_presentation(
                     rotation=0,
                     frame_index=0,
                     staging=staging,
+                    unproject_floor_frame=True,
                 )
                 tile_usage[tile_id]["filename"] = filename
                 tile_usage[tile_id]["artifact"] = artifact
@@ -380,7 +419,8 @@ def prepare_fo2_map_presentation(
             "admission": {
                 "tiles": (
                     "direction 0, frame 0 for each exact floor/roof tile ID "
-                    f"in Map {map_index}"
+                    f"in Map {map_index}, deterministically unprojected from its owned "
+                    "isometric diamond into an opaque square texture when source pixels exist"
                 ),
                 "objects": "only each rotation/frame pair referenced by the transported MAP object graph",
             },

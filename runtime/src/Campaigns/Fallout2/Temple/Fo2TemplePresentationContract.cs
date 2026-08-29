@@ -4,6 +4,13 @@ using Godot;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
+internal sealed record Fo2FloorProjection(
+    string Mode,
+    int SourceWidth,
+    int SourceHeight,
+    int OutputSizePixels,
+    string AlphaFill);
+
 internal sealed record Fo2MapArtifact(
     string Id,
     string Kind,
@@ -17,7 +24,8 @@ internal sealed record Fo2MapArtifact(
     int Rotation,
     int Frame,
     Vector2I DirectionOffset,
-    Vector2I FrameOffset);
+    Vector2I FrameOffset,
+    Fo2FloorProjection? FloorProjection);
 
 internal sealed record Fo2MapTileUse(int Elevation, string Role, int Count);
 
@@ -62,6 +70,11 @@ internal sealed class Fo2TemplePresentationCatalog
     private const int RoofIdShift = 16;
     private const int MapVersion = 20;
     private const int Sha256HexCharacters = 64;
+    private const string FloorProjectionMode = "classic-fallout-isometric-floor-unproject-v1";
+    private const string FloorAlphaFill = "nearest-owned-opaque-pixel-v1";
+    private const int FloorSourceWidth = 80;
+    private const int FloorSourceHeight = 36;
+    private const int FloorOutputSizePixels = 128;
 
     private Fo2TemplePresentationCatalog(
         string manifestPath,
@@ -296,6 +309,29 @@ internal sealed class Fo2TemplePresentationCatalog
                 throw new InvalidOperationException("Fallout 2 Temple PNG path escapes its cache.");
             var expectedBytes = row.GetProperty("pngBytes").GetInt64();
             VerifyFile(path, RequiredHash(row, "pngSha256"), expectedBytes, $"Fallout 2 Temple PNG {id}");
+            Fo2FloorProjection? floorProjection = null;
+            if (kind == "tiles")
+            {
+                var projection = row.GetProperty("floorProjection");
+                floorProjection = new Fo2FloorProjection(
+                    RequiredString(projection, "mode"),
+                    projection.GetProperty("sourceWidth").GetInt32(),
+                    projection.GetProperty("sourceHeight").GetInt32(),
+                    projection.GetProperty("outputSizePixels").GetInt32(),
+                    RequiredString(projection, "alphaFill"));
+                if (floorProjection.Mode != FloorProjectionMode ||
+                    floorProjection.SourceWidth != FloorSourceWidth ||
+                    floorProjection.SourceHeight != FloorSourceHeight ||
+                    floorProjection.OutputSizePixels != FloorOutputSizePixels ||
+                    floorProjection.AlphaFill != FloorAlphaFill)
+                    throw new InvalidOperationException(
+                        $"Fallout 2 Temple floor projection contract drifted: {id}");
+            }
+            else if (row.TryGetProperty("floorProjection", out _))
+            {
+                throw new InvalidOperationException(
+                    $"Fallout 2 Temple object cannot declare a floor projection: {id}");
+            }
             var artifact = new Fo2MapArtifact(
                 id,
                 kind,
@@ -309,8 +345,12 @@ internal sealed class Fo2TemplePresentationCatalog
                 row.GetProperty("rotation").GetInt32(),
                 row.GetProperty("frame").GetInt32(),
                 ReadVector2I(row.GetProperty("directionOffset")),
-                ReadVector2I(row.GetProperty("frameOffset")));
+                ReadVector2I(row.GetProperty("frameOffset")),
+                floorProjection);
             if (artifact.Width <= 0 || artifact.Height <= 0 ||
+                (artifact.FloorProjection is not null &&
+                    (artifact.Width != artifact.FloorProjection.OutputSizePixels ||
+                     artifact.Height != artifact.FloorProjection.OutputSizePixels)) ||
                 !artifacts.TryAdd(id, artifact))
                 throw new InvalidOperationException($"Invalid or duplicate Fallout 2 Temple artifact: {id}");
         }

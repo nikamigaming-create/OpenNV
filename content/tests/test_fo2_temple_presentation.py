@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
 
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
@@ -16,6 +18,9 @@ sys.path.insert(0, str(TOOLS))
 from fo2_profile import inspect_fo2_profile  # noqa: E402
 from prepare_fo2_temple_presentation import (  # noqa: E402
     CACHE_MANIFEST_NAME,
+    FLOOR_ALPHA_FILL,
+    FLOOR_PROJECTION_MODE,
+    FLOOR_UNPROJECTED_TEXTURE_SIZE,
     _derive_map_presentation_graph,
     prepare_fo2_map_presentation,
     prepare_fo2_temple_presentation,
@@ -36,13 +41,33 @@ def synthetic_caves_map() -> bytes:
     return bytes(data)
 
 
+def synthetic_floor_frm() -> bytes:
+    width = 80
+    height = 36
+    pixels = bytearray(width * height)
+    for y in range(height):
+        for x in range(width):
+            normalized_x = abs((x - (width - 1) / 2.0) / (width / 2.0))
+            normalized_y = abs((y - (height - 1) / 2.0) / (height / 2.0))
+            if normalized_x + normalized_y <= 1.0:
+                pixels[y * width + x] = 1
+    header = bytearray(0x3E)
+    struct.pack_into(">IHHH", header, 0, 4, 10, 0, 1)
+    struct.pack_into(">6h", header, 0x0A, 0, 0, 0, 0, 0, 0)
+    struct.pack_into(">6h", header, 0x16, 0, 0, 0, 0, 0, 0)
+    struct.pack_into(">6I", header, 0x22, 0, 0, 0, 0, 0, 0)
+    frame = struct.pack(">HHIhh", width, height, len(pixels), 0, 0) + pixels
+    struct.pack_into(">I", header, 0x3A, len(frame))
+    return bytes(header) + frame
+
+
 class Fo2TemplePresentationTest(unittest.TestCase):
     def test_decodes_only_admitted_tile_and_object_frames_deterministically(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             install = root / "Fallout 2"
             install.mkdir()
-            tile_frm = synthetic_frm()
+            tile_frm = synthetic_floor_frm()
             object_frm = synthetic_frm()
             temple_map = synthetic_map()
             caves_map = synthetic_caves_map()
@@ -139,6 +164,25 @@ class Fo2TemplePresentationTest(unittest.TestCase):
             self.assertEqual(first["counts"]["tileIds"], 1)
             self.assertEqual(first["counts"]["objectFrmIdentities"], 1)
             self.assertEqual(first["counts"]["pngArtifacts"], 2)
+            tile_artifact = next(
+                row for row in first["artifacts"] if row["kind"] == "tiles"
+            )
+            self.assertEqual(
+                tile_artifact["floorProjection"],
+                {
+                    "mode": FLOOR_PROJECTION_MODE,
+                    "sourceWidth": 80,
+                    "sourceHeight": 36,
+                    "outputSizePixels": FLOOR_UNPROJECTED_TEXTURE_SIZE,
+                    "alphaFill": FLOOR_ALPHA_FILL,
+                },
+            )
+            self.assertEqual(
+                [tile_artifact["width"], tile_artifact["height"]],
+                [FLOOR_UNPROJECTED_TEXTURE_SIZE, FLOOR_UNPROJECTED_TEXTURE_SIZE],
+            )
+            tile_png = Image.open(root / "cache-a" / tile_artifact["png"]).convert("RGBA")
+            self.assertEqual(tile_png.getextrema()[3], (255, 255))
             self.assertEqual(
                 [row["pngSha256"] for row in first["artifacts"]],
                 [row["pngSha256"] for row in second["artifacts"]],
