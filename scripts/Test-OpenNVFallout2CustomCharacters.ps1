@@ -7,8 +7,8 @@ param(
     [string]$PlayerCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-player-v1\fo2-arroyo-player-presentation-cache.json",
     [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v1\fo2-character-start-cache.json",
     [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\custom-character-v1",
-    [Parameter(Mandatory)]
-    [string]$ClassicHumanoidInstallManifest
+    [string]$ClassicHumanoidInstallManifest,
+    [string]$PresentationDonorPreviewSet
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,10 +26,18 @@ foreach ($inputPath in @(
         throw "Required Fallout 2 custom-character input is missing: $inputPath"
     }
 }
-$classicHumanoidDonorPreviewSet = & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
-if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid install-manifest resolution failed.' }
+$classicHumanoidDonorPreviewSet = if (
+    -not [string]::IsNullOrWhiteSpace($PresentationDonorPreviewSet)) {
+    [IO.Path]::GetFullPath($PresentationDonorPreviewSet)
+} else {
+    if ([string]::IsNullOrWhiteSpace($ClassicHumanoidInstallManifest)) {
+        throw 'Fallout 2 custom-character proof requires an owned donor preview set or install manifest.'
+    }
+    & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+    if (-not $?) { throw 'Classic humanoid install-manifest resolution failed.' }
+}
 & $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
-if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid donor preflight failed.' }
+if (-not $?) { throw 'Classic humanoid donor preflight failed.' }
 if (Test-Path -LiteralPath $Output) {
     throw "Refusing to overwrite Fallout 2 custom-character proof: $Output"
 }
@@ -89,7 +97,8 @@ foreach ($sex in @('Male', 'Female')) {
         $write.status -ne "pass-$expectedMode-map3-atomic-save" -or
         $restore.schema -ne 'opennv-fo2-custom-character-restore-proof/v1' -or
         $restore.status -ne "pass-$expectedMode-map3-cold-restore" -or
-        $saved.schema -ne 'opennv-fo2-character-arroyo-save/v9' -or
+        $saved.schema -ne 'opennv-fo2-character-arroyo-save/v13' -or
+        $null -eq $saved.appearance.BodyProportions -or
         $saved.character.Mode -ne $expectedMode -or
         $saved.character.Sex -ne $sex -or
         ($saved.character.special | Measure-Object -Sum).Sum -ne 40 -or
@@ -102,7 +111,8 @@ foreach ($sex in @('Male', 'Female')) {
         -not $restore.restore.exactInitialTile -or
         -not $restore.restore.exactInitialRotation -or
         -not $restore.restore.grounded -or
-        -not $restore.restore.visibleSexCorrectOwnedFrm -or
+        -not $restore.restore.visibleOwned3DHumanoid -or
+        -not $restore.restore.sourceFrmReliefHidden -or
         $write.save.sha256 -ne $restore.save.sha256) {
         throw "Fallout 2 $sex custom-character proof failed its bounded contract."
     }
@@ -112,6 +122,28 @@ foreach ($sex in @('Male', 'Female')) {
              $saved.character.taggedSkills.Count -ne 0 -or
              $saved.character.traits.Count -ne 0))) {
         throw "Fallout 2 $sex custom-character tag/trait policy drifted."
+    }
+    $expectedBody = if ($sex -eq 'Male') {
+        @{
+            Height = 1.08; Chest = 1.20; Shoulders = 1.10; Waist = 0.90
+            Arms = 1.03; Thighs = 0.94; Calves = 0.92
+        }
+    } else {
+        @{
+            Height = 0.94; Chest = 1.00; Shoulders = 0.92; Waist = 1.00
+            Arms = 1.00; Thighs = 1.08; Calves = 1.00
+        }
+    }
+    foreach ($role in $expectedBody.Keys) {
+        $expected = [double]$expectedBody[$role]
+        $savedValue = [double]$saved.appearance.BodyProportions.$role
+        $writeValue = [double]$write.selected.appearance.BodyProportions.$role
+        $restoreValue = [double]$restore.selected.appearance.BodyProportions.$role
+        if ([Math]::Abs($savedValue - $expected) -gt 0.0001 -or
+            [Math]::Abs($writeValue - $expected) -gt 0.0001 -or
+            [Math]::Abs($restoreValue - $expected) -gt 0.0001) {
+            throw "Fallout 2 $sex custom-character $role did not survive its gameplay save/restore join."
+        }
     }
     Write-Output (
         "OPENNV_FO2_CUSTOM_CHARACTER_PASS sex={0} mode={1} name={2} saveSha256={3}" -f

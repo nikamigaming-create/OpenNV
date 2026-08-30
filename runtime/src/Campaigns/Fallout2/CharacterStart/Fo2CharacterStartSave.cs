@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -27,8 +28,9 @@ internal sealed record Fo2CharacterStartSaveState(
     Fo2TempleAppliedTransition? TempleExitTransition,
     Fo2ArroyoTrialProgressState? TrialProgress)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v12";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v13";
     internal const string RouteMode = "chosen-one-source-exit-route-v1";
+    private const string BodyAppearanceSchema = "opennv-fo2-character-arroyo-save/v12";
     private const string PriorSchema = "opennv-fo2-character-arroyo-save/v10";
     private const string VersionNineSchema = "opennv-fo2-character-arroyo-save/v9";
     internal const string ColorAppearanceSchema = "opennv-fo2-character-arroyo-save/v8";
@@ -190,6 +192,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     Character.Appearance.GeneratedPortraitSha256,
                     Character.Appearance.GeneratedPortraitWidth,
                     Character.Appearance.GeneratedPortraitHeight,
+                    Character.Appearance.BodyProportions,
                 },
                 world = new
                 {
@@ -301,7 +304,8 @@ internal sealed record Fo2CharacterStartSaveState(
         var previous = schema == PreviousSchema;
         var route = schema == RouteSchema;
         var confrontation = schema == ConfrontationSchema;
-        if (schema != Schema && schema != PriorSchema && schema != VersionNineSchema &&
+        if (schema != Schema && schema != BodyAppearanceSchema &&
+                schema != PriorSchema && schema != VersionNineSchema &&
                 schema != ColorAppearanceSchema &&
                 schema != ProceduralAppearanceSchema &&
                 schema != FaceAppearanceSchema &&
@@ -382,7 +386,8 @@ internal sealed record Fo2CharacterStartSaveState(
                 RequiredString(world, "walkMaskSha256") == arroyo.WalkMaskSha256 &&
                 tileInRange && arroyo.Walkable[currentTile] && lastTransition is null,
             Fo2TemplePresentationCatalog.MapIndex =>
-                (schema == Schema || schema == PriorSchema || schema == VersionNineSchema ||
+                (schema == Schema || schema == BodyAppearanceSchema ||
+                    schema == PriorSchema || schema == VersionNineSchema ||
                     schema == ColorAppearanceSchema ||
                     schema == ProceduralAppearanceSchema ||
                     schema == FaceAppearanceSchema ||
@@ -391,7 +396,8 @@ internal sealed record Fo2CharacterStartSaveState(
                 arrivalTile == arroyo.LiveExit.TargetTile &&
                 RequiredString(world, "mapSha256") == temple.MapSha256 &&
                 lastTransition == arroyo.LiveExit,
-            4 => schema == Schema && trialProgress is not null && trialRoute is not null &&
+            4 => schema is Schema or BodyAppearanceSchema &&
+                trialProgress is not null && trialRoute is not null &&
                 elevation == trialRoute.VillageArrival.Elevation &&
                 arrivalTile == trialRoute.VillageArrival.ArrivalTile &&
                 RequiredString(world, "mapSha256") ==
@@ -456,7 +462,7 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2ArroyoTrialProgressState? trialProgress,
         Fo2ArroyoTrialRouteContract? trialRoute)
     {
-        if (schema != Schema)
+        if (schema is not (Schema or BodyAppearanceSchema))
         {
             if (schema == PriorSchema &&
                 root.TryGetProperty("templeExitTransition", out var priorExit) &&
@@ -530,7 +536,7 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoTrialRouteContract? trialRoute)
     {
-        if (schema != Schema)
+        if (schema is not (Schema or BodyAppearanceSchema))
             return null;
         var value = root.GetProperty("trialProgress");
         if (value.ValueKind == JsonValueKind.Null)
@@ -563,7 +569,8 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoCavesPresentationCatalog arroyo)
     {
-        if (schema != Schema && schema != PriorSchema && schema != VersionNineSchema &&
+        if (schema != Schema && schema != BodyAppearanceSchema &&
+            schema != PriorSchema && schema != VersionNineSchema &&
             schema != ColorAppearanceSchema &&
             schema != ProceduralAppearanceSchema &&
             schema != FaceAppearanceSchema &&
@@ -600,7 +607,8 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterSelection character,
         Fo2TemplePresentationCatalog temple)
     {
-        if (schema != Schema && schema != PriorSchema && schema != VersionNineSchema &&
+        if (schema != Schema && schema != BodyAppearanceSchema &&
+            schema != PriorSchema && schema != VersionNineSchema &&
             schema != ColorAppearanceSchema &&
             schema != ProceduralAppearanceSchema &&
             schema != FaceAppearanceSchema &&
@@ -636,7 +644,8 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2CharacterSelection character)
     {
-        if (schema != Schema && schema != PriorSchema && schema != VersionNineSchema)
+        if (schema != Schema && schema != BodyAppearanceSchema &&
+            schema != PriorSchema && schema != VersionNineSchema)
         {
             if (character.Mode == Fo2CharacterSelection.PremadeMode)
                 return Fo2CharacterAppearanceContract.FromSelection(character);
@@ -699,7 +708,13 @@ internal sealed record Fo2CharacterStartSaveState(
             value.GetProperty("GeneratedPortraitPath").GetString() ?? "",
             value.GetProperty("GeneratedPortraitSha256").GetString() ?? "",
             value.GetProperty("GeneratedPortraitWidth").GetInt32(),
-            value.GetProperty("GeneratedPortraitHeight").GetInt32());
+            value.GetProperty("GeneratedPortraitHeight").GetInt32(),
+            schema == Schema
+                ? JsonSerializer.Deserialize<CharacterBodyProportions>(
+                    value.GetProperty("BodyProportions").GetRawText()) ??
+                    throw new InvalidOperationException(
+                        "Fallout 2 saved body proportions are absent.")
+                : Fo2CharacterBodyProfile.ForSex(character.Profile.Sex));
         appearance.Validate(character);
         return appearance;
     }

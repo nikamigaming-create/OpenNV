@@ -11,6 +11,9 @@ FO1_LOADER = ROOT / "runtime" / "src" / "Campaigns" / "Fallout1" / "Fo1HexSceneL
 FO2_DONOR = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo2HumanoidPresentation.cs"
 FO2_PLAYER = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo2ArroyoPlayerPresentation.cs"
 FO2_RUNTIME = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo2ArroyoCavesPlayerRuntime.cs"
+FO2_CHARACTER_CONTRACT = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "CharacterStart" / "Fo2CharacterStartContract.cs"
+FO2_CHARACTER_SAVE = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "CharacterStart" / "Fo2CharacterStartSave.cs"
+FO2_CHARACTER_EDITOR = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "CharacterStart" / "Fo2CustomCharacterEditor.cs"
 RETAIL_ACTOR_MATERIAL = ROOT / "runtime" / "src" / "RetailActorMaterial.cs"
 RETAIL_FACEGEN_MATERIAL = ROOT / "runtime" / "src" / "RetailFaceGenMaterial.cs"
 
@@ -67,6 +70,20 @@ class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
         self.assertIn('"use_neck_complexion_target", false', facegen_material)
         self.assertIn('"use_neck_complexion_target", true', donor)
         self.assertIn("AverageFaceGenEncodedNeckColor", donor)
+
+    def test_fo2_character_body_state_reaches_the_gameplay_humanoid(self) -> None:
+        contract = FO2_CHARACTER_CONTRACT.read_text(encoding="utf-8")
+        save = FO2_CHARACTER_SAVE.read_text(encoding="utf-8")
+        editor = FO2_CHARACTER_EDITOR.read_text(encoding="utf-8")
+        runtime = FO2_RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("CharacterBodyProportions BodyProportions", contract)
+        self.assertIn("opennv-fo2-character-appearance/v6", contract)
+        self.assertIn("opennv-fo2-character-arroyo-save/v13", save)
+        self.assertIn('GetProperty("BodyProportions")', save)
+        self.assertIn("SetBodyProportion", editor)
+        self.assertIn("_livePreview.SetProportions(_bodyProportions)", editor)
+        self.assertIn("selectedCharacter.Appearance.BodyProportions", runtime)
 
 
 if __name__ == "__main__":

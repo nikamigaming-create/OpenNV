@@ -297,6 +297,10 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         _activeAnimation?.Player.CurrentAnimationPosition ?? 0.0;
     internal string? DonorFailure { get; private set; }
     internal CharacterBodyProportions Proportions => _proportions;
+    internal Aabb PresentationBounds => _donor is { } donor
+        ? ActorModelSlice.PosedWorldBounds(donor)
+        : throw new InvalidOperationException(
+            "Fallout 2 humanoid presentation bounds are unavailable.");
 
     internal void SetProportions(CharacterBodyProportions proportions)
     {
@@ -783,19 +787,7 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
     }
 
     private static CharacterBodyProportions ProportionsForIdentity(
-        Fo2HumanoidIdentity identity) =>
-        identity.Sex.Equals("Male", StringComparison.OrdinalIgnoreCase)
-            ? new CharacterBodyProportions(
-                "fo2-chosen-one-broad-upper-lean-lower-v1",
-                1.01f,
-                1.12f,
-                1.10f,
-                0.96f,
-                1.03f,
-                0.94f,
-                0.92f)
-            : CharacterBodyProportions.Neutral(
-                "fo2-chosen-one-female-neutral-v1");
+        Fo2HumanoidIdentity identity) => Fo2CharacterBodyProfile.ForSex(identity.Sex);
 
     private void ResolveEquipmentSocket(ActorModelSlice.LoadedActor donor)
     {

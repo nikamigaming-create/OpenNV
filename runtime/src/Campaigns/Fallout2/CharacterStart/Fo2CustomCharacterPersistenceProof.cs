@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -39,6 +40,9 @@ internal static class Fo2CustomCharacterPersistenceProof
             editor.SetSex(expected.Sex);
             editor.SetAge(expected.Age);
             editor.SetSpecial(expected.Special);
+            foreach (var role in BodyRoles)
+                editor.SetBodyProportion(role, expected.Body.Value(role));
+            editor.ToggleBodyControls();
             if (!editor.CanConfirm || editor.AllocatedSpecial != 40)
                 throw new InvalidOperationException(
                     "Fallout 2 custom editor rejected an exact bounded allocation.");
@@ -53,8 +57,10 @@ internal static class Fo2CustomCharacterPersistenceProof
             for (var frame = 0; frame < GroundingFrames && !runtime.Player.IsOnFloor(); frame++)
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);
             await WaitForDraws(host, DrawFrames);
-            var worldFrame = Capture(
+            var worldFrame = await CaptureGameplayCharacter(
                 host,
+                runtime.Player.VillageHumanoid ?? throw new InvalidOperationException(
+                    "Fallout 2 custom character entered Arroyo without its humanoid."),
                 output,
                 $"custom-{sex.ToLowerInvariant()}-arroyo.png");
             var selection = host.SelectedCharacter ?? throw new InvalidOperationException(
@@ -67,13 +73,17 @@ internal static class Fo2CustomCharacterPersistenceProof
                 ? Fo2CharacterStartCatalog.FemaleLogicalPath
                 : Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath;
             var passed = Matches(selection, expected) && saved.Character == selection &&
+                editor.Live3DVisible && editor.BodyControlsVisible &&
+                selection.Appearance.BodyProportions == expected.Body &&
+                runtime.Player.VillageHumanoid?.Proportions == expected.Body &&
                 selection.Appearance.CustomFaceEdited &&
                 selection.Appearance.CustomPortraitGenerated &&
                 File.Exists(selection.Appearance.GeneratedPortraitPath) &&
                 saved.MapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
                 saved.Elevation == Fo2ArroyoCavesPresentationCatalog.Elevation &&
                 saved.ArrivalTile == 28707 && saved.CurrentTile == 28707 &&
-                runtime.Player.IsOnFloor() && runtime.Player.Presentation.Visible &&
+                runtime.Player.IsOnFloor() &&
+                runtime.Player.VillageHumanoid is { Visible: true, UsesOwnedDonor: true } &&
                 runtime.SelectedPlayerPresentation.Fid == expectedFid &&
                 runtime.SelectedPlayerPresentation.LogicalPath == expectedLogicalPath &&
                 editorFrame.Sha256 != worldFrame.Sha256 &&
@@ -99,7 +109,9 @@ internal static class Fo2CustomCharacterPersistenceProof
                     {
                         runtime.SelectedPlayerPresentation.Fid,
                         runtime.SelectedPlayerPresentation.LogicalPath,
-                        visible = runtime.Player.Presentation.Visible,
+                        visibleOwned3DHumanoid =
+                            runtime.Player.VillageHumanoid?.Visible == true,
+                        sourceFrmReliefHidden = !runtime.Player.Presentation.Visible,
                     },
                     frames = new[] { editorFrame, worldFrame },
                     save = new { path = saved.Path, sha256 = saved.Sha256, schema = Fo2CharacterStartSaveState.Schema },
@@ -149,10 +161,12 @@ internal static class Fo2CustomCharacterPersistenceProof
             var passed = host.RestoredFromSave && Matches(selection, expected) &&
                 selection == saved.Character && exactInitialPosition && exactInitialTile &&
                 exactInitialRotation && runtime.Player.IsOnFloor() &&
+                selection.Appearance.BodyProportions == expected.Body &&
+                runtime.Player.VillageHumanoid?.Proportions == expected.Body &&
                 selection.Appearance.CustomFaceEdited &&
                 selection.Appearance.CustomPortraitGenerated &&
                 File.Exists(selection.Appearance.GeneratedPortraitPath) &&
-                runtime.Player.Presentation.Visible &&
+                runtime.Player.VillageHumanoid is { Visible: true, UsesOwnedDonor: true } &&
                 runtime.SelectedPlayerPresentation.Fid == expectedFid &&
                 saved.Sha256.Length == 64;
             WriteReport(
@@ -172,7 +186,9 @@ internal static class Fo2CustomCharacterPersistenceProof
                         exactInitialTile,
                         exactInitialRotation,
                         grounded = runtime.Player.IsOnFloor(),
-                        visibleSexCorrectOwnedFrm = runtime.Player.Presentation.Visible,
+                        visibleOwned3DHumanoid =
+                            runtime.Player.VillageHumanoid?.Visible == true,
+                        sourceFrmReliefHidden = !runtime.Player.Presentation.Visible,
                     },
                     save = new { path = saved.Path, sha256 = saved.Sha256, schema = Fo2CharacterStartSaveState.Schema },
                     windowsAppControlUsed = false,
@@ -195,10 +211,22 @@ internal static class Fo2CustomCharacterPersistenceProof
     {
         "Male" => new ExpectedCharacter(
             "Male", "Korin", 26, [7, 6, 7, 4, 5, 6, 5], 0, true,
-            Fo2CharacterSelection.ModifyMode),
+            Fo2CharacterSelection.ModifyMode,
+            Fo2CharacterBodyProfile.ForSex("Male") with
+            {
+                Height = 1.08f,
+                Chest = 1.20f,
+                Waist = 0.90f,
+            }),
         "Female" => new ExpectedCharacter(
             "Female", "Mara", 18, [4, 7, 5, 6, 8, 5, 5], 2, false,
-            Fo2CharacterSelection.CreateMode),
+            Fo2CharacterSelection.CreateMode,
+            Fo2CharacterBodyProfile.ForSex("Female") with
+            {
+                Height = 0.94f,
+                Shoulders = 0.92f,
+                Thighs = 1.08f,
+            }),
         _ => throw new InvalidOperationException(
             $"Unsupported Fallout 2 custom-character proof sex: {sex}"),
     };
@@ -266,10 +294,86 @@ internal static class Fo2CustomCharacterPersistenceProof
                 RenderingServer.SignalName.FramePostDraw);
     }
 
-    private static FrameEvidence Capture(Node host, string output, string filename)
+    private static async Task<FrameEvidence> CaptureGameplayCharacter(
+        Fo2CharacterStartHost host,
+        Temple.Fo2HumanoidVisual humanoid,
+        string output,
+        string filename)
+    {
+        var bounds = humanoid.PresentationBounds;
+        var aspect = ExpectedWidth / (float)ExpectedHeight;
+        var size = MathF.Max(bounds.Size.Y, bounds.Size.X / aspect) * 1.24f;
+        if (!bounds.Position.IsFinite() || !bounds.Size.IsFinite() ||
+            !float.IsFinite(size) || size <= 0.0f)
+            throw new InvalidOperationException(
+                "Fallout 2 gameplay humanoid framing bounds are invalid.");
+        var target = bounds.GetCenter();
+        var proofViewport = new SubViewport
+        {
+            Name = "FO2_CUSTOM_CHARACTER_GAMEPLAY_PROOF_VIEWPORT",
+            Size = new Vector2I(ExpectedWidth, ExpectedHeight),
+            OwnWorld3D = true,
+            TransparentBg = false,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            HandleInputLocally = false,
+        };
+        host.AddChild(proofViewport);
+        proofViewport.AddChild(new WorldEnvironment
+        {
+            Environment = new Godot.Environment
+            {
+                BackgroundMode = Godot.Environment.BGMode.Color,
+                BackgroundColor = new Color("07100b"),
+                AmbientLightSource = Godot.Environment.AmbientSource.Color,
+                AmbientLightColor = Colors.White,
+                AmbientLightEnergy = 0.74f,
+            },
+        });
+        proofViewport.AddChild(new DirectionalLight3D
+        {
+            RotationDegrees = new Vector3(-26.0f, -30.0f, 0.0f),
+            LightEnergy = 1.15f,
+            ShadowEnabled = false,
+        });
+        var proofCamera = new Camera3D
+        {
+            Name = "FO2_CUSTOM_CHARACTER_GAMEPLAY_PROOF_CAMERA",
+            Projection = Camera3D.ProjectionType.Orthogonal,
+            Size = size,
+            Near = 0.01f,
+            Far = 20.0f,
+        };
+        var originalParent = humanoid.GetParent();
+        var originalTransform = humanoid.GlobalTransform;
+        humanoid.Reparent(proofViewport, true);
+        proofViewport.AddChild(proofCamera);
+        proofCamera.GlobalPosition = target + Vector3.Forward *
+            MathF.Max(1.25f, bounds.Size.Z + 0.4f);
+        proofCamera.LookAt(target, Vector3.Up);
+        proofCamera.Current = true;
+        try
+        {
+            await WaitForDraws(host, DrawFrames);
+            if (proofViewport.GetCamera3D() != proofCamera)
+                throw new InvalidOperationException(
+                    "Fallout 2 gameplay actor proof camera did not remain current.");
+            return Capture(proofViewport, output, filename);
+        }
+        finally
+        {
+            humanoid.Reparent(originalParent, true);
+            humanoid.GlobalTransform = originalTransform;
+            proofViewport.QueueFree();
+        }
+    }
+
+    private static FrameEvidence Capture(Node host, string output, string filename) =>
+        Capture(host.GetViewport(), output, filename);
+
+    private static FrameEvidence Capture(Viewport viewport, string output, string filename)
     {
         var path = Path.Combine(output, filename);
-        var image = host.GetViewport().GetTexture().GetImage();
+        var image = viewport.GetTexture().GetImage();
         if (image.IsEmpty() || image.GetWidth() != ExpectedWidth ||
             image.GetHeight() != ExpectedHeight)
             throw new InvalidOperationException(
@@ -298,7 +402,13 @@ internal static class Fo2CustomCharacterPersistenceProof
         IReadOnlyList<int> Special,
         int SourceIndex,
         bool Modify,
-        string Mode);
+        string Mode,
+        CharacterBodyProportions Body);
+
+    private static readonly string[] BodyRoles =
+    [
+        "height", "chest", "shoulders", "waist", "arms", "thighs", "calves",
+    ];
 
     private sealed record FrameEvidence(
         string Path,

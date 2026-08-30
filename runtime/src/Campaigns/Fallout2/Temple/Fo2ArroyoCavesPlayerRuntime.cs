@@ -252,7 +252,8 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
         {
             _villageHumanoid = new Fo2HumanoidVisual(
                 Fo2HumanoidIdentity.FromSelection(selectedCharacter, playerPresentation),
-                humanoidDonor)
+                humanoidDonor,
+                selectedCharacter.Appearance.BodyProportions)
             {
                 Name = "MAP3_SELECTED_HASH_BOUND_FULL_BODY_PLAYER",
                 Position = Vector3.Down * profile.SpawnCenterHeightMeters,

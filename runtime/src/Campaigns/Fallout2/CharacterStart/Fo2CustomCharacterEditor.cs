@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -34,7 +35,12 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private readonly Control _canvas;
     private readonly LineEdit _name;
     private readonly TextureRect _portrait;
+    private readonly TextureRect _sourcePanel;
     private readonly Fo2HumanoidDonorContract _humanoidDonor;
+    private readonly Fo2PremadeHumanoidPreview _livePreview;
+    private readonly Button _previewToggle;
+    private readonly Button _bodyToggle;
+    private readonly Control _bodyPanel;
     private readonly Label _faceShape;
     private readonly Label _hairStyle;
     private readonly Label _skinTone;
@@ -59,6 +65,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private int _browStyleIndex;
     private int _noseStyleIndex;
     private int _mouthStyleIndex;
+    private CharacterBodyProportions _bodyProportions;
     private string _sexValue;
 
     internal Fo2CustomCharacterEditor(
@@ -74,6 +81,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         _ = _humanoidDonor.ForSex(source.Profile.Sex);
         _ageValue = source.Profile.Age;
         _sexValue = source.Profile.Sex;
+        _bodyProportions = Fo2CharacterBodyProfile.ForSex(_sexValue);
         _special = source.Profile.Special.ToArray();
         var appearance = Fo2ProceduralAppearanceCatalog.Load();
         _faceShapeIndex = Fo2ProceduralPortrait.ShapeIndex(appearance.DefaultFaceShapeId);
@@ -105,7 +113,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             MouseFilter = MouseFilterEnum.Stop,
         };
         AddChild(_canvas);
-        _canvas.AddChild(new TextureRect
+        _sourcePanel = new TextureRect
         {
             Name = "OwnedPickcharCustomBackground",
             Texture = catalog.Picker.Load(),
@@ -113,7 +121,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale,
             MouseFilter = MouseFilterEnum.Ignore,
-        });
+        };
+        _canvas.AddChild(_sourcePanel);
         _canvas.AddChild(new TextureRect
         {
             Name = "OwnedCustomSourcePanel",
@@ -142,6 +151,33 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             MouseFilter = MouseFilterEnum.Ignore,
         };
         _canvas.AddChild(_portrait);
+        _livePreview = new Fo2PremadeHumanoidPreview(
+            source,
+            catalog,
+            humanoidDonor)
+        {
+            Position = _sourcePanel.Position,
+            Size = _sourcePanel.Size,
+            Visible = false,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        _canvas.AddChild(_livePreview);
+        _previewToggle = AddButton(
+            "LIVE 3D",
+            PreviewToggleX,
+            PreviewToggleY,
+            PreviewToggleWidth,
+            PreviewToggleHeight,
+            TogglePreviewMode,
+            9);
+        _bodyToggle = AddButton(
+            "BODY",
+            PreviewToggleX + PreviewToggleWidth + 4.0f,
+            PreviewToggleY,
+            62.0f,
+            PreviewToggleHeight,
+            ToggleBodyEditor,
+            9);
         AddButton(
             "◀",
             ControlX,
@@ -394,6 +430,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             22.0f,
             10,
             HorizontalAlignment.Center);
+        _bodyPanel = BuildBodyPanel();
+        _canvas.AddChild(_bodyPanel);
         Refresh();
     }
 
@@ -411,7 +449,9 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     internal string BrowStyleId => Fo2ProceduralPortrait.BrowStyles[_browStyleIndex];
     internal string NoseStyleId => Fo2ProceduralPortrait.NoseStyles[_noseStyleIndex];
     internal string MouthStyleId => Fo2ProceduralPortrait.MouthStyles[_mouthStyleIndex];
-    internal bool Live3DVisible => false;
+    internal bool Live3DVisible => _livePreview.Visible;
+    internal bool BodyControlsVisible => _bodyPanel.Visible;
+    internal CharacterBodyProportions BodyProportions => _bodyProportions;
     internal IReadOnlyList<int> Special => _special;
     internal int AllocatedSpecial => _special.Sum();
     internal bool CanConfirm =>
@@ -452,6 +492,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             throw new ArgumentOutOfRangeException(nameof(value));
         _ = _humanoidDonor.ForSex(value);
         _sexValue = value;
+        _livePreview.SetSex(value);
+        _livePreview.SetProportions(_bodyProportions);
         Refresh();
     }
 
@@ -519,8 +561,24 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         SetMouthStyleIndex(index);
     }
 
-    internal void TogglePreviewMode() => throw new InvalidOperationException(
-        "Fallout 2 custom character has no substitute live 3D head; the hash-bound donor is used after selection.");
+    internal void TogglePreviewMode() =>
+        SetLivePreviewVisible(!_livePreview.Visible);
+
+    internal void ToggleBodyControls() => ToggleBodyEditor();
+
+    internal void SetBodyProportion(string role, float value)
+    {
+        _bodyProportions = _bodyProportions.With(role, value);
+        _bodyProportions.Validate("fallout2-custom-character-editor");
+        _livePreview.SetProportions(_bodyProportions);
+        var slider = _bodyPanel.GetNodeOrNull<HSlider>($"Body_{role}");
+        if (slider is not null && !Mathf.IsEqualApprox((float)slider.Value, value))
+            slider.SetValueNoSignal(value);
+        var label = _bodyPanel.GetNodeOrNull<Label>($"BodyValue_{role}");
+        if (label is not null)
+            label.Text = $"{Mathf.RoundToInt(value * 100.0f)}%";
+        SetMeta("custom_body_proportions", BodyProportionText());
+    }
 
     internal void SetAge(int value)
     {
@@ -565,7 +623,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
                 EyeColorId,
                 BrowStyleId,
                 NoseStyleId,
-                MouthStyleId),
+                MouthStyleId,
+                _bodyProportions),
         };
         selection.Validate(_catalog);
         return selection;
@@ -699,11 +758,117 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         SetMeta("custom_brow_style", BrowStyleId);
         SetMeta("custom_nose_style", NoseStyleId);
         SetMeta("custom_mouth_style", MouthStyleId);
+        SetMeta("custom_body_proportions", BodyProportionText());
         SetMeta("custom_appearance_recipe_sha256", Fo2ProceduralAppearanceCatalog.Load().Sha256);
         SetMeta("custom_portrait_generator", Fo2ProceduralPortrait.GeneratorId);
         SetMeta("custom_special", string.Join(",", _special));
         SetMeta("custom_special_total", AllocatedSpecial);
         SetMeta("custom_tags_traits_policy", _modify ? "source-unchanged" : "unselected");
+    }
+
+    private void ToggleBodyEditor()
+    {
+        _bodyPanel.Visible = !_bodyPanel.Visible;
+        _bodyToggle.Text = _bodyPanel.Visible ? "STATS" : "BODY";
+        if (_bodyPanel.Visible)
+            SetLivePreviewVisible(true);
+    }
+
+    private string BodyProportionText() => string.Join(
+        ",",
+        new[]
+        {
+            "height", "chest", "shoulders", "waist", "arms", "thighs", "calves",
+        }.Select(role => $"{role}:{_bodyProportions.Value(role):F2}"));
+
+    private void SetLivePreviewVisible(bool visible)
+    {
+        _livePreview.Visible = visible;
+        _sourcePanel.Visible = !visible;
+        _portrait.Visible = !visible;
+        _previewToggle.Text = visible ? "PORTRAIT" : "LIVE 3D";
+        if (visible)
+            _livePreview.SetProportions(_bodyProportions);
+        SetMeta(
+            "custom_preview_mode",
+            visible ? _livePreview.PresentationMode : "generated-2d-portrait");
+        SetMeta(
+            "custom_live_3d_boundary",
+            "no substitute live 3D head; verified owned full-body donor only");
+    }
+
+    private Control BuildBodyPanel()
+    {
+        var panel = new Control
+        {
+            Name = "FO2_LIVE_BODY_PROPORTION_CONTROLS",
+            Size = new Vector2(SourceWidth, SourceHeight),
+            Visible = false,
+            MouseFilter = MouseFilterEnum.Pass,
+        };
+        panel.AddChild(new ColorRect
+        {
+            Position = new Vector2(292.0f, 27.0f),
+            Size = new Vector2(309.0f, 240.0f),
+            Color = new Color(0.0f, 0.0f, 0.0f, 1.0f),
+            MouseFilter = MouseFilterEnum.Stop,
+        });
+        var roles = new[]
+        {
+            (Key: "height", Label: "HEIGHT"),
+            (Key: "chest", Label: "CHEST"),
+            (Key: "shoulders", Label: "SHOULDERS"),
+            (Key: "waist", Label: "WAIST"),
+            (Key: "arms", Label: "ARMS"),
+            (Key: "thighs", Label: "THIGHS"),
+            (Key: "calves", Label: "CALVES"),
+        };
+        for (var index = 0; index < roles.Length; index++)
+        {
+            var row = roles[index];
+            var y = 47.0f + index * 30.0f;
+            var label = new Label
+            {
+                Position = new Vector2(304.0f, y),
+                Size = new Vector2(76.0f, 22.0f),
+                Text = row.Label,
+                VerticalAlignment = VerticalAlignment.Center,
+                MouseFilter = MouseFilterEnum.Ignore,
+            };
+            label.AddThemeColorOverride("font_color", new Color("78e781"));
+            label.AddThemeFontSizeOverride("font_size", 9);
+            panel.AddChild(label);
+            var value = new Label
+            {
+                Name = $"BodyValue_{row.Key}",
+                Position = new Vector2(558.0f, y),
+                Size = new Vector2(38.0f, 22.0f),
+                Text = $"{Mathf.RoundToInt(_bodyProportions.Value(row.Key) * 100.0f)}%",
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                MouseFilter = MouseFilterEnum.Ignore,
+            };
+            value.AddThemeColorOverride("font_color", new Color("78e781"));
+            value.AddThemeFontSizeOverride("font_size", 9);
+            panel.AddChild(value);
+            var slider = new HSlider
+            {
+                Name = $"Body_{row.Key}",
+                Position = new Vector2(380.0f, y),
+                Size = new Vector2(174.0f, 22.0f),
+                MinValue = CharacterBodyProportions.Minimum,
+                MaxValue = CharacterBodyProportions.Maximum,
+                Step = CharacterBodyProportions.Step,
+                Value = _bodyProportions.Value(row.Key),
+            };
+            var selected = row.Key;
+            slider.ValueChanged += next =>
+            {
+                SetBodyProportion(selected, (float)next);
+            };
+            panel.AddChild(slider);
+        }
+        return panel;
     }
 
     private Label AddText(

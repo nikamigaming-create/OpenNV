@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -81,9 +82,10 @@ internal sealed record Fo2CharacterAppearanceContract(
     string GeneratedPortraitPath,
     string GeneratedPortraitSha256,
     int GeneratedPortraitWidth,
-    int GeneratedPortraitHeight)
+    int GeneratedPortraitHeight,
+    CharacterBodyProportions BodyProportions)
 {
-    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v5";
+    internal const string ExpectedSchema = "opennv-fo2-character-appearance/v6";
     internal const string OwnedReliefPreview = "owned-panel-curved-relief-v1";
     internal const string GeneratedPortraitPreview = "opennv-local-classic-green-portrait-v1";
     internal const string OwnedPanelFaceShape = "owned-premade-panel";
@@ -130,7 +132,8 @@ internal sealed record Fo2CharacterAppearanceContract(
         "",
         "",
         0,
-        0);
+        0,
+        Fo2CharacterBodyProfile.ForSex(selection.Profile.Sex));
 
     internal void Validate(Fo2CharacterSelection selection)
     {
@@ -140,6 +143,7 @@ internal sealed record Fo2CharacterAppearanceContract(
             LocalPanelPngSha256 != selection.Source.Panel.PngSha256)
             throw new InvalidOperationException(
                 "Fallout 2 appearance/portrait contract differs from its owned source basis.");
+        BodyProportions.Validate("fallout2-character-appearance");
         if (selection.Mode == Fo2CharacterSelection.PremadeMode)
         {
             if (PreviewMode != OwnedReliefPreview || this != FromSelection(selection))
@@ -149,6 +153,26 @@ internal sealed record Fo2CharacterAppearanceContract(
         }
         Fo2ProceduralPortrait.Validate(this);
     }
+}
+
+internal static class Fo2CharacterBodyProfile
+{
+    internal static CharacterBodyProportions ForSex(string sex) =>
+        sex.Equals("Male", StringComparison.OrdinalIgnoreCase)
+            ? new CharacterBodyProportions(
+                "fo2-chosen-one-broad-upper-lean-lower-v1",
+                1.01f,
+                1.12f,
+                1.10f,
+                0.96f,
+                1.03f,
+                0.94f,
+                0.92f)
+            : sex.Equals("Female", StringComparison.OrdinalIgnoreCase)
+                ? CharacterBodyProportions.Neutral(
+                    "fo2-chosen-one-female-neutral-v1")
+                : throw new InvalidOperationException(
+                    $"Fallout 2 body profile has an unsupported sex: {sex}");
 }
 
 internal sealed record Fo2CharacterSelection(

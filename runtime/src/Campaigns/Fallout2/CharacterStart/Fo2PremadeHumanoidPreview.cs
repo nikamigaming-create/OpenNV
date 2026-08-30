@@ -83,6 +83,26 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
     internal string? DonorFailure => _donor?.DonorFailure;
     internal Fo2HumanoidDonorContract DonorContract => _humanoidDonor;
 
+    internal void SetProportions(
+        OpenNV.Runtime.Presentation.CharacterCreation.CharacterBodyProportions proportions)
+    {
+        var donor = _donor ?? throw new InvalidOperationException(
+            "Fallout 2 live 3D preview has no loaded humanoid.");
+        donor.SetProportions(proportions);
+        if (IsInsideTree() && donor.UsesOwnedDonor)
+            FrameDonor(donor);
+    }
+
+    internal void SetSex(string sex)
+    {
+        if (sex is not "Male" and not "Female")
+            throw new ArgumentOutOfRangeException(nameof(sex));
+        SetCharacter(_character with
+        {
+            Profile = _character.Profile with { Sex = sex },
+        });
+    }
+
     internal void SetCharacter(Fo2PremadeCharacter character)
     {
         _character = character;
@@ -93,11 +113,14 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
         }
         _donor = new Fo2HumanoidVisual(
             Fo2HumanoidIdentity.FromPremade(character),
-            _humanoidDonor)
+            _humanoidDonor,
+            Fo2CharacterBodyProfile.ForSex(character.Profile.Sex))
         {
             Name = $"FO2_PREMADE_{character.Id}_HASH_BOUND_DONOR",
         };
         _previewRoot.AddChild(_donor);
+        if (IsInsideTree())
+            PrepareDonor(_donor);
         SetMeta("source_character_id", character.Id);
         SetMeta("source_panel_logical_path", character.Panel.LogicalPath);
         SetMeta("source_panel_sha256", character.Panel.SourceSha256);
@@ -106,5 +129,51 @@ internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer
         SetMeta("donor_outfit_form_id", _humanoidDonor.ForSex(character.Profile.Sex).OutfitFormId);
         SetMeta("presentation_boundary",
             "owned-fnv-body-is-presentation-only-not-fallout2-character-geometry");
+    }
+
+    public override void _Ready()
+    {
+        PrepareDonor(_donor ?? throw new InvalidOperationException(
+            "Fallout 2 live 3D preview entered the tree without its humanoid."));
+    }
+
+    private void PrepareDonor(Fo2HumanoidVisual donor)
+    {
+        if (!donor.UsesOwnedDonor)
+            throw new InvalidOperationException(
+                "Fallout 2 live 3D preview donor did not load its owned assembly.");
+        donor.SetDirection(_character.Profile.Sex == "Female" ? 2 : 3);
+        var configuration = RuntimeConfiguration.Load();
+        var litMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
+            donor,
+            new Color(0.46f, 0.42f, 0.36f, 1.0f),
+            new Color(0.015f, 0.012f, 0.008f, 1.0f),
+            0.0f,
+            100000.0f,
+            1.0f,
+            configuration.World.GameUnitsToMeters);
+        if (litMaterials <= 0)
+            throw new InvalidOperationException(
+                "Fallout 2 live 3D preview has no source-lit materials.");
+        FrameDonor(donor);
+    }
+
+    private void FrameDonor(Fo2HumanoidVisual donor)
+    {
+        var bounds = donor.PresentationBounds;
+        var aspect = Size.X / MathF.Max(Size.Y, 1.0f);
+        var size = MathF.Max(bounds.Size.Y, bounds.Size.X / MathF.Max(aspect, 0.01f)) *
+            1.16f;
+        if (!bounds.Position.IsFinite() || !bounds.Size.IsFinite() ||
+            !float.IsFinite(size) || size <= 0.0f)
+            throw new InvalidOperationException(
+                "Fallout 2 live 3D preview framing bounds are invalid.");
+        var target = bounds.GetCenter();
+        target += Vector3.Right * size * 0.58f;
+        _camera.Size = size;
+        _camera.Position = target + Vector3.Back * MathF.Max(4.0f, bounds.Size.Z * 2.0f);
+        _camera.LookAt(target, Vector3.Up);
+        SetMeta("presentation_bounds", bounds);
+        SetMeta("presentation_camera_size", size);
     }
 }
