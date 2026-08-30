@@ -63,9 +63,10 @@ class Fo2SpearEquipmentContractTest(unittest.TestCase):
         self.assertIn("femaleEquippedWalkRelief", proof)
         self.assertIn("sourceCompositeIncludesSpear", proof)
         self.assertIn("separableWeaponGeometry = false", proof)
-        self.assertIn('Single(row => row.Character.Profile.Sex == "Female")', proof)
+        self.assertIn(".FirstOrDefault()", proof)
+        self.assertIn('selected.Character.Profile.Sex != "Female"', proof)
+        self.assertIn('selectedIdentity.Profile.Sex != "Female"', proof)
         self.assertIn("Fo2CharacterStartCatalog.FemaleLogicalPath", proof)
-        self.assertIn('host.SelectedCharacter?.Profile.Sex == "Female"', proof)
 
 
 if __name__ == "__main__":

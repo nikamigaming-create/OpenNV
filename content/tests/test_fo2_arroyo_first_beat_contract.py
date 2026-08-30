@@ -38,7 +38,10 @@ class Fo2ArroyoFirstBeatContractTest(unittest.TestCase):
         script = SCRIPT.read_text(encoding="utf-8")
 
         self.assertIn("Fo2ArroyoArrivalFirstBeat.RequireArrivalComponent(catalog)", runtime)
-        self.assertIn("requires a verified owned humanoid donor", runtime)
+        self.assertIn(
+            "selected character and owned humanoid donor must be bound together",
+            runtime,
+        )
         self.assertIn("Fo2HumanoidDonorContract.RequireFromOptions(options)", host)
         self.assertIn("Fo2ArroyoArrivalFirstBeatProof.Run", host)
         self.assertIn("LoadFromPresentationOutput(temple)", host)

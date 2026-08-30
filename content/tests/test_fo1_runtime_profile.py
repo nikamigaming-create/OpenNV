@@ -138,20 +138,27 @@ class Fo1RuntimeProfileTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, generator)
 
-    def test_cutaway_uses_only_source_labelled_roof_visibility(self) -> None:
+    def test_cutaway_uses_only_source_labelled_visibility(self) -> None:
         cutaway = (RUNTIME / "Fo1CaveCutaway.cs").read_text(encoding="utf-8")
         cave = (RUNTIME / "Fo1OwnedCaveKit.cs").read_text(encoding="utf-8")
 
         self.assertIn('"fo1_source_tactical_visibility"', cutaway)
         self.assertIn('"hide-roof-envelope"', cutaway)
-        self.assertIn("_camera.Projection == Camera3D.ProjectionType.Orthogonal", cutaway)
-        self.assertIn("internal int MeltMaterials => 0;", cutaway)
-        self.assertNotIn("ShaderMaterial", cutaway)
+        self.assertIn('Name = "Fo1SourceRoofAndDitheredShellCutaway"', cutaway)
+        self.assertIn(
+            "internal int MeltMaterials => _cutawayMaterials.Length;",
+            cutaway,
+        )
+        self.assertIn("screen_dither(FRAGCOORD.xy)", cutaway)
+        self.assertIn("_camera.UnprojectPosition(", cutaway)
+        self.assertIn('"hide-boundary-envelope" or "hide-wall-volume"', cutaway)
         self.assertNotIn("BuildMeltShader", cutaway)
         self.assertIn("BuildCaveEnvelopeMeshes", cave)
         self.assertIn("CAVE_terrain-envelope-source-roof", cave)
         self.assertIn("CAVE_terrain-envelope-source-boundary", cave)
-        self.assertIn('"preserve-boundary-envelope"', cave)
+        self.assertIn('"hide-boundary-envelope"', cave)
+        self.assertIn('"hide-wall-volume"', cave)
+        self.assertIn('"hide-vault-portal"', cave)
 
     def test_owned_player_and_continuous_cave_surface_use_source_bound_floor_contracts(self) -> None:
         session = (RUNTIME / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
