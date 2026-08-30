@@ -40,9 +40,48 @@ internal static class Fo2CustomCharacterPersistenceProof
             editor.SetSex(expected.Sex);
             editor.SetAge(expected.Age);
             editor.SetSpecial(expected.Special);
+            editor.SetFaceShape(expected.Appearance.FaceShapeId);
+            editor.SetHairStyle(expected.Appearance.HairStyleId);
+            editor.SetSkinTone(expected.Appearance.SkinToneId);
+            editor.SetHairColor(expected.Appearance.HairColorId);
+            editor.SetEyeColor(expected.Appearance.EyeColorId);
+            editor.SetBrowStyle(expected.Appearance.BrowStyleId);
+            editor.SetNoseStyle(expected.Appearance.NoseStyleId);
+            editor.SetMouthStyle(expected.Appearance.MouthStyleId);
             foreach (var role in BodyRoles)
                 editor.SetBodyProportion(role, expected.Body.Value(role));
             editor.ToggleBodyControls();
+            var preview = editor.LivePreview;
+            preview._GuiInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.WheelUp,
+                Pressed = true,
+            });
+            var zoomAfterWheel = preview.Zoom;
+            preview._GuiInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Left,
+                Pressed = true,
+            });
+            preview._GuiInput(new InputEventMouseMotion
+            {
+                Relative = new Vector2(36.0f, 0.0f),
+            });
+            preview._GuiInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Left,
+                Pressed = false,
+            });
+            var orbitAfterDrag = preview.OrbitYawRadians;
+            preview._GuiInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Middle,
+                Pressed = true,
+            });
+            var viewerInteractionPassed = zoomAfterWheel < 1.0f &&
+                MathF.Abs(orbitAfterDrag) > 0.1f &&
+                Mathf.IsEqualApprox(preview.Zoom, 1.0f) &&
+                Mathf.IsZeroApprox(preview.OrbitYawRadians);
             if (!editor.CanConfirm || editor.AllocatedSpecial != 40)
                 throw new InvalidOperationException(
                     "Fallout 2 custom editor rejected an exact bounded allocation.");
@@ -51,6 +90,20 @@ internal static class Fo2CustomCharacterPersistenceProof
                 host,
                 output,
                 $"custom-{sex.ToLowerInvariant()}-editor.png");
+            editor.ToggleClassicProjection();
+            await WaitForDraws(host, DrawFrames);
+            var classicProjectionFrame = Capture(
+                host,
+                output,
+                $"custom-{sex.ToLowerInvariant()}-classic-projection.png");
+            var classicProjectionPassed = editor.ClassicProjectionVisible &&
+                preview.ClassicPortraitProjection && !editor.Live3DVisible &&
+                classicProjectionFrame.Sha256 != editorFrame.Sha256;
+            editor.ToggleClassicProjection();
+            await WaitForDraws(host, DrawFrames);
+            var projectionRoundTripPassed = editor.Live3DVisible &&
+                !editor.ClassicProjectionVisible &&
+                !preview.ClassicPortraitProjection;
             editor.Confirm();
             var runtime = host.Runtime ?? throw new InvalidOperationException(
                 "Fallout 2 custom character did not enter Arroyo.");
@@ -74,8 +127,16 @@ internal static class Fo2CustomCharacterPersistenceProof
                 : Fo2ArroyoPlayerPresentationCatalog.ExpectedLogicalPath;
             var passed = Matches(selection, expected) && saved.Character == selection &&
                 editor.Live3DVisible && editor.BodyControlsVisible &&
+                !editor.AppearanceControlsVisible && viewerInteractionPassed &&
+                classicProjectionPassed && projectionRoundTripPassed &&
+                Mathf.IsEqualApprox(
+                    preview.CompositionRightOffset,
+                    Fo2PremadeHumanoidPreview.EditorColumnCompositionRightOffset) &&
                 selection.Appearance.BodyProportions == expected.Body &&
                 runtime.Player.VillageHumanoid?.Proportions == expected.Body &&
+                runtime.Player.VillageHumanoid?.Appearance == expected.Appearance &&
+                runtime.Player.VillageHumanoid?.AppliedFaceGeometryControlCount ==
+                    ExpectedFaceControlCount(expected) &&
                 selection.Appearance.CustomFaceEdited &&
                 selection.Appearance.CustomPortraitGenerated &&
                 File.Exists(selection.Appearance.GeneratedPortraitPath) &&
@@ -110,10 +171,35 @@ internal static class Fo2CustomCharacterPersistenceProof
                         runtime.SelectedPlayerPresentation.Fid,
                         runtime.SelectedPlayerPresentation.LogicalPath,
                         visibleOwned3DHumanoid =
-                            runtime.Player.VillageHumanoid?.Visible == true,
+                        runtime.Player.VillageHumanoid?.Visible == true,
                         sourceFrmReliefHidden = !runtime.Player.Presentation.Visible,
+                        appearance = runtime.Player.VillageHumanoid?.Appearance,
+                        nativeFaceGenControls = runtime.Player.VillageHumanoid?
+                            .AppliedFaceGeometryControlCount,
                     },
-                    frames = new[] { editorFrame, worldFrame },
+                    frames = new[] { editorFrame, classicProjectionFrame, worldFrame },
+                    viewer = new
+                    {
+                        dragOrbit = true,
+                        wheelZoom = true,
+                        middleClickReset = true,
+                        zoomAfterWheel,
+                        orbitAfterDrag,
+                        resetZoom = preview.Zoom,
+                        resetOrbit = preview.OrbitYawRadians,
+                        compositionRightOffset = preview.CompositionRightOffset,
+                        appearanceControlsHiddenInBodyMode =
+                            !editor.AppearanceControlsVisible,
+                        classicProjection = new
+                        {
+                            source = "current-data-bound-3d-character",
+                            shader = "frozen-stylized-live-character-projection",
+                            substitutedModel = false,
+                            classicProjectionPassed,
+                            projectionRoundTripPassed,
+                            frame = classicProjectionFrame,
+                        },
+                    },
                     save = new { path = saved.Path, sha256 = saved.Sha256, schema = Fo2CharacterStartSaveState.Schema },
                     exactBounds = new { nameMaximum = 11, ageMinimum = 16, ageMaximum = 35, specialMinimum = 1, specialMaximum = 10, specialTotal = 40 },
                     tagsAndTraits = expected.Modify ? "source-unchanged" : "unselected",
@@ -163,6 +249,9 @@ internal static class Fo2CustomCharacterPersistenceProof
                 exactInitialRotation && runtime.Player.IsOnFloor() &&
                 selection.Appearance.BodyProportions == expected.Body &&
                 runtime.Player.VillageHumanoid?.Proportions == expected.Body &&
+                runtime.Player.VillageHumanoid?.Appearance == expected.Appearance &&
+                runtime.Player.VillageHumanoid?.AppliedFaceGeometryControlCount ==
+                    ExpectedFaceControlCount(expected) &&
                 selection.Appearance.CustomFaceEdited &&
                 selection.Appearance.CustomPortraitGenerated &&
                 File.Exists(selection.Appearance.GeneratedPortraitPath) &&
@@ -189,6 +278,9 @@ internal static class Fo2CustomCharacterPersistenceProof
                         visibleOwned3DHumanoid =
                             runtime.Player.VillageHumanoid?.Visible == true,
                         sourceFrmReliefHidden = !runtime.Player.Presentation.Visible,
+                        appearance = runtime.Player.VillageHumanoid?.Appearance,
+                        nativeFaceGenControls = runtime.Player.VillageHumanoid?
+                            .AppliedFaceGeometryControlCount,
                     },
                     save = new { path = saved.Path, sha256 = saved.Sha256, schema = Fo2CharacterStartSaveState.Schema },
                     windowsAppControlUsed = false,
@@ -217,7 +309,16 @@ internal static class Fo2CustomCharacterPersistenceProof
                 Height = 1.08f,
                 Chest = 1.20f,
                 Waist = 0.90f,
-            }),
+            },
+            new Fo2HumanoidAppearance(
+                Fo2ProceduralPortrait.AngularFace,
+                Fo2ProceduralPortrait.SweptHair,
+                Fo2ProceduralPortrait.LightSkin,
+                Fo2ProceduralPortrait.AuburnHairColor,
+                Fo2ProceduralPortrait.BlueEyeColor,
+                Fo2ProceduralPortrait.HeavyBrow,
+                Fo2ProceduralPortrait.BroadNose,
+                Fo2ProceduralPortrait.WideMouth)),
         "Female" => new ExpectedCharacter(
             "Female", "Mara", 18, [4, 7, 5, 6, 8, 5, 5], 2, false,
             Fo2CharacterSelection.CreateMode,
@@ -226,7 +327,16 @@ internal static class Fo2CustomCharacterPersistenceProof
                 Height = 0.94f,
                 Shoulders = 0.92f,
                 Thighs = 1.08f,
-            }),
+            },
+            new Fo2HumanoidAppearance(
+                Fo2ProceduralPortrait.RoundFace,
+                Fo2ProceduralPortrait.LongHair,
+                Fo2ProceduralPortrait.DeepSkin,
+                Fo2ProceduralPortrait.BlackHairColor,
+                Fo2ProceduralPortrait.GreenEyeColor,
+                Fo2ProceduralPortrait.ArchedBrow,
+                Fo2ProceduralPortrait.NarrowNose,
+                Fo2ProceduralPortrait.SmallMouth)),
         _ => throw new InvalidOperationException(
             $"Unsupported Fallout 2 custom-character proof sex: {sex}"),
     };
@@ -239,10 +349,18 @@ internal static class Fo2CustomCharacterPersistenceProof
         selection.Profile.Name == expected.Name && selection.Profile.Sex == expected.Sex &&
         selection.Profile.Age == expected.Age &&
         selection.Profile.Special.SequenceEqual(expected.Special) &&
+        Fo2HumanoidAppearance.FromContract(selection.Appearance) == expected.Appearance &&
         (expected.Modify
             ? selection.Profile.TaggedSkills.SequenceEqual(selection.Source.Profile.TaggedSkills) &&
               selection.Profile.Traits.SequenceEqual(selection.Source.Profile.Traits)
             : selection.Profile.TaggedSkills.Count == 0 && selection.Profile.Traits.Count == 0);
+
+    private static int ExpectedFaceControlCount(ExpectedCharacter expected) =>
+        Fo2ProceduralAppearanceCatalog.Load().NativeFaceGenControls(
+            expected.Appearance.FaceShapeId,
+            expected.Appearance.BrowStyleId,
+            expected.Appearance.NoseStyleId,
+            expected.Appearance.MouthStyleId).Count;
 
     private static object CharacterReport(Fo2CharacterSelection character) => new
     {
@@ -403,7 +521,8 @@ internal static class Fo2CustomCharacterPersistenceProof
         int SourceIndex,
         bool Modify,
         string Mode,
-        CharacterBodyProportions Body);
+        CharacterBodyProportions Body,
+        Fo2HumanoidAppearance Appearance);
 
     private static readonly string[] BodyRoles =
     [

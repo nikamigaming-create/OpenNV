@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -10,6 +11,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     private Fo2ArroyoPlayerPresentationCatalog _malePresentation = null!;
     private Fo2CharacterStartCatalog _characterStart = null!;
     private Fo2HumanoidDonorContract _humanoidDonor = null!;
+    private OpeningManifest? _characterReflectron;
     private Fo2ArroyoTrialRouteContract? _trialRoute;
     private Fo2ArvillagPresentationCatalog? _village;
     private string? _openingProofRoot;
@@ -72,6 +74,13 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 Fo2ArroyoCavesProofOptions.Require(options, "fo2-character-start-cache"),
                 _arroyo.SourceProfileId);
             _humanoidDonor = Fo2HumanoidDonorContract.RequireFromOptions(options);
+            _characterReflectron = options.TryGetValue(
+                "character-reflectron-opening-manifest",
+                out var reflectronOpeningManifest)
+                ? OpeningManifest.Load(
+                    reflectronOpeningManifest,
+                    RuntimeConfiguration.Load())
+                : null;
             _trialRoute = options.TryGetValue("fo2-trial-route", out var trialRoutePath)
                 ? Fo2ArroyoTrialRouteContract.Load(trialRoutePath, _arroyo, _transition)
                 : null;
@@ -87,7 +96,10 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             _savePath = options.TryGetValue("fo2-save", out var configuredSavePath)
                 ? configuredSavePath
                 : Fo2CharacterStartSaveState.DefaultPath;
-            Picker = new Fo2CharacterPicker(_characterStart, _humanoidDonor);
+            Picker = new Fo2CharacterPicker(
+                _characterStart,
+                _humanoidDonor,
+                _characterReflectron);
             Picker.CharacterChosen += StartArroyo;
             Picker.BackRequested += () => GetTree().Quit();
             AddChild(Picker);
@@ -108,7 +120,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             }
             GD.Print(
                 $"OPENNV_FO2_CHARACTER_START_READY premades=3 restored={RestoredFromSave} " +
-                "controls=Left/Right+Enter+V mouse=Take/Modify/Create/Back/PortraitToggle " +
+                "controls=Left/Right+Enter+V mouse=Take/Portrait/Create/Back/PortraitToggle " +
                 "exit=Escape+save");
             if (options.TryGetValue("fo2-character-start-proof", out var proofRoot))
                 _ = Fo2CharacterStartProof.Run(this, proofRoot);

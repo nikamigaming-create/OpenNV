@@ -6,6 +6,8 @@ param(
     [string]$ArroyoCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-caves-v1\fo2-arroyo-caves-presentation-cache.json",
     [string]$PlayerCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-player-v1\fo2-arroyo-player-presentation-cache.json",
     [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v1\fo2-character-start-cache.json",
+    [Parameter(Mandatory = $true)]
+    [string]$ReflectronOpeningManifest,
     [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\custom-character-v1",
     [string]$ClassicHumanoidInstallManifest,
     [string]$PresentationDonorPreviewSet
@@ -21,7 +23,8 @@ foreach ($inputPath in @(
         $TempleTransitions,
         $ArroyoCache,
         $PlayerCache,
-        $CharacterStartCache)) {
+        $CharacterStartCache,
+        $ReflectronOpeningManifest)) {
     if (-not (Test-Path -LiteralPath $inputPath -PathType Leaf)) {
         throw "Required Fallout 2 custom-character input is missing: $inputPath"
     }
@@ -52,6 +55,7 @@ $commonArguments = @(
     '--fo2-arroyo-cache', $ArroyoCache,
     '--fo2-player-cache', $PlayerCache,
     '--fo2-character-start-cache', $CharacterStartCache,
+    '--character-reflectron-opening-manifest', $ReflectronOpeningManifest,
     '--classic-humanoid-donor-preview-set', $classicHumanoidDonorPreviewSet
 )
 
@@ -144,6 +148,37 @@ foreach ($sex in @('Male', 'Female')) {
             [Math]::Abs($restoreValue - $expected) -gt 0.0001) {
             throw "Fallout 2 $sex custom-character $role did not survive its gameplay save/restore join."
         }
+    }
+    $expectedAppearance = if ($sex -eq 'Male') {
+        @{
+            FaceShapeId = 'angular'; HairStyleId = 'swept'; SkinToneId = 'light'
+            HairColorId = 'auburn'; EyeColorId = 'blue'; BrowStyleId = 'heavy'
+            NoseStyleId = 'broad'; MouthStyleId = 'wide'
+        }
+    } else {
+        @{
+            FaceShapeId = 'round'; HairStyleId = 'long'; SkinToneId = 'deep'
+            HairColorId = 'black'; EyeColorId = 'green'; BrowStyleId = 'arched'
+            NoseStyleId = 'narrow'; MouthStyleId = 'small'
+        }
+    }
+    $expectedFaceControls = if ($sex -eq 'Male') { 8 } else { 7 }
+    foreach ($field in $expectedAppearance.Keys) {
+        $expected = $expectedAppearance[$field]
+        foreach ($actual in @(
+                $saved.appearance.$field,
+                $write.selected.appearance.$field,
+                $restore.selected.appearance.$field,
+                $write.presentation.appearance.$field,
+                $restore.restore.appearance.$field)) {
+            if ($actual -ne $expected) {
+                throw "Fallout 2 $sex custom-character $field did not survive its creator/gameplay/save join."
+            }
+        }
+    }
+    if ($write.presentation.nativeFaceGenControls -ne $expectedFaceControls -or
+        $restore.restore.nativeFaceGenControls -ne $expectedFaceControls) {
+        throw "Fallout 2 $sex custom-character native FaceGen controls did not survive cold restore."
     }
     Write-Output (
         "OPENNV_FO2_CUSTOM_CHARACTER_PASS sex={0} mode={1} name={2} saveSha256={3}" -f

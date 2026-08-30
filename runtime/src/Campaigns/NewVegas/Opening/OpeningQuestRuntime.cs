@@ -2739,24 +2739,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _raceSexShowSex = showSex;
         _raceSexShowFace = showFace;
         _raceSexShowBody = showBody;
-        _raceSexRenderedDeviceHost.ConfigureCreatorModeControls(
+        _raceSexRenderedDeviceHost.ConfigureCharacterControls(
             source.Font,
-            () =>
-            {
-                _appearancePreviewMode = "3d";
-                previewHost?.ShowThreeDimensional(_bodyProportions);
-                _raceSexRenderedDeviceHost.SetCreatorModeState(
-                    "3D",
-                    _raceSexMenuHost.ActiveList == "body");
-            },
-            () =>
-            {
-                _appearancePreviewMode = "2d";
-                previewHost?.ShowTwoDimensional(_bodyProportions);
-                _raceSexRenderedDeviceHost.SetCreatorModeState(
-                    "2D",
-                    _raceSexMenuHost.ActiveList == "body");
-            },
             () =>
             {
                 if (_raceSexMenuHost.ActiveList == "body")
@@ -2765,7 +2749,22 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     showBody();
                 _raceSexRenderedDeviceHost.SetCreatorModeState(
                     _appearancePreviewMode.ToUpperInvariant(),
-                    _raceSexMenuHost.ActiveList == "body");
+                    _raceSexMenuHost.ActiveList == "body",
+                    projectionEnabled: _appearancePreviewMode == "2d");
+            },
+            () =>
+            {
+                _appearancePreviewMode = _appearancePreviewMode == "3d"
+                    ? "2d"
+                    : "3d";
+                if (_appearancePreviewMode == "2d")
+                    previewHost?.ShowTwoDimensional(_bodyProportions);
+                else
+                    previewHost?.ShowThreeDimensional(_bodyProportions);
+                _raceSexRenderedDeviceHost.SetCreatorModeState(
+                    _appearancePreviewMode.ToUpperInvariant(),
+                    _raceSexMenuHost.ActiveList == "body",
+                    projectionEnabled: _appearancePreviewMode == "2d");
             });
         RenderPreview(CurrentSex());
         _raceSexRenderedDeviceHost.SetCreatorModeState(

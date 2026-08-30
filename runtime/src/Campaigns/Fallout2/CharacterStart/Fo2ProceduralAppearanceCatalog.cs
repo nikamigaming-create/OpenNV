@@ -9,7 +9,8 @@ internal sealed record Fo2FaceShapePreset(
     float HalfWidth,
     float HalfHeight,
     float Taper,
-    Vector3 HeadScale);
+    Vector3 HeadScale,
+    IReadOnlyDictionary<string, float> NativeFaceGenControls);
 
 internal sealed record Fo2HairStylePreset(
     string Id,
@@ -39,20 +40,23 @@ internal sealed record Fo2BrowStylePreset(
     float LiveY,
     float LiveRotationRadians,
     float LiveWidth,
-    float LiveThickness);
+    float LiveThickness,
+    IReadOnlyDictionary<string, float> NativeFaceGenControls);
 
 internal sealed record Fo2NoseStylePreset(
     string Id,
     int PortraitWidth,
     int PortraitHeight,
-    Vector3 HeadScale);
+    Vector3 HeadScale,
+    IReadOnlyDictionary<string, float> NativeFaceGenControls);
 
 internal sealed record Fo2MouthStylePreset(
     string Id,
     int PortraitWidth,
     int PortraitThickness,
     float LiveWidth,
-    float LiveHeight);
+    float LiveHeight,
+    IReadOnlyDictionary<string, float> NativeFaceGenControls);
 
 internal sealed record Fo2LiveHeadProfile(
     Vector2I Viewport,
@@ -66,7 +70,8 @@ internal sealed record Fo2LiveHeadProfile(
     float MouthZ,
     float FeatureDepth,
     float YawAmplitudeRadians,
-    float YawCyclesPerSecond);
+    float YawCyclesPerSecond,
+    float NativeMorphWeightScale);
 
 internal sealed class Fo2ProceduralAppearanceCatalog
 {
@@ -226,6 +231,32 @@ internal sealed class Fo2ProceduralAppearanceCatalog
         MouthStyles.SingleOrDefault(row => row.Id == id) ??
         throw new InvalidOperationException($"Unsupported Fallout 2 mouth style: {id}");
 
+    internal IReadOnlyDictionary<string, float> NativeFaceGenControls(
+        string faceShapeId,
+        string browStyleId,
+        string noseStyleId,
+        string mouthStyleId)
+    {
+        var controls = new Dictionary<string, float>(StringComparer.Ordinal);
+        foreach (var source in new[]
+                 {
+                     Face(faceShapeId).NativeFaceGenControls,
+                     BrowStyle(browStyleId).NativeFaceGenControls,
+                     NoseStyle(noseStyleId).NativeFaceGenControls,
+                     MouthStyle(mouthStyleId).NativeFaceGenControls,
+                 })
+        {
+            foreach (var control in source)
+            {
+                if (!controls.TryAdd(control.Key, control.Value))
+                    throw new InvalidOperationException(
+                        $"Fallout 2 appearance presets overlap native FaceGen control " +
+                        $"{control.Key}.");
+            }
+        }
+        return controls;
+    }
+
     private static Fo2ProceduralAppearanceCatalog LoadCore()
     {
         var bytes = Godot.FileAccess.GetFileAsBytes(ResourcePath);
@@ -242,7 +273,7 @@ internal sealed class Fo2ProceduralAppearanceCatalog
             RequiredString(root, "id") != ExpectedId ||
             RequiredString(root, "campaign") != "Fallout2" ||
             RequiredString(root, "boundary") !=
-                "asset-free-local-procedural-extension-not-retail-face-geometry" ||
+                "asset-free-local-semantics-projected-through-owned-fnv-facegen-non-parity" ||
             !root.GetProperty("unsupported").EnumerateArray().Any())
             throw new InvalidOperationException(
                 "Unexpected Fallout 2 procedural appearance recipe.");
@@ -252,7 +283,8 @@ internal sealed class Fo2ProceduralAppearanceCatalog
                 Positive(row, "halfWidth"),
                 Positive(row, "halfHeight"),
                 Finite(row, "taper"),
-                ReadVector(row.GetProperty("headScale")))).ToArray();
+                ReadVector(row.GetProperty("headScale")),
+                ReadNativeFaceGenControls(row))).ToArray();
         var hair = root.GetProperty("hairStyles").EnumerateArray().Select(row =>
             new Fo2HairStylePreset(
                 RequiredString(row, "id"),
@@ -279,20 +311,23 @@ internal sealed class Fo2ProceduralAppearanceCatalog
                 Finite(row, "liveY"),
                 Finite(row, "liveRotationRadians"),
                 Positive(row, "liveWidth"),
-                Positive(row, "liveThickness"))).ToArray();
+                Positive(row, "liveThickness"),
+                ReadNativeFaceGenControls(row))).ToArray();
         var noseStyles = root.GetProperty("noseStyles").EnumerateArray().Select(row =>
             new Fo2NoseStylePreset(
                 RequiredString(row, "id"),
                 PositiveInt(row, "portraitWidth"),
                 PositiveInt(row, "portraitHeight"),
-                ReadVector(row.GetProperty("headScale")))).ToArray();
+                ReadVector(row.GetProperty("headScale")),
+                ReadNativeFaceGenControls(row))).ToArray();
         var mouthStyles = root.GetProperty("mouthStyles").EnumerateArray().Select(row =>
             new Fo2MouthStylePreset(
                 RequiredString(row, "id"),
                 PositiveInt(row, "portraitWidth"),
                 PositiveInt(row, "portraitThickness"),
                 Positive(row, "liveWidth"),
-                Positive(row, "liveHeight"))).ToArray();
+                Positive(row, "liveHeight"),
+                ReadNativeFaceGenControls(row))).ToArray();
         var profile = new Fo2ProceduralAppearanceCatalog(
             Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
             portrait.GetProperty("width").GetInt32(),
@@ -333,7 +368,8 @@ internal sealed class Fo2ProceduralAppearanceCatalog
                 Positive(live, "mouthZ"),
                 Positive(live, "featureDepth"),
                 Positive(live, "yawAmplitudeRadians"),
-                Positive(live, "yawCyclesPerSecond")));
+                Positive(live, "yawCyclesPerSecond"),
+                Positive(live, "nativeMorphWeightScale")));
         if (profile.PortraitWidth != Fo2ProceduralPortrait.Width ||
             profile.PortraitHeight != Fo2ProceduralPortrait.Height ||
             profile.PortraitBrowLeftX + profile.PortraitBrowWidth >= profile.PortraitWidth ||
@@ -377,6 +413,16 @@ internal sealed class Fo2ProceduralAppearanceCatalog
             profile.DefaultBrowStyleId != Fo2ProceduralPortrait.StraightBrow ||
             profile.DefaultNoseStyleId != Fo2ProceduralPortrait.StandardNose ||
             profile.DefaultMouthStyleId != Fo2ProceduralPortrait.NeutralMouth ||
+            !Mathf.IsEqualApprox(profile.LiveHead.NativeMorphWeightScale, 0.1f) ||
+            profile.NativeFaceGenControls(
+                profile.DefaultFaceShapeId,
+                profile.DefaultBrowStyleId,
+                profile.DefaultNoseStyleId,
+                profile.DefaultMouthStyleId).Count != 0 ||
+            faces.Sum(row => row.NativeFaceGenControls.Count) == 0 ||
+            browStyles.Sum(row => row.NativeFaceGenControls.Count) == 0 ||
+            noseStyles.Sum(row => row.NativeFaceGenControls.Count) == 0 ||
+            mouthStyles.Sum(row => row.NativeFaceGenControls.Count) == 0 ||
             hair.Any(row => row.HairLineY < ZeroInteger || row.BottomY < row.HairLineY ||
                 row.BottomY >= profile.PortraitHeight || row.SideInset < MinimumPositive ||
                 row.SideLength < MinimumPositive ||
@@ -399,6 +445,27 @@ internal sealed class Fo2ProceduralAppearanceCatalog
                 RequiredString(row, "id"),
                 ReadHtmlColor(row, "portraitColor"),
                 ReadColor(row.GetProperty("headAlbedo")))).ToArray();
+
+    private static IReadOnlyDictionary<string, float> ReadNativeFaceGenControls(
+        JsonElement source)
+    {
+        var controls = source.GetProperty("nativeFaceGenControls")
+            .EnumerateObject()
+            .ToDictionary(
+                row => row.Name,
+                row => row.Value.GetSingle(),
+                StringComparer.Ordinal);
+        if (controls.Any(row =>
+                !row.Key.StartsWith("sRSMShapeOption", StringComparison.Ordinal) ||
+                row.Key.Length != "sRSMShapeOption00".Length ||
+                !int.TryParse(row.Key[^2..], out var index) ||
+                index is < 1 or > 55 ||
+                !float.IsFinite(row.Value) ||
+                row.Value is < -50.0f or > 50.0f))
+            throw new InvalidOperationException(
+                "Fallout 2 native FaceGen appearance projection is invalid.");
+        return controls;
+    }
 
     private static string RequiredString(JsonElement source, string property)
     {

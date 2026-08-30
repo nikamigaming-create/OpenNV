@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -17,6 +18,7 @@ internal sealed partial class Fo2CharacterPicker : Control
     private const float PortraitToggleWidth = 112.0f;
     private const float PortraitToggleHeight = 22.0f;
     private readonly Fo2CharacterStartCatalog _catalog;
+    private readonly OpeningManifest? _characterReflectron;
     private readonly Control _canvas;
     private readonly TextureRect _panel;
     private readonly Fo2PremadeHumanoidPreview _humanoidPreview;
@@ -28,9 +30,11 @@ internal sealed partial class Fo2CharacterPicker : Control
 
     internal Fo2CharacterPicker(
         Fo2CharacterStartCatalog catalog,
-        Fo2HumanoidDonorContract humanoidDonor)
+        Fo2HumanoidDonorContract humanoidDonor,
+        OpeningManifest? characterReflectron)
     {
         _catalog = catalog;
+        _characterReflectron = characterReflectron;
         Name = "FALLOUT_2_OWNED_PREMADE_CHARACTER_START";
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
@@ -136,8 +140,9 @@ internal sealed partial class Fo2CharacterPicker : Control
         AddButton("▶", 335.0f, 303.0f, 35.0f, 35.0f, () => Select(_index + 1));
         AddButton("", 65.0f, 301.0f, 181.0f, 79.0f, ChooseCurrent)
             .TooltipText = "Take this owned Fallout 2 premade";
-        AddButton("", 443.0f, 301.0f, 153.0f, 79.0f, () => OpenCustom(true))
-            .TooltipText = "Modify this owned Fallout 2 premade";
+        AddButton("", 443.0f, 301.0f, 153.0f, 79.0f, TogglePortraitMode)
+            .TooltipText =
+                "View this immutable Fallout 2 premade in source 2D or owned-donor 3D";
         AddButton("", 65.0f, 397.0f, 181.0f, 63.0f, () => OpenCustom(false))
             .TooltipText = "Create a custom Chosen One from the owned rules";
         AddButton("", 443.0f, 397.0f, 153.0f, 63.0f, () => BackRequested?.Invoke())
@@ -255,7 +260,9 @@ internal sealed partial class Fo2CharacterPicker : Control
             _catalog,
             Selected,
             modify,
-            _humanoidPreview.DonorContract);
+            _humanoidPreview.DonorContract,
+            _characterReflectron ?? throw new InvalidOperationException(
+                "Fallout 2 custom characters require the locally exported Reflectron source layer."));
         editor.Confirmed += selection =>
         {
             selection.Validate(_catalog);

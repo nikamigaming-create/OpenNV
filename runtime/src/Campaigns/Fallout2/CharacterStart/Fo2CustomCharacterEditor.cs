@@ -1,43 +1,47 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal sealed partial class Fo2CustomCharacterEditor : Control
 {
-    private const float SourceWidth = 640.0f;
-    private const float SourceHeight = 480.0f;
-    private const float PortraitX = 97.0f;
-    private const float PortraitY = 34.0f;
-    private const float PortraitSize = 112.0f;
-    private const float ControlX = 78.0f;
-    private const float ControlWidth = 150.0f;
-    private const float FaceControlY = 150.0f;
-    private const float HairControlY = 168.0f;
-    private const float SkinControlY = 186.0f;
-    private const float HairColorControlY = 204.0f;
-    private const float EyeColorControlY = 222.0f;
-    private const float BrowControlY = 240.0f;
-    private const float NoseControlY = 258.0f;
-    private const float MouthControlY = 276.0f;
-    private const float PreviewToggleX = 106.0f;
-    private const float PreviewToggleY = 7.0f;
+    private const float SourceWidth = 1600.0f;
+    private const float SourceHeight = 1200.0f;
+    private const float ControlDesignWidth = 300.0f;
+    private const float ControlDesignHeight = 360.0f;
+    private const float ControlX = 8.0f;
+    private const float ControlWidth = 284.0f;
+    private const float FaceControlY = 46.0f;
+    private const float HairControlY = 78.0f;
+    private const float SkinControlY = 110.0f;
+    private const float HairColorControlY = 142.0f;
+    private const float EyeColorControlY = 174.0f;
+    private const float BrowControlY = 206.0f;
+    private const float NoseControlY = 238.0f;
+    private const float MouthControlY = 270.0f;
+    private const float PreviewToggleX = 0.0f;
+    private const float PreviewToggleY = 0.0f;
     private const float PreviewToggleWidth = 94.0f;
     private const float PreviewToggleHeight = 22.0f;
-    private const float FaceButtonSize = 18.0f;
-    private const float FaceLabelX = 97.0f;
-    private const float FaceLabelWidth = 112.0f;
-    private const int FaceLabelFontSize = 8;
+    private const float FaceButtonSize = 24.0f;
+    private const float FaceLabelX = 34.0f;
+    private const float FaceLabelWidth = 232.0f;
+    private const int FaceLabelFontSize = 11;
     private static readonly string[] SpecialNames = ["ST", "PE", "EN", "CH", "IN", "AG", "LK"];
     private readonly Fo2CharacterStartCatalog _catalog;
     private readonly Fo2PremadeCharacter _source;
     private readonly bool _modify;
     private readonly Control _canvas;
+    private readonly Control _controlRoot;
+    private readonly OpeningRaceSexRenderedDeviceHost _reflectron;
     private readonly LineEdit _name;
     private readonly TextureRect _portrait;
     private readonly TextureRect _sourcePanel;
     private readonly Fo2HumanoidDonorContract _humanoidDonor;
     private readonly Fo2PremadeHumanoidPreview _livePreview;
+    private readonly IReadOnlyList<Control> _appearanceControls;
+    private readonly IReadOnlyList<Control> _statsControls;
     private readonly Button _previewToggle;
     private readonly Button _bodyToggle;
     private readonly Control _bodyPanel;
@@ -67,12 +71,14 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private int _mouthStyleIndex;
     private CharacterBodyProportions _bodyProportions;
     private string _sexValue;
+    private bool _classicProjectionEnabled;
 
     internal Fo2CustomCharacterEditor(
         Fo2CharacterStartCatalog catalog,
         Fo2PremadeCharacter source,
         bool modify,
-        Fo2HumanoidDonorContract humanoidDonor)
+        Fo2HumanoidDonorContract humanoidDonor,
+        OpeningManifest characterReflectron)
     {
         _catalog = catalog;
         _source = source;
@@ -108,60 +114,72 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         });
         _canvas = new Control
         {
-            Name = "OwnedSource640x480CustomCanvas",
+            Name = "OwnedSourceReflectron1280x720CustomCanvas",
             Size = new Vector2(SourceWidth, SourceHeight),
             MouseFilter = MouseFilterEnum.Stop,
         };
         AddChild(_canvas);
+        if (!characterReflectron.NewGameFlow.ReferenceCanvasSize.IsEqualApprox(
+                new Vector2(SourceWidth, SourceHeight)))
+            throw new InvalidOperationException(
+                "Fallout 2 Reflectron workbench requires the source 1600x1200 device canvas.");
+        var renderedDevice = characterReflectron.NewGameFlow.Menus.Values
+            .Select(menu => menu.RenderedDevice)
+            .SingleOrDefault(device => device is not null)
+            ?? throw new InvalidOperationException(
+                "The locally exported opening manifest has no owned Reflectron device.");
+        var configuration = RuntimeConfiguration.Load();
+        _reflectron = new OpeningRaceSexRenderedDeviceHost(
+            renderedDevice,
+            _canvas,
+            characterReflectron.NewGameFlow.ReferenceCanvasSize,
+            configuration,
+            new CellContentLoader.LightingContract(
+                "fo2-character-reflectron-2.0",
+                new Color("74806f"),
+                new Color("c6d1bb"),
+                new Color("07100b"),
+                0.0f,
+                100000.0f,
+                1.0f,
+                new Vector2(-28.0f, -32.0f),
+                1.0f,
+                []),
+            configuration.World.GameUnitsToMeters);
+        var faceRoot = _reflectron.CreateFacePresentationHost();
+        _controlRoot = _reflectron.CreateMenuPresentationHost(
+            new Rect2(0.0f, 0.0f, ControlDesignWidth, ControlDesignHeight));
         _sourcePanel = new TextureRect
         {
-            Name = "OwnedPickcharCustomBackground",
-            Texture = catalog.Picker.Load(),
-            Size = new Vector2(SourceWidth, SourceHeight),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.Scale,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        _canvas.AddChild(_sourcePanel);
-        _canvas.AddChild(new TextureRect
-        {
-            Name = "OwnedCustomSourcePanel",
+            Name = "OwnedPremadePanelReflectronPortraitBasis",
             Texture = source.Panel.Load(),
-            Position = new Vector2(24.0f, 20.0f),
-            Size = new Vector2(592.0f, 260.0f),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.Scale,
-            MouseFilter = MouseFilterEnum.Ignore,
-        });
-        _canvas.AddChild(new ColorRect
-        {
-            Name = "CustomRulesReadabilityBacking",
-            Position = new Vector2(292.0f, 27.0f),
-            Size = new Vector2(309.0f, 240.0f),
-            Color = new Color(0.0f, 0.0f, 0.0f, 0.78f),
-            MouseFilter = MouseFilterEnum.Ignore,
-        });
-        _portrait = new TextureRect
-        {
-            Name = "OpenNvLocalClassicGreenPortraitPreview",
-            Position = new Vector2(PortraitX, PortraitY),
-            Size = new Vector2(PortraitSize, PortraitSize),
+            Size = faceRoot.Size,
+            Visible = false,
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
             MouseFilter = MouseFilterEnum.Ignore,
         };
-        _canvas.AddChild(_portrait);
+        faceRoot.AddChild(_sourcePanel);
+        _portrait = new TextureRect
+        {
+            Name = "OpenNvLocalClassicGreenPortraitPreview",
+            Size = faceRoot.Size,
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        faceRoot.AddChild(_portrait);
         _livePreview = new Fo2PremadeHumanoidPreview(
             source,
             catalog,
             humanoidDonor)
         {
-            Position = _sourcePanel.Position,
-            Size = _sourcePanel.Size,
+            Size = faceRoot.Size,
             Visible = false,
-            MouseFilter = MouseFilterEnum.Ignore,
         };
-        _canvas.AddChild(_livePreview);
+        _livePreview.SetCompositionRightOffset(
+            Fo2PremadeHumanoidPreview.EditorColumnCompositionRightOffset);
+        faceRoot.AddChild(_livePreview);
         _previewToggle = AddButton(
             "LIVE 3D",
             PreviewToggleX,
@@ -170,6 +188,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             PreviewToggleHeight,
             TogglePreviewMode,
             9);
+        _previewToggle.Visible = false;
         _bodyToggle = AddButton(
             "BODY",
             PreviewToggleX + PreviewToggleWidth + 4.0f,
@@ -178,6 +197,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             PreviewToggleHeight,
             ToggleBodyEditor,
             9);
+        _bodyToggle.Visible = false;
+        var appearanceControlStart = _controlRoot.GetChildCount();
         AddButton(
             "◀",
             ControlX,
@@ -370,19 +391,27 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             FaceButtonSize,
             () => SetMouthStyleIndex(_mouthStyleIndex + 1),
             FaceLabelFontSize);
+        _appearanceControls = _controlRoot.GetChildren()
+            .Skip(appearanceControlStart)
+            .OfType<Control>()
+            .ToArray();
+        if (_appearanceControls.Count != 24)
+            throw new InvalidOperationException(
+                "Fallout 2 appearance editor requires exactly eight three-part controls.");
+        var statsControlStart = _controlRoot.GetChildCount();
         AddText(
             modify ? "MODIFY CHOSEN ONE" : "CREATE CHOSEN ONE",
-            304.0f,
-            32.0f,
-            285.0f,
-            20.0f,
+            10.0f,
+            8.0f,
+            280.0f,
+            24.0f,
             13);
-        AddText("NAME", 304.0f, 57.0f, 50.0f, 20.0f, 10);
+        AddText("NAME", 10.0f, 42.0f, 48.0f, 24.0f, 10);
         _name = new LineEdit
         {
             Name = "ChosenOneName",
-            Position = new Vector2(354.0f, 52.0f),
-            Size = new Vector2(218.0f, 25.0f),
+            Position = new Vector2(60.0f, 39.0f),
+            Size = new Vector2(230.0f, 28.0f),
             MaxLength = 11,
             Text = modify ? source.Profile.Name : "",
             PlaceholderText = "1-11 characters",
@@ -392,46 +421,48 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         _name.AddThemeColorOverride("font_placeholder_color", new Color("477e4b"));
         _name.AddThemeFontSizeOverride("font_size", 11);
         _name.TextChanged += _ => Refresh();
-        _canvas.AddChild(_name);
+        _controlRoot.AddChild(_name);
 
-        AddText("SEX", 304.0f, 83.0f, 50.0f, 20.0f, 10);
-        _sex = AddButton("", 354.0f, 79.0f, 90.0f, 24.0f, ToggleSex, 11);
-        AddText("AGE", 454.0f, 83.0f, 40.0f, 20.0f, 10);
-        AddButton("−", 493.0f, 79.0f, 24.0f, 24.0f, () => SetAge(_ageValue - 1), 13);
-        _age = AddText("", 518.0f, 82.0f, 28.0f, 20.0f, 11);
-        AddButton("+", 548.0f, 79.0f, 24.0f, 24.0f, () => SetAge(_ageValue + 1), 13);
+        AddText("SEX", 10.0f, 77.0f, 48.0f, 24.0f, 10);
+        _sex = AddButton("", 60.0f, 74.0f, 92.0f, 28.0f, ToggleSex, 11);
+        AddText("AGE", 162.0f, 77.0f, 38.0f, 24.0f, 10);
+        AddButton("−", 202.0f, 74.0f, 26.0f, 28.0f, () => SetAge(_ageValue - 1), 13);
+        _age = AddText("", 230.0f, 77.0f, 30.0f, 24.0f, 11);
+        AddButton("+", 262.0f, 74.0f, 28.0f, 28.0f, () => SetAge(_ageValue + 1), 13);
 
-        AddText("SPECIAL", 304.0f, 110.0f, 80.0f, 20.0f, 11);
+        AddText("SPECIAL", 10.0f, 112.0f, 80.0f, 24.0f, 11);
         for (var index = 0; index < SpecialNames.Length; index++)
         {
             var column = index < 4 ? 0 : 1;
             var row = column == 0 ? index : index - 4;
-            var x = 304.0f + column * 142.0f;
-            var y = 134.0f + row * 25.0f;
+            var x = 10.0f + column * 145.0f;
+            var y = 140.0f + row * 32.0f;
             AddText(SpecialNames[index], x, y + 3.0f, 24.0f, 20.0f, 10);
             var captured = index;
             AddButton("−", x + 25.0f, y, 24.0f, 23.0f, () => AdjustSpecial(captured, -1), 12);
             _specialValues[index] = AddText("", x + 51.0f, y + 3.0f, 24.0f, 20.0f, 11);
             AddButton("+", x + 76.0f, y, 24.0f, 23.0f, () => AdjustSpecial(captured, 1), 12);
         }
-        _allocation = AddText("", 446.0f, 211.0f, 135.0f, 20.0f, 10);
-        _policy = AddText("", 304.0f, 238.0f, 285.0f, 24.0f, 8);
+        _allocation = AddText("", 155.0f, 246.0f, 135.0f, 22.0f, 10);
+        _policy = AddText("", 10.0f, 276.0f, 280.0f, 32.0f, 8);
         _policy.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _statsControls = _controlRoot.GetChildren()
+            .Skip(statsControlStart)
+            .OfType<Control>()
+            .ToArray();
 
-        _confirm = AddButton("", 65.0f, 301.0f, 181.0f, 79.0f, Confirm, 12);
+        _confirm = AddButton("SAVE CHARACTER", 8.0f, 320.0f, 138.0f, 30.0f, Confirm, 11);
         _confirm.TooltipText = "Take this custom Chosen One into Arroyo";
-        AddButton("", 443.0f, 397.0f, 153.0f, 63.0f, Cancel, 12)
+        AddButton("BACK", 154.0f, 320.0f, 138.0f, 30.0f, Cancel, 11)
             .TooltipText = "Cancel custom character editing";
-        AddText(
-            "TAKE = CONFIRM   •   BACK = CANCEL",
-            190.0f,
-            279.0f,
-            260.0f,
-            22.0f,
-            10,
-            HorizontalAlignment.Center);
         _bodyPanel = BuildBodyPanel();
-        _canvas.AddChild(_bodyPanel);
+        _controlRoot.AddChild(_bodyPanel);
+        SetAppearanceControlsVisible(false);
+        _reflectron.ConfigureCharacterControls(
+            characterReflectron.Font,
+            ToggleBodyEditor,
+            ToggleClassicProjection);
+        SetLivePreviewVisible(true);
         Refresh();
     }
 
@@ -449,8 +480,11 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     internal string BrowStyleId => Fo2ProceduralPortrait.BrowStyles[_browStyleIndex];
     internal string NoseStyleId => Fo2ProceduralPortrait.NoseStyles[_noseStyleIndex];
     internal string MouthStyleId => Fo2ProceduralPortrait.MouthStyles[_mouthStyleIndex];
-    internal bool Live3DVisible => _livePreview.Visible;
+    internal bool Live3DVisible => _livePreview.Visible && !_classicProjectionEnabled;
+    internal bool ClassicProjectionVisible => _classicProjectionEnabled;
     internal bool BodyControlsVisible => _bodyPanel.Visible;
+    internal bool AppearanceControlsVisible => _appearanceControls.All(row => row.Visible);
+    internal Fo2PremadeHumanoidPreview LivePreview => _livePreview;
     internal CharacterBodyProportions BodyProportions => _bodyProportions;
     internal IReadOnlyList<int> Special => _special;
     internal int AllocatedSpecial => _special.Sum();
@@ -562,7 +596,10 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     }
 
     internal void TogglePreviewMode() =>
-        SetLivePreviewVisible(!_livePreview.Visible);
+        SetLivePreviewVisible(_classicProjectionEnabled);
+
+    internal void ToggleClassicProjection() =>
+        SetLivePreviewVisible(_classicProjectionEnabled);
 
     internal void ToggleBodyControls() => ToggleBodyEditor();
 
@@ -722,6 +759,15 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         _browStyle.Text = $"BROW: {BrowStyleId.ToUpperInvariant()}";
         _noseStyle.Text = $"NOSE: {NoseStyleId.ToUpperInvariant()}";
         _mouthStyle.Text = $"MOUTH: {MouthStyleId.ToUpperInvariant()}";
+        _livePreview.SetAppearance(new Fo2HumanoidAppearance(
+            FaceShapeId,
+            HairStyleId,
+            SkinToneId,
+            HairColorId,
+            EyeColorId,
+            BrowStyleId,
+            NoseStyleId,
+            MouthStyleId));
         _portrait.Texture = ImageTexture.CreateFromImage(
             Fo2ProceduralPortrait.Render(
                 _sexValue,
@@ -768,10 +814,50 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
 
     private void ToggleBodyEditor()
     {
-        _bodyPanel.Visible = !_bodyPanel.Visible;
-        _bodyToggle.Text = _bodyPanel.Visible ? "STATS" : "BODY";
         if (_bodyPanel.Visible)
-            SetLivePreviewVisible(true);
+        {
+            ShowStatsEditor();
+            return;
+        }
+        SetStatsControlsVisible(false);
+        SetAppearanceControlsVisible(false);
+        _bodyPanel.Visible = true;
+        _bodyToggle.Text = "STATS";
+        SetLivePreviewVisible(true);
+        SetMeta(
+            "custom_editor_panel",
+            "body-proportions");
+    }
+
+    private void ShowFaceEditor()
+    {
+        _bodyPanel.Visible = false;
+        SetStatsControlsVisible(false);
+        SetAppearanceControlsVisible(true);
+        _bodyToggle.Text = "BODY";
+        SetLivePreviewVisible(true);
+        SetMeta("custom_editor_panel", "face-appearance");
+    }
+
+    private void ShowStatsEditor()
+    {
+        _bodyPanel.Visible = false;
+        SetAppearanceControlsVisible(false);
+        SetStatsControlsVisible(true);
+        _bodyToggle.Text = "BODY";
+        SetMeta("custom_editor_panel", "identity-and-special");
+    }
+
+    private void SetAppearanceControlsVisible(bool visible)
+    {
+        foreach (var control in _appearanceControls)
+            control.Visible = visible;
+    }
+
+    private void SetStatsControlsVisible(bool visible)
+    {
+        foreach (var control in _statsControls)
+            control.Visible = visible;
     }
 
     private string BodyProportionText() => string.Join(
@@ -783,15 +869,23 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
 
     private void SetLivePreviewVisible(bool visible)
     {
-        _livePreview.Visible = visible;
-        _sourcePanel.Visible = !visible;
-        _portrait.Visible = !visible;
-        _previewToggle.Text = visible ? "PORTRAIT" : "LIVE 3D";
+        _classicProjectionEnabled = !visible;
+        _livePreview.Visible = true;
+        _livePreview.SetClassicPortraitProjection(_classicProjectionEnabled);
+        _sourcePanel.Visible = false;
+        _portrait.Visible = false;
+        _previewToggle.Text = visible ? "CLASSIC" : "LIVE 3D";
         if (visible)
             _livePreview.SetProportions(_bodyProportions);
+        _reflectron.SetCreatorModeState(
+            visible ? "3D" : "2D",
+            _bodyPanel.Visible,
+            projectionEnabled: _classicProjectionEnabled);
         SetMeta(
             "custom_preview_mode",
-            visible ? _livePreview.PresentationMode : "generated-2d-portrait");
+            visible
+                ? _livePreview.PresentationMode
+                : "classic-stylized-projection-of-current-3d-character");
         SetMeta(
             "custom_live_3d_boundary",
             "no substitute live 3D head; verified owned full-body donor only");
@@ -802,15 +896,15 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         var panel = new Control
         {
             Name = "FO2_LIVE_BODY_PROPORTION_CONTROLS",
-            Size = new Vector2(SourceWidth, SourceHeight),
+            Size = new Vector2(ControlDesignWidth, ControlDesignHeight),
             Visible = false,
             MouseFilter = MouseFilterEnum.Pass,
         };
         panel.AddChild(new ColorRect
         {
-            Position = new Vector2(292.0f, 27.0f),
-            Size = new Vector2(309.0f, 240.0f),
-            Color = new Color(0.0f, 0.0f, 0.0f, 1.0f),
+            Position = Vector2.Zero,
+            Size = new Vector2(ControlDesignWidth, ControlDesignHeight),
+            Color = new Color(0.0f, 0.035f, 0.018f, 0.90f),
             MouseFilter = MouseFilterEnum.Stop,
         });
         var roles = new[]
@@ -826,11 +920,11 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         for (var index = 0; index < roles.Length; index++)
         {
             var row = roles[index];
-            var y = 47.0f + index * 30.0f;
+            var y = 44.0f + index * 38.0f;
             var label = new Label
             {
-                Position = new Vector2(304.0f, y),
-                Size = new Vector2(76.0f, 22.0f),
+                Position = new Vector2(12.0f, y),
+                Size = new Vector2(72.0f, 28.0f),
                 Text = row.Label,
                 VerticalAlignment = VerticalAlignment.Center,
                 MouseFilter = MouseFilterEnum.Ignore,
@@ -841,8 +935,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             var value = new Label
             {
                 Name = $"BodyValue_{row.Key}",
-                Position = new Vector2(558.0f, y),
-                Size = new Vector2(38.0f, 22.0f),
+                Position = new Vector2(236.0f, y),
+                Size = new Vector2(54.0f, 28.0f),
                 Text = $"{Mathf.RoundToInt(_bodyProportions.Value(row.Key) * 100.0f)}%",
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -854,8 +948,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             var slider = new HSlider
             {
                 Name = $"Body_{row.Key}",
-                Position = new Vector2(380.0f, y),
-                Size = new Vector2(174.0f, 22.0f),
+                Position = new Vector2(86.0f, y),
+                Size = new Vector2(145.0f, 28.0f),
                 MinValue = CharacterBodyProportions.Minimum,
                 MaxValue = CharacterBodyProportions.Maximum,
                 Step = CharacterBodyProportions.Step,
@@ -893,7 +987,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         label.AddThemeColorOverride("font_outline_color", Colors.Black);
         label.AddThemeConstantOverride("outline_size", 2);
         label.AddThemeFontSizeOverride("font_size", fontSize);
-        _canvas.AddChild(label);
+        _controlRoot.AddChild(label);
         return label;
     }
 
@@ -918,7 +1012,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         button.AddThemeColorOverride("font_hover_color", Colors.White);
         button.AddThemeFontSizeOverride("font_size", fontSize);
         button.Pressed += pressed;
-        _canvas.AddChild(button);
+        _controlRoot.AddChild(button);
         return button;
     }
 

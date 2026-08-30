@@ -27,6 +27,9 @@ internal static class RetailFaceGenMaterial
         uniform float transfer_offset;
         uniform float transfer_normalization;
         uniform float transfer_exponent;
+        uniform bool use_complexion_target;
+        uniform vec3 complexion_target;
+        uniform float complexion_source_mean;
         uniform bool use_neck_complexion_target;
         uniform vec3 neck_complexion_target;
         uniform float neck_complexion_source_mean;
@@ -70,6 +73,12 @@ internal static class RetailFaceGenMaterial
             vec3 encoded_albedo = (
                 base.rgb + signed_detail_scale *
                 (detail - vec3(signed_detail_neutral))) * tone_multiplier;
+            if (use_complexion_target) {
+                float local_mean =
+                    (encoded_albedo.r + encoded_albedo.g + encoded_albedo.b) / 3.0;
+                encoded_albedo = complexion_target *
+                    local_mean / max(complexion_source_mean, 0.0001);
+            }
             if (use_neck_complexion_target) {
                 float lower_u = smoothstep(
                     neck_complexion_uv_bounds.x - neck_complexion_softness,
@@ -167,6 +176,9 @@ internal static class RetailFaceGenMaterial
             "signed_detail_scale",
             configuration.SignedDetailScale);
         shaderMaterial.SetShaderParameter("tone_multiplier", toneMultiplier);
+        shaderMaterial.SetShaderParameter("use_complexion_target", false);
+        shaderMaterial.SetShaderParameter("complexion_target", Vector3.One);
+        shaderMaterial.SetShaderParameter("complexion_source_mean", 1.0f);
         shaderMaterial.SetShaderParameter("use_neck_complexion_target", false);
         shaderMaterial.SetShaderParameter("neck_complexion_target", Vector3.One);
         shaderMaterial.SetShaderParameter("neck_complexion_source_mean", 1.0f);

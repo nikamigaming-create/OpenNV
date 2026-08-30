@@ -14,6 +14,7 @@ FO2_RUNTIME = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "
 FO2_CHARACTER_CONTRACT = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "CharacterStart" / "Fo2CharacterStartContract.cs"
 FO2_CHARACTER_SAVE = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "CharacterStart" / "Fo2CharacterStartSave.cs"
 FO2_CHARACTER_EDITOR = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "CharacterStart" / "Fo2CustomCharacterEditor.cs"
+FO2_APPEARANCE = ROOT / "runtime" / "config" / "fo2-procedural-appearance-v3.json"
 RETAIL_ACTOR_MATERIAL = ROOT / "runtime" / "src" / "RetailActorMaterial.cs"
 RETAIL_FACEGEN_MATERIAL = ROOT / "runtime" / "src" / "RetailFaceGenMaterial.cs"
 
@@ -66,6 +67,8 @@ class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
 
         facegen_material = RETAIL_FACEGEN_MATERIAL.read_text(encoding="utf-8")
         self.assertIn("use_neck_complexion_target", facegen_material)
+        self.assertIn("use_complexion_target", facegen_material)
+        self.assertIn("complexion_target", facegen_material)
         self.assertIn("neck_complexion_uv_bounds", facegen_material)
         self.assertIn('"use_neck_complexion_target", false', facegen_material)
         self.assertIn('"use_neck_complexion_target", true', donor)
@@ -75,7 +78,9 @@ class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
         contract = FO2_CHARACTER_CONTRACT.read_text(encoding="utf-8")
         save = FO2_CHARACTER_SAVE.read_text(encoding="utf-8")
         editor = FO2_CHARACTER_EDITOR.read_text(encoding="utf-8")
+        appearance = FO2_APPEARANCE.read_text(encoding="utf-8")
         runtime = FO2_RUNTIME.read_text(encoding="utf-8")
+        donor = FO2_DONOR.read_text(encoding="utf-8")
 
         self.assertIn("CharacterBodyProportions BodyProportions", contract)
         self.assertIn("opennv-fo2-character-appearance/v6", contract)
@@ -83,7 +88,11 @@ class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
         self.assertIn('GetProperty("BodyProportions")', save)
         self.assertIn("SetBodyProportion", editor)
         self.assertIn("_livePreview.SetProportions(_bodyProportions)", editor)
+        self.assertIn("_livePreview.SetAppearance(new Fo2HumanoidAppearance", editor)
         self.assertIn("selectedCharacter.Appearance.BodyProportions", runtime)
+        self.assertIn("nativeFaceGenControls", appearance)
+        self.assertIn("ApplyNativeFaceGenControl", donor)
+        self.assertIn("selection.Appearance.CustomFaceEdited", donor)
 
 
 if __name__ == "__main__":

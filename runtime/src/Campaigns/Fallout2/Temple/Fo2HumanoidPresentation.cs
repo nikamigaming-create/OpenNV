@@ -189,7 +189,8 @@ internal sealed record Fo2HumanoidIdentity(
     string OwnedIdentitySha256,
     string OwnedPanelSha256,
     string SourceFid,
-    string SourceFrmSha256)
+    string SourceFrmSha256,
+    Fo2HumanoidAppearance? Appearance)
 {
     internal static Fo2HumanoidIdentity FromPremade(Fo2PremadeCharacter character) => new(
         character.Id,
@@ -199,7 +200,8 @@ internal sealed record Fo2HumanoidIdentity(
         character.GcdSha256,
         character.Panel.SourceSha256,
         "picker-preview",
-        character.Panel.SourceSha256);
+        character.Panel.SourceSha256,
+        null);
 
     internal static Fo2HumanoidIdentity FromSelection(
         Fo2CharacterSelection? selection,
@@ -214,7 +216,8 @@ internal sealed record Fo2HumanoidIdentity(
                 source.PrototypeSha256,
                 "none",
                 source.Fid,
-                source.SourceSha256);
+                source.SourceSha256,
+                null);
         return new Fo2HumanoidIdentity(
             selection.Id,
             selection.Profile.Name,
@@ -223,8 +226,33 @@ internal sealed record Fo2HumanoidIdentity(
             selection.GcdSha256,
             selection.Source.Panel.SourceSha256,
             source.Fid,
-            source.SourceSha256);
+            source.SourceSha256,
+            selection.Appearance.CustomFaceEdited
+                ? Fo2HumanoidAppearance.FromContract(selection.Appearance)
+                : null);
     }
+}
+
+internal sealed record Fo2HumanoidAppearance(
+    string FaceShapeId,
+    string HairStyleId,
+    string SkinToneId,
+    string HairColorId,
+    string EyeColorId,
+    string BrowStyleId,
+    string NoseStyleId,
+    string MouthStyleId)
+{
+    internal static Fo2HumanoidAppearance FromContract(
+        Fo2CharacterAppearanceContract appearance) => new(
+        appearance.FaceShapeId,
+        appearance.HairStyleId,
+        appearance.SkinToneId,
+        appearance.HairColorId,
+        appearance.EyeColorId,
+        appearance.BrowStyleId,
+        appearance.NoseStyleId,
+        appearance.MouthStyleId);
 }
 
 /// <summary>
@@ -261,6 +289,8 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
     private BoneAttachment3D? _equipmentSocket;
     private Skeleton3D? _locomotionSkeleton;
     private ActorModelSlice.LoadedAnimation? _activeAnimation;
+    private Fo2HumanoidAppearance? _appearance;
+    private IReadOnlyList<string> _appliedFaceGeometryControls = [];
     private bool _walking;
 
     internal Fo2HumanoidVisual(
@@ -269,6 +299,7 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         CharacterBodyProportions? proportions = null)
     {
         _identity = identity;
+        _appearance = identity.Appearance;
         _proportions = proportions ?? ProportionsForIdentity(identity);
         _proportions.Validate("fallout2-visible-humanoid");
         _contract = contract ?? throw new InvalidOperationException(
@@ -297,6 +328,8 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         _activeAnimation?.Player.CurrentAnimationPosition ?? 0.0;
     internal string? DonorFailure { get; private set; }
     internal CharacterBodyProportions Proportions => _proportions;
+    internal Fo2HumanoidAppearance? Appearance => _appearance;
+    internal int AppliedFaceGeometryControlCount => _appliedFaceGeometryControls.Count;
     internal Aabb PresentationBounds => _donor is { } donor
         ? ActorModelSlice.PosedWorldBounds(donor)
         : throw new InvalidOperationException(
@@ -307,6 +340,12 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         proportions.Validate("fallout2-visible-humanoid");
         _proportions = proportions;
         ApplyBodyProportions();
+    }
+
+    internal void SetAppearance(Fo2HumanoidAppearance appearance)
+    {
+        _appearance = appearance;
+        ApplyCharacterAppearance();
     }
 
     internal float[] CaptureLegPose()
@@ -489,6 +528,7 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
             loaded.Root.Position += Vector3.Up * -loaded.Bounds.Position.Y;
             _donor = loaded;
             ApplySkinOnlyToneTransfer(loaded);
+            ApplyCharacterAppearance();
             ResolveEquipmentSocket(loaded);
             ApplyBodyProportions();
             if (!loaded.LoadedAnimations.Any(row =>
@@ -639,6 +679,145 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         SetMeta("skin_join_neck_source_color", neckSkinColor);
         SetMeta("skin_join_target_role", "head-paired-cheek-uv-islands");
     }
+
+    private void ApplyCharacterAppearance()
+    {
+        if (_donor is not { } donor || _appearance is not { } appearance)
+            return;
+        var catalog = Fo2ProceduralAppearanceCatalog.Load();
+        var controls = catalog.NativeFaceGenControls(
+            appearance.FaceShapeId,
+            appearance.BrowStyleId,
+            appearance.NoseStyleId,
+            appearance.MouthStyleId);
+        foreach (var settingEntity in _appliedFaceGeometryControls)
+            ApplyNativeFaceGenControl(donor, settingEntity, 0.0f);
+        foreach (var control in controls)
+            ApplyNativeFaceGenControl(
+                donor,
+                control.Key,
+                control.Value * catalog.LiveHead.NativeMorphWeightScale);
+        _appliedFaceGeometryControls = controls.Keys
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var skin = catalog.SkinTone(appearance.SkinToneId).HeadAlbedo;
+        var skinTarget = new Vector3(skin.R, skin.G, skin.B);
+        if (!skinTarget.IsFinite())
+            throw new InvalidOperationException(
+                "Fallout 2 custom 3D complexion target is invalid.");
+        var headMaterials = donor.Surfaces
+            .Where(surface => surface.Role == "head")
+            .SelectMany(SurfaceMaterials)
+            .Where(material => material.Shader?.Code.Contains(
+                "uniform bool use_complexion_target;",
+                StringComparison.Ordinal) == true)
+            .ToArray();
+        if (headMaterials.Length != 1)
+            throw new InvalidOperationException(
+                "Fallout 2 custom 3D appearance requires one FaceGen complexion surface.");
+        var headSource = AverageFaceGenEncodedSkinColor(headMaterials[0]);
+        headMaterials[0].SetShaderParameter("use_complexion_target", true);
+        headMaterials[0].SetShaderParameter("complexion_target", skinTarget);
+        headMaterials[0].SetShaderParameter(
+            "complexion_source_mean",
+            Mean(headSource));
+        headMaterials[0].SetShaderParameter("use_neck_complexion_target", false);
+
+        var joinedSkinMaterials = 0;
+        foreach (var surface in donor.Surfaces.Where(surface =>
+                     surface.Role is "body" or "left-hand" or "right-hand"))
+        {
+            foreach (var material in SurfaceMaterials(surface).Where(material =>
+                         material.Shader?.Code.Contains(
+                             "uniform bool use_skin_transfer;",
+                             StringComparison.Ordinal) == true &&
+                         material.GetShaderParameter("use_skin_transfer").AsBool()))
+            {
+                var source = AverageEncodedSkinColor(
+                    material,
+                    centralTorso: surface.Role == "body");
+                material.SetShaderParameter("skin_complexion_multiplier", Vector3.One);
+                material.SetShaderParameter("use_skin_complexion_target", true);
+                material.SetShaderParameter("skin_complexion_target", skinTarget);
+                material.SetShaderParameter("skin_complexion_source_mean", Mean(source));
+                joinedSkinMaterials++;
+            }
+        }
+        if (joinedSkinMaterials < 3)
+            throw new InvalidOperationException(
+                "Fallout 2 custom complexion did not reach the torso and both hands.");
+
+        var hair = catalog.HairColor(appearance.HairColorId).HeadAlbedo;
+        var tintedHairMaterials = 0;
+        foreach (var material in donor.Surfaces
+                     .Where(surface => surface.Role == "hair")
+                     .SelectMany(SurfaceMaterials)
+                     .Where(material => material.Shader?.Code.Contains(
+                         "uniform vec4 base_color_factor;",
+                         StringComparison.Ordinal) == true))
+        {
+            var original = material.GetShaderParameter("base_color_factor").AsColor();
+            material.SetShaderParameter(
+                "base_color_factor",
+                new Color(hair.R, hair.G, hair.B, original.A));
+            tintedHairMaterials++;
+        }
+        if (tintedHairMaterials == 0)
+            throw new InvalidOperationException(
+                "Fallout 2 custom hair color has no owned hair material target.");
+
+        SetMeta("custom_face_shape_id", appearance.FaceShapeId);
+        SetMeta("custom_skin_tone_id", appearance.SkinToneId);
+        SetMeta("custom_hair_color_id", appearance.HairColorId);
+        SetMeta("custom_facegen_control_count", controls.Count);
+        SetMeta(
+            "custom_facegen_controls",
+            string.Join(",", controls.OrderBy(row => row.Key).Select(row =>
+                $"{row.Key}:{row.Value:F1}")));
+        SetMeta("custom_skin_target", skinTarget);
+        SetMeta(
+            "custom_hair_style_disposition",
+            $"{appearance.HairStyleId}:source-sex-default-geometry-until-owned-style-set-exists");
+        SetMeta(
+            "custom_eye_color_disposition",
+            $"{appearance.EyeColorId}:source-default-until-iris-only-mask-is-bound");
+    }
+
+    private static int ApplyNativeFaceGenControl(
+        ActorModelSlice.LoadedActor donor,
+        string settingEntity,
+        float weight)
+    {
+        if (!float.IsFinite(weight))
+            throw new InvalidOperationException(
+                $"Fallout 2 native FaceGen weight is invalid: {settingEntity}.");
+        var bindings = 0;
+        foreach (var surface in donor.Surfaces)
+        {
+            for (var index = 0; index < surface.FaceGenMorphTargets.Count; index++)
+            {
+                if (surface.FaceGenMorphTargets[index] != settingEntity)
+                    continue;
+                surface.Mesh.SetBlendShapeValue(index, weight);
+                bindings++;
+            }
+        }
+        if (bindings == 0)
+            throw new InvalidOperationException(
+                $"Fallout 2 owned donor has no native FaceGen target {settingEntity}.");
+        return bindings;
+    }
+
+    private static IEnumerable<ShaderMaterial> SurfaceMaterials(
+        ActorModelSlice.LoadedSurface surface) => Enumerable.Range(
+            0,
+            surface.Mesh.Mesh?.GetSurfaceCount() ?? 0)
+        .Select(surface.Mesh.GetSurfaceOverrideMaterial)
+        .OfType<ShaderMaterial>();
+
+    private static float Mean(Vector3 color) =>
+        (color.X + color.Y + color.Z) / 3.0f;
 
     private static Vector3 AverageFaceGenEncodedSkinColor(ShaderMaterial material)
     {
