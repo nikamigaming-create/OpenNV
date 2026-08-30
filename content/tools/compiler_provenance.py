@@ -13,6 +13,7 @@ from runtime_configuration import configured_recipe_path, load_runtime_configura
 
 
 SCHEMA = "opennv-content-compiler-identities/v1"
+ACTOR_ROUTE_SCHEMA = "opennv-actor-compiler-route/v1"
 FAMILIES = ("static", "cell", "opening", "actor")
 
 
@@ -83,6 +84,64 @@ def _cell_route_recipe_paths(cell_recipe_id: str | None) -> tuple[list[Path], li
     return cells, actors
 
 
+def _actor_route(
+    cell_recipe_id: str | None,
+) -> tuple[list[Path], dict[str, object]]:
+    """Return the exact one-level actor selection used by prepare_legal_assets."""
+    configuration = load_runtime_configuration()
+    primary_id = cell_recipe_id or str(
+        configuration.document["legalAssets"]["defaultCellRecipe"]
+    )
+    primary_path = _recipe_path(primary_id)
+    primary = json.loads(primary_path.read_text(encoding="utf-8"))
+    configured_links = primary.get("linkedCellRecipes")
+    if configured_links is None and primary.get("linkedExteriorRecipe"):
+        configured_links = [{"recipe": primary["linkedExteriorRecipe"]}]
+    if configured_links is not None and (
+        not isinstance(configured_links, list) or not configured_links
+    ):
+        raise ValueError("Linked CELL recipes must be a non-empty ordered list")
+    linked_ids = (
+        []
+        if configured_links is None
+        else [str(row["recipe"]) for row in configured_links]
+    )
+    linked = [
+        json.loads(_recipe_path(recipe_id).read_text(encoding="utf-8"))
+        for recipe_id in linked_ids
+    ]
+    actor_ids = [str(value) for value in primary["actorRecipes"]]
+    for document in linked:
+        actor_ids.extend(str(value) for value in document["actorRecipes"])
+    actor_paths = [_recipe_path(recipe_id) for recipe_id in actor_ids]
+    route = {
+        "schema": ACTOR_ROUTE_SCHEMA,
+        "primaryCellRecipe": str(primary["id"]),
+        "linkedCellRecipes": linked_ids,
+        "actors": [
+            {
+                "recipe": recipe_id,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+            for recipe_id, path in zip(actor_ids, actor_paths, strict=True)
+        ],
+    }
+    return actor_paths, route
+
+
+def actor_route_manifest(cell_recipe_id: str | None = None) -> dict[str, object]:
+    _, route = _actor_route(cell_recipe_id)
+    payload = json.dumps(
+        route,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        **route,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+
+
 def compiler_provenance_source_paths(
     family: str,
     cell_recipe_id: str | None = None,
@@ -90,11 +149,11 @@ def compiler_provenance_source_paths(
     if family not in FAMILIES:
         raise ValueError(f"Unknown compiler family: {family}")
     configuration = load_runtime_configuration()
-    common = {
-        configuration.path,
+    compiler_common = {
         configured_recipe_path("nifDecoder"),
         configured_recipe_path("materialBinding"),
     }
+    common = {configuration.path, *compiler_common}
     if family == "static":
         sources = _local_dependencies("export_static_nif_gltf.py") | common
     elif family == "cell":
@@ -116,19 +175,18 @@ def compiler_provenance_source_paths(
             }
         )
     else:
-        cell_recipes, actor_recipes = _cell_route_recipe_paths(cell_recipe_id)
+        actor_recipes, _ = _actor_route(cell_recipe_id)
         # Actor animation membership is authored by the opening graph. Keeping
         # that complete graph here makes an opening animation change invalidate
         # actors without coupling either family to unchanged world geometry.
         sources = (
             _local_dependencies("prepare_actor.py", "opening_catalog.py")
-            | common
+            | compiler_common
             | {
                 configured_recipe_path("visualArchives"),
                 configured_recipe_path("audioArchives"),
                 configured_recipe_path("opening"),
             }
-            | set(cell_recipes)
             | set(actor_recipes)
         )
     return sorted({path.resolve() for path in sources}, key=lambda path: str(path).casefold())
@@ -138,6 +196,19 @@ def compiler_provenance(
     family: str,
     cell_recipe_id: str | None = None,
 ) -> dict[str, str]:
+    source_sha256 = compiler_sources_sha256(
+        compiler_provenance_source_paths(family, cell_recipe_id)
+    )
+    actor_configuration_sha256 = (
+        load_runtime_configuration().actor_artifact_manifest()["sha256"]
+        if family == "actor"
+        else None
+    )
+    actor_route_sha256 = (
+        actor_route_manifest(cell_recipe_id)["sha256"]
+        if family == "actor"
+        else None
+    )
     identity = {
         "family": family,
         "name": (
@@ -145,10 +216,30 @@ def compiler_provenance(
             if getattr(sys, "frozen", False)
             else "OpenNV direct static NIF exporter v1"
         ),
-        "sha256": compiler_sources_sha256(
-            compiler_provenance_source_paths(family, cell_recipe_id)
+        "sha256": (
+            hashlib.sha256(
+                json.dumps(
+                    {
+                        "actorArtifactConfigurationSha256": (
+                            actor_configuration_sha256
+                        ),
+                        "actorRouteSha256": actor_route_sha256,
+                        "sourcesSha256": source_sha256,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            if family == "actor"
+            else source_sha256
         ),
     }
+    if actor_configuration_sha256 is not None:
+        identity["actorArtifactConfigurationSha256"] = str(
+            actor_configuration_sha256
+        )
+    if actor_route_sha256 is not None:
+        identity["actorRouteSha256"] = str(actor_route_sha256)
     if getattr(sys, "frozen", False):
         identity["artifactSha256"] = sha256_bytes(Path(sys.executable).read_bytes())
     return identity

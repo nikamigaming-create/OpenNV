@@ -556,6 +556,28 @@ internal static class RuntimeMaterialLoader
             gameUnitsToMeters,
             RetailAmbientDirectionalLambertResourceName);
 
+    internal static int ApplyRetailAmbientDirectionalMenuLighting(
+        Node root,
+        Color ambient)
+    {
+        var configured = new HashSet<ulong>();
+        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        {
+            for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
+            {
+                if (mesh.GetSurfaceOverrideMaterial(surface) is not ShaderMaterial material ||
+                    !material.ResourceName.Equals(
+                        RetailAmbientDirectionalLambertResourceName,
+                        StringComparison.Ordinal) ||
+                    !configured.Add(material.GetInstanceId()))
+                    continue;
+                material.SetShaderParameter("retail_ambient_color", Rgb(ambient));
+                material.SetShaderParameter("retail_fog_enabled", false);
+            }
+        }
+        return configured.Count;
+    }
+
     internal static int ApplyRetailLandscapeLighting(
         Node root,
         Color ambient,
@@ -662,6 +684,7 @@ internal static class RuntimeMaterialLoader
                     !configured.Add(material.GetInstanceId()))
                     continue;
                 material.SetShaderParameter("retail_ambient_color", Rgb(ambient));
+                material.SetShaderParameter("retail_fog_enabled", true);
                 material.SetShaderParameter("retail_fog_color", Rgb(fog));
                 material.SetShaderParameter("retail_fog_near_game_units", fogNearGameUnits);
                 material.SetShaderParameter("retail_fog_far_game_units", fogFarGameUnits);
@@ -1029,6 +1052,7 @@ internal static class RuntimeMaterialLoader
         source.AppendLine("uniform vec4 base_color_factor;");
         source.AppendLine("uniform bool use_vertex_color;");
         source.AppendLine("uniform vec3 retail_ambient_color;");
+        source.AppendLine("uniform bool retail_fog_enabled;");
         source.AppendLine("uniform vec3 retail_fog_color;");
         source.AppendLine("uniform float retail_fog_near_game_units;");
         source.AppendLine("uniform float retail_fog_far_game_units;");
@@ -1044,12 +1068,15 @@ internal static class RuntimeMaterialLoader
             "    vec3 retail_view = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
         source.AppendLine(
             "    float retail_distance = length(retail_view) * retail_game_units_per_meter;");
+        source.AppendLine("    retail_fog_factor = 0.0;");
+        source.AppendLine("    if (retail_fog_enabled) {");
         source.AppendLine(
-            "    float retail_fog_range = retail_fog_far_game_units - retail_fog_near_game_units;");
+            "        float retail_fog_range = retail_fog_far_game_units - retail_fog_near_game_units;");
         source.AppendLine(
-            "    float retail_fog_base = clamp((retail_distance - retail_fog_near_game_units) / retail_fog_range, 0.0, 1.0);");
+            "        float retail_fog_base = clamp((retail_distance - retail_fog_near_game_units) / retail_fog_range, 0.0, 1.0);");
         source.AppendLine(
-            "    retail_fog_factor = pow(retail_fog_base, retail_fog_power);");
+            "        retail_fog_factor = pow(retail_fog_base, retail_fog_power);");
+        source.AppendLine("    }");
         source.AppendLine("}");
         source.AppendLine("void fragment() {");
         source.AppendLine($"    vec2 material_uv = {materialUv};");

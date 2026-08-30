@@ -3,7 +3,9 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Diagnostics.Performance;
+using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.World.Portals;
+using OpenNV.Runtime.Campaigns.TTW;
 
 namespace OpenNV.Runtime;
 
@@ -38,6 +40,7 @@ public partial class RuntimeCoordinator : Node3D
             "report",
             "route-travel-proof",
             "xr-simulator-proof",
+            "world-interaction-proof",
         },
         StringComparer.OrdinalIgnoreCase);
 
@@ -138,11 +141,11 @@ public partial class RuntimeCoordinator : Node3D
                 if (!_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
                     !_options.ContainsKey("opening-proof-name") ||
                     !_options.ContainsKey("opening-proof-timeout-seconds") ||
-                    openingProofMode is not "checkpoint" and not "resume" ||
-                    openingProofMode == "checkpoint" !=
+                    openingProofMode is not "checkpoint" and not "creator" and not "resume" ||
+                    (openingProofMode is "checkpoint" or "creator") !=
                         (_options.ContainsKey("new-game") || startsFromMenuNewGame))
                     throw new ArgumentException(
-                        "--opening-proof requires mode checkpoint with --new-game or the owned " +
+                        "--opening-proof requires mode checkpoint or creator with --new-game or the owned " +
                         "menu new-game route, or mode resume without either, plus --report, " +
                         "--save-path, --opening-proof-name, and --opening-proof-timeout-seconds.");
             }
@@ -194,6 +197,10 @@ public partial class RuntimeCoordinator : Node3D
                     !_options.ContainsKey("report") || !_options.ContainsKey("save-path")))
                 throw new ArgumentException(
                     "The Fallout 1 OpenXR controls proof requires the simulator preview, report, and isolated save path.");
+            if (_options.ContainsKey("fo1-destination-presentation") &&
+                (!_options.ContainsKey("fo1-hex-scene") || !_options.ContainsKey("fo1-exit-grid-transition")))
+                throw new ArgumentException(
+                    "--fo1-destination-presentation requires --fo1-hex-scene and --fo1-exit-grid-transition.");
             if (_options.ContainsKey("vr"))
                 EnableOpenXr();
             if (_options.ContainsKey("xr-rig-proof"))
@@ -222,6 +229,17 @@ public partial class RuntimeCoordinator : Node3D
             if (_options.ContainsKey("fo3-birth-presentation") && !hasFo3Profile)
                 throw new ArgumentException(
                     "--fo3-birth-presentation requires --fo3-profile.");
+            if (_options.ContainsKey("fo3-retail-cg00-stage10-contract") && !hasFo3Profile)
+                throw new ArgumentException(
+                    "--fo3-retail-cg00-stage10-contract requires --fo3-profile.");
+            if (_options.ContainsKey("fo3-ttw-cg00-stage10-presentation-contract") &&
+                !hasFo3Profile)
+                throw new ArgumentException(
+                    "--fo3-ttw-cg00-stage10-presentation-contract requires --fo3-profile.");
+            if (_options.ContainsKey("fo3-ttw-cg00-stage10-actor-set") &&
+                !hasFo3Profile)
+                throw new ArgumentException(
+                    "--fo3-ttw-cg00-stage10-actor-set requires --fo3-profile.");
             if (hasTtwFo3OpeningProfile &&
                 (!_options.TryGetValue("ttw-fo3-opening-proof", out var ttwProofMode) ||
                  ttwProofMode is not "apply" and not "restore" ||
@@ -293,6 +311,74 @@ public partial class RuntimeCoordinator : Node3D
                     "--fo1-start-presentation requires Fallout new game and must be hex-tactical or first-person.");
             if (_options.ContainsKey("fo1-new-game-demo") && !_options.ContainsKey("demo-report"))
                 throw new ArgumentException("Fallout new-game demo requires --demo-report.");
+            if (_options.ContainsKey("fo1-native-first-beat-proof") &&
+                !_options.ContainsKey("fo1-new-game-demo"))
+                throw new ArgumentException(
+                    "--fo1-native-first-beat-proof requires --fo1-new-game-demo.");
+            if (_options.ContainsKey("fo1-native-first-beat-proof") &&
+                _options.ContainsKey("capture-root"))
+                throw new ArgumentException(
+                    "--fo1-native-first-beat-proof is JSON-only and cannot use --capture-root.");
+            if (_options.ContainsKey("fo1-continue-menu-proof") &&
+                (!_options.ContainsKey("fo1-new-game") ||
+                    _options.ContainsKey("fo1-new-game-demo") ||
+                    !_options.ContainsKey("report") ||
+                    !_options.ContainsKey("save-path") ||
+                    !_options.ContainsKey("fo1-exit-grid-transition") ||
+                    !_options.ContainsKey("fo1-destination-presentation") ||
+                    _options.ContainsKey("capture-root")))
+                throw new ArgumentException(
+                    "--fo1-continue-menu-proof requires the normal FO1 new-game menu route plus explicit " +
+                    "save, exit-grid, destination presentation, and report paths; it cannot capture media.");
+            if (_options.ContainsKey("fo1-continue-flare-use-proof") &&
+                (!_options.ContainsKey("fo1-continue-menu-proof") ||
+                    !_options.ContainsKey("fo1-destination-inventory-interaction") ||
+                    !_options.ContainsKey("fo1-destination-flare-use")))
+                throw new ArgumentException(
+                    "--fo1-continue-flare-use-proof requires the normal Continue proof and explicit inventory/flare descriptors.");
+            if (_options.ContainsKey("fo1-continue-generic-door-proof") &&
+                (!_options.ContainsKey("fo1-continue-menu-proof") ||
+                    !_options.ContainsKey("fo1-continue-flare-use-proof") ||
+                    !_options.ContainsKey("fo1-destination-generic-door")))
+                throw new ArgumentException(
+                    "--fo1-continue-generic-door-proof requires normal Continue, restored flare, and an explicit generic-door descriptor.");
+            if (_options.ContainsKey("fo1-destination-cold-restore-proof") &&
+                (!hasFo1HexScene || !_options.ContainsKey("report") ||
+                    !_options.ContainsKey("save-path") ||
+                    !_options.ContainsKey("fo1-exit-grid-transition") ||
+                    !_options.ContainsKey("fo1-destination-presentation") ||
+                    _options.ContainsKey("fo1-new-game") ||
+                    _options.ContainsKey("fo1-new-game-demo") ||
+                    _options.ContainsKey("capture-root")))
+                throw new ArgumentException(
+                    "--fo1-destination-cold-restore-proof requires the explicit FO1 scene, save, " +
+                    "exit-grid, destination presentation, and report paths; it cannot start a new game or capture media.");
+            if ((_options.ContainsKey("fo1-destination-inventory-interaction-proof") ||
+                    _options.ContainsKey("fo1-destination-inventory-interaction-cold-restore-proof")) &&
+                (!hasFo1HexScene || !_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
+                    !_options.ContainsKey("fo1-exit-grid-transition") || !_options.ContainsKey("fo1-destination-presentation") ||
+                    !_options.ContainsKey("fo1-destination-inventory-interaction") ||
+                    _options.ContainsKey("fo1-new-game") || _options.ContainsKey("fo1-new-game-demo") ||
+                    _options.ContainsKey("capture-root")))
+                throw new ArgumentException(
+                    "Fallout destination inventory proof requires explicit scene, save, transition, presentation, and interaction paths; it cannot capture media.");
+            if ((_options.ContainsKey("fo1-destination-medic-look-proof") ||
+                    _options.ContainsKey("fo1-destination-medic-look-cold-restore-proof")) &&
+                (!hasFo1HexScene || !_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
+                    !_options.ContainsKey("fo1-exit-grid-transition") || !_options.ContainsKey("fo1-destination-presentation") ||
+                    !_options.ContainsKey("fo1-destination-generic-door") ||
+                    !_options.ContainsKey("fo1-destination-medic-look") ||
+                    _options.ContainsKey("fo1-new-game") || _options.ContainsKey("fo1-new-game-demo") ||
+                    _options.ContainsKey("capture-root")))
+                throw new ArgumentException(
+                    "Fallout destination Medic proof requires explicit scene, saved generic-door, transition, presentation, and Medic descriptors; it cannot capture media.");
+            if ((_options.ContainsKey("fo1-destination-return-exit-proof") ||
+                    _options.ContainsKey("fo1-destination-return-exit-cold-restore-proof")) &&
+                (!hasFo1HexScene || !_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
+                    !_options.ContainsKey("fo1-exit-grid-transition") || !_options.ContainsKey("fo1-destination-presentation") ||
+                    !_options.ContainsKey("fo1-destination-generic-door") || !_options.ContainsKey("fo1-destination-medic-look") ||
+                    !_options.ContainsKey("fo1-destination-return-exit-grid") || _options.ContainsKey("capture-root")))
+                throw new ArgumentException("Fallout destination return exit proof requires explicit source-bound predecessor descriptors and cannot capture media.");
             if (_options.ContainsKey("fo1-new-game-demo") && _options.ContainsKey("fo1-gameplay-demo"))
                 throw new ArgumentException("Use only one Fallout gameplay demo mode.");
             if (!hasModel && _options.ContainsKey("sidecar"))
@@ -743,6 +829,83 @@ public partial class RuntimeCoordinator : Node3D
                 out var configuredCg01Capture)
             ? ResolveRuntimePath(configuredCg01Capture)
             : null;
+        var appearanceProofMode = options.TryGetValue(
+                "fo3-appearance-proof",
+                out var configuredAppearanceProof)
+            ? configuredAppearanceProof
+            : null;
+        var appearanceCaptureRoot = options.TryGetValue(
+                "fo3-appearance-capture-root",
+                out var configuredAppearanceCaptureRoot)
+            ? ResolveRuntimePath(configuredAppearanceCaptureRoot)
+            : null;
+        var retailCg00Stage10Contract = options.TryGetValue(
+                "fo3-retail-cg00-stage10-contract",
+                out var configuredRetailCg00Stage10Contract)
+            ? Fo3Cg00RetailStage10Contract.Load(
+                ResolveRuntimePath(configuredRetailCg00Stage10Contract))
+            : null;
+        var ttwCg00Stage10PresentationContract = options.TryGetValue(
+                "fo3-ttw-cg00-stage10-presentation-contract",
+                out var configuredTtwCg00Stage10PresentationContract)
+            ? Fo3TtwCg00Stage10PresentationContract.Load(
+                ResolveRuntimePath(configuredTtwCg00Stage10PresentationContract))
+            : null;
+        var ttwCg00Stage10SurfaceContract = options.TryGetValue(
+                "fo3-ttw-cg00-stage10-surface-contract",
+                out var configuredTtwCg00Stage10SurfaceContract)
+            ? Fo3TtwCg00Stage10SurfaceContract.Load(
+                ResolveRuntimePath(configuredTtwCg00Stage10SurfaceContract))
+            : null;
+        if ((ttwCg00Stage10PresentationContract is null) !=
+            (ttwCg00Stage10SurfaceContract is null))
+            throw new ArgumentException(
+                "TTW stage-10 presentation and per-surface depth contracts must be paired.");
+        if (options.TryGetValue(
+                "fo3-ttw-cg00-stage10-actor-set",
+                out var configuredTtwCg00Stage10ActorSet))
+        {
+            if (birthPresentation is null ||
+                ttwCg00Stage10PresentationContract is null ||
+                ttwCg00Stage10SurfaceContract is null)
+                throw new ArgumentException(
+                    "TTW stage-10 actor routing requires birth, presentation, and " +
+                    "per-surface depth contracts.");
+            birthPresentation = TtwFo3Cg00Stage10ActorSetAdapter.Apply(
+                birthPresentation,
+                ResolveRuntimePath(configuredTtwCg00Stage10ActorSet),
+                ttwCg00Stage10SurfaceContract);
+        }
+        var requiresRetailStage10Contract = appearanceProofMode == "stage10-presentation";
+        if (appearanceProofMode is not null &&
+            (appearanceProofMode is not "apply" and not "restore" and
+             not "early-apply" and not "early-restore" and not "early-presentation" and
+             not "stage10-presentation" ||
+             birthPresentation is null ||
+             !options.ContainsKey("report") ||
+             appearanceProofMode is "apply" or "restore" or "early-presentation" or
+                 "stage10-presentation" &&
+             appearanceCaptureRoot is null))
+            throw new ArgumentException(
+                "--fo3-appearance-proof requires apply|restore|early-apply|early-restore|" +
+                "early-presentation|stage10-presentation, " +
+                "--fo3-birth-presentation, --report, and a capture root for visual proofs.");
+        if (requiresRetailStage10Contract &&
+            retailCg00Stage10Contract is null &&
+            ttwCg00Stage10PresentationContract is null)
+            throw new ArgumentException(
+                "Fallout 3 CG00 visual proof requires " +
+                "--fo3-retail-cg00-stage10-contract or " +
+                "--fo3-ttw-cg00-stage10-presentation-contract from an exact live observation.");
+        if (retailCg00Stage10Contract is not null &&
+            ttwCg00Stage10PresentationContract is not null)
+            throw new ArgumentException(
+                "Fallout 3 stage-10 proof cannot mix standalone and TTW observations.");
+        if (appearanceProofMode is "apply" or "restore" or "early-presentation")
+            throw new ArgumentException(
+                "Fallout 3 creator/birth visual proof is disabled until its exact live " +
+                "stage-specific camera/participant contract exists; the CG00 stage-10 " +
+                "contract authorizes only stage10-presentation.");
         if (cg01ProofMode is not null &&
             (cg01ProofMode is not "apply" and not "restore" ||
              birthPresentation is null ||
@@ -757,11 +920,17 @@ public partial class RuntimeCoordinator : Node3D
             profile,
             savePath,
             this,
+            _configuration,
             birthPresentation,
-            options.ContainsKey("fo3-appearance-proof"),
+            appearanceProofMode,
+            appearanceProofMode is null ? null : ResolveRuntimePath(RequireOption(options, "report")),
+            appearanceCaptureRoot,
             cg01ProofMode,
             cg01ProofMode is null ? null : ResolveRuntimePath(RequireOption(options, "report")),
-            cg01CapturePath);
+            cg01CapturePath,
+            retailCg00Stage10Contract,
+            ttwCg00Stage10PresentationContract,
+            ttwCg00Stage10SurfaceContract);
         AddChild(opening);
         if (options.ContainsKey("quit-after-load") &&
             !options.ContainsKey("fo3-appearance-proof") &&
@@ -823,7 +992,9 @@ public partial class RuntimeCoordinator : Node3D
             options.TryGetValue("actor-scene", out var actorScene) ? actorScene : null,
             options.TryGetValue("actor-scenes", out var actorScenes) ? actorScenes : null,
             options.ContainsKey("proof-enable-actor"),
-            !options.ContainsKey("capture-root") || options.ContainsKey("gallery-shot"),
+            !options.ContainsKey("capture-root") ||
+                options.ContainsKey("gallery-shot") ||
+                usesCampaignState && options.ContainsKey("opening-proof"),
             applyCellEnvironment,
             !options.ContainsKey("new-game"),
             true,
@@ -949,6 +1120,16 @@ public partial class RuntimeCoordinator : Node3D
             _ = RunPoolProof(loaded, scenePath, options);
             return;
         }
+        if (options.ContainsKey("world-interaction-proof"))
+        {
+            _ = WorldInteractionProof.Run(
+                this,
+                loaded,
+                _configuration,
+                scenePath,
+                options.TryGetValue("report", out var worldReport) ? worldReport : null);
+            return;
+        }
         if (options.ContainsKey("gameplay-proof"))
         {
             _ = RunGameplayProof(loaded, scenePath, options);
@@ -986,7 +1167,10 @@ public partial class RuntimeCoordinator : Node3D
             var state = await opening.RunAcceptance(
                 mode,
                 RequireOption(options, "opening-proof-name"),
-                timeoutSeconds);
+                timeoutSeconds,
+                options.TryGetValue("capture-root", out var captureRoot)
+                    ? captureRoot
+                    : null);
             if (!File.Exists(loaded.Session.SavePath))
                 throw new InvalidOperationException(
                     "Opening acceptance did not produce the canonical save.");
@@ -1015,6 +1199,16 @@ public partial class RuntimeCoordinator : Node3D
                             introSkipTransport = "godot-input-event",
                             windowsAppControlUsed = false,
                             foregroundInputInjected = false,
+                        },
+                    visualProof = opening.VisualProofReportPath is null
+                        ? null
+                        : new
+                        {
+                            report = opening.VisualProofReportPath,
+                            sha256 = Convert.ToHexString(
+                                    SHA256.HashData(File.ReadAllBytes(
+                                        opening.VisualProofReportPath)))
+                                .ToLowerInvariant(),
                         },
                     save = new
                     {
@@ -1137,10 +1331,63 @@ public partial class RuntimeCoordinator : Node3D
             if (Mathf.IsZeroApprox(travelled))
                 throw new InvalidOperationException("Pool cue ball did not move after the accepted strike.");
 
+            objectBall.Freeze = true;
+            objectBall.GlobalPosition = new Vector3(
+                objectBall.GlobalPosition.X,
+                table.GlobalPosition.Y - objectBall.CollisionRadiusMeters,
+                objectBall.GlobalPosition.Z);
+            objectBall.Freeze = false;
+            objectBall.Sleeping = false;
+            for (var frame = 0;
+                 frame < _configuration.Pool.ProofMaximumPhysicsFrames &&
+                    !objectBall.IsPocketed;
+                 frame++)
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            if (!objectBall.IsPocketed || objectBall.Visible || !objectBall.Freeze)
+                throw new InvalidOperationException(
+                    "Pool pocket detection did not retire the authored object ball.");
+            loaded.Session.Save();
+            GameplaySession? coldSession = null;
+            PoolTableInstance.PoolState restoredPoolState;
+            try
+            {
+                coldSession = new GameplaySession();
+                coldSession.Configure(
+                    loaded.FormId,
+                    loaded.EditorId,
+                    loaded.ProofDoor.ReferenceFormId,
+                    _configuration,
+                    loaded.Session.SavePath,
+                    loadExistingSave: true,
+                    showHud: false);
+                if (!coldSession.TryGetLoadedPoolStateForProof(
+                        table.ReferenceFormId,
+                        out restoredPoolState))
+                    throw new InvalidOperationException(
+                        "Cold session did not restore the persisted pool table state.");
+            }
+            finally
+            {
+                coldSession?.Free();
+            }
+            var restoredPocketedBall = restoredPoolState.Balls.Single(ball =>
+                ball.ReferenceFormId.Equals(
+                    objectBall.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase));
+            if (!restoredPocketedBall.Pocketed)
+                throw new InvalidOperationException(
+                    "Cold-restored pool state lost the pocketed object ball.");
+
             table.ResetAuthored();
             if (table.Balls.Any(ball => !ball.GlobalPosition.IsEqualApprox(
-                    authoredPositions[ball.ReferenceFormId])))
+                    authoredPositions[ball.ReferenceFormId]) ||
+                    ball.IsPocketed || !ball.Visible || ball.Freeze))
                 throw new InvalidOperationException("Pool reset did not restore authored reference transforms.");
+            table.RestoreState(restoredPoolState);
+            if (!objectBall.IsPocketed || objectBall.Visible || !objectBall.Freeze)
+                throw new InvalidOperationException(
+                    "Live pool table did not restore the cold-loaded pocket state.");
+            table.ResetAuthored();
             loaded.Player.ExitPoolForProof();
             loaded.Session.Save();
             if (!File.Exists(loaded.Session.SavePath))
@@ -1168,6 +1415,10 @@ public partial class RuntimeCoordinator : Node3D
                 strikeAccepted = struck,
                 cueBallBallCollisions,
                 cueBallTravelMeters = travelled,
+                pocketDetected = true,
+                pocketedBallReferenceFormId = objectBall.ReferenceFormId,
+                pocketSaveRestored = true,
+                liveStateRestoredFromColdSave = true,
                 authoredReset = true,
                 savePath = loaded.Session.SavePath,
                 hardwareValidated = false,
@@ -1454,7 +1705,10 @@ public partial class RuntimeCoordinator : Node3D
             session = loaded.Session.Report(),
             noHostControl = true,
         };
-        if (options.TryGetValue("report", out var reportPath))
+        if (options.TryGetValue("report", out var reportPath) &&
+            !options.ContainsKey("fo1-continue-menu-proof") &&
+            !options.ContainsKey("fo1-destination-inventory-interaction-proof") &&
+            !options.ContainsKey("fo1-destination-inventory-interaction-cold-restore-proof"))
             WriteReport(reportPath, report);
         GD.Print($"OPENNV_GODOT_PLAYABLE_ROUTE_PASS phase={phase} save={loaded.Session.SavePath}");
     }
@@ -1861,7 +2115,29 @@ public partial class RuntimeCoordinator : Node3D
         var loaded = Fo1HexSceneLoader.Load(
             scenePath,
             this,
-            options.TryGetValue("save-path", out var savePath) ? savePath : null);
+            options.TryGetValue("save-path", out var savePath) ? savePath : null,
+            Fo2HumanoidDonorContract.RequireFromOptions(options),
+            options.TryGetValue("fo1-exit-grid-transition", out var exitGridTransitionPath)
+                ? Fo1ExitGridTransitionContract.Load(exitGridTransitionPath)
+                : null,
+            options.TryGetValue("fo1-destination-presentation", out var destinationPresentationPath)
+                ? destinationPresentationPath
+                : null,
+            options.TryGetValue("fo1-destination-inventory-interaction", out var destinationInventoryInteractionPath)
+                ? destinationInventoryInteractionPath
+                : null,
+            options.TryGetValue("fo1-destination-flare-use", out var destinationFlareUsePath)
+                ? destinationFlareUsePath
+                : null,
+            options.TryGetValue("fo1-destination-generic-door", out var destinationGenericDoorPath)
+                ? destinationGenericDoorPath
+                : null,
+            options.TryGetValue("fo1-destination-medic-look", out var destinationMedicLookPath)
+                ? destinationMedicLookPath
+                : null,
+            options.TryGetValue("fo1-destination-return-exit-grid", out var destinationReturnExitGridPath)
+                ? destinationReturnExitGridPath
+                : null);
         var report = new
         {
             schema = "opennv-fo1-hex-runtime/v1",
@@ -1895,6 +2171,7 @@ public partial class RuntimeCoordinator : Node3D
                 ownedMeshInstances = loaded.OwnedCave.MeshInstances,
                 ownedSurfaceInstances = loaded.OwnedCave.SurfaceInstances,
                 ownedMaterialBindings = loaded.OwnedCave.MaterialBindings,
+                unifiedCaveMaterialSurfaces = loaded.OwnedCave.UnifiedCaveMaterialSurfaces,
                 ownedRoles = loaded.OwnedCave.Roles,
                 continuousFloorHexes = loaded.OwnedCave.ContinuousFloorHexes,
                 continuousFloorTriangles = loaded.OwnedCave.ContinuousFloorTriangles,
@@ -1934,7 +2211,8 @@ public partial class RuntimeCoordinator : Node3D
             windowsAppControlUsed = false,
             foregroundInputInjected = false,
         };
-        if (options.TryGetValue("report", out var reportPath))
+        if (options.TryGetValue("report", out var reportPath) &&
+            !options.ContainsKey("fo1-continue-menu-proof"))
             WriteReport(reportPath, report);
         GD.Print(
             $"OPENNV_FO1_HEX_PASS scene={loaded.SceneSha256} entry={loaded.EntryTile} " +
@@ -1943,6 +2221,44 @@ public partial class RuntimeCoordinator : Node3D
         if (options.ContainsKey("fo1-xr-simulator-preview"))
         {
             _ = Fo1XrSimulatorPreview.Run(this, loaded, options, _configuration);
+            return;
+        }
+        if (options.ContainsKey("fo1-destination-cold-restore-proof"))
+        {
+            _ = Fo1NewGameFlow.RunDestinationColdRestoreProof(
+                this,
+                loaded,
+                RequireOption(options, "report"));
+            return;
+        }
+        if (options.ContainsKey("fo1-destination-inventory-interaction-proof"))
+        {
+            _ = Fo1NewGameFlow.RunDestinationInventoryInteractionProof(this, loaded, RequireOption(options, "report"));
+            return;
+        }
+        if (options.ContainsKey("fo1-destination-inventory-interaction-cold-restore-proof"))
+        {
+            _ = Fo1NewGameFlow.RunDestinationInventoryInteractionColdRestoreProof(this, loaded, RequireOption(options, "report"));
+            return;
+        }
+        if (options.ContainsKey("fo1-destination-medic-look-proof"))
+        {
+            _ = Fo1NewGameFlow.RunDestinationMedicLookProof(this, loaded, RequireOption(options, "report"));
+            return;
+        }
+        if (options.ContainsKey("fo1-destination-medic-look-cold-restore-proof"))
+        {
+            _ = Fo1NewGameFlow.RunDestinationMedicLookColdRestoreProof(this, loaded, RequireOption(options, "report"));
+            return;
+        }
+        if (options.ContainsKey("fo1-destination-return-exit-proof"))
+        {
+            _ = Fo1NewGameFlow.RunDestinationReturnExitProof(this, loaded, RequireOption(options, "report"));
+            return;
+        }
+        if (options.ContainsKey("fo1-destination-return-exit-cold-restore-proof"))
+        {
+            _ = Fo1NewGameFlow.RunDestinationReturnExitColdRestoreProof(this, loaded, RequireOption(options, "report"));
             return;
         }
         if (options.ContainsKey("fo1-new-game") || options.ContainsKey("fo1-new-game-demo"))
@@ -1957,7 +2273,11 @@ public partial class RuntimeCoordinator : Node3D
                     characterStart,
                     RequireOption(options, "demo-report"),
                     options.ContainsKey("fo1-demo-fast-opening"),
-                    options.ContainsKey("fo1-demo-skip-opening"));
+                    options.ContainsKey("fo1-demo-skip-opening"),
+                    options.TryGetValue("capture-root", out var fo1CaptureRoot)
+                        ? fo1CaptureRoot
+                        : null,
+                    options.ContainsKey("fo1-native-first-beat-proof"));
             else
                 Fo1NewGameFlow.StartInteractive(
                     this,
@@ -1965,7 +2285,13 @@ public partial class RuntimeCoordinator : Node3D
                     characterStart,
                     options.TryGetValue("fo1-start-presentation", out var startPresentation)
                         ? startPresentation
-                        : "first-person");
+                        : "first-person",
+                    options.ContainsKey("fo1-continue-menu-proof"),
+                    options.TryGetValue("report", out var continueProofReport)
+                        ? continueProofReport
+                        : null,
+                    options.ContainsKey("fo1-continue-flare-use-proof"),
+                    options.ContainsKey("fo1-continue-generic-door-proof"));
             return;
         }
         if (options.ContainsKey("fo1-tactical-proof"))

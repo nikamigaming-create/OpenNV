@@ -264,12 +264,27 @@ function validateHashBoundFile(filePath, row, label) {
 
 function readTtwProfile(manifestOverride = null) {
   const manifestPath = path.resolve(manifestOverride || configuredModProfilePath("ttw"));
+  const unavailableOpenings = (profileMessage) => ({
+    "ttw-fo3": {
+      proofValidated: false,
+      proofProfilePath: null,
+      interactiveReady: false,
+      blocker: profileMessage
+    },
+    "ttw-fnv": {
+      proofValidated: false,
+      proofProfilePath: null,
+      interactiveReady: false,
+      blocker: profileMessage
+    }
+  });
   const unavailable = (message, manifestDetected = existsSync(manifestPath)) => ({
     ready: false,
     runtimeReady: false,
     validated: false,
     manifestDetected,
     message,
+    openings: unavailableOpenings(message),
     path: manifestPath
   });
   try {
@@ -320,6 +335,22 @@ function readTtwProfile(manifestOverride = null) {
     const runtimeReady = profile?.runtimeCompatibility?.ready === true && opening.runtimeReady;
     const reason = String(profile?.runtimeCompatibility?.reason || "TTW runtime compatibility is not ready.");
     const cacheDigest = opening.validated ? opening.cacheCompatibilityId.split(":", 2)[1] : null;
+    const openings = {
+      "ttw-fo3": {
+        proofValidated: opening.validated,
+        proofProfilePath: opening.path,
+        interactiveReady: false,
+        blocker: opening.validated
+          ? "Fallout 3 via TTW has a validated CG00-to-CG01 proof contract, but Vault 101 world, movie playback, and interactive continuation are not connected."
+          : "Fallout 3 via TTW is missing its bounded CG00-to-CG01 proof contract."
+      },
+      "ttw-fnv": {
+        proofValidated: false,
+        proofProfilePath: null,
+        interactiveReady: false,
+        blocker: "New Vegas via TTW has no effective-stack Doc Mitchell opening profile or interactive world runtime yet."
+      }
+    };
     return {
       ready: runtimeReady,
       runtimeReady,
@@ -327,6 +358,7 @@ function readTtwProfile(manifestOverride = null) {
       manifestDetected: true,
       openingValidated: opening.validated,
       openingManifestDetected: opening.manifestDetected,
+      openings,
       message: opening.validated
         ? opening.message
         : "TTW profile registered; the bounded Fallout 3 opening contract is missing or changed.",
@@ -878,13 +910,24 @@ function runtimeCommand(installed) {
 
 function launch(request) {
   const validatedRequest = validateLaunchRequest(request);
-  const { campaign, enableJam, enableVr } = validatedRequest;
+  const { campaign, ttwOpening, enableJam, enableVr } = validatedRequest;
   const installed = runtimeManifest();
   if (!installed) {
     return { ok: false, code: "runtime-not-found", message: "Choose an installed OpenNV runtime before launching a world." };
   }
   if (!installed.manifest.runtime?.canLaunch) {
     return { ok: false, code: "runtime-slice-not-playable", message: installed.manifest.runtime?.label || "This runtime slice is not playable yet." };
+  }
+  const selectedTtwProfile = campaign.id === "ttw" ? readTtwProfile() : null;
+  if (campaign.id === "ttw") {
+    const opening = selectedTtwProfile?.openings?.[ttwOpening];
+    if (!opening?.interactiveReady) {
+      return {
+        ok: false,
+        code: "ttw-opening-not-ready",
+        message: opening?.blocker || "The selected TTW opening has no interactive world runtime yet."
+      };
+    }
   }
   const runtimeCampaign = installed.manifest.campaigns?.find((entry) =>
     String(entry?.id ?? "").toLowerCase() === campaign.engineCampaign.toLowerCase());
@@ -915,7 +958,7 @@ function launch(request) {
   const fallout2Profile = readFo2Profile();
   const fallout3Profile = readFo3Profile();
   const newVegasProfile = readNewVegasProfile();
-  const ttwProfile = readTtwProfile();
+  const ttwProfile = selectedTtwProfile || readTtwProfile();
   const jamProfile = readJamProfile();
   if (campaign.id === "fallout1" && !fallout1Profile.ready) {
     return { ok: false, code: "fallout1-profile-not-ready", message: fallout1Profile.message };

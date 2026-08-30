@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -26,7 +27,15 @@ internal static class Fo1HexSceneLoader
     internal static LoadedFo1HexScene Load(
         string scenePath,
         Node3D parent,
-        string? savePath)
+        string? savePath,
+        Fo2HumanoidDonorContract classicHumanoidDonor,
+        Fo1ExitGridTransitionContract? exitGridTransition,
+        string? destinationPresentationPath,
+        string? destinationInventoryInteractionPath,
+        string? destinationFlareUsePath,
+        string? destinationGenericDoorPath,
+        string? destinationMedicLookPath,
+        string? destinationReturnExitGridPath)
     {
         var resolvedPath = VerifiedGltfLoader.ResolvePath(scenePath);
         var sceneBytes = File.ReadAllBytes(resolvedPath);
@@ -36,6 +45,9 @@ internal static class Fo1HexSceneLoader
         if (source.GetProperty("schema").GetString() != Schema ||
             source.GetProperty("status").GetString() != "interactive-hex-topology-proof")
             throw new InvalidOperationException($"Unexpected Fallout hex scene: {resolvedPath}");
+        var sourceMap = source.GetProperty("source").GetProperty("map");
+        if (exitGridTransition is not null)
+            exitGridTransition.ValidateAgainstScene(RequiredString(sourceMap, "sha256"));
         var runtimeProfile = Fo1RuntimeProfile.Parse(source.GetProperty("runtimeProfile"));
 
         var recipe = source.GetProperty("recipe");
@@ -122,6 +134,28 @@ internal static class Fo1HexSceneLoader
                 runtimeProfile.Generation.StaticWorldSpriteYawDegrees,
                 runtimeProfile.Camera.Tactical.HomePitchDegrees)
             : Fo1OwnedCaveKit.Coverage.Empty;
+        if (ownedCave.Instances > 0)
+        {
+            var unitsToMeters = RuntimeConfiguration.Load().World.GameUnitsToMeters;
+            var caveAtmosphere = runtimeProfile.Scene.Atmosphere;
+            var caveAmbient = new Color(
+                caveAtmosphere.AmbientColor.R * caveAtmosphere.AmbientEnergy,
+                caveAtmosphere.AmbientColor.G * caveAtmosphere.AmbientEnergy,
+                caveAtmosphere.AmbientColor.B * caveAtmosphere.AmbientEnergy,
+                caveAtmosphere.AmbientColor.A);
+            var litMaterials = RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
+                root,
+                caveAmbient,
+                caveAtmosphere.FogColor,
+                0.0f,
+                runtimeProfile.Camera.Tactical.FarClipMeters / unitsToMeters,
+                Fo1TacticalSessionNumericContracts.PresentationFloat1Point0f,
+                unitsToMeters);
+            if (litMaterials < 1 && ownedCave.UnifiedCaveMaterialSurfaces < 1)
+                throw new InvalidOperationException(
+                    "Fallout owned cave presentation has neither source-lit nor unified cave materials.");
+            ownedCave = ownedCave with { LitMaterials = litMaterials };
+        }
         var combat = source.GetProperty("combat");
         Fo1CreatureModel.Template? creatureTemplate = null;
         if (combat.TryGetProperty("ownedCreaturePresentation", out var creatureSource) &&
@@ -149,6 +183,16 @@ internal static class Fo1HexSceneLoader
             .ToHashSet();
         if (blocked.Any(tile => tile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height))
             throw new InvalidOperationException("Fallout MAP blocker escapes the 200x200 hex grid.");
+        var doorPrototype = doorObject.GetProperty("prototype");
+        if (RequiredString(doorPrototype, "subtype_name") != "door")
+            throw new InvalidOperationException("Fallout tactical door source is not a MAP door.");
+        var sourceDoor = new Fo1TacticalSession.SourceDoorContract(
+            doorObject.GetProperty("serial").GetInt32(),
+            doorTile,
+            RequiredString(doorObject, "pid"),
+            RequiredString(doorObject, "fid"),
+            RequiredString(doorPrototype, "sha256"),
+            blocked.Contains(doorTile));
         var presentationBlocked = BuildPresentationFootprintMask(
             obstacles,
             floorBacked,
@@ -157,7 +201,7 @@ internal static class Fo1HexSceneLoader
             runtimeProfile.Scene.PresentationFootprint);
         for (var tile = 0; tile < walkable.Length; tile++)
             walkable[tile] = floorIds[Fo1HexMath.FloorIndex(tile)] != defaultFloorId &&
-                !blocked.Contains(tile) && !presentationBlocked.Contains(tile);
+                !blocked.Contains(tile);
         var walkableCount = walkable.Count(value => value);
         BuildHexOverlay(
             root,
@@ -188,15 +232,21 @@ internal static class Fo1HexSceneLoader
         if (!inventoryItems.TryGetValue(ammoSymbol, out var ammoItem) ||
             RequiredString(ammoItem.GetProperty("profile"), "subtypeName") != "ammo")
             throw new InvalidOperationException("Fallout starting ammunition profile is missing.");
+        var mapInventoryHosts = combat.GetProperty("mapInventoryHosts").EnumerateArray()
+            .Select(ReadMapInventoryHost)
+            .ToArray();
+        var inventoryDisplayNames = inventoryItems.ToDictionary(
+            row => row.Key,
+            row => RequiredString(row.Value, "displayName"),
+            StringComparer.Ordinal);
+        foreach (var item in mapInventoryHosts.SelectMany(host => host.Items))
+            inventoryDisplayNames.TryAdd(item.Symbol, item.DisplayName);
         var inventoryProfile = new Fo1TacticalSession.InventoryProfile(
             RequiredString(playerInventory, "equippedRangedSymbol"),
             RequiredString(playerInventory, "equippedMeleeSymbol"),
             ammoSymbol,
             ammoItem.GetProperty("profile").GetProperty("roundsPerObject").GetInt32(),
-            inventoryItems.ToDictionary(
-                row => row.Key,
-                row => RequiredString(row.Value, "displayName"),
-                StringComparer.Ordinal),
+            inventoryDisplayNames,
             playerInventory.GetProperty("base").EnumerateArray()
                 .Select(ReadInventoryStack)
                 .ToArray(),
@@ -210,6 +260,7 @@ internal static class Fo1HexSceneLoader
         var playerTexture = LoadTexture(playerArtifact);
         session.Configure(
             sceneSha256,
+            RequiredString(sourceMap, "sha256"),
             walkable,
             floorIds,
             floorNames,
@@ -238,10 +289,24 @@ internal static class Fo1HexSceneLoader
                 ReadWeaponProfile(playerMeleeWeapon, melee: true),
                 inventoryProfile),
             spriteCoverage.Mobs,
+            mapInventoryHosts,
             savePath,
-            runtimeProfile);
+            runtimeProfile,
+            ownedCave.Instances > 0
+                ? ownedCave.GroundingFloorHeightMeters
+                : null,
+            exitGridTransition,
+            sourceDoor,
+            destinationPresentationPath,
+            destinationInventoryInteractionPath,
+            destinationFlareUsePath,
+            destinationGenericDoorPath,
+            destinationMedicLookPath,
+            destinationReturnExitGridPath);
         parent.AddChild(session);
         ActorModelSlice.LoadedActor? playerActor = null;
+        PlayerPresentationSource? playerPresentationSource = null;
+        IReadOnlyDictionary<string, PlayerPresentationSource>? playerDonors = null;
         if (playerSource.TryGetProperty("ownedPresentation", out var playerPresentation) &&
             playerPresentation.ValueKind == JsonValueKind.Object)
         {
@@ -250,9 +315,19 @@ internal static class Fo1HexSceneLoader
                     RequiredString(playerSource, "name") ||
                 playerPresentation.GetProperty("unitsToMeters").GetSingle() <= 0.0f)
                 throw new InvalidOperationException("Unexpected owned Vault Dweller presentation contract.");
-            playerActor = session.AttachOwnedPlayer(
-                playerPresentation.GetProperty("model").GetString()!,
-                playerPresentation.GetProperty("sidecar").GetString()!);
+            VerifyClassicHumanoidDonorJoin(
+                playerSource.GetProperty("sharedHumanoidDonor"),
+                classicHumanoidDonor);
+            var donors = new[] { "male", "female" }.Select(sex =>
+                PlayerPresentationFromClassicDonor(classicHumanoidDonor, sex))
+                .ToArray();
+            playerDonors = donors.ToDictionary(
+                donor => donor.SourceActorFemale ? "Female" : "Male",
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var donor in donors)
+                session.RegisterOwnedPlayerDonor(donor);
+            playerPresentationSource = donors.Single(donor => !donor.SourceActorFemale);
+            playerActor = session.AttachOwnedPlayer(playerPresentationSource.Value);
             if (!playerPresentation.TryGetProperty("thirdPersonWeapon", out var playerWeaponPresentation) ||
                 playerWeaponPresentation.ValueKind != JsonValueKind.Object)
                 throw new InvalidOperationException(
@@ -267,21 +342,18 @@ internal static class Fo1HexSceneLoader
                     out var playerMeleePresentation) ||
                 playerMeleePresentation.ValueKind != JsonValueKind.Object ||
                 RequiredString(playerMeleePresentation, "gameplayPid") !=
-                    RequiredString(playerMeleeWeapon, "pid"))
+                RequiredString(playerMeleeWeapon, "pid"))
                 throw new InvalidOperationException(
                     "Fallout melee presentation/gameplay identity relationship drifted.");
             _ = session.AttachOwnedPlayerMeleeWeapon(playerMeleePresentation);
-            var expectedSourceActor = playerPresentation.GetProperty("sourceActor");
-            var expectedCoverage = playerPresentation.GetProperty("coverage");
+            var maleDonor = classicHumanoidDonor.ForSex("male");
             if (
-                playerActor.Value.FormId != RequiredString(expectedSourceActor, "baseFormId") ||
-                playerActor.Value.Meshes != expectedCoverage.GetProperty("surfaces").GetInt32() ||
+                playerActor.Value.FormId != classicHumanoidDonor.SourceActorFormId ||
+                playerActor.Value.Meshes != maleDonor.Surfaces ||
                 playerActor.Value.Skeletons < 1 ||
-                playerActor.Value.Animations < expectedCoverage.GetProperty("animations").GetInt32() ||
-                playerActor.Value.AuthoredSurfaces !=
-                    expectedCoverage.GetProperty("surfaces").GetInt32() ||
-                playerActor.Value.AuthoredTextures !=
-                    expectedCoverage.GetProperty("textures").GetInt32())
+                playerActor.Value.Animations < maleDonor.Animations ||
+                playerActor.Value.AuthoredSurfaces != maleDonor.Surfaces ||
+                playerActor.Value.AuthoredTextures != maleDonor.Textures)
                 throw new InvalidOperationException("Owned Vault Dweller runtime coverage drifted.");
             if (!combat.TryGetProperty(
                     "ownedCombatPresentation",
@@ -308,7 +380,21 @@ internal static class Fo1HexSceneLoader
             Mathf.DegToRad(cameraSource.GetProperty("pitchDegrees").GetSingle()),
             runtimeProfile.Camera);
         parent.AddChild(camera);
-        session.AttachCamera(camera.Camera);
+        session.AttachCamera(camera);
+        if (session.LoadedDestinationPresentation is { } restoredDestination)
+        {
+            root.Visible = false;
+            var destinationViewer = new Fo1CampaignPresentationViewer();
+            parent.AddChild(destinationViewer);
+            _ = destinationViewer.Configure(
+                restoredDestination.Catalog,
+                restoredDestination.Map.Id,
+                exitGridTransition?.DestinationElevation ?? throw new InvalidOperationException(
+                    "Fallout restored destination has no explicit exit-grid elevation."),
+                includeSourcePlayer: false);
+            destinationViewer.SetStatusVisible(false);
+            destinationViewer.ActivateCamera();
+        }
         var caveCutaway = new Fo1CaveCutaway();
         if (ownedCave.Instances > 0)
         {
@@ -348,6 +434,8 @@ internal static class Fo1HexSceneLoader
             creatureTemplate?.Skeletons ?? 0,
             creatureTemplate?.Animations ?? 0,
             playerActor,
+            playerPresentationSource,
+            playerDonors,
             atmosphere,
             ownedCave,
             caveCutaway,
@@ -577,6 +665,7 @@ internal static class Fo1HexSceneLoader
                     serial,
                     combatMob.GetProperty("name").GetString()!,
                     combatMob.GetProperty("pid").GetString()!,
+                    RequiredString(profile, "prototypeSha256"),
                     tile,
                     combatMob.GetProperty("currentHitPoints").GetInt32(),
                     profile.GetProperty("hitPoints").GetInt32(),
@@ -957,6 +1046,30 @@ internal static class Fo1HexSceneLoader
         RequiredString(source, "pid"),
         source.GetProperty("objects").GetInt32());
 
+    private static Fo1TacticalSession.MapInventoryHost ReadMapInventoryHost(JsonElement source)
+    {
+        if (RequiredString(source, "schema") != "opennv-fo1-map-inventory-host/v1")
+            throw new InvalidOperationException("Unexpected Fallout MAP inventory-host schema.");
+        var host = new Fo1TacticalSession.MapInventoryHost(
+            source.GetProperty("serial").GetInt32(),
+            source.GetProperty("tile").GetInt32(),
+            RequiredString(source, "pid"),
+            RequiredString(source, "prototypeSha256"),
+            source.GetProperty("items").EnumerateArray()
+                .Select(row => new Fo1TacticalSession.MapInventoryItem(
+                    row.GetProperty("index").GetInt32(),
+                    row.GetProperty("serial").GetInt32(),
+                    RequiredString(row, "symbol"),
+                    RequiredString(row, "displayName"),
+                    RequiredString(row, "pid"),
+                    row.GetProperty("quantity").GetInt32(),
+                    RequiredString(row, "prototypeSha256"),
+                    RequiredString(row.GetProperty("profile"), "subtypeName")))
+                .ToArray());
+        host.Validate();
+        return host;
+    }
+
     private static Fo1TacticalSession.WeaponProfile ReadWeaponProfile(
         JsonElement source,
         bool melee)
@@ -1043,10 +1156,80 @@ internal static class Fo1HexSceneLoader
         int CreatureSkeletons,
         int CreatureAnimations,
         ActorModelSlice.LoadedActor? PlayerActor,
+        PlayerPresentationSource? PlayerPresentation,
+        IReadOnlyDictionary<string, PlayerPresentationSource>? PlayerDonors,
         CaveAtmosphere Atmosphere,
         Fo1OwnedCaveKit.Coverage OwnedCave,
         Fo1CaveCutaway CaveCutaway,
         Fo1RuntimeProfile RuntimeProfile);
+
+    internal readonly record struct PlayerPresentationSource(
+        string Role,
+        string DisplayName,
+        string Model,
+        string Sidecar,
+        string ModelSha256,
+        string SidecarSha256,
+        string SourceActorBaseFormId,
+        bool SourceActorFemale,
+        float UnitsToMeters,
+        int Surfaces,
+        int Textures,
+        int Animations);
+
+    private static PlayerPresentationSource PlayerPresentationFromClassicDonor(
+        Fo2HumanoidDonorContract donor,
+        string sex)
+    {
+        var variant = donor.ForSex(sex);
+        var unitsToMeters = RuntimeConfiguration.Load().World.GameUnitsToMeters;
+        if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0.0f)
+            throw new InvalidOperationException(
+                "Classic humanoid donor has no valid shared Gamebryo unit conversion.");
+        return new PlayerPresentationSource(
+            "classic-fnv-player-full-body-donor",
+            $"FNV Player full-body {variant.Sex} donor",
+            variant.ModelPath,
+            variant.SidecarPath,
+            variant.ModelSha256,
+            variant.SidecarSha256,
+            donor.SourceActorFormId,
+            variant.Sex.Equals("female", StringComparison.Ordinal),
+            unitsToMeters,
+            variant.Surfaces,
+            variant.Textures,
+            variant.Animations);
+    }
+
+    private static void VerifyClassicHumanoidDonorJoin(
+        JsonElement source,
+        Fo2HumanoidDonorContract donor)
+    {
+        if (RequiredString(source, "schema") != "opennv-fo1-classic-humanoid-donor-join/v1" ||
+            Path.GetFullPath(RequiredString(source, "previewSet")) != donor.ManifestPath ||
+            RequiredString(source, "previewSetSha256") != donor.ManifestSha256 ||
+            RequiredString(source, "playerFormId") != donor.SourceActorFormId)
+            throw new InvalidOperationException(
+                "Fallout 1 shared classic humanoid donor manifest join drifted.");
+        var variants = source.GetProperty("variants").EnumerateArray()
+            .ToDictionary(row => RequiredString(row, "sex"), StringComparer.Ordinal);
+        foreach (var sex in new[] { "male", "female" })
+        {
+            if (!variants.TryGetValue(sex, out var row))
+                throw new InvalidOperationException(
+                    $"Fallout 1 shared classic humanoid donor has no {sex} variant.");
+            var expected = donor.ForSex(sex);
+            if (Path.GetFullPath(RequiredString(row, "model")) != expected.ModelPath ||
+                Path.GetFullPath(RequiredString(row, "sidecar")) != expected.SidecarPath ||
+                RequiredString(row, "modelSha256") != expected.ModelSha256 ||
+                RequiredString(row, "sidecarSha256") != expected.SidecarSha256 ||
+                row.GetProperty("surfaces").GetInt32() != expected.Surfaces ||
+                row.GetProperty("textures").GetInt32() != expected.Textures ||
+                row.GetProperty("animations").GetInt32() != expected.Animations)
+                throw new InvalidOperationException(
+                    $"Fallout 1 shared classic humanoid donor {sex} join drifted.");
+        }
+    }
 
     internal readonly record struct CaveAtmosphere(
         string Schema,

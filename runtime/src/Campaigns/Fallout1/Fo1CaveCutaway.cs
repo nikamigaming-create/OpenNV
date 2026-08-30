@@ -2,27 +2,116 @@ using Godot;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
-internal static class Fo1CaveCutawayNumericContracts
-{
-    // Immutable format, source-art, geometry, and acceptance contracts.
-    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
-    internal const float GeometryFloat0Point5f = 0.5f;
-    internal const float GeometryFloat0Point99f = 0.99f;
-}
-
+// The roof remains a source-topology cut. Camera-facing cave shells use an
+// opaque, screen-dithered PBR cutaway so discarded fragments neither blend in
+// the transparent queue nor write depth over the player and Vault entrance.
+// The MAP walk mask and all source placement remain untouched.
 internal partial class Fo1CaveCutaway : Node
 {
-    private Entry[] _entries = [];
-    private ShaderMaterial[] _materials = [];
+    private const float InteriorCoverage = 0.0f;
+    private const float EdgeFraction = 0.14f;
+    private const float FocusRadiusScale = 3.10f;
+    private const float VaultRadiusScale = 2.55f;
+
+    private const string CutawayShader = """
+        shader_type spatial;
+        render_mode cull_disabled, depth_draw_opaque, shadows_disabled;
+
+        uniform sampler2D albedo_texture : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+        uniform sampler2D normal_texture : repeat_enable, filter_linear_mipmap_anisotropic;
+        uniform vec4 albedo_tint : source_color = vec4(1.0);
+        uniform float world_scale = 0.5;
+        uniform float triplanar_sharpness = 4.0;
+        uniform float roughness_value = 0.9;
+        uniform float normal_strength = 1.0;
+        uniform vec2 focus_center_uv = vec2(0.5);
+        uniform vec2 focus_radius_uv = vec2(0.15, 0.22);
+        uniform vec2 vault_center_uv = vec2(0.5);
+        uniform vec2 vault_radius_uv = vec2(0.12, 0.18);
+        uniform float interior_coverage = 0.0;
+        uniform float edge_fraction = 0.14;
+
+        varying vec3 world_position;
+
+        vec3 projection_weights(vec3 geometric_normal) {
+            vec3 weights = pow(abs(geometric_normal), vec3(triplanar_sharpness));
+            return weights / max(weights.x + weights.y + weights.z, 0.0001);
+        }
+
+        vec3 triplanar_albedo(vec3 point, vec3 geometric_normal) {
+            vec3 weights = projection_weights(geometric_normal);
+            vec3 first = texture(albedo_texture, point.yz).rgb;
+            vec3 second = texture(albedo_texture, point.xz).rgb;
+            vec3 third = texture(albedo_texture, point.xy).rgb;
+            return first * weights.x + second * weights.y + third * weights.z;
+        }
+
+        vec3 sampled_normal(vec2 coordinates) {
+            vec3 sampled = texture(normal_texture, coordinates).rgb * 2.0 - 1.0;
+            return normalize(vec3(sampled.xy * normal_strength, sampled.z));
+        }
+
+        vec3 triplanar_normal(vec3 point, vec3 geometric_normal) {
+            vec3 weights = projection_weights(geometric_normal);
+            vec3 orientation = sign(geometric_normal);
+            vec3 first_sample = sampled_normal(point.yz);
+            vec3 second_sample = sampled_normal(point.xz);
+            vec3 third_sample = sampled_normal(point.xy);
+            vec3 first = vec3(first_sample.z * orientation.x, first_sample.x, first_sample.y);
+            vec3 second = vec3(second_sample.x, second_sample.z * orientation.y, second_sample.y);
+            vec3 third = vec3(third_sample.x, third_sample.y, third_sample.z * orientation.z);
+            return normalize(first * weights.x + second * weights.y + third * weights.z);
+        }
+
+        float ellipse_distance(vec2 uv, vec2 center, vec2 radius) {
+            return length((uv - center) / max(radius, vec2(0.0001)));
+        }
+
+        float screen_dither(vec2 pixel) {
+            // Stable interleaved-gradient noise: no transparent sorting and no
+            // world-space moire when the tactical camera moves.
+            return fract(52.9829189 * fract(dot(floor(pixel), vec2(0.06711056, 0.00583715))));
+        }
+
+        void vertex() {
+            world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+        }
+
+        void fragment() {
+            float focus_distance = ellipse_distance(SCREEN_UV, focus_center_uv, focus_radius_uv);
+            float vault_distance = ellipse_distance(SCREEN_UV, vault_center_uv, vault_radius_uv);
+            float reveal_distance = min(focus_distance, vault_distance);
+            float edge = smoothstep(1.0 - edge_fraction, 1.0 + edge_fraction, reveal_distance);
+            float coverage = mix(interior_coverage, 1.0, edge);
+            if (screen_dither(FRAGCOORD.xy) > coverage) {
+                discard;
+            }
+
+            vec3 world_normal = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+            vec3 sample_point = world_position * world_scale;
+            ALBEDO = triplanar_albedo(sample_point, world_normal) * albedo_tint.rgb;
+            ROUGHNESS = roughness_value;
+            METALLIC = 0.0;
+            vec3 mapped_world_normal = triplanar_normal(sample_point, world_normal);
+            NORMAL = normalize((VIEW_MATRIX * vec4(mapped_world_normal, 0.0)).xyz);
+        }
+        """;
+
+    private Node3D[] _sourceTacticalHidden = [];
+    private Occluder[] _tacticalOccluders = [];
+    private ShaderMaterial[] _cutawayMaterials = [];
     private Fo1TacticalSession? _session;
     private Camera3D? _camera;
     private Fo1CutawayProfile _profile = null!;
-    private bool _meltEnabled = true;
+    private bool _cutawayEnabled = true;
+    private int _fadedInstances;
 
-    internal int Candidates => _entries.Length;
-    internal int HiddenInstances { get; private set; }
-    internal int MeltMaterials => _materials.Length;
-    internal bool ShaderDriven => _materials.Length > 0;
+    internal int Candidates => _sourceTacticalHidden.Length;
+    internal int HiddenInstances => _sourceTacticalHidden.Count(surface => !surface.Visible);
+    internal int FadedInstances => _fadedInstances;
+    internal int MeltMaterials => _cutawayMaterials.Length;
+    internal bool ShaderDriven => _cutawayMaterials.Length > 0;
+    internal bool SourceVisibilityDriven => _sourceTacticalHidden.Length > 0;
 
     internal void Configure(
         Node3D container,
@@ -30,472 +119,210 @@ internal partial class Fo1CaveCutaway : Node
         Camera3D camera,
         Fo1CutawayProfile profile)
     {
-        Name = "Fo1CaveCameraMelt";
+        Name = "Fo1SourceRoofAndDitheredShellCutaway";
         _session = session;
         _camera = camera;
         _profile = profile;
-        _entries = container.GetChildren()
-            .OfType<Node3D>()
-            .Where(node =>
-                !node.HasMeta("fo1_cutaway_exempt") || !node.GetMeta("fo1_cutaway_exempt").AsBool())
-            .Where(node => node is not Light3D)
-            .Where(node => IsMeltCandidate(node, profile))
-            .Select(node => new Entry(node, WorldBounds(node)))
+        _sourceTacticalHidden = Descendants<Node3D>(container)
+            .Where(surface => SourceVisibility(surface) == "hide-roof-envelope")
             .ToArray();
-        if (_entries.Length < profile.MinimumCandidateInstances)
+        if (_sourceTacticalHidden.Length != 1)
             throw new InvalidOperationException(
-                $"Fallout cave melt has incomplete geometry coverage: {_entries.Length}");
+                $"Fallout owned cave source roof coverage drifted: {_sourceTacticalHidden.Length}");
 
-        var shader = BuildMeltShader();
-        var white = SolidTexture(Colors.White);
-        var flatNormal = SolidTexture(new Color(Fo1CaveCutawayNumericContracts.GeometryFloat0Point5f, Fo1CaveCutawayNumericContracts.GeometryFloat0Point5f, 1.0f, 1.0f));
-        _materials = _entries
-            .SelectMany(entry => PrepareMeltMaterials(entry, shader, white, flatNormal, profile))
+        // Only rock matter participates. Vault hardware is a destination landmark
+        // and remains opaque behind the source-shaped rock portal.
+        _tacticalOccluders = Descendants<Node3D>(container)
+            .Where(surface => SourceVisibility(surface) is
+                "hide-boundary-envelope" or "hide-wall-volume" or "hide-vault-portal")
+            .Select(BuildOccluder)
             .ToArray();
-        if (_materials.Length < _entries.Length)
+        if (_tacticalOccluders.Length < 3)
             throw new InvalidOperationException(
-                $"Fallout cave melt material coverage is incomplete: " +
-                $"materials={_materials.Length} entries={_entries.Length}");
-        SetMeltEnabled(true);
+                "Fallout cave tactical shell cutaway coverage is incomplete.");
+        _cutawayMaterials = _tacticalOccluders
+            .SelectMany(occluder => occluder.Geometry)
+            .SelectMany(row => row.CutawayMaterials)
+            .DistinctBy(material => material.GetInstanceId())
+            .ToArray();
+        ApplyCutaway();
     }
 
     internal void SetMeltEnabled(bool enabled)
     {
-        _meltEnabled = enabled;
-        foreach (var material in _materials)
-            material.SetShaderParameter("melt_enabled", enabled);
+        _cutawayEnabled = enabled;
+        ApplyCutaway();
     }
 
     public override void _Process(double delta)
     {
         _ = delta;
-        if (_session is null || _camera is null)
+        ApplyCutaway();
+    }
+
+    private void ApplyCutaway()
+    {
+        if (_camera is null || _session is null)
             return;
+        foreach (var surface in _sourceTacticalHidden)
+            surface.Visible = !_cutawayEnabled;
 
-        var player = _session.PlayerToken.GlobalPosition +
+        if (!_cutawayEnabled)
+        {
+            _fadedInstances = 0;
+            foreach (var occluder in _tacticalOccluders)
+                occluder.Restore();
+            return;
+        }
+
+        UpdateShaderFocus();
+        _fadedInstances = 0;
+        foreach (var occluder in _tacticalOccluders)
+        {
+            occluder.ApplyCutaway();
+            _fadedInstances += occluder.Geometry.Length;
+        }
+    }
+
+    private void UpdateShaderFocus()
+    {
+        var viewportSize = _camera!.GetViewport().GetVisibleRect().Size;
+        if (viewportSize.X <= 0.0f || viewportSize.Y <= 0.0f)
+            return;
+        var player = _session!.PlayerToken.GlobalPosition +
             Vector3.Up * _profile.PlayerFocusHeightMeters;
-        var focus = _session.SelectedMob is { } selected
-            ? selected.GlobalPosition + Vector3.Up * _profile.TargetFocusHeightMeters
-            : player;
-        var tactical = _camera.Projection == Camera3D.ProjectionType.Orthogonal;
-        foreach (var material in _materials)
-        {
-            material.SetShaderParameter("melt_camera", _camera.GlobalPosition);
-            material.SetShaderParameter("melt_target_a", player);
-            material.SetShaderParameter("melt_target_b", focus);
-            material.SetShaderParameter("melt_enabled", _meltEnabled);
-            material.SetShaderParameter("melt_tactical", tactical);
-        }
-
-        var targets = focus.IsEqualApprox(player)
-            ? new[] { player }
-            : new[] { player, focus };
-        HiddenInstances = _entries.Count(entry => targets.Any(target =>
-            CrowdsTarget(entry.Bounds, target) || Occludes(entry.Bounds, target, _camera)));
-    }
-
-    private static IEnumerable<ShaderMaterial> PrepareMeltMaterials(
-        Entry entry,
-        Shader shader,
-        Texture2D white,
-        Texture2D flatNormal,
-        Fo1CutawayProfile profile)
-    {
-        var role = Role(entry.Root);
-        var radius = profile.MeltRadius(role);
-        var tacticalCutHeight = profile.TacticalCutHeight(role);
-        foreach (var mesh in Meshes(entry.Root))
-        {
-            var count = mesh.Mesh?.GetSurfaceCount() ?? 0;
-            var activeMaterials = Enumerable.Range(0, count)
-                .Select(mesh.GetActiveMaterial)
-                .ToArray();
-            mesh.MaterialOverride = null;
-            for (var surface = 0; surface < count; surface++)
+        var points = _session.SelectedMob is { } selected
+            ? new[]
             {
-                if (activeMaterials[surface] is ShaderMaterial retailSource &&
-                    retailSource.ResourceName.Equals(
-                        RuntimeMaterialLoader.RetailAmbientDirectionalLambertResourceName,
-                        StringComparison.Ordinal))
-                {
-                    var retailMelt = PrepareRetailMeltMaterial(
-                        retailSource,
-                        entry.Root.Name,
-                        surface,
-                        radius,
-                        tacticalCutHeight,
-                        profile);
-                    mesh.SetSurfaceOverrideMaterial(surface, retailMelt);
-                    yield return retailMelt;
-                    continue;
-                }
-                if (activeMaterials[surface] is not StandardMaterial3D source ||
-                    source.Transparency is not (
-                        BaseMaterial3D.TransparencyEnum.Disabled or
-                        BaseMaterial3D.TransparencyEnum.AlphaScissor) ||
-                    source.AlbedoColor.A < Fo1CaveCutawayNumericContracts.GeometryFloat0Point99f)
-                    continue;
-
-                var material = new ShaderMaterial
-                {
-                    ResourceName = $"FO1 cave camera melt {entry.Root.Name} {surface}",
-                    Shader = shader,
-                    RenderPriority = source.RenderPriority,
-                };
-                material.SetShaderParameter(
-                    "albedo_texture",
-                    source.AlbedoTexture as Texture2D ?? white);
-                material.SetShaderParameter(
-                    "normal_texture",
-                    source.NormalTexture as Texture2D ?? flatNormal);
-                material.SetShaderParameter(
-                    "emission_texture",
-                    source.EmissionTexture as Texture2D ?? white);
-                material.SetShaderParameter("use_albedo_texture", source.AlbedoTexture is not null);
-                material.SetShaderParameter(
-                    "use_normal_texture",
-                    source.NormalEnabled && source.NormalTexture is not null);
-                material.SetShaderParameter(
-                    "use_emission_texture",
-                    source.EmissionEnabled && source.EmissionTexture is not null);
-                material.SetShaderParameter("use_triplanar", source.Uv1Triplanar);
-                material.SetShaderParameter("triplanar_scale", source.Uv1Scale);
-                material.SetShaderParameter("triplanar_offset", source.Uv1Offset);
-                material.SetShaderParameter(
-                    "triplanar_sharpness",
-                    source.Uv1TriplanarSharpness);
-                material.SetShaderParameter("albedo_color", source.AlbedoColor);
-                material.SetShaderParameter(
-                    "alpha_scissor_threshold",
-                    source.Transparency == BaseMaterial3D.TransparencyEnum.AlphaScissor
-                        ? source.AlphaScissorThreshold
-                        : 0.0f);
-                material.SetShaderParameter("normal_scale", source.NormalScale);
-                material.SetShaderParameter("roughness_value", source.Roughness);
-                material.SetShaderParameter("metallic_value", source.Metallic);
-                material.SetShaderParameter(
-                    "emission_color",
-                    source.EmissionEnabled ? source.Emission : Colors.Black);
-                material.SetShaderParameter(
-                    "emission_energy",
-                    source.EmissionEnabled ? source.EmissionEnergyMultiplier : 0.0f);
-                material.SetShaderParameter("melt_radius", radius);
-                material.SetShaderParameter("melt_edge", profile.MeltEdgeMeters);
-                material.SetShaderParameter("tactical_cut_height", tacticalCutHeight);
-                material.SetShaderParameter("melt_enabled", true);
-                material.SetShaderParameter("melt_tactical", true);
-                mesh.SetSurfaceOverrideMaterial(surface, material);
-                yield return material;
+                _camera.UnprojectPosition(player),
+                _camera.UnprojectPosition(
+                    selected.GlobalPosition + Vector3.Up * _profile.TargetFocusHeightMeters),
             }
+            : new[] { _camera.UnprojectPosition(player) };
+        var minimum = points.Aggregate((one, two) => one.Min(two));
+        var maximum = points.Aggregate((one, two) => one.Max(two));
+        var horizontalTunnel = MathF.Max(
+            _profile.ScreenMarginPixels * FocusRadiusScale,
+            viewportSize.X * 0.40f);
+        minimum.X -= horizontalTunnel;
+        maximum.X += horizontalTunnel;
+        minimum.Y -= MathF.Max(
+            _profile.ScreenMarginPixels * FocusRadiusScale,
+            viewportSize.Y * 0.16f);
+        maximum.Y = MathF.Max(maximum.Y, viewportSize.Y * 1.05f);
+        var focusCenterPixels = (minimum + maximum) * 0.5f;
+        var focusRadiusPixels = (maximum - minimum) * 0.5f;
+        var vaultCenterPixels = _camera.UnprojectPosition(
+            Fo1HexMath.Center(_session.DoorTile) + Vector3.Up * 1.65f);
+        var vaultRadiusPixels = new Vector2(
+            MathF.Max(
+                _profile.ScreenMarginPixels * VaultRadiusScale,
+                viewportSize.X * 0.26f),
+            MathF.Max(
+                _profile.ScreenMarginPixels * VaultRadiusScale * 1.15f,
+                viewportSize.Y * 0.28f));
+        foreach (var material in _cutawayMaterials)
+        {
+            material.SetShaderParameter("focus_center_uv", focusCenterPixels / viewportSize);
+            material.SetShaderParameter("focus_radius_uv", focusRadiusPixels / viewportSize);
+            material.SetShaderParameter("vault_center_uv", vaultCenterPixels / viewportSize);
+            material.SetShaderParameter("vault_radius_uv", vaultRadiusPixels / viewportSize);
         }
     }
 
-    private static ShaderMaterial PrepareRetailMeltMaterial(
-        ShaderMaterial source,
-        string instanceName,
-        int surface,
-        float radius,
-        float tacticalCutHeight,
-        Fo1CutawayProfile profile)
+    private static Occluder BuildOccluder(Node3D root)
     {
-        const string vertexMarker = "void vertex() {";
-        const string fragmentMarker = "void fragment() {";
-        var sourceShader = source.Shader ?? throw new InvalidOperationException(
-            "Fallout retail cave material has no shader.");
-        var code = sourceShader.Code;
-        if (code.IndexOf(vertexMarker, StringComparison.Ordinal) < 0 ||
-            code.IndexOf(vertexMarker, StringComparison.Ordinal) !=
-                code.LastIndexOf(vertexMarker, StringComparison.Ordinal) ||
-            code.IndexOf(fragmentMarker, StringComparison.Ordinal) < 0 ||
-            code.IndexOf(fragmentMarker, StringComparison.Ordinal) !=
-                code.LastIndexOf(fragmentMarker, StringComparison.Ordinal))
+        var instances = root is GeometryInstance3D rootGeometry
+            ? Descendants<GeometryInstance3D>(root).Prepend(rootGeometry)
+            : Descendants<GeometryInstance3D>(root);
+        var geometry = instances
+            .Where(instance => instance.Visible)
+            .Select(BuildCutawayGeometry)
+            .Where(row => row is not null)
+            .Select(row => row!)
+            .ToArray();
+        if (geometry.Length == 0)
             throw new InvalidOperationException(
-                "Fallout retail cave shader lacks unique vertex/fragment injection points.");
-
-        code = code.Replace(
-            vertexMarker,
-            RetailMeltDeclarations + "\n" + vertexMarker +
-                "\n    opennv_melt_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;",
-            StringComparison.Ordinal);
-        code = code.Replace(
-            fragmentMarker,
-            fragmentMarker + "\n" + RetailMeltFragment,
-            StringComparison.Ordinal);
-
-        var material = source.Duplicate(true) as ShaderMaterial
-            ?? throw new InvalidOperationException(
-                "Could not duplicate a Fallout retail cave material.");
-        var meltShader = sourceShader.Duplicate(true) as Shader
-            ?? throw new InvalidOperationException(
-                "Could not duplicate a Fallout retail cave shader.");
-        meltShader.Code = code;
-        material.Shader = meltShader;
-        material.ResourceName = $"FO1 retail cave camera melt {instanceName} {surface}";
-        material.SetShaderParameter("melt_radius", radius);
-        material.SetShaderParameter("melt_edge", profile.MeltEdgeMeters);
-        material.SetShaderParameter("tactical_cut_height", tacticalCutHeight);
-        material.SetShaderParameter("melt_enabled", true);
-        material.SetShaderParameter("melt_tactical", true);
-        return material;
+                $"Fallout cave cutaway has no visible geometry: {root.Name}");
+        return new Occluder(root, WorldBounds(root), geometry);
     }
 
-    private const string RetailMeltDeclarations = """
-        uniform bool melt_enabled = true;
-        uniform bool melt_tactical = true;
-        uniform vec3 melt_camera;
-        uniform vec3 melt_target_a;
-        uniform vec3 melt_target_b;
-        uniform float melt_radius = 2.0;
-        uniform float melt_edge = 0.07;
-        uniform float tactical_cut_height = -100.0;
-        varying vec3 opennv_melt_world_position;
-
-        float opennv_ordered_dither(vec2 pixel) {
-            vec2 cell = mod(floor(pixel), 4.0);
-            float row0 = cell.x < 1.0 ? 0.0 : cell.x < 2.0 ? 8.0 : cell.x < 3.0 ? 2.0 : 10.0;
-            float row1 = cell.x < 1.0 ? 12.0 : cell.x < 2.0 ? 4.0 : cell.x < 3.0 ? 14.0 : 6.0;
-            float row2 = cell.x < 1.0 ? 3.0 : cell.x < 2.0 ? 11.0 : cell.x < 3.0 ? 1.0 : 9.0;
-            float row3 = cell.x < 1.0 ? 15.0 : cell.x < 2.0 ? 7.0 : cell.x < 3.0 ? 13.0 : 5.0;
-            float value = cell.y < 1.0 ? row0 : cell.y < 2.0 ? row1 : cell.y < 3.0 ? row2 : row3;
-            return (value + 0.5) / 16.0;
+    private static CutawayGeometry? BuildCutawayGeometry(GeometryInstance3D instance)
+    {
+        if (instance.MaterialOverride is StandardMaterial3D overrideMaterial)
+            return new CutawayGeometry(
+                instance,
+                overrideMaterial,
+                CreateCutawayMaterial(overrideMaterial),
+                [],
+                instance.CastShadow);
+        if (instance is not MeshInstance3D mesh || mesh.Mesh is null)
+            return null;
+        var surfaces = new List<CutawaySurface>();
+        var materials = new Dictionary<ulong, ShaderMaterial>();
+        for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
+        {
+            if (mesh.GetActiveMaterial(surface) is not StandardMaterial3D standard ||
+                standard.ResourceName.StartsWith(
+                    "FO1 hidden owned cave-wall surface",
+                    StringComparison.Ordinal))
+                continue;
+            if (!materials.TryGetValue(standard.GetInstanceId(), out var cutaway))
+            {
+                cutaway = CreateCutawayMaterial(standard);
+                materials.Add(standard.GetInstanceId(), cutaway);
+            }
+            surfaces.Add(new CutawaySurface(
+                surface,
+                mesh.GetSurfaceOverrideMaterial(surface),
+                cutaway));
         }
-
-        float opennv_segment_distance(vec3 point, vec3 start, vec3 finish) {
-            vec3 segment = finish - start;
-            float position = clamp(
-                dot(point - start, segment) / max(dot(segment, segment), 0.0001),
-                0.0,
-                1.0);
-            return length(point - (start + segment * position));
-        }
-
-        float opennv_target_melt(vec3 point, vec3 target) {
-            float tunnel = opennv_segment_distance(point, melt_camera, target);
-            float bubble = length(point - target);
-            float distance_to_opening = min(tunnel, bubble);
-            return 1.0 - smoothstep(
-                max(0.05, melt_radius - melt_edge),
-                melt_radius + melt_edge,
-                distance_to_opening);
-        }
-        """;
-
-    private const string RetailMeltFragment = """
-            if (melt_enabled) {
-                float melt = max(
-                    opennv_target_melt(opennv_melt_world_position, melt_target_a),
-                    opennv_target_melt(opennv_melt_world_position, melt_target_b));
-                if (melt_tactical && tactical_cut_height > -99.0) {
-                    float roof_slice = smoothstep(
-                        tactical_cut_height - 0.06,
-                        tactical_cut_height + 0.06,
-                        opennv_melt_world_position.y);
-                    melt = max(melt, roof_slice);
-                }
-                if (melt > opennv_ordered_dither(FRAGCOORD.xy)) {
-                    discard;
-                }
-            }
-        """;
-
-    private static string Role(Node3D root) => root.HasMeta("fo1_asset_role")
-        ? root.GetMeta("fo1_asset_role").AsString()
-        : string.Empty;
-
-    private static bool IsMeltCandidate(Node3D root, Fo1CutawayProfile profile)
-    {
-        var role = Role(root);
-        return role.Length > 0 &&
-            (profile.MeltRadiusByRoleMeters.ContainsKey(role) ||
-                profile.TacticalCutHeightByRoleMeters.ContainsKey(role));
+        return surfaces.Count == 0
+            ? null
+            : new CutawayGeometry(
+                instance,
+                null,
+                null,
+                surfaces.ToArray(),
+                instance.CastShadow);
     }
 
-    private static Shader BuildMeltShader() => new()
+    private static ShaderMaterial CreateCutawayMaterial(StandardMaterial3D standard)
     {
-        Code = """
-            shader_type spatial;
-            render_mode cull_disabled, depth_draw_opaque;
-
-            uniform sampler2D albedo_texture : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-            uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
-            uniform sampler2D emission_texture : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-            uniform bool use_albedo_texture = false;
-            uniform bool use_normal_texture = false;
-            uniform bool use_emission_texture = false;
-            uniform bool use_triplanar = false;
-            uniform vec3 triplanar_scale = vec3(1.0);
-            uniform vec3 triplanar_offset = vec3(0.0);
-            uniform float triplanar_sharpness = 1.0;
-            uniform vec4 albedo_color : source_color = vec4(1.0);
-            uniform float alpha_scissor_threshold = 0.0;
-            uniform float normal_scale = 1.0;
-            uniform float roughness_value = 1.0;
-            uniform float metallic_value = 0.0;
-            uniform vec3 emission_color = vec3(0.0);
-            uniform float emission_energy = 0.0;
-
-            uniform bool melt_enabled = true;
-            uniform bool melt_tactical = true;
-            uniform vec3 melt_camera;
-            uniform vec3 melt_target_a;
-            uniform vec3 melt_target_b;
-            uniform float melt_radius = 2.0;
-            uniform float melt_edge = 0.07;
-            uniform float tactical_cut_height = -100.0;
-
-            varying vec3 world_position;
-            varying vec3 world_normal;
-
-            vec3 triplanar_weights(vec3 normal) {
-                vec3 weights = pow(
-                    max(abs(normal), vec3(0.0001)),
-                    vec3(max(0.5, triplanar_sharpness)));
-                return weights / max(weights.x + weights.y + weights.z, 0.0001);
-            }
-
-            vec4 sample_triplanar(sampler2D source, vec3 position, vec3 normal) {
-                vec3 coordinate = position * triplanar_scale + triplanar_offset;
-                vec3 weights = triplanar_weights(normal);
-                vec4 x_projection = texture(source, coordinate.zy);
-                vec4 y_projection = texture(source, coordinate.xz);
-                vec4 z_projection = texture(source, coordinate.xy);
-                return x_projection * weights.x +
-                    y_projection * weights.y +
-                    z_projection * weights.z;
-            }
-
-            float ordered_dither(vec2 pixel) {
-                vec2 cell = mod(floor(pixel), 4.0);
-                float row0 = cell.x < 1.0 ? 0.0 : cell.x < 2.0 ? 8.0 : cell.x < 3.0 ? 2.0 : 10.0;
-                float row1 = cell.x < 1.0 ? 12.0 : cell.x < 2.0 ? 4.0 : cell.x < 3.0 ? 14.0 : 6.0;
-                float row2 = cell.x < 1.0 ? 3.0 : cell.x < 2.0 ? 11.0 : cell.x < 3.0 ? 1.0 : 9.0;
-                float row3 = cell.x < 1.0 ? 15.0 : cell.x < 2.0 ? 7.0 : cell.x < 3.0 ? 13.0 : 5.0;
-                float value = cell.y < 1.0 ? row0 : cell.y < 2.0 ? row1 : cell.y < 3.0 ? row2 : row3;
-                return (value + 0.5) / 16.0;
-            }
-
-            float segment_distance(vec3 point, vec3 start, vec3 finish) {
-                vec3 segment = finish - start;
-                float position = clamp(
-                    dot(point - start, segment) / max(dot(segment, segment), 0.0001),
-                    0.0,
-                    1.0);
-                return length(point - (start + segment * position));
-            }
-
-            float target_melt(vec3 point, vec3 target) {
-                float tunnel = segment_distance(point, melt_camera, target);
-                float bubble = length(point - target);
-                float distance_to_opening = min(tunnel, bubble);
-                return 1.0 - smoothstep(
-                    max(0.05, melt_radius - melt_edge),
-                    melt_radius + melt_edge,
-                    distance_to_opening);
-            }
-
-            void vertex() {
-                world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-                world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
-            }
-
-            void fragment() {
-                if (melt_enabled) {
-                    float melt = max(
-                        target_melt(world_position, melt_target_a),
-                        target_melt(world_position, melt_target_b));
-                    if (melt_tactical && tactical_cut_height > -99.0) {
-                        float roof_slice = smoothstep(
-                            tactical_cut_height - 0.06,
-                            tactical_cut_height + 0.06,
-                            world_position.y);
-                        melt = max(melt, roof_slice);
-                    }
-                    float dither = ordered_dither(FRAGCOORD.xy);
-                    if (melt > dither) {
-                        discard;
-                    }
-                }
-
-                vec4 sampled_albedo = use_albedo_texture
-                    ? (use_triplanar
-                        ? sample_triplanar(albedo_texture, world_position, world_normal)
-                        : texture(albedo_texture, UV))
-                    : vec4(1.0);
-                if (sampled_albedo.a * albedo_color.a < alpha_scissor_threshold) {
-                    discard;
-                }
-                ALBEDO = sampled_albedo.rgb * albedo_color.rgb;
-                ROUGHNESS = roughness_value;
-                METALLIC = metallic_value;
-                if (use_normal_texture) {
-                    NORMAL_MAP = use_triplanar
-                        ? sample_triplanar(normal_texture, world_position, world_normal).rgb
-                        : texture(normal_texture, UV).rgb;
-                    NORMAL_MAP_DEPTH = normal_scale;
-                }
-                vec3 sampled_emission = use_emission_texture
-                    ? texture(emission_texture, UV).rgb
-                    : vec3(1.0);
-                EMISSION = sampled_emission * emission_color * emission_energy;
-            }
-            """,
-    };
-
-    private static Texture2D SolidTexture(Color color)
-    {
-        var image = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
-        image.Fill(color);
-        return ImageTexture.CreateFromImage(image);
+        if (standard.AlbedoTexture is null || standard.NormalTexture is null)
+            throw new InvalidOperationException(
+                $"Fallout cave cutaway requires the unified PBR rock textures: {standard.ResourceName}");
+        var cutaway = new ShaderMaterial
+        {
+            ResourceName = $"{standard.ResourceName} tactical dither cutaway",
+            Shader = new Shader { Code = CutawayShader },
+        };
+        cutaway.SetShaderParameter("albedo_texture", standard.AlbedoTexture);
+        cutaway.SetShaderParameter("normal_texture", standard.NormalTexture);
+        cutaway.SetShaderParameter("albedo_tint", standard.AlbedoColor);
+        cutaway.SetShaderParameter("world_scale", standard.Uv1Scale.X);
+        cutaway.SetShaderParameter("triplanar_sharpness", standard.Uv1TriplanarSharpness);
+        cutaway.SetShaderParameter("roughness_value", standard.Roughness);
+        cutaway.SetShaderParameter("normal_strength", standard.NormalScale);
+        cutaway.SetShaderParameter("interior_coverage", InteriorCoverage);
+        cutaway.SetShaderParameter("edge_fraction", EdgeFraction);
+        return cutaway;
     }
 
-    private bool Occludes(Aabb bounds, Vector3 target, Camera3D camera)
-    {
-        if (camera.IsPositionBehind(target))
-            return false;
-        var forward = -camera.GlobalBasis.Z;
-        var targetDepth = (target - camera.GlobalPosition).Dot(forward);
-        var center = bounds.GetCenter();
-        var extent = bounds.Size * Fo1CaveCutawayNumericContracts.GeometryFloat0Point5f;
-        var centerDepth = (center - camera.GlobalPosition).Dot(forward);
-        var depthRadius = MathF.Abs(forward.X) * extent.X +
-            MathF.Abs(forward.Y) * extent.Y + MathF.Abs(forward.Z) * extent.Z;
-        if (centerDepth - depthRadius >= targetDepth - _profile.MinimumTargetDepthMarginMeters)
-            return false;
-
-        var corners = new List<Vector2>();
-        foreach (var x in new[] { bounds.Position.X, bounds.End.X })
-            foreach (var y in new[] { bounds.Position.Y, bounds.End.Y })
-                foreach (var z in new[] { bounds.Position.Z, bounds.End.Z })
-                {
-                    var corner = new Vector3(x, y, z);
-                    if (!camera.IsPositionBehind(corner))
-                        corners.Add(camera.UnprojectPosition(corner));
-                }
-        if (corners.Count == 0)
-            return false;
-        var minimum = corners.Aggregate((one, two) => one.Min(two));
-        var maximum = corners.Aggregate((one, two) => one.Max(two));
-        var targetScreen = camera.UnprojectPosition(target);
-        return targetScreen.X >= minimum.X - _profile.ScreenMarginPixels &&
-            targetScreen.X <= maximum.X + _profile.ScreenMarginPixels &&
-            targetScreen.Y >= minimum.Y - _profile.ScreenMarginPixels &&
-            targetScreen.Y <= maximum.Y + _profile.ScreenMarginPixels;
-    }
-
-    private bool CrowdsTarget(Aabb bounds, Vector3 target)
-    {
-        return target.X >= bounds.Position.X - _profile.CameraClearanceMeters &&
-            target.X <= bounds.End.X + _profile.CameraClearanceMeters &&
-            target.Z >= bounds.Position.Z - _profile.CameraClearanceMeters &&
-            target.Z <= bounds.End.Z + _profile.CameraClearanceMeters;
-    }
+    private static string SourceVisibility(Node3D surface) =>
+        surface.HasMeta("fo1_source_tactical_visibility")
+            ? surface.GetMeta("fo1_source_tactical_visibility").AsString()
+            : string.Empty;
 
     private static Aabb WorldBounds(Node3D root)
     {
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        var meshes = root is MeshInstance3D rootMesh
+            ? Descendants<MeshInstance3D>(root).Prepend(rootMesh)
+            : Descendants<MeshInstance3D>(root);
         var count = 0;
-        foreach (var mesh in Meshes(root))
+        foreach (var mesh in meshes)
         {
             var bounds = mesh.GetAabb();
             foreach (var x in new[] { bounds.Position.X, bounds.End.X })
@@ -509,14 +336,10 @@ internal partial class Fo1CaveCutaway : Node
             count++;
         }
         if (count == 0)
-            throw new InvalidOperationException($"Fallout cave melt entry has no meshes: {root.Name}");
+            throw new InvalidOperationException(
+                $"Fallout cave occluder has no meshes: {root.Name}");
         return new Aabb(minimum, maximum - minimum);
     }
-
-    private static IEnumerable<MeshInstance3D> Meshes(Node3D root) =>
-        root is MeshInstance3D rootMesh
-            ? Descendants<MeshInstance3D>(root).Prepend(rootMesh)
-            : Descendants<MeshInstance3D>(root);
 
     private static IEnumerable<T> Descendants<T>(Node node)
         where T : Node
@@ -530,5 +353,57 @@ internal partial class Fo1CaveCutaway : Node
         }
     }
 
-    private readonly record struct Entry(Node3D Root, Aabb Bounds);
+    private sealed record CutawayGeometry(
+        GeometryInstance3D Instance,
+        Material? OriginalOverride,
+        ShaderMaterial? CutawayOverride,
+        CutawaySurface[] Surfaces,
+        GeometryInstance3D.ShadowCastingSetting OriginalShadow)
+    {
+        internal IEnumerable<ShaderMaterial> CutawayMaterials =>
+            CutawayOverride is null
+                ? Surfaces.Select(surface => surface.CutawayMaterial)
+                : Surfaces.Select(surface => surface.CutawayMaterial).Prepend(CutawayOverride);
+
+        internal void ApplyCutaway()
+        {
+            if (CutawayOverride is not null)
+                Instance.MaterialOverride = CutawayOverride;
+            if (Instance is MeshInstance3D mesh)
+                foreach (var surface in Surfaces)
+                    mesh.SetSurfaceOverrideMaterial(surface.Index, surface.CutawayMaterial);
+            Instance.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        }
+
+        internal void Restore()
+        {
+            Instance.MaterialOverride = OriginalOverride;
+            if (Instance is MeshInstance3D mesh)
+                foreach (var surface in Surfaces)
+                    mesh.SetSurfaceOverrideMaterial(surface.Index, surface.OriginalOverride);
+            Instance.CastShadow = OriginalShadow;
+        }
+    }
+
+    private sealed record CutawaySurface(
+        int Index,
+        Material? OriginalOverride,
+        ShaderMaterial CutawayMaterial);
+
+    private sealed record Occluder(Node3D Root, Aabb Bounds, CutawayGeometry[] Geometry)
+    {
+        internal void ApplyCutaway()
+        {
+            Root.Visible = true;
+            foreach (var row in Geometry)
+                row.ApplyCutaway();
+        }
+
+        internal void Restore()
+        {
+            Root.Visible = true;
+            foreach (var row in Geometry)
+                row.Restore();
+        }
+    }
 }

@@ -17,7 +17,25 @@ from facegen_controls import (  # noqa: E402
     decode_facegen_control_space,
 )
 from bsa_archive import ExtractedMember  # noqa: E402
-from opening_catalog import _compile_facegen_control_space  # noqa: E402
+from opening_catalog import (  # noqa: E402
+    FACEGEN_CONTROL_SPACE_STATUS,
+    FACEGEN_SLIDER_EVIDENCE_CLASSIFICATION,
+    FACEGEN_SLIDER_EVIDENCE_ENGINE_BUILD,
+    FACEGEN_SLIDER_EVIDENCE_EXECUTABLE_SHA256_PARTS,
+    FACEGEN_SLIDER_HIGH_GLOBAL_ADDRESS,
+    FACEGEN_SLIDER_INCREMENT_DEFAULT_THRESHOLD,
+    FACEGEN_SLIDER_INCREMENT_TRAIT,
+    FACEGEN_SLIDER_JUMP,
+    FACEGEN_SLIDER_LOW_GLOBAL_ADDRESS,
+    FACEGEN_SLIDER_MORPH_WEIGHT_SCALE,
+    FACEGEN_SLIDER_ORDINARY_INCREMENT,
+    FACEGEN_SLIDER_SOURCE_MAXIMUM,
+    FACEGEN_SLIDER_SOURCE_MINIMUM,
+    FACEGEN_SLIDER_UI_MAXIMUM,
+    FACEGEN_SLIDER_UI_MINIMUM,
+    FACEGEN_SLIDER_UI_SCALE,
+    _compile_facegen_control_space,
+)
 
 
 GEOMETRY_BASIS_VERSION = 101
@@ -93,18 +111,50 @@ def synthetic_policy(payload: bytes) -> dict[str, object]:
         },
         "runtimePreviewControl": {
             "controlIndex": 1,
-            "minimum": -1.0,
-            "maximum": 1.0,
-            "step": 0.1,
+            "minimum": FACEGEN_SLIDER_UI_MINIMUM,
+            "maximum": FACEGEN_SLIDER_UI_MAXIMUM,
+            "step": FACEGEN_SLIDER_ORDINARY_INCREMENT,
+            "jump": FACEGEN_SLIDER_JUMP,
+            "morphWeightScale": FACEGEN_SLIDER_MORPH_WEIGHT_SCALE,
             "resetValue": 0.0,
-            "acceptanceValue": 0.5,
+            "acceptanceValue": FACEGEN_SLIDER_JUMP,
+            "sliderSemanticsEvidence": {
+                "classification": FACEGEN_SLIDER_EVIDENCE_CLASSIFICATION,
+                "engineBuild": FACEGEN_SLIDER_EVIDENCE_ENGINE_BUILD,
+                "sourceExecutableSha256Parts": list(
+                    FACEGEN_SLIDER_EVIDENCE_EXECUTABLE_SHA256_PARTS
+                ),
+                "sourceMinimum": FACEGEN_SLIDER_SOURCE_MINIMUM,
+                "sourceMaximum": FACEGEN_SLIDER_SOURCE_MAXIMUM,
+                "uiScale": FACEGEN_SLIDER_UI_SCALE,
+                "uiMinimum": FACEGEN_SLIDER_UI_MINIMUM,
+                "uiMaximum": FACEGEN_SLIDER_UI_MAXIMUM,
+                "ordinaryIncrement": FACEGEN_SLIDER_ORDINARY_INCREMENT,
+                "jump": FACEGEN_SLIDER_JUMP,
+                "morphWeightScale": FACEGEN_SLIDER_MORPH_WEIGHT_SCALE,
+                "lowGlobalAddress": FACEGEN_SLIDER_LOW_GLOBAL_ADDRESS,
+                "highGlobalAddress": FACEGEN_SLIDER_HIGH_GLOBAL_ADDRESS,
+                "incrementTrait": FACEGEN_SLIDER_INCREMENT_TRAIT,
+                "incrementDefaultThreshold": (
+                    FACEGEN_SLIDER_INCREMENT_DEFAULT_THRESHOLD
+                ),
+            },
             "presentation": {
                 "viewportWidthFraction": 0.5,
                 "viewportHeightFraction": 0.35,
                 "verticalFovHalfAngleFactor": 0.5,
                 "depthExtentFraction": 0.5,
+                "fullInVerticalOffsetGameUnits": -4.699999809265137,
+                "fullInDistanceGameUnits": 55.0,
+                "fullInYawRadians": -0.8399999737739563,
+                "fullOutVerticalOffsetGameUnits": -11.399999618530273,
+                "fullOutDistanceGameUnits": 135.0,
+                "fullOutYawRadians": -0.800000011920929,
+                "startingZoomFraction": 0.699999988079071,
             },
-            "semantics": "synthetic-normalized-preview",
+            "semantics": (
+                "sibling-gamebryo-racesexmenu-ui-units-with-ctl-egm-weight-scale"
+            ),
         },
     }
 
@@ -189,10 +239,27 @@ class FaceGenControlsTest(unittest.TestCase):
             [0],
         )
         self.assertEqual(result["runtimePreviewControl"]["settingEntity"], "sShape02")
-        self.assertEqual(result["runtimePreviewControl"]["acceptanceValue"], 0.5)
+        self.assertEqual(
+            result["runtimePreviewControl"]["acceptanceValue"],
+            FACEGEN_SLIDER_JUMP,
+        )
+        self.assertEqual(
+            result["runtimePreviewControl"]["morphWeightScale"],
+            FACEGEN_SLIDER_MORPH_WEIGHT_SCALE,
+        )
         self.assertEqual(
             result["runtimePreviewControl"]["presentation"]["viewportHeightFraction"],
             0.35,
+        )
+        self.assertEqual(
+            result["status"],
+            FACEGEN_CONTROL_SPACE_STATUS,
+        )
+        self.assertEqual(
+            result["runtimeDisposition"],
+            "control-axes-and-default-preview-egm-targets-compiled-all-native-"
+            "geometry-controls-runtime-bound-sibling-gamebryo-slider-semantics-"
+            "corroborated",
         )
 
 

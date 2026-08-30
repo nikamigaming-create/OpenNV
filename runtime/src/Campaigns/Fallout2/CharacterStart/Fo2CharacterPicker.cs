@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -18,14 +19,16 @@ internal sealed partial class Fo2CharacterPicker : Control
     private readonly Fo2CharacterStartCatalog _catalog;
     private readonly Control _canvas;
     private readonly TextureRect _panel;
-    private readonly Fo2OwnedPortraitRelief _portraitRelief;
+    private readonly Fo2PremadeHumanoidPreview _humanoidPreview;
     private readonly Label _portraitBoundary;
     private readonly Button _portraitToggle;
     private readonly Label _details;
     private readonly Label _selection;
     private int _index;
 
-    internal Fo2CharacterPicker(Fo2CharacterStartCatalog catalog)
+    internal Fo2CharacterPicker(
+        Fo2CharacterStartCatalog catalog,
+        Fo2HumanoidDonorContract humanoidDonor)
     {
         _catalog = catalog;
         Name = "FALLOUT_2_OWNED_PREMADE_CHARACTER_START";
@@ -67,12 +70,15 @@ internal sealed partial class Fo2CharacterPicker : Control
             MouseFilter = MouseFilterEnum.Ignore,
         };
         _canvas.AddChild(_panel);
-        _portraitRelief = new Fo2OwnedPortraitRelief(catalog.Characters[0])
+        _humanoidPreview = new Fo2PremadeHumanoidPreview(
+            catalog.Characters[0],
+            catalog,
+            humanoidDonor)
         {
             Position = _panel.Position,
             Size = _panel.Size,
         };
-        _canvas.AddChild(_portraitRelief);
+        _canvas.AddChild(_humanoidPreview);
         _details = new Label
         {
             Name = "OwnedPremadeGcdState",
@@ -105,10 +111,10 @@ internal sealed partial class Fo2CharacterPicker : Control
         _canvas.AddChild(_selection);
         _portraitBoundary = new Label
         {
-            Name = "OwnedPortraitReliefBoundary",
+            Name = "HumanoidPreviewBoundary",
             Position = new Vector2(PortraitBoundaryX, PortraitBoundaryY),
             Size = new Vector2(PortraitBoundaryWidth, PortraitBoundaryHeight),
-            Text = "OWNED PANEL RELIEF • HEAD GEOMETRY NOT REBUILT",
+            Text = "HASH-BOUND OWNED FULL-BODY DONOR",
             Visible = false,
             MouseFilter = MouseFilterEnum.Ignore,
         };
@@ -125,7 +131,7 @@ internal sealed partial class Fo2CharacterPicker : Control
             PortraitToggleHeight,
             TogglePortraitMode);
         _portraitToggle.TooltipText =
-            "Toggle the exact owned premade panel on a live curved 3D surface";
+            "Toggle between the owned Fallout 2 panel and its hash-bound full-body donor";
         AddButton("◀", 270.0f, 303.0f, 35.0f, 35.0f, () => Select(_index - 1));
         AddButton("▶", 335.0f, 303.0f, 35.0f, 35.0f, () => Select(_index + 1));
         AddButton("", 65.0f, 301.0f, 181.0f, 79.0f, ChooseCurrent)
@@ -192,7 +198,7 @@ internal sealed partial class Fo2CharacterPicker : Control
         var character = Selected;
         var profile = character.Profile;
         _panel.Texture = character.Panel.Load();
-        _portraitRelief.SetCharacter(character);
+        _humanoidPreview.SetCharacter(character);
         _selection.Text =
             $"{profile.Name.ToUpperInvariant()}  {_index + 1}/{_catalog.Characters.Count}";
         var biography = string.Join(
@@ -217,17 +223,18 @@ internal sealed partial class Fo2CharacterPicker : Control
         SetMeta("selected_panel_source_sha256", character.Panel.SourceSha256);
     }
 
-    internal bool Live3DVisible => _portraitRelief.Visible;
-    internal Fo2OwnedPortraitRelief PortraitRelief => _portraitRelief;
+    internal bool Live3DVisible => _humanoidPreview.Visible;
+    internal Fo2PremadeHumanoidPreview HumanoidPreview => _humanoidPreview;
 
     internal void TogglePortraitMode()
     {
-        _portraitRelief.Visible = !_portraitRelief.Visible;
-        _panel.Visible = !_portraitRelief.Visible;
-        _portraitBoundary.Visible = _portraitRelief.Visible;
-        _portraitToggle.Text = _portraitRelief.Visible ? "PORTRAIT" : "LIVE 3D";
-        SetMeta("portrait_view_mode", _portraitRelief.Visible
-            ? Fo2CharacterAppearanceContract.OwnedReliefPreview
+        _humanoidPreview.Visible = !_humanoidPreview.Visible;
+        _panel.Visible = !_humanoidPreview.Visible;
+        _portraitBoundary.Visible = _humanoidPreview.Visible;
+        _portraitBoundary.Text = _humanoidPreview.PresentationLabel;
+        _portraitToggle.Text = _humanoidPreview.Visible ? "PORTRAIT" : "LIVE 3D";
+        SetMeta("portrait_view_mode", _humanoidPreview.Visible
+            ? _humanoidPreview.PresentationMode
             : "owned-source-panel");
     }
 
@@ -244,7 +251,11 @@ internal sealed partial class Fo2CharacterPicker : Control
                 "Fallout 2 custom character editor is already open.");
         SetProcessInput(false);
         _canvas.Visible = false;
-        var editor = new Fo2CustomCharacterEditor(_catalog, Selected, modify);
+        var editor = new Fo2CustomCharacterEditor(
+            _catalog,
+            Selected,
+            modify,
+            _humanoidPreview.DonorContract);
         editor.Confirmed += selection =>
         {
             selection.Validate(_catalog);

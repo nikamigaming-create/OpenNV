@@ -197,8 +197,6 @@ internal static class Fo2TempleBuildProof
                     multihexCentralOnlyBlockers = topology.MultihexCentralOnlyBlockers,
                     walkableHexes = topology.WalkableHexes,
                     entryReachableHexes = topology.EntryReachableHexes,
-                    overlayInstances = topology.WalkOverlayInstances,
-                    overlayVisibleByDefault = topology.WalkOverlayVisible,
                 },
                 moldedWalls = new
                 {

@@ -23,10 +23,14 @@ internal sealed record Fo2CharacterStartSaveState(
     string BlockedMovementMode,
     string PresentationMode,
     Fo2ArroyoExitTransition? LastTransition,
-    Fo2TempleConfrontationState? TempleConfrontation)
+    Fo2TempleConfrontationState? TempleConfrontation,
+    Fo2TempleAppliedTransition? TempleExitTransition,
+    Fo2ArroyoTrialProgressState? TrialProgress)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v9";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v12";
     internal const string RouteMode = "chosen-one-source-exit-route-v1";
+    private const string PriorSchema = "opennv-fo2-character-arroyo-save/v10";
+    private const string VersionNineSchema = "opennv-fo2-character-arroyo-save/v9";
     internal const string ColorAppearanceSchema = "opennv-fo2-character-arroyo-save/v8";
     private const string ProceduralAppearanceSchema = "opennv-fo2-character-arroyo-save/v7";
     private const string FaceAppearanceSchema = "opennv-fo2-character-arroyo-save/v6";
@@ -54,7 +58,11 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2TemplePresentationCatalog temple,
         Fo2ArroyoCavesPlayerRuntimeCoverage runtime,
         Fo2CharacterSelection character,
-        Fo2TempleConfrontationState? templeConfrontation)
+        Fo2TempleConfrontationState? templeConfrontation,
+        Fo2TempleAppliedTransition? templeExitTransition,
+        Fo2TempleTransitionCatalog transitions,
+        Fo2ArroyoTrialProgressState? trialProgress,
+        Fo2ArroyoTrialRouteContract? trialRoute)
     {
         character.Validate(characterStart);
         if (characterStart.SourceProfileId != arroyo.SourceProfileId ||
@@ -78,18 +86,32 @@ internal sealed record Fo2CharacterStartSaveState(
             Fo2TemplePresentationCatalog.MapIndex
                 when player.CurrentMapSha256 == temple.MapSha256 &&
                     player.ArrivalTile == arroyo.LiveExit.TargetTile => arroyo.LiveExit,
+            4 when trialRoute is not null &&
+                player.CurrentMapSha256 == trialRoute.VillageArrival.MapSha256 &&
+                player.ArrivalTile == trialRoute.VillageArrival.ArrivalTile => arroyo.LiveExit,
             _ => throw new InvalidOperationException(
                 "Fallout 2 active map is outside the admitted Arroyo/Temple route."),
         };
         if (player.CurrentMapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
                 templeConfrontation is not null ||
-            player.CurrentMapIndex == Fo2TemplePresentationCatalog.MapIndex &&
+            player.CurrentMapIndex is Fo2TemplePresentationCatalog.MapIndex or 4 &&
                 templeConfrontation is null)
             throw new InvalidOperationException(
                 "Fallout 2 confrontation state does not match the active map.");
         templeConfrontation?.Validate(
             temple.Confrontation,
             Fo2TempleConfrontationRuntime.MaximumActionPoints(character));
+        if ((trialProgress is null) != (trialRoute is null))
+            throw new InvalidOperationException(
+                "Fallout 2 trial save requires both state and its active source route.");
+        trialProgress?.Validate(trialRoute!);
+        ValidateTempleExitTransition(
+            templeExitTransition,
+            transitions,
+            player.CurrentMapIndex,
+            player.CurrentTile,
+            trialProgress,
+            trialRoute);
         return new Fo2CharacterStartSaveState(
             ResolvePath(configuredPath),
             "",
@@ -109,7 +131,9 @@ internal sealed record Fo2CharacterStartSaveState(
             runtime.Profile.BlockedMovementMode,
             runtime.Profile.PlayerPresentationMode,
             lastTransition,
-            templeConfrontation);
+            templeConfrontation,
+            templeExitTransition,
+            trialProgress);
     }
 
     internal Fo2CharacterStartSaveState Write()
@@ -211,6 +235,38 @@ internal sealed record Fo2CharacterStartSaveState(
                     spearLooted = TempleConfrontation.SpearLooted,
                     spearEquipped = TempleConfrontation.SpearEquipped,
                 },
+                templeExitTransition = TempleExitTransition is null ? null : new
+                {
+                    exitSerial = TempleExitTransition.ExitSerial,
+                    sourceMapIndex = TempleExitTransition.SourceMapIndex,
+                    sourceMapSha256 = TempleExitTransition.SourceMapSha256,
+                    sourceTile = TempleExitTransition.SourceTile,
+                    targetMapIndex = TempleExitTransition.TargetMapIndex,
+                    targetMapSha256 = TempleExitTransition.TargetMapSha256,
+                    targetMapName = TempleExitTransition.TargetMapName,
+                    targetTile = TempleExitTransition.TargetTile,
+                    targetElevation = TempleExitTransition.TargetElevation,
+                    targetRotation = TempleExitTransition.TargetRotation,
+                },
+                trialProgress = TrialProgress is null ? null : new
+                {
+                    TrialProgress.RouteSha256,
+                    TrialProgress.Stage,
+                    TrialProgress.GlobalVariable10,
+                    TrialProgress.CameronLocalVariable12,
+                    TrialProgress.CameronLocalVariable13,
+                    TrialProgress.CameronMapVariable20,
+                    TrialProgress.CameronDialogueSelections,
+                    TrialProgress.CameronTile,
+                    TrialProgress.CameronVisible,
+                    TrialProgress.CameronDoorOpened,
+                    TrialProgress.CameronDoorUnlocked,
+                    TrialProgress.KlintGateTile,
+                    TrialProgress.KlintAlive,
+                    TrialProgress.VillageRouteCompleted,
+                    TrialProgress.VillageCurrentTile,
+                    TrialProgress.VillageFirstActionApplied,
+                },
             };
             File.WriteAllText(
                 temporary,
@@ -233,7 +289,9 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterStartCatalog characterStart,
         Fo2ArroyoCavesPresentationCatalog arroyo,
         Fo2TemplePresentationCatalog temple,
-        Fo2ArroyoPlayerProfile runtimeProfile)
+        Fo2TempleTransitionCatalog transitions,
+        Fo2ArroyoPlayerProfile runtimeProfile,
+        Fo2ArroyoTrialRouteContract? trialRoute = null)
     {
         var path = ResolvePath(configuredPath);
         using var document = JsonDocument.Parse(File.ReadAllBytes(path));
@@ -243,7 +301,8 @@ internal sealed record Fo2CharacterStartSaveState(
         var previous = schema == PreviousSchema;
         var route = schema == RouteSchema;
         var confrontation = schema == ConfrontationSchema;
-        if (schema != Schema && schema != ColorAppearanceSchema &&
+        if (schema != Schema && schema != PriorSchema && schema != VersionNineSchema &&
+                schema != ColorAppearanceSchema &&
                 schema != ProceduralAppearanceSchema &&
                 schema != FaceAppearanceSchema &&
                 schema != AppearanceSchema &&
@@ -304,6 +363,15 @@ internal sealed record Fo2CharacterStartSaveState(
             mapIndex,
             character,
             temple);
+        var trialProgress = ReadTrialProgress(root, schema, trialRoute);
+        var templeExitTransition = ReadTempleExitTransition(
+            root,
+            schema,
+            mapIndex,
+            currentTile,
+            transitions,
+            trialProgress,
+            trialRoute);
         var tileInRange = currentTile is >= 0 and < Fo1HexMath.Width * Fo1HexMath.Height;
         var mapIdentityValid = mapIndex switch
         {
@@ -314,13 +382,23 @@ internal sealed record Fo2CharacterStartSaveState(
                 RequiredString(world, "walkMaskSha256") == arroyo.WalkMaskSha256 &&
                 tileInRange && arroyo.Walkable[currentTile] && lastTransition is null,
             Fo2TemplePresentationCatalog.MapIndex =>
-                (schema == Schema || schema == ColorAppearanceSchema ||
+                (schema == Schema || schema == PriorSchema || schema == VersionNineSchema ||
+                    schema == ColorAppearanceSchema ||
                     schema == ProceduralAppearanceSchema ||
                     schema == FaceAppearanceSchema ||
                     schema == AppearanceSchema || confrontation || route) &&
                 elevation == arroyo.LiveExit.TargetElevation &&
                 arrivalTile == arroyo.LiveExit.TargetTile &&
                 RequiredString(world, "mapSha256") == temple.MapSha256 &&
+                lastTransition == arroyo.LiveExit,
+            4 => schema == Schema && trialProgress is not null && trialRoute is not null &&
+                elevation == trialRoute.VillageArrival.Elevation &&
+                arrivalTile == trialRoute.VillageArrival.ArrivalTile &&
+                RequiredString(world, "mapSha256") ==
+                    trialRoute.VillageArrival.MapSha256 &&
+                RequiredString(world, "walkMaskSha256") ==
+                    trialRoute.VillageArrival.WalkMaskSha256 &&
+                currentTile == trialRoute.VillageArrival.FirstActionToTile &&
                 lastTransition == arroyo.LiveExit,
             _ => false,
         };
@@ -364,7 +442,120 @@ internal sealed record Fo2CharacterStartSaveState(
             blockedMovementMode,
             presentationMode,
             lastTransition,
-            templeConfrontation);
+            templeConfrontation,
+            templeExitTransition,
+            trialProgress);
+    }
+
+    private static Fo2TempleAppliedTransition? ReadTempleExitTransition(
+        JsonElement root,
+        string schema,
+        int mapIndex,
+        int currentTile,
+        Fo2TempleTransitionCatalog transitions,
+        Fo2ArroyoTrialProgressState? trialProgress,
+        Fo2ArroyoTrialRouteContract? trialRoute)
+    {
+        if (schema != Schema)
+        {
+            if (schema == PriorSchema &&
+                root.TryGetProperty("templeExitTransition", out var priorExit) &&
+                priorExit.ValueKind != JsonValueKind.Null)
+                throw new InvalidOperationException(
+                    "Fallout 2 v10 post-Klint exit saves used the rejected guardian shortcut.");
+            return null;
+        }
+        var value = root.GetProperty("templeExitTransition");
+        if (value.ValueKind == JsonValueKind.Null)
+            return null;
+        var applied = new Fo2TempleAppliedTransition(
+            value.GetProperty("exitSerial").GetInt32(),
+            value.GetProperty("sourceMapIndex").GetInt32(),
+            RequiredString(value, "sourceMapSha256"),
+            value.GetProperty("sourceTile").GetInt32(),
+            value.GetProperty("targetMapIndex").GetInt32(),
+            RequiredString(value, "targetMapSha256"),
+            RequiredString(value, "targetMapName"),
+            value.GetProperty("targetTile").GetInt32(),
+            value.GetProperty("targetElevation").GetInt32(),
+            value.GetProperty("targetRotation").GetInt32());
+        ValidateTempleExitTransition(
+            applied,
+            transitions,
+            mapIndex,
+            currentTile,
+            trialProgress,
+            trialRoute);
+        return applied;
+    }
+
+    private static void ValidateTempleExitTransition(
+        Fo2TempleAppliedTransition? applied,
+        Fo2TempleTransitionCatalog transitions,
+        int mapIndex,
+        int currentTile,
+        Fo2ArroyoTrialProgressState? trialProgress,
+        Fo2ArroyoTrialRouteContract? trialRoute)
+    {
+        if (applied is null)
+            return;
+        var exit = transitions.Exits.SingleOrDefault(row => row.Serial == applied.ExitSerial);
+        if (exit is null ||
+            !transitions.DestinationMaps.TryGetValue(exit.TargetMapIndex, out var destination) ||
+            applied != new Fo2TempleAppliedTransition(
+                exit.Serial,
+                Fo2TemplePresentationCatalog.MapIndex,
+                transitions.SourceMapSha256,
+                exit.Tile,
+                exit.TargetMapIndex,
+                destination.Sha256,
+                destination.MapName,
+                exit.TargetTile,
+                exit.TargetElevation,
+                exit.TargetRotation) ||
+            mapIndex != trialRoute?.VillageArrival.MapIndex ||
+            currentTile != trialRoute?.VillageArrival.FirstActionToTile ||
+            applied.TargetMapIndex != 4 || trialProgress is null || trialRoute is null ||
+            trialProgress.Stage != Fo2ArroyoTrialProgressState.VillageFirstActionStage ||
+            !trialProgress.VillageRouteCompleted || trialProgress.GlobalVariable10 !=
+                trialRoute.KlintGate.RequiredGlobalVariable10 ||
+            !trialProgress.VillageFirstActionApplied ||
+            exit.Serial != trialRoute.Village.ExitSerial)
+            throw new InvalidOperationException(
+                "Fallout 2 saved post-trial exit does not match Cameron, ACKlint, and MAP state.");
+    }
+
+    private static Fo2ArroyoTrialProgressState? ReadTrialProgress(
+        JsonElement root,
+        string schema,
+        Fo2ArroyoTrialRouteContract? trialRoute)
+    {
+        if (schema != Schema)
+            return null;
+        var value = root.GetProperty("trialProgress");
+        if (value.ValueKind == JsonValueKind.Null)
+            return null;
+        var contract = trialRoute ?? throw new InvalidOperationException(
+            "Fallout 2 trial save was loaded without its source route contract.");
+        var state = new Fo2ArroyoTrialProgressState(
+            RequiredString(value, "RouteSha256"),
+            RequiredString(value, "Stage"),
+            value.GetProperty("GlobalVariable10").GetInt32(),
+            value.GetProperty("CameronLocalVariable12").GetInt32(),
+            value.GetProperty("CameronLocalVariable13").GetInt32(),
+            value.GetProperty("CameronMapVariable20").GetInt32(),
+            value.GetProperty("CameronDialogueSelections").GetInt32(),
+            value.GetProperty("CameronTile").GetInt32(),
+            value.GetProperty("CameronVisible").GetBoolean(),
+            value.GetProperty("CameronDoorOpened").GetBoolean(),
+            value.GetProperty("CameronDoorUnlocked").GetBoolean(),
+            value.GetProperty("KlintGateTile").GetInt32(),
+            value.GetProperty("KlintAlive").GetBoolean(),
+            value.GetProperty("VillageRouteCompleted").GetBoolean(),
+            value.GetProperty("VillageCurrentTile").GetInt32(),
+            value.GetProperty("VillageFirstActionApplied").GetBoolean());
+        state.Validate(contract);
+        return state;
     }
 
     private static Fo2ArroyoExitTransition? ReadLastTransition(
@@ -372,7 +563,8 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoCavesPresentationCatalog arroyo)
     {
-        if (schema != Schema && schema != ColorAppearanceSchema &&
+        if (schema != Schema && schema != PriorSchema && schema != VersionNineSchema &&
+            schema != ColorAppearanceSchema &&
             schema != ProceduralAppearanceSchema &&
             schema != FaceAppearanceSchema &&
             schema != AppearanceSchema &&
@@ -408,7 +600,8 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterSelection character,
         Fo2TemplePresentationCatalog temple)
     {
-        if (schema != Schema && schema != ColorAppearanceSchema &&
+        if (schema != Schema && schema != PriorSchema && schema != VersionNineSchema &&
+            schema != ColorAppearanceSchema &&
             schema != ProceduralAppearanceSchema &&
             schema != FaceAppearanceSchema &&
             schema != AppearanceSchema && schema != ConfrontationSchema)
@@ -421,7 +614,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     "Fallout 2 Arroyo save contains Temple confrontation state.");
             return null;
         }
-        if (mapIndex != Fo2TemplePresentationCatalog.MapIndex ||
+        if (mapIndex is not (Fo2TemplePresentationCatalog.MapIndex or 4) ||
             value.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException(
                 "Fallout 2 Temple save is missing confrontation state.");
@@ -443,7 +636,7 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2CharacterSelection character)
     {
-        if (schema != Schema)
+        if (schema != Schema && schema != PriorSchema && schema != VersionNineSchema)
         {
             if (character.Mode == Fo2CharacterSelection.PremadeMode)
                 return Fo2CharacterAppearanceContract.FromSelection(character);

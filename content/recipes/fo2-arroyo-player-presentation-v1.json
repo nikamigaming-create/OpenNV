@@ -26,11 +26,44 @@
     "walkAnimationCode": "AB",
     "walkFrmLogicalPath": "art\\critters\\hmwarrab.frm",
     "walkFrames": [0, 1, 2, 3, 4, 5, 6, 7],
-    "walkFps": 10
+    "walkFps": 10,
+    "equippedWeapon": {
+      "role": "Spear-equipped Chosen One source animation",
+      "itemFid": "0000002a",
+      "itemPid": "00000007",
+      "weaponAnimationCode": 4,
+      "weaponArtSuffix": "g",
+      "idleAnimationCode": "GA",
+      "idleFrmLogicalPath": "art\\critters\\hmwarrga.frm",
+      "idleFrame": 0,
+      "walkAnimationCode": "GB",
+      "walkFrmLogicalPath": "art\\critters\\hmwarrgb.frm",
+      "walkFrames": [0, 1, 2, 3, 4, 5, 6, 7],
+      "walkFps": 10,
+      "geometryDisposition": "owned-critter-frm-composites-player-and-spear-no-separable-3d-weapon-transform"
+    },
+    "relief3d": {
+      "schema": "opennv-fo2-frm-alpha-relief/v3",
+      "mode": "exact-frm-alpha-island-molded-relief-v2",
+      "normalBlurRadiusPixels": 1.2,
+      "normalLumaWeight": 0.45,
+      "normalSilhouetteWeight": 0.55,
+      "normalStrength": 2.1,
+      "depthField": {
+        "mode": "owned-alpha-distance-and-luma-normalized-v1",
+        "maximumInteriorDistancePixels": 6,
+        "silhouetteWeight": 0.82,
+        "lumaWeight": 0.18,
+        "backDepthFraction": 0.12
+      },
+      "depthMeters": 0.12,
+      "sideRoughness": 0.86,
+      "policy": "exact opaque FRM cells and alpha islands define all front/back/perimeter faces; alpha-distance/luma define normalized relief; only the tightly capped body thickness is reconstructed"
+    }
   },
   "unsupported": [
     "sex or appearance selection and character creation",
-    "animations beyond source idle frame zero and the admitted directional AB walk cycle",
+    "animations beyond source idle frame zero, directional AB walk, and Spear-equipped GA/GB states",
     "stats, inventory, combat, scripts, quests, audio, HUD, Pip-Boy, and save state",
     "retail parity, FPS, OpenXR, and launcher playability"
   ]

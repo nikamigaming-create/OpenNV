@@ -19,12 +19,13 @@ from actor_catalog import (
 )
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_scene import godot_position, godot_rotation_quaternion, godot_yaw_radians
+from compiler_provenance import compiler_provenance
 from export_static_nif_gltf import (
     NoStaticPresentationGeometryError,
     export_static_nif,
 )
 from material_contract import material_bindings, texture_binding_requests
-from prepare_actor import ActorAppearanceOverride, prepare_actor
+from prepare_actor import ActorAppearanceOverride
 from runtime_configuration import load_runtime_configuration
 from texture_pipeline import TexturePipeline
 
@@ -131,6 +132,186 @@ def _cache_relative_derivative(cache_root: Path, path: Path) -> str:
     return relative.as_posix()
 
 
+def _prepared_actor_output_identity(
+    recipe_id: str,
+    appearance_override: ActorAppearanceOverride | None,
+) -> str:
+    return (
+        recipe_id
+        if appearance_override is None
+        else f"{recipe_id}-{appearance_override.variant_id}"
+    )
+
+
+def _prepared_actor_file(
+    output_root: Path,
+    relative_path: str,
+) -> Path:
+    candidate = (output_root / relative_path).resolve()
+    try:
+        relative = candidate.relative_to(output_root.resolve())
+    except ValueError as error:
+        raise ValueError(
+            f"Prepared Fallout 3 actor output escapes its artifact: {candidate}"
+        ) from error
+    if relative == Path("."):
+        raise ValueError("Prepared Fallout 3 actor output names its artifact root")
+    return candidate
+
+
+def _load_prepared_actor(
+    cache_root: Path,
+    recipe: dict[str, object],
+    appearance_override: ActorAppearanceOverride | None = None,
+    runtime_animation_paths: tuple[str, ...] = (),
+) -> dict[str, object]:
+    recipe_id = _required_string(recipe, "id")
+    output_identity = _prepared_actor_output_identity(
+        recipe_id,
+        appearance_override,
+    )
+    output_root = (
+        cache_root.resolve() / "generated" / "actors" / output_identity
+    )
+    manifest_path = output_root / "actor-scene.json"
+    if not manifest_path.is_file():
+        raise ValueError(
+            "Required prepared Fallout 3 actor artifact is absent: "
+            f"{manifest_path}. Run the dedicated actor preparation explicitly."
+        )
+    manifest, _manifest_payload = _read_json(manifest_path)
+    expected_compiler = compiler_provenance("actor")
+    expected_configuration = load_runtime_configuration().actor_artifact_manifest()
+    if (
+        manifest.get("schema") != "opennv-actor-scene/v5"
+        or manifest.get("status") != "skinned-animated"
+        or manifest.get("recipe") != recipe_id
+        or manifest.get("compiler") != expected_compiler
+        or manifest.get("configuration") != expected_configuration
+    ):
+        raise ValueError(
+            "Prepared Fallout 3 actor artifact identity differs: "
+            f"{manifest_path}. Run the dedicated actor preparation explicitly."
+        )
+
+    compiled_override = manifest.get("appearanceOverride")
+    if appearance_override is None:
+        if compiled_override is not None:
+            raise ValueError(
+                f"Prepared Fallout 3 actor artifact has an unexpected appearance override: {manifest_path}"
+            )
+    else:
+        expected_override = {
+            "variantId": appearance_override.variant_id,
+            "authority": appearance_override.authority,
+            "sourceSha256": appearance_override.source_sha256,
+            "referenceFormId": f"{appearance_override.reference_form_id:08x}",
+            "baseFormId": f"{appearance_override.base_form_id:08x}",
+            "raceFormId": f"{appearance_override.race_form_id:08x}",
+            "symmetricGeometrySha256": hashlib.sha256(
+                struct.pack(
+                    f"<{len(appearance_override.symmetric_geometry)}f",
+                    *appearance_override.symmetric_geometry,
+                )
+            ).hexdigest(),
+            "asymmetricGeometrySha256": hashlib.sha256(
+                struct.pack(
+                    f"<{len(appearance_override.asymmetric_geometry)}f",
+                    *appearance_override.asymmetric_geometry,
+                )
+            ).hexdigest(),
+            "symmetricTextureSha256": hashlib.sha256(
+                struct.pack(
+                    f"<{len(appearance_override.symmetric_texture)}f",
+                    *appearance_override.symmetric_texture,
+                )
+            ).hexdigest(),
+        }
+        if not isinstance(compiled_override, dict) or any(
+            compiled_override.get(name) != value
+            for name, value in expected_override.items()
+        ):
+            raise ValueError(
+                f"Prepared Fallout 3 actor appearance identity differs: {manifest_path}"
+            )
+
+    outputs = _required_object(manifest, "outputs")
+    gltf_name = _required_string(outputs, "gltf")
+    sidecar_name = _required_string(outputs, "sidecar")
+    gltf_path = _prepared_actor_file(output_root, gltf_name)
+    sidecar_path = _prepared_actor_file(output_root, sidecar_name)
+    if (
+        not gltf_path.is_file()
+        or _sha256_file(gltf_path) != _required_sha256(outputs, "gltfSha256")
+        or not sidecar_path.is_file()
+        or _sha256_file(sidecar_path)
+        != _required_sha256(outputs, "sidecarSha256")
+    ):
+        raise ValueError(
+            f"Prepared Fallout 3 actor output hash differs: {manifest_path}"
+        )
+    sidecar, _sidecar_payload = _read_json(sidecar_path)
+    sidecar_outputs = _required_object(sidecar, "outputs")
+    sidecar_gltf = _required_object(sidecar_outputs, "gltf")
+    sidecar_buffer = _required_object(sidecar_outputs, "buffer")
+    buffer_path = _prepared_actor_file(
+        output_root,
+        _required_string(sidecar_buffer, "file"),
+    )
+    if (
+        _required_string(sidecar_gltf, "file") != gltf_name
+        or _required_sha256(sidecar_gltf, "sha256")
+        != _required_sha256(outputs, "gltfSha256")
+        or not buffer_path.is_file()
+        or _sha256_file(buffer_path)
+        != _required_sha256(outputs, "bufferSha256")
+        or _required_sha256(sidecar_buffer, "sha256")
+        != _required_sha256(outputs, "bufferSha256")
+    ):
+        raise ValueError(
+            f"Prepared Fallout 3 actor sidecar output identity differs: {manifest_path}"
+        )
+    expected_animations = [
+        canonical_member_path(_required_string(manifest, "idleAnimation")),
+        *(
+            canonical_member_path(path)
+            for path in runtime_animation_paths
+        ),
+    ]
+    actual_animations = [
+        canonical_member_path(_required_string(row, "logicalPath"))
+        for row in _required_list(sidecar, "animations")
+        if isinstance(row, dict)
+    ]
+    if (
+        len(actual_animations) != len(_required_list(sidecar, "animations"))
+        or actual_animations != expected_animations
+    ):
+        raise ValueError(
+            f"Prepared Fallout 3 actor animation identity differs: {manifest_path}"
+        )
+    for texture in _required_list(sidecar, "textures"):
+        if not isinstance(texture, dict):
+            raise ValueError(
+                f"Prepared Fallout 3 actor texture row is malformed: {sidecar_path}"
+            )
+        texture_path = _prepared_actor_file(
+            output_root,
+            _required_string(texture, "png"),
+        )
+        if (
+            not texture_path.is_file()
+            or _sha256_file(texture_path)
+            != _required_sha256(texture, "pngSha256")
+        ):
+            raise ValueError(
+                f"Prepared Fallout 3 actor texture hash differs: {texture_path}"
+            )
+
+    manifest["manifest"] = str(manifest_path.resolve())
+    return manifest
+
+
 def _default_recipe_path() -> Path:
     root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
     return root / "recipes" / "fo3-vault101-birth-presentation-v1.json"
@@ -222,6 +403,7 @@ def prepare(
     actor_recipe_path: Path,
     dad_actor_recipe_path: Path,
     cg01_dad_actor_recipe_path: Path | None,
+    mom_actor_recipe_path: Path | None = None,
 ) -> Path:
     profile, _profile_payload = _read_json(profile_path.resolve())
     if (
@@ -247,10 +429,21 @@ def prepare(
     recipe, recipe_payload = _read_json(recipe_path.resolve())
     if recipe.get("schema") != RECIPE_SCHEMA:
         raise ValueError("Fallout 3 birth-presentation recipe schema is unsupported")
+    source_closure = _required_object(recipe, "sourceClosure")
+    required_roles = _required_list(source_closure, "requiredSceneParticipantRoles")
+    if (
+        required_roles != ["doctor", "father", "mother"]
+        or int(source_closure.get("requiredUnaccountedCount", -1)) != 0
+    ):
+        raise ValueError("Fallout 3 birth-presentation source-closure policy differs")
+    actor_recipes = _required_object(recipe, "actorRecipes")
     if cg01_dad_actor_recipe_path is None:
-        actor_recipes = _required_object(recipe, "actorRecipes")
         cg01_dad_actor_recipe_path = (
             recipe_path.resolve().parent / _required_string(actor_recipes, "cg01Dad")
+        )
+    if mom_actor_recipe_path is None:
+        mom_actor_recipe_path = (
+            recipe_path.resolve().parent / _required_string(actor_recipes, "mother")
         )
     recipe_source = _required_object(recipe, "source")
     birth_recipe = _required_object(birth, "recipe")
@@ -328,6 +521,19 @@ def prepare(
     father_base = bases.get(_required_string(father_reference, "baseFormId"))
     if father_base is None:
         raise ValueError("Fallout 3 CG00 Dad base is absent from the owned CELL graph")
+    mother_rows = [
+        row
+        for row in _required_list(start_graph, "actors")
+        if isinstance(row, dict) and row.get("role") == "mother"
+    ]
+    if len(mother_rows) != 1:
+        raise ValueError("Fallout 3 CG00 Mom start-graph identity is ambiguous")
+    mother_source = mother_rows[0]
+    mother_reference = _required_object(mother_source, "reference")
+    mother_start_marker = _required_object(mother_source, "startMarker")
+    mother_base = bases.get(_required_string(mother_reference, "baseFormId"))
+    if mother_base is None:
+        raise ValueError("Fallout 3 CG00 Mom base is absent from the owned CELL graph")
     actor_recipe, actor_recipe_payload = _read_json(actor_recipe_path.resolve())
     actor_recipe_master = _required_object(actor_recipe, "master")
     actor_recipe_meshes = _required_object(actor_recipe, "meshesArchive")
@@ -375,8 +581,70 @@ def prepare(
         != source_textures.get("sha256")
     ):
         raise ValueError("Fallout 3 CG00 Dad recipe does not bind the owned birth slice")
+    mom_actor_recipe, mom_actor_recipe_payload = _read_json(
+        mom_actor_recipe_path.resolve()
+    )
+    mom_actor_recipe_master = _required_object(mom_actor_recipe, "master")
+    mom_actor_recipe_meshes = _required_object(mom_actor_recipe, "meshesArchive")
+    mom_actor_recipe_textures = _required_list(mom_actor_recipe, "textureArchives")
+    if (
+        mom_actor_recipe.get("schema") != "opennv-actor-recipe/v1"
+        or mom_actor_recipe.get("cellFormId") != cell.get("formId")
+        or mom_actor_recipe.get("proofActorReferenceFormId")
+        != mother_reference.get("formId")
+        or mom_actor_recipe.get("expectedBaseFormId") != mother_base.get("formId")
+        or mom_actor_recipe.get("originGameUnits") != entry_position
+        or mom_actor_recipe_master.get("file") != source.get("master", {}).get("file")
+        or mom_actor_recipe_master.get("sha256")
+        != source.get("master", {}).get("sha256")
+        or mom_actor_recipe_meshes.get("file") != source_meshes.get("file")
+        or mom_actor_recipe_meshes.get("sha256") != source_meshes.get("sha256")
+        or len(mom_actor_recipe_textures) != 1
+        or not isinstance(mom_actor_recipe_textures[0], dict)
+        or mom_actor_recipe_textures[0].get("file") != source_textures.get("file")
+        or mom_actor_recipe_textures[0].get("sha256")
+        != source_textures.get("sha256")
+    ):
+        raise ValueError("Fallout 3 CG00 Mom recipe does not bind the owned birth slice")
 
     character_selection = _required_object(opening, "characterSelection")
+    toddler_camera = _required_object(
+        _required_object(
+            _required_object(character_selection, "cg01Stage0Transition"),
+            "toddlerWorld",
+        ),
+        "camera",
+    )
+    if _required_string(toddler_camera, "godotKeepAspect") != "keep-height":
+        raise ValueError("Fallout 3 birth camera projection contract differs")
+    early_birth_sequence = _required_object(character_selection, "earlyBirthSequence")
+    if (
+        early_birth_sequence.get("schema")
+        != "opennv-fo3-cg00-early-birth-sequence/v1"
+        or early_birth_sequence.get("assetsPrepared") is not True
+        or _required_object(early_birth_sequence, "sourceClosure").get(
+            "unaccountedCount"
+        ) != 0
+    ):
+        raise ValueError("Fallout 3 early CG00 source closure is not prepared")
+    early_package_sections = _required_object(
+        early_birth_sequence, "actorPackageSections"
+    )
+
+    def package_animation_paths(role: str) -> list[str]:
+        rows = _required_list(early_package_sections, role)
+        paths = [
+            canonical_member_path(_required_string(row, "animationLogicalPath"))
+            for row in rows
+            if isinstance(row, dict)
+        ]
+        if len(paths) != len(rows) or len(paths) != len(set(paths)):
+            raise ValueError("Fallout 3 early CG00 actor package animations differ")
+        return paths
+
+    doctor_package_animations = package_animation_paths("doctor")
+    dad_package_animations = package_animation_paths("father")
+    mom_package_animations = package_animation_paths("mother")
     stage65_appearance = _required_object(character_selection, "stage65Appearance")
     if (
         stage65_appearance.get("schema")
@@ -523,6 +791,11 @@ def prepare(
     archive = BsaArchive(meshes_path)
     configuration = load_runtime_configuration()
     presentation = _required_object(recipe, "presentation")
+    if (
+        _required_string(presentation, "projectionAuthority")
+        != "owned-fDefaultFOV-through-fallout3-frustum-contract"
+    ):
+        raise ValueError("Fallout 3 birth camera projection authority differs")
     export_strict = presentation.get("exportStrict")
     if not isinstance(export_strict, bool):
         raise ValueError("Fallout 3 birth-presentation strict-export policy is absent")
@@ -738,11 +1011,10 @@ def prepare(
         origin[1],
         origin[2] + camera_local_position[1],
     ]
-    actor_manifest = prepare_actor(
-        Path(_required_string(source, "dataRoot")).resolve(),
-        cache_root.resolve(),
-        _required_string(actor_recipe, "id"),
-        recipe_document=actor_recipe,
+    actor_manifest = _load_prepared_actor(
+        cache_root,
+        actor_recipe,
+        runtime_animation_paths=tuple(doctor_package_animations),
     )
     actor_reference = _required_object(actor_manifest, "reference")
     actor_identity = _required_object(actor_manifest, "actor")
@@ -809,11 +1081,10 @@ def prepare(
     if len(bound_actor_models) != int(actor_coverage["components"]) + 1:
         raise ValueError("Compiled Doctor Li component provenance coverage differs")
 
-    dad_manifest = prepare_actor(
-        Path(_required_string(source, "dataRoot")).resolve(),
-        cache_root.resolve(),
-        _required_string(dad_actor_recipe, "id"),
-        recipe_document=dad_actor_recipe,
+    dad_manifest = _load_prepared_actor(
+        cache_root,
+        dad_actor_recipe,
+        runtime_animation_paths=tuple(dad_package_animations),
     )
     dad_reference = _required_object(dad_manifest, "reference")
     dad_identity = _required_object(dad_manifest, "actor")
@@ -849,6 +1120,42 @@ def prepare(
     ):
         raise ValueError("Compiled CG00 Dad differs from the direct owned NPC")
     dad_scene_path = Path(_required_string(dad_manifest, "manifest")).resolve()
+
+    mom_manifest = _load_prepared_actor(
+        cache_root,
+        mom_actor_recipe,
+        runtime_animation_paths=tuple(mom_package_animations),
+    )
+    mom_reference = _required_object(mom_manifest, "reference")
+    mom_identity = _required_object(mom_manifest, "actor")
+    mom_coverage = _required_object(mom_manifest, "coverage")
+    mother_transform = _required_object(mother_reference, "transform")
+    mother_marker_transform = _required_object(mother_start_marker, "transform")
+    if (
+        mom_manifest.get("schema") != "opennv-actor-scene/v5"
+        or mom_manifest.get("status") != "skinned-animated"
+        or mom_manifest.get("cellFormId") != cell.get("formId")
+        or mom_reference.get("formId") != mother_reference.get("formId")
+        or mom_reference.get("baseFormId") != mother_base.get("formId")
+        or mom_reference.get("initiallyDisabled") is not False
+        or mom_reference.get("enableParentFormId") != father_reference.get("formId")
+        or mom_reference.get("positionGameUnits")
+        != mother_transform.get("positionGameUnits")
+        or mom_reference.get("rotationRadians")
+        != mother_transform.get("rotationRadians")
+        or mom_reference.get("scale") != mother_transform.get("scale")
+        or mom_identity.get("editorId") != mother_base.get("editorId")
+        or mom_identity.get("name") != "Catherine"
+        or mom_identity.get("female") is not True
+        or int(mom_coverage.get("components", 0)) <= 0
+        or int(mom_coverage.get("skins", 0)) <= 0
+        or int(mom_coverage.get("surfaces", 0)) <= 0
+        or int(mom_coverage.get("textures", 0)) <= 0
+        or int(mom_coverage.get("faceGenMorphTargets", 0)) <= 0
+        or int(mom_coverage.get("omittedSurfaces", -1)) != 0
+    ):
+        raise ValueError("Compiled CG00 Mom differs from the direct owned NPC")
+    mom_scene_path = Path(_required_string(mom_manifest, "manifest")).resolve()
 
     cg01_dad_transform = _required_object(cg01_dad_source, "sourceTransform")
     cg01_dad_marker_transform = _required_object(
@@ -1012,13 +1319,11 @@ def prepare(
             asymmetric_geometry=asymmetric,
             symmetric_texture=texture,
         )
-        manifest = prepare_actor(
-            Path(_required_string(source, "dataRoot")).resolve(),
-            cache_root.resolve(),
-            _required_string(cg01_dad_actor_recipe, "id"),
-            recipe_document=cg01_dad_actor_recipe,
-            runtime_animation_paths=runtime_animation_paths,
-            appearance_override=appearance_override,
+        manifest = _load_prepared_actor(
+            cache_root,
+            cg01_dad_actor_recipe,
+            appearance_override,
+            tuple(runtime_animation_paths),
         )
         reference = _required_object(manifest, "reference")
         actor = _required_object(manifest, "actor")
@@ -1223,6 +1528,59 @@ def prepare(
                 "are not implemented"
             ),
         },
+        "momActor": {
+            "source": "direct-owned-CG00Mom-ACHR-enable-parent-NPC-race-and-FaceGen",
+            "scene": _cache_relative_derivative(cache_root, mom_scene_path),
+            "sha256": _sha256_file(mom_scene_path),
+            "recipe": {
+                "id": _required_string(mom_actor_recipe, "id"),
+                "path": str(mom_actor_recipe_path.resolve()),
+                "sha256": _sha256_bytes(mom_actor_recipe_payload),
+            },
+            "sourceRecordBindings": {
+                "referenceFormId": _required_string(mother_reference, "formId"),
+                "baseFormId": _required_string(mother_base, "formId"),
+                "baseRecordDataSha256": _required_sha256(
+                    mother_base, "recordDataSha256"
+                ),
+                "enableParentReferenceFormId": _required_string(
+                    father_reference, "formId"
+                ),
+            },
+            "reference": mom_reference,
+            "actor": mom_identity,
+            "coverage": mom_coverage,
+            "startMarker": {
+                "referenceFormId": _required_string(mother_start_marker, "formId"),
+                "positionGameUnits": _required_list(
+                    mother_marker_transform, "positionGameUnits"
+                ),
+                "positionGodotGameUnits": godot_position(
+                    tuple(
+                        float(value)
+                        for value in _required_list(
+                            mother_marker_transform, "positionGameUnits"
+                        )
+                    ),
+                    origin,
+                ),
+                "rotationRadians": _required_list(
+                    mother_marker_transform, "rotationRadians"
+                ),
+                "rotationGodotQuaternion": godot_rotation_quaternion(
+                    tuple(
+                        float(value)
+                        for value in _required_list(
+                            mother_marker_transform, "rotationRadians"
+                        )
+                    )
+                ),
+            },
+            "poseAuthority": (
+                "owned mtidle compiler input and exact stage-0 MoveTo marker; "
+                "visibility is joined to the owned CG00 Dad enable-parent reference"
+            ),
+        },
         "dadActor": {
             "source": "direct-owned-CG00Dad-ACHR-NPC-race-and-FaceGen",
             "scene": _cache_relative_derivative(cache_root, dad_scene_path),
@@ -1340,7 +1698,21 @@ def prepare(
             ),
         },
         "presentation": {
-            "verticalFovDegrees": float(presentation["verticalFovDegrees"]),
+            "sourceHorizontalFovDegrees": float(
+                toddler_camera["sourceHorizontalFovDegrees"]
+            ),
+            "referenceAspectHeightOverWidth": float(
+                toddler_camera["referenceAspectHeightOverWidth"]
+            ),
+            "verticalFovDegrees": float(toddler_camera["verticalFovDegrees"]),
+            "godotKeepAspect": _required_string(
+                toddler_camera,
+                "godotKeepAspect",
+            ),
+            "projectionAuthority": _required_string(
+                presentation,
+                "projectionAuthority",
+            ),
             "proofAmbientColor": presentation["proofAmbientColor"],
             "proofAmbientEnergy": float(presentation["proofAmbientEnergy"]),
             "proofFogNearGameUnits": float(presentation["proofFogNearGameUnits"]),
@@ -1376,6 +1748,7 @@ def prepare(
             "texturesPrepared": True,
             "doctorActorPrepared": True,
             "dadActorPrepared": True,
+            "momActorPrepared": True,
             "cg01DadActorPrepared": True,
             "cg01DadStage65AppearanceCompiled": True,
             "cg01DadDialogueAnimationsCompiled": True,
@@ -1389,7 +1762,15 @@ def prepare(
             "parityReviewed": False,
             "headsetAccepted": False,
         },
-        "unsupported": _required_list(recipe, "unsupported"),
+        "sourceClosure": {
+            "requiredSceneParticipantRoles": _required_list(
+                _required_object(recipe, "sourceClosure"),
+                "requiredSceneParticipantRoles",
+            ),
+            "accountedSceneParticipantRoles": ["doctor", "father", "mother"],
+            "unaccounted": [],
+            "unaccountedCount": 0,
+        },
     }
     output = output_root / OUTPUT_NAME
     _atomic_json(output, document)
@@ -1412,6 +1793,11 @@ def main() -> int:
         type=Path,
         default=None,
     )
+    parser.add_argument(
+        "--mom-actor-recipe",
+        type=Path,
+        default=None,
+    )
     arguments = parser.parse_args()
     output = prepare(
         arguments.profile,
@@ -1420,6 +1806,7 @@ def main() -> int:
         arguments.actor_recipe,
         arguments.dad_actor_recipe,
         arguments.cg01_dad_actor_recipe,
+        arguments.mom_actor_recipe,
     )
     print(
         json.dumps(

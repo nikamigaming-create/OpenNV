@@ -517,7 +517,7 @@ internal partial class GameplayUiController : CanvasLayer
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             });
-        foreach (var (role, surfaceName) in contract.ButtonGlowSurfaces)
+        foreach (var (role, surfaceName) in contract.SurfaceRoles)
         {
             var glowMatches = surfaces.Where(surface =>
                     RuntimeMaterialLoader.SourceSurfaceIdentity(surface.Mesh, surface.Surface)

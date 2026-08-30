@@ -156,7 +156,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
     private ImageTexture _creatorChromeTexture = null!;
     private Control _pickerOverlay = null!;
     private TextureRect _pickerPortrait = null!;
-    private Fo1OwnedPortraitRelief? _pickerPortraitRelief;
+    private Fo1PremadePlayerPreview? _pickerPlayerPreview;
     private Button? _pickerPortraitToggle;
     private Fo1CustomAppearanceEditor? _appearanceEditor;
     private Fo1CustomAppearanceSelection? _customAppearanceSelection;
@@ -166,16 +166,25 @@ internal partial class Fo1CharacterCreator : CanvasLayer
     private int _age = Fo1CharacterCreatorNumericContracts.SourcePresentationInt25;
     private string _sex = "Male";
     private bool _hexPortraitToggleEnabled;
+    private IReadOnlyDictionary<string, Fo1HexSceneLoader.PlayerPresentationSource>? _playerDonors;
 
     internal event Action<Fo1CharacterProfile>? CharacterReady;
     internal event Action? BackRequested;
+    internal Fo1PremadeCharacter? SelectedPremade { get; private set; }
 
     internal void Configure(
         Fo1CharacterStartContract contract,
-        bool enableHexPortraitToggle = false)
+        bool enableHexPortraitToggle = false,
+        IReadOnlyDictionary<string, Fo1HexSceneLoader.PlayerPresentationSource>? playerDonors = null)
     {
+        if (playerDonors is null ||
+            !playerDonors.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(["Male", "Female"]))
+            throw new InvalidOperationException(
+                "Fallout 1 creator requires male and female verified player donor contracts.");
         _contract = contract;
         _hexPortraitToggleEnabled = enableHexPortraitToggle;
+        _playerDonors = playerDonors;
         Name = "OriginalFalloutCharacterCreator";
         Layer = Fo1CharacterCreatorNumericContracts.SourcePresentationInt110;
     }
@@ -195,41 +204,21 @@ internal partial class Fo1CharacterCreator : CanvasLayer
         if (_hexPortraitToggleEnabled)
         {
             TogglePortraitMode();
-            AssertLivePortrait(_contract.PremadeCharacters[0]);
+            AssertLivePlayer(_contract.PremadeCharacters[0]);
         }
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
         ShowPremade(1);
-        if (_hexPortraitToggleEnabled)
-            AssertLivePortrait(_contract.PremadeCharacters[1]);
+        // Natalia's exact GCD/FRM identity remains selectable, but this donor
+        // is male-only. The preview intentionally shows no substitute body.
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
         ShowPremade(2);
         if (_hexPortraitToggleEnabled)
         {
-            AssertLivePortrait(_contract.PremadeCharacters[2]);
+            AssertLivePlayer(_contract.PremadeCharacters[2]);
             TogglePortraitMode();
         }
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
         OpenCustomEditor();
-        if (_hexPortraitToggleEnabled)
-        {
-            OpenCustomAppearanceEditor();
-            _appearanceEditor!.SetSelection(new Fo1CustomAppearanceSelection(
-                "angular",
-                "long",
-                "deep",
-                "auburn",
-                "green"));
-            _appearanceEditor.TogglePreviewMode();
-            if (!_appearanceEditor.Live3DVisible ||
-                _appearanceEditor.Head.FaceShapeId != "angular" ||
-                _appearanceEditor.Head.HairStyleId != "long" ||
-                _appearanceEditor.Head.SkinToneId != "deep" ||
-                _appearanceEditor.Head.HairColorId != "auburn" ||
-                _appearanceEditor.Head.EyeColorId != "green")
-                throw new InvalidOperationException(
-                    "Fallout 1 Hex custom live head identity differs.");
-            _appearanceEditor.Confirm();
-        }
         _name.Text = "NIKAMI";
         _info.Text = "NAME\nNIKAMI\n\nYour name is preserved in the live tactical session and save contract.";
         await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
@@ -266,6 +255,22 @@ internal partial class Fo1CharacterCreator : CanvasLayer
         var profile = BuildProfile();
         CharacterReady?.Invoke(profile);
         return profile;
+    }
+
+    internal async Task<Fo1CharacterProfile> RunAutomatedOwnedDonorDemo(Node host)
+    {
+        if (!_hexPortraitToggleEnabled || _playerDonors is null)
+            throw new InvalidOperationException(
+                "Fallout 1 owned-donor proof requires the verified Hex player presentation.");
+        await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt24);
+        ShowPremade(0);
+        TogglePortraitMode();
+        var premade = _contract.PremadeCharacters[0];
+        AssertLivePlayer(premade);
+        await WaitFrames(host, Fo1CharacterCreatorNumericContracts.SourcePresentationInt28);
+        SelectedPremade = premade;
+        premade.Profile.Validate();
+        return premade.Profile;
     }
 
     private void Build()
@@ -452,13 +457,13 @@ internal partial class Fo1CharacterCreator : CanvasLayer
         _pickerOverlay.AddChild(_pickerPortrait);
         if (_hexPortraitToggleEnabled)
         {
-            _pickerPortraitRelief = new Fo1OwnedPortraitRelief(
-                _contract.PremadeCharacters[0])
+            _pickerPlayerPreview = new Fo1PremadePlayerPreview(
+                _playerDonors!)
             {
                 Position = _pickerPortrait.Position,
                 Size = _pickerPortrait.Size,
             };
-            _pickerOverlay.AddChild(_pickerPortraitRelief);
+            _pickerOverlay.AddChild(_pickerPlayerPreview);
             _pickerPortraitToggle = AddPickerButton(
                 "LIVE 3D",
                 Fo1CharacterCreatorNumericContracts.SourcePresentationFloat153Point0f,
@@ -468,7 +473,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
                 TogglePortraitMode,
                 Fo1CharacterCreatorNumericContracts.SourcePresentationInt9);
             _pickerPortraitToggle.TooltipText =
-                "Hex view: toggle the exact owned portrait on a live curved 3D surface";
+                "Hex view: toggle a verified owned FNV full-body donor or the explicit OpenNV full-body adaptation";
         }
         _pickerDetails = PickerLabel(
             "",
@@ -513,7 +518,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
         var premade = _contract.PremadeCharacters[_pickerIndex];
         var profile = premade.Profile;
         _pickerPortrait.Texture = premade.Portrait.Load();
-        _pickerPortraitRelief?.SetCharacter(premade);
+        _pickerPlayerPreview?.SetCharacter(premade);
         _pickerCounter.Text = $"{profile.Name.ToUpperInvariant()}  {_pickerIndex + 1}/3";
         var biography = string.Join(
             " ",
@@ -528,43 +533,55 @@ internal partial class Fo1CharacterCreator : CanvasLayer
             $"SEQ {profile.Sequence:00}  CARRY {profile.CarryWeight:000}\n" +
             $"TAGGED  {string.Join(" • ", profile.TaggedSkills)}\n" +
             $"TRAITS  {string.Join(" • ", profile.Traits)}\n\n" +
-            biography;
+            biography +
+            (_pickerPlayerPreview?.Visible == true
+                ? $"\n\n{_pickerPlayerPreview.PresentationLabel}"
+                : "");
     }
 
-    internal bool Live3DVisible => _pickerPortraitRelief?.Visible == true;
+    internal bool Live3DVisible => _pickerPlayerPreview?.Visible == true;
+
+    internal object PremadePlayerPreviewReport() =>
+        _pickerPlayerPreview?.Report() ?? throw new InvalidOperationException(
+            "Fallout 1 Hex has no true-3D premade player preview report.");
 
     internal void TogglePortraitMode()
     {
-        if (!_hexPortraitToggleEnabled || _pickerPortraitRelief is null ||
+        if (!_hexPortraitToggleEnabled || _pickerPlayerPreview is null ||
             _pickerPortraitToggle is null)
             return;
-        _pickerPortraitRelief.Visible = !_pickerPortraitRelief.Visible;
-        _pickerPortrait.Visible = !_pickerPortraitRelief.Visible;
-        _pickerPortraitToggle.Text = _pickerPortraitRelief.Visible
+        _pickerPlayerPreview.Visible = !_pickerPlayerPreview.Visible;
+        _pickerPortrait.Visible = !_pickerPlayerPreview.Visible;
+        _pickerPortraitToggle.Text = _pickerPlayerPreview.Visible
             ? "PORTRAIT"
             : "LIVE 3D";
         _pickerOverlay.SetMeta(
             "portrait_view_mode",
-            _pickerPortraitRelief.Visible
-                ? "owned-portrait-live-3d-relief"
+            _pickerPlayerPreview.Visible
+                ? _pickerPlayerPreview.PresentationMode
                 : "owned-source-portrait");
+        ShowPremade(_pickerIndex);
     }
 
-    private void AssertLivePortrait(Fo1PremadeCharacter expected)
+    private void AssertLivePlayer(Fo1PremadeCharacter expected)
     {
-        if (_pickerPortraitRelief is null || !_pickerPortraitRelief.Visible ||
-            _pickerPortraitRelief.SurfaceCount != 1 ||
-            _pickerPortraitRelief.CharacterId != expected.Id ||
-            _pickerPortraitRelief.SourcePortraitSha256 !=
-                expected.Portrait.SourceFrmSha256 ||
-            _pickerPortraitRelief.LocalPortraitPngSha256 != expected.Portrait.Sha256)
+        if (_pickerPlayerPreview is null || !_pickerPlayerPreview.Visible ||
+            _pickerPlayerPreview.CharacterId != expected.Id ||
+            (!_pickerPlayerPreview.UsesOwnedDonor ||
+             _pickerPlayerPreview.DonorSurfaces < 1 ||
+             string.IsNullOrWhiteSpace(_pickerPlayerPreview.DonorModelSha256)))
             throw new InvalidOperationException(
-                $"Fallout 1 Hex live portrait did not bind exact premade {expected.Id}.");
+                $"Fallout 1 Hex true-3D player preview did not bind {expected.Id}.");
+        GD.Print(
+            $"OPENNV_FO1_PREMADE_3D_PREVIEW_PASS character={expected.Id} " +
+            $"mode={_pickerPlayerPreview.PresentationMode} " +
+            $"donorSurfaces={_pickerPlayerPreview.DonorSurfaces}");
     }
 
     private void TakePremade()
     {
-        var profile = _contract.PremadeCharacters[_pickerIndex].Profile;
+        SelectedPremade = _contract.PremadeCharacters[_pickerIndex];
+        var profile = SelectedPremade.Profile;
         profile.Validate();
         _pickerDetails.Text = $"{profile.Name.ToUpperInvariant()} SELECTED\n\nBeginning the Vault Overseer briefing.";
         CharacterReady?.Invoke(profile);
@@ -572,6 +589,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
 
     private void ModifyPremade()
     {
+        SelectedPremade = null;
         _customAppearanceSelection = null;
         LoadProfile(_contract.PremadeCharacters[_pickerIndex].Profile);
         _pickerOverlay.Visible = false;
@@ -580,6 +598,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
 
     private void OpenCustomEditor()
     {
+        SelectedPremade = null;
         _customAppearanceSelection = null;
         LoadProfile(new Fo1CharacterProfile(
             "None",
@@ -603,6 +622,11 @@ internal partial class Fo1CharacterCreator : CanvasLayer
         if (!_hexPortraitToggleEnabled || _pickerOverlay.Visible ||
             _appearanceEditor is not null)
             return;
+        if (_playerDonors is null ||
+            !_playerDonors.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(["Male", "Female"]))
+            throw new InvalidOperationException(
+                "Fallout 1 custom creator requires male and female hash-bound owned donors.");
         _appearanceEditor = new Fo1CustomAppearanceEditor(
             _sex,
             _customAppearanceSelection);
@@ -821,6 +845,7 @@ internal partial class Fo1CharacterCreator : CanvasLayer
     {
         try
         {
+            SelectedPremade = null;
             var profile = BuildProfile();
             _info.Text = "DONE\n\nCharacter accepted. Beginning the Vault Overseer briefing.";
             CharacterReady?.Invoke(profile);

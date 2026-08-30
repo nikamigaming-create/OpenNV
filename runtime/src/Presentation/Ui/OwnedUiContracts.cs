@@ -35,7 +35,7 @@ internal sealed record OwnedUiStyle(
 internal sealed record OwnedGameplayUiPresentation(
     Vector2 CanvasSize,
     OwnedUiTexture Background,
-    OwnedPhysicalPipBoy PhysicalDevice,
+    OwnedPhysicalDevice PhysicalDevice,
     OwnedPipBoyStatusPresentation StatusPresentation,
     Color SystemColor,
     OwnedUiStyle Style,
@@ -53,7 +53,7 @@ internal sealed record OwnedGameplayUiPresentation(
             : throw new InvalidOperationException($"Owned gameplay UI font is absent: {id}");
 }
 
-internal sealed record OwnedPhysicalPipBoy(
+internal sealed record OwnedPhysicalDevice(
     string LogicalPath,
     string SourceSha256,
     string ModelPath,
@@ -65,7 +65,7 @@ internal sealed record OwnedPhysicalPipBoy(
     string MaterialManifestPath,
     string MaterialManifestSha256,
     string ScreenSurface,
-    IReadOnlyDictionary<string, string> ButtonGlowSurfaces,
+    IReadOnlyDictionary<string, string> SurfaceRoles,
     int Surfaces,
     int Vertices,
     int Textures);

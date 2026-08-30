@@ -105,6 +105,31 @@ class ActorAppearanceOverride:
     symmetric_texture: tuple[float, ...]
 
 
+@dataclass(frozen=True)
+class ActorRuntimeSurfaceProjection:
+    """Hash-bound owned model/surface selection observed at one retail beat."""
+
+    authority_path: str
+    authority_sha256: str
+    included_shapes_by_model: tuple[tuple[str, tuple[str, ...]], ...]
+    left_hand_model_path: str
+    left_hand_model_sha256: str
+    right_hand_model_path: str
+    right_hand_model_sha256: str
+    include_dismember_cap_shapes: bool
+
+    def included_shapes(self, model_path: str) -> tuple[str, ...]:
+        canonical = canonical_member_path(model_path)
+        matches = [
+            shapes
+            for path, shapes in self.included_shapes_by_model
+            if canonical_member_path(path) == canonical
+        ]
+        if len(matches) > 1:
+            raise ValueError(f"Actor runtime surface model is repeated: {canonical}")
+        return matches[0] if matches else ()
+
+
 def _facegen_values_sha256(values: tuple[float, ...]) -> str:
     return hashlib.sha256(struct.pack(f"<{len(values)}f", *values)).hexdigest()
 
@@ -643,7 +668,7 @@ def _prepare_creature_actor(
         "status": "skinned-animated",
         "compiler": family_compiler or compiler_provenance("actor"),
         "recipe": str(recipe["id"]),
-        "configuration": configuration.manifest(),
+        "configuration": configuration.actor_artifact_manifest(),
         "cellFormId": str(recipe["cellFormId"]),
         "reference": _reference_manifest(catalog, reference, origin),
         "actor": {
@@ -717,6 +742,7 @@ def prepare_actor(
     runtime_accumulation_root_animations: dict[str, str] | None = None,
     family_compiler: dict[str, str] | None = None,
     appearance_override: ActorAppearanceOverride | None = None,
+    runtime_surface_projection: ActorRuntimeSurfaceProjection | None = None,
 ) -> dict[str, object]:
     recipe = load_recipe(recipe_id) if recipe_document is None else recipe_document
     if recipe.get("schema") != RECIPE_SCHEMA or not str(recipe.get("id", "")).strip():
@@ -890,6 +916,23 @@ def prepare_actor(
     if any(path is None for path in outfit_models):
         raise ValueError("Proof actor outfit lacks a sex-specific model")
 
+    if runtime_surface_projection is not None:
+        if (
+            len(runtime_surface_projection.authority_sha256) != SHA256_HEX_CHARACTERS
+            or any(
+                value not in "0123456789abcdef"
+                for value in runtime_surface_projection.authority_sha256
+            )
+        ):
+            raise ValueError("Actor runtime surface projection authority hash is invalid")
+        body_models = list(body_models)
+        body_models[RACE_LEFT_HAND_MODEL_INDEX] = (
+            runtime_surface_projection.left_hand_model_path
+        )
+        body_models[RACE_RIGHT_HAND_MODEL_INDEX] = (
+            runtime_surface_projection.right_hand_model_path
+        )
+
     mesh_archives = context.mesh_archives
     texture_archives = context.texture_archives
 
@@ -954,7 +997,10 @@ def prepare_actor(
         else appearance_override.asymmetric_geometry
     )
     symmetric_texture = (
-        actor.face_symmetric_texture
+        compose_facegen_coordinates(
+            actor.face_symmetric_texture,
+            race_face_symmetric_texture,
+        )
         if appearance_override is None
         else appearance_override.symmetric_texture
     )
@@ -1054,6 +1100,11 @@ def prepare_actor(
                         str(value)
                         for value in recipe.get("excludeOutfitShapePrefixes", [])
                     ),
+                    included_shape_names=(
+                        runtime_surface_projection.included_shapes(outfit_model)
+                        if runtime_surface_projection is not None
+                        else ()
+                    ),
                     generated_diffuse_by_source=generated_skin,
                 )
             )
@@ -1065,6 +1116,13 @@ def prepare_actor(
                     mesh(body_models[RACE_LEFT_HAND_MODEL_INDEX]),
                     generated_diffuse=generated_left_hand,
                     bake_shape_transform=not actor.female,
+                    included_shape_names=(
+                        runtime_surface_projection.included_shapes(
+                            body_models[RACE_LEFT_HAND_MODEL_INDEX]
+                        )
+                        if runtime_surface_projection is not None
+                        else ()
+                    ),
                 ),
                 ActorComponent(
                     "right-hand",
@@ -1072,6 +1130,13 @@ def prepare_actor(
                     mesh(body_models[RACE_RIGHT_HAND_MODEL_INDEX]),
                     generated_diffuse=generated_right_hand,
                     bake_shape_transform=not actor.female,
+                    included_shape_names=(
+                        runtime_surface_projection.included_shapes(
+                            body_models[RACE_RIGHT_HAND_MODEL_INDEX]
+                        )
+                        if runtime_surface_projection is not None
+                        else ()
+                    ),
                 ),
             ]
         )
@@ -1295,6 +1360,11 @@ def prepare_actor(
                 if retail_presentation is not None
                 else ()
             ),
+            include_dismember_cap_shapes=(
+                runtime_surface_projection.include_dismember_cap_shapes
+                if runtime_surface_projection is not None
+                else False
+            ),
         ),
         texture_archives,
         gltf_path,
@@ -1306,7 +1376,7 @@ def prepare_actor(
         "status": "skinned-animated",
         "compiler": family_compiler or compiler_provenance("actor"),
         "recipe": recipe_id,
-        "configuration": configuration.manifest(),
+        "configuration": configuration.actor_artifact_manifest(),
         "cellFormId": recipe["cellFormId"],
         "reference": _reference_manifest(catalog, reference, origin),
         "actor": {
@@ -1393,13 +1463,37 @@ def prepare_actor(
             "outfitSource": "NPC_.CNTO recursively resolved through deterministic LVLI",
             "hairShape": hair_shape,
             "hairShapeSource": "equipped ARMO.BMDT hair-slot flag",
-            "dismemberCaps": "excluded by BSDismemberBodyPartType semantics",
+            "dismemberCaps": (
+                "included by exact live retail surface observation"
+                if runtime_surface_projection is not None
+                and runtime_surface_projection.include_dismember_cap_shapes
+                else "excluded by BSDismemberBodyPartType semantics"
+            ),
             "rigidAttachments": "derived from NIF skin-instance presence",
             "faceGenMaterialSource": configuration.document["actorCompiler"][
                 "faceGenMaterial"
             ]["source"],
             "status": configuration.document["actorCompiler"]["provenance"]["status"],
         },
+        "runtimeSurfaceProjection": (
+            {
+                "authorityPath": runtime_surface_projection.authority_path,
+                "authoritySha256": runtime_surface_projection.authority_sha256,
+                "includeDismemberCapShapes": (
+                    runtime_surface_projection.include_dismember_cap_shapes
+                ),
+                "leftHandModelPath": runtime_surface_projection.left_hand_model_path,
+                "leftHandModelSha256": runtime_surface_projection.left_hand_model_sha256,
+                "rightHandModelPath": runtime_surface_projection.right_hand_model_path,
+                "rightHandModelSha256": runtime_surface_projection.right_hand_model_sha256,
+                "includedShapesByModel": [
+                    {"modelPath": path, "shapeNames": list(shapes)}
+                    for path, shapes in runtime_surface_projection.included_shapes_by_model
+                ],
+            }
+            if runtime_surface_projection is not None
+            else None
+        ),
         "faceDetailSource": face_detail_source,
         "faceDetailLogicalPath": face_mod_path if face_detail_source == "retail-precomputed" else head_egt,
         "bodyModLogicalPath": body_mod_path if body_mod is not None else None,

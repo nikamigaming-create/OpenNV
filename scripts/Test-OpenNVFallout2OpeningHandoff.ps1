@@ -7,16 +7,21 @@ param(
     [string]$PlayerCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-player-v1\fo2-arroyo-player-presentation-cache.json",
     [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v2\fo2-character-start-cache.json",
     [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\opening-handoff-v1",
-    [string]$Save = "$env:LOCALAPPDATA\OpenNV\saves\fallout2\opening-handoff-proof-v1.json"
+    [string]$Save = "$env:LOCALAPPDATA\OpenNV\saves\fallout2\opening-handoff-proof-v1.json",
+    [Parameter(Mandatory)]
+    [string]$ClassicHumanoidInstallManifest
 )
 
 $ErrorActionPreference = 'Stop'
-$ExpectedTailStartFrame = 1118
+$ExpectedPlaybackStartFrame = 1
+$ExpectedFadeStartFrame = 1118
 $ExpectedTerminalFrame = 1145
-$ExpectedTailFrameCount = 28
+$ExpectedPresentedFrameCount = 1145
 $ExpectedEvidenceCount = 5
 $ExpectedHashLength = 64
 $runtime = Join-Path (Split-Path -Parent $PSScriptRoot) 'runtime'
+$classicHumanoidPreflight = Join-Path $PSScriptRoot 'Assert-ClassicHumanoidDonorPreviewSet.ps1'
+$classicHumanoidResolver = Join-Path $PSScriptRoot 'Resolve-ClassicHumanoidDonorPreviewSet.ps1'
 foreach ($inputPath in @(
         $Godot,
         $TempleCache,
@@ -28,12 +33,17 @@ foreach ($inputPath in @(
         throw "Required Fallout 2 opening-handoff input is missing: $inputPath"
     }
 }
+$classicHumanoidDonorPreviewSet = & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid install-manifest resolution failed.' }
+& $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
+if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid donor preflight failed.' }
 if (Test-Path -LiteralPath $Output) {
     throw "Refusing to overwrite Fallout 2 opening-handoff proof: $Output"
 }
 if (Test-Path -LiteralPath $Save) {
     throw "Fallout 2 opening-handoff proof requires a fresh save path: $Save"
 }
+$donorArguments = @('--classic-humanoid-donor-preview-set', $classicHumanoidDonorPreviewSet)
 
 & $Godot `
     --path $runtime `
@@ -46,7 +56,8 @@ if (Test-Path -LiteralPath $Save) {
     --fo2-player-cache $PlayerCache `
     --fo2-character-start-cache $CharacterStartCache `
     --fo2-save $Save `
-    --fo2-opening-handoff-proof $Output
+    --fo2-opening-handoff-proof $Output `
+    @donorArguments
 if ($LASTEXITCODE -ne 0) {
     throw "Fallout 2 opening-handoff proof failed with exit code $LASTEXITCODE."
 }
@@ -58,14 +69,15 @@ if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
 $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
 $cache = Get-Content -LiteralPath $CharacterStartCache -Raw | ConvertFrom-Json
 if ($report.schema -ne 'opennv-fo2-opening-handoff-proof/v1' -or
-    $report.status -ne 'pass-owned-elder-tail-source-schedule-black-adapted-live-action' -or
+    $report.status -ne 'pass-owned-elder-full-source-sequence-black-adapted-live-action' -or
     $report.source.MovieSha256 -ne $cache.openingTail.source.movie.sha256 -or
     $report.source.FadeConfigSha256 -ne $cache.openingTail.source.fadeConfig.sha256 -or
-    $report.source.TailStartFrame -ne $ExpectedTailStartFrame -or
+    $report.source.PlaybackStartFrame -ne $ExpectedPlaybackStartFrame -or
+    $report.source.TailStartFrame -ne $ExpectedFadeStartFrame -or
     $report.source.TerminalFrame -ne $ExpectedTerminalFrame -or
-    $report.source.presentedFrames.Count -ne $ExpectedTailFrameCount -or
+    $report.source.presentedFrames.Count -ne $ExpectedPresentedFrameCount -or
     -not $report.source.exactSourceSequence -or
-    -not $report.seam.authoredMovieTail -or
+    -not $report.seam.authoredMovieFromFirstFrame -or
     -not $report.seam.authoredFadeSchedule -or
     -not $report.seam.authoredMovieEndBlack -or
     -not $report.seam.liveRevealAdapted -or

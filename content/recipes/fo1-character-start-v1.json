@@ -305,6 +305,12 @@
           "width": 83,
           "height": 58
         },
+        "PID_10MM_AP": {
+          "logicalPath": "ART/INVEN/10MMAP.FRM",
+          "sha256": "edd9f1cb6e77e9819bf787f8fbc23d9fc573aab2075595ff9820e9618464ed28",
+          "width": 83,
+          "height": 61
+        },
         "PID_STIMPAK": {
           "logicalPath": "ART/INVEN/STIMX.FRM",
           "sha256": "dc37307f667fc5a5bef507e9e367155542e8fdcb3f4545ed35467b4d6d3054cd",
@@ -533,7 +539,7 @@
     "original owned Overseer MVE video/audio and source subtitle timing",
     "authored briefing-to-V13ENT tile 17690 rotation 2 handoff",
     "original owned Fallout 1 640x100 gameplay HUD composed at source-pixel coordinates with live HP, AP, AC, item art, bitmap message font, combat curtain, and PIP access",
-    "original owned Fallout 1 INVBOX inventory chrome with authoritative starting/tag-bonus stacks, owned item art, I/HUD open, Escape/Done close, and no gameplay mutation",
+    "original owned Fallout 1 INVBOX inventory chrome with authoritative starting/tag-bonus stacks, owned item art, I/HUD open, Escape/Done close, and source-configured ranged/melee active-hand selection",
     "original owned Fallout 1 Pip-Boy 2000 chrome with live bounded character, status, automap, and archive pages"
   ],
   "unsupported": [

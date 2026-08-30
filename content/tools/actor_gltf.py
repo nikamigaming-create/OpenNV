@@ -98,6 +98,12 @@ SKIN_WEIGHT_SUM_TOLERANCE = 1.0e-5
 SKIN_WEIGHT_DUPLICATE_TOLERANCE = 1.0e-7
 UNIFORM_CUBIC_BASIS_DIVISOR = 6.0
 QUATERNION_DIAGONAL_COEFFICIENT = 0.25
+FACEGEN_RIGID_SOURCE_SHAPE_BASIS = (
+    "owned-skinned-head-exact-biped-head-inverse-bind"
+)
+FACEGEN_RIGID_NORMAL_ACTOR_BASIS = (
+    "owned-normal-actor-facegen-prn-via-exact-head-skin-inverse-bind"
+)
 
 
 @dataclass(frozen=True)
@@ -111,6 +117,7 @@ class ActorComponent:
     tri_payload: bytes | None = None
     bake_shape_transform: bool = False
     selected_shape: str | None = None
+    included_shape_names: tuple[str, ...] = ()
     excluded_shape_prefixes: tuple[str, ...] = ()
     diffuse_override: str | None = None
     normal_override: str | None = None
@@ -147,9 +154,10 @@ class SampledTransformAnimation:
     sample_times: tuple[float, ...]
     translations: tuple[tuple[float, float, float], ...]
     rotations: tuple[tuple[float, float, float, float], ...]
+    animated_parent_tracks: tuple[dict[str, object], ...] = ()
 
     def manifest(self) -> dict[str, object]:
-        return {
+        result = {
             "sequenceName": self.sequence_name,
             "targetNode": self.target_node,
             "startSeconds": self.start_seconds,
@@ -171,6 +179,9 @@ class SampledTransformAnimation:
                 )
             ],
         }
+        if self.animated_parent_tracks:
+            result["animatedParentTracks"] = list(self.animated_parent_tracks)
+        return result
 
 
 @dataclass(frozen=True)
@@ -220,12 +231,26 @@ def animation_sequence_manifest(payload: bytes) -> dict[str, object]:
         raise ValueError(
             f"Actor animation has an unexpected time range: {start}..{stop}"
         )
+    transform_priorities: dict[str, int] = {}
+    for controlled in sequence.controlled_blocks:
+        if _text(controlled.get_controller_type()) != "NiTransformController":
+            continue
+        node_name = _text(controlled.get_node_name())
+        priority = int(controlled.priority)
+        if node_name in transform_priorities and transform_priorities[node_name] != priority:
+            raise ValueError(
+                f"Actor animation has conflicting priorities for {node_name!r}"
+            )
+        transform_priorities[node_name] = priority
+    if not transform_priorities:
+        raise ValueError("Actor animation has no transform-controller priorities")
     return {
         "sequenceName": _text(sequence.name),
         "startSeconds": start,
         "stopSeconds": stop,
         "cycleType": int(sequence.cycle_type),
         "controlledBlocks": len(sequence.controlled_blocks),
+        "transformPrioritiesByNode": dict(sorted(transform_priorities.items())),
     }
 
 
@@ -369,6 +394,7 @@ class ActorGltfInput:
     include_dismember_cap_shapes: bool = False
     additional_animations: tuple[ActorAnimation, ...] = ()
     retail_render_parts: tuple[RetailRenderPart, ...] = ()
+    head_only_facegen_preview: bool = False
 
 
 class TextureLibrary:
@@ -514,6 +540,7 @@ def export_actor_gltf(
     skins: list[dict[str, object]] = []
     materials: list[dict[str, object]] = []
     surfaces: list[dict[str, object]] = []
+    facegen_head_skin_inverse_bind: list[list[float]] | None = None
     omitted_surfaces: list[dict[str, object]] = []
     nif_decodes: list[dict[str, object]] = [
         {
@@ -560,14 +587,64 @@ def export_actor_gltf(
             if isinstance(shape, (NifFormat.NiTriShape, NifFormat.NiTriStrips)) and shape.data is not None
         ]
         if component.selected_shape is not None:
+            nonselected_shapes = [
+                shape
+                for shape in authored_shapes
+                if _text(shape.name) != component.selected_shape
+            ]
+            omitted_surfaces.extend(
+                _omitted_shape_row(
+                    component,
+                    shape,
+                    "omit-nonselected-authored-shape",
+                    "source-owned actor appearance selected shape",
+                )
+                for shape in nonselected_shapes
+            )
             authored_shapes = [
                 shape
                 for shape in authored_shapes
                 if _text(shape.name) == component.selected_shape
             ]
-        if not source.include_dismember_cap_shapes:
+        if component.included_shape_names:
+            included = frozenset(component.included_shape_names)
+            absent = included.difference(_text(shape.name) for shape in authored_shapes)
+            if absent:
+                raise ValueError(
+                    f"Actor component {component.role} exact live surface selection "
+                    f"names absent shapes {sorted(absent)} from {component.model_path}"
+                )
+            excluded_by_live_selection = [
+                shape for shape in authored_shapes if _text(shape.name) not in included
+            ]
+            for shape in excluded_by_live_selection:
+                omitted_surfaces.append(
+                    _omitted_shape_row(
+                        component,
+                        shape,
+                        "omit-exact-live-retail-surface-absent",
+                        "hash-bound exact live retail actor geometry observation",
+                    )
+                )
             authored_shapes = [
-                shape for shape in authored_shapes if not _is_dismember_cap_shape(shape)
+                shape for shape in authored_shapes if _text(shape.name) in included
+            ]
+        if not source.include_dismember_cap_shapes:
+            dismember_cap_shapes = [
+                shape for shape in authored_shapes if _is_dismember_cap_shape(shape)
+            ]
+            omitted_surfaces.extend(
+                _omitted_shape_row(
+                    component,
+                    shape,
+                    "omit-bsdismember-cap-shape",
+                    "owned BSDismemberBodyPartType semantics",
+                )
+                for shape in dismember_cap_shapes
+            )
+            dismember_ids = {id(shape) for shape in dismember_cap_shapes}
+            authored_shapes = [
+                shape for shape in authored_shapes if id(shape) not in dismember_ids
             ]
         marker_shapes = [
             shape
@@ -670,6 +747,18 @@ def export_actor_gltf(
             )
             if skin_index is not None:
                 parent = 0
+                if component.role == "head":
+                    if facegen_head_skin_inverse_bind is not None:
+                        raise ValueError(
+                            "Actor FaceGen assembly has multiple skinned head surfaces"
+                        )
+                    facegen_head_skin_inverse_bind = _source_skin_bone_inverse_bind(
+                        shape,
+                        source.biped_head_node,
+                        shape.get_transform(component_root)
+                        if component.bake_shape_transform
+                        else None,
+                    )
             else:
                 parent = node_by_name[rigid_attachment_node]
                 surface["attachmentNode"] = rigid_attachment_node
@@ -680,14 +769,36 @@ def export_actor_gltf(
                     rigid_attachment_source,
                     source.biped_head_node,
                 ):
-                    attachment_matrix = _facegen_rigid_attachment_matrix(
-                        surface["sourceShapeTranslationGameUnits"]
-                    )
-                    surface["attachmentBasisSource"] = (
-                        "retail-biped-prn-local-quarter-turn"
-                        if rigid_attachment_source == RIGID_ATTACHMENT_NIF_PARENT
-                        else "retail-facegen-biped-local-quarter-turn"
-                    )
+                    if _is_facegen_rigid_component(component.role):
+                        if facegen_head_skin_inverse_bind is None:
+                            raise ValueError(
+                                "Actor FaceGen rigid part precedes its unique skinned head surface"
+                            )
+                        attachment_matrix = _facegen_rigid_head_attachment_matrix(
+                            facegen_head_skin_inverse_bind,
+                            surface["sourceShapeTranslationGameUnits"],
+                        )
+                        surface["attachmentBasisSource"] = (
+                            FACEGEN_RIGID_SOURCE_SHAPE_BASIS
+                            if source.head_only_facegen_preview
+                            else FACEGEN_RIGID_NORMAL_ACTOR_BASIS
+                        )
+                        surface["headSkinInverseBindMatrixGodot"] = list(
+                            _gltf_matrix(facegen_head_skin_inverse_bind)
+                        )
+                        surface["sourceShapeTranslationDisposition"] = (
+                            "owned-source-translation-composed-with-exact-head-"
+                            "skin-inverse-bind"
+                        )
+                    else:
+                        attachment_matrix = _facegen_rigid_attachment_matrix(
+                            surface["sourceShapeTranslationGameUnits"]
+                        )
+                        surface["attachmentBasisSource"] = (
+                            "retail-biped-prn-local-quarter-turn"
+                            if rigid_attachment_source == RIGID_ATTACHMENT_NIF_PARENT
+                            else "retail-facegen-biped-local-quarter-turn"
+                        )
                     surface["attachmentLocalMatrixGodot"] = attachment_matrix
                 else:
                     attachment_matrix = None
@@ -715,6 +826,7 @@ def export_actor_gltf(
     nonaccum_origin = None
     use_path_names = len(animation_sources) > 1
     for animation_source in animation_sources:
+        sequence_manifest = animation_sequence_manifest(animation_source.payload)
         try:
             animation, channels, animation_origin = _build_animation(
                 animation_source.payload,
@@ -741,6 +853,13 @@ def export_actor_gltf(
                 "logicalPath": animation_source.logical_path,
                 "sha256": hashlib.sha256(animation_source.payload).hexdigest(),
                 "channels": channels,
+                "sequenceName": sequence_manifest["sequenceName"],
+                "startSeconds": sequence_manifest["startSeconds"],
+                "stopSeconds": sequence_manifest["stopSeconds"],
+                "cycleType": sequence_manifest["cycleType"],
+                "transformPrioritiesByNode": sequence_manifest[
+                    "transformPrioritiesByNode"
+                ],
                 "accumulationRootTranslationDisposition": (
                     "preserve-hash-bound-owned-clip-root-curve"
                     if animation_source.retain_accumulation_root_translation
@@ -929,6 +1048,76 @@ def _facegen_rigid_attachment_matrix(
     ]
 
 
+def _source_skin_bone_inverse_bind(
+    shape: object,
+    bone_name: str,
+    baked_shape_transform: object | None,
+) -> list[list[float]]:
+    """Return one exact converted inverse bind from the source skinned mesh.
+
+    FaceGen eyes, hair, teeth, and head parts are authored in the same model
+    space as the skinned head. Parenting those rigid vertices under the head
+    bone therefore requires the head surface's own Bip01 Head inverse bind.
+    Deriving another quarter-turn from the skeleton rest pose rotates the
+    already-converted left/right axis into the actor's vertical axis.
+    """
+
+    instance = getattr(shape, "skin_instance", None)
+    data = getattr(instance, "data", None)
+    if instance is None or data is None:
+        raise ValueError("Actor FaceGen head has no source skin instance")
+    bone_names = [_text(bone.name) for bone in instance.bones]
+    matches = [index for index, name in enumerate(bone_names) if name == bone_name]
+    if len(matches) != 1 or len(data.bone_list) != len(bone_names):
+        raise ValueError(
+            f"Actor FaceGen head has no unique source inverse bind for {bone_name}"
+        )
+    return _compensated_inverse_bind(
+        data.bone_list[matches[0]].get_transform(),
+        baked_shape_transform,
+    )
+
+
+def _facegen_rigid_head_attachment_matrix(
+    head_skin_inverse_bind: list[list[float]],
+    source_shape_translation_game_units: object,
+) -> list[list[float]]:
+    """Compose one owned rigid-part translation with the exact head bind.
+
+    Rigid FaceGen vertices are already authored in the head model basis, so the
+    NiTriShape rotation must not be baked a second time.  Some effective actor
+    winners retain a small but material per-part translation, however.  Apply
+    that owned translation before the skinned head's exact inverse bind instead
+    of discarding it behind a tolerance.
+    """
+
+    if (
+        len(head_skin_inverse_bind) != 4
+        or any(len(row) != 4 for row in head_skin_inverse_bind)
+        or any(not math.isfinite(float(entry)) for row in head_skin_inverse_bind for entry in row)
+    ):
+        raise ValueError("FaceGen rigid head inverse bind must be a finite 4x4 matrix")
+    if (
+        not isinstance(source_shape_translation_game_units, list)
+        or len(source_shape_translation_game_units) != 3
+        or any(
+            not isinstance(entry, (int, float)) or not math.isfinite(float(entry))
+            for entry in source_shape_translation_game_units
+        )
+    ):
+        raise ValueError("FaceGen rigid source translation must contain three finite numbers")
+    translation = _convert_vector(
+        tuple(float(entry) for entry in source_shape_translation_game_units)
+    )
+    source_translation = [
+        [1.0, 0.0, 0.0, translation[0]],
+        [0.0, 1.0, 0.0, translation[1]],
+        [0.0, 0.0, 1.0, translation[2]],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    return _multiply(head_skin_inverse_bind, source_translation)
+
+
 def _uses_retail_biped_head_basis(
     component_role: str,
     attachment_node: str,
@@ -949,6 +1138,13 @@ def _uses_retail_biped_head_basis(
             component_role in FACEGEN_RIGID_COMPONENT_ROLES
             or attachment_source == RIGID_ATTACHMENT_NIF_PARENT
         )
+    )
+
+
+def _is_facegen_rigid_component(component_role: str) -> bool:
+    return (
+        component_role in FACEGEN_RIGID_COMPONENT_ROLES
+        or component_role.startswith("head-part-")
     )
 
 
@@ -1552,6 +1748,7 @@ def _append_shape(
         "triSha256": hashlib.sha256(component.tri_payload).hexdigest() if component.tri_payload else None,
         "shape": runtime_shape_name,
         "sourceShape": source_shape_name,
+        "sourceVertexFnv1a32": _shape_vertex_fnv1a32(shape),
         "sourceShapeTranslationGameUnits": [
             float(shape_transform.m_41),
             float(shape_transform.m_42),
@@ -1805,6 +2002,33 @@ def _is_dismember_cap_shape(shape: object) -> bool:
     return bool(partitions) and all(
         int(partition.body_part) in _DISMEMBER_CAP_BODY_PARTS for partition in partitions
     )
+
+
+def _shape_vertex_fnv1a32(shape: object) -> int:
+    value = 2166136261
+    for vertex in shape.data.vertices:
+        for component in (float(vertex.x), float(vertex.y), float(vertex.z)):
+            for byte in struct.pack("<f", component):
+                value = ((value ^ byte) * 16777619) & 0xFFFFFFFF
+    return value
+
+
+def _omitted_shape_row(
+    component: ActorComponent,
+    shape: object,
+    disposition: str,
+    authority: str,
+) -> dict[str, object]:
+    return {
+        "role": component.role,
+        "modelPath": component.model_path,
+        "modelSha256": hashlib.sha256(component.model_payload).hexdigest(),
+        "shape": _text(shape.name),
+        "vertices": len(shape.data.vertices),
+        "sourceVertexFnv1a32": _shape_vertex_fnv1a32(shape),
+        "disposition": disposition,
+        "authority": authority,
+    }
 
 
 def _append_skin(
@@ -2088,6 +2312,8 @@ def sample_transform_animation(
     skeleton_payload: bytes,
     target_node: str,
     samples_per_second: float,
+    *,
+    include_animated_parent_tracks: bool = False,
 ) -> SampledTransformAnimation:
     """Sample one owned KF transform against its owned skeleton parent chain."""
 
@@ -2161,6 +2387,17 @@ def sample_transform_animation(
         for node in parent_nodes
         for translation, rotation, scale in [_node_trs(node)]
     )
+    animated_parent_tracks = (
+        _sample_animated_parent_tracks(
+            sequence,
+            parent_nodes,
+            times,
+            start,
+            stop,
+        )
+        if include_animated_parent_tracks
+        else ()
+    )
     return SampledTransformAnimation(
         _text(sequence.name),
         target_node,
@@ -2172,7 +2409,65 @@ def sample_transform_animation(
         tuple(times),
         tuple(translations),
         tuple(rotations),
+        animated_parent_tracks,
     )
+
+
+def _sample_animated_parent_tracks(
+    sequence: object,
+    parent_nodes: list[object],
+    times: list[float],
+    start: float,
+    stop: float,
+) -> tuple[dict[str, object], ...]:
+    """Sample every KF-authored node in the target's skeleton parent chain."""
+
+    tracks = []
+    for parent_chain_index, node in enumerate(parent_nodes):
+        node_name = _text(node.name)
+        controlled = [
+            value
+            for value in sequence.controlled_blocks
+            if _text(value.get_node_name()) == node_name
+            and _text(value.get_controller_type()) == "NiTransformController"
+        ]
+        if len(controlled) > 1:
+            raise ValueError(
+                f"Transform animation controls parent {node_name!r} more than once"
+            )
+        if not controlled:
+            continue
+        translations, rotations = _sample_transform_interpolator(
+            controlled[0].interpolator,
+            times,
+            start,
+            stop,
+            node_name,
+        )
+        if len(translations) != len(times) or len(rotations) != len(times):
+            raise ValueError(
+                f"Animated parent {node_name!r} must author translation and rotation"
+            )
+        tracks.append(
+            {
+                "parentChainIndex": parent_chain_index,
+                "nodeName": node_name,
+                "samples": [
+                    {
+                        "timeSeconds": time_value,
+                        "translationGodotGameUnits": list(translation),
+                        "rotationQuaternionXyzw": list(rotation),
+                    }
+                    for time_value, translation, rotation in zip(
+                        times,
+                        translations,
+                        rotations,
+                        strict=True,
+                    )
+                ],
+            }
+        )
+    return tuple(tracks)
 
 
 def sample_root_motion(

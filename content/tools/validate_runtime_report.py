@@ -17,8 +17,9 @@ XR_SIMULATOR_REPORT_SCHEMA = "opennv-openxr-simulator-acceptance/v1"
 FLAT_CONTROLS_REPORT_SCHEMA = "opennv-flat-controls-acceptance/v1"
 FLAT_ROUTE_TRAVEL_REPORT_SCHEMA = "opennv-flat-route-travel/v1"
 GAMEPLAY_REPORT_SCHEMA = "opennv-godot-playable-route/v1"
-CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v6"
+CAMPAIGN_SAVE_SCHEMA = "opennv-campaign-save/v7"
 POOL_REPORT_SCHEMA = "opennv-pool-practice/v1"
+WORLD_PICKUP_REPORT_SCHEMA = "opennv-world-pickup-interaction/v1"
 FLOAT_COMPARISON_TOLERANCE = 1.0e-6
 
 
@@ -443,6 +444,7 @@ def validate_flat_controls_report(
             "moveForward",
             "moveBackward",
             "activate",
+            "grab",
             "reload",
             "save",
             "cancel",
@@ -743,7 +745,15 @@ def validate_pool_report(
     expected_adapter: str,
 ) -> None:
     _verify_configuration(report, configuration)
-    primary, _linked, _actors = _owned_documents(install_manifest_path)
+    primary, linked, _actors = _owned_documents(install_manifest_path)
+    owned_scenes = [primary, *linked]
+    matches = [
+        scene
+        for scene in owned_scenes
+        if scene["cell"]["formId"] == report.get("cellFormId")
+    ]
+    _require(len(matches) == 1, "Pool report CELL is outside the owned route")
+    primary = matches[0]
     pool = primary.get("poolGameplay")
     _require(isinstance(pool, dict), "Owned cell has no pool gameplay manifest")
     table = pool["table"]
@@ -787,8 +797,49 @@ def validate_pool_report(
     _require(bool(report["cueMounted"]), "Pool cue was not mounted")
     _require(bool(report["strikeAccepted"]), "Pool strike was not accepted")
     _require(int(report["cueBallBallCollisions"]) >= 1, "Pool ball contact is missing")
+    _require(bool(report["pocketDetected"]), "Pool pocket detection is missing")
+    _require(bool(report["pocketSaveRestored"]), "Pool pocket save restore failed")
+    _require(
+        bool(report["liveStateRestoredFromColdSave"]),
+        "Live pool state was not restored from the cold-loaded save",
+    )
     _require(bool(report["authoredReset"]), "Pool authored reset failed")
     _require(not bool(report["hardwareValidated"]), "Software pool proof claimed hardware validation")
+
+
+def validate_world_pickup_report(
+    report: dict[str, object],
+    install_manifest_path: Path,
+    configuration: RuntimeConfiguration,
+) -> None:
+    _verify_configuration(report, configuration)
+    primary, _linked, _actors = _owned_documents(install_manifest_path)
+    pickup_references = {
+        str(row["formId"]): row
+        for row in primary["references"]
+        if not bool(row["initiallyDisabled"])
+        and isinstance(row.get("interaction"), dict)
+        and row["interaction"].get("type") == "pickup"
+    }
+    selected = str(report["pickupReferenceFormId"])
+    _require(report.get("schema") == WORLD_PICKUP_REPORT_SCHEMA, "Unexpected pickup report schema")
+    _require(report.get("status") == "pass", "Pickup interaction report did not pass")
+    _require(report["cellFormId"] == primary["cell"]["formId"], "Pickup CELL identity differs")
+    _require(selected in pickup_references, "Pickup proof used a non-owned reference")
+    _require(str(report["physicsSource"]).startswith("owned-nif-"), "Pickup physics is not owned NIF data")
+    _require(int(report["exactOwnedDynamicPickups"]) > 0, "No movable owned pickup was proved")
+    _require(
+        int(report["activePickups"])
+        == int(report["exactOwnedDynamicPickups"]) + int(report["unsupportedPickupPhysics"]),
+        "Pickup physics coverage counts disagree",
+    )
+    desktop = configuration.document["player"]["desktopInput"]
+    _require(report["desktopControl"] == desktop["grab"]["physicalKey"], "Pickup grab key differs")
+    _require(report["collectControl"] == desktop["activate"]["physicalKey"], "Pickup collect key differs")
+    _require(bool(report["heldCollisionSuppressed"]), "Held pickup collision policy failed")
+    _require(bool(report["droppedCollisionRestored"]), "Dropped pickup collision was not restored")
+    _require(bool(report["coldSaveRestored"]), "Moved pickup did not survive a cold save load")
+    _require(not bool(report["hardwareValidated"]), "Software pickup proof claimed hardware validation")
 
 
 def main() -> int:
@@ -804,6 +855,7 @@ def main() -> int:
             "gameplay-reload",
             "pool-flat",
             "pool-xr-layout",
+            "world-pickup",
             "xr-simulator",
             "flat-controls",
             "flat-route-travel",
@@ -842,6 +894,8 @@ def main() -> int:
             validate_xr_simulator_report(report, args.install_manifest, configuration)
         elif args.mode == "flat-controls":
             validate_flat_controls_report(report, args.install_manifest, configuration)
+        elif args.mode == "world-pickup":
+            validate_world_pickup_report(report, args.install_manifest, configuration)
         elif args.mode in ("flat-route-travel", "flat-route-reload"):
             validate_flat_route_travel_report(
                 report,

@@ -30,7 +30,11 @@ from export_static_nif_gltf import export_static_nif
 from facegen_controls import decode_facegen_control_space
 from material_contract import material_bindings, texture_binding_requests
 from owned_archive_stack import OwnedArchiveStack
-from player_facegen_preview import prepare_default_player_facegen_preview
+from player_facegen_preview import (
+    PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
+    PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+    prepare_default_player_facegen_preview,
+)
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
 from runtime_configuration import RuntimeConfiguration
 from texture_pipeline import OwnedTexturePipeline
@@ -40,6 +44,7 @@ from compiler_provenance import compiler_provenance
 OPENING_RECIPE_SCHEMA = "opennv-owned-opening-recipe/v1"
 OPENING_MANIFEST_SCHEMA = "opennv-owned-opening-manifest/v1"
 OPENING_MANIFEST_STATUS = "compiled-owned-opening-graph"
+RACE_SEX_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-racesex-menu-tiles/v1"
 GAMEPLAY_VITALS_SCHEMA = "opennv-owned-gameplay-vitals/v1"
 PLAYER_BASE_EDITOR_ID = "Player"
 PLAYER_BASE_LEVEL_OFFSET = 8
@@ -58,8 +63,36 @@ FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS = 30
 FACEGEN_SYMMETRIC_TEXTURE_FLOATS = 50
 FACEGEN_CONTROL_SPACE_SCHEMA = "opennv-owned-facegen-control-space/v1"
 FACEGEN_CONTROL_SPACE_STATUS = (
+    "source-bound-controls-default-preview-artifact-compiled-all-native-geometry-"
+    "controls-runtime-bound-sibling-gamebryo-slider-semantics-corroborated"
+)
+FACEGEN_NORMALIZED_PREVIEW_STATUS = (
     "source-bound-controls-default-preview-artifact-compiled-one-control-runtime-bound"
 )
+FACEGEN_NORMALIZED_PREVIEW_DISPOSITION = (
+    "control-axes-and-default-preview-egm-targets-compiled-one-control-runtime-"
+    "bound-retail-slider-ranges-unimplemented"
+)
+FACEGEN_SLIDER_EVIDENCE_CLASSIFICATION = (
+    "independent-sibling-gamebryo-racesexmenu-static-contract"
+)
+FACEGEN_SLIDER_EVIDENCE_ENGINE_BUILD = "1.7.0.4"
+FACEGEN_SLIDER_EVIDENCE_EXECUTABLE_SHA256_PARTS = (
+    "c3f97c2255fa041a851c17cf372d69aa",
+    "add8694e2dc4230ba556001bbfbd2f3e",
+)
+FACEGEN_SLIDER_SOURCE_MINIMUM = -5.0
+FACEGEN_SLIDER_SOURCE_MAXIMUM = 5.0
+FACEGEN_SLIDER_UI_SCALE = 10.0
+FACEGEN_SLIDER_UI_MINIMUM = -50.0
+FACEGEN_SLIDER_UI_MAXIMUM = 50.0
+FACEGEN_SLIDER_ORDINARY_INCREMENT = 1.0
+FACEGEN_SLIDER_JUMP = 25.0
+FACEGEN_SLIDER_MORPH_WEIGHT_SCALE = 0.1
+FACEGEN_SLIDER_LOW_GLOBAL_ADDRESS = "0x1115438"
+FACEGEN_SLIDER_HIGH_GLOBAL_ADDRESS = "0x1115444"
+FACEGEN_SLIDER_INCREMENT_TRAIT = "user6"
+FACEGEN_SLIDER_INCREMENT_DEFAULT_THRESHOLD = 1.0
 FNV_ENGINE_BUILD = "1.4.0.525"
 FNV_ENGINE_DEFAULT_XP_BASE_EVIDENCE = "fnv-1.4.0.525-gmst-ixpbase-v1"
 # FalloutNV.exe owns this default; FalloutNV.esm intentionally has no GMST override.
@@ -161,7 +194,7 @@ PACKAGE_TARGET_BYTES = 16
 REFERENCE_TRANSFORM_BYTES = 24
 DOC_INITIAL_CHAIR_MARKER_ID = 14
 FURNITURE_MARKER_PLACEMENT_SEMANTICS = (
-    "replace-marker-offset-for-actor-placement"
+    "nif-marker-minus-gmst-target-offset-for-actor-placement"
 )
 FURNITURE_MARKER_PLACEMENT_AXES = ("x", "y", "z")
 CONDITION_OPERATOR_GREATER_OR_EQUAL = 0x60
@@ -332,6 +365,30 @@ def atomic_json(path: Path, document: object) -> None:
         path,
         (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8"),
     )
+
+
+def emit_player_facegen_preview_set(
+    cache_root: Path,
+    preview_set: dict[str, object],
+) -> dict[str, str]:
+    """Emit the compiled full-body preview contract for strict sibling consumers."""
+    if (
+        preview_set.get("schema") != PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA
+        or preview_set.get("status") != PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS
+    ):
+        raise ValueError("Owned player FaceGen preview-set contract is malformed")
+    output = (
+        cache_root
+        / "generated"
+        / "opening"
+        / "player-facegen-preview"
+        / "player-facegen-preview-set.json"
+    )
+    atomic_json(output, preview_set)
+    return {
+        "path": str(output.resolve()),
+        "sha256": file_sha256(output),
+    }
 
 
 def form_id_text(value: int) -> str:
@@ -1484,6 +1541,557 @@ def _layout_trait(
         active.remove(identity)
 
 
+def _required_tile_number(node: TileNode, trait_name: str) -> float:
+    value = _direct_number(node.child(trait_name))
+    if value is None:
+        raise ValueError(
+            f"Owned RaceSexMenu trait is not a direct number: {node.name}.{trait_name}"
+        )
+    return value
+
+
+def _required_tile_identity(node: TileNode, trait_name: str) -> str | int:
+    trait = node.child(trait_name)
+    if trait is None or trait.children:
+        raise ValueError(
+            f"Owned RaceSexMenu identity trait is absent: {node.name}.{trait_name}"
+        )
+    entity = _entity_name(trait.text)
+    if entity is not None:
+        return entity
+    try:
+        return int(trait.text)
+    except ValueError as error:
+        raise ValueError(
+            f"Owned RaceSexMenu identity is invalid: {node.name}.{trait_name}"
+        ) from error
+
+
+def _required_tile_text(node: TileNode, trait_name: str) -> str:
+    trait = node.child(trait_name)
+    if trait is None or trait.children or not trait.text:
+        raise ValueError(
+            f"Owned RaceSexMenu text trait is absent: {node.name}.{trait_name}"
+        )
+    return trait.text
+
+
+def _required_tile_texture(node: TileNode) -> dict[str, str]:
+    filename = _required_tile_text(node, "filename").strip().replace("/", "\\")
+    logical_path = _asset_path(filename)
+    atlas = node.child("texatlas")
+    if logical_path is not None:
+        return {"logicalPath": logical_path}
+    if atlas is None or atlas.children or not atlas.text.strip():
+        raise ValueError(
+            f"Owned RaceSexMenu texture has neither a logical path nor atlas: "
+            f"{node.name}.{filename}"
+        )
+    return {
+        "atlas": atlas.text.strip().replace("/", "\\").casefold(),
+        "fileName": filename.casefold(),
+    }
+
+
+def _parse_texture_atlas_entry(payload: bytes, file_name: str) -> dict[str, object]:
+    try:
+        text = payload.decode("ascii")
+    except UnicodeDecodeError as error:
+        raise ValueError("Owned UI texture-atlas index is not ASCII") from error
+    matches = []
+    requested = file_name.casefold()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split(None, 1)
+        if len(fields) != 2 or fields[0].casefold() != requested:
+            continue
+        values = [value.strip() for value in fields[1].split(",")]
+        if len(values) != 8:
+            raise ValueError(
+                f"Owned UI texture-atlas entry has an invalid field count: {file_name}"
+            )
+        try:
+            atlas_index = int(values[1])
+            bounds = [float(value) for value in values[3:]]
+        except ValueError as error:
+            raise ValueError(
+                f"Owned UI texture-atlas entry is invalid: {file_name}"
+            ) from error
+        if (
+            atlas_index < 0
+            or values[2].casefold() != "2d"
+            or not all(math.isfinite(value) for value in bounds)
+            or bounds[0] < 0.0
+            or bounds[1] < 0.0
+            or bounds[3] <= 0.0
+            or bounds[4] <= 0.0
+            or bounds[0] + bounds[3] > 1.0
+            or bounds[1] + bounds[4] > 1.0
+        ):
+            raise ValueError(
+                f"Owned UI texture-atlas entry is unsupported: {file_name}"
+            )
+        matches.append(
+            {
+                "atlasFileName": values[0],
+                "atlasIndex": atlas_index,
+                "atlasType": values[2],
+                "uvRect": [bounds[0], bounds[1], bounds[3], bounds[4]],
+                "depthOffset": bounds[2],
+            }
+        )
+    if len(matches) != 1:
+        raise ValueError(
+            f"Owned UI texture-atlas entry is ambiguous: {file_name} matches={len(matches)}"
+        )
+    return matches[0]
+
+
+def _resolve_tile_atlas_texture(
+    texture: dict[str, str],
+    owned_archives: OwnedArchiveStack,
+    cache_root: Path,
+) -> tuple[dict[str, object], str]:
+    atlas_index_path = canonical_member_path("textures\\" + texture["atlas"])
+    if not atlas_index_path.endswith(".tai"):
+        raise ValueError(
+            f"Owned UI texture-atlas index is not a TAI file: {atlas_index_path}"
+        )
+    atlas_index = owned_archives.extract(atlas_index_path)
+    atlas_source = cache_root / "source" / Path(
+        atlas_index.logical_path.replace("\\", "/")
+    )
+    atomic_bytes(atlas_source, atlas_index.data)
+    entry = _parse_texture_atlas_entry(atlas_index.data, texture["fileName"])
+    atlas_texture_path = canonical_member_path(
+        str(Path(atlas_index_path.replace("\\", "/")).parent / entry["atlasFileName"])
+    )
+    if not atlas_texture_path.endswith(".dds"):
+        raise ValueError(
+            f"Owned UI texture-atlas target is not a DDS file: {atlas_texture_path}"
+        )
+    return (
+        {
+            "fileName": texture["fileName"],
+            "atlasIndexLogicalPath": atlas_index_path,
+            "atlasIndexSource": str(atlas_source.resolve()),
+            "atlasIndexBytes": len(atlas_index.data),
+            "atlasIndexSha256": atlas_index.sha256,
+            "atlasIndexSourceArchive": atlas_index.source_archive,
+            "atlasIndexSourceArchiveSha256": atlas_index.source_archive_sha256,
+            "atlasTextureLogicalPath": atlas_texture_path,
+            **entry,
+        },
+        atlas_texture_path,
+    )
+
+
+def _required_named_child(node: TileNode, name: str) -> TileNode:
+    matches = [child for child in node.children if child.name.casefold() == name.casefold()]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Owned RaceSexMenu child is ambiguous: {node.name}.{name} matches={len(matches)}"
+        )
+    return matches[0]
+
+
+def _required_direct_operation_number(
+    node: TileNode | None,
+    operation_name: str,
+    label: str,
+) -> float:
+    if node is None:
+        raise ValueError(f"Owned RaceSexMenu operation is absent: {label}")
+    matches = [
+        child
+        for child in node.children
+        if child.tag == operation_name and _direct_number(child) is not None
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Owned RaceSexMenu operation is ambiguous: {label} matches={len(matches)}"
+        )
+    value = _direct_number(matches[0])
+    assert value is not None
+    return value
+
+
+def _race_sex_menu_tile_contract(
+    root: TileNode,
+    document: dict[str, object],
+    screen: dict[str, float],
+    trees: dict[str, TileNode],
+) -> dict[str, object]:
+    menus = [node for node in root.children if node.tag == "menu"]
+    if len(menus) != 1 or menus[0].name != "RaceSexMenu":
+        raise ValueError("Owned RaceSexMenu document identity differs")
+    menu = menus[0]
+    parents = _tile_parent_index(root)
+    background = _named_tile(root, "RSM_Background")
+    face_grab = _named_tile(root, "RSM_Face_Grab")
+    scroll_up = _named_tile(root, "RSM_scroll_up_target")
+    scroll_down = _named_tile(root, "RSM_scroll_down_target")
+    back = _named_tile(root, "RSM_back_button")
+    next_button = _named_tile(root, "RSM_next_button")
+    list_item = _named_tile(root, "RSM_list_item")
+    selection = _required_named_child(list_item, "RSM_selection_indicator")
+    list_text = _required_named_child(list_item, "RSM_list_item_text")
+    slider = _named_tile(root, "RSM_slider_option")
+    slider_label = _required_named_child(slider, "RSM_slider_label")
+    slider_value = _required_named_child(slider, "RSM_slider_value")
+    slider_bar = _required_named_child(slider, "RSM_slider_bar")
+    slider_left = _required_named_child(slider, "RSM_slider_arrow_left")
+    slider_right = _required_named_child(slider, "RSM_slider_arrow_right")
+    slider_marker = _required_named_child(slider, "RSM_slider_marker")
+    slider_left_text = _required_named_child(slider_left, "RSM_SAL_text")
+    slider_right_text = _required_named_child(slider_right, "RSM_SAR_text")
+    slider_marker_text = _required_named_child(slider_marker, "RSM_SM_text")
+    scroll_up_image = _required_named_child(scroll_up, "RSM_scroll_up")
+    scroll_down_image = _required_named_child(scroll_down, "RSM_scroll_down")
+
+    text_box_document = canonical_ui_path("menus\\prefabs\\text_box.xml")
+    if text_box_document not in trees:
+        raise ValueError("Owned RaceSexMenu text-box prefab is absent")
+    text_box = trees[text_box_document]
+    text_box_button_text = _named_tile(text_box, "button_text")
+    text_box_default_justify = _required_tile_identity(text_box, "justify")
+    if text_box_default_justify != "left":
+        raise ValueError("Owned RaceSexMenu text-box default justification differs")
+    text_box_y = text_box_button_text.child("y")
+    if text_box_y is None or [value.tag for value in text_box_y.children] != [
+        "copy",
+        "sub",
+        "div",
+        "add",
+    ]:
+        raise ValueError("Owned RaceSexMenu text-box vertical layout differs")
+    center_divisor = _direct_number(text_box_y.children[2])
+    y_add = text_box_y.children[3]
+    if center_divisor is None or len(y_add.children) != 3:
+        raise ValueError("Owned RaceSexMenu text-box vertical geometry is ambiguous")
+    base_y_offset = _direct_number(y_add.children[0])
+    non_glow_add = y_add.children[1]
+    text_adjust_add = y_add.children[2]
+    if (
+        base_y_offset is None
+        or non_glow_add.tag != "add"
+        or len(non_glow_add.children) != 2
+        or _direct_number(non_glow_add.children[0]) is None
+        or non_glow_add.children[1].tag != "onlyifnot"
+        or non_glow_add.children[1].attributes
+        != {"src": "parent()", "trait": "_glow"}
+        or text_adjust_add.tag != "add"
+        or text_adjust_add.attributes
+        != {"src": "parent()", "trait": "_text_y_adjust"}
+    ):
+        raise ValueError("Owned RaceSexMenu text-box vertical offset differs")
+    non_glow_y_offset = _direct_number(non_glow_add.children[0])
+    assert non_glow_y_offset is not None
+
+    font_ids = {
+        int(_required_tile_number(back, "font")),
+        int(_required_tile_number(next_button, "font")),
+        int(_required_tile_number(list_text, "font")),
+        int(_required_tile_number(slider_label, "font")),
+        int(_required_tile_number(slider_value, "font")),
+    }
+    if len(font_ids) != 1 or next(iter(font_ids)) <= 0:
+        raise ValueError("Owned RaceSexMenu font identity is ambiguous")
+    font_id = next(iter(font_ids))
+
+    def hover_only_alpha(node: TileNode) -> str:
+        alpha = node.child("alpha")
+        if alpha is None or len(alpha.children) != 2:
+            raise ValueError(
+                f"Owned RaceSexMenu hover-alpha contract differs: {node.name}"
+            )
+        value, condition = alpha.children
+        if (
+            value.tag != "copy"
+            or _direct_number(value) != 255.0
+            or condition.tag != "onlyif"
+            or len(condition.children) != 2
+            or condition.children[0].tag != "copy"
+            or condition.children[0].attributes
+            != {"src": "me()", "trait": "mouseover"}
+            or condition.children[1].tag != "eq"
+            or _direct_number(condition.children[1]) != 1.0
+        ):
+            raise ValueError(
+                f"Owned RaceSexMenu hover-alpha contract differs: {node.name}"
+            )
+        return "hover-only-255"
+
+    def navigation_button(node: TileNode, role: str) -> dict[str, object]:
+        box_visible = _required_tile_identity(node, "_box_visible")
+        inherit_brightness = _required_tile_identity(
+            node, "_inheritbrightness"
+        )
+        if box_visible != "false" or inherit_brightness != "false":
+            raise ValueError(
+                f"Owned RaceSexMenu navigation presentation differs: {node.name}"
+            )
+        justify = (
+            text_box_default_justify
+            if node.child("justify") is None
+            else _required_tile_identity(node, "justify")
+        )
+        if justify not in {"left", "right"}:
+            raise ValueError(
+                f"Owned RaceSexMenu navigation justification differs: {node.name}"
+            )
+        return {
+            "tile": node.name,
+            "id": _required_tile_identity(node, "id"),
+            "x": _layout_trait(node, "_x", root, parents, screen),
+            "y": _layout_trait(node, "_y", root, parents, screen),
+            "font": _required_tile_number(node, "font"),
+            "brightness": _required_tile_number(node, "brightness"),
+            "horizontalBuffer": _layout_trait(
+                node, "_horbuf", root, parents, screen
+            ),
+            "verticalBuffer": _layout_trait(
+                node, "_verbuf", root, parents, screen
+            ),
+            "textYAdjust": _layout_trait(
+                node, "_text_y_adjust", root, parents, screen
+            ),
+            "verticalCenterDivisor": center_divisor,
+            "baseTextYOffset": base_y_offset + non_glow_y_offset,
+            "boxVisible": False,
+            "inheritBrightness": False,
+            "alphaPolicy": hover_only_alpha(node),
+            "justify": justify,
+            "labelRole": role,
+            "clickSound": _required_tile_text(node, "clicksound"),
+        }
+
+    background_rect = [
+        _layout_trait(background, trait, root, parents, screen)
+        for trait in ("x", "y", "width", "height")
+    ]
+    face_rect = [
+        _layout_trait(face_grab, trait, root, parents, screen)
+        for trait in ("x", "y", "width", "height")
+    ]
+    top_bound = _required_tile_number(background, "_top_bound")
+    bottom_bound = _required_tile_number(background, "_bot_bound")
+    list_text_x = list_text.child("x")
+    list_text_adds = [] if list_text_x is None else [
+        child for child in list_text_x.children if child.tag == "add"
+    ]
+    if len(list_text_adds) != 1:
+        raise ValueError("Owned RaceSexMenu list text offset is ambiguous")
+    selection_gap = _single_added_constant(
+        list_text_adds[0], "RSM list selection gap"
+    )
+    slider_value_gap = _single_added_constant(
+        slider_value.child("x"), "RSM slider label/value gap"
+    )
+    slider_bar_length = _layout_trait(
+        slider_bar, "_length", root, parents, screen
+    )
+    slider_rect = [
+        _layout_trait(slider, trait, root, parents, screen)
+        for trait in ("x", "y", "width", "height")
+    ]
+    slider_bar_x = (slider_rect[2] - slider_bar_length) / 2.0
+    slider_bar_y = _required_tile_number(slider_bar, "y")
+    slider_arrow_y = _layout_trait(slider_left, "y", root, parents, screen)
+    slider_arrow_height = _required_tile_number(slider_left, "height")
+    if (
+        any(value <= 0.0 for value in (*background_rect[2:], *face_rect[2:]))
+        or top_bound < 0.0
+        or bottom_bound <= top_bound
+        or bottom_bound > background_rect[3]
+    ):
+        raise ValueError("Owned RaceSexMenu primary tile geometry is invalid")
+
+    return {
+        "schema": RACE_SEX_MENU_TILE_CONTRACT_SCHEMA,
+        "document": str(document["path"]),
+        "documentSha256": str(document["sha256"]),
+        "menuName": menu.name,
+        "menuClassEntity": _entity_name(_required_tile_text(menu, "class")),
+        "activeListTrait": "user0",
+        "sliderLeftLabelTrait": "user1",
+        "sliderRightLabelTrait": "user2",
+        "fontId": font_id,
+        "background": {
+            "tile": background.name,
+            "rect": background_rect,
+            "texture": _required_tile_texture(background),
+            "brightness": _required_tile_number(background, "brightness"),
+            "depth": _required_tile_number(background, "depth"),
+            "topBound": top_bound,
+            "bottomBound": bottom_bound,
+        },
+        "faceGrab": {
+            "tile": face_grab.name,
+            "id": _required_tile_identity(face_grab, "id"),
+            "rect": face_rect,
+            "depth": _required_tile_number(face_grab, "depth"),
+        },
+        "scroll": {
+            "up": {
+                "tile": scroll_up.name,
+                "id": _required_tile_identity(scroll_up, "id"),
+                "y": _layout_trait(scroll_up, "y", root, parents, screen),
+                "brightness": _required_tile_number(scroll_up, "brightness"),
+                "alphaPolicy": hover_only_alpha(scroll_up),
+                "texture": _required_tile_texture(scroll_up_image),
+                "clickSound": _required_tile_text(scroll_up, "clicksound"),
+            },
+            "down": {
+                "tile": scroll_down.name,
+                "id": _required_tile_identity(scroll_down, "id"),
+                "y": _layout_trait(scroll_down, "y", root, parents, screen),
+                "brightness": _required_tile_number(scroll_down, "brightness"),
+                "alphaPolicy": hover_only_alpha(scroll_down),
+                "texture": _required_tile_texture(scroll_down_image),
+                "clickSound": _required_tile_text(scroll_down, "clicksound"),
+            },
+        },
+        "navigation": {
+            "back": navigation_button(back, "back"),
+            "next": navigation_button(next_button, "next"),
+        },
+        "listItemTemplate": {
+            "template": "RSM_list_item_template",
+            "tile": list_item.name,
+            "id": _required_tile_identity(list_item, "id"),
+            "rect": [
+                _required_tile_number(list_item, trait)
+                for trait in ("x", "y", "width", "height")
+            ],
+            "brightness": _required_tile_number(list_item, "brightness"),
+            "activeListTrait": "user0",
+            "selectedTrait": "_selected",
+            "selectionIndicator": {
+                "tile": selection.name,
+                "texture": _required_tile_texture(selection),
+                "rect": [
+                    _required_tile_number(selection, trait)
+                    for trait in ("x", "y", "width", "height")
+                ],
+            },
+            "text": {
+                "tile": list_text.name,
+                "font": _required_tile_number(list_text, "font"),
+                "y": _required_tile_number(list_text, "y"),
+                "notSelectableX": _required_tile_number(selection, "x"),
+                "selectableX": (
+                    _required_tile_number(selection, "x")
+                    + _required_tile_number(selection, "width")
+                    + selection_gap
+                ),
+                "widthPolicy": "owned-font-content",
+                "heightPolicy": "owned-font-line-height",
+            },
+            "clickSound": _required_tile_text(list_item, "clicksound"),
+            "mouseOverSound": _required_tile_text(list_item, "mouseoversound"),
+        },
+        "sliderTemplate": {
+            "template": "RSM_slider_option_template",
+            "tile": slider.name,
+            "id": _required_tile_identity(slider, "id"),
+            "rect": slider_rect,
+            "brightness": _required_tile_number(slider, "brightness"),
+            "activeListTrait": "user0",
+            "valueTraits": {
+                "current": "user1",
+                "minimum": "user2",
+                "maximum": "user3",
+                "jump": "user4",
+                "display": "user5",
+                "increment": "user6",
+            },
+            "label": {
+                "tile": slider_label.name,
+                "font": _required_tile_number(slider_label, "font"),
+                "x": _required_tile_number(slider_label, "x"),
+                "y": _required_tile_number(slider_label, "y"),
+                "widthPolicy": "owned-font-content",
+                "heightPolicy": "owned-font-line-height",
+            },
+            "value": {
+                "tile": slider_value.name,
+                "font": _required_tile_number(slider_value, "font"),
+                "y": _layout_trait(slider_value, "y", root, parents, screen),
+                "xPolicy": "after-label",
+                "labelGap": slider_value_gap,
+                "widthPolicy": "owned-font-content",
+                "heightPolicy": "owned-font-line-height",
+            },
+            "bar": {
+                "tile": slider_bar.name,
+                "x": slider_bar_x,
+                "y": slider_bar_y,
+                "width": slider_bar_length,
+                "heightGlobalTrait": "_line_thickness",
+            },
+            "leftArrow": {
+                "tile": slider_left.name,
+                "textTile": slider_left_text.name,
+                "id": _required_tile_identity(slider_left, "id"),
+                "xAnchor": slider_bar_x,
+                "anchorEdge": "right",
+                "y": slider_arrow_y,
+                "widthPolicy": "owned-font-content",
+                "height": slider_arrow_height,
+                "stringSource": {
+                    "menuTrait": "user1",
+                },
+                "justify": _required_tile_identity(slider_left_text, "justify"),
+                "clickSound": _required_tile_text(slider_left, "clicksound"),
+            },
+            "rightArrow": {
+                "tile": slider_right.name,
+                "textTile": slider_right_text.name,
+                "id": _required_tile_identity(slider_right, "id"),
+                "x": slider_bar_x + slider_bar_length,
+                "y": slider_arrow_y,
+                "widthPolicy": "owned-font-content",
+                "height": _layout_trait(
+                    slider_right, "height", root, parents, screen
+                ),
+                "stringSource": {
+                    "menuTrait": "user2",
+                },
+                "clickSound": _required_tile_text(slider_right, "clicksound"),
+            },
+            "marker": {
+                "tile": slider_marker.name,
+                "textTile": slider_marker_text.name,
+                "id": _required_tile_identity(slider_marker, "id"),
+                "barX": slider_bar_x,
+                "barWidth": slider_bar_length,
+                "currentTrait": "user1",
+                "minimumTrait": "user2",
+                "maximumTrait": "user3",
+                "clamp": [0.0, 1.0],
+                "y": _layout_trait(slider_marker, "y", root, parents, screen),
+                "width": _required_tile_number(slider_marker, "width"),
+                "height": _layout_trait(
+                    slider_marker, "height", root, parents, screen
+                ),
+                "glyph": _required_tile_text(slider_marker_text, "string"),
+                "glyphXPolicy": "center-from-owned-text-width",
+                "glyphXMultiplier": _required_direct_operation_number(
+                    slider_marker_text.child("x"),
+                    "mul",
+                    "RSM slider marker glyph x multiplier",
+                ),
+                "glyphY": _required_tile_number(slider_marker_text, "y"),
+            },
+            "clickSound": _required_tile_text(slider, "clicksound"),
+            "mouseOverSound": _required_tile_text(slider, "mouseoversound"),
+        },
+    }
+
+
 def _flow_menu_contract(
     flow: dict[str, object],
     trees: dict[str, TileNode],
@@ -1540,6 +2148,26 @@ def _flow_menu_contract(
                 _layout_trait(tile, "width", tree, parents, screen),
                 _layout_trait(tile, "height", tree, parents, screen),
             ]
+        if "semanticLayoutTiles" in definition:
+            tree = trees[document]
+            parents = _tile_parent_index(tree)
+            semantic_rects = {}
+            for semantic, tile_name in dict(
+                definition["semanticLayoutTiles"]
+            ).items():
+                tile = _named_tile(tree, str(tile_name))
+                semantic_rects[str(semantic)] = {
+                    "tile": str(tile_name),
+                    "rect": [
+                        _layout_trait(tile, trait, tree, parents, screen)
+                        for trait in ("x", "y", "width", "height")
+                    ],
+                }
+            row["semanticRects"] = semantic_rects
+        if documents[document]["menuName"] == "RaceSexMenu":
+            row["raceSexMenuTiles"] = _race_sex_menu_tile_contract(
+                trees[document], documents[document], screen, trees
+            )
         rows.append(row)
     closure = set()
     queue = deque(roots)
@@ -1564,6 +2192,53 @@ def _flow_menu_contract(
                 f"Owned flow string entity is absent: {semantic}={entity}"
             )
         strings[str(semantic)] = _display_entity(f"&{entity};")
+    race_sex_rows = [
+        row for row in rows if "raceSexMenuTiles" in row
+    ]
+    if race_sex_rows:
+        navigation_entities = {
+            str(key): str(value)
+            for key, value in dict(
+                flow.get("raceSexNavigationStringEntities", {})
+            ).items()
+        }
+        expected_roles = {
+            str(button["labelRole"])
+            for row in race_sex_rows
+            for button in dict(
+                dict(row["raceSexMenuTiles"])["navigation"]
+            ).values()
+        }
+        if set(navigation_entities) != expected_roles:
+            raise ValueError(
+                "Owned RaceSexMenu navigation string roles differ: "
+                f"expected={sorted(expected_roles)} actual={sorted(navigation_entities)}"
+            )
+        for role, entity in navigation_entities.items():
+            source_documents = [
+                {
+                    "path": document,
+                    "sha256": str(documents[document]["sha256"]),
+                }
+                for document, tree in trees.items()
+                if any(_entity_name(node.text) == entity for node in tree.walk())
+            ]
+            if not source_documents:
+                raise ValueError(
+                    f"Owned RaceSexMenu navigation string entity is absent: {role}={entity}"
+                )
+            label = _display_entity(f"&{entity};")
+            strings[role] = label
+            for row in race_sex_rows:
+                tile_contract = dict(row["raceSexMenuTiles"])
+                navigation = dict(tile_contract["navigation"])
+                button = dict(navigation[role])
+                button["stringEntity"] = entity
+                button["label"] = label
+                button["stringSourceDocuments"] = source_documents
+                navigation[role] = button
+                tile_contract["navigation"] = navigation
+                row["raceSexMenuTiles"] = tile_contract
     return rows, frozenset(closure), canvas, strings
 
 
@@ -1927,31 +2602,37 @@ def _finalize_status_presentation_layout(
             raise ValueError(f"Owned Pip-Boy STATS font identity differs: {tile.name}")
 
 
-def _prepare_gameplay_physical_device(
+def _prepare_owned_physical_device(
     configured: dict[str, object],
     owned_archives: OwnedArchiveStack,
     cache_root: Path,
     configuration: RuntimeConfiguration,
+    *,
+    label: str,
+    schema: str,
+    output_folder: str,
+    surface_role_field: str,
+    required_surface_roles: frozenset[str],
 ) -> dict[str, object]:
     logical_path = canonical_member_path(str(configured["modelAsset"]))
     if not logical_path.startswith("meshes\\") or not logical_path.endswith(".nif"):
-        raise ValueError("Owned Pip-Boy physical device must be one NIF under meshes")
+        raise ValueError(f"Owned {label} must be one NIF under meshes")
     if not isinstance(configured.get("exportStrict"), bool):
-        raise ValueError("Owned Pip-Boy exportStrict policy must be explicit")
+        raise ValueError(f"Owned {label} exportStrict policy must be explicit")
     aliases = configured.get("textureAliases")
     if not isinstance(aliases, dict):
-        raise ValueError("Owned Pip-Boy textureAliases policy must be explicit")
+        raise ValueError(f"Owned {label} textureAliases policy must be explicit")
     screen_surface = str(configured["screenSurface"])
     if not screen_surface:
-        raise ValueError("Owned Pip-Boy screen surface identity is empty")
-    button_glow_surfaces = {
+        raise ValueError(f"Owned {label} screen surface identity is empty")
+    surface_roles = {
         str(role): str(surface)
-        for role, surface in dict(configured["buttonGlowSurfaces"]).items()
+        for role, surface in dict(configured[surface_role_field]).items()
     }
-    if set(button_glow_surfaces) != {"status", "items", "data"} or any(
-        not surface for surface in button_glow_surfaces.values()
+    if set(surface_roles) != required_surface_roles or any(
+        not surface for surface in surface_roles.values()
     ):
-        raise ValueError("Owned Pip-Boy hardware button-glow identities are incomplete")
+        raise ValueError(f"Owned {label} surface-role identities are incomplete")
 
     member = owned_archives.extract(logical_path)
     source_path = cache_root / "source" / Path(logical_path.replace("\\", "/"))
@@ -1959,7 +2640,7 @@ def _prepare_gameplay_physical_device(
     asset_id = hashlib.sha256(
         f"{logical_path}:{member.sha256}".encode("utf-8")
     ).hexdigest()[:configuration.content_compiler.asset_id_hex_characters]
-    output_root = cache_root / "generated" / "opening" / "pipboy3000"
+    output_root = cache_root / "generated" / "opening" / output_folder
     model_path = output_root / f"{asset_id}.gltf"
     sidecar_path = output_root / f"{asset_id}.opennv.json"
     sidecar = export_static_nif(
@@ -1975,21 +2656,21 @@ def _prepare_gameplay_physical_device(
     ]
     if len(screen_matches) != 1:
         raise ValueError(
-            "Owned Pip-Boy CRT surface does not resolve uniquely: "
+            f"Owned {label} screen surface does not resolve uniquely: "
             f"{screen_surface} matches={len(screen_matches)}"
         )
     surface_names = [str(surface["name"]) for surface in sidecar["surfaces"]]
-    ambiguous_glows = {
+    ambiguous_roles = {
         role: surface_names.count(name)
-        for role, name in button_glow_surfaces.items()
+        for role, name in surface_roles.items()
         if surface_names.count(name) != 1
     }
-    if ambiguous_glows:
+    if ambiguous_roles:
         raise ValueError(
-            "Owned Pip-Boy button-glow surfaces do not resolve uniquely: "
+            f"Owned {label} role surfaces do not resolve uniquely: "
             + ", ".join(
-                f"{role}={button_glow_surfaces[role]} matches={count}"
-                for role, count in sorted(ambiguous_glows.items())
+                f"{role}={surface_roles[role]} matches={count}"
+                for role, count in sorted(ambiguous_roles.items())
             )
         )
 
@@ -2011,7 +2692,7 @@ def _prepare_gameplay_physical_device(
     ]
     if missing:
         raise FileNotFoundError(
-            "Owned Pip-Boy active texture bindings are incomplete: "
+            f"Owned {label} active texture bindings are incomplete: "
             + ", ".join(missing)
         )
     textures = {path: texture_pipeline.prepare(path) for path in binding_paths}
@@ -2038,7 +2719,7 @@ def _prepare_gameplay_physical_device(
     buffer_row = dict(sidecar["outputs"]["buffer"])
     buffer_path = output_root / str(buffer_row["file"])
     return {
-        "schema": "opennv-owned-physical-pipboy/v1",
+        "schema": schema,
         "logicalPath": logical_path,
         "source": str(source_path.resolve()),
         "sourceSha256": member.sha256,
@@ -2053,7 +2734,7 @@ def _prepare_gameplay_physical_device(
         "materialManifest": str(material_manifest_path.resolve()),
         "materialManifestSha256": file_sha256(material_manifest_path),
         "screenSurface": screen_surface,
-        "buttonGlowSurfaces": button_glow_surfaces,
+        surface_role_field: surface_roles,
         "surfaces": len(sidecar["surfaces"]),
         "vertices": sum(
             int(surface["vertices"]) for surface in sidecar["surfaces"]
@@ -2061,6 +2742,138 @@ def _prepare_gameplay_physical_device(
         "textures": len(textures),
         "compiler": sidecar["compiler"],
     }
+
+
+def _prepare_gameplay_physical_device(
+    configured: dict[str, object],
+    owned_archives: OwnedArchiveStack,
+    cache_root: Path,
+    configuration: RuntimeConfiguration,
+) -> dict[str, object]:
+    return _prepare_owned_physical_device(
+        configured,
+        owned_archives,
+        cache_root,
+        configuration,
+        label="physical Pip-Boy",
+        schema="opennv-owned-physical-pipboy/v1",
+        output_folder="pipboy3000",
+        surface_role_field="buttonGlowSurfaces",
+        required_surface_roles=frozenset({"status", "items", "data"}),
+    )
+
+
+def _prepare_race_sex_rendered_device(
+    configured: dict[str, object],
+    default_ini_path: Path,
+    owned_archives: OwnedArchiveStack,
+    cache_root: Path,
+    configuration: RuntimeConfiguration,
+) -> dict[str, object]:
+    result = _prepare_owned_physical_device(
+        configured,
+        owned_archives,
+        cache_root,
+        configuration,
+        label="RaceSex rendered terminal",
+        schema="opennv-owned-racesex-rendered-device/v1",
+        output_folder="nv-reflectron-ui",
+        surface_role_field="surfaceRoles",
+        required_surface_roles=frozenset(
+            {
+                "sexButton",
+                "raceButton",
+                "faceButton",
+                "hairButton",
+                "sexGlow",
+                "raceGlow",
+                "faceGlow",
+                "hairGlow",
+                "deviceShell0",
+                "deviceShell1",
+                "deviceShell2",
+            }
+        ),
+    )
+    ini_configuration = dict(configured["iniSettings"])
+    default_section = str(ini_configuration["section"])
+    setting_definitions = dict(ini_configuration["values"])
+    ini = _ini_index(default_ini_path)
+    settings: dict[str, object] = {}
+    for role, definition_value in setting_definitions.items():
+        definition = dict(definition_value)
+        section = str(definition.get("section", default_section))
+        key = str(definition["key"])
+        value_type = str(definition["type"])
+        raw = _ini_setting(ini, section, key)
+        if value_type == "bool":
+            if raw not in {"0", "1"}:
+                raise ValueError(
+                    f"Owned RaceSex rendered-terminal boolean differs: {key}={raw}"
+                )
+            value: object = raw == "1"
+        elif value_type == "float":
+            value = float(raw)
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"Owned RaceSex rendered-terminal float is invalid: {key}={raw}"
+                )
+        else:
+            raise ValueError(
+                f"Owned RaceSex rendered-terminal INI type is unsupported: {value_type}"
+            )
+        settings[str(role)] = {
+            "section": section,
+            "key": key,
+            "type": value_type,
+            "value": value,
+        }
+    result["settings"] = settings
+    result["settingsSource"] = {
+        "path": str(default_ini_path.resolve()),
+        "sha256": file_sha256(default_ini_path),
+    }
+    repository_root = Path(__file__).resolve().parents[2]
+    for role, expected_schema in (
+        (
+            "framingContract",
+            "opennv-fnv-racesex-rendered-device-framing/v1",
+        ),
+        (
+            "previewCameraContract",
+            "opennv-fnv-racesex-preview-camera/v1",
+        ),
+    ):
+        configured_path = Path(str(configured[role]).replace("\\", "/"))
+        contract_path = (repository_root / configured_path).resolve()
+        try:
+            contract_path.relative_to(repository_root)
+        except ValueError as error:
+            raise ValueError(
+                f"RaceSex {role} must remain inside the OpenNV repository"
+            ) from error
+        document = json.loads(contract_path.read_text(encoding="utf-8"))
+        if document.get("schema") != expected_schema:
+            raise ValueError(f"RaceSex {role} schema differs")
+        if role == "framingContract":
+            alignment = document.get("alignment")
+            if (
+                not isinstance(alignment, dict)
+                or alignment.get("baselineCurrentFrameSha256") is None
+                or alignment.get("projectedCurrentRightScreenBoundsPixels") is None
+                or alignment.get("deviceTranslationCanvasUnits") is None
+                or alignment.get("retailContentBoundsPixels") is None
+                or alignment.get("currentContentBoundsPixels") is None
+                or alignment.get("contentScale") is None
+                or alignment.get("contentTranslationWithinScreenPixels") is None
+            ):
+                raise ValueError("RaceSex framing alignment contract is incomplete")
+        result[role] = {
+            "source": str(contract_path),
+            "sha256": file_sha256(contract_path),
+            "document": document,
+        }
+    return result
 
 
 def compile_ui(
@@ -2148,6 +2961,20 @@ def compile_ui(
         cache_root,
         configuration,
     )
+    appearance_menu_configuration = dict(dict(flow["menus"])["appearance"])
+    race_sex_rendered_device = _prepare_race_sex_rendered_device(
+        dict(appearance_menu_configuration["renderedDevice"]),
+        default_ini_path,
+        owned_archives,
+        cache_root,
+        configuration,
+    )
+    appearance_rows = [
+        menu for menu in flow_menus if str(menu["role"]) == "appearance"
+    ]
+    if len(appearance_rows) != 1 or "raceSexMenuTiles" not in appearance_rows[0]:
+        raise ValueError("Owned RaceSex rendered-device menu does not resolve uniquely")
+    appearance_rows[0]["renderedDevice"] = race_sex_rendered_device
     gameplay["systemColor"] = _gameplay_system_color(
         dict(dict(recipe_ui["gameplayPresentation"])["systemColor"]),
         default_ini_path,
@@ -2166,6 +2993,45 @@ def compile_ui(
     configured_title_asset = _asset_path(str(recipe_ui["titleAsset"]))
     if configured_title_asset is None or not configured_title_asset.endswith(".dds"):
         raise ValueError("Owned boot menu title asset is invalid")
+    texture_pipeline = OwnedTexturePipeline(
+        owned_archives,
+        cache_root,
+        {},
+        configuration.content_compiler,
+    )
+    flow_tile_assets: set[str] = set()
+    for menu in flow_menus:
+        tile_contract_value = menu.get("raceSexMenuTiles")
+        if tile_contract_value is None:
+            continue
+        tile_contract = dict(tile_contract_value)
+        texture_owners = [
+            dict(tile_contract["background"]),
+            dict(dict(tile_contract["scroll"])["up"]),
+            dict(dict(tile_contract["scroll"])["down"]),
+            dict(dict(dict(tile_contract["listItemTemplate"])["selectionIndicator"])),
+        ]
+        for owner in texture_owners:
+            texture = dict(owner["texture"])
+            if "logicalPath" in texture:
+                flow_tile_assets.add(str(texture["logicalPath"]))
+                continue
+            resolved, atlas_texture_path = _resolve_tile_atlas_texture(
+                texture,
+                owned_archives,
+                cache_root,
+            )
+            owner["texture"] = resolved
+            flow_tile_assets.add(atlas_texture_path)
+        tile_contract["background"] = texture_owners[0]
+        scroll = dict(tile_contract["scroll"])
+        scroll["up"] = texture_owners[1]
+        scroll["down"] = texture_owners[2]
+        tile_contract["scroll"] = scroll
+        list_item = dict(tile_contract["listItemTemplate"])
+        list_item["selectionIndicator"] = texture_owners[3]
+        tile_contract["listItemTemplate"] = list_item
+        menu["raceSexMenuTiles"] = tile_contract
     requested_assets = sorted(
         {
             str(asset)
@@ -2179,12 +3045,7 @@ def compile_ui(
             for value in gameplay["statusPresentation"]["bodyImages"]
         }
         | {str(value) for value in additional_texture_paths}
-    )
-    texture_pipeline = OwnedTexturePipeline(
-        owned_archives,
-        cache_root,
-        {},
-        configuration.content_compiler,
+        | flow_tile_assets
     )
     texture_rows = []
     unresolved_assets = []
@@ -2196,6 +3057,43 @@ def compile_ui(
             unresolved_assets.append({"path": requested, "reason": "owned-member-not-resolved"})
             continue
         texture_rows.append(texture_pipeline.prepare(requested).manifest())
+
+    flow_textures_by_path = {
+        str(value["requestedPath"]): value for value in texture_rows
+    }
+    for menu in flow_menus:
+        tile_contract_value = menu.get("raceSexMenuTiles")
+        if tile_contract_value is None:
+            continue
+        tile_contract = dict(tile_contract_value)
+        background = dict(tile_contract["background"])
+        scroll = dict(tile_contract["scroll"])
+        for direction in ("up", "down"):
+            target = dict(scroll[direction])
+            texture = dict(target["texture"])
+            requested_path = str(
+                texture.get("logicalPath", texture.get("atlasTextureLogicalPath", ""))
+            )
+            prepared = flow_textures_by_path.get(requested_path)
+            if prepared is None:
+                raise ValueError(
+                    f"Owned RaceSexMenu scroll texture was not prepared: {requested_path}"
+                )
+            width = float(prepared["width"])
+            height = float(prepared["height"])
+            if width <= 0.0 or height <= 0.0:
+                raise ValueError(
+                    f"Owned RaceSexMenu scroll texture dimensions are invalid: {requested_path}"
+                )
+            target["rect"] = [
+                (float(background["rect"][2]) - width) / 2.0,
+                float(target["y"]),
+                width,
+                height,
+            ]
+            scroll[direction] = target
+        tile_contract["scroll"] = scroll
+        menu["raceSexMenuTiles"] = tile_contract
 
     tree = trees[boot_document]
     container_name = str(recipe_ui["buttonContainer"])
@@ -2237,6 +3135,32 @@ def compile_ui(
     )
     ini = _ini_index(default_ini_path)
     fonts_settings = dict(dict(recipe_ui["engineSettings"])["fonts"])
+    race_sex_font_ids = {
+        int(dict(menu["raceSexMenuTiles"])["fontId"])
+        for menu in flow_menus
+        if "raceSexMenuTiles" in menu
+    }
+    race_sex_fonts: dict[int, dict[str, object]] = {}
+    race_sex_font_textures = []
+    for font_id in sorted(race_sex_font_ids):
+        font, atlas = _compile_gamebryo_font(
+            font_id,
+            ini,
+            fonts_settings,
+            owned_archives,
+            cache_root,
+            texture_pipeline,
+        )
+        race_sex_fonts[font_id] = font
+        race_sex_font_textures.append(atlas)
+    for menu in flow_menus:
+        tile_contract_value = menu.get("raceSexMenuTiles")
+        if tile_contract_value is None:
+            continue
+        tile_contract = dict(tile_contract_value)
+        font_id = int(tile_contract["fontId"])
+        tile_contract["font"] = {"fontId": font_id, **race_sex_fonts[font_id]}
+        menu["raceSexMenuTiles"] = tile_contract
     gameplay_fonts = []
     gameplay_font_textures = []
     for font_id in sorted(gameplay_font_ids):
@@ -2259,7 +3183,12 @@ def compile_ui(
     )
     textures_by_path = {
         str(value["requestedPath"]): value
-        for value in [*texture_rows, *engine_textures, *gameplay_font_textures]
+        for value in [
+            *texture_rows,
+            *engine_textures,
+            *race_sex_font_textures,
+            *gameplay_font_textures,
+        ]
     }
     background_asset = str(gameplay["backgroundAsset"])
     if background_asset not in textures_by_path:
@@ -3208,13 +4137,47 @@ def _compile_facegen_control_space(
     preview_minimum = float(preview_policy["minimum"])
     preview_maximum = float(preview_policy["maximum"])
     preview_step = float(preview_policy["step"])
+    exact_slider_semantics = "sliderSemanticsEvidence" in preview_policy
+    preview_jump = float(preview_policy.get("jump", preview_step))
+    morph_weight_scale = float(preview_policy.get("morphWeightScale", 1.0))
     preview_reset = float(preview_policy["resetValue"])
     preview_acceptance = float(preview_policy["acceptanceValue"])
+    slider_evidence = dict(preview_policy.get("sliderSemanticsEvidence", {}))
+    expected_slider_evidence = {
+        "classification": FACEGEN_SLIDER_EVIDENCE_CLASSIFICATION,
+        "engineBuild": FACEGEN_SLIDER_EVIDENCE_ENGINE_BUILD,
+        "sourceExecutableSha256Parts": list(
+            FACEGEN_SLIDER_EVIDENCE_EXECUTABLE_SHA256_PARTS
+        ),
+        "sourceMinimum": FACEGEN_SLIDER_SOURCE_MINIMUM,
+        "sourceMaximum": FACEGEN_SLIDER_SOURCE_MAXIMUM,
+        "uiScale": FACEGEN_SLIDER_UI_SCALE,
+        "uiMinimum": FACEGEN_SLIDER_UI_MINIMUM,
+        "uiMaximum": FACEGEN_SLIDER_UI_MAXIMUM,
+        "ordinaryIncrement": FACEGEN_SLIDER_ORDINARY_INCREMENT,
+        "jump": FACEGEN_SLIDER_JUMP,
+        "morphWeightScale": FACEGEN_SLIDER_MORPH_WEIGHT_SCALE,
+        "lowGlobalAddress": FACEGEN_SLIDER_LOW_GLOBAL_ADDRESS,
+        "highGlobalAddress": FACEGEN_SLIDER_HIGH_GLOBAL_ADDRESS,
+        "incrementTrait": FACEGEN_SLIDER_INCREMENT_TRAIT,
+        "incrementDefaultThreshold": (
+            FACEGEN_SLIDER_INCREMENT_DEFAULT_THRESHOLD
+        ),
+    }
     presentation = {
         key: float(value)
         for key, value in dict(preview_policy["presentation"]).items()
     }
-    expected_presentation_keys = {
+    required_presentation_keys = {
+        "fullInVerticalOffsetGameUnits",
+        "fullInDistanceGameUnits",
+        "fullInYawRadians",
+        "fullOutVerticalOffsetGameUnits",
+        "fullOutDistanceGameUnits",
+        "fullOutYawRadians",
+        "startingZoomFraction",
+    }
+    optional_framing_keys = {
         "viewportWidthFraction",
         "viewportHeightFraction",
         "verticalFovHalfAngleFactor",
@@ -3228,10 +4191,19 @@ def _compile_facegen_control_space(
                 preview_minimum,
                 preview_maximum,
                 preview_step,
+                preview_jump,
+                morph_weight_scale,
                 preview_reset,
                 preview_acceptance,
             )
         )
+        or exact_slider_semantics and slider_evidence != expected_slider_evidence
+        or exact_slider_semantics and preview_minimum != FACEGEN_SLIDER_UI_MINIMUM
+        or exact_slider_semantics and preview_maximum != FACEGEN_SLIDER_UI_MAXIMUM
+        or exact_slider_semantics and preview_step != FACEGEN_SLIDER_ORDINARY_INCREMENT
+        or exact_slider_semantics and preview_jump != FACEGEN_SLIDER_JUMP
+        or exact_slider_semantics and
+            morph_weight_scale != FACEGEN_SLIDER_MORPH_WEIGHT_SCALE
         or preview_minimum >= preview_maximum
         or preview_step <= 0.0
         or preview_reset < preview_minimum
@@ -3239,16 +4211,46 @@ def _compile_facegen_control_space(
         or preview_acceptance < preview_minimum
         or preview_acceptance > preview_maximum
         or preview_acceptance == preview_reset
-        or set(presentation) != expected_presentation_keys
-        or not all(
-            math.isfinite(value) and 0.0 < value <= 1.0
-            for value in presentation.values()
+        or not required_presentation_keys.issubset(presentation)
+        or set(presentation) - required_presentation_keys - optional_framing_keys
+        or set(presentation) & optional_framing_keys not in (
+            set(),
+            optional_framing_keys,
         )
+        or not all(math.isfinite(value) for value in presentation.values())
+        or presentation["fullInDistanceGameUnits"] <= 0.0
+        or presentation["fullOutDistanceGameUnits"] <=
+            presentation["fullInDistanceGameUnits"]
+        or not 0.0 <= presentation["startingZoomFraction"] <= 1.0
     ):
         raise ValueError("Native FaceGen preview control policy is invalid")
+    runtime_preview_control = {
+        **preview_matches[0],
+        "minimum": preview_minimum,
+        "maximum": preview_maximum,
+        "step": preview_step,
+        "jump": preview_jump,
+        "morphWeightScale": morph_weight_scale,
+        "resetValue": preview_reset,
+        "acceptanceValue": preview_acceptance,
+        "presentation": presentation,
+        "semantics": preview_policy["semantics"],
+    }
+    if exact_slider_semantics:
+        slider_executable_sha256 = "".join(
+            slider_evidence.pop("sourceExecutableSha256Parts")
+        )
+        runtime_preview_control["sliderSemanticsEvidence"] = {
+            **slider_evidence,
+            "sourceExecutableSha256": slider_executable_sha256,
+        }
     return {
         "schema": FACEGEN_CONTROL_SPACE_SCHEMA,
-        "status": FACEGEN_CONTROL_SPACE_STATUS,
+        "status": (
+            FACEGEN_CONTROL_SPACE_STATUS
+            if exact_slider_semantics
+            else FACEGEN_NORMALIZED_PREVIEW_STATUS
+        ),
         "source": {
             "archive": ui_archive_path.name,
             "archiveBytes": ui_archive_path.stat().st_size,
@@ -3271,19 +4273,13 @@ def _compile_facegen_control_space(
                 set(range(len(symmetric_geometry))) - set(indices)
             ),
         },
-        "runtimePreviewControl": {
-            **preview_matches[0],
-            "minimum": preview_minimum,
-            "maximum": preview_maximum,
-            "step": preview_step,
-            "resetValue": preview_reset,
-            "acceptanceValue": preview_acceptance,
-            "presentation": presentation,
-            "semantics": preview_policy["semantics"],
-        },
+        "runtimePreviewControl": runtime_preview_control,
         "runtimeDisposition": (
-            "control-axes-and-default-preview-egm-targets-compiled-one-normalized-"
-            "control-runtime-bound-full-retail-slider-ranges-unimplemented"
+            "control-axes-and-default-preview-egm-targets-compiled-all-native-"
+            "geometry-controls-runtime-bound-sibling-gamebryo-slider-semantics-"
+            "corroborated"
+            if exact_slider_semantics
+            else FACEGEN_NORMALIZED_PREVIEW_DISPOSITION
         ),
     }
 
@@ -4399,6 +5395,8 @@ def _compile_guide_animation_objects(
             idle_form_id, ()
         ):
             member = owned_archives.extract(animation_object.logical_path)
+            idle_member = owned_archives.extract(idle.logical_path)
+            idle_playback = animation_sequence_manifest(idle_member.data)
             animation_objects.append(
                 {
                     "componentRole": (
@@ -4411,6 +5409,14 @@ def _compile_guide_animation_objects(
                     "idleAnimationFormId": form_id_text(idle.form_id),
                     "idleAnimationEditorId": idle.editor_id,
                     "idleAnimationLogicalPath": idle.logical_path,
+                    "idleAnimationSha256": idle_member.sha256,
+                    "idleAnimationSequenceName": idle_playback["sequenceName"],
+                    "idleAnimationStartSeconds": idle_playback["startSeconds"],
+                    "idleAnimationStopSeconds": idle_playback["stopSeconds"],
+                    "idleAnimationCycleType": idle_playback["cycleType"],
+                    "idleAnimationTransformPrioritiesByNode": idle_playback[
+                        "transformPrioritiesByNode"
+                    ],
                     "modelLogicalPath": member.logical_path,
                     "bytes": len(member.data),
                     "sha256": member.sha256,
@@ -4514,6 +5520,76 @@ def _compile_guide_furniture_animation(
     return result
 
 
+def _compile_owned_furniture_identity(
+    expected: dict[str, object],
+    sources: FlowSourceCatalog,
+    owned_archives: OwnedArchiveStack,
+    role: str,
+) -> dict[str, object]:
+    reference_form_id = int(str(expected["referenceFormId"]), FORM_ID_RADIX)
+    base_form_id = int(str(expected["baseFormId"]), FORM_ID_RADIX)
+    reference = sources.references_by_form.get(reference_form_id)
+    if (
+        reference is None
+        or reference.record_type != "REFR"
+        or reference.base_form_id != base_form_id
+        or reference.record_sha256.casefold()
+        != str(expected["referenceRecordSha256"]).casefold()
+    ):
+        raise ValueError(
+            f"Owned {role} reference/base differs from the strict recipe"
+        )
+    furniture_record = sources.furniture_by_form.get(base_form_id)
+    if furniture_record is None:
+        raise ValueError(f"Owned {role} FURN base is absent")
+    furniture_subrecords = list(iter_subrecords(furniture_record))
+    model_paths = [
+        value
+        for value in (_catalog_text(furniture_subrecords, "MODL"),)
+        if value is not None
+    ]
+    if len(model_paths) != 1:
+        raise ValueError(f"Owned {role} FURN has no unique model")
+    model_path = canonical_member_path(_asset_path(model_paths[0]) or "")
+    expected_identity = {
+        "editorId": str(expected["editorId"]),
+        "recordSha256": str(expected["recordSha256"]).casefold(),
+        "modelLogicalPath": canonical_member_path(
+            str(expected["modelLogicalPath"])
+        ),
+    }
+    actual_identity = {
+        "editorId": _catalog_text(furniture_subrecords, "EDID"),
+        "recordSha256": hashlib.sha256(furniture_record.data).hexdigest(),
+        "modelLogicalPath": model_path,
+    }
+    if actual_identity != expected_identity:
+        raise ValueError(
+            f"Owned {role} FURN differs from the strict recipe: "
+            f"expected={expected_identity} actual={actual_identity}"
+        )
+    model_member = owned_archives.extract(model_path)
+    expected_model_sha256 = str(expected["modelSha256"]).casefold()
+    if model_member.sha256 != expected_model_sha256:
+        raise ValueError(
+            f"Owned {role} NIF hash differs: "
+            f"expected={expected_model_sha256} actual={model_member.sha256}"
+        )
+    return {
+        "referenceFormId": form_id_text(reference_form_id),
+        "referenceRecordSha256": reference.record_sha256,
+        "baseFormId": form_id_text(base_form_id),
+        "editorId": actual_identity["editorId"],
+        "recordType": "FURN",
+        "recordSha256": actual_identity["recordSha256"],
+        "modelLogicalPath": model_path,
+        "modelBytes": len(model_member.data),
+        "modelSha256": model_member.sha256,
+        "sourceArchive": model_member.source_archive,
+        "sourceArchiveSha256": model_member.source_archive_sha256,
+    }
+
+
 def _compile_guide_furniture_occupancy(
     contract: dict[str, object],
     packages: list[dict[str, object]],
@@ -4605,6 +5681,12 @@ def _compile_guide_furniture_occupancy(
             "Owned initial guide furniture NIF hash differs: "
             f"expected={expected_model_sha256} actual={furniture_member.sha256}"
         )
+    patient_bed = _compile_owned_furniture_identity(
+        dict(source["patientBed"]),
+        sources,
+        owned_archives,
+        "opening patient bed",
+    )
     marker = furniture_marker_manifest(furniture_member.data, marker_id)
     expected_marker = dict(furniture_source["marker"])
     expected_marker_identity = {
@@ -4749,12 +5831,13 @@ def _compile_guide_furniture_occupancy(
         )
     return (
         {
-            "schema": "opennv-owned-guide-furniture-occupancy/v2",
+            "schema": "opennv-owned-guide-furniture-occupancy/v4",
             "initialPackageFormId": initial_package_form_id,
             "referenceFormId": reference_form_id,
             "markerId": marker_id,
             "markerDisposition": (
-                "compose-owned-furniture-reference-gmst-replacement-offset-and-heading-delta"
+                "compose-owned-furniture-reference-nif-marker-minus-gmst-target-"
+                "offset-and-heading-delta"
             ),
             "furniture": {
                 "referenceFormId": reference_form_id,
@@ -4770,6 +5853,7 @@ def _compile_guide_furniture_occupancy(
                 "sourceArchiveSha256": furniture_member.source_archive_sha256,
                 "marker": marker,
             },
+            "patientBed": patient_bed,
             "releaseStage": release_stage,
             "releasePackageFormId": release_package_form_id,
             "animationObjectIdleFormId": animation_object_idle_form_id,
@@ -5270,6 +6354,34 @@ def compile_new_game_flow(
             dict(character_rules["faceGenControlSpace"]),
         ),
     )
+    race_sex_list = dict(character_rules["raceSexList"])
+    race_sex_header = dict(race_sex_list["header"])
+    race_sex_choices = [dict(value) for value in race_sex_list["choices"]]
+    race_sex_source = dict(race_sex_list["source"])
+    source_executable = master_path.parent.parent / "FalloutNV.exe"
+    if (
+        race_sex_list.get("activeList") != "sex"
+        or int(race_sex_header.get("ordinal", 0)) != 1
+        or race_sex_header.get("settingEntity") != "sRSMSex"
+        or not str(race_sex_header.get("value", "")).strip()
+        or [value.get("engineValue") for value in race_sex_choices]
+        != list(appearance["sexEngineValues"])
+        or [value.get("settingEntity") for value in race_sex_choices]
+        != ["sMale", "sFemale"]
+        or any(not str(value.get("value", "")).strip() for value in race_sex_choices)
+        or race_sex_source.get("engineBuild") != FNV_ENGINE_BUILD
+        or race_sex_source.get("observedMenuClass") != "RaceSexMenu"
+        or race_sex_source.get("observedRenderedMenuClass")
+        != "FORenderedMenuRaceSex"
+        or not source_executable.is_file()
+        or file_sha256(source_executable)
+        != str(race_sex_source.get("sourceExecutableSha256", "")).casefold()
+    ):
+        raise ValueError("Owned RaceSexMenu creator-list contract differs")
+    race_sex_creator_title = (
+        f'{int(race_sex_header["ordinal"])}. {race_sex_header["value"]}'
+    )
+    race_sex_creator_choices = [str(value["value"]) for value in race_sex_choices]
     appearance_player = appearance["player"]
     if not isinstance(appearance_player, dict):
         raise ValueError("Owned player appearance contract is malformed")
@@ -5282,6 +6394,11 @@ def compile_new_game_flow(
         cache_root,
         appearance,
         configuration,
+        include_full_body=True,
+        presentation_outfit_form_id=int(
+            str(character_rules["appearancePreviewOutfitFormId"]),
+            16,
+        ),
     )
     tag_menu_commands = [
         command
@@ -5343,8 +6460,18 @@ def compile_new_game_flow(
                 "vitals": _compile_gameplay_vitals(sources),
                 "sex": {
                     "messageFormId": sex_message["formId"],
-                    "title": next(iter(_record_text_values(sex_message, "FULL")), ""),
-                    "choices": sex_choices,
+                    "promptTitle": next(
+                        iter(_record_text_values(sex_message, "FULL")), ""
+                    ),
+                    "promptChoices": sex_choices,
+                    "title": race_sex_creator_title,
+                    "choices": race_sex_creator_choices,
+                    "creatorList": {
+                        "activeList": race_sex_list["activeList"],
+                        "header": race_sex_header,
+                        "choices": race_sex_choices,
+                        "source": race_sex_source,
+                    },
                 },
                 "special": {
                     **{
@@ -5789,6 +6916,32 @@ def prepare_opening_manifest(
         configuration,
         dict(recipe["videoImport"]),
     )
+    entry_blockers = [
+        *({"reason": blocker} for blocker in blockers),
+        *ui["unresolvedIncludes"],
+        *ui["unresolvedAssets"],
+        *(
+            {"path": video["logicalPath"], "reason": video["status"]}
+            for video in videos
+            if video["source"] is None and video["requiredAtEntry"]
+        ),
+    ]
+    source_closure = _first_slice_source_closure(
+        new_game_flow,
+        ui,
+        videos,
+        entry_blockers,
+    )
+    player_facegen_preview_set = emit_player_facegen_preview_set(
+        cache_root,
+        dict(
+            dict(
+                dict(
+                    dict(new_game_flow["character"])["appearance"]
+                )["player"]
+            )["faceGen"]
+        )["previewHead"],
+    )
     manifest = {
         "schema": OPENING_MANIFEST_SCHEMA,
         "status": OPENING_MANIFEST_STATUS,
@@ -5814,19 +6967,173 @@ def prepare_opening_manifest(
             "complexity": "O(records+form-links+selected-group-children)",
         },
         "newGameFlow": new_game_flow,
+        "outputs": {
+            "playerFaceGenPreviewSet": player_facegen_preview_set,
+        },
         "ui": ui,
         "videos": videos,
-        "blockers": [
-            *({"reason": blocker} for blocker in blockers),
-            *ui["unresolvedIncludes"],
-            *ui["unresolvedAssets"],
-            *(
-                {"path": video["logicalPath"], "reason": video["status"]}
-                for video in videos
-                if video["source"] is None and video["requiredAtEntry"]
-            ),
-        ],
+        "sourceClosure": source_closure,
+        "blockers": entry_blockers,
     }
     output = cache_root / "generated" / "opening" / "opening-manifest.json"
     atomic_json(output, manifest)
     return {"output": str(output.resolve()), "manifest": manifest}
+
+
+def _first_slice_source_closure(
+    flow: dict[str, object],
+    ui: dict[str, object],
+    videos: list[dict[str, object]],
+    blockers: list[dict[str, object]],
+) -> dict[str, object]:
+    """Account the admitted FNV new-game chain without promoting parity."""
+
+    command_contract = dict(flow["commandContract"])
+    dialogue = dict(flow["dialogue"])
+    topics = [dict(value) for value in dialogue["topics"]]
+    dialogue_infos = [
+        dict(info)
+        for topic in topics
+        for info in topic["infos"]
+    ]
+    psychology = dict(dialogue["psychologyRootInfo"])
+    if not any(info["formId"] == psychology["formId"] for info in dialogue_infos):
+        dialogue_infos.append(psychology)
+    dialogue_responses = sum(len(info["responses"]) for info in dialogue_infos)
+    voice = dict(dialogue["voice"])
+    guide = dict(flow["guideActorAi"])
+    appearance = dict(dict(dict(flow["character"])["appearance"])["player"])
+    facegen = dict(appearance["faceGen"])
+    control_space = dict(facegen["controlSpace"])
+    native_geometry = dict(control_space["nativeGeometryExposure"])
+    native_geometry_controls = [
+        dict(value) for value in native_geometry["controls"]
+    ]
+    preview = dict(facegen["previewHead"])
+    preview_rows = [dict(value) for value in preview["previews"]]
+    omitted = []
+    for preview_row in preview_rows:
+        preview_outputs = dict(preview_row["outputs"])
+        preview_sidecar_path = Path(str(preview_outputs["sidecar"]))
+        preview_sidecar = json.loads(preview_sidecar_path.read_text(encoding="utf-8"))
+        omitted.extend(
+            {
+                "selection": {
+                    "sex": preview_row["sex"],
+                    "raceFormId": preview_row["raceFormId"],
+                    "hairFormId": preview_row["hairFormId"],
+                    "eyesFormId": preview_row["eyesFormId"],
+                },
+                "role": row["role"],
+                "shape": row["shape"],
+                "disposition": row["disposition"],
+            }
+            for row in preview_sidecar["omittedSurfaces"]
+        )
+    unaccounted = [dict(value) for value in blockers]
+    if not command_contract["allEmittedKindsRuntimeBlocking"]:
+        unaccounted.append({"reason": "opening-command-runtime-coverage"})
+    if not command_contract["allDeclaredRecordReferencesResolved"]:
+        unaccounted.append({"reason": "opening-command-record-identities"})
+    if len(dialogue_infos) != int(voice["infoCount"]):
+        unaccounted.append({"reason": "dialogue-info-voice-closure"})
+    if dialogue_responses != int(voice["responseCount"]):
+        unaccounted.append({"reason": "dialogue-response-voice-closure"})
+    preview_control_names = [str(value) for value in preview["geometryControlNames"]]
+    native_control_names = [
+        str(value["settingEntity"]) for value in native_geometry_controls
+    ]
+    if (
+        not native_geometry_controls
+        or len(native_control_names) != len(set(native_control_names))
+        or len(native_geometry_controls) != int(preview["geometryControlCount"])
+        or native_control_names != preview_control_names
+    ):
+        unaccounted.append({"reason": "creator-native-control-preview-closure"})
+    required_videos = [video for video in videos if video["requiredAtEntry"]]
+    if len(required_videos) != 1 or required_videos[0]["runtime"] is None:
+        unaccounted.append({"reason": "owned-entry-video-runtime"})
+    if {str(row["sex"]) for row in preview_rows} != {"male", "female"}:
+        unaccounted.append({"reason": "creator-default-sex-preview-closure"})
+    unsupported = ["non-default-race-hair-eye-live-3d-face-preview"]
+    if unaccounted or omitted:
+        closure_status = "incomplete"
+    elif unsupported:
+        closure_status = (
+            "source-accounted-playable-claim-blocked-by-explicit-capability-gap"
+        )
+    else:
+        closure_status = "source-accounted-native-runtime-and-visual-promotion-pending"
+    return {
+        "schema": "opennv-fnv-first-slice-source-closure/v1",
+        "status": closure_status,
+        "playableClaimReady": not unaccounted and not omitted and not unsupported,
+        "admittedBeatOrder": [
+            "owned-entry-video-tail",
+            "owned-imad-dialogue-transition",
+            "first-doc-reveal",
+            "doc-seated-smoking",
+            "name-entry",
+            "creator-default",
+            "creator-edited",
+            "creator-confirm-ready",
+            "controls-released",
+        ],
+        "participants": {
+            "source": len(flow["sceneRoles"]),
+            "accounted": len(flow["sceneRoles"]),
+        },
+        "commands": {
+            "source": int(command_contract["commandCount"]),
+            "accounted": int(command_contract["commandCount"]),
+        },
+        "dialogue": {
+            "infos": len(dialogue_infos),
+            "accountedInfos": int(voice["infoCount"]),
+            "responses": dialogue_responses,
+            "accountedResponses": int(voice["responseCount"]),
+        },
+        "ui": {
+            "documents": int(ui["documentCount"]),
+            "preparedTextures": len(ui["preparedTextures"]),
+            "unresolvedIncludes": len(ui["unresolvedIncludes"]),
+            "unresolvedAssets": len(ui["unresolvedAssets"]),
+        },
+        "packages": {
+            "guide": len(guide["packages"]),
+            "player": len(dict(flow["playerAnimation"])["packages"]),
+        },
+        "materials": {
+            "previewSurfaces": len(preview_sidecar["surfaces"]),
+            "previewOmittedSurfaces": len(omitted),
+        },
+        "creator": {
+            "nativeGeometryControls": len(native_geometry_controls),
+            "runtimeBoundGeometryControls": int(preview["geometryControlCount"]),
+            "exactSourceLabels": len(
+                {str(value["sourceLabel"]) for value in native_geometry_controls}
+            ),
+            "exactAxisHashes": len(
+                {str(value["axisSha256"]) for value in native_geometry_controls}
+            ),
+            "sliderValueSemantics": (
+                "independent-sibling-gamebryo-racesexmenu-static-corroboration"
+            ),
+            "sliderSemanticsEvidence": dict(
+                dict(control_space["runtimePreviewControl"])[
+                    "sliderSemanticsEvidence"
+                ]
+            ),
+        },
+        "effects": {
+            "imageSpaceModifiers": len(flow["imageSpaceModifiers"]),
+            "animationObjects": len(guide["animationObjects"]),
+            "smoke": (
+                "first-party-presentation-adaptation-owned-anio-tip-anchor"
+            ),
+        },
+        "omitted": omitted,
+        "unsupported": unsupported,
+        "unaccounted": unaccounted,
+        "unaccountedCount": len(unaccounted),
+    }

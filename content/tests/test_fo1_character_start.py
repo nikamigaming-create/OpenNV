@@ -62,6 +62,7 @@ class Fo1CharacterStartTest(unittest.TestCase):
                 "PID_KNIFE",
                 "PID_10MM_PISTOL",
                 "PID_10MM_JHP",
+                "PID_10MM_AP",
                 "PID_STIMPAK",
                 "PID_FLARE",
                 "PID_LOCKPICKS",
@@ -77,6 +78,21 @@ class Fo1CharacterStartTest(unittest.TestCase):
         self.assertEqual(
             inventory["itemInventoryBySymbol"]["PID_KNIFE"]["logicalPath"],
             "ART/INVEN/OKNIFE.FRM",
+        )
+        self.assertEqual(
+            inventory["itemInventoryBySymbol"]["PID_10MM_AP"],
+            {
+                "logicalPath": "ART/INVEN/10MMAP.FRM",
+                "sha256": "edd9f1cb6e77e9819bf787f8fbc23d9fc573aab2075595ff9820e9618464ed28",
+                "width": 83,
+                "height": 61,
+            },
+        )
+        self.assertTrue(
+            any(
+                "source-configured ranged/melee active-hand selection" in row
+                for row in recipe["supported"]
+            )
         )
 
     @staticmethod

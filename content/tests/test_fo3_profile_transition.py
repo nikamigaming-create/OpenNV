@@ -18,6 +18,8 @@ from prepare_fo3_profile import (  # noqa: E402
     FORM_ID_RADIX,
     _bind_cg01_toddler_world,
     _bind_cg01_transition_video,
+    _cg00_package_playback_contract,
+    _cg00_package_stage_condition,
     _compile_cg01_stage0_transition,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
@@ -25,6 +27,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_post_stage85_dialogue,
     _compile_stage65_appearance_contract,
     _compile_stage100_transition,
+    _fallout_default_fov_projection,
     _float_contract,
     load_recipe,
 )
@@ -52,6 +55,12 @@ CG01_TRIGGER_PRIMITIVE = (69.24656, 69.24656, 69.24656, 0.8, 0.298039, 0.15, 0.0
 CG01_TRIGGER_TRANSFORM = (-2600.9722, -5436.599, 7432.794, 0.0, 0.0, 0.0)
 FO3_RECIPE = Path(__file__).resolve().parents[1] / "recipes" / (
     "fo3-goty-opening-profile-v1.json"
+)
+FO3_OPENING_FLOW = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.cs"
+)
+FO3_CG00_EARLY_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3Cg00EarlyBirthRuntime.cs"
 )
 
 
@@ -156,6 +165,82 @@ def selection() -> dict[str, object]:
 
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
+    def test_capture_creates_fresh_output_directory_before_png_write(self) -> None:
+        source = FO3_OPENING_FLOW.read_text(encoding="utf-8")
+        capture = source[source.index("private async Task<Fo3AppearanceProofCapture>") :]
+
+        self.assertLess(
+            capture.index("Directory.CreateDirectory(captureRoot);"),
+            capture.index("image.SavePng(path);"),
+        )
+
+    def test_default_fov_uses_owned_four_by_three_horizontal_convention(self) -> None:
+        projection = _fallout_default_fov_projection(75.0)
+
+        self.assertEqual(75.0, projection["sourceHorizontalFovDegrees"])
+        self.assertEqual(0.75, projection["referenceAspectHeightOverWidth"])
+        self.assertAlmostEqual(59.840444, projection["verticalFovDegrees"], places=5)
+        self.assertEqual("keep-height", projection["godotKeepAspect"])
+
+    def test_cg00_package_playback_preserves_owned_change_idle_event(self) -> None:
+        records = synthetic_records()
+        package = records[0]
+        contract = _cg00_package_playback_contract(
+            package,
+            {record.form_id: record for record in records},
+        )
+
+        self.assertEqual(
+            {"flags": 1, "count": 1, "timerSeconds": 0.0},
+            contract["idleSelection"],
+        )
+        self.assertEqual(
+            {"begin": "00069efc", "end": None, "change": "00069efd"},
+            contract["events"],
+        )
+
+    def test_cg00_actor_package_condition_binds_exact_quest_stage(self) -> None:
+        package = Record(
+            "PACK",
+            0x0008F778,
+            0,
+            subrecord("EDID", b"CG00DadSection0\0")
+            + subrecord(
+                "CTDA",
+                condition(
+                    58,
+                    QUEST_FORM,
+                    operator_flags=0x60,
+                    comparison=8.0,
+                ),
+            ),
+            (),
+        )
+
+        self.assertEqual(
+            {
+                "function": "GetStage",
+                "functionId": 58,
+                "operator": "equal",
+                "operatorFlags": 0x60,
+                "questFormId": "0001f388",
+                "stage": 8,
+                "runOn": 0,
+            },
+            _cg00_package_stage_condition(package, QUEST_FORM),
+        )
+
+    def test_cg00_actor_packages_switch_by_stage_condition_not_idle_stop(self) -> None:
+        source = FO3_CG00_EARLY_RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("value.ActivationCondition?.Stage == stage", source)
+        self.assertIn("selected.AnimationStartSeconds", source)
+        self.assertNotIn("section == 0 && _cg00ActorPackages.Count == 0", source)
+        self.assertNotIn(
+            "while (playback.ElapsedSeconds >= playback.Contract.AnimationStopSeconds)",
+            source,
+        )
+
     def test_recipe_pins_ffmpeg2theora_video_import(self) -> None:
         video_import = dict(load_recipe(FO3_RECIPE)["videoImport"])
 
@@ -1199,7 +1284,20 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         )
         self.assertEqual(0.4, toddler_world["player"]["scale"])
         self.assertEqual("0002ea4f", toddler_world["player"]["startMarker"]["formId"])
-        self.assertEqual(75.0, toddler_world["camera"]["verticalFovDegrees"])
+        self.assertEqual(
+            75.0,
+            toddler_world["camera"]["sourceHorizontalFovDegrees"],
+        )
+        self.assertEqual(
+            0.75,
+            toddler_world["camera"]["referenceAspectHeightOverWidth"],
+        )
+        self.assertAlmostEqual(
+            59.840444,
+            toddler_world["camera"]["verticalFovDegrees"],
+            places=5,
+        )
+        self.assertEqual("keep-height", toddler_world["camera"]["godotKeepAspect"])
         self.assertEqual(5.0, toddler_world["camera"]["nearGameUnits"])
         self.assertEqual(
             "0002ea54",

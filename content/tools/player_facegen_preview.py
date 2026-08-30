@@ -1,21 +1,35 @@
-"""Compile the source-owned default FNV player head with live EGM controls."""
+"""Compile source-owned default player-selection previews with live EGM controls."""
 
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 
 from actor_catalog import scan_actor_catalog
-from actor_gltf import ActorComponent, ActorGltfInput, export_actor_gltf
+from actor_gltf import (
+    ActorAnimation,
+    ActorComponent,
+    ActorGltfInput,
+    NifFormat,
+    _is_dismember_cap_shape,
+    _text,
+    export_actor_gltf,
+)
+from actor_material import actor_texture_paths
 from bsa_archive import ExtractedMember, canonical_member_path
 from facegen import (
     compose_facegen_coordinates,
     synthesize_texture_detail,
 )
+from nif_decoder import decode_nif
 from owned_archive_stack import OwnedArchiveStack
 from prepare_actor import (
     RACE_HEAD_COMPONENT_ROLES,
     RACE_HEAD_MODEL_INDEX,
+    RACE_LEFT_HAND_MODEL_INDEX,
+    RACE_REQUIRED_BODY_MODEL_COUNT,
+    RACE_RIGHT_HAND_MODEL_INDEX,
     model_companion,
     texture_companion,
     texture_member,
@@ -24,9 +38,27 @@ from runtime_configuration import RuntimeConfiguration
 
 
 PLAYER_FACEGEN_PREVIEW_SCHEMA = "opennv-owned-player-facegen-preview/v1"
+PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA = "opennv-owned-player-facegen-preview-set/v3"
 PLAYER_FACEGEN_PREVIEW_STATUS = (
-    "compiled-default-male-head-with-ctl-egm-targets-one-normalized-control-runtime-bound"
+    "compiled-default-male-head-with-ctl-egm-targets-all-native-geometry-controls-"
+    "runtime-bound"
 )
+PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS = (
+    "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-targets-"
+    "all-native-geometry-controls-runtime-bound"
+)
+PLAYER_FACEGEN_FULL_BODY_RUNTIME_DISPOSITION = (
+    "owned-default-male-and-female-selection-preview-hosts-and-all-native-geometry-"
+    "controls-bound-other-identities-fail-closed-sibling-gamebryo-slider-semantics-"
+    "corroborated"
+)
+PLAYER_FACEGEN_HEAD_RUNTIME_DISPOSITION = (
+    "owned-default-male-preview-host-and-all-native-geometry-controls-bound-"
+    "other-identities-unimplemented-sibling-gamebryo-slider-semantics-"
+    "corroborated"
+)
+PLAYER_FULL_BODY_COMPONENT_ROLES = ("body", "left-hand", "right-hand")
+PLAYER_PREVIEW_SEXES = ("male", "female")
 PLAYER_RECORD_FORM_ID = 0x00000007
 PLAYER_PREVIEW_SEX = "male"
 HAIR_PREVIEW_SHAPE = "NoHat"
@@ -36,9 +68,150 @@ FORM_ID_RADIX = 16
 BYTE_CHANNEL_MAXIMUM = 255.0
 
 
+@dataclass(frozen=True)
+class PlayerBodyComponentSource:
+    role: str
+    model_path: str
+    texture_path: str
+    bake_shape_transform: bool
+    use_source_materials: bool = False
+
+
+@dataclass(frozen=True)
+class PlayerPreviewSelection:
+    sex: str
+    race_form_id: int
+    hair_form_id: int
+    eyes_form_id: int
+
+
+def _player_preview_selections(
+    appearance: dict[str, object],
+    player_form_id: int,
+) -> tuple[PlayerPreviewSelection, ...]:
+    player = dict(appearance["player"])
+    if int(str(player["formId"]), FORM_ID_RADIX) != player_form_id:
+        raise ValueError(
+            "Owned player preview base differs from the appearance contract"
+        )
+    race_form_id = int(str(player["defaultRaceFormId"]), FORM_ID_RADIX)
+    races = [
+        dict(row)
+        for row in appearance["races"]
+        if int(str(row["formId"]), FORM_ID_RADIX) == race_form_id
+    ]
+    if len(races) != 1:
+        raise ValueError("Owned player preview default race selection is not unique")
+    sex_contracts = dict(races[0]["sex"])
+    if set(sex_contracts) != set(PLAYER_PREVIEW_SEXES):
+        raise ValueError("Owned player preview sex selections are incomplete")
+    selections = tuple(
+        PlayerPreviewSelection(
+            sex,
+            race_form_id,
+            int(str(dict(sex_contracts[sex])["defaultHairFormId"]), FORM_ID_RADIX),
+            int(str(dict(sex_contracts[sex])["defaultEyesFormId"]), FORM_ID_RADIX),
+        )
+        for sex in PLAYER_PREVIEW_SEXES
+    )
+    identities = {
+        (row.sex, row.race_form_id, row.hair_form_id, row.eyes_form_id)
+        for row in selections
+    }
+    if len(identities) != len(selections):
+        raise ValueError("Owned player preview selection identities are not unique")
+    return selections
+
+
+def _player_body_component_sources(
+    race: object,
+    sex: str,
+) -> tuple[PlayerBodyComponentSource, ...]:
+    if sex not in PLAYER_PREVIEW_SEXES:
+        raise ValueError(f"Unsupported owned player body sex: {sex}")
+    models = tuple(getattr(race, f"{sex}_body_models"))
+    textures = tuple(getattr(race, f"{sex}_body_textures"))
+    if (
+        len(models) < RACE_REQUIRED_BODY_MODEL_COUNT
+        or len(textures) < RACE_REQUIRED_BODY_MODEL_COUNT
+    ):
+        raise ValueError("Owned default male player body table is incomplete")
+    rows = (
+        PlayerBodyComponentSource(
+            PLAYER_FULL_BODY_COMPONENT_ROLES[0],
+            models[RACE_HEAD_MODEL_INDEX],
+            textures[RACE_HEAD_MODEL_INDEX],
+            False,
+        ),
+        PlayerBodyComponentSource(
+            PLAYER_FULL_BODY_COMPONENT_ROLES[1],
+            models[RACE_LEFT_HAND_MODEL_INDEX],
+            textures[RACE_LEFT_HAND_MODEL_INDEX],
+            sex == "male",
+        ),
+        PlayerBodyComponentSource(
+            PLAYER_FULL_BODY_COMPONENT_ROLES[2],
+            models[RACE_RIGHT_HAND_MODEL_INDEX],
+            textures[RACE_RIGHT_HAND_MODEL_INDEX],
+            sex == "male",
+        ),
+    )
+    if any(not row.model_path or not row.texture_path for row in rows):
+        raise ValueError("Owned default male player body component is absent")
+    return rows
+
+
 def _mesh_path(path: str) -> str:
     canonical = canonical_member_path(path)
     return canonical if canonical.startswith("meshes\\") else f"meshes\\{canonical}"
+
+
+def _head_only_facegen_assembly(include_full_body: bool) -> bool:
+    """Keep rigid FaceGen parts in the same space as the selected actor body."""
+    return not include_full_body
+
+
+def _with_outfit_body(
+    rows: tuple[PlayerBodyComponentSource, ...],
+    model_path: str,
+    texture_path: str,
+) -> tuple[PlayerBodyComponentSource, ...]:
+    """Replace the nude torso with one owned, skinned outfit module."""
+    if tuple(row.role for row in rows) != PLAYER_FULL_BODY_COMPONENT_ROLES:
+        raise ValueError("Owned player body roles cannot accept an outfit module")
+    if not model_path or not texture_path:
+        raise ValueError("Owned player outfit module is incomplete")
+    return (
+        PlayerBodyComponentSource(
+            PLAYER_FULL_BODY_COMPONENT_ROLES[0],
+            model_path,
+            texture_path,
+            False,
+            True,
+        ),
+        *rows[1:],
+    )
+
+
+def _primary_actor_diffuse_path(payload: bytes) -> str:
+    document = decode_nif(payload).document
+    for shape in document.get_global_iterator():
+        if (
+            not isinstance(shape, (NifFormat.NiTriShape, NifFormat.NiTriStrips))
+            or shape.data is None
+            or _is_dismember_cap_shape(shape)
+        ):
+            continue
+        paths = actor_texture_paths(
+            [
+                prop
+                for prop in getattr(shape, "properties", ())
+                if prop is not None
+            ]
+        )
+        if paths and paths[0]:
+            return paths[0]
+    raise ValueError("Owned player outfit module has no retained authored diffuse")
 
 
 def _member_row(member: ExtractedMember) -> dict[str, object]:
@@ -59,39 +232,53 @@ def prepare_default_player_facegen_preview(
     cache_root: Path,
     appearance: dict[str, object],
     configuration: RuntimeConfiguration,
+    *,
+    include_full_body: bool = False,
+    presentation_outfit_form_id: int | None = None,
+    include_locomotion_animation: bool = False,
 ) -> dict[str, object]:
-    """Export the exact default male Player head and native geometry controls."""
+    """Export exact default Player selection previews and native geometry controls."""
     catalog = scan_actor_catalog(master_path)
     player = catalog.actors.get(PLAYER_RECORD_FORM_ID)
     if player is None or player.female or player.race_form_id is None:
         raise ValueError("Owned Player base is not the expected default male humanoid")
     player_contract = dict(appearance["player"])
-    if int(str(player_contract["formId"]), FORM_ID_RADIX) != player.form_id:
-        raise ValueError("Owned player preview base differs from the appearance contract")
+    if include_full_body:
+        selections = _player_preview_selections(appearance, player.form_id)
+    else:
+        if int(str(player_contract["formId"]), FORM_ID_RADIX) != player.form_id:
+            raise ValueError(
+                "Owned player preview base differs from the appearance contract"
+            )
+        race_contracts = {
+            int(str(row["formId"]), FORM_ID_RADIX): dict(row)
+            for row in appearance["races"]
+        }
+        race_contract = race_contracts.get(player.race_form_id)
+        if race_contract is None:
+            raise ValueError("Owned player preview race is not playable")
+        sex_contract = dict(dict(race_contract["sex"])[PLAYER_PREVIEW_SEX])
+        selections = (
+            PlayerPreviewSelection(
+                PLAYER_PREVIEW_SEX,
+                player.race_form_id,
+                int(str(sex_contract["defaultHairFormId"]), FORM_ID_RADIX),
+                int(str(sex_contract["defaultEyesFormId"]), FORM_ID_RADIX),
+            ),
+        )
+    if len(selections) != (len(PLAYER_PREVIEW_SEXES) if include_full_body else 1):
+        raise ValueError("Owned player preview selection inventory is incomplete")
     race = catalog.races.get(player.race_form_id)
     if race is None:
         raise ValueError("Owned player preview race is absent")
-    race_contracts = {
-        int(str(row["formId"]), FORM_ID_RADIX): dict(row)
-        for row in appearance["races"]
-    }
-    race_contract = race_contracts.get(race.form_id)
-    if race_contract is None:
-        raise ValueError("Owned player preview race is not playable")
-    sex_contract = dict(dict(race_contract["sex"])[PLAYER_PREVIEW_SEX])
-    hair_form_id = int(str(sex_contract["defaultHairFormId"]), FORM_ID_RADIX)
-    eyes_form_id = int(str(sex_contract["defaultEyesFormId"]), FORM_ID_RADIX)
-    if hair_form_id != player.hair_form_id or eyes_form_id != player.eyes_form_id:
-        raise ValueError("Owned default male player hair/eyes contract differs")
-    hair = catalog.parts.get(hair_form_id)
-    eyes = catalog.parts.get(eyes_form_id)
+    if any(row.race_form_id != race.form_id for row in selections):
+        raise ValueError("Owned player preview race differs from the selection contract")
+    male_selection = next(row for row in selections if row.sex == PLAYER_PREVIEW_SEX)
     if (
-        hair is None
-        or hair.model_path is None
-        or eyes is None
-        or eyes.texture_path is None
+        male_selection.hair_form_id != player.hair_form_id
+        or male_selection.eyes_form_id != player.eyes_form_id
     ):
-        raise ValueError("Owned player preview hair or eyes are incomplete")
+        raise ValueError("Owned default male player hair/eyes contract differs")
 
     facegen = dict(player_contract["faceGen"])
     control_space = dict(facegen["controlSpace"])
@@ -130,6 +317,51 @@ def prepare_default_player_facegen_preview(
         member = mesh(logical_path)
         return {"tri_path": member.logical_path, "tri_payload": member.data}
 
+    def body_source_manifest(row: PlayerBodyComponentSource) -> dict[str, object]:
+        model = mesh(row.model_path)
+        diffuse = owned_archives.extract(texture_member(row.texture_path))
+        normal = owned_archives.extract(
+            texture_member(texture_companion(row.texture_path, NORMAL_TEXTURE_SUFFIX))
+        )
+        document = decode_nif(model.data).document
+        unsupported = [
+            type(block).__name__
+            for block in document.get_global_iterator()
+            if isinstance(block, NifFormat.NiGeometry)
+            and not isinstance(block, (NifFormat.NiTriShape, NifFormat.NiTriStrips))
+        ]
+        if unsupported:
+            raise ValueError(
+                f"Owned player {row.role} has unsupported source geometry: {unsupported}"
+            )
+        authored = [
+            block
+            for block in document.get_global_iterator()
+            if isinstance(block, (NifFormat.NiTriShape, NifFormat.NiTriStrips))
+            and block.data is not None
+        ]
+        retained = [block for block in authored if not _is_dismember_cap_shape(block)]
+        if not retained:
+            raise ValueError(f"Owned player {row.role} has no retained source surface")
+        return {
+            "role": row.role,
+            "modelLogicalPath": model.logical_path,
+            "modelSha256": model.sha256,
+            "sourceSurfaceCount": len(authored),
+            "retainedSurfaceCount": len(retained),
+            "retainedSurfaceNames": [_text(value.name) for value in retained],
+            "omittedDismemberCapSurfaceCount": len(authored) - len(retained),
+            "diffuseLogicalPath": diffuse.logical_path,
+            "diffuseSha256": diffuse.sha256,
+            "normalLogicalPath": normal.logical_path,
+            "normalSha256": normal.sha256,
+            "shapeTransformDisposition": (
+                "bake-authored-shape-transform"
+                if row.bake_shape_transform
+                else "preserve-authored-skinned-shape-transform"
+            ),
+        }
+
     def controlled_component(
         role: str,
         model_path: str,
@@ -151,127 +383,257 @@ def prepare_default_player_facegen_preview(
             **options,
         )
 
-    head_models = race.male_head_models
-    head_textures = race.male_head_textures
-    head_model = head_models[RACE_HEAD_MODEL_INDEX]
-    head_texture = head_textures[RACE_HEAD_MODEL_INDEX]
-    if head_model is None or head_texture is None:
-        raise ValueError("Owned default male player head model/texture is absent")
-    symmetric_geometry = compose_facegen_coordinates(
-        player.face_symmetric_geometry,
-        race.male_face_symmetric_geometry,
-    )
-    asymmetric_geometry = compose_facegen_coordinates(
-        player.face_asymmetric_geometry,
-        race.male_face_asymmetric_geometry,
-    )
-    head_egt = mesh(model_companion(head_model, ".egt"))
-    generated_face_detail = synthesize_texture_detail(
-        head_egt.data,
-        player.face_symmetric_texture,
-    )
-    components = [
-        controlled_component(
-            "head",
-            head_model,
-            diffuse_override=texture_member(head_texture),
-            normal_override=texture_member(
-                texture_companion(head_texture, NORMAL_TEXTURE_SUFFIX)
-            ),
-            generated_facegen_detail=generated_face_detail,
-        )
-    ]
-    for index, role in RACE_HEAD_COMPONENT_ROLES.items():
-        model_path = head_models[index]
-        if model_path is None:
-            raise ValueError(f"Owned default male player head component is absent: {role}")
-        components.append(
-            controlled_component(
-                role,
+    body_components_by_sex = {
+        sex: _player_body_component_sources(race, sex)
+        for sex in PLAYER_PREVIEW_SEXES
+    }
+    if presentation_outfit_form_id is not None:
+        outfit = catalog.armor.get(presentation_outfit_form_id)
+        if outfit is None:
+            raise ValueError(
+                "Owned player presentation outfit ARMO is unresolved: "
+                f"{presentation_outfit_form_id:08x}"
+            )
+        for sex in PLAYER_PREVIEW_SEXES:
+            model_path = (
+                outfit.male_model_path
+                if sex == PLAYER_PREVIEW_SEX
+                else outfit.female_model_path
+            )
+            if model_path is None:
+                raise ValueError(
+                    f"Owned player presentation outfit lacks its {sex} model"
+                )
+            outfit_model = mesh(model_path)
+            body_components_by_sex[sex] = _with_outfit_body(
+                body_components_by_sex[sex],
                 model_path,
-                diffuse_override=(
-                    texture_member(eyes.texture_path)
-                    if role.startswith("eye-")
-                    else None
-                ),
+                _primary_actor_diffuse_path(outfit_model.data),
             )
-        )
-    hair_egm = model_companion(hair.model_path, f"{HAIR_PREVIEW_SHAPE.lower()}.egm")
-    components.append(
-        controlled_component(
-            "hair",
-            hair.model_path,
-            egm_path=hair_egm,
-            selected_shape=HAIR_PREVIEW_SHAPE,
-            tint_rgb=tuple(
-                value / BYTE_CHANNEL_MAXIMUM for value in player.hair_color_rgba[:3]
-            ),
-        )
-    )
-    for part_form_id in player.head_part_form_ids:
-        part = catalog.parts.get(part_form_id)
-        if part is None or part.model_path is None:
-            raise ValueError("Owned default male player head part is unresolved")
-        components.append(
-            controlled_component(
-                f"head-part-{part.editor_id}",
-                part.model_path,
-            )
-        )
-
     skeleton = mesh(player.skeleton_path or "")
     animation_path = str(
         configuration.document["actorCompiler"]["animationProfiles"]["NPC_"]["path"]
     )
     animation = mesh(animation_path)
     rig = configuration.actor_rig.profiles["NPC_"]
-    output_root = cache_root / "generated" / "opening" / "player-facegen-preview" / PLAYER_PREVIEW_SEX
-    gltf_path = output_root / "player-head.gltf"
-    sidecar_path = output_root / "player-head.opennv.json"
-    sidecar = export_actor_gltf(
-        ActorGltfInput(
-            f"{player.form_id:08x}",
-            "PlayerPreview",
-            skeleton.logical_path,
-            skeleton.data,
-            symmetric_geometry,
-            asymmetric_geometry,
-            tuple(components),
-            animation.logical_path,
-            animation.data,
-            skeleton_root_node=rig.skeleton_root_node,
-            rigid_attachment_node=rig.unparented_rigid_node,
-            biped_head_node=configuration.actor_rig.biped_head_node,
+    preview_rows = []
+    for selection in selections:
+        hair = catalog.parts.get(selection.hair_form_id)
+        eyes = catalog.parts.get(selection.eyes_form_id)
+        if (
+            hair is None
+            or hair.model_path is None
+            or eyes is None
+            or eyes.texture_path is None
+        ):
+            raise ValueError(
+                f"Owned {selection.sex} player preview hair or eyes are incomplete"
+            )
+        head_models = tuple(getattr(race, f"{selection.sex}_head_models"))
+        head_textures = tuple(getattr(race, f"{selection.sex}_head_textures"))
+        head_model = head_models[RACE_HEAD_MODEL_INDEX]
+        head_texture = head_textures[RACE_HEAD_MODEL_INDEX]
+        if head_model is None or head_texture is None:
+            raise ValueError(
+                f"Owned {selection.sex} player head model/texture is absent"
+            )
+        symmetric_geometry = compose_facegen_coordinates(
+            player.face_symmetric_geometry,
+            tuple(getattr(race, f"{selection.sex}_face_symmetric_geometry")),
+        )
+        asymmetric_geometry = compose_facegen_coordinates(
+            player.face_asymmetric_geometry,
+            tuple(getattr(race, f"{selection.sex}_face_asymmetric_geometry")),
+        )
+        head_egt = mesh(model_companion(head_model, ".egt"))
+        symmetric_texture = compose_facegen_coordinates(
+            player.face_symmetric_texture,
+            tuple(getattr(race, f"{selection.sex}_face_symmetric_texture")),
+        )
+        generated_face_detail = synthesize_texture_detail(
+            head_egt.data,
+            symmetric_texture,
+        )
+        body_components = (
+            body_components_by_sex[selection.sex] if include_full_body else ()
+        )
+        components = [
+            ActorComponent(
+                row.role,
+                mesh(row.model_path).logical_path,
+                mesh(row.model_path).data,
+                diffuse_override=(
+                    None
+                    if row.use_source_materials
+                    else texture_member(row.texture_path)
+                ),
+                normal_override=(
+                    None
+                    if row.use_source_materials
+                    else texture_member(
+                        texture_companion(row.texture_path, NORMAL_TEXTURE_SUFFIX)
+                    )
+                ),
+                bake_shape_transform=row.bake_shape_transform,
+            )
+            for row in body_components
+        ]
+        components.append(
+            controlled_component(
+                "head",
+                head_model,
+                diffuse_override=texture_member(head_texture),
+                normal_override=texture_member(
+                    texture_companion(head_texture, NORMAL_TEXTURE_SUFFIX)
+                ),
+                generated_facegen_detail=generated_face_detail,
+            )
+        )
+        for index, role in RACE_HEAD_COMPONENT_ROLES.items():
+            model_path = head_models[index]
+            if model_path is None:
+                raise ValueError(
+                    f"Owned {selection.sex} player head component is absent: {role}"
+                )
+            components.append(
+                controlled_component(
+                    role,
+                    model_path,
+                    diffuse_override=(
+                        texture_member(eyes.texture_path)
+                        if role.startswith("eye-")
+                        else None
+                    ),
+                )
+            )
+        hair_egm = model_companion(
+            hair.model_path,
+            f"{HAIR_PREVIEW_SHAPE.lower()}.egm",
+        )
+        components.append(
+            controlled_component(
+                "hair",
+                hair.model_path,
+                egm_path=hair_egm,
+                selected_shape=HAIR_PREVIEW_SHAPE,
+                tint_rgb=tuple(
+                    value / BYTE_CHANNEL_MAXIMUM
+                    for value in player.hair_color_rgba[:3]
+                ),
+            )
+        )
+        for part_form_id in player.head_part_form_ids:
+            part = catalog.parts.get(part_form_id)
+            if part is None or part.model_path is None:
+                raise ValueError("Owned Player head part is unresolved")
+            components.append(
+                controlled_component(
+                    f"head-part-{part.editor_id}",
+                    part.model_path,
+                )
+            )
+
+        output_root = (
+            cache_root
+            / "generated"
+            / "opening"
+            / "player-facegen-preview"
+            / selection.sex
+        )
+        output_name = "player-full-body" if include_full_body else "player-head"
+        gltf_path = output_root / f"{output_name}.gltf"
+        sidecar_path = output_root / f"{output_name}.opennv.json"
+        locomotion_animations: tuple[ActorAnimation, ...] = ()
+        if include_full_body and include_locomotion_animation:
+            locomotion = mesh(
+                "characters\\_male\\locomotion\\"
+                f"{selection.sex}\\mtforward.kf"
+            )
+            locomotion_animations = (
+                ActorAnimation(locomotion.logical_path, locomotion.data),
+            )
+        sidecar = export_actor_gltf(
+            ActorGltfInput(
+                f"{player.form_id:08x}",
+                f"PlayerPreview-{selection.sex}",
+                skeleton.logical_path,
+                skeleton.data,
+                symmetric_geometry,
+                asymmetric_geometry,
+                tuple(components),
+                animation.logical_path,
+                animation.data,
+                skeleton_root_node=rig.skeleton_root_node,
+                rigid_attachment_node=rig.unparented_rigid_node,
+                biped_head_node=configuration.actor_rig.biped_head_node,
+                additional_animations=locomotion_animations,
+                head_only_facegen_preview=_head_only_facegen_assembly(
+                    include_full_body
+                ),
+            ),
+            [owned_archives],
+            gltf_path,
+            sidecar_path,
+            configuration.content_compiler,
+        )
+        preview_rows.append(
+            {
+                "raceFormId": f"{selection.race_form_id:08x}",
+                "sex": selection.sex,
+                "hairFormId": f"{selection.hair_form_id:08x}",
+                "eyesFormId": f"{selection.eyes_form_id:08x}",
+                "headPartFormIds": [
+                    f"{value:08x}" for value in player.head_part_form_ids
+                ],
+                "outputs": {
+                    "gltf": str(gltf_path.resolve()),
+                    "gltfSha256": sidecar["outputs"]["gltf"]["sha256"],
+                    "sidecar": str(sidecar_path.resolve()),
+                    "sidecarSha256": hashlib.sha256(
+                        sidecar_path.read_bytes()
+                    ).hexdigest(),
+                    "bufferSha256": sidecar["outputs"]["buffer"]["sha256"],
+                },
+            }
+        )
+
+    common = {
+        "playerFormId": f"{player.form_id:08x}",
+        "geometryControlNames": list(control_names),
+        "geometryControlCount": len(control_names),
+        "fullBody": include_full_body,
+        "presentationOutfitFormId": (
+            f"{presentation_outfit_form_id:08x}"
+            if presentation_outfit_form_id is not None
+            else None
         ),
-        [owned_archives],
-        gltf_path,
-        sidecar_path,
-        configuration.content_compiler,
-    )
+        "bodyComponentRoles": (
+            list(PLAYER_FULL_BODY_COMPONENT_ROLES) if include_full_body else []
+        ),
+        "bodyComponentSourcesBySex": {
+            sex: [body_source_manifest(row) for row in rows]
+            for sex, rows in body_components_by_sex.items()
+        },
+        "sourceAssets": [
+            _member_row(member)
+            for member in sorted(
+                extracted.values(),
+                key=lambda value: value.logical_path,
+            )
+        ],
+    }
+    if include_full_body:
+        return {
+            "schema": PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
+            "status": PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+            **common,
+            "previews": preview_rows,
+            "runtimeDisposition": PLAYER_FACEGEN_FULL_BODY_RUNTIME_DISPOSITION,
+        }
     return {
         "schema": PLAYER_FACEGEN_PREVIEW_SCHEMA,
         "status": PLAYER_FACEGEN_PREVIEW_STATUS,
-        "playerFormId": f"{player.form_id:08x}",
-        "raceFormId": f"{race.form_id:08x}",
-        "sex": PLAYER_PREVIEW_SEX,
-        "hairFormId": f"{hair_form_id:08x}",
-        "eyesFormId": f"{eyes_form_id:08x}",
-        "headPartFormIds": [f"{value:08x}" for value in player.head_part_form_ids],
-        "geometryControlNames": list(control_names),
-        "geometryControlCount": len(control_names),
-        "sourceAssets": [
-            _member_row(member)
-            for member in sorted(extracted.values(), key=lambda value: value.logical_path)
-        ],
-        "outputs": {
-            "gltf": str(gltf_path.resolve()),
-            "gltfSha256": sidecar["outputs"]["gltf"]["sha256"],
-            "sidecar": str(sidecar_path.resolve()),
-            "sidecarSha256": hashlib.sha256(sidecar_path.read_bytes()).hexdigest(),
-            "bufferSha256": sidecar["outputs"]["buffer"]["sha256"],
-        },
-        "runtimeDisposition": (
-            "owned-default-male-preview-host-and-one-normalized-control-bound-"
-            "other-identities-and-full-retail-slider-semantics-unimplemented"
-        ),
+        **common,
+        **preview_rows[0],
+        "runtimeDisposition": PLAYER_FACEGEN_HEAD_RUNTIME_DISPOSITION,
     }

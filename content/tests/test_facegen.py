@@ -75,23 +75,39 @@ class FaceGenTest(unittest.TestCase):
                 vertex_count=1,
             )
 
-    def test_texture_modes_use_float_scale_and_signed_rgb_deltas(self) -> None:
+    def test_texture_modes_use_packed_intensity_and_signed_rgb_deltas(self) -> None:
         header = (
             b"FREGT003"
-            + struct.pack("<5I", 2, 1, 2, 0, 81)
-            + bytes(36)
+            + struct.pack("<3I", 2, 1, 2)
+            + bytes(44)
         )
-        first = struct.pack("<f", 1.0) + struct.pack("<2b", 10, -10) * 3
-        second = struct.pack("<f", 0.5) + struct.pack("<2b", -4, 8) * 3
+        first = bytes((1, 2, 3, 0x3E)) + struct.pack("<2b", 10, -10) * 3
+        second = bytes((4, 5, 6, 0x3D)) + struct.pack("<2b", -4, 8) * 3
         image = synthesize_texture_detail(header + first + second, (2.0, 1.0))
         self.assertEqual(image.size, (2, 1))
-        self.assertEqual(image.getpixel((0, 0)), (146, 146, 146, 255))
-        self.assertEqual(image.getpixel((1, 0)), (112, 112, 112, 255))
+        self.assertEqual(image.getpixel((0, 0)), (130, 130, 130, 255))
+        self.assertEqual(image.getpixel((1, 0)), (126, 126, 126, 255))
 
-    def test_texture_contract_rejects_asymmetric_modes(self) -> None:
-        payload = b"FREGT003" + struct.pack("<5I", 1, 1, 0, 1, 81) + bytes(36)
-        with self.assertRaisesRegex(ValueError, "asymmetric=1"):
-            synthesize_texture_detail(payload, ())
+    def test_texture_modes_normalize_egt_scanline_origin(self) -> None:
+        header = (
+            b"FREGT003"
+            + struct.pack("<3I", 1, 2, 1)
+            + bytes(44)
+        )
+        mode = bytes((1, 2, 3, 0x3E, 8, 16, 24, 32, 40, 48))
+        image = synthesize_texture_detail(header + mode, (1.0,))
+        self.assertEqual(image.getpixel((0, 0)), (130, 132, 134, 255))
+        self.assertEqual(image.getpixel((0, 1)), (129, 131, 133, 255))
+
+    def test_texture_contract_rejects_non_face_slot(self) -> None:
+        payload = (
+            b"FREGT003"
+            + struct.pack("<3I", 1, 1, 1)
+            + bytes(44)
+            + bytes((1, 2, 3, 0x06, 0, 0, 0))
+        )
+        with self.assertRaisesRegex(ValueError, "slot=0"):
+            synthesize_texture_detail(payload, (0.0,))
 
     def test_body_shader_composition_multiplies_the_authored_body_mod(self) -> None:
         diffuse = Image.new("RGBA", (1, 1), (128, 100, 64, 222))

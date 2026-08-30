@@ -89,6 +89,7 @@ def build_campaign_transport(
     ettu_root: Path,
     fallout2_master: Path,
     output_root: Path,
+    map_file: str | None = None,
 ) -> dict[str, Any]:
     maps_dir = maps_dir.resolve()
     maps_txt = maps_txt.resolve()
@@ -103,7 +104,16 @@ def build_campaign_transport(
         raise FileNotFoundError(maps_dir if not maps_dir.is_dir() else maps_txt)
     if not fallout2_master.is_file():
         raise FileNotFoundError(fallout2_master)
-    map_paths = sorted(maps_dir.glob("*.MAP"), key=lambda path: path.name.casefold())
+    if map_file is None:
+        map_paths = sorted(maps_dir.glob("*.MAP"), key=lambda path: path.name.casefold())
+    else:
+        requested = Path(map_file)
+        if requested.is_absolute() or requested.name != map_file or requested.suffix.upper() != ".MAP":
+            raise Fo1ProfileError(f"Fallout campaign map selector is not one exact MAP filename: {map_file}")
+        selected = (maps_dir / requested).resolve()
+        if not selected.is_relative_to(maps_dir) or not selected.is_file():
+            raise Fo1ProfileError(f"Fallout campaign selected MAP is absent: {map_file}")
+        map_paths = [selected]
     if not map_paths:
         raise Fo1ProfileError(f"Fallout campaign contains no MAP files: {maps_dir}")
     map_ids = [canonical_map_id(path) for path in map_paths]
@@ -268,6 +278,7 @@ def main() -> int:
     parser.add_argument("--ettu-root", type=Path, required=True)
     parser.add_argument("--fallout2-master", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--map-file")
     args = parser.parse_args()
     try:
         manifest = build_campaign_transport(
@@ -276,6 +287,7 @@ def main() -> int:
             args.ettu_root,
             args.fallout2_master,
             args.output_root,
+            args.map_file,
         )
     except Exception as error:
         print(f"OPENNV_FO1_CAMPAIGN_TRANSPORT_ERROR {error}")

@@ -132,6 +132,42 @@ internal static class Fo1OwnedCaveKit
 {
     private const string PresentationSchema = "opennv-fo1-3d-presentation/v1";
     private const string CompositionSchema = "opennv-fo1-owned-cave-composition/v1";
+    private const string DustyGravelFloorShader = """
+        shader_type spatial;
+        render_mode cull_disabled, depth_draw_opaque;
+
+        uniform sampler2D albedo_texture : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+        uniform sampler2D normal_texture : repeat_enable, filter_linear_mipmap_anisotropic;
+        uniform vec4 albedo_tint : source_color = vec4(1.0);
+        uniform float repeat_meters = 2.2;
+        uniform float source_contrast = 0.72;
+        uniform float roughness_value = 0.96;
+        uniform float normal_strength = 0.65;
+        uniform float emission_energy = 0.02;
+        uniform float ambient_bounce = 0.12;
+
+        varying vec3 world_position;
+
+        void vertex() {
+            world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+        }
+
+        void fragment() {
+            vec2 world_uv = world_position.xz / repeat_meters;
+            vec3 source_sample = texture(albedo_texture, world_uv).rgb;
+            source_sample = clamp(
+                (source_sample - vec3(0.24)) * source_contrast + vec3(0.24),
+                vec3(0.0),
+                vec3(1.0));
+            vec3 dusty_gravel = source_sample * albedo_tint.rgb;
+            ALBEDO = dusty_gravel;
+            ROUGHNESS = roughness_value;
+            METALLIC = 0.0;
+            NORMAL_MAP = texture(normal_texture, world_uv).rgb;
+            NORMAL_MAP_DEPTH = normal_strength * 0.45;
+            EMISSION = dusty_gravel * (ambient_bounce + emission_energy);
+        }
+        """;
 
     internal static Coverage Load(
         JsonElement presentation,
@@ -212,16 +248,6 @@ internal static class Fo1OwnedCaveKit
         var surfaceInstances = 0;
         var roleCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         var placementIds = new HashSet<string>(StringComparer.Ordinal);
-        var envelopeInstances = BuildCaveEnvelope(
-            container,
-            composition,
-            caveKit,
-            textures,
-            floorBacked);
-        instanceCount += envelopeInstances;
-        meshInstances += envelopeInstances;
-        surfaceInstances += envelopeInstances;
-        roleCounts["terrain-envelope"] = envelopeInstances;
         var wallRelief = composition.TryGetProperty("connectedWallVolume", out _)
             ? BuildConnectedWallVolumes(container, composition, caveKit, textures, prototypes)
             : BuildFrmReliefWalls(
@@ -231,19 +257,37 @@ internal static class Fo1OwnedCaveKit
                 textures,
                 canonicalYawDegrees,
                 canonicalPitchDegrees);
+        var envelopeCoverage = BuildCaveEnvelope(
+            container,
+            composition,
+            caveKit,
+            textures,
+            floorBacked,
+            wallRelief.CohesiveCaveMaterial);
+        instanceCount += envelopeCoverage.Instances;
+        meshInstances += envelopeCoverage.MeshInstances;
+        surfaceInstances += envelopeCoverage.SurfaceInstances;
+        roleCounts["terrain-envelope"] = envelopeCoverage.Instances;
         instanceCount += wallRelief.Placements;
         meshInstances += wallRelief.MeshInstances;
         surfaceInstances += wallRelief.SurfaceInstances;
         materialBindings += wallRelief.MaterialBindings;
         roleCounts["wall-ribbon"] = wallRelief.Placements;
+        var unifiedCaveMaterialSurfaces = wallRelief.UnifiedCaveMaterialSurfaces +
+            (wallRelief.CohesiveCaveMaterial is null
+                ? 0
+                : envelopeCoverage.SurfaceInstances);
         var vaultPortalInstances = BuildVaultPortal(
             container,
             composition,
             caveKit,
-            textures);
+            textures,
+            wallRelief.CohesiveCaveMaterial);
         instanceCount += vaultPortalInstances;
         meshInstances += vaultPortalInstances;
         surfaceInstances += vaultPortalInstances;
+        if (wallRelief.CohesiveCaveMaterial is not null)
+            unifiedCaveMaterialSurfaces += vaultPortalInstances;
         roleCounts["vault-portal"] = vaultPortalInstances;
         var groundedInstances = 0;
         var minimumGroundSeatDepthMeters = float.PositiveInfinity;
@@ -291,12 +335,23 @@ internal static class Fo1OwnedCaveKit
                 var hiddenFloorSurfaces = HideRoomFloorSurface(instance, placementId);
                 instance.SetMeta("fo1_hidden_donor_floor_surfaces", hiddenFloorSurfaces);
             }
-            else if (role == "vault-airlock")
+            else if (role is "vault-airlock" or "vault-hall" or "vault-frame")
             {
-                var darkenedConcreteSurfaces = DarkenVaultAirlockConcrete(instance, placementId);
+                var vaultMaterialSurfaces = ApplyVaultEnvironmentMaterialPass(
+                    instance,
+                    placementId);
                 instance.SetMeta(
-                    "fo1_darkened_vault_concrete_surfaces",
-                    darkenedConcreteSurfaces);
+                    "fo1_vault_environment_material_surfaces",
+                    vaultMaterialSurfaces);
+            }
+            if (role is "large-rock" or "small-rock" or "stalagmite" &&
+                wallRelief.CohesiveCaveMaterial is not null)
+            {
+                unifiedCaveMaterialSurfaces += ApplyConnectedWallSurfaceMaterial(
+                    instance,
+                    wallRelief.CohesiveCaveMaterial,
+                    placementId);
+                instance.SetMeta("fo1_cave_material_unified", true);
             }
             container.AddChild(instance);
             var placedBounds = WorldBounds(instance);
@@ -383,14 +438,17 @@ internal static class Fo1OwnedCaveKit
             minimumGroundSeatDepthMeters,
             maximumGroundSeatDepthMeters,
             maximumGroundErrorMeters,
-            grounding.MaximumRuntimeErrorMeters);
+            grounding.MaximumRuntimeErrorMeters,
+            unifiedCaveMaterialSurfaces,
+            0);
     }
 
     private static int BuildVaultPortal(
         Node3D container,
         JsonElement composition,
         JsonElement caveKit,
-        RuntimeMaterialLoader.LoadedTextures textures)
+        RuntimeMaterialLoader.LoadedTextures textures,
+        StandardMaterial3D? cohesiveCaveMaterial)
     {
         var portal = composition.GetProperty("vaultPortal");
         if (portal.GetProperty("schema").GetString() !=
@@ -398,7 +456,7 @@ internal static class Fo1OwnedCaveKit
             throw new InvalidOperationException("Unexpected Fallout Vault portal contract.");
         var diffuseId = TextureId(caveKit, portal.GetProperty("diffusePath").GetString()!);
         var normalId = TextureId(caveKit, portal.GetProperty("normalPath").GetString()!);
-        var material = new StandardMaterial3D
+        var material = cohesiveCaveMaterial ?? new StandardMaterial3D
         {
             ResourceName = "FO1 exact-axis embedded Vault 13 rock portal",
             AlbedoTexture = textures.TwoDimensional[diffuseId],
@@ -407,6 +465,7 @@ internal static class Fo1OwnedCaveKit
             Metallic = 0.0f,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
+            TextureRepeat = true,
             NormalEnabled = true,
             NormalTexture = textures.TwoDimensional[normalId],
             NormalScale = portal.GetProperty("normalScale").GetSingle(),
@@ -421,6 +480,8 @@ internal static class Fo1OwnedCaveKit
         };
         instance.SetMeta("fo1_asset_role", "vault-portal");
         instance.SetMeta("fo1_cutaway_exempt", false);
+        instance.SetMeta("fo1_source_tactical_visibility", "hide-vault-portal");
+        instance.SetMeta("fo1_cave_material_unified", cohesiveCaveMaterial is not null);
         instance.SetMeta(
             "fo1_source_door_serial",
             portal.GetProperty("source").GetProperty("doorSerial").GetInt32());
@@ -555,12 +616,13 @@ internal static class Fo1OwnedCaveKit
             "Could not build the Fallout embedded Vault portal.");
     }
 
-    private static int BuildCaveEnvelope(
+    private static EnvelopeCoverage BuildCaveEnvelope(
         Node3D container,
         JsonElement composition,
         JsonElement caveKit,
         RuntimeMaterialLoader.LoadedTextures textures,
-        bool[] floorBacked)
+        bool[] floorBacked,
+        StandardMaterial3D? cohesiveCaveMaterial)
     {
         var envelope = composition.GetProperty("envelope");
         if (envelope.GetProperty("schema").GetString() !=
@@ -569,7 +631,7 @@ internal static class Fo1OwnedCaveKit
         var diffuseId = TextureId(caveKit, envelope.GetProperty("diffusePath").GetString()!);
         var normalId = TextureId(caveKit, envelope.GetProperty("normalPath").GetString()!);
         var envelopeAlbedo = ReadColor(envelope.GetProperty("albedoColor"));
-        var material = new StandardMaterial3D
+        var material = cohesiveCaveMaterial ?? new StandardMaterial3D
         {
             ResourceName = "FO1 source-bound cave envelope",
             AlbedoTexture = textures.TwoDimensional[diffuseId],
@@ -578,6 +640,7 @@ internal static class Fo1OwnedCaveKit
             Metallic = 0.0f,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
+            TextureRepeat = true,
             NormalEnabled = true,
             NormalTexture = textures.TwoDimensional[normalId],
             NormalScale = envelope.GetProperty("normalScale").GetSingle(),
@@ -587,20 +650,31 @@ internal static class Fo1OwnedCaveKit
             EmissionEnergyMultiplier = Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point22f,
             Transparency = BaseMaterial3D.TransparencyEnum.Disabled,
         };
-        var instance = new MeshInstance3D
+        var meshes = BuildCaveEnvelopeMeshes(envelope, floorBacked);
+        var roof = new MeshInstance3D
         {
-            Name = "CAVE_terrain-envelope_source-v13ent-threshold",
-            Mesh = BuildCaveEnvelopeMesh(envelope, floorBacked),
+            Name = "CAVE_terrain-envelope-source-roof",
+            Mesh = meshes.Roof,
             MaterialOverride = material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
         };
-        instance.SetMeta("fo1_asset_role", "terrain-envelope");
-        instance.SetMeta("fo1_cutaway_exempt", false);
-        container.AddChild(instance);
-        return 1;
+        roof.SetMeta("fo1_asset_role", "terrain-envelope");
+        roof.SetMeta("fo1_source_tactical_visibility", "hide-roof-envelope");
+        container.AddChild(roof);
+        var boundary = new MeshInstance3D
+        {
+            Name = "CAVE_terrain-envelope-source-boundary",
+            Mesh = meshes.Boundary,
+            MaterialOverride = material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+        };
+        boundary.SetMeta("fo1_asset_role", "terrain-envelope");
+        boundary.SetMeta("fo1_source_tactical_visibility", "hide-boundary-envelope");
+        container.AddChild(boundary);
+        return new EnvelopeCoverage(1, 2, 2);
     }
 
-    private static ArrayMesh BuildCaveEnvelopeMesh(JsonElement envelope, bool[] floorBacked)
+    private static EnvelopeMeshes BuildCaveEnvelopeMeshes(JsonElement envelope, bool[] floorBacked)
     {
         if (floorBacked.Length != Fo1HexMath.Width * Fo1HexMath.Height ||
             envelope.GetProperty("topology").GetString() !=
@@ -623,8 +697,10 @@ internal static class Fo1OwnedCaveKit
             return ceiling + relief * (broad + detail);
         }
 
-        var tool = new SurfaceTool();
-        tool.Begin(Mesh.PrimitiveType.Triangles);
+        var roofTool = new SurfaceTool();
+        roofTool.Begin(Mesh.PrimitiveType.Triangles);
+        var boundaryTool = new SurfaceTool();
+        boundaryTool.Begin(Mesh.PrimitiveType.Triangles);
         foreach (var tile in Enumerable.Range(0, floorBacked.Length).Where(tile => floorBacked[tile]))
         {
             var corners = Fo1HexMath.Corners(tile);
@@ -637,7 +713,7 @@ internal static class Fo1OwnedCaveKit
             {
                 var next = (edge + 1) % Fo1HexMath.DirectionCount;
                 AddEnvelopeTriangle(
-                    tool,
+                    roofTool,
                     roofCenter,
                     roofCorners[next],
                     roofCorners[edge],
@@ -651,7 +727,7 @@ internal static class Fo1OwnedCaveKit
                 var outward = ((corners[edge] + corners[next]) * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f - Fo1HexMath.Center(tile))
                     .Normalized();
                 AddEnvelopeQuad(
-                    tool,
+                    boundaryTool,
                     firstBottom,
                     secondBottom,
                     roofCorners[next],
@@ -664,10 +740,15 @@ internal static class Fo1OwnedCaveKit
             }
         }
 
-        tool.Index();
-        tool.GenerateTangents();
-        return tool.Commit() ?? throw new InvalidOperationException(
-            "Could not build the Fallout source-bound cave envelope.");
+        roofTool.Index();
+        roofTool.GenerateTangents();
+        boundaryTool.Index();
+        boundaryTool.GenerateTangents();
+        return new EnvelopeMeshes(
+            roofTool.Commit() ?? throw new InvalidOperationException(
+                "Could not build the Fallout source-bound cave roof."),
+            boundaryTool.Commit() ?? throw new InvalidOperationException(
+                "Could not build the Fallout source-bound cave boundary."));
     }
 
     private static void AddEnvelopeTriangle(
@@ -786,41 +867,97 @@ internal static class Fo1OwnedCaveKit
         instance.SetMeta("fo1_hidden_owned_wall_surfaces", hidden.Count);
     }
 
-    private static int DarkenVaultAirlockConcrete(Node3D airlock, string placementId)
+    private static int ApplyConnectedWallSurfaceMaterial(
+        Node3D instance,
+        StandardMaterial3D connectedWallMaterial,
+        string placementId)
     {
-        var concreteIdentities = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "VURmGearExit01:1@9",
-            "VURmGearExit01:9@36",
-        };
-        var darkened = 0;
-        foreach (var mesh in Descendants<MeshInstance3D>(airlock))
+        var unified = 0;
+        foreach (var mesh in Descendants<MeshInstance3D>(instance))
         {
             for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
             {
-                if (mesh.GetActiveMaterial(surface) is not StandardMaterial3D source ||
-                    !concreteIdentities.Contains(source.ResourceName))
+                var source = mesh.GetActiveMaterial(surface);
+                if (source is null || source.ResourceName.StartsWith(
+                        "FO1 hidden owned cave-wall surface",
+                        StringComparison.Ordinal))
+                    continue;
+                mesh.SetSurfaceOverrideMaterial(surface, connectedWallMaterial);
+                unified++;
+            }
+        }
+        if (unified == 0)
+            throw new InvalidOperationException(
+                $"Fallout cave wall dressing has no material surfaces: {placementId}");
+        instance.SetMeta("fo1_world_triplanar_wall_surfaces", unified);
+        return unified;
+    }
+
+    private static int ApplyVaultEnvironmentMaterialPass(Node3D vault, string placementId)
+    {
+        var treated = 0;
+        foreach (var mesh in Descendants<MeshInstance3D>(vault))
+        {
+            for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
+            {
+                if (mesh.GetActiveMaterial(surface) is not StandardMaterial3D source)
                     continue;
                 var material = source.Duplicate() as StandardMaterial3D
                     ?? throw new InvalidOperationException(
                         "Could not duplicate a Vault 13 airlock material.");
-                material.ResourceName = $"FO1 dark Vault concrete {placementId} {source.ResourceName}";
+                var metallic = source.Metallic >=
+                    Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point20f;
+                var dustFraction = metallic
+                    ? Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point11f
+                    : Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point18f;
+                material.ResourceName =
+                    $"FO1 Vault environment family {placementId} {source.ResourceName}";
                 material.AlbedoColor = new Color(
-                    source.AlbedoColor.R * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point27f,
-                    source.AlbedoColor.G * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point30f,
-                    source.AlbedoColor.B * Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point32f,
+                    source.AlbedoColor.R * Mathf.Lerp(
+                        1.0f,
+                        Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point58f,
+                        dustFraction),
+                    source.AlbedoColor.G * Mathf.Lerp(
+                        1.0f,
+                        Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point52f,
+                        dustFraction),
+                    source.AlbedoColor.B * Mathf.Lerp(
+                        1.0f,
+                        Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point40f,
+                        dustFraction),
                     source.AlbedoColor.A);
-                material.Roughness = MathF.Max(Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point86f, source.Roughness);
-                material.Metallic = MathF.Min(Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point08f, source.Metallic);
+                material.Roughness = MathF.Max(
+                    metallic
+                        ? Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point72f
+                        : Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point92f,
+                    source.Roughness);
+                material.Metallic = source.Metallic *
+                    (1.0f - dustFraction *
+                        Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point25f);
+                if (!source.EmissionEnabled && source.AlbedoTexture is not null)
+                {
+                    material.EmissionEnabled = true;
+                    material.EmissionTexture = source.AlbedoTexture;
+                    material.Emission = metallic
+                        ? new Color(
+                            Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point11f,
+                            Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point135f,
+                            Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point095f)
+                        : new Color(
+                            Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point095f,
+                            Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point08f,
+                            Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point05f);
+                    material.EmissionEnergyMultiplier =
+                        Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point16f;
+                }
                 mesh.SetSurfaceOverrideMaterial(surface, material);
-                darkened++;
+                treated++;
             }
         }
-        if (darkened != concreteIdentities.Count)
+        if (treated == 0)
             throw new InvalidOperationException(
-                $"Fallout Vault airlock concrete identity drift: {placementId} " +
-                $"darkened={darkened}");
-        return darkened;
+                $"Fallout Vault environment material coverage drift: {placementId}");
+        return treated;
     }
 
     private static void AddVaultLight(
@@ -862,9 +999,11 @@ internal static class Fo1OwnedCaveKit
         var repeat = floor.GetProperty("textureRepeatMeters").GetSingle();
         var roughness = floor.GetProperty("roughness").GetSingle();
         var normalScale = floor.GetProperty("normalScale").GetSingle();
+        var emissionEnergy = floor.GetProperty("emissionEnergy").GetSingle();
         var color = ReadColor(floor.GetProperty("albedoColor"));
         if (height is < Fo1OwnedCaveKitNumericContracts.GeometryFloatNEgativE0Point10f or > 0.0f || repeat <= Fo1OwnedCaveKitNumericContracts.GeometryFloat0Point5f ||
-            roughness is < 0.0f or > 1.0f || normalScale is < 0.0f or > 2.0f)
+            roughness is < 0.0f or > 1.0f || normalScale is < 0.0f or > 2.0f ||
+            emissionEnergy is < 0.0f or > 1.0f)
             throw new InvalidOperationException("Fallout continuous-floor material values are invalid.");
 
         var tool = new SurfaceTool();
@@ -893,19 +1032,18 @@ internal static class Fo1OwnedCaveKit
         tool.GenerateTangents();
         var mesh = tool.Commit() ?? throw new InvalidOperationException(
             "Could not build the Fallout continuous cave floor.");
-        var material = new StandardMaterial3D
+        var material = new ShaderMaterial
         {
-            AlbedoTexture = textures.TwoDimensional[diffuseId],
-            AlbedoColor = color,
-            Roughness = roughness,
-            Metallic = 0.0f,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
-            NormalEnabled = true,
-            NormalTexture = textures.TwoDimensional[normalId],
-            NormalScale = normalScale,
-            Transparency = BaseMaterial3D.TransparencyEnum.Disabled,
+            ResourceName = "FO1 normalized dark dusty gravel floor",
+            Shader = new Shader { Code = DustyGravelFloorShader },
         };
+        material.SetShaderParameter("albedo_texture", textures.TwoDimensional[diffuseId]);
+        material.SetShaderParameter("normal_texture", textures.TwoDimensional[normalId]);
+        material.SetShaderParameter("albedo_tint", color);
+        material.SetShaderParameter("repeat_meters", repeat);
+        material.SetShaderParameter("roughness_value", roughness);
+        material.SetShaderParameter("normal_strength", normalScale);
+        material.SetShaderParameter("emission_energy", emissionEnergy);
         var instance = new MeshInstance3D
         {
             Name = "FO1_OWNED_CONTINUOUS_CAVE_FLOOR",
@@ -1140,6 +1278,7 @@ internal static class Fo1OwnedCaveKit
             "opennv-fo1-owned-cave-wall-dressing/v1")
             throw new InvalidOperationException(
                 "Unexpected Fallout owned cave-wall dressing contract.");
+        var dressingEnabled = dressingSource.GetProperty("enabled").GetBoolean();
         var dressingProfiles = dressingSource.GetProperty("profiles").EnumerateArray()
             .Select(value => value.GetString()!)
             .ToHashSet(StringComparer.Ordinal);
@@ -1153,6 +1292,7 @@ internal static class Fo1OwnedCaveKit
             .Select(value => value.GetString()!)
             .ToHashSet(StringComparer.Ordinal);
         var dressing = new WallSurfaceDressing(
+            dressingEnabled,
             dressingProfiles,
             dressingRole,
             dressingSource.GetProperty("spacingMeters").GetSingle(),
@@ -1300,6 +1440,7 @@ internal static class Fo1OwnedCaveKit
         var meshCount = 0;
         var surfaceCount = 0;
         var dressingInstanceCount = 0;
+        var unifiedMaterialSurfaces = 0;
         foreach (var component in components)
         {
             var profile = profiles[component.Profile];
@@ -1346,6 +1487,7 @@ internal static class Fo1OwnedCaveKit
             root.SetMeta("fo1_molded_vertices", shell.Vertices);
             root.SetMeta("fo1_world_triplanar", true);
             root.SetMeta("fo1_cutaway_exempt", false);
+            root.SetMeta("fo1_source_tactical_visibility", "hide-wall-volume");
             container.AddChild(root);
             var shellInstance = new MeshInstance3D
             {
@@ -1356,7 +1498,7 @@ internal static class Fo1OwnedCaveKit
             };
             root.AddChild(shellInstance);
             var componentDressingInstances = 0;
-            if (dressing.Profiles.Contains(component.Profile))
+            if (dressing.Enabled && dressing.Profiles.Contains(component.Profile))
             {
                 foreach (var anchor in shell.DressingAnchors)
                 {
@@ -1400,6 +1542,10 @@ internal static class Fo1OwnedCaveKit
                         instance,
                         dressing.HiddenSurfaceIdentities,
                         $"{component.Id}/{anchor.Index}");
+                    unifiedMaterialSurfaces += ApplyConnectedWallSurfaceMaterial(
+                        instance,
+                        profile.Material,
+                        $"{component.Id}/{anchor.Index}");
                     root.AddChild(instance);
                     var bounds = WorldBounds(instance);
                     instance.Position += Vector3.Up *
@@ -1418,14 +1564,16 @@ internal static class Fo1OwnedCaveKit
             meshCount++;
             surfaceCount++;
         }
-        if (dressingInstanceCount == 0)
+        if (dressing.Enabled && dressingInstanceCount == 0)
             throw new InvalidOperationException(
                 "Fallout cave-wall dressing produced no owned relief instances.");
         return new ReliefCoverage(
             componentCount,
             meshCount,
             surfaceCount,
-            componentCount * 2);
+            componentCount * 2,
+            unifiedMaterialSurfaces,
+            profiles["cave"].Material);
     }
 
     private static MoldedWallCoverage AddConnectedWallShell(
@@ -1624,7 +1772,7 @@ internal static class Fo1OwnedCaveKit
                 noiseBlend,
                 closedContours,
                 ref vertexOffset);
-            if (dressing.Profiles.Contains(component.Profile))
+            if (dressing.Enabled && dressing.Profiles.Contains(component.Profile))
                 dressingAnchors.AddRange(BuildWallDressingAnchors(
                     contour,
                     dressing,
@@ -2515,7 +2663,9 @@ internal static class Fo1OwnedCaveKit
             placements,
             placements * 3,
             placements * 3,
-            placements * 3);
+            placements * 3,
+            0,
+            null);
     }
 
     private static ArrayMesh BuildReliefSideMesh(
@@ -2706,6 +2856,7 @@ internal static class Fo1OwnedCaveKit
         float PeriodicSecondaryPhaseScale);
 
     private sealed record WallSurfaceDressing(
+        bool Enabled,
         IReadOnlySet<string> Profiles,
         string AssetRole,
         float SpacingMeters,
@@ -2755,7 +2906,9 @@ internal static class Fo1OwnedCaveKit
         int Placements,
         int MeshInstances,
         int SurfaceInstances,
-        int MaterialBindings);
+        int MaterialBindings,
+        int UnifiedCaveMaterialSurfaces,
+        StandardMaterial3D? CohesiveCaveMaterial);
 
     private readonly record struct GroundingRole(
         float SeatDepthHeightFraction,
@@ -2773,6 +2926,13 @@ internal static class Fo1OwnedCaveKit
         int MeshInstances,
         int MaterialBindings);
 
+    private readonly record struct EnvelopeMeshes(ArrayMesh Roof, ArrayMesh Boundary);
+
+    private readonly record struct EnvelopeCoverage(
+        int Instances,
+        int MeshInstances,
+        int SurfaceInstances);
+
     internal readonly record struct Coverage(
         string ManifestSha256,
         int Assets,
@@ -2789,7 +2949,9 @@ internal static class Fo1OwnedCaveKit
         float MinimumGroundSeatDepthMeters,
         float MaximumGroundSeatDepthMeters,
         float MaximumGroundErrorMeters,
-        float GroundingToleranceMeters)
+        float GroundingToleranceMeters,
+        int UnifiedCaveMaterialSurfaces,
+        int LitMaterials)
     {
         internal static Coverage Empty => new(
             string.Empty,
@@ -2807,6 +2969,8 @@ internal static class Fo1OwnedCaveKit
             0.0f,
             0.0f,
             0.0f,
-            0.0f);
+            0.0f,
+            0,
+            0);
     }
 }

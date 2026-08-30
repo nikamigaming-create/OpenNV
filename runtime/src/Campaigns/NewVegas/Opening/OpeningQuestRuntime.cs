@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Actors;
 
@@ -35,15 +36,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         "preserve-hash-bound-owned-clip-root-curve";
     private const string ZeroedAccumulationRootTranslation =
         "owned-world-root-authoritative-zero-local-translation";
-    private const string FaceGenSliderNamePrefix = "OwnedFaceGenGeometrySlider_";
-    private const string FaceGenResetAllName = "OwnedFaceGenGeometryResetAll";
-    private static readonly string[] FaceGenPreviewControlLabels =
-    [
-        "Brow Ridge - high / low",
-        "Mouth - happy / sad",
-        "Nose - bridge shallow / deep",
-    ];
-
+    private const string RaceSexSliderPreviousEngineLabel = "<";
+    private const string RaceSexSliderNextEngineLabel = ">";
     private readonly Dictionary<string, Node3D> _roleNodes =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _topicCursors =
@@ -115,6 +109,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private double _playerAnimationElapsedSeconds;
     private double _packageIdleWaitSeconds;
     private int _playerAnimationSampleIndex;
+    private OpeningPlayerAnimation? _lastAppliedPlayerCameraAnimation;
+    private float _lastAppliedPlayerCameraTime;
     private int _packageIdleCursor;
     private bool _activeAnimationIsPackageEvent;
     private bool _packageIdleSequenceComplete;
@@ -124,7 +120,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private OpeningGuideLocomotionClip? _activeGuideLocomotion;
     private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
     private ActorModelSlice.LoadedAnimation? _activeGuideIdleAnimation;
+    private OpeningGuidePriorityAnimation.LayeredPlayback?
+        _guideFurnitureLayeredSeatedAnimation;
     private string? _guideAnimationObjectIdleFormId;
+    private OpeningCigaretteSmokePresentation? _guideCigaretteSmokePresentation;
     private Vector3 _guideDestinationCellUnits;
     private IReadOnlyList<Vector3> _guidePathCellUnits = Array.Empty<Vector3>();
     private int _guidePathIndex;
@@ -142,6 +141,17 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private bool _openingQuestCompleted;
     private bool _autoDisplayObjectives;
     private AcceptanceAppearancePhase _acceptanceAppearancePhase;
+    private OpeningPlayerFaceGenPreviewHost? _appearancePreviewHost;
+    private OpeningRaceSexMenuHost? _raceSexMenuHost;
+    private OpeningRaceSexRenderedDeviceHost? _raceSexRenderedDeviceHost;
+    private Action? _raceSexShowSex;
+    private Action? _raceSexShowFace;
+    private Action? _raceSexShowBody;
+    private CharacterBodyProportions _bodyProportions =
+        CharacterBodyProportions.Neutral("fnv-custom-live-v1");
+    private string _appearancePreviewMode = "3d";
+    private bool _visualCaptureActive;
+    private bool _docSpatialAcceptancePassed;
 
     internal int Stage => _stage;
     internal string PlayerName => _playerName;
@@ -149,11 +159,13 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     internal async Task<OpeningCampaignState> RunAcceptance(
         string mode,
         string playerName,
-        double timeoutSeconds)
+        double timeoutSeconds,
+        string? captureRoot = null)
     {
         var stopAtCheckpoint = mode.Equals("checkpoint", StringComparison.OrdinalIgnoreCase);
+        var stopAfterCreator = mode.Equals("creator", StringComparison.OrdinalIgnoreCase);
         var completeAfterResume = mode.Equals("resume", StringComparison.OrdinalIgnoreCase);
-        if ((!stopAtCheckpoint && !completeAfterResume) ||
+        if ((!stopAtCheckpoint && !stopAfterCreator && !completeAfterResume) ||
             string.IsNullOrWhiteSpace(playerName) || timeoutSeconds <= 0.0)
             throw new ArgumentException("Opening acceptance arguments are invalid.");
         var initialState = _loaded.Session.OpeningState;
@@ -171,6 +183,15 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         DesktopKeyBindingConfiguration? firstPlayerAction = null;
         Vector3? firstPlayerActionOrigin = null;
         var firstPlayerActionProven = !proveFirstPlayerAction;
+        var requireDocSpatialAcceptance = (stopAtCheckpoint || stopAfterCreator) &&
+            _stage < OpeningVisualCaptureSession.DocSpatialAcceptanceDeadlineStage;
+        var latestDocSpatialTelemetry = "not-yet-observed";
+        var visualCapture = OpeningVisualCaptureSession.Create(
+            this,
+            captureRoot,
+            mode,
+            playerName);
+        _visualCaptureActive = visualCapture is not null;
         var activateHeld = false;
         try
         {
@@ -183,10 +204,29 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                         false));
                     activateHeld = false;
                 }
+                if (stopAfterCreator &&
+                    _stage == AuthoredAppearanceReturnStage() &&
+                    _activeModal is null &&
+                    _acceptanceAppearancePhase == AcceptanceAppearancePhase.Complete)
+                {
+                    var creatorState = CaptureState(false);
+                    _loaded.Session.StoreOpeningState(creatorState);
+                    if (visualCapture is not null)
+                    {
+                        await visualCapture.CaptureCreatorAccepted(this);
+                        VisualProofReportPath = visualCapture.Complete(this, creatorState);
+                    }
+                    return creatorState;
+                }
                 var saved = _loaded.Session.OpeningState;
                 if (stopAtCheckpoint && saved is { Completed: false })
                 {
                     ValidateCheckpointState(saved);
+                    if (visualCapture is not null)
+                    {
+                        await visualCapture.CaptureCheckpointRelease(this);
+                        VisualProofReportPath = visualCapture.Complete(this, saved);
+                    }
                     return saved;
                 }
                 if (completeAfterResume && saved is { Completed: true })
@@ -195,6 +235,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                         throw new InvalidOperationException(
                             "Opening completed without a configured first player action.");
                     ValidateCompletedState(_flow, saved);
+                    if (visualCapture is not null)
+                        VisualProofReportPath = visualCapture.Complete(this, saved);
                     return saved;
                 }
                 var elapsedSeconds =
@@ -204,6 +246,33 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                         $"Opening acceptance timed out at stage {_stage} after {elapsedSeconds:F1}s.");
 
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                if (requireDocSpatialAcceptance &&
+                    !_docSpatialAcceptancePassed)
+                {
+                    if (OpeningVisualCaptureSession.TryValidateDocSpatial(
+                            this,
+                            out var docSpatialTelemetry))
+                    {
+                        _docSpatialAcceptancePassed = true;
+                        latestDocSpatialTelemetry = docSpatialTelemetry;
+                        GD.Print(
+                            "OPENNV_OPENING_DOC_SPATIAL_PASS " +
+                            docSpatialTelemetry);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(docSpatialTelemetry))
+                    {
+                        latestDocSpatialTelemetry = docSpatialTelemetry;
+                        throw new InvalidOperationException(
+                            "Opening deterministic stage-8 source pose intersects the " +
+                            $"owned patient-bed collision volume: {docSpatialTelemetry}.");
+                    }
+                }
+                if (requireDocSpatialAcceptance &&
+                    !_docSpatialAcceptancePassed &&
+                    _stage >= OpeningVisualCaptureSession.DocSpatialAcceptanceDeadlineStage)
+                    throw new InvalidOperationException(
+                        "Opening source-driven seated pose never cleared the owned patient " +
+                        $"bed before stage {_stage}: {latestDocSpatialTelemetry}.");
                 if (!firstPlayerActionProven &&
                     firstPlayerAction is not null &&
                     firstPlayerActionOrigin is { } actionOrigin)
@@ -215,6 +284,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                         .MinimumLocomotionMeters;
                     if (progress >= minimum)
                     {
+                        SetAcceptanceMovement(null, ref movementHeld);
                         firstPlayerActionProven = true;
                         GD.Print(
                             $"OPENNV_OPENING_FIRST_PLAYER_ACTION_PASS " +
@@ -225,8 +295,13 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                             $"distanceMeters={progress:F3} minimumMeters={minimum:F3} " +
                             "transport=configured-desktop-input-event " +
                             "movement=owned-navigation");
+                        if (visualCapture is not null)
+                            await visualCapture.CaptureFirstAction(this, progress, minimum);
                     }
                 }
+                if (visualCapture is not null &&
+                    await visualCapture.ObserveCheckpointState(this))
+                    continue;
                 if (_activeModal is not null)
                 {
                     SetAcceptanceMovement(null, ref movementHeld);
@@ -304,12 +379,15 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                         $"controls={string.Join(',', currentControls)} " +
                         $"configuration={_configuration.Sha256} " +
                         "modal=none playerPackage=none");
+                    if (visualCapture is not null)
+                        await visualCapture.CaptureFirstActionReady(this);
                 }
                 SetAcceptanceMovement(requestedMovement, ref movementHeld);
             }
         }
         finally
         {
+            _visualCaptureActive = false;
             SetAcceptanceMovement(null, ref movementHeld);
             if (activateHeld)
                 Input.ParseInputEvent(DesktopInputMap.CreateEvent(
@@ -333,33 +411,30 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 button.Text == _flow.Strings["ok"]));
             return;
         }
-        var raceSelector = Descendants<OptionButton>(_activeModal).SingleOrDefault(value =>
-            value.Name == "OwnedRaceSelector");
-        var hairSelector = Descendants<OptionButton>(_activeModal).SingleOrDefault(value =>
-            value.Name == "OwnedHairSelector");
-        var eyesSelector = Descendants<OptionButton>(_activeModal).SingleOrDefault(value =>
-            value.Name == "OwnedEyesSelector");
-        if (raceSelector is not null && hairSelector is not null && eyesSelector is not null)
+        if (_raceSexMenuHost is not null)
         {
             var faceGen = _flow.Character.Appearance.FaceGen;
             var previewPolicy = faceGen.ControlSpace.PreviewControl;
             var previewControls = FaceGenPreviewControls(faceGen);
-            var geometrySliders = Descendants<HSlider>(_activeModal)
-                .Where(value => value.Name.ToString().StartsWith(
-                    FaceGenSliderNamePrefix,
-                    StringComparison.Ordinal))
-                .ToDictionary(
-                    value => value.Name.ToString()[FaceGenSliderNamePrefix.Length..],
-                    StringComparer.Ordinal);
-            if (geometrySliders.Count != previewControls.Count ||
-                previewControls.Any(control =>
-                    !geometrySliders.ContainsKey(control.SettingEntity)))
+            if (_appearancePreviewHost is null ||
+                _raceSexShowSex is null ||
+                _raceSexShowFace is null)
                 throw new InvalidOperationException(
-                    "Owned appearance modal FaceGen geometry sliders are incomplete.");
-            void SetGeometrySliders(float value)
+                    "Owned RaceSexMenu acceptance state is incomplete.");
+            void SetGeometryValues(bool edited)
             {
                 foreach (var control in previewControls)
-                    geometrySliders[control.SettingEntity].Value = value;
+                {
+                    var value = edited &&
+                        control.SettingEntity == previewPolicy.SettingEntity
+                            ? previewPolicy.AcceptanceValue
+                            : previewPolicy.ResetValue;
+                    _faceGeometryControlValues[control.SettingEntity] = value;
+                    _appearancePreviewHost.Apply(
+                        control.SettingEntity,
+                        value);
+                }
+                _raceSexShowFace();
             }
             bool GeometryValuesEqual(float value) =>
                 previewControls.All(control =>
@@ -367,11 +442,45 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                         control.SettingEntity,
                         out var actual) &&
                     Mathf.IsEqualApprox(actual, value));
+            bool GeometryEditMatches() =>
+                previewControls.All(control =>
+                    _faceGeometryControlValues.TryGetValue(
+                        control.SettingEntity,
+                        out var actual) &&
+                    Mathf.IsEqualApprox(
+                        actual,
+                        control.SettingEntity == previewPolicy.SettingEntity
+                            ? previewPolicy.AcceptanceValue
+                            : previewPolicy.ResetValue));
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.InitialSex)
+            {
+                _raceSexMenuHost.PressNext();
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.SelectRace;
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.SelectRace)
+            {
+                _raceSexMenuHost.PressNext();
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.SelectHair;
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.SelectHair)
+            {
+                _raceSexMenuHost.PressNext();
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.SelectEyes;
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.SelectEyes)
+            {
+                _raceSexMenuHost.PressNext();
+                _acceptanceAppearancePhase = AcceptanceAppearancePhase.EditGeometry;
+                return;
+            }
             if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.EditGeometry)
             {
-                SetGeometrySliders(previewPolicy.AcceptanceValue);
+                SetGeometryValues(edited: true);
                 var editedSha256 = CurrentFaceSymmetricGeometrySha256();
-                if (!GeometryValuesEqual(previewPolicy.AcceptanceValue) ||
+                if (!GeometryEditMatches() ||
                     editedSha256.Equals(
                         faceGen.SymmetricGeometrySha256,
                         StringComparison.OrdinalIgnoreCase))
@@ -382,13 +491,12 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     $"OPENNV_OPENING_ACCEPTANCE_FACEGEN_INPUT " +
                     $"controls={FaceGenControlValuesText(previewControls)} " +
                     $"editedSha256={editedSha256} " +
-                    "transport=godot-authored-slider-signals");
+                    "transport=owned-racesex-slider-state");
                 return;
             }
             if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.ResetGeometry)
             {
-                PressAcceptanceButton(buttons.FirstOrDefault(button =>
-                    button.Name == FaceGenResetAllName));
+                SetGeometryValues(edited: false);
                 if (!GeometryValuesEqual(previewPolicy.ResetValue) ||
                     !CurrentFaceSymmetricGeometrySha256().Equals(
                         faceGen.SymmetricGeometrySha256,
@@ -398,12 +506,12 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 _acceptanceAppearancePhase = AcceptanceAppearancePhase.RestoreGeometryEdit;
                 GD.Print(
                     "OPENNV_OPENING_ACCEPTANCE_FACEGEN_RESET " +
-                    "transport=godot-authored-button-signal");
+                    "transport=owned-racesex-slider-state");
                 return;
             }
             if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.RestoreGeometryEdit)
             {
-                SetGeometrySliders(previewPolicy.AcceptanceValue);
+                SetGeometryValues(edited: true);
                 _acceptanceAppearancePhase = AcceptanceAppearancePhase.SelectSex;
                 return;
             }
@@ -411,21 +519,25 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 _flow.Character.SexChoices.Count > 1)
             {
                 var targetSex = (_sexIndex + 1) % _flow.Character.SexChoices.Count;
+                _raceSexShowSex();
                 _acceptanceAppearancePhase = AcceptanceAppearancePhase.SelectParts;
-                PressAcceptanceButton(buttons.FirstOrDefault(button =>
-                    button.Text == _flow.Character.SexChoices[targetSex]));
+                _raceSexMenuHost.ActivateListEntry(
+                    _flow.Character.Appearance.SexEngineValues[targetSex]);
                 return;
             }
             if (_acceptanceAppearancePhase <= AcceptanceAppearancePhase.SelectParts)
             {
-                SelectDifferentOwnedOption(raceSelector);
-                SelectDifferentOwnedOption(hairSelector);
-                SelectDifferentOwnedOption(eyesSelector);
+                _raceSexShowFace();
                 _acceptanceAppearancePhase = AcceptanceAppearancePhase.Complete;
                 GD.Print(
                     $"OPENNV_OPENING_ACCEPTANCE_APPEARANCE_INPUT sex={_sexIndex} " +
                     $"race={_raceFormId} hair={_hairFormId} eyes={_eyesFormId} " +
-                    "transport=godot-authored-option-signals");
+                    "transport=owned-racesex-active-list");
+                return;
+            }
+            if (_acceptanceAppearancePhase == AcceptanceAppearancePhase.Complete)
+            {
+                _raceSexMenuHost.PressNext();
                 return;
             }
         }
@@ -444,13 +556,20 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         PressAcceptanceButton(buttons.FirstOrDefault());
     }
 
-    private static void SelectDifferentOwnedOption(OptionButton selector)
+    private int AuthoredAppearanceReturnStage()
     {
-        if (selector.ItemCount <= 1)
-            return;
-        var nextIndex = (selector.Selected + 1) % selector.ItemCount;
-        selector.Select(nextIndex);
-        selector.EmitSignal(OptionButton.SignalName.ItemSelected, nextIndex);
+        var appearanceStages = _flow.Stages.Values
+            .Where(program => program.Commands.Any(command =>
+                command.Kind == "showMenu" && command.Role == "appearance"))
+            .Select(program => program.Stage)
+            .ToArray();
+        if (appearanceStages.Length != 1 ||
+            !_flow.MenuCloseTransitions.TryGetValue(
+                appearanceStages[0],
+                out var returnStage))
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu has no unique source stage-to-return transition.");
+        return returnStage;
     }
 
     private static void PressAcceptanceButton(Button? button)
@@ -669,6 +788,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _guideActor.Actor,
             configuration.ActorCompiler.FaceGenAnimation.Lip);
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
+        foreach (var activator in _loaded.MainContent.PlacedReferences
+                     .Select(reference => reference.Placement)
+                     .OfType<ScriptedActivatorInstance>())
+            activator.Bind(AuthorizeScriptedActivatorEvent, ApplyScriptedActivatorEvent);
 
         _viewport = new Control { Name = "OpeningFlowViewport" };
         _viewport.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
@@ -716,7 +839,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         else
         {
             RestoreState(restoredState);
-            SetStage(restoredState.Stage);
+            ResumeRestoredCheckpoint(restoredState.Stage);
         }
         GD.Print(
             $"OPENNV_NEW_GAME_FLOW_READY quest={_flow.QuestEditorId} " +
@@ -730,6 +853,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         UpdateImageSpaceModifiers(delta);
         UpdateGuideActor(delta);
         UpdateGuideAnimationObjectLifecycle();
+        _guideCigaretteSmokePresentation?.Update(delta);
         UpdateDialogueVoice();
         if (_activeModal is not null)
             return;
@@ -836,6 +960,19 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             _guideAnimationObjectSurfaces.Values.Sum(value => value.Count))
             throw new InvalidOperationException(
                 "Owned guide actor contains undeclared animation-object surfaces.");
+        var cigaretteSource = _flow.GuideActorAi.AnimationObjects.Single();
+        var cigaretteSurface = _guideActor.Actor.Surfaces.Single(surface =>
+            surface.Role.Equals(
+                cigaretteSource.ComponentRole,
+                StringComparison.OrdinalIgnoreCase) &&
+            surface.SourceFormId?.Equals(
+                cigaretteSource.FormId,
+                StringComparison.OrdinalIgnoreCase) == true);
+        _guideCigaretteSmokePresentation =
+            OpeningCigaretteSmokePresentation.Create(
+                _loaded.Root,
+                cigaretteSurface,
+                cigaretteSource);
     }
 
     private void EvaluateGuidePackage(bool force = false)
@@ -1026,9 +1163,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 "Owned initial furniture package destination is absent or ambiguous: " +
                 destination.FormId);
         var marker = contract.Furniture.Marker;
+        var actorRootOffset = marker.OffsetGodotGameUnits -
+            marker.ActorPlacementOffset.OffsetGodotGameUnits;
         var markerTransform = furniture[0].Placement.Transform * new Transform3D(
             new Basis(marker.RotationGodot),
-            marker.ActorPlacementOffset.OffsetGodotGameUnits);
+            actorRootOffset);
         var actorTransform = markerTransform * new Transform3D(
             new Basis(marker.ActorForwardHeadingDelta.RotationGodot),
             Vector3.Zero);
@@ -1056,27 +1195,58 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             $"markerDisposition={contract.MarkerDisposition} " +
             $"markerCell={_guideActor.Placement.Position} " +
             $"markerNifOffset={marker.OffsetNifGameUnits} " +
-            $"placementGmstOffset={marker.ActorPlacementOffset.OffsetNifGameUnits} " +
+            $"targetGmstOffset={marker.ActorPlacementOffset.OffsetNifGameUnits} " +
+            $"actorRootOffset={actorRootOffset} " +
             $"headingDeltaGmst={marker.ActorForwardHeadingDelta.EditorId} " +
             $"headingDeltaRadians={marker.ActorForwardHeadingDelta.ValueRadians:F7} " +
-            $"transform=owned-furniture-gmst-replacement-offset-and-heading-delta");
+            $"transform=owned-furniture-nif-marker-minus-gmst-target-offset-and-" +
+            $"heading-delta");
         return true;
     }
 
     private void PlayGuideFurnitureSeatedLoop()
     {
         var furniture = _flow.GuideActorAi.FurnitureOccupancy;
-        PlayGuideAnimation(
+        var animationObject = _flow.GuideActorAi.AnimationObjects.Single(value =>
+            value.IdleAnimationFormId.Equals(
+                furniture.AnimationObjectIdleFormId,
+                StringComparison.OrdinalIgnoreCase));
+        var seated = ResolveGuideAnimation(
             furniture.SeatedLoop.LogicalPath,
             furniture.SeatedLoop.Sha256,
-            restart: true,
-            idleAnimationFormId: furniture.AnimationObjectIdleFormId,
-            loopMode: Animation.LoopModeEnum.Linear);
+            ZeroedAccumulationRootTranslation);
+        var smoking = ResolveGuideAnimation(
+            animationObject.IdleAnimationLogicalPath,
+            animationObject.IdleAnimationSha256,
+            ZeroedAccumulationRootTranslation);
+        if (smoking.SequenceName != animationObject.IdleAnimationSequenceName ||
+            smoking.StartSeconds != animationObject.IdleAnimationStartSeconds ||
+            smoking.StopSeconds != animationObject.IdleAnimationStopSeconds ||
+            smoking.CycleType != animationObject.IdleAnimationCycleType ||
+            !smoking.TransformPrioritiesByNode.OrderBy(value => value.Key)
+                .SequenceEqual(
+                    animationObject.IdleAnimationTransformPrioritiesByNode
+                        .OrderBy(value => value.Key)))
+            throw new InvalidOperationException(
+                "Owned guide package idle differs from its opening source contract.");
+        _guideFurnitureLayeredSeatedAnimation ??=
+            OpeningGuidePriorityAnimation.Compose(
+                seated,
+                smoking,
+                animationObject.AttachmentNode);
+        var layered = _guideFurnitureLayeredSeatedAnimation;
+        layered.Play();
+        _activeGuideIdleAnimation = null;
+        SetGuideAnimationObjects(furniture.AnimationObjectIdleFormId);
+        _activeGuideAnimation = layered.ActiveAnimation;
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_SEATED " +
             $"idle={furniture.SeatedLoop.FormId} " +
             $"sequence={furniture.SeatedLoop.SequenceName} " +
-            $"cigaretteIdle={furniture.AnimationObjectIdleFormId}");
+            $"packageIdle={animationObject.IdleAnimationFormId} " +
+            $"packageSequence={animationObject.IdleAnimationSequenceName} " +
+            $"cigaretteIdle={furniture.AnimationObjectIdleFormId} " +
+            "composition=owned-controlled-node-priority");
     }
 
     private void BeginGuideFurnitureExit(OpeningGuidePackage package)
@@ -1090,6 +1260,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             throw new InvalidOperationException(
                 "Owned guide furniture exit package/stage is unexpected.");
         _guideFurnitureExiting = true;
+        _guideFurnitureLayeredSeatedAnimation?.Stop();
         _guideFurnitureExitPackage = package;
         _guideMoving = false;
         _guidePathCellUnits = Array.Empty<Vector3>();
@@ -1262,22 +1433,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         string expectedAccumulationRootDisposition =
             ZeroedAccumulationRootTranslation)
     {
-        var expected = ActorModelSlice.NormalizeAnimationPath(logicalPath);
-        var matches = _guideActor.Actor.LoadedAnimations.Where(animation =>
-                ActorModelSlice.NormalizeAnimationPath(animation.LogicalPath).Equals(
-                    expected,
-                    StringComparison.OrdinalIgnoreCase) &&
-                (expectedSha256 is null || animation.SourceSha256.Equals(
-                    expectedSha256,
-                    StringComparison.OrdinalIgnoreCase)) &&
-                animation.AccumulationRootTranslationDisposition.Equals(
-                    expectedAccumulationRootDisposition,
-                    StringComparison.Ordinal))
-            .ToArray();
-        if (matches.Length != 1)
-            throw new InvalidOperationException(
-                $"Owned guide animation is absent or ambiguous: {logicalPath}");
-        var animation = matches[0];
+        var animation = ResolveGuideAnimation(
+            logicalPath,
+            expectedSha256,
+            expectedAccumulationRootDisposition);
         if (loopMode is { } requestedLoopMode)
         {
             var resource = animation.Player.GetAnimation(animation.RuntimeName)
@@ -1298,6 +1457,29 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _activeGuideAnimation = animation;
     }
 
+    private ActorModelSlice.LoadedAnimation ResolveGuideAnimation(
+        string logicalPath,
+        string? expectedSha256,
+        string expectedAccumulationRootDisposition)
+    {
+        var expected = ActorModelSlice.NormalizeAnimationPath(logicalPath);
+        var matches = _guideActor.Actor.LoadedAnimations.Where(animation =>
+                ActorModelSlice.NormalizeAnimationPath(animation.LogicalPath).Equals(
+                    expected,
+                    StringComparison.OrdinalIgnoreCase) &&
+                (expectedSha256 is null || animation.SourceSha256.Equals(
+                    expectedSha256,
+                    StringComparison.OrdinalIgnoreCase)) &&
+                animation.AccumulationRootTranslationDisposition.Equals(
+                    expectedAccumulationRootDisposition,
+                    StringComparison.Ordinal))
+            .ToArray();
+        if (matches.Length != 1)
+            throw new InvalidOperationException(
+                $"Owned guide animation is absent or ambiguous: {logicalPath}");
+        return matches[0];
+    }
+
     private void SetGuideAnimationObjects(string? idleAnimationFormId)
     {
         if (string.Equals(
@@ -1314,6 +1496,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                     StringComparison.OrdinalIgnoreCase);
             foreach (var surface in _guideAnimationObjectSurfaces[animationObject.FormId])
                 surface.Visible = visible;
+            _guideCigaretteSmokePresentation?.SetActive(visible);
             GD.Print(
                 $"OPENNV_NEW_GAME_ANIMATION_OBJECT form={animationObject.FormId} " +
                 $"idle={idleAnimationFormId ?? "none"} " +
@@ -1337,6 +1520,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     {
         if (_guideActorResolved)
             SetGuideAnimationObjects(null);
+        _guideCigaretteSmokePresentation?.Root.QueueFree();
     }
 
     private void FaceGuideTowardCellPosition(Vector3 target)
@@ -1403,6 +1587,46 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         return true;
     }
 
+    private bool AuthorizeScriptedActivatorEvent(ScriptedActivatorEvent source)
+    {
+        var guard = source.Guard;
+        return _objectives.TryGetValue(
+            ObjectiveKey(guard.QuestFormId, guard.ObjectiveIndex),
+            out var objective) &&
+            objective.QuestEditorId.Equals(guard.QuestEditorId, StringComparison.OrdinalIgnoreCase) &&
+            objective.State == guard.State && objective.Enabled;
+    }
+
+    private void ApplyScriptedActivatorEvent(ScriptedActivatorEvent source)
+    {
+        foreach (var command in source.Commands)
+        {
+            if (command.Kind == "setStage" && command.Stage is { } stage)
+            {
+                if (command.QuestFormId.Equals(_flow.QuestFormId, StringComparison.OrdinalIgnoreCase))
+                    SetStage(stage);
+                else
+                    ApplyQuestStage(command.QuestFormId, command.QuestEditorId, stage, true);
+                continue;
+            }
+            if (command.Kind == "objective" && command.Index is { } index &&
+                command.State == "completed" && command.Enabled == true &&
+                _objectives.TryGetValue(ObjectiveKey(command.QuestFormId, index), out var objective) &&
+                objective.QuestEditorId.Equals(command.QuestEditorId, StringComparison.OrdinalIgnoreCase))
+            {
+                _objectives[ObjectiveKey(command.QuestFormId, index)] = objective with
+                {
+                    State = command.State,
+                    Enabled = true,
+                };
+                if (_objective.Text == objective.Text)
+                    _objective.Visible = false;
+                continue;
+            }
+            throw new InvalidOperationException("Scripted activator command is not admitted by opening state.");
+        }
+    }
+
     private static bool MatchesTarget(Node? collider, Node3D target) =>
         collider is not null &&
         (collider == target || target.IsAncestorOf(collider) || collider.IsAncestorOf(target));
@@ -1425,6 +1649,35 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         EvaluateGuidePackage();
         GD.Print($"OPENNV_NEW_GAME_STAGE quest={_flow.QuestEditorId} stage={stage}");
         ExecuteStageCommand(program, 0, _generation, null);
+    }
+
+    private void ResumeRestoredCheckpoint(int stage)
+    {
+        if (!_flow.Stages.TryGetValue(stage, out var program))
+            throw new InvalidOperationException($"Owned New Game stage is absent: {stage}");
+        var checkpointStage = AuthoredCheckpointStage();
+        var autosaveIndices = program.Commands
+            .Select((command, index) => (command, index))
+            .Where(value => value.command.Kind == "autosave")
+            .Select(value => value.index)
+            .ToArray();
+        if (stage != checkpointStage || autosaveIndices.Length != 1)
+            throw new InvalidOperationException(
+                "Saved opening state is not at its unique owned checkpoint command.");
+
+        _generation++;
+        _stage = stage;
+        _timerTargetStage = null;
+        _guideArrivalContinuation = null;
+        CloseModal(false);
+        ApplyStageControlPolicy();
+        EvaluateGuidePackage();
+        var resumeCommandIndex = autosaveIndices[0] + 1;
+        GD.Print(
+            $"OPENNV_NEW_GAME_CHECKPOINT_RESUME quest={_flow.QuestEditorId} " +
+            $"stage={stage} resumeCommandIndex={resumeCommandIndex} " +
+            "replayedPrefixCommands=0 autosaveReplayed=0 dialogueReplayed=0");
+        ExecuteStageCommand(program, resumeCommandIndex, _generation, null);
     }
 
     private void ExecuteStageCommand(
@@ -1979,6 +2232,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             translation * _loaded.UnitsToMeters);
         _loaded.Player.ApplyAuthoredCameraTransform(
             new Transform3D(result.Basis.Orthonormalized(), result.Origin));
+        _lastAppliedPlayerCameraAnimation = animation;
+        _lastAppliedPlayerCameraTime = time;
     }
 
     private void ApplyImageSpaceModifier(OpeningFlowCommand command)
@@ -2153,275 +2408,380 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private void ShowAppearanceMenu(Action completed)
     {
-        var content = OpenPanel(MenuRect("appearance"), "appearance");
-        var title = NewLabel(_flow.Character.SexTitle);
-        title.HorizontalAlignment = HorizontalAlignment.Center;
-        content.AddChild(title);
-        for (var index = 0; index < _flow.Character.SexChoices.Count; index++)
-        {
-            var choiceIndex = index;
-            var button = NewButton(_flow.Character.SexChoices[index]);
-            button.ToggleMode = true;
-            button.ButtonPressed = _sexIndex == choiceIndex;
-            button.Pressed += () =>
-            {
-                _sexIndex = choiceIndex;
-                ResolveCurrentAppearanceForSex(resetToRaceDefaults: false);
-                ShowAppearanceMenu(completed);
-            };
-            content.AddChild(button);
-        }
         var appearance = _flow.Character.Appearance;
         var faceGen = appearance.FaceGen;
         var previewPolicy = faceGen.ControlSpace.PreviewControl;
+        var appearanceMenu = _flow.Menus["appearance"];
+        if (appearanceMenu.RaceSexMenuTiles is not { } source ||
+            appearanceMenu.Rect != source.Background.Rect ||
+            !_flow.Strings.TryGetValue(
+                source.Navigation.Back.LabelRole,
+                out var backLabel) ||
+            !_flow.Strings.TryGetValue(
+                source.Navigation.Next.LabelRole,
+                out var nextLabel) ||
+            backLabel != source.Navigation.Back.Label ||
+            nextLabel != source.Navigation.Next.Label)
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu labels or tile contract are incomplete.");
+        if (appearanceMenu.RenderedDevice is not { } renderedDevice)
+            throw new InvalidOperationException(
+                "Owned RaceSex rendered-device contract is absent.");
+        var modalRoot = OpenModalRoot("appearance");
+        _raceSexRenderedDeviceHost = new OpeningRaceSexRenderedDeviceHost(
+            renderedDevice,
+            modalRoot,
+            _flow.ReferenceCanvasSize,
+            _configuration,
+            _loaded.MainContent.Lighting,
+            _loaded.UnitsToMeters);
+        var root = _raceSexRenderedDeviceHost.CreateMenuPresentationHost(
+            source.Background.Rect);
+        _raceSexMenuHost = new OpeningRaceSexMenuHost(
+            source,
+            _opening.MainMenuColor,
+            _opening.Style,
+            root,
+            RaceSexSliderPreviousEngineLabel,
+            RaceSexSliderNextEngineLabel,
+            _raceSexRenderedDeviceHost.SetActiveList);
+        _raceSexMenuHost.FaceGrabHost();
+        var preview = _raceSexRenderedDeviceHost.CreateFacePresentationHost();
         var previewControls = FaceGenPreviewControls(faceGen);
-        var engineSex = appearance.SexEngineValues[_sexIndex];
-        var raceSelect = NewOptionButton("OwnedRaceSelector");
-        var hairSelect = NewOptionButton("OwnedHairSelector");
-        var faceSelect = NewOptionButton("OwnedEyesSelector");
-        content.AddChild(NewLabel("Race"));
-        content.AddChild(raceSelect);
-        content.AddChild(NewLabel("Hair"));
-        content.AddChild(hairSelect);
-        content.AddChild(NewLabel("Face / Eyes"));
-        content.AddChild(faceSelect);
-        var preview = new HBoxContainer
-        {
-            Name = "OwnedAppearanceLivePreview",
-            Alignment = BoxContainer.AlignmentMode.Center,
-        };
-        content.AddChild(preview);
         OpeningPlayerFaceGenPreviewHost? previewHost = null;
-        var controlSliders = new Dictionary<string, HSlider>(StringComparer.Ordinal);
+        OpeningPlayerFaceGenPreview? selectedPreviewState = null;
 
         void UpdateControlValue(
             OpeningNativeFaceGenGeometryControl control,
-            Label label,
             float value)
         {
             if (!float.IsFinite(value) ||
                 value < previewPolicy.Minimum ||
                 value > previewPolicy.Maximum)
                 throw new InvalidOperationException(
-                    "Normalized FaceGen preview control value is invalid.");
-            var normalizedValue = Mathf.IsEqualApprox(
+                    "FaceGen RaceSexMenu UI value is invalid.");
+            var uiValue = Mathf.IsEqualApprox(
                 value,
                 previewPolicy.ResetValue)
                 ? previewPolicy.ResetValue
                 : value;
-            _faceGeometryControlValues[control.SettingEntity] = normalizedValue;
-            label.Text =
-                $"{control.SourceLabel} (normalized preview; retail range pending): " +
-                $"{normalizedValue:+0.00;-0.00;0.00}";
-            previewHost?.Apply(control.SettingEntity, normalizedValue);
+            var morphWeight = uiValue * previewPolicy.MorphWeightScale;
+            _faceGeometryControlValues[control.SettingEntity] = uiValue;
+            previewHost?.Apply(control.SettingEntity, uiValue);
+            if (previewHost is not null && _appearancePreviewMode == "2d")
+                previewHost.ShowTwoDimensional(_bodyProportions);
             GD.Print(
                 $"OPENNV_NEW_GAME_FACEGEN_CONTROL name={control.SettingEntity} " +
-                $"axisSha256={control.AxisSha256} value={normalizedValue:R} " +
+                $"axisSha256={control.AxisSha256} uiValue={uiValue:R} " +
+                $"morphWeight={morphWeight:R} " +
                 $"semantics={previewPolicy.Semantics}");
-        }
-
-        foreach (var control in previewControls)
-        {
-            var selectedControl = control;
-            var controlLabel = NewLabel("");
-            controlLabel.Name = $"OwnedFaceGenGeometryControlValue_{control.SettingEntity}";
-            controlLabel.HorizontalAlignment = HorizontalAlignment.Center;
-            content.AddChild(controlLabel);
-            var controlRow = new HBoxContainer
-            {
-                Name = $"OwnedFaceGenGeometryControl_{control.SettingEntity}",
-                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            };
-            content.AddChild(controlRow);
-            var controlSlider = new HSlider
-            {
-                Name = FaceGenSliderNamePrefix + control.SettingEntity,
-                MinValue = previewPolicy.Minimum,
-                MaxValue = previewPolicy.Maximum,
-                Step = previewPolicy.Step,
-                Value = _faceGeometryControlValues[control.SettingEntity],
-                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-                FocusMode = Control.FocusModeEnum.All,
-            };
-            controlSliders[control.SettingEntity] = controlSlider;
-            controlRow.AddChild(controlSlider);
-            controlSlider.ValueChanged += value => UpdateControlValue(
-                selectedControl,
-                controlLabel,
-                (float)value);
-            UpdateControlValue(selectedControl, controlLabel, (float)controlSlider.Value);
-        }
-        var resetControls = NewButton(_flow.Strings["reset"]);
-        resetControls.Name = FaceGenResetAllName;
-        resetControls.Pressed += () =>
-        {
-            foreach (var control in previewControls)
-                controlSliders[control.SettingEntity].Value = previewPolicy.ResetValue;
-        };
-        content.AddChild(resetControls);
-
-        void FillPartOptions(
-            OptionButton selector,
-            IReadOnlyList<OpeningAppearanceOption> options,
-            string selectedFormId)
-        {
-            selector.Clear();
-            for (var index = 0; index < options.Count; index++)
-            {
-                selector.AddItem(options[index].Label);
-                selector.SetItemMetadata(index, options[index].FormId);
-                if (options[index].FormId.Equals(
-                        selectedFormId,
-                        StringComparison.OrdinalIgnoreCase))
-                    selector.Select(index);
-            }
         }
 
         void RenderPreview(OpeningAppearanceSex sex)
         {
-            foreach (var child in preview.GetChildren())
-                child.QueueFree();
-            previewHost = null;
-            var hair = sex.HairOptions.Single(value => value.FormId.Equals(
-                _hairFormId,
-                StringComparison.OrdinalIgnoreCase));
-            var eyes = sex.EyeOptions.Single(value => value.FormId.Equals(
-                _eyesFormId,
-                StringComparison.OrdinalIgnoreCase));
-            preview.AddChild(AppearancePreviewTexture("Hair", hair));
-            preview.AddChild(AppearancePreviewTexture("Face / Eyes", eyes));
-            if (engineSex == faceGen.PreviewHead.Sex &&
-                _raceFormId.Equals(
-                    faceGen.PreviewHead.RaceFormId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                _hairFormId.Equals(
-                    faceGen.PreviewHead.HairFormId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                _eyesFormId.Equals(
-                    faceGen.PreviewHead.EyesFormId,
-                    StringComparison.OrdinalIgnoreCase))
+            if (previewHost is not null)
             {
-                var menuSize = _flow.Menus["appearance"].Rect?.Size ??
-                    _flow.ReferenceCanvasSize;
-                previewHost = OpeningPlayerFaceGenPreviewHost.Load(
-                    faceGen.PreviewHead,
-                    previewControls,
-                    previewPolicy,
-                    preview,
-                    _configuration,
-                    new Vector2(
-                        menuSize.X * previewPolicy.Presentation.ViewportWidthFraction,
-                        menuSize.Y * previewPolicy.Presentation.ViewportHeightFraction));
-                foreach (var control in previewControls)
-                    previewHost.Apply(
-                        control.SettingEntity,
-                        _faceGeometryControlValues[control.SettingEntity]);
+                var disposed = previewHost.DisposeOwnedTree();
                 GD.Print(
-                    $"OPENNV_NEW_GAME_FACEGEN_PREVIEW_READY " +
-                    $"player={faceGen.PreviewHead.PlayerFormId} " +
-                    $"race={faceGen.PreviewHead.RaceFormId} " +
-                    $"boundControls={previewHost.BoundControlCount} " +
-                    $"boundSurfaces={previewHost.BoundSurfaceCount} " +
-                    $"availableControls={faceGen.PreviewHead.GeometryControlCount}");
+                    "OPENNV_NEW_GAME_FACEGEN_PREVIEW_DISPOSED " +
+                    $"control={disposed.ControlInstanceId} " +
+                    $"viewport={disposed.ViewportInstanceId} " +
+                    $"actor={disposed.ActorInstanceId} " +
+                    $"disposition={disposed.Disposition}");
             }
-        }
-
-        void SelectRace(int index, bool resetParts)
-        {
-            var race = appearance.Races[index];
-            _raceFormId = race.FormId;
-            var sex = race.Sex[engineSex];
-            if (resetParts || !sex.HairOptions.Any(value => value.FormId.Equals(
-                    _hairFormId,
-                    StringComparison.OrdinalIgnoreCase)))
-                _hairFormId = sex.DefaultHairFormId;
-            if (resetParts || !sex.EyeOptions.Any(value => value.FormId.Equals(
-                    _eyesFormId,
-                    StringComparison.OrdinalIgnoreCase)))
-                _eyesFormId = sex.DefaultEyesFormId;
-            FillPartOptions(hairSelect, sex.HairOptions, _hairFormId);
-            FillPartOptions(faceSelect, sex.EyeOptions, _eyesFormId);
-            RenderPreview(sex);
-        }
-
-        for (var index = 0; index < appearance.Races.Count; index++)
-        {
-            raceSelect.AddItem(appearance.Races[index].Label);
-            raceSelect.SetItemMetadata(index, appearance.Races[index].FormId);
-            if (appearance.Races[index].FormId.Equals(
-                    _raceFormId,
-                    StringComparison.OrdinalIgnoreCase))
-                raceSelect.Select(index);
-        }
-        raceSelect.ItemSelected += index => SelectRace((int)index, resetParts: true);
-        hairSelect.ItemSelected += index =>
-        {
-            var race = appearance.Races[raceSelect.Selected];
-            var sex = race.Sex[engineSex];
-            _hairFormId = sex.HairOptions[(int)index].FormId;
-            RenderPreview(sex);
-        };
-        faceSelect.ItemSelected += index =>
-        {
-            var race = appearance.Races[raceSelect.Selected];
-            var sex = race.Sex[engineSex];
-            _eyesFormId = sex.EyeOptions[(int)index].FormId;
-            RenderPreview(sex);
-        };
-        SelectRace(raceSelect.Selected, resetParts: false);
-        var accept = NewButton(_flow.Strings["accept"]);
-        accept.Pressed += () =>
-        {
+            foreach (var child in preview.GetChildren())
+                child.Free();
+            previewHost = null;
+            _appearancePreviewHost = null;
+            var engineSex = appearance.SexEngineValues[_sexIndex];
+            var selectedPreview = faceGen.PreviewHead.Previews.SingleOrDefault(value =>
+                engineSex == value.Sex &&
+                _raceFormId.Equals(value.RaceFormId, StringComparison.OrdinalIgnoreCase) &&
+                _hairFormId.Equals(value.HairFormId, StringComparison.OrdinalIgnoreCase) &&
+                _eyesFormId.Equals(value.EyesFormId, StringComparison.OrdinalIgnoreCase));
+            if (selectedPreview is null)
+                throw new InvalidOperationException(
+                    "Owned RaceSexMenu has no exact full-body preview artifact for " +
+                    $"sex={engineSex} race={_raceFormId} hair={_hairFormId} " +
+                    $"eyes={_eyesFormId}.");
+            selectedPreviewState = selectedPreview;
+            previewHost = OpeningPlayerFaceGenPreviewHost.Load(
+                selectedPreview,
+                previewControls,
+                previewPolicy,
+                preview,
+                _configuration,
+                _loaded.MainContent.Lighting,
+                _loaded.UnitsToMeters,
+                source.FaceGrab.Rect.Size,
+                renderedDevice);
+            foreach (var control in previewControls)
+                previewHost.Apply(
+                    control.SettingEntity,
+                    _faceGeometryControlValues[control.SettingEntity]);
+            if (_appearancePreviewMode == "2d")
+                previewHost.ShowTwoDimensional(_bodyProportions);
+            else
+                previewHost.ShowThreeDimensional(_bodyProportions);
+            _appearancePreviewHost = previewHost;
             GD.Print(
-                $"OPENNV_NEW_GAME_APPEARANCE_CONFIRMED sex={engineSex} " +
+                $"OPENNV_NEW_GAME_FACEGEN_PREVIEW_READY " +
+                $"player={selectedPreview.PlayerFormId} " +
+                $"race={selectedPreview.RaceFormId} " +
+                $"sex={selectedPreview.Sex} " +
+                $"hair={selectedPreview.HairFormId} " +
+                $"eyes={selectedPreview.EyesFormId} " +
+                $"boundControls={previewHost.BoundControlCount} " +
+                $"boundSurfaces={previewHost.BoundSurfaceCount} " +
+                $"availableControls={selectedPreview.GeometryControlCount}");
+        }
+
+        OpeningAppearanceRace CurrentRace() =>
+            appearance.Races.Single(value => value.FormId.Equals(
+                _raceFormId,
+                StringComparison.OrdinalIgnoreCase));
+
+        OpeningAppearanceSex CurrentSex() =>
+            CurrentRace().Sex[appearance.SexEngineValues[_sexIndex]];
+
+        void Accept()
+        {
+            if (selectedPreviewState is not { FullBody: true } selectedPreview ||
+                previewHost is null ||
+                selectedPreview.BodyComponentRoles is not { Count: > 0 } bodyRoles)
+                throw new InvalidOperationException(
+                    "Owned RaceSexMenu full-body preview state is incomplete at accept.");
+            GD.Print(
+                $"OPENNV_NEW_GAME_APPEARANCE_CONFIRMED " +
+                $"sex={appearance.SexEngineValues[_sexIndex]} " +
                 $"race={_raceFormId} hair={_hairFormId} eyes={_eyesFormId} " +
-                $"faceGeometry={appearance.FaceGen.SymmetricGeometrySha256} " +
+                $"faceGeometry={faceGen.SymmetricGeometrySha256} " +
                 $"editedFaceGeometry={CurrentFaceSymmetricGeometrySha256()} " +
                 $"controls={FaceGenControlValuesText(previewControls)} " +
-                $"preview={appearance.PreviewDisposition}");
+                $"previewStatus={selectedPreview.Status} " +
+                $"previewRuntime={selectedPreview.RuntimeDisposition} " +
+                $"fullBody={selectedPreview.FullBody} " +
+                $"previewMode={_appearancePreviewMode} " +
+                $"bodyProportions={_bodyProportions} " +
+                $"bodyRoles={string.Join(',', bodyRoles)} " +
+                $"boundFaceGenSurfaces={previewHost.BoundSurfaceCount} " +
+                $"boundFaceGenControls={previewHost.BoundControlCount}");
             CloseModal();
             completed();
-        };
-        content.AddChild(accept);
-        Callable.From(raceSelect.GrabFocus).CallDeferred();
-    }
+        }
 
-    private OptionButton NewOptionButton(string name)
-    {
-        var selector = new OptionButton
-        {
-            Name = name,
-            FocusMode = Control.FocusModeEnum.All,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-        };
-        OwnedUiTheme.ApplyButton(
-            selector,
-            _font,
-            _opening.MainMenuColor,
-            _opening.Style);
-        return selector;
-    }
+        Action showSex = null!;
+        Action showRace = null!;
+        Action showHair = null!;
+        Action showEyes = null!;
+        Action showFace = null!;
+        Action showBody = null!;
 
-    private VBoxContainer AppearancePreviewTexture(
-        string title,
-        OpeningAppearanceOption option)
-    {
-        var tile = new VBoxContainer();
-        var image = new TextureRect
+        showSex = () => _raceSexMenuHost!.ShowList(
+            "sex",
+            [
+                new OpeningRaceSexListEntry(
+                    "sex-header",
+                    _flow.Character.SexTitle,
+                    false,
+                    false,
+                    () => { }),
+                .. _flow.Character.SexChoices.Select((label, index) =>
+                {
+                    var choiceIndex = index;
+                    return new OpeningRaceSexListEntry(
+                        appearance.SexEngineValues[index],
+                        label,
+                        _sexIndex == index,
+                        true,
+                        () =>
+                        {
+                            _sexIndex = choiceIndex;
+                            ResolveCurrentAppearanceForSex(resetToRaceDefaults: false);
+                            RenderPreview(CurrentSex());
+                            showSex();
+                        });
+                }),
+            ],
+            null,
+            showRace);
+        showRace = () => _raceSexMenuHost!.ShowList(
+            "race",
+            appearance.Races.Select(race =>
+            {
+                var selectedRace = race;
+                return new OpeningRaceSexListEntry(
+                    race.FormId,
+                    race.Label,
+                    race.FormId.Equals(_raceFormId, StringComparison.OrdinalIgnoreCase),
+                    true,
+                    () =>
+                    {
+                        _raceFormId = selectedRace.FormId;
+                        var sex = CurrentSex();
+                        _hairFormId = sex.DefaultHairFormId;
+                        _eyesFormId = sex.DefaultEyesFormId;
+                        RenderPreview(sex);
+                        showRace();
+                    });
+            }).ToArray(),
+            showSex,
+            showHair);
+        showHair = () =>
         {
-            Name = $"OwnedAppearancePreview{option.RecordType}{option.FormId}",
-            Texture = OwnedUiTheme.LoadTexture(option.Texture.Path),
-            ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            CustomMinimumSize = new Vector2(
-                _opening.Font.LineHeightPixels * 4.0f,
-                _opening.Font.LineHeightPixels * 4.0f),
+            var sex = CurrentSex();
+            _raceSexMenuHost!.ShowList(
+                "hair",
+                sex.HairOptions.Select(option =>
+                {
+                    var selectedOption = option;
+                    return new OpeningRaceSexListEntry(
+                        option.FormId,
+                        option.Label,
+                        option.FormId.Equals(
+                            _hairFormId,
+                            StringComparison.OrdinalIgnoreCase),
+                        true,
+                        () =>
+                        {
+                            _hairFormId = selectedOption.FormId;
+                            RenderPreview(CurrentSex());
+                            showHair();
+                        });
+                }).ToArray(),
+                showRace,
+                showEyes);
         };
-        tile.AddChild(image);
-        var label = NewLabel($"{title}: {option.Label}");
-        label.HorizontalAlignment = HorizontalAlignment.Center;
-        tile.AddChild(label);
-        return tile;
+        showEyes = () =>
+        {
+            var sex = CurrentSex();
+            _raceSexMenuHost!.ShowList(
+                "eyes",
+                sex.EyeOptions.Select(option =>
+                {
+                    var selectedOption = option;
+                    return new OpeningRaceSexListEntry(
+                        option.FormId,
+                        option.Label,
+                        option.FormId.Equals(
+                            _eyesFormId,
+                            StringComparison.OrdinalIgnoreCase),
+                        true,
+                        () =>
+                        {
+                            _eyesFormId = selectedOption.FormId;
+                            RenderPreview(CurrentSex());
+                            showEyes();
+                        });
+                }).ToArray(),
+                showHair,
+                showFace);
+        };
+        showFace = () => _raceSexMenuHost!.ShowSliders(
+            "faceGeometry",
+            previewControls.Select(control =>
+            {
+                var selectedControl = control;
+                return new OpeningRaceSexSliderEntry(
+                    control.SettingEntity,
+                    control.SourceLabel,
+                    _faceGeometryControlValues[control.SettingEntity],
+                    previewPolicy.Minimum,
+                    previewPolicy.Maximum,
+                    previewPolicy.Step,
+                    previewPolicy.Jump,
+                    value => value.ToString(
+                        "+0;-0;0",
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    value =>
+                    {
+                        UpdateControlValue(selectedControl, value);
+                        showFace();
+                    });
+            }).ToArray(),
+            showEyes,
+            Accept);
+        showBody = () => _raceSexMenuHost!.ShowSliders(
+            "body",
+            new[]
+            {
+                (Key: "height", Label: "Height"),
+                (Key: "chest", Label: "Chest"),
+                (Key: "shoulders", Label: "Shoulders"),
+                (Key: "waist", Label: "Waist"),
+                (Key: "arms", Label: "Arms"),
+                (Key: "thighs", Label: "Thighs"),
+                (Key: "calves", Label: "Calves"),
+            }.Select(row =>
+            {
+                var selected = row;
+                return new OpeningRaceSexSliderEntry(
+                    selected.Key,
+                    selected.Label,
+                    _bodyProportions.Value(selected.Key),
+                    CharacterBodyProportions.Minimum,
+                    CharacterBodyProportions.Maximum,
+                    CharacterBodyProportions.Step,
+                    CharacterBodyProportions.Jump,
+                    value => $"{Mathf.RoundToInt(value * 100.0f)}%",
+                    value =>
+                    {
+                        _bodyProportions = _bodyProportions.With(selected.Key, value);
+                        if (_appearancePreviewMode == "2d")
+                            previewHost?.ShowTwoDimensional(_bodyProportions);
+                        else
+                            previewHost?.ShowThreeDimensional(_bodyProportions);
+                        showBody();
+                    });
+            }).ToArray(),
+            showFace,
+            Accept);
+        _raceSexShowSex = showSex;
+        _raceSexShowFace = showFace;
+        _raceSexShowBody = showBody;
+        _raceSexRenderedDeviceHost.ConfigureCreatorModeControls(
+            source.Font,
+            () =>
+            {
+                _appearancePreviewMode = "3d";
+                previewHost?.ShowThreeDimensional(_bodyProportions);
+                _raceSexRenderedDeviceHost.SetCreatorModeState(
+                    "3D",
+                    _raceSexMenuHost.ActiveList == "body");
+            },
+            () =>
+            {
+                _appearancePreviewMode = "2d";
+                previewHost?.ShowTwoDimensional(_bodyProportions);
+                _raceSexRenderedDeviceHost.SetCreatorModeState(
+                    "2D",
+                    _raceSexMenuHost.ActiveList == "body");
+            },
+            () =>
+            {
+                if (_raceSexMenuHost.ActiveList == "body")
+                    showFace();
+                else
+                    showBody();
+                _raceSexRenderedDeviceHost.SetCreatorModeState(
+                    _appearancePreviewMode.ToUpperInvariant(),
+                    _raceSexMenuHost.ActiveList == "body");
+            });
+        RenderPreview(CurrentSex());
+        _raceSexRenderedDeviceHost.SetCreatorModeState(
+            _appearancePreviewMode.ToUpperInvariant(),
+            bodyEnabled: false);
+        showSex();
+        GD.Print(
+            "OPENNV_NEW_GAME_APPEARANCE_LAYOUT_STATIC_PASS " +
+            $"canvas={_flow.ReferenceCanvasSize} faceGrab={source.FaceGrab.Rect} " +
+            $"facePresentation={_raceSexRenderedDeviceHost.FacePresentationRect} " +
+            $"menuPresentation={_raceSexRenderedDeviceHost.MenuPresentationRect} " +
+            $"sourcePanel={source.Background.Rect} " +
+            $"listRow={source.ListItem.Rect} sliderRow={source.Slider.Rect} " +
+            $"scrollUp={source.Scroll.Up.Rect} scrollDown={source.Scroll.Down.Rect} " +
+            "activeList=sex oneActiveList=True " +
+            "authority=hashed-owned-racesex-menu-tiles-v1");
     }
 
     private void ResolveCurrentAppearanceForSex(bool resetToRaceDefaults)
@@ -3227,7 +3587,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 .ToDictionary(
                     value => value.Key,
                     value => value.Value,
-                    StringComparer.Ordinal)),
+                    StringComparer.Ordinal),
+            _bodyProportions,
+            _appearancePreviewMode),
         _docReaction,
         _specialValues
             .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
@@ -3395,22 +3757,20 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private static IReadOnlyList<OpeningNativeFaceGenGeometryControl>
         FaceGenPreviewControls(OpeningAppearanceFaceGen faceGen)
     {
-        var selected = FaceGenPreviewControlLabels.Select(label =>
-        {
-            var matches = faceGen.ControlSpace.NativeGeometryControls
-                .Where(control => control.SourceLabel == label)
-                .ToArray();
-            if (matches.Length != 1)
-                throw new InvalidOperationException(
-                    $"Owned FaceGen preview label has {matches.Length} controls: {label}.");
-            return matches[0];
-        }).ToArray();
-        var configured = faceGen.ControlSpace.PreviewControl;
-        if (selected[0].ControlIndex != configured.ControlIndex ||
-            selected[0].SettingEntity != configured.SettingEntity ||
-            selected[0].AxisSha256 != configured.AxisSha256)
+        var selected = faceGen.ControlSpace.NativeGeometryControls.ToArray();
+        if (selected.Length == 0 ||
+            selected.Select(control => control.SettingEntity)
+                .Distinct(StringComparer.Ordinal).Count() != selected.Length)
             throw new InvalidOperationException(
-                "Owned FaceGen configured preview control is not the leading compact control.");
+                "Owned FaceGen native geometry control inventory is incomplete.");
+        var configured = faceGen.ControlSpace.PreviewControl;
+        var configuredMatches = selected.Where(control =>
+            control.ControlIndex == configured.ControlIndex &&
+            control.SettingEntity == configured.SettingEntity &&
+            control.AxisSha256 == configured.AxisSha256).ToArray();
+        if (configuredMatches.Length != 1)
+            throw new InvalidOperationException(
+                "Owned FaceGen configured proof coordinate is not a native control.");
         foreach (var control in selected)
         {
             var source = faceGen.ControlSpace.SymmetricGeometryControls.SingleOrDefault(
@@ -3420,7 +3780,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 source.AxisSha256 != control.AxisSha256 ||
                 source.Axis.Count != faceGen.SymmetricGeometryValues.Count)
                 throw new InvalidOperationException(
-                    $"Owned FaceGen compact control axis differs: {control.SettingEntity}.");
+                    $"Owned FaceGen native control axis differs: {control.SettingEntity}.");
         }
         return selected;
     }
@@ -3438,7 +3798,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 value < policy.Minimum ||
                 value > policy.Maximum))
             throw new InvalidOperationException(
-                "Saved normalized FaceGen preview coordinates are invalid.");
+                "Saved RaceSexMenu FaceGen UI coordinates are invalid.");
         var sourceControls = controls.Select(control =>
             faceGen.ControlSpace.SymmetricGeometryControls.Single(source =>
                 source.Index == control.ControlIndex)).ToArray();
@@ -3452,7 +3812,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 var value = values[controls[controlIndex].SettingEntity];
                 if (value == policy.ResetValue)
                     continue;
-                coordinate += value * sourceControls[controlIndex].Axis[index];
+                coordinate += value * policy.MorphWeightScale *
+                    sourceControls[controlIndex].Axis[index];
             }
             if (!float.IsFinite(coordinate))
                 throw new InvalidOperationException(
@@ -3473,6 +3834,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _raceFormId = state.Appearance.RaceFormId;
         _hairFormId = state.Appearance.HairFormId;
         _eyesFormId = state.Appearance.EyesFormId;
+        _bodyProportions = state.Appearance.BodyProportions;
+        _appearancePreviewMode = state.Appearance.PreviewMode;
         Replace(
             _faceGeometryControlValues,
             state.Appearance.FaceGeometryControlValues);
@@ -3564,17 +3927,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private VBoxContainer OpenPanel(Rect2 rect, string? menuRole = null)
     {
-        CloseModal(false);
-        var root = new Control
-        {
-            Name = "OwnedMenu",
-            Position = Vector2.Zero,
-            Size = _flow.ReferenceCanvasSize,
-            ZIndex = 1,
-            MouseFilter = Control.MouseFilterEnum.Stop,
-        };
-        _canvas.AddChild(root);
-        _activeModal = root;
+        var root = OpenModalRoot(menuRole);
         var panel = new Panel
         {
             Position = rect.Position,
@@ -3620,9 +3973,25 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         content.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         content.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         margins.AddChild(content);
+        return content;
+    }
+
+    private Control OpenModalRoot(string? menuRole = null)
+    {
+        CloseModal(false);
+        var root = new Control
+        {
+            Name = "OwnedMenu",
+            Position = Vector2.Zero,
+            Size = _flow.ReferenceCanvasSize,
+            ZIndex = 1,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        _canvas.AddChild(root);
+        _activeModal = root;
         _loaded.Player.SetControlPolicy(false, false, false, false, false);
         Input.MouseMode = Input.MouseModeEnum.Visible;
-        return content;
+        return root;
     }
 
     private Rect2 MenuRect(string role, string? alternateRole = null)
@@ -3676,6 +4045,21 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private void CloseModal(bool restoreControls = true)
     {
         StopDialogueVoice();
+        if (_appearancePreviewHost is not null)
+        {
+            var disposed = _appearancePreviewHost.DisposeOwnedTree();
+            GD.Print(
+                "OPENNV_NEW_GAME_FACEGEN_PREVIEW_DISPOSED " +
+                $"control={disposed.ControlInstanceId} " +
+                $"viewport={disposed.ViewportInstanceId} " +
+                $"actor={disposed.ActorInstanceId} " +
+                $"disposition={disposed.Disposition}");
+            _appearancePreviewHost = null;
+        }
+        _raceSexMenuHost = null;
+        _raceSexRenderedDeviceHost = null;
+        _raceSexShowSex = null;
+        _raceSexShowFace = null;
         if (_activeModal is not null)
         {
             _activeModal.Visible = false;
@@ -3728,6 +4112,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     private enum AcceptanceAppearancePhase
     {
+        InitialSex,
+        SelectRace,
+        SelectHair,
+        SelectEyes,
         EditGeometry,
         ResetGeometry,
         RestoreGeometryEdit,

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.Ui;
@@ -36,11 +37,11 @@ internal sealed record OpeningNewGameFlow(
     private const string ExpectedGuideActorAiSchema =
         "opennv-owned-guide-actor-ai/v3";
     private const string ExpectedGuideFurnitureOccupancySchema =
-        "opennv-owned-guide-furniture-occupancy/v2";
+        "opennv-owned-guide-furniture-occupancy/v4";
     private const string ExpectedGuideFurnitureHeadingDeltaEditorId =
         "fFurnitureMarker14HeadingDelta";
     private const string ExpectedGuideFurniturePlacementSemantics =
-        "replace-marker-offset-for-actor-placement";
+        "nif-marker-minus-gmst-target-offset-for-actor-placement";
     private const string ExpectedGuideFurniturePlacementXEditorId =
         "fFurnitureMarker14DeltaX";
     private const string ExpectedGuideFurniturePlacementYEditorId =
@@ -70,21 +71,43 @@ internal sealed record OpeningNewGameFlow(
     private const string ExpectedFaceGenControlSpaceSchema =
         "opennv-owned-facegen-control-space/v1";
     private const string ExpectedFaceGenControlSpaceStatus =
-        "source-bound-controls-default-preview-artifact-compiled-one-control-runtime-bound";
+        "source-bound-controls-default-preview-artifact-compiled-all-native-geometry-" +
+        "controls-runtime-bound-sibling-gamebryo-slider-semantics-corroborated";
     private const string ExpectedFaceGenControlRuntimeDisposition =
-        "control-axes-and-default-preview-egm-targets-compiled-one-normalized-" +
-        "control-runtime-bound-full-retail-slider-ranges-unimplemented";
+        "control-axes-and-default-preview-egm-targets-compiled-all-native-geometry-" +
+        "controls-runtime-bound-sibling-gamebryo-slider-semantics-corroborated";
     private const string ExpectedFaceGenEngineBuild = "1.4.0.525";
     private const string ExpectedPlayerFaceGenPreviewSchema =
-        "opennv-owned-player-facegen-preview/v1";
+        "opennv-owned-player-facegen-preview-set/v3";
     private const string ExpectedPlayerFaceGenPreviewStatus =
-        "compiled-default-male-head-with-ctl-egm-targets-one-normalized-control-runtime-bound";
-    private const string ExpectedPlayerFaceGenPreviewSex = "male";
+        "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-" +
+        "targets-all-native-geometry-controls-runtime-bound";
     private const string ExpectedPlayerFaceGenPreviewRuntimeDisposition =
-        "owned-default-male-preview-host-and-one-normalized-control-bound-" +
-        "other-identities-and-full-retail-slider-semantics-unimplemented";
+        "owned-default-male-and-female-selection-preview-hosts-and-all-native-" +
+        "geometry-controls-bound-other-identities-fail-closed-sibling-gamebryo-" +
+        "slider-semantics-corroborated";
+    private static readonly string[] ExpectedPlayerFaceGenBodyComponentRoles =
+        ["body", "left-hand", "right-hand"];
     private const string ExpectedFaceGenPreviewControlSemantics =
-        "first-party-normalized-ctl-axis-preview-not-retail-slider-range";
+        "sibling-gamebryo-racesexmenu-ui-units-with-ctl-egm-weight-scale";
+    private const string ExpectedFaceGenSliderEvidenceClassification =
+        "independent-sibling-gamebryo-racesexmenu-static-contract";
+    private const string ExpectedFaceGenSliderEvidenceEngineBuild = "1.7.0.4";
+    private const string ExpectedFaceGenSliderEvidenceExecutableSha256Prefix =
+        "c3f97c2255fa041a851c17cf372d69aa";
+    private const string ExpectedFaceGenSliderEvidenceExecutableSha256Suffix =
+        "add8694e2dc4230ba556001bbfbd2f3e";
+    private const string ExpectedFaceGenSliderLowGlobalAddress = "0x1115438";
+    private const string ExpectedFaceGenSliderHighGlobalAddress = "0x1115444";
+    private const string ExpectedFaceGenSliderIncrementTrait = "user6";
+    private const float ExpectedFaceGenSliderSourceMinimum = -5.0f;
+    private const float ExpectedFaceGenSliderSourceMaximum = 5.0f;
+    private const float ExpectedFaceGenSliderUiScale = 10.0f;
+    private const float ExpectedFaceGenSliderUiMinimum = -50.0f;
+    private const float ExpectedFaceGenSliderUiMaximum = 50.0f;
+    private const float ExpectedFaceGenSliderOrdinaryIncrement = 1.0f;
+    private const float ExpectedFaceGenSliderJump = 25.0f;
+    private const float ExpectedFaceGenSliderMorphWeightScale = 0.1f;
     private static readonly HashSet<string> RuntimeCommandKinds = new(
         new[]
         {
@@ -272,7 +295,816 @@ internal sealed record OpeningNewGameFlow(
             value.TryGetProperty("rect", out var rect)
                 ? OpeningManifest.ReadRect(rect)
                 : null,
-            background);
+            value.TryGetProperty("semanticRects", out var semanticRects)
+                ? semanticRects.EnumerateObject().ToDictionary(
+                    semantic => semantic.Name,
+                    semantic => new OpeningFlowSemanticRect(
+                        semantic.Value.GetProperty("tile").GetString()!,
+                        OpeningManifest.ReadRect(
+                            semantic.Value.GetProperty("rect"))),
+                    StringComparer.Ordinal)
+                : new Dictionary<string, OpeningFlowSemanticRect>(
+                    StringComparer.Ordinal),
+            background,
+            value.TryGetProperty("raceSexMenuTiles", out var raceSexMenuTiles)
+                ? ParseRaceSexMenuTiles(
+                    raceSexMenuTiles,
+                    document,
+                    value.GetProperty("sha256").GetString()!,
+                    textures,
+                    uiDocuments)
+                : null,
+            value.TryGetProperty("renderedDevice", out var renderedDevice)
+                ? ParseRaceSexRenderedDevice(renderedDevice)
+                : null);
+    }
+
+    private static OpeningRaceSexRenderedDevice ParseRaceSexRenderedDevice(
+        JsonElement source)
+    {
+        var surfaceRoles = new HashSet<string>(
+            new[]
+            {
+                "sexButton",
+                "raceButton",
+                "faceButton",
+                "hairButton",
+                "sexGlow",
+                "raceGlow",
+                "faceGlow",
+                "hairGlow",
+                "deviceShell0",
+                "deviceShell1",
+                "deviceShell2",
+            },
+            StringComparer.OrdinalIgnoreCase);
+        var device = OpeningManifest.ParseOwnedPhysicalDevice(
+            source,
+            "opennv-owned-racesex-rendered-device/v1",
+            "meshes\\terminals\\nv_reflectron_ui.nif",
+            "surfaceRoles",
+            surfaceRoles,
+            "RaceSex rendered terminal");
+        var settingsSource = source.GetProperty("settingsSource");
+        var settingsSourcePath = settingsSource.GetProperty("path").GetString()!;
+        var settingsSourceSha256 = settingsSource.GetProperty("sha256").GetString()!;
+        OpeningManifest.VerifyHash(settingsSourcePath, settingsSourceSha256);
+        var settings = source.GetProperty("settings")
+            .EnumerateObject()
+            .ToDictionary(
+                value => value.Name,
+                value => ParseRaceSexRenderedSetting(value.Value),
+                StringComparer.Ordinal);
+        var requiredSettings = new HashSet<string>(
+            new[]
+            {
+                "enabled",
+                "terminalFov",
+                "terminalZoom",
+                "scanlines",
+                "scanlineScale",
+                "terminalHorizontalPosition",
+                "terminalVerticalPosition",
+                "screenLightBaseIntensity",
+                "screenLightRadius",
+                "screenLightColorRed",
+                "screenLightColorGreen",
+                "screenLightColorBlue",
+                "raceSexHorizontalPosition",
+                "raceSexVerticalPosition",
+                "raceSexZoom",
+                "raceSexScale",
+                "menuPlayerLightDiffuseRed",
+                "menuPlayerLightDiffuseGreen",
+                "menuPlayerLightDiffuseBlue",
+                "menuPlayerLightAmbientRed",
+                "menuPlayerLightAmbientGreen",
+                "menuPlayerLightAmbientBlue",
+                "defaultFovDegrees",
+                "nearDistanceGameUnits",
+                "farDistanceGameUnits",
+            },
+            StringComparer.Ordinal);
+        var menuLightingRoles = new HashSet<string>(
+            new[]
+            {
+                "menuPlayerLightDiffuseRed",
+                "menuPlayerLightDiffuseGreen",
+                "menuPlayerLightDiffuseBlue",
+                "menuPlayerLightAmbientRed",
+                "menuPlayerLightAmbientGreen",
+                "menuPlayerLightAmbientBlue",
+            },
+            StringComparer.Ordinal);
+        var displayRoles = new HashSet<string>(
+            new[]
+            {
+                "defaultFovDegrees",
+                "nearDistanceGameUnits",
+                "farDistanceGameUnits",
+            },
+            StringComparer.Ordinal);
+        if (!settings.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(requiredSettings) ||
+            settings.Any(value => value.Value.Section !=
+                (menuLightingRoles.Contains(value.Key)
+                    ? "Interface"
+                    : displayRoles.Contains(value.Key)
+                        ? "Display"
+                        : "RenderedTerminal")))
+            throw new InvalidOperationException(
+                "Owned RaceSex rendered-terminal settings are incomplete.");
+        var framing = ParseRaceSexRenderedDeviceFraming(
+            source.GetProperty("framingContract"));
+        var previewCamera = ParseRaceSexPreviewCameraContract(
+            source.GetProperty("previewCameraContract"));
+        return new OpeningRaceSexRenderedDevice(
+            device,
+            settingsSourcePath,
+            settingsSourceSha256,
+            settings,
+            framing,
+            previewCamera);
+    }
+
+    private static OpeningRaceSexRenderedDeviceFraming ParseRaceSexRenderedDeviceFraming(
+        JsonElement source)
+    {
+        var sourcePath = source.GetProperty("source").GetString()!;
+        var sourceSha256 = source.GetProperty("sha256").GetString()!;
+        OpeningManifest.VerifyHash(sourcePath, sourceSha256);
+        var document = source.GetProperty("document");
+        var viewport = IntVector2(document.GetProperty("viewportPixels"));
+        var retail = document.GetProperty("retail");
+        var current = document.GetProperty("current");
+        var solve = document.GetProperty("solve");
+        var retailOuterBounds = IntRect(retail.GetProperty("outerDeviceBoundsPixels"));
+        var retailScreenBounds = IntRect(retail.GetProperty("rightScreenBoundsPixels"));
+        var currentOuterBounds = IntRect(current.GetProperty("outerDeviceBoundsPixels"));
+        var currentScreenBounds = IntRect(current.GetProperty("rightScreenBoundsPixels"));
+        var currentZoom = current.GetProperty("zoomGameUnits").GetDouble();
+        var projectionScale = solve.GetProperty("projectionScale").GetDouble();
+        var solvedZoom = solve.GetProperty("zoomGameUnits").GetDouble();
+        var residual = DoubleVector2(solve.GetProperty("residualPixels"));
+        var alignmentSource = document.GetProperty("alignment");
+        var principalPoint = NumberArray(
+            alignmentSource.GetProperty("principalPointPixels"),
+            2);
+        var projectedBounds = NumberArray(
+            alignmentSource.GetProperty("projectedCurrentRightScreenBoundsPixels"),
+            4);
+        var deviceTranslation = NumberArray(
+            alignmentSource.GetProperty("deviceTranslationPixels"),
+            2);
+        var referenceCanvas = IntVector2(
+            alignmentSource.GetProperty("referenceCanvasPixels"));
+        var deviceTranslationCanvas = NumberArray(
+            alignmentSource.GetProperty("deviceTranslationCanvasUnits"),
+            2);
+        var retailContentBounds = IntRect(
+            alignmentSource.GetProperty("retailContentBoundsPixels"));
+        var currentContentBounds = IntRect(
+            alignmentSource.GetProperty("currentContentBoundsPixels"));
+        var contentScale = NumberArray(
+            alignmentSource.GetProperty("contentScale"),
+            2);
+        var contentTranslation = NumberArray(
+            alignmentSource.GetProperty("contentTranslationWithinScreenPixels"),
+            2);
+        var computedScale =
+            ((double)currentScreenBounds.Size.X * retailScreenBounds.Size.X +
+             (double)currentScreenBounds.Size.Y * retailScreenBounds.Size.Y) /
+            ((double)currentScreenBounds.Size.X * currentScreenBounds.Size.X +
+             (double)currentScreenBounds.Size.Y * currentScreenBounds.Size.Y);
+        var computedZoom = currentZoom / computedScale;
+        var computedResidual = new Vector2(
+            (float)(currentScreenBounds.Size.X * computedScale -
+                retailScreenBounds.Size.X),
+            (float)(currentScreenBounds.Size.Y * computedScale -
+                retailScreenBounds.Size.Y));
+        var retailFrameSha256 = retail.GetProperty("frameSha256").GetString()!;
+        var currentFrameSha256 = current.GetProperty("frameSha256").GetString()!;
+        var baselineCurrentFrameSha256 = alignmentSource
+            .GetProperty("baselineCurrentFrameSha256")
+            .GetString()!;
+        var expectedPrincipalX = viewport.X / 2.0;
+        var expectedPrincipalY = viewport.Y / 2.0;
+        var expectedProjectedX = expectedPrincipalX +
+            (currentScreenBounds.Position.X - expectedPrincipalX) * computedScale;
+        var expectedProjectedY = expectedPrincipalY +
+            (currentScreenBounds.Position.Y - expectedPrincipalY) * computedScale;
+        var expectedProjectedWidth = currentScreenBounds.Size.X * computedScale;
+        var expectedProjectedHeight = currentScreenBounds.Size.Y * computedScale;
+        var expectedTranslationX = retailScreenBounds.Position.X +
+            retailScreenBounds.Size.X / 2.0 -
+            (expectedProjectedX + expectedProjectedWidth / 2.0);
+        var expectedTranslationY = retailScreenBounds.Position.Y +
+            retailScreenBounds.Size.Y / 2.0 -
+            (expectedProjectedY + expectedProjectedHeight / 2.0);
+        var canvasScale = Math.Min(
+            viewport.X / (double)referenceCanvas.X,
+            viewport.Y / (double)referenceCanvas.Y);
+        var expectedContentScaleX =
+            retailContentBounds.Size.X / (double)currentContentBounds.Size.X;
+        var expectedContentScaleY =
+            retailContentBounds.Size.Y / (double)currentContentBounds.Size.Y;
+        var expectedContentTranslationX =
+            retailContentBounds.Position.X - retailScreenBounds.Position.X -
+            (currentContentBounds.Position.X - expectedProjectedX) *
+                expectedContentScaleX;
+        var expectedContentTranslationY =
+            retailContentBounds.Position.Y - retailScreenBounds.Position.Y -
+            (currentContentBounds.Position.Y - expectedProjectedY) *
+                expectedContentScaleY;
+        var contentMask = alignmentSource.GetProperty("contentMask");
+        if (document.GetProperty("schema").GetString() !=
+                "opennv-fnv-racesex-rendered-device-framing/v1" ||
+            document.GetProperty("status").GetString() !=
+                "wip-hash-bound-retail-current-pixel-framing" ||
+            viewport.X <= 0 || viewport.Y <= 0 ||
+            retailOuterBounds.Size.X <= 0 || retailOuterBounds.Size.Y <= 0 ||
+            retailScreenBounds.Size.X <= 0 || retailScreenBounds.Size.Y <= 0 ||
+            currentOuterBounds.Size.X <= 0 || currentOuterBounds.Size.Y <= 0 ||
+            currentScreenBounds.Size.X <= 0 || currentScreenBounds.Size.Y <= 0 ||
+            !ValidSha256(retailFrameSha256) || !ValidSha256(currentFrameSha256) ||
+            solve.GetProperty("model").GetString() !=
+                "perspective-pixel-span-inverse-distance-least-squares" ||
+            !solve.GetProperty("spanRoles").EnumerateArray()
+                .Select(value => value.GetString())
+                .SequenceEqual(new[] { "rightScreenWidth", "rightScreenHeight" }) ||
+            !double.IsFinite(currentZoom) || currentZoom <= 0.0 ||
+            !double.IsFinite(projectionScale) || projectionScale <= 0.0 ||
+            !double.IsFinite(solvedZoom) || solvedZoom <= 0.0 ||
+            Math.Abs(projectionScale - computedScale) > 1.0e-12 ||
+            Math.Abs(solvedZoom - computedZoom) > 1.0e-10 ||
+            Math.Abs(residual.X - computedResidual.X) > 1.0e-5 ||
+            Math.Abs(residual.Y - computedResidual.Y) > 1.0e-5 ||
+            !ValidSha256(baselineCurrentFrameSha256) ||
+            Math.Abs(principalPoint[0] - expectedPrincipalX) > 1.0e-10 ||
+            Math.Abs(principalPoint[1] - expectedPrincipalY) > 1.0e-10 ||
+            Math.Abs(projectedBounds[0] - expectedProjectedX) > 1.0e-10 ||
+            Math.Abs(projectedBounds[1] - expectedProjectedY) > 1.0e-10 ||
+            Math.Abs(projectedBounds[2] - expectedProjectedWidth) > 1.0e-10 ||
+            Math.Abs(projectedBounds[3] - expectedProjectedHeight) > 1.0e-10 ||
+            Math.Abs(deviceTranslation[0] - expectedTranslationX) > 1.0e-10 ||
+            Math.Abs(deviceTranslation[1] - expectedTranslationY) > 1.0e-10 ||
+            referenceCanvas.X <= 0 || referenceCanvas.Y <= 0 ||
+            !double.IsFinite(canvasScale) || canvasScale <= 0.0 ||
+            Math.Abs(deviceTranslationCanvas[0] -
+                expectedTranslationX / canvasScale) > 1.0e-10 ||
+            Math.Abs(deviceTranslationCanvas[1] -
+                expectedTranslationY / canvasScale) > 1.0e-10 ||
+            retailContentBounds.Size.X <= 0 || retailContentBounds.Size.Y <= 0 ||
+            currentContentBounds.Size.X <= 0 || currentContentBounds.Size.Y <= 0 ||
+            contentMask.GetProperty("model").GetString() !=
+                "rgb-green-channel-inequality-inside-right-screen" ||
+            contentMask.GetProperty("greenMinimumExclusive").GetInt32() != 70 ||
+            contentMask.GetProperty("greenTimes100GreaterThanRedTimes").GetInt32() != 115 ||
+            contentMask.GetProperty("greenTimes100GreaterThanBlueTimes").GetInt32() != 105 ||
+            Math.Abs(contentScale[0] - expectedContentScaleX) > 1.0e-10 ||
+            Math.Abs(contentScale[1] - expectedContentScaleY) > 1.0e-10 ||
+            Math.Abs(contentTranslation[0] - expectedContentTranslationX) > 1.0e-10 ||
+            Math.Abs(contentTranslation[1] - expectedContentTranslationY) > 1.0e-10 ||
+            document.GetProperty("promotion").GetProperty("parityReady").GetBoolean())
+            throw new InvalidOperationException(
+                "RaceSex rendered-device hash-bound framing contract differs.");
+        return new OpeningRaceSexRenderedDeviceFraming(
+            sourcePath,
+            sourceSha256,
+            document.GetProperty("status").GetString()!,
+            viewport,
+            retailFrameSha256,
+            retailOuterBounds,
+            retailScreenBounds,
+            currentFrameSha256,
+            currentOuterBounds,
+            currentScreenBounds,
+            currentZoom,
+            projectionScale,
+            solvedZoom,
+            residual,
+            new OpeningRaceSexRenderedDeviceAlignment(
+                baselineCurrentFrameSha256,
+                new Rect2(
+                    (float)projectedBounds[0],
+                    (float)projectedBounds[1],
+                    (float)projectedBounds[2],
+                    (float)projectedBounds[3]),
+                new Vector2(
+                    (float)deviceTranslation[0],
+                    (float)deviceTranslation[1]),
+                referenceCanvas,
+                new Vector2(
+                    (float)deviceTranslationCanvas[0],
+                    (float)deviceTranslationCanvas[1]),
+                retailContentBounds,
+                currentContentBounds,
+                new Vector2((float)contentScale[0], (float)contentScale[1]),
+                new Vector2(
+                    (float)contentTranslation[0],
+                    (float)contentTranslation[1])),
+            false);
+    }
+
+    private static OpeningRaceSexPreviewCameraContract ParseRaceSexPreviewCameraContract(
+        JsonElement source)
+    {
+        var sourcePath = source.GetProperty("source").GetString()!;
+        var sourceSha256 = source.GetProperty("sha256").GetString()!;
+        OpeningManifest.VerifyHash(sourcePath, sourceSha256);
+        var document = source.GetProperty("document");
+        var status = document.GetProperty("status").GetString()!;
+        var parityReady = document.GetProperty("parityReady").GetBoolean();
+        var cameraContractReady = document.GetProperty("cameraContractReady").GetBoolean();
+        var camera = document.GetProperty("camera");
+        var unresolvedRoles = new[]
+        {
+            "projection", "target", "distance", "frustum", "aspectBehavior",
+        };
+        if (document.GetProperty("schema").GetString() !=
+                "opennv-fnv-racesex-preview-camera/v1" ||
+            document.GetProperty("engineBuild").GetString() != "1.4.0.525" ||
+            status != "blocked-static-evidence-incomplete" ||
+            parityReady || cameraContractReady ||
+            unresolvedRoles.Any(role =>
+                camera.GetProperty(role).GetProperty("status").GetString() != "unresolved" ||
+                camera.GetProperty(role).GetProperty("value").ValueKind != JsonValueKind.Null))
+            throw new InvalidOperationException(
+                "FNV RaceSex preview-camera public contract differs.");
+        return new OpeningRaceSexPreviewCameraContract(
+            sourcePath,
+            sourceSha256,
+            status,
+            parityReady,
+            cameraContractReady);
+    }
+
+    private static Vector2I IntVector2(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetInt32()).ToArray();
+        if (values.Length != 2)
+            throw new InvalidOperationException("Expected a two-component integer vector.");
+        return new Vector2I(values[0], values[1]);
+    }
+
+    private static Rect2I IntRect(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetInt32()).ToArray();
+        if (values.Length != 4)
+            throw new InvalidOperationException("Expected a four-component integer rect.");
+        return new Rect2I(values[0], values[1], values[2], values[3]);
+    }
+
+    private static Vector2 DoubleVector2(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetDouble()).ToArray();
+        if (values.Length != 2 || values.Any(value => !double.IsFinite(value)))
+            throw new InvalidOperationException("Expected a finite two-component vector.");
+        return new Vector2((float)values[0], (float)values[1]);
+    }
+
+    private static double[] NumberArray(JsonElement source, int expectedCount)
+    {
+        var values = source.EnumerateArray().Select(value => value.GetDouble()).ToArray();
+        if (values.Length != expectedCount || values.Any(value => !double.IsFinite(value)))
+            throw new InvalidOperationException(
+                $"Expected a finite {expectedCount}-component numeric array.");
+        return values;
+    }
+
+    private static OpeningRaceSexRenderedSetting ParseRaceSexRenderedSetting(
+        JsonElement source)
+    {
+        var type = source.GetProperty("type").GetString()!;
+        var value = source.GetProperty("value");
+        return type switch
+        {
+            "bool" => new OpeningRaceSexRenderedSetting(
+                source.GetProperty("section").GetString()!,
+                source.GetProperty("key").GetString()!,
+                type,
+                value.GetBoolean(),
+                null),
+            "float" when float.IsFinite(value.GetSingle()) =>
+                new OpeningRaceSexRenderedSetting(
+                    source.GetProperty("section").GetString()!,
+                    source.GetProperty("key").GetString()!,
+                    type,
+                    null,
+                    value.GetSingle()),
+            _ => throw new InvalidOperationException(
+                "Owned RaceSex rendered-terminal setting type is unsupported."),
+        };
+    }
+
+    private static OpeningRaceSexMenuTiles ParseRaceSexMenuTiles(
+        JsonElement source,
+        string document,
+        string documentSha256,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures,
+        IReadOnlyDictionary<string, JsonElement> uiDocuments)
+    {
+        const string expectedSchema = "opennv-owned-racesex-menu-tiles/v1";
+        if (source.GetProperty("schema").GetString() != expectedSchema ||
+            !source.GetProperty("document").GetString()!.Equals(
+                document,
+                StringComparison.OrdinalIgnoreCase) ||
+            !source.GetProperty("documentSha256").GetString()!.Equals(
+                documentSha256,
+                StringComparison.OrdinalIgnoreCase) ||
+            source.GetProperty("menuName").GetString() != "RaceSexMenu" ||
+            source.GetProperty("activeListTrait").GetString() != "user0")
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu tile contract identity differs.");
+        var background = source.GetProperty("background");
+        var faceGrab = source.GetProperty("faceGrab");
+        var scroll = source.GetProperty("scroll");
+        var navigation = source.GetProperty("navigation");
+        var list = source.GetProperty("listItemTemplate");
+        var slider = source.GetProperty("sliderTemplate");
+        var font = source.GetProperty("font");
+        var fontId = source.GetProperty("fontId").GetInt32();
+        if (font.GetProperty("fontId").GetInt32() != fontId)
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu font identity differs.");
+        var result = new OpeningRaceSexMenuTiles(
+            expectedSchema,
+            document,
+            documentSha256,
+            source.GetProperty("menuName").GetString()!,
+            source.GetProperty("menuClassEntity").GetString()!,
+            source.GetProperty("activeListTrait").GetString()!,
+            source.GetProperty("sliderLeftLabelTrait").GetString()!,
+            source.GetProperty("sliderRightLabelTrait").GetString()!,
+            fontId,
+            OpeningManifest.ParseFont(font),
+            new OpeningRaceSexBackground(
+                background.GetProperty("tile").GetString()!,
+                OpeningManifest.ReadRect(background.GetProperty("rect")),
+                ParseRaceSexTexture(background.GetProperty("texture"), textures),
+                background.GetProperty("brightness").GetSingle(),
+                background.GetProperty("depth").GetSingle(),
+                background.GetProperty("topBound").GetSingle(),
+                background.GetProperty("bottomBound").GetSingle()),
+            new OpeningRaceSexFaceGrab(
+                faceGrab.GetProperty("tile").GetString()!,
+                ReadRaceSexIdentity(faceGrab.GetProperty("id")),
+                OpeningManifest.ReadRect(faceGrab.GetProperty("rect")),
+                faceGrab.GetProperty("depth").GetSingle()),
+            new OpeningRaceSexScroll(
+                ParseRaceSexScrollTarget(scroll.GetProperty("up"), textures),
+                ParseRaceSexScrollTarget(scroll.GetProperty("down"), textures)),
+            new OpeningRaceSexNavigation(
+                ParseRaceSexNavigationButton(
+                    navigation.GetProperty("back"),
+                    uiDocuments),
+                ParseRaceSexNavigationButton(
+                    navigation.GetProperty("next"),
+                    uiDocuments)),
+            ParseRaceSexListTemplate(list, textures),
+            ParseRaceSexSliderTemplate(slider));
+        ValidateRaceSexMenuTiles(result);
+        return result;
+    }
+
+    private static OpeningRaceSexScrollTarget ParseRaceSexScrollTarget(
+        JsonElement source,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures) => new(
+        source.GetProperty("tile").GetString()!,
+        ReadRaceSexIdentity(source.GetProperty("id")),
+        source.GetProperty("y").GetSingle(),
+        source.GetProperty("brightness").GetSingle(),
+        source.GetProperty("alphaPolicy").GetString()!,
+        source.TryGetProperty("rect", out var rect)
+            ? OpeningManifest.ReadRect(rect)
+            : null,
+        ParseRaceSexTexture(source.GetProperty("texture"), textures),
+        source.GetProperty("clickSound").GetString()!);
+
+    private static OpeningRaceSexNavigationButton ParseRaceSexNavigationButton(
+        JsonElement source,
+        IReadOnlyDictionary<string, JsonElement> uiDocuments)
+    {
+        var sourceDocuments = source.GetProperty("stringSourceDocuments")
+            .EnumerateArray()
+            .Select(value => new OpeningRaceSexStringSourceDocument(
+                value.GetProperty("path").GetString()!,
+                value.GetProperty("sha256").GetString()!))
+            .ToArray();
+        if (sourceDocuments.Length == 0 || sourceDocuments.Any(value =>
+                !uiDocuments.TryGetValue(value.Path, out var document) ||
+                !document.GetProperty("sha256").GetString()!.Equals(
+                    value.Sha256,
+                    StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu navigation string provenance differs.");
+        return new OpeningRaceSexNavigationButton(
+            source.GetProperty("tile").GetString()!,
+            ReadRaceSexIdentity(source.GetProperty("id")),
+            source.GetProperty("x").GetSingle(),
+            source.GetProperty("y").GetSingle(),
+            source.GetProperty("font").GetSingle(),
+            source.GetProperty("brightness").GetSingle(),
+            source.GetProperty("horizontalBuffer").GetSingle(),
+            source.GetProperty("verticalBuffer").GetSingle(),
+            source.GetProperty("textYAdjust").GetSingle(),
+            source.GetProperty("verticalCenterDivisor").GetSingle(),
+            source.GetProperty("baseTextYOffset").GetSingle(),
+            source.GetProperty("boxVisible").GetBoolean(),
+            source.GetProperty("inheritBrightness").GetBoolean(),
+            source.GetProperty("alphaPolicy").GetString()!,
+            source.GetProperty("justify").GetString()!,
+            source.GetProperty("labelRole").GetString()!,
+            source.GetProperty("stringEntity").GetString()!,
+            source.GetProperty("label").GetString()!,
+            sourceDocuments,
+            source.GetProperty("clickSound").GetString()!);
+    }
+
+    private static OpeningRaceSexListTemplate ParseRaceSexListTemplate(
+        JsonElement source,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures)
+    {
+        var selection = source.GetProperty("selectionIndicator");
+        var text = source.GetProperty("text");
+        return new OpeningRaceSexListTemplate(
+            source.GetProperty("template").GetString()!,
+            source.GetProperty("tile").GetString()!,
+            ReadRaceSexIdentity(source.GetProperty("id")),
+            OpeningManifest.ReadRect(source.GetProperty("rect")),
+            source.GetProperty("brightness").GetSingle(),
+            source.GetProperty("activeListTrait").GetString()!,
+            source.GetProperty("selectedTrait").GetString()!,
+            new OpeningRaceSexSelectionIndicator(
+                selection.GetProperty("tile").GetString()!,
+                ParseRaceSexTexture(selection.GetProperty("texture"), textures),
+                OpeningManifest.ReadRect(selection.GetProperty("rect"))),
+            new OpeningRaceSexTextTemplate(
+                text.GetProperty("tile").GetString()!,
+                text.GetProperty("font").GetSingle(),
+                text.GetProperty("y").GetSingle(),
+                text.GetProperty("notSelectableX").GetSingle(),
+                text.GetProperty("selectableX").GetSingle(),
+                text.GetProperty("widthPolicy").GetString()!,
+                text.GetProperty("heightPolicy").GetString()!),
+            source.GetProperty("clickSound").GetString()!,
+            source.GetProperty("mouseOverSound").GetString()!);
+    }
+
+    private static OpeningRaceSexSliderTemplate ParseRaceSexSliderTemplate(
+        JsonElement source)
+    {
+        var traits = source.GetProperty("valueTraits");
+        var label = source.GetProperty("label");
+        var value = source.GetProperty("value");
+        var bar = source.GetProperty("bar");
+        var left = source.GetProperty("leftArrow");
+        var right = source.GetProperty("rightArrow");
+        var marker = source.GetProperty("marker");
+        return new OpeningRaceSexSliderTemplate(
+            source.GetProperty("template").GetString()!,
+            source.GetProperty("tile").GetString()!,
+            ReadRaceSexIdentity(source.GetProperty("id")),
+            OpeningManifest.ReadRect(source.GetProperty("rect")),
+            source.GetProperty("brightness").GetSingle(),
+            source.GetProperty("activeListTrait").GetString()!,
+            new OpeningRaceSexSliderTraits(
+                traits.GetProperty("current").GetString()!,
+                traits.GetProperty("minimum").GetString()!,
+                traits.GetProperty("maximum").GetString()!,
+                traits.GetProperty("jump").GetString()!,
+                traits.GetProperty("display").GetString()!,
+                traits.GetProperty("increment").GetString()!),
+            new OpeningRaceSexSliderText(
+                label.GetProperty("tile").GetString()!,
+                label.GetProperty("font").GetSingle(),
+                label.GetProperty("x").GetSingle(),
+                label.GetProperty("y").GetSingle(),
+                null,
+                label.GetProperty("widthPolicy").GetString()!,
+                label.GetProperty("heightPolicy").GetString()!),
+            new OpeningRaceSexSliderValueText(
+                value.GetProperty("tile").GetString()!,
+                value.GetProperty("font").GetSingle(),
+                value.GetProperty("y").GetSingle(),
+                value.GetProperty("xPolicy").GetString()!,
+                value.GetProperty("labelGap").GetSingle(),
+                value.GetProperty("widthPolicy").GetString()!,
+                value.GetProperty("heightPolicy").GetString()!),
+            new OpeningRaceSexSliderBar(
+                bar.GetProperty("tile").GetString()!,
+                bar.GetProperty("x").GetSingle(),
+                bar.GetProperty("y").GetSingle(),
+                bar.GetProperty("width").GetSingle(),
+                bar.GetProperty("heightGlobalTrait").GetString()!),
+            new OpeningRaceSexSliderArrow(
+                left.GetProperty("tile").GetString()!,
+                left.GetProperty("textTile").GetString()!,
+                ReadRaceSexIdentity(left.GetProperty("id")),
+                null,
+                left.GetProperty("xAnchor").GetSingle(),
+                left.GetProperty("anchorEdge").GetString(),
+                left.GetProperty("y").GetSingle(),
+                left.GetProperty("widthPolicy").GetString()!,
+                left.GetProperty("height").GetSingle(),
+                left.GetProperty("stringSource").GetProperty("menuTrait").GetString()!,
+                ReadRaceSexIdentity(left.GetProperty("justify")),
+                left.GetProperty("clickSound").GetString()!),
+            new OpeningRaceSexSliderArrow(
+                right.GetProperty("tile").GetString()!,
+                right.GetProperty("textTile").GetString()!,
+                ReadRaceSexIdentity(right.GetProperty("id")),
+                right.GetProperty("x").GetSingle(),
+                null,
+                null,
+                right.GetProperty("y").GetSingle(),
+                right.GetProperty("widthPolicy").GetString()!,
+                right.GetProperty("height").GetSingle(),
+                right.GetProperty("stringSource").GetProperty("menuTrait").GetString()!,
+                null,
+                right.GetProperty("clickSound").GetString()!),
+            new OpeningRaceSexSliderMarker(
+                marker.GetProperty("tile").GetString()!,
+                marker.GetProperty("textTile").GetString()!,
+                ReadRaceSexIdentity(marker.GetProperty("id")),
+                marker.GetProperty("barX").GetSingle(),
+                marker.GetProperty("barWidth").GetSingle(),
+                marker.GetProperty("currentTrait").GetString()!,
+                marker.GetProperty("minimumTrait").GetString()!,
+                marker.GetProperty("maximumTrait").GetString()!,
+                OpeningManifest.ReadVector(marker.GetProperty("clamp")),
+                marker.GetProperty("y").GetSingle(),
+                marker.GetProperty("width").GetSingle(),
+                marker.GetProperty("height").GetSingle(),
+                marker.GetProperty("glyph").GetString()!,
+                marker.GetProperty("glyphXPolicy").GetString()!,
+                marker.GetProperty("glyphXMultiplier").GetSingle(),
+                marker.GetProperty("glyphY").GetSingle()),
+            source.GetProperty("clickSound").GetString()!,
+            source.GetProperty("mouseOverSound").GetString()!);
+    }
+
+    private static OpeningRaceSexTexture ParseRaceSexTexture(
+        JsonElement source,
+        IReadOnlyDictionary<string, OwnedUiTexture> textures)
+    {
+        var logicalPath = source.TryGetProperty("resolvedLogicalPath", out var resolved)
+            ? resolved.GetString()
+            : source.TryGetProperty("atlasTextureLogicalPath", out var atlasTexture)
+                ? atlasTexture.GetString()
+            : source.TryGetProperty("logicalPath", out var logical)
+                ? logical.GetString()
+                : null;
+        OwnedUiTexture? texture = null;
+        if (logicalPath is not null && !textures.TryGetValue(logicalPath, out texture))
+            throw new InvalidOperationException(
+                $"Owned RaceSexMenu texture is unavailable: {logicalPath}");
+        var atlas = source.TryGetProperty("atlas", out var atlasValue)
+            ? atlasValue.GetString()
+            : null;
+        var fileName = source.TryGetProperty("fileName", out var fileNameValue)
+            ? fileNameValue.GetString()
+            : null;
+        if (logicalPath is null && (atlas is null || fileName is null))
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu texture identity is incomplete.");
+        OpeningRaceSexTextureAtlas? atlasContract = null;
+        if (source.TryGetProperty("atlasIndexLogicalPath", out var atlasIndexPath))
+        {
+            var atlasIndexSource = source.GetProperty("atlasIndexSource").GetString()!;
+            var atlasIndexSha256 = source.GetProperty("atlasIndexSha256").GetString()!;
+            OpeningManifest.VerifyHash(atlasIndexSource, atlasIndexSha256);
+            atlasContract = new OpeningRaceSexTextureAtlas(
+                atlasIndexPath.GetString()!,
+                atlasIndexSource,
+                source.GetProperty("atlasIndexBytes").GetInt64(),
+                atlasIndexSha256,
+                source.GetProperty("atlasIndexSourceArchive").GetString()!,
+                source.GetProperty("atlasIndexSourceArchiveSha256").GetString()!,
+                source.GetProperty("atlasTextureLogicalPath").GetString()!,
+                source.GetProperty("atlasFileName").GetString()!,
+                source.GetProperty("atlasIndex").GetInt32(),
+                source.GetProperty("atlasType").GetString()!,
+                OpeningManifest.ReadRect(source.GetProperty("uvRect")),
+                source.GetProperty("depthOffset").GetSingle());
+            if (atlasContract.IndexBytes <= 0 ||
+                string.IsNullOrWhiteSpace(atlasContract.IndexSourceArchive) ||
+                string.IsNullOrWhiteSpace(atlasContract.IndexSourceArchiveSha256) ||
+                atlasContract.AtlasIndex < 0 ||
+                atlasContract.AtlasType != "2D" ||
+                atlasContract.UvRect.Position.X < 0.0f ||
+                atlasContract.UvRect.Position.Y < 0.0f ||
+                atlasContract.UvRect.Size.X <= 0.0f ||
+                atlasContract.UvRect.Size.Y <= 0.0f ||
+                atlasContract.UvRect.End.X > 1.0f ||
+                atlasContract.UvRect.End.Y > 1.0f)
+                throw new InvalidOperationException(
+                    "Owned RaceSexMenu atlas contract is invalid.");
+        }
+        return new OpeningRaceSexTexture(
+            logicalPath,
+            atlas,
+            fileName,
+            texture,
+            atlasContract);
+    }
+
+    private static string ReadRaceSexIdentity(JsonElement source) =>
+        source.ValueKind switch
+        {
+            JsonValueKind.Number => source.GetInt32().ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            JsonValueKind.String => source.GetString()!,
+            _ => throw new InvalidOperationException(
+                "Owned RaceSexMenu tile identity is invalid."),
+        };
+
+    private static void ValidateRaceSexMenuTiles(OpeningRaceSexMenuTiles source)
+    {
+        if (source.MenuClassEntity != "RaceSexMenu" ||
+            source.FaceGrab.Id != "1" ||
+            source.Scroll.Up.Id != "2" ||
+            source.Scroll.Down.Id != "3" ||
+            source.Navigation.Back.Id != "4" ||
+            source.Navigation.Next.Id != "5" ||
+            source.FontId <= 0 ||
+            source.ListItem.Text.Font != source.FontId ||
+            source.Slider.Label.Font != source.FontId ||
+            source.Slider.Value.Font != source.FontId ||
+            source.Navigation.Back.Font != source.FontId ||
+            source.Navigation.Next.Font != source.FontId ||
+            source.Background.Rect.Size.X <= 0.0f ||
+            source.Background.Rect.Size.Y <= 0.0f ||
+            source.FaceGrab.Rect.Size.X <= 0.0f ||
+            source.FaceGrab.Rect.Size.Y <= 0.0f ||
+            source.Background.TopBound < 0.0f ||
+            source.Background.BottomBound <= source.Background.TopBound ||
+            source.Background.BottomBound > source.Background.Rect.Size.Y ||
+            source.ListItem.Rect.Size.X <= 0.0f ||
+            source.ListItem.Rect.Size.Y <= 0.0f ||
+            source.Slider.Rect.Size.X <= 0.0f ||
+            source.Slider.Rect.Size.Y <= 0.0f ||
+            source.ListItem.ActiveListTrait != source.ActiveListTrait ||
+            source.Slider.ActiveListTrait != source.ActiveListTrait ||
+            source.Navigation.Back.LabelRole != "back" ||
+            source.Navigation.Next.LabelRole != "next" ||
+            string.IsNullOrWhiteSpace(source.Navigation.Back.StringEntity) ||
+            string.IsNullOrWhiteSpace(source.Navigation.Next.StringEntity) ||
+            string.IsNullOrWhiteSpace(source.Navigation.Back.Label) ||
+            string.IsNullOrWhiteSpace(source.Navigation.Next.Label) ||
+            source.Navigation.Back.StringSourceDocuments.Count == 0 ||
+            source.Navigation.Next.StringSourceDocuments.Count == 0 ||
+            source.Scroll.Up.Brightness <= 0.0f ||
+            source.Scroll.Up.Brightness > 255.0f ||
+            source.Scroll.Down.Brightness <= 0.0f ||
+            source.Scroll.Down.Brightness > 255.0f ||
+            source.Scroll.Up.AlphaPolicy != "hover-only-255" ||
+            source.Scroll.Down.AlphaPolicy != "hover-only-255" ||
+            source.Navigation.Back.Brightness <= 0.0f ||
+            source.Navigation.Back.Brightness > 255.0f ||
+            source.Navigation.Next.Brightness <= 0.0f ||
+            source.Navigation.Next.Brightness > 255.0f ||
+            source.Navigation.Back.HorizontalBuffer < 0.0f ||
+            source.Navigation.Back.VerticalBuffer < 0.0f ||
+            source.Navigation.Next.HorizontalBuffer < 0.0f ||
+            source.Navigation.Next.VerticalBuffer < 0.0f ||
+            source.Navigation.Back.VerticalCenterDivisor <= 0.0f ||
+            source.Navigation.Next.VerticalCenterDivisor <= 0.0f ||
+            source.Navigation.Back.BoxVisible ||
+            source.Navigation.Next.BoxVisible ||
+            source.Navigation.Back.InheritBrightness ||
+            source.Navigation.Next.InheritBrightness ||
+            source.Navigation.Back.AlphaPolicy != "hover-only-255" ||
+            source.Navigation.Next.AlphaPolicy != "hover-only-255" ||
+            source.Navigation.Back.Justify != "left" ||
+            source.Navigation.Next.Justify != "right" ||
+            source.ListItem.Text.WidthPolicy != "owned-font-content" ||
+            source.ListItem.Text.HeightPolicy != "owned-font-line-height" ||
+            source.Slider.Label.WidthPolicy != "owned-font-content" ||
+            source.Slider.Label.HeightPolicy != "owned-font-line-height" ||
+            source.Slider.Value.WidthPolicy != "owned-font-content" ||
+            source.Slider.Value.HeightPolicy != "owned-font-line-height" ||
+            source.Slider.Value.XPolicy != "after-label" ||
+            source.Slider.Bar.HeightGlobalTrait != "_line_thickness" ||
+            source.Slider.LeftArrow.AnchorEdge != "right" ||
+            source.Slider.LeftArrow.StringSourceMenuTrait !=
+                source.SliderLeftLabelTrait ||
+            source.Slider.RightArrow.StringSourceMenuTrait !=
+                source.SliderRightLabelTrait ||
+            source.Slider.LeftArrow.Justify != "right" ||
+            source.Slider.LeftArrow.WidthPolicy != "owned-font-content" ||
+            source.Slider.RightArrow.WidthPolicy != "owned-font-content" ||
+            source.Slider.Marker.Clamp != new Vector2(0.0f, 1.0f) ||
+            source.Slider.Marker.GlyphXPolicy !=
+                "center-from-owned-text-width" ||
+            string.IsNullOrEmpty(source.Slider.Marker.Glyph) ||
+            source.Scroll.Up.Rect is null ||
+            source.Scroll.Down.Rect is null ||
+            source.Scroll.Up.Texture.Texture is null ||
+            source.Scroll.Down.Texture.Texture is null ||
+            source.Background.Texture.Texture is null ||
+            source.ListItem.SelectionIndicator.Texture.Texture is null)
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu tile contract is incomplete.");
     }
 
     private static OpeningStageProgram ParseStage(JsonElement value) => new(
@@ -443,6 +1275,7 @@ internal sealed record OpeningNewGameFlow(
             throw new InvalidOperationException(
                 "Owned guide furniture occupancy has an unexpected contract.");
         var furniture = source.GetProperty("furniture");
+        var patientBed = source.GetProperty("patientBed");
         var marker = furniture.GetProperty("marker");
         var placementOffset = marker.GetProperty(
             "actorPlacementOffsetGameSettings");
@@ -497,12 +1330,27 @@ internal sealed record OpeningNewGameFlow(
                         headingDelta.GetProperty("value").GetSingle(),
                         ReadQuaternion(headingDelta.GetProperty(
                             "rotationGodotQuaternion"))))),
+            ParseGuideFurnitureIdentity(patientBed),
             source.GetProperty("releaseStage").GetInt32(),
             source.GetProperty("releasePackageFormId").GetString()!,
             source.GetProperty("animationObjectIdleFormId").GetString()!,
             ParseGuideFurnitureAnimation(source.GetProperty("seatedLoop")),
             ParseGuideFurnitureAnimation(source.GetProperty("exit")));
     }
+
+    private static OpeningGuideFurnitureIdentity ParseGuideFurnitureIdentity(
+        JsonElement source) => new(
+        source.GetProperty("referenceFormId").GetString()!,
+        source.GetProperty("referenceRecordSha256").GetString()!,
+        source.GetProperty("baseFormId").GetString()!,
+        source.GetProperty("editorId").GetString()!,
+        source.GetProperty("recordType").GetString()!,
+        source.GetProperty("recordSha256").GetString()!,
+        source.GetProperty("modelLogicalPath").GetString()!,
+        source.GetProperty("modelBytes").GetInt64(),
+        source.GetProperty("modelSha256").GetString()!,
+        source.GetProperty("sourceArchive").GetString()!,
+        source.GetProperty("sourceArchiveSha256").GetString()!);
 
     private static OpeningGuideFurniturePlacementGameSetting
         ParseFurniturePlacementGameSetting(JsonElement source) => new(
@@ -543,6 +1391,17 @@ internal sealed record OpeningNewGameFlow(
         source.GetProperty("idleAnimationFormId").GetString()!,
         source.GetProperty("idleAnimationEditorId").GetString()!,
         source.GetProperty("idleAnimationLogicalPath").GetString()!,
+        source.GetProperty("idleAnimationSha256").GetString()!,
+        source.GetProperty("idleAnimationSequenceName").GetString()!,
+        source.GetProperty("idleAnimationStartSeconds").GetSingle(),
+        source.GetProperty("idleAnimationStopSeconds").GetSingle(),
+        source.GetProperty("idleAnimationCycleType").GetInt32(),
+        source.GetProperty("idleAnimationTransformPrioritiesByNode")
+            .EnumerateObject()
+            .ToDictionary(
+                value => value.Name,
+                value => value.Value.GetInt32(),
+                StringComparer.Ordinal),
         source.GetProperty("modelLogicalPath").GetString()!,
         source.GetProperty("bytes").GetInt64(),
         source.GetProperty("sha256").GetString()!,
@@ -785,7 +1644,7 @@ internal sealed record OpeningNewGameFlow(
             source.GetProperty("symmetricTexture").GetProperty("sha256").GetString()!,
             ParseFloatArray(source.GetProperty("symmetricTexture").GetProperty("values")),
             ParseFaceGenControlSpace(source.GetProperty("controlSpace")),
-            ParsePlayerFaceGenPreview(source.GetProperty("previewHead")));
+            ParsePlayerFaceGenPreviewSet(source.GetProperty("previewHead")));
 
     private static IReadOnlyList<float> ParseFloatArray(JsonElement source) =>
         source.EnumerateArray().Select(value => value.GetSingle()).ToArray();
@@ -850,42 +1709,132 @@ internal sealed record OpeningNewGameFlow(
             source.GetProperty("minimum").GetSingle(),
             source.GetProperty("maximum").GetSingle(),
             source.GetProperty("step").GetSingle(),
+            source.GetProperty("jump").GetSingle(),
+            source.GetProperty("morphWeightScale").GetSingle(),
             source.GetProperty("resetValue").GetSingle(),
             source.GetProperty("acceptanceValue").GetSingle(),
+            ParseFaceGenSliderSemanticsEvidence(
+                source.GetProperty("sliderSemanticsEvidence")),
             ParseFaceGenPreviewPresentation(source.GetProperty("presentation")),
             source.GetProperty("semantics").GetString()!);
 
+    private static OpeningFaceGenSliderSemanticsEvidence
+        ParseFaceGenSliderSemanticsEvidence(JsonElement source) => new(
+            source.GetProperty("classification").GetString()!,
+            source.GetProperty("engineBuild").GetString()!,
+            source.GetProperty("sourceExecutableSha256").GetString()!,
+            source.GetProperty("sourceMinimum").GetSingle(),
+            source.GetProperty("sourceMaximum").GetSingle(),
+            source.GetProperty("uiScale").GetSingle(),
+            source.GetProperty("uiMinimum").GetSingle(),
+            source.GetProperty("uiMaximum").GetSingle(),
+            source.GetProperty("ordinaryIncrement").GetSingle(),
+            source.GetProperty("jump").GetSingle(),
+            source.GetProperty("morphWeightScale").GetSingle(),
+            source.GetProperty("lowGlobalAddress").GetString()!,
+            source.GetProperty("highGlobalAddress").GetString()!,
+            source.GetProperty("incrementTrait").GetString()!,
+            source.GetProperty("incrementDefaultThreshold").GetSingle());
+
     private static OpeningFaceGenPreviewPresentation ParseFaceGenPreviewPresentation(
         JsonElement source) => new(
-            source.GetProperty("viewportWidthFraction").GetSingle(),
-            source.GetProperty("viewportHeightFraction").GetSingle(),
-            source.GetProperty("verticalFovHalfAngleFactor").GetSingle(),
-            source.GetProperty("depthExtentFraction").GetSingle());
+            source.TryGetProperty("viewportWidthFraction", out var viewportWidth)
+                ? viewportWidth.GetSingle()
+                : float.NaN,
+            source.TryGetProperty("viewportHeightFraction", out var viewportHeight)
+                ? viewportHeight.GetSingle()
+                : float.NaN,
+            source.TryGetProperty("verticalFovHalfAngleFactor", out var fovFactor)
+                ? fovFactor.GetSingle()
+                : float.NaN,
+            source.TryGetProperty("depthExtentFraction", out var depthExtent)
+                ? depthExtent.GetSingle()
+                : float.NaN,
+            source.GetProperty("fullInVerticalOffsetGameUnits").GetSingle(),
+            source.GetProperty("fullInDistanceGameUnits").GetSingle(),
+            source.GetProperty("fullInYawRadians").GetSingle(),
+            source.GetProperty("fullOutVerticalOffsetGameUnits").GetSingle(),
+            source.GetProperty("fullOutDistanceGameUnits").GetSingle(),
+            source.GetProperty("fullOutYawRadians").GetSingle(),
+            source.GetProperty("startingZoomFraction").GetSingle());
 
-    private static OpeningPlayerFaceGenPreview ParsePlayerFaceGenPreview(
+    private static OpeningPlayerFaceGenPreviewSet ParsePlayerFaceGenPreviewSet(
         JsonElement source)
     {
-        var outputs = source.GetProperty("outputs");
-        return new OpeningPlayerFaceGenPreview(
-            source.GetProperty("schema").GetString()!,
-            source.GetProperty("status").GetString()!,
-            source.GetProperty("playerFormId").GetString()!,
-            source.GetProperty("raceFormId").GetString()!,
-            source.GetProperty("sex").GetString()!,
-            source.GetProperty("hairFormId").GetString()!,
-            source.GetProperty("eyesFormId").GetString()!,
-            source.GetProperty("headPartFormIds").EnumerateArray()
-                .Select(value => value.GetString()!).ToArray(),
-            source.GetProperty("geometryControlNames").EnumerateArray()
-                .Select(value => value.GetString()!).ToArray(),
-            source.GetProperty("geometryControlCount").GetInt32(),
-            outputs.GetProperty("gltf").GetString()!,
-            outputs.GetProperty("gltfSha256").GetString()!,
-            outputs.GetProperty("sidecar").GetString()!,
-            outputs.GetProperty("sidecarSha256").GetString()!,
-            outputs.GetProperty("bufferSha256").GetString()!,
-            source.GetProperty("runtimeDisposition").GetString()!);
+        var schema = source.GetProperty("schema").GetString()!;
+        var status = source.GetProperty("status").GetString()!;
+        var playerFormId = source.GetProperty("playerFormId").GetString()!;
+        var geometryControlNames = source.GetProperty("geometryControlNames")
+            .EnumerateArray().Select(value => value.GetString()!).ToArray();
+        var geometryControlCount = source.GetProperty("geometryControlCount").GetInt32();
+        var runtimeDisposition = source.GetProperty("runtimeDisposition").GetString()!;
+        var fullBody = source.GetProperty("fullBody").GetBoolean();
+        var bodyComponentRoles = source.GetProperty("bodyComponentRoles")
+            .EnumerateArray().Select(value => value.GetString()!).ToArray();
+        var bodyComponentSourcesBySex = source.GetProperty("bodyComponentSourcesBySex")
+            .EnumerateObject()
+            .ToDictionary(
+                value => value.Name,
+                value => (IReadOnlyList<OpeningPlayerBodyComponentSource>)value.Value
+                    .EnumerateArray()
+                    .Select(ParsePlayerBodyComponentSource)
+                    .ToArray(),
+                StringComparer.Ordinal);
+        var previews = source.GetProperty("previews").EnumerateArray()
+            .Select(value =>
+            {
+                var outputs = value.GetProperty("outputs");
+                return new OpeningPlayerFaceGenPreview(
+                    schema,
+                    status,
+                    playerFormId,
+                    value.GetProperty("raceFormId").GetString()!,
+                    value.GetProperty("sex").GetString()!,
+                    value.GetProperty("hairFormId").GetString()!,
+                    value.GetProperty("eyesFormId").GetString()!,
+                    value.GetProperty("headPartFormIds").EnumerateArray()
+                        .Select(part => part.GetString()!).ToArray(),
+                    geometryControlNames,
+                    geometryControlCount,
+                    outputs.GetProperty("gltf").GetString()!,
+                    outputs.GetProperty("gltfSha256").GetString()!,
+                    outputs.GetProperty("sidecar").GetString()!,
+                    outputs.GetProperty("sidecarSha256").GetString()!,
+                    outputs.GetProperty("bufferSha256").GetString()!,
+                    runtimeDisposition,
+                    fullBody,
+                    bodyComponentRoles,
+                    bodyComponentSourcesBySex);
+            })
+            .ToArray();
+        return new OpeningPlayerFaceGenPreviewSet(
+            schema,
+            status,
+            playerFormId,
+            geometryControlNames,
+            geometryControlCount,
+            runtimeDisposition,
+            fullBody,
+            bodyComponentRoles,
+            bodyComponentSourcesBySex,
+            previews);
     }
+
+    private static OpeningPlayerBodyComponentSource ParsePlayerBodyComponentSource(
+        JsonElement source) => new(
+            source.GetProperty("role").GetString()!,
+            source.GetProperty("modelLogicalPath").GetString()!,
+            source.GetProperty("modelSha256").GetString()!,
+            source.GetProperty("sourceSurfaceCount").GetInt32(),
+            source.GetProperty("retainedSurfaceCount").GetInt32(),
+            source.GetProperty("retainedSurfaceNames").EnumerateArray()
+                .Select(value => value.GetString()!).ToArray(),
+            source.GetProperty("omittedDismemberCapSurfaceCount").GetInt32(),
+            source.GetProperty("diffuseLogicalPath").GetString()!,
+            source.GetProperty("diffuseSha256").GetString()!,
+            source.GetProperty("normalLogicalPath").GetString()!,
+            source.GetProperty("normalSha256").GetString()!,
+            source.GetProperty("shapeTransformDisposition").GetString()!);
 
     private static OpeningAppearanceRace ParseAppearanceRace(
         JsonElement source,
@@ -1109,7 +2058,8 @@ internal sealed record OpeningNewGameFlow(
                     package.IdleAnimationLogicalPaths.Count) ||
             furniture.MarkerId != DocInitialChairMarkerId ||
             !furniture.MarkerDisposition.Equals(
-                "compose-owned-furniture-reference-gmst-replacement-offset-and-heading-delta",
+                "compose-owned-furniture-reference-nif-marker-minus-gmst-target-" +
+                    "offset-and-heading-delta",
                 StringComparison.Ordinal) ||
             !furniture.Furniture.ReferenceFormId.Equals(
                 furniture.ReferenceFormId,
@@ -1124,6 +2074,7 @@ internal sealed record OpeningNewGameFlow(
             string.IsNullOrWhiteSpace(furniture.Furniture.ModelSha256) ||
             string.IsNullOrWhiteSpace(furniture.Furniture.SourceArchive) ||
             string.IsNullOrWhiteSpace(furniture.Furniture.SourceArchiveSha256) ||
+            !ValidGuideFurnitureIdentity(furniture.PatientBed) ||
             furniture.Furniture.Marker.ExtraDataName != "FRN" ||
             furniture.Furniture.Marker.Index != 2 ||
             furniture.Furniture.Marker.PositionRef1 != furniture.MarkerId ||
@@ -1224,6 +2175,13 @@ internal sealed record OpeningNewGameFlow(
                 string.IsNullOrWhiteSpace(value.EditorId) ||
                 string.IsNullOrWhiteSpace(value.RecordSha256) ||
                 string.IsNullOrWhiteSpace(value.IdleAnimationEditorId) ||
+                string.IsNullOrWhiteSpace(value.IdleAnimationSha256) ||
+                string.IsNullOrWhiteSpace(value.IdleAnimationSequenceName) ||
+                value.IdleAnimationStartSeconds != 0.0f ||
+                value.IdleAnimationStopSeconds <= value.IdleAnimationStartSeconds ||
+                value.IdleAnimationTransformPrioritiesByNode.Count == 0 ||
+                value.IdleAnimationTransformPrioritiesByNode.Any(priority =>
+                    priority.Value < 0) ||
                 string.IsNullOrWhiteSpace(value.ModelLogicalPath) ||
                 value.Bytes <= 0 ||
                 string.IsNullOrWhiteSpace(value.Sha256) ||
@@ -1330,33 +2288,104 @@ internal sealed record OpeningNewGameFlow(
 
     private static bool ValidPlayerFaceGenPreview(OpeningPlayerAppearance appearance)
     {
-        var preview = appearance.FaceGen.PreviewHead;
+        var previewSet = appearance.FaceGen.PreviewHead;
         var controls = appearance.FaceGen.ControlSpace.NativeGeometryControls;
-        return preview.Schema == ExpectedPlayerFaceGenPreviewSchema &&
-            preview.Status == ExpectedPlayerFaceGenPreviewStatus &&
-            preview.RuntimeDisposition == ExpectedPlayerFaceGenPreviewRuntimeDisposition &&
-            preview.PlayerFormId.Equals(
+        var race = appearance.Races.SingleOrDefault(value => value.FormId.Equals(
+            appearance.DefaultRaceFormId,
+            StringComparison.OrdinalIgnoreCase));
+        if (race is null ||
+            previewSet.Schema != ExpectedPlayerFaceGenPreviewSchema ||
+            previewSet.Status != ExpectedPlayerFaceGenPreviewStatus ||
+            previewSet.RuntimeDisposition !=
+                ExpectedPlayerFaceGenPreviewRuntimeDisposition ||
+            !previewSet.PlayerFormId.Equals(
                 appearance.PlayerFormId,
+                StringComparison.OrdinalIgnoreCase) ||
+            previewSet.GeometryControlCount != FaceGenNativeGeometryControlCount ||
+            !previewSet.GeometryControlNames.SequenceEqual(
+                controls.Select(value => value.SettingEntity),
+                StringComparer.Ordinal) ||
+            !previewSet.FullBody ||
+            previewSet.BodyComponentRoles is null ||
+            !previewSet.BodyComponentRoles.SequenceEqual(
+                ExpectedPlayerFaceGenBodyComponentRoles,
+                StringComparer.Ordinal) ||
+            !ValidPlayerBodySourcesBySex(previewSet.BodyComponentSourcesBySex) ||
+            previewSet.Previews.Count != 2 ||
+            !previewSet.Previews.Select(value => value.Sex)
+                .ToHashSet(StringComparer.Ordinal).SetEquals(["male", "female"]) ||
+            previewSet.Previews.Select(value =>
+                    $"{value.Sex}:{value.RaceFormId}:{value.HairFormId}:{value.EyesFormId}")
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count() != 2)
+            return false;
+
+        return previewSet.Previews.All(preview =>
+            race.Sex.TryGetValue(preview.Sex, out var sex) &&
+            preview.Schema == previewSet.Schema &&
+            preview.Status == previewSet.Status &&
+            preview.RuntimeDisposition == previewSet.RuntimeDisposition &&
+            preview.PlayerFormId.Equals(
+                previewSet.PlayerFormId,
                 StringComparison.OrdinalIgnoreCase) &&
             preview.RaceFormId.Equals(
-                appearance.DefaultRaceFormId,
+                race.FormId,
                 StringComparison.OrdinalIgnoreCase) &&
-            preview.Sex == ExpectedPlayerFaceGenPreviewSex &&
             preview.HairFormId.Equals(
-                appearance.DefaultHairFormId,
+                sex.DefaultHairFormId,
                 StringComparison.OrdinalIgnoreCase) &&
             preview.EyesFormId.Equals(
-                appearance.DefaultEyesFormId,
+                sex.DefaultEyesFormId,
                 StringComparison.OrdinalIgnoreCase) &&
-            preview.GeometryControlCount == FaceGenNativeGeometryControlCount &&
+            preview.GeometryControlCount == previewSet.GeometryControlCount &&
             preview.GeometryControlNames.SequenceEqual(
-                controls.Select(value => value.SettingEntity),
+                previewSet.GeometryControlNames,
                 StringComparer.Ordinal) &&
+            preview.FullBody == previewSet.FullBody &&
+            preview.BodyComponentRoles is not null &&
+            preview.BodyComponentRoles.SequenceEqual(
+                previewSet.BodyComponentRoles,
+                StringComparer.Ordinal) &&
+            ReferenceEquals(
+                preview.BodyComponentSourcesBySex,
+                previewSet.BodyComponentSourcesBySex) &&
             !string.IsNullOrWhiteSpace(preview.GltfPath) &&
             !string.IsNullOrWhiteSpace(preview.GltfSha256) &&
             !string.IsNullOrWhiteSpace(preview.SidecarPath) &&
             !string.IsNullOrWhiteSpace(preview.SidecarSha256) &&
-            !string.IsNullOrWhiteSpace(preview.BufferSha256);
+            !string.IsNullOrWhiteSpace(preview.BufferSha256));
+    }
+
+    private static bool ValidPlayerBodySourcesBySex(
+        IReadOnlyDictionary<string, IReadOnlyList<OpeningPlayerBodyComponentSource>>?
+            sources)
+    {
+        if (sources is null ||
+            !sources.Keys.ToHashSet(StringComparer.Ordinal)
+                .SetEquals(new[] { "male", "female" }))
+            return false;
+        foreach (var sex in new[] { "male", "female" })
+        {
+            var rows = sources[sex];
+            if (!rows.Select(value => value.Role).SequenceEqual(
+                    ExpectedPlayerFaceGenBodyComponentRoles,
+                    StringComparer.Ordinal) ||
+                rows.Any(value =>
+                    string.IsNullOrWhiteSpace(value.ModelLogicalPath) ||
+                    string.IsNullOrWhiteSpace(value.ModelSha256) ||
+                    value.SourceSurfaceCount < 1 ||
+                    value.RetainedSurfaceCount < 1 ||
+                    value.RetainedSurfaceNames.Count != value.RetainedSurfaceCount ||
+                    value.OmittedDismemberCapSurfaceCount < 0 ||
+                    value.SourceSurfaceCount != value.RetainedSurfaceCount +
+                        value.OmittedDismemberCapSurfaceCount ||
+                    string.IsNullOrWhiteSpace(value.DiffuseLogicalPath) ||
+                    string.IsNullOrWhiteSpace(value.DiffuseSha256) ||
+                    string.IsNullOrWhiteSpace(value.NormalLogicalPath) ||
+                    string.IsNullOrWhiteSpace(value.NormalSha256) ||
+                    string.IsNullOrWhiteSpace(value.ShapeTransformDisposition)))
+                return false;
+        }
+        return true;
     }
 
     private static bool ValidFaceGenControlSpace(
@@ -1411,15 +2440,23 @@ internal sealed record OpeningNewGameFlow(
             float.IsFinite(preview.Minimum) &&
             float.IsFinite(preview.Maximum) &&
             float.IsFinite(preview.Step) &&
+            float.IsFinite(preview.Jump) &&
+            float.IsFinite(preview.MorphWeightScale) &&
             float.IsFinite(preview.ResetValue) &&
             float.IsFinite(preview.AcceptanceValue) &&
-            preview.Minimum < preview.Maximum &&
-            preview.Step > 0.0f &&
+            Mathf.IsEqualApprox(preview.Minimum, ExpectedFaceGenSliderUiMinimum) &&
+            Mathf.IsEqualApprox(preview.Maximum, ExpectedFaceGenSliderUiMaximum) &&
+            Mathf.IsEqualApprox(preview.Step, ExpectedFaceGenSliderOrdinaryIncrement) &&
+            Mathf.IsEqualApprox(preview.Jump, ExpectedFaceGenSliderJump) &&
+            Mathf.IsEqualApprox(
+                preview.MorphWeightScale,
+                ExpectedFaceGenSliderMorphWeightScale) &&
             preview.ResetValue >= preview.Minimum &&
             preview.ResetValue <= preview.Maximum &&
             preview.AcceptanceValue >= preview.Minimum &&
             preview.AcceptanceValue <= preview.Maximum &&
             preview.AcceptanceValue != preview.ResetValue &&
+            ValidFaceGenSliderSemanticsEvidence(preview.SliderSemanticsEvidence) &&
             ValidFaceGenPreviewPresentation(preview.Presentation) &&
             source.NativeGeometryControls.SingleOrDefault(value =>
                 value.ControlIndex == preview.ControlIndex) is { } native &&
@@ -1428,20 +2465,61 @@ internal sealed record OpeningNewGameFlow(
             preview.AxisSha256 == native.AxisSha256;
     }
 
+    private static bool ValidFaceGenSliderSemanticsEvidence(
+        OpeningFaceGenSliderSemanticsEvidence source) =>
+        source.Classification == ExpectedFaceGenSliderEvidenceClassification &&
+        source.EngineBuild == ExpectedFaceGenSliderEvidenceEngineBuild &&
+        source.SourceExecutableSha256 ==
+            ExpectedFaceGenSliderEvidenceExecutableSha256Prefix +
+            ExpectedFaceGenSliderEvidenceExecutableSha256Suffix &&
+        Mathf.IsEqualApprox(source.SourceMinimum, ExpectedFaceGenSliderSourceMinimum) &&
+        Mathf.IsEqualApprox(source.SourceMaximum, ExpectedFaceGenSliderSourceMaximum) &&
+        Mathf.IsEqualApprox(source.UiScale, ExpectedFaceGenSliderUiScale) &&
+        Mathf.IsEqualApprox(source.UiMinimum, ExpectedFaceGenSliderUiMinimum) &&
+        Mathf.IsEqualApprox(source.UiMaximum, ExpectedFaceGenSliderUiMaximum) &&
+        Mathf.IsEqualApprox(
+            source.OrdinaryIncrement,
+            ExpectedFaceGenSliderOrdinaryIncrement) &&
+        Mathf.IsEqualApprox(source.Jump, ExpectedFaceGenSliderJump) &&
+        Mathf.IsEqualApprox(
+            source.MorphWeightScale,
+            ExpectedFaceGenSliderMorphWeightScale) &&
+        source.LowGlobalAddress == ExpectedFaceGenSliderLowGlobalAddress &&
+        source.HighGlobalAddress == ExpectedFaceGenSliderHighGlobalAddress &&
+        source.IncrementTrait == ExpectedFaceGenSliderIncrementTrait &&
+        Mathf.IsEqualApprox(
+            source.IncrementDefaultThreshold,
+            ExpectedFaceGenSliderOrdinaryIncrement);
+
     private static bool ValidFaceGenPreviewPresentation(
-        OpeningFaceGenPreviewPresentation source) =>
-        float.IsFinite(source.ViewportWidthFraction) &&
-        source.ViewportWidthFraction > 0.0f &&
-        source.ViewportWidthFraction <= 1.0f &&
-        float.IsFinite(source.ViewportHeightFraction) &&
-        source.ViewportHeightFraction > 0.0f &&
-        source.ViewportHeightFraction <= 1.0f &&
-        float.IsFinite(source.VerticalFovHalfAngleFactor) &&
-        source.VerticalFovHalfAngleFactor > 0.0f &&
-        source.VerticalFovHalfAngleFactor <= 1.0f &&
-        float.IsFinite(source.DepthExtentFraction) &&
-        source.DepthExtentFraction > 0.0f &&
-        source.DepthExtentFraction <= 1.0f;
+        OpeningFaceGenPreviewPresentation source)
+    {
+        var aspectFit =
+            float.IsFinite(source.ViewportWidthFraction) &&
+            source.ViewportWidthFraction > 0.0f &&
+            source.ViewportWidthFraction <= 1.0f &&
+            float.IsFinite(source.ViewportHeightFraction) &&
+            source.ViewportHeightFraction > 0.0f &&
+            source.ViewportHeightFraction <= 1.0f &&
+            float.IsFinite(source.VerticalFovHalfAngleFactor) &&
+            source.VerticalFovHalfAngleFactor > 0.0f &&
+            source.VerticalFovHalfAngleFactor <= 1.0f &&
+            float.IsFinite(source.DepthExtentFraction) &&
+            source.DepthExtentFraction > 0.0f &&
+            source.DepthExtentFraction <= 1.0f;
+        var observedRaceSex =
+            float.IsFinite(source.FullInVerticalOffsetGameUnits) &&
+            float.IsFinite(source.FullInDistanceGameUnits) &&
+            source.FullInDistanceGameUnits > 0.0f &&
+            float.IsFinite(source.FullInYawRadians) &&
+            float.IsFinite(source.FullOutVerticalOffsetGameUnits) &&
+            float.IsFinite(source.FullOutDistanceGameUnits) &&
+            source.FullOutDistanceGameUnits > source.FullInDistanceGameUnits &&
+            float.IsFinite(source.FullOutYawRadians) &&
+            float.IsFinite(source.StartingZoomFraction) &&
+            source.StartingZoomFraction is >= 0.0f and <= 1.0f;
+        return aspectFit || observedRaceSex;
+    }
 
     private static bool ValidAppearanceOption(
         OpeningAppearanceOption option,
@@ -1566,6 +2644,35 @@ internal sealed record OpeningNewGameFlow(
         setting.SourceKind == ExpectedOwnedGameSettingSourceKind &&
         float.IsFinite(setting.ValueGameUnits);
 
+    private static bool ValidGuideFurnitureIdentity(
+        OpeningGuideFurnitureIdentity source) =>
+        ValidFormId(source.ReferenceFormId) &&
+        ValidFormId(source.BaseFormId) &&
+        source.RecordType.Equals("FURN", StringComparison.Ordinal) &&
+        !string.IsNullOrWhiteSpace(source.EditorId) &&
+        ValidSha256(source.ReferenceRecordSha256) &&
+        ValidSha256(source.RecordSha256) &&
+        !string.IsNullOrWhiteSpace(source.ModelLogicalPath) &&
+        source.ModelBytes > 0 &&
+        ValidSha256(source.ModelSha256) &&
+        !string.IsNullOrWhiteSpace(source.SourceArchive) &&
+        ValidSha256(source.SourceArchiveSha256);
+
+    private static bool ValidSha256(string value) =>
+        value.Length == SHA256.HashSizeInBits / 4 && value.All(Uri.IsHexDigit);
+
+    private static bool ValidFormId(string formId)
+    {
+        try
+        {
+            return FalloutFormId.Normalize(formId) == formId;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private static bool ValidGuideFurnitureAnimation(
         OpeningGuideFurnitureAnimation animation,
         string role,
@@ -1611,7 +2718,283 @@ internal sealed record OpeningFlowMenu(
     string MenuName,
     string SourcePath,
     Rect2? Rect,
-    OwnedUiTexture? Background);
+    IReadOnlyDictionary<string, OpeningFlowSemanticRect> SemanticRects,
+    OwnedUiTexture? Background,
+    OpeningRaceSexMenuTiles? RaceSexMenuTiles,
+    OpeningRaceSexRenderedDevice? RenderedDevice);
+
+internal sealed record OpeningRaceSexRenderedDevice(
+    OwnedPhysicalDevice Device,
+    string SettingsSourcePath,
+    string SettingsSourceSha256,
+    IReadOnlyDictionary<string, OpeningRaceSexRenderedSetting> Settings,
+    OpeningRaceSexRenderedDeviceFraming Framing,
+    OpeningRaceSexPreviewCameraContract PreviewCameraContract)
+{
+    internal float Float(string role) =>
+        Settings.TryGetValue(role, out var value) && value.FloatValue is { } result
+            ? result
+            : throw new InvalidOperationException(
+                $"Owned RaceSex rendered-terminal float is absent: {role}");
+
+    internal bool Bool(string role) =>
+        Settings.TryGetValue(role, out var value) && value.BoolValue is { } result
+            ? result
+            : throw new InvalidOperationException(
+                $"Owned RaceSex rendered-terminal boolean is absent: {role}");
+}
+
+internal sealed record OpeningRaceSexRenderedDeviceFraming(
+    string SourcePath,
+    string SourceSha256,
+    string Status,
+    Vector2I ViewportPixels,
+    string RetailFrameSha256,
+    Rect2I RetailOuterDeviceBoundsPixels,
+    Rect2I RetailRightScreenBoundsPixels,
+    string CurrentFrameSha256,
+    Rect2I CurrentOuterDeviceBoundsPixels,
+    Rect2I CurrentRightScreenBoundsPixels,
+    double CurrentZoomGameUnits,
+    double ProjectionScale,
+    double SolvedZoomGameUnits,
+    Vector2 ResidualPixels,
+    OpeningRaceSexRenderedDeviceAlignment Alignment,
+    bool ParityReady);
+
+internal sealed record OpeningRaceSexRenderedDeviceAlignment(
+    string BaselineCurrentFrameSha256,
+    Rect2 ProjectedCurrentRightScreenBoundsPixels,
+    Vector2 DeviceTranslationPixels,
+    Vector2I ReferenceCanvasPixels,
+    Vector2 DeviceTranslationCanvasUnits,
+    Rect2I RetailContentBoundsPixels,
+    Rect2I CurrentContentBoundsPixels,
+    Vector2 ContentScale,
+    Vector2 ContentTranslationWithinScreenPixels);
+
+internal sealed record OpeningRaceSexPreviewCameraContract(
+    string SourcePath,
+    string SourceSha256,
+    string Status,
+    bool ParityReady,
+    bool CameraContractReady);
+
+internal sealed record OpeningRaceSexRenderedSetting(
+    string Section,
+    string Key,
+    string Type,
+    bool? BoolValue,
+    float? FloatValue);
+
+internal sealed record OpeningFlowSemanticRect(string Tile, Rect2 Rect);
+
+internal sealed record OpeningRaceSexMenuTiles(
+    string Schema,
+    string Document,
+    string DocumentSha256,
+    string MenuName,
+    string MenuClassEntity,
+    string ActiveListTrait,
+    string SliderLeftLabelTrait,
+    string SliderRightLabelTrait,
+    int FontId,
+    OwnedBitmapFont Font,
+    OpeningRaceSexBackground Background,
+    OpeningRaceSexFaceGrab FaceGrab,
+    OpeningRaceSexScroll Scroll,
+    OpeningRaceSexNavigation Navigation,
+    OpeningRaceSexListTemplate ListItem,
+    OpeningRaceSexSliderTemplate Slider);
+
+internal sealed record OpeningRaceSexTexture(
+    string? LogicalPath,
+    string? Atlas,
+    string? FileName,
+    OwnedUiTexture? Texture,
+    OpeningRaceSexTextureAtlas? AtlasContract);
+
+internal sealed record OpeningRaceSexTextureAtlas(
+    string IndexLogicalPath,
+    string IndexSource,
+    long IndexBytes,
+    string IndexSha256,
+    string IndexSourceArchive,
+    string IndexSourceArchiveSha256,
+    string TextureLogicalPath,
+    string AtlasFileName,
+    int AtlasIndex,
+    string AtlasType,
+    Rect2 UvRect,
+    float DepthOffset);
+
+internal sealed record OpeningRaceSexBackground(
+    string Tile,
+    Rect2 Rect,
+    OpeningRaceSexTexture Texture,
+    float Brightness,
+    float Depth,
+    float TopBound,
+    float BottomBound);
+
+internal sealed record OpeningRaceSexFaceGrab(
+    string Tile,
+    string Id,
+    Rect2 Rect,
+    float Depth);
+
+internal sealed record OpeningRaceSexScroll(
+    OpeningRaceSexScrollTarget Up,
+    OpeningRaceSexScrollTarget Down);
+
+internal sealed record OpeningRaceSexScrollTarget(
+    string Tile,
+    string Id,
+    float Y,
+    float Brightness,
+    string AlphaPolicy,
+    Rect2? Rect,
+    OpeningRaceSexTexture Texture,
+    string ClickSound);
+
+internal sealed record OpeningRaceSexNavigation(
+    OpeningRaceSexNavigationButton Back,
+    OpeningRaceSexNavigationButton Next);
+
+internal sealed record OpeningRaceSexNavigationButton(
+    string Tile,
+    string Id,
+    float X,
+    float Y,
+    float Font,
+    float Brightness,
+    float HorizontalBuffer,
+    float VerticalBuffer,
+    float TextYAdjust,
+    float VerticalCenterDivisor,
+    float BaseTextYOffset,
+    bool BoxVisible,
+    bool InheritBrightness,
+    string AlphaPolicy,
+    string Justify,
+    string LabelRole,
+    string StringEntity,
+    string Label,
+    IReadOnlyList<OpeningRaceSexStringSourceDocument> StringSourceDocuments,
+    string ClickSound);
+
+internal sealed record OpeningRaceSexStringSourceDocument(
+    string Path,
+    string Sha256);
+
+internal sealed record OpeningRaceSexListTemplate(
+    string Template,
+    string Tile,
+    string Id,
+    Rect2 Rect,
+    float Brightness,
+    string ActiveListTrait,
+    string SelectedTrait,
+    OpeningRaceSexSelectionIndicator SelectionIndicator,
+    OpeningRaceSexTextTemplate Text,
+    string ClickSound,
+    string MouseOverSound);
+
+internal sealed record OpeningRaceSexSelectionIndicator(
+    string Tile,
+    OpeningRaceSexTexture Texture,
+    Rect2 Rect);
+
+internal sealed record OpeningRaceSexTextTemplate(
+    string Tile,
+    float Font,
+    float Y,
+    float? NotSelectableX,
+    float? SelectableX,
+    string WidthPolicy,
+    string HeightPolicy);
+
+internal sealed record OpeningRaceSexSliderTemplate(
+    string Template,
+    string Tile,
+    string Id,
+    Rect2 Rect,
+    float Brightness,
+    string ActiveListTrait,
+    OpeningRaceSexSliderTraits Traits,
+    OpeningRaceSexSliderText Label,
+    OpeningRaceSexSliderValueText Value,
+    OpeningRaceSexSliderBar Bar,
+    OpeningRaceSexSliderArrow LeftArrow,
+    OpeningRaceSexSliderArrow RightArrow,
+    OpeningRaceSexSliderMarker Marker,
+    string ClickSound,
+    string MouseOverSound);
+
+internal sealed record OpeningRaceSexSliderTraits(
+    string Current,
+    string Minimum,
+    string Maximum,
+    string Jump,
+    string Display,
+    string Increment);
+
+internal sealed record OpeningRaceSexSliderText(
+    string Tile,
+    float Font,
+    float X,
+    float Y,
+    float? LabelGap,
+    string WidthPolicy,
+    string HeightPolicy);
+
+internal sealed record OpeningRaceSexSliderValueText(
+    string Tile,
+    float Font,
+    float Y,
+    string XPolicy,
+    float LabelGap,
+    string WidthPolicy,
+    string HeightPolicy);
+
+internal sealed record OpeningRaceSexSliderBar(
+    string Tile,
+    float X,
+    float Y,
+    float Width,
+    string HeightGlobalTrait);
+
+internal sealed record OpeningRaceSexSliderArrow(
+    string Tile,
+    string TextTile,
+    string Id,
+    float? X,
+    float? XAnchor,
+    string? AnchorEdge,
+    float Y,
+    string WidthPolicy,
+    float Height,
+    string StringSourceMenuTrait,
+    string? Justify,
+    string ClickSound);
+
+internal sealed record OpeningRaceSexSliderMarker(
+    string Tile,
+    string TextTile,
+    string Id,
+    float BarX,
+    float BarWidth,
+    string CurrentTrait,
+    string MinimumTrait,
+    string MaximumTrait,
+    Vector2 Clamp,
+    float Y,
+    float Width,
+    float Height,
+    string Glyph,
+    string GlyphXPolicy,
+    float GlyphXMultiplier,
+    float GlyphY);
 
 internal sealed record OpeningStageProgram(
     int Stage,
@@ -1760,6 +3143,7 @@ internal sealed record OpeningGuideFurnitureOccupancy(
     int MarkerId,
     string MarkerDisposition,
     OpeningGuideFurnitureSource Furniture,
+    OpeningGuideFurnitureIdentity PatientBed,
     int ReleaseStage,
     string ReleasePackageFormId,
     string AnimationObjectIdleFormId,
@@ -1779,6 +3163,19 @@ internal sealed record OpeningGuideFurnitureSource(
     string SourceArchive,
     string SourceArchiveSha256,
     OpeningGuideFurnitureMarker Marker);
+
+internal sealed record OpeningGuideFurnitureIdentity(
+    string ReferenceFormId,
+    string ReferenceRecordSha256,
+    string BaseFormId,
+    string EditorId,
+    string RecordType,
+    string RecordSha256,
+    string ModelLogicalPath,
+    long ModelBytes,
+    string ModelSha256,
+    string SourceArchive,
+    string SourceArchiveSha256);
 
 internal sealed record OpeningGuideFurnitureMarker(
     string ExtraDataName,
@@ -1845,6 +3242,12 @@ internal sealed record OpeningGuideAnimationObject(
     string IdleAnimationFormId,
     string IdleAnimationEditorId,
     string IdleAnimationLogicalPath,
+    string IdleAnimationSha256,
+    string IdleAnimationSequenceName,
+    float IdleAnimationStartSeconds,
+    float IdleAnimationStopSeconds,
+    int IdleAnimationCycleType,
+    IReadOnlyDictionary<string, int> IdleAnimationTransformPrioritiesByNode,
     string ModelLogicalPath,
     long Bytes,
     string Sha256,
@@ -2020,7 +3423,7 @@ internal sealed record OpeningAppearanceFaceGen(
     string SymmetricTextureSha256,
     IReadOnlyList<float> SymmetricTextureValues,
     OpeningFaceGenControlSpace ControlSpace,
-    OpeningPlayerFaceGenPreview PreviewHead);
+    OpeningPlayerFaceGenPreviewSet PreviewHead);
 
 internal sealed record OpeningFaceGenControlSpace(
     string Schema,
@@ -2069,16 +3472,56 @@ internal sealed record OpeningFaceGenPreviewControl(
     float Minimum,
     float Maximum,
     float Step,
+    float Jump,
+    float MorphWeightScale,
     float ResetValue,
     float AcceptanceValue,
+    OpeningFaceGenSliderSemanticsEvidence SliderSemanticsEvidence,
     OpeningFaceGenPreviewPresentation Presentation,
     string Semantics);
+
+internal sealed record OpeningFaceGenSliderSemanticsEvidence(
+    string Classification,
+    string EngineBuild,
+    string SourceExecutableSha256,
+    float SourceMinimum,
+    float SourceMaximum,
+    float UiScale,
+    float UiMinimum,
+    float UiMaximum,
+    float OrdinaryIncrement,
+    float Jump,
+    float MorphWeightScale,
+    string LowGlobalAddress,
+    string HighGlobalAddress,
+    string IncrementTrait,
+    float IncrementDefaultThreshold);
 
 internal sealed record OpeningFaceGenPreviewPresentation(
     float ViewportWidthFraction,
     float ViewportHeightFraction,
     float VerticalFovHalfAngleFactor,
-    float DepthExtentFraction);
+    float DepthExtentFraction,
+    float FullInVerticalOffsetGameUnits = float.NaN,
+    float FullInDistanceGameUnits = float.NaN,
+    float FullInYawRadians = float.NaN,
+    float FullOutVerticalOffsetGameUnits = float.NaN,
+    float FullOutDistanceGameUnits = float.NaN,
+    float FullOutYawRadians = float.NaN,
+    float StartingZoomFraction = float.NaN);
+
+internal sealed record OpeningPlayerFaceGenPreviewSet(
+    string Schema,
+    string Status,
+    string PlayerFormId,
+    IReadOnlyList<string> GeometryControlNames,
+    int GeometryControlCount,
+    string RuntimeDisposition,
+    bool FullBody,
+    IReadOnlyList<string>? BodyComponentRoles,
+    IReadOnlyDictionary<string, IReadOnlyList<OpeningPlayerBodyComponentSource>>?
+        BodyComponentSourcesBySex,
+    IReadOnlyList<OpeningPlayerFaceGenPreview> Previews);
 
 internal sealed record OpeningPlayerFaceGenPreview(
     string Schema,
@@ -2096,7 +3539,25 @@ internal sealed record OpeningPlayerFaceGenPreview(
     string SidecarPath,
     string SidecarSha256,
     string BufferSha256,
-    string RuntimeDisposition);
+    string RuntimeDisposition,
+    bool FullBody = false,
+    IReadOnlyList<string>? BodyComponentRoles = null,
+    IReadOnlyDictionary<string, IReadOnlyList<OpeningPlayerBodyComponentSource>>?
+        BodyComponentSourcesBySex = null);
+
+internal sealed record OpeningPlayerBodyComponentSource(
+    string Role,
+    string ModelLogicalPath,
+    string ModelSha256,
+    int SourceSurfaceCount,
+    int RetainedSurfaceCount,
+    IReadOnlyList<string> RetainedSurfaceNames,
+    int OmittedDismemberCapSurfaceCount,
+    string DiffuseLogicalPath,
+    string DiffuseSha256,
+    string NormalLogicalPath,
+    string NormalSha256,
+    string ShapeTransformDisposition);
 
 internal sealed record OpeningAppearanceRace(
     string FormId,

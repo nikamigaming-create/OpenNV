@@ -23,6 +23,10 @@ internal sealed record Fo3Vault101BirthSceneCoverage(
     Fo3Vault101ActorGrounding DadGrounding,
     CellReferenceLedger.Geometry DadActorGeometry,
     int ProofLitDadActorMaterials,
+    CellActorLoader.PlacedActor MomActor,
+    Fo3Vault101ActorGrounding MomGrounding,
+    CellReferenceLedger.Geometry MomActorGeometry,
+    int ProofLitMomActorMaterials,
     Fo3Vault101Cg01DadActorVariant Cg01DadAppearance,
     CellActorLoader.PlacedActor Cg01DadActor,
     Fo3Vault101ActorGrounding Cg01DadGrounding,
@@ -262,6 +266,45 @@ internal static class Fo3Vault101BirthScene
                 contract,
                 "CG00 Dad");
 
+            var momActor = CellActorLoader.Load(
+                    contract.MomActor.ScenePath,
+                    new HashSet<string>([contract.CellFormId], StringComparer.OrdinalIgnoreCase),
+                    root,
+                    contract.EntryPositionGameUnits,
+                    configuration,
+                    proofEnableInitiallyDisabled: false)
+                ?? throw new InvalidOperationException(
+                    "Fallout 3 CG00 Mom actor was unexpectedly disabled.");
+            if (momActor.ReferenceFormId != contract.MomActor.ReferenceFormId ||
+                momActor.BaseFormId != contract.MomActor.BaseFormId ||
+                momActor.RaceFormId != contract.MomActor.RaceFormId ||
+                momActor.HairFormId != contract.MomActor.HairFormId ||
+                momActor.EyesFormId != contract.MomActor.EyesFormId ||
+                !momActor.HeadPartFormIds.SequenceEqual(contract.MomActor.HeadPartFormIds) ||
+                !momActor.OutfitFormIds.SequenceEqual(contract.MomActor.OutfitFormIds) ||
+                !momActor.Placement.Position.IsEqualApprox(
+                    contract.MomActor.AuthoredPositionGodotGameUnits) ||
+                !momActor.Placement.Quaternion.IsEqualApprox(
+                    contract.MomActor.AuthoredRotationGodotQuaternion) ||
+                !momActor.Placement.Scale.IsEqualApprox(
+                    Vector3.One * contract.MomActor.Scale) ||
+                momActor.Actor.AuthoredSurfaces != contract.MomActor.Surfaces ||
+                momActor.Actor.AuthoredTextures != contract.MomActor.Textures ||
+                momActor.Actor.Surfaces.Count != contract.MomActor.Surfaces ||
+                momActor.Actor.AnimationLogicalPath != contract.MomActor.IdleAnimationPath)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG00 Mom runtime actor differs from its owned contract.");
+            momActor.Placement.Position = contract.MomActor.StartMarkerPositionGodotGameUnits;
+            momActor.Placement.Quaternion = contract.MomActor.StartMarkerRotationGodotQuaternion;
+            var momGrounding = GroundActor(
+                root,
+                momActor,
+                contract.MomActor.StartMarkerPositionGodotGameUnits,
+                contract.MomActor.StartMarkerRotationGodotQuaternion,
+                contract.MomActor.Scale,
+                contract,
+                "CG00 Mom");
+
             var cg01DadActor = CellActorLoader.Load(
                     cg01DadContract.ScenePath,
                     new HashSet<string>([contract.CellFormId], StringComparer.OrdinalIgnoreCase),
@@ -366,6 +409,17 @@ internal static class Fo3Vault101BirthScene
             if (proofLitDadActorMaterials <= 0)
                 throw new InvalidOperationException(
                     "Fallout 3 CG00 Dad actor received no proof-lighting contract.");
+            var proofLitMomActorMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
+                momActor.Actor.Root,
+                contract.ProofAmbientColor,
+                contract.ProofBackgroundColor,
+                contract.ProofFogNearGameUnits,
+                contract.ProofFogFarGameUnits,
+                contract.ProofFogPower,
+                contract.UnitsToMeters);
+            if (proofLitMomActorMaterials <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG00 Mom actor received no proof-lighting contract.");
             var proofLitCg01DadActorMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
                 cg01DadActor.Actor.Root,
                 contract.ProofAmbientColor,
@@ -396,6 +450,7 @@ internal static class Fo3Vault101BirthScene
                 Position = root.ToGlobal(contract.ProofCameraPositionGodotGameUnits),
                 Quaternion = contract.EntryRotationGodotQuaternion,
                 Fov = contract.VerticalFovDegrees,
+                KeepAspect = Camera3D.KeepAspectEnum.Height,
                 Near = contract.ProofCameraNearGameUnits * contract.UnitsToMeters,
                 Far = 100.0f,
                 Current = true,
@@ -433,6 +488,18 @@ internal static class Fo3Vault101BirthScene
                 dadActorGeometry.Triangles <= 0)
                 throw new InvalidOperationException(
                     "Fallout 3 CG00 Dad actor did not enter the birth-room proof frustum.");
+            var momActorGeometry = CellReferenceLedger.MeasureGeometry(
+                momActor.Actor.Root,
+                camera,
+                momGrounding.GroundedBounds.GetCenter());
+            if (!momActorGeometry.RenderLayerVisible ||
+                !momActorGeometry.AabbValid ||
+                !momActorGeometry.FrustumIntersection ||
+                momActorGeometry.Surfaces != contract.MomActor.Surfaces ||
+                momActorGeometry.Vertices <= 0 ||
+                momActorGeometry.Triangles <= 0)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG00 Mom actor did not enter the birth-room proof frustum.");
             var cg01DadActorGeometry = CellReferenceLedger.MeasureGeometry(
                 cg01DadActor.Actor.Root,
                 camera,
@@ -470,6 +537,10 @@ internal static class Fo3Vault101BirthScene
                 dadGrounding,
                 dadActorGeometry,
                 proofLitDadActorMaterials,
+                momActor,
+                momGrounding,
+                momActorGeometry,
+                proofLitMomActorMaterials,
                 cg01DadAppearance,
                 cg01DadActor,
                 cg01DadGrounding,

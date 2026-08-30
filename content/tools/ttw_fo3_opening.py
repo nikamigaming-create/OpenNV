@@ -16,27 +16,18 @@ import math
 import re
 import struct
 import sys
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from cell_catalog import cell_parent_form_id
 from corpus_io import atomic_json
-from plugin_records import Record, iter_plugin_records, iter_subrecords, read_plugin_masters, zstring
-from plugin_stack import (
-    PluginContext,
-    file_sha256,
-    load_order_indices,
-    parse_form_key,
-    runtime_form_id,
+from plugin_records import Record, iter_subrecords, zstring
+from plugin_stack import file_sha256
+from ttw_effective_source import (
+    EffectiveRecords,
+    _validated_source_namespace,
+    _validated_stack,
 )
-from ttw_profile import (
-    SCHEMA as TTW_PROFILE_SCHEMA,
-    load_requirements,
-    plugin_stack_id,
-    read_active_load_order,
-)
+from ttw_profile import SCHEMA as TTW_PROFILE_SCHEMA
 from ttw_source_namespace import (
-    RESOLUTION_POLICY as SOURCE_NAMESPACE_RESOLUTION_POLICY,
     SCHEMA as SOURCE_NAMESPACE_SCHEMA,
     STATUS as SOURCE_NAMESPACE_STATUS,
 )
@@ -45,29 +36,10 @@ from ttw_source_namespace import (
 SCHEMA = "opennv-ttw-fo3-opening-profile/v1"
 RECIPE_SCHEMA = "opennv-ttw-fo3-opening-recipe/v1"
 DEFAULT_RECIPE = Path(__file__).resolve().parents[1] / "recipes" / "ttw-fo3-opening-profile-v1.json"
-PROFILE_STATUS = "validated-generated-plugin-profile"
-DELETED_RECORD_FLAG = 0x00000020
 ADMITTED_SIGNATURES = frozenset({"ACHR", "CELL", "IMAD", "NPC_", "QUST", "REFR", "SCPT", "SOUN"})
-SHA256_HEX_CHARACTERS = 64
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)"
 CACHE_COMPATIBILITY_PREFIX = b"opennv-ttw-fo3-opening-cache-v1\0"
 CACHE_COMPATIBILITY_NAMESPACE = "ttw-fo3-opening"
-
-
-@dataclass(frozen=True)
-class RecordVersion:
-    context: PluginContext
-    source_root_index: int
-    record: Record
-
-
-def _is_sha256(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == SHA256_HEX_CHARACTERS
-        and all(character in "0123456789abcdef" for character in value)
-    )
-
 
 def _load_recipe(path: Path) -> dict[str, object]:
     recipe = json.loads(path.read_text(encoding="utf-8"))
@@ -93,145 +65,6 @@ def _case_insensitive_file(root: Path, name: str) -> Path:
     return matches[0]
 
 
-def _validated_stack(profile_path: Path) -> tuple[dict[str, object], tuple[Path, ...], tuple[PluginContext, ...], dict[str, int]]:
-    resolved_profile = profile_path.resolve()
-    profile = json.loads(resolved_profile.read_text(encoding="utf-8"))
-    if (
-        profile.get("schema") != TTW_PROFILE_SCHEMA
-        or profile.get("status") != PROFILE_STATUS
-        or profile.get("kind") != "ttw"
-    ):
-        raise ValueError(f"Not a validated TTW profile: {resolved_profile}")
-
-    root_rows = profile.get("sourceRoots")
-    if not isinstance(root_rows, list) or not root_rows or not all(isinstance(row, str) for row in root_rows):
-        raise ValueError("TTW profile has no source roots")
-    roots = tuple(Path(row).resolve() for row in root_rows)
-    if len({str(root).casefold() for root in roots}) != len(roots):
-        raise ValueError("TTW profile contains duplicate source roots")
-    for root in roots:
-        if not root.is_dir():
-            raise FileNotFoundError(f"TTW profile source root is missing: {root}")
-
-    source = profile.get("loadOrderSource")
-    if not isinstance(source, dict) or not isinstance(source.get("file"), str) or not _is_sha256(source.get("sha256")):
-        raise ValueError("TTW profile load-order source is invalid")
-    load_order_path = Path(str(source["file"])).resolve()
-    if not load_order_path.is_file() or file_sha256(load_order_path) != source["sha256"]:
-        raise ValueError("TTW profile load-order source changed")
-    load_order = read_active_load_order(load_order_path)
-
-    rows = profile.get("plugins")
-    if not isinstance(rows, list) or not rows or not all(isinstance(row, dict) for row in rows):
-        raise ValueError("TTW profile contains no plugin rows")
-    if tuple(str(row.get("file", "")) for row in rows) != load_order:
-        raise ValueError("TTW profile plugin rows differ from its load-order source")
-    configured_names = {str(row["file"]).casefold(): str(row["file"]) for row in rows}
-    if len(configured_names) != len(rows):
-        raise ValueError("TTW profile contains duplicate plugin rows")
-    missing_markers = [name for name in load_requirements() if name.casefold() not in configured_names]
-    if missing_markers:
-        raise ValueError("TTW profile is missing required generated plugins: " + ", ".join(missing_markers))
-
-    contexts: list[PluginContext] = []
-    validated_rows: list[dict[str, object]] = []
-    for expected_index, row in enumerate(rows):
-        name = str(row["file"])
-        root_index = row.get("sourceRootIndex")
-        if not isinstance(root_index, int) or not 0 <= root_index < len(roots):
-            raise ValueError(f"TTW plugin has an invalid source root: {name}")
-        if row.get("loadOrderIndex") != expected_index:
-            raise ValueError(f"TTW plugin load-order index changed: {name}")
-        winners = []
-        for index, root in enumerate(roots):
-            matches = [path for path in root.iterdir() if path.is_file() and path.name.casefold() == name.casefold()]
-            if len(matches) > 1:
-                raise ValueError(f"TTW root contains duplicate case-insensitive plugin files: {name}")
-            if matches:
-                winners.append((index, matches[0]))
-        if not winners or winners[-1][0] != root_index:
-            raise ValueError(f"TTW plugin effective source changed: {name}")
-        path = winners[-1][1]
-        if path.stat().st_size != row.get("bytes") or file_sha256(path) != row.get("sha256"):
-            raise ValueError(f"TTW plugin bytes or hash changed: {name}")
-        declared_masters = read_plugin_masters(path)
-        masters = tuple(configured_names.get(master.casefold(), "") for master in declared_masters)
-        recorded_masters = row.get("masters")
-        if (
-            any(not master for master in masters)
-            or not isinstance(recorded_masters, list)
-            or [master.casefold() for master in masters]
-            != [str(master).casefold() for master in recorded_masters]
-        ):
-            raise ValueError(f"TTW plugin master list changed: {name}")
-        if any(load_order.index(master) >= expected_index for master in masters):
-            raise ValueError(f"TTW plugin master order changed: {name}")
-        context = PluginContext(
-            name=name,
-            path=path,
-            load_order_index=expected_index,
-            masters=masters,
-            namespaces=(*masters, name),
-            sha256=str(row["sha256"]),
-            bytes=int(row["bytes"]),
-        )
-        contexts.append(context)
-        validated_rows.append(
-            {
-                "file": name,
-                "loadOrderIndex": expected_index,
-                "sourceRootIndex": root_index,
-                "bytes": context.bytes,
-                "sha256": context.sha256,
-                "masters": list(recorded_masters),
-            }
-        )
-    expected_stack_id = plugin_stack_id(validated_rows)
-    if profile.get("pluginStackId") != expected_stack_id:
-        raise ValueError("TTW plugin-stack identity changed")
-    if profile.get("saveCompatibilityId") != f"ttw:{expected_stack_id}":
-        raise ValueError("TTW save-compatibility identity changed")
-    return profile, roots, tuple(contexts), {name.casefold(): index for index, name in enumerate(load_order)}
-
-
-def _validated_source_namespace(
-    namespace_path: Path,
-    profile_path: Path,
-    profile: dict[str, object],
-) -> dict[str, object]:
-    resolved_namespace = namespace_path.resolve()
-    namespace = json.loads(resolved_namespace.read_text(encoding="utf-8"))
-    if (
-        namespace.get("schema") != SOURCE_NAMESPACE_SCHEMA
-        or namespace.get("status") != SOURCE_NAMESPACE_STATUS
-        or namespace.get("resolutionPolicy") != SOURCE_NAMESPACE_RESOLUTION_POLICY
-    ):
-        raise ValueError(f"Not a validated TTW effective-source namespace: {resolved_namespace}")
-
-    source = namespace.get("sourceProfile")
-    if not isinstance(source, dict):
-        raise ValueError("TTW effective-source namespace has no source-profile binding")
-    resolved_profile = profile_path.resolve()
-    if (
-        not isinstance(source.get("file"), str)
-        or Path(str(source["file"])).resolve() != resolved_profile
-        or source.get("sha256") != file_sha256(resolved_profile)
-        or source.get("pluginStackId") != profile.get("pluginStackId")
-        or source.get("saveCompatibilityId") != profile.get("saveCompatibilityId")
-    ):
-        raise ValueError("TTW effective-source namespace profile binding differs")
-
-    expected_roots = [str(Path(row).resolve()) for row in profile["sourceRoots"]]
-    if namespace.get("sourceRoots") != expected_roots:
-        raise ValueError("TTW effective-source namespace roots differ from its profile")
-    if namespace.get("plugins") != profile.get("plugins"):
-        raise ValueError("TTW effective-source namespace plugin stack differs from its profile")
-    compatibility = namespace.get("runtimeCompatibility")
-    if not isinstance(compatibility, dict) or compatibility.get("ready") is not False:
-        raise ValueError("TTW effective-source namespace overstates runtime compatibility")
-    return namespace
-
-
 def _cache_compatibility_id(document: dict[str, object]) -> str:
     payload = {
         "schema": document["schema"],
@@ -251,13 +84,6 @@ def _cache_compatibility_id(document: dict[str, object]) -> str:
     ).encode("utf-8")
     digest = hashlib.sha256(CACHE_COMPATIBILITY_PREFIX + encoded).hexdigest()
     return f"{CACHE_COMPATIBILITY_NAMESPACE}:{digest}"
-
-
-def _editor_id(record: Record) -> str | None:
-    values = [zstring(row.data) for row in iter_subrecords(record) if row.signature == "EDID"]
-    if len(values) > 1:
-        raise ValueError(f"{record.signature} {record.form_id:08x} has duplicate EDID values")
-    return values[0] if values else None
 
 
 def _single_subrecord(record: Record, signature: str) -> bytes:
@@ -352,77 +178,6 @@ def parse_stage(source: str, expected_kinds: list[str], label: str) -> list[dict
     return commands
 
 
-class EffectiveRecords:
-    def __init__(self, contexts: tuple[PluginContext, ...], source_root_indices: dict[str, int], indices: dict[str, int]):
-        self.contexts = contexts
-        self.source_root_indices = source_root_indices
-        self.indices = indices
-        self.versions: dict[str, list[RecordVersion]] = {}
-        for context in contexts:
-            local: set[str] = set()
-            for record in iter_plugin_records(context.path, ADMITTED_SIGNATURES):
-                key = context.form_key(record.form_id)
-                folded = key.text.casefold()
-                if folded in local:
-                    raise ValueError(f"{context.name} contains duplicate admitted record {key.text}")
-                local.add(folded)
-                self.versions.setdefault(folded, []).append(
-                    RecordVersion(context, source_root_indices[context.name.casefold()], record)
-                )
-        self.winners = {key: rows[-1] for key, rows in self.versions.items()}
-
-    def contract(self, definition: dict[str, object], *, expected_editor_id: str | None = None) -> dict[str, object]:
-        key = parse_form_key(str(definition["formKey"]))
-        rows = self.versions.get(key.text.casefold())
-        if not rows:
-            raise ValueError(f"TTW opening FormKey is absent: {key.text}")
-        winner = rows[-1]
-        record = winner.record
-        editor_id = _editor_id(record)
-        expected_editor = expected_editor_id or definition.get("editorId")
-        if record.flags & DELETED_RECORD_FLAG:
-            raise ValueError(f"TTW opening FormKey is deleted: {key.text}")
-        if record.signature != definition.get("recordType"):
-            raise ValueError(f"TTW opening record type differs: {key.text}")
-        if expected_editor is not None and (editor_id or "").casefold() != str(expected_editor).casefold():
-            raise ValueError(f"TTW opening editor identity differs: {key.text}")
-        expected_winner = definition.get("winnerPlugin")
-        if expected_winner is not None and winner.context.name.casefold() != str(expected_winner).casefold():
-            raise ValueError(f"TTW opening effective winner differs: {key.text}")
-        parent_key = None
-        raw_parent = cell_parent_form_id(record)
-        if raw_parent is not None:
-            parent_key = winner.context.form_key(raw_parent).text
-        expected_parent = definition.get("parentCell")
-        if expected_parent is not None and (parent_key or "").casefold() != str(expected_parent).casefold():
-            raise ValueError(f"TTW opening parent CELL differs: {key.text}")
-        return {
-            "formKey": key.text,
-            "runtimeFormId": runtime_form_id(key, self.indices),
-            "recordType": record.signature,
-            "editorId": editor_id,
-            "parentCellFormKey": parent_key,
-            "winner": self._version_row(winner),
-            "overriddenVersions": [self._version_row(row) for row in rows[:-1]],
-        }
-
-    def _version_row(self, version: RecordVersion) -> dict[str, object]:
-        return {
-            "plugin": version.context.name,
-            "loadOrderIndex": version.context.load_order_index,
-            "sourceRootIndex": version.source_root_index,
-            "pluginSha256": version.context.sha256,
-            "recordSha256": hashlib.sha256(version.record.data).hexdigest(),
-            "flags": version.record.flags,
-        }
-
-    def winner(self, form_key: str) -> RecordVersion:
-        row = self.winners.get(form_key.casefold())
-        if row is None:
-            raise ValueError(f"TTW opening FormKey is absent: {form_key}")
-        return row
-
-
 def _operand_link(contract: dict[str, object]) -> dict[str, object]:
     return {
         "editorId": contract["editorId"],
@@ -480,7 +235,12 @@ def compile_ttw_fo3_opening(
     profile, roots, contexts, indices = _validated_stack(profile_path)
     _validated_source_namespace(source_namespace_path, profile_path, profile)
     source_root_indices = {str(row["file"]).casefold(): int(row["sourceRootIndex"]) for row in profile["plugins"]}
-    effective = EffectiveRecords(contexts, source_root_indices, indices)
+    effective = EffectiveRecords(
+        contexts,
+        source_root_indices,
+        indices,
+        ADMITTED_SIGNATURES,
+    )
 
     forms = {name: effective.contract(dict(definition)) for name, definition in dict(recipe["forms"]).items()}
     operands = {

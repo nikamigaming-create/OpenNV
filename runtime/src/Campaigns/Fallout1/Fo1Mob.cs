@@ -7,6 +7,7 @@ internal static class Fo1MobNumericContracts
     // Immutable format, source-art, geometry, and acceptance contracts.
     // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
     internal const float PresentationFloat0Point0001f = 0.0001f;
+    internal const int PresentationInt64 = 64;
 }
 
 internal partial class Fo1Mob : Node3D
@@ -33,6 +34,7 @@ internal partial class Fo1Mob : Node3D
     internal int Serial { get; private set; }
     internal string DisplayName { get; private set; } = "";
     internal string Pid { get; private set; } = "";
+    internal string PrototypeSha256 { get; private set; } = "";
     internal int Tile { get; private set; }
     internal int HitPoints { get; private set; }
     internal int MaximumHitPoints { get; private set; }
@@ -86,6 +88,7 @@ internal partial class Fo1Mob : Node3D
         int serial,
         string displayName,
         string pid,
+        string prototypeSha256,
         int tile,
         int hitPoints,
         int maximumHitPoints,
@@ -103,10 +106,16 @@ internal partial class Fo1Mob : Node3D
         Fo1CreatureModel.Template? creatureTemplate,
         Fo1RuntimeProfile runtimeProfile)
     {
+        if (string.IsNullOrWhiteSpace(pid) ||
+            prototypeSha256.Length != Fo1MobNumericContracts.PresentationInt64 ||
+            !prototypeSha256.All(Uri.IsHexDigit))
+            throw new InvalidOperationException(
+                "Fallout critter has no hash-bound source prototype.");
         _runtimeProfile = runtimeProfile;
         Serial = serial;
         DisplayName = displayName;
         Pid = pid;
+        PrototypeSha256 = prototypeSha256;
         Tile = tile;
         HitPoints = Math.Clamp(hitPoints, 0, maximumHitPoints);
         MaximumHitPoints = maximumHitPoints;
@@ -407,6 +416,7 @@ internal partial class Fo1Mob : Node3D
         serial = Serial,
         name = DisplayName,
         pid = Pid,
+        prototypeSha256 = PrototypeSha256,
         tile = Tile,
         hitPoints = HitPoints,
         maximumHitPoints = MaximumHitPoints,

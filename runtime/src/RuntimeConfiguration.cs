@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Godot;
@@ -12,6 +14,7 @@ internal sealed record RuntimeConfiguration(
     RendererConfiguration Renderer,
     PlayerConfiguration Player,
     XrConfiguration Xr,
+    PickupConfiguration Pickup,
     PoolConfiguration Pool,
     DoorConfiguration Door,
     HudConfiguration Hud,
@@ -32,11 +35,24 @@ internal sealed record RuntimeConfiguration(
     ActorCompilerConfiguration ActorCompiler)
 {
     internal const string ExpectedSchema = "opennv-runtime-configuration/v1";
+    internal const string ActorArtifactExpectedSchema =
+        "opennv-actor-artifact-runtime-configuration/v1";
     internal const string ResourcePath = "res://config/open-nv-runtime-v1.json";
     private const float PerspectiveMaximumDegrees = 180.0f;
     private const int RgbaChannelCount = 4;
 
     internal string Sha256 { get; private set; } = "";
+    internal string ActorArtifactConfigurationSha256 { get; private set; } = "";
+
+    private static readonly string[] ActorArtifactContentCompilerFields =
+    [
+        "animationSamplesPerSecond",
+        "assetIdHexCharacters",
+        "defaultMaterialGlossiness",
+        "minimumMaterialRoughness",
+        "pngCompressionLevel",
+        "zeroSpecularEpsilon",
+    ];
 
     internal static RuntimeConfiguration Load()
     {
@@ -58,6 +74,9 @@ internal sealed record RuntimeConfiguration(
                 $"Unexpected OpenNV runtime configuration: {ResourcePath}");
         configuration.Validate();
         configuration.Sha256 = Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+        using var source = JsonDocument.Parse(payload);
+        configuration.ActorArtifactConfigurationSha256 =
+            ActorArtifactConfigurationHash(source.RootElement);
         return configuration;
     }
 
@@ -71,6 +90,104 @@ internal sealed record RuntimeConfiguration(
         if (compiled.GetProperty("schema").GetString() != ExpectedSchema ||
             !compiled.GetProperty("sha256").GetString()!.Equals(Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Prepared content was compiled with another runtime configuration.");
+    }
+
+    internal void VerifyCompiledActorConfiguration(JsonElement source)
+    {
+        var compiled = source.GetProperty("configuration");
+        var schema = compiled.GetProperty("schema").GetString();
+        if (schema == ExpectedSchema)
+        {
+            VerifyCompiledConfigurationDescriptor(compiled);
+            return;
+        }
+        if (schema != ActorArtifactExpectedSchema ||
+            compiled.EnumerateObject().Count() != 3 ||
+            !compiled.GetProperty("sha256").GetString()!.Equals(
+                ActorArtifactConfigurationSha256,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Prepared actor content was compiled with another actor configuration.");
+        var sections = compiled.GetProperty("sections");
+        if (sections.EnumerateObject().Count() != 2 ||
+            sections.GetProperty("actorCompiler").GetString() != "all" ||
+            !sections.GetProperty("contentCompiler").EnumerateArray()
+                .Select(value => value.GetString()!)
+                .SequenceEqual(ActorArtifactContentCompilerFields, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                "Prepared actor content has another configuration scope.");
+    }
+
+    private static string ActorArtifactConfigurationHash(JsonElement root)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(
+            stream,
+            new JsonWriterOptions
+            {
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            }))
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("actorCompiler");
+            WriteCanonicalJson(writer, root.GetProperty("actorCompiler"));
+            writer.WritePropertyName("contentCompiler");
+            writer.WriteStartObject();
+            var contentCompiler = root.GetProperty("contentCompiler");
+            foreach (var field in ActorArtifactContentCompilerFields)
+            {
+                writer.WritePropertyName(field);
+                WriteCanonicalJson(writer, contentCompiler.GetProperty(field));
+            }
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+        return Convert.ToHexString(SHA256.HashData(stream.ToArray())).ToLowerInvariant();
+    }
+
+    private static void WriteCanonicalJson(Utf8JsonWriter writer, JsonElement value)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in value.EnumerateObject()
+                    .OrderBy(row => row.Name, StringComparer.Ordinal))
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteCanonicalJson(writer, property.Value);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var row in value.EnumerateArray())
+                    WriteCanonicalJson(writer, row);
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                writer.WriteStringValue(value.GetString());
+                break;
+            case JsonValueKind.Number:
+                writer.WriteStringValue(
+                    value.TryGetInt64(out var integer)
+                        ? integer.ToString(CultureInfo.InvariantCulture)
+                        : value.GetDouble().ToString("G17", CultureInfo.InvariantCulture)
+                            .ToLowerInvariant());
+                break;
+            case JsonValueKind.True:
+                writer.WriteBooleanValue(true);
+                break;
+            case JsonValueKind.False:
+                writer.WriteBooleanValue(false);
+                break;
+            case JsonValueKind.Null:
+                writer.WriteNullValue();
+                break;
+            default:
+                throw new InvalidOperationException(
+                    "Runtime configuration contains unsupported JSON.");
+        }
     }
 
     private void Validate()
@@ -87,6 +204,7 @@ internal sealed record RuntimeConfiguration(
             Xr.SimulatorAcceptance.Provenance,
             Xr.DiagnosticRigProof.Provenance,
             Xr.DiagnosticMuzzleFlash.Provenance,
+            Pickup.Provenance,
             Pool.Provenance,
             Door.Provenance,
             Hud.Provenance,
@@ -153,6 +271,10 @@ internal sealed record RuntimeConfiguration(
         RequireUnitInterval(Xr.SnapTurnResetThreshold, nameof(Xr.SnapTurnResetThreshold));
         if (Xr.SnapTurnResetThreshold >= Xr.SnapTurnActivationThreshold)
             throw new InvalidOperationException("XR snap-turn reset threshold must be lower than activation.");
+        RequirePositive(Pickup.HoldDistanceMeters, nameof(Pickup.HoldDistanceMeters));
+        if (Pickup.CollisionLayer == 0 || Pickup.CollisionMask == 0)
+            throw new InvalidOperationException(
+                "Pickup collision layer and mask must be nonzero.");
         if (Pool.FlatStrikeSpeedsMetersPerSecond.Count < 1 ||
             Pool.FlatStrikeSpeedsMetersPerSecond.Any(value => !float.IsFinite(value) || value <= 0.0f))
             throw new InvalidOperationException("Pool flat strike speeds must be nonempty and positive.");
@@ -703,6 +825,7 @@ internal sealed record DesktopInputConfiguration(
     DesktopKeyBindingConfiguration MoveForward,
     DesktopKeyBindingConfiguration MoveBackward,
     DesktopKeyBindingConfiguration Activate,
+    DesktopKeyBindingConfiguration Grab,
     DesktopKeyBindingConfiguration Reload,
     DesktopKeyBindingConfiguration Save,
     DesktopKeyBindingConfiguration Cancel,
@@ -722,6 +845,7 @@ internal sealed record DesktopInputConfiguration(
             yield return MoveForward;
             yield return MoveBackward;
             yield return Activate;
+            yield return Grab;
             yield return Reload;
             yield return Save;
             yield return Cancel;
@@ -770,6 +894,12 @@ internal sealed record DesktopInputConfiguration(
             throw new InvalidOperationException("Desktop input acceptance values must be positive.");
     }
 }
+
+internal sealed record PickupConfiguration(
+    ConfigurationProvenance Provenance,
+    float HoldDistanceMeters,
+    uint CollisionLayer,
+    uint CollisionMask);
 
 internal sealed record DesktopKeyBindingConfiguration(
     string Action,

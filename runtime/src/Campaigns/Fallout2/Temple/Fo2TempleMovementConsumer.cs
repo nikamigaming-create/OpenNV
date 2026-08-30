@@ -117,9 +117,17 @@ internal sealed class Fo2TempleMovementConsumer
             !_entryComponent.Contains(targetTile))
             throw new InvalidOperationException(
                 "Fallout 2 Temple target path must begin at the entry and remain in its component.");
-        var parents = new Dictionary<int, int> { [EntryTile] = -1 };
+        return BuildShortestPath(EntryTile, targetTile);
+    }
+
+    internal IReadOnlyList<int> BuildShortestPath(int startTile, int targetTile)
+    {
+        if (!_entryComponent.Contains(startTile) || !_entryComponent.Contains(targetTile))
+            throw new InvalidOperationException(
+                "Fallout 2 Temple path endpoints must remain in the source entry component.");
+        var parents = new Dictionary<int, int> { [startTile] = -1 };
         var queue = new Queue<int>();
-        queue.Enqueue(EntryTile);
+        queue.Enqueue(startTile);
         while (queue.Count > 0 && !parents.ContainsKey(targetTile))
         {
             var tile = queue.Dequeue();
@@ -137,6 +145,11 @@ internal sealed class Fo2TempleMovementConsumer
         for (var tile = targetTile; tile >= 0; tile = parents[tile])
             reversed.Add(tile);
         reversed.Reverse();
+        if (reversed.Count == 0 || reversed[0] != startTile || reversed[^1] != targetTile ||
+            reversed.Zip(reversed.Skip(1)).Any(row =>
+                !Fo1HexMath.Neighbors(row.First).Contains(row.Second)))
+            throw new InvalidOperationException(
+                "Fallout 2 Temple source path reconstruction is invalid.");
         return reversed;
     }
 

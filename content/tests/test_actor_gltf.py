@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
@@ -22,20 +23,24 @@ from actor_gltf import (  # noqa: E402
     _converted_matrix,
     _converted_xyz_rotation,
     _facegen_rigid_attachment_matrix,
+    _facegen_rigid_head_attachment_matrix,
     _hardware_vertex_weights,
     _multiply,
     _quadratic_vector_keys,
     _rigid_attachment,
     _resolve_retail_rigid_part,
+    _sample_animated_parent_tracks,
     _sample_transform_interpolator,
+    _source_skin_bone_inverse_bind,
     _unsupported_actor_geometry,
     _uses_retail_biped_head_basis,
     _visible_creature_geometry_names,
     actor_animation_translations,
+    animation_sequence_manifest,
     furniture_marker_manifest,
+    FACEGEN_RIGID_NORMAL_ACTOR_BASIS,
     _accumulation_root_source_translation,
     _world_authoritative_accumulation_root_translations,
-    gltf_skeleton_inverse_binds,
 )
 from facegen_animation import (  # noqa: E402
     FaceGenDifferentialMorph,
@@ -57,6 +62,36 @@ from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class ActorGltfTest(unittest.TestCase):
+    def test_animation_sequence_manifest_preserves_transform_priorities(self):
+        sequence = NifFormat.NiControllerSequence()
+        sequence.name = "SyntheticLayeredPose"
+        sequence.start_time = 0.0
+        sequence.stop_time = 2.5
+        sequence.cycle_type = 2
+        sequence.num_controlled_blocks = 3
+        sequence.controlled_blocks.update_size()
+        for controlled, (node_name, priority) in zip(
+            sequence.controlled_blocks,
+            (("Bip01", 35), ("Bip01 Spine2", 50), ("Bip01 R Hand", 50)),
+        ):
+            controlled.node_name = node_name
+            controlled.controller_type = "NiTransformController"
+            controlled.priority = priority
+
+        with patch(
+            "actor_gltf._read_nif",
+            return_value=SimpleNamespace(roots=[sequence]),
+        ):
+            manifest = animation_sequence_manifest(b"synthetic-owned-kf")
+
+        self.assertEqual(manifest["sequenceName"], "SyntheticLayeredPose")
+        self.assertEqual(manifest["stopSeconds"], 2.5)
+        self.assertEqual(manifest["cycleType"], 2)
+        self.assertEqual(
+            manifest["transformPrioritiesByNode"],
+            {"Bip01": 35, "Bip01 R Hand": 50, "Bip01 Spine2": 50},
+        )
+
     @staticmethod
     def _retail_part(
         geometry_name: str,
@@ -344,6 +379,66 @@ class ActorGltfTest(unittest.TestCase):
         self.assertEqual(
             nodes[1]["matrix"][12:15],
             [1.0, 3.0, -2.0],
+        )
+
+    def test_facegen_rigid_parts_reuse_exact_head_skin_inverse_bind(self):
+        exact = NifFormat.Matrix44()
+        exact.set_identity()
+        exact.m_12 = -1.0
+        exact.m_21 = 1.0
+        exact.m_41 = 0.125
+        head_bone = SimpleNamespace(name="Bip01 Head")
+        source = SimpleNamespace(
+            skin_instance=SimpleNamespace(
+                bones=[head_bone],
+                data=SimpleNamespace(
+                    bone_list=[SimpleNamespace(get_transform=lambda: exact)],
+                ),
+            ),
+        )
+
+        attachment = _source_skin_bone_inverse_bind(
+            source,
+            "Bip01 Head",
+            None,
+        )
+
+        self.assertEqual(attachment, _converted_matrix(exact))
+        self.assertEqual(
+            FACEGEN_RIGID_NORMAL_ACTOR_BASIS,
+            "owned-normal-actor-facegen-prn-via-exact-head-skin-inverse-bind",
+        )
+
+    def test_facegen_rigid_parts_require_unique_head_skin_inverse_bind(self):
+        source = SimpleNamespace(
+            skin_instance=SimpleNamespace(
+                bones=[SimpleNamespace(name="Bip01 Neck")],
+                data=SimpleNamespace(
+                    bone_list=[SimpleNamespace(get_transform=lambda: None)],
+                ),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "no unique source inverse bind"):
+            _source_skin_bone_inverse_bind(source, "Bip01 Head", None)
+
+    def test_facegen_exact_head_bind_keeps_owned_rigid_translation(self):
+        head_bind = [
+            [0.0, 1.0, 0.0, 4.0],
+            [-1.0, 0.0, 0.0, 5.0],
+            [0.0, 0.0, 1.0, 6.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+        self.assertEqual(
+            _facegen_rigid_head_attachment_matrix(
+                head_bind,
+                [1.0, 2.0, 3.0],
+            ),
+            [
+                [0.0, 1.0, 0.0, 7.0],
+                [-1.0, 0.0, 0.0, 4.0],
+                [0.0, 0.0, 1.0, 4.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
         )
 
     def test_prn_head_apparel_uses_the_same_owned_biped_head_basis(self):
@@ -636,6 +731,52 @@ class ActorGltfTest(unittest.TestCase):
 
         self.assertEqual(translations, [(0.0, 36.85, -0.0)] * 2)
         self.assertEqual(rotations, [(0.0, 0.0, 0.0, 1.0)] * 2)
+
+    def test_sampled_camera_contract_includes_authored_nonaccum_parent(self):
+        sequence = NifFormat.NiControllerSequence()
+        sequence.num_controlled_blocks = 1
+        sequence.controlled_blocks.update_size()
+        controlled = sequence.controlled_blocks[0]
+        controlled.node_name = "Bip01 NonAccum"
+        controlled.controller_type = "NiTransformController"
+        interpolator = NifFormat.NiTransformInterpolator()
+        interpolator.translation.x = 2.0
+        interpolator.translation.y = 3.0
+        interpolator.translation.z = 4.0
+        interpolator.rotation.w = 1.0
+        interpolator.rotation.x = 0.0
+        interpolator.rotation.y = 0.0
+        interpolator.rotation.z = 0.0
+        controlled.interpolator = interpolator
+        parent = NifFormat.NiNode()
+        parent.name = "Bip01 NonAccum"
+
+        tracks = _sample_animated_parent_tracks(
+            sequence,
+            [parent],
+            [0.0, 1.0],
+            0.0,
+            1.0,
+        )
+
+        self.assertEqual(len(tracks), 1)
+        self.assertEqual(tracks[0]["parentChainIndex"], 0)
+        self.assertEqual(tracks[0]["nodeName"], "Bip01 NonAccum")
+        self.assertEqual(
+            tracks[0]["samples"],
+            [
+                {
+                    "timeSeconds": 0.0,
+                    "translationGodotGameUnits": [2.0, 4.0, -3.0],
+                    "rotationQuaternionXyzw": [0.0, 0.0, 0.0, 1.0],
+                },
+                {
+                    "timeSeconds": 1.0,
+                    "translationGodotGameUnits": [2.0, 4.0, -3.0],
+                    "rotationQuaternionXyzw": [0.0, 0.0, 0.0, 1.0],
+                },
+            ],
+        )
 
     def test_invalid_transform_sentinel_does_not_publish_constant_channels(self):
         interpolator = NifFormat.NiTransformInterpolator()

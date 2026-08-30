@@ -191,11 +191,53 @@ internal static class ActorModelSlice
         if (channels < 1)
             throw new InvalidOperationException(
                 $"Actor animation {logicalPath} has no authored channels in {sidecarPath}.");
+        var runtimeAnimation = runtime.Player.GetAnimation(runtime.Name) ??
+            throw new InvalidOperationException(
+                $"Actor animation {logicalPath} has no imported Godot animation in {sidecarPath}.");
+        var sequenceName = source.TryGetProperty("sequenceName", out var sequenceSource)
+            ? sequenceSource.GetString()
+            : Path.GetFileNameWithoutExtension(logicalPath);
+        var startSeconds = source.TryGetProperty("startSeconds", out var startSource)
+            ? startSource.GetSingle()
+            : 0.0f;
+        var stopSeconds = source.TryGetProperty("stopSeconds", out var stopSource)
+            ? stopSource.GetSingle()
+            : (float)runtimeAnimation.Length;
+        var cycleType = source.TryGetProperty("cycleType", out var cycleSource)
+            ? cycleSource.GetInt32()
+            : (int)runtimeAnimation.LoopMode;
+        if (string.IsNullOrWhiteSpace(sequenceName))
+            throw new InvalidOperationException(
+                $"Actor animation {logicalPath} has no source or imported sequence name " +
+                $"in {sidecarPath}.");
+        if (!float.IsFinite(startSeconds) || !float.IsFinite(stopSeconds) ||
+            startSeconds != 0.0f || stopSeconds <= startSeconds)
+            throw new InvalidOperationException(
+                $"Actor animation {logicalPath} has invalid source timing in {sidecarPath}.");
+        var priorities = source.TryGetProperty(
+                "transformPrioritiesByNode",
+                out var prioritySource)
+            ? prioritySource
+                .EnumerateObject()
+                .ToDictionary(
+                    value => value.Name,
+                    value => value.Value.GetInt32(),
+                    StringComparer.Ordinal)
+            : new Dictionary<string, int>(StringComparer.Ordinal);
+        if (priorities.Any(value => value.Value < 0))
+            throw new InvalidOperationException(
+                $"Actor animation {logicalPath} has invalid transform priorities " +
+                $"in {sidecarPath}.");
         return new LoadedAnimation(
             logicalPath,
             sha256,
             rootDisposition,
             channels,
+            sequenceName,
+            startSeconds,
+            stopSeconds,
+            cycleType,
+            priorities,
             runtime.Name,
             runtime.Player);
     }
@@ -257,6 +299,12 @@ internal static class ActorModelSlice
         {
             var role = RequireSurfaceText(surface, "role", sidecarPath);
             var shape = RequireSurfaceText(surface, "shape", sidecarPath);
+            var sourceShape = RequireSurfaceText(surface, "sourceShape", sidecarPath);
+            var modelPath = RequireSurfaceText(surface, "modelPath", sidecarPath);
+            var modelSha256 = RequireSurfaceText(surface, "modelSha256", sidecarPath);
+            var sourceVertexCount = surface.GetProperty("vertices").GetInt32();
+            var sourceVertexFnv1a32 = OptionalSurfaceUInt32(
+                surface, "sourceVertexFnv1a32", sidecarPath) ?? 0;
             var runtimeNodeName = RequireSurfaceText(surface, "runtimeNodeName", sidecarPath);
             if (!declaredRuntimeNames.Add(runtimeNodeName))
                 throw new InvalidOperationException(
@@ -339,6 +387,11 @@ internal static class ActorModelSlice
             loaded.Add(new LoadedSurface(
                 role,
                 shape,
+                sourceShape,
+                modelPath,
+                modelSha256,
+                sourceVertexCount,
+                sourceVertexFnv1a32,
                 runtimeNodeName,
                 matches[0],
                 skinned,
@@ -508,6 +561,91 @@ internal static class ActorModelSlice
             : PosedWorldBounds(actor.Root, surfaces, includeWeapons: true).GetCenter();
     }
 
+    internal static IReadOnlyList<Vector3> PosedWorldVertices(
+        LoadedActor actor,
+        bool includeWeapons = true)
+    {
+        var vertices = new List<Vector3>();
+        VisitPosedWorldVertices(
+            actor.Root,
+            actor.Surfaces,
+            includeWeapons,
+            vertices.Add);
+        if (vertices.Count == 0)
+            throw new InvalidOperationException(
+                "Actor scene contains no finite posed visual vertices.");
+        return vertices;
+    }
+
+    internal static IReadOnlyList<Vector3> PosedWorldVertices(
+        LoadedActor actor,
+        LoadedSurface surface)
+    {
+        var vertices = new List<Vector3>();
+        VisitPosedWorldVertices(
+            actor.Root,
+            [surface],
+            includeWeapons: true,
+            vertices.Add);
+        if (vertices.Count == 0)
+            throw new InvalidOperationException(
+                $"Actor surface contains no finite posed vertices: " +
+                $"{surface.Role}/{surface.Shape}.");
+        return vertices;
+    }
+
+    internal static IReadOnlyList<PosedTriangle> PosedWorldTriangles(
+        LoadedActor actor,
+        LoadedSurface surface)
+    {
+        var mesh = surface.Mesh.Mesh
+            ?? throw new InvalidOperationException(
+                $"Actor surface has no runtime mesh: {surface.Role}/{surface.Shape}.");
+        var skeleton = surface.Skinned
+            ? ResolveSkeleton(actor.Root, surface.Mesh)
+            : null;
+        var palette = surface.Skinned
+            ? BuildSkinPalette(surface, skeleton!)
+            : Array.Empty<Transform3D>();
+        var triangles = new List<PosedTriangle>();
+        for (var surfaceIndex = 0;
+             surfaceIndex < mesh.GetSurfaceCount();
+             surfaceIndex++)
+        {
+            var arrays = mesh.SurfaceGetArrays(surfaceIndex);
+            var vertices = PoseSurfaceVertices(surface, surfaceIndex, arrays, palette);
+            var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+            if (indices.Length == 0)
+            {
+                if (vertices.Length % 3 != 0)
+                    throw new InvalidOperationException(
+                        $"Unindexed actor triangle surface has a partial triangle: " +
+                        $"{surface.Role}/{surface.Shape}.");
+                for (var index = 0; index < vertices.Length; index += 3)
+                    triangles.Add(new PosedTriangle(
+                        vertices[index],
+                        vertices[index + 1],
+                        vertices[index + 2]));
+                continue;
+            }
+            if (indices.Length % 3 != 0 ||
+                indices.Any(index => index < 0 || index >= vertices.Length))
+                throw new InvalidOperationException(
+                    $"Indexed actor triangle surface is invalid: " +
+                    $"{surface.Role}/{surface.Shape}.");
+            for (var index = 0; index < indices.Length; index += 3)
+                triangles.Add(new PosedTriangle(
+                    vertices[indices[index]],
+                    vertices[indices[index + 1]],
+                    vertices[indices[index + 2]]));
+        }
+        if (triangles.Count == 0)
+            throw new InvalidOperationException(
+                $"Actor surface contains no posed triangles: " +
+                $"{surface.Role}/{surface.Shape}.");
+        return triangles;
+    }
+
     private static Aabb PosedWorldBounds(
         Node3D actorRoot,
         IReadOnlyList<LoadedSurface> surfaces,
@@ -522,6 +660,26 @@ internal static class ActorModelSlice
             float.NegativeInfinity,
             float.NegativeInfinity);
         var points = 0;
+        VisitPosedWorldVertices(actorRoot, surfaces, includeWeapons, Expand);
+        if (points < 1 || !minimum.IsFinite() || !maximum.IsFinite())
+            throw new InvalidOperationException(
+                "Actor scene contains no finite posed visual bounds.");
+        return new Aabb(minimum, maximum - minimum);
+
+        void Expand(Vector3 point)
+        {
+            minimum = minimum.Min(point);
+            maximum = maximum.Max(point);
+            points++;
+        }
+    }
+
+    private static void VisitPosedWorldVertices(
+        Node3D actorRoot,
+        IReadOnlyList<LoadedSurface> surfaces,
+        bool includeWeapons,
+        Action<Vector3> visit)
+    {
         foreach (var surface in surfaces.Where(surface =>
                      includeWeapons || surface.Role != WeaponSurfaceRole))
         {
@@ -539,78 +697,79 @@ internal static class ActorModelSlice
                  surfaceIndex++)
             {
                 var arrays = mesh.SurfaceGetArrays(surfaceIndex);
-                var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-                if (vertices.Length < 1)
-                    throw new InvalidOperationException(
-                        $"Actor surface contains no vertices: {surface.Role}/{surface.Shape}.");
-                if (!surface.Skinned)
-                {
-                    foreach (var vertex in vertices)
-                        Expand(surface.Mesh.ToGlobal(vertex));
-                    continue;
-                }
-
-                var bones = arrays[(int)Mesh.ArrayType.Bones].AsInt32Array();
-                var weights = arrays[(int)Mesh.ArrayType.Weights].AsFloat32Array();
-                var arrayMesh = mesh as ArrayMesh
-                    ?? throw new InvalidOperationException(
-                        $"Actor surface is not an ArrayMesh: " +
-                        $"{surface.Role}/{surface.Shape}.");
-                var format = arrayMesh.SurfaceGetFormat(surfaceIndex);
-                var influences = (format & Mesh.ArrayFormat.FlagUse8BoneWeights) != 0
-                    ? RenderingServer.ArrayWeightsSize * 2
-                    : RenderingServer.ArrayWeightsSize;
-                if (bones.Length != vertices.Length * influences ||
-                    weights.Length != bones.Length)
-                    throw new InvalidOperationException(
-                        $"Actor skin arrays disagree for {surface.Role}/{surface.Shape}: " +
-                        $"vertices={vertices.Length} bones={bones.Length} " +
-                        $"weights={weights.Length} influences={influences}.");
-                for (var vertexIndex = 0;
-                     vertexIndex < vertices.Length;
-                     vertexIndex++)
-                {
-                    var deformed = Vector3.Zero;
-                    var weightSum = 0.0f;
-                    var influenceStart = vertexIndex * influences;
-                    for (var influence = 0;
-                         influence < influences;
-                         influence++)
-                    {
-                        var weight = weights[influenceStart + influence];
-                        if (weight <= 0.0f)
-                            continue;
-                        var bindIndex = bones[influenceStart + influence];
-                        if (bindIndex < 0 || bindIndex >= palette.Length ||
-                            !float.IsFinite(weight))
-                            throw new InvalidOperationException(
-                                $"Actor skin influence is invalid for " +
-                                $"{surface.Role}/{surface.Shape}.");
-                        deformed += palette[bindIndex] * vertices[vertexIndex] * weight;
-                        weightSum += weight;
-                    }
-                    if (!float.IsFinite(weightSum) || weightSum <= 0.0f)
-                        throw new InvalidOperationException(
-                            $"Actor skin vertex has no finite weight for " +
-                            $"{surface.Role}/{surface.Shape}.");
-                    Expand(deformed / weightSum);
-                }
+                foreach (var vertex in PoseSurfaceVertices(
+                             surface,
+                             surfaceIndex,
+                             arrays,
+                             palette))
+                    Visit(vertex);
             }
         }
-        if (points < 1 || !minimum.IsFinite() || !maximum.IsFinite())
-            throw new InvalidOperationException(
-                "Actor scene contains no finite posed visual bounds.");
-        return new Aabb(minimum, maximum - minimum);
 
-        void Expand(Vector3 point)
+        void Visit(Vector3 point)
         {
             if (!point.IsFinite())
                 throw new InvalidOperationException(
                     "Actor posed visual bounds contain a non-finite vertex.");
-            minimum = minimum.Min(point);
-            maximum = maximum.Max(point);
-            points++;
+            visit(point);
         }
+    }
+
+    private static Vector3[] PoseSurfaceVertices(
+        LoadedSurface surface,
+        int surfaceIndex,
+        Godot.Collections.Array arrays,
+        IReadOnlyList<Transform3D> palette)
+    {
+        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        if (vertices.Length < 1)
+            throw new InvalidOperationException(
+                $"Actor surface contains no vertices: {surface.Role}/{surface.Shape}.");
+        if (!surface.Skinned)
+            return vertices.Select(surface.Mesh.ToGlobal).ToArray();
+
+        var bones = arrays[(int)Mesh.ArrayType.Bones].AsInt32Array();
+        var weights = arrays[(int)Mesh.ArrayType.Weights].AsFloat32Array();
+        var arrayMesh = surface.Mesh.Mesh as ArrayMesh
+            ?? throw new InvalidOperationException(
+                $"Actor surface is not an ArrayMesh: {surface.Role}/{surface.Shape}.");
+        var format = arrayMesh.SurfaceGetFormat(surfaceIndex);
+        var influences = (format & Mesh.ArrayFormat.FlagUse8BoneWeights) != 0
+            ? RenderingServer.ArrayWeightsSize * 2
+            : RenderingServer.ArrayWeightsSize;
+        if (bones.Length != vertices.Length * influences ||
+            weights.Length != bones.Length)
+            throw new InvalidOperationException(
+                $"Actor skin arrays disagree for {surface.Role}/{surface.Shape}: " +
+                $"vertices={vertices.Length} bones={bones.Length} " +
+                $"weights={weights.Length} influences={influences}.");
+        var posed = new Vector3[vertices.Length];
+        for (var vertexIndex = 0; vertexIndex < vertices.Length; vertexIndex++)
+        {
+            var deformed = Vector3.Zero;
+            var weightSum = 0.0f;
+            var influenceStart = vertexIndex * influences;
+            for (var influence = 0; influence < influences; influence++)
+            {
+                var weight = weights[influenceStart + influence];
+                if (weight <= 0.0f)
+                    continue;
+                var bindIndex = bones[influenceStart + influence];
+                if (bindIndex < 0 || bindIndex >= palette.Count ||
+                    !float.IsFinite(weight))
+                    throw new InvalidOperationException(
+                        $"Actor skin influence is invalid for " +
+                        $"{surface.Role}/{surface.Shape}.");
+                deformed += palette[bindIndex] * vertices[vertexIndex] * weight;
+                weightSum += weight;
+            }
+            if (!float.IsFinite(weightSum) || weightSum <= 0.0f)
+                throw new InvalidOperationException(
+                    $"Actor skin vertex has no finite weight for " +
+                    $"{surface.Role}/{surface.Shape}.");
+            posed[vertexIndex] = deformed / weightSum;
+        }
+        return posed;
     }
 
     private static Skeleton3D ResolveSkeleton(
@@ -714,12 +873,24 @@ internal static class ActorModelSlice
         string SourceSha256,
         string AccumulationRootTranslationDisposition,
         int Channels,
+        string SequenceName,
+        float StartSeconds,
+        float StopSeconds,
+        int CycleType,
+        IReadOnlyDictionary<string, int> TransformPrioritiesByNode,
         string RuntimeName,
         AnimationPlayer Player);
+
+    internal readonly record struct PosedTriangle(Vector3 A, Vector3 B, Vector3 C);
 
     internal readonly record struct LoadedSurface(
         string Role,
         string Shape,
+        string SourceShape,
+        string ModelPath,
+        string ModelSha256,
+        int SourceVertexCount,
+        uint SourceVertexFnv1a32,
         string RuntimeNodeName,
         MeshInstance3D Mesh,
         bool Skinned,

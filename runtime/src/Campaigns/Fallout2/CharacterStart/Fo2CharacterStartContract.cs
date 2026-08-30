@@ -206,6 +206,8 @@ internal sealed class Fo2CharacterStartCatalog
     internal const string FemaleFid = "0100003d";
     internal const string FemaleLogicalPath = "art\\critters\\hfprimaa.frm";
     internal const string FemaleWalkLogicalPath = "art\\critters\\hfprimab.frm";
+    internal const string FemaleEquippedIdleLogicalPath = "art\\critters\\hfprimga.frm";
+    internal const string FemaleEquippedWalkLogicalPath = "art\\critters\\hfprimgb.frm";
     internal const string FemalePrototypeLogicalPath = "proto\\critters\\00000002.pro";
     internal const string FemalePrototypePid = "01000002";
     private static readonly string[] SkillNames =
@@ -403,6 +405,12 @@ internal sealed class Fo2CharacterStartCatalog
             .Append($"{female.LogicalPath}|{female.SourceSha256}")
             .Append($"{female.Walk.LogicalPath}|{female.Walk.SourceSha256}")
             .Append(
+                $"{FemaleEquippedIdleLogicalPath}|" +
+                $"{female.EquippedWeapon.IdleDirections.Values.First().SourceSha256}")
+            .Append(
+                $"{female.EquippedWeapon.Walk.LogicalPath}|" +
+                $"{female.EquippedWeapon.Walk.SourceSha256}")
+            .Append(
                 $"proto\\critters\\critters.lst|" +
                 Fo2TemplePresentationCatalog.RequiredHash(
                     femaleRow.GetProperty("prototype"),
@@ -429,6 +437,15 @@ internal sealed class Fo2CharacterStartCatalog
                 female.Directions.Count ||
             counts.GetProperty("femaleWalkFramePngs").GetInt32() !=
                 female.Walk.Directions.Values.Sum(row => row.Count) ||
+            counts.GetProperty("femaleEquippedIdleDirectionPngs").GetInt32() !=
+                female.EquippedWeapon.IdleDirections.Count ||
+            counts.GetProperty("femaleEquippedWalkFramePngs").GetInt32() !=
+                female.EquippedWeapon.Walk.Directions.Values.Sum(row => row.Count) ||
+            counts.GetProperty("femaleClosedReliefArtifacts").GetInt32() !=
+                female.Directions.Count +
+                    female.Walk.Directions.Values.Sum(row => row.Count) +
+                    female.EquippedWeapon.IdleDirections.Count +
+                    female.EquippedWeapon.Walk.Directions.Values.Sum(row => row.Count) ||
             openingTail is not null &&
                 counts.GetProperty("openingTailPngs").GetInt32() != openingTail.Frames.Count ||
             openingTail is null && counts.TryGetProperty("openingTailPngs", out _) ||
@@ -590,6 +607,7 @@ internal sealed class Fo2CharacterStartCatalog
         string sourceProfileId)
     {
         var sourceSha256 = Fo2TemplePresentationCatalog.RequiredHash(row, "sourceSha256");
+        var expectedEquipped = expected.GetProperty("equippedWeapon");
         if (Fo2TemplePresentationCatalog.RequiredString(row, "fid") != FemaleFid ||
             Fo2TemplePresentationCatalog.RequiredString(row, "fid") !=
                 Fo2TemplePresentationCatalog.RequiredString(expected, "fid") ||
@@ -622,7 +640,37 @@ internal sealed class Fo2CharacterStartCatalog
             !ReadInts(expected.GetProperty("walkFrames")).SequenceEqual(
                 Enumerable.Range(0, Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection)) ||
             expected.GetProperty("walkFps").GetInt32() !=
-                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerSecond)
+                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerSecond ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expectedEquipped,
+                "itemFid") != Fo2ArroyoPlayerPresentationCatalog.ExpectedEquippedItemFid ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expectedEquipped,
+                "itemPid") != Fo2ArroyoPlayerPresentationCatalog.ExpectedEquippedItemPid ||
+            expectedEquipped.GetProperty("weaponAnimationCode").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedWeaponAnimationCode ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expectedEquipped,
+                "weaponArtSuffix") != "g" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expectedEquipped,
+                "idleAnimationCode") != "GA" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expectedEquipped,
+                "idleLogicalPath") != FemaleEquippedIdleLogicalPath ||
+            expectedEquipped.GetProperty("idleFrame").GetInt32() != 0 ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expectedEquipped,
+                "walkAnimationCode") != "GB" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expectedEquipped,
+                "walkLogicalPath") != FemaleEquippedWalkLogicalPath ||
+            !ReadInts(expectedEquipped.GetProperty("walkFrames")).SequenceEqual(
+                Enumerable.Range(0, Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection)) ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                expectedEquipped,
+                "geometryDisposition") !=
+                Fo2ArroyoPlayerPresentationCatalog.EquippedGeometryDisposition)
             throw new InvalidOperationException(
                 "Fallout 2 female player source binding drifted.");
         var prototype = row.GetProperty("prototype");
@@ -723,6 +771,107 @@ internal sealed class Fo2CharacterStartCatalog
                         Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection))))
             throw new InvalidOperationException(
                 "Fallout 2 female walk direction/frame coverage drifted.");
+        var equippedArt = row.GetProperty("equippedWeaponArt");
+        var equippedIdle = equippedArt.GetProperty("idle");
+        var equippedWalk = equippedArt.GetProperty("walk");
+        var equippedIdleSha256 = Fo2TemplePresentationCatalog.RequiredHash(
+            equippedIdle,
+            "sourceSha256");
+        var equippedWalkSha256 = Fo2TemplePresentationCatalog.RequiredHash(
+            equippedWalk,
+            "sourceSha256");
+        if (Fo2TemplePresentationCatalog.RequiredString(equippedArt, "itemFid") !=
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedEquippedItemFid ||
+            Fo2TemplePresentationCatalog.RequiredString(equippedArt, "itemPid") !=
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedEquippedItemPid ||
+            equippedArt.GetProperty("weaponAnimationCode").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedWeaponAnimationCode ||
+            Fo2TemplePresentationCatalog.RequiredString(equippedArt, "weaponArtSuffix") != "g" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                equippedArt,
+                "geometryDisposition") !=
+                Fo2ArroyoPlayerPresentationCatalog.EquippedGeometryDisposition ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                equippedIdle,
+                "animationCode") != "GA" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                equippedIdle,
+                "logicalPath") != FemaleEquippedIdleLogicalPath ||
+            equippedIdle.GetProperty("sourceBytes").GetInt64() <= 0 ||
+            equippedIdle.GetProperty("framesPerDirection").GetInt32() <= 0 ||
+            equippedIdle.GetProperty("animationPlayback").GetBoolean() ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                equippedWalk,
+                "animationCode") != "GB" ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                equippedWalk,
+                "logicalPath") != FemaleEquippedWalkLogicalPath ||
+            equippedWalk.GetProperty("sourceBytes").GetInt64() <= 0 ||
+            equippedWalk.GetProperty("fps").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerSecond ||
+            equippedWalk.GetProperty("actionFrame").GetInt32() != 0 ||
+            equippedWalk.GetProperty("framesPerDirection").GetInt32() !=
+                Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection ||
+            !equippedWalk.GetProperty("animationPlayback").GetBoolean())
+            throw new InvalidOperationException(
+                "Fallout 2 female Spear-equipped GA/GB binding drifted.");
+        var equippedIdleFrames = new Dictionary<int, Fo2ArroyoPlayerFrame>();
+        foreach (var artifact in equippedIdle.GetProperty("directions").EnumerateArray())
+        {
+            var frame = Fo2ArroyoPlayerPresentationCatalog.LoadFrame(
+                artifact,
+                cacheRoot,
+                "Fallout 2 female Spear-equipped idle PNG");
+            if (Fo2TemplePresentationCatalog.RequiredString(artifact, "kind") !=
+                    "female-player-equipped" ||
+                frame.LogicalPath != FemaleEquippedIdleLogicalPath ||
+                frame.SourceSha256 != equippedIdleSha256 || frame.Frame != 0 ||
+                frame.Direction is < 0 or >= Fo1HexMath.DirectionCount ||
+                !equippedIdleFrames.TryAdd(frame.Direction, frame))
+                throw new InvalidOperationException(
+                    "Fallout 2 female Spear-equipped idle artifact drifted.");
+        }
+        var equippedWalkFrames = new Dictionary<int, Dictionary<int, Fo2ArroyoPlayerFrame>>();
+        foreach (var artifact in equippedWalk.GetProperty("directions").EnumerateArray())
+        {
+            var frame = Fo2ArroyoPlayerPresentationCatalog.LoadFrame(
+                artifact,
+                cacheRoot,
+                "Fallout 2 female Spear-equipped walk PNG");
+            if (Fo2TemplePresentationCatalog.RequiredString(artifact, "kind") !=
+                    "female-player-equipped-walk" ||
+                frame.LogicalPath != FemaleEquippedWalkLogicalPath ||
+                frame.SourceSha256 != equippedWalkSha256 ||
+                frame.Direction is < 0 or >= Fo1HexMath.DirectionCount ||
+                frame.Frame is < 0 or >=
+                    Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection)
+                throw new InvalidOperationException(
+                    "Fallout 2 female Spear-equipped walk artifact drifted.");
+            if (!equippedWalkFrames.TryGetValue(frame.Direction, out var directionFrames))
+            {
+                directionFrames = new Dictionary<int, Fo2ArroyoPlayerFrame>();
+                equippedWalkFrames.Add(frame.Direction, directionFrames);
+            }
+            if (!directionFrames.TryAdd(frame.Frame, frame))
+                throw new InvalidOperationException(
+                    "Duplicate Fallout 2 female Spear-equipped walk artifact.");
+        }
+        var equippedWalkDirections = equippedWalkFrames.ToDictionary(
+            row => row.Key,
+            row => (IReadOnlyList<Fo2ArroyoPlayerFrame>)row.Value
+                .OrderBy(frame => frame.Key).Select(frame => frame.Value).ToArray());
+        if (!equippedIdleFrames.Keys.Order().SequenceEqual(
+                Enumerable.Range(0, Fo1HexMath.DirectionCount)) ||
+            !equippedWalkDirections.Keys.Order().SequenceEqual(
+                Enumerable.Range(0, Fo1HexMath.DirectionCount)) ||
+            equippedWalkDirections.Values.Any(direction =>
+                direction.Count != Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection ||
+                !direction.Select(frame => frame.Frame).SequenceEqual(
+                    Enumerable.Range(
+                        0,
+                        Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerDirection))))
+            throw new InvalidOperationException(
+                "Fallout 2 female Spear-equipped direction/frame coverage drifted.");
         return new Fo2ArroyoPlayerPresentationSource(
             sourceProfileId,
             "CHOSEN_ONE_OWNED_HFPRIM_DIRECTIONAL_FRM",
@@ -739,7 +888,23 @@ internal sealed class Fo2CharacterStartCatalog
                 walkSourceSha256,
                 walkArt.GetProperty("fps").GetInt32(),
                 walkArt.GetProperty("actionFrame").GetInt32(),
-                walkDirections));
+                walkDirections),
+            new Fo2ArroyoEquippedWeaponPresentation(
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedEquippedItemFid,
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedEquippedItemPid,
+                Fo2ArroyoPlayerPresentationCatalog.ExpectedWeaponAnimationCode,
+                "g",
+                Fo2ArroyoPlayerPresentationCatalog.EquippedGeometryDisposition,
+                equippedIdleFrames,
+                new Fo2ArroyoPlayerAnimation(
+                    "GB",
+                    FemaleEquippedWalkLogicalPath,
+                    equippedWalkSha256,
+                    equippedWalk.GetProperty("fps").GetInt32(),
+                    equippedWalk.GetProperty("actionFrame").GetInt32(),
+                    equippedWalkDirections)),
+            Fo2ArroyoPlayerPresentationCatalog.ExpectedReliefDepthMeters,
+            Fo2ArroyoPlayerPresentationCatalog.ExpectedReliefSideRoughness);
     }
 
     private static int[] ReadInts(JsonElement source) =>

@@ -21,7 +21,7 @@
     "multihexCoverage": "central-source-hex-only-unresolved"
   },
   "presentation": {
-    "mode": "owned-critter-frm-idle-and-ab-walk",
+    "mode": "exact-owned-fo2-frm-alpha-island-molded-relief-v2",
     "recipeId": "fo2-arroyo-player-presentation-v1",
     "fid": "0100003e",
     "logicalPath": "art\\critters\\hmwarraa.frm",
@@ -31,7 +31,7 @@
     "walkFramesPerDirection": 8,
     "walkFramesPerSecond": 10,
     "directionMode": "nearest-source-hex-direction-from-input",
-    "billboard": "fixed-y",
+    "billboard": "fixed-y-camera-facing-molded-owned-critter-composite",
     "animationPlayback": true
   },
   "player": {
@@ -47,8 +47,10 @@
   },
   "camera": {
     "projection": "orthographic-follow",
-    "sizeMeters": 12.0,
-    "offsetMeters": [-8.0, 10.0, 9.0],
+    "compositionMode": "owned-640x480-width-fit-source-pixel-scale-hud-crop-v1",
+    "sourceFramePixels": [640, 480],
+    "sourceHudCropHeightPixels": 99,
+    "offsetMeters": [-6.0, 8.0, 7.0],
     "lookHeightMeters": 0.65,
     "nearMeters": 0.05,
     "farMeters": 180.0
@@ -78,12 +80,14 @@
     "persistentInteraction": false,
     "playerStatePersistent": true,
     "playerArtLoaded": true,
+    "ownedClassicHudSourcePixels": true,
     "playableCampaign": false,
     "collisionParity": false,
     "walkabilityParity": false
   },
   "unsupported": [
-    "tag/trait editing, appearance editing, animation beyond owned AA idle and AB walk, inventory, combat, scripts, quests, audio, HUD, and Pip-Boy",
+    "Fallout 2 authored volumetric humanoid mesh parity; gameplay uses exact owned directional composite FRM pixels molded into bounded relief",
+    "tag/trait editing, appearance editing, animation beyond owned AA idle and AB walk, inventory, combat, scripts, quests, audio, classic HUD behavior/state parity, and Pip-Boy",
     "multihex footprint expansion beyond the stored central source hex",
     "retail collision and walkability parity",
     "FPS and OpenXR interaction",

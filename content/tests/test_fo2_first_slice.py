@@ -198,6 +198,14 @@ class Fo2FirstSliceTest(unittest.TestCase):
             item_list = b"unused.pro\r\n" * 6 + b"00000013.pro\r\n"
             critter_art_list = b"unused.frm\r\n" * 64 + b"nmwarr,11,1\r\n"
             item_art_list = b"unused.frm\r\n" * 42 + b"spear.frm\r\n"
+            guardian_script = b"synthetic hash-bound ACKlint INT bytecode"
+            guardian_messages = b"".join(
+                f"{{{message_id}}}{{}}{{guardian {message_id}}}\r\n".encode("ascii")
+                for message_id in range(103, 121)
+            )
+            script_entries = ["unused.int"] * 751
+            script_entries[750] = "ACKlint.int"
+            scripts_list = ("\r\n".join(script_entries) + "\r\n").encode("ascii")
             (install / "master.dat").write_bytes(
                 synthetic_dat2(
                     [
@@ -212,6 +220,9 @@ class Fo2FirstSliceTest(unittest.TestCase):
                         ("art\\items\\spear.frm", synthetic_frm(), True),
                         ("text\\english\\game\\pro_crit.msg", b"{300}{}{Villager}\r\n", False),
                         ("text\\english\\game\\pro_item.msg", b"{700}{}{Spear}\r\n", False),
+                        ("text\\english\\dialog\\acklint.msg", guardian_messages, False),
+                        ("scripts\\acklint.int", guardian_script, False),
+                        ("scripts\\scripts.lst", scripts_list, False),
                     ]
                 )
             )
@@ -290,6 +301,89 @@ class Fo2FirstSliceTest(unittest.TestCase):
                                 "critter": "text\\english\\game\\pro_crit.msg",
                                 "item": "text\\english\\game\\pro_item.msg",
                             },
+                            "guardianScript": {
+                                "program": {
+                                    "scriptsListIndex": 750,
+                                    "logicalPath": "scripts\\acklint.int",
+                                    "sha256": hashlib.sha256(guardian_script).hexdigest(),
+                                },
+                                "messageCatalog": {
+                                    "logicalPath": "text\\english\\dialog\\acklint.msg",
+                                    "sha256": hashlib.sha256(guardian_messages).hexdigest(),
+                                    "messageListId": 751,
+                                },
+                                "preTrialPlayerArtFids": ["0100003d", "0100003e"],
+                                "initialNode": "Node001",
+                                "terminalNode": "Node999",
+                                "nodes": [
+                                    {
+                                        "id": "Node001",
+                                        "reply": [
+                                            {"messageId": 103},
+                                            {"playerName": True},
+                                            {"messageId": 104},
+                                        ],
+                                        "options": [
+                                            {"messageId": 105, "target": "Node002", "maximumIntelligence": 3, "reaction": 50},
+                                            {"messageId": 106, "target": "Node003", "minimumIntelligence": 4, "reaction": 50},
+                                            {"messageId": 107, "target": "Node004", "minimumIntelligence": 4, "reaction": 50},
+                                            {"messageId": 108, "target": "Node999", "minimumIntelligence": 4, "reaction": 50},
+                                        ],
+                                    },
+                                    {
+                                        "id": "Node002",
+                                        "reply": [
+                                            {"messageId": 109},
+                                            {"playerName": True},
+                                            {"messageId": 110},
+                                        ],
+                                        "options": [
+                                            {"messageId": 111, "target": "Node999", "maximumIntelligence": 3, "reaction": 50},
+                                        ],
+                                    },
+                                    {
+                                        "id": "Node003",
+                                        "reply": [
+                                            {"messageId": 112},
+                                            {"playerName": True},
+                                            {"messageId": 113},
+                                        ],
+                                        "options": [
+                                            {"messageId": 114, "target": "Node999", "minimumIntelligence": 4, "reaction": 50},
+                                            {"messageId": 115, "target": "Node004", "minimumIntelligence": 4, "reaction": 50},
+                                            {"messageId": 116, "target": "Node005", "minimumIntelligence": 4, "reaction": 50},
+                                        ],
+                                    },
+                                    {
+                                        "id": "Node004",
+                                        "reply": [{"messageId": 117}],
+                                        "options": [
+                                            {"messageId": 118, "target": "Node999", "minimumIntelligence": 4, "reaction": 50},
+                                        ],
+                                    },
+                                    {
+                                        "id": "Node005",
+                                        "reply": [{"messageId": 119}],
+                                        "options": [
+                                            {"messageId": 120, "target": "Node999", "minimumIntelligence": 4, "reaction": 50},
+                                        ],
+                                    },
+                                ],
+                                "hostilityTrigger": {
+                                    "pickupProcedure": {
+                                        "requiresSourcePlayer": True,
+                                        "localVariable": 5,
+                                        "setValue": 2,
+                                    },
+                                    "critterProcedure": {
+                                        "localVariable": 5,
+                                        "requiredValue": 2,
+                                        "requiresCanSeePlayer": True,
+                                        "setValueBeforeAttack": 1,
+                                        "attackPlayer": True,
+                                    },
+                                },
+                            },
                         },
                         "declaredRole": "synthetic Temple source slice",
                         "unsupported": ["runtime"],
@@ -315,6 +409,15 @@ class Fo2FirstSliceTest(unittest.TestCase):
                 confrontation["defeatLoot"]["prototype"]["weapon"]["actionPointCostPrimary"],
                 4,
             )
+            guardian = confrontation["guardianScript"]
+            self.assertEqual(guardian["program"]["scriptsListIndex"], 750)
+            self.assertEqual(guardian["program"]["sha256"], hashlib.sha256(guardian_script).hexdigest())
+            self.assertEqual(guardian["messageCatalog"]["messageListId"], 751)
+            self.assertEqual([row["id"] for row in guardian["nodes"]], ["Node001", "Node002", "Node003", "Node004", "Node005"])
+            self.assertEqual(guardian["nodes"][2]["options"][2]["messageId"], 116)
+            self.assertEqual(guardian["nodes"][2]["options"][2]["target"], "Node005")
+            self.assertTrue(guardian["implementedBoundary"]["dialogueNodes"])
+            self.assertFalse(guardian["implementedBoundary"]["generalIntExecution"])
             self.assertTrue(document["promotion"]["transported"])
             self.assertFalse(document["runtimeCompatibility"]["ready"])
             self.assertFalse(document["retailOrDerivedAssetsPackaged"])

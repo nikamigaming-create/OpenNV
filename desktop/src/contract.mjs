@@ -1,4 +1,9 @@
 import launcherState from "./launcher-state.json" with { type: "json" };
+export {
+  FO3_STAGE10_ROUTE_CONTRACT,
+  preflightFo3Stage10Launch,
+  probeFo3Stage10Launch
+} from "./fo3-stage10-routing-contract.mjs";
 
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
@@ -10,6 +15,9 @@ const CONTRACT = deepFreeze(launcherState);
 export const LAUNCHER_STATE_SCHEMA = CONTRACT.schema;
 export const CAMPAIGNS = CONTRACT.campaigns;
 export const EXTENDER_LAYERS = CONTRACT.extenderLayers;
+export const TTW_OPENING_ROUTE_IDS = Object.freeze(["ttw-fo3", "ttw-fnv"]);
+
+const TTW_OPENING_ROUTE_ID_SET = new Set(TTW_OPENING_ROUTE_IDS);
 
 function defaultRuntime(platform) {
   const windows = platform === "win32";
@@ -122,8 +130,14 @@ export function mergeRuntimeState(
 }
 
 export function validateLaunchRequest(request) {
-  const campaign = CAMPAIGNS.find((entry) => entry.id === request?.campaign);
+  const routeId = String(request?.campaign ?? "").toLowerCase();
+  const ttwOpening = TTW_OPENING_ROUTE_ID_SET.has(routeId) ? routeId : null;
+  const campaign = CAMPAIGNS.find((entry) =>
+    entry.id === (ttwOpening ? "ttw" : routeId));
   if (!campaign) throw new Error(CONTRACT.copy.invalidCampaign);
+  if (campaign.id === "ttw" && !ttwOpening) {
+    throw new Error(CONTRACT.copy.ttwOpeningRequired);
+  }
   if (request?.enableJam && !campaign.jam) {
     throw new Error(CONTRACT.copy.jamUnavailable);
   }
@@ -138,6 +152,8 @@ export function validateLaunchRequest(request) {
   }
   return {
     campaign,
+    routeId,
+    ttwOpening,
     enableJam: Boolean(request?.enableJam),
     enableVr: presentation === "openxr",
     presentation
@@ -145,7 +161,7 @@ export function validateLaunchRequest(request) {
 }
 
 export function createRuntimeArguments(
-  { campaign, enableJam, enableVr, presentation },
+  { campaign, ttwOpening, enableJam, enableVr, presentation },
   {
     fallout1Profile = null,
     fallout2Profile = null,
@@ -215,27 +231,39 @@ export function createRuntimeArguments(
     if (enableVr) args.push("--vr");
     return args;
   }
-  if (!ttwProfile?.ready || !ttwProfile?.openingValidated ||
-      !ttwProfile?.openingProfilePath || !ttwProfile?.sourceNamespacePath ||
+  if (!ttwProfile?.validated || !ttwProfile?.sourceNamespacePath ||
       !ttwProfile?.cacheCompatibilityId || !ttwProfile?.cacheRoot ||
       !ttwProfile?.saveCompatibilityId) {
     throw new Error(CONTRACT.copy.ttwProfileUnavailable);
   }
-  const args = [
-    "--xr-mode", enableVr ? "on" : "off", "--",
-    "--campaign", campaign.engineCampaign,
-    "--ttw-profile", ttwProfile.path,
-    "--ttw-source-namespace", ttwProfile.sourceNamespacePath,
-    "--ttw-fo3-opening-profile", ttwProfile.openingProfilePath,
-    "--ttw-cache-compatibility-id", ttwProfile.cacheCompatibilityId,
-    "--ttw-cache-root", ttwProfile.cacheRoot,
-    "--save-compatibility-id", ttwProfile.saveCompatibilityId,
-    "--save-path", ttwProfile.savePath
-  ];
-  if (enableJam) {
-    if (!jamProfile?.ready) throw new Error(CONTRACT.copy.jamProfileUnavailable);
-    args.push("--enable-jam", "--jam-profile", jamProfile.path);
+  const opening = ttwProfile.openings?.[ttwOpening];
+  if (!opening?.interactiveReady) {
+    throw new Error(opening?.blocker || CONTRACT.copy.ttwOpeningUnavailable);
   }
-  if (enableVr) args.push("--vr");
-  return args;
+  throw new Error(CONTRACT.copy.ttwInteractiveAdapterUnavailable);
+}
+
+export function createTtwOpeningProofArguments(
+  ttwOpening,
+  ttwProfile,
+  { mode, reportPath } = {}
+) {
+  if (ttwOpening !== "ttw-fo3") {
+    throw new Error(CONTRACT.copy.ttwFnvProofUnavailable);
+  }
+  const opening = ttwProfile?.openings?.[ttwOpening];
+  if (!ttwProfile?.validated || !opening?.proofValidated ||
+      !opening?.proofProfilePath || !ttwProfile?.savePath) {
+    throw new Error(CONTRACT.copy.ttwProfileUnavailable);
+  }
+  if (!["apply", "restore"].includes(mode) || !reportPath) {
+    throw new Error(CONTRACT.copy.ttwProofArgumentsInvalid);
+  }
+  return [
+    "--xr-mode", "off", "--",
+    "--ttw-fo3-opening-profile", opening.proofProfilePath,
+    "--ttw-fo3-opening-proof", mode,
+    "--save-path", ttwProfile.savePath,
+    "--report", reportPath
+  ];
 }

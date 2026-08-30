@@ -3,7 +3,7 @@
   "id": "fo1-campaign-presentation-v1",
   "runtimeProfile": {
     "path": "fo1-classic-3d-runtime-v1.json",
-    "sha256": "4c1db12df1aba2237e010a93196dbf968a61039f0dbba6f7610d996a360acb6a"
+    "sha256": "12c10873da090804ae682fc8c49d4c4cf6dc0eb6323777ddf9bbe817c3f520a2"
   },
   "source": {
     "fallout2MasterSha256": "9b096d3035edafd4077deeb8ee7877a803b9db98497aa4596624b5c058a84711",

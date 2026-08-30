@@ -34,8 +34,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     private readonly Control _canvas;
     private readonly LineEdit _name;
     private readonly TextureRect _portrait;
-    private readonly Fo2ProceduralHeadPreview _headPreview;
-    private readonly Button _previewToggle;
+    private readonly Fo2HumanoidDonorContract _humanoidDonor;
     private readonly Label _faceShape;
     private readonly Label _hairStyle;
     private readonly Label _skinTone;
@@ -65,11 +64,14 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     internal Fo2CustomCharacterEditor(
         Fo2CharacterStartCatalog catalog,
         Fo2PremadeCharacter source,
-        bool modify)
+        bool modify,
+        Fo2HumanoidDonorContract humanoidDonor)
     {
         _catalog = catalog;
         _source = source;
         _modify = modify;
+        _humanoidDonor = humanoidDonor;
+        _ = _humanoidDonor.ForSex(source.Profile.Sex);
         _ageValue = source.Profile.Age;
         _sexValue = source.Profile.Sex;
         _special = source.Profile.Special.ToArray();
@@ -140,22 +142,6 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
             MouseFilter = MouseFilterEnum.Ignore,
         };
         _canvas.AddChild(_portrait);
-        _headPreview = new Fo2ProceduralHeadPreview
-        {
-            Position = _portrait.Position,
-            Size = _portrait.Size,
-        };
-        _canvas.AddChild(_headPreview);
-        _previewToggle = AddButton(
-            "LIVE 3D",
-            PreviewToggleX,
-            PreviewToggleY,
-            PreviewToggleWidth,
-            PreviewToggleHeight,
-            TogglePreviewMode,
-            FaceLabelFontSize);
-        _previewToggle.TooltipText =
-            "Toggle the local procedural portrait and matching live 3D head";
         AddButton(
             "◀",
             ControlX,
@@ -425,8 +411,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     internal string BrowStyleId => Fo2ProceduralPortrait.BrowStyles[_browStyleIndex];
     internal string NoseStyleId => Fo2ProceduralPortrait.NoseStyles[_noseStyleIndex];
     internal string MouthStyleId => Fo2ProceduralPortrait.MouthStyles[_mouthStyleIndex];
-    internal bool Live3DVisible => _headPreview.Visible;
-    internal Fo2ProceduralHeadPreview HeadPreview => _headPreview;
+    internal bool Live3DVisible => false;
     internal IReadOnlyList<int> Special => _special;
     internal int AllocatedSpecial => _special.Sum();
     internal bool CanConfirm =>
@@ -465,6 +450,7 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
     {
         if (value is not "Male" and not "Female")
             throw new ArgumentOutOfRangeException(nameof(value));
+        _ = _humanoidDonor.ForSex(value);
         _sexValue = value;
         Refresh();
     }
@@ -533,15 +519,8 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
         SetMouthStyleIndex(index);
     }
 
-    internal void TogglePreviewMode()
-    {
-        _headPreview.Visible = !_headPreview.Visible;
-        _portrait.Visible = !_headPreview.Visible;
-        _previewToggle.Text = _headPreview.Visible ? "PORTRAIT" : "LIVE 3D";
-        SetMeta("custom_preview_mode", _headPreview.Visible
-            ? "local-procedural-live-3d-head"
-            : Fo2CharacterAppearanceContract.GeneratedPortraitPreview);
-    }
+    internal void TogglePreviewMode() => throw new InvalidOperationException(
+        "Fallout 2 custom character has no substitute live 3D head; the hash-bound donor is used after selection.");
 
     internal void SetAge(int value)
     {
@@ -695,16 +674,6 @@ internal sealed partial class Fo2CustomCharacterEditor : Control
                 BrowStyleId,
                 NoseStyleId,
                 MouthStyleId));
-        _headPreview.SetIdentity(
-            _sexValue,
-            FaceShapeId,
-            HairStyleId,
-            SkinToneId,
-            HairColorId,
-            EyeColorId,
-            BrowStyleId,
-            NoseStyleId,
-            MouthStyleId);
         _age.Text = _ageValue.ToString();
         for (var index = 0; index < _special.Length; index++)
             _specialValues[index].Text = _special[index].ToString("00");

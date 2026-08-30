@@ -7,6 +7,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from PIL import Image
@@ -16,6 +17,7 @@ TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from fo2_profile import inspect_fo2_profile  # noqa: E402
+import prepare_fo2_temple_presentation as temple_presentation  # noqa: E402
 from prepare_fo2_temple_presentation import (  # noqa: E402
     CACHE_MANIFEST_NAME,
     FLOOR_ALPHA_FILL,
@@ -62,6 +64,48 @@ def synthetic_floor_frm() -> bytes:
 
 
 class Fo2TemplePresentationTest(unittest.TestCase):
+    def test_rejects_transition_output_with_a_different_source_join(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile_path = root / "fallout2-profile.json"
+            profile_path.write_text("{}", encoding="utf-8")
+            source_path = root / "temple-source.json"
+            source_path.write_text("{}", encoding="utf-8")
+            document = {
+                "sourceManifest": {"sha256": file_sha256(source_path)},
+                "sourceProfile": {
+                    "sourceProfileId": "source-profile-id",
+                    "sha256": file_sha256(profile_path),
+                },
+            }
+            mismatched_transition = {
+                "schema": "opennv-fo2-temple-transitions/v1",
+                "status": "compiled-owned-transition-records",
+                "sourceManifest": {
+                    "file": str(source_path.resolve()),
+                    "sha256": "0" * 64,
+                },
+                "sourceProfile": {
+                    "file": str(profile_path.resolve()),
+                    "sourceProfileId": "source-profile-id",
+                    "sha256": file_sha256(profile_path),
+                },
+            }
+            with mock.patch.object(
+                temple_presentation,
+                "compile_fo2_temple_transitions",
+                return_value=mismatched_transition,
+            ), self.assertRaisesRegex(Exception, "does not bind the cache source/profile"):
+                temple_presentation._emit_temple_transition_output(
+                    root,
+                    document,
+                    {"sourceProfile": {"sourceProfileId": "source-profile-id"}},
+                    profile_path=profile_path,
+                    source_manifest_path=source_path,
+                )
+            self.assertNotIn("outputs", document)
+            self.assertFalse((root / "fo2-temple-transitions.json").exists())
+
     def test_decodes_only_admitted_tile_and_object_frames_deterministically(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -150,15 +194,41 @@ class Fo2TemplePresentationTest(unittest.TestCase):
             }
             source_path.write_text(json.dumps(source), encoding="utf-8")
 
-            first = prepare_fo2_temple_presentation(
-                profile_path,
-                source_path,
-                root / "cache-a",
-            )
-            second = prepare_fo2_temple_presentation(
-                profile_path,
-                source_path,
-                root / "cache-b",
+            transition = {
+                "schema": "opennv-fo2-temple-transitions/v1",
+                "status": "compiled-owned-transition-records",
+                "sourceManifest": {
+                    "file": str(source_path.resolve()),
+                    "sha256": file_sha256(source_path),
+                },
+                "sourceProfile": {
+                    "file": str(profile_path.resolve()),
+                    "sourceProfileId": profile["sourceProfileId"],
+                    "sha256": file_sha256(profile_path),
+                },
+            }
+
+            with mock.patch.object(
+                temple_presentation,
+                "compile_fo2_temple_transitions",
+                return_value=transition,
+            ) as compiler:
+                first = prepare_fo2_temple_presentation(
+                    profile_path,
+                    source_path,
+                    root / "cache-a",
+                )
+                second = prepare_fo2_temple_presentation(
+                    profile_path,
+                    source_path,
+                    root / "cache-b",
+                )
+            self.assertEqual(
+                compiler.call_args_list,
+                [
+                    mock.call(profile_path.resolve(), source_path.resolve()),
+                    mock.call(profile_path.resolve(), source_path.resolve()),
+                ],
             )
 
             self.assertEqual(first["counts"]["tileIds"], 1)
@@ -190,6 +260,24 @@ class Fo2TemplePresentationTest(unittest.TestCase):
             self.assertFalse(first["runtimeCompatibility"]["ready"])
             self.assertFalse(first["cachePolicy"]["distributionAllowed"])
             self.assertTrue((root / "cache-a" / CACHE_MANIFEST_NAME).is_file())
+            transition_output = first["outputs"]["templeTransitions"]
+            self.assertEqual(
+                transition_output["file"], "fo2-temple-transitions.json"
+            )
+            self.assertEqual(
+                transition_output["sourceManifestSha256"], file_sha256(source_path)
+            )
+            self.assertEqual(
+                transition_output["sourceProfileSha256"], file_sha256(profile_path)
+            )
+            self.assertEqual(
+                transition_output["sourceProfileId"], profile["sourceProfileId"]
+            )
+            transition_path = root / "cache-a" / transition_output["file"]
+            self.assertEqual(transition_output["sha256"], file_sha256(transition_path))
+            self.assertEqual(
+                json.loads(transition_path.read_text(encoding="utf-8")), transition
+            )
             self.assertEqual(len(list((root / "cache-a" / "assets").rglob("*.png"))), 2)
 
             source["map"]["layout"]["elevations"][0]["rawEntries"][0] = 0x00010000

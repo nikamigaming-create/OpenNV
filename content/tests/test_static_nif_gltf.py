@@ -192,7 +192,7 @@ def synthetic_controller_door_document(
         )
         collision.body = body
         body.rotation.w = 1.0
-        if kind in {"convex", "convex-t"}:
+        if kind in {"convex", "convex-t", "box"}:
             body.mass = 0.0
             body.translation.x = 0.25
             body.friction = 0.4
@@ -204,6 +204,16 @@ def synthetic_controller_door_document(
             body.havok_col_filter.layer = 2
             body.havok_col_filter.flags_and_part_number = 3
             body.havok_col_filter.unknown_short = 4
+            if kind == "box":
+                shape = NifFormat.bhkBoxShape()
+                shape.radius = 0.05
+                shape.material.material = 9
+                shape.dimensions.x = 1.0
+                shape.dimensions.y = 2.0
+                shape.dimensions.z = 3.0
+                shape.minimum_size = 1.0
+                body.shape = shape
+                return collision
             shape = NifFormat.bhkConvexVerticesShape()
             shape.radius = 0.05
             shape.material.material = 9
@@ -550,6 +560,50 @@ class StaticNifGltfTest(unittest.TestCase):
         self.assertEqual(
             exported["hulls"][0]["pointsGodotGameUnits"][0],
             (7.0, 0.0, -0.0),
+        )
+
+    def test_dynamic_box_body_retains_exact_owned_half_extents(self) -> None:
+        root = NifFormat.NiNode()
+        root.name = "Root"
+        target = NifFormat.NiNode()
+        target.name = "Book"
+        root.add_child(target)
+        collision = NifFormat.bhkCollisionObject()
+        collision.target = target
+        target.collision_object = collision
+        body = NifFormat.bhkRigidBody()
+        collision.body = body
+        body.mass = 15.0
+        shape = NifFormat.bhkBoxShape()
+        shape.dimensions.x = 1.0
+        shape.dimensions.y = 2.0
+        shape.dimensions.z = 3.0
+        shape.radius = 0.1
+        shape.minimum_size = 1.0
+        body.shape = shape
+        blocks = [root, target, collision, body, shape]
+        bodies, unsupported = dynamic_physics_contract(
+            blocks,
+            {id(block): index for index, block in enumerate(blocks)},
+        )
+
+        self.assertEqual(unsupported, [])
+        self.assertEqual(len(bodies), 1)
+        exported = bodies[0]
+        self.assertEqual(exported["shapeType"], "box")
+        self.assertEqual(exported["hulls"][0]["halfExtentsGodotGameUnits"], [7.0, 21.0, 14.0])
+        self.assertEqual(
+            exported["hulls"][0]["pointsGodotGameUnits"],
+            [
+                (-7.0, -21.0, 14.0),
+                (-7.0, 21.0, 14.0),
+                (-7.0, -21.0, -14.0),
+                (-7.0, 21.0, -14.0),
+                (7.0, -21.0, 14.0),
+                (7.0, 21.0, 14.0),
+                (7.0, -21.0, -14.0),
+                (7.0, 21.0, -14.0),
+            ],
         )
 
     def test_compiler_source_hash_accounts_for_every_owned_module(self) -> None:

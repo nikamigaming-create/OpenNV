@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Godot;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -10,13 +12,15 @@ internal static class Fo2OpeningTailHandoffNumericContracts
 
 internal sealed partial class Fo2OpeningTailHandoff : Node
 {
-    private readonly List<ImageTexture> _textures = [];
+    private ImageTexture? _activeTexture;
     private bool _skipRequested;
 
     internal bool IsPlaying { get; private set; }
     internal bool Completed { get; private set; }
     internal bool ControlReleased { get; private set; }
     internal bool TerminalBlackPresented { get; private set; }
+    internal bool SkipRequested => _skipRequested;
+    internal bool SkipTerminalStateApplied { get; private set; }
     internal int FinalPresentedSourceFrame { get; private set; }
     internal float FinalSourceFadeFraction { get; private set; }
     internal IReadOnlyList<int> PresentedSourceFrames => _presentedSourceFrames;
@@ -26,6 +30,12 @@ internal sealed partial class Fo2OpeningTailHandoff : Node
     internal string RenderedTerminalFramePath { get; private set; } = "";
     internal string BlackSeamFramePath { get; private set; } = "";
     internal string LiveRevealFramePath { get; private set; } = "";
+    internal Fo2ArroyoCavesPlayProof.World3DAudit? World3DAudit { get; private set; }
+    internal Fo2ArroyoCavesPlayProof.SourceClosureLedger? SourceClosure
+    {
+        get;
+        private set;
+    }
 
     private readonly List<int> _presentedSourceFrames = [];
 
@@ -37,6 +47,7 @@ internal sealed partial class Fo2OpeningTailHandoff : Node
 
     internal async Task Play(
         Fo2OpeningTailContract contract,
+        Fo2ArroyoCavesPresentationCatalog catalog,
         Fo2ArroyoCavesSceneCoverage scene,
         Fo2ArroyoCavesPlayerRuntimeCoverage runtime,
         string? proofRoot)
@@ -50,16 +61,21 @@ internal sealed partial class Fo2OpeningTailHandoff : Node
             runtime.Player.Presentation.Direction != contract.HandoffArrivalRotation)
             throw new InvalidOperationException(
                 "Fallout 2 opening tail does not lead to its source-bound Arroyo arrival.");
-
-        foreach (var frame in contract.Frames)
-        {
-            var image = Image.LoadFromFile(frame.Path);
-            if (image is null || image.IsEmpty() || image.GetWidth() != contract.Width ||
-                image.GetHeight() != contract.Height)
-                throw new InvalidOperationException(
-                    $"Fallout 2 Elder frame {frame.SourceFrame} failed runtime decode.");
-            _textures.Add(ImageTexture.CreateFromImage(image));
-        }
+        var camera = runtime.Player.GetNode<Camera3D>("ARROYO_PLAYER_FOLLOW_CAMERA");
+        var proofHost = GetParent() ?? throw new InvalidOperationException(
+            "Fallout 2 opening handoff has no live scene host.");
+        World3DAudit = Fo2ArroyoCavesPlayProof.AuditWorld3D(
+            proofHost,
+            catalog,
+            scene,
+            runtime,
+            camera);
+        SourceClosure = Fo2ArroyoCavesPlayProof.BuildSourceClosure(
+            catalog,
+            scene,
+            runtime,
+            World3DAudit);
+        VerifyFirstBeatClosure(scene, runtime, World3DAudit, SourceClosure);
 
         var audioStream = AudioStreamWav.LoadFromFile(contract.AudioPath)
             ?? throw new InvalidOperationException(
@@ -95,25 +111,42 @@ internal sealed partial class Fo2OpeningTailHandoff : Node
         scene.Root.Visible = false;
         runtime.Player.SetControlsEnabled(false);
         IsPlaying = true;
+        var preparedTexture = LoadSourceTexture(contract, contract.Frames[0]);
         audio.Play();
+        var playbackClock = Stopwatch.StartNew();
         for (var index = 0; index < contract.Frames.Count && !_skipRequested; index++)
         {
-            var source = contract.Frames[index];
-            video.Texture = _textures[index];
-            var fadeStep = source.SourceFrame - contract.FadeStartFrame + 1;
-            var fadeFraction = Math.Clamp(fadeStep / (float)contract.FadeSteps, 0.0f, 1.0f);
-            fade.Color = new Color(0.0f, 0.0f, 0.0f, fadeFraction);
-            FinalPresentedSourceFrame = source.SourceFrame;
-            FinalSourceFadeFraction = fadeFraction;
-            _presentedSourceFrames.Add(source.SourceFrame);
-            await ToSignal(
-                GetTree().CreateTimer(contract.FramePeriodSeconds),
-                SceneTreeTimer.SignalName.Timeout);
+            await WaitForSourceTime(playbackClock, index * contract.FramePeriodSeconds);
+            PresentSourceFrame(contract, index, preparedTexture, video, fade);
+            if (index + 1 < contract.Frames.Count)
+                preparedTexture = LoadSourceTexture(contract, contract.Frames[index + 1]);
         }
 
-        if (!_skipRequested && FinalPresentedSourceFrame != contract.TerminalFrame)
+        if (_skipRequested)
+        {
+            if (FinalPresentedSourceFrame != contract.TerminalFrame)
+            {
+                var terminalIndex = contract.Frames.Count - 1;
+                PresentSourceFrame(
+                    contract,
+                    terminalIndex,
+                    LoadSourceTexture(contract, contract.Frames[terminalIndex]),
+                    video,
+                    fade);
+            }
+            SkipTerminalStateApplied = true;
+            await WaitPostDraw();
+        }
+        else
+            await WaitForSourceTime(
+                playbackClock,
+                contract.Frames.Count * contract.FramePeriodSeconds);
+        if (FinalPresentedSourceFrame != contract.TerminalFrame ||
+            !Mathf.IsEqualApprox(
+                FinalSourceFadeFraction,
+                contract.TerminalFadeFraction))
             throw new InvalidOperationException(
-                "Fallout 2 Elder tail did not reach its terminal source frame.");
+                "Fallout 2 Elder tail did not converge on its source terminal state.");
         if (!_skipRequested && proofRoot is not null)
         {
             Directory.CreateDirectory(proofRoot);
@@ -133,7 +166,6 @@ internal sealed partial class Fo2OpeningTailHandoff : Node
         if (proofRoot is not null)
             BlackSeamFramePath = await Capture(proofRoot, "02-movie-end-black.png");
 
-        var camera = runtime.Player.GetNode<Camera3D>("ARROYO_PLAYER_FOLLOW_CAMERA");
         scene.Root.Visible = true;
         PreparedCameraTransform = camera.GlobalTransform;
         for (var frame = 0;
@@ -150,6 +182,92 @@ internal sealed partial class Fo2OpeningTailHandoff : Node
         IsPlaying = false;
         Completed = true;
         layer.QueueFree();
+    }
+
+    private void PresentSourceFrame(
+        Fo2OpeningTailContract contract,
+        int index,
+        ImageTexture texture,
+        TextureRect video,
+        ColorRect fade)
+    {
+        if (index < 0 || index >= contract.Frames.Count)
+            throw new InvalidOperationException(
+                "Fallout 2 Elder source-frame presentation index drifted.");
+        var source = contract.Frames[index];
+        video.Texture = texture;
+        var previous = _activeTexture;
+        _activeTexture = texture;
+        previous?.Dispose();
+        var fadeFraction = contract.SourceFadeFraction(source.SourceFrame);
+        fade.Color = new Color(0.0f, 0.0f, 0.0f, fadeFraction);
+        FinalPresentedSourceFrame = source.SourceFrame;
+        FinalSourceFadeFraction = fadeFraction;
+        _presentedSourceFrames.Add(source.SourceFrame);
+    }
+
+    private static ImageTexture LoadSourceTexture(
+        Fo2OpeningTailContract contract,
+        Fo2OpeningTailFrame source)
+    {
+        var image = Image.LoadFromFile(source.Path);
+        if (image is null || image.IsEmpty() || image.GetWidth() != contract.Width ||
+            image.GetHeight() != contract.Height)
+            throw new InvalidOperationException(
+                $"Fallout 2 Elder frame {source.SourceFrame} failed runtime decode.");
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private async Task WaitForSourceTime(Stopwatch playbackClock, double targetSeconds)
+    {
+        var remaining = targetSeconds - playbackClock.Elapsed.TotalSeconds;
+        if (remaining > 0.0)
+            await ToSignal(
+                GetTree().CreateTimer(remaining),
+                SceneTreeTimer.SignalName.Timeout);
+    }
+
+    private static void VerifyFirstBeatClosure(
+        Fo2ArroyoCavesSceneCoverage scene,
+        Fo2ArroyoCavesPlayerRuntimeCoverage runtime,
+        Fo2ArroyoCavesPlayProof.World3DAudit world,
+        Fo2ArroyoCavesPlayProof.SourceClosureLedger closure)
+    {
+        if (!runtime.Player.Presentation.UsesOwnedFrmRelief ||
+            runtime.Player.Presentation.UsesOwnedDonor ||
+            runtime.Player.Presentation.MeshInstances != 2 ||
+            runtime.Player.Presentation.MoldedFaceTriangles <= 0 ||
+            runtime.Player.Presentation.MoldedSideTriangles <= 0 ||
+            world.VisibleSpriteCards != 0 || world.InFrustumSpriteCards != 0 ||
+            world.ClosedReliefSourceObjects != scene.Molded3D.ClosedReliefWorldObjects ||
+            world.SourceTorchAssemblies != scene.Molded3D.VisibleSourceTorchProps ||
+            world.SourceTorchPostLayeredAssemblies !=
+                scene.Molded3D.SourceTorchPostLayeredAssemblies ||
+            world.SourceTorchFrmPixelProps != world.SourceTorchAssemblies ||
+            world.SourceMapLightRecords != scene.Molded3D.SourceMapLightRecords ||
+            world.SourceMapLights != scene.Molded3D.SourceMapLights ||
+            world.SourceTorchMotivatedMapLights !=
+                scene.Molded3D.SourceTorchMotivatedMapLights ||
+            world.InFrustumTorchAssembliesWithMissingSourcePixels != 0 ||
+            world.InvalidSourceMapLights != 0 ||
+            closure.UnaccountedSourceObjects != 0 ||
+            !closure.FirstBeatRuntimeClosurePassed)
+            throw new InvalidOperationException(
+                "Fallout 2 opening handoff zero-card or first-beat closure failed: " +
+                $"player={runtime.Player.Presentation.GeometryMode}, " +
+                $"visibleCards={world.VisibleSpriteCards}, " +
+                $"frustumCards={world.InFrustumSpriteCards}, " +
+                $"relief={world.ClosedReliefSourceObjects}/" +
+                    $"{scene.Molded3D.ClosedReliefWorldObjects}, " +
+                $"torches={world.SourceTorchAssemblies}/" +
+                    $"{scene.Molded3D.VisibleSourceTorchProps}, " +
+                $"frmPixelProps={world.SourceTorchFrmPixelProps}, mapLights=" +
+                    $"{world.SourceMapLightRecords}/{world.SourceMapLights}, " +
+                $"missingSourcePixels={world.InFrustumTorchAssembliesWithMissingSourcePixels}, " +
+                $"invalidMapLights={world.InvalidSourceMapLights}, " +
+                $"unaccounted={closure.UnaccountedSourceObjects}, " +
+                $"admittedIncomplete={closure.AdmittedBehaviorIncompleteSourceObjects}, " +
+                $"hudState={closure.FirstBeatRuntimeClosurePassed}.");
     }
 
     private static ColorRect FullRect(string name, Color color)

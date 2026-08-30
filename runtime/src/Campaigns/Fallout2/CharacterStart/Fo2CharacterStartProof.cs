@@ -23,6 +23,7 @@ internal static class Fo2CharacterStartProof
                 throw new InvalidOperationException(
                     $"Refusing to overwrite Fallout 2 character-start proof: {output}");
             Directory.CreateDirectory(output);
+            host.Picker.TogglePortraitMode();
             await WaitForDraws(host, DrawFrames);
             var initial = Capture(host, output, "character-start-narg.png");
 
@@ -47,7 +48,14 @@ internal static class Fo2CharacterStartProof
                 profile.Traits.SequenceEqual(["One Hander", "Night Person"]) &&
                 presentation.Fid == Fo2CharacterStartCatalog.FemaleFid &&
                 presentation.LogicalPath == Fo2CharacterStartCatalog.FemaleLogicalPath &&
+                host.Picker.HumanoidPreview.UsesOwnedDonor &&
+                host.Picker.HumanoidPreview.CharacterId == selected.Id &&
                 runtime.Player.Presentation.Visible &&
+                runtime.Player.Presentation.UsesOwnedFrmRelief &&
+                !runtime.Player.Presentation.UsesOwnedDonor &&
+                runtime.Player.Presentation.MeshInstances == 2 &&
+                runtime.Player.Presentation.MoldedFaceTriangles > 0 &&
+                runtime.Player.Presentation.MoldedSideTriangles > 0 &&
                 runtime.Player.Presentation.Texture is not null &&
                 runtime.Player.CurrentTile == 28707 &&
                 runtime.Player.IsOnFloor() &&
@@ -123,6 +131,7 @@ internal static class Fo2CharacterStartProof
                     transported = true,
                     rendered = true,
                     ownedPremadeRosterSelectable = passed,
+                    selectedHashBoundFullBodyDonorPreview = passed,
                     selectedStateAppliedToPlayer = passed,
                     immediateArroyoHandoff = passed,
                     humanKeyboardAndMouseEntryAvailable = true,

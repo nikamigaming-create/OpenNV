@@ -341,9 +341,33 @@ internal static class CellContentLoader
                         interaction.GetProperty("itemRecordType").GetString()!,
                         interaction.GetProperty("count").GetInt32(),
                         weapon);
+                    var dynamicBodies = prototypes[assetId].DynamicPhysicsBodies;
+                    if (dynamicBodies.Count > 1)
+                        throw new InvalidOperationException(
+                            $"Pickup has ambiguous authored dynamic bodies: {referenceFormId}");
+                    if (dynamicBodies.Count == 1)
+                        pickup.ConfigurePhysics(dynamicBodies[0], configuration.Pickup);
                     pickup.Basis = new Basis(rotation);
                     pickups.Add(referenceFormId, pickup);
                     placement = pickup;
+                }
+                else if (interactionType == "scripted-activator" &&
+                    interaction.GetProperty("support").GetString() == "delayed-objective-events")
+                {
+                    var activator = new ScriptedActivatorInstance();
+                    activator.Configure(
+                        referenceFormId,
+                        reference.GetProperty("baseFormId").GetString()!,
+                        baseEditorId,
+                        ScriptedActivatorContract.Read(interaction));
+                    var dynamicBodies = prototypes[assetId].DynamicPhysicsBodies;
+                    if (dynamicBodies.Count != 1)
+                        throw new InvalidOperationException(
+                            "Scripted activator requires one authored dynamic body: " +
+                            referenceFormId);
+                    activator.ConfigurePhysics(dynamicBodies[0], configuration.Pickup);
+                    activator.Basis = new Basis(rotation);
+                    placement = activator;
                 }
                 else if (interactionType == "container")
                 {
@@ -511,7 +535,8 @@ internal static class CellContentLoader
                 }
                 else if (buildCollision &&
                     (collisionAssets.Contains(assetId) ||
-                        interactionType is not null and not "pool-table" and not "pool-component"))
+                        interactionType is not null and not "pool-table" and not "pool-component") &&
+                    placement is not PickupInstance { CanGrab: true })
                 {
                     foreach (var mesh in Descendants<MeshInstance3D>(instance))
                     {
@@ -532,6 +557,27 @@ internal static class CellContentLoader
                         verifiedAuthoredCollision,
                         buildCollision);
                     ordinaryDoor.RestoreOpenState(session.IsDoorOpen(referenceFormId));
+                }
+                if (placement is ScriptedActivatorInstance scriptedActivator)
+                {
+                    scriptedActivator.Freeze = !buildCollision || !scriptedActivator.CanGrab;
+                    if (!buildCollision)
+                    {
+                        scriptedActivator.CollisionLayer = 0u;
+                        scriptedActivator.CollisionMask = 0u;
+                    }
+                    scriptedActivator.CaptureAuthoredTransform();
+                }
+                else if (placement is PickupInstance loadedPickup)
+                {
+                    loadedPickup.Freeze = !buildCollision || !loadedPickup.CanGrab;
+                    if (!buildCollision)
+                    {
+                        loadedPickup.CollisionLayer = 0u;
+                        loadedPickup.CollisionMask = 0u;
+                    }
+                    loadedPickup.CaptureAuthoredTransform();
+                    session.RegisterPickup(loadedPickup);
                 }
                 loadedReferences++;
             }

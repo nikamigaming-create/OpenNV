@@ -106,6 +106,8 @@ class Fo1ProfileTest(unittest.TestCase):
             {},
             {},
             {},
+            {},
+            {},
             [
                 PlacedReference(0x300, 0x100, 0x200, 0, Transform((0, 0, 0), (0, 0, 0)), 1.0, None, None),
                 PlacedReference(0x301, 0x100, 0x200, 0, Transform((1, 0, 0), (0, 0, 0)), 1.0, None, None),

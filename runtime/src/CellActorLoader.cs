@@ -60,7 +60,7 @@ internal static class CellActorLoader
         if (root.GetProperty("schema").GetString() != ActorSceneSchema ||
             root.GetProperty("status").GetString() != "skinned-animated")
             throw new InvalidOperationException($"Unexpected OpenNV actor scene: {resolvedManifest}");
-        configuration.VerifyCompiledConfiguration(root);
+        configuration.VerifyCompiledActorConfiguration(root);
         if (!acceptedCellFormIds.Contains(root.GetProperty("cellFormId").GetString()!))
             throw new InvalidOperationException("Actor scene belongs to another CELL.");
         var reference = root.GetProperty("reference");

@@ -13,7 +13,6 @@ internal static class Fo1CharacterStartContractNumericContracts
     internal const double SourcePresentationDouble100Point0 = 100.0;
     internal const int SourcePresentationInt11 = 11;
     internal const int SourcePresentationInt12 = 12;
-    internal const int SourcePresentationInt13 = 13;
     internal const double SourcePresentationDouble130Point0 = 130.0;
     internal const int SourcePresentationInt14 = 14;
     internal const int SourcePresentationInt15 = 15;
@@ -666,10 +665,9 @@ internal sealed record Fo1CharacterStartContract(
                 throw new InvalidOperationException(
                     "Fallout classic inventory item-art symbols drifted.");
         }
-        if (classicInventoryItemTextures.Count !=
-            Fo1CharacterStartContractNumericContracts.SourcePresentationInt13)
+        if (classicInventoryItemTextures.Count == 0)
             throw new InvalidOperationException(
-                "Fallout classic inventory item-art coverage drifted.");
+                "Fallout classic inventory has no source item-art coverage.");
         var classicInventoryFont = ReadBitmapFont(
             classicInventoryRow.GetProperty("messageFont"));
         if (classicInventoryFont.AtlasSha256 != interfaceFont.AtlasSha256 ||

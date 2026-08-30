@@ -26,7 +26,8 @@ internal sealed record Fo2ArroyoCavesSceneCoverage(
     string WalkMaskSha256,
     int WalkableHexes,
     int ArrivalComponentHexes,
-    string SourceTransitionSha256);
+    string SourceTransitionSha256,
+    Fo2ArroyoCavesMoldedCoverage Molded3D);
 
 internal static class Fo2ArroyoCavesScene
 {
@@ -55,6 +56,7 @@ internal static class Fo2ArroyoCavesScene
         scene.Root.SetMeta("arrival_component_hexes", catalog.ArrivalComponentHexes);
         scene.Root.GetNode<Node3D>("MAP_3_SOURCE_ARRIVAL_MARKER_NO_PLAYER_OBJECT")
             .SetMeta("temple_exit_grid_arrival", true);
+        var molded = Fo2ArroyoCavesMoldedPresentation.Build(catalog, scene);
 
         return new Fo2ArroyoCavesSceneCoverage(
             scene.Root,
@@ -80,6 +82,7 @@ internal static class Fo2ArroyoCavesScene
             catalog.WalkMaskSha256,
             catalog.WalkableHexes,
             catalog.ArrivalComponentHexes,
-            catalog.SourceTransitionSha256);
+            catalog.SourceTransitionSha256,
+            molded);
     }
 }

@@ -96,6 +96,35 @@ def synthetic_plugin() -> bytes:
         subrecord("EDID", b"SyntheticAmmo\0")
         + subrecord("FULL", b"Synthetic Ammo\0"),
     )
+    opening_quest = record("QUST", 0x400, subrecord("EDID", b"SyntheticOpening\0"))
+    tutorial_quest = record("QUST", 0x401, subrecord("EDID", b"SyntheticTutorial\0"))
+    activator_script = record(
+        "SCPT",
+        0x307,
+        subrecord("EDID", b"SyntheticDelayedActivatorSCRIPT\0")
+        + subrecord(
+            "SCTX",
+            b"scn SyntheticDelayedActivatorSCRIPT\n"
+            b"short grabbed\nshort released\nfloat timer\nshort runTimer\n"
+            b"begin gamemode\n"
+            b" if runTimer == 1\n if timer > 0\n set timer to timer - GetSecondsPassed\n"
+            b" else\n if grabbed == 1\n set grabbed to 2\n"
+            b" SetStage SyntheticTutorial 22\n SetObjectiveCompleted SyntheticOpening 20 1\n"
+            b" elseif released == 1\n set released to 2\n SetStage SyntheticTutorial 24\n endif\n"
+            b" endif\n endif\nend\n"
+            b"begin OnGrab\n if (grabbed == 0 && GetObjectiveDisplayed SyntheticOpening 20)\n"
+            b" set grabbed to 1\n set runTimer to 1\n set timer to 1\n endif\nend\n"
+            b"begin OnRelease\n if (released == 0 && GetObjectiveDisplayed SyntheticOpening 20)\n"
+            b" set released to 1\n set runTimer to 1\n set timer to 1\n endif\nend\0",
+        ),
+    )
+    activator = record(
+        "ACTI",
+        0x308,
+        subrecord("EDID", b"SyntheticDelayedActivator\0")
+        + subrecord("MODL", b"clutter/test/activator.nif\0")
+        + subrecord("SCRI", struct.pack("<I", 0x307)),
+    )
     xcll = bytes((10, 20, 30, 0, 40, 50, 60, 0, 70, 80, 90, 0)) + struct.pack(
         "<ffii3f", 64.0, 3750.0, 0, 250, 1.0, 6600.0, 1.25
     )
@@ -159,6 +188,12 @@ def synthetic_plugin() -> bytes:
         subrecord("NAME", struct.pack("<I", 0x305))
         + subrecord("DATA", struct.pack("<6f", 20.0, 30.0, 40.0, 0.1, 0.2, 0.3)),
     )
+    activator_reference = record(
+        "REFR",
+        0x208,
+        subrecord("NAME", struct.pack("<I", 0x308))
+        + subrecord("DATA", struct.pack("<6f", 21.0, 31.0, 41.0, 0.0, 0.0, 0.0)),
+    )
     navmesh = record(
         "NAVM",
         0x206,
@@ -214,6 +249,7 @@ def synthetic_plugin() -> bytes:
             + item_reference
             + container_reference
             + weapon_reference
+            + activator_reference
             + navmesh,
         ),
     )
@@ -226,6 +262,9 @@ def synthetic_plugin() -> bytes:
         + group(b"CONT", 0, container)
         + group(b"WEAP", 0, weapon)
         + group(b"AMMO", 0, ammo)
+        + group(b"QUST", 0, opening_quest + tutorial_quest)
+        + group(b"SCPT", 0, activator_script)
+        + group(b"ACTI", 0, activator)
         + group(b"LGTM", 0, lighting_template)
         + group(b"CELL", 0, cell + children)
     )
@@ -295,7 +334,7 @@ class CellCatalogTest(unittest.TestCase):
         self.assertIsNone(cell.worldspace_form_id)
         self.assertEqual(catalog.base_objects[0x300].model_path, "test\\floor.nif")
         references = catalog.references_for(cell.form_id)
-        self.assertEqual(len(references), 6)
+        self.assertEqual(len(references), 7)
         self.assertEqual(references[0].transform.position, (10.0, 20.0, 30.0))
         self.assertEqual(references[0].transform.rotation_radians, (0.0, 0.0, 1.5))
         self.assertAlmostEqual(references[0].scale, 0.75)
@@ -388,6 +427,70 @@ class CellCatalogTest(unittest.TestCase):
         self.assertEqual(weapon_interaction["weapon"]["damage"], 26)
         self.assertEqual(weapon_interaction["weapon"]["clipSize"], 6)
         self.assertEqual(weapon_interaction["weapon"]["ammoFormId"], "00000306")
+        activator = catalog.base_objects[0x308]
+        self.assertEqual(activator.attached_script_form_id, 0x307)
+        self.assertEqual(catalog.scripts[0x307].editor_id, "SyntheticDelayedActivatorSCRIPT")
+        self.assertEqual(catalog.quests[0x400].editor_id, "SyntheticOpening")
+        activator_interaction = interaction_manifest(
+            next(reference for reference in references if reference.form_id == 0x208),
+            activator,
+            catalog,
+        )
+        self.assertEqual(activator_interaction["type"], "scripted-activator")
+        self.assertEqual(activator_interaction["script"], {
+            "formId": "00000307",
+            "editorId": "SyntheticDelayedActivatorSCRIPT",
+        })
+        self.assertEqual(activator_interaction["support"], "delayed-objective-events")
+        self.assertEqual(
+            activator_interaction["events"],
+            [
+                {
+                    "event": "grab",
+                    "guard": {
+                        "questFormId": "00000400",
+                        "questEditorId": "SyntheticOpening",
+                        "objectiveIndex": 20,
+                        "state": "displayed",
+                    },
+                    "delaySeconds": 1.0,
+                    "commands": [
+                        {
+                            "kind": "setStage",
+                            "questFormId": "00000401",
+                            "questEditorId": "SyntheticTutorial",
+                            "stage": 22,
+                        },
+                        {
+                            "kind": "objective",
+                            "questFormId": "00000400",
+                            "questEditorId": "SyntheticOpening",
+                            "index": 20,
+                            "state": "completed",
+                            "enabled": True,
+                        },
+                    ],
+                },
+                {
+                    "event": "release",
+                    "guard": {
+                        "questFormId": "00000400",
+                        "questEditorId": "SyntheticOpening",
+                        "objectiveIndex": 20,
+                        "state": "displayed",
+                    },
+                    "delaySeconds": 1.0,
+                    "commands": [
+                        {
+                            "kind": "setStage",
+                            "questFormId": "00000401",
+                            "questEditorId": "SyntheticTutorial",
+                            "stage": 24,
+                        },
+                    ],
+                },
+            ],
+        )
 
     def test_localized_full_is_not_decoded_as_a_zstring(self) -> None:
         plugin = record(

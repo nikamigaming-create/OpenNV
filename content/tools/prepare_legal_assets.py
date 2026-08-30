@@ -92,6 +92,26 @@ def _opening_inputs_match(path_value: object) -> bool:
     )
 
 
+def _opening_preview_set_matches(
+    opening_manifest_path: object,
+    preview_set_path: object,
+    preview_set_sha256: object,
+) -> bool:
+    if not isinstance(opening_manifest_path, str):
+        return False
+    document = json.loads(Path(opening_manifest_path).read_text(encoding="utf-8"))
+    outputs = document.get("outputs")
+    if not isinstance(outputs, dict):
+        return False
+    preview_set = outputs.get("playerFaceGenPreviewSet")
+    return (
+        isinstance(preview_set, dict)
+        and preview_set.get("path") == preview_set_path
+        and preview_set.get("sha256") == preview_set_sha256
+        and _hash_matches(preview_set_path, preview_set_sha256)
+    )
+
+
 def reusable_families(
     prior: object,
     install: dict[str, object],
@@ -136,6 +156,11 @@ def reusable_families(
                     )
                     and _document_compiler_matches(outputs.get("openingManifest"), expected)
                     and _opening_inputs_match(outputs.get("openingManifest"))
+                    and _opening_preview_set_matches(
+                        outputs.get("openingManifest"),
+                        outputs.get("openingPlayerFaceGenPreviewSet"),
+                        outputs.get("openingPlayerFaceGenPreviewSetSha256"),
+                    )
                 )
             elif family == "cell":
                 if not require_cell:
@@ -559,6 +584,12 @@ def prepare(
             ),
             "openingManifest": opening["output"],
             "openingManifestSha256": file_sha256(Path(str(opening["output"]))),
+            "openingPlayerFaceGenPreviewSet": opening["manifest"]["outputs"][
+                "playerFaceGenPreviewSet"
+            ]["path"],
+            "openingPlayerFaceGenPreviewSetSha256": opening["manifest"]["outputs"][
+                "playerFaceGenPreviewSet"
+            ]["sha256"],
         },
     }
     atomic_text(cache_root / "install-manifest.json", manifest)

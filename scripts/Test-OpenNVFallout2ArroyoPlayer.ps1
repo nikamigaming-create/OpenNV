@@ -5,19 +5,43 @@ param(
     [string]$TempleTransitions = "$env:LOCALAPPDATA\OpenNV\profiles\fallout2\temple-transitions-v1.json",
     [string]$ArroyoCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-caves-v1\fo2-arroyo-caves-presentation-cache.json",
     [string]$PlayerCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-player-v1\fo2-arroyo-player-presentation-cache.json",
-    [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\arroyo-player-runtime-v1"
+    [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v2\fo2-character-start-cache.json",
+    [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\arroyo-player-runtime-v1",
+    [string]$ClassicHumanoidInstallManifest,
+    [string]$PresentationDonorPreviewSet
 )
 
 $ErrorActionPreference = 'Stop'
 $ExpectedArrivalTile = 28707
 $ExpectedFinalTile = 31907
 $ExpectedRejectedTile = 32107
+$ExpectedClassicHudSourceAssets = 15
 $runtime = Join-Path (Split-Path -Parent $PSScriptRoot) 'runtime'
-foreach ($inputPath in @($Godot, $TempleCache, $TempleTransitions, $ArroyoCache, $PlayerCache)) {
+$classicHumanoidPreflight = Join-Path $PSScriptRoot 'Assert-ClassicHumanoidDonorPreviewSet.ps1'
+$classicHumanoidResolver = Join-Path $PSScriptRoot 'Resolve-ClassicHumanoidDonorPreviewSet.ps1'
+foreach ($inputPath in @(
+        $Godot,
+        $TempleCache,
+        $TempleTransitions,
+        $ArroyoCache,
+        $PlayerCache,
+        $CharacterStartCache)) {
     if (-not (Test-Path -LiteralPath $inputPath -PathType Leaf)) {
         throw "Required Fallout 2 player-proof input is missing: $inputPath"
     }
 }
+$classicHumanoidDonorPreviewSet = if (
+    -not [string]::IsNullOrWhiteSpace($PresentationDonorPreviewSet)) {
+    [IO.Path]::GetFullPath($PresentationDonorPreviewSet)
+} else {
+    if ([string]::IsNullOrWhiteSpace($ClassicHumanoidInstallManifest)) {
+        throw 'Fallout 2 player proof requires an owned presentation donor preview set or install manifest.'
+    }
+    & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+    if (-not $?) { throw 'Classic humanoid install-manifest resolution failed.' }
+}
+& $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
+if (-not $?) { throw 'Classic humanoid donor preflight failed.' }
 if (Test-Path -LiteralPath $Output) {
     throw "Refusing to overwrite Fallout 2 player proof: $Output"
 }
@@ -32,6 +56,8 @@ if (Test-Path -LiteralPath $Output) {
     --fo2-temple-transitions $TempleTransitions `
     --fo2-arroyo-cache $ArroyoCache `
     --fo2-player-cache $PlayerCache `
+    --fo2-character-start-cache $CharacterStartCache `
+    --classic-humanoid-donor-preview-set $classicHumanoidDonorPreviewSet `
     --fo2-arroyo-player-proof $Output
 if ($LASTEXITCODE -ne 0) {
     throw "Fallout 2 Arroyo player runtime proof failed with exit code $LASTEXITCODE."
@@ -43,7 +69,7 @@ if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
 }
 $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
 if ($report.schema -ne 'opennv-fo2-arroyo-player-runtime-proof/v1' -or
-    $report.status -ne 'pass-input-driven-source-gated-player-runtime-owned-hmwarr-no-save' -or
+    $report.status -ne 'pass-input-driven-source-gated-player-runtime-owned-hmwarr-bound-3d-donor-no-save' -or
     $report.arrival.mapIndex -ne 3 -or
     $report.arrival.elevation -ne 0 -or
     $report.arrival.tile -ne $ExpectedArrivalTile -or
@@ -69,6 +95,24 @@ if ($report.schema -ne 'opennv-fo2-arroyo-player-runtime-proof/v1' -or
     $report.playerPresentation.completedWalkCycles -le 0 -or
     -not $report.playerPresentation.idleResumedAtEnd -or
     -not $report.playerPresentation.visible -or
+    $report.playerPresentation.geometryMode -ne 'owned-fnv-full-body-presentation-donor-non-parity' -or
+    $report.playerPresentation.sourceStateGeometryMode -ne 'exact-owned-fo2-frm-alpha-island-molded-relief-v2' -or
+    $report.playerPresentation.sourceStateReliefVisible -or
+    -not $report.playerPresentation.usesOwnedDonor -or
+    $report.playerPresentation.meshInstances -le 0 -or
+    $report.playerPresentation.visibleAnimation.firstWalkClip -notmatch 'forward' -or
+    $report.playerPresentation.visibleAnimation.secondWalkClip -notmatch 'forward' -or
+    $report.playerPresentation.visibleAnimation.firstWalkClipSeconds -le 0 -or
+    $report.playerPresentation.visibleAnimation.secondWalkClipSeconds -le 0 -or
+    $report.playerPresentation.visibleAnimation.endClip -notmatch 'idle' -or
+    -not $report.classicHud.visible -or
+    -not $report.classicHud.ownedFallout2ClassicInterface -or
+    -not $report.classicHud.sourcePixelLayout -or
+    $report.classicHud.sourceAssetCount -ne $ExpectedClassicHudSourceAssets -or
+    $report.classicHud.retailBehaviorParity -or
+    $report.classicHud.startBlockedSourceLight -or
+    -not $report.classicHud.endBlockedSourceLight -or
+    $report.classicHud.sourceStateTile -ne $ExpectedFinalTile -or
     $report.promotion.playerStatePersistent -or
     $report.promotion.interactive -or
     $report.promotion.playableCampaign -or

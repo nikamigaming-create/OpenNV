@@ -49,20 +49,26 @@ commercial file or conversion output is committed or distributed. The verified
 cache remembers the selected installation and is reopened automatically on
 later launches. The separate saloon diagnostic opens the Goodsprings Prospector
 Saloon at the main entrance's data-defined XTEL target. In that component, use WASD/mouse, E to
-activate, left-click to fire the initially equipped owned-data 10mm, R to
+collect/activate, hold Z while aiming at movable clutter and release to drop it,
+left-click to fire the initially equipped owned-data 10mm, R to
 reload, and F5 to save.
 Aim at the intact pool table or one of its balls and press E to enter practice
 mode. Left-click strikes along the camera heading, the mouse wheel changes the
 configured power, R resets every ball to its authored Saloon transform, and E
 or Escape returns to the weapon. In OpenXR, grip enters/exits, hold trigger and
-sweep the tracked cue through the cue ball, and B resets the table.
+sweep the tracked cue through the cue ball, and B resets the table. This pool
+experiment is currently unsupported: its native flat contact gate fails because
+the ruined-table retail ball placements do not form a playable layout on the
+intact replacement, so pocket/save/reset and OpenXR behavior are not accepted.
 
 The launcher shows four top-level game choices: Fallout 1, Fallout 2, New Vegas,
-and Fallout 3. Fallout 1 enables registered Hex/FPS while VR stays disabled;
-Fallout 2 visibly lists disabled Hex/FPS/VR choices; New Vegas enables original
-flat and experimental OpenXR while JAM stays disabled; and Fallout 3 keeps
-FPS/Hex/VR disabled while its bounded menu/CG00 development frontend remains
-non-playable. TTW is an edition, not a fifth game button. On
+and Fallout 3. Every card shows the same FPS/Hex/VR mode row; unsupported modes
+remain visible and disabled. The current manifest admits Fallout 1 Hex/FPS,
+Fallout 2 Hex, and New Vegas FPS plus an experimental OpenXR route under their
+separate runtime gates. Fallout 1 VR, Fallout 2 FPS/VR, New Vegas Hex, and all
+Fallout 3 presentations remain disabled. TTW is not a fifth game button:
+TTW-FO3 is an edition under Fallout 3 and TTW-FNV is an edition under New Vegas.
+Both TTW editions remain disabled. On
 this development machine Fallout 1's generated V13ENT
 inputs and Fallout 3's owned GOTY profile are registered. New Vegas launches the
 owned menu, skippable intro, and Doc Mitchell route from the verified local
@@ -86,25 +92,24 @@ configured clear-day `NVWastelandClear` atmosphere/cloud pair outside without
 rebuilding that cache. Exterior surface/directional lighting remains
 provisional. Dynamic time/weather, reverse traversal, neighboring exterior-grid
 streaming, integrated-route OpenXR acceptance, and visual parity remain
-pending. The registered
-Fallout 3 development frontend opens its
-profile-backed menu, plays a locally
-converted and hash-verified copy of the owned intro, and converges through
-Escape or the Skip button on CG00 sex/name selection, a persistent stage-60
-character, and source-backed race/hair/eye selection persisted at stage 62.
-The bounded ordinary route enters the owned Vault 101 birth room, executes the
-exact stage-65 Dad cue and stage-80/85 results, applies stage-90 INFO `0001f379`
-with its owned fade/sound, then executes seven of eight exact stage-100 commands
-through `SetPCYoung 1`. It cold-restores stage 100 without replaying the one-shot
-effects. CG01 stage 0, the eighth stage-100 command, and a freely playable Vault
-101 route remain unimplemented.
-The current preview shows verified owned source textures rather than a 3D
-FaceGen actor. Fallout 1 OpenXR has a shared-state V13ENT simulator adapter that
+pending. The registered Fallout 3 development frontend opens its profile-backed
+menu, plays a locally converted and hash-verified copy of the owned intro, and
+converges through Escape or Skip on the same CG00 character state. Its current
+early-birth implementation starts admitted actors from source `PACK` sections,
+selects hash-bound KF sequences, and composes the sampled `Camera1st` skeleton
+node through its source parent chain without applying a `NiCamera` axis fix.
+That correction does not enable the launcher route. The current toddler proof
+auto-steers toward its target; ordinary configured user input, physical trigger
+entry, source actor/camera timing, and a matched retail/native differential are
+still required. The current creator preview remains an owned-texture inspection
+surface rather than a 3D FaceGen actor. Fallout 1 OpenXR has a shared-state V13ENT simulator adapter that
 passes locomotion, snap turn, fire, reload, and save. XR door use,
 campaign-native hands/weapon/UI, launcher enablement, and physical-headset
-acceptance remain unpromoted. TTW, complete JAM runtime/launcher support, Fallout 3
-`CG00PlayerSection4` package execution and Vault 101 world play, and all complete
-campaigns also remain unpromoted.
+acceptance remain unpromoted. TTW currently consumes effective records only;
+resource winners are not connected to a playable TTW world, and TTW-FNV has no
+effective-stack Doc runtime. OpenNV also does not load xNVSE/JAM native DLLs or
+implement their complete portable script/event/UI/AP/animation/audio/cosave
+surface. Fallout 3 world play and every complete campaign remain unpromoted.
 
 The legally owned Fallout 2 install can be registered without producing a
 content cache:
@@ -117,23 +122,39 @@ content cache:
 This validates and hashes `master.dat`, `critter.dat`, and `patch000.dat`, plus
 their DAT2 directory identities. It does not copy any member. The registered
 profile can be passed to `content/tools/fo2_first_slice.py` to emit an
-asset-free, hash-bound Temple MAP/PRO/FRM source manifest. Registration and
-source transport do not make Fallout 2 playable: character creation, scripts,
-gameplay/save state, and launcher-ready presentations remain unimplemented.
+asset-free, hash-bound Temple MAP/PRO/FRM source manifest. Registration alone
+does not enable play; the launcher admits the bounded Hex route only when its
+matching Temple, transition, Arroyo, player, and character-start artifacts are
+all present and hash-valid. FPS and VR remain disabled.
 
 `content/tools/prepare_fo2_temple_presentation.py` can then decode only the
 source manifest's admitted tile and object frames into a disposable local PNG
 cache. The cache includes a provenance manifest, remains derived owned content,
 must not be distributed, and does not change runtime readiness.
-The bounded runtime can verify that cache, construct the exact admitted Map 126
-floor/object scene, and prove its source-derived floor/wall colliders with
-physics rays. The proof remains headless and does not establish rendered parity,
-player interaction, or playability.
+The bounded runtime verifies that cache and constructs the admitted Map 3/Map
+126 Hex slice. Its player uses a fail-closed true 3D presentation path from an
+admitted owned FNV full-body donor over authoritative classic GCD/FRM identity;
+there is no procedural, FRM-player, silhouette, or standee fallback, and the
+donor is not a parity claim. The Elder movie's normal end
+and Skip converge through the same exact terminal source frame/fade and live
+camera handoff. Torch anchors use exact owned opaque FRM emitter pixels/centroid
+and source MAP light placement, but the admitted emitter is static and does not
+transport source flame animation or smoke. The live handoff still requires
+visual acceptance. The retained current checkpoints are alternative peaceful
+Cameron-to-ARVILLAG and Temple guardian-combat/Spear-loot/equip saves; they do
+not merge or imply a dead-guardian exit. Their hashes and exact boundaries are
+in the [canonical FO2 branch ledger](evidence/fo2-first-slice-branch-ledger.md).
+Full campaign/script coverage remains absent.
 
 The registered Fallout 1 route now opens an asset-free original-style menu;
 **New Game** enters the owned character picker and skippable owned Overseer
 movie before releasing the selected Hex/FPS view in V13ENT. Its original retail
 startup logos and exact retail main-menu presentation are not implemented.
+The selected premade/custom identity and sex are wired through cold restore into
+the gameplay actor. Max/Albert may use an owned FNV full-body donor only as a
+presentation adapter; Natalia/custom geometry is an explicitly first-party
+procedural non-parity path. Exact GCD/FRM identity remains authoritative, and a
+fresh producer/native acceptance of that integration is still required.
 The launcher also shows a diagnostic OpenXR choice but keeps it disabled.
 Meta/Oculus Touch and
 the OpenXR generic-controller fallback are declared. A repo-local simulator

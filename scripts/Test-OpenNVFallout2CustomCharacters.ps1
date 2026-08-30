@@ -6,11 +6,15 @@ param(
     [string]$ArroyoCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-caves-v1\fo2-arroyo-caves-presentation-cache.json",
     [string]$PlayerCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-player-v1\fo2-arroyo-player-presentation-cache.json",
     [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v1\fo2-character-start-cache.json",
-    [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\custom-character-v1"
+    [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\custom-character-v1",
+    [Parameter(Mandatory)]
+    [string]$ClassicHumanoidInstallManifest
 )
 
 $ErrorActionPreference = 'Stop'
 $runtime = Join-Path (Split-Path -Parent $PSScriptRoot) 'runtime'
+$classicHumanoidPreflight = Join-Path $PSScriptRoot 'Assert-ClassicHumanoidDonorPreviewSet.ps1'
+$classicHumanoidResolver = Join-Path $PSScriptRoot 'Resolve-ClassicHumanoidDonorPreviewSet.ps1'
 foreach ($inputPath in @(
         $Godot,
         $TempleCache,
@@ -22,6 +26,10 @@ foreach ($inputPath in @(
         throw "Required Fallout 2 custom-character input is missing: $inputPath"
     }
 }
+$classicHumanoidDonorPreviewSet = & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid install-manifest resolution failed.' }
+& $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
+if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid donor preflight failed.' }
 if (Test-Path -LiteralPath $Output) {
     throw "Refusing to overwrite Fallout 2 custom-character proof: $Output"
 }
@@ -35,7 +43,8 @@ $commonArguments = @(
     '--fo2-temple-transitions', $TempleTransitions,
     '--fo2-arroyo-cache', $ArroyoCache,
     '--fo2-player-cache', $PlayerCache,
-    '--fo2-character-start-cache', $CharacterStartCache
+    '--fo2-character-start-cache', $CharacterStartCache,
+    '--classic-humanoid-donor-preview-set', $classicHumanoidDonorPreviewSet
 )
 
 foreach ($sex in @('Male', 'Female')) {

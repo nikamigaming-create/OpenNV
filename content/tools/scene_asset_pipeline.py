@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 from bsa_archive import BsaArchive
@@ -26,6 +27,144 @@ from texture_pipeline import OwnedTexturePipeline, TexturePipeline
 
 
 FORM_ID_RADIX = 16
+
+
+def _quest_identity(catalog: CellCatalog, editor_id: str) -> tuple[int, str]:
+    matches = [
+        quest
+        for quest in catalog.quests.values()
+        if quest.editor_id.casefold() == editor_id.casefold()
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"Scripted activator quest identity is ambiguous: {editor_id}")
+    return matches[0].form_id, matches[0].editor_id
+
+
+def _script_event_block(source: str, event: str) -> str | None:
+    match = re.search(
+        rf"\bbegin\s+{re.escape(event)}\b(?P<body>.*?)\bend\b",
+        source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    return match.group("body") if match is not None else None
+
+
+def _delayed_objective_event(
+    source: str,
+    event: str,
+    catalog: CellCatalog,
+) -> dict[str, object] | None:
+    event_body = _script_event_block(source, event)
+    if event_body is None:
+        return None
+    guard = re.search(
+        r"if\s*\(\s*(?P<state>[A-Za-z_][A-Za-z0-9_]*)\s*==\s*0\s*"
+        r"&&\s*GetObjectiveDisplayed\s+(?P<quest>[A-Za-z0-9_]+)\s+"
+        r"(?P<index>\d+)\s*\)",
+        event_body,
+        re.IGNORECASE,
+    )
+    if guard is None:
+        return None
+    state = guard.group("state")
+    if not re.search(rf"\bset\s+{re.escape(state)}\s+to\s+1\b", event_body, re.IGNORECASE):
+        return None
+    timer = re.search(
+        r"\bset\s+[A-Za-z_][A-Za-z0-9_]*\s+to\s+"
+        r"(?P<seconds>\d+(?:\.\d+)?)\b",
+        event_body,
+        re.IGNORECASE,
+    )
+    if timer is None:
+        return None
+    game_mode = _script_event_block(source, "gamemode")
+    if game_mode is None:
+        return None
+    result = re.search(
+        rf"\b(?:if|elseif)\s*\(?\s*{re.escape(state)}\s*==\s*1\s*\)?"
+        r"(?P<body>.*?)(?=\belseif\b|\Z)",
+        game_mode,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if result is None:
+        return None
+    result_body = result.group("body")
+    if not re.search(rf"\bset\s+{re.escape(state)}\s+to\s+2\b", result_body, re.IGNORECASE):
+        return None
+    stages = re.findall(
+        r"\bSetStage\s+(?P<quest>[A-Za-z0-9_]+)\s+(?P<stage>\d+)\b",
+        result_body,
+        re.IGNORECASE,
+    )
+    objectives = re.findall(
+        r"\bSetObjectiveCompleted\s+(?P<quest>[A-Za-z0-9_]+)\s+"
+        r"(?P<index>\d+)\s+1\b",
+        result_body,
+        re.IGNORECASE,
+    )
+    if len(stages) != 1 or len(objectives) > 1 or (event.casefold() == "ongrab" and len(objectives) != 1):
+        return None
+    guard_form_id, guard_editor_id = _quest_identity(catalog, guard.group("quest"))
+    stage_form_id, stage_editor_id = _quest_identity(catalog, stages[0][0])
+    commands: list[dict[str, object]] = [
+        {
+            "kind": "setStage",
+            "questFormId": form_id(stage_form_id),
+            "questEditorId": stage_editor_id,
+            "stage": int(stages[0][1]),
+        }
+    ]
+    if objectives:
+        objective_form_id, objective_editor_id = _quest_identity(catalog, objectives[0][0])
+        commands.append(
+            {
+                "kind": "objective",
+                "questFormId": form_id(objective_form_id),
+                "questEditorId": objective_editor_id,
+                "index": int(objectives[0][1]),
+                "state": "completed",
+                "enabled": True,
+            }
+        )
+    return {
+        "event": event.casefold().removeprefix("on"),
+        "guard": {
+            "questFormId": form_id(guard_form_id),
+            "questEditorId": guard_editor_id,
+            "objectiveIndex": int(guard.group("index")),
+            "state": "displayed",
+        },
+        "delaySeconds": float(timer.group("seconds")),
+        "commands": commands,
+    }
+
+
+def _scripted_activator_manifest(base: BaseObject, catalog: CellCatalog) -> dict[str, object]:
+    if base.attached_script_form_id is None:
+        raise ValueError("ACTI scripted activator has no source script identity")
+    script = catalog.scripts.get(base.attached_script_form_id)
+    if script is None or not script.editor_id:
+        raise ValueError(
+            f"ACTI {base.form_id:08x} attached SCPT does not resolve: "
+            f"{base.attached_script_form_id:08x}"
+        )
+    events = [
+        event
+        for event in (
+            _delayed_objective_event(script.source, "OnGrab", catalog),
+            _delayed_objective_event(script.source, "OnRelease", catalog),
+        )
+        if event is not None
+    ]
+    return {
+        "type": "scripted-activator",
+        "script": {
+            "formId": form_id(script.form_id),
+            "editorId": script.editor_id,
+        },
+        "events": events,
+        "support": "delayed-objective-events" if len(events) == 2 else "unsupported-script-source",
+    }
 
 
 def form_id(value: int) -> str:
@@ -84,6 +223,8 @@ def interaction_manifest(
     base: BaseObject,
     catalog: CellCatalog,
 ) -> dict[str, object] | None:
+    if base.record_type == "ACTI" and base.attached_script_form_id is not None:
+        return _scripted_activator_manifest(base, catalog)
     if base.record_type in ITEM_RECORD_TYPES:
         interaction = {
             "type": "pickup",

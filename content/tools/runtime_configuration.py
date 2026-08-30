@@ -16,6 +16,17 @@ from typing import Mapping
 
 RUNTIME_CONFIGURATION_SCHEMA = "opennv-runtime-configuration/v1"
 RUNTIME_CONFIGURATION_FILE = "open-nv-runtime-v1.json"
+ACTOR_ARTIFACT_CONFIGURATION_SCHEMA = (
+    "opennv-actor-artifact-runtime-configuration/v1"
+)
+ACTOR_ARTIFACT_CONTENT_COMPILER_FIELDS = (
+    "animationSamplesPerSecond",
+    "assetIdHexCharacters",
+    "defaultMaterialGlossiness",
+    "minimumMaterialRoughness",
+    "pngCompressionLevel",
+    "zeroSpecularEpsilon",
+)
 FACEGEN_MATERIAL_SCHEMA = "opennv-retail-facegen-material/v2"
 FACEGEN_ANIMATION_SCHEMA = "opennv-retail-facegen-animation/v1"
 SRGB_TRANSFER_SCHEMA = "opennv-srgb-transfer/v1"
@@ -38,6 +49,7 @@ CONFIGURATION_SECTIONS = (
     "player",
     "xr",
     "pool",
+    "pickup",
     "door",
     "hud",
     "capture",
@@ -300,6 +312,9 @@ class RuntimeConfiguration:
     def manifest(self) -> dict[str, str]:
         return {"schema": RUNTIME_CONFIGURATION_SCHEMA, "sha256": self.sha256}
 
+    def actor_artifact_manifest(self) -> dict[str, object]:
+        return actor_artifact_configuration_manifest(self.document)
+
     @property
     def actor_rig(self) -> ActorRigConfiguration:
         source = _object(_object(self.document, "actorCompiler"), "rigidAttachment")
@@ -455,6 +470,67 @@ class RuntimeConfiguration:
         if any(value <= 0 for value in sheet_scalars):
             raise ValueError("OpenNV actorParity contact-sheet dimensions must be positive")
         return configuration
+
+def actor_artifact_configuration_payload(
+    document: dict[str, object],
+) -> dict[str, object]:
+    actor_compiler = _object(document, "actorCompiler")
+    content_compiler = _object(document, "contentCompiler")
+    missing = set(ACTOR_ARTIFACT_CONTENT_COMPILER_FIELDS) - set(content_compiler)
+    if missing:
+        raise ValueError(
+            "OpenNV actor artifact configuration fields are missing: "
+            + ", ".join(sorted(missing))
+        )
+    return {
+        "actorCompiler": actor_compiler,
+        "contentCompiler": {
+            field: content_compiler[field]
+            for field in ACTOR_ARTIFACT_CONTENT_COMPILER_FIELDS
+        },
+    }
+
+
+def actor_artifact_configuration_manifest(
+    document: dict[str, object],
+) -> dict[str, object]:
+    payload = _configuration_identity_value(
+        actor_artifact_configuration_payload(document)
+    )
+    digest = hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema": ACTOR_ARTIFACT_CONFIGURATION_SCHEMA,
+        "sha256": digest,
+        "sections": {
+            "actorCompiler": "all",
+            "contentCompiler": list(ACTOR_ARTIFACT_CONTENT_COMPILER_FIELDS),
+        },
+    }
+
+
+def _configuration_identity_value(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            str(key): _configuration_identity_value(child)
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_configuration_identity_value(child) for child in value]
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float) and math.isfinite(value):
+        return format(value, ".17g").casefold()
+    raise ValueError("OpenNV actor artifact configuration contains an invalid value")
+
 
 def configuration_path() -> Path:
     packaged_root = getattr(sys, "_MEIPASS", None)

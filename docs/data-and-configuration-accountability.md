@@ -136,7 +136,7 @@ only while the opening is active, the CELL's owned NAVM plus configured capsule
 dimensions. It does not carry a Doc-specific coordinate, route, key, item, or
 stage table.
 
-`opennv-campaign-save/v6` embeds
+`opennv-campaign-save/v7` embeds
 `opennv-opening-campaign-state/v1` in the same atomic save envelope used by the
 gameplay session. Loading validates schemas, normalized FormIDs, uniqueness,
 finite values, transform shape, and the flow-specific character constraints
@@ -144,8 +144,9 @@ before restoring state. Version 4 additionally records the active CELL FormID;
 Continue rejects an active CELL outside the prepared ordered route before it
 restores the player transform. Version 5 adds source-identity-checked remaining
 counts for each opened container. Version 6 persists the shared gameplay-vitals
-state derived from the owned player, AVIF, and GMST contracts while retaining
-v1-v5 load compatibility. A
+state derived from the owned player, AVIF, and GMST contracts. Version 7 adds
+the transform and velocity of every movable pickup backed by owned collision,
+while retaining v1-v6 load compatibility. A
 headless two-process gate reaches the authored
 autosave, exits, reloads that exact incomplete state, and requires the owned
 completion stage and command effects. Godot's configured input events and
@@ -171,21 +172,36 @@ owned-data manifests and this configuration.
 ### Prepared-cache compiler families
 
 New Vegas derived caches use four separately hashed compiler families:
-`static`, `cell`, `opening`, and `actor`. Opening/UI source changes affect the
-opening family and, because that graph owns actor animation membership, the
-actor family. They do not affect static NIF or CELL world identity. Every
+`static`, `cell`, `opening`, and `actor`. The actor family binds the exact
+ordered one-level actor route selected by `prepare_legal_assets`: ordered actor
+recipe IDs and each recipe's SHA-256. Actor add/remove/reorder/content changes
+invalidate that family; non-actor CELL presentation changes do not. Opening/UI
+changes affect opening only unless an exact declared dependency says otherwise,
+and they do not affect static NIF or CELL world identity. Every
 admitted manifest carries its family/name/hash tuple; the install manifest seals
 the complete family set and owned-input hashes. Explicit preparation reuses a
 family only when those identities, route recipes, dependency rows, and output
 hashes all match. `TryRestore` never recompiles. Legacy single-identity caches
 fail closed and require one explicit migration build.
 
+Actor scenes bind a scoped configuration identity rather than the complete
+runtime-configuration hash. The scope is the complete `actorCompiler` section
+plus `contentCompiler.animationSamplesPerSecond`, `assetIdHexCharacters`,
+`defaultMaterialGlossiness`, `minimumMaterialRoughness`,
+`pngCompressionLevel`, and `zeroSpecularEpsilon`. The generated family manifest
+is the identity authority; documentation does not copy a current hash. Pickup,
+player-input, XR-only configuration, and non-actor CELL presentation changes
+cannot invalidate actor artifacts. Legacy full-configuration actor manifests
+remain fail-closed until a
+metadata migration proves both configurations reduce to the same scoped
+identity.
+
 ## Configuration ownership
 
 | Section | Owner and present truth |
 | --- | --- |
 | `world` | Verified Gamebryo world-unit conversion. |
-| `simulation`, `player.desktopInput`, `xr`, `pool`, `hud` | Explicit OpenNV flat/VR policy; physical key/mouse bindings, simulator thresholds, pool input/mount/contact-proof tuning, and hardware/playtest gates are stated separately from retail data. |
+| `simulation`, `player.desktopInput`, `xr`, `pickup`, `pool`, `hud` | Explicit OpenNV flat/VR policy; physical key/mouse bindings, held-pickup distance/collision layers, simulator thresholds, pool input/mount/contact-proof tuning, and hardware/playtest gates are stated separately from retail data. |
 | `renderer` | Honest parity-failing Godot adapter; raw authored XCLL/material inputs remain available. |
 | `door` | Explicit non-parity fallback angle for verified single-piece, non-controller doors. Controller-bearing doors instead consume hash-joined owned NIF Open/Close transforms and exact moving visual/collision membership; the fallback may not impersonate a decoded controller track. |
 | `capture`, `proof`, `retailActorState`, `actorParity` | Diagnostic-only gates, never world or actor authoring data. |

@@ -56,8 +56,6 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
     private static readonly Color Amber = new("e6c34c");
     private readonly string _sex;
     private readonly TextureRect _portrait;
-    private readonly Fo1ProceduralHeadPreview _head;
-    private readonly Button _previewMode;
     private readonly Label[] _labels =
         new Label[Fo1CustomAppearanceEditorNumericContracts.FeatureCount];
     private int _face;
@@ -95,7 +93,7 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
             MouseFilter = MouseFilterEnum.Stop,
         });
         var title = Text(
-            "CUSTOM PORTRAIT + LIVE 3D HEAD",
+            "CUSTOM PORTRAIT",
             Fo1CustomAppearanceEditorNumericContracts.TitleX,
             Fo1CustomAppearanceEditorNumericContracts.TitleY,
             Fo1CustomAppearanceEditorNumericContracts.TitleWidth,
@@ -117,20 +115,6 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
             MouseFilter = MouseFilterEnum.Ignore,
         };
         AddChild(_portrait);
-        _head = new Fo1ProceduralHeadPreview
-        {
-            Position = _portrait.Position,
-            Size = _portrait.Size,
-        };
-        AddChild(_head);
-        _previewMode = Button(
-            "LIVE 3D",
-            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonX,
-            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonY,
-            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonWidth,
-            Fo1CustomAppearanceEditorNumericContracts.RowButtonWidth,
-            TogglePreview);
-        _previewMode.TooltipText = "Toggle the deterministic green portrait and matching live head";
 
         var names = new[] { "FACE", "HAIR", "SKIN", "HAIR COLOR", "EYES" };
         for (var row = 0; row < names.Length; row++)
@@ -171,7 +155,7 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
                 () => Change(captured, 1));
         }
         Text(
-            "HEX EXTENSION • LOCAL GENERATED PORTRAIT • NO RETAIL HEAD GEOMETRY",
+            "HEX EXTENSION • LOCAL GENERATED PORTRAIT • NO SUBSTITUTE 3D HEAD",
             Fo1CustomAppearanceEditorNumericContracts.BoundaryX,
             Fo1CustomAppearanceEditorNumericContracts.BoundaryY,
             Fo1CustomAppearanceEditorNumericContracts.BoundaryWidth,
@@ -197,8 +181,7 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
 
     internal event Action<Fo1CustomAppearanceSelection>? Confirmed;
     internal event Action? Cancelled;
-    internal bool Live3DVisible => _head.Visible;
-    internal Fo1ProceduralHeadPreview Head => _head;
+    internal bool Live3DVisible => false;
 
     internal void SetSelection(Fo1CustomAppearanceSelection selection)
     {
@@ -210,7 +193,8 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
         Refresh();
     }
 
-    internal void TogglePreviewMode() => TogglePreview();
+    internal void TogglePreviewMode() => throw new InvalidOperationException(
+        "Fallout 1 custom appearance has no substitute live 3D head; use a hash-bound full-body donor preview.");
     internal void Confirm() => Commit();
 
     private Fo1CustomAppearanceSelection Selection => new(
@@ -246,13 +230,6 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
         Refresh();
     }
 
-    private void TogglePreview()
-    {
-        _head.Visible = !_head.Visible;
-        _portrait.Visible = !_head.Visible;
-        _previewMode.Text = _head.Visible ? "PORTRAIT" : "LIVE 3D";
-    }
-
     private void Commit() => Confirmed?.Invoke(Selection);
 
     private void Refresh()
@@ -265,13 +242,6 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
             selection.SkinToneId,
             selection.HairColorId,
             selection.EyeColorId));
-        _head.SetIdentity(
-            _sex,
-            selection.FaceShapeId,
-            selection.HairStyleId,
-            selection.SkinToneId,
-            selection.HairColorId,
-            selection.EyeColorId);
         _labels[0].Text = selection.FaceShapeId.ToUpperInvariant();
         _labels[1].Text = selection.HairStyleId.ToUpperInvariant();
         _labels[2].Text = selection.SkinToneId.ToUpperInvariant();

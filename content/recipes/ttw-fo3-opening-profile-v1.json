@@ -1,6 +1,10 @@
 {
   "schema": "opennv-ttw-fo3-opening-recipe/v1",
   "id": "ttw-fo3-opening-profile-v1",
+  "semanticDifferentialSchema": "opennv-ttw-fo3-cg00-semantic-differential/v1",
+  "memberClosureSchema": "opennv-ttw-fo3-cg00-member-closure/v1",
+  "profileProjectionSchema": "opennv-ttw-fo3-cg00-profile-projection/v1",
+  "terminalPackageChangeDisposition": "source-link-provenance-only-outside-76-record-compiler-closure",
   "campaign": "Fallout3",
   "edition": "TTW",
   "sourceProfileSchema": "opennv-ttw-profile/v1",
@@ -62,6 +66,93 @@
     "CG02DadREF": { "formKey": "Fallout3.esm:0300ef", "recordType": "ACHR" },
     "PHYBabyRattle": { "formKey": "FalloutNV.esm:047758", "recordType": "SOUN" },
     "QSTBabyBabble": { "formKey": "FalloutNV.esm:089b4c", "recordType": "SOUN" }
+  },
+  "cg00SceneClosure": {
+    "cellFormKey": "Fallout3.esm:028138",
+    "player": {
+      "formKey": "FalloutNV.esm:000007",
+      "recordType": "NPC_",
+      "editorId": "Player",
+      "winnerPlugin": "TaleOfTwoWastelands.esm"
+    },
+    "participants": [
+      {
+        "role": "father",
+        "reference": { "formKey": "Fallout3.esm:0290a7", "recordType": "ACHR", "editorId": "CG00DadREF", "winnerPlugin": "Fallout3.esm", "parentCell": "Fallout3.esm:028138" },
+        "base": { "formKey": "Fallout3.esm:0290a6", "recordType": "NPC_", "editorId": "CG00Dad", "winnerPlugin": "Fallout3.esm" },
+        "startMarker": { "formKey": "Fallout3.esm:03a17b", "recordType": "REFR", "editorId": "CG00DadStartMarker", "winnerPlugin": "Fallout3.esm", "parentCell": "Fallout3.esm:028138" }
+      },
+      {
+        "role": "doctor",
+        "reference": { "formKey": "Fallout3.esm:0290a5", "recordType": "ACHR", "editorId": "CG00DoctorLiREF", "winnerPlugin": "Fallout3.esm", "parentCell": "Fallout3.esm:028138" },
+        "base": { "formKey": "Fallout3.esm:0290a3", "recordType": "NPC_", "editorId": "CG00DoctorLi", "winnerPlugin": "Fallout3.esm" },
+        "startMarker": { "formKey": "Fallout3.esm:0290a4", "recordType": "REFR", "editorId": "CG00DoctorLiStartMarker", "winnerPlugin": "Fallout3.esm", "parentCell": "Fallout3.esm:028138" }
+      },
+      {
+        "role": "mother",
+        "reference": { "formKey": "Fallout3.esm:05ede0", "recordType": "ACHR", "editorId": "CG00MomREF", "winnerPlugin": "Fallout3.esm", "parentCell": "Fallout3.esm:028138" },
+        "base": { "formKey": "Fallout3.esm:05eddf", "recordType": "NPC_", "editorId": "CG00Mom", "winnerPlugin": "Fallout3.esm" },
+        "startMarker": { "formKey": "Fallout3.esm:06a810", "recordType": "REFR", "editorId": "CG00MomStartMarker", "winnerPlugin": "Fallout3.esm", "parentCell": "Fallout3.esm:028138" }
+      }
+    ],
+    "placedReferences": {
+      "playerStartMarker": { "formKey": "Fallout3.esm:039562", "recordType": "REFR", "editorId": "CG00PlayerStartMarker", "winnerPlugin": "Fallout3.esm", "parentCell": "Fallout3.esm:028138" },
+      "geneProjector": { "formKey": "Fallout3.esm:0438ea", "recordType": "REFR", "editorId": "CG00GeneProjectorREF", "winnerPlugin": "Fallout3.esm", "parentCell": "Fallout3.esm:028138" }
+    },
+    "packageSections": {
+      "player": [
+        { "section": 0, "package": { "formKey": "FalloutNV.esm:08f77b", "recordType": "PACK", "editorId": "CG00PlayerSection0", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:08443c", "recordType": "IDLE", "editorId": "LooseCG00PlayerSection00", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 1, "package": { "formKey": "FalloutNV.esm:038ea3", "recordType": "PACK", "editorId": "CG00PlayerSection1", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069ef9", "recordType": "IDLE", "editorId": "LooseCG00PlayerSection01", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 2, "package": { "formKey": "FalloutNV.esm:06a811", "recordType": "PACK", "editorId": "CG00PlayerSection2", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069efa", "recordType": "IDLE", "editorId": "LooseCG00PlayerSection02", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 3, "package": { "formKey": "FalloutNV.esm:06a812", "recordType": "PACK", "editorId": "CG00PlayerSection3", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069efb", "recordType": "IDLE", "editorId": "LooseCG00PlayerSection03", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 4, "package": { "formKey": "FalloutNV.esm:06a818", "recordType": "PACK", "editorId": "CG00PlayerSection4", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069efc", "recordType": "IDLE", "editorId": "LooseCG00PlayerSection04", "winnerPlugin": "FalloutNV.esm" } }
+      ],
+      "father": [
+        { "section": 0, "package": { "formKey": "FalloutNV.esm:08f778", "recordType": "PACK", "editorId": "CG00DadSection0", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:084439", "recordType": "IDLE", "editorId": "LooseCG00DadSection00", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 1, "package": { "formKey": "FalloutNV.esm:06b245", "recordType": "PACK", "editorId": "CG00DadSection1", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:068ab0", "recordType": "IDLE", "editorId": "LooseCG00DadSection01", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 2, "package": { "formKey": "FalloutNV.esm:06b246", "recordType": "PACK", "editorId": "CG00DadSection2", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069eec", "recordType": "IDLE", "editorId": "LooseCG00DadSection02", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 3, "package": { "formKey": "FalloutNV.esm:06b24a", "recordType": "PACK", "editorId": "CG00DadSection3", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069eed", "recordType": "IDLE", "editorId": "LooseCG00DadSection03", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 4, "package": { "formKey": "FalloutNV.esm:06b249", "recordType": "PACK", "editorId": "CG00DadSection4", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069eee", "recordType": "IDLE", "editorId": "LooseCG00DadSection04", "winnerPlugin": "FalloutNV.esm" } }
+      ],
+      "doctor": [
+        { "section": 0, "package": { "formKey": "FalloutNV.esm:08f779", "recordType": "PACK", "editorId": "CG00DoctorLiSection0", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:08443a", "recordType": "IDLE", "editorId": "LooseCG00DrLiSection00", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 1, "package": { "formKey": "FalloutNV.esm:06a813", "recordType": "PACK", "editorId": "CG00DoctorLiSection1", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:068ab1", "recordType": "IDLE", "editorId": "LooseCG00DrLiSection01", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 2, "package": { "formKey": "FalloutNV.esm:06a814", "recordType": "PACK", "editorId": "CG00DoctorLiSection2", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069ef0", "recordType": "IDLE", "editorId": "LooseCG00DrLiSection02", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 3, "package": { "formKey": "FalloutNV.esm:06a815", "recordType": "PACK", "editorId": "CG00DoctorLiSection3", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069ef1", "recordType": "IDLE", "editorId": "LooseCG00DrLiSection03", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 4, "package": { "formKey": "FalloutNV.esm:06a816", "recordType": "PACK", "editorId": "CG00DoctorLiSection4", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069ef2", "recordType": "IDLE", "editorId": "LooseCG00DrLiSection04", "winnerPlugin": "FalloutNV.esm" } }
+      ],
+      "mother": [
+        { "section": 0, "package": { "formKey": "FalloutNV.esm:08f77a", "recordType": "PACK", "editorId": "CG00MomSection0", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:08443b", "recordType": "IDLE", "editorId": "LooseCG00MomSection00", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 1, "package": { "formKey": "FalloutNV.esm:06b244", "recordType": "PACK", "editorId": "CG00MomSection1", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069ef4", "recordType": "IDLE", "editorId": "LooseCG00MomSection01", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 2, "package": { "formKey": "FalloutNV.esm:06b24c", "recordType": "PACK", "editorId": "CG00MomSection2", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069ef5", "recordType": "IDLE", "editorId": "LooseCG00MomSection02", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 3, "package": { "formKey": "FalloutNV.esm:06b241", "recordType": "PACK", "editorId": "CG00MomSection3", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069ef6", "recordType": "IDLE", "editorId": "LooseCG00MomSection03", "winnerPlugin": "FalloutNV.esm" } },
+        { "section": 4, "package": { "formKey": "FalloutNV.esm:06b242", "recordType": "PACK", "editorId": "CG00MomSection4", "winnerPlugin": "Fallout3.esm" }, "idle": { "formKey": "FalloutNV.esm:069ef7", "recordType": "IDLE", "editorId": "LooseCG00MomSection04", "winnerPlugin": "FalloutNV.esm" } }
+      ]
+    },
+    "dialogue": {
+      "questFormKey": "FalloutNV.esm:01f388",
+      "topics": {
+        "father": { "formKey": "FalloutNV.esm:01f378", "recordType": "DIAL", "editorId": "CG00DadSpeech", "winnerPlugin": "TaleOfTwoWastelands.esm" },
+        "mother": { "formKey": "FalloutNV.esm:02cb97", "recordType": "DIAL", "editorId": "CG00MomSpeech", "winnerPlugin": "Fallout3.esm" }
+      },
+      "voiceTypes": {
+        "father": { "formKey": "FalloutNV.esm:019fdf", "recordType": "VTYP", "editorId": "MaleUniqueDad", "winnerPlugin": "FalloutNV.esm" },
+        "mother": { "formKey": "Fallout3.esm:05eddc", "recordType": "VTYP", "editorId": "FemaleUniqueMom", "winnerPlugin": "Fallout3.esm" }
+      },
+      "stage10": ["Fallout3.esm:01f387"],
+      "stage22Male": ["Fallout3.esm:01f386", "Fallout3.esm:05edd7", "Fallout3.esm:01f37e", "Fallout3.esm:01f384", "Fallout3.esm:01f382"],
+      "stage22Female": ["Fallout3.esm:01f385", "Fallout3.esm:05edd8", "Fallout3.esm:01f37d", "Fallout3.esm:01f383", "Fallout3.esm:01f382"],
+      "stage42": ["Fallout3.esm:0202c2", "Fallout3.esm:0202c3"]
+    },
+    "imageSpaceModifiers": [
+      { "formKey": "FalloutNV.esm:0230e7", "recordType": "IMAD", "editorId": "CG00BlackScreenISFX", "winnerPlugin": "FalloutNV.esm" },
+      { "formKey": "FalloutNV.esm:09b5c1", "recordType": "IMAD", "editorId": "CG00BirthISFX", "winnerPlugin": "FalloutNV.esm" },
+      { "formKey": "FalloutNV.esm:035a20", "recordType": "IMAD", "editorId": "CG00BirthBaseISFX", "winnerPlugin": "FalloutNV.esm" }
+    ],
+    "sounds": [
+      { "formKey": "Fallout3.esm:023045", "recordType": "SOUN", "editorId": "QSTBirthStart", "winnerPlugin": "Fallout3.esm" },
+      { "formKey": "FalloutNV.esm:07db67", "recordType": "SOUN", "editorId": "QSTBabyCry", "winnerPlugin": "FalloutNV.esm" }
+    ]
   },
   "commandDialects": {
     "cg00Stage0": [

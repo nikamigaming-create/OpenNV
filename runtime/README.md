@@ -106,8 +106,9 @@ implemented.
 
 The following controls and loadout describe the independently accepted saloon
 component, not the complete default Doc/exterior/saloon route. Use WASD and
-mouse-look, press E to pick up items, open containers, or operate a
-door, left-click to fire, R to reload, and F5 to save. Flat and XR both start
+mouse-look, press E to collect items, open containers, or operate a door, hold
+Z while aiming at a pickup to physically move it and release Z to drop it,
+left-click to fire, R to reload, and F5 to save. Flat and XR both start
 with the owned-data 10mm equipped. The main door opens
 both reciprocal references and can be crossed without a loading screen. The HUD tracks the
 four-stage sandbox objective and inventory. Press Tab to open the shared Pip-Boy view:
@@ -122,8 +123,9 @@ Its simulator result does not promote the launcher's default joined route;
 **OpenXR mode** there remains explicitly experimental and awaits integrated
 route acceptance. Oculus Touch and the OpenXR
 1.1 generic-controller fallback are declared: left stick moves, right stick
-snap-turns, right grip activates, right trigger fires with haptics, B reloads,
-and X saves. VR starts with the owned master-record 10mm pistol profile equipped,
+snap-turns, right grip activates, right A/primary holds and moves an owned
+pickup until release, right trigger fires with haptics, B reloads, and X saves.
+VR starts with the owned master-record 10mm pistol profile equipped,
 one full magazine, and one reserve magazine. The tracked eye is calibrated once
 to 1.68 metres above the authored floor. The wrist Pip-Boy screen is an actual OpenXR
 world-space pixel surface attached to the left hand; it consumes the same UI snapshot
@@ -200,7 +202,13 @@ Godot_v4.7.2-stable_mono_win64.exe --xr-mode off --path runtime -- `
 The bounded Fallout 1 new-game route adds the hash-pinned owned character/opening
 cache. It begins at a functional asset-free, original-style menu whose **New
 Game** action opens the owned original picker with Max Stone, Natalia, Albert,
-and Custom; **Exit** quits, and the picker's Back action returns to that menu.
+and Custom; a valid save exposes **Continue**; **Exit** quits, and the picker's
+Back action returns to that menu. Continue restores the saved hex, bound player
+identity/presentation, Pip-Boy/classic HUD, and finite camera mode, yaw, pitch,
+and zoom under black before controls. It does not replay the picker or Overseer
+movie and does not reset V13ENT entry. A save missing either the complete player
+presentation identity or `opennv-fo1-camera-state/v1` remains non-continuable;
+OpenNV does not invent a legacy camera or identity migration.
 Take selects a premade, while Modify loads it into the complete
 SPECIAL/skills/traits editor. It then shows the complete Overseer briefing before
 entering the same tactical session. The movie's **SKIP** button or `Escape`

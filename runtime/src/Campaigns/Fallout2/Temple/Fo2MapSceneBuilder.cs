@@ -37,7 +37,8 @@ internal static class Fo2MapSceneBuilder
         IReadOnlyList<uint> tileEntries,
         IReadOnlyDictionary<string, Fo2MapArtifact> artifacts,
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
-        IReadOnlyList<Fo2MapObjectPlacement> objectPlacements)
+        IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
+        bool allowOwnedRoofCutaway = false)
     {
         if (mapIndex < 0 || string.IsNullOrWhiteSpace(mapName) || mapSha256.Length != 64 ||
             elevation is < 0 or > 2 ||
@@ -49,7 +50,8 @@ internal static class Fo2MapSceneBuilder
         var floorIds = tileEntries.Select(entry => (int)(entry & FloorIdMask)).ToArray();
         var roofIds = tileEntries.Select(entry =>
             (int)((entry >> RoofIdShift) & FloorIdMask)).ToArray();
-        if (roofIds.Any(id => id != defaultTileId))
+        var sourceRoofPatches = roofIds.Count(id => id != defaultTileId);
+        if (sourceRoofPatches > 0 && !allowOwnedRoofCutaway)
             throw new InvalidOperationException(
                 $"Fallout 2 {mapName} elevation {elevation} has non-default roof art " +
                 "without a source height contract.");
@@ -105,6 +107,8 @@ internal static class Fo2MapSceneBuilder
         root.SetMeta("map_name", mapName);
         root.SetMeta("source_map_sha256", mapSha256);
         root.SetMeta("source_elevation", elevation);
+        root.SetMeta("source_roof_patches", sourceRoofPatches);
+        root.SetMeta("roof_cutaway", sourceRoofPatches > 0);
         parent.AddChild(root);
 
         var floorRoot = new Node3D { Name = $"MAP_{mapIndex}_ELEVATION_{elevation}_FLOOR_FRM" };
@@ -183,7 +187,7 @@ internal static class Fo2MapSceneBuilder
             artifacts.Count,
             requiredArtifactIds.Count,
             renderedFloors,
-            0,
+            sourceRoofPatches,
             placements.Length,
             sourcePixelsPerMeter,
             floorMeshes,
@@ -239,12 +243,16 @@ internal static class Fo2MapSceneBuilder
                     new Transform3D(
                         Basis.Identity,
                         Fo1HexMath.FloorPatchCenter(indices[instance])));
-            root.AddChild(new MultiMeshInstance3D
+            var floorInstance = new MultiMeshInstance3D
             {
                 Name = $"FLOOR_FRM_{group.Key:D4}_{indices.Length}",
                 Multimesh = multiMesh,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            });
+            };
+            floorInstance.SetMeta("source_floor_tile_id", group.Key);
+            floorInstance.SetMeta("source_floor_artifact_id", artifact.Id);
+            floorInstance.SetMeta("source_floor_png_sha256", artifact.PngSha256);
+            root.AddChild(floorInstance);
             patches += indices.Length;
             meshes++;
         }

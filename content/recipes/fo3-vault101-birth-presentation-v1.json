@@ -2,7 +2,8 @@
   "schema": "opennv-fo3-birth-presentation-recipe/v1",
   "id": "fo3-vault101-birth-presentation-v1",
   "actorRecipes": {
-    "cg01Dad": "fo3-vault101-cg01-dad-actor-v1.json"
+    "cg01Dad": "fo3-vault101-cg01-dad-actor-v1.json",
+    "mother": "fo3-vault101-mom-actor-v1.json"
   },
   "source": {
     "birthSliceSchema": "opennv-fo3-opening-slice/v1",
@@ -46,7 +47,7 @@
     "proofCameraSupportModelPath": "furniture\\cg00bed.nif",
     "proofCameraSurfaceClearanceGameUnits": 4.0,
     "proofCameraNearGameUnits": 1.0,
-    "verticalFovDegrees": 75.0,
+    "projectionAuthority": "owned-fDefaultFOV-through-fallout3-frustum-contract",
     "proofAmbientColor": [
       0.72,
       0.72,
@@ -62,13 +63,8 @@
       0.018
     ]
   },
-  "unsupported": [
-    "Mom, player body, and all actors except Doctor Li, CG00 Dad, and CG01 Dad",
-    "automatic CG00 dialogue timing, package state, and animation selection",
-    "quest and package command execution",
-    "CELL lighting and image-space effects",
-    "collision and interaction",
-    "camera and pixel parity",
-    "OpenXR"
-  ]
+  "sourceClosure": {
+    "requiredSceneParticipantRoles": ["doctor", "father", "mother"],
+    "requiredUnaccountedCount": 0
+  }
 }

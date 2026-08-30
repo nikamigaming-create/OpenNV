@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+import hashlib
 import json
 import re
 import struct
@@ -114,6 +115,7 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         or not isinstance(confrontation.get("critter"), dict)
         or not isinstance(confrontation.get("loot"), dict)
         or not isinstance(confrontation.get("messageCatalogs"), dict)
+        or not isinstance(confrontation.get("guardianScript"), dict)
     ):
         raise Fo1ProfileError("Fallout 2 bounded confrontation recipe is incomplete")
     return recipe
@@ -138,6 +140,169 @@ def _parse_message_catalog(data: bytes) -> dict[int, str]:
         result[number] = match.group(2)
     if not result:
         raise Fo1ProfileError("Fallout 2 prototype message catalog is empty")
+    return result
+
+
+def _script_entries(data: bytes) -> list[str]:
+    try:
+        lines = data.decode("cp1252").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    except UnicodeDecodeError as error:
+        raise Fo1ProfileError("Fallout 2 scripts.lst is not cp1252") from error
+    entries = []
+    for line in lines:
+        program = line.split(";", 1)[0].strip()
+        if program:
+            entries.append(program)
+    if not entries:
+        raise Fo1ProfileError("Fallout 2 scripts.lst has no program entries")
+    return entries
+
+
+def _compile_guardian_script(
+    resolver: Fo1ResourceResolver,
+    configured: dict[str, Any],
+    critter_script_index: int,
+) -> dict[str, Any]:
+    program_rule = dict(configured["program"])
+    catalog_rule = dict(configured["messageCatalog"])
+    program_index = int(program_rule["scriptsListIndex"])
+    scripts_list = resolver.read("scripts\\scripts.lst")
+    entries = _script_entries(scripts_list.data)
+    if (
+        program_index != critter_script_index
+        or program_index < 0
+        or program_index >= len(entries)
+        or entries[program_index].casefold() != "acklint.int"
+    ):
+        raise Fo1ProfileError("Fallout 2 guardian script-list identity drifted")
+    program = resolver.read(str(program_rule["logicalPath"]))
+    if (
+        program.logical_path.casefold() != "scripts\\acklint.int"
+        or program.sha256 != str(program_rule["sha256"]).casefold()
+    ):
+        raise Fo1ProfileError("Fallout 2 guardian INT identity drifted")
+    message_catalog = resolver.read(str(catalog_rule["logicalPath"]))
+    if (
+        message_catalog.logical_path.casefold() != "text\\english\\dialog\\acklint.msg"
+        or message_catalog.sha256 != str(catalog_rule["sha256"]).casefold()
+        or int(catalog_rule["messageListId"]) != 751
+    ):
+        raise Fo1ProfileError("Fallout 2 guardian MSG identity drifted")
+    messages = _parse_message_catalog(message_catalog.data)
+
+    terminal = str(configured["terminalNode"])
+    nodes = list(configured["nodes"])
+    node_ids = [str(node["id"]) for node in nodes]
+    if (
+        str(configured["initialNode"]) != "Node001"
+        or terminal != "Node999"
+        or len(nodes) != 5
+        or len(set(node_ids)) != len(node_ids)
+        or set(node_ids) != {"Node001", "Node002", "Node003", "Node004", "Node005"}
+        or sorted(str(value).casefold() for value in configured["preTrialPlayerArtFids"])
+        != ["0100003d", "0100003e"]
+    ):
+        raise Fo1ProfileError("Fallout 2 guardian dialogue node identity drifted")
+
+    emitted_nodes = []
+    referenced_messages: set[int] = set()
+    for node in nodes:
+        reply = []
+        for segment in node["reply"]:
+            if set(segment) == {"messageId"}:
+                message_id = int(segment["messageId"])
+                text = messages.get(message_id, "")
+                if not text:
+                    raise Fo1ProfileError(
+                        f"Fallout 2 guardian reply message is absent: {message_id}"
+                    )
+                referenced_messages.add(message_id)
+                reply.append({"messageId": message_id, "text": text})
+            elif segment == {"playerName": True}:
+                reply.append({"playerName": True})
+            else:
+                raise Fo1ProfileError("Fallout 2 guardian reply segment is unsupported")
+        options = []
+        for option in node["options"]:
+            message_id = int(option["messageId"])
+            target = str(option["target"])
+            minimum = option.get("minimumIntelligence")
+            maximum = option.get("maximumIntelligence")
+            text = messages.get(message_id, "")
+            if (
+                not text
+                or target not in {*node_ids, terminal}
+                or (minimum is None) == (maximum is None)
+                or minimum is not None and int(minimum) != 4
+                or maximum is not None and int(maximum) != 3
+                or int(option["reaction"]) != 50
+            ):
+                raise Fo1ProfileError(
+                    f"Fallout 2 guardian option contract drifted: {message_id}"
+                )
+            referenced_messages.add(message_id)
+            options.append(
+                {
+                    "messageId": message_id,
+                    "text": text,
+                    "target": target,
+                    "minimumIntelligence": None if minimum is None else int(minimum),
+                    "maximumIntelligence": None if maximum is None else int(maximum),
+                    "reaction": 50,
+                }
+            )
+        emitted_nodes.append({"id": str(node["id"]), "reply": reply, "options": options})
+    if referenced_messages != set(range(103, 121)):
+        raise Fo1ProfileError("Fallout 2 guardian dialogue message coverage drifted")
+
+    hostility = dict(configured["hostilityTrigger"])
+    pickup = dict(hostility["pickupProcedure"])
+    critter = dict(hostility["critterProcedure"])
+    if (
+        pickup != {"requiresSourcePlayer": True, "localVariable": 5, "setValue": 2}
+        or critter
+        != {
+            "localVariable": 5,
+            "requiredValue": 2,
+            "requiresCanSeePlayer": True,
+            "setValueBeforeAttack": 1,
+            "attackPlayer": True,
+        }
+    ):
+        raise Fo1ProfileError("Fallout 2 guardian hostility trigger drifted")
+    result = {
+        "schema": "opennv-fo2-acklint-guardian-script/v1",
+        "authority": "hash-bound owned ACKlint.int control-flow audit plus owned ACKlint.msg rows",
+        "program": {
+            "scriptsListIndex": program_index,
+            "scriptsListLogicalPath": scripts_list.logical_path,
+            "scriptsListSha256": scripts_list.sha256,
+            "logicalPath": program.logical_path,
+            "source": program.source,
+            "bytes": len(program.data),
+            "sha256": program.sha256,
+        },
+        "messageCatalog": {
+            "messageListId": 751,
+            "logicalPath": message_catalog.logical_path,
+            "source": message_catalog.source,
+            "bytes": len(message_catalog.data),
+            "sha256": message_catalog.sha256,
+        },
+        "preTrialPlayerArtFids": list(configured["preTrialPlayerArtFids"]),
+        "initialNode": "Node001",
+        "terminalNode": terminal,
+        "nodes": emitted_nodes,
+        "hostilityTrigger": hostility,
+        "implementedBoundary": {
+            "dialogueNodes": True,
+            "pickupToAttackTransition": False,
+            "generalIntExecution": False,
+        },
+    }
+    result["contractSha256"] = hashlib.sha256(
+        json.dumps(result, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     return result
 
 
@@ -283,6 +448,11 @@ def _compile_bounded_confrontation(
     loot_name = item_messages.get(int(loot_prototype["message_number"]), "").strip()
     if not critter_name or not loot_name:
         raise Fo1ProfileError("Fallout 2 bounded confrontation display name is absent")
+    guardian_script = _compile_guardian_script(
+        resolver,
+        dict(configured["guardianScript"]),
+        int(critter["scriptIndex"]),
+    )
     return {
         "schema": CONFRONTATION_SCHEMA,
         "authority": "owned MAP object/inventory graph plus hash-bound PRO and MSG records",
@@ -333,11 +503,17 @@ def _compile_bounded_confrontation(
                 "sha256": item_messages_resource.sha256,
             },
         },
+        "guardianScript": guardian_script,
         "scriptBoundary": {
             "sid": critter["sid"],
             "scriptIndex": critter["scriptIndex"],
             "executed": False,
-            "reason": "general Fallout 2 INT script execution is outside this bounded adapter",
+            "boundedDialogueExecuted": True,
+            "reason": (
+                "ACKlint dialogue nodes 001-005 are implemented from a hash-bound owned "
+                "control-flow audit; general INT execution and engine combat remain outside "
+                "this bounded adapter"
+            ),
         },
     }
 

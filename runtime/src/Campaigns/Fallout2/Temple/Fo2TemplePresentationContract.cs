@@ -47,6 +47,8 @@ internal sealed record Fo2MapObjectPlacement(
     int ObjectType,
     int? PrototypeSubtype,
     string? ArtFilename,
+    int LightDistance,
+    int LightIntensity,
     IReadOnlyList<int> InstanceValues,
     string Sid,
     int ScriptIndex,
@@ -81,6 +83,8 @@ internal sealed class Fo2TemplePresentationCatalog
         string manifestSha256,
         string sourceManifestPath,
         string sourceManifestSha256,
+        string sourceProfilePath,
+        string sourceProfileSha256,
         string sourceProfileId,
         string mapSha256,
         int entryTile,
@@ -98,6 +102,8 @@ internal sealed class Fo2TemplePresentationCatalog
         ManifestSha256 = manifestSha256;
         SourceManifestPath = sourceManifestPath;
         SourceManifestSha256 = sourceManifestSha256;
+        SourceProfilePath = sourceProfilePath;
+        SourceProfileSha256 = sourceProfileSha256;
         SourceProfileId = sourceProfileId;
         MapSha256 = mapSha256;
         EntryTile = entryTile;
@@ -116,6 +122,8 @@ internal sealed class Fo2TemplePresentationCatalog
     internal string ManifestSha256 { get; }
     internal string SourceManifestPath { get; }
     internal string SourceManifestSha256 { get; }
+    internal string SourceProfilePath { get; }
+    internal string SourceProfileSha256 { get; }
     internal string SourceProfileId { get; }
     internal string MapSha256 { get; }
     internal int EntryTile { get; }
@@ -284,6 +292,8 @@ internal sealed class Fo2TemplePresentationCatalog
             cacheSha256,
             sourcePath,
             Sha256(sourceBytes),
+            profilePath,
+            Sha256(profileBytes),
             RequiredString(profileDescriptor, "sourceProfileId"),
             mapSha256,
             entryTile,
@@ -443,6 +453,8 @@ internal sealed class Fo2TemplePresentationCatalog
                 obj.GetProperty("prototype").GetProperty("object_type").GetInt32(),
                 OptionalInt(obj.GetProperty("prototype"), "subtype"),
                 OptionalString(obj, "artFilename"),
+                obj.GetProperty("lightDistance").GetInt32(),
+                obj.GetProperty("lightIntensity").GetInt32(),
                 obj.GetProperty("instanceValues").EnumerateArray()
                     .Select(value => value.GetInt32()).ToArray(),
                 RequiredString(obj, "sid"),
@@ -511,6 +523,8 @@ internal sealed class Fo2TemplePresentationCatalog
                         sourceObject.ObjectType,
                         sourceObject.PrototypeSubtype,
                         sourceObject.ArtFilename,
+                        sourceObject.LightDistance,
+                        sourceObject.LightIntensity,
                         sourceObject.InstanceValues,
                         sourceObject.Sid,
                         sourceObject.ScriptIndex,
@@ -650,6 +664,8 @@ internal sealed class Fo2TemplePresentationCatalog
         int ObjectType,
         int? PrototypeSubtype,
         string? ArtFilename,
+        int LightDistance,
+        int LightIntensity,
         IReadOnlyList<int> InstanceValues,
         string Sid,
         int ScriptIndex,

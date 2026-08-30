@@ -34,6 +34,12 @@ resource_name = "fire"
 localized_name = "Fire"
 toplevel_paths = PackedStringArray("/user/hand/right")
 
+[sub_resource type="OpenXRAction" id="OpenXRAction_grab"]
+resource_name = "grab"
+localized_name = "Hold or drop world item"
+action_type = 0
+toplevel_paths = PackedStringArray("/user/hand/right")
+
 [sub_resource type="OpenXRAction" id="OpenXRAction_save"]
 resource_name = "save"
 localized_name = "Save"
@@ -55,7 +61,7 @@ toplevel_paths = PackedStringArray("/user/hand/left", "/user/hand/right")
 [sub_resource type="OpenXRActionSet" id="OpenXRActionSet_gameplay"]
 resource_name = "gameplay"
 localized_name = "Open Nevada gameplay"
-actions = [SubResource("OpenXRAction_aim"), SubResource("OpenXRAction_grip"), SubResource("OpenXRAction_move"), SubResource("OpenXRAction_turn"), SubResource("OpenXRAction_activate"), SubResource("OpenXRAction_fire"), SubResource("OpenXRAction_save"), SubResource("OpenXRAction_reload"), SubResource("OpenXRAction_haptic")]
+actions = [SubResource("OpenXRAction_aim"), SubResource("OpenXRAction_grip"), SubResource("OpenXRAction_move"), SubResource("OpenXRAction_turn"), SubResource("OpenXRAction_activate"), SubResource("OpenXRAction_fire"), SubResource("OpenXRAction_grab"), SubResource("OpenXRAction_save"), SubResource("OpenXRAction_reload"), SubResource("OpenXRAction_haptic")]
 
 [sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_aim_left"]
 action = SubResource("OpenXRAction_aim")
@@ -89,6 +95,10 @@ binding_path = "/user/hand/right/input/squeeze/value"
 action = SubResource("OpenXRAction_fire")
 binding_path = "/user/hand/right/input/trigger/value"
 
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_grab"]
+action = SubResource("OpenXRAction_grab")
+binding_path = "/user/hand/right/input/a/click"
+
 [sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_save"]
 action = SubResource("OpenXRAction_save")
 binding_path = "/user/hand/left/input/x/click"
@@ -107,7 +117,7 @@ binding_path = "/user/hand/right/output/haptic"
 
 [sub_resource type="OpenXRInteractionProfile" id="OpenXRInteractionProfile_oculus_touch"]
 interaction_profile_path = "/interaction_profiles/oculus/touch_controller"
-bindings = [SubResource("OpenXRIPBinding_aim_left"), SubResource("OpenXRIPBinding_aim_right"), SubResource("OpenXRIPBinding_grip_left"), SubResource("OpenXRIPBinding_grip_right"), SubResource("OpenXRIPBinding_move"), SubResource("OpenXRIPBinding_turn"), SubResource("OpenXRIPBinding_activate"), SubResource("OpenXRIPBinding_fire"), SubResource("OpenXRIPBinding_save"), SubResource("OpenXRIPBinding_reload"), SubResource("OpenXRIPBinding_haptic_left"), SubResource("OpenXRIPBinding_haptic_right")]
+bindings = [SubResource("OpenXRIPBinding_aim_left"), SubResource("OpenXRIPBinding_aim_right"), SubResource("OpenXRIPBinding_grip_left"), SubResource("OpenXRIPBinding_grip_right"), SubResource("OpenXRIPBinding_move"), SubResource("OpenXRIPBinding_turn"), SubResource("OpenXRIPBinding_activate"), SubResource("OpenXRIPBinding_fire"), SubResource("OpenXRIPBinding_grab"), SubResource("OpenXRIPBinding_save"), SubResource("OpenXRIPBinding_reload"), SubResource("OpenXRIPBinding_haptic_left"), SubResource("OpenXRIPBinding_haptic_right")]
 
 [sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_generic_aim_left"]
 action = SubResource("OpenXRAction_aim")
@@ -141,6 +151,10 @@ binding_path = "/user/hand/right/input/squeeze/value"
 action = SubResource("OpenXRAction_fire")
 binding_path = "/user/hand/right/input/trigger/value"
 
+[sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_generic_grab"]
+action = SubResource("OpenXRAction_grab")
+binding_path = "/user/hand/right/input/primary/click"
+
 [sub_resource type="OpenXRIPBinding" id="OpenXRIPBinding_generic_save"]
 action = SubResource("OpenXRAction_save")
 binding_path = "/user/hand/left/input/primary/click"
@@ -159,7 +173,7 @@ binding_path = "/user/hand/right/output/haptic"
 
 [sub_resource type="OpenXRInteractionProfile" id="OpenXRInteractionProfile_generic"]
 interaction_profile_path = "/interaction_profiles/khr/generic_controller"
-bindings = [SubResource("OpenXRIPBinding_generic_aim_left"), SubResource("OpenXRIPBinding_generic_aim_right"), SubResource("OpenXRIPBinding_generic_grip_left"), SubResource("OpenXRIPBinding_generic_grip_right"), SubResource("OpenXRIPBinding_generic_move"), SubResource("OpenXRIPBinding_generic_turn"), SubResource("OpenXRIPBinding_generic_activate"), SubResource("OpenXRIPBinding_generic_fire"), SubResource("OpenXRIPBinding_generic_save"), SubResource("OpenXRIPBinding_generic_reload"), SubResource("OpenXRIPBinding_generic_haptic_left"), SubResource("OpenXRIPBinding_generic_haptic_right")]
+bindings = [SubResource("OpenXRIPBinding_generic_aim_left"), SubResource("OpenXRIPBinding_generic_aim_right"), SubResource("OpenXRIPBinding_generic_grip_left"), SubResource("OpenXRIPBinding_generic_grip_right"), SubResource("OpenXRIPBinding_generic_move"), SubResource("OpenXRIPBinding_generic_turn"), SubResource("OpenXRIPBinding_generic_activate"), SubResource("OpenXRIPBinding_generic_fire"), SubResource("OpenXRIPBinding_generic_grab"), SubResource("OpenXRIPBinding_generic_save"), SubResource("OpenXRIPBinding_generic_reload"), SubResource("OpenXRIPBinding_generic_haptic_left"), SubResource("OpenXRIPBinding_generic_haptic_right")]
 
 [resource]
 action_sets = [SubResource("OpenXRActionSet_gameplay")]
