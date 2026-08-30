@@ -561,22 +561,19 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         if (!headTone.IsFinite())
             throw new InvalidOperationException(
                 "Fallout 2 humanoid live FaceGen head tone is invalid.");
-        var transfer = RuntimeConfiguration.Load()
-            .ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer;
         var headSkinColor = AverageFaceGenEncodedSkinColor(headToneMaterials[0]);
         var skinNodes = document.RootElement.GetProperty("surfaces")
             .EnumerateArray()
             .Where(row =>
             {
-                var role = row.GetProperty("role").GetString() ?? "";
                 var material = row.GetProperty("material");
-                var diffuse = material.GetProperty("resolvedDiffuse").ValueKind ==
-                        JsonValueKind.String
-                    ? material.GetProperty("resolvedDiffuse").GetString() ?? ""
-                    : "";
-                return role is "left-hand" or "right-hand" ||
-                    diffuse.Contains("\\upperbodymale.dds", StringComparison.OrdinalIgnoreCase) ||
-                    diffuse.Contains("\\upperbodyfemale.dds", StringComparison.OrdinalIgnoreCase);
+                return material.TryGetProperty("skin", out var skin) &&
+                    skin.ValueKind == JsonValueKind.Object &&
+                    material.GetProperty("faceGen").ValueKind == JsonValueKind.Null &&
+                    skin.GetProperty("schema").GetString() ==
+                        "opennv-retail-actor-skin-material/v1" &&
+                    skin.GetProperty("source").GetString() ==
+                        "owned-nif-bs-shader-type-shaderskin";
             })
             .Select(row => row.GetProperty("runtimeNodeName").GetString() ?? "")
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -591,9 +588,16 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
             {
                 if (surface.Mesh.GetSurfaceOverrideMaterial(index) is not ShaderMaterial material)
                     continue;
+                if (material.ResourceName !=
+                        RuntimeMaterialLoader.RetailActorMaterialResourceName ||
+                    material.Shader?.Code.Contains(
+                        "uniform bool use_skin_transfer;",
+                        StringComparison.Ordinal) != true)
+                    throw new InvalidOperationException(
+                        "Fallout 2 humanoid source-declared skin surface lacks its runtime transfer.");
+                material.SetShaderParameter("use_skin_transfer", true);
                 var sourceSkinColor = AverageEncodedSkinColor(
                     material,
-                    headTone,
                     centralTorso: surface.Role == "body");
                 var skinMatch = new Vector3(
                     Math.Clamp(headSkinColor.X / MathF.Max(sourceSkinColor.X, 0.0001f), 0.15f, 4.0f),
@@ -602,9 +606,12 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
                 SetMeta(
                     $"skin_join_match_{surface.Role.Replace('-', '_')}",
                     skinMatch);
-                surface.Mesh.SetSurfaceOverrideMaterial(
-                    index,
-                    BuildSkinTransferMaterial(material, headTone, skinMatch, transfer));
+                material.SetShaderParameter("skin_complexion_multiplier", Vector3.One);
+                material.SetShaderParameter("use_skin_complexion_target", true);
+                material.SetShaderParameter("skin_complexion_target", headSkinColor);
+                material.SetShaderParameter(
+                    "skin_complexion_source_mean",
+                    (sourceSkinColor.X + sourceSkinColor.Y + sourceSkinColor.Z) / 3.0f);
                 joined++;
             }
         }
@@ -613,93 +620,11 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
                 "Fallout 2 humanoid donor has no complete torso-and-hand skin join.");
         SetMeta(
             "skin_join_mode",
-            "owned-upperbody-and-hand-surfaces-use-live-facegen-neck-transfer-v5");
+            "owned-shaderskin-detail-with-live-facegen-cheek-complexion-v8");
         SetMeta("skin_join_materials", joined);
         SetMeta("skin_join_head_tone", headTone);
         SetMeta("skin_join_target_color", headSkinColor);
-        SetMeta("skin_join_target_role", "head-lower-neck-uv-island");
-    }
-
-    private static ShaderMaterial BuildSkinTransferMaterial(
-        ShaderMaterial source,
-        Vector3 headTone,
-        Vector3 skinMatch,
-        ColorTransferConfiguration transfer)
-    {
-        const string fragmentMarker = "void fragment() {";
-        const string baseMarker = "    base *= base_color_factor;";
-        var shaderCode = source.Shader?.Code ?? "";
-        if (source.ResourceName != RuntimeMaterialLoader.RetailActorMaterialResourceName ||
-            !shaderCode.Contains(fragmentMarker, StringComparison.Ordinal) ||
-            !shaderCode.Contains(baseMarker, StringComparison.Ordinal))
-            throw new InvalidOperationException(
-                "Fallout 2 humanoid skin surface has no compatible retail actor shader.");
-        var skinShader = shaderCode
-            .Replace(
-                fragmentMarker,
-                """
-                uniform vec3 skin_tone_multiplier;
-                uniform vec3 skin_match_multiplier;
-                uniform float skin_transfer_encoded_cutoff;
-                uniform float skin_transfer_linear_scale;
-                uniform float skin_transfer_offset;
-                uniform float skin_transfer_normalization;
-                uniform float skin_transfer_exponent;
-                vec3 skin_encoded_to_linear(vec3 encoded_color) {
-                    bvec3 low = lessThanEqual(
-                        encoded_color,
-                        vec3(skin_transfer_encoded_cutoff));
-                    vec3 low_value = encoded_color / skin_transfer_linear_scale;
-                    vec3 high_value = pow(
-                        (encoded_color + vec3(skin_transfer_offset)) /
-                            skin_transfer_normalization,
-                        vec3(skin_transfer_exponent));
-                    return mix(high_value, low_value, low);
-                }
-                void fragment() {
-                """,
-                StringComparison.Ordinal)
-            .Replace(
-                baseMarker,
-                """
-                    base *= base_color_factor;
-                    base.rgb = skin_encoded_to_linear(clamp(
-                        base.rgb * skin_tone_multiplier * skin_match_multiplier,
-                        vec3(0.0),
-                        vec3(1.0)));
-                """,
-                StringComparison.Ordinal);
-        var material = new ShaderMaterial
-        {
-            ResourceName = source.ResourceName,
-            Shader = new Shader { Code = skinShader },
-        };
-        foreach (var parameter in new[]
-                 {
-                     "base_map",
-                     "normal_map",
-                     "use_base_map",
-                     "use_normal_map",
-                     "base_color_factor",
-                     "alpha_cutoff",
-                 })
-            material.SetShaderParameter(parameter, source.GetShaderParameter(parameter));
-        material.SetShaderParameter("skin_tone_multiplier", headTone);
-        material.SetShaderParameter("skin_match_multiplier", skinMatch);
-        material.SetShaderParameter(
-            "skin_transfer_encoded_cutoff",
-            transfer.EncodedCutoff);
-        material.SetShaderParameter(
-            "skin_transfer_linear_scale",
-            transfer.LinearScale);
-        material.SetShaderParameter("skin_transfer_offset", transfer.Offset);
-        material.SetShaderParameter(
-            "skin_transfer_normalization",
-            transfer.Normalization);
-        material.SetShaderParameter(
-            "skin_transfer_exponent",
-            transfer.Exponent);
-        return material;
+        SetMeta("skin_join_target_role", "head-paired-cheek-uv-islands");
     }
 
     private static Vector3 AverageFaceGenEncodedSkinColor(ShaderMaterial material)
@@ -709,7 +634,7 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         var neutral = material.GetShaderParameter("signed_detail_neutral").AsSingle();
         var detailScale = material.GetShaderParameter("signed_detail_scale").AsSingle();
         var tone = material.GetShaderParameter("tone_multiplier").AsVector3();
-        return AverageTextureColor(baseImage, (x, y, baseColor) =>
+        Vector3 Sample(int x, int y, Color baseColor)
         {
             var detailX = Math.Min(
                 detailImage.GetWidth() - 1,
@@ -731,22 +656,36 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
                     (baseColor.B + detailScale * (detail.B - neutral)) * tone.Z,
                     0.0f,
                     1.0f));
-        // The actor seam is the lower-neck island, not the center of the face.
-        // Matching body and hands to this authored join patch preserves facial
-        // complexion while eliminating the false collar ring.
-        }, 0.35f, 0.65f, 0.78f, 0.98f);
+        }
+        // The canonical humanoid head UV keeps the two exposed cheeks away
+        // from eyes, lips, hair, and the lower-neck seam.  Average both owned
+        // islands so body and hands inherit the visible FaceGen complexion.
+        var leftCheek = AverageTextureColor(
+            baseImage,
+            Sample,
+            0.12f,
+            0.42f,
+            0.40f,
+            0.68f);
+        var rightCheek = AverageTextureColor(
+            baseImage,
+            Sample,
+            0.58f,
+            0.88f,
+            0.40f,
+            0.68f);
+        return (leftCheek + rightCheek) * 0.5f;
     }
 
     private static Vector3 AverageEncodedSkinColor(
         ShaderMaterial material,
-        Vector3 tone,
         bool centralTorso)
     {
         var image = RequiredTextureImage(material, "base_map");
         return AverageTextureColor(image, (_, _, color) => new Vector3(
-            Math.Clamp(color.R * tone.X, 0.0f, 1.0f),
-            Math.Clamp(color.G * tone.Y, 0.0f, 1.0f),
-            Math.Clamp(color.B * tone.Z, 0.0f, 1.0f)),
+            color.R,
+            color.G,
+            color.B),
             centralTorso ? 0.25f : 0.0f,
             centralTorso ? 0.75f : 1.0f,
             centralTorso ? 0.25f : 0.0f,

@@ -29,6 +29,7 @@ NIF_ALPHA_TEST_FUNCTION_SHIFT = 10
 NIF_ALPHA_NO_SORTER_FLAG = 0x2000
 BYTE_CHANNEL_MAXIMUM = 255.0
 FACEGEN_MATERIAL_SCHEMA = "opennv-retail-facegen-material/v2"
+SKIN_MATERIAL_SCHEMA = "opennv-retail-actor-skin-material/v1"
 GLTF_UNLIT_EXTENSION = "KHR_materials_unlit"
 
 
@@ -139,6 +140,25 @@ def build_actor_material(
             "detailGeneratedSha256": detail_sha256,
         }
         material["extras"] = {"openNvFaceGenMaterial": facegen_contract}
+    skin_shader = next(
+        (
+            prop
+            for prop in properties
+            if isinstance(prop, NifFormat.BSShaderPPLightingProperty)
+            and prop.shader_type == NifFormat.BSShaderType.SHADERSKIN
+        ),
+        None,
+    )
+    skin_contract = (
+        {
+            "schema": SKIN_MATERIAL_SCHEMA,
+            "source": "owned-nif-bs-shader-type-shaderskin",
+            "shaderType": int(skin_shader.shader_type),
+            "diffuseDomain": "encoded",
+        }
+        if skin_shader is not None
+        else None
+    )
     alpha_properties = [prop for prop in properties if isinstance(prop, NifFormat.NiAlphaProperty)]
     if alpha_properties:
         alpha_contract = actor_alpha_contract(alpha_properties[0])
@@ -172,6 +192,7 @@ def build_actor_material(
             "owned-nif-no-lighting-or-effect-shader" if unshaded else None
         ),
         "faceGen": facegen_contract,
+        "skin": skin_contract,
     }
 
 

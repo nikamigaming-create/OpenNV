@@ -51,6 +51,7 @@ from gltf_io import BufferBuilder  # noqa: E402
 from actor_material import (  # noqa: E402
     FACEGEN_MATERIAL_SCHEMA,
     GLTF_UNLIT_EXTENSION,
+    SKIN_MATERIAL_SCHEMA,
     actor_alpha_contract,
     actor_base_color_factor,
     actor_roughness,
@@ -665,6 +666,83 @@ class ActorGltfTest(unittest.TestCase):
         self.assertEqual(row["faceGen"]["detailTextureIndex"], 2)
         self.assertEqual(row["alphaMode"], "OPAQUE")
         self.assertIsNone(row["generatedDiffuseSha256"])
+
+    def test_owned_skin_shader_declares_encoded_complexion_material(self):
+        class TextureLibrary:
+            def source(self, path: str, *, normal: bool = False) -> int:
+                del path, normal
+                return 0
+
+            def generated(self, identity: str, image: Image.Image, source_sha256: str) -> int:
+                del identity, image, source_sha256
+                return 0
+
+        shader = NifFormat.BSShaderPPLightingProperty()
+        shader.shader_type = NifFormat.BSShaderType.SHADERSKIN
+        shader.texture_set = NifFormat.BSShaderTextureSet()
+        shader.texture_set.num_textures = 2
+        shader.texture_set.textures.update_size()
+        shader.texture_set.textures[0] = b"textures\\characters\\male\\handmale.dds"
+        shader.texture_set.textures[1] = b"textures\\characters\\male\\handmale_n.dds"
+
+        class Shape:
+            name = b"LeftHand:0"
+            properties = [shader]
+
+        _material, row = build_actor_material(
+            ActorComponent(
+                "left-hand",
+                "meshes\\characters\\_male\\lefthand.nif",
+                b"nif",
+            ),
+            Shape(),
+            TextureLibrary(),  # type: ignore[arg-type]
+            load_runtime_configuration().content_compiler,
+        )
+
+        self.assertEqual(
+            row["skin"],
+            {
+                "schema": SKIN_MATERIAL_SCHEMA,
+                "source": "owned-nif-bs-shader-type-shaderskin",
+                "shaderType": int(NifFormat.BSShaderType.SHADERSKIN),
+                "diffuseDomain": "encoded",
+            },
+        )
+
+    def test_default_shader_does_not_recolor_clothing_as_skin(self):
+        class TextureLibrary:
+            def source(self, path: str, *, normal: bool = False) -> int:
+                del path, normal
+                return 0
+
+            def generated(self, identity: str, image: Image.Image, source_sha256: str) -> int:
+                del identity, image, source_sha256
+                return 0
+
+        shader = NifFormat.BSShaderPPLightingProperty()
+        shader.shader_type = 1
+        shader.texture_set = NifFormat.BSShaderTextureSet()
+        shader.texture_set.num_textures = 1
+        shader.texture_set.textures.update_size()
+        shader.texture_set.textures[0] = b"textures\\armor\\republicans\\suspender_d1.dds"
+
+        class Shape:
+            name = b"arms:0"
+            properties = [shader]
+
+        _material, row = build_actor_material(
+            ActorComponent(
+                "outfit-1",
+                "meshes\\armor\\republicans\\republican_02.nif",
+                b"nif",
+            ),
+            Shape(),
+            TextureLibrary(),  # type: ignore[arg-type]
+            load_runtime_configuration().content_compiler,
+        )
+
+        self.assertIsNone(row["skin"])
 
     def test_retail_hair_blends_while_outfit_alpha_tests(self):
         hair = NifFormat.NiAlphaProperty()

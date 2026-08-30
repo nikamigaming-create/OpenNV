@@ -10,6 +10,7 @@ namespace OpenNV.Runtime;
 /// </summary>
 internal static class RetailActorMaterial
 {
+    private const string SkinMaterialSchema = "opennv-retail-actor-skin-material/v1";
     private const int BlendOne = 0;
     private const int BlendZero = 1;
     private const int BlendSourceColor = 2;
@@ -39,6 +40,17 @@ internal static class RetailActorMaterial
                 $"Actor surface did not import as a standard glTF material: {mesh.Name}");
 
         var materialContract = surface.GetProperty("material");
+        var skin = materialContract.TryGetProperty("skin", out var skinProperty) &&
+            skinProperty.ValueKind == JsonValueKind.Object
+                ? skinProperty
+                : (JsonElement?)null;
+        if (skin is { } skinContract &&
+            (skinContract.GetProperty("schema").GetString() != SkinMaterialSchema ||
+                skinContract.GetProperty("source").GetString() !=
+                    "owned-nif-bs-shader-type-shaderskin" ||
+                skinContract.GetProperty("diffuseDomain").GetString() != "encoded"))
+            throw new InvalidOperationException(
+                $"Actor surface has an invalid skin material contract: {sidecarPath}");
         var alpha = materialContract.GetProperty("alphaContract");
         var unshaded = materialContract.GetProperty("unshaded").GetBoolean();
         var alphaMode = alpha.GetProperty("mode").GetString() ?? "";
@@ -75,6 +87,17 @@ internal static class RetailActorMaterial
         material.SetShaderParameter("use_base_map", imported.AlbedoTexture is not null);
         material.SetShaderParameter("use_normal_map", imported.NormalTexture is not null);
         material.SetShaderParameter("base_color_factor", baseColorFactor);
+        material.SetShaderParameter("skin_complexion_multiplier", Vector3.One);
+        material.SetShaderParameter("use_skin_complexion_target", false);
+        material.SetShaderParameter("skin_complexion_target", Vector3.One);
+        material.SetShaderParameter("skin_complexion_source_mean", 1.0f);
+        var transfer = faceGenConfiguration.RuntimeAlbedoTransfer;
+        material.SetShaderParameter("skin_transfer_encoded_cutoff", transfer.EncodedCutoff);
+        material.SetShaderParameter("skin_transfer_linear_scale", transfer.LinearScale);
+        material.SetShaderParameter("skin_transfer_offset", transfer.Offset);
+        material.SetShaderParameter("skin_transfer_normalization", transfer.Normalization);
+        material.SetShaderParameter("skin_transfer_exponent", transfer.Exponent);
+        material.SetShaderParameter("use_skin_transfer", skin is not null);
         if (!unshaded)
             material.SetShaderParameter("retail_ambient_color", Vector3.Zero);
         material.SetShaderParameter(
@@ -137,12 +160,47 @@ internal static class RetailActorMaterial
         source.AppendLine("uniform bool use_base_map;");
         source.AppendLine("uniform bool use_normal_map;");
         source.AppendLine("uniform vec4 base_color_factor;");
+        source.AppendLine("uniform bool use_skin_transfer;");
+        source.AppendLine("uniform vec3 skin_complexion_multiplier;");
+        source.AppendLine("uniform bool use_skin_complexion_target;");
+        source.AppendLine("uniform vec3 skin_complexion_target;");
+        source.AppendLine("uniform float skin_complexion_source_mean;");
+        source.AppendLine("uniform float skin_transfer_encoded_cutoff;");
+        source.AppendLine("uniform float skin_transfer_linear_scale;");
+        source.AppendLine("uniform float skin_transfer_offset;");
+        source.AppendLine("uniform float skin_transfer_normalization;");
+        source.AppendLine("uniform float skin_transfer_exponent;");
         if (!unshaded)
             AppendRetailLightingUniforms(source);
         source.AppendLine("uniform float alpha_cutoff;");
+        source.AppendLine("vec3 skin_encoded_to_linear(vec3 encoded_color) {");
+        source.AppendLine(
+            "    vec3 linear_segment = encoded_color / skin_transfer_linear_scale;");
+        source.AppendLine("    vec3 power_segment = pow(");
+        source.AppendLine(
+            "        (encoded_color + vec3(skin_transfer_offset)) / skin_transfer_normalization,");
+        source.AppendLine("        vec3(skin_transfer_exponent));");
+        source.AppendLine("    return mix(");
+        source.AppendLine("        power_segment,");
+        source.AppendLine("        linear_segment,");
+        source.AppendLine(
+            "        lessThanEqual(encoded_color, vec3(skin_transfer_encoded_cutoff)));");
+        source.AppendLine("}");
         source.AppendLine("void fragment() {");
         source.AppendLine("    vec4 base = use_base_map ? texture(base_map, UV) : vec4(1.0);");
         source.AppendLine("    base *= base_color_factor;");
+        source.AppendLine("    if (use_skin_transfer) {");
+        source.AppendLine("        vec3 skin_encoded = base.rgb * skin_complexion_multiplier;");
+        source.AppendLine("        if (use_skin_complexion_target) {");
+        source.AppendLine(
+            "            float source_mean = (base.r + base.g + base.b) / 3.0;");
+        source.AppendLine(
+            "            skin_encoded = skin_complexion_target * source_mean / max(skin_complexion_source_mean, 0.0001);");
+        source.AppendLine("        }");
+        source.AppendLine("        base.rgb = skin_encoded_to_linear(clamp(");
+        source.AppendLine(
+            "            skin_encoded, vec3(0.0), vec3(1.0)));");
+        source.AppendLine("    }");
         source.AppendLine("    if (use_normal_map) {");
         source.AppendLine(
             "        vec3 tangent_normal = normalize(texture(normal_map, UV).rgb * 2.0 - 1.0);");

@@ -11,6 +11,7 @@ FO1_LOADER = ROOT / "runtime" / "src" / "Campaigns" / "Fallout1" / "Fo1HexSceneL
 FO2_DONOR = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo2HumanoidPresentation.cs"
 FO2_PLAYER = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo2ArroyoPlayerPresentation.cs"
 FO2_RUNTIME = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo2ArroyoCavesPlayerRuntime.cs"
+RETAIL_ACTOR_MATERIAL = ROOT / "runtime" / "src" / "RetailActorMaterial.cs"
 
 
 class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
@@ -40,9 +41,22 @@ class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
         self.assertIn("rigidAttachmentNode", donor)
         self.assertIn("classic-humanoid-donor-preview-set", donor)
         self.assertIn("RequireFromOptions", donor)
-        self.assertIn("new Fo2HumanoidVisual(identity, humanoidDonor)", player)
-        self.assertNotIn("Fo2FrmReliefMesh.Instantiate(", player)
-        self.assertIn("requires a verified owned humanoid donor", runtime)
+        self.assertIn("new Fo2HumanoidVisual(", runtime)
+        self.assertIn("_presentation.Visible = false;", runtime)
+        self.assertIn(
+            "selected character and owned humanoid donor must be bound together",
+            runtime,
+        )
+        self.assertIn("opennv-retail-actor-skin-material/v1", donor)
+        self.assertIn("owned-nif-bs-shader-type-shaderskin", donor)
+        self.assertIn("head-paired-cheek-uv-islands", donor)
+        self.assertNotIn("upperbodymale.dds", donor)
+        self.assertNotIn("upperbodyfemale.dds", donor)
+
+        material = RETAIL_ACTOR_MATERIAL.read_text(encoding="utf-8")
+        self.assertIn("opennv-retail-actor-skin-material/v1", material)
+        self.assertIn("skin_complexion_target", material)
+        self.assertIn("skin_encoded_to_linear", material)
 
 
 if __name__ == "__main__":
