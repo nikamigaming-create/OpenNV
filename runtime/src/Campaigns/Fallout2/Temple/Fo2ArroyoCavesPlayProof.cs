@@ -158,6 +158,11 @@ internal static class Fo2ArroyoCavesPlayProof
             var endFloor = CastFloor(space, player, player.Position);
             await WaitForDraws(host, SettleFrames);
             var endFrame = Capture(host, output, "player-source-boundary-stop.png");
+            var gameplayCameraSize = camera.Size;
+            camera.Size = MathF.Max(2.4f, gameplayCameraSize * 0.18f);
+            await WaitForDraws(host, SettleFrames);
+            var closeFinalFrame = Capture(host, output, "player-close-final.png");
+            camera.Size = gameplayCameraSize;
             var expectedEndDirection = Fo2ArroyoCavesPlayerBody.DirectionForMovement(
                 player.CurrentTile,
                 Vector3.Back);
@@ -286,6 +291,10 @@ internal static class Fo2ArroyoCavesPlayProof
                     presentationLabel = humanoid?.PresentationLabel ??
                         presentation.PresentationLabel,
                     usesOwnedDonor = humanoid?.UsesOwnedDonor == true,
+                    roleDonorOutfitFormId =
+                        runtime.PlayerPresentation.Live3DPresentationOutfitFormId,
+                    loadedDonorOutfitFormId =
+                        humanoid?.GetMeta("donor_outfit_form_id").AsString() ?? "",
                     presentation.UsesOwnedFrmRelief,
                     sourceStateReliefVisible = presentation.VisibleInWorld,
                     meshInstances = humanoid?.MeshInstances ?? 0,
@@ -312,6 +321,8 @@ internal static class Fo2ArroyoCavesPlayProof
                         targetRole = humanoid.GetMeta("skin_join_target_role").AsString(),
                         materials = humanoid.GetMeta("skin_join_materials").AsInt32(),
                         target = Vector(humanoid.GetMeta("skin_join_target_color").AsVector3()),
+                        neckSource = Vector(
+                            humanoid.GetMeta("skin_join_neck_source_color").AsVector3()),
                         bodyMatch = Vector(humanoid.GetMeta("skin_join_match_body").AsVector3()),
                         leftHandMatch = Vector(
                             humanoid.GetMeta("skin_join_match_left_hand").AsVector3()),
@@ -469,6 +480,7 @@ internal static class Fo2ArroyoCavesPlayProof
                     firstWalkFrame!,
                     secondWalkFrame!,
                     endFrame,
+                    closeFinalFrame,
                 },
                 promotion = new
                 {

@@ -30,6 +30,11 @@ CRITTER_WEAPON_ART_SUFFIXES = "adefghij"
 EQUIPPED_GEOMETRY_DISPOSITION = (
     "owned-critter-frm-composites-player-and-spear-no-separable-3d-weapon-transform"
 )
+LIVE_3D_PRESENTATION_SCHEMA = "opennv-classic-humanoid-role-donor/v1"
+LIVE_3D_PRESENTATION_AUTHORITY = (
+    "fo2-source-role-to-owned-fnv-presentation-donor"
+)
+LIVE_3D_PRESENTATION_OUTFIT_FORM_ID = "0003307c"
 
 
 def default_recipe_path() -> Path:
@@ -51,6 +56,7 @@ def _load_recipe(path: Path) -> dict[str, Any]:
     recipe = _load_json(path)
     player = recipe.get("player")
     equipped = player.get("equippedWeapon") if isinstance(player, dict) else None
+    live_3d = player.get("live3dPresentation") if isinstance(player, dict) else None
     if (
         recipe.get("schema") != RECIPE_SCHEMA
         or recipe.get("id") != path.stem
@@ -77,6 +83,16 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         or player.get("walkFrmLogicalPath") != "art\\critters\\hmwarrab.frm"
         or player.get("walkFrames") != list(range(8))
         or player.get("walkFps") != 10
+        or not isinstance(live_3d, dict)
+        or live_3d.get("schema") != LIVE_3D_PRESENTATION_SCHEMA
+        or live_3d.get("authority") != LIVE_3D_PRESENTATION_AUTHORITY
+        or live_3d.get("donorGame") != "FalloutNV"
+        or live_3d.get("outfitFormId") != LIVE_3D_PRESENTATION_OUTFIT_FORM_ID
+        or live_3d.get("role") != "Chosen One tribal silhouette donor"
+        or live_3d.get("fullBody") is not True
+        or live_3d.get("requiredBodyRoles")
+        != ["body", "left-hand", "right-hand"]
+        or live_3d.get("retailParity") is not False
         or not isinstance(equipped, dict)
         or equipped.get("role") != "Spear-equipped Chosen One source animation"
         or equipped.get("itemFid") != "0000002a"
@@ -377,6 +393,7 @@ def prepare_fo2_player_presentation(
                 "admittedDirections": player["directions"],
                 "animationPlayback": True,
             },
+            "live3dPresentation": player["live3dPresentation"],
             "equippedWeaponArt": {
                 "role": equipped["role"],
                 "itemFid": equipped["itemFid"],

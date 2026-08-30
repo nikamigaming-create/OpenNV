@@ -562,6 +562,14 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
             throw new InvalidOperationException(
                 "Fallout 2 humanoid live FaceGen head tone is invalid.");
         var headSkinColor = AverageFaceGenEncodedSkinColor(headToneMaterials[0]);
+        var neckSkinColor = AverageFaceGenEncodedNeckColor(headToneMaterials[0]);
+        headToneMaterials[0].SetShaderParameter("use_neck_complexion_target", true);
+        headToneMaterials[0].SetShaderParameter(
+            "neck_complexion_target",
+            headSkinColor);
+        headToneMaterials[0].SetShaderParameter(
+            "neck_complexion_source_mean",
+            (neckSkinColor.X + neckSkinColor.Y + neckSkinColor.Z) / 3.0f);
         var skinNodes = document.RootElement.GetProperty("surfaces")
             .EnumerateArray()
             .Where(row =>
@@ -620,14 +628,50 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
                 "Fallout 2 humanoid donor has no complete torso-and-hand skin join.");
         SetMeta(
             "skin_join_mode",
-            "owned-shaderskin-detail-with-live-facegen-cheek-complexion-v8");
+            "owned-shaderskin-detail-with-facegen-neck-and-cheek-complexion-v9");
         SetMeta("skin_join_materials", joined);
         SetMeta("skin_join_head_tone", headTone);
         SetMeta("skin_join_target_color", headSkinColor);
+        SetMeta("skin_join_neck_source_color", neckSkinColor);
         SetMeta("skin_join_target_role", "head-paired-cheek-uv-islands");
     }
 
     private static Vector3 AverageFaceGenEncodedSkinColor(ShaderMaterial material)
+    {
+        // The canonical humanoid head UV keeps the two exposed cheeks away
+        // from eyes, lips, hair, and the lower-neck seam.  Average both owned
+        // islands so body, hands, and the neck inherit the visible complexion.
+        var leftCheek = AverageFaceGenEncodedColor(
+            material,
+            0.12f,
+            0.42f,
+            0.40f,
+            0.68f);
+        var rightCheek = AverageFaceGenEncodedColor(
+            material,
+            0.58f,
+            0.88f,
+            0.40f,
+            0.68f);
+        return (leftCheek + rightCheek) * 0.5f;
+    }
+
+    private static Vector3 AverageFaceGenEncodedNeckColor(ShaderMaterial material)
+    {
+        return AverageFaceGenEncodedColor(
+            material,
+            0.18f,
+            0.82f,
+            0.78f,
+            0.98f);
+    }
+
+    private static Vector3 AverageFaceGenEncodedColor(
+        ShaderMaterial material,
+        float minimumU,
+        float maximumU,
+        float minimumV,
+        float maximumV)
     {
         var baseImage = RequiredTextureImage(material, "base_map");
         var detailImage = RequiredTextureImage(material, "facegen_map0");
@@ -657,24 +701,13 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
                     0.0f,
                     1.0f));
         }
-        // The canonical humanoid head UV keeps the two exposed cheeks away
-        // from eyes, lips, hair, and the lower-neck seam.  Average both owned
-        // islands so body and hands inherit the visible FaceGen complexion.
-        var leftCheek = AverageTextureColor(
+        return AverageTextureColor(
             baseImage,
             Sample,
-            0.12f,
-            0.42f,
-            0.40f,
-            0.68f);
-        var rightCheek = AverageTextureColor(
-            baseImage,
-            Sample,
-            0.58f,
-            0.88f,
-            0.40f,
-            0.68f);
-        return (leftCheek + rightCheek) * 0.5f;
+            minimumU,
+            maximumU,
+            minimumV,
+            maximumV);
     }
 
     private static Vector3 AverageEncodedSkinColor(

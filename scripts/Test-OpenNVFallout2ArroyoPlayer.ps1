@@ -99,12 +99,18 @@ if ($report.schema -ne 'opennv-fo2-arroyo-player-runtime-proof/v1' -or
     $report.playerPresentation.sourceStateGeometryMode -ne 'exact-owned-fo2-frm-alpha-island-molded-relief-v2' -or
     $report.playerPresentation.sourceStateReliefVisible -or
     -not $report.playerPresentation.usesOwnedDonor -or
+    $report.playerPresentation.roleDonorOutfitFormId -ne '0003307c' -or
+    $report.playerPresentation.loadedDonorOutfitFormId -ne '0003307c' -or
     $report.playerPresentation.meshInstances -le 0 -or
     $report.playerPresentation.visibleAnimation.firstWalkClip -notmatch 'forward' -or
     $report.playerPresentation.visibleAnimation.secondWalkClip -notmatch 'forward' -or
     $report.playerPresentation.visibleAnimation.firstWalkClipSeconds -le 0 -or
     $report.playerPresentation.visibleAnimation.secondWalkClipSeconds -le 0 -or
     $report.playerPresentation.visibleAnimation.endClip -notmatch 'idle' -or
+    $report.playerPresentation.skinJoin.mode -ne
+        'owned-shaderskin-detail-with-facegen-neck-and-cheek-complexion-v9' -or
+    $report.frames.Count -ne 5 -or
+    [IO.Path]::GetFileName($report.frames[4].Path) -ne 'player-close-final.png' -or
     -not $report.classicHud.visible -or
     -not $report.classicHud.ownedFallout2ClassicInterface -or
     -not $report.classicHud.sourcePixelLayout -or

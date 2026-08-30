@@ -35,10 +35,11 @@ def synthetic_walk_frm() -> bytes:
 
 
 def recipe(path: Path) -> None:
-    relief = json.loads(
+    canonical_player = json.loads(
         (TOOLS.parent / "recipes" / "fo2-arroyo-player-presentation-v1.json")
         .read_text(encoding="utf-8")
-    )["player"]["relief3d"]
+    )["player"]
+    relief = canonical_player["relief3d"]
     path.write_text(
         json.dumps(
             {
@@ -70,6 +71,7 @@ def recipe(path: Path) -> None:
                     "walkFrmLogicalPath": "art\\critters\\hmwarrab.frm",
                     "walkFrames": list(range(8)),
                     "walkFps": 10,
+                    "live3dPresentation": canonical_player["live3dPresentation"],
                     "equippedWeapon": {
                         "role": "Spear-equipped Chosen One source animation",
                         "itemFid": "0000002a",
@@ -167,6 +169,11 @@ class Fo2PlayerPresentationTest(unittest.TestCase):
             self.assertEqual(first["walkArt"]["framesPerDirection"], 8)
             self.assertEqual(first["walkArt"]["fps"], 10)
             self.assertTrue(first["walkArt"]["animationPlayback"])
+            self.assertEqual(
+                first["live3dPresentation"]["outfitFormId"],
+                "0003307c",
+            )
+            self.assertFalse(first["live3dPresentation"]["retailParity"])
             equipped = first["equippedWeaponArt"]
             self.assertEqual(equipped["itemFid"], "0000002a")
             self.assertEqual(equipped["itemPid"], "00000007")

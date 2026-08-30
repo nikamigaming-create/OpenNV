@@ -68,6 +68,11 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
     internal const int ExpectedWeaponAnimationCode = 4;
     internal const string ExpectedPrototypeLogicalPath = "proto\\critters\\00000001.pro";
     internal const string ExpectedPrototypePid = "01000001";
+    internal const string Live3DPresentationSchema =
+        "opennv-classic-humanoid-role-donor/v1";
+    internal const string Live3DPresentationAuthority =
+        "fo2-source-role-to-owned-fnv-presentation-donor";
+    internal const string ExpectedLive3DPresentationOutfitFormId = "0003307c";
     internal const int ExpectedArtIndex = 62;
     internal const int IdleFrame = 0;
     internal const int WalkFramesPerDirection = 8;
@@ -91,6 +96,7 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
         IReadOnlyDictionary<int, Fo2ArroyoPlayerFrame> directions,
         Fo2ArroyoPlayerAnimation walk,
         Fo2ArroyoEquippedWeaponPresentation equippedWeapon,
+        string live3DPresentationOutfitFormId,
         float reliefDepthMeters,
         float reliefSideRoughness,
         int verifiedResources)
@@ -108,6 +114,7 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
         Directions = directions;
         Walk = walk;
         EquippedWeapon = equippedWeapon;
+        Live3DPresentationOutfitFormId = live3DPresentationOutfitFormId;
         ReliefDepthMeters = reliefDepthMeters;
         ReliefSideRoughness = reliefSideRoughness;
         VerifiedResources = verifiedResources;
@@ -126,6 +133,7 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
     internal IReadOnlyDictionary<int, Fo2ArroyoPlayerFrame> Directions { get; }
     internal Fo2ArroyoPlayerAnimation Walk { get; }
     internal Fo2ArroyoEquippedWeaponPresentation EquippedWeapon { get; }
+    internal string Live3DPresentationOutfitFormId { get; }
     internal float ReliefDepthMeters { get; }
     internal float ReliefSideRoughness { get; }
     internal int VerifiedResources { get; }
@@ -222,6 +230,7 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
             var recipe = recipeDocument.RootElement;
             var player = recipe.GetProperty("player");
             var equipped = player.GetProperty("equippedWeapon");
+            var live3D = player.GetProperty("live3dPresentation");
             var relief = player.GetProperty("relief3d");
             var directions = player.GetProperty("directions")
                 .EnumerateArray().Select(row => row.GetInt32()).ToArray();
@@ -269,6 +278,21 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
                     .Select(row => row.GetInt32())
                     .SequenceEqual(Enumerable.Range(0, WalkFramesPerDirection)) ||
                 player.GetProperty("walkFps").GetInt32() != WalkFramesPerSecond ||
+                Fo2TemplePresentationCatalog.RequiredString(live3D, "schema") !=
+                    Live3DPresentationSchema ||
+                Fo2TemplePresentationCatalog.RequiredString(live3D, "authority") !=
+                    Live3DPresentationAuthority ||
+                Fo2TemplePresentationCatalog.RequiredString(live3D, "donorGame") !=
+                    "FalloutNV" ||
+                Fo2TemplePresentationCatalog.RequiredString(live3D, "outfitFormId") !=
+                    ExpectedLive3DPresentationOutfitFormId ||
+                Fo2TemplePresentationCatalog.RequiredString(live3D, "role") !=
+                    "Chosen One tribal silhouette donor" ||
+                !live3D.GetProperty("fullBody").GetBoolean() ||
+                !live3D.GetProperty("requiredBodyRoles").EnumerateArray()
+                    .Select(row => row.GetString())
+                    .SequenceEqual(["body", "left-hand", "right-hand"]) ||
+                live3D.GetProperty("retailParity").GetBoolean() ||
                 Fo2TemplePresentationCatalog.RequiredString(equipped, "itemFid") !=
                     ExpectedEquippedItemFid ||
                 Fo2TemplePresentationCatalog.RequiredString(equipped, "itemPid") !=
@@ -391,6 +415,25 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
             throw new InvalidOperationException("Fallout 2 player walk-art binding drifted.");
 
         var equippedArt = cache.GetProperty("equippedWeaponArt");
+        var live3DPresentation = cache.GetProperty("live3dPresentation");
+        var live3DPresentationOutfitFormId =
+            Fo2TemplePresentationCatalog.RequiredString(
+                live3DPresentation,
+                "outfitFormId");
+        if (Fo2TemplePresentationCatalog.RequiredString(
+                live3DPresentation,
+                "schema") != Live3DPresentationSchema ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                live3DPresentation,
+                "authority") != Live3DPresentationAuthority ||
+            Fo2TemplePresentationCatalog.RequiredString(
+                live3DPresentation,
+                "donorGame") != "FalloutNV" ||
+            live3DPresentationOutfitFormId != ExpectedLive3DPresentationOutfitFormId ||
+            !live3DPresentation.GetProperty("fullBody").GetBoolean() ||
+            live3DPresentation.GetProperty("retailParity").GetBoolean())
+            throw new InvalidOperationException(
+                "Fallout 2 live 3D role-donor binding drifted.");
         var equippedIdleArt = equippedArt.GetProperty("idle");
         var equippedWalkArt = equippedArt.GetProperty("walk");
         var equippedIdleSourceSha256 = Fo2TemplePresentationCatalog.RequiredHash(
@@ -621,6 +664,7 @@ internal sealed class Fo2ArroyoPlayerPresentationCatalog
             frames,
             walk,
             equippedWeapon,
+            live3DPresentationOutfitFormId,
             reliefDepthMeters,
             reliefSideRoughness,
             resources.Length);

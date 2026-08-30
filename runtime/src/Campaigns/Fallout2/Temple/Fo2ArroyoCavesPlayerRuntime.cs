@@ -31,6 +31,11 @@ internal static class Fo2ArroyoCavesPlayerRuntime
         if (selectedPresentation.SourceProfileId != catalog.SourceProfileId)
             throw new InvalidOperationException(
                 "Fallout 2 selected character/map source profiles differ.");
+        if (selectedCharacter is not null && humanoidDonor is not null &&
+            humanoidDonor.ForSex(selectedCharacter.Profile.Sex).OutfitFormId !=
+                playerPresentation.Live3DPresentationOutfitFormId)
+            throw new InvalidOperationException(
+                "Fallout 2 owned humanoid donor does not match the source-role 3D binding.");
         var profile = Fo2ArroyoPlayerProfile.Load(catalog);
         var component = Fo2ArroyoArrivalFirstBeat.RequireArrivalComponent(catalog).ToHashSet();
 

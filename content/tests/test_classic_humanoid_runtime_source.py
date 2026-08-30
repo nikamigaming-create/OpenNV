@@ -12,6 +12,7 @@ FO2_DONOR = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo
 FO2_PLAYER = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo2ArroyoPlayerPresentation.cs"
 FO2_RUNTIME = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Temple" / "Fo2ArroyoCavesPlayerRuntime.cs"
 RETAIL_ACTOR_MATERIAL = ROOT / "runtime" / "src" / "RetailActorMaterial.cs"
+RETAIL_FACEGEN_MATERIAL = ROOT / "runtime" / "src" / "RetailFaceGenMaterial.cs"
 
 
 class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
@@ -42,6 +43,8 @@ class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
         self.assertIn("classic-humanoid-donor-preview-set", donor)
         self.assertIn("RequireFromOptions", donor)
         self.assertIn("new Fo2HumanoidVisual(", runtime)
+        self.assertIn("Live3DPresentationOutfitFormId", runtime)
+        self.assertIn("source-role 3D binding", runtime)
         self.assertIn("_presentation.Visible = false;", runtime)
         self.assertIn(
             "selected character and owned humanoid donor must be bound together",
@@ -57,6 +60,13 @@ class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
         self.assertIn("opennv-retail-actor-skin-material/v1", material)
         self.assertIn("skin_complexion_target", material)
         self.assertIn("skin_encoded_to_linear", material)
+
+        facegen_material = RETAIL_FACEGEN_MATERIAL.read_text(encoding="utf-8")
+        self.assertIn("use_neck_complexion_target", facegen_material)
+        self.assertIn("neck_complexion_uv_bounds", facegen_material)
+        self.assertIn('"use_neck_complexion_target", false', facegen_material)
+        self.assertIn('"use_neck_complexion_target", true', donor)
+        self.assertIn("AverageFaceGenEncodedNeckColor", donor)
 
 
 if __name__ == "__main__":
