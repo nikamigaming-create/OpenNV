@@ -139,7 +139,10 @@ internal partial class OpeningQuestRuntime
                 : value;
             var morphWeight = uiValue * previewPolicy.MorphWeightScale;
             _faceGeometryControlValues[control.SettingEntity] = uiValue;
-            previewHost?.Apply(control.SettingEntity, uiValue);
+            OwnedGamebryoFaceGenMorphRuntime.Publish(
+                previewHost,
+                control.SettingEntity,
+                uiValue);
             RefreshPreview();
             GD.Print(
                 $"OPENNV_NEW_GAME_FACEGEN_CONTROL name={control.SettingEntity} " +
@@ -183,7 +186,8 @@ internal partial class OpeningQuestRuntime
                 source.FaceGrab.Rect.Size,
                 renderedDevice.FaceGenPreviewDevice);
             foreach (var control in previewControls)
-                previewHost.Apply(
+                OwnedGamebryoFaceGenMorphRuntime.Publish(
+                    previewHost,
                     control.SettingEntity,
                     _faceGeometryControlValues[control.SettingEntity]);
             RefreshPreview();

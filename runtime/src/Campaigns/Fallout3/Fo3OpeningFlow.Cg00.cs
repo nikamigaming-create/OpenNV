@@ -866,7 +866,10 @@ internal partial class Fo3OpeningFlow
             }
             slider.Editable = true;
             foreach (var faceControl in _profile.Appearance.FaceControls)
-                _activeFacePreview.Apply(faceControl.SettingEntity, faceControl.ResetValue);
+                OwnedGamebryoFaceGenMorphRuntime.Publish(
+                    _activeFacePreview,
+                    faceControl.SettingEntity,
+                    faceControl.ResetValue);
             activeControl = control;
             faceControlSelect.Select(Array.IndexOf(
                 _profile.Appearance.FaceControls.ToArray(),
@@ -883,9 +886,10 @@ internal partial class Fo3OpeningFlow
         {
             if (!slider.Editable || _activeAppearanceSelection is null)
                 return;
-            _activeFacePreview.Apply(
+            OwnedGamebryoFaceGenMorphRuntime.Publish(
+                _activeFacePreview,
                 activeControl.SettingEntity,
-                (float)value * activeControl.MorphWeightScale);
+                (float)value);
             _activeAppearanceSelection = _profile.Appearance.ApplyFaceControl(
                 _activeAppearanceSelection,
                 activeControl,

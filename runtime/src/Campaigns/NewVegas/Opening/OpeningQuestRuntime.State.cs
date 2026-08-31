@@ -1,5 +1,3 @@
-using System.Buffers.Binary;
-using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
@@ -684,30 +682,23 @@ internal partial class OpeningQuestRuntime
                 value > policy.Maximum))
             throw new InvalidOperationException(
                 "Saved RaceSexMenu FaceGen UI coordinates are invalid.");
-        var sourceControls = controls.Select(control =>
-            faceGen.ControlSpace.SymmetricGeometryControls.Single(source =>
-                source.Index == control.ControlIndex)).ToArray();
-
-        var payload = new byte[faceGen.SymmetricGeometryValues.Count * sizeof(float)];
-        for (var index = 0; index < faceGen.SymmetricGeometryValues.Count; index++)
+        var morphControls = controls.Select(control =>
         {
-            var coordinate = faceGen.SymmetricGeometryValues[index];
-            for (var controlIndex = 0; controlIndex < controls.Count; controlIndex++)
-            {
-                var value = values[controls[controlIndex].SettingEntity];
-                if (value == policy.ResetValue)
-                    continue;
-                coordinate += value * policy.MorphWeightScale *
-                    sourceControls[controlIndex].Axis[index];
-            }
-            if (!float.IsFinite(coordinate))
-                throw new InvalidOperationException(
-                    "Edited FaceGen geometry coordinate is non-finite.");
-            BinaryPrimitives.WriteSingleLittleEndian(
-                payload.AsSpan(index * sizeof(float), sizeof(float)),
-                coordinate);
-        }
-        return Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+            var source = faceGen.ControlSpace.SymmetricGeometryControls.Single(value =>
+                value.Index == control.ControlIndex);
+            return new OwnedGamebryoFaceGenMorphControl(
+                control.SettingEntity,
+                control.AxisSha256,
+                source.Axis);
+        }).ToArray();
+        return OwnedGamebryoFaceGenMorphRuntime.Evaluate(
+            faceGen.SymmetricGeometryValues,
+            morphControls,
+            values,
+            policy.Minimum,
+            policy.Maximum,
+            policy.MorphWeightScale,
+            policy.ResetValue).SymmetricGeometrySha256;
     }
 
     private void RestoreState(OpeningCampaignState state)

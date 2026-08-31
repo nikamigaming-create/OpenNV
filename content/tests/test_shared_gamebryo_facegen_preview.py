@@ -21,6 +21,14 @@ CONTRACTS = (
     / "CharacterCreation"
     / "OwnedGamebryoFaceGenPreviewContracts.cs"
 )
+MORPH_RUNTIME = (
+    ROOT
+    / "runtime"
+    / "src"
+    / "Presentation"
+    / "CharacterCreation"
+    / "OwnedGamebryoFaceGenMorphRuntime.cs"
+)
 ACTOR_LOADER = (
     ROOT / "runtime" / "src" / "World" / "Actors" / "ActorModelSlice.cs"
 )
@@ -65,6 +73,25 @@ class SharedGamebryoFaceGenPreviewTest(unittest.TestCase):
         self.assertNotIn('Label("HEAD"', ui)
         self.assertNotIn('Label("HAIR"', ui)
         self.assertNotIn('Label("EYES"', ui)
+
+    def test_both_creators_apply_source_ui_values_through_shared_morph_owner(self) -> None:
+        morph_runtime = MORPH_RUNTIME.read_text(encoding="utf-8")
+        fnv_state = (FNV / "OpeningQuestRuntime.State.cs").read_text(encoding="utf-8")
+        fnv_ui = (FNV / "OpeningQuestRuntime.CharacterCreation.cs").read_text(
+            encoding="utf-8"
+        )
+        fo3_contract = (FO3 / "Fo3OpeningContracts.cs").read_text(encoding="utf-8")
+        fo3_ui = (FO3 / "Fo3OpeningFlow.Cg00.cs").read_text(encoding="utf-8")
+
+        self.assertIn("class OwnedGamebryoFaceGenMorphRuntime", morph_runtime)
+        self.assertIn("OwnedGamebryoFaceGenMorphRuntime.Evaluate(", fnv_state)
+        self.assertIn("OwnedGamebryoFaceGenMorphRuntime.Advance(", fo3_contract)
+        self.assertIn("OwnedGamebryoFaceGenMorphRuntime.Publish(", fnv_ui)
+        self.assertIn("OwnedGamebryoFaceGenMorphRuntime.Publish(", fo3_ui)
+        self.assertNotIn(
+            "(float)value * activeControl.MorphWeightScale",
+            fo3_ui,
+        )
 
 
 if __name__ == "__main__":

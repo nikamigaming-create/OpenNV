@@ -409,31 +409,32 @@ internal sealed record Fo3AppearanceContract(
             selection.Hair.FormId != preview.HairFormId ||
             selection.Eyes.FormId != preview.EyesFormId ||
             value < control.Minimum || value > control.Maximum ||
-            !selection.FaceControlValues.TryGetValue(control.SettingEntity, out var priorValue))
+            !selection.FaceControlValues.ContainsKey(control.SettingEntity))
             throw new InvalidOperationException(
-                "Fallout 3 live FaceGen preview supports only owned default sex identities.");
-        var symmetric = selection.Sex.FaceGen.SymmetricGeometry
-            .Zip(
-                control.Axis,
-                (baseline, axis) => baseline +
-                    (value - priorValue) * control.MorphWeightScale * axis)
-            .ToArray();
-        var values = selection.FaceControlValues.ToDictionary(
-            pair => pair.Key,
-            pair => pair.Value,
-            StringComparer.Ordinal);
-        values[control.SettingEntity] = value;
+                "Fallout 3 live FaceGen preview control is outside the owned contract.");
+        var state = OwnedGamebryoFaceGenMorphRuntime.Advance(
+            selection.Sex.FaceGen.SymmetricGeometry,
+            FaceControls.Select(value => new OwnedGamebryoFaceGenMorphControl(
+                value.SettingEntity,
+                value.AxisSha256,
+                value.Axis)).ToArray(),
+            selection.FaceControlValues,
+            control.SettingEntity,
+            value,
+            control.Minimum,
+            control.Maximum,
+            control.MorphWeightScale);
         var face = new Fo3FaceGenDefaults(
-            HashFloats(symmetric),
+            state.SymmetricGeometrySha256,
             selection.Sex.FaceGen.AsymmetricGeometrySha256,
             selection.Sex.FaceGen.SymmetricTextureSha256,
-            symmetric,
+            state.SymmetricGeometry,
             selection.Sex.FaceGen.AsymmetricGeometry,
             selection.Sex.FaceGen.SymmetricTexture);
         return selection with
         {
             Sex = selection.Sex with { FaceGen = face },
-            FaceControlValues = values,
+            FaceControlValues = state.ControlValues,
         };
     }
 
@@ -705,15 +706,6 @@ internal sealed record Fo3AppearanceContract(
         if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Fallout 3 FaceGen coordinate hash differs.");
         return (actualSha256, values);
-    }
-
-    private static string HashFloats(IReadOnlyList<float> values)
-    {
-        using var buffer = new MemoryStream();
-        using (var writer = new BinaryWriter(buffer, System.Text.Encoding.UTF8, true))
-            foreach (var value in values)
-                writer.Write(value);
-        return Convert.ToHexString(SHA256.HashData(buffer.ToArray())).ToLowerInvariant();
     }
 
     private static void ValidateFaceControl(Fo3AppearanceFaceControl source)
