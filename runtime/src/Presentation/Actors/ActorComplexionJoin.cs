@@ -1,5 +1,8 @@
 using Godot;
 
+
+using OpenNV.Runtime.World.Actors;
+
 namespace OpenNV.Runtime.Presentation.Actors;
 
 /// <summary>

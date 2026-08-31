@@ -5,6 +5,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Godot;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+
 namespace OpenNV.Runtime;
 
 internal sealed record RuntimeConfiguration(

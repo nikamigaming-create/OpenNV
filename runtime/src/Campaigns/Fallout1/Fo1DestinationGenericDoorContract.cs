@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 
+
+using OpenNV.Runtime.Content;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 /// <summary>One explicit unscripted MAP door whose owned blocker becomes walkable when activated.</summary>

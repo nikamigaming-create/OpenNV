@@ -2,8 +2,9 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+
+
 using OpenNV.Runtime.Presentation.Ui;
-using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 

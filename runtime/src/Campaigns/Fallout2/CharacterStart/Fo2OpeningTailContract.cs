@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 

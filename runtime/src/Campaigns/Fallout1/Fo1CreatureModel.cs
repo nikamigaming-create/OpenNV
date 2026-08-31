@@ -4,6 +4,10 @@ using Godot;
 
 using OpenNV.Runtime.SceneGraph;
 
+
+using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Actors;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1CreatureModelNumericContracts

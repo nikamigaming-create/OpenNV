@@ -2,6 +2,10 @@ using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout3;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Actors;
+
 namespace OpenNV.Runtime.Campaigns.TTW;
 
 internal sealed record TtwFo3Cg00Stage10MaterializedParticipantIdentity(

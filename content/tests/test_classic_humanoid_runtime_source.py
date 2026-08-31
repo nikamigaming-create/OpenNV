@@ -20,8 +20,12 @@ FO2_CHARACTER_EDITOR = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "Ch
 FO2_CHARACTER_PICKER = ROOT / "runtime" / "src" / "Campaigns" / "Fallout2" / "CharacterStart" / "Fo2CharacterPicker.cs"
 REFLECTRON_DEVICE = ROOT / "runtime" / "src" / "Campaigns" / "NewVegas" / "Opening" / "OpeningRaceSexRenderedDeviceHost.cs"
 FO2_APPEARANCE = ROOT / "runtime" / "config" / "fo2-procedural-appearance-v3.json"
-RETAIL_ACTOR_MATERIAL = ROOT / "runtime" / "src" / "RetailActorMaterial.cs"
-RETAIL_FACEGEN_MATERIAL = ROOT / "runtime" / "src" / "RetailFaceGenMaterial.cs"
+RETAIL_ACTOR_MATERIAL = (
+    ROOT / "runtime" / "src" / "Presentation" / "Rendering" / "RetailActorMaterial.cs"
+)
+RETAIL_FACEGEN_MATERIAL = (
+    ROOT / "runtime" / "src" / "Presentation" / "Rendering" / "RetailFaceGenMaterial.cs"
+)
 CLASSIC_ANALOG_CAST = ROOT / "content" / "recipes" / "classic-premade-analog-cast-v1.json"
 CLASSIC_ANALOG_BUILDER = ROOT / "content" / "tools" / "prepare_classic_premade_analogs.py"
 CLASSIC_ANALOG_PROOF = ROOT / "runtime" / "src" / "Campaigns" / "Classic" / "ClassicPremadeAnalogProofHost.cs"

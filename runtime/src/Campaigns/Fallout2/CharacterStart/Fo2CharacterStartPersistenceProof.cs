@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 

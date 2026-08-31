@@ -8,9 +8,24 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = ROOT / "runtime" / "src"
 PROJECT = ROOT / "runtime" / "OpenNV.csproj"
+RUNTIME_GUIDE = ROOT / "docs" / "runtime-source-guide.md"
 
 
 class CSharpArchitectureTest(unittest.TestCase):
+    def test_source_root_contains_only_runtime_composition(self) -> None:
+        expected = {
+            "RuntimeConfiguration.Contracts.cs",
+            "RuntimeConfiguration.cs",
+            "RuntimeCoordinator.Acceptance.cs",
+            "RuntimeCoordinator.ClassicCampaigns.cs",
+            "RuntimeCoordinator.Launch.cs",
+            "RuntimeCoordinator.cs",
+            "RuntimeLaunchRequest.cs",
+            "RuntimeLaunchValidator.cs",
+        }
+        actual = {path.name for path in SOURCE_ROOT.glob("*.cs")}
+        self.assertEqual(expected, actual)
+
     def test_runtime_files_stay_bounded_by_responsibility(self) -> None:
         maximum_lines = 2_000
         oversized = {}
@@ -42,7 +57,9 @@ class CSharpArchitectureTest(unittest.TestCase):
         traversal = (SOURCE_ROOT / "SceneGraph" / "NodeTraversal.cs").read_text(
             encoding="utf-8"
         )
-        actor_loader = (SOURCE_ROOT / "ActorModelSlice.cs").read_text(encoding="utf-8")
+        actor_loader = (
+            SOURCE_ROOT / "World" / "Actors" / "ActorModelSlice.cs"
+        ).read_text(encoding="utf-8")
         body_rig = (
             SOURCE_ROOT
             / "Presentation"
@@ -66,6 +83,24 @@ class CSharpArchitectureTest(unittest.TestCase):
             ):
                 local_traversals[str(path.relative_to(ROOT))] = "local traversal"
         self.assertEqual({}, local_traversals)
+
+    def test_runtime_guide_names_every_top_level_domain(self) -> None:
+        guide = RUNTIME_GUIDE.read_text(encoding="utf-8")
+        domains = {
+            path.name
+            for path in SOURCE_ROOT.iterdir()
+            if path.is_dir() and any(path.rglob("*.cs"))
+        }
+        missing = sorted(domain for domain in domains if f"`{domain}/`" not in guide)
+        self.assertEqual([], missing)
+
+    def test_domain_dependencies_are_explicit(self) -> None:
+        offenders = {}
+        for path in SOURCE_ROOT.rglob("*.cs"):
+            source = path.read_text(encoding="utf-8")
+            if re.search(r"^global\s+using\s+OpenNV\.Runtime", source, re.MULTILINE):
+                offenders[str(path.relative_to(ROOT))] = "global domain import"
+        self.assertEqual({}, offenders)
 
     def test_character_shader_has_no_speculative_vats_contract(self) -> None:
         shader = (

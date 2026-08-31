@@ -1,5 +1,9 @@
 using Godot;
 
+
+using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.World.Streaming;
 
 internal sealed class CellEnvironmentSet

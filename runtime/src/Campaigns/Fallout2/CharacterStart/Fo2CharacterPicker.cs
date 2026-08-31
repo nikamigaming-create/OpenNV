@@ -2,6 +2,7 @@ using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal sealed partial class Fo2CharacterPicker : Control

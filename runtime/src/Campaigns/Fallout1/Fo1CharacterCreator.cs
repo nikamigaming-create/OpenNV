@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1CharacterCreatorNumericContracts

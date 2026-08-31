@@ -2,6 +2,11 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal sealed record Fo3TtwCg00Stage10Transform(

@@ -1,5 +1,9 @@
 using Godot;
 
+
+using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.Gameplay.State;
+
 namespace OpenNV.Runtime.Presentation.OpenXR;
 
 internal static class XrRigLayoutAcceptance

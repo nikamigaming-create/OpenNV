@@ -2,6 +2,12 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+
+using OpenNV.Runtime.Diagnostics.Acceptance;
+using OpenNV.Runtime.InputSystem;
+using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Interactions;
+
 namespace OpenNV.Runtime.World.Portals;
 
 internal static class CellRouteTravelAcceptance

@@ -7,6 +7,11 @@ using OpenNV.Runtime.Presentation.CharacterCreation;
 
 using OpenNV.Runtime.SceneGraph;
 
+
+using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Campaigns.Fallout1;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2HumanoidDonorVariant(

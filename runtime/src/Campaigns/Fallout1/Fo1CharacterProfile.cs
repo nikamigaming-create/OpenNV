@@ -1,3 +1,4 @@
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal sealed record Fo1CharacterIdentity(

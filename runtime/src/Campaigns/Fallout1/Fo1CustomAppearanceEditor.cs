@@ -1,6 +1,9 @@
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
+
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal sealed record Fo1CustomAppearanceSelection(

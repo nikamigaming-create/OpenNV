@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 
+
+using OpenNV.Runtime.Content;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 /// <summary>One hash-bound SCRIPT_MEDIC look-at message; dialogue and combat stay outside this boundary.</summary>

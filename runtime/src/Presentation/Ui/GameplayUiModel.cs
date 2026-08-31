@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 

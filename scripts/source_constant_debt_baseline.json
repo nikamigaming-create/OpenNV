@@ -13,7 +13,7 @@
     "unsupported-source": 6
   },
   "schema": "opennv-source-constant-debt-baseline/v1",
-  "sourceRevision": "3353ca1cb03734d71fb079ed0e27711ab8da304f",
+  "sourceRevision": "1d8551225706c404b89dfdf19f71cd34cd5c366f",
   "total": 1279,
   "violations": [
     {
@@ -4195,18 +4195,6 @@
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/CellContentLoader.cs",
-      "value": "0.5f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/CellContentLoader.cs",
-      "value": "64"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
       "path": "runtime/src/Compatibility/Jam/JamProfileContract.cs",
       "value": ".20"
     },
@@ -4219,8 +4207,20 @@
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/DoorInstance.cs",
+      "path": "runtime/src/Content/LegalAssetPreparer.cs",
+      "value": "7"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Content/VerifiedGltfLoader.cs",
       "value": "0.000001f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Content/VerifiedGltfLoader.cs",
+      "value": "5126"
     },
     {
       "category": "csharp",
@@ -4279,14 +4279,44 @@
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/LegalAssetPreparer.cs",
-      "value": "7"
+      "path": "runtime/src/Presentation/Actors/ActorComplexionMath.cs",
+      "value": "0.5f"
     },
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/Presentation/Actors/ActorComplexionMath.cs",
-      "value": "0.5f"
+      "path": "runtime/src/Presentation/Rendering/RetailExteriorEnvironment.cs",
+      "value": "100"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Presentation/Rendering/RetailFaceGenMaterial.cs",
+      "value": "0.0125f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Presentation/Rendering/RetailFaceGenMaterial.cs",
+      "value": "0.18f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Presentation/Rendering/RetailFaceGenMaterial.cs",
+      "value": "0.78f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Presentation/Rendering/RetailFaceGenMaterial.cs",
+      "value": "0.82f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Presentation/Rendering/RetailFaceGenMaterial.cs",
+      "value": "0.98f"
     },
     {
       "category": "csharp",
@@ -4339,42 +4369,6 @@
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/RetailExteriorEnvironment.cs",
-      "value": "100"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/RetailFaceGenMaterial.cs",
-      "value": "0.0125f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/RetailFaceGenMaterial.cs",
-      "value": "0.18f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/RetailFaceGenMaterial.cs",
-      "value": "0.78f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/RetailFaceGenMaterial.cs",
-      "value": "0.82f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/RetailFaceGenMaterial.cs",
-      "value": "0.98f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
       "path": "runtime/src/RuntimeCoordinator.Acceptance.cs",
       "value": "45"
     },
@@ -4393,14 +4387,20 @@
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/VerifiedGltfLoader.cs",
-      "value": "0.000001f"
+      "path": "runtime/src/World/Cells/CellContentLoader.cs",
+      "value": "0.5f"
     },
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/VerifiedGltfLoader.cs",
-      "value": "5126"
+      "path": "runtime/src/World/Cells/CellContentLoader.cs",
+      "value": "64"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/World/Interactions/DoorInstance.cs",
+      "value": "0.000001f"
     },
     {
       "category": "content-form-id",

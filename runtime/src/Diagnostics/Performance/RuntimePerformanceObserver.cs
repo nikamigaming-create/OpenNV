@@ -2,6 +2,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime;
 
+
 namespace OpenNV.Runtime.Diagnostics.Performance;
 
 internal partial class RuntimePerformanceObserver : Node

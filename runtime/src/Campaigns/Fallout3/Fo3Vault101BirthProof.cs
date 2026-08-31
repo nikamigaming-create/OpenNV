@@ -4,6 +4,10 @@ using System.Reflection.PortableExecutable;
 using System.Text.Json;
 using Godot;
 
+
+using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal partial class Fo3Vault101BirthProof : Node3D

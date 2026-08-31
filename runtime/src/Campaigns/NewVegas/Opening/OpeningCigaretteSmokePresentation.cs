@@ -1,5 +1,8 @@
 using Godot;
 
+
+using OpenNV.Runtime.World.Actors;
+
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal sealed class OpeningCigaretteSmokePresentation

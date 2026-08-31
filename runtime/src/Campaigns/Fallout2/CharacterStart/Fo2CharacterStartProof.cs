@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal static class Fo2CharacterStartProof

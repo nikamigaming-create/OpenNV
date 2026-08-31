@@ -2,6 +2,7 @@ using Godot;
 
 using OpenNV.Runtime.SceneGraph;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 // The roof remains a source-topology cut. Camera-facing cave shells use an

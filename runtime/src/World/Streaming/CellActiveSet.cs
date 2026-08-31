@@ -2,6 +2,9 @@ using Godot;
 
 using OpenNV.Runtime.SceneGraph;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+
 namespace OpenNV.Runtime.World.Streaming;
 
 internal sealed class CellActiveSet

@@ -2,6 +2,10 @@ using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+
+using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal sealed partial class Fo2CustomCharacterEditor : Control

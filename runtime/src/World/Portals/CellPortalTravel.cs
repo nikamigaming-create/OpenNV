@@ -2,6 +2,10 @@ using Godot;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Streaming;
 
+
+using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Interactions;
+
 namespace OpenNV.Runtime.World.Portals;
 
 internal sealed class CellPortalTravel

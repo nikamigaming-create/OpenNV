@@ -4,6 +4,9 @@ using Godot;
 
 using OpenNV.Runtime.SceneGraph;
 
+
+using OpenNV.Runtime.Presentation.Rendering;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static partial class Fo1OwnedCaveKit

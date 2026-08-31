@@ -1,5 +1,6 @@
 using Godot;
 
+
 namespace OpenNV.Runtime.Gameplay.Containers;
 
 internal partial class ContainerInteractionView : CanvasLayer
