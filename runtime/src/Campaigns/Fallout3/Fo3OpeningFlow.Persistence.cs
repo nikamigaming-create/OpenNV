@@ -423,7 +423,8 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage10State? cg01Stage10 = null,
         Fo3Cg01Stage12State? cg01Stage12 = null,
         Fo3Cg01ToddlerWorldState? cg01ToddlerWorld = null,
-        Fo3Cg01Stage14State? cg01Stage14 = null)
+        Fo3Cg01Stage14State? cg01Stage14 = null,
+        Fo3Cg01Stage20State? cg01Stage20 = null)
     {
         var state = new
         {
@@ -432,7 +433,7 @@ internal partial class Fo3OpeningFlow
             profileSha256 = _profile.Sha256,
             questEditorId = _profile.QuestEditorId,
             questFormId = _profile.QuestFormId,
-            stage = cg01Stage14?.ActiveStage ?? cg01Stage12?.ActiveStage ??
+            stage = cg01Stage20?.ActiveStage ?? cg01Stage14?.ActiveStage ?? cg01Stage12?.ActiveStage ??
                 cg01Stage10?.ActiveStage ?? cg01?.ActiveStage ?? stage100?.Stage ??
                 stage90?.Stage ?? stage85?.Stage ?? stage80.Stage,
             activeQuest = cg01 is null
@@ -441,7 +442,7 @@ internal partial class Fo3OpeningFlow
                 {
                     formId = cg01.ActiveQuestFormId,
                     editorId = cg01.ActiveQuestEditorId,
-                    stage = cg01Stage14?.ActiveStage ?? cg01Stage12?.ActiveStage ??
+                    stage = cg01Stage20?.ActiveStage ?? cg01Stage14?.ActiveStage ?? cg01Stage12?.ActiveStage ??
                         cg01Stage10?.ActiveStage ?? cg01.ActiveStage,
                 },
             playerName,
@@ -637,7 +638,12 @@ internal partial class Fo3OpeningFlow
             cg01Stage12DadResponse = cg01Stage14 is null
                 ? null
                 : _profile.Cg01Stage12DadResponse.SavedState(cg01Stage14),
-            birthRuntime = BirthRuntimeState(cg01Stage14 is not null
+            cg01PostStage14Transition = cg01Stage20 is null
+                ? null
+                : _profile.Cg01PostStage14Transition.SavedState(cg01Stage20),
+            birthRuntime = BirthRuntimeState(cg01Stage20 is not null
+                ? "cg01-stage20-package-dialogue-sequence-applied"
+                : cg01Stage14 is not null
                 ? "cg01-stage14-dad-response-applied-package-evaluated"
                 : cg01Stage12 is not null
                 ? "cg01-stage12-physical-trigger-applied-post-stage12-blocked"
@@ -797,6 +803,31 @@ internal partial class Fo3OpeningFlow
             cg01Stage12,
             toddlerWorld,
             cg01Stage14);
+
+    private void PersistCg01Stage20Transition(
+        Fo3Cg01RuntimeContext context,
+        Fo3Cg01Stage0State cg01,
+        Fo3Cg01Stage10State cg01Stage10,
+        Fo3Cg01Stage12State cg01Stage12,
+        Fo3Cg01ToddlerWorldState toddlerWorld,
+        Fo3Cg01Stage14State cg01Stage14,
+        Fo3Cg01Stage20State cg01Stage20) =>
+        PersistStage80Transition(
+            context.PlayerName,
+            context.Sex,
+            context.Selection,
+            context.Section4Package,
+            context.Stage65,
+            context.Stage80,
+            context.Stage85,
+            context.Stage90,
+            context.Stage100,
+            cg01,
+            cg01Stage10,
+            cg01Stage12,
+            toddlerWorld,
+            cg01Stage14,
+            cg01Stage20);
 
     private void WriteState(object state)
     {

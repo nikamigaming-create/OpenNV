@@ -300,7 +300,7 @@ internal sealed record Fo3Cg01Stage12Transition(
                 "Fallout 3 CG01 stage-12 Dad variable differs.");
     }
 
-    private static Fo3Cg01Transform LoadTransform(JsonElement source) => new(
+    internal static Fo3Cg01Transform LoadTransform(JsonElement source) => new(
         ReadVector3(source, "positionGameUnits"),
         ReadVector3(source, "rotationRadians"),
         RequiredDouble(source, "scale"));

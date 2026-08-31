@@ -584,7 +584,8 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage10State stage10,
         Fo3Cg01ToddlerWorldState? restored,
         bool acceptanceProof,
-        Fo3Cg01Stage14State? restoredStage14 = null)
+        Fo3Cg01Stage14State? restoredStage14 = null,
+        Fo3Cg01Stage20State? restoredStage20 = null)
     {
         if (_cg01ToddlerWorld is not null)
             throw new InvalidOperationException(
@@ -691,8 +692,21 @@ internal partial class Fo3OpeningFlow
                 GetTree().Quit(0);
                 return;
             }
-            if (restoredStage14 is not null)
-                ShowCg01PostStage14Boundary(restoredStage14, resumed: true);
+            if (restoredStage20 is not null)
+            {
+                if (restoredStage14 is null)
+                    throw new InvalidOperationException(
+                        "Fallout 3 CG01 stage-20 restore has no stage-14 state.");
+                RestoreCg01Stage20World(stage5, restoredStage20);
+            }
+            else if (restoredStage14 is not null)
+                BeginCg01PostStage14Transition(
+                    stage5,
+                    context,
+                    stage10,
+                    restoredStage12,
+                    restored,
+                    restoredStage14);
             else
                 ShowCg01PostStage12Boundary(restoredStage12, resumed: true);
             return;
@@ -982,7 +996,13 @@ internal partial class Fo3OpeningFlow
             GetTree().Quit(0);
             return;
         }
-        ShowCg01PostStage14Boundary(stage14, resumed: false);
+        BeginCg01PostStage14Transition(
+            stage5,
+            context,
+            stage10,
+            stage12,
+            toddlerState,
+            stage14);
         GD.Print(
             $"OPENNV_FO3_CG01_STAGE14_APPLIED quest={stage14.ActiveQuestFormId} " +
             $"stage={stage14.ActiveStage} infos={string.Join(',', stage14.AppliedInfoFormIds)} " +
@@ -1110,60 +1130,216 @@ internal partial class Fo3OpeningFlow
         }
     }
 
-    private void ShowCg01PostStage14Boundary(Fo3Cg01Stage14State state, bool resumed)
+    private void BeginCg01PostStage14Transition(
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01RuntimeContext context,
+        Fo3Cg01Stage10State stage10,
+        Fo3Cg01Stage12State stage12,
+        Fo3Cg01ToddlerWorldState toddlerState,
+        Fo3Cg01Stage14State stage14)
     {
         _vaultPreviewOverlay?.QueueFree();
-        var overlay = new PanelContainer
+        _vaultPreviewOverlay = null;
+        ApplyCg01DadPackage(_profile.Cg01PostStage14Transition.CloseGatePackage, stage5);
+        SetCg01WorldReferenceOpen(
+            _profile.Cg01PostStage14Transition.PlaypenGateReferenceFormId,
+            false);
+        var cues = _profile.Cg01PostStage14Transition.SelectCues(context.Sex.EngineSex);
+        var subtitle = AddVaultDialogueOverlay("FO3_CG01_STAGE16_DAD_RESPONSE");
+        PlayCg01PostStage14Cue(
+            stage5,
+            context,
+            stage10,
+            stage12,
+            toddlerState,
+            stage14,
+            cues,
+            0,
+            subtitle);
+    }
+
+    private void PlayCg01PostStage14Cue(
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01RuntimeContext context,
+        Fo3Cg01Stage10State stage10,
+        Fo3Cg01Stage12State stage12,
+        Fo3Cg01ToddlerWorldState toddlerState,
+        Fo3Cg01Stage14State stage14,
+        IReadOnlyList<Fo3Cg01PostStage14Cue> cues,
+        int index,
+        Label subtitle)
+    {
+        var cue = cues[index];
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 stage-16 Dad response has no owned world.");
+        RestoreCg01DadPrimaryIdle();
+        _vaultDialogueVoice?.Stop();
+        _vaultDialogueVoice?.QueueFree();
+        ClearCg01DadLip();
+        var stream = AudioStreamOggVorbis.LoadFromFile(cue.Response.Voice.SourcePath)
+            ?? throw new InvalidOperationException(
+                $"Fallout 3 CG01 Dad voice could not be decoded: {cue.InfoFormId}");
+        _activeCg01DadLip = FaceGenLipAnimation.Load(
+            cue.Response.Lip.SourcePath,
+            RuntimeConfiguration.Load().ActorCompiler.FaceGenAnimation.Lip);
+        _activeCg01DadInfoFormId = cue.InfoFormId;
+        coverage.Cg01DadActor.Placement.SetMeta("opennv_talking", 1);
+        _vaultDialogueVoice = new AudioStreamPlayer
         {
-            Name = "FO3_CG01_POST_STAGE14_BOUNDARY",
-            AnchorLeft = 0.0f,
-            AnchorTop = 1.0f,
-            AnchorRight = 1.0f,
-            AnchorBottom = 1.0f,
-            OffsetLeft = Fo3OpeningFlowNumericContracts.BoundaryHorizontalInsetPixels,
-            OffsetTop = Fo3OpeningFlowNumericContracts.BoundaryTopOffsetPixels,
-            OffsetRight = -Fo3OpeningFlowNumericContracts.BoundaryHorizontalInsetPixels,
-            OffsetBottom = Fo3OpeningFlowNumericContracts.BoundaryBottomOffsetPixels,
+            Name = $"Fallout3Cg01Stage16DadVoice{cue.Sequence}",
+            Stream = stream,
         };
-        overlay.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        _vaultDialogueVoice.SetMeta("opennv_info_form_id", cue.InfoFormId);
+        _vaultDialogueVoice.Finished += () =>
         {
-            BgColor = new Color(
-                0.0f,
-                0.0f,
-                0.0f,
-                Fo3OpeningFlowNumericContracts.BoundaryPanelAlpha),
-            BorderColor = _profile.InterfaceColor,
-            BorderWidthLeft = 1,
-            BorderWidthTop = 1,
-            BorderWidthRight = 1,
-            BorderWidthBottom = 1,
-        });
-        var margin = new MarginContainer();
-        foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
-            margin.AddThemeConstantOverride(side, Fo3OpeningFlowNumericContracts.SeparationPixels);
-        overlay.AddChild(margin);
-        var content = new VBoxContainer();
-        margin.AddChild(content);
-        content.AddChild(Label(
-            $"{state.ActiveQuestEditorId}  •  STAGE {state.ActiveStage}",
-            Fo3OpeningFlowNumericContracts.TitleFontPixels));
-        content.AddChild(Label(
-            "Dad's two source-ordered say-once responses completed. His SayToDone state and " +
-            "the exact stage-14 package reevaluation command are saved.",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        var exit = Button("RETURN TO MAIN MENU");
-        exit.Pressed += ExitVault101Preview;
-        content.AddChild(exit);
-        AddChild(overlay);
-        _vaultPreviewOverlay = overlay;
-        Callable.From(exit.GrabFocus).CallDeferred();
-        if (resumed)
+            ClearCg01DadLip();
+            _vaultDialogueVoice?.QueueFree();
+            _vaultDialogueVoice = null;
+            coverage.Cg01DadActor.Placement.SetMeta("opennv_talking", 0);
+            if (index + 1 < cues.Count)
+            {
+                Callable.From(() => PlayCg01PostStage14Cue(
+                    stage5,
+                    context,
+                    stage10,
+                    stage12,
+                    toddlerState,
+                    stage14,
+                    cues,
+                    index + 1,
+                    subtitle)).CallDeferred();
+                return;
+            }
+            CompleteCg01PostStage14Transition(
+                stage5,
+                context,
+                stage10,
+                stage12,
+                toddlerState,
+                stage14,
+                subtitle);
+        };
+        AddChild(_vaultDialogueVoice);
+        subtitle.Text = $"DAD: {cue.Response.Text}";
+        subtitle.Visible = true;
+        _vaultDialogueVoice.Play();
+    }
+
+    private void CompleteCg01PostStage14Transition(
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01RuntimeContext context,
+        Fo3Cg01Stage10State stage10,
+        Fo3Cg01Stage12State stage12,
+        Fo3Cg01ToddlerWorldState toddlerState,
+        Fo3Cg01Stage14State stage14,
+        Label subtitle)
+    {
+        subtitle.QueueFree();
+        _vaultPreviewOverlay = null;
+        var state = _profile.Cg01PostStage14Transition.Apply(
+            stage14,
+            context.Sex.EngineSex);
+        ApplyCg01DadPackage(_profile.Cg01PostStage14Transition.CloseDoorPackage, stage5);
+        SetCg01WorldReferenceOpen(state.PlayroomDoorReferenceFormId, false);
+        SetCg01WorldReferenceLock(state.PlayroomDoorReferenceFormId, state.PlayroomDoorLockLevel);
+        SetCg01WorldReferenceOpen(state.PlaypenGateReferenceFormId, false);
+        ApplyCg01DadPackage(_profile.Cg01PostStage14Transition.LeaveRoomPackage, stage5);
+        (_cg01ToddlerWorld ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 stage-20 world is absent."))
+            .Player.EnableMovementAtSourceStage();
+        var stage20World = _cg01ToddlerWorld.State(triggerEntered: true);
+        PersistCg01Stage20Transition(
+            context,
+            stage5,
+            stage10,
+            stage12,
+            stage20World,
+            stage14,
+            state);
+        GD.Print(
+            $"OPENNV_FO3_CG01_STAGE20_APPLIED quest={state.ActiveQuestFormId} " +
+            $"stage={state.ActiveStage} packages={string.Join(',', state.AppliedPackageFormIds)} " +
+            $"infos={string.Join(',', state.AppliedInfoFormIds)} movement=1 " +
+            $"objective={state.DisplayedObjectiveIndex} blocker={state.NextBoundary.Blocker}");
+    }
+
+    private void ApplyCg01DadPackage(
+        Fo3Cg01PostStage14Package package,
+        Fo3Cg01Stage0State stage5)
+    {
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 Dad package has no owned world.");
+        var source = package.TargetTransform;
+        var placement = GamebryoPackagePlacement.FromPlanarGameReferenceMarker(
+            package.TargetFormId,
+            new Vector3(
+                (float)source.PositionGameUnits.X,
+                (float)source.PositionGameUnits.Y,
+                (float)source.PositionGameUnits.Z),
+            new Vector3(
+                (float)source.RotationRadians.X,
+                (float)source.RotationRadians.Y,
+                (float)source.RotationRadians.Z),
+            (float)stage5.Dad.Reference.SourceTransform.Scale,
+            coverage.Contract.EntryPositionGameUnits);
+        placement = placement with
         {
-            GD.Print(
-                $"OPENNV_FO3_CG01_STAGE14_COLD_RESTORE quest={state.ActiveQuestFormId} " +
-                $"stage={state.ActiveStage} infos={string.Join(',', state.AppliedInfoFormIds)} " +
-                "dialogueReplayed=0 packageEffectsReplayed=0 nextApplied=0 " +
-                $"blocker={state.NextBoundary.Blocker}");
-        }
+            SourceTransform = GamebryoPackagePlacement.AdjustSupportHeight(
+                placement.SourceTransform,
+                coverage.Cg01DadGrounding.VerticalCorrectionGodotGameUnits),
+        };
+        var travel = GamebryoPackageTravel.ArriveAtSourceTarget(
+            package.FormId,
+            placement,
+            coverage.Cg01DadActor.Placement.Transform,
+            GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
+        travel.Publish(coverage.Cg01DadActor.Placement);
+    }
+
+    private void RestoreCg01Stage20World(
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01Stage20State state)
+    {
+        ApplyCg01DadPackage(_profile.Cg01PostStage14Transition.LeaveRoomPackage, stage5);
+        SetCg01WorldReferenceOpen(state.PlayroomDoorReferenceFormId, state.PlayroomDoorOpen);
+        SetCg01WorldReferenceLock(
+            state.PlayroomDoorReferenceFormId,
+            state.PlayroomDoorLockLevel);
+        SetCg01WorldReferenceOpen(
+            state.PlaypenGateReferenceFormId,
+            state.PlaypenGateOpen);
+        var world = _cg01ToddlerWorld ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 stage-20 restore has no toddler world.");
+        if (!world.Player.MovementEnabled ||
+            _vaultDialogueVoice is not null ||
+            _activeCg01DadLip is not null)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 stage-20 restored runtime differs.");
+        GD.Print(
+            $"OPENNV_FO3_CG01_STAGE20_COLD_RESTORE quest={state.ActiveQuestFormId} " +
+            $"stage={state.ActiveStage} packages={string.Join(',', state.AppliedPackageFormIds)} " +
+            "dialogueReplayed=0 packageTravelReplayed=0 movement=1 " +
+            $"blocker={state.NextBoundary.Blocker}");
+    }
+
+    private Node3D Cg01WorldReference(string formId) =>
+        (_vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 reference has no owned world."))
+        .CellRoot.GetChildren().OfType<Node3D>().Single(node =>
+            node.HasMeta("opennv_source_form_id") &&
+            node.GetMeta("opennv_source_form_id").AsString().Equals(
+                formId,
+                StringComparison.OrdinalIgnoreCase));
+
+    private void SetCg01WorldReferenceOpen(string formId, bool open)
+    {
+        var reference = Cg01WorldReference(formId);
+        reference.SetMeta("opennv_open_state", open ? 1 : 0);
+    }
+
+    private void SetCg01WorldReferenceLock(string formId, int lockLevel)
+    {
+        var reference = Cg01WorldReference(formId);
+        reference.SetMeta("opennv_lock_level", lockLevel);
     }
 }

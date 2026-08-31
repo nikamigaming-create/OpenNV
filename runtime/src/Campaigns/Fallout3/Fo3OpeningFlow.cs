@@ -385,7 +385,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3Cg01Stage10State? resumedCg01Stage10 = null,
         Fo3Cg01Stage12State? resumedCg01Stage12 = null,
         Fo3Cg01ToddlerWorldState? resumedCg01ToddlerWorld = null,
-        Fo3Cg01Stage14State? resumedCg01Stage14 = null)
+        Fo3Cg01Stage14State? resumedCg01Stage14 = null,
+        Fo3Cg01Stage20State? resumedCg01Stage20 = null)
     {
         var contract = _birthPresentation ?? throw new InvalidOperationException(
             "Fallout 3 Vault 101 birth room has no owned presentation contract.");
@@ -436,7 +437,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             (resumedCg01Stage10 is not null && resumedCg01 is null) ||
             (resumedCg01Stage12 is not null && resumedCg01Stage10 is null) ||
             (resumedCg01ToddlerWorld is not null && resumedCg01Stage12 is null) ||
-            (resumedCg01Stage14 is not null && resumedCg01ToddlerWorld is null))
+            (resumedCg01Stage14 is not null && resumedCg01ToddlerWorld is null) ||
+            (resumedCg01Stage20 is not null && resumedCg01Stage14 is null))
             throw new InvalidOperationException(
                 "Fallout 3 resumed birth-room stage chain is incomplete.");
 
@@ -534,7 +536,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                         resumedCg01Stage10!,
                         resumedCg01ToddlerWorld,
                         acceptanceProof: false,
-                        restoredStage14: resumedCg01Stage14);
+                        restoredStage14: resumedCg01Stage14,
+                        restoredStage20: resumedCg01Stage20);
                 else if (resumedCg01Stage10 is not null)
                     BeginCg01ToddlerWorld(
                         resumedCg01,

@@ -432,7 +432,8 @@ internal partial class Fo3OpeningFlow
                 stage != _profile.Cg01Stage0Transition.ResultingStage &&
                 stage != _profile.Cg01Stage10Transition.TargetStage &&
                 stage != _profile.Cg01Stage12Transition.TargetStage &&
-                stage != _profile.Cg01Stage12DadResponse.TargetStage)
+                stage != _profile.Cg01Stage12DadResponse.TargetStage &&
+                stage != _profile.Cg01PostStage14Transition.TargetStage)
                 throw new InvalidOperationException("Saved Fallout 3 CG00 stage is unsupported.");
             var savedAppearance = RequiredSaveObject(root, "appearance");
             if (RequiredSaveString(savedAppearance, "sourceContract") !=
@@ -551,6 +552,7 @@ internal partial class Fo3OpeningFlow
             Fo3Cg01Stage12State? cg01Stage12 = null;
             Fo3Cg01ToddlerWorldState? cg01ToddlerWorld = null;
             Fo3Cg01Stage14State? cg01Stage14 = null;
+            Fo3Cg01Stage20State? cg01Stage20 = null;
             if (root.TryGetProperty("cg01Stage0Transition", out var savedCg01) &&
                 savedCg01.ValueKind == JsonValueKind.Object)
             {
@@ -586,11 +588,25 @@ internal partial class Fo3OpeningFlow
                             _profile.Cg01Stage12DadResponse.ValidateSavedState(
                                 savedCg01Stage14,
                                 cg01Stage14);
+                            if (root.TryGetProperty(
+                                    "cg01PostStage14Transition",
+                                    out var savedCg01Stage20) &&
+                                savedCg01Stage20.ValueKind == JsonValueKind.Object)
+                            {
+                                cg01Stage20 = _profile.Cg01PostStage14Transition.Apply(
+                                    cg01Stage14,
+                                    _selectedSex.EngineSex);
+                                _profile.Cg01PostStage14Transition.ValidateSavedState(
+                                    savedCg01Stage20,
+                                    cg01Stage20);
+                            }
                         }
                     }
                     ValidateBirthRuntimeState(
                         RequiredSaveObject(root, "birthRuntime"),
-                        cg01Stage14 is not null
+                        cg01Stage20 is not null
+                            ? "cg01-stage20-package-dialogue-sequence-applied"
+                        : cg01Stage14 is not null
                             ? "cg01-stage14-dad-response-applied-package-evaluated"
                         : cg01Stage12 is null
                             ? "cg01-stage10-toddler-world-active"
@@ -622,7 +638,8 @@ internal partial class Fo3OpeningFlow
                 cg01Stage10,
                 cg01Stage12,
                 cg01ToddlerWorld,
-                cg01Stage14);
+                cg01Stage14,
+                cg01Stage20);
         }
         catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
         {

@@ -239,6 +239,18 @@
         "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
         "stage12DadResponseInfoFormIds": ["0001f3e0", "0001f3df"],
         "stage12DadResponseTargetStage": 14,
+        "postStage14Transition": {
+          "stage16": 16,
+          "stage18": 18,
+          "stage20": 20,
+          "closeGatePackageFormId": "000c6de4",
+          "closeDoorPackageFormId": "000457c4",
+          "leaveRoomPackageFormId": "0002eaaf",
+          "closeGateTargetFormId": "000457c2",
+          "closeDoorTargetFormId": "000457c0",
+          "leaveRoomTargetFormId": "0002ea4b",
+          "dadResponseInfoFormIds": ["0001f3de", "0001f3dd", "0001f3dc"]
+        },
         "tutorialQuestEditorId": "CGTutorial",
         "tutorialQuestFormId": "00059c85",
         "tutorialQuestStage": 2,

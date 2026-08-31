@@ -643,6 +643,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                         "endif",
                         "endif",
                         "end",
+                        "begin OnPackageDone CG01DadCloseDoor",
+                        "setstage CG01 18",
+                        "end",
                         "begin SayToDone CG01DadSpeech",
                         "set talking to 0",
                         "look player",
@@ -669,7 +672,10 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             0,
             subrecord("EDID", b"CG01Dad\0")
             + subrecord("VTCK", struct.pack("<I", VOICE_FORM))
-            + subrecord("SCRI", struct.pack("<I", cg01_dad_script.form_id)),
+            + subrecord("SCRI", struct.pack("<I", cg01_dad_script.form_id))
+            + subrecord("PKID", struct.pack("<I", 0x0002EAAF))
+            + subrecord("PKID", struct.pack("<I", 0x000457C4))
+            + subrecord("PKID", struct.pack("<I", 0x000C6DE4)),
             (),
         )
         cg02_dad_base = Record(
@@ -709,6 +715,77 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             marker_base.form_id,
             0x00000400,
             (-2582.588, -5798.251, 7424.0, 0.0, 0.0, 0.0460234),
+        )
+        cg01_close_gate_target = placed_reference(
+            "REFR", 0x000457C2, "CG01DadExitPlaypenMarker2", marker_base.form_id, 0,
+            (-2644.5, -5710.0, 7424.0, 0.0, 0.0, 0.092),
+        )
+        cg01_close_door_target = placed_reference(
+            "REFR", 0x000457C0, "CG01DadExitRoomMarker", marker_base.form_id, 0,
+            (-2686.3, -5948.4, 7424.0, 0.0, 0.0, 3.275),
+        )
+        cg01_leave_room_target = placed_reference(
+            "REFR", 0x0002EA4B, "CG01DadGoneMarker", marker_base.form_id, 0,
+            (-3168.0, -5888.0, 7424.0, 0.0, 0.0, 3.188),
+        )
+        cg01_playpen_gate = placed_reference(
+            "REFR", 0x00047803, "CG01PlaypenGateREF", marker_base.form_id, 0,
+            (-2645.0, -5590.6, 7425.0, 0.0, 0.0, 1.571),
+        )
+        cg01_playroom_door = placed_reference(
+            "REFR", 0x0002EA4A, "CG01PlayroomDoor", marker_base.form_id, 0,
+            (-2688.0, -5888.0, 7424.0, 0.0, 0.0, 2.750),
+        )
+
+        def cg01_package(
+            form_id: int,
+            editor_id: str,
+            stage: int,
+            target_form_id: int,
+            end_source: str | None = None,
+        ) -> Record:
+            events = subrecord("POBA") + subrecord("POEA")
+            if end_source is not None:
+                events += subrecord("SCTX", end_source.encode("cp1252") + b"\0")
+            events += subrecord("POCA")
+            return Record(
+                "PACK",
+                form_id,
+                0,
+                subrecord("EDID", editor_id.encode("ascii") + b"\0")
+                + subrecord("PKDT", bytes(12))
+                + subrecord("PLDT", struct.pack("<iIi", 0, target_form_id, 0))
+                + subrecord(
+                    "CTDA",
+                    condition(
+                        58,
+                        0x00014E83,
+                        operator_flags=0x60,
+                        comparison=float(stage),
+                    ),
+                )
+                + events,
+                (),
+            )
+
+        cg01_close_gate_package = cg01_package(
+            0x000C6DE4,
+            "CG01DadCloseGate",
+            14,
+            cg01_close_gate_target.form_id,
+            "setstage CG01 16",
+        )
+        cg01_close_door_package = cg01_package(
+            0x000457C4,
+            "CG01DadCloseDoor",
+            16,
+            cg01_close_door_target.form_id,
+        )
+        cg01_leave_room_package = cg01_package(
+            0x0002EAAF,
+            "CG01DadLeaveRoom",
+            20,
+            cg01_leave_room_target.form_id,
         )
         cg02_dad_ref = placed_reference(
             "ACHR",
@@ -769,6 +846,25 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             )
         )
         cg01_stage14_source = "CG01DadREF.evp"
+        cg01_stage16_source = "\n".join(
+            ("set CG01DadREF.doTalk to 1", "CG01PlaypenGateREF.setOpenState 0")
+        )
+        cg01_stage18_source = "\n".join(
+            (
+                "set CG01DadREF.doTalk to 0",
+                "CG01PlayroomDoor.setOpenState 0",
+                "CG01PlayroomDoor.Lock 100",
+                "CG01PlaypenGateREF.setOpenState 0",
+                "setstage CG01 20",
+            )
+        )
+        cg01_stage20_source = "\n".join(
+            (
+                "CG01DadREF.evp",
+                "EnablePlayerControls 1 0 0 0 1 1 0",
+                "setObjectiveDisplayed CG01 20 1",
+            )
+        )
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -785,6 +881,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("SCTX", cg01_stage12_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", 14))
             + subrecord("SCTX", cg01_stage14_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 16))
+            + subrecord("SCTX", cg01_stage16_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 18))
+            + subrecord("SCTX", cg01_stage18_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 20))
+            + subrecord("SCTX", cg01_stage20_source.encode("cp1252") + b"\0")
             + subrecord("QOBJ", struct.pack("<I", CG01_WALK_OBJECTIVE_INDEX))
             + subrecord("NNAM", b"Walk to Dad.\0"),
             (),
@@ -954,6 +1056,42 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
             ),
         )
+        cg01_stage16_dad_infos = (
+            Record(
+                "INFO",
+                0x0001F3DE,
+                0,
+                subrecord("DATA", struct.pack("<BBH", 1, 0, 4))
+                + subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord("NAM1", b"Listen, kiddo, Daddy needs to leave for a minute.\0")
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id)),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            ),
+            Record(
+                "INFO",
+                0x0001F3DD,
+                0,
+                subrecord("DATA", struct.pack("<BBH", 1, 0, 4))
+                + subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord("NAM1", b"You'll be okay, pal. I'll be back in a bit.\0")
+                + subrecord("CTDA", condition(131, 0))
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id))
+                + subrecord("SCTX", b"set CG01DadREF.doTalk to 0\0"),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            ),
+            Record(
+                "INFO",
+                0x0001F3DC,
+                0,
+                subrecord("DATA", struct.pack("<BBH", 1, 0, 4))
+                + subrecord("QSTI", struct.pack("<I", cg01.form_id))
+                + subrecord("NAM1", b"You'll be okay, honey. I'll be back in a bit.\0")
+                + subrecord("CTDA", condition(131, 1))
+                + subrecord("CTDA", condition(72, cg01_dad_base.form_id))
+                + subrecord("SCTX", b"set CG01DadREF.doTalk to 0\0"),
+                (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),),
+            ),
+        )
         modifier = Record(
             "IMAD",
             0x00035A20,
@@ -1002,6 +1140,18 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "dadSpeechStageInfoFormIds": ["0001f3e6", "0001f3e7"],
                 "stage12DadResponseInfoFormIds": ["0001f3e0", "0001f3df"],
                 "stage12DadResponseTargetStage": 14,
+                "postStage14Transition": {
+                    "stage16": 16,
+                    "stage18": 18,
+                    "stage20": 20,
+                    "closeGatePackageFormId": "000c6de4",
+                    "closeDoorPackageFormId": "000457c4",
+                    "leaveRoomPackageFormId": "0002eaaf",
+                    "closeGateTargetFormId": "000457c2",
+                    "closeDoorTargetFormId": "000457c0",
+                    "leaveRoomTargetFormId": "0002ea4b",
+                    "dadResponseInfoFormIds": ["0001f3de", "0001f3dd", "0001f3dc"],
+                },
                 "tutorialQuestEditorId": "CGTutorial",
                 "tutorialQuestFormId": "00059c85",
                 "tutorialQuestStage": 2,
@@ -1029,6 +1179,7 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg01_dad_topic,
             *cg01_dad_infos,
             *cg01_stage12_dad_infos,
+            *cg01_stage16_dad_infos,
             idle(
                 CG01_DAD_TALK_IDLE_FORM,
                 "ttnpcNTRLHandsDownTalkA",
@@ -1054,6 +1205,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg01_dad_ref,
             cg01_dad_marker,
             cg01_player_marker,
+            cg01_close_gate_target,
+            cg01_close_door_target,
+            cg01_leave_room_target,
+            cg01_playpen_gate,
+            cg01_playroom_door,
+            cg01_close_gate_package,
+            cg01_close_door_package,
+            cg01_leave_room_package,
             cg02_dad_ref,
             baby_babble,
             modifier,
@@ -1182,6 +1341,27 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual(
             "evaluatePackage",
             stage12_response["stageResult"]["commands"][0]["kind"],
+        )
+        post_stage14 = post_stage5["postStage14Transition"]
+        self.assertEqual(
+            "opennv-fo3-cg01-stage-14-to-20-runtime/v1",
+            post_stage14["schema"],
+        )
+        self.assertEqual(20, post_stage14["targetStage"])
+        self.assertEqual(
+            ["000c6de4", "000457c4", "0002eaaf"],
+            [
+                post_stage14["packages"][name]["formId"]
+                for name in ("closeGate", "closeDoor", "leaveRoom")
+            ],
+        )
+        self.assertEqual(
+            ["0001f3de", "0001f3dd", "0001f3dc"],
+            [row["infoFormId"] for row in post_stage14["dialogue"]["branches"]],
+        )
+        self.assertEqual(
+            "fo3-cg01-stage-20-playpen-special-runtime-not-implemented",
+            post_stage14["nextBoundary"]["blocker"],
         )
         self.assertEqual(
             [

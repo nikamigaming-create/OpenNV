@@ -44,7 +44,7 @@ internal sealed record Fo3Cg01Stage12DadResponse(
         "source-backed-say-once-dad-response-runtime-unapplied";
     private const string ExpectedLookTarget = "player";
     private const string ExpectedBoundaryBlocker =
-        "fo3-cg01-post-stage-14-runtime-not-implemented";
+        "awaiting-source-owned-post-stage-14-package-completion";
     private const int ExpectedCueCount = 2;
     private const int ExpectedStageCommandCount = 1;
     private const int FirstSourceCommandIndex = 0;

@@ -572,6 +572,14 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         Velocity = Vector3.Zero;
     }
 
+    internal void EnableMovementAtSourceStage()
+    {
+        if (MovementEnabled)
+            throw new InvalidOperationException(
+                "Fallout 3 CG01 toddler movement was already enabled.");
+        MovementEnabled = true;
+    }
+
     public override void _Ready()
     {
         if (DisplayServer.GetName() != "headless")

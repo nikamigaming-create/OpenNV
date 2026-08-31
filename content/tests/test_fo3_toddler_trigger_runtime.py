@@ -37,7 +37,29 @@ class Fo3ToddlerTriggerRuntimeTest(unittest.TestCase):
         stage10 = (FO3 / "Fo3Cg01Stage10Transition.cs").read_text(encoding="utf-8")
         self.assertIn("awaiting-source-owned-player-trigger-entry", stage10)
         self.assertIn("awaiting-source-owned-dad-response-completion", stage12)
-        self.assertIn("fo3-cg01-post-stage-14-runtime-not-implemented", response)
+        self.assertIn(
+            "awaiting-source-owned-post-stage-14-package-completion", response
+        )
+
+    def test_post_stage14_executes_owned_packages_and_persists_stage20(self) -> None:
+        contract = (FO3 / "Fo3Cg01PostStage14Transition.cs").read_text(
+            encoding="utf-8"
+        )
+        flow = (FO3 / "Fo3OpeningFlow.Cg01.cs").read_text(encoding="utf-8")
+        persistence = (FO3 / "Fo3OpeningFlow.Persistence.cs").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("GamebryoPackageTravel.ArriveAtSourceTarget", flow)
+        self.assertIn("CloseGatePackage", flow)
+        self.assertIn("CloseDoorPackage", flow)
+        self.assertIn("LeaveRoomPackage", flow)
+        self.assertIn("EnableMovementAtSourceStage", flow)
+        self.assertIn("source-backed-package-dialogue-runtime-ready", contract)
+        self.assertIn("cg01PostStage14Transition", persistence)
+        self.assertIn(
+            "fo3-cg01-stage-20-playpen-special-runtime-not-implemented", contract
+        )
 
 
 if __name__ == "__main__":

@@ -193,6 +193,9 @@ CG01_WALK_OBJECTIVE_INDEX = 10
 CG01_WALK_TARGET_STAGE = 12
 CG01_DAD_COMPLETION_CONDITIONAL_SOURCE_STAGE = 75
 CG01_DAD_COMPLETION_CONDITIONAL_TARGET_STAGE = 80
+CG01_POST_STAGE16_COMMAND_COUNT = 2
+CG01_POST_STAGE18_COMMAND_COUNT = 5
+CG01_POST_STAGE20_COMMAND_COUNT = 3
 PERSPECTIVE_MAXIMUM_DEGREES = 180.0
 CG00_TIMER_CHAIN_PATTERN = re.compile(
     r"\bif\s+runTimer\s*==\s*1\b.*?"
@@ -228,6 +231,14 @@ IS_ACTION_REF_PLAYER_PATTERN = re.compile(
 REFERENCE_COMMAND_PATTERN = re.compile(
     r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\."
     r"(?P<command>evp|enable)$",
+    re.IGNORECASE,
+)
+SET_OPEN_STATE_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.setOpenState\s+(?P<value>\d+)$",
+    re.IGNORECASE,
+)
+LOCK_REFERENCE_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.Lock\s+(?P<value>\d+)$",
     re.IGNORECASE,
 )
 CONDITION_BYTES = 28
@@ -2706,7 +2717,297 @@ def _compile_cg01_stage12_dad_response(
         },
         "nextBoundary": {
             "applied": False,
-            "blocker": "fo3-cg01-post-stage-14-runtime-not-implemented",
+            "blocker": "awaiting-source-owned-post-stage-14-package-completion",
+        },
+    }
+
+
+def _compile_cg01_post_stage14_transition(
+    records: tuple[object, ...],
+    definition: dict[str, object],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    dad_reference: object,
+    dad_base: object,
+    dad_script: object,
+    topic: object,
+) -> dict[str, object]:
+    config = dict(definition["postStage14Transition"])
+    stages = [
+        int(definition["stage12DadResponseTargetStage"]),
+        int(config["stage16"]),
+        int(config["stage18"]),
+        int(config["stage20"]),
+    ]
+    if stages != sorted(set(stages)):
+        raise ValueError("Fallout 3 CG01 post-stage-14 stage order differs")
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    def exact(raw: object, signature: str, label: str) -> object:
+        form_id = int(str(raw), FORM_ID_RADIX)
+        record = by_form.get(form_id)
+        if record is None or record.signature != signature:
+            raise ValueError(f"Fallout 3 CG01 {label} is absent")
+        return record
+
+    def package_contract(package_key: str, target_key: str, stage: int) -> dict[str, object]:
+        package = exact(config[package_key], PACKAGE_RECORD, package_key)
+        target = exact(config[target_key], PLACED_REFERENCE_RECORD, target_key)
+        package_ids = [
+            struct.unpack("<I", row.data)[0]
+            for row in iter_subrecords(dad_base)
+            if row.signature == "PKID" and len(row.data) == FORM_ID_BYTES
+        ]
+        if package.form_id not in package_ids:
+            raise ValueError(f"Fallout 3 CG01 {package_key} is not owned by Dad")
+        conditions = [
+            _dialogue_condition(row.data)
+            for row in iter_subrecords(package)
+            if row.signature == "CTDA"
+        ]
+        if len(conditions) != 1:
+            raise ValueError(f"Fallout 3 CG01 {package_key} condition differs")
+        condition = conditions[0]
+        if (
+            condition["operatorFlags"] != CONDITION_EQUAL_OPERATOR_FLAGS
+            or condition["comparisonValue"] != float(stage)
+            or condition["function"] != GET_STAGE_FUNCTION
+            or condition["parameter1"] != quest.form_id
+            or condition["parameter2"] != 0
+            or condition["runOn"] != 0
+            or condition["reference"] != 0
+        ):
+            raise ValueError(f"Fallout 3 CG01 {package_key} stage condition differs")
+        location = _single_subrecord(package, "PLDT")
+        if len(location) != PACKAGE_LOCATION_BYTES:
+            raise ValueError(f"Fallout 3 CG01 {package_key} location differs")
+        location_type, target_form_id, radius = struct.unpack("<iIi", location)
+        if location_type != 0 or target_form_id != target.form_id or radius < 0:
+            raise ValueError(f"Fallout 3 CG01 {package_key} target differs")
+        return {
+            "formId": _form_id(package.form_id),
+            "editorId": _editor_id(package),
+            "recordSha256": hashlib.sha256(package.data).hexdigest(),
+            "condition": {
+                **condition,
+                "parameter1": _form_id(int(condition["parameter1"])),
+                "reference": _form_id(int(condition["reference"])),
+            },
+            "target": {
+                "kind": "referenceMarker",
+                "formId": _form_id(target.form_id),
+                "editorId": _editor_id(target),
+                "recordSha256": hashlib.sha256(target.data).hexdigest(),
+                "sourceTransform": _reference_transform_contract(target),
+                "radiusGameUnits": radius,
+            },
+        }
+
+    close_gate = package_contract("closeGatePackageFormId", "closeGateTargetFormId", stages[0])
+    close_door = package_contract("closeDoorPackageFormId", "closeDoorTargetFormId", stages[1])
+    leave_room = package_contract("leaveRoomPackageFormId", "leaveRoomTargetFormId", stages[3])
+
+    close_gate_record = by_form[int(str(config["closeGatePackageFormId"]), FORM_ID_RADIX)]
+    pending_event: str | None = None
+    close_gate_end_sources: list[str] = []
+    for row in iter_subrecords(close_gate_record):
+        if row.signature in PACKAGE_EVENT_NAMES:
+            pending_event = PACKAGE_EVENT_NAMES[row.signature]
+        elif row.signature == "SCTX" and pending_event == "end":
+            close_gate_end_sources.append(zstring(row.data))
+    close_gate_commands = [
+        command for source in close_gate_end_sources for command in _source_commands(source)
+    ]
+    if close_gate_commands != [f"setstage {_editor_id(quest)} {stages[1]}"]:
+        raise ValueError("Fallout 3 CG01 close-gate completion differs")
+
+    dad_source = _script_source(dad_script)
+    close_door_done = re.search(
+        rf"\bbegin\s+OnPackageDone\s+{re.escape(str(close_door['editorId']))}\b"
+        r"(?P<body>.*?)\bend\b",
+        dad_source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if close_door_done is None or _source_commands(close_door_done.group("body")) != [
+        f"setstage {_editor_id(quest)} {stages[2]}"
+    ]:
+        raise ValueError("Fallout 3 CG01 close-door completion differs")
+
+    def stage_commands(stage: int) -> list[str]:
+        sources = stage_sources.get(stage, [])
+        if len(sources) != 1:
+            raise ValueError(f"Fallout 3 CG01 stage {stage} result is ambiguous")
+        return _source_commands(sources[0])
+
+    stage16_commands = stage_commands(stages[1])
+    stage18_commands = stage_commands(stages[2])
+    stage20_commands = stage_commands(stages[3])
+    if (
+        len(stage16_commands) != CG01_POST_STAGE16_COMMAND_COUNT
+        or len(stage18_commands) != CG01_POST_STAGE18_COMMAND_COUNT
+        or len(stage20_commands) != CG01_POST_STAGE20_COMMAND_COUNT
+    ):
+        raise ValueError("Fallout 3 CG01 post-stage-14 command coverage differs")
+
+    def reference(editor_id: str) -> object:
+        matches = [
+            record
+            for record in by_editor.get(editor_id.casefold(), [])
+            if record.signature in {PLACED_REFERENCE_RECORD, ACTOR_REFERENCE_RECORD}
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"Fallout 3 CG01 reference is absent: {editor_id}")
+        return matches[0]
+
+    def compile_command(text: str, index: int) -> dict[str, object]:
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            subject = reference(match.group("subject"))
+            value_text = match.group("value")
+            return {
+                "index": index,
+                "kind": "setScriptVariable",
+                "referenceFormId": _form_id(subject.form_id),
+                "referenceEditorId": _editor_id(subject),
+                "variable": match.group("variable"),
+                "value": float(value_text) if "." in value_text else int(value_text),
+            }
+        if match := SET_OPEN_STATE_PATTERN.fullmatch(text):
+            subject = reference(match.group("subject"))
+            return {
+                "index": index,
+                "kind": "setOpenState",
+                "referenceFormId": _form_id(subject.form_id),
+                "referenceEditorId": _editor_id(subject),
+                "value": int(match.group("value")),
+            }
+        if match := LOCK_REFERENCE_PATTERN.fullmatch(text):
+            subject = reference(match.group("subject"))
+            return {
+                "index": index,
+                "kind": "lock",
+                "referenceFormId": _form_id(subject.form_id),
+                "referenceEditorId": _editor_id(subject),
+                "value": int(match.group("value")),
+            }
+        if match := SET_STAGE_PATTERN.fullmatch(text):
+            if match.group("quest").casefold() != (_editor_id(quest) or "").casefold():
+                raise ValueError("Fallout 3 CG01 nested stage quest differs")
+            return {
+                "index": index,
+                "kind": "setStage",
+                "questFormId": _form_id(quest.form_id),
+                "questEditorId": _editor_id(quest),
+                "stage": int(match.group("stage")),
+            }
+        if match := REFERENCE_COMMAND_PATTERN.fullmatch(text):
+            subject = reference(match.group("subject"))
+            if match.group("command").casefold() != "evp":
+                raise ValueError("Fallout 3 CG01 post-stage-14 reference command differs")
+            return {
+                "index": index,
+                "kind": "evaluatePackage",
+                "referenceFormId": _form_id(subject.form_id),
+                "referenceEditorId": _editor_id(subject),
+            }
+        if match := PLAYER_CONTROLS_PATTERN.fullmatch(text):
+            if match.group("command").casefold() != "enableplayercontrols":
+                raise ValueError("Fallout 3 CG01 stage-20 control command differs")
+            return {
+                "index": index,
+                "kind": "enablePlayerControls",
+                "arguments": [int(value) for value in match.group("arguments").split()],
+            }
+        if match := SET_OBJECTIVE_DISPLAYED_PATTERN.fullmatch(text):
+            return {
+                "index": index,
+                "kind": "setObjectiveDisplayed",
+                "questFormId": _form_id(quest.form_id),
+                "questEditorId": _editor_id(quest),
+                "objectiveIndex": int(match.group("index")),
+                "value": int(match.group("value")),
+            }
+        raise ValueError(f"Fallout 3 CG01 post-stage-14 command is unsupported: {text}")
+
+    info_ids = [int(str(value), FORM_ID_RADIX) for value in config["dadResponseInfoFormIds"]]
+    infos = [exact(_form_id(value), DIALOGUE_INFO_RECORD, "stage-16 Dad INFO") for value in info_ids]
+    if len(infos) != 3 or len(set(info_ids)) != 3:
+        raise ValueError("Fallout 3 CG01 stage-16 Dad INFO selection differs")
+    cues = []
+    for sequence, info in enumerate(infos):
+        if not any(
+            group.group_type == DIALOGUE_CHILD_GROUP_TYPE and group.label_u32 == topic.form_id
+            for group in info.groups
+        ):
+            raise ValueError("Fallout 3 CG01 stage-16 Dad INFO topic differs")
+        response = _text_values(info, "NAM1")
+        data = _single_subrecord(info, "DATA")
+        if len(response) != 1 or len(data) != DIALOGUE_INFO_DATA_BYTES or struct.unpack("<BBH", data)[2] != DIALOGUE_INFO_SAY_ONCE_FLAG:
+            raise ValueError("Fallout 3 CG01 stage-16 Dad INFO response differs")
+        conditions = [_dialogue_condition(row.data) for row in iter_subrecords(info) if row.signature == "CTDA"]
+        effects = [compile_command(command, index) for index, command in enumerate(
+            command for source in _text_values(info, "SCTX") for command in _source_commands(source)
+        )]
+        cues.append({
+            "sequence": sequence,
+            "infoFormId": _form_id(info.form_id),
+            "recordSha256": hashlib.sha256(info.data).hexdigest(),
+            "sayOnce": True,
+            "conditions": [{
+                **row,
+                "parameter1": _form_id(int(row["parameter1"])),
+                "reference": _form_id(int(row["reference"])),
+            } for row in conditions],
+            "effects": effects,
+            "response": {
+                "index": 1,
+                "text": response[0],
+                "textSha256": hashlib.sha256(response[0].encode("utf-8")).hexdigest(),
+            },
+        })
+
+    return {
+        "schema": "opennv-fo3-cg01-stage-14-to-20-runtime/v1",
+        "status": "source-backed-package-dialogue-runtime-ready",
+        "sourceStage": stages[0],
+        "stage16": stages[1],
+        "stage18": stages[2],
+        "targetStage": stages[3],
+        "dadReferenceFormId": _form_id(dad_reference.form_id),
+        "packages": {
+            "closeGate": {**close_gate, "completionStage": stages[1]},
+            "closeDoor": {**close_door, "completionStage": stages[2]},
+            "leaveRoom": leave_room,
+        },
+        "stage16Result": {
+            "sourceSha256": hashlib.sha256(stage_sources[stages[1]][0].encode("cp1252")).hexdigest(),
+            "commands": [compile_command(text, index) for index, text in enumerate(stage16_commands)],
+        },
+        "dialogue": {
+            "topicFormId": _form_id(topic.form_id),
+            "topicEditorId": _editor_id(topic),
+            "voiceType": dict(_compile_cg01_stage12_dad_response(
+                records, definition, quest, stage_sources, dad_reference, dad_base, dad_script, topic
+            )["dialogue"]["voiceType"]),
+            "branches": cues,
+            "dialoguePlaybackPrepared": False,
+            "dialoguePlaybackImplemented": False,
+        },
+        "stage18Result": {
+            "sourceSha256": hashlib.sha256(stage_sources[stages[2]][0].encode("cp1252")).hexdigest(),
+            "commands": [compile_command(text, index) for index, text in enumerate(stage18_commands)],
+        },
+        "stage20Result": {
+            "sourceSha256": hashlib.sha256(stage_sources[stages[3]][0].encode("cp1252")).hexdigest(),
+            "commands": [compile_command(text, index) for index, text in enumerate(stage20_commands)],
+        },
+        "nextBoundary": {
+            "applied": False,
+            "blocker": "fo3-cg01-stage-20-playpen-special-runtime-not-implemented",
         },
     }
 
@@ -3046,6 +3347,16 @@ def _compile_cg01_post_stage5_transition(
         dad_script,
         topic,
     )
+    post_stage14_transition = _compile_cg01_post_stage14_transition(
+        records,
+        definition,
+        quest,
+        stage_sources,
+        dad_reference,
+        dad_base,
+        dad_script,
+        topic,
+    )
     return {
         "schema": "opennv-fo3-cg01-stage-5-to-10-transition/v1",
         "status": "source-backed-dad-dialogue-and-stage-result-runtime-unapplied",
@@ -3091,6 +3402,7 @@ def _compile_cg01_post_stage5_transition(
         },
         "postStage10TriggerTransition": walk_to_dad,
         "postStage12DadResponse": stage12_dad_response,
+        "postStage14Transition": post_stage14_transition,
         "nextBoundary": {
             "applied": False,
             "blocker": "awaiting-source-owned-player-trigger-entry",
@@ -5837,6 +6149,16 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     )
     stage12_dad_response["dialogue"] = stage12_dad_dialogue
     post_stage5_transition["postStage12DadResponse"] = stage12_dad_response
+    post_stage14_transition = dict(post_stage5_transition["postStage14Transition"])
+    post_stage14_dialogue = dict(post_stage14_transition["dialogue"])
+    _bind_owned_dad_dialogue_audio(
+        post_stage14_dialogue,
+        voices_archive,
+        voices_archive_sha256,
+        profile_root,
+    )
+    post_stage14_transition["dialogue"] = post_stage14_dialogue
+    post_stage5_transition["postStage14Transition"] = post_stage14_transition
     cg01_transition["postStage5Transition"] = post_stage5_transition
     character_selection["cg01Stage0Transition"] = cg01_transition
     _bind_cg01_toddler_world(
@@ -6046,7 +6368,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg01-post-stage-14-runtime-not-implemented",
+            "fo3-cg01-stage-20-playpen-special-runtime-not-implemented",
             "fo3-cg01-toddler-visual-body-not-prepared",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
