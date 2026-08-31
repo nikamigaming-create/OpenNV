@@ -60,7 +60,7 @@ if (!Rejects(() => GamebryoPackageSelector.SelectFirst(
         [new GamebryoPackageCandidate<string>(
             "00000050",
             [],
-            new GamebryoPackageTarget("packageTarget:reference", "00000060"),
+            new GamebryoPackageTarget("packageTarget:reference", "00000060", null),
             null,
             "target")],
         state,

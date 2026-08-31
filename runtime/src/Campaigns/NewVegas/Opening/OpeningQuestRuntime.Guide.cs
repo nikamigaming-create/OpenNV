@@ -159,6 +159,7 @@ internal partial class OpeningQuestRuntime
             return;
         _activeGuidePackage = package;
         _activeGuidePackageAnimation = selected.Animation;
+        _activeGuidePackageTarget = selected.Target;
         _guideLookAtPlayer = false;
         BeginGuidePackage(package);
         GD.Print(
@@ -190,17 +191,61 @@ internal partial class OpeningQuestRuntime
                 $"Owned package comparison is unsupported: {operatorFlags}"),
         };
 
-    private static GamebryoPackageTarget PackageTarget(OpeningGuidePackage package)
+    private GamebryoPackageTarget PackageTarget(OpeningGuidePackage package)
     {
         if (package.Target is not null)
             return new GamebryoPackageTarget(
                 $"packageTarget:{package.Target.TypeName}",
-                package.Target.FormId);
+                package.Target.FormId,
+                null);
         if (package.Location is null)
             return GamebryoPackageTarget.None;
+        if (package.Location is not
+            {
+                TypeName: "nearReference",
+                Reference: { } reference,
+            })
+            return new GamebryoPackageTarget(
+                package.Location.TypeName,
+                package.Location.Reference?.FormId,
+                null);
+        var furniture = _flow.GuideActorAi.FurnitureOccupancy;
+        var placement = reference.FormId.Equals(
+                furniture.ReferenceFormId,
+                StringComparison.OrdinalIgnoreCase)
+            ? ResolveGuideFurniturePlacement(reference.FormId)
+            : GamebryoPackagePlacement.FromCellReference(
+                "nearReference",
+                reference.FormId,
+                _loaded.GameToCellUnits(reference.PositionGameUnits),
+                reference.RotationGodot,
+                _guideActor.Placement.Scale);
         return new GamebryoPackageTarget(
             package.Location.TypeName,
-            package.Location.Reference?.FormId);
+            reference.FormId,
+            placement);
+    }
+
+    private SourcePackagePlacement ResolveGuideFurniturePlacement(string referenceFormId)
+    {
+        var contract = _flow.GuideActorAi.FurnitureOccupancy.Furniture;
+        var furniture = _loaded.MainContent.PlacedReferences.Where(value =>
+                value.FormId.Equals(referenceFormId, StringComparison.OrdinalIgnoreCase) &&
+                value.BaseFormId.Equals(contract.BaseFormId, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (furniture.Length != 1)
+            throw new InvalidOperationException(
+                "Owned package furniture target is absent or ambiguous: " +
+                referenceFormId);
+        var marker = contract.Marker;
+        return GamebryoPackagePlacement.FromFurnitureMarker(
+            referenceFormId,
+            furniture[0].Placement.Transform,
+            marker.OffsetGodotGameUnits,
+            marker.RotationGodot,
+            marker.ActorPlacementOffset.OffsetGodotGameUnits,
+            marker.ActorForwardHeadingDelta.RotationGodot,
+            _guideActor.Placement.Scale);
     }
 
     private void BeginGuidePackage(OpeningGuidePackage package)
@@ -237,9 +282,21 @@ internal partial class OpeningQuestRuntime
             PlayGuidePackageIdle(package);
             return;
         }
-        _guideDestinationCellUnits = GameplayActorGrounding.ApplyGroundOffset(
+        var targetPlacement = _activeGuidePackageTarget.Placement ??
+            throw new InvalidOperationException(
+                "Owned guide package destination has no source placement.");
+        if (!targetPlacement.TargetFormId.Equals(
+                destination.FormId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Owned guide package destination placement differs.");
+        var groundedPosition = GameplayActorGrounding.ApplyGroundOffset(
             _guideActor,
-            _loaded.GameToCellUnits(destination.PositionGameUnits));
+            targetPlacement.SourceTransform.Origin);
+        var groundedTarget = GamebryoPackagePlacement.AdjustSupportHeight(
+            targetPlacement.SourceTransform,
+            groundedPosition.Y - targetPlacement.SourceTransform.Origin.Y);
+        _guideDestinationCellUnits = groundedTarget.Origin;
         _activeGuideLocomotion = package.AlwaysRun
             ? _flow.GuideActorAi.Locomotion.Run
             : _flow.GuideActorAi.Locomotion.Walk;
@@ -329,28 +386,14 @@ internal partial class OpeningQuestRuntime
                 "Owned initial furniture package destination is absent or ambiguous: " +
                 destination.FormId);
         var marker = contract.Furniture.Marker;
-        var actorRootOffset = marker.OffsetGodotGameUnits -
-            marker.ActorPlacementOffset.OffsetGodotGameUnits;
-        var markerTransform = furniture[0].Placement.Transform * new Transform3D(
-            new Basis(marker.RotationGodot),
-            actorRootOffset);
-        var actorTransform = markerTransform * new Transform3D(
-            new Basis(marker.ActorForwardHeadingDelta.RotationGodot),
-            Vector3.Zero);
-        if (!markerTransform.Origin.IsFinite() ||
-            !markerTransform.Basis.IsFinite() ||
-            !actorTransform.Basis.IsFinite())
+        var placement = _activeGuidePackageTarget.Placement ??
             throw new InvalidOperationException(
-                "Owned initial furniture marker produced a non-finite transform.");
-        var actorScale = _guideActor.Placement.Scale;
-        _guideActor.Placement.Position = markerTransform.Origin;
-        _guideActor.Placement.Basis = actorTransform.Basis
-            .Orthonormalized()
-            .Scaled(actorScale);
+                "Owned furniture package has no selected marker placement.");
+        GamebryoPackagePlacement.Publish(_guideActor, placement);
         _loaded.ActorGrounding.RegisterOwnedFurnitureMarkerOccupancy(
             _guideActor,
             furniture[0].Placement,
-            markerTransform.Origin);
+            placement.SourceTransform.Origin);
         _guideFurnitureOccupied = true;
         _guideFurnitureExitRootMotionApplied = false;
         _guideFurnitureReferenceFormId = source.FormId;
@@ -362,7 +405,7 @@ internal partial class OpeningQuestRuntime
             $"markerCell={_guideActor.Placement.Position} " +
             $"markerNifOffset={marker.OffsetNifGameUnits} " +
             $"targetGmstOffset={marker.ActorPlacementOffset.OffsetNifGameUnits} " +
-            $"actorRootOffset={actorRootOffset} " +
+            $"actorRootOffset={marker.OffsetGodotGameUnits - marker.ActorPlacementOffset.OffsetGodotGameUnits} " +
             $"headingDeltaGmst={marker.ActorForwardHeadingDelta.EditorId} " +
             $"headingDeltaRadians={marker.ActorForwardHeadingDelta.ValueRadians:F7} " +
             $"transform=owned-furniture-nif-marker-minus-gmst-target-offset-and-" +
@@ -464,22 +507,17 @@ internal partial class OpeningQuestRuntime
             furniture.Exit.RootMotion is not { } rootMotion)
             throw new InvalidOperationException(
                 "Owned guide furniture exit root motion is absent or already applied.");
-        var rootBefore = _guideActor.Placement.Position;
-        var displacementCell = _guideActor.Placement.Basis
-            .Orthonormalized() * rootMotion.DisplacementGodotGameUnits;
-        var rootAfter = rootBefore + displacementCell;
-        if (!displacementCell.IsFinite() || !rootAfter.IsFinite())
-            throw new InvalidOperationException(
-                "Owned guide furniture exit produced a non-finite root transform.");
-        _guideActor.Placement.Position = rootAfter;
+        var transfer = GamebryoPackagePlacement.TransferRoot(
+            _guideActor,
+            rootMotion.DisplacementGodotGameUnits);
         _guideFurnitureExitRootMotionApplied = true;
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_EXIT_ROOT " +
             $"reference={_guideFurnitureReferenceFormId} " +
-            $"sequence={rootMotion.SequenceName} rootBefore={rootBefore} " +
-            $"rootAfter={rootAfter} sourceDisplacement=" +
+            $"sequence={rootMotion.SequenceName} rootBefore={transfer.Before.Origin} " +
+            $"rootAfter={transfer.After.Origin} sourceDisplacement=" +
             $"{rootMotion.DisplacementGodotGameUnits} " +
-            $"cellDisplacement={displacementCell}");
+            $"cellDisplacement={transfer.AppliedDisplacement}");
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_RELEASED " +
             $"reference={_guideFurnitureReferenceFormId} " +
@@ -575,8 +613,9 @@ internal partial class OpeningQuestRuntime
     {
         _guideMoving = false;
         _activeGuideLocomotion = null;
-        if (_guideDestinationReference is { } destination)
-            _guideActor.Placement.Basis = new Basis(destination.RotationGodot);
+        if (_guideDestinationReference is not null &&
+            _activeGuidePackageTarget.Placement is { } placement)
+            _guideActor.Placement.Basis = placement.SourceTransform.Basis;
         if (_guideLookAtPlayer)
             FaceGuideToward(_loaded.Player.GlobalPosition);
         if (_activeGuidePackage is { } package)

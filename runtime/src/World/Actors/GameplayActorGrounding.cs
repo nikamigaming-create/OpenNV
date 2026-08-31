@@ -94,6 +94,7 @@ internal sealed partial class GameplayActorGrounding : Node3D
             foreach (var actor in space.Actors.Where(actor =>
                          !_groundedReferences.Contains(actor.ReferenceFormId)))
             {
+                var sourcePlacement = actor.Placement.GlobalTransform;
                 var visualBounds = ActorModelSlice.PosedWorldBounds(
                     actor.Actor,
                     includeWeapons: false);
@@ -104,6 +105,9 @@ internal sealed partial class GameplayActorGrounding : Node3D
                     _configuration,
                     space.CollisionMask,
                     space.CellRoot.GlobalPosition);
+                GamebryoPackagePlacement.RequireSupportHeightOnly(
+                    sourcePlacement,
+                    actor.Placement.GlobalTransform);
                 var offsetGameUnits = -alignment.CorrectionGameUnits;
                 actor.Placement.SetMeta(GroundOffsetMetadata, offsetGameUnits);
                 _groundedReferences.Add(actor.ReferenceFormId);

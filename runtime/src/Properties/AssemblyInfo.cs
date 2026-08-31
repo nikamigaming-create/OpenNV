@@ -8,3 +8,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("OpenNV.ActorComplexionContractProbe")]
 [assembly: InternalsVisibleTo("OpenNV.GamebryoPackageSelectionProbe")]
 [assembly: InternalsVisibleTo("OpenNV.GamebryoUiTileContractProbe")]
+[assembly: InternalsVisibleTo("OpenNV.GamebryoPackagePlacementProbe")]

@@ -13,9 +13,10 @@ internal sealed record GamebryoPackageCondition(
 
 internal sealed record GamebryoPackageTarget(
     string Kind,
-    string? ReferenceFormId)
+    string? ReferenceFormId,
+    SourcePackagePlacement? Placement)
 {
-    internal static readonly GamebryoPackageTarget None = new("none", null);
+    internal static readonly GamebryoPackageTarget None = new("none", null, null);
 }
 
 internal sealed record GamebryoPackageCandidate<T>(
@@ -138,13 +139,18 @@ internal static class GamebryoPackageSelector
     {
         if (target.Kind.Equals("none", StringComparison.Ordinal))
         {
-            if (target.ReferenceFormId is not null)
+            if (target.ReferenceFormId is not null || target.Placement is not null)
                 throw new InvalidOperationException(
                     "Source package without a target contains a reference.");
             return;
         }
-        if (target.Kind.Equals("nearReference", StringComparison.Ordinal) &&
-            !string.IsNullOrWhiteSpace(target.ReferenceFormId))
+        if (target.Kind is "nearReference" or "referenceMarker" &&
+            !string.IsNullOrWhiteSpace(target.ReferenceFormId) &&
+            target.Placement is { } placement &&
+            placement.Kind.Equals(target.Kind, StringComparison.Ordinal) &&
+            placement.TargetFormId.Equals(
+                target.ReferenceFormId,
+                StringComparison.OrdinalIgnoreCase))
             return;
         throw new InvalidOperationException(
             $"Source package target is unsupported: {target.Kind}");

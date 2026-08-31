@@ -165,9 +165,6 @@ internal partial class Fo3OpeningFlow
             $"OPENNV_FO3_CG00_EARLY_STAGE_APPLIED stage={stage} " +
             $"source={source.SourceSha256} commands={source.Commands.Count}");
 
-        if (stage == sequence.Stages.Keys.Min())
-            ApplyCg00ParticipantStartMarkers();
-
         foreach (var command in source.Commands.Where(value =>
                      value.StartsWith("imod ", StringComparison.OrdinalIgnoreCase)))
             StartCg00ImageSpace(command["imod ".Length..]);
@@ -384,6 +381,9 @@ internal partial class Fo3OpeningFlow
                 "Fallout 3 early CG00 participant package evaluation set differs.");
         foreach (var role in sequence.SceneParticipants.Keys)
         {
+            var participant = sequence.SceneParticipants[role];
+            var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+                "Fallout 3 package selection has no Vault world.");
             var candidates = sequence.PackageSections[role]
                 .Select(package => new GamebryoPackageCandidate<Fo3Cg00PackageSection>(
                     package.PackageFormId,
@@ -397,7 +397,17 @@ internal partial class Fo3OpeningFlow
                             (uint)condition.RunOn,
                             "")]
                         : [],
-                    GamebryoPackageTarget.None,
+                    package.Section == 0
+                        ? new GamebryoPackageTarget(
+                            "referenceMarker",
+                            participant.StartMarkerFormId,
+                            GamebryoPackagePlacement.FromPlanarGameReferenceMarker(
+                                participant.StartMarkerFormId,
+                                participant.StartMarkerTransform.PositionGameUnits,
+                                participant.StartMarkerTransform.RotationRadians,
+                                participant.ReferenceTransform.Scale,
+                                coverage.Contract.EntryPositionGameUnits))
+                        : GamebryoPackageTarget.None,
                     new SourceActorAnimation(
                         package.AnimationLogicalPath,
                         package.AnimationSha256,
@@ -423,6 +433,21 @@ internal partial class Fo3OpeningFlow
             if (_cg00ActorPackages.TryGetValue(role, out var current) &&
                 current.Contract.PackageFormId == selected.Value.PackageFormId)
                 continue;
+            if (selected.Target.Placement is { } placement)
+            {
+                var actor = ActorForCg00Role(role);
+                if (!actor.ReferenceFormId.Equals(
+                        participant.ReferenceFormId,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        $"Fallout 3 CG00 {role} package placement identity differs.");
+                GamebryoPackagePlacement.Publish(actor, placement);
+                GD.Print(
+                    $"OPENNV_FO3_CG00_MARKER_APPLIED role={role} " +
+                    $"reference={participant.ReferenceFormId} " +
+                    $"marker={participant.StartMarkerFormId} " +
+                    $"position={actor.Placement.Position} yaw={actor.Placement.Rotation.Y:R}");
+            }
             StartCg00ActorPackage(
                 role,
                 selected.Value,
@@ -613,45 +638,6 @@ internal partial class Fo3OpeningFlow
                 weight),
             lower.Rotation.Slerp(upper.Rotation, weight).Normalized());
     }
-
-    private void ApplyCg00ParticipantStartMarkers()
-    {
-        var sequence = _cg00EarlySequence ?? throw new InvalidOperationException(
-            "Fallout 3 early CG00 marker application has no sequence.");
-        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
-            "Fallout 3 early CG00 marker application has no Vault world.");
-        foreach (var participant in sequence.SceneParticipants.Values)
-        {
-            var actor = ActorForCg00Role(participant.Role);
-            if (!actor.ReferenceFormId.Equals(
-                    participant.ReferenceFormId,
-                    StringComparison.OrdinalIgnoreCase) ||
-                !Mathf.IsZeroApprox(participant.StartMarkerTransform.RotationRadians.X) ||
-                !Mathf.IsZeroApprox(participant.StartMarkerTransform.RotationRadians.Y))
-                throw new InvalidOperationException(
-                    $"Fallout 3 CG00 {participant.Role} marker join differs.");
-            actor.Placement.Position = ParticipantMarkerLocal(participant, coverage);
-            actor.Placement.Rotation = new Vector3(
-                0.0f,
-                -participant.StartMarkerTransform.RotationRadians.Z,
-                0.0f);
-            actor.Placement.Scale = Vector3.One * participant.ReferenceTransform.Scale;
-            actor.Placement.SetMeta(
-                "opennv_cg00_start_marker_form_id",
-                participant.StartMarkerFormId);
-            GD.Print(
-                $"OPENNV_FO3_CG00_MARKER_APPLIED role={participant.Role} " +
-                $"reference={participant.ReferenceFormId} marker={participant.StartMarkerFormId} " +
-                $"position={actor.Placement.Position} yaw={actor.Placement.Rotation.Y:R}");
-        }
-    }
-
-    private static Vector3 ParticipantMarkerLocal(
-        Fo3Cg00SceneParticipant participant,
-        Fo3Vault101BirthSceneCoverage coverage) =>
-        GamebryoCoordinate.ConvertVector(
-            participant.StartMarkerTransform.PositionGameUnits -
-            coverage.Contract.EntryPositionGameUnits);
 
     private CellActorLoader.PlacedActor ActorForCg00Role(string role) => role switch
     {
