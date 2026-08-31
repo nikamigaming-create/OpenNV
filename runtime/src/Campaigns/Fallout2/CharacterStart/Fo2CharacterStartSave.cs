@@ -4,6 +4,7 @@ using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -30,8 +31,9 @@ internal sealed record Fo2CharacterStartSaveState(
     Fo2TempleAppliedTransition? TempleExitTransition,
     Fo2ArroyoTrialProgressState? TrialProgress)
 {
-    internal const string Schema = "opennv-fo2-character-arroyo-save/v14";
+    internal const string Schema = "opennv-fo2-character-arroyo-save/v15";
     internal const string RouteMode = "chosen-one-source-exit-route-v1";
+    private const string VersionFourteenSchema = "opennv-fo2-character-arroyo-save/v14";
     private const string SplitAppearanceSchema = "opennv-fo2-character-arroyo-save/v13";
     private const string BodyAppearanceSchema = "opennv-fo2-character-arroyo-save/v12";
     private const string PriorSchema = "opennv-fo2-character-arroyo-save/v10";
@@ -240,6 +242,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     combatActive = TempleConfrontation.CombatActive,
                     spearLooted = TempleConfrontation.SpearLooted,
                     spearEquipped = TempleConfrontation.SpearEquipped,
+                    scriptState = TempleConfrontation.ScriptState.Save(),
                 },
                 templeExitTransition = TempleExitTransition is null ? null : new
                 {
@@ -307,7 +310,7 @@ internal sealed record Fo2CharacterStartSaveState(
         var previous = schema == PreviousSchema;
         var route = schema == RouteSchema;
         var confrontation = schema == ConfrontationSchema;
-        if (schema != Schema && schema != SplitAppearanceSchema &&
+        if (schema != Schema && schema != VersionFourteenSchema && schema != SplitAppearanceSchema &&
                 schema != BodyAppearanceSchema &&
                 schema != PriorSchema && schema != VersionNineSchema &&
                 schema != ColorAppearanceSchema &&
@@ -394,7 +397,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 RequiredString(world, "walkMaskSha256") == arroyo.WalkMaskSha256 &&
                 tileInRange && arroyo.Walkable[currentTile] && lastTransition is null,
             Fo2TemplePresentationCatalog.MapIndex =>
-                (schema == Schema || schema == SplitAppearanceSchema ||
+                (schema == Schema || schema == VersionFourteenSchema || schema == SplitAppearanceSchema ||
                     schema == BodyAppearanceSchema ||
                     schema == PriorSchema || schema == VersionNineSchema ||
                     schema == ColorAppearanceSchema ||
@@ -405,7 +408,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 arrivalTile == arroyo.LiveExit.TargetTile &&
                 RequiredString(world, "mapSha256") == temple.MapSha256 &&
                 lastTransition == arroyo.LiveExit,
-            4 => (schema is Schema or SplitAppearanceSchema or BodyAppearanceSchema) &&
+            4 => (schema is Schema or VersionFourteenSchema or SplitAppearanceSchema or BodyAppearanceSchema) &&
                 trialProgress is not null && trialRoute is not null &&
                 elevation == trialRoute.VillageArrival.Elevation &&
                 arrivalTile == trialRoute.VillageArrival.ArrivalTile &&
@@ -471,7 +474,7 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2ArroyoTrialProgressState? trialProgress,
         Fo2ArroyoTrialRouteContract? trialRoute)
     {
-        if (schema is not (Schema or SplitAppearanceSchema or BodyAppearanceSchema))
+        if (schema is not (Schema or VersionFourteenSchema or SplitAppearanceSchema or BodyAppearanceSchema))
         {
             if (schema == PriorSchema &&
                 root.TryGetProperty("templeExitTransition", out var priorExit) &&
@@ -545,7 +548,7 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoTrialRouteContract? trialRoute)
     {
-        if (schema is not (Schema or SplitAppearanceSchema or BodyAppearanceSchema))
+        if (schema is not (Schema or VersionFourteenSchema or SplitAppearanceSchema or BodyAppearanceSchema))
             return null;
         var value = root.GetProperty("trialProgress");
         if (value.ValueKind == JsonValueKind.Null)
@@ -578,7 +581,8 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2ArroyoCavesPresentationCatalog arroyo)
     {
-        if (schema != Schema && schema != SplitAppearanceSchema &&
+        if (schema != Schema && schema != VersionFourteenSchema &&
+            schema != SplitAppearanceSchema &&
             schema != BodyAppearanceSchema &&
             schema != PriorSchema && schema != VersionNineSchema &&
             schema != ColorAppearanceSchema &&
@@ -617,7 +621,8 @@ internal sealed record Fo2CharacterStartSaveState(
         Fo2CharacterSelection character,
         Fo2TemplePresentationCatalog temple)
     {
-        if (schema != Schema && schema != SplitAppearanceSchema &&
+        if (schema != Schema && schema != VersionFourteenSchema &&
+            schema != SplitAppearanceSchema &&
             schema != BodyAppearanceSchema &&
             schema != PriorSchema && schema != VersionNineSchema &&
             schema != ColorAppearanceSchema &&
@@ -643,7 +648,10 @@ internal sealed record Fo2CharacterStartSaveState(
             value.GetProperty("combatActive").GetBoolean(),
             value.GetProperty("spearLooted").GetBoolean(),
             value.TryGetProperty("spearEquipped", out var equipped) &&
-                equipped.GetBoolean());
+                equipped.GetBoolean(),
+            schema == Schema
+                ? ClassicScriptState.Restore(value.GetProperty("scriptState"))
+                : new ClassicScriptState());
         state.Validate(
             temple.Confrontation,
             Fo2TempleConfrontationRuntime.MaximumActionPoints(character));
@@ -656,7 +664,8 @@ internal sealed record Fo2CharacterStartSaveState(
         string schema,
         Fo2CharacterSelection character)
     {
-        if (schema != Schema && schema != SplitAppearanceSchema &&
+        if (schema != Schema && schema != VersionFourteenSchema &&
+            schema != SplitAppearanceSchema &&
             schema != BodyAppearanceSchema &&
             schema != PriorSchema && schema != VersionNineSchema)
         {
@@ -696,7 +705,7 @@ internal sealed record Fo2CharacterStartSaveState(
                 recipe.DefaultNoseStyleId,
                 recipe.DefaultMouthStyleId);
         }
-        var value = schema == Schema
+        var value = schema is Schema or VersionFourteenSchema
             ? savedCharacter.GetProperty("appearance")
             : root.GetProperty("appearance");
         var appearance = new Fo2CharacterAppearanceContract(
@@ -724,7 +733,7 @@ internal sealed record Fo2CharacterStartSaveState(
             value.GetProperty("GeneratedPortraitSha256").GetString() ?? "",
             value.GetProperty("GeneratedPortraitWidth").GetInt32(),
             value.GetProperty("GeneratedPortraitHeight").GetInt32(),
-            schema is Schema or SplitAppearanceSchema
+            schema is Schema or VersionFourteenSchema or SplitAppearanceSchema
                 ? JsonSerializer.Deserialize<CharacterBodyProportions>(
                     value.GetProperty("BodyProportions").GetRawText()) ??
                     throw new InvalidOperationException(

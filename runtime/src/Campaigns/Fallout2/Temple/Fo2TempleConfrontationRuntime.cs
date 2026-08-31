@@ -5,6 +5,7 @@ using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -182,7 +183,8 @@ internal sealed record Fo2TempleConfrontationState(
     int PlayerActionPoints,
     bool CombatActive,
     bool SpearLooted,
-    bool SpearEquipped)
+    bool SpearEquipped,
+    ClassicScriptState ScriptState)
 {
     internal void Validate(
         Fo2TempleConfrontationContract contract,
@@ -312,7 +314,8 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             _maximumPlayerActionPoints,
             false,
             false,
-            false);
+            false,
+            new ClassicScriptState());
         _state.Validate(contract, _maximumPlayerActionPoints);
         Name = "FO2_TEMPLE_BOUNDED_CONFRONTATION";
         Layer = HudLayer;
@@ -606,6 +609,33 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
 
     internal bool Loot()
     {
+        if (_state.TargetHitPoints > 0 && !_state.SpearLooted && Adjacent())
+        {
+            var script = _contract.GuardianScript;
+            var pickupExecuted = script.EffectProgram.Execute(
+                "pickup_proc",
+                _state.ScriptState,
+                new ClassicScriptContext(
+                    SourceIsPlayer: true,
+                    CanSeePlayer: true,
+                    GameTime: default));
+            var critterExecuted = script.EffectProgram.Execute(
+                "critter_proc",
+                _state.ScriptState,
+                new ClassicScriptContext(
+                    SourceIsPlayer: false,
+                    CanSeePlayer: Adjacent(),
+                    GameTime: default));
+            if (!pickupExecuted || !critterExecuted ||
+                !_state.ScriptState.Flag("attack-player-requested"))
+                throw new InvalidOperationException(
+                    "Fallout 2 guardian pickup script did not request combat.");
+            _state = _state with { CombatActive = true };
+            SetStatus(
+                $"{_contract.Critter.DisplayName} becomes hostile and engages combat.");
+            Changed();
+            return false;
+        }
         if (_state.TargetHitPoints != 0 || _state.SpearLooted || !Adjacent())
         {
             SetStatus(_state.TargetHitPoints != 0

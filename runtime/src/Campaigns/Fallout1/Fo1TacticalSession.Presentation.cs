@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
 using OpenNV.Runtime.SceneGraph;
@@ -297,7 +298,16 @@ internal partial class Fo1TacticalSession
         if (flare is null || symbol != flare.Symbol || InventoryObjects(symbol) <= 0 ||
             _destinationInventoryInteraction is null || !_lootedMapInventoryHostSerials.Contains(flare.HostSerial))
             return false;
-        _destinationFlareLit = true;
+        if (!flare.Program.Execute(
+                "use_proc",
+                _destinationFlareScriptState,
+                new ClassicScriptContext(
+                    SourceIsPlayer: true,
+                    CanSeePlayer: false,
+                    GameTime: _classicScriptGameTime)) ||
+            !_destinationFlareScriptState.Flag("lit"))
+            throw new InvalidOperationException(
+                "Fallout flare source-script use did not publish its lit state.");
         _status = $"Used {symbol} through its source script; time-based expiry remains fail-closed.";
         RefreshHud();
         Save();

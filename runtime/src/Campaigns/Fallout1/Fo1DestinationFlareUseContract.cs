@@ -3,13 +3,14 @@ using System.Text.Json;
 
 
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 /// <summary>One explicit source-script use contract for the VAULT13 MAP flare stack.</summary>
 internal sealed record Fo1DestinationFlareUseContract(
     string Path, string Sha256, int HostSerial, string Symbol, string Pid,
-    string PrototypeSha256, string ScriptSha256)
+    string PrototypeSha256, string ScriptSha256, ClassicScriptProgram Program)
 {
     private const string Schema = "opennv-fo1-destination-flare-use/v1";
 
@@ -46,8 +47,10 @@ internal sealed record Fo1DestinationFlareUseContract(
         var scriptSha256 = Required(root.GetProperty("script"), "sha256");
         if (!Hash(scriptSha256))
             throw new InvalidOperationException("Fallout flare use descriptor script hash is invalid.");
+        var program = ClassicScriptProgram.Parse(root.GetProperty("effectProgram"));
         return new Fo1DestinationFlareUseContract(
-            resolved, sha256, hostSerial, symbol, pid, prototypeSha256, scriptSha256);
+            resolved, sha256, hostSerial, symbol, pid, prototypeSha256, scriptSha256,
+            program);
     }
 
     internal object Report() => new

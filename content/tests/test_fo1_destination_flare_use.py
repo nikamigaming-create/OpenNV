@@ -17,6 +17,8 @@ class Fo1DestinationFlareUseTest(unittest.TestCase):
         self.assertIn("use_proc", tool)
         self.assertIn("set_local_var", tool)
         self.assertIn("game_time", tool)
+        self.assertIn("opennv-classic-script-effects/v1", tool)
+        self.assertIn('"valueFrom": "game-time"', tool)
         self.assertIn("unimplemented-fail-closed", tool)
         self.assertIn("refusing to overwrite flare use descriptor", tool)
 
@@ -27,7 +29,8 @@ class Fo1DestinationFlareUseTest(unittest.TestCase):
         flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         self.assertIn("interaction join drifted", contract)
         self.assertIn("UseInventoryScriptedItem", session)
-        self.assertIn("_destinationFlareLit", session)
+        self.assertIn("_destinationFlareScriptState", session)
+        self.assertIn('Program.Execute(\n                "use_proc"', session)
         self.assertIn("destinationFlare", session)
         self.assertIn("UseSelectedSourceInventoryForProof", inventory)
         self.assertIn("activeHand = \"not-proven-by-script\"", flow)

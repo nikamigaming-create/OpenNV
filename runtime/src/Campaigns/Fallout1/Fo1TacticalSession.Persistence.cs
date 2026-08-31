@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Campaigns.Classic;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
@@ -43,7 +44,9 @@ internal partial class Fo1TacticalSession
             destinationFlare = _destinationFlareUse is null ? null : new
             {
                 descriptorSha256 = _destinationFlareUse.Sha256,
-                lit = _destinationFlareLit,
+                scriptState = _destinationFlareScriptState.Save(),
+                gameTime = _classicScriptGameTime,
+                expiry = "unimplemented-fail-closed",
             },
             destinationGenericDoor = _destinationGenericDoor is null ? null : new
             {
@@ -235,7 +238,14 @@ internal partial class Fo1TacticalSession
             if (_destinationFlareUse is null ||
                 destinationFlare.GetProperty("descriptorSha256").GetString() != _destinationFlareUse.Sha256)
                 throw new InvalidOperationException("Fallout save flare state does not match its descriptor.");
-            _destinationFlareLit = destinationFlare.GetProperty("lit").GetBoolean();
+            _destinationFlareScriptState = ClassicScriptState.Restore(
+                destinationFlare.GetProperty("scriptState"));
+            _classicScriptGameTime = destinationFlare.GetProperty("gameTime").GetInt32();
+            if (!_destinationFlareScriptState.Flag("lit") ||
+                destinationFlare.GetProperty("expiry").GetString() !=
+                    "unimplemented-fail-closed")
+                throw new InvalidOperationException(
+                    "Fallout saved flare script state is invalid.");
         }
         if (root.TryGetProperty("destinationGenericDoor", out var destinationGenericDoor) &&
             destinationGenericDoor.ValueKind != JsonValueKind.Null)

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -71,6 +72,7 @@ internal sealed record Fo2TempleGuardianScript(
     string TerminalNode,
     IReadOnlyDictionary<string, Fo2TempleGuardianDialogueNode> Nodes,
     Fo2TempleGuardianHostilityTrigger Hostility,
+    ClassicScriptProgram EffectProgram,
     string ContractSha256);
 
 internal sealed record Fo2TempleConfrontationCritter(
@@ -278,6 +280,7 @@ internal sealed record Fo2TempleConfrontationContract(
                 pickup.GetProperty("requiresSourcePlayer").GetBoolean(),
                 critter.GetProperty("requiresCanSeePlayer").GetBoolean(),
                 critter.GetProperty("attackPlayer").GetBoolean()),
+            ClassicScriptProgram.Parse(source.GetProperty("effectProgram")),
             Fo2TemplePresentationCatalog.RequiredHash(source, "contractSha256"));
         if (result.Schema != "opennv-fo2-acklint-guardian-script/v1" ||
             string.IsNullOrWhiteSpace(result.Authority) ||
@@ -294,7 +297,7 @@ internal sealed record Fo2TempleConfrontationContract(
                 new[] { "Node001", "Node002", "Node003", "Node004", "Node005" }) ||
             result.Hostility != new Fo2TempleGuardianHostilityTrigger(5, 2, 2, 1, true, true, true) ||
             !boundary.GetProperty("dialogueNodes").GetBoolean() ||
-            boundary.GetProperty("pickupToAttackTransition").GetBoolean() ||
+            !boundary.GetProperty("pickupToAttackTransition").GetBoolean() ||
             boundary.GetProperty("generalIntExecution").GetBoolean())
             throw new InvalidOperationException(
                 "Fallout 2 ACKlint guardian script contract is invalid.");

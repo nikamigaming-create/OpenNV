@@ -294,9 +294,40 @@ def _compile_guardian_script(
         "terminalNode": terminal,
         "nodes": emitted_nodes,
         "hostilityTrigger": hostility,
+        "effectProgram": {
+            "schema": "opennv-classic-script-effects/v1",
+            "events": {
+                "pickup_proc": [{
+                    "all": [{"operation": "source-is-player"}],
+                    "then": [{
+                        "operation": "set-local",
+                        "index": int(pickup["localVariable"]),
+                        "value": int(pickup["setValue"]),
+                    }],
+                }],
+                "critter_proc": [{
+                    "all": [
+                        {
+                            "operation": "local-equals",
+                            "index": int(critter["localVariable"]),
+                            "value": int(critter["requiredValue"]),
+                        },
+                        {"operation": "can-see-player"},
+                    ],
+                    "then": [
+                        {
+                            "operation": "set-local",
+                            "index": int(critter["localVariable"]),
+                            "value": int(critter["setValueBeforeAttack"]),
+                        },
+                        {"operation": "set-flag", "flag": "attack-player-requested"},
+                    ],
+                }],
+            },
+        },
         "implementedBoundary": {
             "dialogueNodes": True,
-            "pickupToAttackTransition": False,
+            "pickupToAttackTransition": True,
             "generalIntExecution": False,
         },
     }

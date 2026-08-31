@@ -276,9 +276,10 @@ internal static class Fo2TempleConfrontationProof
                     ["Node001", "Node003", "Node005"]))
                 throw new InvalidOperationException(
                     "Fallout 2 ACKlint dialogue did not converge through the owned terminal branch.");
-            if (!confrontation.ToggleCombat())
+            if (confrontation.Loot() || !confrontation.State.CombatActive ||
+                !confrontation.State.ScriptState.Flag("attack-player-requested"))
                 throw new InvalidOperationException(
-                    "Fallout 2 confrontation could not enter bounded combat after dialogue.");
+                    "Fallout 2 ACKlint pickup procedure did not enter hostile combat.");
             var attempts = 0;
             var attackEndTurns = 0;
             while (confrontation.State.TargetHitPoints > 0 &&

@@ -417,7 +417,14 @@ class Fo2FirstSliceTest(unittest.TestCase):
             self.assertEqual(guardian["nodes"][2]["options"][2]["messageId"], 116)
             self.assertEqual(guardian["nodes"][2]["options"][2]["target"], "Node005")
             self.assertTrue(guardian["implementedBoundary"]["dialogueNodes"])
+            self.assertTrue(guardian["implementedBoundary"]["pickupToAttackTransition"])
             self.assertFalse(guardian["implementedBoundary"]["generalIntExecution"])
+            effects = guardian["effectProgram"]
+            self.assertEqual(effects["schema"], "opennv-classic-script-effects/v1")
+            self.assertEqual(
+                effects["events"]["pickup_proc"][0]["then"][0],
+                {"operation": "set-local", "index": 5, "value": 2},
+            )
             self.assertTrue(document["promotion"]["transported"])
             self.assertFalse(document["runtimeCompatibility"]["ready"])
             self.assertFalse(document["retailOrDerivedAssetsPackaged"])

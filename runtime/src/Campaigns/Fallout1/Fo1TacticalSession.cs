@@ -7,6 +7,7 @@ using OpenNV.Runtime.Presentation.CharacterCreation;
 
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -209,7 +210,8 @@ internal partial class Fo1TacticalSession : Node
     private Fo1DestinationInventoryInteractionContract? _destinationInventoryInteraction;
     private string? _destinationFlareUsePath;
     private Fo1DestinationFlareUseContract? _destinationFlareUse;
-    private bool _destinationFlareLit;
+    private ClassicScriptState _destinationFlareScriptState = new();
+    private int _classicScriptGameTime;
     private string? _destinationGenericDoorPath;
     private Fo1DestinationGenericDoorContract? _destinationGenericDoor;
     private bool _destinationGenericDoorOpen;
@@ -385,7 +387,7 @@ internal partial class Fo1TacticalSession : Node
     internal Fo1DestinationPresentationContract? LoadedDestinationPresentation => _loadedDestinationPresentation;
     internal Fo1DestinationInventoryInteractionContract? DestinationInventoryInteraction => _destinationInventoryInteraction;
     internal Fo1DestinationFlareUseContract? DestinationFlareUse => _destinationFlareUse;
-    internal bool DestinationFlareLit => _destinationFlareLit;
+    internal bool DestinationFlareLit => _destinationFlareScriptState.Flag("lit");
     internal Fo1DestinationGenericDoorContract? DestinationGenericDoor => _destinationGenericDoor;
     internal bool DestinationGenericDoorOpen => _destinationGenericDoorOpen;
     internal Fo1DestinationMedicLookContract? DestinationMedicLook => _destinationMedicLook;
