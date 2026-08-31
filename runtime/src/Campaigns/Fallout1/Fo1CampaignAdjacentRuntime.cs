@@ -36,6 +36,7 @@ internal sealed partial class Fo1CampaignAdjacentRuntime : Node3D
     {
         _presentation = presentation;
         _joins = joins;
+        ValidatePresentationClosure();
         _savePath = ResolveSavePath(savePath);
         _viewer = new Fo1CampaignPresentationViewer();
         AddChild(_viewer);
@@ -133,6 +134,22 @@ internal sealed partial class Fo1CampaignAdjacentRuntime : Node3D
 
     private ClassicMapEndpoint RequireJoinedMap(Fo1CampaignMapPresentation map) =>
         _joins.RequireMap(map.SourceFile, map.MapSha256);
+
+    private void ValidatePresentationClosure()
+    {
+        foreach (var endpoint in _joins.MapEndpoints)
+        {
+            var mapName = endpoint.MapName ?? throw new InvalidOperationException(
+                "Fallout adjacent join endpoint has no source MAP name.");
+            var mapId = Path.GetFileNameWithoutExtension(mapName);
+            var map = Fo1CampaignPresentationContract.LoadMap(_presentation, mapId);
+            if (!map.SourceFile.Equals(mapName, StringComparison.OrdinalIgnoreCase) ||
+                !map.MapSha256.Equals(
+                    endpoint.MapSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Fallout adjacent join/presentation MAP identity drifted.");
+        }
+    }
 
     private List<int> FindPath(int start, int target)
     {

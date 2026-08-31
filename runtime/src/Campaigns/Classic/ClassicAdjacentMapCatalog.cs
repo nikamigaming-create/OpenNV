@@ -14,6 +14,19 @@ internal sealed record ClassicAdjacentMapCatalog(
     string Sha256,
     IReadOnlyList<ClassicReciprocalMapJoins> ReciprocalJoins)
 {
+    internal IReadOnlyList<ClassicMapEndpoint> MapEndpoints => ReciprocalJoins
+        .SelectMany(row => row.Forward.Concat(row.Reverse))
+        .SelectMany(row => new[] { row.Source, row.Destination })
+        .GroupBy(row => new
+        {
+            row.MapIndex,
+            Name = row.MapName?.ToLowerInvariant(),
+            Hash = row.MapSha256.ToLowerInvariant(),
+        })
+        .Select(row => row.First())
+        .OrderBy(row => row.MapIndex)
+        .ToArray();
+
     internal ClassicMapJoinState? TryCommitAt(
         int mapIndex,
         string mapSha256,

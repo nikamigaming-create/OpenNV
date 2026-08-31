@@ -56,6 +56,9 @@ class ClassicAdjacentMapCompilerTest(unittest.TestCase):
         self.assertIn("WriteSave()", runtime)
         self.assertIn("_playablePlayer ??= BuildPlayablePlayer()", viewer)
         self.assertIn("Fo1HexMath.Neighbors(current)", runtime)
+        self.assertIn("ValidatePresentationClosure()", runtime)
+        self.assertIn("_joins.MapEndpoints", runtime)
+        self.assertIn("endpoint.MapSha256", runtime)
 
     def test_fo2_adjacent_cache_is_decoded_and_consumed_by_live_player(self) -> None:
         preparer = (
