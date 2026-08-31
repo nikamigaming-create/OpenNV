@@ -22,28 +22,49 @@ internal partial class OpeningQuestRuntime
     {
         if (generation != _generation)
             return;
-        if (index >= info.Commands.Count)
+        if (index < info.Commands.Count)
         {
-            if (info.NextTopicFormIds.Count > 0)
-            {
-                ShowTopicChoices(
-                    info.NextTopicFormIds,
-                    topic is null
-                        ? completed
-                        : () => PlayTopic(topic, completed, generation),
-                    generation);
+            var commands = info.Commands.Select((command, sourceIndex) =>
+                new SourceGamebryoResultCommand<OpeningFlowCommand>(
+                    sourceIndex,
+                    ResultCommandKind(command.Kind),
+                    ResultCommandIsTerminal(command),
+                    command)).ToArray();
+            var execution = GamebryoResultCommandExecutor.Execute(
+                commands,
+                index,
+                command => ApplyInfoResultCommand(
+                    command.Value,
+                    completed,
+                    generation));
+            if (execution.Terminal)
                 return;
-            }
-            if (!info.Goodbye && topic is not null)
-            {
-                PlayTopic(topic, completed, generation);
-                return;
-            }
-            CloseModal();
-            completed();
+        }
+
+        if (info.NextTopicFormIds.Count > 0)
+        {
+            ShowTopicChoices(
+                info.NextTopicFormIds,
+                topic is null
+                    ? completed
+                    : () => PlayTopic(topic, completed, generation),
+                generation);
             return;
         }
-        var command = info.Commands[index];
+        if (!info.Goodbye && topic is not null)
+        {
+            PlayTopic(topic, completed, generation);
+            return;
+        }
+        CloseModal();
+        completed();
+    }
+
+    private bool ApplyInfoResultCommand(
+        OpeningFlowCommand command,
+        Action completed,
+        int generation)
+    {
         switch (command.Kind)
         {
             case "actorValueDelta":
@@ -108,7 +129,7 @@ internal partial class OpeningQuestRuntime
                     StringComparison.OrdinalIgnoreCase))
                 {
                     SetStage(stageResult.Stage);
-                    return;
+                    return true;
                 }
                 ApplyQuestStage(command);
                 break;
@@ -121,14 +142,14 @@ internal partial class OpeningQuestRuntime
                         generation);
                 else
                     PlayTopicEditor(command.TopicEditorId, completed, generation);
-                return;
+                return true;
             case "deferredStage":
                 if (command.Stage is { } deferred && command.Seconds is { } seconds)
                 {
                     CloseModal();
                     _timerTargetStage = deferred;
                     _timerRemainingSeconds = seconds;
-                    return;
+                    return true;
                 }
                 throw new InvalidOperationException(
                     "Owned deferred-stage dialogue command is incomplete.");
@@ -136,8 +157,43 @@ internal partial class OpeningQuestRuntime
                 throw new InvalidOperationException(
                     $"Owned opening dialogue command is unsupported: {command.Kind}");
         }
-        ExecuteInfoCommands(info, topic, completed, generation, index + 1);
+        return true;
     }
+
+    private bool ResultCommandIsTerminal(OpeningFlowCommand command) =>
+        command.Kind is "sayTo" or "deferredStage" ||
+        command.Kind == "setStage" && command.QuestFormId?.Equals(
+            _flow.QuestFormId,
+            StringComparison.OrdinalIgnoreCase) == true;
+
+    private static GamebryoResultCommandKind ResultCommandKind(string kind) => kind switch
+    {
+        "actorValueDelta" => GamebryoResultCommandKind.ActorValueDelta,
+        "setQuestVariable" => GamebryoResultCommandKind.SetQuestVariable,
+        "setDestroyed" => GamebryoResultCommandKind.SetDestroyed,
+        "additem" => GamebryoResultCommandKind.AddItem,
+        "removeitem" => GamebryoResultCommandKind.RemoveItem,
+        "equipitem" => GamebryoResultCommandKind.EquipItem,
+        "playerControls" => GamebryoResultCommandKind.PlayerControls,
+        "addScriptPackage" => GamebryoResultCommandKind.AddScriptPackage,
+        "removeScriptPackage" => GamebryoResultCommandKind.RemoveScriptPackage,
+        "imageSpaceModifier" => GamebryoResultCommandKind.ImageSpaceModifier,
+        "referenceEnabled" => GamebryoResultCommandKind.ReferenceEnabled,
+        "actorIntent" => GamebryoResultCommandKind.ActorIntent,
+        "objective" => GamebryoResultCommandKind.Objective,
+        "startQuest" => GamebryoResultCommandKind.StartQuest,
+        "stopQuest" => GamebryoResultCommandKind.StopQuest,
+        "setGlobal" => GamebryoResultCommandKind.SetGlobal,
+        "autoDisplayObjectives" => GamebryoResultCommandKind.AutoDisplayObjectives,
+        "achievement" => GamebryoResultCommandKind.Achievement,
+        "autosave" => GamebryoResultCommandKind.Autosave,
+        "setTimer" => GamebryoResultCommandKind.SetTimer,
+        "setStage" => GamebryoResultCommandKind.SetStage,
+        "sayTo" => GamebryoResultCommandKind.SayTo,
+        "deferredStage" => GamebryoResultCommandKind.DeferredStage,
+        _ => throw new InvalidOperationException(
+            $"Owned opening dialogue command is unsupported: {kind}"),
+    };
 
     private void ShowTopicChoices(
         IReadOnlyList<string> topicFormIds,

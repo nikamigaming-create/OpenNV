@@ -10,3 +10,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("OpenNV.GamebryoUiTileContractProbe")]
 [assembly: InternalsVisibleTo("OpenNV.GamebryoPackagePlacementProbe")]
 [assembly: InternalsVisibleTo("OpenNV.GamebryoDialoguePlaybackProbe")]
+[assembly: InternalsVisibleTo("OpenNV.GamebryoResultCommandProbe")]

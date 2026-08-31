@@ -368,11 +368,23 @@ internal partial class Fo3OpeningFlow
 
     private void CompleteCg00Dialogue(Fo3Cg00DialogueCue cue)
     {
+        const int firstResultCommandIndex = 0;
         var result = GamebryoDialoguePlayback.RequireStageResult(cue.ResultCommands);
         if (!result.QuestEditorId.Equals("CG00", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "Fallout 3 early CG00 dialogue targets another quest.");
-        ApplyCg00EarlyStage(result.Stage);
+        GamebryoResultCommandExecutor.Execute(
+            [new SourceGamebryoResultCommand<int>(
+                firstResultCommandIndex,
+                GamebryoResultCommandKind.SetStage,
+                true,
+                result.Stage)],
+            firstResultCommandIndex,
+            command =>
+            {
+                ApplyCg00EarlyStage(command.Value);
+                return _cg00EarlyStage == command.Value;
+            });
     }
 
     private static bool EvaluateCg00DialogueCondition(
