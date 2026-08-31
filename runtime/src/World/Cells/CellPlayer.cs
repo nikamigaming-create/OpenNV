@@ -685,6 +685,12 @@ internal partial class CellPlayer : CharacterBody3D
             _session!.OpenContainer(container);
             return true;
         }
+        var craftingStation = Ancestor<CraftingStationInstance>(collider);
+        if (craftingStation is not null)
+        {
+            _session!.OpenCrafting(craftingStation);
+            return true;
+        }
         var door = Ancestor<DoorInstance>(collider);
         if (door is null)
         {

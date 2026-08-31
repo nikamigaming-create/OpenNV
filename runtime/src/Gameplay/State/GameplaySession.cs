@@ -2,6 +2,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Gameplay.Containers;
+using OpenNV.Runtime.Gameplay.Crafting;
 using OpenNV.Runtime.Gameplay.Items;
 
 
@@ -181,6 +182,9 @@ internal partial class GameplaySession : Node
         _containerView = new ContainerInteractionView();
         AddChild(_containerView);
         _containerView.Configure(_useXrHud);
+        _craftingView = new CraftingInteractionView();
+        AddChild(_craftingView);
+        _craftingView.Configure(_useXrHud);
         RefreshHud(
             _useClassicDioramaHud
                 ? "WASD pan • Wheel zoom • Q/E rotate 60° • Home reset • F5 save"

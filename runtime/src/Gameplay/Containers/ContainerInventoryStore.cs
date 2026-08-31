@@ -27,7 +27,8 @@ internal sealed class ContainerInventoryStore
                 container.EditorId,
                 container.DisplayName,
                 container.Items.Select(item => new ContainerInventoryDefinitionItem(
-                    item.Item,
+                    item.ItemFormId,
+                    item.Definition,
                     item.Count,
                     item.Resolved)).ToArray()),
             legacyEmptied);
@@ -169,7 +170,7 @@ internal sealed class ContainerInventoryStore
         var items = new Dictionary<string, MutableContainerItem>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in container.Items)
         {
-            if (!entry.Resolved)
+            if (!entry.Resolved || entry.Definition is null)
                 throw new InvalidOperationException(
                     $"Container has unresolved owned contents: {referenceFormId}");
             if (string.IsNullOrWhiteSpace(entry.DisplayName))
@@ -375,12 +376,12 @@ internal sealed record ContainerInventoryDefinition(
     IReadOnlyList<ContainerInventoryDefinitionItem> Items);
 
 internal sealed record ContainerInventoryDefinitionItem(
-    ItemDefinition Definition,
+    string ItemFormId,
+    ItemDefinition? Definition,
     int Count,
     bool Resolved)
 {
-    internal string ItemFormId => Definition.FormId;
-    internal string EditorId => Definition.EditorId;
-    internal string DisplayName => Definition.DisplayName ?? "";
-    internal string RecordType => Definition.RecordType;
+    internal string EditorId => Definition?.EditorId ?? "";
+    internal string DisplayName => Definition?.DisplayName ?? "";
+    internal string RecordType => Definition?.RecordType ?? "";
 }

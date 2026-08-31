@@ -1,3 +1,4 @@
+using System.Text.Json;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Gameplay.Items;
@@ -34,6 +35,39 @@ internal sealed record ItemDefinition
     internal string RecordType { get; }
     internal int? Value { get; }
     internal float? Weight { get; }
+
+    internal static ItemDefinition ReadCompiled(JsonElement source)
+    {
+        var definition = new ItemDefinition(
+            source.GetProperty("itemFormId").GetString()!,
+            source.GetProperty("itemEditorId").GetString()!,
+            source.TryGetProperty("itemDisplayName", out var displayName)
+                ? displayName.GetString()
+                : null,
+            source.GetProperty("itemRecordType").GetString()!,
+            source.TryGetProperty("itemValue", out var value) && value.ValueKind == JsonValueKind.Number
+                ? value.GetInt32()
+                : null,
+            source.TryGetProperty("itemWeight", out var weight) && weight.ValueKind == JsonValueKind.Number
+                ? weight.GetSingle()
+                : null);
+        var contract = source.GetProperty("itemDefinition");
+        var contractSource = contract.GetProperty("source");
+        var economicsStatus = contractSource.GetProperty("economicsStatus").GetString();
+        if (contract.GetProperty("schema").GetString() != "opennv-owned-item-definition/v1" ||
+            !definition.FormId.Equals(contract.GetProperty("formId").GetString(), StringComparison.OrdinalIgnoreCase) ||
+            !definition.EditorId.Equals(contract.GetProperty("editorId").GetString(), StringComparison.Ordinal) ||
+            !string.Equals(definition.DisplayName ?? "", contract.GetProperty("displayName").GetString(), StringComparison.Ordinal) ||
+            !definition.RecordType.Equals(contract.GetProperty("recordType").GetString(), StringComparison.Ordinal) ||
+            !definition.FormId.Equals(contractSource.GetProperty("recordFormId").GetString(), StringComparison.OrdinalIgnoreCase) ||
+            !definition.RecordType.Equals(contractSource.GetProperty("recordType").GetString(), StringComparison.Ordinal) ||
+            economicsStatus is not "source-bound" and not "unsupported-record-layout" ||
+            economicsStatus == "source-bound" && (definition.Value is null || definition.Weight is null) ||
+            economicsStatus == "unsupported-record-layout" && (definition.Value is not null || definition.Weight is not null))
+            throw new InvalidOperationException(
+                $"Compiled item definition provenance is invalid: {definition.FormId}.");
+        return definition;
+    }
 
     internal ItemDefinition Merge(ItemDefinition other)
     {

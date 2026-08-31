@@ -23,11 +23,14 @@ internal partial class ContainerInstance : Node3D
         Name = $"CONTAINER_{referenceFormId}_{editorId}";
     }
 
-    internal readonly record struct Entry(ItemDefinition Item, int Count, bool Resolved)
+    internal readonly record struct Entry(
+        string ItemFormId,
+        ItemDefinition? Definition,
+        int Count,
+        bool Resolved)
     {
-        internal string ItemFormId => Item.FormId;
-        internal string EditorId => Item.EditorId;
-        internal string DisplayName => Item.DisplayName ?? "";
-        internal string RecordType => Item.RecordType;
+        internal string EditorId => Definition?.EditorId ?? "";
+        internal string DisplayName => Definition?.DisplayName ?? "";
+        internal string RecordType => Definition?.RecordType ?? "";
     }
 }

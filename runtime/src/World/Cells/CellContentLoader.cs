@@ -12,6 +12,7 @@ using OpenNV.Runtime.Presentation.OpenXR;
 using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Gameplay.Items;
+using OpenNV.Runtime.Gameplay.Crafting;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -374,14 +375,30 @@ internal static class CellContentLoader
                     activator.Basis = new Basis(rotation);
                     placement = activator;
                 }
+                else if (interactionType == "crafting-station" &&
+                    interaction.GetProperty("support").GetString() == "unconditioned-zero-skill-recipes")
+                {
+                    var station = new CraftingStationInstance();
+                    station.Configure(
+                        referenceFormId,
+                        baseEditorId,
+                        CraftingStationContract.Read(interaction));
+                    station.Basis = new Basis(rotation);
+                    placement = station;
+                }
                 else if (interactionType == "container")
                 {
                     var entries = interaction.GetProperty("items")
                         .EnumerateArray()
-                        .Select(item => new ContainerInstance.Entry(
-                            ReadItemDefinition(item),
-                            item.GetProperty("count").GetInt32(),
-                            item.GetProperty("resolved").GetBoolean()))
+                        .Select(item =>
+                        {
+                            var resolved = item.GetProperty("resolved").GetBoolean();
+                            return new ContainerInstance.Entry(
+                                item.GetProperty("itemFormId").GetString()!,
+                                resolved ? ReadItemDefinition(item) : null,
+                                item.GetProperty("count").GetInt32(),
+                                resolved);
+                        })
                         .ToArray();
                     var container = new ContainerInstance();
                     container.Configure(
@@ -717,19 +734,8 @@ internal static class CellContentLoader
         }
     }
 
-    private static ItemDefinition ReadItemDefinition(JsonElement source) => new(
-        source.GetProperty("itemFormId").GetString()!,
-        source.GetProperty("itemEditorId").GetString()!,
-        source.TryGetProperty("itemDisplayName", out var displayName)
-            ? displayName.GetString()
-            : null,
-        source.GetProperty("itemRecordType").GetString()!,
-        source.TryGetProperty("itemValue", out var value) && value.ValueKind == JsonValueKind.Number
-            ? value.GetInt32()
-            : null,
-        source.TryGetProperty("itemWeight", out var weight) && weight.ValueKind == JsonValueKind.Number
-            ? weight.GetSingle()
-            : null);
+    private static ItemDefinition ReadItemDefinition(JsonElement source) =>
+        ItemDefinition.ReadCompiled(source);
 
     private static SourceReference ReadSourceReference(JsonElement reference) => new(
         reference.GetProperty("formId").GetString()!,
