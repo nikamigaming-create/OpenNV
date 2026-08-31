@@ -181,11 +181,10 @@ internal partial class CellPlayer : CharacterBody3D
         Vector3 targetOriginGameUnits,
         DoorInstance.TeleportDestination destination)
     {
-        var localPosition = new Vector3(
-            destination.PositionGameUnits.X - targetOriginGameUnits.X,
-            destination.PositionGameUnits.Z - targetOriginGameUnits.Z,
-            -(destination.PositionGameUnits.Y - targetOriginGameUnits.Y));
-        var floorPosition = targetRoot.ToGlobal(localPosition);
+        var floorPosition = ResolvePortalArrivalFloorPosition(
+            targetRoot,
+            targetOriginGameUnits,
+            destination);
         var targetBasis = targetRoot.GlobalBasis.Orthonormalized() *
             new Basis(Vector3.Up, destination.YawGodotRadians);
         var bodyPosition = floorPosition +
@@ -201,6 +200,18 @@ internal partial class CellPlayer : CharacterBody3D
         var scale = GlobalBasis.Scale;
         GlobalTransform = new Transform3D(targetBasis.Scaled(scale), bodyPosition);
         Velocity = Vector3.Zero;
+    }
+
+    internal static Vector3 ResolvePortalArrivalFloorPosition(
+        Node3D targetRoot,
+        Vector3 targetOriginGameUnits,
+        DoorInstance.TeleportDestination destination)
+    {
+        var localPosition = new Vector3(
+            destination.PositionGameUnits.X - targetOriginGameUnits.X,
+            destination.PositionGameUnits.Z - targetOriginGameUnits.Z,
+            -(destination.PositionGameUnits.Y - targetOriginGameUnits.Y));
+        return targetRoot.ToGlobal(localPosition);
     }
 
     internal void ClearOwnedNavigation()

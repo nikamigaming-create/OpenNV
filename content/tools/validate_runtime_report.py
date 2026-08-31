@@ -298,6 +298,10 @@ def validate_cell_report(
             _require(bool(actual["projectilePortalClear"]), "Projectile failed one portal hop")
             _require(bool(actual["floorHit"]), "Portal floor probe did not hit")
             _require(bool(actual["floorWalkable"]), "Portal floor is not walkable")
+            _require(
+                bool(actual["floorOwnedCellCollision"]),
+                "Portal floor is not owned by the destination CELL",
+            )
             _require(bool(actual["capsuleWalkThrough"]), "Capsule failed one portal hop")
     opening_menu = report.get("openingMenuProof")
     if require_opening_menu:

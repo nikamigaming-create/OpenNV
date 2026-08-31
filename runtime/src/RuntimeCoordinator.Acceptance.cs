@@ -649,13 +649,18 @@ public partial class RuntimeCoordinator
                     $"withinProbe={floorWithinProbe} collider={floor.ColliderPath}");
             var portalTraversals = new List<PortalTraversalProof>();
             if (loaded.PortalLinks.Count == 0)
-                portalTraversals.Add(await ProvePortalPassage(loaded, loaded.ProofDoor, null));
+                portalTraversals.Add(await ProvePortalPassage(
+                    loaded,
+                    loaded.ProofDoor,
+                    null,
+                    null));
             else
                 foreach (var portal in loaded.PortalLinks)
                     portalTraversals.Add(await ProvePortalPassage(
                         loaded,
                         portal.FromDoor,
-                        portal.ToDoor));
+                        portal.ToDoor,
+                        portal));
             var failedPortal = portalTraversals.FirstOrDefault(value => !value.Passed);
             if (failedPortal != default)
                 throw new InvalidOperationException(
@@ -667,6 +672,7 @@ public partial class RuntimeCoordinator
                     $"openClear={failedPortal.OpenRayPortalClear} " +
                     $"projectileClear={failedPortal.ProjectilePortalClear} " +
                     $"floorHit={failedPortal.FloorHit} floorY={failedPortal.FloorY} " +
+                    $"floorOwned={failedPortal.FloorOwnedCellCollision} " +
                     $"walkForward={failedPortal.CapsuleWalkForward} " +
                     $"walkBackward={failedPortal.CapsuleWalkBackward}");
             CompleteCellLoad(
@@ -706,8 +712,12 @@ public partial class RuntimeCoordinator
     private async Task<PortalTraversalProof> ProvePortalPassage(
         CellSceneLoader.LoadedCell loaded,
         DoorInstance fromDoor,
-        DoorInstance? toDoor)
+        DoorInstance? toDoor,
+        CellSceneLoader.PortalLink? portal)
     {
+        if ((toDoor is null) != (portal is null) ||
+            portal is { } link && (link.FromDoor != fromDoor || link.ToDoor != toDoor))
+            throw new InvalidOperationException("Portal passage endpoints are inconsistent.");
         fromDoor.SetOpen(false);
         await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         var ray = CellSceneLoader.BuildProofRay(fromDoor, _configuration.Proof);
@@ -751,8 +761,6 @@ public partial class RuntimeCoordinator
             loaded.Player.CollisionMask,
             loaded.Player.GetRid(),
             portalCenter);
-        var portalFloorWalkable = portalFloor.Hit &&
-            portalFloor.Normal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum;
         if (portalFloor.Hit)
             portalCenter.Y = portalFloor.Y + _configuration.Proof.PortalCapsuleCenterHeightMeters;
         var portalMotion = portalDirection * _configuration.Proof.PortalCapsuleMotionMeters;
@@ -766,6 +774,12 @@ public partial class RuntimeCoordinator
             new Transform3D(Basis.Identity, portalCenter + portalMotion / 2.0f),
             -portalMotion,
             backwardCollision);
+        var arrivalFloor = portal is { } target
+            ? await ProvePortalArrivalFloor(loaded, target)
+            : new PortalArrivalFloor(
+                portalFloor,
+                portalFloor.Collider is not null &&
+                    loaded.MainContent.Root.IsAncestorOf(portalFloor.Collider));
         return new PortalTraversalProof(
             fromDoor.ReferenceFormId,
             toDoor?.ReferenceFormId,
@@ -774,13 +788,53 @@ public partial class RuntimeCoordinator
             openBlockedByDoor,
             openRayPortalClear,
             projectilePortalClear,
-            portalFloor.Hit,
-            portalFloorWalkable,
-            portalFloor.Y,
+            arrivalFloor.Hit.Hit,
+            arrivalFloor.Hit.Hit &&
+                arrivalFloor.Hit.Normal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum,
+            arrivalFloor.Hit.Y,
+            arrivalFloor.OwnedByTargetCell,
             !walkForwardBlocked,
             !walkBackwardBlocked,
             !walkForwardBlocked && !walkBackwardBlocked);
     }
+
+    private async Task<PortalArrivalFloor> ProvePortalArrivalFloor(
+        CellSceneLoader.LoadedCell loaded,
+        CellSceneLoader.PortalLink portal)
+    {
+        var destination = portal.FromDoor.Destination ??
+            throw new InvalidOperationException(
+                $"Portal XTEL destination is missing: {portal.FromDoor.ReferenceFormId}");
+        loaded.ActiveSet.Activate(portal.ToCellFormId);
+        try
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            var arrival = CellPlayer.ResolvePortalArrivalFloorPosition(
+                portal.ToRoot,
+                portal.ToOriginGameUnits,
+                destination);
+            var floor = CellSceneLoader.CastFloorAt(
+                GetWorld3D().DirectSpaceState,
+                _configuration.Proof,
+                portal.ToCollisionLayer,
+                loaded.Player.GetRid(),
+                arrival);
+            return new PortalArrivalFloor(
+                floor,
+                floor.Collider is not null && portal.ToRoot.IsAncestorOf(floor.Collider));
+        }
+        finally
+        {
+            loaded.ActiveSet.Activate(portal.FromCellFormId);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        }
+    }
+
+    private readonly record struct PortalArrivalFloor(
+        CellSceneLoader.FloorHit Hit,
+        bool OwnedByTargetCell);
 
     private static bool IsColliderUnder(string colliderPath, Node node) =>
         colliderPath.StartsWith(node.GetPath().ToString(), StringComparison.Ordinal);

@@ -1240,6 +1240,7 @@ public partial class RuntimeCoordinator : Node3D
         bool FloorHit,
         bool FloorWalkable,
         float FloorY,
+        bool FloorOwnedCellCollision,
         bool CapsuleWalkForward,
         bool CapsuleWalkBackward,
         bool CapsuleWalkThrough)
@@ -1252,6 +1253,7 @@ public partial class RuntimeCoordinator : Node3D
             ProjectilePortalClear &&
             FloorHit &&
             FloorWalkable &&
+            FloorOwnedCellCollision &&
             CapsuleWalkForward &&
             CapsuleWalkBackward &&
             CapsuleWalkThrough;
