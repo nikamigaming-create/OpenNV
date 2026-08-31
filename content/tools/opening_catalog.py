@@ -7321,6 +7321,23 @@ def prepare_opening_manifest(
     return {"output": str(output.resolve()), "manifest": manifest}
 
 
+def _expected_preview_identities(
+    appearance: dict[str, object],
+) -> set[tuple[str, str, str, str]]:
+    return {
+        (
+            str(engine_sex),
+            str(race["formId"]).casefold(),
+            str(hair["formId"]).casefold(),
+            str(eyes["formId"]).casefold(),
+        )
+        for race in appearance["races"]
+        for engine_sex, sex in dict(race["sex"]).items()
+        for hair in dict(sex)["hairOptions"]
+        for eyes in dict(sex)["eyeOptions"]
+    }
+
+
 def _first_slice_source_closure(
     flow: dict[str, object],
     ui: dict[str, object],
@@ -7343,8 +7360,9 @@ def _first_slice_source_closure(
     dialogue_responses = sum(len(info["responses"]) for info in dialogue_infos)
     voice = dict(dialogue["voice"])
     guide = dict(flow["guideActorAi"])
-    appearance = dict(dict(dict(flow["character"])["appearance"])["player"])
-    facegen = dict(appearance["faceGen"])
+    appearance = dict(dict(flow["character"])["appearance"])
+    player = dict(appearance["player"])
+    facegen = dict(player["faceGen"])
     control_space = dict(facegen["controlSpace"])
     native_geometry = dict(control_space["nativeGeometryExposure"])
     native_geometry_controls = [
@@ -7403,18 +7421,8 @@ def _first_slice_source_closure(
         )
         for row in preview_rows
     }
-    expected_preview_identities = {
-        (
-            str(engine_sex),
-            str(race["formId"]).casefold(),
-            str(hair["formId"]).casefold(),
-            str(eyes["formId"]).casefold(),
-        )
-        for race in appearance["races"]
-        for engine_sex, sex in dict(race["sex"]).items()
-        for hair in dict(sex)["hairOptions"]
-        for eyes in dict(sex)["eyeOptions"]
-    }
+    expected_preview_identities = _expected_preview_identities(appearance)
+
     if preview_identities != expected_preview_identities:
         unaccounted.append({"reason": "creator-valid-selection-preview-closure"})
     unsupported = []

@@ -28,6 +28,7 @@ from opening_catalog import (  # noqa: E402
     _compile_player_appearance,
     emit_player_facegen_preview_set,
     _flow_menu_contract,
+    _expected_preview_identities,
     _parse_texture_atlas_entry,
     _resolve_command_record_identities,
     _resolve_actor_animation_commands,
@@ -82,6 +83,33 @@ def subrecord(signature: str, data: bytes = b"") -> bytes:
 
 
 class OpeningCatalogTest(unittest.TestCase):
+    def test_preview_identity_closure_uses_appearance_race_inventory(self) -> None:
+        appearance = {
+            "player": {"faceGen": {}},
+            "races": [
+                {
+                    "formId": "00000019",
+                    "sex": {
+                        "male": {
+                            "hairOptions": [{"formId": "00000100"}],
+                            "eyeOptions": [
+                                {"formId": "00000200"},
+                                {"formId": "00000201"},
+                            ],
+                        }
+                    },
+                }
+            ],
+        }
+
+        self.assertEqual(
+            _expected_preview_identities(appearance),
+            {
+                ("male", "00000019", "00000100", "00000200"),
+                ("male", "00000019", "00000100", "00000201"),
+            },
+        )
+
     def test_text_edit_menu_compiles_parent_self_affine_traits(self):
         document = "menus\\dialog\\texteditmenu.xml"
         tree = parse_tile_document(
