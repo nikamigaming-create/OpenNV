@@ -546,60 +546,6 @@ internal partial class GameplaySession : Node
         Save();
     }
 
-    internal bool HasInventory(IReadOnlyDictionary<string, int> requirements)
-    {
-        var normalized = NormalizeInventoryRequirements(requirements);
-        return normalized.All(requirement =>
-            _inventory.TryGetValue(requirement.Key, out var item) &&
-            item.Count >= requirement.Value);
-    }
-
-    internal void ConsumeInventory(IReadOnlyDictionary<string, int> requirements)
-    {
-        var normalized = NormalizeInventoryRequirements(requirements);
-        if (normalized.Any(requirement =>
-                !_inventory.TryGetValue(requirement.Key, out var item) ||
-                item.Count < requirement.Value))
-            throw new InvalidOperationException(
-                "Authoritative inventory does not contain the requested components.");
-        var equipmentChanged = false;
-        foreach (var requirement in normalized)
-        {
-            var item = _inventory[requirement.Key];
-            if (item.Count == requirement.Value)
-            {
-                _inventory.Remove(requirement.Key);
-                equipmentChanged |= requirement.Key.Equals(
-                    _equippedWeaponFormId,
-                    StringComparison.OrdinalIgnoreCase);
-            }
-            else
-                _inventory[requirement.Key] = item with { Count = item.Count - requirement.Value };
-        }
-        if (equipmentChanged)
-            ClearEquippedWeapon();
-        Save();
-        RefreshHud("Inventory components consumed");
-    }
-
-    private static IReadOnlyDictionary<string, int> NormalizeInventoryRequirements(
-        IReadOnlyDictionary<string, int> requirements)
-    {
-        if (requirements.Count == 0)
-            throw new InvalidOperationException("Inventory consumption requires at least one component.");
-        var normalized = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var requirement in requirements)
-        {
-            if (requirement.Value <= 0)
-                throw new InvalidOperationException(
-                    $"Inventory consumption count is invalid: {requirement.Key}.");
-            var formId = FalloutFormId.Normalize(requirement.Key);
-            normalized[formId] = checked(
-                normalized.GetValueOrDefault(formId) + requirement.Value);
-        }
-        return normalized;
-    }
-
     private void ClearEquippedWeapon()
     {
         _equippedWeaponFormId = null;
