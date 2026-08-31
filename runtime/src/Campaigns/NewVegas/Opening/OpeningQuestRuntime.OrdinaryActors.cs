@@ -6,6 +6,8 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class OpeningQuestRuntime
 {
+    private const float BoundsToHalfExtents = 0.5f;
+
     private readonly Dictionary<string, OpeningGuidePackage> _ordinaryActorPackages =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, GamebryoPackageTravel> _ordinaryActorTravel =
@@ -264,7 +266,7 @@ internal partial class OpeningQuestRuntime
                 var halfBounds = new Vector3(
                     trigger.BoundsGameUnits.X,
                     trigger.BoundsGameUnits.Z,
-                    trigger.BoundsGameUnits.Y) * 0.5f;
+                    trigger.BoundsGameUnits.Y) * BoundsToHalfExtents;
                 if (Mathf.Abs(playerLocal.X) > halfBounds.X ||
                     Mathf.Abs(playerLocal.Y) > halfBounds.Y ||
                     Mathf.Abs(playerLocal.Z) > halfBounds.Z ||

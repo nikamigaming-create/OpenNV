@@ -197,6 +197,12 @@ PACKAGE_IDLE_FORM_BYTES = 4
 PACKAGE_LOCATION_BYTES = 12
 PACKAGE_TARGET_BYTES = 16
 REFERENCE_TRANSFORM_BYTES = 24
+REFERENCE_PRIMITIVE_BYTES = 32
+REFERENCE_PRIMITIVE_FLOAT_COUNT = 7
+LEVELED_ITEM_ENTRY_BYTES = 12
+WEAPON_DATA_BYTES = 15
+WEAPON_DAMAGE_OFFSET = 12
+WEAPON_CLIP_SIZE_OFFSET = 14
 DOC_INITIAL_CHAIR_MARKER_ID = 14
 FURNITURE_MARKER_PLACEMENT_SEMANTICS = (
     "nif-marker-minus-gmst-target-offset-for-actor-placement"
@@ -664,18 +670,18 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
             if subrecord.signature == "CTDA":
                 conditions.append(_condition_manifest(subrecord.data))
             if subrecord.signature == "XPRM":
-                if len(subrecord.data) != 32 or primitive is not None:
+                if len(subrecord.data) != REFERENCE_PRIMITIVE_BYTES or primitive is not None:
                     raise ValueError(
                         f"Owned reference primitive differs: {form_id_text(record.form_id)}"
                     )
                 primitive_values = struct.unpack("<7fI", subrecord.data)
                 primitive = {
                     "boundsGameUnits": list(primitive_values[:3]),
-                    "colorRgba": list(primitive_values[3:7]),
-                    "type": primitive_values[7],
+                    "colorRgba": list(primitive_values[3:REFERENCE_PRIMITIVE_FLOAT_COUNT]),
+                    "type": primitive_values[REFERENCE_PRIMITIVE_FLOAT_COUNT],
                 }
             if record.signature == "LVLI" and subrecord.signature == "LVLO":
-                if len(subrecord.data) != 12:
+                if len(subrecord.data) != LEVELED_ITEM_ENTRY_BYTES:
                     raise ValueError(
                         f"Owned leveled item entry differs: {form_id_text(record.form_id)}"
                     )
@@ -690,15 +696,17 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                     }
                 )
             if record.signature == "WEAP" and subrecord.signature == "DATA":
-                if len(subrecord.data) != 15:
+                if len(subrecord.data) != WEAPON_DATA_BYTES:
                     continue
                 if weapon is not None and weapon.get("damage") is not None:
                     raise ValueError(
                         f"Owned weapon DATA is duplicated: {form_id_text(record.form_id)}"
                     )
                 weapon = {
-                    "damage": struct.unpack_from("<H", subrecord.data, 12)[0],
-                    "clipSize": subrecord.data[14],
+                    "damage": struct.unpack_from(
+                        "<H", subrecord.data, WEAPON_DAMAGE_OFFSET
+                    )[0],
+                    "clipSize": subrecord.data[WEAPON_CLIP_SIZE_OFFSET],
                     "ammoFormId": None if weapon is None else weapon["ammoFormId"],
                 }
             if record.signature == "WEAP" and subrecord.signature == "NAM0":
