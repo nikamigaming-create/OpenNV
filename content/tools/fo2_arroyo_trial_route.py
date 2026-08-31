@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from corpus_io import atomic_json
+from classic_door import decode_classic_door
 from fo1_map_objects import Fo1ResourceResolver, parse_map_objects, parse_script_section
 from fo1_profile import Fo1ProfileError, parse_map_layout
 from fo2_first_slice import _archive_paths, _load_json
@@ -27,6 +28,7 @@ MAP_WIDTH = 200
 NO_BLOCK_FLAG = 0x10
 WALL_OBJECT_TYPE = 3
 EXIT_GRID_OBJECT_TYPE = 5
+PID_RADIX = 16
 
 
 def _parse_dialogue_catalog(payload: bytes) -> dict[int, str]:
@@ -309,8 +311,12 @@ def compile_fo2_arroyo_trial_route(
         raise Fo1ProfileError("Fallout 2 Cameron script index drifted")
     if int(door["scriptIndex"]) != int(cameron_rule["release"]["doorScriptIndex"]):
         raise Fo1ProfileError("Fallout 2 Cameron door script index drifted")
-
     with resolver.access_scope() as accessed:
+        door_presentation = decode_classic_door(
+            resolver,
+            int(door["pid"], PID_RADIX),
+            str(door["artFilename"]),
+        )
         global_resource = resolver.read(trial["globalCatalog"]["logicalPath"])
         global_text = global_resource.data.decode("cp1252")
         expected_global = trial["globalCatalog"]
@@ -529,6 +535,7 @@ def compile_fo2_arroyo_trial_route(
                 **cameron_rule["release"],
                 "doorFid": door["fid"],
                 "doorPrototypeSha256": door["prototype"]["sha256"],
+                "doorPresentation": door_presentation,
             },
         },
         "movement": {

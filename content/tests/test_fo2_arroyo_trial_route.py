@@ -56,6 +56,7 @@ class Fo2ArroyoTrialRouteTest(unittest.TestCase):
         self.assertIn("post-trial obelisk move", compiler)
         self.assertIn("parse_map_objects", compiler)
         self.assertIn("firstLegalAction", compiler)
+        self.assertIn("decode_classic_door", compiler)
         self.assertNotIn("guardian death", compiler.casefold())
 
         contract = (
@@ -75,6 +76,10 @@ class Fo2ArroyoTrialRouteTest(unittest.TestCase):
         self.assertIn("TryApplyPostTrial(_contract.Village)", runtime)
         self.assertIn("ApplyVillageFirstLegalAction", runtime)
         self.assertIn("VillageFirstActionStage", runtime)
+        self.assertIn("ClassicDoorSession", runtime)
+        self.assertIn('SetMeta("source_door_frame"', runtime)
+        self.assertIn('"source_door_sound"', runtime)
+        self.assertIn('GetProperty("doorPresentation")', contract)
         self.assertIn("CameronDialogueSelections", save)
         self.assertIn("VillageFirstActionApplied", save)
         self.assertIn("rejected guardian shortcut", save)

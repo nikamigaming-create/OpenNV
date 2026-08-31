@@ -732,6 +732,9 @@ internal static partial class Fo1NewGameFlow
                 loaded.Session.CompleteQueuedTacticalMovementForHeadlessProof();
                 if (loaded.Session.PlayerTile != door.Door.Tile)
                     throw new InvalidOperationException("Fallout generic-door Continue proof did not move through its opened source blocker.");
+                var doorState = loaded.Session.DestinationGenericDoorState ??
+                    throw new InvalidOperationException(
+                        "Fallout generic-door Continue proof has no source presentation state.");
                 destinationMove = door.Door.Tile;
                 genericDoor = new
                 {
@@ -740,8 +743,10 @@ internal static partial class Fo1NewGameFlow
                     opened = true,
                     movedThroughOpenedBlocker = true,
                     interactionActionPoints = "not-source-backed",
-                    sound = "unsupported-fail-closed",
-                    animationTiming = "unsupported-fail-closed",
+                    sound = doorState.LastSoundLogicalPath,
+                    sourceFrame = doorState.Frame,
+                    framesPerSecond = door.Presentation.StoredFramesPerSecond,
+                    frameCount = door.Presentation.FrameCount,
                 };
             }
             else

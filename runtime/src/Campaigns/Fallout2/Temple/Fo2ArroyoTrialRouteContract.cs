@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text.Json;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -52,6 +53,7 @@ internal sealed record Fo2TrialCameron(
     bool ReleaseDoorOpened,
     bool ReleaseDoorUnlocked,
     bool ReleaseFinalVisible,
+    ClassicDoorSource ReleaseDoorPresentation,
     Fo2TrialDialogueBranch TaggedSpeechBranch);
 
 internal sealed record Fo2TrialKlintGate(
@@ -270,6 +272,10 @@ internal sealed class Fo2ArroyoTrialRouteContract
             release.GetProperty("doorOpened").GetBoolean(),
             release.GetProperty("doorUnlocked").GetBoolean(),
             release.GetProperty("finalVisible").GetBoolean(),
+            ClassicDoorSource.Load(
+                release.GetProperty("doorPresentation"),
+                RequiredHash(release, "doorPrototypeSha256"),
+                RequiredHash(release.GetProperty("doorPresentation").GetProperty("art"), "sha256")),
             new Fo2TrialDialogueBranch(
                 branch.GetProperty("minimumIntelligence").GetInt32(),
                 RequiredString(branch, "requiredTaggedSkill"),

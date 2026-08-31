@@ -15,6 +15,7 @@ from typing import Any
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError, sha256_path
 from fo1_frm import decode_frm
+from classic_door import decode_classic_door
 
 
 SCHEMA = "opennv-fo1-destination-generic-door/v1"
@@ -29,6 +30,7 @@ FLOOR_HEIGHT = MAP_HEIGHT // 2
 FLOOR_COUNT = FLOOR_WIDTH * FLOOR_HEIGHT
 NO_SCRIPT_INDEX = -1
 NO_SCRIPT_ID = "ffffffff"
+PID_RADIX = 16
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -149,6 +151,9 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path,
     if hashlib.sha256(prototype_resource.data).hexdigest() != door["prototype"]["sha256"]:
         raise Fo1ProfileError("generic-door owned PRO bytes do not match the MAP prototype hash")
     art_sha256 = hashlib.sha256(art_resource.data).hexdigest()
+    door_presentation = decode_classic_door(
+        resolver, int(door["pid"], PID_RADIX), door["artFilename"]
+    )
     document = {
         "schema": SCHEMA,
         "status": "compiled-owned-map-unscripted-generic-door-open-passability",
@@ -171,8 +176,8 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path,
             "script": {"mapScriptIndex": NO_SCRIPT_INDEX, "sid": NO_SCRIPT_ID,
                        "semantics": "no-script-boundary-generic-door-open-passability-only"},
             "closed": {"walkable": False}, "open": {"walkable": True},
-            "interactionActionPoints": "not-source-backed", "sound": "unsupported-fail-closed",
-            "animationTiming": "unsupported-fail-closed",
+            "interactionActionPoints": "not-source-backed",
+            "presentation": door_presentation,
         },
         "sourceWalkMaskRoute": {"pathTiles": route, "contactTile": route[-1], "contactIsAdjacent": route[-1] in neighbors(door["tile"])},
         "rendered": False, "interactive": False, "retailOrDerivedAssetsPackaged": False,

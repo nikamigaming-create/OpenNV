@@ -3,6 +3,7 @@ using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -112,6 +113,7 @@ internal sealed class Fo2ArroyoTrialRuntime
     private int _returnIndex;
     private int _dialogueIndex;
     private int _villageIndex;
+    private readonly ClassicDoorSession _cameronDoor;
 
     private Fo2ArroyoTrialRuntime(
         Fo2ArroyoTrialRouteContract contract,
@@ -135,6 +137,11 @@ internal sealed class Fo2ArroyoTrialRuntime
                 .ToHashSet());
         State = state;
         State.Validate(contract);
+        _cameronDoor = new ClassicDoorSession(
+            contract.Cameron.ReleaseDoorPresentation,
+            state.CameronDoorOpened
+                ? ClassicDoorSession.OpenTerminal(contract.Cameron.ReleaseDoorPresentation)
+                : null);
         _dialogueIndex = state.CameronDialogueSelections;
         _player.PersistenceBoundaryReached += OnPlayerPersistenceBoundary;
     }
@@ -397,8 +404,21 @@ internal sealed class Fo2ArroyoTrialRuntime
         }
         actor.Visible = _contract.Cameron.ReleaseFinalVisible;
         actor.SetMeta("actemvil_release_applied", true);
-        door.SetMeta("source_door_open", _contract.Cameron.ReleaseDoorOpened);
+        var doorState = _cameronDoor.OpenToSourceTerminal();
+        if (doorState.Open != _contract.Cameron.ReleaseDoorOpened ||
+            doorState.Blocked == _contract.Cameron.ReleaseDoorOpened)
+            throw new InvalidOperationException(
+                "Fallout 2 Cameron door source presentation disagrees with decoded release state.");
+        door.SetMeta("source_door_open", doorState.Open);
         door.SetMeta("source_door_unlocked", _contract.Cameron.ReleaseDoorUnlocked);
+        door.SetMeta("source_door_frame", doorState.Frame);
+        door.SetMeta(
+            "source_door_frames_per_second",
+            _contract.Cameron.ReleaseDoorPresentation.StoredFramesPerSecond);
+        door.SetMeta(
+            "source_door_sound",
+            doorState.LastSoundLogicalPath ?? throw new InvalidOperationException(
+                "Fallout 2 Cameron door source sound was not emitted."));
         State = State with
         {
             Stage = Fo2ArroyoTrialProgressState.NegotiatedStage,
@@ -409,7 +429,7 @@ internal sealed class Fo2ArroyoTrialRuntime
             CameronDialogueSelections = _dialogueIndex,
             CameronTile = _contract.Cameron.ReleaseActorTiles[^1],
             CameronVisible = _contract.Cameron.ReleaseFinalVisible,
-            CameronDoorOpened = _contract.Cameron.ReleaseDoorOpened,
+            CameronDoorOpened = doorState.Open,
             CameronDoorUnlocked = _contract.Cameron.ReleaseDoorUnlocked,
         };
         State.Validate(_contract);

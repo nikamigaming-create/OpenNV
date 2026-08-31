@@ -215,6 +215,7 @@ internal partial class Fo1TacticalSession : Node
     private int _classicScriptGameTime;
     private string? _destinationGenericDoorPath;
     private Fo1DestinationGenericDoorContract? _destinationGenericDoor;
+    private ClassicDoorSession? _destinationGenericDoorSession;
     private bool _destinationGenericDoorOpen;
     private string? _destinationMedicLookPath;
     private Fo1DestinationMedicLookContract? _destinationMedicLook;
@@ -395,6 +396,8 @@ internal partial class Fo1TacticalSession : Node
     internal bool DestinationFlareExpired => _destinationFlareExpired;
     internal Fo1DestinationGenericDoorContract? DestinationGenericDoor => _destinationGenericDoor;
     internal bool DestinationGenericDoorOpen => _destinationGenericDoorOpen;
+    internal ClassicDoorState? DestinationGenericDoorState =>
+        _destinationGenericDoorSession?.State;
     internal Fo1DestinationMedicLookContract? DestinationMedicLook => _destinationMedicLook;
     internal bool DestinationMedicLookViewed => _destinationMedicLookViewed;
     internal string? DestinationMedicDialogueProcedure => _destinationMedicDialogueProcedure;
@@ -562,9 +565,13 @@ internal partial class Fo1TacticalSession : Node
             return false;
         if (_walkable[door.Door.Tile])
             throw new InvalidOperationException("Fallout destination generic door opened without its authored MAP blocker.");
-        _destinationGenericDoorOpen = true;
-        _walkable[door.Door.Tile] = true;
-        _status = "Unscripted MAP door activated; its owned blocked hex is now passable.";
+        var state = (_destinationGenericDoorSession ?? throw new InvalidOperationException(
+            "Fallout destination generic door has no source presentation session."))
+            .OpenToSourceTerminal();
+        _destinationGenericDoorOpen = state.Open;
+        _walkable[door.Door.Tile] = !state.Blocked;
+        _status = $"Unscripted MAP door opened to source frame {state.Frame}; " +
+            $"sound {state.LastSoundLogicalPath}.";
         RefreshHud();
         Save();
         return true;
@@ -789,6 +796,11 @@ internal partial class Fo1TacticalSession : Node
             : Fo1DestinationGenericDoorContract.Load(_destinationGenericDoorPath, destination, transition);
         if (_destinationGenericDoor is not null)
         {
+            _destinationGenericDoorSession ??= new ClassicDoorSession(
+                _destinationGenericDoor.Presentation,
+                _destinationGenericDoorOpen
+                    ? ClassicDoorSession.OpenTerminal(_destinationGenericDoor.Presentation)
+                    : null);
             if (_walkable[_destinationGenericDoor.Door.Tile])
                 throw new InvalidOperationException("Fallout destination generic door is not an authored presentation blocker.");
             if (_destinationGenericDoorOpen)
