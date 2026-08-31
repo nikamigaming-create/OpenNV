@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -94,7 +95,9 @@ internal sealed record Fo3FaceGenDefaults(
 internal sealed record Fo3AppearanceNameUi(
     int PanelWidth,
     int PanelHeight,
-    Fo3AppearanceAsset BackgroundTexture);
+    Fo3AppearanceAsset BackgroundTexture,
+    OwnedGamebryoTileLayout Panel,
+    OwnedGamebryoTextBinding Prompt);
 
 internal sealed record Fo3AppearancePreviewPresentation(
     float ViewportWidthFraction,
@@ -222,6 +225,13 @@ internal sealed record Fo3AppearanceContract(
         var defaultRaceFormId = RequiredFormId(player, "defaultRaceFormId");
         var uiSource = RequiredObject(source, "ui");
         var nameSource = RequiredObject(uiSource, "name");
+        var nameWidth = PositiveInteger(nameSource, "panelWidth");
+        var nameHeight = PositiveInteger(nameSource, "panelHeight");
+        var namePrompt = RequiredObject(nameSource, "prompt");
+        var namePromptSha256 = RequiredString(namePrompt, "sourceSha256");
+        if (!ValidHex(namePromptSha256, Fo3OpeningFlowNumericContracts.Sha256HexCharacters))
+            throw new InvalidOperationException(
+                "Fallout 3 name prompt source hash is invalid.");
         var ui = new Fo3AppearanceUi(
             PositiveInteger(uiSource, "panelX"),
             PositiveInteger(uiSource, "panelY"),
@@ -237,9 +247,28 @@ internal sealed record Fo3AppearanceContract(
             PositiveInteger(uiSource, "sliderHeight"),
             LoadAsset(RequiredObject(uiSource, "backgroundTexture")),
             new Fo3AppearanceNameUi(
-                PositiveInteger(nameSource, "panelWidth"),
-                PositiveInteger(nameSource, "panelHeight"),
-                LoadAsset(RequiredObject(nameSource, "backgroundTexture"))));
+                nameWidth,
+                nameHeight,
+                LoadAsset(RequiredObject(nameSource, "backgroundTexture")),
+                new OwnedGamebryoTileLayout(
+                    RequiredString(nameSource, "document"),
+                    RequiredString(nameSource, "documentSha256"),
+                    RequiredString(nameSource, "panelName"),
+                    new Rect2(
+                        (Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels - nameWidth) /
+                            2.0f,
+                        (Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels - nameHeight) /
+                            2.0f,
+                        nameWidth,
+                        nameHeight),
+                    ParseTileVisibility(RequiredString(nameSource, "panelVisibility"))),
+                new OwnedGamebryoTextBinding(
+                    RequiredString(namePrompt, "tile"),
+                    RequiredString(namePrompt, "stringEntity"),
+                    RequiredString(namePrompt, "text"),
+                    [namePromptSha256])));
+        OwnedGamebryoTileRuntime.Validate(ui.Name.Panel);
+        OwnedGamebryoTileRuntime.Validate(ui.Name.Prompt);
         var playerFaceGen = RequiredObject(RequiredObject(source, "player"), "faceGen");
         var controlSpace = RequiredObject(playerFaceGen, "controlSpace");
         var previewControl = RequiredObject(controlSpace, "runtimePreviewControl");
@@ -739,6 +768,16 @@ internal sealed record Fo3AppearanceContract(
             throw new InvalidOperationException($"Fallout 3 appearance UI field {name} is invalid.");
         return value;
     }
+
+    private static OwnedGamebryoTileVisibility ParseTileVisibility(string source) =>
+        source switch
+        {
+            "inherited" => OwnedGamebryoTileVisibility.Inherited,
+            "visible" => OwnedGamebryoTileVisibility.Visible,
+            "hidden" => OwnedGamebryoTileVisibility.Hidden,
+            _ => throw new InvalidOperationException(
+                $"Fallout 3 appearance UI visibility is unsupported: {source}"),
+        };
 
     private static string RequiredFormId(JsonElement source, string name)
     {

@@ -268,6 +268,8 @@
       "nameDocument": "menus\\dialog\\texteditmenu.xml",
       "nameMenuName": "TextEditMenu",
       "namePanelName": "TEM_MainRect",
+      "namePromptTile": "textedit_prompt",
+      "namePromptEntity": "-sEnterName",
       "namePanelWidth": 720,
       "namePanelHeight": 180,
       "nameBackgroundTexture": "textures\\interface\\shared\\background\\solid_black.dds"

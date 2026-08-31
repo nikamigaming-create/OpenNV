@@ -21,7 +21,7 @@ from cell_catalog import cell_parent_form_id
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from facegen import compose_facegen_coordinates
-from opening_catalog import _compile_facegen_control_space, _prepare_runtime_video
+from opening_catalog import _compile_facegen_control_space, _display_entity, _prepare_runtime_video
 from owned_archive_stack import OwnedArchive, OwnedArchiveStack
 from player_facegen_preview import prepare_default_player_facegen_preview
 from plugin_records import iter_plugin_records, iter_subrecords, zstring
@@ -1435,6 +1435,18 @@ def _appearance_ui_contract(
             raise ValueError(f"Fallout 3 appearance menu {name} is absent")
         return int(match.group("value"))
 
+    def visibility(body: str) -> str:
+        match = re.search(
+            r"<visible>\s*(?:&(?P<entity>true|false);|(?P<number>[01]))\s*</visible>",
+            body,
+        )
+        if match is None:
+            if "<visible>" in body:
+                raise ValueError("Fallout 3 appearance tile visibility is unsupported")
+            return "inherited"
+        value = match.group("entity") or match.group("number")
+        return "visible" if value in {"true", "1"} else "hidden"
+
     observed = {
         "panelX": dimension(text, "x"),
         "panelY": dimension(text, "y"),
@@ -1465,6 +1477,8 @@ def _appearance_ui_contract(
     name_text = name_member.data.decode("cp1252")
     name_menu_name = str(definition["nameMenuName"])
     name_panel_name = str(definition["namePanelName"])
+    name_prompt_tile = str(definition["namePromptTile"])
+    name_prompt_entity = str(definition["namePromptEntity"])
     if f'<menu name="{name_menu_name}">' not in name_text:
         raise ValueError("Fallout 3 name menu identity differs")
     name_panel = re.search(
@@ -1474,6 +1488,20 @@ def _appearance_ui_contract(
     )
     if name_panel is None:
         raise ValueError("Fallout 3 name menu panel is absent")
+    prompt = re.search(
+        rf'<text\s+name="{re.escape(name_prompt_tile)}">(?P<body>.*?)</text>',
+        name_text,
+        re.DOTALL,
+    )
+    prompt_entity = None if prompt is None else re.search(
+        r"<string>\s*&(?P<entity>[^;]+);\s*</string>",
+        prompt.group("body"),
+    )
+    if (
+        prompt_entity is None
+        or prompt_entity.group("entity") != name_prompt_entity
+    ):
+        raise ValueError("Fallout 3 name prompt source binding differs")
     name_observed = {
         "panelWidth": dimension(name_panel.group("body"), "width"),
         "panelHeight": dimension(name_panel.group("body"), "height"),
@@ -1492,6 +1520,7 @@ def _appearance_ui_contract(
         "documentSha256": member.sha256,
         "menuName": menu_name,
         "panelName": panel_name,
+        "panelVisibility": visibility(panel.group("body")),
         **observed,
         "backgroundTexture": _extract_profile_texture(
             texture_archive,
@@ -1505,7 +1534,14 @@ def _appearance_ui_contract(
             "documentSha256": name_member.sha256,
             "menuName": name_menu_name,
             "panelName": name_panel_name,
+            "panelVisibility": visibility(name_panel.group("body")),
             **name_observed,
+            "prompt": {
+                "tile": name_prompt_tile,
+                "stringEntity": name_prompt_entity,
+                "text": _display_entity(f"&{name_prompt_entity};"),
+                "sourceSha256": name_member.sha256,
+            },
             "backgroundTexture": _extract_profile_texture(
                 texture_archive,
                 texture_archive_sha256,

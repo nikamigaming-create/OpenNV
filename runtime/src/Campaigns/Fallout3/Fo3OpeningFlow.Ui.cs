@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -103,12 +104,9 @@ internal partial class Fo3OpeningFlow
     }
 
     private Control CreatorSurface(
-        float left,
-        float top,
-        float width,
-        float height,
+        OwnedGamebryoTileLayout layout,
         Fo3AppearanceAsset background,
-        string name)
+        Vector2 sourceCanvas)
     {
         if (_creatorLayer is null)
         {
@@ -118,15 +116,12 @@ internal partial class Fo3OpeningFlow
             _panel.Visible = false;
             _background.Visible = _vaultPreviewHost is null;
         }
-        var surface = new Control { Name = name };
-        surface.AnchorLeft = left;
-        surface.AnchorTop = top;
-        surface.AnchorRight = left + width;
-        surface.AnchorBottom = top + height;
+        var surface = new Control();
+        OwnedGamebryoTileRuntime.ApplyAnchored(surface, layout, sourceCanvas);
         _creatorLayer.AddChild(surface);
         var texture = new TextureRect
         {
-            Name = $"{name}_OwnedBackground",
+            Name = $"{layout.Tile}_OwnedBackground",
             Texture = ImageTexture.CreateFromImage(LoadAppearanceImage(background)),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale,

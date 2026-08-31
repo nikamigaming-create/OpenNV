@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Presentation.Ui;
 
 
 using OpenNV.Runtime.World.Cells;
@@ -287,22 +288,17 @@ internal partial class Fo3OpeningFlow
         ClearContent();
         var nameUi = _profile.Appearance.Ui.Name;
         var panel = CreatorSurface(
-            (Fo3OpeningFlowNumericContracts.Center -
-                nameUi.PanelWidth /
-                    (2.0f * Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels)),
-            (Fo3OpeningFlowNumericContracts.Center -
-                nameUi.PanelHeight /
-                    (2.0f * Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels)),
-            nameUi.PanelWidth /
-                (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
-            nameUi.PanelHeight /
-                (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels,
+            nameUi.Panel,
             nameUi.BackgroundTexture,
-            "FO3_TextEditMenu_TEM_MainRect");
+            new Vector2(
+                Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
+                Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels));
         var content = CreatorColumn(
             panel,
             (int)Fo3OpeningFlowNumericContracts.VaultPreviewMarginPixels);
-        content.AddChild(Label("ENTER NAME", Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var prompt = Label("", Fo3OpeningFlowNumericContracts.BodyFontPixels);
+        OwnedGamebryoTileRuntime.BindText(prompt, nameUi.Prompt);
+        content.AddChild(prompt);
         var name = new LineEdit
         {
             PlaceholderText = "Name",

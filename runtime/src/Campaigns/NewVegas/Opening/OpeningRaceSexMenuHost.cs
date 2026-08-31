@@ -64,10 +64,7 @@ internal sealed class OpeningRaceSexMenuHost
 
         var backgroundTexture = new TextureRect
         {
-            Name = source.Background.Tile,
             Texture = LoadTexture(source.Background.Texture),
-            Position = source.Background.Rect.Position,
-            Size = source.Background.Rect.Size,
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale,
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -75,6 +72,9 @@ internal sealed class OpeningRaceSexMenuHost
                 systemColor,
                 source.Background.Brightness),
         };
+        OwnedGamebryoTileRuntime.ApplyAbsolute(
+            backgroundTexture,
+            Layout(source.Background.Tile, source.Background.Rect));
         root.AddChild(backgroundTexture);
         _content = new Control
         {
@@ -104,12 +104,12 @@ internal sealed class OpeningRaceSexMenuHost
     {
         var result = new Control
         {
-            Name = _source.FaceGrab.Tile,
-            Position = _source.FaceGrab.Rect.Position,
-            Size = _source.FaceGrab.Rect.Size,
             ClipContents = true,
             MouseFilter = Control.MouseFilterEnum.Pass,
         };
+        OwnedGamebryoTileRuntime.ApplyAbsolute(
+            result,
+            Layout(_source.FaceGrab.Tile, _source.FaceGrab.Rect));
         _root.AddChild(result);
         return result;
     }
@@ -392,6 +392,11 @@ internal sealed class OpeningRaceSexMenuHost
             rightAligned ? source.X - boxSize.X : source.X,
             source.Y,
             boxSize);
+        OwnedGamebryoTileRuntime.ApplyAbsolute(
+            button,
+            Layout(
+                source.Tile,
+                new Rect2(button.Position, button.Size)));
         button.Text = "";
         var empty = new StyleBoxEmpty();
         button.AddThemeStyleboxOverride("normal", empty);
@@ -400,8 +405,15 @@ internal sealed class OpeningRaceSexMenuHost
         button.AddThemeStyleboxOverride("pressed", empty);
         button.AddThemeStyleboxOverride("focus", empty);
         var label = NewText(
-            source.Label,
+            "",
             source.Brightness);
+        OwnedGamebryoTileRuntime.BindText(
+            label,
+            new OwnedGamebryoTextBinding(
+                source.Tile,
+                source.StringEntity,
+                source.Label,
+                source.StringSourceDocuments.Select(document => document.Sha256).ToArray()));
         label.Position = new Vector2(
             source.HorizontalBuffer * OwnedUiTheme.CenteringFactor,
             (boxSize.Y - size.Y) / source.VerticalCenterDivisor +
@@ -410,6 +422,13 @@ internal sealed class OpeningRaceSexMenuHost
         button.AddChild(label);
         return button;
     }
+
+    private OwnedGamebryoTileLayout Layout(string tile, Rect2 rect) => new(
+        _source.Document,
+        _source.DocumentSha256,
+        tile,
+        rect,
+        OwnedGamebryoTileVisibility.Inherited);
 
     private TextureButton NewTextureButton(
         OpeningRaceSexScrollTarget source,
