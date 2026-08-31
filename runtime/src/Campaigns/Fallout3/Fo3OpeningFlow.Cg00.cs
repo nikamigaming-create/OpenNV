@@ -593,12 +593,12 @@ internal partial class Fo3OpeningFlow
                                     out var savedCg01Stage20) &&
                                 savedCg01Stage20.ValueKind == JsonValueKind.Object)
                             {
-                                cg01Stage20 = _profile.Cg01PostStage14Transition.Apply(
+                                var baselineStage20 = _profile.Cg01PostStage14Transition.Apply(
                                     cg01Stage14,
                                     _selectedSex.EngineSex);
-                                _profile.Cg01PostStage14Transition.ValidateSavedState(
+                                cg01Stage20 = _profile.Cg01PostStage14Transition.LoadSavedState(
                                     savedCg01Stage20,
-                                    cg01Stage20);
+                                    baselineStage20);
                             }
                         }
                     }

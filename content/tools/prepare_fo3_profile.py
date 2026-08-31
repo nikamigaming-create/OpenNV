@@ -69,6 +69,8 @@ ACTOR_REFERENCE_RECORD = "ACHR"
 PLACED_REFERENCE_RECORD = "REFR"
 ACTIVATOR_RECORD = "ACTI"
 DOOR_RECORD = "DOOR"
+ACTOR_VALUE_RECORD = "AVIF"
+NPC_RECORD = "NPC_"
 ACTOR_BASE_RECORD = "NPC_"
 STATIC_RECORD = "STAT"
 DIALOGUE_TOPIC_RECORD = "DIAL"
@@ -175,6 +177,17 @@ SET_OBJECTIVE_COMPLETED_PATTERN = re.compile(
     re.IGNORECASE,
 )
 SPECIAL_BOOK_MENU_PATTERN = re.compile(r"^ssbmp\s+(?P<points>\d+)$", re.IGNORECASE)
+GAMEBRYO_SPECIAL_MINIMUM_VALUE = 1
+GAMEBRYO_SPECIAL_MAXIMUM_VALUE = 10
+GAMEBRYO_SPECIAL_EDITOR_IDS = (
+    "AVStrength",
+    "AVPerception",
+    "AVEndurance",
+    "AVCharisma",
+    "AVIntelligence",
+    "AVAgility",
+    "AVLuck",
+)
 SET_NO_ACTIVATION_SOUND_PATTERN = re.compile(
     r"^SetNoActivationSound\s+(?P<sound>[A-Za-z_][A-Za-z0-9_]*)$",
     re.IGNORECASE,
@@ -1610,6 +1623,68 @@ def _appearance_ui_contract(
     }
 
 
+def _special_book_menu_tile_contract(member: object) -> dict[str, object]:
+    document = canonical_member_path("menus\\chargen\\specialbookmenu.xml")
+    root = parse_tile_document(member.data)
+    menus = [node for node in root.children if node.tag == "menu"]
+    if len(menus) != 1 or menus[0].name != "SPECIALBookMenu":
+        raise ValueError("Fallout 3 SPECIALBookMenu identity differs")
+    menu = menus[0]
+
+    def scalar(node: object, trait: str) -> str:
+        value = node.child(trait)
+        if value is None or value.children or not value.text:
+            raise ValueError(f"Fallout 3 SPECIALBookMenu trait is absent: {trait}")
+        return value.text
+
+    bindings = []
+    for action in ("xbuttonrt", "xbuttonlt", "xright", "xleft", "xup", "xdown", "xbuttonx"):
+        node = menu.child(action)
+        if node is None or len(node.children) != 1 or node.children[0].tag != "ref":
+            raise ValueError(f"Fallout 3 SPECIALBookMenu binding differs: {action}")
+        ref = node.children[0]
+        if set(ref.attributes) != {"src", "trait"} or ref.attributes["trait"] != "clicked":
+            raise ValueError(f"Fallout 3 SPECIALBookMenu binding target differs: {action}")
+        bindings.append({"action": action, "tile": ref.attributes["src"], "trait": "clicked"})
+
+    controls = []
+    for node in menu.children:
+        if node.tag not in {"hotrect", "image"}:
+            continue
+        if not node.name:
+            raise ValueError("Fallout 3 SPECIALBookMenu control identity is absent")
+        control = {
+            "kind": node.tag,
+            "tile": node.name,
+            "id": int(float(scalar(node, "id"))),
+            "width": float(scalar(node, "width")) if node.child("width") else None,
+            "height": float(scalar(node, "height")) if node.child("height") else None,
+            "x": float(scalar(node, "_x")) if node.child("_x") else None,
+            "y": float(scalar(node, "_y")) if node.child("_y") else None,
+            "visible": scalar(node, "visible") if node.child("visible") else None,
+            "target": scalar(node, "target") if node.child("target") else None,
+            "repeatHorizontal": scalar(node, "repeathorizontal") if node.child("repeathorizontal") else None,
+        }
+        controls.append(control)
+    targets = {str(row["tile"]) for row in controls}
+    if len(controls) != 8 or any(str(row["tile"]) not in targets for row in bindings):
+        raise ValueError("Fallout 3 SPECIALBookMenu control coverage differs")
+    return {
+        "schema": "opennv-owned-special-book-menu-tiles/v1",
+        "document": document,
+        "documentSha256": member.sha256,
+        "menuName": menu.name,
+        "classEntity": scalar(menu, "class"),
+        "stackingTypeEntity": scalar(menu, "stackingtype"),
+        "alpha": float(scalar(menu, "alpha")),
+        "locusEntity": scalar(menu, "locus"),
+        "menuFadeSeconds": float(scalar(menu, "menufade")),
+        "systemColorEntity": scalar(menu, "systemcolor"),
+        "bindings": bindings,
+        "controls": controls,
+    }
+
+
 def _appearance_inventory(
     master: Path,
     recipe: dict[str, object],
@@ -2904,6 +2979,16 @@ def _compile_cg01_post_stage14_transition(
 
     def compile_command(text: str, index: int) -> dict[str, object]:
         if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            if match.group("subject").casefold() == (_editor_id(quest) or "").casefold():
+                value_text = match.group("value")
+                return {
+                    "index": index,
+                    "kind": "setQuestVariable",
+                    "questFormId": _form_id(quest.form_id),
+                    "questEditorId": _editor_id(quest),
+                    "variable": match.group("variable"),
+                    "value": float(value_text) if "." in value_text else int(value_text),
+                }
             subject = reference(match.group("subject"))
             value_text = match.group("value")
             return {
@@ -2964,6 +3049,17 @@ def _compile_cg01_post_stage14_transition(
             return {
                 "index": index,
                 "kind": "setObjectiveDisplayed",
+                "questFormId": _form_id(quest.form_id),
+                "questEditorId": _editor_id(quest),
+                "objectiveIndex": int(match.group("index")),
+                "value": int(match.group("value")),
+            }
+        if match := SET_OBJECTIVE_COMPLETED_PATTERN.fullmatch(text):
+            if match.group("quest").casefold() != (_editor_id(quest) or "").casefold():
+                raise ValueError("Fallout 3 CG01 completed-objective quest differs")
+            return {
+                "index": index,
+                "kind": "setObjectiveCompleted",
                 "questFormId": _form_id(quest.form_id),
                 "questEditorId": _editor_id(quest),
                 "objectiveIndex": int(match.group("index")),
@@ -3089,8 +3185,47 @@ def _compile_cg01_post_stage14_transition(
         result_contracts.append({
             "stage": stage,
             "sourceSha256": hashlib.sha256(stage_sources[stage][0].encode("cp1252")).hexdigest(),
-            "commands": commands,
+            "commands": [compile_command(text, index) for index, text in enumerate(commands)],
         })
+    player_rows = [
+        record for record in by_editor.get("player", []) if record.signature == NPC_RECORD
+    ]
+    if len(player_rows) != 1:
+        raise ValueError("Fallout 3 SPECIAL player base is absent")
+    player_data = _single_subrecord(player_rows[0], "DATA")
+    if len(player_data) != 11:
+        raise ValueError("Fallout 3 SPECIAL player DATA layout differs")
+    initial_values = list(player_data[-len(GAMEBRYO_SPECIAL_EDITOR_IDS):])
+    actor_values = []
+    for index, editor_id in enumerate(GAMEBRYO_SPECIAL_EDITOR_IDS):
+        matches = [
+            record for record in by_editor.get(editor_id.casefold(), [])
+            if record.signature == ACTOR_VALUE_RECORD
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"Fallout 3 SPECIAL actor value is absent: {editor_id}")
+        actor_value = matches[0]
+        names = _text_values(actor_value, "FULL")
+        descriptions = _text_values(actor_value, "DESC")
+        if len(names) != 1 or len(descriptions) != 1:
+            raise ValueError(f"Fallout 3 SPECIAL actor value text differs: {editor_id}")
+        actor_values.append({
+            "index": index,
+            "formId": _form_id(actor_value.form_id),
+            "editorId": editor_id,
+            "recordSha256": hashlib.sha256(actor_value.data).hexdigest(),
+            "label": names[0],
+            "description": descriptions[0],
+            "initialValue": initial_values[index],
+            "minimumValue": GAMEBRYO_SPECIAL_MINIMUM_VALUE,
+            "maximumValue": GAMEBRYO_SPECIAL_MAXIMUM_VALUE,
+        })
+    menu_points = int(menu_rows[0].group("points"))
+    if not all(
+        GAMEBRYO_SPECIAL_MINIMUM_VALUE <= value <= GAMEBRYO_SPECIAL_MAXIMUM_VALUE
+        for value in initial_values
+    ) or sum(initial_values) > menu_points:
+        raise ValueError("Fallout 3 SPECIAL initial allocation differs")
     stage20_interaction = {
         "schema": "opennv-fo3-cg01-stage-20-special-runtime/v1",
         "status": "source-backed-physical-interaction-runtime-ready",
@@ -3105,11 +3240,14 @@ def _compile_cg01_post_stage14_transition(
         "specialBook": {
             **interaction_identity(book_ref, book_base, book_script),
             "targetStage": interaction_stages[2],
-            "menuPoints": int(menu_rows[0].group("points")),
+            "menuPoints": menu_points,
             "menuDocument": "menus\\chargen\\specialbookmenu.xml",
+            "playerBaseFormId": _form_id(player_rows[0].form_id),
+            "playerBaseRecordSha256": hashlib.sha256(player_rows[0].data).hexdigest(),
+            "actorValues": actor_values,
         },
         "stageResults": result_contracts,
-        "nextBoundary": {"applied": False, "blocker": "fo3-cg01-special-book-menu-runtime-not-implemented"},
+        "nextBoundary": {"applied": False, "blocker": "fo3-cg01-stage-50-timer-runtime-not-implemented"},
     }
 
     return {
@@ -5811,6 +5949,8 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     PLACED_REFERENCE_RECORD,
                     ACTIVATOR_RECORD,
                     DOOR_RECORD,
+                    ACTOR_VALUE_RECORD,
+                    NPC_RECORD,
                     ACTOR_BASE_RECORD,
                     STATIC_RECORD,
                 }
@@ -6235,6 +6375,21 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
 
     opening = dict(recipe["opening"])
     quests, character_selection = _quest_inventory(master, opening)
+    special_path = canonical_member_path("menus\\chargen\\specialbookmenu.xml")
+    special_member = menu_member_payloads.get(special_path)
+    if special_member is None:
+        raise ValueError("Fallout 3 SPECIALBookMenu XML was not admitted")
+    cg01 = dict(character_selection["cg01Stage0Transition"])
+    post_stage5 = dict(cg01["postStage5Transition"])
+    post_stage14 = dict(post_stage5["postStage14Transition"])
+    stage20_interaction = dict(post_stage14["stage20Interaction"])
+    special_book = dict(stage20_interaction["specialBook"])
+    special_book["tiles"] = _special_book_menu_tile_contract(special_member)
+    stage20_interaction["specialBook"] = special_book
+    post_stage14["stage20Interaction"] = stage20_interaction
+    post_stage5["postStage14Transition"] = post_stage14
+    cg01["postStage5Transition"] = post_stage5
+    character_selection["cg01Stage0Transition"] = cg01
     meshes_role = "meshes"
     meshes_archive_path = archive_by_role[meshes_role]
     section4_transition = dict(character_selection["section4Transition"])

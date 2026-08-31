@@ -528,6 +528,7 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
     private Fo3Cg01Stage20Interaction? _interaction;
     private Action? _gateActivated;
     private Action? _bookActivated;
+    private Func<InputEvent, bool>? _menuInputHandler;
 
     internal bool MovementEnabled { get; private set; } = true;
     internal int AcceptancePhysicsFrames { get; private set; }
@@ -637,6 +638,11 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
+        if (_menuInputHandler?.Invoke(inputEvent) == true)
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (!MovementEnabled)
             return;
         if (_interaction is not null && inputEvent.IsActionPressed(_contract.ActivateAction))
@@ -684,6 +690,16 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         _interaction = interaction;
         _gateActivated = gateActivated;
         _bookActivated = bookActivated;
+    }
+
+    internal void SetMenuInputHandler(Func<InputEvent, bool>? handler)
+    {
+        if ((handler is null) == (_menuInputHandler is null))
+            throw new InvalidOperationException(
+                "Fallout 3 toddler menu-input lifecycle differs.");
+        _menuInputHandler = handler;
+        MovementEnabled = handler is null;
+        Velocity = Vector3.Zero;
     }
 
     public override void _PhysicsProcess(double delta)

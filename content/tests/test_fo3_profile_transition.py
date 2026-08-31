@@ -30,6 +30,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _compile_stage100_transition,
     _fallout_default_fov_projection,
     _float_contract,
+    _special_book_menu_tile_contract,
     load_recipe,
 )
 
@@ -166,6 +167,40 @@ def selection() -> dict[str, object]:
 
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
+    def test_compiles_owned_special_book_menu_tile_hierarchy(self) -> None:
+        bindings = "".join(
+            f'<{action}><ref src="{tile}" trait="clicked"/></{action}>'
+            for action, tile in (
+                ("xbuttonrt", "next_page"), ("xbuttonlt", "previous_page"),
+                ("xright", "increase_value"), ("xleft", "decrease_value"),
+                ("xup", "index_up"), ("xdown", "index_down"),
+                ("xbuttonx", "exit_menu"),
+            )
+        )
+        controls = "".join(
+            f'<{kind} name="{name}"><id>{index}</id><width>1</width><height>1</height>'
+            f'<_x>100</_x><_y>200</_y><visible>&true;</visible><target>&true;</target>'
+            f'</{kind}>'
+            for index, (kind, name) in enumerate((
+                ("hotrect", "index_up"), ("hotrect", "index_down"),
+                ("hotrect", "clickable"), ("image", "next_page"),
+                ("image", "previous_page"), ("image", "increase_value"),
+                ("image", "decrease_value"), ("image", "exit_menu"),
+            ))
+        )
+        payload = (
+            '<menu name="SPECIALBookMenu"><class>&SPECIALBookMenu;</class>'
+            '<stackingtype>&no_click_past;</stackingtype><alpha>0</alpha>'
+            '<locus>&true;</locus><menufade>0.25</menufade>'
+            '<systemcolor>&hudmain;</systemcolor>' + bindings + controls + '</menu>'
+        ).encode("cp1252")
+        contract = _special_book_menu_tile_contract(
+            SimpleNamespace(data=payload, sha256="a" * 64))
+        self.assertEqual("SPECIALBookMenu", contract["menuName"])
+        self.assertEqual(8, len(contract["controls"]))
+        self.assertEqual(7, len(contract["bindings"]))
+        self.assertEqual("increase_value", contract["bindings"][2]["tile"])
+
     def test_capture_creates_fresh_output_directory_before_png_write(self) -> None:
         source = read_csharp_source_module(FO3_OPENING_FLOW)
         capture = source[source.index("private async Task<Fo3AppearanceProofCapture>") :]
@@ -994,6 +1029,24 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "begin OnActivate\nif getStage CG01 >= 30 && getStageDone CG01 50 == 0\nsetstage CG01 50\nssbmp 40\nendif\nend",
             0x00061215, "BabyBookActivator", 0x0002ECC0, full="You're SPECIAL!",
             model=b"Clutter\\BabyBookSmall01.NIF\0")
+        special_names = (
+            (0x3E8, "AVStrength", "Strength"),
+            (0x3E9, "AVPerception", "Perception"),
+            (0x3EA, "AVEndurance", "Endurance"),
+            (0x3EB, "AVCharisma", "Charisma"),
+            (0x3EC, "AVIntelligence", "Intelligence"),
+            (0x3ED, "AVAgility", "Agility"),
+            (0x3EE, "AVLuck", "Luck"),
+        )
+        special_values = tuple(Record(
+            "AVIF", form_id, 0,
+            subrecord("EDID", editor.encode() + b"\0") +
+            subrecord("FULL", label.encode() + b"\0") +
+            subrecord("DESC", (label + " description").encode() + b"\0"), ())
+            for form_id, editor, label in special_names)
+        player_base = Record(
+            "NPC_", 0x00000007, 0,
+            subrecord("EDID", b"Player\0") + subrecord("DATA", b"\x64\0\0\0" + bytes([5] * 7)), ())
         tutorial = Record(
             "QUST",
             0x00059C85,
@@ -1233,6 +1286,8 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             *playpen_records,
             *exit_records,
             *book_records,
+            *special_values,
+            player_base,
             cg01_dad_script,
             cg01_dad_base,
             voice,
@@ -1426,7 +1481,20 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("0002ecc0", interaction["specialBook"]["referenceFormId"])
         self.assertEqual(40, interaction["specialBook"]["menuPoints"])
         self.assertEqual(
-            "fo3-cg01-special-book-menu-runtime-not-implemented",
+            [5] * 7,
+            [row["initialValue"] for row in interaction["specialBook"]["actorValues"]],
+        )
+        self.assertEqual(
+            [
+                ["setObjectiveCompleted", "setObjectiveDisplayed", "setOpenState", "lock"],
+                ["setObjectiveCompleted", "setObjectiveDisplayed", "setOpenState", "lock"],
+                ["setObjectiveCompleted", "setQuestVariable", "setQuestVariable"],
+            ],
+            [[command["kind"] for command in row["commands"]]
+             for row in interaction["stageResults"]],
+        )
+        self.assertEqual(
+            "fo3-cg01-stage-50-timer-runtime-not-implemented",
             interaction["nextBoundary"]["blocker"],
         )
         self.assertEqual(

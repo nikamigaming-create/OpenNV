@@ -62,6 +62,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Fo3Cg01Stage0State? _activeCg01MovieState;
     private Fo3Cg01RuntimeContext? _activeCg01MovieContext;
     private Fo3Cg01ToddlerWorldRuntime? _cg01ToddlerWorld;
+    private Fo3SpecialBookMenuRuntime? _cg01SpecialBookMenu;
     private string? _cg01ProofMode;
     private string? _cg01ProofReportPath;
     private string? _cg01ProofCapturePath;

@@ -85,6 +85,32 @@ internal sealed record OwnedGamebryoRaceSexControls(
     OwnedGamebryoRaceSexTemplate List,
     OwnedGamebryoRaceSexTemplate Slider);
 
+internal sealed record OwnedGamebryoSpecialBookControl(
+    string Kind,
+    string Tile,
+    int Id,
+    float? Width,
+    float? Height,
+    float? X,
+    float? Y,
+    string? VisibilityEntity,
+    string? TargetEntity,
+    string? RepeatHorizontalEntity);
+
+internal sealed record OwnedGamebryoSpecialBookBinding(
+    string Action,
+    string Tile,
+    string Trait);
+
+internal sealed record OwnedGamebryoSpecialBookMenu(
+    string Document,
+    string DocumentSha256,
+    string MenuName,
+    float Alpha,
+    float MenuFadeSeconds,
+    IReadOnlyList<OwnedGamebryoSpecialBookBinding> Bindings,
+    IReadOnlyList<OwnedGamebryoSpecialBookControl> Controls);
+
 internal sealed record OwnedGamebryoDialogueMenu(
     Vector2 CanvasSize,
     string Document,
@@ -127,6 +153,8 @@ internal sealed record OwnedGamebryoDialogueFonts(
 internal static class OwnedGamebryoTileRuntime
 {
     private const int Sha256HexCharacters = 64;
+    private const int SpecialBookBindingCount = 7;
+    private const int SpecialBookControlCount = 8;
 
     internal static void ApplyAbsolute(Control control, OwnedGamebryoTileLayout source)
     {
@@ -166,6 +194,64 @@ internal static class OwnedGamebryoTileRuntime
         Validate(source);
         button.Name = source.Tile;
         button.Text = source.Text;
+    }
+
+    internal static OwnedGamebryoSpecialBookMenu ParseSpecialBookMenu(JsonElement source)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-owned-special-book-menu-tiles/v1" ||
+            source.GetProperty("menuName").GetString() != "SPECIALBookMenu")
+            throw new InvalidOperationException(
+                "Owned SPECIALBookMenu tile contract identity differs.");
+        var bindings = source.GetProperty("bindings").EnumerateArray().Select(row =>
+            new OwnedGamebryoSpecialBookBinding(
+                RequiredText(row, "action"), RequiredText(row, "tile"),
+                RequiredText(row, "trait"))).ToArray();
+        var controls = source.GetProperty("controls").EnumerateArray().Select(row =>
+            new OwnedGamebryoSpecialBookControl(
+                RequiredText(row, "kind"), RequiredText(row, "tile"),
+                row.GetProperty("id").GetInt32(), NullableSingle(row, "width"),
+                NullableSingle(row, "height"), NullableSingle(row, "x"),
+                NullableSingle(row, "y"), NullableText(row, "visible"),
+                NullableText(row, "target"), NullableText(row, "repeatHorizontal")))
+            .ToArray();
+        if (bindings.Length != SpecialBookBindingCount ||
+            controls.Length != SpecialBookControlCount ||
+            bindings.Any(binding => binding.Trait != "clicked" ||
+                controls.Count(control => control.Tile == binding.Tile) != 1) ||
+            controls.Select(control => control.Tile).Distinct(StringComparer.Ordinal).Count() !=
+                controls.Length ||
+            controls.Select(control => control.Id).Distinct().Count() != controls.Length)
+            throw new InvalidOperationException(
+                "Owned SPECIALBookMenu tile control coverage differs.");
+        var document = RequiredText(source, "document");
+        var sha256 = RequiredText(source, "documentSha256");
+        ValidateSha256(sha256);
+        return new OwnedGamebryoSpecialBookMenu(
+            document, sha256, "SPECIALBookMenu", source.GetProperty("alpha").GetSingle(),
+            source.GetProperty("menuFadeSeconds").GetSingle(), bindings, controls);
+    }
+
+    private static string RequiredText(JsonElement source, string name) =>
+        source.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(value.GetString())
+            ? value.GetString()!
+            : throw new InvalidOperationException($"Owned Gamebryo tile field is absent: {name}");
+
+    private static string? NullableText(JsonElement source, string name) =>
+        source.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static float? NullableSingle(JsonElement source, string name) =>
+        source.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+            ? value.GetSingle()
+            : null;
+
+    private static void ValidateSha256(string value)
+    {
+        if (value.Length != Sha256HexCharacters || value.Any(character => !Uri.IsHexDigit(character)))
+            throw new InvalidOperationException("Owned Gamebryo UI document hash is invalid.");
     }
 
     internal static int RequireSourceSelection<T>(

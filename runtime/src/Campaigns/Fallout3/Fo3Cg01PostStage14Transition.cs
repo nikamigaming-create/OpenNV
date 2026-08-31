@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -34,7 +36,23 @@ internal sealed record Fo3Cg01Stage20State(
     int DisplayedObjectiveIndex,
     int AccountedCommandCount,
     int AppliedCommandCount,
+    IReadOnlyList<int> SpecialValues,
+    bool SpecialBookAccepted,
     Fo3Cg01Stage12Boundary NextBoundary);
+
+internal sealed record Fo3SpecialActorValue(
+    int Index,
+    string FormId,
+    string EditorId,
+    string Label,
+    string Description,
+    int InitialValue,
+    int MinimumValue,
+    int MaximumValue);
+
+internal sealed record Fo3SpecialStageResult(
+    int Stage,
+    IReadOnlyList<SourceGamebryoStageCommand<string>> Commands);
 
 internal sealed record Fo3Cg01Stage20Interaction(
     int SourceStage,
@@ -49,6 +67,9 @@ internal sealed record Fo3Cg01Stage20Interaction(
     string BookDisplayName,
     int MenuPoints,
     string MenuDocument,
+    IReadOnlyList<Fo3SpecialActorValue> ActorValues,
+    OwnedGamebryoSpecialBookMenu Tiles,
+    IReadOnlyList<Fo3SpecialStageResult> StageResults,
     string NextBoundaryBlocker)
 {
     internal const string ExpectedSchema = "opennv-fo3-cg01-stage-20-special-runtime/v1";
@@ -81,6 +102,49 @@ internal sealed record Fo3Cg01Stage20Interaction(
         var boundary = RequiredObject(source, "nextBoundary");
         if (RequiredBoolean(boundary, "applied"))
             throw new InvalidOperationException("Fallout 3 CG01 stage-50 boundary differs.");
+        var actorValues = RequiredArray(book, "actorValues").EnumerateArray()
+            .Select((row, index) =>
+            {
+                if (RequiredInteger(row, "index") != index)
+                    throw new InvalidOperationException("Fallout 3 SPECIAL actor-value order differs.");
+                _ = RequiredString(row, "recordSha256");
+                return new Fo3SpecialActorValue(index, RequiredFormId(row, "formId"),
+                    RequiredString(row, "editorId"), RequiredString(row, "label"),
+                    RequiredString(row, "description"), RequiredInteger(row, "initialValue"),
+                    RequiredInteger(row, "minimumValue"), RequiredInteger(row, "maximumValue"));
+            }).ToArray();
+        if (actorValues.Length == 0 || actorValues.Any(value =>
+                value.MinimumValue > value.InitialValue ||
+                value.InitialValue > value.MaximumValue) ||
+            actorValues.Sum(value => value.InitialValue) > RequiredInteger(book, "menuPoints"))
+            throw new InvalidOperationException("Fallout 3 SPECIAL actor-value allocation differs.");
+        var stageResults = RequiredArray(source, "stageResults").EnumerateArray()
+            .Select(row =>
+            {
+                var stage = RequiredInteger(row, "stage");
+                var commands = RequiredArray(row, "commands").EnumerateArray()
+                    .Select((command, index) =>
+                    {
+                        if (RequiredInteger(command, "index") != index)
+                            throw new InvalidOperationException(
+                                "Fallout 3 SPECIAL stage-command order differs.");
+                        var kind = RequiredString(command, "kind") switch
+                        {
+                            "setObjectiveCompleted" or "setObjectiveDisplayed" =>
+                                GamebryoStageCommandKind.Objective,
+                            "setOpenState" or "lock" => GamebryoStageCommandKind.ActorIntent,
+                            "setQuestVariable" => GamebryoStageCommandKind.SetQuestVariable,
+                            _ => throw new InvalidOperationException(
+                                "Fallout 3 SPECIAL stage-command kind differs."),
+                        };
+                        return new SourceGamebryoStageCommand<string>(
+                            index, kind, RequiredString(command, "kind"));
+                    }).ToArray();
+                return new Fo3SpecialStageResult(stage, commands);
+            }).ToArray();
+        if (!stageResults.Select(value => value.Stage).SequenceEqual(
+                new[] { gateStage, exitStage, bookStage }))
+            throw new InvalidOperationException("Fallout 3 SPECIAL stage-result coverage differs.");
         return new Fo3Cg01Stage20Interaction(
             expectedSourceStage, gateStage, exitStage, bookStage,
             RequiredFormId(gate, "referenceFormId"), RequiredFormId(exit, "referenceFormId"),
@@ -90,7 +154,22 @@ internal sealed record Fo3Cg01Stage20Interaction(
             new Fo3Cg01Vector3(dimensions[0], dimensions[1], dimensions[2]),
             RequiredFormId(book, "referenceFormId"), RequiredString(book, "displayName"),
             RequiredInteger(book, "menuPoints"), RequiredString(book, "menuDocument"),
+            actorValues,
+            OwnedGamebryoTileRuntime.ParseSpecialBookMenu(RequiredObject(book, "tiles")),
+            stageResults,
             RequiredString(boundary, "blocker"));
+    }
+
+    internal int ExecuteStageResult(int stage)
+    {
+        var result = StageResults.Single(value => value.Stage == stage);
+        var applied = 0;
+        GamebryoStageCommandExecutor.ExecuteAll(result.Commands, command =>
+        {
+            applied++;
+            return applied == command.SourceIndex + 1;
+        });
+        return applied;
     }
 
     private static double RequiredDouble(JsonElement parent, string name) =>
@@ -277,6 +356,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
             ObjectiveIndex,
             AccountedCommandCount,
             AccountedCommandCount,
+            Stage20Interaction.ActorValues.Select(value => value.InitialValue).ToArray(),
+            false,
             new Fo3Cg01Stage12Boundary(false, NextBoundaryBlocker));
     }
 
@@ -303,35 +384,81 @@ internal sealed record Fo3Cg01PostStage14Transition(
         displayedObjectiveIndex = state.DisplayedObjectiveIndex,
         accountedCommandCount = state.AccountedCommandCount,
         appliedCommandCount = state.AppliedCommandCount,
+        specialValues = state.SpecialValues,
+        specialBookAccepted = state.SpecialBookAccepted,
         nextBoundary = new { applied = false, blocker = state.NextBoundary.Blocker },
     };
 
-    internal void ValidateSavedState(JsonElement source, Fo3Cg01Stage20State expected)
+    internal Fo3Cg01Stage20State LoadSavedState(
+        JsonElement source,
+        Fo3Cg01Stage20State baseline)
     {
         var active = RequiredObject(source, "activeQuest");
         var gate = RequiredObject(source, "playpenGate");
         var door = RequiredObject(source, "playroomDoor");
         var boundary = RequiredObject(source, "nextBoundary");
+        var stage = RequiredInteger(active, "stage");
+        var values = RequiredArray(source, "specialValues").EnumerateArray()
+            .Select(value => value.GetInt32()).ToArray();
+        var accepted = RequiredBoolean(source, "specialBookAccepted");
+        if (!new[]
+            {
+                TargetStage,
+                Stage20Interaction.GateStage,
+                Stage20Interaction.ExitStage,
+                Stage20Interaction.BookStage,
+            }.Contains(stage) ||
+            values.Length != Stage20Interaction.ActorValues.Count ||
+            values.Select((value, index) =>
+                value < Stage20Interaction.ActorValues[index].MinimumValue ||
+                value > Stage20Interaction.ActorValues[index].MaximumValue).Any(value => value) ||
+            values.Sum() > Stage20Interaction.MenuPoints ||
+            accepted && (stage != Stage20Interaction.BookStage ||
+                values.Sum() != Stage20Interaction.MenuPoints))
+            throw new InvalidOperationException(
+                "Saved Fallout 3 SPECIAL allocation differs.");
+        var gateOpen = RequiredBoolean(gate, "open");
+        var expectedGateOpen = stage != TargetStage;
+        var objective = RequiredInteger(source, "displayedObjectiveIndex");
+        var expectedObjective = stage switch
+        {
+            var value when value == TargetStage => TargetStage,
+            var value when value == Stage20Interaction.GateStage => Stage20Interaction.GateStage,
+            _ => Stage20Interaction.ExitStage,
+        };
+        var interactionCommandCount = Stage20Interaction.StageResults
+            .Where(result => result.Stage <= stage)
+            .Sum(result => result.Commands.Count);
+        var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
         if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
-            RequiredInteger(active, "stage") != expected.ActiveStage ||
-            RequiredFormId(active, "formId") != expected.ActiveQuestFormId ||
+            RequiredFormId(active, "formId") != baseline.ActiveQuestFormId ||
             !RequiredArray(source, "appliedInfoFormIds").EnumerateArray()
-                .Select(value => value.GetString()).SequenceEqual(expected.AppliedInfoFormIds) ||
+                .Select(value => value.GetString()).SequenceEqual(baseline.AppliedInfoFormIds) ||
             !RequiredArray(source, "appliedPackageFormIds").EnumerateArray()
-                .Select(value => value.GetString()).SequenceEqual(expected.AppliedPackageFormIds) ||
-            RequiredFormId(gate, "referenceFormId") != expected.PlaypenGateReferenceFormId ||
-            RequiredBoolean(gate, "open") != expected.PlaypenGateOpen ||
-            RequiredFormId(door, "referenceFormId") != expected.PlayroomDoorReferenceFormId ||
-            RequiredBoolean(door, "open") != expected.PlayroomDoorOpen ||
-            RequiredInteger(door, "lockLevel") != expected.PlayroomDoorLockLevel ||
+                .Select(value => value.GetString()).SequenceEqual(baseline.AppliedPackageFormIds) ||
+            RequiredFormId(gate, "referenceFormId") != baseline.PlaypenGateReferenceFormId ||
+            gateOpen != expectedGateOpen ||
+            RequiredFormId(door, "referenceFormId") != baseline.PlayroomDoorReferenceFormId ||
+            RequiredBoolean(door, "open") != baseline.PlayroomDoorOpen ||
+            RequiredInteger(door, "lockLevel") != baseline.PlayroomDoorLockLevel ||
             !RequiredBoolean(source, "playerMovementEnabled") ||
-            RequiredInteger(source, "displayedObjectiveIndex") != expected.DisplayedObjectiveIndex ||
-            RequiredInteger(source, "accountedCommandCount") != expected.AccountedCommandCount ||
-            RequiredInteger(source, "appliedCommandCount") != expected.AppliedCommandCount ||
+            objective != expectedObjective ||
+            RequiredInteger(source, "accountedCommandCount") != expectedCommandCount ||
+            RequiredInteger(source, "appliedCommandCount") != expectedCommandCount ||
             RequiredBoolean(boundary, "applied") ||
-            RequiredString(boundary, "blocker") != expected.NextBoundary.Blocker)
+            RequiredString(boundary, "blocker") != baseline.NextBoundary.Blocker)
             throw new InvalidOperationException(
                 "Saved Fallout 3 CG01 stage-20 state differs.");
+        return baseline with
+        {
+            ActiveStage = stage,
+            PlaypenGateOpen = gateOpen,
+            DisplayedObjectiveIndex = objective,
+            AccountedCommandCount = expectedCommandCount,
+            AppliedCommandCount = expectedCommandCount,
+            SpecialValues = values,
+            SpecialBookAccepted = accepted,
+        };
     }
 
     private static Fo3Cg01PostStage14Package LoadPackage(

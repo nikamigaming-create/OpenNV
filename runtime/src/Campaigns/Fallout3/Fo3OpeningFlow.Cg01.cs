@@ -700,7 +700,9 @@ internal partial class Fo3OpeningFlow
                 if (restoredStage14 is null)
                     throw new InvalidOperationException(
                         "Fallout 3 CG01 stage-20 restore has no stage-14 state.");
-                RestoreCg01Stage20World(stage5, restoredStage20);
+                RestoreCg01Stage20World(
+                    context, stage5, stage10, restoredStage12, restored,
+                    restoredStage14, restoredStage20);
             }
             else if (restoredStage14 is not null)
                 BeginCg01PostStage14Transition(
@@ -1305,7 +1307,12 @@ internal partial class Fo3OpeningFlow
     }
 
     private void RestoreCg01Stage20World(
+        Fo3Cg01RuntimeContext context,
         Fo3Cg01Stage0State stage5,
+        Fo3Cg01Stage10State stage10,
+        Fo3Cg01Stage12State stage12,
+        Fo3Cg01ToddlerWorldState toddlerWorld,
+        Fo3Cg01Stage14State stage14,
         Fo3Cg01Stage20State state)
     {
         ApplyCg01DadPackage(_profile.Cg01PostStage14Transition.LeaveRoomPackage, stage5);
@@ -1323,6 +1330,8 @@ internal partial class Fo3OpeningFlow
             _activeCg01DadLip is not null)
             throw new InvalidOperationException(
                 "Fallout 3 CG01 stage-20 restored runtime differs.");
+        InstallCg01Stage20Interactions(
+            context, stage5, stage10, stage12, toddlerWorld, stage14, state);
         GD.Print(
             $"OPENNV_FO3_CG01_STAGE20_COLD_RESTORE quest={state.ActiveQuestFormId} " +
             $"stage={state.ActiveStage} packages={string.Join(',', state.AppliedPackageFormIds)} " +
@@ -1350,12 +1359,15 @@ internal partial class Fo3OpeningFlow
         {
             if (current.ActiveStage != interaction.SourceStage)
                 return;
+            var applied = interaction.ExecuteStageResult(interaction.GateStage);
             SetCg01WorldReferenceOpen(interaction.GateReferenceFormId, true);
             current = current with
             {
                 ActiveStage = interaction.GateStage,
                 PlaypenGateOpen = true,
-                DisplayedObjectiveIndex = interaction.GateStage
+                DisplayedObjectiveIndex = interaction.GateStage,
+                AccountedCommandCount = current.AccountedCommandCount + applied,
+                AppliedCommandCount = current.AppliedCommandCount + applied
             };
             Persist();
         }
@@ -1363,21 +1375,62 @@ internal partial class Fo3OpeningFlow
         {
             if (current.ActiveStage != interaction.GateStage)
                 return;
+            var applied = interaction.ExecuteStageResult(interaction.ExitStage);
             current = current with
             {
                 ActiveStage = interaction.ExitStage,
-                DisplayedObjectiveIndex = interaction.ExitStage
+                DisplayedObjectiveIndex = interaction.ExitStage,
+                AccountedCommandCount = current.AccountedCommandCount + applied,
+                AppliedCommandCount = current.AppliedCommandCount + applied
             };
             Persist();
         }
         void Book()
         {
-            if (current.ActiveStage < interaction.GateStage || current.ActiveStage >= interaction.BookStage)
+            if (current.ActiveStage != interaction.ExitStage &&
+                    current.ActiveStage != interaction.BookStage ||
+                current.ActiveStage == interaction.BookStage && current.SpecialBookAccepted)
                 return;
-            current = current with { ActiveStage = interaction.BookStage };
-            Cg01WorldReference(interaction.BookReferenceFormId)
-                .SetMeta("opennv_special_book_menu_points", interaction.MenuPoints);
-            Persist();
+            if (current.ActiveStage < interaction.BookStage)
+            {
+                var applied = interaction.ExecuteStageResult(interaction.BookStage);
+                current = current with
+                {
+                    ActiveStage = interaction.BookStage,
+                    AccountedCommandCount = current.AccountedCommandCount + applied,
+                    AppliedCommandCount = current.AppliedCommandCount + applied
+                };
+                Cg01WorldReference(interaction.BookReferenceFormId)
+                    .SetMeta("opennv_special_book_menu_points", interaction.MenuPoints);
+                Persist();
+            }
+            if (_cg01SpecialBookMenu is not null)
+                throw new InvalidOperationException(
+                    "Fallout 3 SPECIAL book menu is already active.");
+            _cg01SpecialBookMenu = new Fo3SpecialBookMenuRuntime(
+                interaction,
+                (_cg01ToddlerWorld ?? throw new InvalidOperationException(
+                    "Fallout 3 SPECIAL input owner is absent.")).Contract,
+                current.SpecialValues,
+                values =>
+                {
+                    current = current with { SpecialValues = values };
+                    Persist();
+                },
+                values =>
+                {
+                    current = current with
+                    {
+                        SpecialValues = values,
+                        SpecialBookAccepted = true
+                    };
+                    _cg01SpecialBookMenu = null;
+                    Persist();
+                });
+            _cg01SpecialBookMenu.Open(
+                Cg01WorldReference(interaction.BookReferenceFormId),
+                (_cg01ToddlerWorld ?? throw new InvalidOperationException(
+                    "Fallout 3 SPECIAL player is absent.")).Player);
         }
         (_cg01ToddlerWorld ?? throw new InvalidOperationException(
             "Fallout 3 CG01 interaction world is absent."))
@@ -1385,6 +1438,8 @@ internal partial class Fo3OpeningFlow
                 _vaultBirthCoverage ?? throw new InvalidOperationException(
                     "Fallout 3 CG01 interaction scene is absent."),
                 interaction, Gate, Exit, Book);
+        if (current.ActiveStage == interaction.BookStage && !current.SpecialBookAccepted)
+            Book();
     }
 
     private Node3D Cg01WorldReference(string formId) =>
