@@ -3,6 +3,10 @@ using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Presentation.Actors;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+
+using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.World.Actors;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 /// <summary>

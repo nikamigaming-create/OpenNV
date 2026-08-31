@@ -3,6 +3,12 @@ using Godot;
 
 using OpenNV.Runtime.SceneGraph;
 
+
+using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal sealed record Fo3Vault101BirthSceneCoverage(

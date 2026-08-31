@@ -3,9 +3,22 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Diagnostics.Performance;
-using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.World.Portals;
 using OpenNV.Runtime.Campaigns.TTW;
+
+
+using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Diagnostics.Capture;
+using OpenNV.Runtime.InputSystem;
+using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Interactions;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
+using OpenNV.Runtime.Campaigns.Fallout3;
+using OpenNV.Runtime.Compatibility.Jam;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime;
 
@@ -85,6 +98,7 @@ public partial class RuntimeCoordinator : Node3D
             RenderingServer.SetDefaultClearColor(_configuration.Renderer.BackgroundColorRgba.Color());
             Engine.PhysicsTicksPerSecond = _configuration.Simulation.PhysicsTicksPerSecond;
             _options = ParseOptions(OS.GetCmdlineUserArgs());
+            var launch = RuntimeLaunchRequest.Create(_options);
             var performanceReportPath = _options.TryGetValue(
                 "perf-report",
                 out var configuredPerformanceReportPath)
@@ -97,115 +111,9 @@ public partial class RuntimeCoordinator : Node3D
                 _configuration.Sha256,
                 performanceReportPath);
             AddChild(performanceObserver);
-            if (_options.ContainsKey("fo1-hex-scene"))
-            {
-                var presentation = _options.TryGetValue("fo1-start-presentation", out var selectedPresentation)
-                    ? selectedPresentation.Replace('-', ' ').ToUpperInvariant()
-                    : "V13ENT";
-                _loadingScreen?.SetTitle($"FALLOUT 1  //  {presentation}");
-            }
-            if (_options.ContainsKey("fo1-campaign-transport"))
-                _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING ALL MAPS");
-            if (_options.ContainsKey("fo1-campaign-presentation"))
-                _loadingScreen?.SetTitle("FALLOUT 1  //  VERIFYING CAMPAIGN ART");
-            if (_options.ContainsKey("fo2-temple-cache"))
-                _loadingScreen?.SetTitle("FALLOUT 2  //  VERIFYING TEMPLE MAP 126");
-            if (_options.ContainsKey("fo3-profile"))
-                _loadingScreen?.SetTitle("FALLOUT 3  //  CG00 CHARACTER SELECTION");
-            if (_options.ContainsKey("ttw-fo3-opening-profile"))
-                _loadingScreen?.SetTitle("TTW  //  VERIFYING CG00 TO CG01 STATE");
-            if (_options.ContainsKey("xr-simulator-proof") &&
-                (!_options.ContainsKey("vr") || !_options.ContainsKey("report")))
-                throw new ArgumentException("--xr-simulator-proof requires --vr and --report.");
-            if (_options.ContainsKey("flat-controls-proof") &&
-                (_options.ContainsKey("vr") || !_options.ContainsKey("report") ||
-                    !_options.ContainsKey("save-path")))
-                throw new ArgumentException(
-                    "--flat-controls-proof requires --report and --save-path and cannot use --vr.");
-            if (_options.ContainsKey("pipboy-screenshot") &&
-                !_options.ContainsKey("flat-controls-proof") &&
-                !_options.ContainsKey("pipboy-visual-proof"))
-                throw new ArgumentException(
-                    "--pipboy-screenshot requires --flat-controls-proof or --pipboy-visual-proof.");
-            if (_options.ContainsKey("pipboy-visual-proof") &&
-                (_options.ContainsKey("vr") || !_options.ContainsKey("report") ||
-                    !_options.ContainsKey("save-path") ||
-                    !_options.ContainsKey("pipboy-screenshot")))
-                throw new ArgumentException(
-                    "--pipboy-visual-proof requires --report, --save-path, and " +
-                    "--pipboy-screenshot and cannot use --vr.");
-            var startsFromMenuNewGame =
-                _options.TryGetValue("opening-menu-proof", out var configuredMenuProof) &&
-                configuredMenuProof == "new-game";
-            if (_options.TryGetValue("opening-proof", out var openingProofMode))
-            {
-                if (!_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
-                    !_options.ContainsKey("opening-proof-name") ||
-                    !_options.ContainsKey("opening-proof-timeout-seconds") ||
-                    openingProofMode is not "checkpoint" and not "creator" and not "resume" ||
-                    (openingProofMode is "checkpoint" or "creator") !=
-                        (_options.ContainsKey("new-game") || startsFromMenuNewGame))
-                    throw new ArgumentException(
-                        "--opening-proof requires mode checkpoint or creator with --new-game or the owned " +
-                        "menu new-game route, or mode resume without either, plus --report, " +
-                        "--save-path, --opening-proof-name, and --opening-proof-timeout-seconds.");
-            }
-            if (_options.ContainsKey("opening-character-video") &&
-                (!_options.ContainsKey("new-game") || !_options.ContainsKey("save-path")))
-                throw new ArgumentException(
-                    "--opening-character-video requires --new-game and an isolated --save-path.");
-            if (_options.TryGetValue("opening-menu-proof", out var openingMenuAction))
-            {
-                var sharedMenuProofInvalid =
-                    !_options.ContainsKey("report") ||
-                    !_options.ContainsKey("save-path") ||
-                    _options.ContainsKey("cell-scene") ||
-                    _options.ContainsKey("portal-proof");
-                var validContinue = openingMenuAction == "continue" &&
-                    !_options.ContainsKey("new-game") &&
-                    !_options.ContainsKey("opening-proof");
-                var validNewGame = openingMenuAction == "new-game" &&
-                    !_options.ContainsKey("new-game") &&
-                    _options.TryGetValue("opening-proof", out var menuOpeningProof) &&
-                    menuOpeningProof == "checkpoint";
-                if (sharedMenuProofInvalid || (!validContinue && !validNewGame))
-                    throw new ArgumentException(
-                        "--opening-menu-proof accepts continue for a completed prepared save, " +
-                        "or new-game with --opening-proof checkpoint; both require --report and " +
-                        "--save-path and cannot combine with a direct CELL or portal proof.");
-            }
-            if (_options.TryGetValue("route-travel-proof", out var routeTravelMode) &&
-                (routeTravelMode is not "first-run" and not "cold-reload" ||
-                    !_options.TryGetValue("opening-menu-proof", out var routeMenuAction) ||
-                    routeMenuAction != "continue" ||
-                    !_options.ContainsKey("report") ||
-                    !_options.ContainsKey("save-path") ||
-                    _options.ContainsKey("vr")))
-                throw new ArgumentException(
-                    "--route-travel-proof first-run|cold-reload requires the owned " +
-                    "--opening-menu-proof continue path, --report, and --save-path, and cannot use --vr.");
-            if (_options.ContainsKey("vr") && _options.ContainsKey("xr-rig-proof"))
-                throw new ArgumentException("Use --vr for a live OpenXR session or --xr-rig-proof for the headless layout gate, not both.");
-            if ((_options.ContainsKey("classic-diorama") || _options.ContainsKey("classic-diorama-rig-proof")) &&
-                (_options.ContainsKey("vr") || _options.ContainsKey("vr-layout-proof") ||
-                    _options.ContainsKey("xr-rig-proof")))
-                throw new ArgumentException("Classic Diorama and OpenXR require separate presentation adapters.");
-            if (_options.ContainsKey("fo1-hex-scene") && _options.ContainsKey("vr") &&
-                !_options.ContainsKey("fo1-xr-simulator-preview"))
-                throw new ArgumentException("The Fallout 1 tactical hex slice has not passed its OpenXR gate.");
-            if (_options.ContainsKey("fo1-xr-simulator-preview") &&
-                (!_options.ContainsKey("fo1-hex-scene") || !_options.ContainsKey("vr")))
-                throw new ArgumentException(
-                    "The Fallout 1 OpenXR simulator preview requires --fo1-hex-scene and --vr.");
-            if (_options.ContainsKey("fo1-xr-controls-proof") &&
-                (!_options.ContainsKey("fo1-xr-simulator-preview") ||
-                    !_options.ContainsKey("report") || !_options.ContainsKey("save-path")))
-                throw new ArgumentException(
-                    "The Fallout 1 OpenXR controls proof requires the simulator preview, report, and isolated save path.");
-            if (_options.ContainsKey("fo1-destination-presentation") &&
-                (!_options.ContainsKey("fo1-hex-scene") || !_options.ContainsKey("fo1-exit-grid-transition")))
-                throw new ArgumentException(
-                    "--fo1-destination-presentation requires --fo1-hex-scene and --fo1-exit-grid-transition.");
+            if (launch.LoadingTitle is not null)
+                _loadingScreen?.SetTitle(launch.LoadingTitle);
+            RuntimeLaunchValidator.ValidatePreflight(_options);
             if (_options.ContainsKey("vr"))
                 EnableOpenXr();
             if (_options.ContainsKey("xr-rig-proof"))
@@ -218,345 +126,10 @@ public partial class RuntimeCoordinator : Node3D
                 CompleteClassicDioramaRigProof(_options);
                 return;
             }
-            var hasDataRoot = _options.TryGetValue("data-root", out var dataRoot);
-            var hasModel = _options.ContainsKey("model");
-            var hasCellScene = _options.ContainsKey("cell-scene");
-            var hasStaticCellCompile = _options.ContainsKey("static-cell-compile");
-            var hasActorModel = _options.ContainsKey("actor-model");
-            var hasActorReviewScene = _options.ContainsKey("actor-review-scene");
-            var hasFo1HexScene = _options.ContainsKey("fo1-hex-scene");
-            var hasFo1Campaign = _options.ContainsKey("fo1-campaign-transport");
-            var hasFo1CampaignPresentation = _options.ContainsKey("fo1-campaign-presentation");
-            var hasFo2TemplePresentation = _options.ContainsKey("fo2-temple-cache");
-            var hasFo3Profile = _options.ContainsKey("fo3-profile");
-            var hasTtwFo3OpeningProfile = _options.ContainsKey("ttw-fo3-opening-profile");
-            var hasPreparedCache = _options.ContainsKey("reuse-cache");
-            if (_options.ContainsKey("fo3-birth-presentation") && !hasFo3Profile)
-                throw new ArgumentException(
-                    "--fo3-birth-presentation requires --fo3-profile.");
-            if (_options.ContainsKey("fo3-character-video") &&
-                (!hasFo3Profile || !_options.ContainsKey("fo3-birth-presentation") ||
-                    !_options.ContainsKey("save-path") ||
-                    _options.ContainsKey("fo3-appearance-proof") ||
-                    _options.ContainsKey("fo3-cg01-proof")))
-                throw new ArgumentException(
-                    "--fo3-character-video requires --fo3-profile, --fo3-birth-presentation, " +
-                    "and an isolated --save-path; it cannot combine with acceptance modes.");
-            if (_options.ContainsKey("fo3-retail-cg00-stage10-contract") && !hasFo3Profile)
-                throw new ArgumentException(
-                    "--fo3-retail-cg00-stage10-contract requires --fo3-profile.");
-            if (_options.ContainsKey("fo3-ttw-cg00-stage10-presentation-contract") &&
-                !hasFo3Profile)
-                throw new ArgumentException(
-                    "--fo3-ttw-cg00-stage10-presentation-contract requires --fo3-profile.");
-            if (_options.ContainsKey("fo3-ttw-cg00-stage10-actor-set") &&
-                !hasFo3Profile)
-                throw new ArgumentException(
-                    "--fo3-ttw-cg00-stage10-actor-set requires --fo3-profile.");
-            if (hasTtwFo3OpeningProfile &&
-                (!_options.TryGetValue("ttw-fo3-opening-proof", out var ttwProofMode) ||
-                 ttwProofMode is not "apply" and not "restore" ||
-                 !_options.ContainsKey("save-path") ||
-                 !_options.ContainsKey("report")))
-                throw new ArgumentException(
-                    "--ttw-fo3-opening-profile requires --ttw-fo3-opening-proof " +
-                    "apply|restore, --save-path, and --report.");
-            if (_options.ContainsKey("ttw-fo3-opening-proof") && !hasTtwFo3OpeningProfile)
-                throw new ArgumentException(
-                    "--ttw-fo3-opening-proof requires --ttw-fo3-opening-profile.");
-            var hasJamProfile = _options.ContainsKey("jam-profile");
-            if (hasJamProfile && !hasDataRoot && !hasCellScene && !hasPreparedCache)
-                throw new ArgumentException(
-                    "--jam-profile requires --data-root, --cell-scene, or --reuse-cache.");
-            if (hasJamProfile &&
-                (_options.ContainsKey("vr") || _options.ContainsKey("vr-layout-proof") ||
-                    _options.ContainsKey("classic-diorama")))
-                throw new ArgumentException(
-                    "The bounded JVS sprint transport currently supports desktop first-person movement only.");
-            if ((_options.ContainsKey("fo1-map") || _options.ContainsKey("fo1-elevation")) &&
-                !hasFo1CampaignPresentation)
-                throw new ArgumentException(
-                    "--fo1-map and --fo1-elevation require --fo1-campaign-presentation.");
-            if (_options.ContainsKey("fo1-campaign-build-proof") &&
-                (!hasFo1CampaignPresentation || !_options.ContainsKey("report")))
-                throw new ArgumentException(
-                    "--fo1-campaign-build-proof requires --fo1-campaign-presentation and --report.");
-            if (_options.ContainsKey("fo1-campaign-build-proof") &&
-                _options.ContainsKey("capture-root"))
-                throw new ArgumentException(
-                    "Fallout campaign headless build proof and visual capture are separate gates.");
-            if (hasFo2TemplePresentation &&
-                (!_options.ContainsKey("fo2-temple-build-proof") ||
-                    !_options.ContainsKey("report")))
-                throw new ArgumentException(
-                    "--fo2-temple-cache requires --fo2-temple-build-proof and --report.");
-            if (_options.ContainsKey("fo2-temple-build-proof") && !hasFo2TemplePresentation)
-                throw new ArgumentException(
-                    "--fo2-temple-build-proof requires --fo2-temple-cache.");
-            if (_options.ContainsKey("fo2-temple-transitions") && !hasFo2TemplePresentation)
-                throw new ArgumentException(
-                    "--fo2-temple-transitions requires --fo2-temple-cache.");
-            if ((hasDataRoot ? 1 : 0) + (hasModel ? 1 : 0) + (hasCellScene ? 1 : 0) +
-                    (hasStaticCellCompile ? 1 : 0) + (hasActorModel ? 1 : 0) +
-                    (hasActorReviewScene ? 1 : 0) + (hasFo1HexScene ? 1 : 0) +
-                    (hasFo1Campaign ? 1 : 0) + (hasFo1CampaignPresentation ? 1 : 0) +
-                    (hasFo2TemplePresentation ? 1 : 0) + (hasFo3Profile ? 1 : 0) +
-                    (hasTtwFo3OpeningProfile ? 1 : 0) > 1)
-                throw new ArgumentException(
-                    "Use only one of --data-root, --model/--sidecar, --cell-scene, " +
-                    "--static-cell-compile, --actor-model/--actor-sidecar, " +
-                    "--actor-review-scene, --fo1-hex-scene, --fo1-campaign-transport, or " +
-                    "--fo1-campaign-presentation, --fo2-temple-cache, --fo3-profile, or " +
-                    "--ttw-fo3-opening-profile.");
-            var startsFo1NewGame = _options.ContainsKey("fo1-new-game") ||
-                _options.ContainsKey("fo1-new-game-demo") ||
-                _options.ContainsKey("fo1-character-video");
-            if (startsFo1NewGame && !hasFo1HexScene)
-                throw new ArgumentException("Fallout new game requires --fo1-hex-scene.");
-            if (startsFo1NewGame &&
-                (!_options.ContainsKey("fo1-character-start") ||
-                    !_options.ContainsKey("fo1-character-start-sha256")))
-                throw new ArgumentException(
-                    "Fallout new game requires --fo1-character-start and --fo1-character-start-sha256.");
-            if (_options.TryGetValue("fo1-start-presentation", out var fo1StartPresentation) &&
-                (!startsFo1NewGame ||
-                    fo1StartPresentation is not "hex-tactical" and not "first-person"))
-                throw new ArgumentException(
-                    "--fo1-start-presentation requires Fallout new game and must be hex-tactical or first-person.");
-            if (_options.ContainsKey("fo1-new-game-demo") && !_options.ContainsKey("demo-report"))
-                throw new ArgumentException("Fallout new-game demo requires --demo-report.");
-            if (_options.TryGetValue("fo1-character-video", out var fo1VideoCharacter) &&
-                fo1VideoCharacter is not "max-stone" and not "natalia" and not "albert" and
-                    not "custom-male" and not "custom-female")
-                throw new ArgumentException(
-                    "--fo1-character-video requires max-stone, natalia, albert, custom-male, or custom-female.");
-            if (_options.ContainsKey("fo1-native-first-beat-proof") &&
-                !_options.ContainsKey("fo1-new-game-demo"))
-                throw new ArgumentException(
-                    "--fo1-native-first-beat-proof requires --fo1-new-game-demo.");
-            if (_options.ContainsKey("fo1-native-first-beat-proof") &&
-                _options.ContainsKey("capture-root"))
-                throw new ArgumentException(
-                    "--fo1-native-first-beat-proof is JSON-only and cannot use --capture-root.");
-            if (_options.ContainsKey("fo1-continue-menu-proof") &&
-                (!_options.ContainsKey("fo1-new-game") ||
-                    _options.ContainsKey("fo1-new-game-demo") ||
-                    !_options.ContainsKey("report") ||
-                    !_options.ContainsKey("save-path") ||
-                    !_options.ContainsKey("fo1-exit-grid-transition") ||
-                    !_options.ContainsKey("fo1-destination-presentation") ||
-                    _options.ContainsKey("capture-root")))
-                throw new ArgumentException(
-                    "--fo1-continue-menu-proof requires the normal FO1 new-game menu route plus explicit " +
-                    "save, exit-grid, destination presentation, and report paths; it cannot capture media.");
-            if (_options.ContainsKey("fo1-continue-flare-use-proof") &&
-                (!_options.ContainsKey("fo1-continue-menu-proof") ||
-                    !_options.ContainsKey("fo1-destination-inventory-interaction") ||
-                    !_options.ContainsKey("fo1-destination-flare-use")))
-                throw new ArgumentException(
-                    "--fo1-continue-flare-use-proof requires the normal Continue proof and explicit inventory/flare descriptors.");
-            if (_options.ContainsKey("fo1-continue-generic-door-proof") &&
-                (!_options.ContainsKey("fo1-continue-menu-proof") ||
-                    !_options.ContainsKey("fo1-continue-flare-use-proof") ||
-                    !_options.ContainsKey("fo1-destination-generic-door")))
-                throw new ArgumentException(
-                    "--fo1-continue-generic-door-proof requires normal Continue, restored flare, and an explicit generic-door descriptor.");
-            if (_options.ContainsKey("fo1-destination-cold-restore-proof") &&
-                (!hasFo1HexScene || !_options.ContainsKey("report") ||
-                    !_options.ContainsKey("save-path") ||
-                    !_options.ContainsKey("fo1-exit-grid-transition") ||
-                    !_options.ContainsKey("fo1-destination-presentation") ||
-                    _options.ContainsKey("fo1-new-game") ||
-                    _options.ContainsKey("fo1-new-game-demo") ||
-                    _options.ContainsKey("capture-root")))
-                throw new ArgumentException(
-                    "--fo1-destination-cold-restore-proof requires the explicit FO1 scene, save, " +
-                    "exit-grid, destination presentation, and report paths; it cannot start a new game or capture media.");
-            if ((_options.ContainsKey("fo1-destination-inventory-interaction-proof") ||
-                    _options.ContainsKey("fo1-destination-inventory-interaction-cold-restore-proof")) &&
-                (!hasFo1HexScene || !_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
-                    !_options.ContainsKey("fo1-exit-grid-transition") || !_options.ContainsKey("fo1-destination-presentation") ||
-                    !_options.ContainsKey("fo1-destination-inventory-interaction") ||
-                    _options.ContainsKey("fo1-new-game") || _options.ContainsKey("fo1-new-game-demo") ||
-                    _options.ContainsKey("capture-root")))
-                throw new ArgumentException(
-                    "Fallout destination inventory proof requires explicit scene, save, transition, presentation, and interaction paths; it cannot capture media.");
-            if ((_options.ContainsKey("fo1-destination-medic-look-proof") ||
-                    _options.ContainsKey("fo1-destination-medic-look-cold-restore-proof")) &&
-                (!hasFo1HexScene || !_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
-                    !_options.ContainsKey("fo1-exit-grid-transition") || !_options.ContainsKey("fo1-destination-presentation") ||
-                    !_options.ContainsKey("fo1-destination-generic-door") ||
-                    !_options.ContainsKey("fo1-destination-medic-look") ||
-                    _options.ContainsKey("fo1-new-game") || _options.ContainsKey("fo1-new-game-demo") ||
-                    _options.ContainsKey("capture-root")))
-                throw new ArgumentException(
-                    "Fallout destination Medic proof requires explicit scene, saved generic-door, transition, presentation, and Medic descriptors; it cannot capture media.");
-            if ((_options.ContainsKey("fo1-destination-return-exit-proof") ||
-                    _options.ContainsKey("fo1-destination-return-exit-cold-restore-proof")) &&
-                (!hasFo1HexScene || !_options.ContainsKey("report") || !_options.ContainsKey("save-path") ||
-                    !_options.ContainsKey("fo1-exit-grid-transition") || !_options.ContainsKey("fo1-destination-presentation") ||
-                    !_options.ContainsKey("fo1-destination-generic-door") || !_options.ContainsKey("fo1-destination-medic-look") ||
-                    !_options.ContainsKey("fo1-destination-return-exit-grid") || _options.ContainsKey("capture-root")))
-                throw new ArgumentException("Fallout destination return exit proof requires explicit source-bound predecessor descriptors and cannot capture media.");
-            if (_options.ContainsKey("fo1-new-game-demo") && _options.ContainsKey("fo1-gameplay-demo"))
-                throw new ArgumentException("Use only one Fallout gameplay demo mode.");
-            if (!hasModel && _options.ContainsKey("sidecar"))
-                throw new ArgumentException("--sidecar requires --model.");
-            if (_options.ContainsKey("material-manifest") != _options.ContainsKey("material-manifest-sha256"))
-                throw new ArgumentException("Use --material-manifest together with --material-manifest-sha256.");
-            if (!hasModel && _options.ContainsKey("material-manifest"))
-                throw new ArgumentException("--material-manifest requires --model.");
-            if (!hasActorModel && _options.ContainsKey("actor-sidecar"))
-                throw new ArgumentException("--actor-sidecar requires --actor-model.");
-            if (hasActorReviewScene && !_options.ContainsKey("capture-root"))
-                throw new ArgumentException("--actor-review-scene requires --capture-root.");
-            if (_options.ContainsKey("actor-review-background-cell") && !hasActorReviewScene)
-                throw new ArgumentException(
-                    "--actor-review-background-cell requires --actor-review-scene.");
-            if (_options.ContainsKey("actor-scene") && _options.ContainsKey("actor-scenes"))
-                throw new ArgumentException("Use --actor-scene or --actor-scenes, not both.");
-            if (_options.ContainsKey("retail-state-contract") &&
-                (!hasCellScene || !_options.ContainsKey("capture-root") ||
-                    (!_options.ContainsKey("actor-scene") && !_options.ContainsKey("actor-scenes"))))
-                throw new ArgumentException(
-                    "--retail-state-contract requires --cell-scene, actor scenes, and --capture-root.");
-            if (_options.ContainsKey("gallery-shot") &&
-                (!hasCellScene || !_options.ContainsKey("capture-root") ||
-                    !_options.ContainsKey("actor-scene") ||
-                    _options.ContainsKey("actor-scenes") ||
-                    _options.ContainsKey("retail-state-contract")))
-                throw new ArgumentException(
-                    "--gallery-shot requires --cell-scene, one --actor-scene, and " +
-                    "--capture-root, and cannot use retail-state-contract.");
+            RuntimeLaunchValidator.ValidateContent(_options, launch);
 
-            if (hasDataRoot)
-            {
-                var prepared = LegalAssetPreparer.Prepare(dataRoot!, _options, _configuration);
-                LoadPrepared(prepared, _options);
-                DismissLoadingScreen();
+            if (TryDispatchLaunch(launch))
                 return;
-            }
-
-            if (hasModel)
-            {
-                SetLoadingStatus(
-                    _options.ContainsKey("classic-diorama")
-                        ? "LOADING CLASSIC DIORAMA MODEL"
-                        : "VERIFYING HASHED 3D MODEL");
-                LoadModel(RequireOption(_options, "model"), RequireOption(_options, "sidecar"), _options);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (hasCellScene)
-            {
-                SetLoadingStatus(
-                    _options.ContainsKey("classic-diorama")
-                        ? "LOADING CLASSIC DIORAMA CELL"
-                        : "LOADING VERIFIED 3D CELL");
-                LoadCellScene(RequireOption(_options, "cell-scene"), _options);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (hasStaticCellCompile)
-            {
-                LoadStaticCellCompile(
-                    RequireOption(_options, "static-cell-compile"),
-                    _options);
-                return;
-            }
-
-            if (hasActorModel)
-            {
-                SetLoadingStatus("VERIFYING HASHED ACTOR MODEL");
-                LoadActorModel(
-                    RequireOption(_options, "actor-model"),
-                    RequireOption(_options, "actor-sidecar"),
-                    _options);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (hasFo1HexScene)
-            {
-                SetLoadingStatus("LOADING V13ENT 200×200 HEX MAP");
-                LoadFo1HexScene(RequireOption(_options, "fo1-hex-scene"), _options);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (hasFo1Campaign)
-            {
-                SetLoadingStatus("HASHING AND VALIDATING 96 MAP CONTRACTS");
-                LoadFo1CampaignTransport(
-                    RequireOption(_options, "fo1-campaign-transport"),
-                    _options);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (hasFo1CampaignPresentation)
-            {
-                SetLoadingStatus("VERIFYING ALL MAPS AND SOURCE ARTIFACTS");
-                LoadFo1CampaignPresentation(
-                    RequireOption(_options, "fo1-campaign-presentation"),
-                    _options);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (hasFo2TemplePresentation)
-            {
-                SetLoadingStatus("VERIFYING MAP 126 SOURCE AND PNG HASHES");
-                LoadFo2TemplePresentation(
-                    RequireOption(_options, "fo2-temple-cache"),
-                    RequireOption(_options, "report"),
-                    _options.TryGetValue("fo2-temple-transitions", out var transitions)
-                        ? transitions
-                        : null);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (hasActorReviewScene)
-            {
-                LoadActorReviewScene(
-                    RequireOption(_options, "actor-review-scene"),
-                    _options);
-                return;
-            }
-
-            if (hasFo3Profile)
-            {
-                SetLoadingStatus("VERIFYING OWNED FALLOUT 3 CG00 CONTRACT");
-                LoadFo3Opening(RequireOption(_options, "fo3-profile"), _options);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (hasTtwFo3OpeningProfile)
-            {
-                SetLoadingStatus("APPLYING ISOLATED TTW CG00 TO CG01 STATE");
-                LoadTtwFo3Opening(
-                    RequireOption(_options, "ttw-fo3-opening-profile"),
-                    _options);
-                DismissLoadingScreen();
-                return;
-            }
-
-            if (_options.ContainsKey("reuse-cache"))
-            {
-                if (!LegalAssetPreparer.TryRestore(
-                        _options,
-                        _configuration,
-                        out var restored,
-                        out var restoreError))
-                    throw new InvalidOperationException(restoreError ?? "No prepared legal-asset cache exists.");
-                LoadPrepared(restored, _options);
-                DismissLoadingScreen();
-                return;
-            }
 
             if (_options.TryGetValue("report", out var startupReportPath))
                 WriteStartupReport(startupReportPath);

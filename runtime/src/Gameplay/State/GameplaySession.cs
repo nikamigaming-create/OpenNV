@@ -2,7 +2,12 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Gameplay.Containers;
+
+
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Interactions;
 
 namespace OpenNV.Runtime.Gameplay.State;
 

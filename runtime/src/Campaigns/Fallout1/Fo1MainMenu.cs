@@ -1,5 +1,6 @@
 using Godot;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1MainMenuNumericContracts

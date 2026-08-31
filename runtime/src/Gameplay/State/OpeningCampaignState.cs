@@ -2,6 +2,9 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+
 namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record OpeningCampaignState(

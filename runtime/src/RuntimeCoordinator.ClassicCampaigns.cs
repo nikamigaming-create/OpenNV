@@ -3,9 +3,11 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Diagnostics.Performance;
-using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.World.Portals;
 using OpenNV.Runtime.Campaigns.TTW;
+using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime;
 

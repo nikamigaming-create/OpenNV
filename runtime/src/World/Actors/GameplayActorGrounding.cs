@@ -1,6 +1,10 @@
 using Godot;
 using OpenNV.Runtime.World.Streaming;
 
+
+using OpenNV.Runtime.Diagnostics.Capture;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.World.Actors;
 
 internal sealed partial class GameplayActorGrounding : Node3D

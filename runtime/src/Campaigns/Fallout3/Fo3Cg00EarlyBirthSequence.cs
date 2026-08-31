@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal sealed record Fo3Cg00AuthoredTransform(

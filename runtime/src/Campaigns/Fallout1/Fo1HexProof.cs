@@ -3,6 +3,7 @@ using Godot;
 
 using OpenNV.Runtime.SceneGraph;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1HexProofNumericContracts

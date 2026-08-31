@@ -4,6 +4,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal partial class Fo1TacticalSession

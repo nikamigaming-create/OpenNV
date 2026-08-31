@@ -3,6 +3,9 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
+
+using OpenNV.Runtime.Presentation.Rendering;
+
 namespace OpenNV.Runtime.Campaigns.Classic;
 
 internal sealed partial class ClassicPremadeAnalogProofHost : Node

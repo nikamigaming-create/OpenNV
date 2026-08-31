@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2FloorProjection(

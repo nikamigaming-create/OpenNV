@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1CampaignPresentationContractNumericContracts

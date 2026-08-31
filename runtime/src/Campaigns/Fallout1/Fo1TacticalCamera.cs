@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Godot;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal readonly record struct Fo1CameraSaveState(

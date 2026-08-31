@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.Fallout1;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 

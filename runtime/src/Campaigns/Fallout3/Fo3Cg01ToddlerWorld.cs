@@ -1,6 +1,9 @@
 using System.Text.Json;
 using Godot;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal sealed record Fo3Cg01ToddlerWorldContract(

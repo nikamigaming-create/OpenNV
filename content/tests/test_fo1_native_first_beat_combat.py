@@ -119,7 +119,9 @@ class Fo1NativeFirstBeatCombatContractTest(unittest.TestCase):
 
     def test_headless_proof_is_explicit_and_never_requests_capture_output(self) -> None:
         flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
-        runtime = read_csharp_source_module((ROOT / "runtime" / "src" / "RuntimeCoordinator.cs"))
+        launch_validation = (
+            ROOT / "runtime" / "src" / "RuntimeLaunchValidator.cs"
+        ).read_text(encoding="utf-8")
         wrapper = (ROOT / "scripts" / "Test-OpenNVFallout1NativeFirstBeat.ps1").read_text(
             encoding="utf-8"
         )
@@ -129,8 +131,8 @@ class Fo1NativeFirstBeatCombatContractTest(unittest.TestCase):
         self.assertIn("rendered = false", flow)
         self.assertIn("if (!nativeFirstBeatHeadlessProof)\n            await WaitFrames(host, 1);", flow)
         self.assertIn("if (!nativeFirstBeatHeadlessProof)\n                await WaitFrames(host, 2);", flow)
-        self.assertIn("--fo1-native-first-beat-proof", runtime)
-        self.assertIn("cannot use --capture-root", runtime)
+        self.assertIn("--fo1-native-first-beat-proof", launch_validation)
+        self.assertIn("cannot use --capture-root", launch_validation)
         self.assertIn("--fo1-native-first-beat-proof", wrapper)
         self.assertIn("--headless", wrapper)
         self.assertNotIn("capture-root", wrapper)

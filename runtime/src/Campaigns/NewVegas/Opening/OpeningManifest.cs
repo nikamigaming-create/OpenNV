@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+
 using OpenNV.Runtime.Presentation.Ui;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;

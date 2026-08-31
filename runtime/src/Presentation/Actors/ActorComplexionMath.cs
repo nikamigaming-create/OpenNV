@@ -1,5 +1,6 @@
 using Godot;
 
+
 namespace OpenNV.Runtime.Presentation.Actors;
 
 internal static class ActorComplexionMath

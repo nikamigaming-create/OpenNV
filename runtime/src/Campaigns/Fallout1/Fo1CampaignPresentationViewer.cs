@@ -1,5 +1,6 @@
 using Godot;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal partial class Fo1CampaignPresentationViewer : Node3D

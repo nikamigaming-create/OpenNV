@@ -5,6 +5,10 @@ using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+
+using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal partial class Fo3OpeningFlow : CanvasLayer

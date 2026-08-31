@@ -1,6 +1,10 @@
 using System.Text.Json;
 using Godot;
 
+
+using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.Gameplay.State;
+
 namespace OpenNV.Runtime.World.Interactions;
 
 internal static class WorldInteractionProof

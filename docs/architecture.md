@@ -1,5 +1,8 @@
 # OpenNV architecture and code accountability
 
+The C# source tree has a maintained reading order and dependency guide in
+[`runtime-source-guide.md`](runtime-source-guide.md).
+
 Status: **launcher-routed bounded Fallout 1 V13ENT, Fallout 2 character-to-ARVILLAG
 or Temple-combat Hex branches, and New Vegas opening/Goodsprings slices, plus a non-playable Fallout 3
 CG00 development frontend; no full campaign**.
@@ -526,9 +529,8 @@ retail data, or promotion verdict.
 | `test_fo1_runtime_profile.py` | Runtime-profile hash/path/schema/provenance and adaptation-leak regressions | Visual approval or campaign-promotion claims |
 | `test_fo1_campaign_inventory.py` | Synthetic all-map inventory, identity, and monotonic-promotion regressions | Retail bytes or campaign-readiness claims |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
-| `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
+| `runtime/src/Content/LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
 | `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, versioned flow contract, hash-bound HUD/STATS/ITEMS/DATA XML/font/texture contract, source menu-background bindings, IDLE→ANIO ownership, source furniture/animation joins, and the admitted FaceGen control surface | Runtime state, Gamebryo tile execution, Godot UI, non-default identity rendering, or unowned smoke behavior |
-| `runtime/src/Campaigns/NewVegas/Opening/NewVegasOpeningNamespaceBridge.cs` | Compile-time namespace join between the New Vegas opening campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs` and `OpeningFlowContracts.cs` | Flow/configuration parsing and fail-closed validation, separated from the immutable runtime contract records | Command execution or save state |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningManifest.cs` | Owned New Vegas front-end manifest identity, hash verification, and typed menu/media/gameplay-UI contract loading | Menu rendering, command execution, or source compilation |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningQuestRuntime*.cs` | Data-driven opening composition split into stage/package execution, character creation, dialogue, state/checkpoint handling, and visual capture modules; it retains the owned TextEdit/RaceSex presentation and exact selection-keyed default male/female full-body FaceGen controls | ESM/BSA parsing, non-default race/hair/eye live 3D previews, general gameplay-player construction, source smoke transport, or guessed content identities |
@@ -539,44 +541,42 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/NewVegas/Opening/RetailOpening.cs` | Owned New Vegas main-menu and intro playback/skip presentation | Manifest parsing, gameplay progression, or campaign state |
 | `runtime/src/Presentation/Ui/GameplayUiModel.cs` | One read-only inventory/equipment/quest/objective/map/control snapshot over authoritative gameplay state | Mutation, save ownership, or presentation layout |
 | `runtime/src/Presentation/Ui/GameplayUiController.cs` | Flat HUD/Pip-Boy and status-only shared-state wrist presentation; New Vegas flat UI consumes the owned XML/font/texture/rectangle role contract, STATS explicitly reuses the verified ITEMS frame, and the wrist consumes its owned font/theme path | Campaign state, asset extraction, native STATS rectangle evaluation, ITEMS/DATA wrist navigation, full Gamebryo tile execution, or retail-parity claims |
-| `VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
-| `CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
-| `CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal composition, activity-space ownership, active collision-layer selection, and proof queries | Binary parsing or portal gameplay decisions |
-| `RuntimeMaterialLoader.cs` | Hash-verified 2D/cubemap load and name-keyed retail material passes | DDS/BSA parsing |
-| `StaticCellCompileArtifact.cs` | Static compile schema/configuration/hash/path/count verification and immutable row load | Godot node construction |
-| `StaticCellCompileLoader.cs` | Verified relative artifact load, profile-typed static/point-light placement instantiation, CELL lighting, and authored collision | Record parsing, actors, gameplay, or parity claims |
-| `ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
-| `RetailFaceGenMaterial.cs` | Hash-verified runtime FaceGen sampler composition, encoded-color transfer, and opaque/depth-write enforcement | Record selection, texture extraction, actor placement, or lighting policy |
-| `CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
-| `RetailActorStateContract.cs` | Fail-closed retail shot-state parsing for ACHR transform, camera, idle phase, arm bones, and face/hair hashes | Process addresses, asset parsing, or rendering |
-| `EnvironmentCapture.cs` | Native cell/actor frames, application of validated retail shot state, normalized telemetry, hashes, and visual-quality gates | Gameplay or desktop control |
+| `runtime/src/Content/VerifiedGltfLoader.cs` | Sidecar/model/buffer hash verification and glTF load | Cell placement |
+| `runtime/src/World/Cells/CellContentLoader.cs` | One verified CELL presentation/entity root with authored collision instances | Binary parsing or player ownership |
+| `runtime/src/World/Cells/CellSceneLoader.cs` | Shared session/view composition, linked CELL alignment, reciprocal portal composition, activity-space ownership, active collision-layer selection, and proof queries | Binary parsing or portal gameplay decisions |
+| `runtime/src/Presentation/Rendering/RuntimeMaterialLoader.cs` | Hash-verified 2D/cubemap load and name-keyed retail material passes | DDS/BSA parsing |
+| `runtime/src/Content/StaticCellCompileArtifact.cs` | Static compile schema/configuration/hash/path/count verification and immutable row load | Godot node construction |
+| `runtime/src/Content/StaticCellCompileLoader.cs` | Verified relative artifact load, profile-typed static/point-light placement instantiation, CELL lighting, and authored collision | Record parsing, actors, gameplay, or parity claims |
+| `runtime/src/World/Actors/ActorModelSlice.cs` | Hash-verified skinned glTF import, idle start, and non-accumulating bounds contract | Record parsing or placement |
+| `runtime/src/Presentation/Rendering/RetailFaceGenMaterial.cs` | Hash-verified runtime FaceGen sampler composition, encoded-color transfer, and opaque/depth-write enforcement | Record selection, texture extraction, actor placement, or lighting policy |
+| `runtime/src/World/Cells/CellActorLoader.cs` | Actor-manifest identity, CELL ownership, enable-state gate, and ACHR placement | Actor export or AI state simulation |
+| `runtime/src/Diagnostics/Capture/RetailActorStateContract.cs` | Fail-closed retail shot-state parsing for ACHR transform, camera, idle phase, arm bones, and face/hair hashes | Process addresses, asset parsing, or rendering |
+| `runtime/src/Diagnostics/Capture/EnvironmentCapture.cs` | Native cell/actor frames, application of validated retail shot state, normalized telemetry, hashes, and visual-quality gates | Gameplay or desktop control |
 | `actor_parity.py` | Retail/Godot identity, camera, pixel metrics, and labelled differential sheets | Rendering or automatic human approval |
-| `DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
-| `PickupInstance.cs` | One authored pickup's identity, owned dynamic rigid body, and held/dropped transform | Inventory ownership or input polling |
-| `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
-| `PoolBallInstance.cs` | One authored dynamic convex body and its persisted motion/pocket state | Table rules or input |
-| `PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
-| `runtime/src/Gameplay/State/GameplayStateNamespaceBridge.cs` | Compile-time namespace join between shared authoritative state and its campaign, world, and presentation consumers | Runtime behavior or gameplay abstractions |
+| `runtime/src/World/Interactions/DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
+| `runtime/src/World/Interactions/PickupInstance.cs` | One authored pickup's identity, owned dynamic rigid body, and held/dropped transform | Inventory ownership or input polling |
+| `runtime/src/World/Interactions/ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
+| `runtime/src/World/Interactions/PoolBallInstance.cs` | One authored dynamic convex body and its persisted motion/pocket state | Table rules or input |
+| `runtime/src/World/Interactions/PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
 | `runtime/src/Gameplay/State/GameplaySession.cs` | Shared authoritative inventory/world delta, active-CELL identity, objective state, opening-completion envelope, movable-pickup and pool snapshots, and atomic save/reload | Asset parsing, portal geometry, or opening progression |
 | `runtime/src/Gameplay/Containers/` | Source-named two-column container view plus authoritative per-reference remaining counts and transfer operations | Player-to-container deposits, barter, or retail-pixel parity |
-| `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, pickup-hold, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
+| `runtime/src/World/Cells/CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, pickup-hold, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
 | `runtime/src/World/Portals/CellPortalTravel.cs` | Production reciprocal-XTEL activation, owned arrival transform, active collision layer, and authoritative CELL transition | Input synthesis, save serialization, or content parsing |
 | `runtime/src/World/Streaming/CellActiveSet.cs` | Authoritative-current-CELL visibility, processing, collision, rigid-body, and light lifecycle for an eagerly preloaded source-portal route | CELL compilation, demand loading/unloading, portal clipping, environment switching, or adjacency invention |
 | `runtime/src/World/Actors/GameplayActorGrounding.cs` | One-time source-actor support alignment against the active CELL's authored collision, plus package-path preservation of that source-derived offset | Actor admission, AI/package selection, navmesh placement invention, or retail parity |
-| `DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
-| `FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |
-| `PlayerControlTelemetry.cs` | Simulator-only pose, locomotion, floor-height, snap-pivot, and action acceptance measurements | Input synthesis or gameplay mutation |
+| `runtime/src/InputSystem/DesktopInputMap.cs` | Configured physical key/mouse events to named Godot actions | Gameplay decisions or Windows input injection |
+| `runtime/src/Presentation/OpenXR/FirstPersonRig.cs` | Verified hand import and retail Camera1st/Weapon/grip-frame alignment | Content extraction or controller polling |
+| `runtime/src/InputSystem/PlayerControlTelemetry.cs` | Simulator-only pose, locomotion, floor-height, snap-pivot, and action acceptance measurements | Input synthesis or gameplay mutation |
 | `runtime/src/Presentation/OpenXR/XrSimulatorAcceptance.cs` | Time-bounded simulator observation and evidence report for tracked hands, sticks, locomotion, interactions, weapon, save, and floor height | Input synthesis or headset claims |
-| `FlatControlsAcceptance.cs` | Configured Godot keyboard/mouse event acceptance over the shared gameplay path | Windows input injection or gameplay rules |
+| `runtime/src/Diagnostics/Acceptance/FlatControlsAcceptance.cs` | Configured Godot keyboard/mouse event acceptance over the shared gameplay path | Windows input injection or gameplay rules |
 | `runtime/src/World/Portals/CellRouteTravelAcceptance.cs` | Bounded forward configured-input route and v4 cold-Continue evidence report | Portal rules, reverse-traversal claims, OpenXR acceptance, or world streaming |
-| `runtime/src/Presentation/OpenXR/OpenXrNamespaceBridge.cs` | Compile-time namespace join between OpenXR acceptance and shared runtime composition | Runtime behavior, input translation, or presentation abstractions |
 | `runtime/src/Presentation/OpenXR/XrRigLayoutAcceptance.cs` | Headless OpenXR action-map, node hierarchy, HUD, and shared weapon-state layout gate | Simulator or headset claims |
-| `RuntimeCoordinator*.cs` | Startup routing and composition, with acceptance drivers and classic-campaign composition isolated in responsibility-named partial modules | Feature UI construction or file-format parsing |
+| `runtime/src/RuntimeLaunchRequest.cs` | One immutable, fail-closed selection of the invocation's authoritative content source and loading identity | Content loading, proof execution, or world mutation |
+| `runtime/src/RuntimeCoordinator*.cs` | Startup routing and composition, with acceptance drivers and classic-campaign composition isolated in responsibility-named partial modules | Feature UI construction or file-format parsing |
 | `runtime/src/Diagnostics/Performance/RuntimePerformanceObserver.cs` | Allocation-free periodic sampling and optional threshold-free JSON summary of Godot performance monitors | Gameplay behavior, acceptance thresholds, proprietary data, or subsystem management |
-| `LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
-| `StaticModelSlice.cs` | Hash-verified one-model material binding, bounds, and reference view | Cell relationships or controller playback |
-| `StaticModelCapture.cs` | Native hash-recorded one-model visual gate | Cell placement, interaction, or retail parity |
-| `runtime/src/Campaigns/Fallout1/Fallout1NamespaceBridge.cs` | Compile-time namespace join between the Fallout 1 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
+| `runtime/src/Presentation/Ui/LegalAssetSetupView.cs` | First-run folder selection and status UI | Preparation or rendering |
+| `runtime/src/Content/StaticModelSlice.cs` | Hash-verified one-model material binding, bounds, and reference view | Cell relationships or controller playback |
+| `runtime/src/Diagnostics/Capture/StaticModelCapture.cs` | Native hash-recorded one-model visual gate | Cell placement, interaction, or retail parity |
 | `runtime/src/Campaigns/Fallout1/Fo1HexMath.cs` | Fallout 200×200 tile IDs, retail even-column-offset world conversion, direction/neighbor/distance/corner math | Rendering, AP, or source parsing |
 | `runtime/src/Campaigns/Fallout1/Fo1RuntimeProfile.cs` | Strict typed ownership of the embedded versioned 3D adaptation profile | Fallout source authority or fallback tuning |
 | `runtime/src/Campaigns/Fallout1/Fo1HexSceneLoader.cs` | Verified V13ENT floor/sprite/door manifests, diagnostic overlays, and ordinary Godot presentation nodes | MAP parsing, camera input, or gameplay rules |
@@ -607,12 +607,10 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesMoldedPresentation.cs` | Full wall relief plus exact owned opaque FRM torch-emitter pixels/centroid joined to source MAP light placement | Source flame animation, smoke, guessed billboard proxies, or visual parity |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs` | Strict join of one owned MAP critter/inventory pair to hash-bound PRO/MSG identities and stats | General actor admission, INT execution, AI, or retail combat behavior |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationRuntime.cs` | Visible player HP/AP, adjacent deterministic melee, exact target defeat/Spear loot, inventory state, and save publication for that one contract | Target turns/AI, dialogue, general inventory, retail formulas, general combat, or parity |
-| `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
 | `runtime/src/Compatibility/Jam/JamProfileContract.cs` | Shared hash-bound JAM profile/plugin identity and transported-capability admission | Native DLL loading, script interpretation, or complete compatibility |
 | `runtime/src/Compatibility/Jam/JamJvsSprintContract.cs` | Hash-bound transport and validation of JAM 4.6 JVS hold-to-sprint settings | Native DLL loading, xNVSE interpretation, or complete JAM compatibility |
 | `runtime/src/Compatibility/Jam/JamJbtBulletTimeContract.cs` | Hash-bound transport of JAM 4.6 JBT toggle and authored world-time multiplier | AP/effect/audio/UI/event semantics or complete JBT/JAM compatibility |
 | `prepare_fo3_profile.py` / `prepare_fo3_opening_slice.py` | Read-only Fallout 3 GOTY profile, CG00/Vault 101 source graph, playable race and sex-aware hair/eye inventory, Player-plus-RACE FaceGen defaults, and hash-bound local manifest generation | Godot nodes, runtime progression, 3D FaceGen rendering, or full-opening claims |
-| `runtime/src/Campaigns/Fallout3/Fallout3NamespaceBridge.cs` | Compile-time namespace join between the Fallout 3 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
 | `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow*.cs` and `Fo3OpeningContracts.cs` | Bounded owned-profile composition split into immutable contracts, CG00/menu flow, CG01 dialogue, persistence, proof capture, and UI helpers | General dialogue/KF/package AI, toddler world locomotion/trigger entry, portable presentation-cache publication, full Vault 101 play, or parity |
 | `runtime/src/Campaigns/Fallout3/Fo3Cg00EarlyBirthRuntime.cs` | Exact source `PACK`-selected KF publication and `Camera1st` skeleton-node/animated-parent composition without a guessed `NiCamera` axis flip | Retail/native timing or pixels, ordinary user-input proof, general package AI, or route promotion |
 | `runtime/src/Campaigns/Fallout3/Fo3Cg01Stage10Transition.cs` | Fail-closed sex-specific two-INFO Dad dialogue and exact stage-10 objective/timer/control/autosave state plus cold-restore contract | LIP animation, toddler interaction, general dialogue/package AI, or world play |
@@ -626,7 +624,6 @@ retail data, or promotion verdict.
 | `ttw_profile.py` | Read-only layered profile identity, explicit flattened-output mtime order derivation, immutable load-order snapshot, master closure, plugin hashes, archive-name inventory, and save boundary | Archive members, loose-file precedence, records, scripts, or runtime-compatibility promotion |
 | `ttw_source_namespace.py` | Registered-plugin revalidation plus effective top-level loose-file, BSA-v104-header, and zero-byte override-marker winner inventory | BSA member resolution, nested loose files, override-member semantics, records, scripts, or runtime behavior |
 | `ttw_effective_source.py` | Fail-closed effective FormKey winner resolver and optional archive/loose-member resolver; current FO3 profile producer consumes the records-only entry point | Connected TTW world resources, scripts, runtime behavior, TTW-FNV Doc profile, or playable-route claims |
-| `runtime/src/Campaigns/TTW/TtwNamespaceBridge.cs` | Compile-time namespace join between the isolated TTW campaign adapter and shared runtime composition | Runtime behavior, profile reuse, routing, or campaign abstractions |
 | `runtime/src/Campaigns/TTW/TtwFo3OpeningRuntime.cs` | Fail-closed TTW profile/namespace/cache/save identity validation plus exact 38-command `CG00:0/60/100` → `CG01:0/5` state application, atomic save, cold restore, and proof report | Vault 101 resources/presentation, movie playback, CG01 stage 10+, xNVSE/JAM execution, or playable-route promotion |
 | `jam_profile.py` | Read-only JAM dependency identity, plugin/master closure, hashes, save boundary, bounded portable-capability transport, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or complete runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |

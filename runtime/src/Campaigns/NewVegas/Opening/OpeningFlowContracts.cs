@@ -1,6 +1,10 @@
 using System.Text.Json;
 using Godot;
+
+
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Ui;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 

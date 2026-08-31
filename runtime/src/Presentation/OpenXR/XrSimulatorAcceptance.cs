@@ -1,6 +1,10 @@
 using System.Text.Json;
 using Godot;
 
+
+using OpenNV.Runtime.InputSystem;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Presentation.OpenXR;
 
 internal static class XrSimulatorAcceptance

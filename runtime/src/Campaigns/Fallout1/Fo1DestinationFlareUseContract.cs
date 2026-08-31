@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 
+
+using OpenNV.Runtime.Content;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 /// <summary>One explicit source-script use contract for the VAULT13 MAP flare stack.</summary>

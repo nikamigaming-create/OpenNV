@@ -2,6 +2,11 @@ using Godot;
 using OpenNV.Runtime;
 using System.Text.Json;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal partial class Fo3OpeningFlow

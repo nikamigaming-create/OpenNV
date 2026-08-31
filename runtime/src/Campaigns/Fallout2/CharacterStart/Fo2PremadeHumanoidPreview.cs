@@ -2,6 +2,9 @@ using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+
+using OpenNV.Runtime.Presentation.Rendering;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal sealed partial class Fo2PremadeHumanoidPreview : SubViewportContainer

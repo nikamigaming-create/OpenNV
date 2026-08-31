@@ -4,6 +4,11 @@ using OpenNV.Runtime.Presentation.CharacterCreation;
 
 using OpenNV.Runtime.SceneGraph;
 
+
+using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal sealed class OpeningPlayerFaceGenPreviewHost

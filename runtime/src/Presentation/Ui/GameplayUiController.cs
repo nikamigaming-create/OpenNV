@@ -4,6 +4,11 @@ using Godot;
 
 using OpenNV.Runtime.SceneGraph;
 
+
+using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.Gameplay.State;
+
 namespace OpenNV.Runtime.Presentation.Ui;
 
 internal partial class GameplayUiController : CanvasLayer

@@ -1,5 +1,9 @@
 using System.Text.Json;
 
+
+using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Interactions;
+
 namespace OpenNV.Runtime.Gameplay.Containers;
 
 internal sealed class ContainerInventoryStore

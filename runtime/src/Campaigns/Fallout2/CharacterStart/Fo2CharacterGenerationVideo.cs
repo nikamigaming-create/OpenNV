@@ -1,5 +1,6 @@
 using Godot;
 
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal static class Fo2CharacterGenerationVideo
