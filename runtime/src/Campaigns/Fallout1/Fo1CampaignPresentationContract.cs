@@ -281,14 +281,20 @@ internal static class Fo1CampaignPresentationContract
                 $"Fallout campaign placement world position drifted: {mapId}/{elevation}/{serial}");
         Fo1CampaignCritterFidState? critterFidState = null;
         if (source.TryGetProperty("critterFidState", out var critterSource))
+        {
+            var aliasSource = critterSource.GetProperty("artAliasListIndex");
             critterFidState = new Fo1CampaignCritterFidState(
                 critterSource.GetProperty("animation").GetInt32(),
                 critterSource.GetProperty("weapon").GetInt32(),
-                critterSource.GetProperty("packedRotation").GetInt32());
+                critterSource.GetProperty("packedRotation").GetInt32(),
+                aliasSource.ValueKind == JsonValueKind.Null
+                    ? null
+                    : aliasSource.GetInt32());
+        }
         if ((objectType == Fo1CampaignPresentationContractNumericContracts.PresentationInt1) !=
             (critterFidState is not null) ||
             critterFidState is { Animation: < 0 } or { Weapon: < 0 } or
-            { PackedRotation: not 0 })
+            { PackedRotation: not 0 } or { ArtAliasListIndex: < 0 })
             throw new InvalidOperationException(
                 $"Fallout campaign critter FID state is invalid: {mapId}/{elevation}/{serial}");
         return new Fo1CampaignPlacement(
@@ -490,9 +496,13 @@ internal static class Fo1CampaignPresentationContract
         var actionFrame = source.GetProperty("actionFrame").GetInt32();
         var framesPerDirection = source.GetProperty("framesPerDirection").GetInt32();
         var directionCount = source.GetProperty("directionCount").GetInt32();
+        var frameSelection = RequiredString(source, "frameSelection");
         if (framesPerSecond <= 0 || framesPerDirection <= frame ||
             actionFrame < 0 || actionFrame >= framesPerDirection ||
-            directionCount != Fo1HexMath.DirectionCount)
+            directionCount != Fo1HexMath.DirectionCount ||
+            frameSelection is not ("stored" or "terminal") ||
+            frameSelection == "terminal" && frame != framesPerDirection -
+                Fo1CampaignPresentationContractNumericContracts.PresentationInt1)
             throw new InvalidOperationException(
                 $"Fallout sprite timing/direction contract is invalid: {id}");
         return new Fo1CampaignSpriteArtifact(
@@ -510,6 +520,7 @@ internal static class Fo1CampaignPresentationContract
             actionFrame,
             framesPerDirection,
             directionCount,
+            frameSelection,
             averageOpaqueColor);
     }
 
@@ -1018,6 +1029,7 @@ internal sealed record Fo1CampaignSpriteArtifact(
     int ActionFrame,
     int FramesPerDirection,
     int DirectionCount,
+    string FrameSelection,
     Color? AverageOpaqueColor);
 
 internal sealed record Fo1CampaignCritterProfile(
@@ -1119,7 +1131,8 @@ internal sealed record Fo1CampaignPlacement(
 internal sealed record Fo1CampaignCritterFidState(
     int Animation,
     int Weapon,
-    int PackedRotation);
+    int PackedRotation,
+    int? ArtAliasListIndex);
 
 internal sealed record Fo1CampaignSkippedPlacement(int Serial, string Reason);
 internal sealed record Fo1CampaignBlocker(int Serial, int Tile, bool Multihex);

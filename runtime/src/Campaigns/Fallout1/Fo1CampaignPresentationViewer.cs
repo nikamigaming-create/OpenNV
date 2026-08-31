@@ -416,10 +416,13 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
             sprite.SetMeta("source_fid_animation", critter.Animation);
             sprite.SetMeta("source_fid_weapon", critter.Weapon);
             sprite.SetMeta("source_fid_packed_rotation", critter.PackedRotation);
+            if (critter.ArtAliasListIndex is { } alias)
+                sprite.SetMeta("source_fid_art_alias_list_index", alias);
             sprite.SetMeta("source_frm_fps", artifact.FramesPerSecond);
             sprite.SetMeta("source_frm_action_frame", artifact.ActionFrame);
             sprite.SetMeta("source_frm_frames_per_direction", artifact.FramesPerDirection);
             sprite.SetMeta("source_frm_direction_count", artifact.DirectionCount);
+            sprite.SetMeta("source_frm_frame_selection", artifact.FrameSelection);
             sprite.SetMeta("source_frm_rotation", artifact.Rotation);
             sprite.SetMeta("source_frm_frame", artifact.Frame);
         }
