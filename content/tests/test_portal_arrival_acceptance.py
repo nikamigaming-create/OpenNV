@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ACCEPTANCE = ROOT / "runtime" / "src" / "RuntimeCoordinator.Acceptance.cs"
+COORDINATOR = ROOT / "runtime" / "src" / "RuntimeCoordinator.cs"
 PLAYER = ROOT / "runtime" / "src" / "World" / "Cells" / "CellPlayer.cs"
 
 
@@ -39,8 +40,15 @@ class PortalArrivalAcceptanceTest(unittest.TestCase):
         self.assertNotIn("loaded.Player.CollisionMask", arrival)
         self.assertIn("portal.ToRoot.IsAncestorOf", arrival)
         self.assertIn("ActiveSet.Activate(portal.FromCellFormId)", arrival)
+        self.assertIn('"xtel-activation"', passage)
         self.assertIn("portal is null", passage)
-        self.assertIn("ray.To - ray.From", passage)
+        self.assertIn("capsuleWalkForward", passage)
+        self.assertIn(": null", passage)
+        report = COORDINATOR.read_text(encoding="utf-8")
+        self.assertIn("traversalMode = portal.TraversalMode", report)
+        self.assertIn(
+            "floorOwnedCellCollision = portal.FloorOwnedCellCollision", report
+        )
 
     def test_acceptance_reuses_the_production_xtel_arrival_transform(self) -> None:
         acceptance = ACCEPTANCE.read_text(encoding="utf-8")

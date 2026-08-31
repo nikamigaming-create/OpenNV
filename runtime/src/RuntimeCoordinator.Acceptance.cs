@@ -692,9 +692,9 @@ public partial class RuntimeCoordinator
                     portalTraversals.Any(value => !value.OpenRayPortalClear),
                     portalTraversals.Any(value => value.OpenBlockedByPortalDoor),
                     portalTraversals.All(value => value.ProjectilePortalClear),
-                    portalTraversals.All(value => value.CapsuleWalkForward),
-                    portalTraversals.All(value => value.CapsuleWalkBackward),
-                    portalTraversals.All(value => value.CapsuleWalkThrough),
+                    portalTraversals.All(value => value.CapsuleWalkForward is not false),
+                    portalTraversals.All(value => value.CapsuleWalkBackward is not false),
+                    portalTraversals.All(value => value.CapsuleWalkThrough is not false),
                     loaded.LinkedCells.Count,
                     loaded.PortalLinks.Count == 0
                         ? null
@@ -763,22 +763,21 @@ public partial class RuntimeCoordinator
             portalCenter);
         if (portalFloor.Hit)
             portalCenter.Y = portalFloor.Y + _configuration.Proof.PortalCapsuleCenterHeightMeters;
-        // XTEL doors do not lead into a continuous three-metre corridor. Prove
-        // that the player capsule clears the source-authored door aperture;
-        // destination support is verified independently at the XTEL arrival.
-        var portalMotion = portal is null
-            ? portalDirection * _configuration.Proof.PortalCapsuleMotionMeters
-            : ray.To - ray.From;
+        var portalMotion = portalDirection * _configuration.Proof.PortalCapsuleMotionMeters;
         var forwardCollision = new KinematicCollision3D();
-        var walkForwardBlocked = toDoor is not null && loaded.Player.TestMove(
-            new Transform3D(Basis.Identity, portalCenter - portalMotion / 2.0f),
-            portalMotion,
-            forwardCollision);
+        bool? capsuleWalkForward = portal is null
+            ? !loaded.Player.TestMove(
+                new Transform3D(Basis.Identity, portalCenter - portalMotion / 2.0f),
+                portalMotion,
+                forwardCollision)
+            : null;
         var backwardCollision = new KinematicCollision3D();
-        var walkBackwardBlocked = toDoor is not null && loaded.Player.TestMove(
-            new Transform3D(Basis.Identity, portalCenter + portalMotion / 2.0f),
-            -portalMotion,
-            backwardCollision);
+        bool? capsuleWalkBackward = portal is null
+            ? !loaded.Player.TestMove(
+                new Transform3D(Basis.Identity, portalCenter + portalMotion / 2.0f),
+                -portalMotion,
+                backwardCollision)
+            : null;
         var arrivalFloor = portal is { } target
             ? await ProvePortalArrivalFloor(loaded, target)
             : new PortalArrivalFloor(
@@ -788,6 +787,7 @@ public partial class RuntimeCoordinator
         return new PortalTraversalProof(
             fromDoor.ReferenceFormId,
             toDoor?.ReferenceFormId,
+            portal is null ? "continuous-aperture" : "xtel-activation",
             closed.Hit,
             closedHitDoor,
             openBlockedByDoor,
@@ -798,9 +798,11 @@ public partial class RuntimeCoordinator
                 arrivalFloor.Hit.Normal.Y >= _configuration.Proof.WalkableSurfaceNormalYMinimum,
             arrivalFloor.Hit.Y,
             arrivalFloor.OwnedByTargetCell,
-            !walkForwardBlocked,
-            !walkBackwardBlocked,
-            !walkForwardBlocked && !walkBackwardBlocked);
+            capsuleWalkForward,
+            capsuleWalkBackward,
+            portal is null
+                ? capsuleWalkForward is true && capsuleWalkBackward is true
+                : null);
     }
 
     private async Task<PortalArrivalFloor> ProvePortalArrivalFloor(

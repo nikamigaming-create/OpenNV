@@ -302,7 +302,16 @@ def validate_cell_report(
                 bool(actual["floorOwnedCellCollision"]),
                 "Portal floor is not owned by the destination CELL",
             )
-            _require(bool(actual["capsuleWalkThrough"]), "Capsule failed one portal hop")
+            _require(
+                actual["traversalMode"] == "xtel-activation",
+                "Linked portal did not use XTEL activation semantics",
+            )
+            _require(
+                actual["capsuleWalkForward"] is None
+                and actual["capsuleWalkBackward"] is None
+                and actual["capsuleWalkThrough"] is None,
+                "XTEL portal reported an inapplicable continuous capsule proof",
+            )
     opening_menu = report.get("openingMenuProof")
     if require_opening_menu:
         _require(isinstance(opening_menu, dict), "Normal-menu Continue proof is missing")

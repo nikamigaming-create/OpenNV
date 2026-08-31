@@ -942,6 +942,7 @@ public partial class RuntimeCoordinator : Node3D
                     {
                         fromDoorReferenceFormId = portal.FromDoorReferenceFormId,
                         toDoorReferenceFormId = portal.ToDoorReferenceFormId,
+                        traversalMode = portal.TraversalMode,
                         closedHit = portal.ClosedHit,
                         closedHitDoor = portal.ClosedHitDoor,
                         openBlockedByPortalDoor = portal.OpenBlockedByPortalDoor,
@@ -950,6 +951,7 @@ public partial class RuntimeCoordinator : Node3D
                         floorHit = portal.FloorHit,
                         floorWalkable = portal.FloorWalkable,
                         floorY = portal.FloorY,
+                        floorOwnedCellCollision = portal.FloorOwnedCellCollision,
                         capsuleWalkForward = portal.CapsuleWalkForward,
                         capsuleWalkBackward = portal.CapsuleWalkBackward,
                         capsuleWalkThrough = portal.CapsuleWalkThrough,
@@ -1232,6 +1234,7 @@ public partial class RuntimeCoordinator : Node3D
     private readonly record struct PortalTraversalProof(
         string FromDoorReferenceFormId,
         string? ToDoorReferenceFormId,
+        string TraversalMode,
         bool ClosedHit,
         bool ClosedHitDoor,
         bool OpenBlockedByPortalDoor,
@@ -1241,9 +1244,9 @@ public partial class RuntimeCoordinator : Node3D
         bool FloorWalkable,
         float FloorY,
         bool FloorOwnedCellCollision,
-        bool CapsuleWalkForward,
-        bool CapsuleWalkBackward,
-        bool CapsuleWalkThrough)
+        bool? CapsuleWalkForward,
+        bool? CapsuleWalkBackward,
+        bool? CapsuleWalkThrough)
     {
         internal bool Passed =>
             ClosedHit &&
@@ -1254,8 +1257,13 @@ public partial class RuntimeCoordinator : Node3D
             FloorHit &&
             FloorWalkable &&
             FloorOwnedCellCollision &&
-            CapsuleWalkForward &&
-            CapsuleWalkBackward &&
-            CapsuleWalkThrough;
+            (TraversalMode == "xtel-activation"
+                ? CapsuleWalkForward is null &&
+                    CapsuleWalkBackward is null &&
+                    CapsuleWalkThrough is null
+                : TraversalMode == "continuous-aperture" &&
+                    CapsuleWalkForward is true &&
+                    CapsuleWalkBackward is true &&
+                    CapsuleWalkThrough is true);
     }
 }
