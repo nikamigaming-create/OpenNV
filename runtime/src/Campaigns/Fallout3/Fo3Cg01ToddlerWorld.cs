@@ -472,24 +472,17 @@ internal sealed record Fo3Cg01ToddlerWorldRuntime(
 internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
 {
     private const float MinimumValue = 0.0f;
-    private const float MaximumWallNormalVerticalComponent = 0.5f;
-    private const float AcceptanceWallClearanceRadii = 4.0f;
+    private const float PressedInputStrength = 1.0f;
 
     private Fo3Cg01ToddlerWorldContract _contract = null!;
     private Camera3D _camera = null!;
     private float _pitch;
-    private bool _acceptanceForward;
-    private Vector3? _acceptanceTarget;
-    private Vector3 _acceptanceHeading;
-    private float _acceptanceWallClearanceMeters;
+    private bool _acceptanceTracking;
+    private bool _acceptanceInputPressed;
 
     internal bool MovementEnabled { get; private set; } = true;
     internal int AcceptancePhysicsFrames { get; private set; }
-    internal int AcceptanceWallContacts { get; private set; }
     internal float AcceptanceHorizontalTravelMeters { get; private set; }
-    internal float AcceptanceTargetDistanceMeters => _acceptanceTarget is Vector3 target
-        ? Horizontal(target - GlobalPosition).Length()
-        : MinimumValue;
 
     internal void Configure(
         Fo3Cg01ToddlerWorldContract contract,
@@ -550,22 +543,32 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         SetMeta("opennv_visual_body_prepared", false);
     }
 
-    internal void SetAcceptanceTarget(Vector3 target)
+    internal void BeginConfiguredInputAcceptance()
     {
-        var horizontalTarget = new Vector3(target.X, GlobalPosition.Y, target.Z);
-        if (horizontalTarget.IsEqualApprox(GlobalPosition))
+        if (!MovementEnabled || _acceptanceTracking || _acceptanceInputPressed)
             throw new InvalidOperationException(
-                "Fallout 3 CG01 toddler proof target has no horizontal separation.");
-        LookAt(horizontalTarget, Vector3.Up);
-        _acceptanceTarget = horizontalTarget;
-        _acceptanceForward = true;
+                "Fallout 3 CG01 toddler configured-input acceptance state differs.");
+        _acceptanceTracking = true;
+        _acceptanceInputPressed = true;
+        Input.ParseInputEvent(new InputEventAction
+        {
+            Action = _contract.MoveForwardAction,
+            Pressed = true,
+            Strength = PressedInputStrength,
+        });
     }
 
     internal void StopAtAuthoredTrigger()
     {
         MovementEnabled = false;
-        _acceptanceForward = false;
-        _acceptanceTarget = null;
+        ReleaseAcceptanceInput();
+        Velocity = Vector3.Zero;
+    }
+
+    internal void CancelConfiguredInputAcceptance()
+    {
+        _acceptanceTracking = false;
+        ReleaseAcceptanceInput();
         Velocity = Vector3.Zero;
     }
 
@@ -592,16 +595,13 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
 
     public override void _PhysicsProcess(double delta)
     {
-        var input = _acceptanceForward
-            ? Vector2.Up
-            : Input.GetVector(
-                _contract.MoveLeftAction,
-                _contract.MoveRightAction,
-                _contract.MoveForwardAction,
-                _contract.MoveBackwardAction);
-        var direction = _acceptanceTarget is Vector3 acceptanceTarget
-            ? AcceptanceDirection(acceptanceTarget)
-            : (GlobalBasis * new Vector3(input.X, MinimumValue, input.Y)).Normalized();
+        var input = Input.GetVector(
+            _contract.MoveLeftAction,
+            _contract.MoveRightAction,
+            _contract.MoveForwardAction,
+            _contract.MoveBackwardAction);
+        var direction = (GlobalBasis *
+            new Vector3(input.X, MinimumValue, input.Y)).Normalized();
         var velocity = MovementEnabled
             ? direction * _contract.MoveSpeedMetersPerSecond
             : Vector3.Zero;
@@ -613,44 +613,26 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         {
             var before = GlobalPosition;
             MoveAndSlide();
-            UpdateAcceptanceMotion(before);
+            if (_acceptanceTracking)
+            {
+                AcceptancePhysicsFrames++;
+                AcceptanceHorizontalTravelMeters +=
+                    Horizontal(GlobalPosition - before).Length();
+            }
         }
     }
 
-    private Vector3 AcceptanceDirection(Vector3 target)
+    private void ReleaseAcceptanceInput()
     {
-        var direct = Horizontal(target - GlobalPosition).Normalized();
-        return _acceptanceWallClearanceMeters > MinimumValue
-            ? _acceptanceHeading
-            : direct;
-    }
-
-    private void UpdateAcceptanceMotion(Vector3 before)
-    {
-        if (_acceptanceTarget is not Vector3 target)
+        if (!_acceptanceInputPressed)
             return;
-        AcceptancePhysicsFrames++;
-        var travelled = Horizontal(GlobalPosition - before).Length();
-        AcceptanceHorizontalTravelMeters += travelled;
-        if (_acceptanceWallClearanceMeters > MinimumValue)
-            _acceptanceWallClearanceMeters = MathF.Max(
-                MinimumValue,
-                _acceptanceWallClearanceMeters - travelled);
-        var direct = Horizontal(target - GlobalPosition).Normalized();
-        for (var index = 0; index < GetSlideCollisionCount(); index++)
+        Input.ParseInputEvent(new InputEventAction
         {
-            var normal = GetSlideCollision(index).GetNormal();
-            if (MathF.Abs(normal.Y) > MaximumWallNormalVerticalComponent)
-                continue;
-            normal = Horizontal(normal).Normalized();
-            var first = new Vector3(-normal.Z, MinimumValue, normal.X);
-            var second = -first;
-            _acceptanceHeading = first.Dot(direct) >= second.Dot(direct) ? first : second;
-            _acceptanceWallClearanceMeters =
-                _contract.CapsuleRadiusMeters * AcceptanceWallClearanceRadii;
-            AcceptanceWallContacts++;
-            break;
-        }
+            Action = _contract.MoveForwardAction,
+            Pressed = false,
+            Strength = MinimumValue,
+        });
+        _acceptanceInputPressed = false;
     }
 
     private static Vector3 Horizontal(Vector3 value) =>

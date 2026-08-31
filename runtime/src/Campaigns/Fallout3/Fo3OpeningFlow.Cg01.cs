@@ -706,8 +706,7 @@ internal partial class Fo3OpeningFlow
             $"trigger={_profile.Cg01ToddlerWorld.TriggerReferenceFormId} visualBody=0");
         if (!acceptanceProof)
             return;
-        _cg01ToddlerWorld.Player.SetAcceptanceTarget(
-            _cg01ToddlerWorld.DadTrigger.GlobalPosition);
+        _cg01ToddlerWorld.Player.BeginConfiguredInputAcceptance();
         var start = _profile.Cg01ToddlerWorld.PlayerStartTransform.PositionGameUnits;
         var trigger = _profile.Cg01Stage12Transition.Trigger.SourceTransform.PositionGameUnits;
         var distanceGameUnits = new Vector3(
@@ -723,12 +722,11 @@ internal partial class Fo3OpeningFlow
             if (_cg01ToddlerWorld?.Player.MovementEnabled != true)
                 return;
             var player = _cg01ToddlerWorld.Player;
+            player.CancelConfiguredInputAcceptance();
             GD.PushError(
                 "OPENNV_FO3_CG01_TODDLER_WORLD_PROOF_FAIL physical trigger was not entered " +
                 $"frames={player.AcceptancePhysicsFrames} " +
                 $"travel={player.AcceptanceHorizontalTravelMeters:F3} " +
-                $"distance={player.AcceptanceTargetDistanceMeters:F3} " +
-                $"wallContacts={player.AcceptanceWallContacts} " +
                 $"position={player.GlobalPosition}");
             GetTree().Quit(Fo3OpeningFlowNumericContracts.ProofFailureExitCode);
         };

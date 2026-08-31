@@ -55,7 +55,7 @@ internal sealed record Fo3Cg01Stage12Transition(
     private const string ExpectedStatus =
         "source-backed-player-trigger-and-stage-result-runtime-unapplied";
     private const string ExpectedBoundaryBlocker =
-        "fo3-cg01-stage-12-dad-response-not-implemented";
+        "awaiting-source-owned-dad-response-completion";
     private const int ExpectedSourceStage = 10;
     private const int ExpectedTargetStage = 12;
     private const int ExpectedObjectiveIndex = 10;

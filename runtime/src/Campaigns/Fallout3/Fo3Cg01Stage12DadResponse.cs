@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -43,9 +44,10 @@ internal sealed record Fo3Cg01Stage12DadResponse(
         "source-backed-say-once-dad-response-runtime-unapplied";
     private const string ExpectedLookTarget = "player";
     private const string ExpectedBoundaryBlocker =
-        "fo3-cg01-stage-14-dad-package-runtime-not-implemented";
+        "fo3-cg01-post-stage-14-runtime-not-implemented";
     private const int ExpectedCueCount = 2;
     private const int ExpectedStageCommandCount = 1;
+    private const int FirstSourceCommandIndex = 0;
     private const int ExpectedDadTalkingAfterCue = 0;
     private const int ExpectedConditionalStageSource = 75;
     private const int ExpectedConditionalStageTarget = 80;
@@ -145,6 +147,23 @@ internal sealed record Fo3Cg01Stage12DadResponse(
             stage12.NextBoundary.Applied)
             throw new InvalidOperationException(
                 "Fallout 3 CG01 stage-12 Dad response source state differs.");
+        var packageEvaluated = false;
+        var commands = new[]
+        {
+            new SourceGamebryoStageCommand<string>(
+                FirstSourceCommandIndex,
+                GamebryoStageCommandKind.ActorIntent,
+                DadReferenceFormId),
+        };
+        var applied = 0;
+        GamebryoStageCommandExecutor.ExecuteAll(commands, command =>
+        {
+            if (command.Value != DadReferenceFormId)
+                return false;
+            packageEvaluated = true;
+            applied++;
+            return packageEvaluated;
+        });
         return new Fo3Cg01Stage14State(
             SourceStage,
             stage12.ActiveQuestFormId,
@@ -153,9 +172,9 @@ internal sealed record Fo3Cg01Stage12DadResponse(
             Cues.Select(value => value.InfoFormId).ToArray(),
             ExpectedDadTalkingAfterCue,
             true,
-            true,
-            ExpectedStageCommandCount,
-            ExpectedStageCommandCount,
+            packageEvaluated,
+            commands.Length,
+            applied,
             new Fo3Cg01Stage12Boundary(false, NextBoundaryBlocker));
     }
 
@@ -240,13 +259,17 @@ internal sealed record Fo3Cg01Stage12DadResponse(
         }
         else
         {
-            if (effects.Length != 1 ||
-                RequiredString(effects[0], "kind") != "setStage" ||
-                RequiredFormId(effects[0], "questFormId") != stage12.QuestFormId ||
-                RequiredInteger(effects[0], "stage") != targetStage)
+            if (effects.Length != 1)
                 throw new InvalidOperationException(
                     "Fallout 3 CG01 final Dad response effect differs.");
-            cueTargetStage = targetStage;
+            var result = GamebryoDialoguePlayback.RequireStageResult(
+                RequiredString(effects[0], "kind"),
+                RequiredFormId(effects[0], "questFormId"),
+                RequiredInteger(effects[0], "stage"));
+            if (result.QuestFormId != stage12.QuestFormId || result.Stage != targetStage)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG01 final Dad response effect differs.");
+            cueTargetStage = result.Stage;
         }
         var response = RequiredObject(source, "response");
         var responseIndex = RequiredInteger(response, "index");

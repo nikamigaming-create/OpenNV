@@ -2460,7 +2460,7 @@ def _compile_cg01_walk_to_dad_transition(
         },
         "nextBoundary": {
             "applied": False,
-            "blocker": "fo3-cg01-stage-12-dad-response-not-implemented",
+            "blocker": "awaiting-source-owned-dad-response-completion",
         },
     }
 
@@ -2706,7 +2706,7 @@ def _compile_cg01_stage12_dad_response(
         },
         "nextBoundary": {
             "applied": False,
-            "blocker": "fo3-cg01-stage-14-dad-package-runtime-not-implemented",
+            "blocker": "fo3-cg01-post-stage-14-runtime-not-implemented",
         },
     }
 
@@ -3093,7 +3093,7 @@ def _compile_cg01_post_stage5_transition(
         "postStage12DadResponse": stage12_dad_response,
         "nextBoundary": {
             "applied": False,
-            "blocker": "fo3-cg01-stage-10-walk-to-dad-trigger-runtime-not-implemented",
+            "blocker": "awaiting-source-owned-player-trigger-entry",
         },
     }
 
@@ -6046,7 +6046,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             "runtimeBootReady": True,
         },
         "blockers": [
-            "fo3-cg01-stage-12-dad-response-not-implemented",
+            "fo3-cg01-post-stage-14-runtime-not-implemented",
             "fo3-cg01-toddler-visual-body-not-prepared",
             "fo3-opening-command-interpreter-after-cg00-not-implemented",
             "fo3-vault101-godot-scene-not-compiled",
