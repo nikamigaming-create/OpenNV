@@ -1,0 +1,34 @@
+{
+  "schema": "opennv-classic-skill/v1",
+  "exactBuild": "fallout2-retail-1.02",
+  "specialCount": 7,
+  "minimumSpecial": 1,
+  "maximumSpecial": 10,
+  "taggedFlatBonus": 20,
+  "maximumSkill": 300,
+  "difficultyAdjustments": {
+    "easy": 20,
+    "normal": 0,
+    "hard": -10
+  },
+  "skills": [
+    { "id": "Small Guns", "baseValue": 5, "specialMultiplier": 4, "specialIndices": [5], "sourceBonusMultiplier": 1, "difficultyAdjusted": false },
+    { "id": "Big Guns", "baseValue": 0, "specialMultiplier": 2, "specialIndices": [5], "sourceBonusMultiplier": 1, "difficultyAdjusted": false },
+    { "id": "Energy Weapons", "baseValue": 0, "specialMultiplier": 2, "specialIndices": [5], "sourceBonusMultiplier": 1, "difficultyAdjusted": false },
+    { "id": "Unarmed", "baseValue": 30, "specialMultiplier": 2, "specialIndices": [5, 0], "sourceBonusMultiplier": 1, "difficultyAdjusted": false },
+    { "id": "Melee Weapons", "baseValue": 20, "specialMultiplier": 2, "specialIndices": [5, 0], "sourceBonusMultiplier": 1, "difficultyAdjusted": false },
+    { "id": "Throwing", "baseValue": 0, "specialMultiplier": 4, "specialIndices": [5], "sourceBonusMultiplier": 1, "difficultyAdjusted": false },
+    { "id": "First Aid", "baseValue": 0, "specialMultiplier": 2, "specialIndices": [1, 4], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Doctor", "baseValue": 5, "specialMultiplier": 1, "specialIndices": [1, 4], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Sneak", "baseValue": 5, "specialMultiplier": 3, "specialIndices": [5], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Lockpick", "baseValue": 10, "specialMultiplier": 1, "specialIndices": [1, 5], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Steal", "baseValue": 0, "specialMultiplier": 3, "specialIndices": [5], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Traps", "baseValue": 10, "specialMultiplier": 1, "specialIndices": [1, 5], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Science", "baseValue": 0, "specialMultiplier": 4, "specialIndices": [4], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Repair", "baseValue": 0, "specialMultiplier": 3, "specialIndices": [4], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Speech", "baseValue": 0, "specialMultiplier": 5, "specialIndices": [3], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Barter", "baseValue": 0, "specialMultiplier": 4, "specialIndices": [3], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Gambling", "baseValue": 0, "specialMultiplier": 5, "specialIndices": [6], "sourceBonusMultiplier": 1, "difficultyAdjusted": true },
+    { "id": "Outdoorsman", "baseValue": 0, "specialMultiplier": 2, "specialIndices": [2, 4], "sourceBonusMultiplier": 1, "difficultyAdjusted": true }
+  ]
+}

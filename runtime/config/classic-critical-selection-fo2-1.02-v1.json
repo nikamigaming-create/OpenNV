@@ -1,0 +1,15 @@
+{
+  "schema": "opennv-classic-critical-selection/v1",
+  "exactBuild": "fallout2-retail-1.02",
+  "minimumPercentRoll": 1,
+  "maximumPercentRoll": 100,
+  "criticalScoreThresholds": [20, 45, 70, 90, 100],
+  "hitLocationCount": 9,
+  "fumbleScoreThresholds": [20, 50, 75, 95],
+  "fumbleTypeCount": 7,
+  "luckSpecialIndex": 6,
+  "neutralLuck": 5,
+  "fumblePercentPerLuckPoint": 5,
+  "playerFumbleImmunityDays": 6,
+  "ticksPerDay": 864000
+}

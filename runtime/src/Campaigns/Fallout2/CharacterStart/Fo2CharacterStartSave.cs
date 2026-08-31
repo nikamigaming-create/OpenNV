@@ -168,6 +168,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     Character.Profile.Age,
                     Character.Profile.Sex,
                     special = Character.Profile.Special,
+                    skillBonuses = Character.Profile.SkillBonuses,
                     taggedSkills = Character.Profile.TaggedSkills,
                     traits = Character.Profile.Traits,
                     appearance = new
@@ -389,6 +390,9 @@ internal sealed record Fo2CharacterStartSaveState(
             savedCharacter.GetProperty("Age").GetInt32(),
             RequiredString(savedCharacter, "Sex"),
             ReadInts(savedCharacter.GetProperty("special")),
+            savedCharacter.TryGetProperty("skillBonuses", out var skillBonuses)
+                ? ReadInts(skillBonuses)
+                : source.Profile.SkillBonuses,
             ReadStrings(savedCharacter.GetProperty("taggedSkills")),
             ReadStrings(savedCharacter.GetProperty("traits")));
         var provisionalCharacter = new Fo2CharacterSelection(mode, source, profile);

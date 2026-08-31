@@ -3,6 +3,7 @@ using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -11,9 +12,29 @@ internal sealed record Fo2CharacterProfile(
     int Age,
     string Sex,
     IReadOnlyList<int> Special,
+    IReadOnlyList<int> SkillBonuses,
     IReadOnlyList<string> TaggedSkills,
     IReadOnlyList<string> Traits)
 {
+    internal ClassicSkillInputs SkillInputs(
+        string skillId,
+        IReadOnlyList<int> effectiveSpecial,
+        int? traitAdjustment,
+        int? perkAdjustment,
+        ClassicSkillDifficulty difficulty)
+    {
+        var skillIndex = Array.IndexOf(Fo2CharacterStartCatalog.SkillNames, skillId);
+        if (skillIndex < 0)
+            throw new InvalidOperationException($"Fallout 2 skill is unsupported: {skillId}");
+        return new ClassicSkillInputs(
+            effectiveSpecial,
+            SkillBonuses[skillIndex],
+            TaggedSkills.Contains(skillId, StringComparer.Ordinal),
+            traitAdjustment,
+            perkAdjustment,
+            difficulty);
+    }
+
     internal void Validate(bool allowUnselectedTags = false)
     {
         if (string.IsNullOrWhiteSpace(Name) || Name.Length > 11 ||
@@ -21,6 +42,8 @@ internal sealed record Fo2CharacterProfile(
             Sex is not "Male" and not "Female" ||
             Special.Count != 7 || Special.Any(value => value is < 1 or > 10) ||
             Special.Sum() != 40 ||
+            SkillBonuses.Count != Fo2CharacterStartCatalog.SkillNames.Length ||
+            SkillBonuses.Any(value => value < 0) ||
             TaggedSkills.Count != 3 && !(allowUnselectedTags && TaggedSkills.Count == 0) ||
             TaggedSkills.Distinct(StringComparer.Ordinal).Count() != TaggedSkills.Count ||
             Traits.Count > 2 ||
@@ -217,6 +240,7 @@ internal sealed record Fo2CharacterSelection(
     private static bool SameProfile(Fo2CharacterProfile left, Fo2CharacterProfile right) =>
         left.Name == right.Name && left.Age == right.Age && left.Sex == right.Sex &&
         left.Special.SequenceEqual(right.Special) &&
+        left.SkillBonuses.SequenceEqual(right.SkillBonuses) &&
         left.TaggedSkills.SequenceEqual(right.TaggedSkills) &&
         left.Traits.SequenceEqual(right.Traits);
 }
@@ -619,6 +643,7 @@ internal sealed class Fo2CharacterStartCatalog
         row.GetProperty("age").GetInt32(),
         Fo2TemplePresentationCatalog.RequiredString(row, "sex"),
         ReadInts(row.GetProperty("allocatedSpecial")),
+        ReadInts(row.GetProperty("skillBonuses")),
         row.GetProperty("taggedSkills").EnumerateArray()
             .Select(value => value.GetString() ?? "").ToArray(),
         row.GetProperty("traits").EnumerateArray()

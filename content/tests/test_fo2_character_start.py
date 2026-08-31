@@ -27,6 +27,7 @@ def gcd(name: str, sex: int, special: list[int], tags: list[int], traits: list[i
     values[1:8] = special
     values[34] = 25
     values[35] = sex
+    values[71:89] = list(range(18))
     values[101:104] = tags
     values[104] = -1
     values[105:107] = (traits + [-1, -1])[:2]
@@ -230,6 +231,10 @@ class Fo2CharacterStartTest(unittest.TestCase):
             )
             self.assertEqual(first["characters"][2]["profile"]["sex"], "Female")
             self.assertEqual(first["characters"][2]["profile"]["allocatedSpecial"], [4, 5, 4, 10, 7, 6, 4])
+            self.assertEqual(
+                first["characters"][2]["profile"]["skillBonuses"],
+                list(range(18)),
+            )
             self.assertEqual(first["femalePresentation"]["fid"], "0100003d")
             self.assertEqual(len(first["femalePresentation"]["directions"]), 6)
             self.assertEqual(first["femalePresentation"]["prototype"]["pid"], "01000002")

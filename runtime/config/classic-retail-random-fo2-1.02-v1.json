@@ -1,0 +1,13 @@
+{
+  "schema": "opennv-classic-retail-random/v1",
+  "exactBuild": "fallout2-retail-1.02",
+  "minimumSeed": 1,
+  "modulus": 2147483647,
+  "multiplier": 16807,
+  "quotient": 127773,
+  "remainder": 2836,
+  "shuffleSlots": 32,
+  "warmupSteps": 40,
+  "shuffleIndexMask": 31,
+  "savePolicy": "reset-from-new-seed-on-load"
+}
