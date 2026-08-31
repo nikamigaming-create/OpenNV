@@ -12,3 +12,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("OpenNV.GamebryoDialoguePlaybackProbe")]
 [assembly: InternalsVisibleTo("OpenNV.GamebryoResultCommandProbe")]
 [assembly: InternalsVisibleTo("OpenNV.GamebryoStageCommandProbe")]
+[assembly: InternalsVisibleTo("OpenNV.GamebryoPackageTravelProbe")]

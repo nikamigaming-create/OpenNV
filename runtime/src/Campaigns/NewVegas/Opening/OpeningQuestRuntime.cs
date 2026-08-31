@@ -133,9 +133,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _guideFurnitureLayeredSeatedAnimation;
     private string? _guideAnimationObjectIdleFormId;
     private OpeningCigaretteSmokePresentation? _guideCigaretteSmokePresentation;
-    private Vector3 _guideDestinationCellUnits;
-    private IReadOnlyList<Vector3> _guidePathCellUnits = Array.Empty<Vector3>();
-    private int _guidePathIndex;
+    private GamebryoPackageTravel? _guidePackageTravel;
     private OpeningGuideReference? _guideDestinationReference;
     private bool _guideMoving;
     private bool _guidePackageBegan;

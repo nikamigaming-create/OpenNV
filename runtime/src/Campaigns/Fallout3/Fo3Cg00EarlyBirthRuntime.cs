@@ -55,10 +55,12 @@ internal partial class Fo3OpeningFlow
 
     private sealed class Fo3Cg00ActorPackagePlayback(
         Fo3Cg00PackageSection contract,
-        ActorAnimationPlayback animation)
+        ActorAnimationPlayback animation,
+        GamebryoPackageTravel? travel)
     {
         internal Fo3Cg00PackageSection Contract { get; set; } = contract;
         internal ActorAnimationPlayback Animation { get; } = animation;
+        internal GamebryoPackageTravel? Travel { get; } = travel;
         internal double ElapsedSeconds => Animation.PositionSeconds;
     }
 
@@ -471,6 +473,7 @@ internal partial class Fo3OpeningFlow
             if (_cg00ActorPackages.TryGetValue(role, out var current) &&
                 current.Contract.PackageFormId == selected.Value.PackageFormId)
                 continue;
+            GamebryoPackageTravel? travel = null;
             if (selected.Target.Placement is { } placement)
             {
                 var actor = ActorForCg00Role(role);
@@ -479,7 +482,12 @@ internal partial class Fo3OpeningFlow
                         StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
                         $"Fallout 3 CG00 {role} package placement identity differs.");
-                GamebryoPackagePlacement.Publish(actor, placement);
+                travel = GamebryoPackageTravel.ArriveAtSourceTarget(
+                    selected.Value.PackageFormId,
+                    placement,
+                    actor.Placement.Transform,
+                    GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
+                travel.Publish(actor.Placement);
                 GD.Print(
                     $"OPENNV_FO3_CG00_MARKER_APPLIED role={role} " +
                     $"reference={participant.ReferenceFormId} " +
@@ -491,7 +499,8 @@ internal partial class Fo3OpeningFlow
                 selected.Value,
                 selected.Animation ?? throw new InvalidOperationException(
                     "Fallout 3 selected actor package has no source animation."),
-                selected.Value.AnimationStartSeconds);
+                selected.Value.AnimationStartSeconds,
+                travel);
         }
     }
 
@@ -522,6 +531,11 @@ internal partial class Fo3OpeningFlow
         foreach (var role in _cg00ActorPackages.Keys.ToArray())
         {
             var playback = _cg00ActorPackages[role];
+            if (playback.Travel is { } travel && !travel.Arrived)
+            {
+                travel.Advance(delta);
+                travel.Publish(ActorForCg00Role(role).Placement);
+            }
             playback.Animation.Advance(delta);
         }
     }
@@ -530,7 +544,8 @@ internal partial class Fo3OpeningFlow
         string role,
         Fo3Cg00PackageSection contract,
         SourceActorAnimation animation,
-        double elapsedSeconds)
+        double elapsedSeconds,
+        GamebryoPackageTravel? travel)
     {
         if (elapsedSeconds < contract.AnimationStartSeconds ||
             elapsedSeconds >= contract.AnimationStopSeconds)
@@ -543,7 +558,8 @@ internal partial class Fo3OpeningFlow
             elapsedSeconds);
         _cg00ActorPackages[role] = new Fo3Cg00ActorPackagePlayback(
             contract,
-            playback);
+            playback,
+            travel);
         GD.Print(
             $"OPENNV_FO3_CG00_PACKAGE_PUBLISHED stage={_cg00EarlyStage} role={role} " +
             $"section={contract.Section} package={contract.PackageFormId} " +

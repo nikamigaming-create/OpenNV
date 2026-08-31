@@ -256,8 +256,7 @@ internal partial class OpeningQuestRuntime
         {
             _guidePackageBegan = true;
             _guideMoving = false;
-            _guidePathCellUnits = Array.Empty<Vector3>();
-            _guidePathIndex = 0;
+            _guidePackageTravel = null;
             _activeGuideLocomotion = null;
             PlayGuideFurnitureSeatedLoop();
             return;
@@ -276,8 +275,7 @@ internal partial class OpeningQuestRuntime
         if (_guideDestinationReference is not { } destination)
         {
             _guideMoving = false;
-            _guidePathCellUnits = Array.Empty<Vector3>();
-            _guidePathIndex = 0;
+            _guidePackageTravel = null;
             _activeGuideLocomotion = null;
             PlayGuidePackageIdle(package);
             return;
@@ -296,19 +294,26 @@ internal partial class OpeningQuestRuntime
         var groundedTarget = GamebryoPackagePlacement.AdjustSupportHeight(
             targetPlacement.SourceTransform,
             groundedPosition.Y - targetPlacement.SourceTransform.Origin.Y);
-        _guideDestinationCellUnits = groundedTarget.Origin;
+        var groundedPlacement = new SourcePackagePlacement(
+            targetPlacement.Kind,
+            targetPlacement.TargetFormId,
+            groundedTarget);
         _activeGuideLocomotion = package.AlwaysRun
             ? _flow.GuideActorAi.Locomotion.Run
             : _flow.GuideActorAi.Locomotion.Walk;
-        if (_guideActor.Placement.Position == _guideDestinationCellUnits)
+        if (_guideActor.Placement.Position == groundedTarget.Origin)
         {
-            _guidePathCellUnits = Array.Empty<Vector3>();
-            _guidePathIndex = 0;
+            _guidePackageTravel = GamebryoPackageTravel.ArriveAtSourceTarget(
+                package.FormId,
+                groundedPlacement,
+                _guideActor.Placement.Transform,
+                GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
+            _guidePackageTravel.Publish(_guideActor.Placement);
             _guideMoving = false;
             FinishGuideTravel();
             return;
         }
-        _guidePathCellUnits = _loaded.MainContent.Navigation.FindPath(
+        var path = _loaded.MainContent.Navigation.FindPath(
                 _loaded.CellToGameUnits(_guideActor.Placement.Position),
                 destination.PositionGameUnits)
             .Select(_loaded.GameToCellUnits)
@@ -316,7 +321,7 @@ internal partial class OpeningQuestRuntime
                 _guideActor,
                 position))
             .ToArray();
-        if (_guidePathCellUnits.Count == 0)
+        if (path.Length == 0)
             throw new InvalidOperationException(
                 "Owned opening guide navigation returned no waypoints.");
         GD.Print(
@@ -324,9 +329,14 @@ internal partial class OpeningQuestRuntime
             $"navmeshes={_loaded.MainContent.Navigation.NavMeshes} " +
             $"vertices={_loaded.MainContent.Navigation.Vertices} " +
             $"triangles={_loaded.MainContent.Navigation.Triangles} " +
-            $"waypoints={_guidePathCellUnits.Count}");
-        _guidePathIndex = 0;
-        _guideDestinationCellUnits = _guidePathCellUnits[_guidePathIndex];
+            $"waypoints={path.Length}");
+        _guidePackageTravel = GamebryoPackageTravel.Start(
+            package.FormId,
+            groundedPlacement,
+            _guideActor.Placement.Transform,
+            path,
+            _activeGuideLocomotion.RootMotion.SpeedGameUnitsPerSecond,
+            GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
         _guideMoving = true;
         PlayGuideAnimation(
             _activeGuideLocomotion.LogicalPath,
@@ -480,8 +490,7 @@ internal partial class OpeningQuestRuntime
         _guideFurnitureLayeredSeatedAnimation?.Stop();
         _guideFurnitureExitPackage = package;
         _guideMoving = false;
-        _guidePathCellUnits = Array.Empty<Vector3>();
-        _guidePathIndex = 0;
+        _guidePackageTravel = null;
         _activeGuideLocomotion = null;
         _guideFurnitureExitPlayback = ActorAnimationPlayback.Start(
             _guideActor.Actor,
@@ -571,31 +580,14 @@ internal partial class OpeningQuestRuntime
                 locomotion.LogicalPath,
                 locomotion.Sha256,
                 restart: true);
-        var travelRemaining =
-            locomotion.RootMotion.SpeedGameUnitsPerSecond * (float)delta;
-        while (_guideMoving)
-        {
-            var current = _guideActor.Placement.Position;
-            var offset = _guideDestinationCellUnits - current;
-            var distance = offset.Length();
-            if (travelRemaining < distance)
-            {
-                _guideActor.Placement.Position =
-                    current + offset / distance * travelRemaining;
-                FaceGuideTowardCellPosition(_guideDestinationCellUnits);
-                return;
-            }
-            _guideActor.Placement.Position = _guideDestinationCellUnits;
-            travelRemaining -= distance;
-            _guidePathIndex++;
-            if (_guidePathIndex >= _guidePathCellUnits.Count)
-            {
-                FinishGuideTravel();
-                return;
-            }
-            _guideDestinationCellUnits = _guidePathCellUnits[_guidePathIndex];
-            FaceGuideTowardCellPosition(_guideDestinationCellUnits);
-        }
+        var travel = _guidePackageTravel ?? throw new InvalidOperationException(
+            "Owned opening guide is moving without source package travel state.");
+        var arrived = travel.Advance(delta);
+        travel.Publish(_guideActor.Placement);
+        if (travel.NextWaypoint is { } nextWaypoint)
+            FaceGuideTowardCellPosition(nextWaypoint);
+        if (arrived)
+            FinishGuideTravel();
     }
 
     private static SourceActorAnimation SourceAnimation(
@@ -613,9 +605,14 @@ internal partial class OpeningQuestRuntime
     {
         _guideMoving = false;
         _activeGuideLocomotion = null;
-        if (_guideDestinationReference is not null &&
-            _activeGuidePackageTarget.Placement is { } placement)
-            _guideActor.Placement.Basis = placement.SourceTransform.Basis;
+        var travel = _guidePackageTravel;
+        if (_guideDestinationReference is not null)
+        {
+            if (travel is null || !travel.Arrived)
+                throw new InvalidOperationException(
+                    "Owned guide package arrival was not completed.");
+            travel.Publish(_guideActor.Placement);
+        }
         if (_guideLookAtPlayer)
             FaceGuideToward(_loaded.Player.GlobalPosition);
         if (_activeGuidePackage is { } package)
