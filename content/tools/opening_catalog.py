@@ -548,6 +548,11 @@ def record_graph_closure(
         for source in reverse_links.get((signature, root), ())
         if source in by_form and by_form[source].signature == "DIAL"
     }
+    dialogue_topics.update(
+        form_id
+        for form_id in root_forms
+        if by_form[form_id].signature == "DIAL"
+    )
     selected.update(dialogue_topics)
     dialogue_children = {
         child
@@ -5071,6 +5076,134 @@ def _compile_dialogue(
     }
 
 
+def _compile_topic_closure(
+    records: list[dict[str, object]],
+    root_editor_id: str,
+    scripts: dict[str, tuple[int, str]],
+    quest_editor_id: str,
+) -> tuple[list[dict[str, object]], str]:
+    topics_by_form = {
+        str(record["formId"]): record
+        for record in records
+        if record["recordType"] == "DIAL"
+    }
+    root = _unique_manifest_record(records, root_editor_id, "DIAL")
+    infos_by_topic: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for record in records:
+        if record["recordType"] != "INFO":
+            continue
+        for group in record["groups"]:
+            if int(group["type"]) == DIALOGUE_TOPIC_GROUP_TYPE:
+                infos_by_topic[str(group["label"])].append(record)
+    closure = set()
+    queue = deque([str(root["formId"])])
+    while queue:
+        form_id = queue.popleft()
+        if form_id in closure:
+            continue
+        if form_id not in topics_by_form:
+            raise ValueError(f"Owned ordinary dialogue topic is absent: {form_id}")
+        closure.add(form_id)
+        for info in infos_by_topic.get(form_id, []):
+            queue.extend(
+                link["formId"]
+                for link in info["links"]
+                if link["signature"] == "TCLT"
+            )
+    rows = []
+    for form_id in sorted(closure, key=lambda value: int(value, FORM_ID_RADIX)):
+        topic = topics_by_form[form_id]
+        rows.append(
+            {
+                "formId": form_id,
+                "editorId": _record_editor_id_from_manifest(topic),
+                "prompt": next(iter(_record_text_values(topic, "FULL")), ""),
+                "infos": [
+                    _dialogue_info_manifest(info, scripts, quest_editor_id)
+                    for info in sorted(
+                        infos_by_topic.get(form_id, []),
+                        key=lambda value: int(value["sourceOrder"]),
+                    )
+                ],
+            }
+        )
+    return rows, str(root["formId"])
+
+
+def _compile_actor_dialogue_voice(
+    topics: list[dict[str, object]],
+    role: dict[str, object],
+    sources: FlowSourceCatalog,
+    audio_archives: OwnedArchiveStack,
+    master_path: Path,
+    cache_root: Path,
+) -> dict[str, object]:
+    base = sources.needed[int(str(role["baseFormId"]), FORM_ID_RADIX)]
+    voice_links = [
+        link["formId"] for link in base["links"] if link["signature"] == "VTCK"
+    ]
+    if len(voice_links) != 1:
+        raise ValueError(f"Owned ordinary speaker has no unique voice: {role['role']}")
+    voice_form_id = int(str(voice_links[0]), FORM_ID_RADIX)
+    voice_editor_id = sources.voice_types_by_form.get(voice_form_id)
+    if voice_editor_id is None:
+        raise ValueError("Owned ordinary speaker voice type is absent")
+    namespace = canonical_member_path(
+        f"{VOICE_MEMBER_ROOT}\\{master_path.name}\\{voice_editor_id}"
+    )
+    response_members: dict[tuple[str, int], str] = {}
+    prefix = namespace + "\\"
+    for logical_path in audio_archives.members:
+        if not logical_path.startswith(prefix):
+            continue
+        match = VOICE_RESPONSE_SUFFIX_PATTERN.search(logical_path)
+        if match is not None:
+            response_members[(match.group("form").casefold(), int(match.group("index")))] = logical_path
+    response_count = 0
+    infos = [info for topic in topics for info in topic["infos"]]
+    for info in infos:
+        lines = [str(value) for value in info.pop("lines")]
+        responses = []
+        for index, line in enumerate(lines, start=1):
+            logical_path = response_members.get((str(info["formId"]).casefold(), index))
+            if logical_path is None:
+                raise ValueError(
+                    f"Owned ordinary dialogue voice is absent: {info['formId']} {index}"
+                )
+            lip_path = logical_path.removesuffix(VOICE_AUDIO_EXTENSION) + VOICE_LIP_EXTENSION
+            if lip_path not in audio_archives.members:
+                raise ValueError(
+                    f"Owned ordinary dialogue LIP is absent: {info['formId']} {index}"
+                )
+            responses.append(
+                {
+                    "index": index,
+                    "text": line,
+                    "voice": _prepare_dialogue_asset(
+                        audio_archives.extract(logical_path), cache_root
+                    ),
+                    "lip": _prepare_dialogue_asset(
+                        audio_archives.extract(lip_path), cache_root
+                    ),
+                }
+            )
+            response_count += 1
+        if not responses:
+            raise ValueError(f"Owned ordinary INFO has no responses: {info['formId']}")
+        info["responses"] = responses
+    return {
+        "speakerRole": role["role"],
+        "speakerReferenceFormId": role["referenceFormId"],
+        "speakerBaseFormId": role["baseFormId"],
+        "voiceTypeFormId": form_id_text(voice_form_id),
+        "voiceTypeEditorId": voice_editor_id,
+        "memberNamespace": namespace,
+        "infoCount": len(infos),
+        "responseCount": response_count,
+        "archiveStack": audio_archives.manifest(),
+    }
+
+
 def _prepare_dialogue_asset(
     member: ExtractedMember,
     cache_root: Path,
@@ -6730,6 +6863,71 @@ def compile_new_game_flow(
         configuration,
         str(quest["formId"]),
     )
+    ordinary_actors = []
+    guide_contract = dict(flow["guideActorAi"])
+    for actor_contract_source in flow.get("ordinaryActors", []):
+        actor_contract = dict(actor_contract_source)
+        role_name = str(actor_contract["role"])
+        role = role_by_name.get(role_name)
+        if role is None or role["recordType"] not in {"ACHR", "ACRE"}:
+            raise ValueError(f"Owned ordinary actor role is absent: {role_name}")
+        packages = []
+        for package_editor_id in actor_contract["packageEditorIds"]:
+            package_record = sources.packages_by_editor.get(
+                str(package_editor_id).casefold()
+            )
+            if package_record is None:
+                raise ValueError(
+                    f"Owned ordinary actor package is absent: {package_editor_id}"
+                )
+            package, _ = _compile_guide_package(
+                package_record, guide_contract, sources
+            )
+            packages.append(package)
+        ordinary_quest_editor_id = str(actor_contract["questEditorId"])
+        if not any(
+            str(ordinary["editorId"]).casefold()
+            == ordinary_quest_editor_id.casefold()
+            for ordinary in ordinary_quests
+        ):
+            raise ValueError(
+                f"Owned ordinary actor quest is absent: {ordinary_quest_editor_id}"
+            )
+        topics, activation_topic_form_id = _compile_topic_closure(
+            records,
+            str(actor_contract["activationTopicEditorId"]),
+            sources.scripts,
+            ordinary_quest_editor_id,
+        )
+        voice = _compile_actor_dialogue_voice(
+            topics,
+            role,
+            sources,
+            audio_archives,
+            master_path,
+            cache_root,
+        )
+        commands = [
+            command
+            for topic in topics
+            for info in topic["infos"]
+            for command in info["commands"]
+        ]
+        ordinary_actors.append(
+            {
+                "role": role_name,
+                "referenceFormId": role["referenceFormId"],
+                "baseFormId": role["baseFormId"],
+                "packagePriority": [package["formId"] for package in packages],
+                "packages": packages,
+                "activationTopicFormId": activation_topic_form_id,
+                "topics": topics,
+                "voice": voice,
+                "commandContract": _resolve_command_record_identities(
+                    commands, records
+                ),
+            }
+        )
     _merge_actor_animation_paths(
         actor_animations,
         str(guide_actor_ai["referenceFormId"]),
@@ -6884,6 +7082,7 @@ def compile_new_game_flow(
                 "completionStage": completion_stages[0],
             },
             "ordinaryQuests": ordinary_quests,
+            "ordinaryActors": ordinary_actors,
             "sceneRoles": roles,
             "actorAnimations": actor_animations,
             "guideActorAi": guide_actor_ai,

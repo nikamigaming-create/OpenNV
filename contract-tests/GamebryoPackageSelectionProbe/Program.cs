@@ -1,3 +1,4 @@
+using Godot;
 using OpenNV.Runtime.World.Actors;
 
 const string quest = "00000001";
@@ -66,6 +67,36 @@ if (!Rejects(() => GamebryoPackageSelector.SelectFirst(
         state,
         requireMatch: true)))
     throw new InvalidOperationException("Unsupported source package target was admitted.");
+
+var actorReference = GamebryoPackageSelector.SelectFirst(
+    [new GamebryoPackageCandidate<string>(
+        "00000061",
+        [],
+        new GamebryoPackageTarget("actorReference", "00000014", null),
+        null,
+        "player")],
+    state,
+    requireMatch: true);
+if (actorReference?.Target.ReferenceFormId != "00000014")
+    throw new InvalidOperationException("Source actor-reference package target was not retained.");
+
+if (!Rejects(() => GamebryoPackageSelector.SelectFirst(
+        [new GamebryoPackageCandidate<string>(
+            "00000062",
+            [],
+            new GamebryoPackageTarget(
+                "actorReference",
+                "00000014",
+                new SourcePackagePlacement(
+                    "actorReference",
+                    "00000014",
+                    Transform3D.Identity)),
+            null,
+            "player")],
+        state,
+        requireMatch: true)))
+    throw new InvalidOperationException(
+        "Actor-reference package target admitted an invented placement.");
 
 if (!Rejects(() => GamebryoPackageSelector.SelectFirst(
         [new GamebryoPackageCandidate<string>(

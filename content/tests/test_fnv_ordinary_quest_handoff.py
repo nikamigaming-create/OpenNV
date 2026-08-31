@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "content" / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from opening_catalog import _compile_ordinary_quests
+from opening_catalog import _compile_ordinary_quests, _compile_topic_closure
 
 
 def record(
@@ -89,6 +89,51 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         self.assertIn("VCG02", recipe["rootEditorIds"])
         self.assertEqual(
             ["VCG02"], recipe["newGameFlow"]["ordinaryQuestEditorIds"]
+        )
+        self.assertEqual(
+            "VCG02", recipe["newGameFlow"]["ordinaryActors"][0]["questEditorId"]
+        )
+
+    def test_compiles_ordered_activation_topic_info_and_source_results(self) -> None:
+        topic = record("DIAL", "0010a1e1", "VFreeformGoodspringsGSSunnySmilesTopic019")
+        topic["text"].append({"signature": "FULL", "value": "Ask about survival"})
+        info = record(
+            "INFO",
+            "0010a1e4",
+            "",
+            source="StartQuest VCG02\nSetStage VCG02 10",
+        )
+        info.update(
+            {
+                "sourceOrder": 41,
+                "groups": [{"type": 7, "label": "0010a1e1"}],
+                "conditions": [],
+                "dialogueData": {"flags": 1, "responseType": 0},
+            }
+        )
+        info["text"].extend(
+            [
+                {"signature": "NAM1", "value": "First response"},
+                {"signature": "NAM1", "value": "Second response"},
+            ]
+        )
+
+        topics, root_form_id = _compile_topic_closure(
+            [topic, info],
+            "VFreeformGoodspringsGSSunnySmilesTopic019",
+            {},
+            "VCG01",
+        )
+
+        self.assertEqual("0010a1e1", root_form_id)
+        self.assertEqual("Ask about survival", topics[0]["prompt"])
+        self.assertEqual(41, topics[0]["infos"][0]["sourceOrder"])
+        self.assertEqual(
+            ["First response", "Second response"], topics[0]["infos"][0]["lines"]
+        )
+        self.assertEqual(
+            ["startQuest", "setStage"],
+            [command["kind"] for command in topics[0]["infos"][0]["commands"]],
         )
 
 

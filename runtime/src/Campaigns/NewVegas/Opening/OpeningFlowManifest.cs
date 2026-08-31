@@ -12,6 +12,7 @@ internal sealed partial record OpeningNewGameFlow(
     string QuestEditorId,
     IReadOnlyDictionary<int, string> Objectives,
     IReadOnlyDictionary<string, OpeningOrdinaryQuest> OrdinaryQuests,
+    IReadOnlyList<OpeningOrdinaryActor> OrdinaryActors,
     int CompletionStage,
     int PsychologyStartStage,
     int OutroStartStage,
@@ -180,6 +181,9 @@ internal sealed partial record OpeningNewGameFlow(
         var ordinaryQuests = source.GetProperty("ordinaryQuests").EnumerateArray()
             .Select(ParseOrdinaryQuest)
             .ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase);
+        var ordinaryActors = source.GetProperty("ordinaryActors").EnumerateArray()
+            .Select(ParseOrdinaryActor)
+            .ToArray();
         var timerTransitions = quest.GetProperty("timerTransitions").EnumerateArray()
             .Select(value => new OpeningTimerTransition(
                 value.GetProperty("fromStage").GetInt32(),
@@ -228,6 +232,7 @@ internal sealed partial record OpeningNewGameFlow(
             quest.GetProperty("editorId").GetString()!,
             objectives,
             ordinaryQuests,
+            ordinaryActors,
             quest.GetProperty("completionStage").GetInt32(),
             dialogue.GetProperty("psychologyStartStage").GetInt32(),
             dialogue.GetProperty("outroStartStage").GetInt32(),
@@ -268,6 +273,27 @@ internal sealed partial record OpeningNewGameFlow(
             source.GetProperty("stages").EnumerateArray()
                 .Select(ParseStage)
                 .ToDictionary(value => value.Stage),
+            ParseCommandContract(source.GetProperty("commandContract")));
+    }
+
+    private static OpeningOrdinaryActor ParseOrdinaryActor(JsonElement source)
+    {
+        var topics = source.GetProperty("topics").EnumerateArray()
+            .Select(ParseTopic)
+            .ToArray();
+        return new OpeningOrdinaryActor(
+            source.GetProperty("role").GetString()!,
+            source.GetProperty("referenceFormId").GetString()!,
+            source.GetProperty("baseFormId").GetString()!,
+            source.GetProperty("packagePriority").EnumerateArray()
+                .Select(value => value.GetString()!)
+                .ToArray(),
+            source.GetProperty("packages").EnumerateArray()
+                .Select(ParseGuidePackage)
+                .ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase),
+            source.GetProperty("activationTopicFormId").GetString()!,
+            topics.ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase),
+            ParseDialogueVoice(source.GetProperty("voice")),
             ParseCommandContract(source.GetProperty("commandContract")));
     }
 

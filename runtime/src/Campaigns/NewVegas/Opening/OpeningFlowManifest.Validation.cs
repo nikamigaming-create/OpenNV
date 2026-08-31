@@ -62,6 +62,22 @@ internal sealed partial record OpeningNewGameFlow
                 ordinary.CommandContract,
                 ordinary.Stages.Values.SelectMany(stage => stage.Commands).ToArray());
         }
+        foreach (var actor in flow.OrdinaryActors)
+        {
+            var actorCommands = actor.Topics.Values.SelectMany(topic =>
+                topic.Infos.SelectMany(info => info.Commands)).ToArray();
+            if (!flow.SceneRoles.TryGetValue(actor.Role, out var role) ||
+                !role.ReferenceFormId.Equals(
+                    actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase) ||
+                !role.BaseFormId.Equals(actor.BaseFormId, StringComparison.OrdinalIgnoreCase) ||
+                actor.PackagePriority.Count == 0 ||
+                actor.PackagePriority.Any(formId => !actor.Packages.ContainsKey(formId)) ||
+                !actor.Topics.ContainsKey(actor.ActivationTopicFormId) ||
+                !actor.Voice.SpeakerRole.Equals(actor.Role, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Owned ordinary actor dialogue handoff is incomplete.");
+            ValidateCommandContract(actor.CommandContract, actorCommands);
+        }
         if (flow.Stages.Values
             .SelectMany(value => value.Commands)
             .Where(value => value.Kind == "objective" &&

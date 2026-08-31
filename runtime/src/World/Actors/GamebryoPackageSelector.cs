@@ -152,6 +152,10 @@ internal static class GamebryoPackageSelector
                 target.ReferenceFormId,
                 StringComparison.OrdinalIgnoreCase))
             return;
+        if (target.Kind.Equals("actorReference", StringComparison.Ordinal) &&
+            !string.IsNullOrWhiteSpace(target.ReferenceFormId) &&
+            target.Placement is null)
+            return;
         throw new InvalidOperationException(
             $"Source package target is unsupported: {target.Kind}");
     }

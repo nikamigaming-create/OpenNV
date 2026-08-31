@@ -902,6 +902,8 @@ internal partial class OpeningQuestRuntime
 
     private bool HandleExternalActivation(Node? collider)
     {
+        if (_openingQuestCompleted && HandleOrdinaryActorActivation(collider))
+            return true;
         foreach (var role in _flow.SceneRoles.Values)
         {
             if (!_destroyedReferences.Contains(role.ReferenceFormId) ||

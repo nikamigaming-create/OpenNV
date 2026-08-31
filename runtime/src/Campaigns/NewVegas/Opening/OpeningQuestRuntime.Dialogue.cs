@@ -13,14 +13,22 @@ internal partial class OpeningQuestRuntime
 {
     private void PlayTopicEditor(string editorId, Action completed, int generation)
     {
-        if (!_flow.TopicsByEditorId.TryGetValue(editorId, out var topic))
+        var topic = _flow.TopicsByEditorId.GetValueOrDefault(editorId) ??
+            _flow.OrdinaryActors.SelectMany(actor => actor.Topics.Values)
+                .SingleOrDefault(value => value.EditorId.Equals(
+                    editorId, StringComparison.OrdinalIgnoreCase));
+        if (topic is null)
             throw new InvalidOperationException($"Owned dialogue topic is absent: {editorId}");
         PlayTopic(topic, completed, generation);
     }
 
     private void PlayTopicForm(string formId, Action completed, int generation)
     {
-        if (!_flow.TopicsByFormId.TryGetValue(formId, out var topic))
+        var topic = _flow.TopicsByFormId.GetValueOrDefault(formId) ??
+            _flow.OrdinaryActors.SelectMany(actor => actor.Topics.Values)
+                .SingleOrDefault(value => value.FormId.Equals(
+                    formId, StringComparison.OrdinalIgnoreCase));
+        if (topic is null)
             throw new InvalidOperationException($"Owned dialogue topic is absent: {formId}");
         PlayTopic(topic, completed, generation);
     }
@@ -70,14 +78,16 @@ internal partial class OpeningQuestRuntime
             return;
         }
         var response = info.Responses[lineIndex];
+        var binding = ResolveDialogueBinding(info.FormId);
         var menu = OpenDialogueMenu();
         menu.ShowLine(
-            _flow.SceneRoles[_flow.DialogueVoice.SpeakerRole].DisplayName,
+            _flow.SceneRoles[binding.Role].DisplayName,
             response.Text,
             CompleteDialogueVoice);
         StartDialogueVoice(
             response,
             info.FormId,
+            binding,
             generation,
             () => PlayInfo(
                 info,
@@ -111,14 +121,15 @@ internal partial class OpeningQuestRuntime
     private void StartDialogueVoice(
         OpeningDialogueResponse response,
         string infoFormId,
+        DialogueBinding binding,
         int flowGeneration,
         Action completed)
     {
         _activeDialogueInfoFormId = infoFormId;
         _activeDialogueResponseIndex = response.Index;
         _dialoguePlayback.Start(
-            SourceLine(infoFormId, response),
-            _dialogueFace,
+            SourceLine(infoFormId, response, binding.VoiceTypeFormId),
+            binding.Face,
             () =>
             {
                 if (flowGeneration != _generation)
@@ -131,11 +142,12 @@ internal partial class OpeningQuestRuntime
 
     private SourceDialogueLine SourceLine(
         string infoFormId,
-        OpeningDialogueResponse response) =>
+        OpeningDialogueResponse response,
+        string? voiceTypeFormId = null) =>
         new(
             infoFormId,
             response.Index,
-            _flow.DialogueVoice.VoiceTypeFormId,
+            voiceTypeFormId ?? _flow.DialogueVoice.VoiceTypeFormId,
             response.Text,
             new SourceDialogueAsset(
                 response.Voice.LogicalPath,
@@ -145,6 +157,27 @@ internal partial class OpeningQuestRuntime
                 response.Lip.LogicalPath,
                 response.Lip.SourcePath,
                 response.Lip.Sha256));
+
+    private DialogueBinding ResolveDialogueBinding(string infoFormId)
+    {
+        var actor = _flow.OrdinaryActors.SingleOrDefault(candidate =>
+            candidate.Topics.Values.SelectMany(topic => topic.Infos).Any(info =>
+                info.FormId.Equals(infoFormId, StringComparison.OrdinalIgnoreCase)));
+        return actor is null
+            ? new DialogueBinding(
+                _flow.DialogueVoice.SpeakerRole,
+                _flow.DialogueVoice.VoiceTypeFormId,
+                _dialogueFace)
+            : new DialogueBinding(
+                actor.Role,
+                actor.Voice.VoiceTypeFormId,
+                _ordinaryDialogueFaces[actor.Role]);
+    }
+
+    private sealed record DialogueBinding(
+        string Role,
+        string VoiceTypeFormId,
+        FaceGenMorphController Face);
 
     private void UpdateDialogueVoice()
     {

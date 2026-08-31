@@ -203,15 +203,22 @@ internal partial class OpeningQuestRuntime
         var choices = new List<(string Identity, string Text, Action Selected)>();
         foreach (var formId in topicFormIds)
         {
-            if (!_flow.TopicsByFormId.TryGetValue(formId, out var topic))
+            var topic = _flow.TopicsByFormId.GetValueOrDefault(formId) ??
+                _flow.OrdinaryActors.SelectMany(actor => actor.Topics.Values)
+                    .SingleOrDefault(value => value.FormId.Equals(
+                        formId, StringComparison.OrdinalIgnoreCase));
+            if (topic is null)
                 throw new InvalidOperationException($"Owned dialogue choice is absent: {formId}");
             choices.Add((
                 topic.FormId,
                 topic.Prompt,
                 () => PlayTopic(topic, completed, generation)));
         }
+        var ordinarySpeaker = _flow.OrdinaryActors.SingleOrDefault(actor =>
+            topicFormIds.Any(actor.Topics.ContainsKey));
+        var speakerRole = ordinarySpeaker?.Role ?? _flow.DialogueVoice.SpeakerRole;
         OpenDialogueMenu().ShowTopics(
-            _flow.SceneRoles[_flow.DialogueVoice.SpeakerRole].DisplayName,
+            _flow.SceneRoles[speakerRole].DisplayName,
             choices);
     }
 
@@ -299,6 +306,9 @@ internal partial class OpeningQuestRuntime
             stage,
             running || existing?.Running == true,
             false);
+        if (_flow.OrdinaryQuests.TryGetValue(formId, out var ordinary) &&
+            ordinary.Stages.ContainsKey(stage))
+            ExecuteOrdinaryQuestStage(ordinary, stage);
     }
 
     private void ApplyQuestLifecycle(OpeningFlowCommand command)
@@ -337,10 +347,24 @@ internal partial class OpeningQuestRuntime
             GamebryoStageCommandExecutor.ExecuteOne(commands, index, sourceCommand =>
             {
                 var source = sourceCommand.Value;
-                if (source.Kind != "objective")
-                    throw new InvalidOperationException(
-                        "Owned ordinary quest stage command is not admitted by this handoff.");
-                ApplyObjective(source);
+                switch (source.Kind)
+                {
+                    case "objective":
+                        ApplyObjective(source);
+                        break;
+                    case "setQuestVariable":
+                        ApplyQuestVariable(source);
+                        break;
+                    case "setStage":
+                        ApplyQuestStage(source);
+                        break;
+                    case "actorIntent":
+                        ApplyOrdinaryActorIntent(source);
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            "Owned ordinary quest stage command is not admitted by this handoff.");
+                }
                 return true;
             });
         }
@@ -931,11 +955,10 @@ internal partial class OpeningQuestRuntime
         ApplyStageControlPolicy();
         var state = CaptureState(true);
         _loaded.Session.StoreOpeningState(state);
-        _loaded.Player.SetExternalActivationHandler(null);
         _loaded.Player.ClearOwnedNavigation();
         _viewport.MouseFilter = Control.MouseFilterEnum.Ignore;
         _viewport.Visible = false;
-        SetProcess(false);
+        EvaluateOrdinaryActorPackages();
         GD.Print(
             $"OPENNV_NEW_GAME_OPEN_WORLD_READY quest={_flow.QuestEditorId} " +
             $"stage={_stage} name={_playerName} inventory={_inventory.Count} " +
@@ -1024,6 +1047,8 @@ internal partial class OpeningQuestRuntime
     private Control OpenModalRoot(string? menuRole = null)
     {
         CloseModal(false);
+        _viewport.Visible = true;
+        _viewport.MouseFilter = Control.MouseFilterEnum.Stop;
         var root = new Control
         {
             Name = "OwnedMenu",
@@ -1113,6 +1138,11 @@ internal partial class OpeningQuestRuntime
         }
         if (restoreControls)
             ApplyStageControlPolicy();
+        if (_openingQuestCompleted && _activeModal is null)
+        {
+            _viewport.Visible = false;
+            _viewport.MouseFilter = Control.MouseFilterEnum.Ignore;
+        }
     }
 
     private void ApplyStageControlPolicy()

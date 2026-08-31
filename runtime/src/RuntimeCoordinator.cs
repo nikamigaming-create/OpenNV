@@ -640,7 +640,7 @@ public partial class RuntimeCoordinator : Node3D
                 restoredOpening is not null &&
                 OpeningQuestRuntime.GameplayUiEnabled(restoredOpening));
         OpeningQuestRuntime? openingFlow = null;
-        if (startsNewGame || restoredOpening is { Completed: false })
+        if (startsNewGame || restoredOpening is not null)
         {
             if (openingManifest is null)
                 throw new InvalidOperationException(

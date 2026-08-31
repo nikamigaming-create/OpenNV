@@ -12,7 +12,10 @@
     "VCG00",
     "VCG01",
     "VCG02",
-    "VGenericTimer"
+    "VGenericTimer",
+    "SunnyRef",
+    "SunnyMeetPlayerDialoguePackage",
+    "VFreeformGoodspringsGSSunnySmilesTopic019"
   ],
   "entryPoint": {
     "questEditorId": "VCG00",
@@ -375,9 +378,18 @@
     },
     "sceneRoles": {
       "guideActor": "DocMitchellREF",
+      "tutorialGuide": "SunnyREF",
       "vigorTester": "VCG01VigorTesterREF",
       "exitDoor": "GSDocMitchellHouseIntDoorREF"
     },
+    "ordinaryActors": [
+      {
+        "role": "tutorialGuide",
+        "questEditorId": "VCG02",
+        "packageEditorIds": ["SunnyMeetPlayerDialoguePackage"],
+        "activationTopicEditorId": "VFreeformGoodspringsGSSunnySmilesTopic019"
+      }
+    ],
     "menus": {
       "dialogue": {
         "document": "menus\\dialog\\dialog_menu.xml"

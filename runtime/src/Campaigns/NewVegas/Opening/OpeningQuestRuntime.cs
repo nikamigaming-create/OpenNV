@@ -98,6 +98,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private ColorRect _imageSpaceFade = null!;
     private AudioStreamPlayer _dialogueVoice = null!;
     private FaceGenMorphController _dialogueFace = null!;
+    private readonly Dictionary<string, FaceGenMorphController> _ordinaryDialogueFaces =
+        new(StringComparer.OrdinalIgnoreCase);
     private GamebryoDialoguePlayback _dialoguePlayback = null!;
     private string? _activeDialogueInfoFormId;
     private int _activeDialogueResponseIndex;
@@ -843,6 +845,19 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _dialogueFace = new FaceGenMorphController(
             _guideActor.Actor,
             configuration.ActorCompiler.FaceGenAnimation.Lip);
+        foreach (var actor in _flow.OrdinaryActors)
+        {
+            var placed = _loaded.Actors.Single(value =>
+                value.ReferenceFormId.Equals(
+                    actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase) &&
+                value.BaseFormId.Equals(
+                    actor.BaseFormId, StringComparison.OrdinalIgnoreCase));
+            _ordinaryDialogueFaces.Add(
+                actor.Role,
+                new FaceGenMorphController(
+                    placed.Actor,
+                    configuration.ActorCompiler.FaceGenAnimation.Lip));
+        }
         _dialoguePlayback = new GamebryoDialoguePlayback(
             _dialogueVoice,
             configuration.ActorCompiler.FaceGenAnimation.Lip);
@@ -898,7 +913,16 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         else
         {
             RestoreState(restoredState);
-            ResumeRestoredCheckpoint(restoredState.Stage);
+            if (restoredState.Completed)
+            {
+                _openingQuestCompleted = true;
+                _stage = restoredState.Stage;
+                _viewport.Visible = false;
+                _viewport.MouseFilter = Control.MouseFilterEnum.Ignore;
+                EvaluateOrdinaryActorPackages();
+            }
+            else
+                ResumeRestoredCheckpoint(restoredState.Stage);
         }
         GD.Print(
             $"OPENNV_NEW_GAME_FLOW_READY quest={_flow.QuestEditorId} " +
@@ -908,6 +932,11 @@ internal partial class OpeningQuestRuntime : CanvasLayer
 
     public override void _Process(double delta)
     {
+        if (_openingQuestCompleted)
+        {
+            UpdateDialogueVoice();
+            return;
+        }
         UpdatePlayerAnimation(delta);
         UpdateImageSpaceModifiers(delta);
         UpdateGuideActor(delta);

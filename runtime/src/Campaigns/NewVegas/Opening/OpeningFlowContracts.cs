@@ -327,6 +327,17 @@ internal sealed record OpeningOrdinaryQuest(
     IReadOnlyDictionary<int, OpeningStageProgram> Stages,
     OpeningCommandContract CommandContract);
 
+internal sealed record OpeningOrdinaryActor(
+    string Role,
+    string ReferenceFormId,
+    string BaseFormId,
+    IReadOnlyList<string> PackagePriority,
+    IReadOnlyDictionary<string, OpeningGuidePackage> Packages,
+    string ActivationTopicFormId,
+    IReadOnlyDictionary<string, OpeningDialogueTopic> Topics,
+    OpeningDialogueVoice Voice,
+    OpeningCommandContract CommandContract);
+
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
 
 internal sealed record OpeningCommandContract(
