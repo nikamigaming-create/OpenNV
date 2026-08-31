@@ -259,6 +259,9 @@ LOCK_REFERENCE_PATTERN = re.compile(
     r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.Lock\s+(?P<value>\d+)$",
     re.IGNORECASE,
 )
+UNLOCK_REFERENCE_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.Unlock$", re.IGNORECASE
+)
 CONDITION_BYTES = 28
 CONDITION_FUNCTION_OFFSET = 8
 CONDITION_PARAMETER_1_OFFSET = 12
@@ -3019,6 +3022,14 @@ def _compile_cg01_post_stage14_transition(
                 "referenceEditorId": _editor_id(subject),
                 "value": int(match.group("value")),
             }
+        if match := UNLOCK_REFERENCE_PATTERN.fullmatch(text):
+            subject = reference(match.group("subject"))
+            return {
+                "index": index,
+                "kind": "unlock",
+                "referenceFormId": _form_id(subject.form_id),
+                "referenceEditorId": _editor_id(subject),
+            }
         if match := SET_STAGE_PATTERN.fullmatch(text):
             if match.group("quest").casefold() != (_editor_id(quest) or "").casefold():
                 raise ValueError("Fallout 3 CG01 nested stage quest differs")
@@ -3298,8 +3309,103 @@ def _compile_cg01_post_stage14_transition(
             "sourceSha256": hashlib.sha256(stage_sources[timer_target_stage][0].encode("cp1252")).hexdigest(),
             "commands": target_compiled,
         },
-        "nextBoundary": {"applied": False, "blocker": "fo3-cg01-stage-70-dad-package-runtime-not-implemented"},
+        "nextBoundary": {"applied": True, "blocker": None},
     }
+    dad_package_ids = [
+        struct.unpack("<I", row.data)[0] for row in iter_subrecords(dad_base)
+        if row.signature == "PKID" and len(row.data) == FORM_ID_BYTES
+    ]
+    return_packages = []
+    for package_id in dad_package_ids:
+        package = by_form.get(package_id)
+        if package is None or package.signature != PACKAGE_RECORD:
+            continue
+        conditions = [_dialogue_condition(row.data) for row in iter_subrecords(package) if row.signature == "CTDA"]
+        if len(conditions) == 1 and conditions[0]["function"] == GET_STAGE_FUNCTION and conditions[0]["parameter1"] == quest.form_id and conditions[0]["comparisonValue"] == float(timer_target_stage):
+            return_packages.append((package, conditions[0]))
+    if len(return_packages) != 1:
+        raise ValueError("Fallout 3 CG01 stage-70 Dad package differs")
+    return_package, return_condition = return_packages[0]
+    location = _single_subrecord(return_package, "PLDT")
+    if len(location) != PACKAGE_LOCATION_BYTES:
+        raise ValueError("Fallout 3 CG01 Dad-return location differs")
+    location_type, return_target_id, return_radius = struct.unpack("<iIi", location)
+    return_target = by_form.get(return_target_id)
+    if location_type != 0 or return_target is None or return_target.signature != PLACED_REFERENCE_RECORD:
+        raise ValueError("Fallout 3 CG01 Dad-return marker differs")
+    completion = re.search(
+        rf"begin\s+OnPackageDone\s+{re.escape(_editor_id(return_package) or '')}\s*"
+        r"(?P<body>.*?)\bend\b",
+        _script_source(dad_script), re.IGNORECASE | re.DOTALL)
+    completion_commands = _source_commands(completion.group("body")) if completion else []
+    if len(completion_commands) != 1 or not (completion_stage := SET_STAGE_PATTERN.fullmatch(completion_commands[0])):
+        raise ValueError("Fallout 3 CG01 Dad-return completion differs")
+    completion_target = int(completion_stage.group("stage"))
+    stage72_commands = stage_commands(completion_target)
+    stage72_compiled = [compile_command(text, index) for index, text in enumerate(stage72_commands)]
+    dialogue_delay_rows = [row for row in stage72_compiled if row["kind"] == "setScriptVariable" and row["variable"] == "timer"]
+    if len(dialogue_delay_rows) != 1 or float(dialogue_delay_rows[0]["value"]) <= 0:
+        raise ValueError("Fallout 3 CG01 Dad-return dialogue delay differs")
+    topic_infos = [
+        record for record in records if record.signature == DIALOGUE_INFO_RECORD and
+        any(group.group_type == DIALOGUE_CHILD_GROUP_TYPE and group.label_u32 == topic.form_id for group in record.groups)
+    ]
+    dialogue_start = next((index for index, info in enumerate(topic_infos) if any(
+        SET_STAGE_PATTERN.fullmatch(command) and int(SET_STAGE_PATTERN.fullmatch(command).group("stage")) > completion_target
+        for source_text in _text_values(info, "SCTX") for command in _source_commands(source_text))), None)
+    if dialogue_start is None:
+        raise ValueError("Fallout 3 CG01 Dad-return dialogue start is absent")
+    dialogue_infos = []
+    dialogue_target = None
+    for info in topic_infos[dialogue_start:]:
+        dialogue_infos.append(info)
+        stages_in_info = [int(match.group("stage")) for source_text in _text_values(info, "SCTX")
+            for command in _source_commands(source_text) if (match := SET_STAGE_PATTERN.fullmatch(command))]
+        if stages_in_info:
+            dialogue_target = stages_in_info[-1]
+            if dialogue_target > completion_target + 1:
+                break
+    if dialogue_target is None or len(dialogue_infos) < 2:
+        raise ValueError("Fallout 3 CG01 Dad-return dialogue closure differs")
+    return_cues = []
+    for sequence, info in enumerate(dialogue_infos):
+        responses = _text_values(info, "NAM1")
+        if len(responses) != 1:
+            raise ValueError("Fallout 3 CG01 Dad-return response differs")
+        return_cues.append({
+            "sequence": sequence,
+            "infoFormId": _form_id(info.form_id),
+            "recordSha256": hashlib.sha256(info.data).hexdigest(),
+            "sayOnce": True,
+            "conditions": [{**row, "parameter1": _form_id(int(row["parameter1"])), "reference": _form_id(int(row["reference"]))}
+                for row in [_dialogue_condition(value.data) for value in iter_subrecords(info) if value.signature == "CTDA"]],
+            "effects": [compile_command(command, index) for index, command in enumerate(
+                command for source_text in _text_values(info, "SCTX") for command in _source_commands(source_text))],
+            "targetStage": next((int(match.group("stage")) for source_text in _text_values(info, "SCTX")
+                for command in _source_commands(source_text) if (match := SET_STAGE_PATTERN.fullmatch(command))), None),
+            "targetQuestFormId": _form_id(quest.form_id) if any(SET_STAGE_PATTERN.fullmatch(command)
+                for source_text in _text_values(info, "SCTX") for command in _source_commands(source_text)) else None,
+            "response": {"index": 1, "text": responses[0], "textSha256": hashlib.sha256(responses[0].encode("utf-8")).hexdigest()},
+        })
+    timer_contract = dict(stage20_interaction["timerTransition"])
+    timer_contract["dadReturn"] = {
+        "package": {
+            "formId": _form_id(return_package.form_id), "editorId": _editor_id(return_package),
+            "recordSha256": hashlib.sha256(return_package.data).hexdigest(),
+            "condition": {**return_condition, "parameter1": _form_id(int(return_condition["parameter1"])), "reference": _form_id(int(return_condition["reference"]))},
+            "target": {"formId": _form_id(return_target.form_id), "editorId": _editor_id(return_target),
+                "recordSha256": hashlib.sha256(return_target.data).hexdigest(), "sourceTransform": _reference_transform_contract(return_target),
+                "radiusGameUnits": return_radius},
+            "completionStage": completion_target,
+        },
+        "completionResult": {"sourceSha256": hashlib.sha256(stage_sources[completion_target][0].encode("cp1252")).hexdigest(), "commands": stage72_compiled},
+        "dialogueDelaySeconds": float(dialogue_delay_rows[0]["value"]),
+        "dialogue": {"topicFormId": _form_id(topic.form_id), "topicEditorId": _editor_id(topic), "branches": return_cues,
+            "dialoguePlaybackPrepared": False, "dialoguePlaybackImplemented": False},
+        "targetStage": dialogue_target,
+        "nextBoundary": {"applied": False, "blocker": "fo3-cg01-stage-75-dad-lead-package-runtime-not-implemented"},
+    }
+    stage20_interaction["timerTransition"] = timer_contract
 
     return {
         "schema": "opennv-fo3-cg01-stage-14-to-20-runtime/v1",
@@ -6532,6 +6638,20 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         profile_root,
     )
     post_stage14_transition["dialogue"] = post_stage14_dialogue
+    stage20_interaction = dict(post_stage14_transition["stage20Interaction"])
+    timer_transition = dict(stage20_interaction["timerTransition"])
+    dad_return = dict(timer_transition["dadReturn"])
+    dad_return_dialogue = dict(dad_return["dialogue"])
+    _bind_owned_dad_dialogue_audio(
+        dad_return_dialogue,
+        voices_archive,
+        voices_archive_sha256,
+        profile_root,
+    )
+    dad_return["dialogue"] = dad_return_dialogue
+    timer_transition["dadReturn"] = dad_return
+    stage20_interaction["timerTransition"] = timer_transition
+    post_stage14_transition["stage20Interaction"] = stage20_interaction
     post_stage5_transition["postStage14Transition"] = post_stage14_transition
     cg01_transition["postStage5Transition"] = post_stage5_transition
     character_selection["cg01Stage0Transition"] = cg01_transition

@@ -56,11 +56,26 @@ internal sealed record Fo3SpecialStageResult(
     int Stage,
     IReadOnlyList<SourceGamebryoStageCommand<string>> Commands);
 
+internal sealed record Fo3Cg01DadReturnCue(
+    string InfoFormId,
+    Fo3OwnedDialogueResponse Response,
+    string? TargetQuestFormId,
+    int? TargetStage);
+
 internal sealed record Fo3Cg01Stage50Timer(
     int SourceStage,
     int TargetStage,
     double InitialSeconds,
     IReadOnlyList<SourceGamebryoStageCommand<string>> TargetCommands,
+    Fo3Cg01PostStage14Package DadReturnPackage,
+    int CompletionStage,
+    IReadOnlyList<SourceGamebryoStageCommand<string>> CompletionCommands,
+    double DialogueDelaySeconds,
+    IReadOnlyList<Fo3Cg01DadReturnCue> DialogueCues,
+    int DialogueTargetStage,
+    string MainDoorReferenceFormId,
+    int MainDoorLockLevel,
+    bool MainDoorOpen,
     string NextBoundaryBlocker)
 {
     internal static Fo3Cg01Stage50Timer Load(JsonElement source, int expectedSourceStage)
@@ -91,16 +106,85 @@ internal sealed record Fo3Cg01Stage50Timer(
                 return new SourceGamebryoStageCommand<string>(index, kind,
                     row.GetProperty("kind").GetString()!);
             }).ToArray();
-        var boundary = source.GetProperty("nextBoundary");
+        var dadReturn = source.GetProperty("dadReturn");
+        var package = dadReturn.GetProperty("package");
+        var target = package.GetProperty("target");
+        var transform = Fo3Cg01Stage12Transition.LoadTransform(target.GetProperty("sourceTransform"));
+        var completionStage = package.GetProperty("completionStage").GetInt32();
+        var completionCommands = ReadCommands(dadReturn.GetProperty("completionResult"),
+            new Dictionary<string, GamebryoStageCommandKind>(StringComparer.Ordinal)
+            {
+                ["setScriptVariable"] = GamebryoStageCommandKind.SetScriptVariable,
+                ["unlock"] = GamebryoStageCommandKind.ActorIntent,
+                ["setOpenState"] = GamebryoStageCommandKind.ActorIntent,
+                ["lock"] = GamebryoStageCommandKind.ActorIntent,
+            });
+        var completionRows = dadReturn.GetProperty("completionResult").GetProperty("commands")
+            .EnumerateArray().ToArray();
+        var mainDoorRows = completionRows.Where(row =>
+            row.TryGetProperty("referenceEditorId", out var editor) &&
+            editor.GetString() == "CG01MainDoor").ToArray();
+        var mainDoorLock = mainDoorRows.Single(row => row.GetProperty("kind").GetString() == "lock");
+        var mainDoorOpen = mainDoorRows.Single(row => row.GetProperty("kind").GetString() == "setOpenState");
+        var dialogue = dadReturn.GetProperty("dialogue");
+        if (!dialogue.GetProperty("dialoguePlaybackPrepared").GetBoolean() ||
+            !dialogue.GetProperty("dialoguePlaybackImplemented").GetBoolean())
+            throw new InvalidOperationException("Fallout 3 CG01 Dad-return dialogue is not prepared.");
+        var cues = dialogue.GetProperty("branches").EnumerateArray().Select((row, index) =>
+        {
+            if (row.GetProperty("sequence").GetInt32() != index)
+                throw new InvalidOperationException("Fallout 3 CG01 Dad-return cue order differs.");
+            var info = row.GetProperty("infoFormId").GetString()!;
+            var response = row.GetProperty("response");
+            return new Fo3Cg01DadReturnCue(info,
+                new Fo3OwnedDialogueResponse(1, response.GetProperty("text").GetString()!,
+                    Fo3Cg01Stage10Transition.LoadDialogueAsset(response.GetProperty("voice"), $"_{info}_1.ogg"),
+                    Fo3Cg01Stage10Transition.LoadDialogueAsset(response.GetProperty("lip"), $"_{info}_1.lip")),
+                row.GetProperty("targetQuestFormId").ValueKind == JsonValueKind.Null
+                    ? null : row.GetProperty("targetQuestFormId").GetString(),
+                row.GetProperty("targetStage").ValueKind == JsonValueKind.Null
+                    ? null : row.GetProperty("targetStage").GetInt32());
+        }).ToArray();
+        var boundary = dadReturn.GetProperty("nextBoundary");
         return new Fo3Cg01Stage50Timer(expectedSourceStage, targetStage,
             timer.GetProperty("initialSeconds").GetDouble(), commands,
+            new Fo3Cg01PostStage14Package(package.GetProperty("formId").GetString()!,
+                package.GetProperty("editorId").GetString()!, target.GetProperty("formId").GetString()!,
+                transform, target.GetProperty("radiusGameUnits").GetInt32(), completionStage),
+            completionStage, completionCommands, dadReturn.GetProperty("dialogueDelaySeconds").GetDouble(),
+            cues, dadReturn.GetProperty("targetStage").GetInt32(),
+            mainDoorLock.GetProperty("referenceFormId").GetString()!,
+            mainDoorLock.GetProperty("value").GetInt32(),
+            mainDoorOpen.GetProperty("value").GetInt32() != 0,
             boundary.GetProperty("blocker").GetString()!);
     }
+
+    private static IReadOnlyList<SourceGamebryoStageCommand<string>> ReadCommands(
+        JsonElement result,
+        IReadOnlyDictionary<string, GamebryoStageCommandKind> kinds) =>
+        result.GetProperty("commands").EnumerateArray().Select((row, index) =>
+        {
+            var kind = row.GetProperty("kind").GetString()!;
+            if (row.GetProperty("index").GetInt32() != index || !kinds.TryGetValue(kind, out var mapped))
+                throw new InvalidOperationException("Fallout 3 CG01 Dad-return command differs.");
+            return new SourceGamebryoStageCommand<string>(index, mapped, kind);
+        }).ToArray();
 
     internal int ExecuteTargetResult()
     {
         var applied = 0;
         GamebryoStageCommandExecutor.ExecuteAll(TargetCommands, command =>
+        {
+            applied++;
+            return applied == command.SourceIndex + 1;
+        });
+        return applied;
+    }
+
+    internal int ExecuteCompletionResult()
+    {
+        var applied = 0;
+        GamebryoStageCommandExecutor.ExecuteAll(CompletionCommands, command =>
         {
             applied++;
             return applied == command.SourceIndex + 1;
@@ -463,14 +547,19 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var values = RequiredArray(source, "specialValues").EnumerateArray()
             .Select(value => value.GetInt32()).ToArray();
         var accepted = RequiredBoolean(source, "specialBookAccepted");
-        if (!new[]
-            {
+        var supportedStages = new HashSet<int>
+        {
                 TargetStage,
                 Stage20Interaction.GateStage,
                 Stage20Interaction.ExitStage,
                 Stage20Interaction.BookStage,
                 Stage20Interaction.TimerTransition.TargetStage,
-            }.Contains(stage) ||
+                Stage20Interaction.TimerTransition.CompletionStage,
+                Stage20Interaction.TimerTransition.DialogueTargetStage,
+        };
+        supportedStages.UnionWith(Stage20Interaction.TimerTransition.DialogueCues
+            .Where(cue => cue.TargetStage is not null).Select(cue => cue.TargetStage!.Value));
+        if (!supportedStages.Contains(stage) ||
             values.Length != Stage20Interaction.ActorValues.Count ||
             values.Select((value, index) =>
                 value < Stage20Interaction.ActorValues[index].MinimumValue ||
@@ -494,12 +583,19 @@ internal sealed record Fo3Cg01PostStage14Transition(
             .Sum(result => result.Commands.Count);
         if (stage == Stage20Interaction.TimerTransition.TargetStage)
             interactionCommandCount += Stage20Interaction.TimerTransition.TargetCommands.Count;
+        else if (stage >= Stage20Interaction.TimerTransition.CompletionStage)
+            interactionCommandCount += Stage20Interaction.TimerTransition.TargetCommands.Count +
+                Stage20Interaction.TimerTransition.CompletionCommands.Count;
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
+        var expectedPackages = stage >= Stage20Interaction.TimerTransition.CompletionStage
+            ? baseline.AppliedPackageFormIds
+                .Append(Stage20Interaction.TimerTransition.DadReturnPackage.FormId).ToArray()
+            : baseline.AppliedPackageFormIds;
         var timerRemaining = source.GetProperty("timerRemainingSeconds").GetDouble();
         var timerAdvancing = RequiredBoolean(source, "timerAdvancing");
         if (!double.IsFinite(timerRemaining) || timerRemaining < 0.0 ||
             timerAdvancing && (!accepted || stage != Stage20Interaction.BookStage) ||
-            stage == Stage20Interaction.TimerTransition.TargetStage &&
+            stage >= Stage20Interaction.TimerTransition.TargetStage &&
                 (timerAdvancing || timerRemaining != 0.0))
             throw new InvalidOperationException("Saved Fallout 3 CG01 timer state differs.");
         if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
@@ -507,7 +603,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
             !RequiredArray(source, "appliedInfoFormIds").EnumerateArray()
                 .Select(value => value.GetString()).SequenceEqual(baseline.AppliedInfoFormIds) ||
             !RequiredArray(source, "appliedPackageFormIds").EnumerateArray()
-                .Select(value => value.GetString()).SequenceEqual(baseline.AppliedPackageFormIds) ||
+                .Select(value => value.GetString()).SequenceEqual(expectedPackages) ||
             RequiredFormId(gate, "referenceFormId") != baseline.PlaypenGateReferenceFormId ||
             gateOpen != expectedGateOpen ||
             RequiredFormId(door, "referenceFormId") != baseline.PlayroomDoorReferenceFormId ||
@@ -528,6 +624,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
             DisplayedObjectiveIndex = objective,
             AccountedCommandCount = expectedCommandCount,
             AppliedCommandCount = expectedCommandCount,
+            AppliedPackageFormIds = expectedPackages,
             SpecialValues = values,
             SpecialBookAccepted = accepted,
             TimerRemainingSeconds = timerRemaining,

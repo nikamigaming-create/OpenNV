@@ -1251,7 +1251,13 @@ internal partial class Fo3OpeningFlow
         SetCg01WorldReferenceOpen(state.PlayroomDoorReferenceFormId, false);
         SetCg01WorldReferenceLock(state.PlayroomDoorReferenceFormId, state.PlayroomDoorLockLevel);
         SetCg01WorldReferenceOpen(state.PlaypenGateReferenceFormId, false);
-        ApplyCg01DadPackage(_profile.Cg01PostStage14Transition.LeaveRoomPackage, stage5);
+        ApplyCg01DadPackage(
+            state.ActiveStage >= _profile.Cg01PostStage14Transition.Stage20Interaction
+                .TimerTransition.TargetStage
+                ? _profile.Cg01PostStage14Transition.Stage20Interaction
+                    .TimerTransition.DadReturnPackage
+                : _profile.Cg01PostStage14Transition.LeaveRoomPackage,
+            stage5);
         (_cg01ToddlerWorld ?? throw new InvalidOperationException(
             "Fallout 3 CG01 stage-20 world is absent."))
             .Player.EnableMovementAtSourceStage();
@@ -1323,6 +1329,13 @@ internal partial class Fo3OpeningFlow
         SetCg01WorldReferenceOpen(
             state.PlaypenGateReferenceFormId,
             state.PlaypenGateOpen);
+        if (state.ActiveStage >= _profile.Cg01PostStage14Transition.Stage20Interaction
+                .TimerTransition.CompletionStage)
+        {
+            var timer = _profile.Cg01PostStage14Transition.Stage20Interaction.TimerTransition;
+            SetCg01WorldReferenceLock(timer.MainDoorReferenceFormId, timer.MainDoorLockLevel);
+            SetCg01WorldReferenceOpen(timer.MainDoorReferenceFormId, timer.MainDoorOpen);
+        }
         var world = _cg01ToddlerWorld ?? throw new InvalidOperationException(
             "Fallout 3 CG01 stage-20 restore has no toddler world.");
         if (!world.Player.MovementEnabled ||
@@ -1383,7 +1396,38 @@ internal partial class Fo3OpeningFlow
                     "Fallout 3 CG01 stage-70 Dad world is absent."))
                     .Cg01DadActor.Placement.SetMeta("opennv_package_evaluated", true);
                 _cg01Stage50TimerTick = null;
-                Persist();
+                ApplyCg01DadPackage(interaction.TimerTransition.DadReturnPackage, stage5);
+                var completionApplied = interaction.TimerTransition.ExecuteCompletionResult();
+                SetCg01WorldReferenceLock(current.PlayroomDoorReferenceFormId, 0);
+                SetCg01WorldReferenceOpen(current.PlayroomDoorReferenceFormId, true);
+                SetCg01WorldReferenceLock(
+                    interaction.TimerTransition.MainDoorReferenceFormId,
+                    interaction.TimerTransition.MainDoorLockLevel);
+                SetCg01WorldReferenceOpen(
+                    interaction.TimerTransition.MainDoorReferenceFormId,
+                    interaction.TimerTransition.MainDoorOpen);
+                current = current with
+                {
+                    ActiveStage = interaction.TimerTransition.CompletionStage,
+                    AppliedPackageFormIds = current.AppliedPackageFormIds
+                        .Append(interaction.TimerTransition.DadReturnPackage.FormId).ToArray(),
+                    PlayroomDoorOpen = true,
+                    PlayroomDoorLockLevel = 0,
+                    AccountedCommandCount = current.AccountedCommandCount + completionApplied,
+                    AppliedCommandCount = current.AppliedCommandCount + completionApplied
+                };
+                var dialogueDelay = GetTree().CreateTimer(
+                    interaction.TimerTransition.DialogueDelaySeconds);
+                dialogueDelay.Timeout += () => PlayCg01DadReturnCue(
+                    interaction.TimerTransition.DialogueCues,
+                    0,
+                    targetStage =>
+                    {
+                        if (targetStage is not null)
+                            current = current with { ActiveStage = targetStage.Value };
+                        if (targetStage == interaction.TimerTransition.DialogueTargetStage)
+                            Persist();
+                    });
             };
         }
         void Gate()
@@ -1486,6 +1530,53 @@ internal partial class Fo3OpeningFlow
             node.GetMeta("opennv_source_form_id").AsString().Equals(
                 formId,
                 StringComparison.OrdinalIgnoreCase));
+
+    private void PlayCg01DadReturnCue(
+        IReadOnlyList<Fo3Cg01DadReturnCue> cues,
+        int index,
+        Action<int?> completed)
+    {
+        var cue = cues[index];
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 Dad-return dialogue has no owned world.");
+        _vaultDialogueVoice?.Stop();
+        _vaultDialogueVoice?.QueueFree();
+        ClearCg01DadLip();
+        var stream = AudioStreamOggVorbis.LoadFromFile(cue.Response.Voice.SourcePath)
+            ?? throw new InvalidOperationException(
+                $"Fallout 3 CG01 Dad-return voice could not be decoded: {cue.InfoFormId}");
+        _activeCg01DadLip = FaceGenLipAnimation.Load(
+            cue.Response.Lip.SourcePath,
+            RuntimeConfiguration.Load().ActorCompiler.FaceGenAnimation.Lip);
+        _activeCg01DadInfoFormId = cue.InfoFormId;
+        coverage.Cg01DadActor.Placement.SetMeta("opennv_talking", 1);
+        _vaultDialogueVoice = new AudioStreamPlayer
+        {
+            Name = $"Fallout3Cg01DadReturnVoice{index}",
+            Stream = stream,
+        };
+        _vaultDialogueVoice.SetMeta("opennv_info_form_id", cue.InfoFormId);
+        _vaultDialogueVoice.Finished += () =>
+        {
+            ClearCg01DadLip();
+            _vaultDialogueVoice?.QueueFree();
+            _vaultDialogueVoice = null;
+            coverage.Cg01DadActor.Placement.SetMeta("opennv_talking", 0);
+            if (cue.TargetStage is not null)
+            {
+                var result = GamebryoDialoguePlayback.RequireStageResult(
+                    "setStage", cue.TargetQuestFormId, cue.TargetStage);
+                completed(result.Stage);
+            }
+            else
+                completed(null);
+            if (index + 1 < cues.Count)
+                Callable.From(() => PlayCg01DadReturnCue(
+                    cues, index + 1, completed)).CallDeferred();
+        };
+        AddChild(_vaultDialogueVoice);
+        _vaultDialogueVoice.Play();
+    }
 
     private void SetCg01WorldReferenceOpen(string formId, bool open)
     {
