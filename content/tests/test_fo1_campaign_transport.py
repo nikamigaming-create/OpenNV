@@ -159,8 +159,17 @@ class Fo1CampaignTransportTest(unittest.TestCase):
             "layout": {"presentElevations": [0]},
             "objectGraph": {
                 "scriptLists": [{"liveCount": 2}, {"liveCount": 3}],
-                "objects": {"totalTopLevelObjects": 11},
+                "objects": {
+                    "totalTopLevelObjects": 11,
+                    "elevations": [
+                        {"objects": [{"inventory": []} for _ in range(11)]}
+                    ],
+                },
                 "doors": [{}, {}],
+            },
+            "initializationScripts": {
+                "mapHeader": {"program": {"program": "TESTMAP.int"}},
+                "randomSites": [],
             },
             "exitGrids": [],
             "resources": [{}, {}, {}],
@@ -171,6 +180,7 @@ class Fo1CampaignTransportTest(unittest.TestCase):
         summary = map_summary("testmap", "maps/testmap.json", digest, document)
         self.assertEqual(summary["liveScripts"], 5)
         self.assertEqual(summary["topLevelObjects"], 11)
+        self.assertEqual(summary["allObjects"], 11)
         self.assertEqual(summary["doors"], 2)
         self.assertEqual(summary["resources"], 3)
         self.assertEqual(summary["exitGrids"], 0)

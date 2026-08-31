@@ -24,6 +24,19 @@ def synthetic_random_int() -> bytes:
     )
 
 
+def synthetic_source_expression_random_int() -> bytes:
+    push = lambda value: struct.pack(">Hi", 0xC001, value)
+    opcode = lambda value: struct.pack(">H", value)
+    name = b"map_enter_p_proc\0"
+    body_offset = 42 + 4 + 24 + 4 + len(name)
+    body = b"".join(
+        [opcode(0x802B), push(4), opcode(0x80BF), opcode(0x80B4), opcode(0x801C)]
+    )
+    return b"\0" * 42 + struct.pack(">I6I", 1, 4, 0, 0, 0, body_offset, 0) + (
+        struct.pack(">I", len(name)) + name + body
+    )
+
+
 class ClassicIntInitializationTests(unittest.TestCase):
     def test_int_inventory_decodes_literal_random_and_branch_free_start(self) -> None:
         inventory = inventory_int_program(synthetic_random_int())
@@ -42,6 +55,15 @@ class ClassicIntInitializationTests(unittest.TestCase):
         )
         self.assertEqual(inventory["procedures"][0]["eventKind"], "program-start")
         self.assertEqual(inventory["procedures"][0]["branches"], [])
+
+    def test_int_inventory_source_binds_nonliteral_random_operands(self) -> None:
+        inventory = inventory_int_program(synthetic_source_expression_random_int())
+        site = inventory["randomSites"][0]
+        self.assertEqual(site["procedure"], "map_enter_p_proc")
+        self.assertEqual(site["operandKind"], "source-stack-expression")
+        self.assertIsNone(site["minimum"])
+        self.assertIsNone(site["maximum"])
+        self.assertEqual(inventory["procedures"][0]["eventKind"], "map-enter")
 
     def test_map_script_records_decode_type_specific_program_indices(self) -> None:
         data = bytearray()

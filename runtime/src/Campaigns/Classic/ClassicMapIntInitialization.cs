@@ -25,11 +25,12 @@ internal sealed record ClassicMapIntRandomSite(
     string Program,
     string Procedure,
     int Offset,
-    int Minimum,
-    int Maximum);
+    string OperandKind,
+    int? Minimum,
+    int? Maximum);
 
 internal sealed record ClassicMapIntInitialization(
-    ClassicMapIntProgram HeaderProgram,
+    ClassicMapIntProgram? HeaderProgram,
     IReadOnlyList<ClassicMapIntScriptSlot> ScriptSlots,
     IReadOnlyList<ClassicMapIntRandomSite> RandomSites,
     bool EngineInterleavingTransported);
@@ -50,11 +51,19 @@ internal static class ClassicMapIntInitializationOwner
             throw new InvalidOperationException(
                 "Classic MAP INT initialization boundary drifted.");
         var header = source.GetProperty("mapHeader");
-        if (RequiredString(header, "indexSemantics") !=
-            "MAP-header-one-based-to-scripts-list")
+        var storedHeaderIndex = header.GetProperty("storedScriptIndex").GetInt32();
+        var headerProgramElement = header.GetProperty("program");
+        var headerProgram = headerProgramElement.ValueKind == JsonValueKind.Null
+            ? null
+            : ParseProgram(headerProgramElement);
+        if (headerProgram is null && (storedHeaderIndex != 0 ||
+                RequiredString(header, "indexSemantics") !=
+                    "MAP-header-zero-means-no-program") ||
+            headerProgram is not null && (storedHeaderIndex <= 0 ||
+                RequiredString(header, "indexSemantics") !=
+                    "MAP-header-one-based-to-scripts-list"))
             throw new InvalidOperationException(
                 "Classic MAP header INT index semantics drifted.");
-        var headerProgram = ParseProgram(header.GetProperty("program"));
 
         var sourceSlots = source.GetProperty("liveScriptSlots").EnumerateArray().ToArray();
         if (sourceSlots.Length != map.ScriptSlots.Count)
@@ -86,14 +95,23 @@ internal static class ClassicMapIntInitializationOwner
         var randomSites = source.GetProperty("randomSites").EnumerateArray()
             .Select(row =>
             {
-                if (RequiredString(row, "operandKind") != "literal-inclusive-range")
+                var operandKind = RequiredString(row, "operandKind");
+                var minimumElement = row.GetProperty("minimum");
+                var maximumElement = row.GetProperty("maximum");
+                int? minimum = minimumElement.ValueKind == JsonValueKind.Null
+                    ? null
+                    : minimumElement.GetInt32();
+                int? maximum = maximumElement.ValueKind == JsonValueKind.Null
+                    ? null
+                    : maximumElement.GetInt32();
+                if (operandKind == "literal-inclusive-range" &&
+                    (minimum is null || maximum is null || minimum > maximum) ||
+                    operandKind == "source-stack-expression" &&
+                    (minimum is not null || maximum is not null) ||
+                    operandKind is not (
+                        "literal-inclusive-range" or "source-stack-expression"))
                     throw new InvalidOperationException(
-                        "Classic MAP INT has an untransported dynamic RANDOM range.");
-                var minimum = row.GetProperty("minimum").GetInt32();
-                var maximum = row.GetProperty("maximum").GetInt32();
-                if (minimum > maximum)
-                    throw new InvalidOperationException(
-                        "Classic MAP INT RANDOM range is reversed.");
+                        "Classic MAP INT RANDOM operand contract drifted.");
                 var owner = RequiredString(row, "owner");
                 var sid = row.GetProperty("sid").ValueKind == JsonValueKind.Null
                     ? null
@@ -109,14 +127,15 @@ internal static class ClassicMapIntInitializationOwner
                     RequiredString(row, "program"),
                     RequiredString(row, "procedure"),
                     row.GetProperty("offset").GetInt32(),
+                    operandKind,
                     minimum,
                     maximum);
             })
             .ToArray();
-        var expectedRandomSites = headerProgram.RandomSiteCount +
+        var expectedRandomSites = (headerProgram?.RandomSiteCount ?? 0) +
             slots.Sum(row => row.Program.RandomSiteCount);
         if (randomSites.Length != expectedRandomSites || randomSites.Any(row =>
-            row.Owner == "map-header" && row.Program != headerProgram.Program ||
+            row.Owner == "map-header" && row.Program != headerProgram?.Program ||
             row.Owner == "live-map-script-slot" && !slots.Any(slot =>
                 slot.Sid == row.Sid && slot.Program.Program == row.Program)))
             throw new InvalidOperationException(

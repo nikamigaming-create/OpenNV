@@ -36,7 +36,7 @@ def compile_map_int_initialization(
     entries = _script_entries(scripts_list.data)
     stored_header_index = int(header["scriptIndex"])
     header_index = stored_header_index - 1
-    if not 0 <= header_index < len(entries):
+    if stored_header_index != 0 and not 0 <= header_index < len(entries):
         raise Fo1ProfileError(
             f"classic MAP header script index is outside scripts.lst: {stored_header_index}"
         )
@@ -91,8 +91,8 @@ def compile_map_int_initialization(
         if live != int(script_list["liveCount"]):
             raise Fo1ProfileError("classic MAP script live count drifted")
 
-    header_program = program(header_index)
-    random_sites = [
+    header_program = None if stored_header_index == 0 else program(header_index)
+    random_sites = [] if header_program is None else [
         {
             "owner": "map-header",
             "sid": None,
@@ -121,7 +121,11 @@ def compile_map_int_initialization(
         },
         "mapHeader": {
             "storedScriptIndex": stored_header_index,
-            "indexSemantics": "MAP-header-one-based-to-scripts-list",
+            "indexSemantics": (
+                "MAP-header-zero-means-no-program"
+                if header_program is None
+                else "MAP-header-one-based-to-scripts-list"
+            ),
             "program": header_program,
         },
         "liveScriptSlots": ordered_slots,

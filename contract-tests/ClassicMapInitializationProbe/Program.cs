@@ -75,24 +75,9 @@ using var intDocument = JsonDocument.Parse("""
       "schema": "opennv-classic-map-int-initialization/v1",
       "engineInterleavingTransported": false,
       "mapHeader": {
-        "storedScriptIndex": 25,
-        "indexSemantics": "MAP-header-one-based-to-scripts-list",
-        "program": {
-          "scriptsListIndex": 24,
-          "program": "ArCaves.int",
-          "logicalPath": "scripts\\arcaves.int",
-          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-          "inventory": {
-            "schema": "opennv-classic-int-initialization-inventory/v1",
-            "randomOpcode": "80b4",
-            "procedures": [{
-              "name": "map_enter_p_proc",
-              "bodyOffset": 100,
-              "bodyEndOffset": 120
-            }],
-            "randomSites": []
-          }
-        }
+        "storedScriptIndex": 0,
+        "indexSemantics": "MAP-header-zero-means-no-program",
+        "program": null
       },
       "liveScriptSlots": [{
         "order": 0,
@@ -120,6 +105,12 @@ using var intDocument = JsonDocument.Parse("""
               "operandKind": "literal-inclusive-range",
               "minimum": 1,
               "maximum": 5
+            }, {
+              "procedure": "map_enter_p_proc",
+              "offset": 224,
+              "operandKind": "source-stack-expression",
+              "minimum": null,
+              "maximum": null
             }]
           }
         }
@@ -133,6 +124,15 @@ using var intDocument = JsonDocument.Parse("""
         "operandKind": "literal-inclusive-range",
         "minimum": 1,
         "maximum": 5
+      }, {
+        "owner": "live-map-script-slot",
+        "sid": "04000001",
+        "program": "ACKlint.int",
+        "procedure": "map_enter_p_proc",
+        "offset": 224,
+        "operandKind": "source-stack-expression",
+        "minimum": null,
+        "maximum": null
       }]
     }
     """);
@@ -140,9 +140,14 @@ var intInitialization = ClassicMapIntInitializationOwner.Parse(
     intDocument.RootElement,
     initialization);
 if (intInitialization.EngineInterleavingTransported ||
+    intInitialization.HeaderProgram is not null ||
     intInitialization.ScriptSlots.Single().Program.ScriptsListIndex != 750 ||
-    intInitialization.RandomSites.Single().Minimum != 1 ||
-    intInitialization.RandomSites.Single().Maximum != 5)
+    intInitialization.RandomSites.Count != 2 ||
+    intInitialization.RandomSites[0].Minimum != 1 ||
+    intInitialization.RandomSites[0].Maximum != 5 ||
+    intInitialization.RandomSites[1].OperandKind != "source-stack-expression" ||
+    intInitialization.RandomSites[1].Minimum is not null ||
+    intInitialization.RandomSites[1].Maximum is not null)
     throw new InvalidOperationException(
         "Classic MAP INT initialization contract drifted.");
 

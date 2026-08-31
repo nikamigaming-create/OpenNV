@@ -89,7 +89,10 @@ def _u32(data: bytes, offset: int, label: str) -> int:
     return struct.unpack_from(">I", data, offset)[0]
 
 
-def _procedures(data: bytes) -> dict[str, tuple[int, int]]:
+def _procedure_inventory(
+    data: bytes,
+    require_bounded_signature: bool,
+) -> dict[str, dict[str, int | tuple[int, int]]]:
     count = _u32(data, PROCEDURE_TABLE_OFFSET, "procedure count")
     if count == 0 or count > MAX_PROCEDURES:
         raise ClassicIntDecodeError(f"invalid INT procedure count: {count}")
@@ -99,13 +102,15 @@ def _procedures(data: bytes) -> dict[str, tuple[int, int]]:
     identifier_end = identifiers + 4 + identifier_bytes
     if identifier_end > len(data):
         raise ClassicIntDecodeError("INT identifier table exceeds the program")
-    rows: list[tuple[str, int]] = []
+    rows: list[tuple[str, int, int, int, int, int]] = []
     for index in range(count):
         row = table + index * PROCEDURE_SIZE
         name_offset, flags, time, condition, body, arguments = struct.unpack_from(
             ">6I", data, row
         )
-        if flags != 0 or time != 0 or condition != 0 or arguments != 0:
+        if require_bounded_signature and (
+            flags != 0 or time != 0 or condition != 0 or arguments != 0
+        ):
             raise ClassicIntDecodeError(
                 "bounded INT decoder does not admit flagged or parameterized procedures"
             )
@@ -121,15 +126,28 @@ def _procedures(data: bytes) -> dict[str, tuple[int, int]]:
             raise ClassicIntDecodeError("INT procedure name is not ASCII") from error
         if not name or body < identifier_end or body >= len(data):
             raise ClassicIntDecodeError("INT procedure identity or body offset is invalid")
-        rows.append((name, body))
-    ordered_offsets = sorted({body for _, body in rows} | {len(data)})
-    result: dict[str, tuple[int, int]] = {}
-    for name, body in rows:
+        rows.append((name, flags, time, condition, body, arguments))
+    ordered_offsets = sorted({row[4] for row in rows} | {len(data)})
+    result: dict[str, dict[str, int | tuple[int, int]]] = {}
+    for name, flags, time, condition, body, arguments in rows:
         end = next(offset for offset in ordered_offsets if offset > body)
         if name in result:
             raise ClassicIntDecodeError(f"duplicate INT procedure: {name}")
-        result[name] = (body, end)
+        result[name] = {
+            "flags": flags,
+            "time": time,
+            "condition": condition,
+            "arguments": arguments,
+            "bounds": (body, end),
+        }
     return result
+
+
+def _procedures(data: bytes) -> dict[str, tuple[int, int]]:
+    return {
+        name: row["bounds"]
+        for name, row in _procedure_inventory(data, True).items()
+    }
 
 
 def _instructions(data: bytes, bounds: tuple[int, int]) -> list[Instruction]:
@@ -152,11 +170,12 @@ def _instructions(data: bytes, bounds: tuple[int, int]) -> list[Instruction]:
 
 
 def inventory_int_program(data: bytes) -> dict[str, Any]:
-    """Inventory source procedures and literal RANDOM sites without executing them."""
-    procedures = _procedures(data)
+    """Inventory source procedures and RANDOM operand shapes without executing them."""
+    procedures = _procedure_inventory(data, False)
     rows: list[dict[str, Any]] = []
     random_sites: list[dict[str, Any]] = []
-    for name, bounds in procedures.items():
+    for name, procedure in procedures.items():
+        bounds = procedure["bounds"]
         instructions = _instructions(data, bounds)
         branches = []
         for index, instruction in enumerate(instructions):
@@ -167,6 +186,11 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
                 {
                     "offset": instruction.offset,
                     "kind": "conditional" if instruction.opcode == IF else "jump",
+                    "targetKind": (
+                        "literal-immediate"
+                        if target is not None and target.opcode == PUSH_INT
+                        else "source-stack-expression"
+                    ),
                     "target": (
                         target.operand
                         if target is not None and target.opcode == PUSH_INT
@@ -189,7 +213,11 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
             site = {
                 "procedure": name,
                 "offset": instruction.offset,
-                "operandKind": "literal-inclusive-range" if literal else "dynamic-stack-range",
+                "operandKind": (
+                    "literal-inclusive-range"
+                    if literal
+                    else "source-stack-expression"
+                ),
                 "minimum": lower.operand if literal else None,
                 "maximum": upper.operand if literal else None,
             }
@@ -200,6 +228,10 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
                 "name": name,
                 "bodyOffset": bounds[0],
                 "bodyEndOffset": bounds[1],
+                "flags": procedure["flags"],
+                "time": procedure["time"],
+                "conditionOffset": procedure["condition"],
+                "arguments": procedure["arguments"],
                 "eventKind": (
                     "program-start"
                     if name == "start"
