@@ -225,6 +225,15 @@
         "nextQuestStage": 0
       },
       "cg01Stage0Transition": {
+        "cg02IntroActorRecipes": [
+          "fo3-vault101-cg02-amata-actor-v1",
+          "fo3-vault101-cg02-beatrice-actor-v1",
+          "fo3-vault101-cg02-dad-actor-v1",
+          "fo3-vault101-cg02-old-lady-palmer-actor-v1",
+          "fo3-vault101-cg02-stanley-actor-v1",
+          "fo3-vault101-cg02-paul-hannon-actor-v1",
+          "fo3-vault101-cg02-security04-actor-v1"
+        ],
         "questEditorId": "CG01",
         "questFormId": "00014e83",
         "entryStage": 0,

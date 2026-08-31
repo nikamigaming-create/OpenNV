@@ -389,10 +389,18 @@ def prepare_default_player_facegen_preview(
         tuple(float(value) for value in source_controls[int(row["controlIndex"])]["axis"])
         for row in exposed
     )
-    age_control = dict(control_space["nativeAgeExposure"])
-    age_setting = str(age_control["settingEntity"])
-    age_geometry_axis = tuple(float(value) for value in age_control["geometryAxis"])
-    age_texture_axis = tuple(float(value) for value in age_control["textureAxis"])
+    raw_age_control = control_space.get("nativeAgeExposure")
+    age_control = None if raw_age_control is None else dict(raw_age_control)
+    age_geometry_axis = () if age_control is None else tuple(
+        float(value) for value in age_control["geometryAxis"]
+    )
+    age_texture_axis = () if age_control is None else tuple(
+        float(value) for value in age_control["textureAxis"]
+    )
+    age_control_names = () if age_control is None else (
+        str(age_control["settingEntity"]),
+    )
+    age_geometry_axes = () if age_control is None else (age_geometry_axis,)
     if (
         not control_names
         or len(control_names) != len(set(control_names))
@@ -499,8 +507,8 @@ def prepare_default_player_facegen_preview(
             model.data,
             egm_path=egm.logical_path,
             egm_payload=egm.data,
-            egm_symmetric_control_names=control_names + (age_setting,),
-            egm_symmetric_control_axes=control_axes + (age_geometry_axis,),
+            egm_symmetric_control_names=control_names + age_control_names,
+            egm_symmetric_control_axes=control_axes + age_geometry_axes,
             **tri(model_path),
             **options,
         )
@@ -749,7 +757,7 @@ def prepare_default_player_facegen_preview(
                     }
                     for row, axis in zip(exposed_texture, texture_control_axes)
                 ],
-                "ageControl": {
+                "ageControl": None if age_control is None else {
                     **age_control,
                     "geometryAxis": list(age_geometry_axis),
                     "textureAxis": list(age_texture_axis),

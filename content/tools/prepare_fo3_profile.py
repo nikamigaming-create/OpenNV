@@ -15,7 +15,11 @@ from io import BytesIO
 from pathlib import Path
 
 from actor_catalog import scan_actor_catalog
-from actor_gltf import animation_sequence_manifest, sample_transform_animation
+from actor_gltf import (
+    animation_sequence_manifest,
+    sample_root_motion,
+    sample_transform_animation,
+)
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_catalog import cell_parent_form_id, parse_navmesh
 from cell_scene import godot_rotation_quaternion, navmesh_manifest
@@ -35,6 +39,7 @@ from opening_catalog import (
 )
 from owned_archive_stack import OwnedArchive, OwnedArchiveStack
 from player_facegen_preview import prepare_default_player_facegen_preview
+import prepare_actor as actor_preparation
 from plugin_records import iter_plugin_records, iter_subrecords, zstring
 from plugin_stack import build_plugin_stack, file_sha256, find_case_insensitive_file
 from prepare_fo3_opening_slice import (
@@ -3027,6 +3032,363 @@ def _compile_cg01_stage12_dad_response(
     }
 
 
+def _compile_cg02_intro_runtime(
+    records: tuple[object, ...],
+    quest: object,
+    quest_script: object,
+    stage_sources: dict[int, list[str]],
+    actor_recipe_ids: list[str],
+) -> dict[str, object]:
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+    source = _script_source(quest_script)
+    timer_match = re.search(
+        r"if\s+runTimer\s*==\s*1\s*"
+        r"if\s+timer\s*>\s*0\s*"
+        r"set\s+timer\s+to\s+timer\s*-\s*GetSecondsPassed\s*"
+        r"else\s*.*?if\s+intro\s*>\s*0\s*"
+        r"if\s+intro\s*==\s*1(?P<body>.*?)elseif\s+intro\s*==\s*2",
+        source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if timer_match is None:
+        raise ValueError("Fallout 3 CG02 intro timer block differs")
+    body_commands = _source_commands(timer_match.group("body"))
+    say_pattern = re.compile(
+        r"(?P<subject>\w+)\.SayTo\s+player\s+(?P<topic>\w+)(?:\s+.*)?",
+        re.IGNORECASE,
+    )
+    sound_pattern = re.compile(r"playSound\s+(?P<sound>\w+)", re.IGNORECASE)
+    say_rows = []
+    sound_rows = []
+    for command in body_commands:
+        say = say_pattern.fullmatch(command)
+        sound = sound_pattern.fullmatch(command)
+        if say is not None:
+            say_rows.append((say.group("subject"), say.group("topic")))
+        elif sound is not None:
+            sound_rows.append(sound.group("sound"))
+        elif command.casefold() != "set runtimer to 0":
+            raise ValueError(f"Fallout 3 CG02 intro command differs: {command}")
+    if len(say_rows) != 6 or len(sound_rows) != 2 or len({topic.casefold() for _, topic in say_rows}) != 1:
+        raise ValueError("Fallout 3 CG02 intro SayTo/sound chain differs")
+    topic_matches = by_editor.get(say_rows[0][1].casefold(), [])
+    if len(topic_matches) != 1 or topic_matches[0].signature != DIALOGUE_TOPIC_RECORD:
+        raise ValueError("Fallout 3 CG02 intro topic differs")
+    topic = topic_matches[0]
+    infos = sorted(
+        (
+            record for record in records
+            if record.signature == DIALOGUE_INFO_RECORD
+            and any(group.group_type == DIALOGUE_CHILD_GROUP_TYPE and group.label_u32 == topic.form_id for group in record.groups)
+        ),
+        key=lambda record: record.form_id,
+    )
+    recipes = [actor_preparation.load_recipe(recipe_id) for recipe_id in actor_recipe_ids]
+    recipe_by_reference = {
+        str(recipe["proofActorReferenceFormId"]).casefold(): recipe for recipe in recipes
+    }
+    if len(recipe_by_reference) != 7:
+        raise ValueError("Fallout 3 CG02 intro actor recipe count differs")
+    participants = []
+    common_info_id = None
+    dad_info_id = None
+    for sequence, (reference_editor_id, _) in enumerate(say_rows):
+        reference_matches = [
+            row for row in by_editor.get(reference_editor_id.casefold(), [])
+            if row.signature == ACTOR_REFERENCE_RECORD
+        ]
+        if len(reference_matches) != 1:
+            raise ValueError(f"Fallout 3 CG02 intro reference differs: {reference_editor_id}")
+        reference = reference_matches[0]
+        base_id = struct.unpack("<I", _single_subrecord(reference, "NAME"))[0]
+        base = by_form.get(base_id)
+        if base is None or base.signature != NPC_RECORD:
+            raise ValueError(f"Fallout 3 CG02 intro base differs: {reference_editor_id}")
+        recipe = recipe_by_reference.get(_form_id(reference.form_id))
+        if recipe is None or str(recipe.get("expectedBaseFormId", "")).casefold() != _form_id(base.form_id):
+            raise ValueError(f"Fallout 3 CG02 intro actor recipe differs: {reference_editor_id}")
+        matching_infos = []
+        for info in infos:
+            identities = [
+                int(_dialogue_condition(row.data)["parameter1"])
+                for row in iter_subrecords(info)
+                if row.signature == "CTDA" and int(_dialogue_condition(row.data)["function"]) == GET_IS_ID_FUNCTION
+            ]
+            if base.form_id in identities:
+                matching_infos.append(info)
+        if len(matching_infos) != 1:
+            raise ValueError(f"Fallout 3 CG02 intro INFO differs: {reference_editor_id}")
+        info = matching_infos[0]
+        effects = []
+        result_sources = _text_values(info, "SCTX")
+        result_commands = [command for row in result_sources for command in _source_commands(row)]
+        if reference_editor_id.casefold() == "cg02dadref":
+            if [row.casefold() for row in result_commands] != [
+                "set cg02.intro to 2", "set cg02.runtimer to 1"
+            ]:
+                raise ValueError("Fallout 3 CG02 Dad intro result differs")
+            effects = [
+                {"kind": "setQuestVariable", "variable": "intro", "value": 2},
+                {"kind": "setQuestVariable", "variable": "runTimer", "value": 1},
+            ]
+            dad_info_id = info.form_id
+        else:
+            if result_commands:
+                raise ValueError("Fallout 3 CG02 non-Dad intro result differs")
+            common_info_id = info.form_id if common_info_id is None else common_info_id
+            if common_info_id != info.form_id:
+                raise ValueError("Fallout 3 CG02 shared intro INFO differs")
+        response_lines = [value for value in _text_values(info, "NAM1") if value]
+        idle_ids = [
+            struct.unpack("<I", row.data)[0] for row in iter_subrecords(info)
+            if row.signature == "SNAM" and len(row.data) == FORM_ID_BYTES
+        ]
+        voice_ids = [
+            struct.unpack("<I", row.data)[0] for row in iter_subrecords(base)
+            if row.signature == "VTCK" and len(row.data) == FORM_ID_BYTES
+        ]
+        if len(response_lines) != 1 or len(idle_ids) != 1 or len(voice_ids) != 1:
+            raise ValueError(f"Fallout 3 CG02 intro response differs: {reference_editor_id}")
+        idle = by_form.get(idle_ids[0])
+        voice = by_form.get(voice_ids[0])
+        idle_models = [] if idle is None else _text_values(idle, "MODL")
+        if idle is None or idle.signature != IDLE_RECORD or len(idle_models) != 1 or voice is None or voice.signature != VOICE_TYPE_RECORD:
+            raise ValueError(f"Fallout 3 CG02 intro animation/voice differs: {reference_editor_id}")
+        participants.append({
+            "phase": 0,
+            "sequenceInPhase": sequence,
+            "sequence": sequence,
+            "referenceFormId": _form_id(reference.form_id),
+            "referenceEditorId": reference_editor_id,
+            "referenceRecordSha256": hashlib.sha256(reference.data).hexdigest(),
+            "baseFormId": _form_id(base.form_id),
+            "baseRecordSha256": hashlib.sha256(base.data).hexdigest(),
+            "actorRecipeId": str(recipe["id"]),
+            "infoFormId": _form_id(info.form_id),
+            "infoRecordSha256": hashlib.sha256(info.data).hexdigest(),
+            "response": {"index": 1, "text": response_lines[0], "textSha256": hashlib.sha256(response_lines[0].encode("utf-8")).hexdigest()},
+            "speakerIdle": {"formId": _form_id(idle.form_id), "editorId": _editor_id(idle), "recordSha256": hashlib.sha256(idle.data).hexdigest(), "modelPath": canonical_member_path(f"meshes\\{idle_models[0]}")},
+            "voiceType": {"formId": _form_id(voice.form_id), "editorId": _editor_id(voice), "recordSha256": hashlib.sha256(voice.data).hexdigest()},
+            "effects": effects,
+        })
+    def compile_additional_cue(
+        reference_editor_id: str,
+        topic_editor_id: str,
+        phase: int,
+        sequence_in_phase: int,
+        engine_sex: str | None = None,
+    ) -> dict[str, object]:
+        references = [
+            row for row in by_editor.get(reference_editor_id.casefold(), [])
+            if row.signature == ACTOR_REFERENCE_RECORD
+        ]
+        topics = [
+            row for row in by_editor.get(topic_editor_id.casefold(), [])
+            if row.signature == DIALOGUE_TOPIC_RECORD
+        ]
+        if len(references) != 1 or len(topics) != 1:
+            raise ValueError("Fallout 3 CG02 continuation identity differs")
+        reference = references[0]
+        topic_row = topics[0]
+        base_id = struct.unpack("<I", _single_subrecord(reference, "NAME"))[0]
+        base = by_form.get(base_id)
+        recipe = recipe_by_reference.get(_form_id(reference.form_id))
+        if base is None or base.signature != NPC_RECORD or recipe is None:
+            raise ValueError("Fallout 3 CG02 continuation actor differs")
+        candidates = []
+        for info in records:
+            if info.signature != DIALOGUE_INFO_RECORD or not any(
+                group.group_type == DIALOGUE_CHILD_GROUP_TYPE
+                and group.label_u32 == topic_row.form_id
+                for group in info.groups
+            ):
+                continue
+            identities = [
+                int(_dialogue_condition(row.data)["parameter1"])
+                for row in iter_subrecords(info)
+                if row.signature == "CTDA"
+                and int(_dialogue_condition(row.data)["function"]) == GET_IS_ID_FUNCTION
+            ]
+            result_commands = [
+                command for row in _text_values(info, "SCTX")
+                for command in _source_commands(row)
+            ]
+            effect_carrier = (
+                phase == 1 and reference_editor_id.casefold() == "cg02vault101security04ref"
+                or phase == 2 and reference_editor_id.casefold() == "cg02dadref"
+                or phase == 3 and reference_editor_id.casefold() == "cg02oldladypalmerref"
+            )
+            has_intro_effect = any(".intro" in command.casefold() for command in result_commands)
+            sex_conditions = [
+                int(_dialogue_condition(row.data)["parameter1"])
+                for row in iter_subrecords(info)
+                if row.signature == "CTDA"
+                and int(_dialogue_condition(row.data)["function"]) == GET_PC_IS_SEX_FUNCTION
+            ]
+            sex_matches = engine_sex is None and not sex_conditions or (
+                engine_sex == "male" and sex_conditions == [0]
+            ) or (engine_sex == "female" and sex_conditions == [1])
+            if base.form_id in identities and has_intro_effect == effect_carrier and sex_matches:
+                candidates.append(info)
+        if len(candidates) != 1:
+            raise ValueError(
+                f"Fallout 3 CG02 continuation INFO differs: {reference_editor_id}"
+            )
+        info = candidates[0]
+        response_lines = [value for value in _text_values(info, "NAM1") if value]
+        idle_ids = [
+            struct.unpack("<I", row.data)[0] for row in iter_subrecords(info)
+            if row.signature == "SNAM" and len(row.data) == FORM_ID_BYTES
+        ]
+        voice_ids = [
+            struct.unpack("<I", row.data)[0] for row in iter_subrecords(base)
+            if row.signature == "VTCK" and len(row.data) == FORM_ID_BYTES
+        ]
+        if len(response_lines) != 1 or len(idle_ids) > 1 or len(voice_ids) != 1:
+            raise ValueError("Fallout 3 CG02 continuation response differs")
+        idle = None if not idle_ids else by_form.get(idle_ids[0])
+        voice = by_form.get(voice_ids[0])
+        idle_models = [] if idle is None else _text_values(idle, "MODL")
+        if (idle is not None and (idle.signature != IDLE_RECORD or len(idle_models) != 1)) or voice is None or voice.signature != VOICE_TYPE_RECORD:
+            raise ValueError("Fallout 3 CG02 continuation voice/idle differs")
+        effects = []
+        for command in [
+            command for row in _text_values(info, "SCTX")
+            for command in _source_commands(row)
+        ]:
+            match = SET_REFERENCE_VARIABLE_PATTERN.fullmatch(command)
+            if match is not None and match.group("subject").casefold() == "cg02":
+                effects.append({"kind": "setQuestVariable", "variable": match.group("variable"), "value": int(float(match.group("value")))})
+            elif command.casefold() == "setav variable01 1":
+                effects.append({"kind": "setActorValue", "actorValue": "variable01", "value": 1})
+            elif command.casefold() == "evp":
+                effects.append({"kind": "evaluatePackage"})
+            else:
+                raise ValueError(f"Fallout 3 CG02 continuation result differs: {command}")
+        return {
+            "phase": phase,
+            "sequenceInPhase": sequence_in_phase,
+            "sequence": len(participants),
+            "engineSex": engine_sex,
+            "referenceFormId": _form_id(reference.form_id),
+            "referenceEditorId": reference_editor_id,
+            "referenceRecordSha256": hashlib.sha256(reference.data).hexdigest(),
+            "baseFormId": _form_id(base.form_id),
+            "baseRecordSha256": hashlib.sha256(base.data).hexdigest(),
+            "actorRecipeId": str(recipe["id"]),
+            "topicFormId": _form_id(topic_row.form_id),
+            "topicEditorId": _editor_id(topic_row),
+            "infoFormId": _form_id(info.form_id),
+            "infoRecordSha256": hashlib.sha256(info.data).hexdigest(),
+            "response": {"index": 1, "text": response_lines[0], "textSha256": hashlib.sha256(response_lines[0].encode("utf-8")).hexdigest()},
+            "speakerIdle": None if idle is None else {"formId": _form_id(idle.form_id), "editorId": _editor_id(idle), "recordSha256": hashlib.sha256(idle.data).hexdigest(), "modelPath": canonical_member_path(f"meshes\\{idle_models[0]}")},
+            "voiceType": {"formId": _form_id(voice.form_id), "editorId": _editor_id(voice), "recordSha256": hashlib.sha256(voice.data).hexdigest()},
+            "effects": effects,
+        }
+
+    continuation_specs = (
+        ("CG02Vault101Security04REF", "CG02OfficerGomezSpeech", 1, 0),
+        ("CG02AmataREF", "CG02IntroYell", 2, 0),
+        ("CG02BeatriceREF", "CG02IntroYell", 2, 1),
+        ("CG02DadREF", "CG02IntroYell", 2, 2),
+        ("CG02Vault101Security04REF", "CG02IntroYell", 2, 3),
+        ("CG02StanleyREF", "CG02IntroYell", 2, 4),
+        ("CG02PaulHannonREF", "CG02IntroYell", 2, 5),
+        ("CG02OldLadyPalmerREF", "CG02OldLadyPalmerSpeech", 3, 0, "male"),
+        ("CG02OldLadyPalmerREF", "CG02OldLadyPalmerSpeech", 3, 0, "female"),
+    )
+    for spec in continuation_specs:
+        participants.append(compile_additional_cue(*spec))
+    expected_phase_effects = {
+        0: {"intro": 2, "runTimer": 1},
+        1: {"intro": 3, "runTimer": 1},
+        2: {"intro": 4, "runTimer": 1},
+        3: {"intro": 5, "runTimer": 1},
+    }
+    for phase, expected in expected_phase_effects.items():
+        actual = {
+            str(effect["variable"]): int(effect["value"])
+            for row in participants if int(row["phase"]) == phase
+            for effect in row["effects"]
+            if effect["kind"] == "setQuestVariable"
+        }
+        if actual != expected:
+            raise ValueError(f"Fallout 3 CG02 phase {phase} results differ")
+    final_match = re.search(
+        r"elseif\s+intro\s*==\s*5(?P<body>.*?)endif",
+        source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    final_source_commands = [] if final_match is None else _source_commands(
+        final_match.group("body")
+    )
+    if [command.casefold() for command in final_source_commands] != [
+        "setstage cg02 6", "set intro to 0", "set runtimer to 0"
+    ]:
+        raise ValueError("Fallout 3 CG02 intro completion source differs")
+
+    sounds = []
+    for sequence, sound_editor_id in enumerate(sound_rows):
+        matches = by_editor.get(sound_editor_id.casefold(), [])
+        if len(matches) != 1 or matches[0].signature != "SOUN":
+            raise ValueError(f"Fallout 3 CG02 intro sound differs: {sound_editor_id}")
+        sound = matches[0]
+        paths = _text_values(sound, "FNAM")
+        if len(paths) != 1:
+            raise ValueError(f"Fallout 3 CG02 intro sound path differs: {sound_editor_id}")
+        sounds.append({"phase": 0, "sequence": sequence, "formId": _form_id(sound.form_id), "editorId": _editor_id(sound), "recordSha256": hashlib.sha256(sound.data).hexdigest(), "logicalPath": canonical_member_path(f"sound\\{paths[0]}")})
+    clapping = next(row for row in sounds if str(row["editorId"]).casefold() == "qstpartyclapping2d")
+    sounds.append({**clapping, "phase": 2, "sequence": 0})
+    stage6 = stage_sources.get(6, [])
+    if len(stage6) != 2:
+        raise ValueError("Fallout 3 CG02 stage-6 result rows differ")
+    stage6_commands = [
+        command for row in stage6 for command in _source_commands(row)
+    ]
+    resolved_stage6 = []
+    for index, command in enumerate(stage6_commands):
+        if match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(command):
+            references = by_editor.get(match.group("subject").casefold(), [])
+            if len(references) != 1 or references[0].signature != ACTOR_REFERENCE_RECORD:
+                raise ValueError("Fallout 3 CG02 stage-6 Dad result differs")
+            resolved_stage6.append({"index": index, "kind": "setActorVariable", "referenceFormId": _form_id(references[0].form_id), "referenceEditorId": _editor_id(references[0]), "variable": match.group("variable"), "value": int(float(match.group("value")))})
+        elif match := SET_OPEN_STATE_PATTERN.fullmatch(command):
+            references = by_editor.get(match.group("subject").casefold(), [])
+            if len(references) != 1 or references[0].signature != PLACED_REFERENCE_RECORD:
+                raise ValueError("Fallout 3 CG02 stage-6 door result differs")
+            resolved_stage6.append({"index": index, "kind": "setOpenState", "referenceFormId": _form_id(references[0].form_id), "referenceEditorId": _editor_id(references[0]), "value": int(match.group("value"))})
+        elif match := LOOK_AT_PATTERN.fullmatch(command):
+            references = by_editor.get(match.group("subject").casefold(), [])
+            if len(references) != 1 or references[0].signature != ACTOR_REFERENCE_RECORD or match.group("target").casefold() != "player":
+                raise ValueError("Fallout 3 CG02 stage-6 look result differs")
+            resolved_stage6.append({"index": index, "kind": "lookAt", "referenceFormId": _form_id(references[0].form_id), "referenceEditorId": _editor_id(references[0]), "target": "player"})
+        else:
+            raise ValueError(f"Fallout 3 CG02 stage-6 result differs: {command}")
+    return {
+        "schema": "opennv-fo3-cg02-stage-5-intro-runtime/v1",
+        "sourceStage": 5,
+        "targetStage": 6,
+        "timer": {"decrementSource": "GetSecondsPassed", "initialVariable": "timer", "runVariable": "runTimer", "requiredIntro": 1},
+        "topicFormId": _form_id(topic.form_id),
+        "topicEditorId": _editor_id(topic),
+        "participants": participants,
+        "sounds": sounds,
+        "stage6SourceSha256": hashlib.sha256("\n".join(stage6).encode("cp1252")).hexdigest(),
+        "stage6Commands": resolved_stage6,
+        "finalCommands": [
+            {"index": 0, "kind": "setStage", "questFormId": _form_id(quest.form_id), "questEditorId": _editor_id(quest), "stage": 6},
+            {"index": 1, "kind": "setQuestVariable", "variable": "intro", "value": 0},
+            {"index": 2, "kind": "setQuestVariable", "variable": "runTimer", "value": 0},
+        ],
+        "nextBoundary": {"applied": False, "blocker": "fo3-cg02-stage-6-dad-speech-runtime-not-implemented"},
+    }
+
+
 def _compile_cg01_post_stage14_transition(
     records: tuple[object, ...],
     definition: dict[str, object],
@@ -4047,10 +4409,30 @@ def _compile_cg01_post_stage14_transition(
             "sourceTransform": _reference_transform_contract(next_marker),
         },
         "nextBoundary": {
-            "applied": False,
-            "blocker": "fo3-cg02-stage-5-intro-timer-dialogue-runtime-not-implemented",
+            "applied": "cg02IntroActorRecipes" in definition,
+            "blocker": (
+                None if "cg02IntroActorRecipes" in definition
+                else "fo3-cg02-stage-5-intro-timer-dialogue-runtime-not-implemented"
+            ),
         },
     }
+    if "cg02IntroActorRecipes" in definition:
+        intro_runtime = _compile_cg02_intro_runtime(
+            records,
+            next_quest,
+            next_script,
+            next_stage_sources,
+            [str(value) for value in definition["cg02IntroActorRecipes"]],
+        )
+        intro_timer = next(
+            row for row in resolved_nested
+            if row["kind"] == "setQuestVariable" and row["variable"] == "timer"
+        )
+        intro_runtime["timer"] = {
+            **dict(intro_runtime["timer"]),
+            "initialSeconds": float(intro_timer["value"]),
+        }
+        cg02_stage0["introRuntime"] = intro_runtime
     lead_contract["completion"] = {
         "schema": "opennv-fo3-cg01-stage-90-to-cg02-runtime/v1",
         "sourceStage": end_stage,
@@ -4114,7 +4496,10 @@ def _compile_cg01_post_stage14_transition(
         },
         "completionResult": {"sourceSha256": hashlib.sha256(stage_sources[completion_target][0].encode("cp1252")).hexdigest(), "commands": stage72_compiled},
         "dialogueDelaySeconds": float(dialogue_delay_rows[0]["value"]),
-        "dialogue": {"topicFormId": _form_id(topic.form_id), "topicEditorId": _editor_id(topic), "branches": return_cues,
+        "dialogue": {"topicFormId": _form_id(topic.form_id), "topicEditorId": _editor_id(topic),
+            "voiceType": dict(_compile_cg01_stage12_dad_response(
+                records, definition, quest, stage_sources, dad_reference, dad_base, dad_script, topic
+            )["dialogue"]["voiceType"]), "branches": return_cues,
             "dialoguePlaybackPrepared": False, "dialoguePlaybackImplemented": False},
         "targetStage": dialogue_target,
         "bibleTravel": bible_contract,
@@ -6257,6 +6642,121 @@ def _bind_stage90_sound(
     transition["commands"] = commands
 
 
+def _bind_cg02_intro_assets(
+    intro: dict[str, object],
+    data_root: Path,
+    profile_root: Path,
+    meshes_archive: BsaArchive,
+    meshes_archive_sha256: str,
+    voices_archive: BsaArchive,
+    voices_archive_sha256: str,
+    sound_archive: BsaArchive,
+    sound_archive_sha256: str,
+) -> None:
+    participants = [dict(row) for row in intro["participants"]]
+    animation_paths: dict[str, tuple[str, ...]] = {}
+    for row in participants:
+        reference_id = str(row["referenceFormId"]).casefold()
+        if row["speakerIdle"] is None:
+            continue
+        animation_paths[reference_id] = tuple(dict.fromkeys((
+            *animation_paths.get(reference_id, ()),
+            str(dict(row["speakerIdle"])["modelPath"]),
+        )))
+    actor_recipe_ids = list(dict.fromkeys(
+        str(row["actorRecipeId"]) for row in participants
+    ))
+    actor_set = actor_preparation.prepare_actor_set(
+        data_root,
+        profile_root,
+        actor_recipe_ids,
+        animation_paths,
+    )
+    actor_set_document = json.loads(
+        Path(str(actor_set["manifest"])).read_text(encoding="utf-8")
+    )
+    scenes = {
+        str(row["referenceFormId"]).casefold(): dict(row)
+        for row in actor_set_document["actors"]
+    }
+
+    def prepare_member(
+        archive: BsaArchive,
+        archive_sha256: str,
+        logical_path: str,
+        category: str,
+    ) -> dict[str, object]:
+        member = archive.extract(logical_path)
+        output = profile_root / "generated" / "fallout3" / category / Path(
+            member.logical_path.replace("\\", "/")
+        )
+        if not output.is_file() or file_sha256(output) != member.sha256:
+            atomic_bytes(output, member.data)
+        return {
+            "logicalPath": member.logical_path,
+            "source": str(output.resolve()),
+            "bytes": len(member.data),
+            "sha256": member.sha256,
+            "sourceArchive": archive.archive.name,
+            "sourceArchiveSha256": archive_sha256,
+        }
+
+    prepared = []
+    for row in participants:
+        reference_id = str(row["referenceFormId"]).casefold()
+        actor_scene = scenes.get(reference_id)
+        if actor_scene is None:
+            raise ValueError(f"Fallout 3 CG02 actor scene is absent: {reference_id}")
+        row["actorScene"] = actor_scene
+        if row["speakerIdle"] is not None:
+            idle = dict(row["speakerIdle"])
+            idle_member = meshes_archive.extract(str(idle["modelPath"]))
+            idle.update({
+                "sourceBytes": len(idle_member.data),
+                "sourceSha256": idle_member.sha256,
+                "sourceArchive": meshes_archive.archive.name,
+                "sourceArchiveSha256": meshes_archive_sha256,
+            })
+            row["speakerIdle"] = idle
+        response = dict(row["response"])
+        namespace = canonical_member_path(
+            f"sound\\voice\\fallout3.esm\\{dict(row['voiceType'])['editorId']}"
+        )
+        suffix = f"_{str(row['infoFormId']).casefold()}_{int(response['index'])}.ogg"
+        matches = [
+            path for path in voices_archive.members
+            if path.startswith(namespace + "\\") and path.endswith(suffix)
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"Fallout 3 CG02 intro voice differs: {reference_id}")
+        voice_path = matches[0]
+        lip_path = voice_path.removesuffix(".ogg") + ".lip"
+        if lip_path not in voices_archive.members:
+            raise ValueError(f"Fallout 3 CG02 intro lip differs: {reference_id}")
+        response["voice"] = prepare_member(
+            voices_archive, voices_archive_sha256, voice_path, "dialogue"
+        )
+        response["lip"] = prepare_member(
+            voices_archive, voices_archive_sha256, lip_path, "dialogue"
+        )
+        row["response"] = response
+        prepared.append(row)
+    intro["participants"] = prepared
+    intro["sounds"] = [
+        {
+            **dict(row),
+            "asset": prepare_member(
+                sound_archive,
+                sound_archive_sha256,
+                str(dict(row)["logicalPath"]),
+                "sound",
+            ),
+        }
+        for row in intro["sounds"]
+    ]
+    intro["assetsPrepared"] = True
+
+
 def _bind_cg01_transition_video(
     character_selection: dict[str, object],
     transition_video: dict[str, object],
@@ -7400,6 +7900,21 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         profile_root,
     )
     completion["stage90Result"] = stage90_result
+    cg02_stage0 = dict(completion["cg02Stage0"])
+    cg02_intro = dict(cg02_stage0["introRuntime"])
+    _bind_cg02_intro_assets(
+        cg02_intro,
+        resolved_data_root,
+        profile_root,
+        meshes_archive,
+        meshes_archive_sha256,
+        voices_archive,
+        voices_archive_sha256,
+        sound_archive,
+        sound_archive_sha256,
+    )
+    cg02_stage0["introRuntime"] = cg02_intro
+    completion["cg02Stage0"] = cg02_stage0
     dad_lead["completion"] = completion
     dad_return["dadLead"] = dad_lead
     timer_transition["dadReturn"] = dad_return

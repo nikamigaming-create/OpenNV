@@ -66,6 +66,14 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Action<double>? _cg01Stage50TimerTick;
     private Action<double>? _cg01DadPackageTravelTick;
     private Action<double>? _cg01Stage90TimerTick;
+    private Action? _cg02IntroBegin;
+    private Action<double>? _cg02IntroTimerTick;
+    private readonly Dictionary<string, CellActorLoader.PlacedActor> _cg02IntroActors =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<GamebryoDialoguePlayback> _cg02IntroDialogue = [];
+    private readonly Dictionary<string, ActorAnimationPlayback> _cg02IntroAnimations =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<AudioStreamPlayer> _cg02IntroSounds = [];
     private string? _cg01ProofMode;
     private string? _cg01ProofReportPath;
     private string? _cg01ProofCapturePath;
@@ -210,6 +218,11 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         _cg01Stage50TimerTick?.Invoke(delta);
         _cg01DadPackageTravelTick?.Invoke(delta);
         _cg01Stage90TimerTick?.Invoke(delta);
+        _cg02IntroTimerTick?.Invoke(delta);
+        foreach (var dialogue in _cg02IntroDialogue)
+            dialogue.Update();
+        foreach (var animation in _cg02IntroAnimations.Values)
+            animation.Advance(delta);
         if (_vaultStage90Fade is not null && _activeStage90ImageSpaceModifier is not null)
         {
             _stage90ImageSpaceElapsedSeconds += delta;

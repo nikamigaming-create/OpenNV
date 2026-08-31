@@ -889,7 +889,10 @@ def prepare_actor(
     ):
         raise ValueError("Proof actor race has no complete sex-specific head/body table")
     hair = catalog.parts.get(actor.hair_form_id or 0)
-    eyes = catalog.parts.get(actor.eyes_form_id or 0)
+    resolved_eyes_form_id = actor.eyes_form_id or (
+        race.valid_eye_form_ids[0] if race.valid_eye_form_ids else 0
+    )
+    eyes = catalog.parts.get(resolved_eyes_form_id)
     head_parts = [catalog.parts.get(part) for part in actor.head_part_form_ids]
     if hair is None or hair.model_path is None or eyes is None or eyes.texture_path is None:
         raise ValueError("Proof actor has incomplete hair or eye records")
@@ -917,7 +920,11 @@ def prepare_actor(
         if not outfits or any(outfit is None for outfit in outfits):
             raise ValueError(f"Proof actor has unresolved outfit armor: {outfit_forms}")
         outfit_models = [
-            outfit.female_model_path if actor.female else outfit.male_model_path
+            (
+                outfit.female_model_path or outfit.male_model_path
+                if actor.female
+                else outfit.male_model_path or outfit.female_model_path
+            )
             for outfit in outfits
         ]
     if any(path is None for path in outfit_models):
@@ -1395,7 +1402,11 @@ def prepare_actor(
             "female": actor.female,
             "raceFormId": f"{appearance_race_form_id:08x}",
             "hairFormId": f"{actor.hair_form_id:08x}",
-            "eyesFormId": f"{actor.eyes_form_id:08x}",
+            "eyesFormId": f"{resolved_eyes_form_id:08x}",
+            "eyesSource": (
+                "npc-enam" if actor.eyes_form_id is not None
+                else "race-enam-first-engine-default"
+            ),
             "headPartFormIds": [f"{part:08x}" for part in actor.head_part_form_ids],
             "outfitFormIds": [f"{outfit_form:08x}" for outfit_form in outfit_forms],
             "recordType": HUMANOID_BASE_RECORD_TYPE,

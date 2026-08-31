@@ -92,6 +92,50 @@ internal sealed record Fo3Cg02Stage5Item(
     int AddedCount,
     bool Equipped);
 
+internal sealed record Fo3Cg02IntroParticipant(
+    int Phase,
+    int SequenceInPhase,
+    int Sequence,
+    string? EngineSex,
+    string ReferenceFormId,
+    string ReferenceEditorId,
+    string BaseFormId,
+    string ActorScenePath,
+    string ActorSceneSha256,
+    string InfoFormId,
+    string? SpeakerIdleFormId,
+    string? SpeakerIdleLogicalPath,
+    Fo3OwnedDialogueResponse Response,
+    IReadOnlyDictionary<string, int> QuestVariableEffects,
+    int ResultEffectCount);
+
+internal sealed record Fo3Cg02IntroSound(
+    int Phase,
+    int Sequence,
+    string FormId,
+    string EditorId,
+    string LogicalPath,
+    string SourcePath,
+    string Sha256);
+
+internal sealed record Fo3Cg02Stage6Command(
+    int Index,
+    string Kind,
+    string ReferenceFormId,
+    string ReferenceEditorId,
+    string? Variable,
+    int Value);
+
+internal sealed record Fo3Cg02IntroRuntime(
+    int SourceStage,
+    int TargetStage,
+    double InitialSeconds,
+    IReadOnlyList<Fo3Cg02IntroParticipant> Participants,
+    IReadOnlyList<Fo3Cg02IntroSound> Sounds,
+    IReadOnlyList<Fo3Cg02Stage6Command> Stage6Commands,
+    int FinalCommandCount,
+    string NextBoundaryBlocker);
+
 internal sealed record Fo3Cg02Stage0Transition(
     int SourceStage,
     int TargetStage,
@@ -109,6 +153,7 @@ internal sealed record Fo3Cg02Stage0Transition(
     int RunTimerValue,
     int IntroValue,
     Fo3Cg01OwnedMovie TransitionMovie,
+    Fo3Cg02IntroRuntime? IntroRuntime,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg01Stage90Completion(
@@ -482,9 +527,15 @@ internal sealed record Fo3Cg01Stage50Timer(
         var stage0CommandCount = source.GetProperty("stage0CommandCount").GetInt32();
         if (stage0CommandCount <= 0 ||
             move.GetProperty("index").GetInt32() != stage0CommandCount - 1 ||
-            move.GetProperty("kind").GetString() != "moveToReference" ||
-            boundary.GetProperty("applied").GetBoolean())
+            move.GetProperty("kind").GetString() != "moveToReference")
             throw new InvalidOperationException("Fallout 3 CG02 stage-0 move boundary differs.");
+        var boundaryApplied = boundary.GetProperty("applied").GetBoolean();
+        var intro = boundaryApplied
+            ? LoadCg02Intro(source.GetProperty("introRuntime"), targetStage)
+            : null;
+        var blocker = boundaryApplied
+            ? intro!.NextBoundaryBlocker
+            : boundary.GetProperty("blocker").GetString()!;
         return new Fo3Cg02Stage0Transition(
             expectedSourceStage,
             targetStage,
@@ -504,6 +555,135 @@ internal sealed record Fo3Cg01Stage50Timer(
             variables["runTimer"].GetProperty("value").GetInt32(),
             variables["intro"].GetProperty("value").GetInt32(),
             movie,
+            intro,
+            blocker);
+    }
+
+    private static Fo3Cg02IntroRuntime LoadCg02Intro(JsonElement source, int sourceStage)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg02-stage-5-intro-runtime/v1" ||
+            source.GetProperty("sourceStage").GetInt32() != sourceStage ||
+            !source.GetProperty("assetsPrepared").GetBoolean())
+            throw new InvalidOperationException("Fallout 3 CG02 intro identity differs.");
+        var timer = source.GetProperty("timer");
+        if (timer.GetProperty("decrementSource").GetString() != "GetSecondsPassed" ||
+            timer.GetProperty("initialVariable").GetString() != "timer" ||
+            timer.GetProperty("runVariable").GetString() != "runTimer" ||
+            timer.GetProperty("requiredIntro").GetInt32() != 1)
+            throw new InvalidOperationException("Fallout 3 CG02 intro timer differs.");
+        var participants = source.GetProperty("participants").EnumerateArray()
+            .Select((row, index) =>
+            {
+                if (row.GetProperty("sequence").GetInt32() != index)
+                    throw new InvalidOperationException("Fallout 3 CG02 intro order differs.");
+                var actor = row.GetProperty("actorScene");
+                var idle = row.GetProperty("speakerIdle");
+                var response = row.GetProperty("response");
+                var effectRows = row.GetProperty("effects").EnumerateArray().ToArray();
+                var effects = effectRows.Where(value =>
+                        value.GetProperty("kind").GetString() == "setQuestVariable")
+                    .ToDictionary(
+                    value => value.GetProperty("variable").GetString()!,
+                    value => value.GetProperty("value").GetInt32(),
+                    StringComparer.OrdinalIgnoreCase);
+                var voice = response.GetProperty("voice");
+                var lip = response.GetProperty("lip");
+                return new Fo3Cg02IntroParticipant(
+                    row.GetProperty("phase").GetInt32(),
+                    row.GetProperty("sequenceInPhase").GetInt32(),
+                    index,
+                    row.TryGetProperty("engineSex", out var sex) &&
+                        sex.ValueKind != JsonValueKind.Null ? sex.GetString() : null,
+                    row.GetProperty("referenceFormId").GetString()!,
+                    row.GetProperty("referenceEditorId").GetString()!,
+                    row.GetProperty("baseFormId").GetString()!,
+                    actor.GetProperty("scene").GetString()!,
+                    actor.GetProperty("sha256").GetString()!,
+                    row.GetProperty("infoFormId").GetString()!,
+                    idle.ValueKind == JsonValueKind.Null
+                        ? null : idle.GetProperty("formId").GetString()!,
+                    idle.ValueKind == JsonValueKind.Null
+                        ? null : idle.GetProperty("modelPath").GetString()!,
+                    new Fo3OwnedDialogueResponse(
+                        response.GetProperty("index").GetInt32(),
+                        response.GetProperty("text").GetString()!,
+                        new Fo3OwnedDialogueAsset(
+                            voice.GetProperty("logicalPath").GetString()!,
+                            voice.GetProperty("source").GetString()!,
+                            voice.GetProperty("bytes").GetInt64(),
+                            voice.GetProperty("sha256").GetString()!),
+                        new Fo3OwnedDialogueAsset(
+                            lip.GetProperty("logicalPath").GetString()!,
+                            lip.GetProperty("source").GetString()!,
+                            lip.GetProperty("bytes").GetInt64(),
+                            lip.GetProperty("sha256").GetString()!)),
+                    effects,
+                    effectRows.Length);
+            }).ToArray();
+        if (participants.Length != 15 || participants.Count(value =>
+                value.QuestVariableEffects.Count != 0) != 5 ||
+            participants.Where(value => value.EngineSex is null)
+                .GroupBy(value => value.Phase).Any(group =>
+                !group.OrderBy(value => value.SequenceInPhase)
+                    .Select(value => value.SequenceInPhase)
+                    .SequenceEqual(Enumerable.Range(0, group.Count()))))
+            throw new InvalidOperationException("Fallout 3 CG02 intro participants differ.");
+        var sounds = source.GetProperty("sounds").EnumerateArray()
+            .Select((row, index) =>
+            {
+                var asset = row.GetProperty("asset");
+                return new Fo3Cg02IntroSound(
+                    row.GetProperty("phase").GetInt32(),
+                    row.GetProperty("sequence").GetInt32(),
+                    row.GetProperty("formId").GetString()!,
+                    row.GetProperty("editorId").GetString()!,
+                    asset.GetProperty("logicalPath").GetString()!,
+                    asset.GetProperty("source").GetString()!,
+                    asset.GetProperty("sha256").GetString()!);
+            }).ToArray();
+        if (sounds.Length != 3 || sounds.GroupBy(value => value.Phase).Any(group =>
+                !group.OrderBy(value => value.Sequence).Select(value => value.Sequence)
+                    .SequenceEqual(Enumerable.Range(0, group.Count()))))
+            throw new InvalidOperationException("Fallout 3 CG02 intro sounds differ.");
+        var finalCommands = source.GetProperty("finalCommands").EnumerateArray().ToArray();
+        if (finalCommands.Length != 3 ||
+            finalCommands[0].GetProperty("kind").GetString() != "setStage" ||
+            finalCommands[0].GetProperty("stage").GetInt32() !=
+                source.GetProperty("targetStage").GetInt32() ||
+            finalCommands.Skip(1).Any(value =>
+                value.GetProperty("kind").GetString() != "setQuestVariable"))
+            throw new InvalidOperationException("Fallout 3 CG02 intro completion differs.");
+        var stage6Commands = source.GetProperty("stage6Commands").EnumerateArray()
+            .Select((row, index) =>
+            {
+                if (row.GetProperty("index").GetInt32() != index)
+                    throw new InvalidOperationException("Fallout 3 CG02 stage-6 order differs.");
+                var kind = row.GetProperty("kind").GetString()!;
+                if (kind is not ("setActorVariable" or "setOpenState" or "lookAt"))
+                    throw new InvalidOperationException("Fallout 3 CG02 stage-6 command differs.");
+                return new Fo3Cg02Stage6Command(
+                    index,
+                    kind,
+                    row.GetProperty("referenceFormId").GetString()!,
+                    row.GetProperty("referenceEditorId").GetString()!,
+                    row.TryGetProperty("variable", out var variable)
+                        ? variable.GetString() : null,
+                    row.TryGetProperty("value", out var value) ? value.GetInt32() : 0);
+            }).ToArray();
+        if (stage6Commands.Length == 0)
+            throw new InvalidOperationException("Fallout 3 CG02 stage-6 result is absent.");
+        var boundary = source.GetProperty("nextBoundary");
+        if (boundary.GetProperty("applied").GetBoolean())
+            throw new InvalidOperationException("Fallout 3 CG02 intro boundary differs.");
+        return new Fo3Cg02IntroRuntime(
+            sourceStage,
+            source.GetProperty("targetStage").GetInt32(),
+            timer.GetProperty("initialSeconds").GetDouble(),
+            participants,
+            sounds,
+            stage6Commands,
+            finalCommands.Length + stage6Commands.Length,
             boundary.GetProperty("blocker").GetString()!);
     }
 
@@ -932,9 +1112,11 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var stage = RequiredInteger(active, "stage");
         var dadLead = Stage20Interaction.TimerTransition.DadLead;
         var completion = dadLead.Completion;
+        var cg02IntroComplete = completion.Cg02Stage0.IntroRuntime is not null &&
+            stage == completion.Cg02Stage0.IntroRuntime.TargetStage;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
             RequiredString(active, "editorId") == completion.NextQuestEditorId &&
-            stage == completion.Cg02Stage0.TargetStage;
+            (stage == completion.Cg02Stage0.TargetStage || cg02IntroComplete);
         var progressStage = reachedNextQuest ? completion.TargetStage : stage;
         var values = RequiredArray(source, "specialValues").EnumerateArray()
             .Select(value => value.GetInt32()).ToArray();
@@ -997,6 +1179,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 completion.Stage100CommandCount +
                 completion.Cg02Stage0.Stage5CommandCount +
                 completion.Cg02Stage0.Stage0CommandCount;
+        if (cg02IntroComplete)
+            interactionCommandCount += completion.Cg02Stage0.IntroRuntime!.FinalCommandCount;
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
         var expectedPackages = baseline.AppliedPackageFormIds.AsEnumerable();
         if (progressStage >= Stage20Interaction.TimerTransition.CompletionStage)
@@ -1012,9 +1196,14 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var imageSpaceElapsed = source.GetProperty("imageSpaceElapsedSeconds").GetDouble();
         var soundStarted = RequiredBoolean(source, "stage90SoundStarted");
         if (!double.IsFinite(timerRemaining) || timerRemaining < 0.0 ||
-            timerAdvancing && (!accepted || stage != Stage20Interaction.BookStage) ||
-            progressStage >= Stage20Interaction.TimerTransition.TargetStage &&
+            !reachedNextQuest && timerAdvancing &&
+                (!accepted || stage != Stage20Interaction.BookStage) ||
+            !reachedNextQuest && progressStage >= Stage20Interaction.TimerTransition.TargetStage &&
                 (timerAdvancing || timerRemaining != 0.0) ||
+            reachedNextQuest && (completion.Cg02Stage0.IntroRuntime is null
+                ? timerAdvancing || timerRemaining != 0.0
+                : timerRemaining > completion.Cg02Stage0.IntroRuntime.InitialSeconds ||
+                  timerAdvancing != (timerRemaining > 0.0)) ||
             reachedNextQuest &&
                 (!double.IsFinite(imageSpaceElapsed) ||
                  imageSpaceElapsed < completion.TimerInitialSeconds ||

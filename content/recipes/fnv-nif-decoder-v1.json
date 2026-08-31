@@ -13,6 +13,7 @@
     "endian": 1,
     "userVersion": 11,
     "userVersion2": 34,
+    "compatibleGeometryUserVersion2": [32],
     "animationUserVersion2": [
       33
     ],
