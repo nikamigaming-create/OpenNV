@@ -125,10 +125,11 @@ using var intDocument = JsonDocument.Parse("""
                 "kind": "literal", "offset": 212, "value": 1, "arguments": []
               },
               "maximumExpression": {
-                "kind": "program-variable", "offset": 218, "value": null,
-                "arguments": [{
-                  "kind": "literal", "offset": 214, "value": 7, "arguments": []
-                }]
+                "kind": "critter-stat", "offset": 220, "value": null,
+                "arguments": [
+                  { "kind": "dude-object", "offset": 214, "value": null, "arguments": [] },
+                  { "kind": "literal", "offset": 216, "value": 6, "arguments": [] }
+                ]
               }
             }]
           }
@@ -166,10 +167,11 @@ using var intDocument = JsonDocument.Parse("""
           "kind": "literal", "offset": 212, "value": 1, "arguments": []
         },
         "maximumExpression": {
-          "kind": "program-variable", "offset": 218, "value": null,
-          "arguments": [{
-            "kind": "literal", "offset": 214, "value": 7, "arguments": []
-          }]
+          "kind": "critter-stat", "offset": 220, "value": null,
+          "arguments": [
+            { "kind": "dude-object", "offset": 214, "value": null, "arguments": [] },
+            { "kind": "literal", "offset": 216, "value": 6, "arguments": [] }
+          ]
         }
       }]
     }
@@ -196,10 +198,17 @@ var randomState = ClassicRetailRandomLifecycle.Initialize(1, randomContract);
 var expressionResult = ClassicIntExpressionOwner.EvaluateRandomSite(
     intInitialization.RandomSites[1],
     new ClassicIntExpressionContext(
-        new Dictionary<int, int> { [7] = 3 },
         new Dictionary<int, int>(),
         new Dictionary<int, int>(),
         new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        100,
+        200,
+        1,
+        1,
+        new Dictionary<(int, int), int> { [(100, 6)] = 3 },
+        new Dictionary<(int, int), int>(),
         new Dictionary<int, int>()),
     randomState,
     randomContract);

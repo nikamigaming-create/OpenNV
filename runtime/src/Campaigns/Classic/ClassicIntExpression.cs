@@ -11,7 +11,14 @@ internal sealed record ClassicIntExpressionContext(
     IReadOnlyDictionary<int, int> LocalVariables,
     IReadOnlyDictionary<int, int> ScriptLocalVariables,
     IReadOnlyDictionary<int, int> MapVariables,
-    IReadOnlyDictionary<int, int> GlobalVariables);
+    IReadOnlyDictionary<int, int> GlobalVariables,
+    int DudeObject,
+    int SelfObject,
+    int CombatDifficulty,
+    int DifficultyLevel,
+    IReadOnlyDictionary<(int Object, int Stat), int> CritterStats,
+    IReadOnlyDictionary<(int Rule, int Argument), int> MetaruleValues,
+    IReadOnlyDictionary<int, int> SfallArrayLengths);
 
 internal sealed record ClassicIntExpressionValue(
     ClassicRetailRandomLifecycleState RandomState,
@@ -71,6 +78,22 @@ internal static class ClassicIntExpressionOwner
                 context.MapVariables, arguments, expression, site),
             "global-variable" => RequiredVariable(
                 context.GlobalVariables, arguments, expression, site),
+            "dude-object" when arguments.Count == 0 => context.DudeObject,
+            "self-object" when arguments.Count == 0 => context.SelfObject,
+            "combat-difficulty" when arguments.Count == 0 => context.CombatDifficulty,
+            "difficulty-level" when arguments.Count == 0 => context.DifficultyLevel,
+            "critter-stat" => RequiredGameValue(
+                context.CritterStats,
+                arguments,
+                expression,
+                site),
+            "metarule" => RequiredGameValue(
+                context.MetaruleValues,
+                arguments,
+                expression,
+                site),
+            "sfall-array-length" => RequiredVariable(
+                context.SfallArrayLengths, arguments, expression, site),
             "equal" => Boolean(arguments[0] == arguments[1]),
             "not-equal" => Boolean(arguments[0] != arguments[1]),
             "greater-than-or-equal" => Boolean(arguments[0] >= arguments[1]),
@@ -82,6 +105,7 @@ internal static class ClassicIntExpressionOwner
             "modulo" when arguments[1] != 0 => arguments[0] % arguments[1],
             "and" => Boolean(arguments[0] != 0 && arguments[1] != 0),
             "or" => Boolean(arguments[0] != 0 || arguments[1] != 0),
+            "bitwise-and" => arguments[0] & arguments[1],
             "not" => Boolean(arguments[0] == 0),
             "negate" => unchecked(-arguments[0]),
             "random-inclusive" => 0,
@@ -123,6 +147,18 @@ internal static class ClassicIntExpressionOwner
         ClassicMapIntRandomSite site)
     {
         if (arguments.Count != 1 || !variables.TryGetValue(arguments[0], out var value))
+            throw Unsupported(expression, site);
+        return value;
+    }
+
+    private static int RequiredGameValue(
+        IReadOnlyDictionary<(int, int), int> values,
+        IReadOnlyList<int> arguments,
+        ClassicIntExpression expression,
+        ClassicMapIntRandomSite site)
+    {
+        if (arguments.Count != 2 ||
+            !values.TryGetValue((arguments[0], arguments[1]), out var value))
             throw Unsupported(expression, site);
         return value;
     }

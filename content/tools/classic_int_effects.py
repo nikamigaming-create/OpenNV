@@ -29,6 +29,7 @@ LOCAL_VAR = 0x80C1
 SET_LOCAL_VAR = 0x80C2
 MAP_VAR = 0x80C3
 GLOBAL_VAR = 0x80C5
+GET_CRITTER_STAT = 0x80CA
 EQUAL = 0x8033
 AND = 0x803E
 IF = 0x802F
@@ -38,6 +39,10 @@ JUMP = 0x8004
 DISPLAY_MSG = 0x80B8
 SCRIPT_OVERRIDES = 0x80B9
 MESSAGE_STR = 0x8105
+METARULE = 0x810B
+COMBAT_DIFFICULTY = 0x814F
+SFALL_ARRAY_LENGTH = 0x8231
+DIFFICULTY_LEVEL = 0x812A
 ADD = 0x8039
 NEGATE = 0x8046
 FETCH_PROGRAM_VARIABLE = 0x8012
@@ -50,6 +55,7 @@ MULTIPLY = 0x803B
 DIVIDE = 0x803C
 MODULO = 0x803D
 NOT = 0x8045
+BITWISE_AND = 0x8040
 OR = 0x803F
 DUDE_NAME = 0x80A4
 GSAY_REPLY = 0x811E
@@ -101,6 +107,13 @@ _EXPRESSION_OPERATIONS = {
     LOCAL_VAR: ("script-local-variable", 1),
     MAP_VAR: ("map-variable", 1),
     GLOBAL_VAR: ("global-variable", 1),
+    SELF_OBJ: ("self-object", 0),
+    DUDE_OBJ: ("dude-object", 0),
+    GET_CRITTER_STAT: ("critter-stat", 2),
+    METARULE: ("metarule", 2),
+    COMBAT_DIFFICULTY: ("combat-difficulty", 0),
+    SFALL_ARRAY_LENGTH: ("sfall-array-length", 1),
+    DIFFICULTY_LEVEL: ("difficulty-level", 0),
     EQUAL: ("equal", 2),
     NOT_EQUAL: ("not-equal", 2),
     GREATER_THAN_OR_EQUAL: ("greater-than-or-equal", 2),
@@ -112,6 +125,7 @@ _EXPRESSION_OPERATIONS = {
     MODULO: ("modulo", 2),
     AND: ("and", 2),
     OR: ("or", 2),
+    BITWISE_AND: ("bitwise-and", 2),
     NOT: ("not", 1),
     NEGATE: ("negate", 1),
     RANDOM: ("random-inclusive", 2),

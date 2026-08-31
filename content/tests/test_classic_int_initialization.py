@@ -79,8 +79,8 @@ class ClassicIntInitializationTests(unittest.TestCase):
         self.assertEqual(site["operandKind"], "source-stack-expression")
         self.assertIsNone(site["minimum"])
         self.assertIsNone(site["maximum"])
-        self.assertEqual(site["expressionStatus"], "unsupported")
-        self.assertIn("opcode 0x80bf", site["unsupported"])
+        self.assertEqual(site["expressionStatus"], "executable")
+        self.assertEqual(site["maximumExpression"]["kind"], "dude-object")
         self.assertEqual(inventory["procedures"][0]["eventKind"], "map-enter")
 
     def test_int_inventory_decodes_expression_branch_stack_order(self) -> None:
