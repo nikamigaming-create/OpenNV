@@ -88,6 +88,7 @@ def synthetic_critter_pro() -> bytes:
     stats = [8, 5, 5, 5, 5, 8, 5, 50, 9, 8, 0, 3, 0, 15, 0, 5] + [0] * 19
     struct.pack_into(">35i", result, 0x30, *stats)
     struct.pack_into(">35i", result, 0xBC, *([0] * 35))
+    struct.pack_into(">18i", result, 0x148, *([0, 0, 0, 45, 60] + [0] * 13))
     return bytes(result)
 
 
@@ -545,8 +546,22 @@ class Fo2FirstSliceTest(unittest.TestCase):
                     "maximumRange": 2,
                     "actionPointCost": 4,
                     "animationCode": 4,
+                    "minimumStrength": 4,
+                    "criticalFailureType": 1,
+                    "roundsPerAttack": 0,
+                    "caliber": 0,
+                    "ammunitionPid": "ffffffff",
+                    "ammunitionCapacity": 0,
                     "hitResolution": "engine-roll-required",
                 },
+            )
+            self.assertEqual(
+                confrontation["critter"]["prototype"]["stats"]["skills"][4],
+                60,
+            )
+            self.assertEqual(
+                confrontation["critter"]["prototype"]["stats"]["damageThresholds"],
+                [0] * 7,
             )
             self.assertEqual(confrontation["defeatLoot"]["serial"], 1)
             self.assertEqual(confrontation["defeatLoot"]["displayName"], "Spear")

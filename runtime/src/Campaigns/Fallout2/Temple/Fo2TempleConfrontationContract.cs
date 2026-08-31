@@ -15,6 +15,9 @@ internal sealed record Fo2TempleCritterStats(
     int MeleeDamage,
     int Sequence,
     int CriticalChance,
+    IReadOnlyList<int> DamageThresholds,
+    IReadOnlyList<int> DamageResistances,
+    IReadOnlyList<int> Skills,
     int AiPacket,
     int Team);
 
@@ -40,6 +43,12 @@ internal sealed record Fo2TempleEquippedAttack(
     int MaximumRange,
     int ActionPointCost,
     int AnimationCode,
+    int MinimumStrength,
+    int CriticalFailureType,
+    int RoundsPerAttack,
+    int Caliber,
+    string AmmunitionPid,
+    int AmmunitionCapacity,
     string HitResolution);
 
 internal sealed record Fo2TempleGuardianDialogueSegment(
@@ -172,6 +181,13 @@ internal sealed record Fo2TempleConfrontationContract(
                     critter.GetProperty("equippedAttack").GetProperty("maximumRange").GetInt32(),
                     critter.GetProperty("equippedAttack").GetProperty("actionPointCost").GetInt32(),
                     critter.GetProperty("equippedAttack").GetProperty("animationCode").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("minimumStrength").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("criticalFailureType").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("roundsPerAttack").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("caliber").GetInt32(),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "ammunitionPid"),
+                    critter.GetProperty("equippedAttack").GetProperty("ammunitionCapacity").GetInt32(),
                     Fo2TemplePresentationCatalog.RequiredString(
                         critter.GetProperty("equippedAttack"), "hitResolution")),
                 Fo2TemplePresentationCatalog.RequiredString(critterPrototype, "logicalPath"),
@@ -190,6 +206,12 @@ internal sealed record Fo2TempleConfrontationContract(
                     critterStats.GetProperty("meleeDamage").GetInt32(),
                     critterStats.GetProperty("sequence").GetInt32(),
                     critterStats.GetProperty("criticalChance").GetInt32(),
+                    critterStats.GetProperty("damageThresholds").EnumerateArray()
+                        .Select(row => row.GetInt32()).ToArray(),
+                    critterStats.GetProperty("damageResistances").EnumerateArray()
+                        .Select(row => row.GetInt32()).ToArray(),
+                    critterStats.GetProperty("skills").EnumerateArray()
+                        .Select(row => row.GetInt32()).ToArray(),
                     critterStats.GetProperty("aiPacket").GetInt32(),
                     critterStats.GetProperty("team").GetInt32())),
             new Fo2TempleConfrontationLoot(
@@ -244,6 +266,13 @@ internal sealed record Fo2TempleConfrontationContract(
             Critter.Stats.HitPoints <= 0 || Critter.Stats.ActionPoints <= 0 ||
             Critter.Stats.Team != Critter.RuntimeTeam ||
             Critter.Stats.AiPacket != Critter.RuntimeAiPacket ||
+            Critter.Stats.DamageThresholds.Count !=
+                Critter.Stats.DamageResistances.Count ||
+            Critter.Stats.DamageThresholds.Count == 0 ||
+            Critter.Stats.Skills.Count == 0 ||
+            Critter.Stats.DamageThresholds.Any(value => value < 0) ||
+            Critter.Stats.DamageResistances.Any(value => value < 0) ||
+            Critter.Stats.Skills.Any(value => value < 0) ||
             Critter.EquippedAttack.InventorySerial != DefeatLoot.Serial ||
             Critter.EquippedAttack.Pid != DefeatLoot.Pid ||
             Critter.EquippedAttack.Hand != "right" ||
@@ -253,6 +282,11 @@ internal sealed record Fo2TempleConfrontationContract(
             Critter.EquippedAttack.MaximumRange != DefeatLoot.Weapon.MaximumRangePrimary ||
             Critter.EquippedAttack.ActionPointCost != DefeatLoot.Weapon.ActionPointCostPrimary ||
             Critter.EquippedAttack.AnimationCode != DefeatLoot.Weapon.AnimationCode ||
+            Critter.EquippedAttack.MinimumStrength != DefeatLoot.Weapon.MinimumStrength ||
+            Critter.EquippedAttack.RoundsPerAttack < 0 ||
+            Critter.EquippedAttack.AmmunitionCapacity < 0 ||
+            Critter.EquippedAttack.AmmunitionPid.Length != DefeatLoot.Pid.Length ||
+            !Critter.EquippedAttack.AmmunitionPid.All(Uri.IsHexDigit) ||
             Critter.EquippedAttack.HitResolution != "engine-roll-required" ||
             DefeatLoot.Quantity <= 0 || DefeatLoot.Weapon.MinimumDamage <= 0 ||
             DefeatLoot.Weapon.MaximumDamage < DefeatLoot.Weapon.MinimumDamage ||

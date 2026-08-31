@@ -49,7 +49,9 @@ CRITTER_PRO_HEADER_OFFSET = 0x20
 CRITTER_PRO_HEADER_FIELD_COUNT = 3
 CRITTER_PRO_BASE_STATS_OFFSET = 0x30
 CRITTER_PRO_BONUS_STATS_OFFSET = 0xBC
+CRITTER_PRO_SKILLS_OFFSET = 0x148
 CRITTER_PRO_STAT_COUNT = 35
+CRITTER_PRO_SKILL_COUNT = 18
 CRITTER_STAT_STRENGTH = 0
 CRITTER_STAT_PERCEPTION = 1
 CRITTER_STAT_ENDURANCE = 2
@@ -64,6 +66,10 @@ CRITTER_STAT_UNARMED_DAMAGE = 10
 CRITTER_STAT_MELEE_DAMAGE = 11
 CRITTER_STAT_SEQUENCE = 13
 CRITTER_STAT_CRITICAL_CHANCE = 15
+CRITTER_STAT_DAMAGE_THRESHOLD_FIRST = 17
+CRITTER_STAT_DAMAGE_THRESHOLD_LAST = 23
+CRITTER_STAT_DAMAGE_RESISTANCE_FIRST = 24
+CRITTER_STAT_DAMAGE_RESISTANCE_LAST = 30
 CRITTER_OBJECT_TYPE = 1
 CRITTER_INSTANCE_VALUE_COUNT = 11
 CRITTER_INSTANCE_CURRENT_AP = 3
@@ -341,6 +347,9 @@ def _parse_critter_pro(data: bytes) -> dict[str, int]:
     stats = [
         base[index] + bonus[index] for index in range(CRITTER_PRO_STAT_COUNT)
     ]
+    skills = struct.unpack_from(
+        f">{CRITTER_PRO_SKILL_COUNT}i", data, CRITTER_PRO_SKILLS_OFFSET
+    )
     head_fid, ai_packet, team = struct.unpack_from(
         f">{CRITTER_PRO_HEADER_FIELD_COUNT}i", data, CRITTER_PRO_HEADER_OFFSET
     )
@@ -362,6 +371,19 @@ def _parse_critter_pro(data: bytes) -> dict[str, int]:
         "meleeDamage": stats[CRITTER_STAT_MELEE_DAMAGE],
         "sequence": stats[CRITTER_STAT_SEQUENCE],
         "criticalChance": stats[CRITTER_STAT_CRITICAL_CHANCE],
+        "damageThresholds": list(
+            stats[
+                CRITTER_STAT_DAMAGE_THRESHOLD_FIRST :
+                CRITTER_STAT_DAMAGE_THRESHOLD_LAST + 1
+            ]
+        ),
+        "damageResistances": list(
+            stats[
+                CRITTER_STAT_DAMAGE_RESISTANCE_FIRST :
+                CRITTER_STAT_DAMAGE_RESISTANCE_LAST + 1
+            ]
+        ),
+        "skills": list(skills),
     }
 
 
@@ -507,6 +529,14 @@ def _compile_bounded_confrontation(
                 "maximumRange": weapon_stats["maximumRangePrimary"],
                 "actionPointCost": weapon_stats["actionPointCostPrimary"],
                 "animationCode": weapon_stats["animationCode"],
+                "minimumStrength": weapon_stats["minimumStrength"],
+                "criticalFailureType": weapon_stats["criticalFailureType"],
+                "roundsPerAttack": weapon_stats["roundsPerAttack"],
+                "caliber": weapon_stats["caliber"],
+                "ammunitionPid": struct.pack(
+                    ">i", weapon_stats["ammunitionPid"]
+                ).hex(),
+                "ammunitionCapacity": weapon_stats["ammunitionCapacity"],
                 "hitResolution": "engine-roll-required",
             },
             "prototype": {
