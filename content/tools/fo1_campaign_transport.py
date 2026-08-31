@@ -18,6 +18,7 @@ import shutil
 import tempfile
 from typing import Any
 
+from classic_map_joins import exit_grid_records, reciprocal_map_joins
 from fo1_campaign_inventory import parse_maps_txt
 from fo1_map_objects import (
     CONTRACT_SCHEMA as OBJECT_CONTRACT_SCHEMA,
@@ -76,6 +77,7 @@ def map_summary(
         "topLevelObjects": object_graph["objects"]["totalTopLevelObjects"],
         "doors": len(object_graph["doors"]),
         "liveScripts": sum(row["liveCount"] for row in script_lists),
+        "exitGrids": len(document["exitGrids"]),
         "resources": len(document["resources"]),
         "entry": document["entry"],
         "mapsTxt": document["mapsTxt"],
@@ -131,6 +133,7 @@ def build_campaign_transport(
     )
     try:
         map_rows: list[dict[str, Any]] = []
+        join_maps: list[dict[str, Any]] = []
         seen_source_hashes: set[str] = set()
         for map_id, map_path in zip(map_ids, map_paths, strict=True):
             source_bytes = map_path.read_bytes()
@@ -177,6 +180,12 @@ def build_campaign_transport(
                 },
                 "layout": map_layout_manifest(layout),
                 "objectGraph": object_contract["map"],
+                "exitGrids": exit_grid_records(
+                    layout.header.mapIndex,
+                    layout.header.name,
+                    source_hash,
+                    object_contract["map"]["objects"],
+                ),
                 "resources": object_contract["resources"],
                 "promotion": {
                     "state": "transported",
@@ -197,6 +206,18 @@ def build_campaign_transport(
             relative_path = f"maps/{map_id}.json"
             digest = write_payload(staging / relative_path, document)
             map_rows.append(map_summary(map_id, relative_path, digest, document))
+            if (
+                configured_row is not None
+                and str(configured_row["map_name"]).casefold() == map_id
+            ):
+                join_maps.append(
+                    {
+                        "mapIndex": layout.header.mapIndex,
+                        "mapName": layout.header.name,
+                        "mapSha256": source_hash,
+                        "exitGrids": document["exitGrids"],
+                    }
+                )
 
         resources = [
             {
@@ -210,6 +231,7 @@ def build_campaign_transport(
                 key=lambda item: item.logical_path,
             )
         ]
+        map_joins = reciprocal_map_joins(join_maps)
         campaign = {
             "schema": CAMPAIGN_SCHEMA,
             "status": "transported-not-rendered",
@@ -228,6 +250,8 @@ def build_campaign_transport(
                 "topLevelObjects": sum(row["topLevelObjects"] for row in map_rows),
                 "doors": sum(row["doors"] for row in map_rows),
                 "liveScripts": sum(row["liveScripts"] for row in map_rows),
+                "exitGrids": sum(row["exitGrids"] for row in map_rows),
+                "reciprocalMapJoins": len(map_joins),
                 "uniqueResources": len(resources),
                 "mapsTxtRows": len(configured),
                 "configuredMaps": sum(row["mapsTxt"] is not None for row in map_rows),
@@ -241,6 +265,7 @@ def build_campaign_transport(
                 "openXrAcceptedMaps": 0,
             },
             "maps": map_rows,
+            "mapJoins": map_joins,
             "resources": resources,
             "unsupported": [
                 "script execution and quest state",
@@ -260,6 +285,7 @@ def build_campaign_transport(
             "elevations": campaign["coverage"]["presentElevations"],
             "objects": campaign["coverage"]["topLevelObjects"],
             "doors": campaign["coverage"]["doors"],
+            "reciprocalMapJoins": campaign["coverage"]["reciprocalMapJoins"],
             "resources": len(resources),
             "retailOrDerivedAssetsPackaged": False,
         }
