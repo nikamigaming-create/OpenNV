@@ -187,6 +187,7 @@ internal sealed record Fo2TempleConfrontationState(
     int TargetActionPoints,
     int TargetTurnCount,
     ClassicTargetTurnAction? LastTargetTurnAction,
+    ClassicAttackIntent? LastTargetAttack,
     bool CombatActive,
     bool SpearLooted,
     bool SpearEquipped,
@@ -201,11 +202,29 @@ internal sealed record Fo2TempleConfrontationState(
             TargetActionPoints is < 0 || TargetActionPoints > contract.Critter.Stats.ActionPoints ||
             TargetTurnCount < 0 || TargetTurnCount == 0 && LastTargetTurnAction is not null ||
             TargetTurnCount > 0 && LastTargetTurnAction is null ||
+            LastTargetAttack is not null &&
+                (LastTargetTurnAction != ClassicTargetTurnAction.AdjacentAttackRequired ||
+                 LastTargetAttack.ActorId != $"{contract.Critter.Serial}:{contract.Critter.Pid}" ||
+                 LastTargetAttack.TargetId != "player" ||
+                 LastTargetAttack.ActorActionPoints != TargetActionPoints ||
+                 LastTargetAttack.Boundary != ClassicAttackBoundary.HitRollRequired ||
+                 LastTargetAttack.Source != EquippedAttackSource(contract)) ||
             CombatActive && TargetHitPoints == 0 || SpearLooted && TargetHitPoints != 0 ||
             SpearEquipped && !SpearLooted)
             throw new InvalidOperationException(
                 "Fallout 2 Temple confrontation save state is invalid.");
     }
+
+    internal static ClassicAttackSource EquippedAttackSource(
+        Fo2TempleConfrontationContract contract) => new(
+        contract.Critter.EquippedAttack.Pid,
+        contract.Critter.EquippedAttack.MinimumDamage,
+        contract.Critter.EquippedAttack.MaximumDamage,
+        contract.Critter.EquippedAttack.DamageType,
+        contract.Critter.EquippedAttack.MaximumRange,
+        contract.Critter.EquippedAttack.ActionPointCost,
+        contract.Critter.EquippedAttack.AnimationCode,
+        contract.Critter.EquippedAttack.HitResolution);
 }
 
 internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
@@ -323,6 +342,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             _maximumPlayerActionPoints,
             contract.Critter.CurrentActionPoints,
             0,
+            null,
             null,
             false,
             false,
@@ -646,6 +666,12 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
 
     internal bool EndTurn()
     {
+        if (_state.LastTargetAttack is not null)
+        {
+            SetStatus(
+                "The source target attack is waiting on unavailable retail hit/RNG resolution.");
+            return false;
+        }
         if (_state.TargetHitPoints == 0 || !_state.CombatActive)
         {
             SetStatus(_state.TargetHitPoints == 0
@@ -662,17 +688,28 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             _contract.Critter.Tile,
             _player.CurrentTile,
             Fo1HexMath.Neighbors(_contract.Critter.Tile).ToHashSet());
+        var targetAttack = targetTurn.Action == ClassicTargetTurnAction.AdjacentAttackRequired
+            ? ClassicAttackOwner.Prepare(
+                $"{_contract.Critter.Serial}:{_contract.Critter.Pid}",
+                "player",
+                Fo1HexMath.Distance(_contract.Critter.Tile, _player.CurrentTile),
+                targetTurn.ActionPoints,
+                Fo2TempleConfrontationState.EquippedAttackSource(_contract))
+            : null;
         _state = _state with
         {
             PlayerActionPoints = _maximumPlayerActionPoints,
             TargetActionPoints = targetTurn.ActionPoints,
             TargetTurnCount = _state.TargetTurnCount + 1,
             LastTargetTurnAction = targetTurn.Action,
+            LastTargetAttack = targetAttack,
         };
         SetStatus(targetTurn.Action switch
         {
             ClassicTargetTurnAction.AdjacentAttackRequired =>
-                "Source target turn selected an adjacent attack; hit/damage execution is fail-closed.",
+                $"Source-equipped {_contract.DefeatLoot.DisplayName} attack is in range and " +
+                $"costs {_contract.Critter.EquippedAttack.ActionPointCost} AP; " +
+                "retail hit/RNG resolution is unavailable, so damage remains fail-closed.",
             ClassicTargetTurnAction.MovementRequired =>
                 "Source target turn selected movement; AI-packet path execution is fail-closed.",
             _ => "Source target turn had no ACKlint attack request.",

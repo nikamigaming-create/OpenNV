@@ -1718,10 +1718,23 @@ internal partial class Fo1TacticalSession : Node
 
     private void RatAttack(Fo1Mob mob)
     {
-        mob.PlayAttack();
-        var damage = Math.Max(_runtimeProfile.Gameplay.MinimumDamage, mob.MeleeDamage);
-        _playerHitPoints = Math.Max(0, _playerHitPoints - damage);
-        mob.SpendActionPoint();
+        var intent = ClassicAttackOwner.Prepare(
+            $"{mob.Serial}:{mob.Pid}",
+            "player",
+            Fo1HexMath.Distance(mob.Tile, _playerTile),
+            mob.ActionPoints,
+            new ClassicAttackSource(
+                mob.Pid,
+                mob.MeleeDamage,
+                mob.MeleeDamage,
+                null,
+                null,
+                null,
+                null,
+                ClassicAttackOwner.EngineRollRequired));
+        if (intent.Boundary != ClassicAttackBoundary.ActionPointCostRequired)
+            throw new InvalidOperationException(
+                "FO1 rat attack did not preserve its source-engine combat boundary.");
     }
 
     private void BuildWorldMarkers()

@@ -242,6 +242,25 @@ internal sealed record Fo2CharacterStartSaveState(
                     targetActionPoints = TempleConfrontation.TargetActionPoints,
                     targetTurnCount = TempleConfrontation.TargetTurnCount,
                     lastTargetTurnAction = TempleConfrontation.LastTargetTurnAction?.ToString(),
+                    lastTargetAttack = TempleConfrontation.LastTargetAttack is null ? null : new
+                    {
+                        actorId = TempleConfrontation.LastTargetAttack.ActorId,
+                        targetId = TempleConfrontation.LastTargetAttack.TargetId,
+                        distanceHexes = TempleConfrontation.LastTargetAttack.DistanceHexes,
+                        actorActionPoints = TempleConfrontation.LastTargetAttack.ActorActionPoints,
+                        boundary = TempleConfrontation.LastTargetAttack.Boundary.ToString(),
+                        source = new
+                        {
+                            weaponPid = TempleConfrontation.LastTargetAttack.Source.AttackPid,
+                            minimumDamage = TempleConfrontation.LastTargetAttack.Source.MinimumDamage,
+                            maximumDamage = TempleConfrontation.LastTargetAttack.Source.MaximumDamage,
+                            damageType = TempleConfrontation.LastTargetAttack.Source.DamageType,
+                            maximumRangeHexes = TempleConfrontation.LastTargetAttack.Source.MaximumRangeHexes,
+                            actionPointCost = TempleConfrontation.LastTargetAttack.Source.ActionPointCost,
+                            animationCode = TempleConfrontation.LastTargetAttack.Source.AnimationCode,
+                            hitResolution = TempleConfrontation.LastTargetAttack.Source.HitResolution,
+                        },
+                    },
                     combatActive = TempleConfrontation.CombatActive,
                     spearLooted = TempleConfrontation.SpearLooted,
                     spearEquipped = TempleConfrontation.SpearEquipped,
@@ -668,6 +687,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     : throw new InvalidOperationException(
                         "Fallout 2 save target-turn action is invalid.")
                 : null,
+            ReadClassicAttackIntent(value),
             value.GetProperty("combatActive").GetBoolean(),
             value.GetProperty("spearLooted").GetBoolean(),
             value.TryGetProperty("spearEquipped", out var equipped) &&
@@ -679,6 +699,39 @@ internal sealed record Fo2CharacterStartSaveState(
             temple.Confrontation,
             Fo2TempleConfrontationRuntime.MaximumActionPoints(character));
         return state;
+    }
+
+    private static ClassicAttackIntent? ReadClassicAttackIntent(JsonElement confrontation)
+    {
+        if (!confrontation.TryGetProperty("lastTargetAttack", out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (value.ValueKind != JsonValueKind.Object ||
+            !Enum.TryParse<ClassicAttackBoundary>(
+                value.GetProperty("boundary").GetString(), out var boundary))
+            throw new InvalidOperationException("Fallout 2 save attack intent is invalid.");
+        var sourceValue = value.GetProperty("source");
+        var actionPointCost = sourceValue.GetProperty("actionPointCost");
+        var source = new ClassicAttackSource(
+            sourceValue.GetProperty("weaponPid").GetString() ?? "",
+            sourceValue.GetProperty("minimumDamage").GetInt32(),
+            sourceValue.GetProperty("maximumDamage").GetInt32(),
+            sourceValue.GetProperty("damageType").GetInt32(),
+            sourceValue.GetProperty("maximumRangeHexes").GetInt32(),
+            actionPointCost.ValueKind == JsonValueKind.Null
+                ? null
+                : actionPointCost.GetInt32(),
+            sourceValue.GetProperty("animationCode").GetInt32(),
+            sourceValue.GetProperty("hitResolution").GetString() ?? "");
+        var intent = ClassicAttackOwner.Prepare(
+            value.GetProperty("actorId").GetString() ?? "",
+            value.GetProperty("targetId").GetString() ?? "",
+            value.GetProperty("distanceHexes").GetInt32(),
+            value.GetProperty("actorActionPoints").GetInt32(),
+            source);
+        if (intent.Boundary != boundary)
+            throw new InvalidOperationException("Fallout 2 save attack boundary drifted.");
+        return intent;
     }
 
     private static Fo2CharacterAppearanceContract ReadAppearance(

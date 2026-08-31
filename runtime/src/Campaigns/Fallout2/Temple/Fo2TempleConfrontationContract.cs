@@ -29,6 +29,19 @@ internal sealed record Fo2TempleWeaponStats(
     int ActionPointCostSecondary,
     int AnimationCode);
 
+internal sealed record Fo2TempleEquippedAttack(
+    int InventorySerial,
+    string Pid,
+    string ObjectFlags,
+    string Hand,
+    int MinimumDamage,
+    int MaximumDamage,
+    int DamageType,
+    int MaximumRange,
+    int ActionPointCost,
+    int AnimationCode,
+    string HitResolution);
+
 internal sealed record Fo2TempleGuardianDialogueSegment(
     int? MessageId,
     string Text,
@@ -80,6 +93,7 @@ internal sealed record Fo2TempleConfrontationCritter(
     int CurrentActionPoints,
     int RuntimeAiPacket,
     int RuntimeTeam,
+    Fo2TempleEquippedAttack EquippedAttack,
     string PrototypeLogicalPath,
     string PrototypeSha256,
     string MessageLogicalPath,
@@ -144,6 +158,22 @@ internal sealed record Fo2TempleConfrontationContract(
                 critter.GetProperty("currentActionPoints").GetInt32(),
                 critter.GetProperty("runtimeAiPacket").GetInt32(),
                 critter.GetProperty("runtimeTeam").GetInt32(),
+                new Fo2TempleEquippedAttack(
+                    critter.GetProperty("equippedAttack").GetProperty("inventorySerial").GetInt32(),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "pid"),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "objectFlags"),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "hand"),
+                    critter.GetProperty("equippedAttack").GetProperty("minimumDamage").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("maximumDamage").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("damageType").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("maximumRange").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("actionPointCost").GetInt32(),
+                    critter.GetProperty("equippedAttack").GetProperty("animationCode").GetInt32(),
+                    Fo2TemplePresentationCatalog.RequiredString(
+                        critter.GetProperty("equippedAttack"), "hitResolution")),
                 Fo2TemplePresentationCatalog.RequiredString(critterPrototype, "logicalPath"),
                 Fo2TemplePresentationCatalog.RequiredHash(critterPrototype, "sha256"),
                 Fo2TemplePresentationCatalog.RequiredString(critterMessage, "logicalPath"),
@@ -214,6 +244,16 @@ internal sealed record Fo2TempleConfrontationContract(
             Critter.Stats.HitPoints <= 0 || Critter.Stats.ActionPoints <= 0 ||
             Critter.Stats.Team != Critter.RuntimeTeam ||
             Critter.Stats.AiPacket != Critter.RuntimeAiPacket ||
+            Critter.EquippedAttack.InventorySerial != DefeatLoot.Serial ||
+            Critter.EquippedAttack.Pid != DefeatLoot.Pid ||
+            Critter.EquippedAttack.Hand != "right" ||
+            Critter.EquippedAttack.MinimumDamage != DefeatLoot.Weapon.MinimumDamage ||
+            Critter.EquippedAttack.MaximumDamage != DefeatLoot.Weapon.MaximumDamage ||
+            Critter.EquippedAttack.DamageType != DefeatLoot.Weapon.DamageType ||
+            Critter.EquippedAttack.MaximumRange != DefeatLoot.Weapon.MaximumRangePrimary ||
+            Critter.EquippedAttack.ActionPointCost != DefeatLoot.Weapon.ActionPointCostPrimary ||
+            Critter.EquippedAttack.AnimationCode != DefeatLoot.Weapon.AnimationCode ||
+            Critter.EquippedAttack.HitResolution != "engine-roll-required" ||
             DefeatLoot.Quantity <= 0 || DefeatLoot.Weapon.MinimumDamage <= 0 ||
             DefeatLoot.Weapon.MaximumDamage < DefeatLoot.Weapon.MinimumDamage ||
             DefeatLoot.Weapon.ActionPointCostPrimary <= 0 ||

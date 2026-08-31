@@ -1048,6 +1048,7 @@ internal static class Fo2TempleConfrontationProof
         left.TargetActionPoints == right.TargetActionPoints &&
         left.TargetTurnCount == right.TargetTurnCount &&
         left.LastTargetTurnAction == right.LastTargetTurnAction &&
+        left.LastTargetAttack == right.LastTargetAttack &&
         left.CombatActive == right.CombatActive &&
         left.SpearLooted == right.SpearLooted;
 

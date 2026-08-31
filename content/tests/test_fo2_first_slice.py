@@ -532,6 +532,22 @@ class Fo2FirstSliceTest(unittest.TestCase):
             self.assertEqual(confrontation["critter"]["serial"], 2)
             self.assertEqual(confrontation["critter"]["currentHitPoints"], 50)
             self.assertEqual(confrontation["critter"]["prototype"]["stats"]["actionPoints"], 9)
+            self.assertEqual(
+                confrontation["critter"]["equippedAttack"],
+                {
+                    "inventorySerial": 1,
+                    "pid": "00000007",
+                    "objectFlags": "02000008",
+                    "hand": "right",
+                    "minimumDamage": 3,
+                    "maximumDamage": 10,
+                    "damageType": 0,
+                    "maximumRange": 2,
+                    "actionPointCost": 4,
+                    "animationCode": 4,
+                    "hitResolution": "engine-roll-required",
+                },
+            )
             self.assertEqual(confrontation["defeatLoot"]["serial"], 1)
             self.assertEqual(confrontation["defeatLoot"]["displayName"], "Spear")
             self.assertEqual(

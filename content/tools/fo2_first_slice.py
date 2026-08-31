@@ -40,6 +40,8 @@ FRM_PALETTE_SIZE = 256
 MAP_WIDTH_TILES = 200
 CONFRONTATION_SCHEMA = "opennv-fo2-temple-confrontation/v1"
 CONFRONTATION_RECIPE_SCHEMA = "opennv-fo2-temple-confrontation-recipe/v1"
+OBJECT_EQUIPPED_RIGHT_HAND_FLAG = 0x02000000
+OBJECT_FLAG_HEX_RADIX = 16
 MESSAGE_ROW = re.compile(r"^\{(-?[0-9]+)\}\{[^}]*\}\{(.*)\}$")
 ACKLINT_MESSAGE_LIST_ID = 751
 CRITTER_PRO_SUPPORTED_SIZES = frozenset({0x19C, 0x1A0})
@@ -449,6 +451,7 @@ def _compile_bounded_confrontation(
     loot_pro = resolver.read(loot_pro_path)
     critter_stats = _parse_critter_pro(critter_pro.data)
     weapon_stats = _parse_weapon_pro(loot_pro.data)
+    loot_flags = int(str(loot["flags"]), OBJECT_FLAG_HEX_RADIX)
     if (
         len(critter["instanceValues"]) != CRITTER_INSTANCE_VALUE_COUNT
         or critter["instanceValues"][CRITTER_INSTANCE_CURRENT_HP] <= 0
@@ -458,6 +461,7 @@ def _compile_bounded_confrontation(
         or weapon_stats["minimumDamage"] <= 0
         or weapon_stats["maximumDamage"] < weapon_stats["minimumDamage"]
         or weapon_stats["actionPointCostPrimary"] <= 0
+        or not loot_flags & OBJECT_EQUIPPED_RIGHT_HAND_FLAG
     ):
         raise Fo1ProfileError("Fallout 2 bounded confrontation gameplay values are invalid")
     catalogs = dict(configured["messageCatalogs"])
@@ -492,6 +496,19 @@ def _compile_bounded_confrontation(
             "currentActionPoints": critter["instanceValues"][CRITTER_INSTANCE_CURRENT_AP],
             "runtimeAiPacket": critter["instanceValues"][CRITTER_INSTANCE_AI_PACKET],
             "runtimeTeam": critter["instanceValues"][CRITTER_INSTANCE_TEAM],
+            "equippedAttack": {
+                "inventorySerial": loot["serial"],
+                "pid": loot["pid"],
+                "objectFlags": loot["flags"],
+                "hand": "right",
+                "minimumDamage": weapon_stats["minimumDamage"],
+                "maximumDamage": weapon_stats["maximumDamage"],
+                "damageType": weapon_stats["damageType"],
+                "maximumRange": weapon_stats["maximumRangePrimary"],
+                "actionPointCost": weapon_stats["actionPointCostPrimary"],
+                "animationCode": weapon_stats["animationCode"],
+                "hitResolution": "engine-roll-required",
+            },
             "prototype": {
                 "logicalPath": critter_pro.logical_path,
                 "source": critter_pro.source,
