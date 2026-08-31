@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import struct
+import sys
 import unittest
+from pathlib import Path
+
+TOOLS = Path(__file__).resolve().parents[1] / "tools"
+sys.path.insert(0, str(TOOLS))
 
 from crafting_catalog import (
     CraftingCatalog,
