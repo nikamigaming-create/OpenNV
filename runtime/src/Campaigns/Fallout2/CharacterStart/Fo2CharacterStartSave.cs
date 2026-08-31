@@ -239,6 +239,9 @@ internal sealed record Fo2CharacterStartSaveState(
                 {
                     targetHitPoints = TempleConfrontation.TargetHitPoints,
                     playerActionPoints = TempleConfrontation.PlayerActionPoints,
+                    targetActionPoints = TempleConfrontation.TargetActionPoints,
+                    targetTurnCount = TempleConfrontation.TargetTurnCount,
+                    lastTargetTurnAction = TempleConfrontation.LastTargetTurnAction?.ToString(),
                     combatActive = TempleConfrontation.CombatActive,
                     spearLooted = TempleConfrontation.SpearLooted,
                     spearEquipped = TempleConfrontation.SpearEquipped,
@@ -645,6 +648,20 @@ internal sealed record Fo2CharacterStartSaveState(
         var state = new Fo2TempleConfrontationState(
             value.GetProperty("targetHitPoints").GetInt32(),
             value.GetProperty("playerActionPoints").GetInt32(),
+            value.TryGetProperty("targetActionPoints", out var targetActionPoints)
+                ? targetActionPoints.GetInt32()
+                : temple.Confrontation.Critter.CurrentActionPoints,
+            value.TryGetProperty("targetTurnCount", out var targetTurnCount)
+                ? targetTurnCount.GetInt32()
+                : 0,
+            value.TryGetProperty("lastTargetTurnAction", out var lastTargetTurnAction) &&
+                lastTargetTurnAction.ValueKind == JsonValueKind.String
+                ? Enum.TryParse<ClassicTargetTurnAction>(
+                    lastTargetTurnAction.GetString(), out var parsedTargetTurnAction)
+                    ? parsedTargetTurnAction
+                    : throw new InvalidOperationException(
+                        "Fallout 2 save target-turn action is invalid.")
+                : null,
             value.GetProperty("combatActive").GetBoolean(),
             value.GetProperty("spearLooted").GetBoolean(),
             value.TryGetProperty("spearEquipped", out var equipped) &&

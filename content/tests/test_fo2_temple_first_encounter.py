@@ -44,7 +44,7 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
             profile["adapter"]["movementResolution"],
             "exact-adjacent-source-walk-mask-hex-v1",
         )
-        self.assertFalse(profile["adapter"]["targetTurns"])
+        self.assertTrue(profile["adapter"]["targetTurns"])
         self.assertFalse(profile["adapter"]["generalIntScripts"])
         self.assertTrue(profile["adapter"]["boundedGuardianDialogue"])
         self.assertIn("source-acklint-dialogue", profile["adapter"]["identity"])
@@ -84,6 +84,37 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
         self.assertIn("internal bool LookAtGuardian()", combat)
         self.assertIn('"look_at_p_proc"', combat)
         self.assertIn("internal bool SelectDialogueOption(int messageId)", combat)
+        turn_owner = (
+            ROOT / "runtime/src/Campaigns/Classic/ClassicCombatTurnOwner.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("BeginTargetTurn", turn_owner)
+        self.assertIn("sourceMaximumActionPoints", turn_owner)
+        self.assertIn("AdjacentAttackRequired", turn_owner)
+        self.assertIn("MovementRequired", turn_owner)
+        self.assertNotIn("Fallout1", turn_owner)
+        self.assertNotIn("Fallout2", turn_owner)
+        self.assertIn("ClassicCombatTurnOwner.BeginTargetTurn", combat)
+        self.assertIn("_contract.Critter.RuntimeAiPacket", combat)
+        self.assertIn("_contract.Critter.RuntimeTeam", combat)
+        self.assertIn('Flag("attack-player-requested")', combat)
+        self.assertIn("TargetActionPoints", combat)
+        self.assertIn("TargetTurnCount", combat)
+        save = (
+            ROOT / "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2CharacterStartSave.cs"
+        ).read_text(encoding="utf-8")
+        proof = (
+            ROOT
+            / "runtime/src/Campaigns/Fallout2/CharacterStart/Fo2TempleConfrontationProof.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("targetActionPoints = TempleConfrontation.TargetActionPoints", save)
+        self.assertIn("targetTurnCount = TempleConfrontation.TargetTurnCount", save)
+        self.assertIn("lastTargetTurnAction =", save)
+        self.assertIn('TryGetProperty("targetActionPoints"', save)
+        self.assertIn('TryGetProperty("targetTurnCount"', save)
+        self.assertIn('TryGetProperty("lastTargetTurnAction"', save)
+        self.assertIn("left.TargetActionPoints == right.TargetActionPoints", proof)
+        self.assertIn("left.TargetTurnCount == right.TargetTurnCount", proof)
+        self.assertIn("left.LastTargetTurnAction == right.LastTargetTurnAction", proof)
         dialogue = (
             ROOT
             / "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleGuardianDialogue.cs"

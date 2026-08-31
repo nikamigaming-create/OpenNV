@@ -62,7 +62,7 @@ internal sealed record Fo2TempleConfrontationProfile(
             RequiredString(source, "critterSid") != contract.Critter.Sid ||
             source.GetProperty("lootSerial").GetInt32() != contract.DefeatLoot.Serial ||
             RequiredString(source, "lootPid") != contract.DefeatLoot.Pid ||
-            adapter.GetProperty("targetTurns").GetBoolean() ||
+            !adapter.GetProperty("targetTurns").GetBoolean() ||
             adapter.GetProperty("generalIntScripts").GetBoolean() ||
             !adapter.GetProperty("boundedGuardianDialogue").GetBoolean() ||
             RequiredString(adapter, "playerActionPointFormula") !=
@@ -110,7 +110,7 @@ internal sealed record Fo2TempleConfrontationProfile(
         };
         if (result.Id != "fo2-temple-guardian-bounded-combat-v1" ||
             result.AdapterIdentity !=
-                "source-acklint-dialogue-path-ap-player-turn-melee-no-target-ai-v3" ||
+                "source-acklint-dialogue-path-ap-bounded-target-turn-v4" ||
             result.InteractionRangeHexes != 1 || result.MovementActionPointCost != 1 ||
             result.MovementResolution != "exact-adjacent-source-walk-mask-hex-v1" ||
             result.AttackActionPointCost <= 0 ||
@@ -184,6 +184,9 @@ internal sealed record Fo2TempleConfrontationProfile(
 internal sealed record Fo2TempleConfrontationState(
     int TargetHitPoints,
     int PlayerActionPoints,
+    int TargetActionPoints,
+    int TargetTurnCount,
+    ClassicTargetTurnAction? LastTargetTurnAction,
     bool CombatActive,
     bool SpearLooted,
     bool SpearEquipped,
@@ -195,6 +198,9 @@ internal sealed record Fo2TempleConfrontationState(
     {
         if (TargetHitPoints is < 0 || TargetHitPoints > contract.Critter.CurrentHitPoints ||
             PlayerActionPoints is < 0 || PlayerActionPoints > maximumPlayerActionPoints ||
+            TargetActionPoints is < 0 || TargetActionPoints > contract.Critter.Stats.ActionPoints ||
+            TargetTurnCount < 0 || TargetTurnCount == 0 && LastTargetTurnAction is not null ||
+            TargetTurnCount > 0 && LastTargetTurnAction is null ||
             CombatActive && TargetHitPoints == 0 || SpearLooted && TargetHitPoints != 0 ||
             SpearEquipped && !SpearLooted)
             throw new InvalidOperationException(
@@ -315,6 +321,9 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         _state = restored ?? new Fo2TempleConfrontationState(
             contract.Critter.CurrentHitPoints,
             _maximumPlayerActionPoints,
+            contract.Critter.CurrentActionPoints,
+            0,
+            null,
             false,
             false,
             false,
@@ -644,8 +653,30 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
                 : "Enter combat before ending the player turn.");
             return false;
         }
-        _state = _state with { PlayerActionPoints = _maximumPlayerActionPoints };
-        SetStatus("Player AP restored. Target turns/AI are not implemented in this adapter.");
+        var targetTurn = ClassicCombatTurnOwner.BeginTargetTurn(
+            _state.TargetActionPoints,
+            _contract.Critter.Stats.ActionPoints,
+            _contract.Critter.RuntimeAiPacket,
+            _contract.Critter.RuntimeTeam,
+            _state.ScriptState.Flag("attack-player-requested"),
+            _contract.Critter.Tile,
+            _player.CurrentTile,
+            Fo1HexMath.Neighbors(_contract.Critter.Tile).ToHashSet());
+        _state = _state with
+        {
+            PlayerActionPoints = _maximumPlayerActionPoints,
+            TargetActionPoints = targetTurn.ActionPoints,
+            TargetTurnCount = _state.TargetTurnCount + 1,
+            LastTargetTurnAction = targetTurn.Action,
+        };
+        SetStatus(targetTurn.Action switch
+        {
+            ClassicTargetTurnAction.AdjacentAttackRequired =>
+                "Source target turn selected an adjacent attack; hit/damage execution is fail-closed.",
+            ClassicTargetTurnAction.MovementRequired =>
+                "Source target turn selected movement; AI-packet path execution is fail-closed.",
+            _ => "Source target turn had no ACKlint attack request.",
+        });
         Changed();
         return true;
     }

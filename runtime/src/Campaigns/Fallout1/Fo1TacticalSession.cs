@@ -1641,12 +1641,22 @@ internal partial class Fo1TacticalSession : Node
         foreach (var mob in actors)
         {
             mob.ResetActionPoints();
-            var distance = Fo1HexMath.Distance(mob.Tile, _playerTile);
-            if (distance <= _runtimeProfile.Gameplay.RatAttackRangeHexes)
+            var turn = ClassicCombatTurnOwner.BeginTargetTurn(
+                mob.ActionPoints,
+                mob.MaximumActionPoints,
+                mob.AiPacket,
+                mob.Team,
+                mob.Alerted,
+                mob.Tile,
+                _playerTile,
+                Fo1HexMath.Neighbors(mob.Tile).ToHashSet());
+            if (turn.Action == ClassicTargetTurnAction.AdjacentAttackRequired)
             {
                 RatAttack(mob);
                 continue;
             }
+            if (turn.Action != ClassicTargetTurnAction.MovementRequired)
+                continue;
             var original = mob.Tile;
             _walkable[original] = true;
             _mobsByTile.Remove(original);

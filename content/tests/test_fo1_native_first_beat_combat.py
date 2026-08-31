@@ -45,6 +45,20 @@ class Fo1NativeFirstBeatCombatContractTest(unittest.TestCase):
         self.assertNotIn("Knife", engagement)
         self.assertNotIn("Giant Rat", engagement)
 
+    def test_rat_turn_uses_the_shared_source_bound_target_turn_owner(self) -> None:
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
+        start = session.index("private void RunRatTurn()")
+        end = session.index("private void RatAttack(Fo1Mob mob)", start)
+        turn = session[start:end]
+
+        self.assertIn("ClassicCombatTurnOwner.BeginTargetTurn(", turn)
+        self.assertIn("mob.MaximumActionPoints", turn)
+        self.assertIn("mob.AiPacket", turn)
+        self.assertIn("mob.Team", turn)
+        self.assertIn("mob.Alerted", turn)
+        self.assertIn("ClassicTargetTurnAction.AdjacentAttackRequired", turn)
+        self.assertIn("ClassicTargetTurnAction.MovementRequired", turn)
+
     def test_combat_save_is_checked_against_the_live_source_bound_result(self) -> None:
         flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
