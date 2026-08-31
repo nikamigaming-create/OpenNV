@@ -715,62 +715,67 @@ internal partial class Fo3OpeningFlow
             sex.EngineSex);
         var control = _profile.Appearance.FaceControl;
         var activeControl = control;
-        _activeFacePreview = OwnedGamebryoFaceGenPreviewHost.Load(
-            previewSource,
-            _profile.Appearance.FaceControls.Select(value =>
+        var previewControls = _profile.Appearance.FaceControls.Select(value =>
                 new OpeningNativeFaceGenGeometryControl(
                     value.ControlIndex,
                     value.SettingEntity,
                     value.SourceLabel,
-                    value.AxisSha256)).ToArray(),
-            new OpeningFaceGenPreviewControl(
-                control.ControlIndex,
-                control.SettingEntity,
-                control.SourceLabel,
-                control.AxisSha256,
-                control.Minimum,
-                control.Maximum,
-                control.Step,
-                control.Jump,
-                control.MorphWeightScale,
-                control.ResetValue,
-                control.AcceptanceValue,
-                new OpeningFaceGenSliderSemanticsEvidence(
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceClassification,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceEngineBuild,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Prefix +
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Suffix,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMinimum,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMaximum,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiScale,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiMinimum,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiMaximum,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderOrdinaryIncrement,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderJump,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderMorphWeightScale,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderLowGlobalAddress,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderHighGlobalAddress,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementTrait,
-                    Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementDefaultThreshold),
-                new OpeningFaceGenPreviewPresentation(
-                    control.Presentation.ViewportWidthFraction,
-                    control.Presentation.ViewportHeightFraction,
-                    control.Presentation.VerticalFovHalfAngleFactor,
-                    control.Presentation.DepthExtentFraction,
-                    control.Presentation.FullInVerticalOffsetGameUnits,
-                    control.Presentation.FullInDistanceGameUnits,
-                    control.Presentation.FullInYawRadians,
-                    control.Presentation.FullOutVerticalOffsetGameUnits,
-                    control.Presentation.FullOutDistanceGameUnits,
-                    control.Presentation.FullOutYawRadians,
-                    control.Presentation.StartingZoomFraction),
-                control.Semantics),
-            faceFrame,
-            _runtimeConfiguration,
-            creatorLighting,
-            _birthPresentation.UnitsToMeters,
-            faceFrame.Size,
-            renderedDevice.FaceGenPreviewDevice);
+                    value.AxisSha256)).ToArray();
+        var previewPolicy = new OpeningFaceGenPreviewControl(
+            control.ControlIndex,
+            control.SettingEntity,
+            control.SourceLabel,
+            control.AxisSha256,
+            control.Minimum,
+            control.Maximum,
+            control.Step,
+            control.Jump,
+            control.MorphWeightScale,
+            control.ResetValue,
+            control.AcceptanceValue,
+            new OpeningFaceGenSliderSemanticsEvidence(
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceClassification,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceEngineBuild,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Prefix +
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Suffix,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMinimum,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMaximum,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiScale,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiMinimum,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiMaximum,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderOrdinaryIncrement,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderJump,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderMorphWeightScale,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderLowGlobalAddress,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderHighGlobalAddress,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementTrait,
+                Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementDefaultThreshold),
+            new OpeningFaceGenPreviewPresentation(
+                control.Presentation.ViewportWidthFraction,
+                control.Presentation.ViewportHeightFraction,
+                control.Presentation.VerticalFovHalfAngleFactor,
+                control.Presentation.DepthExtentFraction,
+                control.Presentation.FullInVerticalOffsetGameUnits,
+                control.Presentation.FullInDistanceGameUnits,
+                control.Presentation.FullInYawRadians,
+                control.Presentation.FullOutVerticalOffsetGameUnits,
+                control.Presentation.FullOutDistanceGameUnits,
+                control.Presentation.FullOutYawRadians,
+                control.Presentation.StartingZoomFraction),
+            control.Semantics);
+        OwnedGamebryoFaceGenPreviewHost LoadPreview(
+            OpeningPlayerFaceGenPreview source) =>
+            OwnedGamebryoFaceGenPreviewHost.Load(
+                source,
+                previewControls,
+                previewPolicy,
+                faceFrame,
+                _runtimeConfiguration,
+                creatorLighting,
+                _birthPresentation.UnitsToMeters,
+                faceFrame.Size,
+                renderedDevice.FaceGenPreviewDevice);
+        _activeFacePreview = LoadPreview(previewSource);
         var previewProportions =
             CharacterBodyProportions.Neutral("fo3-custom-live-v1");
         var faceFraming = true;
@@ -833,13 +838,15 @@ internal partial class Fo3OpeningFlow
                     value => value.SettingEntity,
                     value => value.ResetValue,
                     StringComparer.Ordinal));
-            var previewSupported = sex.EngineSex == previewSource.Sex &&
-                selection.Race.FormId == previewSource.RaceFormId &&
-                selection.Hair.FormId == previewSource.HairFormId &&
-                selection.Eyes.FormId == previewSource.EyesFormId;
-            if (!previewSupported)
-                throw new InvalidOperationException(
-                    "Fallout 3 RaceSex selection has no owned full-body preview.");
+            var selectedPreview = _profile.Appearance.PreviewFor(selection, sex.EngineSex);
+            if (selectedPreview.GltfSha256 != previewSource.GltfSha256 ||
+                selectedPreview.SidecarSha256 != previewSource.SidecarSha256)
+            {
+                _activeFacePreview.DisposeOwnedTree();
+                previewSource = selectedPreview;
+                _activeFacePreview = LoadPreview(previewSource);
+                RefreshProjection();
+            }
             slider.Editable = true;
             foreach (var faceControl in _profile.Appearance.FaceControls)
                 _activeFacePreview.Apply(faceControl.SettingEntity, faceControl.ResetValue);
