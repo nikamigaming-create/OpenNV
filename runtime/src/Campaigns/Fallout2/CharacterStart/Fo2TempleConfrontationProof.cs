@@ -2,6 +2,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -1049,8 +1050,23 @@ internal static class Fo2TempleConfrontationProof
         left.TargetTurnCount == right.TargetTurnCount &&
         left.LastTargetTurnAction == right.LastTargetTurnAction &&
         left.LastTargetAttack == right.LastTargetAttack &&
+        SameTargetPath(left.LastTargetPath, right.LastTargetPath) &&
         left.CombatActive == right.CombatActive &&
         left.SpearLooted == right.SpearLooted;
+
+    private static bool SameTargetPath(
+        ClassicTargetPathState? left,
+        ClassicTargetPathState? right) =>
+        left is null && right is null ||
+        left is not null && right is not null &&
+        left.CurrentTile == right.CurrentTile &&
+        left.TargetTile == right.TargetTile &&
+        left.ActionPoints == right.ActionPoints &&
+        left.Rotation == right.Rotation &&
+        left.CompletedSteps == right.CompletedSteps &&
+        left.Path.SequenceEqual(right.Path) &&
+        left.Contract == right.Contract &&
+        left.Boundary == right.Boundary;
 
     private static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
 

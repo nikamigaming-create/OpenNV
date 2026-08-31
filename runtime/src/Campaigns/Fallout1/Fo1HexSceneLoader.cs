@@ -269,6 +269,8 @@ internal static class Fo1HexSceneLoader
         session.Configure(
             sceneSha256,
             RequiredString(sourceMap, "sha256"),
+            source.GetProperty("coverage")
+                .GetProperty("multihexBlockersWithCentralHexOnly").GetInt32() == 0,
             walkable,
             floorIds,
             floorNames,

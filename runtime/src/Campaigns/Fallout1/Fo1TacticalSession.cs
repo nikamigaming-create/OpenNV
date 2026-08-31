@@ -191,6 +191,7 @@ internal partial class Fo1TacticalSession : Node
     private IReadOnlyList<MapInventoryHost> _sourceMapInventoryHosts = [];
     private string _sceneSha256 = "";
     private string _sourceMapSha256 = "";
+    private bool _sourceMultihexCoverageComplete;
     private string _savePath = "";
     private int _maximumActionPoints;
     private int _doorTile;
@@ -452,6 +453,7 @@ internal partial class Fo1TacticalSession : Node
     internal void Configure(
         string sceneSha256,
         string sourceMapSha256,
+        bool sourceMultihexCoverageComplete,
         bool[] walkable,
         int[] floorIds,
         IReadOnlyDictionary<int, string> floorNames,
@@ -487,6 +489,7 @@ internal partial class Fo1TacticalSession : Node
             throw new ArgumentException("Fallout tactical session received an invalid source MAP hash.");
         _sceneSha256 = sceneSha256;
         _sourceMapSha256 = sourceMapSha256;
+        _sourceMultihexCoverageComplete = sourceMultihexCoverageComplete;
         _runtimeProfile = runtimeProfile;
         if (ownedPlayerFloorHeightMeters is not null &&
             (!float.IsFinite(ownedPlayerFloorHeightMeters.Value) ||
@@ -1695,24 +1698,23 @@ internal partial class Fo1TacticalSession : Node
             }
             if (turn.Action != ClassicTargetTurnAction.MovementRequired)
                 continue;
-            var original = mob.Tile;
-            _walkable[original] = true;
-            _mobsByTile.Remove(original);
-            var path = FindPath(original, _playerTile);
-            var movement = Math.Min(
-                _runtimeProfile.Gameplay.RatMovementLimitHexes,
-                Math.Max(0, path.Count - 1));
-            movement = Math.Min(movement, mob.ActionPoints);
-            var destination = movement > 0 ? path[movement - 1] : original;
-            for (var index = 0; index < movement; index++)
-                mob.SpendActionPoint();
-            mob.MoveTo(destination);
-            _walkable[destination] = false;
-            _mobsByTile[destination] = mob;
-            if (Fo1HexMath.Distance(destination, _playerTile) <=
-                    _runtimeProfile.Gameplay.RatAttackRangeHexes &&
-                mob.ActionPoints > 0)
-                RatAttack(mob);
+            var sourceWalkable = Enumerable.Range(0, _walkable.Length)
+                .Where(tile => _walkable[tile] || tile == mob.Tile)
+                .ToHashSet();
+            var path = ClassicTargetPathOwner.Plan(
+                mob.Tile,
+                _playerTile,
+                mob.ActionPoints,
+                sourceWalkable,
+                new ClassicTargetPathContract(
+                    _sourceMapSha256,
+                    true,
+                    _sourceMultihexCoverageComplete,
+                    null,
+                    null));
+            if (path.Boundary != ClassicTargetPathBoundary.MoveAnimationRequired)
+                throw new InvalidOperationException(
+                    "FO1 rat path did not preserve its source move-animation boundary.");
         }
     }
 

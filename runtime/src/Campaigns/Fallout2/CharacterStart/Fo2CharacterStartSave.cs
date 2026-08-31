@@ -261,6 +261,24 @@ internal sealed record Fo2CharacterStartSaveState(
                             hitResolution = TempleConfrontation.LastTargetAttack.Source.HitResolution,
                         },
                     },
+                    lastTargetPath = TempleConfrontation.LastTargetPath is null ? null : new
+                    {
+                        currentTile = TempleConfrontation.LastTargetPath.CurrentTile,
+                        targetTile = TempleConfrontation.LastTargetPath.TargetTile,
+                        actionPoints = TempleConfrontation.LastTargetPath.ActionPoints,
+                        rotation = TempleConfrontation.LastTargetPath.Rotation,
+                        completedSteps = TempleConfrontation.LastTargetPath.CompletedSteps,
+                        path = TempleConfrontation.LastTargetPath.Path,
+                        boundary = TempleConfrontation.LastTargetPath.Boundary.ToString(),
+                        contract = new
+                        {
+                            mapSha256 = TempleConfrontation.LastTargetPath.Contract.MapSha256,
+                            doorStateComplete = TempleConfrontation.LastTargetPath.Contract.DoorStateComplete,
+                            multihexCoverageComplete = TempleConfrontation.LastTargetPath.Contract.MultihexCoverageComplete,
+                            stepActionPointCost = TempleConfrontation.LastTargetPath.Contract.StepActionPointCost,
+                            moveAnimation = TempleConfrontation.LastTargetPath.Contract.MoveAnimation,
+                        },
+                    },
                     combatActive = TempleConfrontation.CombatActive,
                     spearLooted = TempleConfrontation.SpearLooted,
                     spearEquipped = TempleConfrontation.SpearEquipped,
@@ -688,6 +706,7 @@ internal sealed record Fo2CharacterStartSaveState(
                         "Fallout 2 save target-turn action is invalid.")
                 : null,
             ReadClassicAttackIntent(value),
+            ReadClassicTargetPath(value),
             value.GetProperty("combatActive").GetBoolean(),
             value.GetProperty("spearLooted").GetBoolean(),
             value.TryGetProperty("spearEquipped", out var equipped) &&
@@ -732,6 +751,34 @@ internal sealed record Fo2CharacterStartSaveState(
         if (intent.Boundary != boundary)
             throw new InvalidOperationException("Fallout 2 save attack boundary drifted.");
         return intent;
+    }
+
+    private static ClassicTargetPathState? ReadClassicTargetPath(JsonElement confrontation)
+    {
+        if (!confrontation.TryGetProperty("lastTargetPath", out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+            return null;
+        if (!Enum.TryParse<ClassicTargetPathBoundary>(
+                value.GetProperty("boundary").GetString(), out var boundary))
+            throw new InvalidOperationException("Fallout 2 save target-path boundary is invalid.");
+        var source = value.GetProperty("contract");
+        var stepCost = source.GetProperty("stepActionPointCost");
+        var animation = source.GetProperty("moveAnimation");
+        var contract = new ClassicTargetPathContract(
+            source.GetProperty("mapSha256").GetString() ?? "",
+            source.GetProperty("doorStateComplete").GetBoolean(),
+            source.GetProperty("multihexCoverageComplete").GetBoolean(),
+            stepCost.ValueKind == JsonValueKind.Null ? null : stepCost.GetInt32(),
+            animation.ValueKind == JsonValueKind.Null ? null : animation.GetString());
+        return new ClassicTargetPathState(
+            value.GetProperty("currentTile").GetInt32(),
+            value.GetProperty("targetTile").GetInt32(),
+            value.GetProperty("actionPoints").GetInt32(),
+            value.GetProperty("rotation").GetInt32(),
+            value.GetProperty("completedSteps").GetInt32(),
+            value.GetProperty("path").EnumerateArray().Select(row => row.GetInt32()).ToArray(),
+            contract,
+            boundary);
     }
 
     private static Fo2CharacterAppearanceContract ReadAppearance(

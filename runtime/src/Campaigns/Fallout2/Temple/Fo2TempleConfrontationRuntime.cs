@@ -188,6 +188,7 @@ internal sealed record Fo2TempleConfrontationState(
     int TargetTurnCount,
     ClassicTargetTurnAction? LastTargetTurnAction,
     ClassicAttackIntent? LastTargetAttack,
+    ClassicTargetPathState? LastTargetPath,
     bool CombatActive,
     bool SpearLooted,
     bool SpearEquipped,
@@ -209,6 +210,10 @@ internal sealed record Fo2TempleConfrontationState(
                  LastTargetAttack.ActorActionPoints != TargetActionPoints ||
                  LastTargetAttack.Boundary != ClassicAttackBoundary.HitRollRequired ||
                  LastTargetAttack.Source != EquippedAttackSource(contract)) ||
+            LastTargetPath is not null &&
+                (LastTargetTurnAction != ClassicTargetTurnAction.MovementRequired ||
+                 LastTargetPath.CurrentTile != contract.Critter.Tile ||
+                 LastTargetPath.ActionPoints != TargetActionPoints) ||
             CombatActive && TargetHitPoints == 0 || SpearLooted && TargetHitPoints != 0 ||
             SpearEquipped && !SpearLooted)
             throw new InvalidOperationException(
@@ -245,6 +250,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
     private readonly Fo2TempleConfrontationContract _contract;
     private readonly Fo2TempleConfrontationProfile _profile;
     private readonly Fo2ArroyoCavesPlayerBody _player;
+    private readonly Fo2TempleTopologyCoverage _topology;
     private readonly Sprite3D _targetSprite;
     private readonly int _maximumPlayerHitPoints;
     private readonly int _maximumPlayerActionPoints;
@@ -323,6 +329,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         Fo2TempleConfrontationContract contract,
         Fo2TempleConfrontationProfile profile,
         Fo2ArroyoCavesPlayerBody player,
+        Fo2TempleTopologyCoverage topology,
         Sprite3D targetSprite,
         Fo2CharacterSelection character,
         Fo2CharacterStartAsset inventorySource,
@@ -332,6 +339,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         _contract = contract;
         _profile = profile;
         _player = player;
+        _topology = topology;
         _targetSprite = targetSprite;
         _transition = transition;
         _maximumPlayerHitPoints = MaximumHitPoints(character);
@@ -344,11 +352,31 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             0,
             null,
             null,
+            null,
             false,
             false,
             false,
             new ClassicScriptState());
         _state.Validate(contract, _maximumPlayerActionPoints);
+        if (_state.LastTargetPath is { } restoredPath)
+        {
+            var expectedPath = ClassicTargetPathOwner.Plan(
+                contract.Critter.Tile,
+                player.CurrentTile,
+                restoredPath.ActionPoints,
+                topology.TargetWalkableTiles,
+                new ClassicTargetPathContract(
+                    topology.MapSha256,
+                    topology.DoorStateComplete,
+                    topology.MultihexCoverageComplete,
+                    null,
+                    null));
+            if (!restoredPath.Path.SequenceEqual(expectedPath.Path) ||
+                restoredPath.Contract != expectedPath.Contract ||
+                restoredPath.Boundary != expectedPath.Boundary)
+                throw new InvalidOperationException(
+                    "Fallout 2 restored target path drifted from source topology.");
+        }
         Name = "FO2_TEMPLE_BOUNDED_CONFRONTATION";
         Layer = HudLayer;
         var panel = new PanelContainer
@@ -426,6 +454,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             catalog.Confrontation,
             profile,
             player,
+            scene.Topology,
             targets[0],
             character,
             inventorySource,
@@ -666,6 +695,12 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
 
     internal bool EndTurn()
     {
+        if (_state.LastTargetPath is not null)
+        {
+            SetStatus(
+                "The exact target path is waiting on source move animation/AP-step contracts.");
+            return false;
+        }
         if (_state.LastTargetAttack is not null)
         {
             SetStatus(
@@ -696,6 +731,19 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
                 targetTurn.ActionPoints,
                 Fo2TempleConfrontationState.EquippedAttackSource(_contract))
             : null;
+        var targetPath = targetTurn.Action == ClassicTargetTurnAction.MovementRequired
+            ? ClassicTargetPathOwner.Plan(
+                _contract.Critter.Tile,
+                _player.CurrentTile,
+                targetTurn.ActionPoints,
+                _topology.TargetWalkableTiles,
+                new ClassicTargetPathContract(
+                    _topology.MapSha256,
+                    _topology.DoorStateComplete,
+                    _topology.MultihexCoverageComplete,
+                    null,
+                    null))
+            : null;
         _state = _state with
         {
             PlayerActionPoints = _maximumPlayerActionPoints,
@@ -703,6 +751,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
             TargetTurnCount = _state.TargetTurnCount + 1,
             LastTargetTurnAction = targetTurn.Action,
             LastTargetAttack = targetAttack,
+            LastTargetPath = targetPath,
         };
         SetStatus(targetTurn.Action switch
         {
@@ -711,7 +760,15 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
                 $"costs {_contract.Critter.EquippedAttack.ActionPointCost} AP; " +
                 "retail hit/RNG resolution is unavailable, so damage remains fail-closed.",
             ClassicTargetTurnAction.MovementRequired =>
-                "Source target turn selected movement; AI-packet path execution is fail-closed.",
+                targetPath?.Boundary switch
+                {
+                    ClassicTargetPathBoundary.MoveAnimationRequired =>
+                        $"Exact source-topology target path has {targetPath.Path.Count - 1} " +
+                        "step(s); source move animation is unavailable, so movement is fail-closed.",
+                    ClassicTargetPathBoundary.StepActionPointCostRequired =>
+                        "Exact source-topology path is ready; source step AP cost is unavailable.",
+                    _ => "Source target path could not be admitted.",
+                },
             _ => "Source target turn had no ACKlint attack request.",
         });
         Changed();
