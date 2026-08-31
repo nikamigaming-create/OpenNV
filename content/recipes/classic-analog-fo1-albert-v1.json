@@ -1,0 +1,20 @@
+{
+  "schema": "opennv-actor-recipe/v1",
+  "id": "classic-analog-fo1-albert-v1",
+  "master": { "file": "FalloutNV.esm", "sha256": "50991d36804b7d1e70df1afd7471b72f0e29d1b456ee2516a9717c002564e7c1" },
+  "meshesArchive": { "file": "Fallout - Meshes.bsa", "sha256": "054e299829ff24fd4bd4edf69f6424346b400c87379cee39bec02e4d082bf85a" },
+  "textureArchives": [
+    { "file": "Fallout - Textures.bsa", "sha256": "68c0f4beb00e07cc06361e3a5be0909873220731db3bd43bc013e85544b67578" },
+    { "file": "Fallout - Textures2.bsa", "sha256": "bdaa85989b30a68c2c9ce79a07b167ecd72942df47f2e58c4a0299b016410dc2" }
+  ],
+  "cellFormId": "0010d2d4",
+  "proofActorReferenceFormId": "00128594",
+  "expectedBaseFormId": "00128586",
+  "originGameUnits": [1404.33642578125, 3305.51904296875, 8127.99853515625],
+  "hairShape": "NoHat",
+  "outfitModelPaths": ["armor\\1950stylesuit\\m\\outfit.nif"],
+  "outfitIdentityFormIds": ["0005c682"],
+  "additionalAnimations": [
+    { "role": "move", "path": "meshes\\characters\\_male\\locomotion\\male\\mtforward.kf", "sha256": "d58ae8375fc012627c48836f15d296928f2eb76248504f183b3c332ae0fa15bd" }
+  ]
+}

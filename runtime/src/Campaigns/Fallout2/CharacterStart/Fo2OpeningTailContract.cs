@@ -20,6 +20,7 @@ internal sealed record Fo2OpeningTailContract(
     int FrameRateNumerator,
     int FrameRateDenominator,
     int SourceFrameCount,
+    int PlaybackStartFrame,
     int TailStartFrame,
     int TerminalFrame,
     int TerminalFrameRepeatedFrom,
@@ -50,6 +51,23 @@ internal sealed record Fo2OpeningTailContract(
     internal double FramePeriodSeconds =>
         FrameRateDenominator / (double)FrameRateNumerator;
 
+    internal int TerminalFadeStep => TerminalFrame - FadeStartFrame + 1;
+
+    internal float TerminalFadeFraction => TerminalFadeStep / (float)FadeSteps;
+
+    internal float SourceFadeFraction(int sourceFrame)
+    {
+        if (sourceFrame < PlaybackStartFrame || sourceFrame > TerminalFrame)
+            throw new InvalidOperationException(
+                $"Fallout 2 Elder source frame {sourceFrame} is outside its decoded playback.");
+        if (sourceFrame < FadeStartFrame)
+            return 0.0f;
+        return Math.Clamp(
+            (sourceFrame - FadeStartFrame + 1) / (float)FadeSteps,
+            0.0f,
+            1.0f);
+    }
+
     internal static Fo2OpeningTailContract Load(
         JsonElement row,
         JsonElement expected,
@@ -70,6 +88,7 @@ internal sealed record Fo2OpeningTailContract(
         var rateNumerator = video.GetProperty("frameRateNumerator").GetInt32();
         var rateDenominator = video.GetProperty("frameRateDenominator").GetInt32();
         var sourceFrames = video.GetProperty("sourceFrameCount").GetInt32();
+        var playbackStart = video.GetProperty("playbackStartFrame").GetInt32();
         var tailStart = video.GetProperty("tailStartFrame").GetInt32();
         var terminalFrame = video.GetProperty("terminalFrame").GetInt32();
         var terminalRepeat = video.GetProperty("terminalFrameRepeatedFrom").GetInt32();
@@ -83,27 +102,29 @@ internal sealed record Fo2OpeningTailContract(
             rateNumerator != expectedVideo.GetProperty("frameRateNumerator").GetInt32() ||
             rateDenominator != expectedVideo.GetProperty("frameRateDenominator").GetInt32() ||
             sourceFrames != expectedVideo.GetProperty("sourceFrameCount").GetInt32() ||
+            playbackStart != expectedVideo.GetProperty("playbackStartFrame").GetInt32() ||
             tailStart != expectedVideo.GetProperty("tailStartFrame").GetInt32() ||
             !video.GetProperty("sourceFrameNumbersOneBased").GetBoolean() ||
-            terminalFrame != sourceFrames || tailStart <= 0 ||
+            playbackStart != 1 || terminalFrame != sourceFrames ||
+            tailStart <= playbackStart ||
             terminalRepeat < tailStart || terminalRepeat > terminalFrame)
             throw new InvalidOperationException(
-                "Fallout 2 Elder tail video contract drifted.");
+                "Fallout 2 Elder full-playback video contract drifted.");
 
         var frameRows = video.GetProperty("frames").EnumerateArray().ToArray();
-        var expectedFrameCount = sourceFrames - tailStart + 1;
-        if (video.GetProperty("tailFrameCount").GetInt32() != expectedFrameCount ||
+        var expectedFrameCount = sourceFrames - playbackStart + 1;
+        if (video.GetProperty("playbackFrameCount").GetInt32() != expectedFrameCount ||
             frameRows.Length != expectedFrameCount)
             throw new InvalidOperationException(
-                "Fallout 2 Elder tail frame coverage drifted.");
+                "Fallout 2 Elder full-playback frame coverage drifted.");
         var frames = new List<Fo2OpeningTailFrame>(frameRows.Length);
         for (var index = 0; index < frameRows.Length; index++)
         {
             var frame = frameRows[index];
             var sourceFrame = frame.GetProperty("sourceFrame").GetInt32();
-            if (sourceFrame != tailStart + index)
+            if (sourceFrame != playbackStart + index)
                 throw new InvalidOperationException(
-                    "Fallout 2 Elder tail source-frame order drifted.");
+                    "Fallout 2 Elder full-playback source-frame order drifted.");
             var path = VerifyCacheFile(
                 cacheRoot,
                 Fo2TemplePresentationCatalog.RequiredString(frame, "png"),
@@ -155,6 +176,8 @@ internal sealed record Fo2OpeningTailContract(
                 .SequenceEqual([0, 0, 0]) ||
             fadeSteps != expectedFadeContract.GetProperty("steps").GetInt32() ||
             fadeEnd != fadeStart + fadeSteps - 1 ||
+            fadeStart != tailStart || terminalFrame < fadeStart ||
+            terminalFrame > fadeEnd ||
             !fade.GetProperty("movieEndForcesBlack").GetBoolean())
             throw new InvalidOperationException(
                 "Fallout 2 Elder source fade contract drifted.");
@@ -192,6 +215,7 @@ internal sealed record Fo2OpeningTailContract(
             rateNumerator,
             rateDenominator,
             sourceFrames,
+            playbackStart,
             tailStart,
             terminalFrame,
             terminalRepeat,

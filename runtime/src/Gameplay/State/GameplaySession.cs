@@ -14,12 +14,17 @@ internal partial class GameplaySession : Node
     private const string SaveSchemaV4 = "opennv-campaign-save/v4";
     private const string SaveSchemaV5 = "opennv-campaign-save/v5";
     private const string SaveSchemaV6 = "opennv-campaign-save/v6";
+    private const string SaveSchemaV7 = "opennv-campaign-save/v7";
     private const int EquippedWeaponCount = 1;
 
     private readonly Dictionary<string, InventoryEntry> _inventory = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _removedReferences = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, bool> _doorStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _emptiedContainers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PickupInstance> _pickups =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PickupInstance.PickupState> _loadedPickupStates =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PoolTableInstance> _pools = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PoolTableInstance.PoolState> _loadedPoolStates =
         new(StringComparer.OrdinalIgnoreCase);
@@ -337,10 +342,28 @@ internal partial class GameplaySession : Node
 
     internal bool IsDoorOpen(string referenceFormId) => _doorStates.GetValueOrDefault(referenceFormId);
 
+    internal void RegisterPickup(PickupInstance pickup)
+    {
+        _pickups.Add(pickup.ReferenceFormId, pickup);
+        if (_loadedPickupStates.TryGetValue(pickup.ReferenceFormId, out var state))
+            pickup.RestoreState(state);
+    }
+
+    internal void PickupMoved(PickupInstance pickup)
+    {
+        if (!_pickups.TryGetValue(pickup.ReferenceFormId, out var registered) ||
+            registered != pickup)
+            throw new InvalidOperationException("Moved pickup is not registered to this session.");
+        Save();
+        RefreshHud($"Moved {pickup.DisplayName ?? pickup.EditorId}");
+    }
+
     internal void Collect(PickupInstance pickup)
     {
         if (!_removedReferences.Add(pickup.ReferenceFormId))
             return;
+        pickup.Drop();
+        _pickups.Remove(pickup.ReferenceFormId);
         AddInventory(
             pickup.ItemFormId,
             pickup.EditorId,
@@ -479,6 +502,16 @@ internal partial class GameplaySession : Node
             table.RestoreState(state);
     }
 
+    internal bool TryGetLoadedPoolStateForProof(
+        string referenceFormId,
+        out PoolTableInstance.PoolState state) =>
+        _loadedPoolStates.TryGetValue(referenceFormId, out state);
+
+    internal bool TryGetLoadedPickupStateForProof(
+        string referenceFormId,
+        out PickupInstance.PickupState state) =>
+        _loadedPickupStates.TryGetValue(referenceFormId, out state);
+
     internal void Notify(string status) => RefreshHud(status);
 
     internal void DoorChanged(DoorInstance door)
@@ -584,7 +617,7 @@ internal partial class GameplaySession : Node
             : PlayerTransformState.Capture(_player);
         var document = new
         {
-            schema = SaveSchemaV6,
+            schema = SaveSchemaV7,
             cellFormId = _cellFormId,
             activeCellFormId = _activeCellFormId,
             opening = _openingState,
@@ -623,6 +656,18 @@ internal partial class GameplaySession : Node
             ammoInMagazine = _ammoInMagazine,
             shotsFired = _shotsFired,
             objectiveStage = (int)ObjectiveStage,
+            pickupTransforms = _pickups.Values
+                .Where(pickup => pickup.CanGrab)
+                .OrderBy(pickup => pickup.ReferenceFormId, StringComparer.OrdinalIgnoreCase)
+                .Select(pickup => pickup.CaptureState())
+                .Select(state => new
+                {
+                    referenceFormId = state.ReferenceFormId,
+                    position = Vector(state.Position),
+                    rotation = Quaternion(state.Rotation),
+                    linearVelocity = Vector(state.LinearVelocity),
+                    angularVelocity = Vector(state.AngularVelocity),
+                }),
             poolTables = _pools.Values
                 .OrderBy(table => table.ReferenceFormId, StringComparer.OrdinalIgnoreCase)
                 .Select(table => table.CaptureState())
@@ -650,7 +695,7 @@ internal partial class GameplaySession : Node
 
     internal object Report() => new
     {
-        schema = SaveSchemaV6,
+        schema = SaveSchemaV7,
         savePath = _savePath,
         routeCellFormId = _cellFormId,
         activeCellFormId = _activeCellFormId,
@@ -668,6 +713,8 @@ internal partial class GameplaySession : Node
         reserveAmmo = ReserveAmmo,
         shotsFired = _shotsFired,
         removedReferences = _removedReferences.Count,
+        movablePickups = _pickups.Values.Count(pickup => pickup.CanGrab),
+        unsupportedPickupPhysics = _pickups.Values.Count(pickup => !pickup.CanGrab),
         emptiedContainers = _emptiedContainers.Count,
         containerInventories = _containerInventories.RegisteredContainers,
         containerRemainingItems = _containerInventories.RemainingItemCount,
@@ -704,11 +751,12 @@ internal partial class GameplaySession : Node
         var schema = root.GetProperty("schema").GetString();
         if (schema != SaveSchemaV1 && schema != SaveSchemaV2 &&
             schema != SaveSchemaV3 && schema != SaveSchemaV4 && schema != SaveSchemaV5 &&
-            schema != SaveSchemaV6)
+            schema != SaveSchemaV6 && schema != SaveSchemaV7)
             throw new InvalidOperationException($"Unexpected sandbox save schema: {_savePath}");
         if (root.GetProperty("cellFormId").GetString() != cellFormId)
             throw new InvalidOperationException($"Sandbox save belongs to another cell: {_savePath}");
-        if (schema == SaveSchemaV4 || schema == SaveSchemaV5 || schema == SaveSchemaV6)
+        if (schema == SaveSchemaV4 || schema == SaveSchemaV5 || schema == SaveSchemaV6 ||
+            schema == SaveSchemaV7)
         {
             if (!root.TryGetProperty("activeCellFormId", out var activeCell) ||
                 activeCell.ValueKind != JsonValueKind.String)
@@ -735,7 +783,7 @@ internal partial class GameplaySession : Node
             _doorStates.Add(property.Name, property.Value.GetBoolean());
         foreach (var value in root.GetProperty("emptiedContainers").EnumerateArray())
             _emptiedContainers.Add(value.GetString()!);
-        if (schema == SaveSchemaV5 || schema == SaveSchemaV6)
+        if (schema == SaveSchemaV5 || schema == SaveSchemaV6 || schema == SaveSchemaV7)
         {
             if (!root.TryGetProperty("containerInventories", out var containers))
                 throw new InvalidOperationException(
@@ -753,6 +801,25 @@ internal partial class GameplaySession : Node
         _weaponClipSize = root.GetProperty("weaponClipSize").GetInt32();
         _ammoInMagazine = root.GetProperty("ammoInMagazine").GetInt32();
         _shotsFired = root.GetProperty("shotsFired").GetInt32();
+        if (schema == SaveSchemaV7)
+        {
+            if (!root.TryGetProperty("pickupTransforms", out var pickups) ||
+                pickups.ValueKind != JsonValueKind.Array)
+                throw new InvalidOperationException(
+                    "Campaign save has no movable pickup transform state.");
+            foreach (var pickup in pickups.EnumerateArray())
+            {
+                var referenceFormId = pickup.GetProperty("referenceFormId").GetString()!;
+                _loadedPickupStates.Add(
+                    referenceFormId,
+                    new PickupInstance.PickupState(
+                        referenceFormId,
+                        ReadVector(pickup.GetProperty("position")),
+                        ReadQuaternion(pickup.GetProperty("rotation")),
+                        ReadVector(pickup.GetProperty("linearVelocity")),
+                        ReadVector(pickup.GetProperty("angularVelocity"))));
+            }
+        }
         if (schema != SaveSchemaV1 && root.TryGetProperty("poolTables", out var pools))
         {
             foreach (var pool in pools.EnumerateArray())
@@ -773,11 +840,11 @@ internal partial class GameplaySession : Node
             }
         }
         if ((schema == SaveSchemaV3 || schema == SaveSchemaV4 || schema == SaveSchemaV5 ||
-             schema == SaveSchemaV6) &&
+             schema == SaveSchemaV6 || schema == SaveSchemaV7) &&
             root.TryGetProperty("opening", out var opening) &&
             opening.ValueKind == JsonValueKind.Object)
             _openingState = OpeningCampaignState.Parse(opening);
-        if (schema == SaveSchemaV6)
+        if (schema == SaveSchemaV6 || schema == SaveSchemaV7)
         {
             if (!root.TryGetProperty("vitals", out var vitals) ||
                 vitals.ValueKind is not JsonValueKind.Object and not JsonValueKind.Null)

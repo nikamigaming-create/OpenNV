@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -14,6 +16,12 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const int SeparationPixels = 18;
     internal const int TitleFontPixels = 36;
     internal const int BodyFontPixels = 22;
+    internal const int CreatorPanelSeparationPixels = 8;
+    internal const int CreatorAppearancePanelSeparationPixels = 4;
+    internal const int CreatorPanelMarginPixels = 12;
+    internal const int CreatorStatusFontPixels = 16;
+    internal const int SourceUiCanvasWidthPixels = 1600;
+    internal const int SourceUiCanvasHeightPixels = 1200;
     internal const int ButtonMinimumHeightPixels = 54;
     internal const float PanelWidthFraction = 0.62f;
     internal const float PanelHeightFraction = 0.72f;
@@ -38,6 +46,27 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const int FaceGenSymmetricGeometryFloats = 50;
     internal const int FaceGenAsymmetricGeometryFloats = 30;
     internal const int FaceGenSymmetricTextureFloats = 50;
+    internal const int AabbCornerCount = 8;
+    internal const float FaceGenPreviewNormalizedMorphWeightScale = 1.0f;
+    internal const float FaceGenSliderSourceMinimum = -5.0f;
+    internal const float FaceGenSliderSourceMaximum = 5.0f;
+    internal const float FaceGenSliderUiScale = 10.0f;
+    internal const float FaceGenSliderUiMinimum = -50.0f;
+    internal const float FaceGenSliderUiMaximum = 50.0f;
+    internal const float FaceGenSliderOrdinaryIncrement = 1.0f;
+    internal const float FaceGenSliderJump = 25.0f;
+    internal const float FaceGenSliderMorphWeightScale = 0.1f;
+    internal const float FaceGenSliderIncrementDefaultThreshold = 1.0f;
+    internal const string FaceGenSliderEvidenceClassification =
+        "independent-sibling-gamebryo-racesexmenu-static-contract";
+    internal const string FaceGenSliderEvidenceEngineBuild = "1.7.0.4";
+    internal const string FaceGenSliderEvidenceExecutableSha256Prefix =
+        "c3f97c2255fa041a851c17cf372d69aa";
+    internal const string FaceGenSliderEvidenceExecutableSha256Suffix =
+        "add8694e2dc4230ba556001bbfbd2f3e";
+    internal const string FaceGenSliderLowGlobalAddress = "0x1115438";
+    internal const string FaceGenSliderHighGlobalAddress = "0x1115444";
+    internal const string FaceGenSliderIncrementTrait = "user6";
 }
 
 internal sealed record Fo3SexChoice(string Label, string EngineSex);
@@ -57,7 +86,51 @@ internal sealed record Fo3AppearanceOption(
 internal sealed record Fo3FaceGenDefaults(
     string SymmetricGeometrySha256,
     string AsymmetricGeometrySha256,
-    string SymmetricTextureSha256);
+    string SymmetricTextureSha256,
+    IReadOnlyList<float> SymmetricGeometry,
+    IReadOnlyList<float> AsymmetricGeometry,
+    IReadOnlyList<float> SymmetricTexture);
+
+internal sealed record Fo3AppearanceNameUi(
+    int PanelWidth,
+    int PanelHeight,
+    Fo3AppearanceAsset BackgroundTexture);
+
+internal sealed record Fo3AppearancePreviewPresentation(
+    float ViewportWidthFraction,
+    float ViewportHeightFraction,
+    float VerticalFovHalfAngleFactor,
+    float DepthExtentFraction,
+    float FullInVerticalOffsetGameUnits,
+    float FullInDistanceGameUnits,
+    float FullInYawRadians,
+    float FullOutVerticalOffsetGameUnits,
+    float FullOutDistanceGameUnits,
+    float FullOutYawRadians,
+    float StartingZoomFraction);
+
+internal sealed record Fo3AppearanceFaceControl(
+    int ControlIndex,
+    string SettingEntity,
+    string SourceLabel,
+    string AxisSha256,
+    IReadOnlyList<float> Axis,
+    float Minimum,
+    float Maximum,
+    float Step,
+    float Jump,
+    float MorphWeightScale,
+    float ResetValue,
+    float AcceptanceValue,
+    Fo3AppearancePreviewPresentation Presentation,
+    string Semantics);
+
+internal sealed record Fo3AppearanceProofCapture(
+    string Path,
+    string Sha256,
+    int Width,
+    int Height,
+    int RgbSpan);
 
 internal sealed record Fo3AppearanceSex(
     Fo3AppearanceAsset HeadTexture,
@@ -75,17 +148,30 @@ internal sealed record Fo3AppearanceRace(
     IReadOnlyDictionary<string, Fo3AppearanceSex> Sex);
 
 internal sealed record Fo3AppearanceUi(
+    int PanelX,
+    int PanelY,
     int PanelWidth,
     int PanelHeight,
+    int FaceGrabX,
+    int FaceGrabY,
+    int FaceGrabWidth,
+    int FaceGrabHeight,
     int ListItemWidth,
     int ListItemHeight,
-    Fo3AppearanceAsset BackgroundTexture);
+    int SliderWidth,
+    int SliderHeight,
+    Fo3AppearanceAsset BackgroundTexture,
+    Fo3AppearanceNameUi Name);
 
 internal sealed record Fo3AppearanceSelection(
     Fo3AppearanceRace Race,
     Fo3AppearanceSex Sex,
     Fo3AppearanceOption Hair,
-    Fo3AppearanceOption Eyes);
+    Fo3AppearanceOption Eyes,
+    IReadOnlyDictionary<string, float> FaceControlValues)
+{
+    internal float FaceControlValue(string settingEntity) => FaceControlValues[settingEntity];
+}
 
 internal sealed record Fo3AppearanceContract(
     int Stage,
@@ -96,11 +182,28 @@ internal sealed record Fo3AppearanceContract(
     string PlayerEditorId,
     string DefaultRaceFormId,
     Fo3AppearanceUi Ui,
+    Fo3AppearanceFaceControl FaceControl,
+    IReadOnlyList<Fo3AppearanceFaceControl> FaceControls,
+    OpeningPlayerFaceGenPreviewSet PreviewSet,
     IReadOnlyList<Fo3AppearanceRace> Races)
 {
     internal const string ExpectedSchema = "opennv-fo3-cg00-appearance/v1";
-    private const string ExpectedStatus = "source-backed-default-selection";
-    private const string ExpectedPreview = "owned-head-hair-eye-source-textures-not-a-3d-face-render";
+    private const string ExpectedStatus =
+        "source-backed-native-creator-all-native-geometry-controls";
+    private const string ExpectedPreview =
+        "owned-default-male-and-female-full-body-live-previews-" +
+        "all-native-geometry-controls";
+    private const string ExpectedPreviewSchema =
+        "opennv-owned-player-facegen-preview-set/v3";
+    private const string ExpectedPreviewStatus =
+        "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-targets-" +
+        "all-native-geometry-controls-runtime-bound";
+    private const string ExpectedPreviewRuntimeDisposition =
+        "owned-default-male-and-female-selection-preview-hosts-and-all-native-geometry-" +
+        "controls-bound-other-identities-fail-closed-sibling-gamebryo-slider-semantics-" +
+        "corroborated";
+    private static readonly string[] ExpectedBodyRoles = ["body", "left-hand", "right-hand"];
+    private static readonly string[] ExpectedPreviewSexes = ["male", "female"];
 
     internal static Fo3AppearanceContract Load(JsonElement source)
     {
@@ -114,19 +217,101 @@ internal sealed record Fo3AppearanceContract(
         if (!(stage < menuEnteredStage && menuEnteredStage < acceptedStage))
             throw new InvalidOperationException("Fallout 3 CG00 appearance stages are not monotonic.");
         var player = RequiredObject(source, "player");
+        var playerFormId = RequiredFormId(player, "formId");
         var playerEditorId = RequiredString(player, "editorId");
         var defaultRaceFormId = RequiredFormId(player, "defaultRaceFormId");
         var uiSource = RequiredObject(source, "ui");
+        var nameSource = RequiredObject(uiSource, "name");
         var ui = new Fo3AppearanceUi(
+            PositiveInteger(uiSource, "panelX"),
+            PositiveInteger(uiSource, "panelY"),
             PositiveInteger(uiSource, "panelWidth"),
             PositiveInteger(uiSource, "panelHeight"),
+            PositiveInteger(uiSource, "faceGrabX"),
+            PositiveInteger(uiSource, "faceGrabY"),
+            PositiveInteger(uiSource, "faceGrabWidth"),
+            PositiveInteger(uiSource, "faceGrabHeight"),
             PositiveInteger(uiSource, "listItemWidth"),
             PositiveInteger(uiSource, "listItemHeight"),
-            LoadAsset(RequiredObject(uiSource, "backgroundTexture")));
+            PositiveInteger(uiSource, "sliderWidth"),
+            PositiveInteger(uiSource, "sliderHeight"),
+            LoadAsset(RequiredObject(uiSource, "backgroundTexture")),
+            new Fo3AppearanceNameUi(
+                PositiveInteger(nameSource, "panelWidth"),
+                PositiveInteger(nameSource, "panelHeight"),
+                LoadAsset(RequiredObject(nameSource, "backgroundTexture"))));
+        var playerFaceGen = RequiredObject(RequiredObject(source, "player"), "faceGen");
+        var controlSpace = RequiredObject(playerFaceGen, "controlSpace");
+        var previewControl = RequiredObject(controlSpace, "runtimePreviewControl");
+        var nativeControls = RequiredArray(
+            RequiredObject(controlSpace, "nativeGeometryExposure"),
+            "controls").EnumerateArray().ToArray();
+        var previewIndex = RequiredInteger(previewControl, "controlIndex");
+        var formatControlSource = RequiredObject(
+            RequiredObject(controlSpace, "format"),
+            "controls");
+        if (!formatControlSource.TryGetProperty("symmetricGeometry", out var formatControls) ||
+            formatControls.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException(
+                "Fallout 3 FaceGen symmetric control inventory is absent.");
+        var presentationSource = RequiredObject(previewControl, "presentation");
+        var presentation = new Fo3AppearancePreviewPresentation(
+            RequiredSingle(presentationSource, "viewportWidthFraction"),
+            RequiredSingle(presentationSource, "viewportHeightFraction"),
+            RequiredSingle(presentationSource, "verticalFovHalfAngleFactor"),
+            RequiredSingle(presentationSource, "depthExtentFraction"),
+            RequiredSingle(presentationSource, "fullInVerticalOffsetGameUnits"),
+            RequiredSingle(presentationSource, "fullInDistanceGameUnits"),
+            RequiredSingle(presentationSource, "fullInYawRadians"),
+            RequiredSingle(presentationSource, "fullOutVerticalOffsetGameUnits"),
+            RequiredSingle(presentationSource, "fullOutDistanceGameUnits"),
+            RequiredSingle(presentationSource, "fullOutYawRadians"),
+            RequiredSingle(presentationSource, "startingZoomFraction"));
+        ValidateSliderSemantics(RequiredObject(previewControl, "sliderSemanticsEvidence"));
+        var formatControlRows = formatControls.EnumerateArray().ToArray();
+        var faceControls = nativeControls.Select(native =>
+        {
+            var index = RequiredInteger(native, "controlIndex");
+            var axisSource = formatControlRows.Single(value =>
+                RequiredInteger(value, "index") == index);
+            var axis = RequiredArray(axisSource, "axis").EnumerateArray()
+                .Select(value => value.GetSingle()).ToArray();
+            var axisSha256 = RequiredString(axisSource, "axisSha256");
+            if (axis.Length != Fo3OpeningFlowNumericContracts.FaceGenSymmetricGeometryFloats ||
+                axis.Any(value => !float.IsFinite(value)) ||
+                RequiredString(native, "axisSha256") != axisSha256)
+                throw new InvalidOperationException("Fallout 3 FaceGen control axis differs.");
+            var control = new Fo3AppearanceFaceControl(
+                index,
+                RequiredString(native, "settingEntity"),
+                RequiredString(native, "sourceLabel"),
+                axisSha256,
+                axis,
+                RequiredSingle(previewControl, "minimum"),
+                RequiredSingle(previewControl, "maximum"),
+                RequiredSingle(previewControl, "step"),
+                RequiredSingle(previewControl, "jump"),
+                RequiredSingle(previewControl, "morphWeightScale"),
+                RequiredSingle(previewControl, "resetValue"),
+                RequiredSingle(previewControl, "acceptanceValue"),
+                presentation,
+                RequiredString(previewControl, "semantics"));
+            ValidateFaceControl(control);
+            return control;
+        }).ToArray();
+        var faceControl = faceControls.Single(value => value.ControlIndex == previewIndex);
+        if (RequiredString(previewControl, "axisSha256") != faceControl.AxisSha256)
+            throw new InvalidOperationException("Fallout 3 FaceGen preview axis differs.");
         var races = RequiredArray(source, "races").EnumerateArray().Select(LoadRace).ToArray();
         if (races.Length == 0 || races.Select(value => value.FormId).Distinct().Count() != races.Length ||
             races.All(value => value.FormId != defaultRaceFormId))
             throw new InvalidOperationException("Fallout 3 playable race inventory is incomplete.");
+        var previewSet = LoadPreviewSet(
+            RequiredObject(playerFaceGen, "previewHead"),
+            playerFormId,
+            defaultRaceFormId,
+            faceControls,
+            races);
         return new Fo3AppearanceContract(
             stage,
             menuEnteredStage,
@@ -136,6 +321,9 @@ internal sealed record Fo3AppearanceContract(
             playerEditorId,
             defaultRaceFormId,
             ui,
+            faceControl,
+            faceControls,
+            previewSet,
             races);
     }
 
@@ -147,7 +335,11 @@ internal sealed record Fo3AppearanceContract(
             race,
             sex,
             sex.HairOptions.Single(value => value.FormId == sex.DefaultHairFormId),
-            sex.EyeOptions.Single(value => value.FormId == sex.DefaultEyesFormId));
+            sex.EyeOptions.Single(value => value.FormId == sex.DefaultEyesFormId),
+            FaceControls.ToDictionary(
+                value => value.SettingEntity,
+                value => value.ResetValue,
+                StringComparer.Ordinal));
     }
 
     internal Fo3AppearanceSelection ResolveSelection(
@@ -164,8 +356,182 @@ internal sealed record Fo3AppearanceContract(
             race,
             sex,
             sex.HairOptions.Single(value => value.FormId == hairFormId),
-            sex.EyeOptions.Single(value => value.FormId == eyesFormId));
+            sex.EyeOptions.Single(value => value.FormId == eyesFormId),
+            FaceControls.ToDictionary(
+                value => value.SettingEntity,
+                value => value.ResetValue,
+                StringComparer.Ordinal));
     }
+
+    internal Fo3AppearanceSelection ApplyFaceControl(
+        Fo3AppearanceSelection selection,
+        Fo3AppearanceFaceControl control,
+        float value)
+    {
+        var preview = PreviewSet.Previews.Single(value =>
+            value.RaceFormId.Equals(selection.Race.FormId, StringComparison.OrdinalIgnoreCase) &&
+            value.HairFormId.Equals(selection.Hair.FormId, StringComparison.OrdinalIgnoreCase) &&
+            value.EyesFormId.Equals(selection.Eyes.FormId, StringComparison.OrdinalIgnoreCase));
+        if (selection.Race.FormId != preview.RaceFormId ||
+            selection.Hair.FormId != preview.HairFormId ||
+            selection.Eyes.FormId != preview.EyesFormId ||
+            value < control.Minimum || value > control.Maximum ||
+            !selection.FaceControlValues.TryGetValue(control.SettingEntity, out var priorValue))
+            throw new InvalidOperationException(
+                "Fallout 3 live FaceGen preview supports only owned default sex identities.");
+        var symmetric = selection.Sex.FaceGen.SymmetricGeometry
+            .Zip(
+                control.Axis,
+                (baseline, axis) => baseline +
+                    (value - priorValue) * control.MorphWeightScale * axis)
+            .ToArray();
+        var values = selection.FaceControlValues.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.Ordinal);
+        values[control.SettingEntity] = value;
+        var face = new Fo3FaceGenDefaults(
+            HashFloats(symmetric),
+            selection.Sex.FaceGen.AsymmetricGeometrySha256,
+            selection.Sex.FaceGen.SymmetricTextureSha256,
+            symmetric,
+            selection.Sex.FaceGen.AsymmetricGeometry,
+            selection.Sex.FaceGen.SymmetricTexture);
+        return selection with
+        {
+            Sex = selection.Sex with { FaceGen = face },
+            FaceControlValues = values,
+        };
+    }
+
+    internal OpeningPlayerFaceGenPreview PreviewFor(
+        Fo3AppearanceSelection selection,
+        string engineSex) => PreviewSet.Previews.Single(preview =>
+            preview.Sex == engineSex &&
+            preview.RaceFormId.Equals(selection.Race.FormId, StringComparison.OrdinalIgnoreCase) &&
+            preview.HairFormId.Equals(selection.Hair.FormId, StringComparison.OrdinalIgnoreCase) &&
+            preview.EyesFormId.Equals(selection.Eyes.FormId, StringComparison.OrdinalIgnoreCase));
+
+    private static OpeningPlayerFaceGenPreviewSet LoadPreviewSet(
+        JsonElement source,
+        string playerFormId,
+        string defaultRaceFormId,
+        IReadOnlyList<Fo3AppearanceFaceControl> faceControls,
+        IReadOnlyList<Fo3AppearanceRace> races)
+    {
+        var schema = RequiredString(source, "schema");
+        var status = RequiredString(source, "status");
+        var previewPlayerFormId = RequiredFormId(source, "playerFormId");
+        var geometryControlNames = RequiredArray(source, "geometryControlNames")
+            .EnumerateArray().Select(value => value.GetString()!).ToArray();
+        var geometryControlCount = RequiredInteger(source, "geometryControlCount");
+        var runtimeDisposition = RequiredString(source, "runtimeDisposition");
+        var fullBody = source.GetProperty("fullBody").GetBoolean();
+        var bodyRoles = RequiredArray(source, "bodyComponentRoles")
+            .EnumerateArray().Select(value => value.GetString()!).ToArray();
+        var bodySources = RequiredObject(source, "bodyComponentSourcesBySex")
+            .EnumerateObject()
+            .ToDictionary(
+                value => value.Name,
+                value => (IReadOnlyList<OpeningPlayerBodyComponentSource>)value.Value
+                    .EnumerateArray().Select(LoadBodySource).ToArray(),
+                StringComparer.Ordinal);
+        var previews = RequiredArray(source, "previews").EnumerateArray()
+            .Select(value =>
+            {
+                var outputs = RequiredObject(value, "outputs");
+                return new OpeningPlayerFaceGenPreview(
+                    schema,
+                    status,
+                    previewPlayerFormId,
+                    RequiredFormId(value, "raceFormId"),
+                    RequiredString(value, "sex"),
+                    RequiredFormId(value, "hairFormId"),
+                    RequiredFormId(value, "eyesFormId"),
+                    RequiredArray(value, "headPartFormIds").EnumerateArray()
+                        .Select(part => part.GetString()!).ToArray(),
+                    geometryControlNames,
+                    geometryControlCount,
+                    VerifiedPath(outputs, "gltf", "gltfSha256"),
+                    RequiredString(outputs, "gltfSha256"),
+                    VerifiedPath(outputs, "sidecar", "sidecarSha256"),
+                    RequiredString(outputs, "sidecarSha256"),
+                    RequiredString(outputs, "bufferSha256"),
+                    runtimeDisposition,
+                    fullBody,
+                    bodyRoles,
+                    bodySources);
+            }).ToArray();
+        var previewSet = new OpeningPlayerFaceGenPreviewSet(
+            schema,
+            status,
+            previewPlayerFormId,
+            geometryControlNames,
+            geometryControlCount,
+            runtimeDisposition,
+            fullBody,
+            bodyRoles,
+            bodySources,
+            previews);
+        var race = races.Single(value => value.FormId == defaultRaceFormId);
+        if (schema != ExpectedPreviewSchema ||
+            status != ExpectedPreviewStatus ||
+            runtimeDisposition != ExpectedPreviewRuntimeDisposition ||
+            !previewPlayerFormId.Equals(playerFormId, StringComparison.OrdinalIgnoreCase) ||
+            geometryControlCount != faceControls.Count ||
+            !geometryControlNames.SequenceEqual(
+                faceControls.Select(value => value.SettingEntity),
+                StringComparer.Ordinal) ||
+            !fullBody ||
+            !bodyRoles.SequenceEqual(ExpectedBodyRoles, StringComparer.Ordinal) ||
+            !bodySources.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedPreviewSexes) ||
+            previews.Length != ExpectedPreviewSexes.Length ||
+            !previews.Select(value => value.Sex).ToHashSet(StringComparer.Ordinal)
+                .SetEquals(ExpectedPreviewSexes) ||
+            previews.Any(preview =>
+                !race.Sex.TryGetValue(preview.Sex, out var sex) ||
+                preview.RaceFormId != race.FormId ||
+                preview.HairFormId != sex.DefaultHairFormId ||
+                preview.EyesFormId != sex.DefaultEyesFormId ||
+                preview.GeometryControlCount != geometryControlCount ||
+                !preview.GeometryControlNames.SequenceEqual(
+                    geometryControlNames,
+                    StringComparer.Ordinal) ||
+                !preview.FullBody ||
+                preview.BodyComponentRoles is null ||
+                !preview.BodyComponentRoles.SequenceEqual(
+                    bodyRoles,
+                    StringComparer.Ordinal) ||
+                !ReferenceEquals(preview.BodyComponentSourcesBySex, bodySources)) ||
+            bodySources.Values.Any(rows =>
+                !rows.Select(value => value.Role).SequenceEqual(
+                    ExpectedBodyRoles,
+                    StringComparer.Ordinal) ||
+                rows.Any(value =>
+                    value.SourceSurfaceCount < 1 ||
+                    value.RetainedSurfaceCount < 1 ||
+                    value.SourceSurfaceCount != value.RetainedSurfaceCount +
+                        value.OmittedDismemberCapSurfaceCount ||
+                    value.RetainedSurfaceNames.Count != value.RetainedSurfaceCount)))
+            throw new InvalidOperationException(
+                "Fallout 3 full-body live FaceGen preview differs.");
+        return previewSet;
+    }
+
+    private static OpeningPlayerBodyComponentSource LoadBodySource(JsonElement source) => new(
+        RequiredString(source, "role"),
+        RequiredString(source, "modelLogicalPath"),
+        RequiredString(source, "modelSha256"),
+        RequiredInteger(source, "sourceSurfaceCount"),
+        RequiredInteger(source, "retainedSurfaceCount"),
+        RequiredArray(source, "retainedSurfaceNames").EnumerateArray()
+            .Select(value => value.GetString()!).ToArray(),
+        RequiredInteger(source, "omittedDismemberCapSurfaceCount"),
+        RequiredString(source, "diffuseLogicalPath"),
+        RequiredString(source, "diffuseSha256"),
+        RequiredString(source, "normalLogicalPath"),
+        RequiredString(source, "normalSha256"),
+        RequiredString(source, "shapeTransformDisposition"));
 
     private static Fo3AppearanceRace LoadRace(JsonElement source)
     {
@@ -198,6 +564,15 @@ internal sealed record Fo3AppearanceContract(
             eyes.All(value => value.FormId != defaultEyes))
             throw new InvalidOperationException("Fallout 3 sex-aware appearance options are incomplete.");
         var face = RequiredObject(source, "faceGenDefaults");
+        var symmetric = LoadFloatContract(
+            RequiredObject(face, "symmetricGeometry"),
+            Fo3OpeningFlowNumericContracts.FaceGenSymmetricGeometryFloats);
+        var asymmetric = LoadFloatContract(
+            RequiredObject(face, "asymmetricGeometry"),
+            Fo3OpeningFlowNumericContracts.FaceGenAsymmetricGeometryFloats);
+        var texture = LoadFloatContract(
+            RequiredObject(face, "symmetricTexture"),
+            Fo3OpeningFlowNumericContracts.FaceGenSymmetricTextureFloats);
         return new Fo3AppearanceSex(
             LoadAsset(RequiredObject(source, "headTexture")),
             hair,
@@ -205,15 +580,12 @@ internal sealed record Fo3AppearanceContract(
             defaultHair,
             defaultEyes,
             new Fo3FaceGenDefaults(
-                ValidateFloatContract(
-                    RequiredObject(face, "symmetricGeometry"),
-                    Fo3OpeningFlowNumericContracts.FaceGenSymmetricGeometryFloats),
-                ValidateFloatContract(
-                    RequiredObject(face, "asymmetricGeometry"),
-                    Fo3OpeningFlowNumericContracts.FaceGenAsymmetricGeometryFloats),
-                ValidateFloatContract(
-                    RequiredObject(face, "symmetricTexture"),
-                    Fo3OpeningFlowNumericContracts.FaceGenSymmetricTextureFloats)));
+                symmetric.Sha256,
+                asymmetric.Sha256,
+                texture.Sha256,
+                symmetric.Values,
+                asymmetric.Values,
+                texture.Values));
     }
 
     private static Fo3AppearanceOption LoadOption(JsonElement source, string recordType)
@@ -263,7 +635,9 @@ internal sealed record Fo3AppearanceContract(
         return actualSha256;
     }
 
-    private static string ValidateFloatContract(JsonElement source, int expectedCount)
+    private static (string Sha256, IReadOnlyList<float> Values) LoadFloatContract(
+        JsonElement source,
+        int expectedCount)
     {
         if (RequiredInteger(source, "count") != expectedCount)
             throw new InvalidOperationException("Fallout 3 FaceGen coordinate count differs.");
@@ -279,7 +653,83 @@ internal sealed record Fo3AppearanceContract(
         var expectedSha256 = RequiredString(source, "sha256");
         if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Fallout 3 FaceGen coordinate hash differs.");
-        return actualSha256;
+        return (actualSha256, values);
+    }
+
+    private static string HashFloats(IReadOnlyList<float> values)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new BinaryWriter(buffer, System.Text.Encoding.UTF8, true))
+            foreach (var value in values)
+                writer.Write(value);
+        return Convert.ToHexString(SHA256.HashData(buffer.ToArray())).ToLowerInvariant();
+    }
+
+    private static void ValidateFaceControl(Fo3AppearanceFaceControl source)
+    {
+        if (!float.IsFinite(source.Minimum) || !float.IsFinite(source.Maximum) ||
+            !float.IsFinite(source.Step) || !float.IsFinite(source.Jump) ||
+            !float.IsFinite(source.MorphWeightScale) ||
+            !float.IsFinite(source.ResetValue) ||
+            !float.IsFinite(source.AcceptanceValue) || source.Minimum >= source.Maximum ||
+            source.Step <= 0.0f || source.Jump <= 0.0f || source.MorphWeightScale <= 0.0f ||
+            source.ResetValue < source.Minimum ||
+            source.ResetValue > source.Maximum || source.AcceptanceValue < source.Minimum ||
+            source.AcceptanceValue > source.Maximum ||
+            source.AcceptanceValue == source.ResetValue ||
+            source.Semantics !=
+                "sibling-gamebryo-racesexmenu-ui-units-with-ctl-egm-weight-scale")
+            throw new InvalidOperationException("Fallout 3 FaceGen preview control is invalid.");
+    }
+
+    private static void ValidateSliderSemantics(JsonElement source)
+    {
+        if (RequiredString(source, "classification") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceClassification ||
+            RequiredString(source, "engineBuild") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceEngineBuild ||
+            RequiredString(source, "sourceExecutableSha256") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Prefix +
+                Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Suffix ||
+            RequiredSingle(source, "sourceMinimum") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMinimum ||
+            RequiredSingle(source, "sourceMaximum") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMaximum ||
+            RequiredSingle(source, "uiScale") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiScale ||
+            RequiredSingle(source, "uiMinimum") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiMinimum ||
+            RequiredSingle(source, "uiMaximum") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderUiMaximum ||
+            RequiredSingle(source, "ordinaryIncrement") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderOrdinaryIncrement ||
+            RequiredSingle(source, "jump") != Fo3OpeningFlowNumericContracts.FaceGenSliderJump ||
+            RequiredSingle(source, "morphWeightScale") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderMorphWeightScale ||
+            RequiredString(source, "lowGlobalAddress") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderLowGlobalAddress ||
+            RequiredString(source, "highGlobalAddress") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderHighGlobalAddress ||
+            RequiredString(source, "incrementTrait") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementTrait ||
+            RequiredSingle(source, "incrementDefaultThreshold") !=
+                Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementDefaultThreshold)
+            throw new InvalidOperationException(
+                "Fallout 3 FaceGen slider semantics evidence differs.");
+    }
+
+    private static string VerifiedPath(JsonElement source, string pathName, string hashName)
+    {
+        var path = System.IO.Path.GetFullPath(RequiredString(source, pathName));
+        var expected = RequiredString(source, hashName);
+        if (!ValidHex(expected, Fo3OpeningFlowNumericContracts.Sha256HexCharacters) ||
+            !File.Exists(path))
+            throw new InvalidOperationException("Fallout 3 FaceGen preview artifact is absent.");
+        using var stream = File.OpenRead(path);
+        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Fallout 3 FaceGen preview artifact hash differs.");
+        return path;
     }
 
     private static int PositiveInteger(JsonElement source, string name)
@@ -334,6 +784,14 @@ internal sealed record Fo3AppearanceContract(
         return result;
     }
 
+    private static float RequiredSingle(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) || !value.TryGetSingle(out var result) ||
+            !float.IsFinite(result))
+            throw new InvalidOperationException($"Fallout 3 appearance field {name} is invalid.");
+        return result;
+    }
+
     private static bool ValidHex(string value, int characters) =>
         value.Length == characters && value.All(Uri.IsHexDigit);
 }
@@ -351,6 +809,7 @@ internal sealed record Fo3OwnedProfile(
     string NameCommand,
     int AppearanceStage,
     string AppearanceCommand,
+    Fo3Cg00EarlyBirthSequence EarlyBirthSequence,
     Fo3AppearanceContract Appearance,
     Fo3PlayerPackageTransition Section4Transition,
     Fo3Stage65AppearanceTransition Stage65Appearance,
@@ -414,6 +873,8 @@ internal sealed record Fo3OwnedProfile(
         var questEditorId = RequiredString(selection, "questEditorId");
         var name = RequiredObject(selection, "name");
         var appearance = RequiredObject(selection, "appearance");
+        var earlyBirthSequence = Fo3Cg00EarlyBirthSequence.Load(
+            RequiredObject(selection, "earlyBirthSequence"));
         var appearanceContract = Fo3AppearanceContract.Load(appearance);
         var section4Transition = Fo3PlayerPackageTransition.Load(
             RequiredObject(selection, "section4Transition"),
@@ -533,6 +994,7 @@ internal sealed record Fo3OwnedProfile(
             RequiredString(name, "command"),
             appearanceStage,
             RequiredString(appearance, "command"),
+            earlyBirthSequence,
             appearanceContract,
             section4Transition,
             stage65Appearance,
@@ -689,6 +1151,9 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private string _savePath = "";
     private Node3D _worldHost = null!;
     private Fo3Vault101BirthPresentationContract? _birthPresentation;
+    private Fo3Cg00RetailStage10Contract? _retailCg00Stage10Contract;
+    private Fo3TtwCg00Stage10PresentationContract? _ttwCg00Stage10PresentationContract;
+    private Fo3TtwCg00Stage10SurfaceContract? _ttwCg00Stage10SurfaceContract;
     private ColorRect _background = null!;
     private PanelContainer _panel = null!;
     private VBoxContainer _content = null!;
@@ -712,7 +1177,19 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Fo3Vault101BirthSceneCoverage? _vaultBirthCoverage;
     private Fo3Stage100RuntimeContext? _stage100Runtime;
     private double _stage100TimerRemainingSeconds;
-    private bool _runAppearanceProof;
+    private RuntimeConfiguration _runtimeConfiguration = null!;
+    private OpeningManifest? _characterReflectron;
+    private OpeningRaceSexRenderedDeviceHost? _reflectron;
+    private string? _appearanceProofMode;
+    private string? _appearanceProofReportPath;
+    private string? _appearanceProofCaptureRoot;
+    private bool _characterVideo;
+    private Control? _creatorLayer;
+    private LineEdit? _activeNameInput;
+    private OptionButton? _activeAppearanceCategory;
+    private HSlider? _activeFaceControlSlider;
+    private Fo3AppearanceSelection? _activeAppearanceSelection;
+    private OpeningPlayerFaceGenPreviewHost? _activeFacePreview;
     private bool _introCompleted;
     private Fo3OwnedVideoMode _ownedVideoMode;
     private Fo3Cg01Stage0State? _activeCg01MovieState;
@@ -738,16 +1215,37 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         Fo3OwnedProfile profile,
         string savePath,
         Node3D worldHost,
+        RuntimeConfiguration runtimeConfiguration,
         Fo3Vault101BirthPresentationContract? birthPresentation,
-        bool runAppearanceProof = false,
+        string? appearanceProofMode = null,
+        string? appearanceProofReportPath = null,
+        string? appearanceProofCaptureRoot = null,
         string? cg01ProofMode = null,
         string? cg01ProofReportPath = null,
-        string? cg01ProofCapturePath = null)
+        string? cg01ProofCapturePath = null,
+        Fo3Cg00RetailStage10Contract? retailCg00Stage10Contract = null,
+        Fo3TtwCg00Stage10PresentationContract? ttwCg00Stage10PresentationContract = null,
+        Fo3TtwCg00Stage10SurfaceContract? ttwCg00Stage10SurfaceContract = null,
+        OpeningManifest? characterReflectron = null,
+        bool characterVideo = false)
     {
         _profile = profile;
         _savePath = System.IO.Path.GetFullPath(savePath);
         _worldHost = worldHost;
+        _runtimeConfiguration = runtimeConfiguration;
         _birthPresentation = birthPresentation;
+        _retailCg00Stage10Contract = retailCg00Stage10Contract;
+        _ttwCg00Stage10PresentationContract = ttwCg00Stage10PresentationContract;
+        _ttwCg00Stage10SurfaceContract = ttwCg00Stage10SurfaceContract;
+        _characterReflectron = characterReflectron;
+        if ((_ttwCg00Stage10PresentationContract is null) !=
+            (_ttwCg00Stage10SurfaceContract is null))
+            throw new InvalidOperationException(
+                "Fallout 3 TTW stage-10 presentation and surface contracts must be paired.");
+        if (_retailCg00Stage10Contract is not null &&
+            _ttwCg00Stage10PresentationContract is not null)
+            throw new InvalidOperationException(
+                "Fallout 3 stage-10 proof cannot mix standalone and TTW observations.");
         if (_birthPresentation is not null &&
             (!_birthPresentation.EntryReferenceFormId.Equals(
                  _profile.Section4Transition.LocationReferenceFormId,
@@ -772,7 +1270,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                      StringComparison.OrdinalIgnoreCase))))
             throw new InvalidOperationException(
                 "Fallout 3 stage-62 package or stage-100 Dad does not join the owned Vault 101 scene.");
-        _runAppearanceProof = runAppearanceProof;
+        _appearanceProofMode = appearanceProofMode;
+        _appearanceProofReportPath = appearanceProofReportPath;
+        _appearanceProofCaptureRoot = appearanceProofCaptureRoot;
+        _characterVideo = characterVideo;
         _cg01ProofMode = cg01ProofMode;
         _cg01ProofReportPath = cg01ProofReportPath;
         _cg01ProofCapturePath = cg01ProofCapturePath;
@@ -783,13 +1284,32 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     public override void _Ready()
     {
         BuildShell();
+        if (_characterVideo)
+        {
+            RunCharacterGenerationVideo();
+            return;
+        }
         if (_cg01ProofMode is not null)
         {
             RunCg01Proof();
             return;
         }
-        if (_runAppearanceProof)
+        if (_appearanceProofMode is not null)
         {
+            if (_appearanceProofMode is "early-apply" or "early-restore" or
+                "early-presentation" or "stage10-presentation")
+            {
+                try
+                {
+                    RunCg00EarlyProof();
+                }
+                catch (Exception exception)
+                {
+                    GD.PushError($"OPENNV_FO3_CG00_EARLY_PRESENTATION_FAIL {exception}");
+                    GetTree().Quit(Fo3OpeningFlowNumericContracts.ProofFailureExitCode);
+                }
+                return;
+            }
             RunAppearanceProof();
             return;
         }
@@ -813,6 +1333,8 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     {
         EnforceOwnedPresentationShell();
         UpdateOwnedVideoSurface();
+        UpdateCg00EarlyBirth(delta);
+        UpdateCg00EarlyProof();
         UpdateCg01DadLip();
         if (_vaultStage90Fade is not null && _activeStage90ImageSpaceModifier is not null)
         {
@@ -996,7 +1518,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             return;
         _introCompleted = true;
         ClearOwnedVideo();
-        ShowSexSelection();
+        StartCg00EarlyBirthSequence();
         GD.Print(
             $"OPENNV_FO3_INTRO_COMPLETE profile={_profile.ProfileId} " +
             $"mode={(skipped ? "skipped" : "watched")} next={_profile.QuestEditorId}");
@@ -1094,9 +1616,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         if (ownedPresentationActive)
         {
             _background.Visible = false;
-            _panel.Visible = false;
+            _panel.Visible = _cg00EarlySexMenuActive;
         }
-        if (ownedPresentationActive && (_background.Visible || _panel.Visible))
+        if (ownedPresentationActive &&
+            (_background.Visible || (_panel.Visible && !_cg00EarlySexMenuActive)))
             throw new InvalidOperationException(
                 "Fallout 3 owned presentation exposed the menu shell.");
         if (_panel.Visible && _content.GetChildCount() == 0)
@@ -1107,13 +1630,22 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private void ShowSexSelection()
     {
         ClearContent();
-        _content.AddChild(Label("FALLOUT 3  •  CG00", Fo3OpeningFlowNumericContracts.TitleFontPixels));
+        if (_cg00EarlySequence is null)
+            _content.AddChild(Label(
+                "FALLOUT 3  •  CG00",
+                Fo3OpeningFlowNumericContracts.TitleFontPixels));
         _content.AddChild(Label(_profile.SexTitle, Fo3OpeningFlowNumericContracts.BodyFontPixels));
         foreach (var choice in _profile.SexChoices)
         {
             var captured = choice;
             var button = Button(choice.Label);
-            button.Pressed += () => ShowNameSelection(captured);
+            button.Pressed += () =>
+            {
+                if (_cg00EarlySequence is null)
+                    ShowNameSelection(captured);
+                else
+                    SelectCg00EarlySex(captured);
+            };
             _content.AddChild(button);
         }
         GD.Print(
@@ -1125,11 +1657,26 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private void ShowNameSelection(Fo3SexChoice sex)
     {
         _selectedSex = sex;
+        EnsureCreatorVaultBackdrop(sex);
         ClearContent();
-        _content.AddChild(Label(
-            $"{_profile.QuestEditorId}  •  STAGE {_profile.NameStage}",
-            Fo3OpeningFlowNumericContracts.TitleFontPixels));
-        _content.AddChild(Label(_profile.NameCommand, Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var nameUi = _profile.Appearance.Ui.Name;
+        var panel = CreatorSurface(
+            (Fo3OpeningFlowNumericContracts.Center -
+                nameUi.PanelWidth /
+                    (2.0f * Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels)),
+            (Fo3OpeningFlowNumericContracts.Center -
+                nameUi.PanelHeight /
+                    (2.0f * Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels)),
+            nameUi.PanelWidth /
+                (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
+            nameUi.PanelHeight /
+                (float)Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels,
+            nameUi.BackgroundTexture,
+            "FO3_TextEditMenu_TEM_MainRect");
+        var content = CreatorColumn(
+            panel,
+            (int)Fo3OpeningFlowNumericContracts.VaultPreviewMarginPixels);
+        content.AddChild(Label("ENTER NAME", Fo3OpeningFlowNumericContracts.BodyFontPixels));
         var name = new LineEdit
         {
             PlaceholderText = "Name",
@@ -1139,11 +1686,53 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         };
         name.AddThemeFontSizeOverride("font_size", Fo3OpeningFlowNumericContracts.BodyFontPixels);
         name.TextSubmitted += _ => AcceptName(name);
-        _content.AddChild(name);
+        content.AddChild(name);
         var accept = Button("ACCEPT");
         accept.Pressed += () => AcceptName(name);
-        _content.AddChild(accept);
+        content.AddChild(accept);
+        _activeNameInput = name;
         Callable.From(name.GrabFocus).CallDeferred();
+        GD.Print(
+            $"OPENNV_FO3_CG00_NAME_READY stage={_profile.NameStage} " +
+            $"sourcePanel={nameUi.PanelWidth}x{nameUi.PanelHeight} " +
+            $"background={nameUi.BackgroundTexture.SourceSha256}");
+    }
+
+    private void EnsureCreatorVaultBackdrop(Fo3SexChoice sex)
+    {
+        if (_birthPresentation is null || _vaultPreviewHost is not null)
+            return;
+        var selection = _profile.Appearance.DefaultSelection(sex.EngineSex);
+        var stage65 = _profile.Stage65Appearance.Apply(
+            sex.EngineSex,
+            selection.Race.FormId,
+            selection.Sex.FaceGen);
+        var futureDad = _birthPresentation.Cg01DadActorFor(
+            selection.Race.FormId,
+            sex.EngineSex,
+            stage65);
+        var host = new Node3D { Name = "FO3_VAULT101_CREATOR_BACKDROP" };
+        _worldHost.AddChild(host);
+        try
+        {
+            _vaultBirthCoverage = Fo3Vault101BirthScene.Build(
+                host,
+                _birthPresentation,
+                futureDad);
+        }
+        catch
+        {
+            host.QueueFree();
+            throw;
+        }
+        _vaultPreviewHost = host;
+        _background.Visible = false;
+        _panel.Visible = false;
+        GD.Print(
+            $"OPENNV_FO3_CREATOR_VAULT_BACKDROP_READY cell=" +
+            $"{_birthPresentation.CellFormId} sex={sex.EngineSex} " +
+            $"doctorVisible={_vaultBirthCoverage.DoctorActor.Placement.Visible} " +
+            $"dadVisible={_vaultBirthCoverage.DadActor.Placement.Visible}");
     }
 
     private void AcceptName(LineEdit input)
@@ -1155,7 +1744,13 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             return;
         }
         PersistNamedCharacter(playerName, _selectedSex!);
-        ShowAppearanceSelection(playerName, _selectedSex!);
+        if (_cg00EarlySequence is null)
+            ShowAppearanceSelection(playerName, _selectedSex!);
+        else
+        {
+            ClearContent();
+            ResumeCg00AfterName(playerName);
+        }
         GD.Print(
             $"OPENNV_FO3_CG00_CHARACTER_SAVED profile={_profile.ProfileId} " +
             $"stage={_profile.AppearanceStage} save={_savePath}");
@@ -1206,6 +1801,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 RequiredSaveString(savedAppearance, "hairFormId"),
                 RequiredSaveString(savedAppearance, "eyesFormId"));
             var faceGen = RequiredSaveObject(savedAppearance, "faceGen");
+            selection = LoadSavedFaceControls(faceGen, selection);
             if (RequiredSaveString(faceGen, "symmetricGeometrySha256") !=
                     selection.Sex.FaceGen.SymmetricGeometrySha256 ||
                 RequiredSaveString(faceGen, "asymmetricGeometrySha256") !=
@@ -1216,7 +1812,15 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             if (stage == _profile.Appearance.AcceptedStage)
             {
                 if (root.TryGetProperty("playerPackage", out var savedStage62Package))
+                {
                     _profile.Section4Transition.ValidateSavedState(savedStage62Package);
+                    ShowVault101BirthRoomBeforeStage65(
+                        playerName,
+                        _selectedSex,
+                        selection,
+                        persistPackage: false);
+                    return;
+                }
                 ShowVault101BirthRoom(playerName, _selectedSex, selection);
                 return;
             }
@@ -1234,10 +1838,10 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 stage65);
             if (stage == stage65.Stage)
             {
+                ShowVault101BirthRoom(playerName, _selectedSex, selection, stage65);
                 ValidateBirthRuntimeState(
                     RequiredSaveObject(root, "birthRuntime"),
                     "stage65-source-bound-ready");
-                ShowVault101BirthRoom(playerName, _selectedSex, selection, stage65);
                 return;
             }
             var stage80 = _profile.Stage80Transition.Apply(_selectedSex.EngineSex, stage65);
@@ -1386,71 +1990,208 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private void ShowAppearanceSelection(string playerName, Fo3SexChoice sex)
     {
         ClearContent();
-        _content.AddChild(Label(
-            $"{_profile.QuestEditorId}  •  STAGE {_profile.AppearanceStage}",
-            Fo3OpeningFlowNumericContracts.TitleFontPixels));
-        _content.AddChild(Label(
-            $"{playerName}  •  {sex.Label}",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        _content.AddChild(Label(
-            $"NEXT OWNED COMMAND: {_profile.AppearanceCommand}",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        var ui = _profile.Appearance.Ui;
+        var characterReflectron = _characterReflectron ??
+            throw new InvalidOperationException(
+                "Fallout 3 character creation requires the shared owned Reflectron manifest.");
+        _creatorLayer = new Control { Name = "FO3_SHARED_REFLECTRON_HOST" };
+        _creatorLayer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_creatorLayer);
+        _panel.Visible = false;
+        _background.Visible = false;
+        var referenceCanvas = characterReflectron.NewGameFlow.ReferenceCanvasSize;
+        var viewportSize = GetViewport().GetVisibleRect().Size;
+        var deviceScale = MathF.Min(
+            viewportSize.X / referenceCanvas.X,
+            viewportSize.Y / referenceCanvas.Y);
+        var deviceCanvas = new Control
+        {
+            Name = "FO3_SHARED_REFLECTRON_1600X1200",
+            Size = referenceCanvas,
+            Scale = Vector2.One * deviceScale,
+            Position = (viewportSize - referenceCanvas * deviceScale) * 0.5f,
+        };
+        _creatorLayer.AddChild(deviceCanvas);
+        var renderedDevice = characterReflectron.NewGameFlow.Menus.Values
+            .Select(menu => menu.RenderedDevice)
+            .SingleOrDefault(device => device is not null)
+            ?? throw new InvalidOperationException(
+                "The shared owned opening manifest has no Reflectron device.");
+        var creatorLighting = new CellContentLoader.LightingContract(
+            "fo3-character-reflectron-2.0",
+            _birthPresentation!.ProofAmbientColor,
+            _birthPresentation.ProofAmbientColor,
+            _birthPresentation.ProofBackgroundColor,
+            _birthPresentation.ProofFogNearGameUnits,
+            _birthPresentation.ProofFogFarGameUnits,
+            _birthPresentation.ProofFogPower,
+            Vector2.Zero,
+            0.0f,
+            []);
+        _reflectron = new OpeningRaceSexRenderedDeviceHost(
+            renderedDevice,
+            deviceCanvas,
+            referenceCanvas,
+            _runtimeConfiguration,
+            creatorLighting,
+            _birthPresentation.UnitsToMeters);
+        var panel = _reflectron.CreateMenuPresentationHost(
+            new Rect2(0.0f, 0.0f, 340.0f, 500.0f));
+        var content = CreatorColumn(
+            panel,
+            Fo3OpeningFlowNumericContracts.CreatorPanelMarginPixels);
+        content.AddThemeConstantOverride(
+            "separation",
+            Fo3OpeningFlowNumericContracts.CreatorAppearancePanelSeparationPixels);
+        content.AddChild(Label(
+            $"{playerName}{System.Environment.NewLine}{sex.Label.ToUpperInvariant()}",
+            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels));
 
-        var selectors = new GridContainer { Columns = 2 };
-        selectors.AddThemeConstantOverride("h_separation", Fo3OpeningFlowNumericContracts.SeparationPixels);
-        selectors.AddThemeConstantOverride("v_separation", Fo3OpeningFlowNumericContracts.SeparationPixels);
+        var scaledListItemHeight = ui.ListItemHeight;
+        var categorySelect = new OptionButton
+        {
+            CustomMinimumSize = new Vector2(0.0f, scaledListItemHeight),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        foreach (var category in new[] { "RACE", "HAIR", "EYES", "FACE" })
+            categorySelect.AddItem(category);
+        categorySelect.AddThemeFontSizeOverride(
+            "font_size",
+            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
+        content.AddChild(categorySelect);
+        _activeAppearanceCategory = categorySelect;
+        var selectors = new GridContainer { Columns = 1 };
+        selectors.AddThemeConstantOverride(
+            "h_separation",
+            Fo3OpeningFlowNumericContracts.CreatorPanelSeparationPixels);
+        selectors.AddThemeConstantOverride(
+            "v_separation",
+            Fo3OpeningFlowNumericContracts.CreatorPanelSeparationPixels);
         var raceSelect = new OptionButton();
         var hairSelect = new OptionButton();
         var eyesSelect = new OptionButton();
         AddSelector(selectors, "RACE", raceSelect);
         AddSelector(selectors, "HAIR", hairSelect);
         AddSelector(selectors, "EYES", eyesSelect);
-        _content.AddChild(selectors);
+        content.AddChild(selectors);
 
         var defaultSelection = _profile.Appearance.DefaultSelection(sex.EngineSex);
-        FillOptions(raceSelect, _profile.Appearance.Races, defaultSelection.Race.FormId);
-        var preview = new HBoxContainer
+        FillOptions(raceSelect, _profile.Appearance.Races, defaultSelection.Race.FormId, "RACE");
+        var faceFrame = _reflectron.CreateFacePresentationHost();
+        var previewSource = _profile.Appearance.PreviewFor(
+            defaultSelection,
+            sex.EngineSex);
+        var control = _profile.Appearance.FaceControl;
+        var activeControl = control;
+        _activeFacePreview = OpeningPlayerFaceGenPreviewHost.Load(
+            previewSource,
+            _profile.Appearance.FaceControls.Select(value =>
+                new OpeningNativeFaceGenGeometryControl(
+                    value.ControlIndex,
+                    value.SettingEntity,
+                    value.SourceLabel,
+                    value.AxisSha256)).ToArray(),
+            new OpeningFaceGenPreviewControl(
+                control.ControlIndex,
+                control.SettingEntity,
+                control.SourceLabel,
+                control.AxisSha256,
+                control.Minimum,
+                control.Maximum,
+                control.Step,
+                control.Jump,
+                control.MorphWeightScale,
+                control.ResetValue,
+                control.AcceptanceValue,
+                new OpeningFaceGenSliderSemanticsEvidence(
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceClassification,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceEngineBuild,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Prefix +
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderEvidenceExecutableSha256Suffix,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMinimum,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderSourceMaximum,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiScale,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiMinimum,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderUiMaximum,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderOrdinaryIncrement,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderJump,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderMorphWeightScale,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderLowGlobalAddress,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderHighGlobalAddress,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementTrait,
+                    Fo3OpeningFlowNumericContracts.FaceGenSliderIncrementDefaultThreshold),
+                new OpeningFaceGenPreviewPresentation(
+                    control.Presentation.ViewportWidthFraction,
+                    control.Presentation.ViewportHeightFraction,
+                    control.Presentation.VerticalFovHalfAngleFactor,
+                    control.Presentation.DepthExtentFraction,
+                    control.Presentation.FullInVerticalOffsetGameUnits,
+                    control.Presentation.FullInDistanceGameUnits,
+                    control.Presentation.FullInYawRadians,
+                    control.Presentation.FullOutVerticalOffsetGameUnits,
+                    control.Presentation.FullOutDistanceGameUnits,
+                    control.Presentation.FullOutYawRadians,
+                    control.Presentation.StartingZoomFraction),
+                control.Semantics),
+            faceFrame,
+            _runtimeConfiguration,
+            creatorLighting,
+            _birthPresentation.UnitsToMeters,
+            faceFrame.Size,
+            renderedDevice);
+        var previewProportions =
+            CharacterBodyProportions.Neutral("fo3-custom-live-v1");
+        var faceFraming = true;
+        var greenProjection = false;
+        void RefreshProjection()
         {
-            Alignment = BoxContainer.AlignmentMode.Center,
+            _activeFacePreview.SetPreviewState(
+                previewProportions,
+                faceFraming,
+                greenProjection);
+            _reflectron.SetCreatorModeState(
+                faceFraming ? "FACE" : "BODY",
+                bodyEnabled: !faceFraming,
+                projectionEnabled: greenProjection,
+                faceEnabled: faceFraming);
+        }
+        RefreshProjection();
+        var liveStatus = Label(
+            "SCULPT FACE",
+            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
+        content.AddChild(liveStatus);
+        var faceControlSelect = new OptionButton();
+        foreach (var faceControl in _profile.Appearance.FaceControls)
+            faceControlSelect.AddItem(faceControl.SourceLabel);
+        faceControlSelect.Select(Array.IndexOf(
+            _profile.Appearance.FaceControls.ToArray(),
+            control));
+        content.AddChild(faceControlSelect);
+        var slider = new HSlider
+        {
+            Name = "FO3_RaceSexMenu_RSM_slider_option",
+            MinValue = control.Minimum,
+            MaxValue = control.Maximum,
+            Step = control.Step,
+            Value = control.ResetValue,
+            CustomMinimumSize = new Vector2(
+                0.0f,
+                ui.SliderHeight * GetViewport().GetVisibleRect().Size.Y /
+                    Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
-        preview.AddThemeConstantOverride("separation", Fo3OpeningFlowNumericContracts.SeparationPixels);
-        _content.AddChild(preview);
+        content.AddChild(slider);
+        _activeFaceControlSlider = slider;
 
-        void RenderRaceDefaults(Fo3AppearanceRace race)
+        void SelectRaceDefaults(Fo3AppearanceRace race)
         {
             var raceSex = race.Sex[sex.EngineSex];
-            FillOptions(hairSelect, raceSex.HairOptions, raceSex.DefaultHairFormId);
-            FillOptions(eyesSelect, raceSex.EyeOptions, raceSex.DefaultEyesFormId);
-            RenderAppearancePreview(
-                preview,
-                raceSex.HeadTexture,
-                raceSex.HairOptions[hairSelect.Selected].Texture,
-                raceSex.EyeOptions[eyesSelect.Selected].Texture,
-                raceSex.FaceGen);
+            FillOptions(hairSelect, raceSex.HairOptions, raceSex.DefaultHairFormId, "HAIR");
+            FillOptions(eyesSelect, raceSex.EyeOptions, raceSex.DefaultEyesFormId, "EYES");
+            SelectCurrent();
         }
 
-        void RenderCurrentPreview()
-        {
-            var race = _profile.Appearance.Races[raceSelect.Selected];
-            var raceSex = race.Sex[sex.EngineSex];
-            RenderAppearancePreview(
-                preview,
-                raceSex.HeadTexture,
-                raceSex.HairOptions[hairSelect.Selected].Texture,
-                raceSex.EyeOptions[eyesSelect.Selected].Texture,
-                raceSex.FaceGen);
-        }
-
-        raceSelect.ItemSelected += index => RenderRaceDefaults(_profile.Appearance.Races[(int)index]);
-        hairSelect.ItemSelected += _ => RenderCurrentPreview();
-        eyesSelect.ItemSelected += _ => RenderCurrentPreview();
-        RenderRaceDefaults(defaultSelection.Race);
-
-        _content.AddChild(Label(
-            "OWNED HEAD / HAIR / EYE SOURCE TEXTURES  •  NOT A 3D FACE RENDER",
-            Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        var accept = Button("ACCEPT APPEARANCE");
-        accept.Pressed += () =>
+        void SelectCurrent()
         {
             var race = _profile.Appearance.Races[raceSelect.Selected];
             var raceSex = race.Sex[sex.EngineSex];
@@ -1458,19 +2199,218 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 race,
                 raceSex,
                 raceSex.HairOptions[hairSelect.Selected],
-                raceSex.EyeOptions[eyesSelect.Selected]);
-            PersistAppearance(playerName, sex, selection);
-            if (_birthPresentation is null)
-                ShowAppearanceAccepted(playerName, sex, selection);
-            else
-                ShowVault101BirthRoom(playerName, sex, selection);
+                raceSex.EyeOptions[eyesSelect.Selected],
+                _profile.Appearance.FaceControls.ToDictionary(
+                    value => value.SettingEntity,
+                    value => value.ResetValue,
+                    StringComparer.Ordinal));
+            var previewSupported = sex.EngineSex == previewSource.Sex &&
+                selection.Race.FormId == previewSource.RaceFormId &&
+                selection.Hair.FormId == previewSource.HairFormId &&
+                selection.Eyes.FormId == previewSource.EyesFormId;
+            slider.Editable = previewSupported;
+            foreach (var faceControl in _profile.Appearance.FaceControls)
+                _activeFacePreview.Apply(faceControl.SettingEntity, faceControl.ResetValue);
+            activeControl = control;
+            faceControlSelect.Select(Array.IndexOf(
+                _profile.Appearance.FaceControls.ToArray(),
+                control));
+            slider.Value = activeControl.ResetValue;
+            _activeFacePreview.Control.Visible = previewSupported;
+            liveStatus.Text = previewSupported
+                ? "SCULPT FACE"
+                : "3D PREVIEW NOT AVAILABLE FOR THIS SELECTION";
+            _activeAppearanceSelection = selection;
+        }
+
+        raceSelect.ItemSelected += index => SelectRaceDefaults(_profile.Appearance.Races[(int)index]);
+        hairSelect.ItemSelected += _ => SelectCurrent();
+        eyesSelect.ItemSelected += _ => SelectCurrent();
+        slider.ValueChanged += value =>
+        {
+            if (!slider.Editable || _activeAppearanceSelection is null)
+                return;
+            _activeFacePreview.Apply(
+                activeControl.SettingEntity,
+                (float)value * activeControl.MorphWeightScale);
+            _activeAppearanceSelection = _profile.Appearance.ApplyFaceControl(
+                _activeAppearanceSelection,
+                activeControl,
+                (float)value);
+            liveStatus.Text =
+                $"{activeControl.SourceLabel}{System.Environment.NewLine}" +
+                $"{(float)value:+0.00;-0.00;0.00}";
         };
-        _content.AddChild(accept);
+        faceControlSelect.ItemSelected += index =>
+        {
+            activeControl = _profile.Appearance.FaceControls[(int)index];
+            slider.MinValue = activeControl.Minimum;
+            slider.MaxValue = activeControl.Maximum;
+            slider.Step = activeControl.Step;
+            slider.Value = _activeAppearanceSelection?.FaceControlValue(
+                activeControl.SettingEntity) ?? activeControl.ResetValue;
+            liveStatus.Text = activeControl.SourceLabel;
+        };
+        SelectRaceDefaults(defaultSelection.Race);
+        void ShowCategory(long index)
+        {
+            raceSelect.Visible = index == 0;
+            hairSelect.Visible = index == 1;
+            eyesSelect.Visible = index == 2;
+            slider.Visible = index == 3;
+            faceControlSelect.Visible = index == 3;
+            liveStatus.Visible = index == 3;
+            _reflectron.SetActiveList(index switch
+            {
+                0 => "race",
+                1 => "hair",
+                2 => "eyes",
+                _ => "face",
+            });
+        }
+        categorySelect.ItemSelected += ShowCategory;
+        ShowCategory(0);
+        void SelectCategory(int index)
+        {
+            categorySelect.Select(index);
+            ShowCategory(index);
+        }
+        _reflectron.ConfigureCharacterControls(
+            characterReflectron.Font,
+            () => { },
+            () => SelectCategory(0),
+            () => SelectCategory(3),
+            () => SelectCategory(1),
+            () =>
+            {
+                faceFraming = true;
+                SelectCategory(3);
+                RefreshProjection();
+            },
+            () =>
+            {
+                faceFraming = false;
+                RefreshProjection();
+            },
+            () =>
+            {
+                greenProjection = !greenProjection;
+                RefreshProjection();
+            });
+        RefreshProjection();
+
+        var accept = Button("ACCEPT APPEARANCE");
+        accept.CustomMinimumSize = new Vector2(0.0f, scaledListItemHeight);
+        accept.Pressed += () => AcceptAppearance(playerName, sex);
+        content.AddChild(accept);
         Callable.From(raceSelect.GrabFocus).CallDeferred();
         GD.Print(
             $"OPENNV_FO3_CG00_APPEARANCE_READY profile={_profile.ProfileId} " +
             $"stage={_profile.Appearance.Stage} entered={_profile.Appearance.MenuEnteredStage} " +
-            $"races={_profile.Appearance.Races.Count} sex={sex.EngineSex} preview=owned-source-textures");
+            $"races={_profile.Appearance.Races.Count} sex={sex.EngineSex} " +
+            $"preview=owned-live-default-full-body controls={_profile.Appearance.FaceControls.Count} " +
+            $"boundSurfaces={_activeFacePreview.BoundSurfaceCount} " +
+            $"bodySurfaces={_activeFacePreview.BodySurfaceCount}");
+    }
+
+    private void AcceptAppearance(string playerName, Fo3SexChoice sex)
+    {
+        var selection = _activeAppearanceSelection ?? throw new InvalidOperationException(
+            "Fallout 3 appearance selection is absent.");
+        PersistAppearance(playerName, sex, selection);
+        if (_cg00EarlySequence is not null)
+        {
+            _cg00EarlySequence = null;
+            _cg00EarlyStage = _profile.Appearance.AcceptedStage;
+            _cg00EarlyTimerTargetStage = null;
+            ClearCg00ImageSpace();
+            _cg00EarlySubtitle?.QueueFree();
+            _cg00EarlySubtitle = null;
+        }
+        if (_birthPresentation is null)
+            ShowAppearanceAccepted(playerName, sex, selection);
+        else if (_profile.Appearance.FaceControls.Any(control =>
+                     selection.FaceControlValue(control.SettingEntity) != control.ResetValue))
+            ShowVault101BirthRoomBeforeStage65(
+                playerName,
+                sex,
+                selection,
+                persistPackage: true);
+        else
+            ShowVault101BirthRoom(playerName, sex, selection);
+    }
+
+    private void ShowVault101BirthRoomBeforeStage65(
+        string playerName,
+        Fo3SexChoice sex,
+        Fo3AppearanceSelection selection,
+        bool persistPackage)
+    {
+        var contract = _birthPresentation ?? throw new InvalidOperationException(
+            "Fallout 3 pre-stage-65 Vault room has no owned presentation contract.");
+        if (_vaultPreviewHost is not null)
+        {
+            if (_vaultBirthCoverage is null)
+                throw new InvalidOperationException(
+                    "Fallout 3 creator Vault backdrop coverage is absent.");
+            ClearContent();
+            _background.Visible = false;
+            _panel.Visible = false;
+            var resumedPackage = _profile.Section4Transition.Activate();
+            if (persistPackage)
+                PersistSection4Package(playerName, sex, selection, resumedPackage);
+            GD.Print(
+                $"OPENNV_FO3_CG00_CREATOR_CONFIRMED_VAULT_READY profile={_profile.ProfileId} " +
+                $"stage={_profile.Appearance.AcceptedStage} package={resumedPackage.FormId} " +
+                $"location={resumedPackage.LocationReferenceFormId} playerGeometry=" +
+                $"{selection.Sex.FaceGen.SymmetricGeometrySha256} " +
+                $"doctorVisible={_vaultBirthCoverage.DoctorActor.Placement.Visible} " +
+                $"dadVisible={_vaultBirthCoverage.DadActor.Placement.Visible} " +
+                "stage65Triggered=0 sourceMarkerPending=1");
+            return;
+        }
+        ClearContent();
+        var baselineSelection = _profile.Appearance.ResolveSelection(
+            sex.EngineSex,
+            selection.Race.FormId,
+            selection.Race.ChildRaceFormId,
+            selection.Hair.FormId,
+            selection.Eyes.FormId);
+        var baselineStage65 = _profile.Stage65Appearance.Apply(
+            sex.EngineSex,
+            baselineSelection.Race.FormId,
+            baselineSelection.Sex.FaceGen);
+        var previewHost = new Node3D { Name = "FO3_VAULT101_BIRTH_ROOM_PRE_STAGE65" };
+        _worldHost.AddChild(previewHost);
+        Fo3Vault101BirthSceneCoverage coverage;
+        try
+        {
+            var hiddenFutureDad = contract.Cg01DadActorFor(
+                baselineSelection.Race.FormId,
+                sex.EngineSex,
+                baselineStage65);
+            coverage = Fo3Vault101BirthScene.Build(previewHost, contract, hiddenFutureDad);
+        }
+        catch
+        {
+            previewHost.QueueFree();
+            throw;
+        }
+        _vaultPreviewHost = previewHost;
+        _vaultBirthCoverage = coverage;
+        _background.Visible = false;
+        _panel.Visible = false;
+        var package = _profile.Section4Transition.Activate();
+        if (persistPackage)
+            PersistSection4Package(playerName, sex, selection, package);
+        GD.Print(
+            $"OPENNV_FO3_CG00_CREATOR_CONFIRMED_VAULT_READY profile={_profile.ProfileId} " +
+            $"stage={_profile.Appearance.AcceptedStage} package={package.FormId} " +
+            $"location={package.LocationReferenceFormId} playerGeometry=" +
+            $"{selection.Sex.FaceGen.SymmetricGeometrySha256} " +
+            $"doctorVisible={coverage.DoctorActor.Placement.Visible} " +
+            $"dadVisible={coverage.DadActor.Placement.Visible} " +
+            "stage65Triggered=0 sourceMarkerPending=1");
     }
 
     private void ShowAppearanceAccepted(
@@ -1545,7 +2485,12 @@ internal partial class Fo3OpeningFlow : CanvasLayer
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 birth room does not join the stage-62 package location.");
         if (_vaultPreviewHost is not null)
-            throw new InvalidOperationException("Fallout 3 Vault 101 birth room is already active.");
+        {
+            _vaultPreviewHost.QueueFree();
+            _vaultPreviewHost = null;
+            _vaultBirthCoverage = null;
+        }
+        ClearContent();
 
         Fo3PlayerPackageRuntimeActivation? activation = null;
         var stage65 = resumedStage65;
@@ -1617,15 +2562,18 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 activation);
         if (resumedStage80 is null)
         {
-            var subtitle = AddVaultDialogueOverlay();
-            var branch = _profile.Stage80Transition.DialogueFor(sex.EngineSex);
-            Callable.From(() => PlayVaultDialogue(
-                branch,
-                subtitle,
-                playerName,
-                sex,
-                selection,
-                stage65)).CallDeferred();
+            if (_appearanceProofMode is not "early-apply" and not "early-restore")
+            {
+                var subtitle = AddVaultDialogueOverlay();
+                var branch = _profile.Stage80Transition.DialogueFor(sex.EngineSex);
+                Callable.From(() => PlayVaultDialogue(
+                    branch,
+                    subtitle,
+                    playerName,
+                    sex,
+                    selection,
+                    stage65)).CallDeferred();
+            }
         }
         else if (resumedStage85 is null)
         {
@@ -3681,6 +4629,37 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         WriteState(state);
     }
 
+    private object SavedFaceControls(Fo3AppearanceSelection selection) =>
+        _profile.Appearance.FaceControls.Select(control => new
+        {
+            settingEntity = control.SettingEntity,
+            axisSha256 = control.AxisSha256,
+            value = selection.FaceControlValue(control.SettingEntity),
+        }).ToArray();
+
+    private Fo3AppearanceSelection LoadSavedFaceControls(
+        JsonElement faceGen,
+        Fo3AppearanceSelection selection)
+    {
+        var saved = RequiredSaveArray(faceGen, "geometryControls").EnumerateArray().ToArray();
+        if (saved.Length != _profile.Appearance.FaceControls.Count)
+            throw new InvalidOperationException(
+                "Saved Fallout 3 FaceGen control count differs from the profile.");
+        foreach (var control in _profile.Appearance.FaceControls)
+        {
+            var row = saved.Single(value =>
+                RequiredSaveString(value, "settingEntity") == control.SettingEntity);
+            if (RequiredSaveString(row, "axisSha256") != control.AxisSha256)
+                throw new InvalidOperationException(
+                    "Saved Fallout 3 FaceGen control identity differs from the profile.");
+            selection = _profile.Appearance.ApplyFaceControl(
+                selection,
+                control,
+                RequiredSaveSingle(row, "value"));
+        }
+        return selection;
+    }
+
     private void PersistAppearance(
         string playerName,
         Fo3SexChoice sex,
@@ -3708,6 +4687,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                     symmetricGeometrySha256 = selection.Sex.FaceGen.SymmetricGeometrySha256,
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
+                    geometryControls = SavedFaceControls(selection),
                 },
             },
             nextCommand = _profile.Appearance.AcceptedStageCommand,
@@ -3744,6 +4724,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                     symmetricGeometrySha256 = selection.Sex.FaceGen.SymmetricGeometrySha256,
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
+                    geometryControls = SavedFaceControls(selection),
                 },
             },
             playerPackage = new
@@ -3793,6 +4774,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                     symmetricGeometrySha256 = selection.Sex.FaceGen.SymmetricGeometrySha256,
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
+                    geometryControls = SavedFaceControls(selection),
                 },
             },
             playerPackage = new
@@ -3886,6 +4868,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                     symmetricGeometrySha256 = selection.Sex.FaceGen.SymmetricGeometrySha256,
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
+                    geometryControls = SavedFaceControls(selection),
                 },
             },
             playerPackage = new
@@ -4236,22 +5219,423 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         File.Move(temporary, _savePath, true);
     }
 
-    private void RunAppearanceProof()
+    private async void RunAppearanceProof()
     {
-        var sex = _profile.SexChoices.Single(value => value.EngineSex == "male");
-        var selection = _profile.Appearance.DefaultSelection(sex.EngineSex);
-        _ = LoadAppearanceImage(_profile.Appearance.Ui.BackgroundTexture);
-        _ = LoadAppearanceImage(selection.Sex.HeadTexture);
-        _ = LoadAppearanceImage(selection.Hair.Texture);
-        _ = LoadAppearanceImage(selection.Eyes.Texture);
-        PersistAppearance(_profile.Appearance.PlayerEditorId, sex, selection);
-        GD.Print(
-            $"OPENNV_FO3_CG00_APPEARANCE_PROOF profile={_profile.ProfileId} " +
-            $"stage={_profile.Appearance.AcceptedStage} sex={sex.EngineSex} " +
-            $"race={selection.Race.FormId} hair={selection.Hair.FormId} " +
-            $"eyes={selection.Eyes.FormId} previewTextures=4 save={_savePath} " +
-            $"next={_profile.Appearance.AcceptedStageCommand}");
-        GetTree().Quit(0);
+        try
+        {
+            if (_appearanceProofMode is not "apply" and not "restore" ||
+                string.IsNullOrWhiteSpace(_appearanceProofReportPath) ||
+                string.IsNullOrWhiteSpace(_appearanceProofCaptureRoot) ||
+                _birthPresentation is null ||
+                DisplayServer.GetName() == "headless")
+                throw new InvalidOperationException(
+                    "Fallout 3 creator proof requires apply|restore, owned Vault presentation, " +
+                    "report/capture paths, and a rendering display driver.");
+            if (File.Exists(_appearanceProofReportPath))
+                throw new InvalidOperationException(
+                    "Fallout 3 creator proof requires a fresh report path.");
+            Directory.CreateDirectory(_appearanceProofCaptureRoot);
+            if (_appearanceProofMode == "apply")
+            {
+                if (File.Exists(_savePath))
+                    throw new InvalidOperationException(
+                        "Fallout 3 creator apply proof requires a fresh save path.");
+                var sex = _profile.SexChoices.Single(value => value.EngineSex == "male");
+                ShowNameSelection(sex);
+                _activeNameInput!.Text = "Lone Wanderer";
+                var nameCapture = await CaptureAppearanceFrame("fo3-name-entry.png");
+                AcceptName(_activeNameInput);
+                _activeAppearanceCategory!.Select(3);
+                _activeAppearanceCategory.EmitSignal(
+                    OptionButton.SignalName.ItemSelected,
+                    3);
+                var defaultCapture = await CaptureAppearanceFrame(
+                    "fo3-creator-default.png");
+                _activeFaceControlSlider!.Value =
+                    _profile.Appearance.FaceControl.AcceptanceValue;
+                var editedSelection = _activeAppearanceSelection ??
+                    throw new InvalidOperationException(
+                        "Fallout 3 creator proof did not apply the visible face edit.");
+                if (editedSelection.FaceControlValue(
+                        _profile.Appearance.FaceControl.SettingEntity) !=
+                            _profile.Appearance.FaceControl.AcceptanceValue ||
+                    editedSelection.Sex.FaceGen.SymmetricGeometrySha256 ==
+                        _profile.Appearance.DefaultSelection("male").Sex.FaceGen
+                            .SymmetricGeometrySha256)
+                    throw new InvalidOperationException(
+                        "Fallout 3 creator proof face edit did not change geometry.");
+                var creatorCapture = await CaptureAppearanceFrame("fo3-creator-edited.png");
+                var morphDifference = MeasureAppearanceDifference(
+                    defaultCapture,
+                    creatorCapture);
+                AcceptAppearance("Lone Wanderer", sex);
+                if (_creatorLayer is not null || _vaultBirthCoverage is null)
+                    throw new InvalidOperationException(
+                        "Fallout 3 creator acceptance did not reveal the owned Vault room.");
+                var persistedSelection = LoadSavedAppearanceSelection();
+                if (!_profile.Appearance.FaceControls.All(control =>
+                        persistedSelection.FaceControlValue(control.SettingEntity) ==
+                            editedSelection.FaceControlValue(control.SettingEntity)) ||
+                    persistedSelection.Sex.FaceGen.SymmetricGeometrySha256 !=
+                        editedSelection.Sex.FaceGen.SymmetricGeometrySha256)
+                    throw new InvalidOperationException(
+                        "Fallout 3 creator acceptance did not persist the edited identity.");
+                var birthCapture = await CaptureAppearanceFrame("fo3-birth-next-beat.png");
+                WriteAppearanceProofReport(
+                    "apply",
+                    editedSelection,
+                    [nameCapture, defaultCapture, creatorCapture, birthCapture],
+                    morphDifference,
+                    creatorActionsReplayed: false);
+                GD.Print(
+                    $"OPENNV_FO3_CREATOR_PROOF_APPLY_PASS profile={_profile.ProfileId} " +
+                    $"control={_profile.Appearance.FaceControl.SettingEntity} " +
+                    $"value={editedSelection.FaceControlValue(
+                        _profile.Appearance.FaceControl.SettingEntity):F2} " +
+                    $"geometry={editedSelection.Sex.FaceGen.SymmetricGeometrySha256} " +
+                    $"save={_savePath}");
+                GetTree().Quit(0);
+                return;
+            }
+
+            if (!File.Exists(_savePath))
+                throw new InvalidOperationException(
+                    "Fallout 3 creator restore proof save is absent.");
+            var restored = LoadSavedAppearanceSelection();
+            ContinueCharacter();
+            if (_creatorLayer is not null || _vaultBirthCoverage is null)
+                throw new InvalidOperationException(
+                    "Fallout 3 creator restore did not resume the owned Vault room.");
+            var restoreCapture = await CaptureAppearanceFrame("fo3-birth-restored.png");
+            WriteAppearanceProofReport(
+                "restore",
+                restored,
+                [restoreCapture],
+                morphDifference: null,
+                creatorActionsReplayed: false);
+            GD.Print(
+                $"OPENNV_FO3_CREATOR_PROOF_RESTORE_PASS profile={_profile.ProfileId} " +
+                $"control={_profile.Appearance.FaceControl.SettingEntity} " +
+                $"value={restored.FaceControlValue(
+                    _profile.Appearance.FaceControl.SettingEntity):F2} " +
+                $"geometry={restored.Sex.FaceGen.SymmetricGeometrySha256} " +
+                $"save={_savePath}");
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO3_CREATOR_PROOF_FAIL {exception}");
+            GetTree().Quit(Fo3OpeningFlowNumericContracts.ProofFailureExitCode);
+        }
+    }
+
+    private async void RunCharacterGenerationVideo()
+    {
+        try
+        {
+            if (_birthPresentation is null || DisplayServer.GetName() == "headless")
+                throw new InvalidOperationException(
+                    "Fallout 3 character video requires the owned Vault presentation and a rendering display driver.");
+            if (File.Exists(_savePath))
+                throw new InvalidOperationException(
+                    "Fallout 3 character video requires a fresh save path.");
+            StartMenuMusic();
+            ShowMainMenu();
+            await WaitForCharacterVideoDraws(55);
+            ShowSexSelection();
+            await WaitForCharacterVideoDraws(55);
+            var sex = _profile.SexChoices.Single(value => value.EngineSex == "male");
+            ShowNameSelection(sex);
+            await WaitForCharacterVideoDraws(40);
+            _activeNameInput!.Text = "LONE WANDERER";
+            await WaitForCharacterVideoDraws(55);
+            AcceptName(_activeNameInput);
+            var appearanceCategory = _activeAppearanceCategory ??
+                throw new InvalidOperationException(
+                    "Fallout 3 generated character did not open the appearance categories.");
+            var faceControlSlider = _activeFaceControlSlider ??
+                throw new InvalidOperationException(
+                    "Fallout 3 generated character did not open the live face controls.");
+            appearanceCategory.Select(3);
+            appearanceCategory.EmitSignal(
+                OptionButton.SignalName.ItemSelected,
+                3);
+            faceControlSlider.Value =
+                _profile.Appearance.FaceControl.AcceptanceValue;
+            await WaitForCharacterVideoDraws(55);
+            _reflectron!.ActivateCreatorModeControl("BODY");
+            await WaitForCharacterVideoDraws(55);
+            _reflectron.ActivateCreatorModeControl("PROJECTION");
+            await WaitForCharacterVideoDraws(55);
+            _reflectron.ActivateCreatorModeControl("FACE");
+            await WaitForCharacterVideoDraws(55);
+            _reflectron.ActivateCreatorModeControl("PROJECTION");
+            await WaitForCharacterVideoDraws(55);
+            AcceptAppearance("LONE WANDERER", sex);
+            if (_creatorLayer is not null || _vaultBirthCoverage is null)
+                throw new InvalidOperationException(
+                    "Fallout 3 generated character did not enter the Vault 101 birth slice.");
+            await WaitForCharacterVideoDraws(180);
+            GD.Print(
+                $"OPENNV_FO3_CHARACTER_VIDEO_COMPLETE profile={_profile.ProfileId} save={_savePath}");
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO3_CHARACTER_VIDEO_FAIL {exception}");
+            GetTree().Quit(1);
+        }
+    }
+
+    private async Task WaitForCharacterVideoDraws(int count)
+    {
+        for (var frame = 0; frame < count; frame++)
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+    }
+
+    private Fo3AppearanceSelection LoadSavedAppearanceSelection()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllBytes(_savePath));
+        var root = document.RootElement;
+        if (RequiredSaveString(root, "profileId") != _profile.ProfileId ||
+            RequiredSaveString(root, "profileSha256") != _profile.Sha256 ||
+            RequiredSaveInteger(root, "stage") != _profile.Appearance.AcceptedStage)
+            throw new InvalidOperationException(
+                "Fallout 3 creator restore proof save identity/stage differs.");
+        _profile.Section4Transition.ValidateSavedState(
+            RequiredSaveObject(root, "playerPackage"));
+        var sex = RequiredSaveObject(root, "sex");
+        var engineSex = RequiredSaveString(sex, "engineSex");
+        var appearance = RequiredSaveObject(root, "appearance");
+        var selection = _profile.Appearance.ResolveSelection(
+            engineSex,
+            RequiredSaveString(appearance, "adultRaceFormId"),
+            RequiredSaveString(appearance, "childRaceFormId"),
+            RequiredSaveString(appearance, "hairFormId"),
+            RequiredSaveString(appearance, "eyesFormId"));
+        var face = RequiredSaveObject(appearance, "faceGen");
+        selection = LoadSavedFaceControls(face, selection);
+        if (RequiredSaveString(face, "symmetricGeometrySha256") !=
+                selection.Sex.FaceGen.SymmetricGeometrySha256)
+            throw new InvalidOperationException(
+                "Fallout 3 creator restore proof geometry differs.");
+        return selection;
+    }
+
+    private async Task<Fo3AppearanceProofCapture> CaptureAppearanceFrame(string fileName)
+    {
+        for (var frame = 0;
+             frame < Fo3OpeningFlowNumericContracts.Cg01CaptureWarmupFrames;
+             frame++)
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        if (fileName.Contains("birth", StringComparison.Ordinal) &&
+            (_creatorLayer is not null || _panel.Visible || _background.Visible ||
+             _vaultBirthCoverage is null ||
+             !_vaultBirthCoverage.DoctorActor.Placement.Visible ||
+             !_vaultBirthCoverage.DadActor.Placement.Visible ||
+             !_vaultBirthCoverage.MomActor.Placement.Visible))
+            throw new InvalidOperationException(
+                "Fallout 3 creator birth capture has stale UI or an absent CG00 participant.");
+        if (fileName.Contains("birth", StringComparison.Ordinal) ||
+            fileName.Contains("creator", StringComparison.Ordinal))
+            ValidateCg00ParticipantScreenPresentation();
+        var image = GetViewport().GetTexture().GetImage();
+        image.Convert(Image.Format.Rgba8);
+        var data = image.GetData();
+        if (data.Length == 0)
+            throw new InvalidOperationException("Fallout 3 creator capture is empty.");
+        var minimum = data.Min();
+        var maximum = data.Max();
+        if (maximum <= minimum)
+            throw new InvalidOperationException("Fallout 3 creator capture is one blank color.");
+        var captureRoot = Path.GetFullPath(_appearanceProofCaptureRoot!);
+        Directory.CreateDirectory(captureRoot);
+        var path = Path.Combine(captureRoot, fileName);
+        if (File.Exists(path))
+            throw new InvalidOperationException(
+                $"Fallout 3 creator capture path is not fresh: {path}");
+        var error = image.SavePng(path);
+        if (error != Error.Ok)
+            throw new InvalidOperationException(
+                $"Fallout 3 creator capture could not be saved: {error}.");
+        using var stream = File.OpenRead(path);
+        var sha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        return new Fo3AppearanceProofCapture(
+            path,
+            sha256,
+            image.GetWidth(),
+            image.GetHeight(),
+            maximum - minimum);
+    }
+
+    private object MeasureAppearanceDifference(
+        Fo3AppearanceProofCapture baseline,
+        Fo3AppearanceProofCapture edited)
+    {
+        var baselineImage = Image.LoadFromFile(baseline.Path);
+        var editedImage = Image.LoadFromFile(edited.Path);
+        if (baselineImage is null || editedImage is null ||
+            baselineImage.GetSize() != editedImage.GetSize())
+            throw new InvalidOperationException(
+                "Fallout 3 creator comparison frames do not share one viewport.");
+        baselineImage.Convert(Image.Format.Rgba8);
+        editedImage.Convert(Image.Format.Rgba8);
+        var baselineData = baselineImage.GetData();
+        var editedData = editedImage.GetData();
+        var left = baseline.Width * _profile.Appearance.Ui.FaceGrabX /
+            Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels;
+        var top = baseline.Height * _profile.Appearance.Ui.FaceGrabY /
+            Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels;
+        var width = baseline.Width * _profile.Appearance.Ui.FaceGrabWidth /
+            Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels;
+        var height = baseline.Height * _profile.Appearance.Ui.FaceGrabHeight /
+            Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels;
+        if (width <= 0 || height <= 0 || left + width > baseline.Width ||
+            top + height > baseline.Height)
+            throw new InvalidOperationException(
+                "Fallout 3 creator face comparison region is outside the viewport.");
+        long absoluteDifference = 0;
+        var changedPixels = 0;
+        for (var y = top; y < top + height; y++)
+        {
+            for (var x = left; x < left + width; x++)
+            {
+                var offset = (y * baseline.Width + x) *
+                    Fo3OpeningFlowNumericContracts.CaptureBytesPerPixel;
+                var pixelChanged = false;
+                for (var channel = 0;
+                     channel < Fo3OpeningFlowNumericContracts.CaptureRgbChannels;
+                     channel++)
+                {
+                    var difference = Math.Abs(baselineData[offset + channel] -
+                        editedData[offset + channel]);
+                    absoluteDifference += difference;
+                    pixelChanged |= difference > 0;
+                }
+                if (pixelChanged)
+                    changedPixels++;
+            }
+        }
+        if (changedPixels == 0 || absoluteDifference == 0)
+            throw new InvalidOperationException(
+                "Fallout 3 normalized FaceGen edit produced no visible pixel change.");
+        return new
+        {
+            baselinePath = baseline.Path,
+            editedPath = edited.Path,
+            region = new[] { left, top, width, height },
+            changedPixels,
+            absoluteRgbDifference = absoluteDifference,
+            meanAbsoluteRgbDifference = absoluteDifference /
+                (double)(width * height *
+                    Fo3OpeningFlowNumericContracts.CaptureRgbChannels),
+        };
+    }
+
+    private void WriteAppearanceProofReport(
+        string phase,
+        Fo3AppearanceSelection selection,
+        IReadOnlyList<Fo3AppearanceProofCapture> captures,
+        object? morphDifference,
+        bool creatorActionsReplayed)
+    {
+        var preview = _profile.Appearance.PreviewSet.Previews.Single(value =>
+            value.RaceFormId.Equals(selection.Race.FormId, StringComparison.OrdinalIgnoreCase) &&
+            value.HairFormId.Equals(selection.Hair.FormId, StringComparison.OrdinalIgnoreCase) &&
+            value.EyesFormId.Equals(selection.Eyes.FormId, StringComparison.OrdinalIgnoreCase));
+        using var document = JsonDocument.Parse(File.ReadAllBytes(_savePath));
+        var root = document.RootElement;
+        var savedPackage = RequiredSaveObject(root, "playerPackage");
+        var activePackage = RequiredSaveBoolean(savedPackage, "active");
+        var advancedIntoNextBirthBeat =
+            RequiredSaveInteger(root, "stage") == _profile.Appearance.AcceptedStage &&
+            activePackage;
+        if (!advancedIntoNextBirthBeat)
+            throw new InvalidOperationException(
+                "Fallout 3 creator proof did not persist the next authored package beat.");
+        var report = new
+        {
+            schema = "opennv-fo3-native-creator-proof/v1",
+            phase,
+            profileId = _profile.ProfileId,
+            profileSha256 = _profile.Sha256,
+            sourceUi = new
+            {
+                canvas = new[]
+                {
+                    Fo3OpeningFlowNumericContracts.SourceUiCanvasWidthPixels,
+                    Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels,
+                },
+                namePanel = new[]
+                {
+                    _profile.Appearance.Ui.Name.PanelWidth,
+                    _profile.Appearance.Ui.Name.PanelHeight,
+                },
+                appearancePanel = new[]
+                {
+                    _profile.Appearance.Ui.PanelX,
+                    _profile.Appearance.Ui.PanelY,
+                    _profile.Appearance.Ui.PanelWidth,
+                    _profile.Appearance.Ui.PanelHeight,
+                },
+                faceGrab = new[]
+                {
+                    _profile.Appearance.Ui.FaceGrabX,
+                    _profile.Appearance.Ui.FaceGrabY,
+                    _profile.Appearance.Ui.FaceGrabWidth,
+                    _profile.Appearance.Ui.FaceGrabHeight,
+                },
+            },
+            livePreview = new
+            {
+                raceFormId = selection.Race.FormId,
+                sex = preview.Sex,
+                hairFormId = selection.Hair.FormId,
+                eyesFormId = selection.Eyes.FormId,
+                control = _profile.Appearance.FaceControl.SettingEntity,
+                controlAxisSha256 = _profile.Appearance.FaceControl.AxisSha256,
+                value = selection.FaceControlValue(
+                    _profile.Appearance.FaceControl.SettingEntity),
+                controlCount = _profile.Appearance.FaceControls.Count,
+                symmetricGeometrySha256 = selection.Sex.FaceGen.SymmetricGeometrySha256,
+                disposition = preview.RuntimeDisposition,
+                fullBody = preview.FullBody,
+                bodyComponentRoles = preview.BodyComponentRoles,
+                fullRetailSlidersImplemented = true,
+            },
+            morphDifference,
+            persisted = new
+            {
+                stage = RequiredSaveInteger(root, "stage"),
+                name = RequiredSaveString(root, "playerName"),
+                race = RequiredSaveString(RequiredSaveObject(root, "appearance"), "adultRaceFormId"),
+                faceControlValues = RequiredSaveArray(
+                    RequiredSaveObject(
+                        RequiredSaveObject(root, "appearance"),
+                        "faceGen"),
+                    "geometryControls").EnumerateArray().Select(value => new
+                    {
+                        settingEntity = RequiredSaveString(value, "settingEntity"),
+                        value = RequiredSaveSingle(value, "value"),
+                    }).ToArray(),
+                creatorActionsReplayed,
+                activePackage,
+                advancedIntoNextBirthBeat,
+            },
+            captures = captures.Select(value => new
+            {
+                path = value.Path,
+                sha256 = value.Sha256,
+                width = value.Width,
+                height = value.Height,
+                rgbSpan = value.RgbSpan,
+            }),
+        };
+        Directory.CreateDirectory(Path.GetDirectoryName(_appearanceProofReportPath!)!);
+        File.WriteAllText(
+            _appearanceProofReportPath!,
+            JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) +
+                System.Environment.NewLine);
     }
 
     private void RunCg01Proof()
@@ -4623,23 +6007,27 @@ internal partial class Fo3OpeningFlow : CanvasLayer
 
     private void AddSelector(GridContainer grid, string title, OptionButton selector)
     {
-        grid.AddChild(Label(title, Fo3OpeningFlowNumericContracts.BodyFontPixels));
+        selector.Name = $"FO3_RaceSexMenu_{title}";
         selector.CustomMinimumSize = new Vector2(
-            _profile.Appearance.Ui.ListItemWidth,
+            0.0f,
             _profile.Appearance.Ui.ListItemHeight);
-        selector.AddThemeFontSizeOverride("font_size", Fo3OpeningFlowNumericContracts.BodyFontPixels);
+        selector.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        selector.AddThemeFontSizeOverride(
+            "font_size",
+            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
         grid.AddChild(selector);
     }
 
     private static void FillOptions(
         OptionButton selector,
         IReadOnlyList<Fo3AppearanceRace> options,
-        string selectedFormId)
+        string selectedFormId,
+        string prefix)
     {
         selector.Clear();
         for (var index = 0; index < options.Count; index++)
         {
-            selector.AddItem(options[index].Label);
+            selector.AddItem($"{prefix}  •  {options[index].Label}");
             selector.SetItemMetadata(index, options[index].FormId);
             if (options[index].FormId == selectedFormId)
                 selector.Select(index);
@@ -4649,12 +6037,13 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private static void FillOptions(
         OptionButton selector,
         IReadOnlyList<Fo3AppearanceOption> options,
-        string selectedFormId)
+        string selectedFormId,
+        string prefix)
     {
         selector.Clear();
         for (var index = 0; index < options.Count; index++)
         {
-            selector.AddItem(options[index].Label);
+            selector.AddItem($"{prefix}  •  {options[index].Label}");
             selector.SetItemMetadata(index, options[index].FormId);
             if (options[index].FormId == selectedFormId)
                 selector.Select(index);
@@ -4709,8 +6098,77 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         return image;
     }
 
+    private Control CreatorSurface(
+        float left,
+        float top,
+        float width,
+        float height,
+        Fo3AppearanceAsset background,
+        string name)
+    {
+        if (_creatorLayer is null)
+        {
+            _creatorLayer = new Control { Name = "FO3_OwnedCreatorCanvas_1600x1200" };
+            _creatorLayer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+            AddChild(_creatorLayer);
+            _panel.Visible = false;
+            _background.Visible = _vaultPreviewHost is null;
+        }
+        var surface = new Control { Name = name };
+        surface.AnchorLeft = left;
+        surface.AnchorTop = top;
+        surface.AnchorRight = left + width;
+        surface.AnchorBottom = top + height;
+        _creatorLayer.AddChild(surface);
+        var texture = new TextureRect
+        {
+            Name = $"{name}_OwnedBackground",
+            Texture = ImageTexture.CreateFromImage(LoadAppearanceImage(background)),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            TooltipText =
+                $"source={background.SourceSha256} preview={background.PreviewSha256}",
+        };
+        texture.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        surface.AddChild(texture);
+        return surface;
+    }
+
+    private static VBoxContainer CreatorColumn(Control surface, int marginPixels)
+    {
+        var margin = new MarginContainer();
+        margin.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
+            margin.AddThemeConstantOverride(side, marginPixels);
+        surface.AddChild(margin);
+        var column = new VBoxContainer
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+        };
+        column.AddThemeConstantOverride(
+            "separation",
+            Fo3OpeningFlowNumericContracts.CreatorPanelSeparationPixels);
+        margin.AddChild(column);
+        return column;
+    }
+
     private void ClearContent()
     {
+        if (_creatorLayer is not null)
+        {
+            _creatorLayer.Visible = false;
+            _creatorLayer.QueueFree();
+            _creatorLayer = null;
+        }
+        _activeNameInput = null;
+        _activeAppearanceCategory = null;
+        _activeFaceControlSlider = null;
+        _activeAppearanceSelection = null;
+        _activeFacePreview = null;
+        _reflectron = null;
+        _panel.Visible = true;
         foreach (var child in _content.GetChildren())
         {
             _content.RemoveChild(child);

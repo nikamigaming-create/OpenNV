@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -164,7 +165,8 @@ internal static class Fo2ProceduralPortrait
         string eyeColorId,
         string browStyleId,
         string noseStyleId,
-        string mouthStyleId)
+        string mouthStyleId,
+        CharacterBodyProportions? bodyProportions = null)
     {
         var image = Render(
             sex,
@@ -221,7 +223,8 @@ internal static class Fo2ProceduralPortrait
                 destination,
                 sha256,
                 Width,
-                Height);
+                Height,
+                bodyProportions ?? Fo2CharacterBodyProfile.ForSex(sex));
             Validate(contract);
             return contract;
         }

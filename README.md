@@ -34,18 +34,26 @@ but it enables only routes whose ordinary launcher-to-runtime handoff is proven.
 
 | Route | Available now | Explicit boundary |
 | --- | --- | --- |
-| Fallout 1 Hex | Registered-cache launcher route through the OpenNV menu, character picker, owned Overseer movie, and bounded Godot V13ENT/Vault 13 slice | Only V13ENT is playable; this is not the complete Fallout 1 campaign |
-| Fallout 1 FPS | The same Vault Dweller and save in the bounded V13ENT slice, with free movement and shooting | The FPS adapter does not extend campaign coverage beyond V13ENT |
+| Fallout 1 Hex | Registered-cache route through the OpenNV menu, character picker, owned Overseer movie, and bounded Godot V13ENT/Vault 13 slice. The selected premade/custom identity, sex, presentation authority, and weapon-visual suppression policy are wired through save/cold restore into the gameplay actor. **Continue** bypasses the picker/movie/entry reset and restores the saved hex plus finite Hex/FPS/shoulder camera mode, yaw, pitch, and zoom before controls. Every 3D classic humanoid requires the same verified owned FNV full-body donor preview set, with both male and female variants. | GCD/FRM data remains the classic identity/gameplay authority; the FNV body is presentation only and is not a parity claim. A missing, malformed, wrong-sex, body-role, outfit, hash, or socket donor fails closed—there is no procedural, FRM-player, silhouette, or standee substitute. Saves without the complete player-presentation identity and `opennv-fo1-camera-state/v1` camera state are non-continuable. Only V13ENT is playable; fresh producer/native visual acceptance remains pending. |
+| Fallout 1 FPS | The same selected Vault Dweller identity and save in the bounded V13ENT slice, with free movement and shooting; Continue restores the saved first-person camera state before input is released. | The FPS adapter does not extend campaign coverage beyond V13ENT; the same shared-donor and fail-closed save boundaries apply. |
 | Fallout 1 VR | Shared-state V13ENT adapter with simulator coverage | Not launcher-enabled or physical-headset accepted; campaign-native hands, weapon, and UI remain open |
-| Fallout 2 Hex | Registered-profile launcher route into the original owned 640×480 Narg/Mingan/Chitsa selector plus source-backed Modify/Create for name, sex, age, and exact SPECIAL. Each premade keeps its distinct exact owned panel and one small Portrait/Live 3D toggle presents that panel on a curved live 3D surface. Take enters Map 3 and exact exit serial 1738 reaches ARTEMPLE Map 126. A bounded source-identified Temple Villager exposes player HP/AP, deterministic adjacent melee, defeat, exact nested Spear loot, visible inventory state, version-5 save, and cold restore | The Live 3D mode is an owned-reference panel relief, not rebuilt head geometry. Custom face/hair/skin controls and generated portraits are not implemented; v5 records that state explicitly. The Temple adapter does not execute target AI/turns, INT/dialogue, retail hit formulas, or general inventory. Full campaign, parity, FPS, and OpenXR remain absent |
-| New Vegas | Owned menu, skippable intro, source-ordered Doc Mitchell speech/quest beats, stage-36 character selection, source-bound HUD/STATS/ITEMS/DATA contracts and Pip-Boy shell, and one ordered Doc house → Goodsprings exterior → saloon composite with both reciprocal XTEL pairs and normally enabled Sunny. Level 1 HP 200/200, AP 80/80, and XP 0/200 are source/default-derived, save-v6 persistent, and exposed to the Pip-Boy. The admitted four-family cache supports controller-door articulation, target-local static convex collision, current-CELL-only render/collision activation with linked CELLs preloaded, current-CELL WorldEnvironment switching, the owned clear-day atmosphere/cloud pair, one-time source-collision actor grounding, and a manifest-validated configured-input first-run/cold-Continue pair through the saloon door | The exact startup player-root/camera transform, complete saloon population/package AI, exterior surface/directional lighting, player deposits, Pip-Boy tab navigation, dynamic clock/weather/global state, reverse traversal, neighboring exterior-grid streaming, complete Gamebryo tile behavior, retail parity, integrated OpenXR, Hex, physical-headset acceptance, and the uninterrupted campaign remain unproven; the [Goodsprings actor/package audit](docs/evidence/fnv-goodsprings-actor-package-contract.md) records the next source contract |
-| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, and normal persistent CG00 progression into the owned Vault 101 birth room through stage 100. The bounded route plays the stage-65 Dad cue, applies stage-80/85 and stage-90 INFO `0001f379`, then executes seven of eight exact stage-100 commands through `SetPCYoung 1`; cold Continue restores without replaying one-shot cue/effects. A fresh pinned-Theora profile now compiles both movies plus the exact CG01 stage-0/stage-5 tree and the sex-specific two-line Dad-speech → stage-10 contract | The stage-10 runtime/save adapter is implemented but not native-proven: the fresh run correctly stops on stale absolute actor-derivative paths in the existing Vault 101 presentation cache. No freely playable first-person Vault 101 route, general package/dialogue interpreter, lip playback, Mom/player presentation, Hex, VR, or retail parity exists |
-| TTW | Strict local profile/effective-source registration plus a launcher-validated, source-bound Fallout 3 CG00→CG01-stage-5 command/movie contract with dedicated TTW cache and save identities | No TTW command interpreter, Vault 101 world presentation, save runtime, xNVSE execution, or JAM runtime exists; every TTW presentation remains disabled |
-| JAM | Dependency/profile inspection plus bounded JVS sprint and JBT time-dilation semantics | The full dependency and portable-semantic gates are incomplete, so JAM remains disabled |
+| Fallout 2 Hex | Registered-profile route into the original owned 640×480 Narg/Mingan/Chitsa selector plus source-backed Modify/Create. The selector and Map 3 gameplay actor use the same verified owned FNV full-body donor preview set; it must supply the selected sex plus the hash-bound body, outfit, and socket join. The opening Elder movie's natural end and Skip converge through the same exact terminal source frame/fade, black handoff, prepared live camera, and reveal. Two bounded branches now retain the same selected identity: tagged-Speech Cameron → live ARVILLAG input/save, or Temple guardian AP combat → exact Spear loot/equip/save. | GCD/FRM remains identity/gameplay authority and the donor is non-parity presentation. A missing or incompatible donor fails closed; there is no procedural, FRM-player, silhouette, or standee fallback. The branches are alternatives: no dead-guardian shortcut to ARVILLAG exists. Torch animation/smoke, target AI/turns, general INT execution, full campaign, FPS/OpenXR, and retail parity remain absent. See the [canonical FO2 branch ledger](docs/evidence/fo2-first-slice-branch-ledger.md). |
+| New Vegas | Owned menu and skippable intro; source-ordered Doc opening; exact chair reference `001059b0`; exact patient-bed `REFR 00103e5b` → `FURN 00106a6a` (`NVbedtwin01`) identity; owned cigarette `ANIO 00083519` attached to `Bip01 R Hand`; visible name entry; selection-keyed default male and female full-body FaceGen preview contracts with all 43 admitted CTL/EGM controls; exact stage-40 chair-exit root transfer; and stage-55 checkpoint autosave. | The male/female preview change is code-complete but has no regenerated owned cache or native acceptance; non-default race/hair/eye combinations deliberately fall back to owned source-texture tiles. The exact bed binding likewise awaits a fresh native/retail differential. The admitted cigarette NIF/KF contains no source particle/effect emitter, so visible puffs remain an explicitly first-party, tip-anchored non-parity adaptation. Exact phase/pixels, complete package AI, uninterrupted campaign continuity, integrated OpenXR, Hex, and physical-headset acceptance remain unproven. |
+| Fallout 3 | Owned main menu, intro, sex/name/appearance selection, persistent CG00 progression, and bounded CG01 state/save work. Source `PACK` sections now select their hash-bound KF sequences, and the player view composes the sampled `Camera1st` node through its owned parent chain without treating it as a `NiCamera`. | Those source-backed implementation fixes are not a retail-input proof: the toddler acceptance path still auto-steers, and ordinary user-driven movement/trigger entry plus a matched retail differential remain gated. No freely playable Vault 101 route, general package/dialogue interpreter, Hex, VR, or retail parity is claimed. |
+| TTW | The launcher exposes two editions rather than a fifth game card: **TTW · Fallout 3 opening** under Fallout 3 and **TTW · New Vegas opening** under New Vegas. A strict local profile and records-only effective-source adapter feed the bounded TTW-FO3 CG00→CG01-stage-5 compiler/executor with dedicated cache/save identities. | The currently consumed adapter resolves effective records only; archive/loose resource winners are not yet connected to either playable world. TTW-FNV has no effective-stack Doc profile/runtime. Both editions remain disabled, and xNVSE/JAM plugin execution is unsupported. |
+| JAM / xNVSE | Dependency/profile inspection plus bounded first-party transport of JVS sprint and JBT time-dilation settings/semantics | OpenNV does not load native mod DLLs. Portable xNVSE, JIP LN, JohnnyGuitar, kNVSE, Stewie Tweaks, UIO, and the remaining JAM script/event/UI/AP/animation/audio/cosave semantics are unsupported, so JAM remains disabled. |
 
 “Local slice works” is not the same as “launcher-ready,” and “first slice” is
 not a whole-campaign claim. The runtime manifest is the authority used to keep
 those distinctions visible.
+
+New Vegas preparation is family-scoped rather than a periodic full-cache
+rebuild. Static, CELL, opening, and actor outputs have separate identities. The
+actor family hashes the exact ordered one-level actor recipe route (recipe IDs
+plus hashes), so actor add/remove/reorder/content changes invalidate it while an
+unrelated CELL presentation edit does not. Restore is read-only and never starts
+a compiler; only explicit preparation rebuilds a changed family and its actual
+dependents.
 
 ## Run the source launcher
 
@@ -60,9 +68,14 @@ Pop-Location
 
 If Godot is not found automatically, pass the Godot 4.7.2 Mono executable with
 `-Godot`. The compact launcher always shows Fallout 1, Fallout 2, New Vegas,
-and Fallout 3 as its four top-level choices. Selecting a card exposes one
-shared FPS / Hex / VR mode row and Play action below it, with unfinished modes
-visible but disabled. Select **New
+and Fallout 3 as its four top-level choices. Selecting a card exposes the same
+FPS / Hex / VR mode row and Play action below it; an unfinished route remains
+visible and disabled instead of disappearing. The current manifest admits
+Fallout 1 Hex/FPS, Fallout 2 Hex, and New Vegas FPS plus an experimental
+OpenXR route under their separate runtime gates. Fallout 1 VR, Fallout 2
+FPS/VR, New Vegas Hex, and all Fallout 3 presentations remain disabled. TTW is
+an edition dropdown under Fallout 3 or New Vegas, not another top-level card.
+Select **New
 Vegas** and **Play** for the normal owned main menu;
 **New Game** plays the owned intro, and `Escape` skips into the same Doc Mitchell
 opening state as watching it through. The default owned-data cache now binds an
@@ -132,37 +145,32 @@ Fallout 3 registration is available separately and writes a local profile under
 ```
 
 That command resolves the owned menu, movies, quest chain, birth inputs, and
-Vault 101 resource graph. The bounded development frontend can boot the CG00 sex/name flow,
-resume its stage-60 character, select from source-backed playable race and
-sex-aware hair/eye records, and persist the owned FaceGen defaults at stage 62.
-The preview is an exact owned-texture inspection surface, not a 3D face render.
-The exact `CG00PlayerSection4`, stage-65 parent appearance, stage-80
-package/variable/reference, stage-85 zero-command result, and stage-90
-four-command result compile and validate. The ordinary bounded flow renders the
-owned Vault 101 birth room with grounded Doctor Li and direct `CG00Dad`
-ACHR/NPC/race/FaceGen/outfit identity, plays the exact owned Dad cue/subtitle,
-applies INFO `0001f379`, sets timer `2.2` and `runTimer=1`, presents the owned
-white fade and sound, then executes seven of eight exact stage-100 commands
-through `SetPCYoung 1`. Cold Continue restores stage 100 without replaying those
-one-shot effects. The owned-profile producer also compiles the exact CG01
-stage-0 command tree through its synchronous stage-5 result and the sex-specific
-two-line Dad-speech transition into stage 10. The bounded runtime/save adapter
-for that transition is implemented, but its fresh native proof currently stops
-on stale absolute actor-derivative paths in the existing Vault 101 presentation
-cache. This remains a deterministic bounded room/front-end
-route, not retail camera, lighting, material, animation, lip, package, timing,
-or freely playable first-person parity; the launcher therefore keeps every
-Fallout 3 presentation disabled. General package/KF execution, a portable fresh
-Vault 101 presentation cache, the eighth stage-100 command, Mom/player presentation, and the remaining opening
-interpreter are active work. TTW and JAM
+Vault 101 resource graph. The bounded development frontend can boot the CG00
+sex/name flow, resume its stage-60 character, select from source-backed playable
+race and sex-aware hair/eye records, and persist the owned FaceGen defaults at
+stage 62. The preview is an exact owned-texture inspection surface, not a 3D
+face render. The early-birth runtime now starts each admitted actor from its
+source `PACK` section, selects the hash-bound KF sequence, and follows admitted
+idle transitions. The player camera samples the owned `Camera1st` skeleton node
+and parent chain using the normal Gamebryo-to-Godot conversion; it no longer
+adds the incorrect camera-axis treatment that would apply to a `NiCamera`.
+Those are source-backed implementation corrections, not acceptance of the
+retail scene. The current toddler proof uses an internal auto-steered target,
+so ordinary configured user input, physical trigger entry, actor/camera timing,
+and matched retail/native frames remain fail-closed gates. The launcher keeps
+every Fallout 3 presentation disabled; no freely playable Vault 101, general
+package/dialogue interpreter, lip playback, Hex, VR, or parity is claimed. TTW
+and JAM
 registration are documented in [the mod policy](docs/mods.md);
 registration alone does not make either route runtime-playable.
 
-The owned JAM 4.6 plugin currently transports two narrow desktop behaviors:
-Shift-held forward sprint at its authored 1.75 multiplier and X-toggled Bullet
-Time at its authored 0.5 world-time multiplier. The five missing local native
-prerequisites and the unimplemented AP, UI, animation, audio, event, and cosave
-semantics keep the launcher JAM route disabled; OpenNV never loads those DLLs.
+The owned JAM 4.6 profile currently transports two narrow first-party desktop
+behaviors: Shift-held forward sprint at its authored 1.75 multiplier and
+X-toggled Bullet Time at its authored 0.5 world-time multiplier. This is not an
+xNVSE compatibility layer. OpenNV never loads the native mod DLLs, and portable
+xNVSE, JIP LN, JohnnyGuitar, kNVSE, Stewie Tweaks, UIO, plus JAM's remaining AP,
+UI, animation, audio, event, script, and cosave semantics are unsupported. JAM
+therefore remains disabled.
 
 Fallout 2 source registration is also available and writes only a small local
 manifest; it does not extract or copy the three owned DAT2 archives:
@@ -219,12 +227,12 @@ exact floor and wall colliders with headless physics rays. The non-source visual
 shell is now suppressed while all 45 owned wall FRMs remain visible. A nonvisual cursor consumes
 42 exact adjacent moves inside the 1,085-hex entry component, proving floor
 contact and fail-closed boundary rejection. Multihex footprint semantics,
-General Temple scripts, target AI, dialogue, complete combat/inventory, and
+General Temple scripts, target AI/turns, broad combat/inventory, and
 parity remain unimplemented. One deliberately bounded confrontation adapter
 binds MAP critter serial 379/PID `01000003`/SID `04000001`, its owned Villager
 PRO/MSG stats, and nested Spear serial 378/PID `00000007`. Adjacent player melee
 uses visible derived HP/AP, deterministic damage, defeat-to-loot, inventory
-visibility, and version-6 save/cold restore; it never executes `ARTemple.int` or
+visibility, and version-12 save/cold restore; it never executes `ARTemple.int` or
 claims retail combat parity. A separate asset-free transition
 contract proves that Map 126 has no door-prototype objects and binds its source
 exit grids without executing `ARTemple.int`. The destination compiler independently binds
@@ -241,15 +249,20 @@ mouse can Take a premade, Modify it, or Create a custom state. Modify/Create edi
 name (1–11 characters), sex, age (16–35), and seven SPECIAL values (1–10 each,
 exactly 40 total). Modify preserves the source premade's tags/traits unchanged;
 Create leaves them explicitly unselected because their editing rules are not yet
-transported. A single `LIVE 3D`/`PORTRAIT` button (or `V`) switches each exact
-owned Narg/Mingan/Chitsa panel to a gently curved live 3D surface while the
-original picker remains intact. This is an owned-reference relief, not rebuilt
-head geometry. Modify/Create now adds one explicitly OpenNV-local face-shape
-control (`ROUND`, `OVAL`, or `ANGULAR`) with a live procedural classic-green
-preview. Confirm deterministically writes the matching 128×128 portrait under
+transported. A single `LIVE 3D`/`PORTRAIT` button (or `V`) keeps each exact
+owned Narg/Mingan/Chitsa panel available and switches the preview to the same
+hash-bound owned FNV full-body donor used by the Map 3 gameplay actor. The
+shared preview-set contract requires both sex variants, ordered body/left-hand/
+right-hand roles, a verified presentation outfit, GLTF and sidecar hashes, and
+an authored rigid attachment socket. Missing or incompatible input stops before
+Godot; it never substitutes a procedural body, source-FRM player relief,
+silhouette, or standee. The donor is presentation only—not classic geometry or
+a parity claim—while exact GCD/FRM identity and gameplay state remain
+authoritative. Modify/Create retains its bounded authored-state controls and
+local portrait output; it has no substitute live 3D head. Confirm deterministically writes the matching 128×128 portrait under
 the OpenNV user-data portrait directory; the hash-named PNG contains no owned
 pixels. Confirm then hands the state and sex-correct FRM to the grounded Map 3
-player at exact tile 28707. Its version-6 atomic OpenNV user-data save retains
+player at exact tile 28707. Its version-12 atomic OpenNV user-data save retains
 the selected mode, owned GCD/BIO source basis, custom profile state, current map,
 elevation, tile, facing, transform, bounded movement/presentation modes, and the
 source exit transition identity plus the bounded Temple target HP/AP/combat and
@@ -259,10 +272,47 @@ portrait path, SHA-256, dimensions, generator, and face shape before restoring
 the same player. The
 launcher passes these exact five hash-matched local artifacts and the isolated
 save path to the same character-start scene. This is bounded custom character
-creation and Hex playability, not a complete campaign save, FPS/VR, or retail parity.
-`scripts/Test-OpenNVFallout2CustomCharacters.ps1` captures a modified male and
-created female path and cold-restores each in a separate process; its owned
-screenshots and saves remain private under `%LOCALAPPDATA%\OpenNV\proofs`.
+creation and Hex playability, not a complete campaign save, FPS/VR, or retail
+parity. The opening Elder movie's natural end and Skip both present the exact
+terminal source frame/fade, converge at black, prepare the same live Arroyo
+camera, and execute the same reveal/control release. The handoff implementation
+is source-timed, but its live presentation remains human-review/unaccepted. The
+22 admitted Temple/Arroyo torch anchors use exact owned opaque FRM emitter
+pixels and centroid joined to source MAP light placements. The admitted emitter
+is a static frame; source flame animation and smoke are not claimed. The
+[source audit](docs/evidence/fo2-map3-torch-animation-source-audit.md) records
+why the three retained torch FRMs cannot lawfully advance and separates the
+real elevation-2 12-frame firepit identity.
+### Classic humanoid donor preflight and no-media launch
+
+The following commands only validate existing local artifacts or launch the
+existing bounded runtime. They do not build a cache, capture media, or claim
+visual acceptance. Supply an explicitly produced owned install manifest and
+already-prepared classic artifacts. Before runtime, the resolver hash-verifies
+the install-manifest output, the referenced opening-manifest join, and the
+standalone preview-set payload; it never discovers a donor by scanning a cache.
+
+```powershell
+$ClassicHumanoidInstallManifest = '<absolute-owned-install-manifest.json>'
+$DonorPreviewSet = pwsh -NoProfile -File .\scripts\Resolve-ClassicHumanoidDonorPreviewSet.ps1 `
+  -InstallManifest $ClassicHumanoidInstallManifest
+pwsh -NoProfile -File .\scripts\Assert-ClassicHumanoidDonorPreviewSet.ps1 `
+  -PreviewSet $DonorPreviewSet
+
+python -m unittest `
+  content.tests.test_classic_humanoid_launch_contract `
+  content.tests.test_classic_humanoid_no_placeholder_runtime
+```
+
+```powershell
+pwsh -NoProfile -File .\scripts\Test-GodotRuntime.ps1 `
+  -Godot '<Godot-console.exe>' `
+  -Fo1HexScene '<absolute-fo1-hex-scene.json>' `
+  -ClassicHumanoidInstallManifest $ClassicHumanoidInstallManifest
+
+pwsh -NoProfile -File .\scripts\Start-OpenNVFallout2Arroyo.ps1 `
+  -ClassicHumanoidInstallManifest $ClassicHumanoidInstallManifest
+```
 
 ## Character path is a real choice
 
@@ -271,11 +321,11 @@ profile and save boundary.
 
 | Path | Selector and shared-state rule | Current implementation boundary | JAM / edition rule |
 | --- | --- | --- | --- |
-| Fallout 1 | Normal/FPS retains the classic native picker. Hex uses the classic picker template with only the small Portrait/Live 3D toggle and local Custom-face extension. VR reuses the normal/FPS creator and character state; it never gets a separate picker. | FPS and Hex are launcher-visible development presentations; VR remains pending and the campaign is not claimed complete. | Separate from the Gamebryo-family profiles. |
-| Fallout 2 | Normal/FPS must retain the classic native picker. Hex keeps the owned classic picker with only Portrait/Live 3D and the local Custom-face extension. VR must reuse the normal/FPS creator and character state; it never gets a separate picker. | Only the bounded Hex route is enabled. Its version-6 save cold-restores the owned source basis, local portrait, Map 3/Temple transform, and Villager/Spear state; tag/trait editing and campaign-wide state remain absent. | No JAM layer. |
+| Fallout 1 | Normal/FPS retains the classic native picker. Hex uses the classic picker template with an optional owned-donor preview; VR reuses the normal/FPS creator and character state. | Selected premade/custom identity and sex cold-restore into the gameplay actor. Exact GCD/FRM data remains authoritative; all 3D humanoid presentation requires the shared owned FNV donor set and is non-parity. No procedural or FRM-player substitute is admitted. Native visual acceptance remains pending. | Separate from the Gamebryo-family profiles. |
+| Fallout 2 | Normal/FPS must retain the classic native picker. Hex keeps the owned classic picker with an optional owned-donor preview; VR must reuse the normal/FPS creator and character state. | Only the bounded Hex route is enabled. Its version-12 save cold-restores the owned source basis, local portrait, Map 3/Temple transform, and the selected peaceful-ARVILLAG or Temple-combat branch state described in the [canonical ledger](docs/evidence/fo2-first-slice-branch-ledger.md). The 3D player/creator preview requires the shared owned FNV donor set and is non-parity; source MAP/PRO/FRM remains the environment and identity authority. The branches do not merge; tag/trait editing and campaign-wide state remain absent. | No JAM layer. |
 | New Vegas | Normal/FPS uses the native Doc Mitchell creator. A future Hex route uses the classic Hex picker template plus Custom. VR shares the normal/FPS Doc creator and save state; it never gets a separate picker. | The standalone opening is still a bounded development route; Hex and fully validated VR character creation are not implemented. | Standalone Mojave save; JAM is optional only after its dependencies and portable semantics validate. |
 | Fallout 3 | Normal/FPS uses the native Vault 101 creator. A future Hex route uses the classic Hex picker template plus Custom. VR shares the normal/FPS Vault creator and save state; it never gets a separate picker. | The standalone CG00/CG01 work remains a bounded development route; Hex and fully validated VR character creation are not implemented. | Standalone Capital Wasteland save; TTW is a distinct edition/path. |
-| TTW | One Capital Wasteland-to-Mojave identity follows the Fallout 3 native creator contract; future VR shares it rather than creating another character. | Runtime support remains bounded and cannot claim the combined campaign complete. | A TTW save cannot adopt an existing standalone FO3 or FNV character. |
+| TTW | One Capital Wasteland-to-Mojave identity follows the Fallout 3 native creator contract; future VR shares it rather than creating another character. | The launcher presents separate TTW-FO3 and TTW-FNV editions. Only TTW-FO3 has the bounded records-only opening compiler/executor; TTW-FNV has no Doc/runtime route. Neither edition is playable. | A TTW save cannot adopt an existing standalone FO3 or FNV character. |
 
 This makes the important distinction visible rather than hiding it in mod
 files: JAM is modular; TTW is a character-path decision.
@@ -302,7 +352,11 @@ Fallout 1 has a bounded owned-data V13ENT slice with original-style character
 creation, the owned Overseer movie, Escape/skip convergence, one shared save,
 hex-tactical play, and FPS movement/shooting. The desktop launcher validates and
 registers the two generated local cache contracts, passes their paths and hash to
-Godot, and owns an isolated Vault Dweller save. Only V13ENT is playable; the
+Godot, and owns an isolated Vault Dweller save. A valid save exposes **Continue**,
+which restores the saved player hex, presentation identity, Pip-Boy/classic HUD,
+and finite camera mode/yaw/pitch/zoom under black before controls; it never
+replays the picker/movie or resets the entry. Older saves missing either required
+identity or camera contract remain non-continuable. Only V13ENT is playable; the
 other 95 inventoried maps, full dialogue/quest simulation, combat-formula parity,
 and promoted OpenXR play are not connected. A simulator-only adapter reaches
 the shared V13ENT state but remains launcher-disabled. This route now begins at a functional, asset-free
@@ -344,6 +398,28 @@ not require Python or another engine at runtime.
 The New Vegas owned front end and Doc Mitchell opening are implemented as a
 bounded campaign-state route. New Game plays the owned intro and Escape skips
 to the same opening state; Continue/Load use the canonical save owner. The
+latest bounded native checkpoint proves chair reference `001059b0` and its
+exact furniture-marker formula at stage 8 with zero marker position/basis error.
+The current compiler/runtime additionally binds the patient bed fail-closed to
+`REFR 00103e5b`, base `FURN 00106a6a` / `NVbedtwin01`, and the owned model hash;
+that newer identity correction still needs a fresh native/retail differential.
+The owned cigarette `ANIO 00083519` is attached to `Bip01 R Hand`. Its admitted
+NIF and smoking KF contain no particle/effect spawn contract, so visible puffs
+are separately labelled as a first-party, tip-anchored non-parity adaptation,
+not a transported source emitter. The cited Stage-36 run accepts a visible name
+and exposes all 43 admitted CTL/EGM controls on its older owned default-male
+head preview. Current compiler/runtime code instead admits distinct hash-bound,
+full-body male and female artifacts for the exact default race/hair/eye
+identities; those artifacts have not been regenerated or accepted natively, and
+every other selection still fails closed to owned source-texture tiles. The same
+earlier run applies the exact stage-40 exit/root handoff and reaches the stage-55
+autosave. It did not perform cold resume or generate accepted media. The native
+report is
+`D:\Builds\OpenNV-fnv-headless-exact-creator-20260829-r1\checkpoint-marker-v3-scoped2-report.json`
+(SHA-256
+`894598ee8644cb2ac3869fd645c420882f9980c722d96277d46f1d09f35e645b`).
+This bounded result is separate from the older completed-route evidence below.
+The
 completed cold-Continue path maps the saved movement, look, rollover-derived
 activation, and fighting bits back onto `CellPlayer`, including the authored
 disabled-combat state. Pip-Boy visibility is restored separately; saved POV and
@@ -372,11 +448,18 @@ metre-correct rig, two owned-data retail hands, controller locomotion/actions,
 haptics, and a wrist HUD. The repo-local simulator passes both sticks, snap
 turn, door/fire/reload/save, supported eye height, and native stereo capture. A
 connected-headset final-eye validation is still required before calling VR ready.
-The owned-data Saloon slice also includes an experimental practice pool table:
-the intact retail table triangles, authored cue/rack/four placed balls, NIF
-convex bodies, shared flat/OpenXR strike simulation, and v2 save state are
-software-gated. Full eight-ball rules and physical headset acceptance are not
-claimed.
+Owned NIF dynamic convex and box collision now drives a separate shared pickup
+hold/move/drop path: Z on desktop and right A/primary in OpenXR hold an item,
+release drops it, while E/right grip retains the ordinary collect/activate path.
+Movable pickup transforms and velocities cold-restore in the v7 campaign save;
+assets without a unique owned dynamic body remain collectible but are honestly
+reported as unsupported for physical grabbing. The owned-data Saloon slice also
+contains an unsupported experimental practice pool table. The intact retail
+table triangles, authored cue/rack/four placed balls, and NIF convex bodies load,
+but the flat native gate currently fails before ball contact: the retail ball
+references decorate the ruined table and do not make a playable layout on the
+intact replacement. Pocket, reset, cold restore, OpenXR layout, full eight-ball
+rules, and physical-headset acceptance are therefore not claimed.
 
 ### Reproducible development sneak peeks
 

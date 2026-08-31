@@ -106,6 +106,83 @@
       "appearanceStage": 60,
       "appearanceMenuEnteredStage": 61,
       "appearanceAcceptedStage": 62,
+      "earlyBirthSequence": {
+        "stages": [0, 5, 6, 8, 9, 10, 18, 20, 22, 38, 40, 42, 60, 61, 62],
+        "timerTransitions": [
+          { "sourceStage": 5, "targetStage": 6 },
+          { "sourceStage": 6, "targetStage": 8 },
+          { "sourceStage": 8, "targetStage": 9 },
+          { "sourceStage": 9, "targetStage": 10 },
+          { "sourceStage": 18, "targetStage": 20 },
+          { "sourceStage": 20, "targetStage": 22 },
+          { "sourceStage": 38, "targetStage": 40 },
+          { "sourceStage": 40, "targetStage": 42 },
+          { "sourceStage": 61, "targetStage": 62 }
+        ],
+        "sceneParticipants": [
+          { "role": "father", "referenceEditorId": "CG00DadREF", "referenceFormId": "000290a7", "startMarkerEditorId": "CG00DadStartMarker", "startMarkerFormId": "0003a17b" },
+          { "role": "doctor", "referenceEditorId": "CG00DoctorLiREF", "referenceFormId": "000290a5", "startMarkerEditorId": "CG00DoctorLiStartMarker", "startMarkerFormId": "000290a4" },
+          { "role": "mother", "referenceEditorId": "CG00MomREF", "referenceFormId": "0005ede0", "startMarkerEditorId": "CG00MomStartMarker", "startMarkerFormId": "0006a810" }
+        ],
+        "playerStartMarkerEditorId": "CG00PlayerStartMarker",
+        "playerStartMarkerFormId": "00039562",
+        "playerCamera": {
+          "section": 1,
+          "skeletonLogicalPath": "meshes\\characters\\_1stperson\\skeleton.nif",
+          "targetNode": "Camera1st"
+        },
+        "actorPackages": {
+          "player": [
+            { "section": 0, "formId": "0008f77b", "idleFormId": "0008443c" },
+            { "section": 1, "formId": "00038ea3", "idleFormId": "00069ef9" },
+            { "section": 2, "formId": "0006a811", "idleFormId": "00069efa" },
+            { "section": 3, "formId": "0006a812", "idleFormId": "00069efb" },
+            { "section": 4, "formId": "0006a818", "idleFormId": "00069efc" }
+          ],
+          "father": [
+            { "section": 0, "formId": "0008f778", "idleFormId": "00084439" },
+            { "section": 1, "formId": "0006b245", "idleFormId": "00068ab0" },
+            { "section": 2, "formId": "0006b246", "idleFormId": "00069eec" },
+            { "section": 3, "formId": "0006b24a", "idleFormId": "00069eed" },
+            { "section": 4, "formId": "0006b249", "idleFormId": "00069eee" }
+          ],
+          "doctor": [
+            { "section": 0, "formId": "0008f779", "idleFormId": "0008443a" },
+            { "section": 1, "formId": "0006a813", "idleFormId": "00068ab1" },
+            { "section": 2, "formId": "0006a814", "idleFormId": "00069ef0" },
+            { "section": 3, "formId": "0006a815", "idleFormId": "00069ef1" },
+            { "section": 4, "formId": "0006a816", "idleFormId": "00069ef2" }
+          ],
+          "mother": [
+            { "section": 0, "formId": "0008f77a", "idleFormId": "0008443b" },
+            { "section": 1, "formId": "0006b244", "idleFormId": "00069ef4" },
+            { "section": 2, "formId": "0006b24c", "idleFormId": "00069ef5" },
+            { "section": 3, "formId": "0006b241", "idleFormId": "00069ef6" },
+            { "section": 4, "formId": "0006b242", "idleFormId": "00069ef7" }
+          ]
+        },
+        "dialogue": {
+          "dadTopicEditorId": "CG00DadSpeech",
+          "dadTopicFormId": "0001f378",
+          "momTopicEditorId": "CG00MomSpeech",
+          "momTopicFormId": "0002cb97",
+          "stage10InfoFormIds": ["0001f387"],
+          "stage22MaleInfoFormIds": ["0001f386", "0005edd7", "0001f37e", "0001f384", "0001f382"],
+          "stage22FemaleInfoFormIds": ["0001f385", "0005edd8", "0001f37d", "0001f383", "0001f382"],
+          "stage42InfoFormIds": ["000202c2", "000202c3"]
+        },
+        "imageSpaceModifiers": [
+          { "editorId": "CG00BlackScreenISFX", "formId": "000230e7" },
+          { "editorId": "CG00BirthISFX", "formId": "0009b5c1" },
+          { "editorId": "CG00BirthBaseISFX", "formId": "00035a20" }
+        ],
+        "sounds": [
+          { "editorId": "QSTBirthStart", "formId": "00023045" },
+          { "editorId": "QSTBabyCry", "formId": "0007db67" }
+        ],
+        "geneProjectorReferenceEditorId": "CG00GeneProjectorREF",
+        "geneProjectorReferenceFormId": "000438ea"
+      },
       "section4Package": {
         "editorId": "CG00PlayerSection4",
         "formId": "0006a818",
@@ -175,11 +252,102 @@
       "document": "menus\\chargen\\race_sex_menu.xml",
       "menuName": "RaceSexMenu",
       "panelName": "NOGLOW_BRANCH",
+      "panelX": 930,
+      "panelY": 550,
       "panelWidth": 340,
       "panelHeight": 500,
+      "faceGrabX": 150,
+      "faceGrabY": 50,
+      "faceGrabWidth": 680,
+      "faceGrabHeight": 620,
       "listItemWidth": 320,
       "listItemHeight": 36,
-      "backgroundTexture": "textures\\interface\\shared\\background\\pipboy.dds"
+      "sliderWidth": 320,
+      "sliderHeight": 64,
+      "backgroundTexture": "textures\\interface\\shared\\background\\pipboy.dds",
+      "nameDocument": "menus\\dialog\\texteditmenu.xml",
+      "nameMenuName": "TextEditMenu",
+      "namePanelName": "TEM_MainRect",
+      "namePanelWidth": 720,
+      "namePanelHeight": 180,
+      "nameBackgroundTexture": "textures\\interface\\shared\\background\\solid_black.dds"
+    },
+    "faceGenControlSpace": {
+      "memberLogicalPath": "facegen\\si.ctl",
+      "memberSha256": "4f3f63d3e0dde33247613753c386c0aaa987affc44f65578336d22e621939964",
+      "sourceExecutable": "Fallout3.exe",
+      "expectedFormat": {
+        "formatSignature": "FRCTL001",
+        "geometryBasisVersion": 2001060901,
+        "textureBasisVersion": 81,
+        "basisCounts": {
+          "symmetricGeometry": 50,
+          "asymmetricGeometry": 30,
+          "symmetricTexture": 50,
+          "asymmetricTexture": 0
+        },
+        "linearControlCounts": {
+          "symmetricGeometry": 56,
+          "asymmetricGeometry": 26,
+          "symmetricTexture": 33,
+          "asymmetricTexture": 0
+        }
+      },
+      "nativeGeometryExposure": {
+        "classification": "owned-fo3-1.7.0.4-static-setting-string-contract",
+        "engineBuild": "1.7.0.4",
+        "sourceExecutableSha256": "c3f97c2255fa041a851c17cf372d69aaadd8694e2dc4230ba556001bbfbd2f3e",
+        "settingEntityTemplate": "sRSMShapeOption{oneBasedIndex:02d}",
+        "controlIndices": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+          17, 18, 19, 20, 21, 26, 29, 31, 32, 34, 35, 36, 37, 38, 39,
+          40, 41, 42, 44, 45, 46, 47, 49, 50, 52, 53, 54
+        ]
+      },
+      "runtimePreviewControl": {
+        "controlIndex": 0,
+        "minimum": -50.0,
+        "maximum": 50.0,
+        "step": 1.0,
+        "jump": 25.0,
+        "morphWeightScale": 0.1,
+        "resetValue": 0.0,
+        "acceptanceValue": 25.0,
+        "sliderSemanticsEvidence": {
+          "classification": "independent-sibling-gamebryo-racesexmenu-static-contract",
+          "engineBuild": "1.7.0.4",
+          "sourceExecutableSha256Parts": [
+            "c3f97c2255fa041a851c17cf372d69aa",
+            "add8694e2dc4230ba556001bbfbd2f3e"
+          ],
+          "sourceMinimum": -5.0,
+          "sourceMaximum": 5.0,
+          "uiScale": 10.0,
+          "uiMinimum": -50.0,
+          "uiMaximum": 50.0,
+          "ordinaryIncrement": 1.0,
+          "jump": 25.0,
+          "morphWeightScale": 0.1,
+          "lowGlobalAddress": "0x1115438",
+          "highGlobalAddress": "0x1115444",
+          "incrementTrait": "user6",
+          "incrementDefaultThreshold": 1.0
+        },
+        "presentation": {
+          "viewportWidthFraction": 0.5,
+          "viewportHeightFraction": 0.35,
+          "verticalFovHalfAngleFactor": 0.5,
+          "depthExtentFraction": 0.5,
+          "fullInVerticalOffsetGameUnits": -4.699999809265137,
+          "fullInDistanceGameUnits": 55.0,
+          "fullInYawRadians": -0.8399999737739563,
+          "fullOutVerticalOffsetGameUnits": -11.399999618530273,
+          "fullOutDistanceGameUnits": 135.0,
+          "fullOutYawRadians": -0.800000011920929,
+          "startingZoomFraction": 0.699999988079071
+        },
+        "semantics": "sibling-gamebryo-racesexmenu-ui-units-with-ctl-egm-weight-scale"
+      }
     }
   }
 }

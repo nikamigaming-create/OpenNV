@@ -37,7 +37,7 @@ BASE_RECORD_TYPES = ITEM_RECORD_TYPES | {
     "TREE",
 }
 CATALOG_RECORD_TYPES = frozenset(
-    BASE_RECORD_TYPES | {"CELL", "LGTM", "NAVM", "REFR", "TES4"}
+    BASE_RECORD_TYPES | {"CELL", "LGTM", "NAVM", "QUST", "REFR", "SCPT", "TES4"}
 )
 PLUGIN_LOCALIZED_FLAG = 0x00000080
 
@@ -153,6 +153,20 @@ class BaseObject:
     editor_id: str
     model_path: str | None
     display_name: str | None = None
+    attached_script_form_id: int | None = None
+
+
+@dataclass(frozen=True)
+class ScriptSource:
+    form_id: int
+    editor_id: str
+    source: str
+
+
+@dataclass(frozen=True)
+class QuestIdentity:
+    form_id: int
+    editor_id: str
 
 
 @dataclass(frozen=True)
@@ -252,6 +266,8 @@ class CellCatalog:
     cells: dict[int, Cell]
     lighting_templates: dict[int, LightingTemplate]
     base_objects: dict[int, BaseObject]
+    scripts: dict[int, ScriptSource]
+    quests: dict[int, QuestIdentity]
     lights: dict[int, LightObject]
     containers: dict[int, ContainerObject]
     weapons: dict[int, WeaponObject]
@@ -667,7 +683,7 @@ def _weapon_object(record: Record, values: dict[str, list[bytes]]) -> WeaponObje
 
 @cache
 def scan_cell_catalog(path: Path) -> CellCatalog:
-    catalog = CellCatalog({}, {}, {}, {}, {}, {}, {}, [])
+    catalog = CellCatalog({}, {}, {}, {}, {}, {}, {}, {}, {}, [])
     localized_plugin: bool | None = None
     for record in iter_plugin_records(path, CATALOG_RECORD_TYPES):
         if record.signature == "TES4":
@@ -731,6 +747,9 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 _first_text(values, "EDID"),
                 normalize_model_path(models[0]) if models else None,
                 _display_name(values, localized_plugin, record),
+                parse_form_id(values["SCRI"][0], record, "SCRI")
+                if values.get("SCRI")
+                else None,
             )
             if record.signature == "LIGH":
                 light = parse_light_object(record, values)
@@ -740,6 +759,22 @@ def scan_cell_catalog(path: Path) -> CellCatalog:
                 catalog.containers[record.form_id] = _container_object(record, values)
             elif record.signature == "WEAP":
                 catalog.weapons[record.form_id] = _weapon_object(record, values)
+        elif record.signature == "SCPT":
+            values = subrecords_by_signature(record)
+            sources = values.get("SCTX", [])
+            if len(sources) != 1:
+                raise ValueError(f"SCPT {record.form_id:08x} must contain one SCTX source")
+            catalog.scripts[record.form_id] = ScriptSource(
+                record.form_id,
+                _first_text(values, "EDID"),
+                zstring(sources[0]),
+            )
+        elif record.signature == "QUST":
+            values = subrecords_by_signature(record)
+            catalog.quests[record.form_id] = QuestIdentity(
+                record.form_id,
+                _first_text(values, "EDID"),
+            )
         elif record.signature == "NAVM":
             navmesh = parse_navmesh(record)
             catalog.navmeshes.setdefault(navmesh.cell_form_id, []).append(navmesh)

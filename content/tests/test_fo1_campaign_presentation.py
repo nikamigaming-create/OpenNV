@@ -17,6 +17,7 @@ from prepare_fo1_campaign_presentation import (  # noqa: E402
     source_sprite_logical_path,
     validate_viewer_config,
 )
+from fo1_campaign_transport import build_campaign_transport  # noqa: E402,F401
 
 
 MAP_FORMAT = {
@@ -27,6 +28,13 @@ MAP_FORMAT = {
 
 
 class Fo1CampaignPresentationTest(unittest.TestCase):
+    def test_transport_supports_one_explicit_map_without_directory_scan(self) -> None:
+        import inspect
+
+        source = inspect.getsource(build_campaign_transport)
+        self.assertIn("map_file: str | None", source)
+        self.assertIn("selected MAP is absent", source)
+        self.assertIn("map_paths = [selected]", source)
     def test_message_catalog_preserves_source_text(self) -> None:
         catalog = parse_message_catalog(
             "# comment\r\n{100}{}{Giant Rat}\r\n{101}{ignored}{Vault {Dweller}}\r\n"

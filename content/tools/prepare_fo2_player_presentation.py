@@ -17,6 +17,7 @@ from fo1_frm import decode_frm, palette_rgba_bytes
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError
 from fo2_first_slice import PROFILE_SCHEMA, _archive_paths
+from fo2_frm_relief import RELIEF_MODE, RELIEF_SCHEMA, derive_relief
 from plugin_stack import file_sha256
 from prepare_fo2_temple_presentation import _save_admitted_frame
 
@@ -25,6 +26,15 @@ RECIPE_SCHEMA = "opennv-fo2-player-presentation-recipe/v1"
 CACHE_SCHEMA = "opennv-fo2-player-presentation-cache/v1"
 CACHE_MANIFEST_NAME = "fo2-arroyo-player-presentation-cache.json"
 PALETTE_LOGICAL_PATH = "color.pal"
+CRITTER_WEAPON_ART_SUFFIXES = "adefghij"
+EQUIPPED_GEOMETRY_DISPOSITION = (
+    "owned-critter-frm-composites-player-and-spear-no-separable-3d-weapon-transform"
+)
+LIVE_3D_PRESENTATION_SCHEMA = "opennv-classic-humanoid-role-donor/v1"
+LIVE_3D_PRESENTATION_AUTHORITY = (
+    "fo2-source-role-to-owned-fnv-presentation-donor"
+)
+LIVE_3D_PRESENTATION_OUTFIT_FORM_ID = "0003307c"
 
 
 def default_recipe_path() -> Path:
@@ -45,6 +55,8 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _load_recipe(path: Path) -> dict[str, Any]:
     recipe = _load_json(path)
     player = recipe.get("player")
+    equipped = player.get("equippedWeapon") if isinstance(player, dict) else None
+    live_3d = player.get("live3dPresentation") if isinstance(player, dict) else None
     if (
         recipe.get("schema") != RECIPE_SCHEMA
         or recipe.get("id") != path.stem
@@ -71,6 +83,33 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         or player.get("walkFrmLogicalPath") != "art\\critters\\hmwarrab.frm"
         or player.get("walkFrames") != list(range(8))
         or player.get("walkFps") != 10
+        or not isinstance(live_3d, dict)
+        or live_3d.get("schema") != LIVE_3D_PRESENTATION_SCHEMA
+        or live_3d.get("authority") != LIVE_3D_PRESENTATION_AUTHORITY
+        or live_3d.get("donorGame") != "FalloutNV"
+        or live_3d.get("outfitFormId") != LIVE_3D_PRESENTATION_OUTFIT_FORM_ID
+        or live_3d.get("role") != "Chosen One tribal silhouette donor"
+        or live_3d.get("fullBody") is not True
+        or live_3d.get("requiredBodyRoles")
+        != ["body", "left-hand", "right-hand"]
+        or live_3d.get("retailParity") is not False
+        or not isinstance(equipped, dict)
+        or equipped.get("role") != "Spear-equipped Chosen One source animation"
+        or equipped.get("itemFid") != "0000002a"
+        or equipped.get("itemPid") != "00000007"
+        or equipped.get("weaponAnimationCode") != 4
+        or equipped.get("weaponArtSuffix") != "g"
+        or equipped.get("idleAnimationCode") != "GA"
+        or equipped.get("idleFrmLogicalPath") != "art\\critters\\hmwarrga.frm"
+        or equipped.get("idleFrame") != 0
+        or equipped.get("walkAnimationCode") != "GB"
+        or equipped.get("walkFrmLogicalPath") != "art\\critters\\hmwarrgb.frm"
+        or equipped.get("walkFrames") != list(range(8))
+        or equipped.get("walkFps") != 10
+        or equipped.get("geometryDisposition") != EQUIPPED_GEOMETRY_DISPOSITION
+        or not isinstance(player.get("relief3d"), dict)
+        or player["relief3d"].get("schema") != RELIEF_SCHEMA
+        or player["relief3d"].get("mode") != RELIEF_MODE
         or not isinstance(recipe.get("unsupported"), list)
         or not recipe["unsupported"]
     ):
@@ -194,7 +233,86 @@ def prepare_fo2_player_presentation(
                 for direction in player["directions"]
                 for frame in player["walkFrames"]
             ]
-            artifacts = idle_artifacts + walk_artifacts
+            equipped = player["equippedWeapon"]
+            weapon_code = int(equipped["weaponAnimationCode"])
+            if (
+                weapon_code >= len(CRITTER_WEAPON_ART_SUFFIXES)
+                or CRITTER_WEAPON_ART_SUFFIXES[weapon_code]
+                != equipped["weaponArtSuffix"]
+            ):
+                raise Fo1ProfileError(
+                    "Fallout 2 Spear PRO animation code no longer resolves weapon art suffix g"
+                )
+            equipped_idle_path = (
+                f"art\\critters\\{art_base}{equipped['idleAnimationCode'].casefold()}.frm"
+            )
+            if equipped_idle_path != equipped["idleFrmLogicalPath"]:
+                raise Fo1ProfileError("Fallout 2 player GA equipped-idle path drifted")
+            equipped_idle_frm = resolver.read(equipped_idle_path)
+            equipped_idle_decoded = decode_frm(equipped_idle_frm.data, colors)
+            if (
+                equipped_idle_decoded["framesPerDirection"] <= equipped["idleFrame"]
+                or len(equipped_idle_decoded["directions"]) != len(player["directions"])
+            ):
+                raise Fo1ProfileError(
+                    "Fallout 2 player GA equipped-idle direction/frame contract drifted"
+                )
+            equipped_idle_artifacts = [
+                _save_admitted_frame(
+                    kind="player-equipped",
+                    logical_path=equipped_idle_path,
+                    source=equipped_idle_frm,
+                    colors=colors,
+                    rotation=direction,
+                    frame_index=equipped["idleFrame"],
+                    staging=staging,
+                )
+                for direction in player["directions"]
+            ]
+            equipped_walk_path = (
+                f"art\\critters\\{art_base}{equipped['walkAnimationCode'].casefold()}.frm"
+            )
+            if equipped_walk_path != equipped["walkFrmLogicalPath"]:
+                raise Fo1ProfileError("Fallout 2 player GB equipped-walk path drifted")
+            equipped_walk_frm = resolver.read(equipped_walk_path)
+            equipped_walk_decoded = decode_frm(equipped_walk_frm.data, colors)
+            if (
+                equipped_walk_decoded["fps"] != equipped["walkFps"]
+                or equipped_walk_decoded["framesPerDirection"]
+                != len(equipped["walkFrames"])
+                or equipped_walk_decoded["actionFrame"] != 0
+                or len(equipped_walk_decoded["directions"])
+                != len(player["directions"])
+            ):
+                raise Fo1ProfileError(
+                    "Fallout 2 player GB equipped-walk animation contract drifted"
+                )
+            equipped_walk_artifacts = [
+                _save_admitted_frame(
+                    kind="player-equipped-walk",
+                    logical_path=equipped_walk_path,
+                    source=equipped_walk_frm,
+                    colors=colors,
+                    rotation=direction,
+                    frame_index=frame,
+                    staging=staging,
+                )
+                for direction in player["directions"]
+                for frame in equipped["walkFrames"]
+            ]
+            artifacts = (
+                idle_artifacts
+                + walk_artifacts
+                + equipped_idle_artifacts
+                + equipped_walk_artifacts
+            )
+            for artifact in artifacts:
+                artifact["relief3d"] = derive_relief(
+                    staging,
+                    artifact,
+                    player["relief3d"],
+                    output_folder="player-relief3d",
+                )
 
         resources = [
             {
@@ -275,6 +393,43 @@ def prepare_fo2_player_presentation(
                 "admittedDirections": player["directions"],
                 "animationPlayback": True,
             },
+            "live3dPresentation": player["live3dPresentation"],
+            "equippedWeaponArt": {
+                "role": equipped["role"],
+                "itemFid": equipped["itemFid"],
+                "itemPid": equipped["itemPid"],
+                "weaponAnimationCode": equipped["weaponAnimationCode"],
+                "weaponArtSuffix": equipped["weaponArtSuffix"],
+                "geometryDisposition": equipped["geometryDisposition"],
+                "idle": {
+                    "animationCode": equipped["idleAnimationCode"],
+                    "logicalPath": equipped_idle_path,
+                    "source": equipped_idle_frm.source,
+                    "bytes": len(equipped_idle_frm.data),
+                    "sha256": equipped_idle_frm.sha256,
+                    "fps": equipped_idle_decoded["fps"],
+                    "actionFrame": equipped_idle_decoded["actionFrame"],
+                    "framesPerDirection": equipped_idle_decoded["framesPerDirection"],
+                    "decodedDirections": len(equipped_idle_decoded["directions"]),
+                    "admittedFrame": equipped["idleFrame"],
+                    "admittedDirections": player["directions"],
+                    "animationPlayback": False,
+                },
+                "walk": {
+                    "animationCode": equipped["walkAnimationCode"],
+                    "logicalPath": equipped_walk_path,
+                    "source": equipped_walk_frm.source,
+                    "bytes": len(equipped_walk_frm.data),
+                    "sha256": equipped_walk_frm.sha256,
+                    "fps": equipped_walk_decoded["fps"],
+                    "actionFrame": equipped_walk_decoded["actionFrame"],
+                    "framesPerDirection": equipped_walk_decoded["framesPerDirection"],
+                    "decodedDirections": len(equipped_walk_decoded["directions"]),
+                    "admittedFrames": equipped["walkFrames"],
+                    "admittedDirections": player["directions"],
+                    "animationPlayback": True,
+                },
+            },
             "palette": {
                 "logicalPath": palette.logical_path,
                 "source": palette.source,
@@ -288,6 +443,9 @@ def prepare_fo2_player_presentation(
                 "sourceResources": len(resources),
                 "idleDirectionArtifacts": len(idle_artifacts),
                 "walkFrameArtifacts": len(walk_artifacts),
+                "equippedIdleDirectionArtifacts": len(equipped_idle_artifacts),
+                "equippedWalkFrameArtifacts": len(equipped_walk_artifacts),
+                "closedReliefArtifacts": len(artifacts),
             },
             "promotion": {
                 "transported": True,
@@ -300,9 +458,9 @@ def prepare_fo2_player_presentation(
             "runtimeCompatibility": {
                 "ready": False,
                 "firstSliceBlocker": (
-                    "Six exact owned HMWARR idle directions and the 6x8 AB walk frames are "
-                    "decoded, but this cache alone does not provide character creation, "
-                    "gameplay, or save state."
+                    "Exact owned HMWARR unarmed AA/AB and Spear-equipped GA/GB states are "
+                    "decoded, but FO2's composited FRMs provide no separable 3D weapon "
+                    "transform; this cache alone does not provide gameplay or save state."
                 ),
             },
             "cachePolicy": {

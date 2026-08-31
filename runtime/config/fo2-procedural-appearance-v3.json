@@ -25,9 +25,9 @@
     "mouthStyleId": "neutral"
   },
   "faceShapes": [
-    { "id": "round", "halfWidth": 41.0, "halfHeight": 42.0, "taper": 0.0, "headScale": [1.08, 0.92, 1.0] },
-    { "id": "oval", "halfWidth": 35.0, "halfHeight": 48.0, "taper": 0.0, "headScale": [0.94, 1.08, 1.0] },
-    { "id": "angular", "halfWidth": 38.0, "halfHeight": 46.0, "taper": 0.42, "headScale": [1.0, 1.02, 0.94] }
+    { "id": "round", "halfWidth": 41.0, "halfHeight": 42.0, "taper": 0.0, "headScale": [1.08, 0.92, 1.0], "nativeFaceGenControls": { "sRSMShapeOption08": -12.0, "sRSMShapeOption22": -8.0 } },
+    { "id": "oval", "halfWidth": 35.0, "halfHeight": 48.0, "taper": 0.0, "headScale": [0.94, 1.08, 1.0], "nativeFaceGenControls": {} },
+    { "id": "angular", "halfWidth": 38.0, "halfHeight": 46.0, "taper": 0.42, "headScale": [1.0, 1.02, 0.94], "nativeFaceGenControls": { "sRSMShapeOption05": 10.0, "sRSMShapeOption08": 10.0 } }
   ],
   "hairStyles": [
     { "id": "cropped", "hairLineY": 42, "bottomY": 42, "sideMode": "none", "sideInset": 0.0, "sideLength": 0.0, "headGeometry": "cap" },
@@ -50,19 +50,19 @@
     { "id": "green", "portraitColor": "78e781", "headAlbedo": [0.12, 0.42, 0.18, 1.0] }
   ],
   "browStyles": [
-    { "id": "straight", "portraitY": 52, "portraitOuterOffset": 0, "portraitThickness": 1, "liveY": 0.26, "liveRotationRadians": 0.0, "liveWidth": 0.30, "liveThickness": 0.035 },
-    { "id": "arched", "portraitY": 50, "portraitOuterOffset": 2, "portraitThickness": 1, "liveY": 0.29, "liveRotationRadians": 0.20, "liveWidth": 0.32, "liveThickness": 0.03 },
-    { "id": "heavy", "portraitY": 51, "portraitOuterOffset": 0, "portraitThickness": 3, "liveY": 0.25, "liveRotationRadians": 0.0, "liveWidth": 0.34, "liveThickness": 0.07 }
+    { "id": "straight", "portraitY": 52, "portraitOuterOffset": 0, "portraitThickness": 1, "liveY": 0.26, "liveRotationRadians": 0.0, "liveWidth": 0.30, "liveThickness": 0.035, "nativeFaceGenControls": {} },
+    { "id": "arched", "portraitY": 50, "portraitOuterOffset": 2, "portraitThickness": 1, "liveY": 0.29, "liveRotationRadians": 0.20, "liveWidth": 0.32, "liveThickness": 0.03, "nativeFaceGenControls": { "sRSMShapeOption02": -7.0, "sRSMShapeOption03": -10.0 } },
+    { "id": "heavy", "portraitY": 51, "portraitOuterOffset": 0, "portraitThickness": 3, "liveY": 0.25, "liveRotationRadians": 0.0, "liveWidth": 0.34, "liveThickness": 0.07, "nativeFaceGenControls": { "sRSMShapeOption01": 8.0, "sRSMShapeOption22": -10.0 } }
   ],
   "noseStyles": [
-    { "id": "narrow", "portraitWidth": 1, "portraitHeight": 7, "headScale": [0.72, 1.0, 0.88] },
-    { "id": "standard", "portraitWidth": 2, "portraitHeight": 7, "headScale": [1.0, 1.0, 1.0] },
-    { "id": "broad", "portraitWidth": 4, "portraitHeight": 6, "headScale": [1.38, 0.92, 1.12] }
+    { "id": "narrow", "portraitWidth": 1, "portraitHeight": 7, "headScale": [0.72, 1.0, 0.88], "nativeFaceGenControls": { "sRSMShapeOption47": -8.0, "sRSMShapeOption48": 12.0 } },
+    { "id": "standard", "portraitWidth": 2, "portraitHeight": 7, "headScale": [1.0, 1.0, 1.0], "nativeFaceGenControls": {} },
+    { "id": "broad", "portraitWidth": 4, "portraitHeight": 6, "headScale": [1.38, 0.92, 1.12], "nativeFaceGenControls": { "sRSMShapeOption47": 10.0, "sRSMShapeOption48": -12.0 } }
   ],
   "mouthStyles": [
-    { "id": "small", "portraitWidth": 14, "portraitThickness": 2, "liveWidth": 0.30, "liveHeight": 0.035 },
-    { "id": "neutral", "portraitWidth": 22, "portraitThickness": 2, "liveWidth": 0.46, "liveHeight": 0.04 },
-    { "id": "wide", "portraitWidth": 30, "portraitThickness": 3, "liveWidth": 0.64, "liveHeight": 0.045 }
+    { "id": "small", "portraitWidth": 14, "portraitThickness": 2, "liveWidth": 0.30, "liveHeight": 0.035, "nativeFaceGenControls": { "sRSMShapeOption36": 12.0 } },
+    { "id": "neutral", "portraitWidth": 22, "portraitThickness": 2, "liveWidth": 0.46, "liveHeight": 0.04, "nativeFaceGenControls": {} },
+    { "id": "wide", "portraitWidth": 30, "portraitThickness": 3, "liveWidth": 0.64, "liveHeight": 0.045, "nativeFaceGenControls": { "sRSMShapeOption35": 6.0, "sRSMShapeOption36": -12.0 } }
   ],
   "live3d": {
     "viewport": [192, 192],
@@ -76,12 +76,15 @@
     "mouthZ": 0.69,
     "featureDepth": 0.04,
     "yawAmplitudeRadians": 0.09,
-    "yawCyclesPerSecond": 0.08
+    "yawCyclesPerSecond": 0.08,
+    "nativeMorphWeightScale": 0.1
   },
-  "boundary": "asset-free-local-procedural-extension-not-retail-face-geometry",
+  "boundary": "asset-free-local-semantics-projected-through-owned-fnv-facegen-non-parity",
   "unsupported": [
     "retail Fallout 2 face or head parity",
     "owned portrait pixels or proprietary head geometry",
-    "facial morph animation, asymmetry, texture selection, and body customization"
+    "exact retail Fallout 2 face identity",
+    "hair geometry switching and iris-only color masks",
+    "facial asymmetry and texture-basis authoring"
   ]
 }

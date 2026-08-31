@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
@@ -15,11 +16,13 @@ if str(TOOLS) not in sys.path:
 
 from compiler_provenance import (  # noqa: E402
     FAMILIES,
+    actor_route_manifest,
     compiler_identities,
     compiler_provenance_source_paths,
 )
 from prepare_legal_assets import reusable_families  # noqa: E402
 from gltf_io import compiler_sources_sha256  # noqa: E402
+from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 def _write_json(path: Path, document: object) -> str:
@@ -40,6 +43,95 @@ class CompilerProvenanceTest(unittest.TestCase):
         self.assertNotIn("opening_catalog.py", paths["cell"])
         self.assertIn("actor_catalog.py", paths["actor"])
         self.assertNotIn("actor_catalog.py", paths["cell"])
+        self.assertNotIn("open-nv-runtime-v1.json", paths["actor"])
+        self.assertIn("open-nv-runtime-v1.json", paths["cell"])
+        self.assertNotIn("goodsprings-doc-mitchell-house-v1.json", paths["actor"])
+        self.assertIn("goodsprings-doc-mitchell-actor-v1.json", paths["actor"])
+
+    def test_actor_identity_binds_scoped_configuration(self):
+        actor = compiler_identities()["families"]["actor"]
+        self.assertEqual(
+            actor["actorArtifactConfigurationSha256"],
+            load_runtime_configuration().actor_artifact_manifest()["sha256"],
+        )
+        self.assertEqual(actor["actorRouteSha256"], actor_route_manifest()["sha256"])
+
+    def test_non_actor_cell_fields_do_not_change_actor_route_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tools = root / "tools"
+            recipes = root / "recipes"
+            tools.mkdir()
+            recipes.mkdir()
+            primary = {
+                "id": "primary",
+                "actorRecipes": ["actor-a", "actor-b"],
+                "linkedCellRecipes": [{"recipe": "linked"}],
+                "selection": {"modelPrefixes": ["architecture\\\\"]},
+            }
+            _write_json(recipes / "primary.json", primary)
+            _write_json(
+                recipes / "linked.json",
+                {"id": "linked", "actorRecipes": ["actor-c"]},
+            )
+            for actor_id in ("actor-a", "actor-b", "actor-c"):
+                _write_json(recipes / f"{actor_id}.json", {"id": actor_id})
+            with mock.patch(
+                "compiler_provenance._roots",
+                return_value=(tools, recipes),
+            ):
+                baseline = actor_route_manifest("primary")
+                primary["selection"] = {"modelPrefixes": ["clutter\\\\"]}
+                _write_json(recipes / "primary.json", primary)
+                changed = actor_route_manifest("primary")
+            self.assertEqual(changed["sha256"], baseline["sha256"])
+
+    def test_actor_route_and_recipe_changes_invalidate_actor_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tools = root / "tools"
+            recipes = root / "recipes"
+            tools.mkdir()
+            recipes.mkdir()
+            primary = {
+                "id": "primary",
+                "actorRecipes": ["actor-a", "actor-b"],
+                "linkedCellRecipes": [{"recipe": "linked"}],
+            }
+            _write_json(recipes / "primary.json", primary)
+            _write_json(
+                recipes / "linked.json",
+                {"id": "linked", "actorRecipes": ["actor-c"]},
+            )
+            for actor_id in ("actor-a", "actor-b", "actor-c", "actor-d"):
+                _write_json(recipes / f"{actor_id}.json", {"id": actor_id})
+            with mock.patch(
+                "compiler_provenance._roots",
+                return_value=(tools, recipes),
+            ):
+                baseline = actor_route_manifest("primary")["sha256"]
+                primary["actorRecipes"].reverse()
+                _write_json(recipes / "primary.json", primary)
+                reordered = actor_route_manifest("primary")["sha256"]
+                primary["actorRecipes"].reverse()
+                _write_json(recipes / "primary.json", primary)
+                primary["actorRecipes"].pop()
+                _write_json(recipes / "primary.json", primary)
+                removed = actor_route_manifest("primary")["sha256"]
+                primary["actorRecipes"] = ["actor-a", "actor-b", "actor-d"]
+                _write_json(recipes / "primary.json", primary)
+                added = actor_route_manifest("primary")["sha256"]
+                primary["actorRecipes"] = ["actor-a", "actor-b"]
+                _write_json(recipes / "primary.json", primary)
+                _write_json(
+                    recipes / "actor-a.json",
+                    {"id": "actor-a", "artifactInput": "changed"},
+                )
+                recipe_changed = actor_route_manifest("primary")["sha256"]
+            self.assertNotEqual(reordered, baseline)
+            self.assertNotEqual(removed, baseline)
+            self.assertNotEqual(added, baseline)
+            self.assertNotEqual(recipe_changed, baseline)
 
     def test_opening_only_payload_change_changes_only_opening_and_actor_hashes(self):
         family_paths = {
@@ -89,9 +181,22 @@ class CompilerProvenanceTest(unittest.TestCase):
                 {"compiler": identities["families"]["cell"]},
             )
             opening = root / "opening.json"
+            preview_set = root / "player-facegen-preview-set.json"
+            preview_set_hash = _write_json(
+                preview_set,
+                {"schema": "opennv-owned-player-facegen-preview-set/v3"},
+            )
             opening_hash = _write_json(
                 opening,
-                {"compiler": identities["families"]["opening"]},
+                {
+                    "compiler": identities["families"]["opening"],
+                    "outputs": {
+                        "playerFaceGenPreviewSet": {
+                            "path": str(preview_set),
+                            "sha256": preview_set_hash,
+                        },
+                    },
+                },
             )
             actor = root / "actor.json"
             actor_hash = _write_json(
@@ -125,6 +230,8 @@ class CompilerProvenanceTest(unittest.TestCase):
                     ],
                     "openingManifest": str(opening),
                     "openingManifestSha256": opening_hash,
+                    "openingPlayerFaceGenPreviewSet": str(preview_set),
+                    "openingPlayerFaceGenPreviewSetSha256": preview_set_hash,
                     "actorScenes": str(actor_set),
                     "actorScenesSha256": actor_set_hash,
                 },
@@ -141,6 +248,25 @@ class CompilerProvenanceTest(unittest.TestCase):
                 actor_recipe_ids=("actor",),
             )
             self.assertTrue(all(baseline.values()))
+
+            stale_preview = copy.deepcopy(prior)
+            stale_preview["outputs"][
+                "openingPlayerFaceGenPreviewSetSha256"
+            ] = "0" * 64
+            self.assertEqual(
+                reusable_families(
+                    stale_preview,
+                    install,
+                    identities,
+                    require_cell=True,
+                    require_actor=True,
+                    cell_recipe_id="primary",
+                    linked_recipe_ids=("linked",),
+                    actor_recipe_ids=("actor",),
+                ),
+                {"static": True, "opening": False, "cell": True, "actor": True},
+            )
+
             changed["families"]["opening"]["sha256"] = "b" * 64
             changed["families"]["actor"]["sha256"] = "c" * 64
             plan = reusable_families(

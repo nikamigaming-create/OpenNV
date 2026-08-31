@@ -35,19 +35,29 @@ internal partial class Fo1MainMenu : CanvasLayer
         Fo1MainMenuNumericContracts.PresentationFloat0Point82f,
         Fo1MainMenuNumericContracts.PresentationFloat0Point22f);
     private string _startPresentation = string.Empty;
+    private bool _continueAvailable;
 
+    internal event Action? ContinueRequested;
     internal event Action? NewGameRequested;
     internal event Action? ExitRequested;
 
-    internal void Configure(string startPresentation)
+    internal void Configure(string startPresentation, bool continueAvailable)
     {
         if (startPresentation is not "hex-tactical" and not "first-person")
             throw new ArgumentException(
                 "Fallout 1 front end requires hex-tactical or first-person presentation.",
                 nameof(startPresentation));
         _startPresentation = startPresentation;
+        _continueAvailable = continueAvailable;
         Name = "Fallout1MainMenu";
         Layer = Fo1MainMenuNumericContracts.PresentationInt109;
+    }
+
+    internal void RequestContinueForHeadlessProof()
+    {
+        if (!_continueAvailable)
+            throw new InvalidOperationException("Fallout 1 Continue proof requires a menu-visible saved game.");
+        ContinueRequested?.Invoke();
     }
 
     public override void _Ready()
@@ -94,6 +104,14 @@ internal partial class Fo1MainMenu : CanvasLayer
         subtitle.HorizontalAlignment = HorizontalAlignment.Center;
         stack.AddChild(subtitle);
 
+        Button? continueGame = null;
+        if (_continueAvailable)
+        {
+            continueGame = BuildMenuButton("CONTINUE");
+            continueGame.Pressed += () => ContinueRequested?.Invoke();
+            stack.AddChild(continueGame);
+        }
+
         var newGame = BuildMenuButton("NEW GAME");
         newGame.Pressed += () => NewGameRequested?.Invoke();
         stack.AddChild(newGame);
@@ -110,7 +128,7 @@ internal partial class Fo1MainMenu : CanvasLayer
         var exit = BuildMenuButton("EXIT");
         exit.Pressed += () => ExitRequested?.Invoke();
         stack.AddChild(exit);
-        newGame.GrabFocus();
+        (continueGame ?? newGame).GrabFocus();
     }
 
     private static Button BuildMenuButton(string text)

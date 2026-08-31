@@ -25,6 +25,7 @@ from fo1_frm import decode_frm, decode_frm_frame, palette_rgba_bytes
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError
 from fo2_first_slice import PROFILE_SCHEMA, _archive_paths
+from fo2_frm_relief import RELIEF_MODE, RELIEF_SCHEMA, derive_relief
 from plugin_stack import file_sha256
 from prepare_fo2_temple_presentation import _save_admitted_frame
 
@@ -32,6 +33,8 @@ from prepare_fo2_temple_presentation import _save_admitted_frame
 RECIPE_SCHEMA = "opennv-fo2-character-start-recipe/v1"
 CACHE_SCHEMA = "opennv-fo2-character-start-cache/v1"
 CACHE_MANIFEST_NAME = "fo2-character-start-cache.json"
+RELIEF_DEPTH_METERS = 0.12
+RELIEF_SIDE_ROUGHNESS = 0.86
 SPECIAL_NAMES = [
     "Strength",
     "Perception",
@@ -91,6 +94,10 @@ MVE_TIMESTAMP_DECIMAL_DIGITS = 9
 SHA256_HEX_LENGTH = 64
 FO2_OPENING_HANDOFF_ARRIVAL_TILE = 28707
 OPENING_RECIPE_MATCH_COUNT = 1
+CRITTER_WEAPON_ART_SUFFIXES = "adefghij"
+EQUIPPED_GEOMETRY_DISPOSITION = (
+    "owned-critter-frm-composites-player-and-spear-no-separable-3d-weapon-transform"
+)
 
 
 def default_recipe_path() -> Path:
@@ -119,6 +126,7 @@ def _load_recipe(path: Path) -> dict[str, Any]:
     recipe = _load_json(path)
     premades = recipe.get("premades")
     female = recipe.get("femalePresentation")
+    equipped = female.get("equippedWeapon") if isinstance(female, dict) else None
     presentation = recipe.get("presentation")
     inventory = recipe.get("inventory")
     opening = recipe.get("openingTail")
@@ -135,6 +143,8 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         and len(opening["fadeConfig"]["sha256"]) == SHA256_HEX_LENGTH
         and isinstance(opening.get("video"), dict)
         and opening["video"].get("sourceFrameNumbersOneBased") is True
+        and opening["video"].get("playbackStartFrame")
+        == MVE_SOURCE_FRAME_NUMBER_ORIGIN
         and opening["video"].get("tailStartFrame")
         == opening.get("fade", {}).get("startFrame")
         and isinstance(opening.get("audio"), dict)
@@ -187,6 +197,24 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         or female.get("walkLogicalPath") != "art\\critters\\hfprimab.frm"
         or female.get("walkFrames") != list(range(8))
         or female.get("walkFps") != 10
+        or not isinstance(equipped, dict)
+        or equipped.get("itemFid") != "0000002a"
+        or equipped.get("itemPid") != "00000007"
+        or equipped.get("weaponAnimationCode") != 4
+        or equipped.get("weaponArtSuffix") != "g"
+        or equipped.get("idleAnimationCode") != "GA"
+        or equipped.get("idleLogicalPath") != "art\\critters\\hfprimga.frm"
+        or equipped.get("idleFrame") != 0
+        or equipped.get("walkAnimationCode") != "GB"
+        or equipped.get("walkLogicalPath") != "art\\critters\\hfprimgb.frm"
+        or equipped.get("walkFrames") != list(range(8))
+        or equipped.get("walkFps") != 10
+        or equipped.get("geometryDisposition") != EQUIPPED_GEOMETRY_DISPOSITION
+        or not isinstance(female.get("relief3d"), dict)
+        or female["relief3d"].get("schema") != RELIEF_SCHEMA
+        or female["relief3d"].get("mode") != RELIEF_MODE
+        or female["relief3d"].get("depthMeters") != RELIEF_DEPTH_METERS
+        or female["relief3d"].get("sideRoughness") != RELIEF_SIDE_ROUGHNESS
         or not isinstance(presentation, dict)
         or presentation.get("viewport") != [640, 480]
         or presentation.get("panel") != [24, 20, 592, 260]
@@ -455,7 +483,7 @@ def prepare_fo2_character_start(
                 opaque=True,
             )
             opening_tail = None
-            tail_frames = []
+            opening_frames = []
             if "openingTail" in recipe:
                 opening_recipe = recipe["openingTail"]
                 opening_movie = _verified(resolver, opening_recipe["movie"])
@@ -476,16 +504,26 @@ def prepare_fo2_character_start(
                     opening_recipe["audio"],
                 )
                 source_frame_count = int(opening_recipe["video"]["sourceFrameCount"])
-                tail_start_frame = int(opening_recipe["video"]["tailStartFrame"])
-                tail_frame_count = (
-                    source_frame_count - tail_start_frame + MVE_SOURCE_FRAME_NUMBER_ORIGIN
+                playback_start_frame = int(
+                    opening_recipe["video"]["playbackStartFrame"]
                 )
-                decoded_start_index = tail_start_frame - MVE_SOURCE_FRAME_NUMBER_ORIGIN
-                if tail_frame_count <= 0 or opening_fade["startFrame"] != tail_start_frame:
-                    raise Fo1ProfileError("Fallout 2 Elder tail range is invalid")
-                tail_directory = staging / "assets" / "opening-tail"
-                tail_directory.mkdir(parents=True)
-                frame_pattern = tail_directory / (
+                tail_start_frame = int(opening_recipe["video"]["tailStartFrame"])
+                playback_frame_count = (
+                    source_frame_count
+                    - playback_start_frame
+                    + MVE_SOURCE_FRAME_NUMBER_ORIGIN
+                )
+                decoded_start_index = (
+                    playback_start_frame - MVE_SOURCE_FRAME_NUMBER_ORIGIN
+                )
+                if (
+                    playback_frame_count != source_frame_count
+                    or opening_fade["startFrame"] != tail_start_frame
+                ):
+                    raise Fo1ProfileError("Fallout 2 Elder playback range is invalid")
+                opening_directory = staging / "assets" / "opening"
+                opening_directory.mkdir(parents=True)
+                frame_pattern = opening_directory / (
                     f"frame-%0{MVE_FRAME_FILENAME_DIGITS}d.png"
                 )
                 frame_command = [
@@ -503,17 +541,17 @@ def prepare_fo2_character_start(
                     "-fps_mode",
                     "passthrough",
                     "-start_number",
-                    str(tail_start_frame),
+                    str(playback_start_frame),
                     str(frame_pattern),
                 ]
                 if subprocess.run(frame_command, check=False).returncode != MVE_FFMPEG_SUCCESS:
-                    raise Fo1ProfileError("Fallout 2 Elder tail frame decode failed")
-                frame_paths = sorted(tail_directory.glob("frame-*.png"))
-                if len(frame_paths) != tail_frame_count:
-                    raise Fo1ProfileError("Fallout 2 Elder tail frame count drifted")
-                tail_frames = []
+                    raise Fo1ProfileError("Fallout 2 Elder frame decode failed")
+                frame_paths = sorted(opening_directory.glob("frame-*.png"))
+                if len(frame_paths) != playback_frame_count:
+                    raise Fo1ProfileError("Fallout 2 Elder frame count drifted")
+                opening_frames = []
                 for offset, frame_path in enumerate(frame_paths):
-                    source_frame = tail_start_frame + offset
+                    source_frame = playback_start_frame + offset
                     expected_name = (
                         f"frame-{source_frame:0{MVE_FRAME_FILENAME_DIGITS}d}.png"
                     )
@@ -524,10 +562,10 @@ def prepare_fo2_character_start(
                         opening_probe["height"],
                     ):
                         raise Fo1ProfileError(
-                            "Fallout 2 Elder tail frame identity or dimensions drifted"
+                            "Fallout 2 Elder frame identity or dimensions drifted"
                         )
                     relative = frame_path.relative_to(staging).as_posix()
-                    tail_frames.append(
+                    opening_frames.append(
                         {
                             "sourceFrame": source_frame,
                             "png": relative,
@@ -535,9 +573,11 @@ def prepare_fo2_character_start(
                             "pngSha256": file_sha256(frame_path),
                         }
                     )
-                terminal_hash = tail_frames[-MVE_SOURCE_FRAME_NUMBER_ORIGIN]["pngSha256"]
+                terminal_hash = opening_frames[-MVE_SOURCE_FRAME_NUMBER_ORIGIN][
+                    "pngSha256"
+                ]
                 terminal_repeated_from = source_frame_count
-                for frame in reversed(tail_frames):
+                for frame in reversed(opening_frames):
                     if frame["pngSha256"] != terminal_hash:
                         break
                     terminal_repeated_from = frame["sourceFrame"]
@@ -550,8 +590,8 @@ def prepare_fo2_character_start(
                 )
                 frame_period = Fraction(frame_rate_denominator, frame_rate_numerator)
                 audio_start = frame_period * decoded_start_index
-                audio_duration = frame_period * tail_frame_count
-                audio_path = staging / "assets" / "opening-tail" / "elder-tail.wav"
+                audio_duration = frame_period * playback_frame_count
+                audio_path = staging / "assets" / "opening" / "elder.wav"
                 audio_command = [
                     ffmpeg,
                     "-hide_banner",
@@ -610,12 +650,13 @@ def prepare_fo2_character_start(
                         "frameRateNumerator": frame_rate_numerator,
                         "frameRateDenominator": frame_rate_denominator,
                         "sourceFrameNumbersOneBased": True,
+                        "playbackStartFrame": playback_start_frame,
+                        "playbackFrameCount": playback_frame_count,
                         "tailStartFrame": tail_start_frame,
-                        "tailFrameCount": tail_frame_count,
                         "terminalFrame": source_frame_count,
                         "terminalFramePngSha256": terminal_hash,
                         "terminalFrameRepeatedFrom": terminal_repeated_from,
-                        "frames": tail_frames,
+                        "frames": opening_frames,
                     },
                     "audio": {
                         "wav": audio_path.relative_to(staging).as_posix(),
@@ -756,6 +797,93 @@ def prepare_fo2_character_start(
                 for direction in female["directions"]
                 for frame in female["walkFrames"]
             ]
+            equipped = female["equippedWeapon"]
+            weapon_code = int(equipped["weaponAnimationCode"])
+            if (
+                weapon_code >= len(CRITTER_WEAPON_ART_SUFFIXES)
+                or CRITTER_WEAPON_ART_SUFFIXES[weapon_code]
+                != equipped["weaponArtSuffix"]
+            ):
+                raise Fo1ProfileError(
+                    "Fallout 2 female Spear animation code no longer resolves suffix g"
+                )
+            equipped_idle_path = (
+                f"art\\critters\\{art_base}{equipped['idleAnimationCode'].casefold()}.frm"
+            )
+            if equipped_idle_path != equipped["idleLogicalPath"]:
+                raise Fo1ProfileError("Fallout 2 female GA equipped-idle path drifted")
+            female_equipped_idle_frm = resolver.read(equipped_idle_path)
+            female_equipped_idle_decoded = decode_frm(
+                female_equipped_idle_frm.data,
+                colors,
+            )
+            if (
+                female_equipped_idle_decoded["framesPerDirection"]
+                <= equipped["idleFrame"]
+                or len(female_equipped_idle_decoded["directions"])
+                != len(female["directions"])
+            ):
+                raise Fo1ProfileError(
+                    "Fallout 2 female GA equipped-idle contract drifted"
+                )
+            female_equipped_idle_artifacts = [
+                _save_admitted_frame(
+                    kind="female-player-equipped",
+                    logical_path=equipped_idle_path,
+                    source=female_equipped_idle_frm,
+                    colors=colors,
+                    rotation=direction,
+                    frame_index=equipped["idleFrame"],
+                    staging=staging,
+                )
+                for direction in female["directions"]
+            ]
+            equipped_walk_path = (
+                f"art\\critters\\{art_base}{equipped['walkAnimationCode'].casefold()}.frm"
+            )
+            if equipped_walk_path != equipped["walkLogicalPath"]:
+                raise Fo1ProfileError("Fallout 2 female GB equipped-walk path drifted")
+            female_equipped_walk_frm = resolver.read(equipped_walk_path)
+            female_equipped_walk_decoded = decode_frm(
+                female_equipped_walk_frm.data,
+                colors,
+            )
+            if (
+                female_equipped_walk_decoded["fps"] != equipped["walkFps"]
+                or female_equipped_walk_decoded["framesPerDirection"]
+                != len(equipped["walkFrames"])
+                or female_equipped_walk_decoded["actionFrame"] != 0
+                or len(female_equipped_walk_decoded["directions"])
+                != len(female["directions"])
+            ):
+                raise Fo1ProfileError(
+                    "Fallout 2 female GB equipped-walk contract drifted"
+                )
+            female_equipped_walk_artifacts = [
+                _save_admitted_frame(
+                    kind="female-player-equipped-walk",
+                    logical_path=equipped_walk_path,
+                    source=female_equipped_walk_frm,
+                    colors=colors,
+                    rotation=direction,
+                    frame_index=frame,
+                    staging=staging,
+                )
+                for direction in female["directions"]
+                for frame in equipped["walkFrames"]
+            ]
+            for artifact in (
+                female_artifacts
+                + female_walk_artifacts
+                + female_equipped_idle_artifacts
+                + female_equipped_walk_artifacts
+            ):
+                artifact["relief3d"] = derive_relief(
+                    staging,
+                    artifact,
+                    female["relief3d"],
+                    output_folder="female-player-relief3d",
+                )
 
         resources = [
             {
@@ -831,6 +959,41 @@ def prepare_fo2_character_start(
                     "directions": female_walk_artifacts,
                     "animationPlayback": True,
                 },
+                "equippedWeaponArt": {
+                    "itemFid": equipped["itemFid"],
+                    "itemPid": equipped["itemPid"],
+                    "weaponAnimationCode": equipped["weaponAnimationCode"],
+                    "weaponArtSuffix": equipped["weaponArtSuffix"],
+                    "geometryDisposition": equipped["geometryDisposition"],
+                    "idle": {
+                        "animationCode": equipped["idleAnimationCode"],
+                        "logicalPath": equipped_idle_path,
+                        "source": female_equipped_idle_frm.source,
+                        "sourceBytes": len(female_equipped_idle_frm.data),
+                        "sourceSha256": female_equipped_idle_frm.sha256,
+                        "fps": female_equipped_idle_decoded["fps"],
+                        "actionFrame": female_equipped_idle_decoded["actionFrame"],
+                        "framesPerDirection": female_equipped_idle_decoded[
+                            "framesPerDirection"
+                        ],
+                        "directions": female_equipped_idle_artifacts,
+                        "animationPlayback": False,
+                    },
+                    "walk": {
+                        "animationCode": equipped["walkAnimationCode"],
+                        "logicalPath": equipped_walk_path,
+                        "source": female_equipped_walk_frm.source,
+                        "sourceBytes": len(female_equipped_walk_frm.data),
+                        "sourceSha256": female_equipped_walk_frm.sha256,
+                        "fps": female_equipped_walk_decoded["fps"],
+                        "actionFrame": female_equipped_walk_decoded["actionFrame"],
+                        "framesPerDirection": female_equipped_walk_decoded[
+                            "framesPerDirection"
+                        ],
+                        "directions": female_equipped_walk_artifacts,
+                        "animationPlayback": True,
+                    },
+                },
             },
             "resources": resources,
             "counts": {
@@ -838,6 +1001,16 @@ def prepare_fo2_character_start(
                 "uiPngs": 2 + len(characters),
                 "femaleDirectionPngs": len(female_artifacts),
                 "femaleWalkFramePngs": len(female_walk_artifacts),
+                "femaleEquippedIdleDirectionPngs": len(
+                    female_equipped_idle_artifacts
+                ),
+                "femaleEquippedWalkFramePngs": len(
+                    female_equipped_walk_artifacts
+                ),
+                "femaleClosedReliefArtifacts": len(female_artifacts)
+                + len(female_walk_artifacts)
+                + len(female_equipped_idle_artifacts)
+                + len(female_equipped_walk_artifacts),
                 "sourceResources": len(resources),
             },
             "promotion": {
@@ -850,9 +1023,9 @@ def prepare_fo2_character_start(
             "runtimeCompatibility": {
                 "ready": False,
                 "firstSliceBlocker": (
-                    "The three owned premades, inventory background, and female idle/AB walk "
-                    "art are decoded, but selection, handoff, and persistence are runtime "
-                    "responsibilities."
+                    "The three owned premades, inventory background, and female unarmed "
+                    "AA/AB plus Spear-equipped GA/GB states are decoded; the composited "
+                    "FRM has no separable 3D weapon transform."
                 ),
             },
             "cachePolicy": {
@@ -864,7 +1037,7 @@ def prepare_fo2_character_start(
         }
         if opening_tail is not None:
             document["openingTail"] = opening_tail
-            document["counts"]["openingTailPngs"] = len(tail_frames)
+            document["counts"]["openingTailPngs"] = len(opening_frames)
         atomic_json(staging / CACHE_MANIFEST_NAME, document)
         os.replace(staging, output_root)
         return document

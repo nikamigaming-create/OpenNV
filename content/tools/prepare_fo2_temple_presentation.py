@@ -13,7 +13,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from corpus_io import atomic_json
 from fo1_frm import decode_frm_frame, palette_rgba_bytes
@@ -28,11 +28,13 @@ from fo2_first_slice import (
     _load_recipe,
     default_recipe_path,
 )
+from fo2_temple_transitions import SCHEMA as TRANSITION_SCHEMA, compile_fo2_temple_transitions
 from plugin_stack import file_sha256
 
 
 CACHE_SCHEMA = "opennv-fo2-temple-presentation-cache/v1"
 CACHE_MANIFEST_NAME = "fo2-temple-presentation-cache.json"
+TRANSITION_MANIFEST_NAME = "fo2-temple-transitions.json"
 PALETTE_LOGICAL_PATH = "color.pal"
 TILE_LIST_LOGICAL_PATH = "art\\tiles\\tiles.lst"
 TILE_ID_MASK = 0x0FFF
@@ -201,6 +203,7 @@ def prepare_fo2_map_presentation(
     map_name: str = "ARTEMPLE.MAP",
     map_logical_path: str = "maps\\artemple.map",
     map_label: str = "Temple",
+    cache_enricher: Callable[[Path, dict[str, Any], dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     profile_path = profile_path.resolve()
     source_manifest_path = source_manifest_path.resolve()
@@ -470,6 +473,8 @@ def prepare_fo2_map_presentation(
             },
             "retailOrDerivedAssetsPackaged": False,
         }
+        if cache_enricher is not None:
+            cache_enricher(staging, document, source_manifest)
         atomic_json(staging / cache_manifest_name, document)
         os.replace(staging, output_root)
         return document
@@ -489,7 +494,55 @@ def prepare_fo2_temple_presentation(
         source_manifest_path,
         output_root,
         recipe_path,
+        cache_enricher=lambda staging, document, source: _emit_temple_transition_output(
+            staging,
+            document,
+            source,
+            profile_path=profile_path,
+            source_manifest_path=source_manifest_path,
+        ),
     )
+
+
+def _emit_temple_transition_output(
+    staging: Path,
+    document: dict[str, Any],
+    source_manifest: dict[str, Any],
+    *,
+    profile_path: Path,
+    source_manifest_path: Path,
+) -> None:
+    """Publish the transition compiler output bound to this exact cache source."""
+    profile_path = profile_path.resolve()
+    source_manifest_path = source_manifest_path.resolve()
+    transition = compile_fo2_temple_transitions(profile_path, source_manifest_path)
+    source_descriptor = transition.get("sourceManifest", {})
+    profile_descriptor = transition.get("sourceProfile", {})
+    if (
+        transition.get("schema") != TRANSITION_SCHEMA
+        or transition.get("status") != "compiled-owned-transition-records"
+        or source_descriptor.get("file") != str(source_manifest_path)
+        or source_descriptor.get("sha256") != document["sourceManifest"]["sha256"]
+        or profile_descriptor.get("file") != str(profile_path)
+        or profile_descriptor.get("sourceProfileId") != document["sourceProfile"]["sourceProfileId"]
+        or profile_descriptor.get("sha256") != document["sourceProfile"]["sha256"]
+        or source_manifest.get("sourceProfile", {}).get("sourceProfileId")
+        != document["sourceProfile"]["sourceProfileId"]
+    ):
+        raise Fo1ProfileError(
+            "Fallout 2 Temple transition output does not bind the cache source/profile."
+        )
+    transition_path = staging / TRANSITION_MANIFEST_NAME
+    atomic_json(transition_path, transition)
+    document["outputs"] = {
+        "templeTransitions": {
+            "file": TRANSITION_MANIFEST_NAME,
+            "sha256": file_sha256(transition_path),
+            "sourceManifestSha256": document["sourceManifest"]["sha256"],
+            "sourceProfileSha256": document["sourceProfile"]["sha256"],
+            "sourceProfileId": document["sourceProfile"]["sourceProfileId"],
+        }
+    }
 
 
 def main() -> int:

@@ -5,7 +5,8 @@ param(
     [string]$FalloutNewVegasData = "",
     [string]$ExpectedMeshesBsaSha256 = "",
     [string]$RetailLogicalPath = "",
-    [string]$Fo1HexScene = ""
+    [string]$Fo1HexScene = "",
+    [string]$ClassicHumanoidInstallManifest = ""
 )
 
 # Immutable diagnostic/acceptance contracts; runtime policy is configuration-owned.
@@ -47,7 +48,7 @@ $TestGodotRuntimeContract7 = 7
 $TestGodotRuntimeContract80 = 80
 $TestGodotRuntimeContract87903 = 87903
 $DemonstratedCombatKillPaths = 4
-$CampaignSaveSchema = "opennv-campaign-save/v6"
+$CampaignSaveSchema = "opennv-campaign-save/v7"
 
 
 $ErrorActionPreference = "Stop"
@@ -60,6 +61,8 @@ $solution = Join-Path $runtimeRoot "OpenNV.sln"
 $exporter = Join-Path $contentRoot "tools\export_static_nif_gltf.py"
 $preparer = Join-Path $contentRoot "tools\prepare_legal_assets.py"
 $reportValidator = Join-Path $contentRoot "tools\validate_runtime_report.py"
+$classicHumanoidPreflight = Join-Path $PSScriptRoot "Assert-ClassicHumanoidDonorPreviewSet.ps1"
+$classicHumanoidResolver = Join-Path $PSScriptRoot "Resolve-ClassicHumanoidDonorPreviewSet.ps1"
 $runtimeConfigurationPath = Join-Path $runtimeRoot "config\open-nv-runtime-v1.json"
 $RuntimeConfigurationJsonDepth = 100
 $runtimeConfiguration = Get-Content -Raw -LiteralPath $runtimeConfigurationPath |
@@ -93,6 +96,17 @@ foreach ($path in @($Godot, $solution, $exporter, $preparer, $reportValidator, (
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Missing OpenNV Godot gate input: $path"
     }
+}
+$fo1DonorArguments = @()
+if (-not [string]::IsNullOrWhiteSpace($Fo1HexScene)) {
+    if ([string]::IsNullOrWhiteSpace($ClassicHumanoidInstallManifest)) {
+        throw "Fallout 1 tactical proof requires -ClassicHumanoidInstallManifest; no substitute player body is admitted."
+    }
+    $classicHumanoidDonorPreviewSet = & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+    if ($LASTEXITCODE -ne 0) { throw "Classic humanoid install-manifest resolution failed." }
+    & $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
+    if ($LASTEXITCODE -ne 0) { throw "Classic humanoid donor preflight failed." }
+    $fo1DonorArguments = @("--classic-humanoid-donor-preview-set", $classicHumanoidDonorPreviewSet)
 }
 
 $sourceRoots = @(
@@ -163,7 +177,8 @@ if (-not [string]::IsNullOrWhiteSpace($Fo1HexScene)) {
     $fo1Save = Join-Path ([IO.Path]::GetTempPath()) ("opennv-fo1-tactical-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
     try {
         $fo1Output = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
-            --fo1-hex-scene $fo1Scene --fo1-tactical-proof --save-path $fo1Save --report $fo1Report 2>&1
+            --fo1-hex-scene $fo1Scene @fo1DonorArguments `
+            --fo1-tactical-proof --save-path $fo1Save --report $fo1Report 2>&1
         $fo1Text = $fo1Output | Out-String
         if ($LASTEXITCODE -ne 0 -or $fo1Text -notmatch "OPENNV_FO1_TACTICAL_PROOF_PASS" -or
             $fo1Text -match "(?m)^ERROR:") {
@@ -379,6 +394,7 @@ $retailSidecar = ""
 $temporaryCache = ""
 $poolPracticeValidated = $false
 $flatControlsValidated = $false
+$worldPickupValidated = $false
 try {
 if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
     $resolvedFalloutData = Resolve-OwnedDataRoot `
@@ -527,10 +543,33 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
         & python $reportValidator --mode flat-controls --report $flatReport `
             --install-manifest (Join-Path $temporaryCache "install-manifest.json")
         if ($LASTEXITCODE -ne 0) { throw "OpenNV flat controls report is invalid." }
-        $flatControlsValidated = $true
+    $flatControlsValidated = $true
     }
     finally {
         foreach ($path in @($flatReport, $flatSave)) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+    }
+
+    $pickupReport = Join-Path ([IO.Path]::GetTempPath()) ("opennv-world-pickup-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $pickupSave = Join-Path ([IO.Path]::GetTempPath()) ("opennv-world-pickup-save-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    try {
+        $pickupOutput = & $Godot --headless --xr-mode off --path $runtimeRoot -- `
+            --cell-scene ([string]$install.outputs.cellScene) `
+            --save-path $pickupSave --world-interaction-proof --report $pickupReport 2>&1
+        $pickupText = $pickupOutput | Out-String
+        if ($LASTEXITCODE -ne 0 -or
+            $pickupText -notmatch "OPENNV_WORLD_PICKUP_PASS" -or
+            $pickupText -match "(?m)^ERROR:") {
+            throw "OpenNV world pickup gate failed:`n$pickupText"
+        }
+        & python $reportValidator --mode world-pickup --report $pickupReport `
+            --install-manifest (Join-Path $temporaryCache "install-manifest.json")
+        if ($LASTEXITCODE -ne 0) { throw "OpenNV world pickup report is invalid." }
+        $worldPickupValidated = $true
+    }
+    finally {
+        foreach ($path in @($pickupReport, $pickupSave)) {
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
         }
     }
@@ -563,6 +602,9 @@ if (-not [string]::IsNullOrWhiteSpace($FalloutNewVegasData)) {
                 -not [bool]$pool.cueMounted -or
                 -not [bool]$pool.strikeAccepted -or
                 [int]$pool.cueBallBallCollisions -lt 1 -or
+                -not [bool]$pool.pocketDetected -or
+                -not [bool]$pool.pocketSaveRestored -or
+                -not [bool]$pool.liveStateRestoredFromColdSave -or
                 -not [bool]$pool.authoredReset -or
                 [bool]$pool.hardwareValidated) {
                 throw "OpenNV pool practice report is invalid ($Label): $poolReport"
@@ -620,6 +662,7 @@ $result = [pscustomobject][ordered]@{
     poolFlatPractice = $poolPracticeValidated
     poolOpenXrLayout = $poolPracticeValidated
     flatControls = $flatControlsValidated
+    worldPickup = $worldPickupValidated
     openXrHardwareValidated = $false
     syntheticSourceSha256 = [string]$fixture.sourceSha256
     retailSourceSha256 = if ($null -eq $retail) { "not-requested" } else { [string]$retail.sourceSha256 }

@@ -28,11 +28,17 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
     private IReadOnlyDictionary<string, string> _displayNames = null!;
     private Func<IReadOnlyDictionary<string, int>> _inventory = null!;
     private Func<string> _equippedSymbol = null!;
+    private Func<string, bool> _equip = null!;
+    private Func<string, bool> _use = null!;
     private Action _close = null!;
+    private string _rangedSymbol = "";
+    private string _meleeSymbol = "";
     private TextureRect _selectedIcon = null!;
     private Label _selectedText = null!;
     private TextureRect _item1 = null!;
     private TextureRect _item2 = null!;
+    private Button _rangedHandButton = null!;
+    private Button _meleeHandButton = null!;
     private IReadOnlyList<KeyValuePair<string, int>> _rows = [];
     private int _scrollOffset;
     private int _selectedIndex;
@@ -41,6 +47,7 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
     internal Key PhysicalKey => _assets.PhysicalKey;
     internal int OpenedCount { get; private set; }
     internal int ClosedCount { get; private set; }
+    internal int EquipmentChangedCount { get; private set; }
     internal int VisibleStackCount => _rows.Count;
     internal string SelectedSymbol => _rows.Count == 0
         ? ""
@@ -53,6 +60,10 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
         IReadOnlyDictionary<string, string> displayNames,
         Func<IReadOnlyDictionary<string, int>> inventory,
         Func<string> equippedSymbol,
+        string rangedSymbol,
+        string meleeSymbol,
+        Func<string, bool> equip,
+        Func<string, bool> use,
         Action close)
     {
         profile.Validate();
@@ -60,7 +71,18 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
         _displayNames = displayNames;
         _inventory = inventory;
         _equippedSymbol = equippedSymbol;
+        _rangedSymbol = rangedSymbol;
+        _meleeSymbol = meleeSymbol;
+        _equip = equip;
+        _use = use;
         _close = close;
+        if (rangedSymbol == meleeSymbol ||
+            !assets.ItemInventoryBySymbol.ContainsKey(rangedSymbol) ||
+            !assets.ItemInventoryBySymbol.ContainsKey(meleeSymbol) ||
+            !displayNames.ContainsKey(rangedSymbol) ||
+            !displayNames.ContainsKey(meleeSymbol))
+            throw new InvalidOperationException(
+                "Fallout classic inventory active-hand symbols are not source-backed inventory items.");
         Name = "OwnedFallout1ClassicInventory";
         MouseFilter = MouseFilterEnum.Stop;
         ProcessMode = ProcessModeEnum.Always;
@@ -111,6 +133,18 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
             Fo1ClassicInventoryScreenNumericContracts.SelectedItemFontSize);
         _item1 = AddItemSurface(frame, assets.Layout.Item1);
         _item2 = AddItemSurface(frame, assets.Layout.Item2);
+        _rangedHandButton = AddButton(
+            frame,
+            assets.Layout.Item1,
+            $"Equip {_displayNames[_rangedSymbol]} in active hand");
+        _rangedHandButton.Name = "OwnedInventoryRangedHandButton";
+        _rangedHandButton.Pressed += () => Equip(_rangedSymbol);
+        _meleeHandButton = AddButton(
+            frame,
+            assets.Layout.Item2,
+            $"Equip {_displayNames[_meleeSymbol]} in active hand");
+        _meleeHandButton.Name = "OwnedInventoryMeleeHandButton";
+        _meleeHandButton.Pressed += () => Equip(_meleeSymbol);
 
         var done = AddButton(frame, assets.Layout.Done, "Close inventory (Escape)");
         done.Name = "OwnedInventoryDoneButton";
@@ -161,11 +195,63 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
         closedCount = ClosedCount,
         visibleStackCount = VisibleStackCount,
         selectedSymbol = SelectedSymbol,
+        activeHandSymbol = _equippedSymbol(),
+        rangedHandSymbol = _rangedSymbol,
+        meleeHandSymbol = _meleeSymbol,
+        equipmentChangedCount = EquipmentChangedCount,
         input = PhysicalKey.ToString(),
         hudButton = true,
         escapeClose = true,
-        gameplayMutation = false,
+        gameplayMutation = "source-symbol-equipment-only",
     };
+
+    internal void SelectSourceInventorySymbolForProof(string symbol)
+    {
+        if (!Visible)
+            throw new InvalidOperationException(
+                "Fallout classic inventory selection requires the owned inventory screen.");
+        var index = _rows.ToList().FindIndex(row => row.Key == symbol && row.Value > 0);
+        if (index < 0)
+            throw new InvalidOperationException(
+                $"Fallout classic inventory has no source-backed stack for selection: {symbol}.");
+        _scrollOffset = Math.Clamp(
+            index,
+            0,
+            Math.Max(0, _rows.Count - _assets.Layout.VisibleRows));
+        Refresh();
+        var slot = index - _scrollOffset;
+        if (slot < 0 || slot >= _rowButtons.Count || _rowButtons[slot].Disabled)
+            throw new InvalidOperationException(
+                $"Fallout classic inventory row control is unavailable for {symbol}.");
+        _rowButtons[slot].EmitSignal(Button.SignalName.Pressed);
+        if (SelectedSymbol != symbol)
+            throw new InvalidOperationException(
+                $"Fallout classic inventory row control selected the wrong source stack: {symbol}.");
+    }
+
+    internal void EquipSourceActiveHandForProof(string symbol)
+    {
+        if (!Visible || SelectedSymbol != symbol)
+            throw new InvalidOperationException(
+                "Fallout classic inventory active-hand selection requires its selected source stack.");
+        var button = symbol == _rangedSymbol
+            ? _rangedHandButton
+            : symbol == _meleeSymbol
+                ? _meleeHandButton
+                : throw new InvalidOperationException(
+                    $"Fallout classic inventory stack is not an active-hand source weapon: {symbol}.");
+        button.EmitSignal(Button.SignalName.Pressed);
+    }
+
+    internal void UseSelectedSourceInventoryForProof()
+    {
+        if (!Visible || string.IsNullOrWhiteSpace(SelectedSymbol))
+            throw new InvalidOperationException(
+                "Fallout classic inventory use requires a selected owned source stack.");
+        if (!_use(SelectedSymbol))
+            throw new InvalidOperationException(
+                $"Fallout classic inventory selected stack has no admitted source use: {SelectedSymbol}.");
+    }
 
     private void BuildRows(Control frame)
     {
@@ -302,16 +388,20 @@ internal sealed partial class Fo1ClassicInventoryScreen : Control
         _selectedText.Text =
             $"{_displayNames[selected.Key].ToUpperInvariant()}\n" +
             $"COUNT {selected.Value}";
-        var ranged = _assets.ItemInventoryBySymbol.ContainsKey("PID_10MM_PISTOL")
-            ? _assets.ItemInventory("PID_10MM_PISTOL").Load()
-            : null;
-        var melee = _assets.ItemInventoryBySymbol.ContainsKey("PID_KNIFE")
-            ? _assets.ItemInventory("PID_KNIFE").Load()
-            : null;
-        _item1.Texture = ranged;
-        _item2.Texture = melee;
+        _item1.Texture = _assets.ItemInventory(_rangedSymbol).Load();
+        _item2.Texture = _assets.ItemInventory(_meleeSymbol).Load();
         if (selected.Key == _equippedSymbol())
             _selectedText.Text += "\nACTIVE HAND";
+    }
+
+    private void Equip(string symbol)
+    {
+        if (!Visible || !_rows.Any(row => row.Key == symbol && row.Value > 0))
+            throw new InvalidOperationException(
+                $"Fallout classic inventory cannot equip an unavailable stack: {symbol}.");
+        if (_equip(symbol))
+            EquipmentChangedCount++;
+        Refresh();
     }
 
     private static TextureRect AddItemSurface(Control parent, Fo1HudRect rect)

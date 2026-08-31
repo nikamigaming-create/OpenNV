@@ -9,9 +9,6 @@ internal static class Fo2ArroyoCavesRenderProof
     private const int ExpectedWidth = 1280;
     private const int ExpectedHeight = 720;
     private const int WarmupFrames = 8;
-    private const double MinimumLuminanceDeviation = 0.015;
-    private const int MinimumNonBackgroundPixels = 1000;
-    private static readonly Color BackgroundColor = new("05080d");
 
     internal static async Task Run(
         Node3D host,
@@ -23,6 +20,8 @@ internal static class Fo2ArroyoCavesRenderProof
             if (DisplayServer.GetName() == "headless")
                 throw new InvalidOperationException(
                     "Fallout 2 Arroyo Caves render proof requires a rendering display driver.");
+            DisplayServer.WindowSetTitle(
+                "OpenNV • Fallout 2 • Arroyo Caves • bounded proof");
             var output = Path.GetFullPath(captureRoot);
             if (Directory.Exists(output) || File.Exists(output))
                 throw new InvalidOperationException(
@@ -30,7 +29,7 @@ internal static class Fo2ArroyoCavesRenderProof
             Directory.CreateDirectory(output);
 
             VerifySceneIdentity(coverage);
-            BuildPresentation(host, coverage.ArrivalWorldMeters);
+            BuildCamera(host, coverage.ArrivalWorldMeters, coverage.Molded3D.Profile.StaticCapture);
             for (var frame = 0; frame < WarmupFrames; frame++)
                 await host.ToSignal(
                     RenderingServer.Singleton,
@@ -39,7 +38,10 @@ internal static class Fo2ArroyoCavesRenderProof
             var framePath = Path.Combine(output, "arroyo-caves-arrival.png");
             var image = host.GetViewport().GetTexture().GetImage();
             image.Convert(Image.Format.Rgba8);
-            var metrics = Analyze(image);
+            var capture = coverage.Molded3D.Profile.StaticCapture;
+            var metrics = Analyze(
+                image,
+                coverage.Molded3D.Profile.Atmosphere.BackgroundColor);
             var error = image.SavePng(framePath);
             if (error != Error.Ok)
                 throw new InvalidOperationException(
@@ -48,17 +50,19 @@ internal static class Fo2ArroyoCavesRenderProof
             var frameSha256 = Convert.ToHexString(SHA256.HashData(frameStream)).ToLowerInvariant();
             var failure = metrics.Width != ExpectedWidth || metrics.Height != ExpectedHeight
                 ? "unexpected-size"
-                : metrics.LuminanceDeviation < MinimumLuminanceDeviation
+                : metrics.LuminanceDeviation < capture.MinimumLuminanceDeviation
                     ? "luminance-deviation"
-                    : metrics.NonBackgroundPixels < MinimumNonBackgroundPixels
+                    : metrics.NonBackgroundPixels < capture.MinimumNonBackgroundPixels
                         ? "source-pixels-not-visible"
+                        : metrics.BackgroundPixelFraction > capture.MaximumBackgroundPixelFraction
+                            ? "clear-background-coverage"
                         : null;
             var report = new
             {
-                schema = "opennv-fo2-arroyo-caves-native-render-proof/v1",
+                schema = "opennv-fo2-arroyo-caves-native-render-proof/v3",
                 status = failure is null
-                    ? "pass-rendered-owned-map-presentation-no-player-or-gameplay"
-                    : "fail-rendered-owned-map-presentation",
+                    ? "pass-source-bound-molded-3d-construction-frame-presentation-unaccepted"
+                    : "fail-source-bound-molded-3d-construction-frame",
                 campaign = "Fallout2",
                 slice = "ArroyoCaves",
                 renderer = RenderingServer.GetCurrentRenderingMethod(),
@@ -73,6 +77,19 @@ internal static class Fo2ArroyoCavesRenderProof
                     mapSha256 = coverage.MapSha256,
                     transitionManifestSha256 = coverage.SourceTransitionSha256,
                     walkMaskSha256 = coverage.WalkMaskSha256,
+                    exactElevationZeroCoverage = new
+                    {
+                        nonDefaultFloorPatches = coverage.Molded3D.SourceFloorPatches,
+                        floorBoundaryEdges = coverage.Molded3D.SourceFloorBoundaryEdges,
+                        topLevelObjects = coverage.Molded3D.SourceTopLevelObjects,
+                        objectTypes = coverage.Molded3D.SourceObjectTypes,
+                        wallObjects = coverage.Molded3D.SourceWallObjects,
+                        uniqueWallTiles = coverage.Molded3D.UniqueWallTiles,
+                        wallComponents = coverage.Molded3D.WallComponents,
+                        largestWallComponentTiles =
+                            coverage.Molded3D.LargestWallComponentTiles,
+                        wallBoundaryEdges = coverage.Molded3D.WallBoundaryEdges,
+                    },
                 },
                 arrival = new
                 {
@@ -95,6 +112,74 @@ internal static class Fo2ArroyoCavesRenderProof
                     sourcePixelsPerMeter = coverage.SourcePixelsPerMeter,
                     walkableHexes = coverage.WalkableHexes,
                     arrivalComponentHexes = coverage.ArrivalComponentHexes,
+                    moldedFloorPatches = coverage.Molded3D.MoldedFloorPatches,
+                    moldedFloorTriangles = coverage.Molded3D.MoldedFloorTriangles,
+                    moldedFloorMeshes = coverage.Molded3D.MoldedFloorMeshes,
+                    floorBoundaryClosureTriangles =
+                        coverage.Molded3D.FloorBoundaryClosureTriangles,
+                    floorBoundaryClosureMeshes = coverage.Molded3D.FloorBoundaryClosureMeshes,
+                    sourceWallComponents = coverage.Molded3D.WallComponents,
+                    fusedCaveShellComponents = coverage.Molded3D.CaveShellComponents,
+                    caveShellWallObjects = coverage.Molded3D.CaveShellWallObjects,
+                    sourceFrmStonePostInstances = coverage.Molded3D.StonePostInstances,
+                    fusedWallTriangles = coverage.Molded3D.WallTriangles,
+                    fusedWallMeshInstances = coverage.Molded3D.WallMeshInstances,
+                    ceilingClosure = coverage.Molded3D.Profile.WallGeometry.CeilingClosure,
+                    componentMeshMode =
+                        coverage.Molded3D.Profile.WallGeometry.ComponentMeshMode,
+                    hiddenWallSpriteCards = coverage.Molded3D.HiddenWallSpriteCards,
+                    hiddenNonWallBlockCards =
+                        coverage.Molded3D.HiddenNonWallBlockCards,
+                    hiddenSourceMarkerCards = coverage.Molded3D.HiddenSourceMarkerCards,
+                    visibleSourceProps = coverage.Molded3D.VisibleSourceProps,
+                    groundedSourceProps = coverage.Molded3D.GroundedSourceProps,
+                    maximumGroundErrorMeters =
+                        coverage.Molded3D.MaximumGroundErrorMeters,
+                    visibleSourceTorchProps = coverage.Molded3D.VisibleSourceTorchProps,
+                    sourceTorchPostLayeredAssemblies =
+                        coverage.Molded3D.SourceTorchPostLayeredAssemblies,
+                    sourceMapLightRecords = coverage.Molded3D.SourceMapLightRecords,
+                    sourceMapLights = coverage.Molded3D.SourceMapLights,
+                    sourceTorchMotivatedMapLights =
+                        coverage.Molded3D.SourceTorchMotivatedMapLights,
+                    sourceWalkMaskUnchanged = coverage.Molded3D.SourceWalkMaskUnchanged,
+                },
+                presentation = new
+                {
+                    recipe = coverage.Molded3D.Profile.ResourcePath,
+                    recipeSha256 = coverage.Molded3D.Profile.Sha256,
+                    recipeId = coverage.Molded3D.Profile.Id,
+                    worldSpaceMaterial = coverage.Molded3D.WorldSpaceMaterialContract,
+                    ownedFrmSurfaces = new
+                    {
+                        textureSha256 = coverage.Molded3D.SourceWallTextureSha256,
+                        normalTextureSha256 =
+                            coverage.Molded3D.SourceWallNormalTextureSha256,
+                        floorTextureSha256 = coverage.Molded3D.SourceFloorTextureSha256,
+                        floorNormalTextureSha256 =
+                            coverage.Molded3D.SourceFloorNormalTextureSha256,
+                        provenanceSha256 = coverage.Molded3D.SourceWallProvenanceSha256,
+                        sourceWallObjects = coverage.Molded3D.SourceWallObjects,
+                        sourceWallArtifacts = coverage.Molded3D.SourceWallMaterialArtifacts,
+                        opaqueSourceWallArtifacts =
+                            coverage.Molded3D.OpaqueSourceWallMaterialArtifacts,
+                        sourceFloorPatches = coverage.Molded3D.SourceFloorPatches,
+                        sourceFloorArtifacts = coverage.Molded3D.SourceFloorMaterialArtifacts,
+                        distributionAllowed = false,
+                    },
+                    depthFogEnabled = true,
+                    sourcePlacedPracticalLights = coverage.Molded3D.SourceMapLights,
+                    generatedAssetLane = new
+                    {
+                        used = coverage.Molded3D.GeneratedAssetsUsed,
+                        trellisCandidatesAdmitted =
+                            coverage.Molded3D.Profile.GeneratedAssetLane
+                                .TrellisCandidatesAdmitted,
+                        ownedOrGeneratedMeshesPackaged =
+                            coverage.Molded3D.Profile.GeneratedAssetLane
+                                .OwnedOrGeneratedMeshesPackaged,
+                        reason = coverage.Molded3D.Profile.GeneratedAssetLane.Reason,
+                    },
                 },
                 frame = new
                 {
@@ -106,19 +191,33 @@ internal static class Fo2ArroyoCavesRenderProof
                     meanLuminance = metrics.MeanLuminance,
                     luminanceDeviation = metrics.LuminanceDeviation,
                     nonBackgroundPixels = metrics.NonBackgroundPixels,
-                    visualGatePassed = failure is null,
-                    visualGateFailure = failure,
+                    backgroundPixels = metrics.BackgroundPixels,
+                    backgroundPixelFraction = metrics.BackgroundPixelFraction,
+                    frameIntegrityGatePassed = failure is null,
+                    frameIntegrityGateFailure = failure,
+                    presentationVisualGatePassed = false,
+                    presentationVisualBlockers =
+                        coverage.Molded3D.Profile.Promotion.PresentationBlockers,
                 },
                 promotion = new
                 {
                     transported = true,
-                    rendered = failure is null,
+                    constructionFrameRendered = failure is null,
+                    presentationAccepted = false,
                     interactive = false,
                     retailParityReviewed = false,
                     playerSpawned = false,
                     gameplayImplemented = false,
                     saveImplemented = false,
                     launcherPlayable = false,
+                    pairReady = false,
+                    fo1QualityParity = false,
+                },
+                cinematicHandoff = new
+                {
+                    reviewed = false,
+                    verdict = "not-claimed-static-arrival-only",
+                    reason = "No owned movie frame or control-release sequence is part of this static PNG proof.",
                 },
                 windowsAppControlUsed = false,
                 foregroundActivationUsed = false,
@@ -131,13 +230,13 @@ internal static class Fo2ArroyoCavesRenderProof
                     System.Environment.NewLine);
             if (failure is null)
                 GD.Print(
-                    $"OPENNV_FO2_ARROYO_RENDER_PASS map={coverage.MapIndex} " +
+                    $"OPENNV_FO2_ARROYO_CONSTRUCTION_CAPTURE_PASS map={coverage.MapIndex} " +
                     $"elevation={coverage.Elevation} arrival={coverage.ArrivalTile} " +
                     $"floors={coverage.ConstructedFloorPatches} " +
                     $"objects={coverage.PlacedTopLevelObjects} output={output}");
             else
                 GD.PushError(
-                    $"OPENNV_FO2_ARROYO_RENDER_VISUAL_FAIL failure={failure} output={output}");
+                    $"OPENNV_FO2_ARROYO_CONSTRUCTION_CAPTURE_FAIL failure={failure} output={output}");
             host.GetTree().Quit(failure is null ? 0 : 1);
         }
         catch (Exception exception)
@@ -164,51 +263,56 @@ internal static class Fo2ArroyoCavesRenderProof
             !marker.Rotation.IsEqualApprox(expectedRotation) ||
             !marker.GetMeta("temple_exit_grid_arrival").AsBool() ||
             coverage.ConstructedFloorPatches <= 0 ||
-            coverage.PlacedTopLevelObjects <= 0)
+            coverage.PlacedTopLevelObjects <= 0 ||
+            coverage.Molded3D.SourceFloorPatches != coverage.ConstructedFloorPatches ||
+            coverage.Molded3D.SourceTopLevelObjects != coverage.PlacedTopLevelObjects ||
+            coverage.Molded3D.MoldedFloorPatches != coverage.ConstructedFloorPatches ||
+            coverage.Molded3D.WallMeshInstances != coverage.Molded3D.CaveShellComponents ||
+            coverage.Molded3D.StonePostInstances !=
+                coverage.Molded3D.Profile.WallGeometry.Roles.ExpectedStonePostInstances ||
+            coverage.Molded3D.HiddenWallSpriteCards != coverage.Molded3D.SourceWallObjects ||
+            coverage.Molded3D.VisibleSourceProps != coverage.Molded3D.GroundedSourceProps ||
+            !coverage.Molded3D.SourceWalkMaskUnchanged ||
+            coverage.Molded3D.GeneratedAssetsUsed ||
+            coverage.Molded3D.Profile.Promotion.PairReady ||
+            coverage.Molded3D.Profile.Promotion.Fo1QualityParity)
             throw new InvalidOperationException(
                 "Fallout 2 Arroyo Caves rendered-arrival scene identity drifted.");
     }
 
-    private static void BuildPresentation(Node3D host, Vector3 arrival)
+    private static void BuildCamera(
+        Node3D host,
+        Vector3 arrival,
+        Fo2ArroyoStaticCaptureProfile profile)
     {
-        var environment = new WorldEnvironment
-        {
-            Name = "ARROYO_RENDER_PROOF_ENVIRONMENT",
-            Environment = new Godot.Environment
-            {
-                BackgroundMode = Godot.Environment.BGMode.Color,
-                BackgroundColor = BackgroundColor,
-                AmbientLightSource = Godot.Environment.AmbientSource.Color,
-                AmbientLightColor = Colors.White,
-                AmbientLightEnergy = 1.0f,
-            },
-        };
-        host.AddChild(environment);
         var camera = new Camera3D
         {
-            Name = "ARROYO_EXACT_ARRIVAL_PROOF_CAMERA",
-            Projection = Camera3D.ProjectionType.Orthogonal,
-            Size = 24.0f,
-            Position = arrival + new Vector3(-10.0f, 15.0f, 12.0f),
+            Name = "ARROYO_RECIPE_STATIC_ARRIVAL_CAMERA",
+            Projection = Camera3D.ProjectionType.Perspective,
+            Position = arrival + profile.PositionOffsetMeters,
+            Fov = profile.FovDegrees,
+            Near = profile.NearClipMeters,
+            Far = profile.FarClipMeters,
             Current = true,
         };
         host.AddChild(camera);
-        camera.LookAt(arrival + Vector3.Up * 0.75f, Vector3.Up);
+        camera.LookAt(arrival + profile.FocusOffsetMeters, Vector3.Up);
     }
 
-    private static FrameMetrics Analyze(Image image)
+    private static FrameMetrics Analyze(Image image, Color backgroundColor)
     {
         var data = image.GetData();
         var pixels = image.GetWidth() * image.GetHeight();
         if (pixels <= 0 || data.Length != pixels * 4)
             throw new InvalidOperationException("Fallout 2 Arroyo Caves viewport is empty.");
         var background = new Vector3(
-            BackgroundColor.R * byte.MaxValue,
-            BackgroundColor.G * byte.MaxValue,
-            BackgroundColor.B * byte.MaxValue);
+            backgroundColor.R * byte.MaxValue,
+            backgroundColor.G * byte.MaxValue,
+            backgroundColor.B * byte.MaxValue);
         double luminance = 0.0;
         double luminanceSquared = 0.0;
         var nonBackgroundPixels = 0;
+        var backgroundPixels = 0;
         for (var offset = 0; offset < data.Length; offset += 4)
         {
             var value = (0.2126 * data[offset] + 0.7152 * data[offset + 1] +
@@ -219,6 +323,8 @@ internal static class Fo2ArroyoCavesRenderProof
                 background;
             if (delta.LengthSquared() > 16.0f)
                 nonBackgroundPixels++;
+            else
+                backgroundPixels++;
         }
         var mean = luminance / pixels;
         return new FrameMetrics(
@@ -226,7 +332,9 @@ internal static class Fo2ArroyoCavesRenderProof
             image.GetHeight(),
             mean,
             Math.Sqrt(Math.Max(0.0, luminanceSquared / pixels - mean * mean)),
-            nonBackgroundPixels);
+            nonBackgroundPixels,
+            backgroundPixels,
+            (double)backgroundPixels / pixels);
     }
 
     private static float[] Vector(Vector3 value) => new[] { value.X, value.Y, value.Z };
@@ -236,5 +344,7 @@ internal static class Fo2ArroyoCavesRenderProof
         int Height,
         double MeanLuminance,
         double LuminanceDeviation,
-        int NonBackgroundPixels);
+        int NonBackgroundPixels,
+        int BackgroundPixels,
+        double BackgroundPixelFraction);
 }

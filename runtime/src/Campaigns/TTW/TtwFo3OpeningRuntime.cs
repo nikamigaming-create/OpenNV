@@ -145,6 +145,12 @@ internal sealed record TtwFo3OpeningContract(
         var profileSha256 = ComputeSha256(profileBytes);
         using var document = JsonDocument.Parse(profileBytes);
         var root = document.RootElement;
+        var projection = TtwFo3ProfileProjectionContract.TryLoad(
+            fullPath,
+            profileSha256,
+            root);
+        if (projection is not null)
+            root = projection.OpeningCommandContract;
         if (TtwJson.String(root, "schema") != ExpectedSchema ||
             TtwJson.String(root, "status") != ExpectedStatus ||
             TtwJson.String(root, "campaign") != "Fallout3" ||
@@ -230,10 +236,20 @@ internal sealed record TtwFo3OpeningContract(
             TtwJson.Boolean(cache, "standaloneNewVegasProfileAccepted") ||
             TtwJson.Boolean(cache, "standaloneNewVegasCacheReused"))
             throw new InvalidOperationException("TTW cache/profile isolation differs.");
-        var cacheCompatibilityId = TtwJson.String(cache, "compatibilityId");
+        var commandCacheCompatibilityId = TtwJson.String(cache, "compatibilityId");
         var expectedCacheCompatibilityId = ComputeCacheCompatibilityId(root);
-        if (cacheCompatibilityId != expectedCacheCompatibilityId)
+        if (commandCacheCompatibilityId != expectedCacheCompatibilityId)
             throw new InvalidOperationException("TTW opening cache compatibility ID differs.");
+        projection?.ValidateSourceBinding(
+            sourceProfilePath,
+            sourceProfileSha256,
+            namespacePath,
+            namespaceSha256,
+            pluginStackId,
+            saveCompatibilityId,
+            commandCacheCompatibilityId);
+        var cacheCompatibilityId = projection?.CacheCompatibilityId ??
+            commandCacheCompatibilityId;
 
         var references = LoadReferences(root);
         var stages = LoadStages(root, references);

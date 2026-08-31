@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -55,9 +56,9 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
     private static readonly Color Green = new("78e781");
     private static readonly Color Amber = new("e6c34c");
     private readonly string _sex;
-    private readonly TextureRect _portrait;
-    private readonly Fo1ProceduralHeadPreview _head;
-    private readonly Button _previewMode;
+    private readonly Fo1CustomPortraitPreview _portrait;
+    private readonly Control _controlRoot;
+    private readonly OpeningRaceSexRenderedDeviceHost _reflectron;
     private readonly Label[] _labels =
         new Label[Fo1CustomAppearanceEditorNumericContracts.FeatureCount];
     private int _face;
@@ -65,12 +66,19 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
     private int _skin;
     private int _hairColor;
     private int _eyeColor;
+    private bool _faceFraming = true;
+    private bool _greenProjection;
 
     internal Fo1CustomAppearanceEditor(
         string sex,
+        IReadOnlyDictionary<string, Fo1HexSceneLoader.PlayerPresentationSource> donors,
+        OpeningManifest characterReflectron,
         Fo1CustomAppearanceSelection? current = null)
     {
         _sex = sex;
+        if (!donors.TryGetValue(sex, out var portraitDonor))
+            throw new InvalidOperationException(
+                $"Fallout 1 custom portrait requires its {sex} owned donor.");
         Name = "FO1_HEX_CUSTOM_APPEARANCE_EDITOR";
         Size = new Vector2(
             Fo1CustomAppearanceEditorNumericContracts.EditorWidth,
@@ -94,111 +102,157 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
             Color = Colors.Black,
             MouseFilter = MouseFilterEnum.Stop,
         });
+        var deviceCanvas = new Control
+        {
+            Name = "FO1_SHARED_REFLECTRON_1600X1200",
+            Size = characterReflectron.NewGameFlow.ReferenceCanvasSize,
+            Scale = new Vector2(
+                Size.X / characterReflectron.NewGameFlow.ReferenceCanvasSize.X,
+                Size.Y / characterReflectron.NewGameFlow.ReferenceCanvasSize.Y),
+            MouseFilter = MouseFilterEnum.Stop,
+        };
+        AddChild(deviceCanvas);
+        var renderedDevice = characterReflectron.NewGameFlow.Menus.Values
+            .Select(menu => menu.RenderedDevice)
+            .SingleOrDefault(device => device is not null)
+            ?? throw new InvalidOperationException(
+                "The shared owned opening manifest has no Reflectron device.");
+        var configuration = RuntimeConfiguration.Load();
+        _reflectron = new OpeningRaceSexRenderedDeviceHost(
+            renderedDevice,
+            deviceCanvas,
+            characterReflectron.NewGameFlow.ReferenceCanvasSize,
+            configuration,
+            new CellContentLoader.LightingContract(
+                "fo1-character-reflectron-2.0",
+                new Color("74806f"),
+                new Color("c6d1bb"),
+                new Color("07100b"),
+                0.0f,
+                100000.0f,
+                1.0f,
+                new Vector2(-28.0f, -32.0f),
+                1.0f,
+                []),
+            configuration.World.GameUnitsToMeters);
+        var faceRoot = _reflectron.CreateFacePresentationHost();
+        _controlRoot = _reflectron.CreateMenuPresentationHost(
+            new Rect2(0.0f, 0.0f, 340.0f, 500.0f));
         var title = Text(
-            "CUSTOM PORTRAIT + LIVE 3D HEAD",
-            Fo1CustomAppearanceEditorNumericContracts.TitleX,
-            Fo1CustomAppearanceEditorNumericContracts.TitleY,
-            Fo1CustomAppearanceEditorNumericContracts.TitleWidth,
-            Fo1CustomAppearanceEditorNumericContracts.TitleHeight,
-            Fo1CustomAppearanceEditorNumericContracts.TitleFontSize,
+            "CUSTOM PORTRAIT",
+            8.0f,
+            4.0f,
+            324.0f,
+            30.0f,
+            14,
             Amber);
         title.HorizontalAlignment = HorizontalAlignment.Center;
-        _portrait = new TextureRect
+        _portrait = new Fo1CustomPortraitPreview(sex, portraitDonor)
         {
             Name = "FO1_HEX_CUSTOM_PORTRAIT",
-            Position = new Vector2(
-                Fo1CustomAppearanceEditorNumericContracts.PortraitX,
-                Fo1CustomAppearanceEditorNumericContracts.PortraitY),
-            Size = new Vector2(
-                Fo1CustomAppearanceEditorNumericContracts.PortraitSize,
-                Fo1CustomAppearanceEditorNumericContracts.PortraitSize),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            MouseFilter = MouseFilterEnum.Ignore,
+            Size = faceRoot.Size,
         };
-        AddChild(_portrait);
-        _head = new Fo1ProceduralHeadPreview
-        {
-            Position = _portrait.Position,
-            Size = _portrait.Size,
-        };
-        AddChild(_head);
-        _previewMode = Button(
-            "LIVE 3D",
-            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonX,
-            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonY,
-            Fo1CustomAppearanceEditorNumericContracts.PreviewButtonWidth,
-            Fo1CustomAppearanceEditorNumericContracts.RowButtonWidth,
-            TogglePreview);
-        _previewMode.TooltipText = "Toggle the deterministic green portrait and matching live head";
+        faceRoot.AddChild(_portrait);
 
         var names = new[] { "FACE", "HAIR", "SKIN", "HAIR COLOR", "EYES" };
         for (var row = 0; row < names.Length; row++)
         {
             var captured = row;
-            var y = Fo1CustomAppearanceEditorNumericContracts.RowStartY +
-                row * Fo1CustomAppearanceEditorNumericContracts.RowSpacing;
+            var y = 46.0f + row * 55.0f;
             Text(
                 names[row],
-                Fo1CustomAppearanceEditorNumericContracts.FieldNameX,
+                8.0f,
                 y,
-                Fo1CustomAppearanceEditorNumericContracts.FieldNameWidth,
-                Fo1CustomAppearanceEditorNumericContracts.FieldHeight,
-                Fo1CustomAppearanceEditorNumericContracts.FieldFontSize,
+                92.0f,
+                26.0f,
+                10,
                 Amber);
             Button(
                 "◀",
-                Fo1CustomAppearanceEditorNumericContracts.PreviousButtonX,
+                104.0f,
                 y - 2,
-                Fo1CustomAppearanceEditorNumericContracts.RowButtonWidth,
-                Fo1CustomAppearanceEditorNumericContracts.RowButtonHeight,
+                30.0f,
+                30.0f,
                 () => Change(captured, -1));
             _labels[row] = Text(
                 "",
-                Fo1CustomAppearanceEditorNumericContracts.ValueX,
+                138.0f,
                 y,
-                Fo1CustomAppearanceEditorNumericContracts.ValueWidth,
-                Fo1CustomAppearanceEditorNumericContracts.FieldHeight,
-                Fo1CustomAppearanceEditorNumericContracts.FieldFontSize,
+                158.0f,
+                26.0f,
+                10,
                 Green);
             _labels[row].HorizontalAlignment = HorizontalAlignment.Center;
             Button(
                 "▶",
-                Fo1CustomAppearanceEditorNumericContracts.NextButtonX,
+                300.0f,
                 y - 2,
-                Fo1CustomAppearanceEditorNumericContracts.RowButtonWidth,
-                Fo1CustomAppearanceEditorNumericContracts.RowButtonHeight,
+                30.0f,
+                30.0f,
                 () => Change(captured, 1));
         }
         Text(
-            "HEX EXTENSION • LOCAL GENERATED PORTRAIT • NO RETAIL HEAD GEOMETRY",
-            Fo1CustomAppearanceEditorNumericContracts.BoundaryX,
-            Fo1CustomAppearanceEditorNumericContracts.BoundaryY,
-            Fo1CustomAppearanceEditorNumericContracts.BoundaryWidth,
-            Fo1CustomAppearanceEditorNumericContracts.BoundaryHeight,
-            Fo1CustomAppearanceEditorNumericContracts.BoundaryFontSize,
+            "OWNED DONOR • SHARED REFLECTRON",
+            8.0f,
+            326.0f,
+            324.0f,
+            24.0f,
+            9,
             Green).HorizontalAlignment = HorizontalAlignment.Center;
         Button(
             "USE FACE",
-            Fo1CustomAppearanceEditorNumericContracts.CommitButtonX,
-            Fo1CustomAppearanceEditorNumericContracts.FooterButtonY,
-            Fo1CustomAppearanceEditorNumericContracts.FooterButtonWidth,
-            Fo1CustomAppearanceEditorNumericContracts.FooterButtonHeight,
+            32.0f,
+            366.0f,
+            124.0f,
+            34.0f,
             Commit);
         Button(
             "BACK",
-            Fo1CustomAppearanceEditorNumericContracts.CancelButtonX,
-            Fo1CustomAppearanceEditorNumericContracts.FooterButtonY,
-            Fo1CustomAppearanceEditorNumericContracts.FooterButtonWidth,
-            Fo1CustomAppearanceEditorNumericContracts.FooterButtonHeight,
+            184.0f,
+            366.0f,
+            124.0f,
+            34.0f,
             () => Cancelled?.Invoke());
+        void RefreshProjection()
+        {
+            _portrait.SetPreviewState(_faceFraming, _greenProjection);
+            _reflectron.SetCreatorModeState(
+                _faceFraming ? "FACE" : "BODY",
+                bodyEnabled: !_faceFraming,
+                projectionEnabled: _greenProjection,
+                faceEnabled: _faceFraming);
+        }
+        _reflectron.ConfigureCharacterControls(
+            characterReflectron.Font,
+            () => { },
+            () => { },
+            () => { },
+            () => { },
+            () =>
+            {
+                _faceFraming = true;
+                RefreshProjection();
+            },
+            () =>
+            {
+                _faceFraming = false;
+                RefreshProjection();
+            },
+            () =>
+            {
+                _greenProjection = !_greenProjection;
+                RefreshProjection();
+            });
+        RefreshProjection();
         Refresh();
     }
 
     internal event Action<Fo1CustomAppearanceSelection>? Confirmed;
     internal event Action? Cancelled;
-    internal bool Live3DVisible => _head.Visible;
-    internal Fo1ProceduralHeadPreview Head => _head;
+    internal bool Live3DVisible => !_greenProjection;
+    internal bool GreenPortraitReady => _portrait.ReadyForCapture;
+    internal string PortraitSourceActorFormId => _portrait.SourceActorFormId;
+    internal Image CapturePortrait() => _portrait.CapturePortrait();
 
     internal void SetSelection(Fo1CustomAppearanceSelection selection)
     {
@@ -210,7 +264,12 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
         Refresh();
     }
 
-    internal void TogglePreviewMode() => TogglePreview();
+    internal void ActivateReflectronFaceControl() =>
+        _reflectron.ActivateCreatorModeControl("FACE");
+    internal void ActivateReflectronBodyControl() =>
+        _reflectron.ActivateCreatorModeControl("BODY");
+    internal void TogglePreviewMode() =>
+        _reflectron.ActivateCreatorModeControl("PROJECTION");
     internal void Confirm() => Commit();
 
     private Fo1CustomAppearanceSelection Selection => new(
@@ -246,32 +305,12 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
         Refresh();
     }
 
-    private void TogglePreview()
-    {
-        _head.Visible = !_head.Visible;
-        _portrait.Visible = !_head.Visible;
-        _previewMode.Text = _head.Visible ? "PORTRAIT" : "LIVE 3D";
-    }
-
     private void Commit() => Confirmed?.Invoke(Selection);
 
     private void Refresh()
     {
         var selection = Selection;
-        _portrait.Texture = ImageTexture.CreateFromImage(Fo1ProceduralPortrait.Render(
-            _sex,
-            selection.FaceShapeId,
-            selection.HairStyleId,
-            selection.SkinToneId,
-            selection.HairColorId,
-            selection.EyeColorId));
-        _head.SetIdentity(
-            _sex,
-            selection.FaceShapeId,
-            selection.HairStyleId,
-            selection.SkinToneId,
-            selection.HairColorId,
-            selection.EyeColorId);
+        _portrait.SetSelection(selection);
         _labels[0].Text = selection.FaceShapeId.ToUpperInvariant();
         _labels[1].Text = selection.HairStyleId.ToUpperInvariant();
         _labels[2].Text = selection.SkinToneId.ToUpperInvariant();
@@ -306,7 +345,7 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
         label.AddThemeColorOverride("font_outline_color", Colors.Black);
         label.AddThemeConstantOverride("outline_size", 2);
         label.AddThemeFontSizeOverride("font_size", size);
-        AddChild(label);
+        _controlRoot.AddChild(label);
         return label;
     }
 
@@ -332,7 +371,7 @@ internal sealed partial class Fo1CustomAppearanceEditor : Control
             "font_size",
             Fo1CustomAppearanceEditorNumericContracts.ButtonFontSize);
         button.Pressed += pressed;
-        AddChild(button);
+        _controlRoot.AddChild(button);
         return button;
     }
 

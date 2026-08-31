@@ -26,6 +26,12 @@ internal sealed record OpeningManifest(
 {
     private const string ExpectedSchema = "opennv-owned-opening-manifest/v1";
     private const string ExpectedStatus = "compiled-owned-opening-graph";
+    private const string ExpectedFirstSliceClosureSchema =
+        "opennv-fnv-first-slice-source-closure/v1";
+    private const string ExpectedFirstSliceClosureStatus =
+        "source-accounted-playable-claim-blocked-by-explicit-capability-gap";
+    private const string ExpectedFirstSliceUnsupportedCapability =
+        "non-default-race-hair-eye-live-3d-face-preview";
     private const int VectorComponents = 2;
     private const int RectComponents = 4;
     private const int RgbComponents = 3;
@@ -44,6 +50,38 @@ internal sealed record OpeningManifest(
         configuration.VerifyCompiledConfigurationDescriptor(root.GetProperty("configuration"));
         if (root.GetProperty("blockers").GetArrayLength() != 0)
             throw new InvalidOperationException("Owned opening manifest contains entry blockers.");
+        var sourceClosure = root.GetProperty("sourceClosure");
+        var omitted = sourceClosure.GetProperty("omitted");
+        var previewOmittedSurfaces = sourceClosure.GetProperty("materials")
+            .GetProperty("previewOmittedSurfaces")
+            .GetInt32();
+        var declaredCreatorCapExclusions = omitted.GetArrayLength() > 0 &&
+            omitted.GetArrayLength() == previewOmittedSurfaces &&
+            omitted.EnumerateArray().All(value =>
+                ((value.GetProperty("role").GetString() == "body" &&
+                  value.GetProperty("disposition").GetString() ==
+                    "omit-bsdismember-cap-shape") ||
+                 (value.GetProperty("role").GetString() == "hair" &&
+                  value.GetProperty("disposition").GetString() ==
+                    "omit-nonselected-authored-shape")) &&
+                value.GetProperty("selection").GetProperty("sex").GetString() is
+                    "male" or "female");
+        var validClosureStatus = omitted.GetArrayLength() == 0
+            ? sourceClosure.GetProperty("status").GetString() ==
+                ExpectedFirstSliceClosureStatus
+            : declaredCreatorCapExclusions &&
+                sourceClosure.GetProperty("status").GetString() == "incomplete";
+        if (sourceClosure.GetProperty("schema").GetString() !=
+                ExpectedFirstSliceClosureSchema ||
+            !validClosureStatus ||
+            sourceClosure.GetProperty("playableClaimReady").GetBoolean() ||
+            sourceClosure.GetProperty("unaccountedCount").GetInt32() != 0 ||
+            sourceClosure.GetProperty("unaccounted").GetArrayLength() != 0 ||
+            sourceClosure.GetProperty("unsupported").GetArrayLength() != 1 ||
+            sourceClosure.GetProperty("unsupported")[0].GetString() !=
+                ExpectedFirstSliceUnsupportedCapability)
+            throw new InvalidOperationException(
+                "Owned opening first-slice source closure is inconsistent.");
 
         var entry = root.GetProperty("entryPoint");
         var ui = root.GetProperty("ui");
@@ -314,10 +352,27 @@ internal sealed record OpeningManifest(
         })
         .ToArray();
 
-    private static OwnedPhysicalPipBoy ParsePhysicalPipBoy(JsonElement source)
+    private static OwnedPhysicalDevice ParsePhysicalPipBoy(JsonElement source)
+        => ParseOwnedPhysicalDevice(
+            source,
+            "opennv-owned-physical-pipboy/v1",
+            "meshes\\pipboy3000\\pipboyarm.nif",
+            "buttonGlowSurfaces",
+            new HashSet<string>(
+                new[] { "status", "items", "data" },
+                StringComparer.OrdinalIgnoreCase),
+            "physical Pip-Boy");
+
+    internal static OwnedPhysicalDevice ParseOwnedPhysicalDevice(
+        JsonElement source,
+        string expectedSchema,
+        string expectedLogicalPath,
+        string surfaceRoleProperty,
+        IReadOnlySet<string> requiredSurfaceRoles,
+        string label)
     {
-        if (source.GetProperty("schema").GetString() != "opennv-owned-physical-pipboy/v1")
-            throw new InvalidOperationException("Owned physical Pip-Boy has an unexpected contract.");
+        if (source.GetProperty("schema").GetString() != expectedSchema)
+            throw new InvalidOperationException($"Owned {label} has an unexpected contract.");
         var sourcePath = source.GetProperty("source").GetString()!;
         var sourceSha256 = source.GetProperty("sourceSha256").GetString()!;
         VerifyHash(sourcePath, sourceSha256);
@@ -328,7 +383,7 @@ internal sealed record OpeningManifest(
         if (materialDocument.RootElement.GetProperty("schema").GetString() !=
                 "opennv-static-material-manifest/v1")
             throw new InvalidOperationException(
-                "Owned physical Pip-Boy material manifest has an unexpected contract.");
+                $"Owned {label} material manifest has an unexpected contract.");
         var modelPath = source.GetProperty("model").GetString()!;
         var modelSha256 = source.GetProperty("modelSha256").GetString()!;
         var sidecarPath = source.GetProperty("sidecar").GetString()!;
@@ -356,8 +411,8 @@ internal sealed record OpeningManifest(
                 expectedBufferPath,
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
-                "Owned physical Pip-Boy model/sidecar/buffer identities disagree.");
-        var result = new OwnedPhysicalPipBoy(
+                $"Owned {label} model/sidecar/buffer identities disagree.");
+        var result = new OwnedPhysicalDevice(
             source.GetProperty("logicalPath").GetString()!,
             sourceSha256,
             System.IO.Path.GetFullPath(modelPath),
@@ -369,7 +424,7 @@ internal sealed record OpeningManifest(
             System.IO.Path.GetFullPath(materialManifestPath),
             materialManifestSha256,
             source.GetProperty("screenSurface").GetString()!,
-            source.GetProperty("buttonGlowSurfaces")
+            source.GetProperty(surfaceRoleProperty)
                 .EnumerateObject()
                 .ToDictionary(
                     value => value.Name,
@@ -379,18 +434,18 @@ internal sealed record OpeningManifest(
             source.GetProperty("vertices").GetInt32(),
             source.GetProperty("textures").GetInt32());
         if (!result.LogicalPath.Equals(
-                "meshes\\pipboy3000\\pipboyarm.nif",
+                expectedLogicalPath,
                 StringComparison.OrdinalIgnoreCase) ||
             string.IsNullOrWhiteSpace(result.SourceSha256) ||
             string.IsNullOrWhiteSpace(result.ScreenSurface) ||
-            result.ButtonGlowSurfaces.Count != 3 ||
-            new[] { "status", "items", "data" }.Any(role =>
-                !result.ButtonGlowSurfaces.TryGetValue(role, out var surface) ||
+            result.SurfaceRoles.Count != requiredSurfaceRoles.Count ||
+            requiredSurfaceRoles.Any(role =>
+                !result.SurfaceRoles.TryGetValue(role, out var surface) ||
                 string.IsNullOrWhiteSpace(surface)) ||
             result.Surfaces < 1 ||
             result.Vertices < 1 ||
             result.Textures < 1)
-            throw new InvalidOperationException("Owned physical Pip-Boy presentation is incomplete.");
+            throw new InvalidOperationException($"Owned {label} presentation is incomplete.");
         return result;
     }
 
@@ -408,7 +463,7 @@ internal sealed record OpeningManifest(
         return result;
     }
 
-    private static OwnedBitmapFont ParseFont(JsonElement source)
+    internal static OwnedBitmapFont ParseFont(JsonElement source)
     {
         if (source.GetProperty("schema").GetString() != "opennv-owned-gamebryo-bitmap-font/v1")
             throw new InvalidOperationException("Owned opening font has an unexpected contract.");

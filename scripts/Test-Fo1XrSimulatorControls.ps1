@@ -8,6 +8,8 @@ param(
     [string]$SimulatorRuntimeManifest,
     [Parameter(Mandatory = $true)]
     [string]$OutputDirectory,
+    [Parameter(Mandatory = $true)]
+    [string]$ClassicHumanoidInstallManifest,
     [string]$Configuration = ""
 )
 
@@ -19,9 +21,15 @@ $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtime = Join-Path $repository "runtime"
+$classicHumanoidPreflight = Join-Path $PSScriptRoot 'Assert-ClassicHumanoidDonorPreviewSet.ps1'
+$classicHumanoidResolver = Join-Path $PSScriptRoot 'Resolve-ClassicHumanoidDonorPreviewSet.ps1'
 if ([string]::IsNullOrWhiteSpace($Configuration)) {
     $Configuration = Join-Path $runtime "config\open-nv-xr-simulator-driver-v1.json"
 }
+$classicHumanoidDonorPreviewSet = & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid install-manifest resolution failed.' }
+& $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
+if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid donor preflight failed.' }
 foreach ($path in @(
     $Godot,
     $Scene,
@@ -137,6 +145,7 @@ try {
         "--xr-mode", "on",
         "--",
         "--fo1-hex-scene", ([IO.Path]::GetFullPath($Scene)),
+        "--classic-humanoid-donor-preview-set", ([IO.Path]::GetFullPath($classicHumanoidDonorPreviewSet)),
         "--vr",
         "--fo1-xr-simulator-preview",
         "--fo1-xr-controls-proof",

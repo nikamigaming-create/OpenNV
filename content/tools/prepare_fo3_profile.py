@@ -15,11 +15,15 @@ from io import BytesIO
 from pathlib import Path
 
 from actor_catalog import scan_actor_catalog
+from actor_gltf import animation_sequence_manifest, sample_transform_animation
 from bsa_archive import BsaArchive, canonical_member_path
 from cell_catalog import cell_parent_form_id
+from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from facegen import compose_facegen_coordinates
-from opening_catalog import _prepare_runtime_video
+from opening_catalog import _compile_facegen_control_space, _prepare_runtime_video
+from owned_archive_stack import OwnedArchive, OwnedArchiveStack
+from player_facegen_preview import prepare_default_player_facegen_preview
 from plugin_records import iter_plugin_records, iter_subrecords, zstring
 from plugin_stack import build_plugin_stack, file_sha256, find_case_insensitive_file
 from prepare_fo3_opening_slice import (
@@ -28,6 +32,9 @@ from prepare_fo3_opening_slice import (
 )
 from runtime_configuration import load_runtime_configuration
 from texture_pipeline import decode_dds
+from ttw_effective_source import load_ttw_effective_record_source
+from ttw_fo3_opening import DEFAULT_RECIPE as DEFAULT_TTW_FO3_OPENING_RECIPE
+from ttw_profile import DEFAULT_REQUIREMENTS_PATH as DEFAULT_TTW_PROFILE_RECIPE
 
 
 RECIPE_SCHEMA = "opennv-fo3-owned-profile-recipe/v1"
@@ -37,6 +44,7 @@ PROFILE_ID_HEX_CHARACTERS = 20
 FORM_ID_HEX_CHARACTERS = 8
 FORM_ID_BYTES = 4
 FORM_ID_RADIX = 16
+FALLOUT_CAMERA_REFERENCE_ASPECT_HEIGHT_OVER_WIDTH = 0.75
 PNG_MAXIMUM_COMPRESSION_LEVEL = 9
 STAGE_INDEX_BYTES = frozenset({2, 4})
 QUEST_RECORD = "QUST"
@@ -187,9 +195,9 @@ CG00_TIMER_CHAIN_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 CG00_TIMER_STAGE_PATTERN = re.compile(
-    r"\b(?:if|elseif)\s+getstage\s+CG00\s*==\s*(?P<source>\d+)\b\s*"
+    r"\b(?:if|elseif)\s+getstage\s+CG00\s*==\s*(?P<source>\d+)\b.*?"
     r"setstage\s+CG00\s+(?P<target>\d+)\b",
-    re.IGNORECASE,
+    re.IGNORECASE | re.DOTALL,
 )
 SET_REFERENCE_VARIABLE_PATTERN = re.compile(
     r"^set\s+(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\."
@@ -222,6 +230,7 @@ CONDITION_RUN_ON_OFFSET = 20
 CONDITION_REFERENCE_OFFSET = 24
 GET_IS_SEX_FUNCTION = 70
 GET_STAGE_FUNCTION = 58
+CONDITION_EQUAL_OPERATOR_FLAGS = 0x60
 GET_IS_VOICE_TYPE_FUNCTION = 427
 GET_PC_IS_SEX_FUNCTION = 131
 GET_IS_ID_FUNCTION = 72
@@ -256,6 +265,25 @@ HAIR_MALE_FLAG = 0x04
 FACEGEN_SYMMETRIC_GEOMETRY_FLOATS = 50
 FACEGEN_ASYMMETRIC_GEOMETRY_FLOATS = 30
 FACEGEN_SYMMETRIC_TEXTURE_FLOATS = 50
+TTW_INPUT_ENUMERATION_SCHEMA = "opennv-ttw-fo3-profile-input-enumeration/v1"
+TTW_INPUT_SIGNATURES = frozenset(
+    {
+        "ACHR",
+        "CELL",
+        "DIAL",
+        "IDLE",
+        "IMAD",
+        "INFO",
+        "NPC_",
+        "PACK",
+        "QUST",
+        "REFR",
+        "SCPT",
+        "SOUN",
+        "VTYP",
+    }
+)
+TTW_INPUT_FORM_NAMES = ("vault101d", "cg00Quest", "cg00Script")
 
 
 def default_recipe_path() -> Path:
@@ -274,6 +302,284 @@ def default_recipe_path() -> Path:
             f"found {len(candidates)}"
         )
     return candidates[0]
+
+
+def enumerate_ttw_fo3_profile_inputs(
+    profile_path: Path,
+    source_namespace_path: Path,
+    opening_recipe_path: Path = DEFAULT_TTW_FO3_OPENING_RECIPE,
+    source_recipe_path: Path = DEFAULT_TTW_PROFILE_RECIPE,
+) -> dict[str, object]:
+    """Enumerate the TTW Vault101d/CG00 input boundary without profile output."""
+
+    resolved_opening_recipe = opening_recipe_path.resolve()
+    opening_recipe = json.loads(resolved_opening_recipe.read_text(encoding="utf-8"))
+    if (
+        opening_recipe.get("schema") != "opennv-ttw-fo3-opening-recipe/v1"
+        or opening_recipe.get("id") != resolved_opening_recipe.stem
+    ):
+        raise ValueError(
+            f"Unexpected TTW Fallout 3 opening recipe: {resolved_opening_recipe}"
+        )
+    forms = opening_recipe.get("forms")
+    if not isinstance(forms, dict):
+        raise ValueError("TTW Fallout 3 opening recipe has no form inventory")
+    missing = [name for name in TTW_INPUT_FORM_NAMES if name not in forms]
+    if missing:
+        raise ValueError(
+            "TTW Fallout 3 profile input forms are absent: " + ", ".join(missing)
+        )
+
+    source = load_ttw_effective_record_source(
+        profile_path,
+        source_namespace_path,
+        TTW_INPUT_SIGNATURES,
+        source_recipe_path,
+    )
+    records = {
+        name: source.records.contract(dict(forms[name]))
+        for name in TTW_INPUT_FORM_NAMES
+    }
+    raw_closure = opening_recipe.get("cg00SceneClosure")
+    if not isinstance(raw_closure, dict):
+        raise ValueError("TTW Fallout 3 opening recipe has no CG00 scene closure")
+    closure = dict(raw_closure)
+    vault_form_key = str(records["vault101d"]["formKey"])
+    if str(closure.get("cellFormKey", "")).casefold() != vault_form_key.casefold():
+        raise ValueError("TTW CG00 scene CELL differs from the profile input CELL")
+
+    def record_contract(raw_definition: object) -> dict[str, object]:
+        if not isinstance(raw_definition, dict):
+            raise ValueError("TTW CG00 scene record definition is invalid")
+        return source.records.contract(dict(raw_definition))
+
+    def joined_form_key(contract: dict[str, object], signature: str) -> str:
+        version = source.records.winner(str(contract["formKey"]))
+        payload = _single_subrecord(version.record, signature)
+        if len(payload) != FORM_ID_BYTES:
+            raise ValueError(
+                f"TTW CG00 {contract['recordType']} {contract['formKey']} "
+                f"has a malformed {signature} link"
+            )
+        return version.context.form_key(struct.unpack("<I", payload)[0]).text
+
+    player = record_contract(closure.get("player"))
+    raw_participants = closure.get("participants")
+    if not isinstance(raw_participants, list):
+        raise ValueError("TTW CG00 scene participants are absent")
+    participants = []
+    placed_references = []
+    for raw_participant in raw_participants:
+        if not isinstance(raw_participant, dict):
+            raise ValueError("TTW CG00 scene participant is invalid")
+        participant = dict(raw_participant)
+        reference = record_contract(participant.get("reference"))
+        base = record_contract(participant.get("base"))
+        start_marker = record_contract(participant.get("startMarker"))
+        if joined_form_key(reference, "NAME").casefold() != str(
+            base["formKey"]
+        ).casefold():
+            raise ValueError("TTW CG00 participant ACHR-to-NPC join differs")
+        participants.append(
+            {
+                "role": str(participant.get("role", "")),
+                "reference": reference,
+                "base": base,
+                "startMarker": start_marker,
+            }
+        )
+        placed_references.extend((reference, start_marker))
+    if {row["role"] for row in participants} != {"father", "doctor", "mother"}:
+        raise ValueError("TTW CG00 scene participant roles differ")
+
+    raw_placed = closure.get("placedReferences")
+    if not isinstance(raw_placed, dict):
+        raise ValueError("TTW CG00 placed-reference closure is absent")
+    explicit_placed = {
+        str(name): record_contract(definition)
+        for name, definition in raw_placed.items()
+    }
+    if set(explicit_placed) != {"playerStartMarker", "geneProjector"}:
+        raise ValueError("TTW CG00 explicit placed-reference roles differ")
+    placed_references.extend(explicit_placed.values())
+    if any(
+        str(row.get("parentCellFormKey", "")).casefold()
+        != vault_form_key.casefold()
+        for row in placed_references
+    ):
+        raise ValueError("TTW CG00 placed reference is outside Vault101d")
+
+    raw_package_sections = closure.get("packageSections")
+    if not isinstance(raw_package_sections, dict):
+        raise ValueError("TTW CG00 package sections are absent")
+    package_sections: dict[str, list[dict[str, object]]] = {}
+    for role, raw_rows in raw_package_sections.items():
+        if not isinstance(raw_rows, list):
+            raise ValueError("TTW CG00 package-section rows are invalid")
+        rows = []
+        for raw_row in raw_rows:
+            if not isinstance(raw_row, dict):
+                raise ValueError("TTW CG00 package-section row is invalid")
+            row = dict(raw_row)
+            package = record_contract(row.get("package"))
+            idle = record_contract(row.get("idle"))
+            package_version = source.records.winner(str(package["formKey"]))
+            idle_form_keys = {
+                package_version.context.form_key(raw_form_id).text.casefold()
+                for raw_form_id in _form_id_list(package_version.record, "IDLA")
+            }
+            if str(idle["formKey"]).casefold() not in idle_form_keys:
+                raise ValueError("TTW CG00 PACK-to-IDLE join differs")
+            rows.append(
+                {
+                    "section": int(row["section"]),
+                    "package": package,
+                    "idle": idle,
+                }
+            )
+        if [row["section"] for row in rows] != list(range(len(rows))):
+            raise ValueError("TTW CG00 package sections are not contiguous")
+        package_sections[str(role)] = rows
+    if set(package_sections) != {"player", "father", "doctor", "mother"}:
+        raise ValueError("TTW CG00 package-section roles differ")
+
+    raw_dialogue = closure.get("dialogue")
+    if not isinstance(raw_dialogue, dict):
+        raise ValueError("TTW CG00 dialogue closure is absent")
+    dialogue_definition = dict(raw_dialogue)
+    quest_form_key = str(dialogue_definition.get("questFormKey", ""))
+    if quest_form_key.casefold() != str(records["cg00Quest"]["formKey"]).casefold():
+        raise ValueError("TTW CG00 dialogue quest identity differs")
+    raw_topics = dialogue_definition.get("topics")
+    raw_voice_types = dialogue_definition.get("voiceTypes")
+    if not isinstance(raw_topics, dict) or not isinstance(raw_voice_types, dict):
+        raise ValueError("TTW CG00 dialogue owner definitions are absent")
+    topics = {str(role): record_contract(value) for role, value in raw_topics.items()}
+    voice_types = {
+        str(role): record_contract(value) for role, value in raw_voice_types.items()
+    }
+    if set(topics) != {"father", "mother"} or set(voice_types) != set(topics):
+        raise ValueError("TTW CG00 dialogue owner roles differ")
+    for topic in topics.values():
+        if joined_form_key(topic, "QSTI").casefold() != quest_form_key.casefold():
+            raise ValueError("TTW CG00 DIAL-to-QUST join differs")
+
+    topic_roles = {
+        str(contract["formKey"]).casefold(): role for role, contract in topics.items()
+    }
+
+    def compile_info(raw_form_key: object) -> dict[str, object]:
+        definition = {"formKey": str(raw_form_key), "recordType": "INFO"}
+        info = record_contract(definition)
+        version = source.records.winner(str(info["formKey"]))
+        topic_keys = {
+            version.context.form_key(group.label_u32).text.casefold()
+            for group in version.record.groups
+            if group.group_type == DIALOGUE_CHILD_GROUP_TYPE
+        }
+        roles = {topic_roles[key] for key in topic_keys if key in topic_roles}
+        if len(roles) != 1:
+            raise ValueError("TTW CG00 INFO-to-DIAL join differs")
+        role = roles.pop()
+        if joined_form_key(info, "QSTI").casefold() != quest_form_key.casefold():
+            raise ValueError("TTW CG00 INFO-to-QUST join differs")
+        voice_links = []
+        for subrecord in iter_subrecords(version.record):
+            if subrecord.signature != "CTDA":
+                continue
+            condition = _dialogue_condition(subrecord.data)
+            if int(condition["function"]) == GET_IS_VOICE_TYPE_FUNCTION:
+                voice_links.append(
+                    version.context.form_key(int(condition["parameter1"])).text
+                )
+        if len(voice_links) != 1 or voice_links[0].casefold() != str(
+            voice_types[role]["formKey"]
+        ).casefold():
+            raise ValueError("TTW CG00 INFO-to-VTYP join differs")
+        return {
+            **info,
+            "speakerRole": role,
+            "topicFormKey": str(topics[role]["formKey"]),
+            "voiceTypeFormKey": str(voice_types[role]["formKey"]),
+        }
+
+    dialogue_rows = {}
+    for stage_name in ("stage10", "stage22Male", "stage22Female", "stage42"):
+        raw_info_rows = dialogue_definition.get(stage_name)
+        if not isinstance(raw_info_rows, list):
+            raise ValueError(f"TTW CG00 dialogue {stage_name} rows are absent")
+        dialogue_rows[stage_name] = [compile_info(value) for value in raw_info_rows]
+
+    raw_effects = closure.get("imageSpaceModifiers")
+    raw_sounds = closure.get("sounds")
+    if not isinstance(raw_effects, list) or not isinstance(raw_sounds, list):
+        raise ValueError("TTW CG00 effect or sound closure is absent")
+    image_space_modifiers = [record_contract(value) for value in raw_effects]
+    sounds = [record_contract(value) for value in raw_sounds]
+
+    unique_contracts: dict[str, dict[str, object]] = {}
+
+    def remember(contract: dict[str, object]) -> None:
+        unique_contracts[str(contract["formKey"]).casefold()] = contract
+
+    for contract in (
+        *records.values(),
+        player,
+        *placed_references,
+        *image_space_modifiers,
+        *sounds,
+        *topics.values(),
+        *voice_types.values(),
+    ):
+        remember(contract)
+    for participant in participants:
+        remember(participant["base"])
+    for rows in package_sections.values():
+        for row in rows:
+            remember(row["package"])
+            remember(row["idle"])
+    for rows in dialogue_rows.values():
+        for row in rows:
+            remember(row)
+    record_type_counts: dict[str, int] = {}
+    for contract in unique_contracts.values():
+        record_type = str(contract["recordType"])
+        record_type_counts[record_type] = record_type_counts.get(record_type, 0) + 1
+
+    cg00_scene_closure = {
+        "cell": records["vault101d"],
+        "player": player,
+        "participants": participants,
+        "placedReferences": explicit_placed,
+        "packageSections": package_sections,
+        "dialogue": {
+            "questFormKey": quest_form_key,
+            "topics": topics,
+            "voiceTypes": voice_types,
+            **dialogue_rows,
+        },
+        "imageSpaceModifiers": image_space_modifiers,
+        "sounds": sounds,
+        "recordCount": len(unique_contracts),
+        "recordTypeCounts": dict(sorted(record_type_counts.items())),
+        "recordClosureReady": True,
+        "archiveMembersIndexed": False,
+        "profileEmissionReady": False,
+        "runtimeReady": False,
+    }
+    return {
+        "schema": TTW_INPUT_ENUMERATION_SCHEMA,
+        "status": "validated-record-inputs-not-profile-emission",
+        "source": source.compiler_contract(),
+        "openingRecipe": {
+            "file": str(resolved_opening_recipe),
+            "sha256": file_sha256(resolved_opening_recipe),
+        },
+        "records": records,
+        "cg00SceneClosure": cg00_scene_closure,
+        "profileEmissionReady": False,
+        "runtimeReady": False,
+    }
 
 
 def atomic_json(path: Path, document: object) -> None:
@@ -451,6 +757,91 @@ def _form_id_list(record: object, signature: str) -> list[int]:
     return list(struct.unpack(f"<{len(payload) // FORM_ID_BYTES}I", payload))
 
 
+def _cg00_package_playback_contract(
+    package: object,
+    by_form: dict[int, object],
+) -> dict[str, object]:
+    idle_flags_data = _single_subrecord(package, "IDLF")
+    idle_count_data = _single_subrecord(package, "IDLC")
+    idle_timer_data = _single_subrecord(package, "IDLT")
+    if (
+        len(idle_flags_data) not in PACKAGE_IDLE_FLAG_BYTES
+        or len(idle_count_data) not in PACKAGE_IDLE_COUNT_BYTES
+        or len(idle_timer_data) != PACKAGE_IDLE_TIMER_BYTES
+    ):
+        raise ValueError("Fallout 3 early CG00 package idle selection differs")
+    idle_form_ids = _form_id_list(package, "IDLA")
+    idle_count = int.from_bytes(idle_count_data, "little")
+    idle_timer = struct.unpack("<f", idle_timer_data)[0]
+    if idle_count != len(idle_form_ids) or idle_count == 0 or not math.isfinite(idle_timer):
+        raise ValueError("Fallout 3 early CG00 package idle clock differs")
+
+    events: dict[str, str | None] = {}
+    pending_event: str | None = None
+    for subrecord in iter_subrecords(package):
+        if subrecord.signature in PACKAGE_EVENT_NAMES:
+            pending_event = PACKAGE_EVENT_NAMES[subrecord.signature]
+            if pending_event in events:
+                raise ValueError("Fallout 3 early CG00 package event is duplicated")
+        elif subrecord.signature == "INAM" and pending_event is not None:
+            if len(subrecord.data) != FORM_ID_BYTES:
+                raise ValueError("Fallout 3 early CG00 package event IDLE is invalid")
+            event_form_id = struct.unpack("<I", subrecord.data)[0]
+            event_idle = by_form.get(event_form_id) if event_form_id else None
+            if event_idle is not None and event_idle.signature != IDLE_RECORD:
+                raise ValueError("Fallout 3 early CG00 package event target differs")
+            events[pending_event] = (
+                _form_id(event_idle.form_id) if event_idle is not None else None
+            )
+            pending_event = None
+    if pending_event is not None or set(events) != set(PACKAGE_EVENT_NAMES.values()):
+        raise ValueError("Fallout 3 early CG00 package events are incomplete")
+    return {
+        "idleSelection": {
+            "flags": int.from_bytes(idle_flags_data, "little"),
+            "count": idle_count,
+            "timerSeconds": idle_timer,
+        },
+        "events": events,
+    }
+
+
+def _cg00_package_stage_condition(
+    package: object,
+    quest_form_id: int,
+) -> dict[str, object]:
+    conditions = [
+        _dialogue_condition(subrecord.data)
+        for subrecord in iter_subrecords(package)
+        if subrecord.signature == "CTDA"
+    ]
+    if len(conditions) != 1:
+        raise ValueError("Fallout 3 early CG00 actor package stage condition differs")
+    condition = conditions[0]
+    comparison = float(condition["comparisonValue"])
+    stage = int(comparison)
+    if (
+        condition["operatorFlags"] != CONDITION_EQUAL_OPERATOR_FLAGS
+        or condition["function"] != GET_STAGE_FUNCTION
+        or condition["parameter1"] != quest_form_id
+        or condition["parameter2"] != 0
+        or condition["runOn"] != 0
+        or condition["reference"] != 0
+        or not comparison.is_integer()
+        or stage < 0
+    ):
+        raise ValueError("Fallout 3 early CG00 actor package stage condition differs")
+    return {
+        "function": "GetStage",
+        "functionId": GET_STAGE_FUNCTION,
+        "operator": "equal",
+        "operatorFlags": CONDITION_EQUAL_OPERATOR_FLAGS,
+        "questFormId": _form_id(quest_form_id),
+        "stage": stage,
+        "runOn": int(condition["runOn"]),
+    }
+
+
 def _float_contract(values: tuple[float, ...], expected_count: int) -> dict[str, object]:
     if len(values) != expected_count or not all(math.isfinite(value) for value in values):
         raise ValueError("Fallout 3 FaceGen default coordinates are incomplete")
@@ -459,6 +850,28 @@ def _float_contract(values: tuple[float, ...], expected_count: int) -> dict[str,
         "count": len(values),
         "values": list(values),
         "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+
+
+def _fallout_default_fov_projection(horizontal_fov_degrees: float) -> dict[str, object]:
+    if not math.isfinite(horizontal_fov_degrees) or not (
+        0.0 < horizontal_fov_degrees < PERSPECTIVE_MAXIMUM_DEGREES
+    ):
+        raise ValueError("Fallout 3 default FOV is invalid")
+    tangent_half_angle = math.tan(math.radians(horizontal_fov_degrees) / 2.0)
+    vertical_fov_degrees = math.degrees(
+        2.0
+        * math.atan(
+            tangent_half_angle * FALLOUT_CAMERA_REFERENCE_ASPECT_HEIGHT_OVER_WIDTH
+        )
+    )
+    return {
+        "sourceHorizontalFovDegrees": horizontal_fov_degrees,
+        "referenceAspectHeightOverWidth": (
+            FALLOUT_CAMERA_REFERENCE_ASPECT_HEIGHT_OVER_WIDTH
+        ),
+        "verticalFovDegrees": vertical_fov_degrees,
+        "godotKeepAspect": "keep-height",
     }
 
 
@@ -1003,7 +1416,17 @@ def _appearance_ui_contract(
         text,
         re.DOTALL,
     )
-    if panel is None or list_item is None:
+    slider = re.search(
+        r'<template\s+name="RSM_slider_option_template">(?P<body>.*?)</template>',
+        text,
+        re.DOTALL,
+    )
+    face_grab = re.search(
+        r'<hotrect\s+name="RSM_Face_Grab">(?P<body>.*?)</hotrect>',
+        text,
+        re.DOTALL,
+    )
+    if panel is None or list_item is None or slider is None or face_grab is None:
         raise ValueError("Fallout 3 appearance menu layout owners are absent")
 
     def dimension(body: str, name: str) -> int:
@@ -1013,10 +1436,18 @@ def _appearance_ui_contract(
         return int(match.group("value"))
 
     observed = {
+        "panelX": dimension(text, "x"),
+        "panelY": dimension(text, "y"),
         "panelWidth": dimension(panel.group("body"), "width"),
         "panelHeight": dimension(panel.group("body"), "height"),
+        "faceGrabX": dimension(face_grab.group("body"), "x"),
+        "faceGrabY": dimension(face_grab.group("body"), "y"),
+        "faceGrabWidth": dimension(face_grab.group("body"), "width"),
+        "faceGrabHeight": dimension(face_grab.group("body"), "height"),
         "listItemWidth": dimension(list_item.group("body"), "width"),
         "listItemHeight": dimension(list_item.group("body"), "height"),
+        "sliderWidth": dimension(slider.group("body"), "width"),
+        "sliderHeight": dimension(slider.group("body"), "height"),
     }
     for key, value in observed.items():
         if value != int(definition[key]):
@@ -1027,6 +1458,35 @@ def _appearance_ui_contract(
     background_path = canonical_member_path(str(definition["backgroundTexture"]))
     if background_path.removeprefix("textures\\") not in text.casefold():
         raise ValueError("Fallout 3 appearance menu background identity differs")
+    name_document_path = canonical_member_path(str(definition["nameDocument"]))
+    name_member = menu_members.get(name_document_path)
+    if name_member is None:
+        raise ValueError("Fallout 3 name menu XML was not admitted")
+    name_text = name_member.data.decode("cp1252")
+    name_menu_name = str(definition["nameMenuName"])
+    name_panel_name = str(definition["namePanelName"])
+    if f'<menu name="{name_menu_name}">' not in name_text:
+        raise ValueError("Fallout 3 name menu identity differs")
+    name_panel = re.search(
+        rf'<rect\s+name="{re.escape(name_panel_name)}">(?P<body>.*?)</rect>',
+        name_text,
+        re.DOTALL,
+    )
+    if name_panel is None:
+        raise ValueError("Fallout 3 name menu panel is absent")
+    name_observed = {
+        "panelWidth": dimension(name_panel.group("body"), "width"),
+        "panelHeight": dimension(name_panel.group("body"), "height"),
+    }
+    for key, value in name_observed.items():
+        if value != int(definition[f"name{key[0].upper()}{key[1:]}"]):
+            raise ValueError(
+                f"Fallout 3 name menu {key} differs: "
+                f"expected={definition[f'name{key[0].upper()}{key[1:]}']} actual={value}"
+            )
+    name_background_path = canonical_member_path(str(definition["nameBackgroundTexture"]))
+    if name_background_path.removeprefix("textures\\") not in name_text.casefold():
+        raise ValueError("Fallout 3 name menu background identity differs")
     return {
         "document": document_path,
         "documentSha256": member.sha256,
@@ -1040,6 +1500,20 @@ def _appearance_ui_contract(
             profile_root,
             texture_cache,
         ),
+        "name": {
+            "document": name_document_path,
+            "documentSha256": name_member.sha256,
+            "menuName": name_menu_name,
+            "panelName": name_panel_name,
+            **name_observed,
+            "backgroundTexture": _extract_profile_texture(
+                texture_archive,
+                texture_archive_sha256,
+                name_background_path,
+                profile_root,
+                texture_cache,
+            ),
+        },
     }
 
 
@@ -1051,6 +1525,9 @@ def _appearance_inventory(
     texture_archive: BsaArchive,
     texture_archive_sha256: str,
     profile_root: Path,
+    ui_archive_path: Path,
+    owned_archives: OwnedArchiveStack,
+    configuration: object,
 ) -> dict[str, object]:
     selection_recipe = dict(dict(recipe["opening"])["characterSelection"])
     player_form_id = int(str(selection_recipe["playerBaseFormId"]), FORM_ID_RADIX)
@@ -1238,10 +1715,26 @@ def _appearance_inventory(
         character_selection,
     )
     appearance = dict(character_selection["appearance"])
-    return {
+    control_policy = dict(dict(recipe["opening"])["faceGenControlSpace"])
+    executable_path = master.parent.parent / str(control_policy["sourceExecutable"])
+    expected_executable_sha256 = str(
+        dict(control_policy["nativeGeometryExposure"])["sourceExecutableSha256"]
+    ).casefold()
+    if file_sha256(executable_path) != expected_executable_sha256:
+        raise ValueError("Owned Fallout 3 FaceGen source executable hash differs")
+    executable_payload = executable_path.read_bytes()
+    expected_settings = [
+        str(dict(control_policy["nativeGeometryExposure"])["settingEntityTemplate"]).format(
+            oneBasedIndex=int(index) + 1
+        ).encode("ascii")
+        for index in dict(control_policy["nativeGeometryExposure"])["controlIndices"]
+    ]
+    if any(executable_payload.count(setting) != 1 for setting in expected_settings):
+        raise ValueError("Owned Fallout 3 FaceGen setting exposure differs")
+    result = {
         **appearance,
         "schema": "opennv-fo3-cg00-appearance/v1",
-        "status": "source-backed-default-selection",
+        "status": "source-backed-native-creator-all-native-geometry-controls",
         "player": {
             "formId": _form_id(player.form_id),
             "editorId": player.editor_id,
@@ -1249,6 +1742,12 @@ def _appearance_inventory(
             "defaultRaceFormId": _form_id(player.race_form_id or 0),
             "defaultHairColorRgba": list(player.hair_color_rgba),
             "defaultHairLength": player.hair_length,
+            "faceGen": {
+                "controlSpace": _compile_facegen_control_space(
+                    ui_archive_path,
+                    control_policy,
+                ),
+            },
         },
         "ui": _appearance_ui_contract(
             recipe,
@@ -1259,8 +1758,20 @@ def _appearance_inventory(
             texture_cache,
         ),
         "races": races,
-        "preview": "owned-head-hair-eye-source-textures-not-a-3d-face-render",
+        "preview": (
+            "owned-default-male-and-female-full-body-live-previews-"
+            "all-native-geometry-controls"
+        ),
     }
+    result["player"]["faceGen"]["previewHead"] = prepare_default_player_facegen_preview(
+        master,
+        owned_archives,
+        profile_root,
+        result,
+        configuration,
+        include_full_body=True,
+    )
+    return result
 
 
 def _script_source(record: object) -> str:
@@ -3939,6 +4450,216 @@ def _bind_owned_dad_dialogue_audio(
     dialogue["voiceType"] = {**voice_type, "memberNamespace": namespace}
 
 
+def _bind_cg00_player_camera_asset(
+    sequence: dict[str, object],
+    meshes_archive: BsaArchive,
+    meshes_archive_sha256: str,
+    profile_root: Path,
+    animation_samples_per_second: float,
+) -> None:
+    package_sections = dict(sequence["actorPackageSections"])
+    camera = dict(sequence["playerCamera"])
+    player_camera_rows = [
+        row
+        for row in package_sections["player"]
+        if int(row["section"]) == int(camera["section"])
+    ]
+    if len(player_camera_rows) != 1:
+        raise ValueError("Fallout 3 early CG00 player camera package is ambiguous")
+    player_camera_row = player_camera_rows[0]
+    animation_member = meshes_archive.extract(
+        str(player_camera_row["animationLogicalPath"])
+    )
+    skeleton_member = meshes_archive.extract(str(camera["skeletonLogicalPath"]))
+    animation_output = (
+        profile_root
+        / "generated"
+        / "fallout3"
+        / "camera"
+        / Path(animation_member.logical_path.replace("\\", "/"))
+    )
+    skeleton_output = (
+        profile_root
+        / "generated"
+        / "fallout3"
+        / "camera"
+        / Path(skeleton_member.logical_path.replace("\\", "/"))
+    )
+    for output, member in (
+        (animation_output, animation_member),
+        (skeleton_output, skeleton_member),
+    ):
+        if not output.is_file() or file_sha256(output) != member.sha256:
+            atomic_bytes(output, member.data)
+    sampled = sample_transform_animation(
+        animation_member.data,
+        skeleton_member.data,
+        str(camera["targetNode"]),
+        animation_samples_per_second,
+        include_animated_parent_tracks=True,
+    ).manifest()
+    if not sampled.get("animatedParentTracks"):
+        raise ValueError(
+            "Fallout 3 early CG00 player camera has no animated parent transform"
+        )
+    sample_contract_sha256 = hashlib.sha256(
+        json.dumps(sampled, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    camera.update(
+        {
+            "schema": "opennv-fo3-cg00-player-camera-transform/v1",
+            "status": "source-backed-sampled-player-camera-root-transform",
+            "packageFormId": player_camera_row["packageFormId"],
+            "packageEditorId": player_camera_row["packageEditorId"],
+            "idleFormId": player_camera_row["idleFormId"],
+            "animation": {
+                "logicalPath": animation_member.logical_path,
+                "source": str(animation_output.resolve()),
+                "bytes": len(animation_member.data),
+                "sha256": animation_member.sha256,
+                "sourceArchive": meshes_archive.archive.name,
+                "sourceArchiveSha256": meshes_archive_sha256,
+            },
+            "skeleton": {
+                "logicalPath": skeleton_member.logical_path,
+                "source": str(skeleton_output.resolve()),
+                "bytes": len(skeleton_member.data),
+                "sha256": skeleton_member.sha256,
+                "sourceArchive": meshes_archive.archive.name,
+                "sourceArchiveSha256": meshes_archive_sha256,
+            },
+            "sampleContractSha256": sample_contract_sha256,
+            "track": sampled,
+        }
+    )
+    sequence["playerCamera"] = camera
+
+
+def _bind_cg00_early_birth_assets(
+    sequence: dict[str, object],
+    meshes_archive: BsaArchive,
+    meshes_archive_sha256: str,
+    voices_archive: BsaArchive,
+    voices_archive_sha256: str,
+    sound_archive: BsaArchive,
+    sound_archive_sha256: str,
+    profile_root: Path,
+    animation_samples_per_second: float,
+) -> None:
+    package_sections = dict(sequence["actorPackageSections"])
+    for role, raw_rows in package_sections.items():
+        rows = []
+        for raw_row in raw_rows:
+            row = dict(raw_row)
+            member = meshes_archive.extract(str(row["animationLogicalPath"]))
+            row["animationSource"] = {
+                "sourceArchive": meshes_archive.archive.name,
+                "sourceArchiveSha256": meshes_archive_sha256,
+                "sourceBytes": len(member.data),
+                "sourceSha256": member.sha256,
+            }
+            row["animationPlayback"] = animation_sequence_manifest(member.data)
+            rows.append(row)
+        package_sections[str(role)] = rows
+    sequence["actorPackageSections"] = package_sections
+    _bind_cg00_player_camera_asset(
+        sequence,
+        meshes_archive,
+        meshes_archive_sha256,
+        profile_root,
+        animation_samples_per_second,
+    )
+
+    def prepare_member(
+        archive: BsaArchive,
+        archive_sha256: str,
+        logical_path: str,
+        output_group: str,
+    ) -> dict[str, object]:
+        member = archive.extract(logical_path)
+        output = profile_root / "generated" / "fallout3" / output_group / Path(
+            member.logical_path.replace("\\", "/")
+        )
+        if not output.is_file() or file_sha256(output) != member.sha256:
+            atomic_bytes(output, member.data)
+        return {
+            "logicalPath": member.logical_path,
+            "source": str(output.resolve()),
+            "bytes": len(member.data),
+            "sha256": member.sha256,
+            "sourceArchive": archive.archive.name,
+            "sourceArchiveSha256": archive_sha256,
+        }
+
+    dialogue = dict(sequence["dialogue"])
+    dialogue_rows = [
+        *list(dialogue["stage10"]),
+        *list(dict(dialogue["stage22"])["male"]),
+        *list(dict(dialogue["stage22"])["female"]),
+        *list(dialogue["stage42"]),
+    ]
+    prepared_by_info: dict[str, dict[str, object]] = {}
+    for raw_info in dialogue_rows:
+        info = dict(raw_info)
+        info_form_id = str(info["infoFormId"]).casefold()
+        voice_editor_id = str(dict(info["voiceType"])["editorId"])
+        namespace = canonical_member_path(
+            f"sound\\voice\\fallout3.esm\\{voice_editor_id}"
+        )
+        suffix = f"_{info_form_id}_1.ogg"
+        matches = [
+            path for path in voices_archive.members
+            if path.startswith(namespace + "\\") and path.endswith(suffix)
+        ]
+        if len(matches) != 1:
+            raise ValueError("Fallout 3 early CG00 INFO voice is absent or ambiguous")
+        lip_path = matches[0].removesuffix(".ogg") + ".lip"
+        if lip_path not in voices_archive.members:
+            raise ValueError("Fallout 3 early CG00 INFO lip data is absent")
+        prepared_by_info[info_form_id] = {
+            "voice": prepare_member(
+                voices_archive, voices_archive_sha256, matches[0], "dialogue"
+            ),
+            "lip": prepare_member(
+                voices_archive, voices_archive_sha256, lip_path, "dialogue"
+            ),
+        }
+
+    def bind_info(raw_info: object) -> dict[str, object]:
+        info = dict(raw_info)
+        info["preparedAudio"] = prepared_by_info[str(info["infoFormId"]).casefold()]
+        return info
+
+    dialogue["stage10"] = [bind_info(value) for value in dialogue["stage10"]]
+    stage22 = dict(dialogue["stage22"])
+    stage22["male"] = [bind_info(value) for value in stage22["male"]]
+    stage22["female"] = [bind_info(value) for value in stage22["female"]]
+    dialogue["stage22"] = stage22
+    dialogue["stage42"] = [bind_info(value) for value in dialogue["stage42"]]
+    sequence["dialogue"] = dialogue
+
+    prepared_sounds = []
+    for raw_sound in sequence["sounds"]:
+        sound = dict(raw_sound)
+        logical_path = str(sound["logicalPath"])
+        if sound["selectionPolicy"] == "exact-file":
+            members = [logical_path]
+        else:
+            prefix = logical_path.rstrip("\\") + "\\"
+            members = sorted(
+                path for path in sound_archive.members if path.startswith(prefix)
+            )
+        if not members:
+            raise ValueError("Fallout 3 early CG00 sound source is absent")
+        sound["preparedSources"] = [
+            prepare_member(sound_archive, sound_archive_sha256, path, "sound")
+            for path in members
+        ]
+        prepared_sounds.append(sound)
+    sequence["sounds"] = prepared_sounds
+    sequence["assetsPrepared"] = True
+
+
 def _bind_owned_dad_dialogue_animations(
     dialogue: dict[str, object],
     meshes_archive: BsaArchive,
@@ -4104,11 +4825,11 @@ def _bind_cg01_toddler_world(
     camera_by_key = {str(row["key"]): row for row in camera_rows}
     if set(camera_by_key) != {"fDefaultFOV", "fNearDistance"}:
         raise ValueError("Fallout 3 CG01 toddler camera settings differ")
-    vertical_fov = float(camera_by_key["fDefaultFOV"]["value"])
+    default_horizontal_fov = float(camera_by_key["fDefaultFOV"]["value"])
     near_game_units = float(camera_by_key["fNearDistance"]["value"])
     if (
-        not math.isfinite(vertical_fov)
-        or not 0.0 < vertical_fov < PERSPECTIVE_MAXIMUM_DEGREES
+        not math.isfinite(default_horizontal_fov)
+        or not 0.0 < default_horizontal_fov < PERSPECTIVE_MAXIMUM_DEGREES
         or not math.isfinite(near_game_units)
         or near_game_units <= 0.0
     ):
@@ -4131,7 +4852,7 @@ def _bind_cg01_toddler_world(
             "visualBodyPrepared": False,
         },
         "camera": {
-            "verticalFovDegrees": vertical_fov,
+            **_fallout_default_fov_projection(default_horizontal_fov),
             "nearGameUnits": near_game_units,
             "settings": camera_rows,
         },
@@ -4169,6 +4890,371 @@ def _bind_cg01_toddler_world(
         "blocker": None,
     }
     character_selection["cg01Stage0Transition"] = transition
+
+
+def _compile_cg00_early_birth_sequence(
+    records: tuple[object, ...],
+    selection: dict[str, object],
+    quest_form_id: int,
+    quest_script: object,
+    quest_script_source: str,
+    stage_sources: dict[int, list[str]],
+) -> dict[str, object]:
+    """Compile the exact owned CG00 stage-0 through RaceSex-menu source closure."""
+    definition = dict(selection["earlyBirthSequence"])
+    expected_stages = [int(value) for value in definition["stages"]]
+    if len(expected_stages) != len(set(expected_stages)) or any(
+        len(stage_sources.get(stage, [])) != 1 for stage in expected_stages
+    ):
+        raise ValueError("Fallout 3 early CG00 stage source closure is incomplete")
+
+    timer_match = CG00_TIMER_CHAIN_PATTERN.search(quest_script_source)
+    if timer_match is None:
+        raise ValueError("Fallout 3 early CG00 timer chain is absent")
+    observed_timer_transitions = [
+        {"sourceStage": int(match.group("source")), "targetStage": int(match.group("target"))}
+        for match in CG00_TIMER_STAGE_PATTERN.finditer(timer_match.group("stage_branches"))
+        if int(match.group("source")) <= int(selection["appearanceMenuEnteredStage"])
+    ]
+    expected_timer_transitions = [dict(row) for row in definition["timerTransitions"]]
+    if observed_timer_transitions != expected_timer_transitions:
+        raise ValueError("Fallout 3 early CG00 timer transitions differ")
+
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    def exact_record(raw_form_id: object, editor_id: object, signature: str) -> object:
+        form_id = int(str(raw_form_id), FORM_ID_RADIX)
+        record = by_form.get(form_id)
+        if (
+            record is None
+            or record.signature != signature
+            or (_editor_id(record) or "").casefold() != str(editor_id).casefold()
+        ):
+            raise ValueError(
+                f"Fallout 3 early CG00 {signature} identity differs: {editor_id}"
+            )
+        return record
+
+    stage_rows = []
+    for stage in expected_stages:
+        source = stage_sources[stage][0]
+        commands = _source_commands(source)
+        stage_rows.append(
+            {
+                "stage": stage,
+                "sourceSha256": hashlib.sha256(source.encode("cp1252")).hexdigest(),
+                "commandCount": len(commands),
+                "commands": commands,
+            }
+        )
+
+    stage0_commands = [value.casefold() for value in stage_rows[0]["commands"]]
+    participants = []
+    for raw_participant in definition["sceneParticipants"]:
+        participant = dict(raw_participant)
+        reference = exact_record(
+            participant["referenceFormId"],
+            participant["referenceEditorId"],
+            ACTOR_REFERENCE_RECORD,
+        )
+        marker = exact_record(
+            participant["startMarkerFormId"],
+            participant["startMarkerEditorId"],
+            PLACED_REFERENCE_RECORD,
+        )
+        expected_move = (
+            f"{participant['referenceEditorId']}.moveto "
+            f"{participant['startMarkerEditorId']}"
+        ).casefold()
+        if expected_move not in stage0_commands:
+            raise ValueError("Fallout 3 early CG00 participant MoveTo command is absent")
+        participants.append(
+            {
+                "role": str(participant["role"]),
+                "reference": {
+                    "formId": _form_id(reference.form_id),
+                    "editorId": _editor_id(reference),
+                    "recordSha256": hashlib.sha256(reference.data).hexdigest(),
+                    "authoredTransform": _reference_transform_contract(reference),
+                },
+                "startMarker": {
+                    "formId": _form_id(marker.form_id),
+                    "editorId": _editor_id(marker),
+                    "recordSha256": hashlib.sha256(marker.data).hexdigest(),
+                    "authoredTransform": _reference_transform_contract(marker),
+                },
+            }
+        )
+    if {row["role"] for row in participants} != {"father", "doctor", "mother"}:
+        raise ValueError("Fallout 3 early CG00 scene participant roles differ")
+
+    player_marker = exact_record(
+        definition["playerStartMarkerFormId"],
+        definition["playerStartMarkerEditorId"],
+        PLACED_REFERENCE_RECORD,
+    )
+    player_move = f"player.moveto {definition['playerStartMarkerEditorId']}".casefold()
+    if player_move not in stage0_commands:
+        raise ValueError("Fallout 3 early CG00 player MoveTo command is absent")
+
+    package_roles = {}
+    for role, raw_rows in dict(definition["actorPackages"]).items():
+        rows = []
+        for raw_row in raw_rows:
+            row = dict(raw_row)
+            package = by_form.get(int(str(row["formId"]), FORM_ID_RADIX))
+            idle_form_id = int(str(row["idleFormId"]), FORM_ID_RADIX)
+            idle = by_form.get(idle_form_id)
+            if package is None or package.signature != PACKAGE_RECORD:
+                raise ValueError("Fallout 3 early CG00 actor package is absent")
+            if idle is None or idle.signature != IDLE_RECORD:
+                raise ValueError("Fallout 3 early CG00 actor package IDLE is absent")
+            package_idle_ids = _form_id_list(package, "IDLA")
+            if idle_form_id not in package_idle_ids:
+                raise ValueError("Fallout 3 early CG00 package-to-IDLE join differs")
+            package_playback = _cg00_package_playback_contract(package, by_form)
+            models = _text_values(idle, "MODL")
+            if len(models) != 1 or not models[0].casefold().endswith(".kf"):
+                raise ValueError("Fallout 3 early CG00 package animation is absent")
+            rows.append(
+                {
+                    "section": int(row["section"]),
+                    "packageFormId": _form_id(package.form_id),
+                    "packageEditorId": _editor_id(package),
+                    "packageRecordSha256": hashlib.sha256(package.data).hexdigest(),
+                    "idleFormId": _form_id(idle.form_id),
+                    "idleEditorId": _editor_id(idle),
+                    "idleRecordSha256": hashlib.sha256(idle.data).hexdigest(),
+                    "activationCondition": (
+                        None
+                        if str(role) == "player"
+                        else _cg00_package_stage_condition(package, quest_form_id)
+                    ),
+                    **package_playback,
+                    "animationLogicalPath": canonical_member_path(f"meshes\\{models[0]}"),
+                }
+            )
+        sections = [int(row["section"]) for row in rows]
+        if sections != list(range(len(sections))):
+            raise ValueError("Fallout 3 early CG00 package sections are not contiguous")
+        if any(
+            row["events"]["change"] != rows[index + 1]["idleFormId"]
+            for index, row in enumerate(rows[:-1])
+        ):
+            raise ValueError("Fallout 3 early CG00 package change-idle chain differs")
+        package_roles[str(role)] = rows
+
+    player_camera_definition = dict(definition["playerCamera"])
+    player_camera_section = int(player_camera_definition["section"])
+    player_camera_packages = [
+        row
+        for row in package_roles["player"]
+        if int(row["section"]) == player_camera_section
+    ]
+    player_camera_target = str(player_camera_definition["targetNode"])
+    if len(player_camera_packages) != 1 or not player_camera_target:
+        raise ValueError("Fallout 3 early CG00 player camera owner differs")
+    player_camera = {
+        "section": player_camera_section,
+        "skeletonLogicalPath": canonical_member_path(
+            str(player_camera_definition["skeletonLogicalPath"])
+        ),
+        "targetNode": player_camera_target,
+        "playerStartMarkerFormId": _form_id(player_marker.form_id),
+        "playerStartMarkerRotationGodotQuaternion": godot_rotation_quaternion(
+            tuple(
+                float(value)
+                for value in _reference_transform_contract(player_marker)["rotationRadians"]
+            )
+        ),
+    }
+
+    effect_rows = []
+    for raw_effect in definition["imageSpaceModifiers"]:
+        effect = dict(raw_effect)
+        record = exact_record(effect["formId"], effect["editorId"], IMAGE_SPACE_MODIFIER_RECORD)
+        effect_rows.append(
+            {
+                "formId": _form_id(record.form_id),
+                "editorId": _editor_id(record),
+                "recordSha256": hashlib.sha256(record.data).hexdigest(),
+                "parameters": parse_image_space_modifier(record).manifest(),
+            }
+        )
+
+    sound_rows = []
+    for raw_sound in definition["sounds"]:
+        sound = dict(raw_sound)
+        record = exact_record(sound["formId"], sound["editorId"], SOUND_RECORD)
+        paths = _text_values(record, "FNAM")
+        sound_data = [
+            subrecord.data for subrecord in iter_subrecords(record)
+            if subrecord.signature in {"SNDD", "SNDX"}
+        ]
+        if len(paths) != 1 or len(sound_data) != 1:
+            raise ValueError("Fallout 3 early CG00 sound layout differs")
+        logical_path = canonical_member_path(f"sound\\{paths[0]}")
+        sound_rows.append(
+            {
+                "formId": _form_id(record.form_id),
+                "editorId": _editor_id(record),
+                "recordSha256": hashlib.sha256(record.data).hexdigest(),
+                "soundDataSha256": hashlib.sha256(sound_data[0]).hexdigest(),
+                "logicalPath": logical_path,
+                "selectionPolicy": (
+                    "exact-file" if Path(logical_path).suffix else "source-folder-variant-set"
+                ),
+            }
+        )
+
+    dialogue_definition = dict(definition["dialogue"])
+    dad_topic = exact_record(
+        dialogue_definition["dadTopicFormId"],
+        dialogue_definition["dadTopicEditorId"],
+        DIALOGUE_TOPIC_RECORD,
+    )
+    mom_topic = exact_record(
+        dialogue_definition["momTopicFormId"],
+        dialogue_definition["momTopicEditorId"],
+        DIALOGUE_TOPIC_RECORD,
+    )
+    if any(
+        struct.unpack("<I", _single_subrecord(topic, "QSTI"))[0] != quest_form_id
+        for topic in (dad_topic, mom_topic)
+    ):
+        raise ValueError("Fallout 3 early CG00 dialogue quest ownership differs")
+
+    info_roles = {
+        dad_topic.form_id: "father",
+        mom_topic.form_id: "mother",
+    }
+
+    def compile_info(raw_form_id: object) -> dict[str, object]:
+        info = by_form.get(int(str(raw_form_id), FORM_ID_RADIX))
+        if info is None or info.signature != DIALOGUE_INFO_RECORD:
+            raise ValueError("Fallout 3 early CG00 INFO is absent")
+        owner_forms = {
+            int(group.label_u32)
+            for group in info.groups
+            if group.group_type == DIALOGUE_CHILD_GROUP_TYPE
+        }
+        owners = owner_forms & set(info_roles)
+        if len(owners) != 1 or struct.unpack("<I", _single_subrecord(info, "QSTI"))[0] != quest_form_id:
+            raise ValueError("Fallout 3 early CG00 INFO ownership differs")
+        responses = [text for text in _text_values(info, "NAM1") if text]
+        data = _single_subrecord(info, "DATA")
+        if len(data) != DIALOGUE_INFO_DATA_BYTES:
+            raise ValueError("Fallout 3 early CG00 INFO response layout differs")
+        response_type, unused, flags = struct.unpack("<BBH", data)
+        if (
+            len(responses) != 1
+            or response_type != 1
+            or unused != 0
+            or flags != DIALOGUE_INFO_SAY_ONCE_FLAG
+        ):
+            raise ValueError("Fallout 3 early CG00 INFO response contract differs")
+        result_sources = _text_values(info, "SCTX")
+        result_source = "\n".join(result_sources)
+        conditions = [
+            _dialogue_condition(subrecord.data)
+            for subrecord in iter_subrecords(info)
+            if subrecord.signature == "CTDA"
+        ]
+        voice_conditions = [
+            row for row in conditions if int(row["function"]) == GET_IS_VOICE_TYPE_FUNCTION
+        ]
+        if len(voice_conditions) != 1:
+            raise ValueError("Fallout 3 early CG00 INFO voice ownership differs")
+        voice = by_form.get(int(voice_conditions[0]["parameter1"]))
+        if voice is None or voice.signature != VOICE_TYPE_RECORD:
+            raise ValueError("Fallout 3 early CG00 INFO voice type is absent")
+        return {
+            "infoFormId": _form_id(info.form_id),
+            "speakerRole": info_roles[owners.pop()],
+            "recordSha256": hashlib.sha256(info.data).hexdigest(),
+            "sayOnce": True,
+            "continuation": sum(
+                1 for subrecord in iter_subrecords(info) if subrecord.signature == "NEXT"
+            ) == 1,
+            "voiceType": {
+                "formId": _form_id(voice.form_id),
+                "editorId": _editor_id(voice),
+                "recordSha256": hashlib.sha256(voice.data).hexdigest(),
+            },
+            "response": {
+                "index": 1,
+                "text": responses[0],
+                "textSha256": hashlib.sha256(responses[0].encode("utf-8")).hexdigest(),
+            },
+            "resultSourceSha256": hashlib.sha256(result_source.encode("cp1252")).hexdigest(),
+            "resultCommands": _source_commands(result_source),
+            "conditions": conditions,
+        }
+
+    dialogue = {
+        "stage10": [compile_info(value) for value in dialogue_definition["stage10InfoFormIds"]],
+        "stage22": {
+            "male": [compile_info(value) for value in dialogue_definition["stage22MaleInfoFormIds"]],
+            "female": [compile_info(value) for value in dialogue_definition["stage22FemaleInfoFormIds"]],
+        },
+        "stage42": [compile_info(value) for value in dialogue_definition["stage42InfoFormIds"]],
+    }
+    gene_projector = exact_record(
+        definition["geneProjectorReferenceFormId"],
+        definition["geneProjectorReferenceEditorId"],
+        PLACED_REFERENCE_RECORD,
+    )
+    return {
+        "schema": "opennv-fo3-cg00-early-birth-sequence/v1",
+        "status": "source-backed-complete-contract-runtime-pending",
+        "questFormId": _form_id(quest_form_id),
+        "questScript": {
+            "formId": _form_id(quest_script.form_id),
+            "editorId": _editor_id(quest_script),
+            "recordSha256": hashlib.sha256(quest_script.data).hexdigest(),
+            "sourceSha256": hashlib.sha256(quest_script_source.encode("cp1252")).hexdigest(),
+        },
+        "stages": stage_rows,
+        "timerTransitions": observed_timer_transitions,
+        "sceneParticipants": participants,
+        "playerStartMarker": {
+            "formId": _form_id(player_marker.form_id),
+            "editorId": _editor_id(player_marker),
+            "recordSha256": hashlib.sha256(player_marker.data).hexdigest(),
+            "authoredTransform": _reference_transform_contract(player_marker),
+        },
+        "actorPackageSections": package_roles,
+        "playerCamera": player_camera,
+        "imageSpaceModifiers": effect_rows,
+        "sounds": sound_rows,
+        "dialogue": dialogue,
+        "geneProjectorReference": {
+            "formId": _form_id(gene_projector.form_id),
+            "editorId": _editor_id(gene_projector),
+            "recordSha256": hashlib.sha256(gene_projector.data).hexdigest(),
+        },
+        "sourceClosure": {
+            "accounted": [
+                "quest-stage-results",
+                "timer-stage-transitions",
+                "scene-participants",
+                "actor-package-idle-animation-joins",
+                "image-space-modifiers",
+                "opening-sounds",
+                "dad-and-mom-dialogue",
+                "name-and-race-sex-menu-commands",
+            ],
+            "unaccounted": [],
+            "unaccountedCount": 0,
+        },
+        "runtimeReady": False,
+        "nextBoundary": "fo3-cg00-early-sequence-runtime-executor-not-yet-bound",
+    }
 
 
 def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dict[str, object]], dict[str, object]]:
@@ -4394,6 +5480,14 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
         selection,
         stage100_transition,
     )
+    early_birth_sequence = _compile_cg00_early_birth_sequence(
+        records,
+        selection,
+        selection_quest_form_id,
+        quest_script,
+        quest_script_source,
+        stage_sources,
+    )
     stage90_transition["nextBoundary"] = stage100_transition["schema"]
 
     character_selection = {
@@ -4409,6 +5503,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
             ],
         },
         "name": {"stage": name_stage, "command": "GetPlayerName"},
+        "earlyBirthSequence": early_birth_sequence,
         "appearance": {
             "stage": appearance_stage,
             "command": "ShowRaceMenu",
@@ -4589,26 +5684,48 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     meshes_archive_sha256 = next(
         str(row["sha256"]) for row in archives if row["role"] == meshes_role
     )
+    voices_role = "voices"
+    voices_archive = BsaArchive(archive_by_role[voices_role])
+    voices_archive_sha256 = next(
+        str(row["sha256"]) for row in archives if row["role"] == voices_role
+    )
+    sound_role = "sound"
+    sound_archive = BsaArchive(archive_by_role[sound_role])
+    sound_archive_sha256 = next(
+        str(row["sha256"]) for row in archives if row["role"] == sound_role
+    )
+    early_birth_sequence = dict(character_selection["earlyBirthSequence"])
+    _bind_cg00_early_birth_assets(
+        early_birth_sequence,
+        meshes_archive,
+        meshes_archive_sha256,
+        voices_archive,
+        voices_archive_sha256,
+        sound_archive,
+        sound_archive_sha256,
+        profile_root,
+        configuration.content_compiler.animation_samples_per_second,
+    )
+    character_selection["earlyBirthSequence"] = early_birth_sequence
     _bind_cg00_package_animations(
         section4_transition,
         meshes_archive,
         meshes_archive_sha256,
     )
     character_selection["section4Transition"] = section4_transition
-    voices_role = "voices"
     post_stage65_dialogue = dict(character_selection["postStage65Dialogue"])
     _bind_owned_dad_dialogue_audio(
         post_stage65_dialogue,
-        BsaArchive(archive_by_role[voices_role]),
-        next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
+        voices_archive,
+        voices_archive_sha256,
         profile_root,
     )
     character_selection["postStage65Dialogue"] = post_stage65_dialogue
     post_stage85_dialogue = dict(character_selection["postStage85Dialogue"])
     _bind_owned_dad_dialogue_audio(
         post_stage85_dialogue,
-        BsaArchive(archive_by_role[voices_role]),
-        next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
+        voices_archive,
+        voices_archive_sha256,
         profile_root,
     )
     character_selection["postStage85Dialogue"] = post_stage85_dialogue
@@ -4622,8 +5739,8 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     )
     _bind_owned_dad_dialogue_audio(
         cg01_dad_dialogue,
-        BsaArchive(archive_by_role[voices_role]),
-        next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
+        voices_archive,
+        voices_archive_sha256,
         profile_root,
     )
     post_stage5_transition["dialogue"] = cg01_dad_dialogue
@@ -4636,8 +5753,8 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     )
     _bind_owned_dad_dialogue_audio(
         stage12_dad_dialogue,
-        BsaArchive(archive_by_role[voices_role]),
-        next(str(row["sha256"]) for row in archives if row["role"] == voices_role),
+        voices_archive,
+        voices_archive_sha256,
         profile_root,
     )
     stage12_dad_response["dialogue"] = stage12_dad_dialogue
@@ -4662,6 +5779,20 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             if row["role"] == str(menu["textureArchiveRole"])
         ),
         profile_root,
+        archive_by_role[str(menu["uiArchiveRole"])],
+        OwnedArchiveStack(
+            tuple(
+                OwnedArchive(
+                    path.name,
+                    path,
+                    file_sha256(path),
+                    path.stat().st_size,
+                    BsaArchive(path),
+                )
+                for path in archive_by_role.values()
+            )
+        ),
+        configuration,
     )
     character_selection["appearance"] = appearance_contract
     stage80_transition = dict(character_selection["stage80Transition"])
@@ -4673,11 +5804,10 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     )
     character_selection["stage80Transition"] = stage80_transition
     stage90_transition = dict(character_selection["stage90Transition"])
-    sound_role = "sound"
     _bind_stage90_sound(
         stage90_transition,
-        BsaArchive(archive_by_role[sound_role]),
-        next(str(row["sha256"]) for row in archives if row["role"] == sound_role),
+        sound_archive,
+        sound_archive_sha256,
         profile_root,
     )
     character_selection["stage90Transition"] = stage90_transition
@@ -4849,22 +5979,139 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
     return {"output": str(output), "manifest": manifest}
 
 
+def refresh_cg00_player_camera(
+    data_root: Path,
+    profile_root: Path,
+    recipe_path: Path,
+) -> dict[str, object]:
+    """Refresh only the owned CG00 section-1 player-camera transform closure."""
+    recipe = load_recipe(recipe_path)
+    configuration = load_runtime_configuration()
+    _install_root, resolved_data_root = resolve_installation(data_root, recipe)
+    profile_path = profile_root.resolve() / "fallout3-profile.json"
+    if not profile_path.is_file():
+        raise FileNotFoundError("Fallout 3 owned profile is absent for camera refresh")
+    manifest = json.loads(profile_path.read_text(encoding="utf-8"))
+    if (
+        manifest.get("schema") != PROFILE_SCHEMA
+        or manifest.get("status") != PROFILE_STATUS
+        or dict(manifest.get("recipe", {})).get("id") != recipe["id"]
+        or Path(str(dict(manifest["install"])["dataRoot"])).resolve()
+        != resolved_data_root.resolve()
+    ):
+        raise ValueError("Fallout 3 owned profile camera refresh identity differs")
+
+    mesh_rows = [
+        dict(row)
+        for row in dict(recipe["install"])["requiredArchives"]
+        if dict(row)["role"] == "meshes"
+    ]
+    if len(mesh_rows) != 1:
+        raise ValueError("Fallout 3 owned meshes archive recipe is ambiguous")
+    meshes_path = find_case_insensitive_file(
+        resolved_data_root,
+        str(mesh_rows[0]["file"]),
+    )
+    meshes_sha256 = file_sha256(meshes_path)
+    registered_meshes = [
+        dict(row)
+        for row in dict(manifest["install"])["archives"]
+        if dict(row)["role"] == "meshes"
+    ]
+    if (
+        len(registered_meshes) != 1
+        or str(registered_meshes[0]["sha256"]).casefold() != meshes_sha256
+    ):
+        raise ValueError("Fallout 3 owned meshes archive changed before camera refresh")
+
+    character_selection = dict(dict(manifest["opening"])["characterSelection"])
+    sequence = dict(character_selection["earlyBirthSequence"])
+    definition = dict(dict(dict(recipe["opening"])["characterSelection"])[
+        "earlyBirthSequence"
+    ])
+    camera_definition = dict(definition["playerCamera"])
+    player_marker = dict(sequence["playerStartMarker"])
+    marker_transform = dict(player_marker["authoredTransform"])
+    if str(player_marker["formId"]).casefold() != str(
+        definition["playerStartMarkerFormId"]
+    ).casefold():
+        raise ValueError("Fallout 3 player camera start marker changed")
+    sequence["playerCamera"] = {
+        "section": int(camera_definition["section"]),
+        "skeletonLogicalPath": canonical_member_path(
+            str(camera_definition["skeletonLogicalPath"])
+        ),
+        "targetNode": str(camera_definition["targetNode"]),
+        "playerStartMarkerFormId": str(player_marker["formId"]),
+        "playerStartMarkerRotationGodotQuaternion": godot_rotation_quaternion(
+            tuple(float(value) for value in marker_transform["rotationRadians"])
+        ),
+    }
+    _bind_cg00_player_camera_asset(
+        sequence,
+        BsaArchive(meshes_path),
+        meshes_sha256,
+        profile_root,
+        configuration.content_compiler.animation_samples_per_second,
+    )
+    character_selection["earlyBirthSequence"] = sequence
+    manifest["opening"]["characterSelection"] = character_selection
+    manifest["recipe"] = {"id": recipe["id"], "sha256": file_sha256(recipe_path)}
+    registrar_path = Path(sys.executable) if getattr(sys, "frozen", False) else Path(__file__)
+    manifest["registrar"]["sha256"] = file_sha256(registrar_path)
+    manifest["capabilities"]["cg00PlayerCameraRuntimeReady"] = True
+    atomic_json(profile_path, manifest)
+    camera = dict(sequence["playerCamera"])
+    return {
+        "output": str(profile_path),
+        "manifest": manifest,
+        "camera": camera,
+        "outputSha256": file_sha256(profile_path),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--profile-root", type=Path, required=True)
     parser.add_argument("--recipe", type=Path, default=default_recipe_path())
+    parser.add_argument("--refresh-cg00-player-camera-only", action="store_true")
     args = parser.parse_args()
     try:
-        result = prepare_profile(
-            args.data_root.resolve(),
-            args.profile_root.resolve(),
-            args.recipe.resolve(),
+        result = (
+            refresh_cg00_player_camera(
+                args.data_root.resolve(),
+                args.profile_root.resolve(),
+                args.recipe.resolve(),
+            )
+            if args.refresh_cg00_player_camera_only
+            else prepare_profile(
+                args.data_root.resolve(),
+                args.profile_root.resolve(),
+                args.recipe.resolve(),
+            )
         )
     except Exception as error:
         print(f"OPENNV_FO3_PROFILE_ERROR {error}", file=sys.stderr)
         return 2
     manifest = result["manifest"]
+    if args.refresh_cg00_player_camera_only:
+        camera = dict(result["camera"])
+        print(
+            "OPENNV_FO3_CG00_PLAYER_CAMERA "
+            + json.dumps(
+                {
+                    "profile": result["output"],
+                    "profileSha256": result["outputSha256"],
+                    "animationSha256": dict(camera["animation"])["sha256"],
+                    "skeletonSha256": dict(camera["skeleton"])["sha256"],
+                    "sampleContractSha256": camera["sampleContractSha256"],
+                    "sampleCount": len(dict(camera["track"])["samples"]),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
     print(
         "OPENNV_FO3_PROFILE "
         + json.dumps(

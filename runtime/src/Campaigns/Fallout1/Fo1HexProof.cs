@@ -466,18 +466,20 @@ internal static class Fo1HexProof
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             var cutawayCandidates = loaded.CaveCutaway.Candidates;
             var cutawayHidden = loaded.CaveCutaway.HiddenInstances;
-            var meltMaterials = loaded.CaveCutaway.MeltMaterials;
             var visibleHostileMarkers = loaded.Session.VisibleHostileMarkers;
             var visibleHostileBeacons = loaded.Session.VisibleHostileBeacons;
             var visibleHostileLabels = loaded.Session.VisibleHostileLabels;
             if (ownedCavePresentation &&
-                (cutawayCandidates < loaded.RuntimeProfile.Cutaway.MinimumCandidateInstances ||
-                 cutawayHidden < 1 ||
-                 meltMaterials < cutawayCandidates || !loaded.CaveCutaway.ShaderDriven))
+                (cutawayCandidates != 1 || cutawayHidden != cutawayCandidates ||
+                 !loaded.CaveCutaway.SourceVisibilityDriven ||
+                 !loaded.CaveCutaway.ShaderDriven || loaded.CaveCutaway.MeltMaterials < 2 ||
+                 loaded.CaveCutaway.FadedInstances < 1))
                 throw new InvalidOperationException(
-                    $"Fallout cave melt proof failed: candidates={cutawayCandidates} " +
-                    $"occluders={cutawayHidden} materials={meltMaterials} " +
-                    $"shaderDriven={loaded.CaveCutaway.ShaderDriven}");
+                    $"Fallout tactical cave cutaway proof failed: surfaces={cutawayCandidates} " +
+                    $"hidden={cutawayHidden} sourceDriven={loaded.CaveCutaway.SourceVisibilityDriven} " +
+                    $"shaderDriven={loaded.CaveCutaway.ShaderDriven} " +
+                    $"materials={loaded.CaveCutaway.MeltMaterials} " +
+                    $"faded={loaded.CaveCutaway.FadedInstances}");
             var targetReticle = host.FindChild("SelectedTargetReticle", true, false) as Control;
             var targetReticleVisible = targetReticle is not null && targetReticle.Visible;
             if (hostileMarkers != Fo1HexProofNumericContracts.AcceptanceInt20 || hostileLabels != Fo1HexProofNumericContracts.AcceptanceInt20)
@@ -834,8 +836,9 @@ internal static class Fo1HexProof
                     defaultVisible = ownedCavePresentation,
                     cutawayCandidates,
                     combatCutawayOccluders = cutawayHidden,
-                    meltShaderMaterials = meltMaterials,
-                    shaderDrivenCameraMelt = loaded.CaveCutaway.ShaderDriven,
+                    sourceRoofSurfaces = cutawayCandidates,
+                    tacticalHiddenSourceRoofSurfaces = cutawayHidden,
+                    sourceVisibilityDriven = loaded.CaveCutaway.SourceVisibilityDriven,
                     atmosphere = new
                     {
                         schema = loaded.Atmosphere.Schema,

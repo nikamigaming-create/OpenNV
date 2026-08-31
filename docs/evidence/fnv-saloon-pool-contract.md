@@ -1,12 +1,16 @@
 # Goodsprings Saloon pool contract
 
-Status: bounded OpenNV gameplay extension; retail identities and physics verified,
-desktop and physical OpenXR acceptance pending.
+Status: unsupported gameplay extension. Retail identities and individual NIF
+physics are resolved, but a playable table layout, collision/contact, pocket,
+reset, and cold save/restore have not passed the native gate. Physical OpenXR
+acceptance is also pending.
 
 The legally owned `FalloutNV.esm` places one ruined table, one cue, one rack, one
 cue ball, and three object balls in `GSProspectorSaloonInterior`. Their reference
 FormIDs, base FormIDs, models, transforms, and NIF rigid-body fields are compiler
-inputs. OpenNV does not synthesize extra balls or guess their placement.
+inputs. OpenNV does not synthesize extra balls or guess their placement. The
+authored ball references decorate the ruined retail table; they do not form a
+playable layout on the intact replacement table.
 
 The recipe explicitly replaces the ruined table presentation with the intact
 retail `clutter\\billiards\\pooltable.nif` asset. This is an OpenNV practice-table
@@ -31,3 +35,14 @@ mount transforms live in `runtime/config/open-nv-runtime-v1.json`.
 
 This slice is solo practice with the four authored balls. Full eight-ball rules,
 AI, and a fabricated fifteen-ball rack are outside this contract.
+
+The flat and OpenXR-layout software gates are designed to strike the same
+authoritative rigid bodies, require an observed ball-to-ball collision, move
+one owned object ball below the table's pocket boundary, require it to retire,
+cold-load that pocketed state from the shared save, restore it into the live
+table, and finally reset every ball to its exact authored transform. The flat
+gate currently fails before contact because at least ball `00107d76` has no
+intact-table triangle beneath its authored X/Z position. OpenXR-layout proof is
+therefore not run. A future playable arrangement needs an explicit, reviewable
+OpenNV policy contract; it must not be inferred and presented as a
+retail-authored layout.

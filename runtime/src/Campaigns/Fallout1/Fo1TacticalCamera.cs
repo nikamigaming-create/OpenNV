@@ -1,6 +1,40 @@
+using System.Text.Json;
 using Godot;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
+
+internal readonly record struct Fo1CameraSaveState(
+    string Mode,
+    float YawRadians,
+    float PitchRadians,
+    float TacticalZoomMeters,
+    float ShoulderDistanceMeters)
+{
+    private const string Schema = "opennv-fo1-camera-state/v1";
+
+    internal static Fo1CameraSaveState Load(JsonElement source)
+    {
+        if (source.GetProperty("schema").GetString() != Schema)
+            throw new InvalidOperationException(
+                "Fallout 1 save contains an unknown camera-state schema.");
+        return new Fo1CameraSaveState(
+            source.GetProperty("mode").GetString() ?? string.Empty,
+            source.GetProperty("yawRadians").GetSingle(),
+            source.GetProperty("pitchRadians").GetSingle(),
+            source.GetProperty("tacticalZoomMeters").GetSingle(),
+            source.GetProperty("shoulderDistanceMeters").GetSingle());
+    }
+
+    internal object SaveState() => new
+    {
+        schema = Schema,
+        mode = Mode,
+        yawRadians = YawRadians,
+        pitchRadians = PitchRadians,
+        tacticalZoomMeters = TacticalZoomMeters,
+        shoulderDistanceMeters = ShoulderDistanceMeters,
+    };
+}
 
 internal static class Fo1TacticalCameraNumericContracts
 {
@@ -52,6 +86,87 @@ internal partial class Fo1TacticalCamera : Node3D
     internal float FirstPersonEyeHeightMeters => _profile.FirstPerson.EyeHeightMeters;
     internal float FirstPersonFovDegrees => _profile.FirstPerson.FovDegrees;
     internal float FirstPersonMoveSpeedMetersPerSecond => _profile.FirstPerson.MoveSpeedMetersPerSecond;
+
+    internal Fo1CameraSaveState CaptureSaveState()
+    {
+        var result = new Fo1CameraSaveState(
+            _firstPersonMode
+                ? "first-person"
+                : _explorationMode
+                    ? "shoulder"
+                    : "hex-tactical",
+            _targetYaw,
+            _targetPitch,
+            _targetSize,
+            _explorationDistance);
+        ValidateSaveState(result);
+        return result;
+    }
+
+    internal void ValidateSaveState(Fo1CameraSaveState state)
+    {
+        if (state.Mode is not ("hex-tactical" or "shoulder" or "first-person") ||
+            !float.IsFinite(state.YawRadians) ||
+            !float.IsFinite(state.PitchRadians) ||
+            !float.IsFinite(state.TacticalZoomMeters) ||
+            !float.IsFinite(state.ShoulderDistanceMeters) ||
+            state.TacticalZoomMeters < _profile.Tactical.MinimumSizeMeters ||
+            state.TacticalZoomMeters > _profile.Tactical.MaximumSizeMeters ||
+            state.ShoulderDistanceMeters < _profile.Shoulder.MinimumDistanceMeters ||
+            state.ShoulderDistanceMeters > _profile.Shoulder.MaximumDistanceMeters)
+            throw new InvalidOperationException(
+                "Fallout 1 saved camera mode, angle, or zoom is invalid.");
+        var minimumPitch = Mathf.DegToRad(state.Mode switch
+        {
+            "hex-tactical" => _profile.Tactical.MinimumPitchDegrees,
+            "shoulder" => _profile.Shoulder.MinimumPitchDegrees,
+            _ => _profile.FirstPerson.MinimumPitchDegrees,
+        });
+        var maximumPitch = Mathf.DegToRad(state.Mode switch
+        {
+            "hex-tactical" => _profile.Tactical.MaximumPitchDegrees,
+            "shoulder" => _profile.Shoulder.MaximumPitchDegrees,
+            _ => _profile.FirstPerson.MaximumPitchDegrees,
+        });
+        if (state.PitchRadians < minimumPitch || state.PitchRadians > maximumPitch)
+            throw new InvalidOperationException(
+                "Fallout 1 saved camera pitch is outside the selected mode's authored range.");
+    }
+
+    internal void ApplySaveState(Fo1CameraSaveState state)
+    {
+        ValidateSaveState(state);
+        if (state.Mode == "first-person")
+            SetFirstPersonMode(true);
+        else if (state.Mode == "shoulder")
+            SetExplorationMode(true);
+        else
+            SetExplorationMode(false);
+
+        _targetSize = state.TacticalZoomMeters;
+        _explorationDistance = state.ShoulderDistanceMeters;
+        SetOrbitDegrees(
+            Mathf.RadToDeg(state.YawRadians),
+            Mathf.RadToDeg(state.PitchRadians));
+        if (state.Mode == "hex-tactical")
+        {
+            Position = Fo1HexMath.Center(_session.PlayerTile);
+            _camera.Size = _targetSize;
+        }
+        else
+        {
+            Position = _session.PlayerToken.GlobalPosition + Vector3.Up *
+                (state.Mode == "first-person"
+                    ? _profile.FirstPerson.EyeHeightMeters
+                    : _profile.Shoulder.RigHeightMeters);
+            _camera.Position = state.Mode == "first-person"
+                ? Vector3.Zero
+                : new Vector3(
+                    _profile.Shoulder.CameraLateralOffsetMeters,
+                    _profile.Shoulder.CameraVerticalOffsetMeters,
+                    _explorationDistance);
+        }
+    }
 
     internal void AttachCaveCutaway(Fo1CaveCutaway caveCutaway)
     {

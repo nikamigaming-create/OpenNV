@@ -40,6 +40,9 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
     private const int VectorDimensions = 3;
     private const float MinimumValue = 0.0f;
     private const float PerspectiveMaximumDegrees = 180.0f;
+    private const float FalloutReferenceAspectHeightOverWidth = 0.75f;
+    private const float FovDiameterToRadius = 0.5f;
+    private const string ExpectedGodotKeepAspect = "keep-height";
 
     internal static Fo3Cg01ToddlerWorldContract Load(
         JsonElement source,
@@ -71,9 +74,24 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
                 "Fallout 3 CG01 toddler player marker differs.");
 
         var camera = RequiredObject(source, "camera");
+        var sourceHorizontalFov = RequiredPositiveSingle(
+            camera,
+            "sourceHorizontalFovDegrees");
+        var referenceAspect = RequiredPositiveSingle(
+            camera,
+            "referenceAspectHeightOverWidth");
         var verticalFov = RequiredPositiveSingle(camera, "verticalFovDegrees");
         var nearGameUnits = RequiredPositiveSingle(camera, "nearGameUnits");
-        if (verticalFov >= PerspectiveMaximumDegrees)
+        var expectedVerticalFov = Mathf.RadToDeg(
+            2.0f * Mathf.Atan(
+                Mathf.Tan(Mathf.DegToRad(sourceHorizontalFov) * FovDiameterToRadius) *
+                referenceAspect));
+        if (sourceHorizontalFov >= PerspectiveMaximumDegrees ||
+            !Mathf.IsEqualApprox(
+                referenceAspect,
+                FalloutReferenceAspectHeightOverWidth) ||
+            !Mathf.IsEqualApprox(verticalFov, expectedVerticalFov) ||
+            RequiredString(camera, "godotKeepAspect") != ExpectedGodotKeepAspect)
             throw new InvalidOperationException("Fallout 3 CG01 toddler camera differs.");
 
         var physics = RequiredObject(source, "physicsPolicy");
@@ -495,6 +513,7 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
             Name = "CG01_OWNED_INI_FIRST_PERSON_CAMERA",
             Position = contract.DesktopCameraOffsetMeters,
             Fov = contract.VerticalFovDegrees,
+            KeepAspect = Camera3D.KeepAspectEnum.Height,
             Near = contract.NearGameUnits * scene.UnitsToMeters,
             Far = contract.CameraFarMeters,
             Current = true,

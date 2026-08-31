@@ -54,6 +54,9 @@ class Fo1RuntimeProfileTest(unittest.TestCase):
     def test_equipment_and_hud_are_source_symbol_driven(self) -> None:
         session = (RUNTIME / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
         hud = (RUNTIME / "Fo1ClassicHud.cs").read_text(encoding="utf-8")
+        inventory = (RUNTIME / "Fo1ClassicInventoryScreen.cs").read_text(
+            encoding="utf-8"
+        )
         contract = (RUNTIME / "Fo1CharacterStartContract.cs").read_text(
             encoding="utf-8"
         )
@@ -62,6 +65,41 @@ class Fo1RuntimeProfileTest(unittest.TestCase):
         self.assertNotIn("SetHeldWeapon", session)
         self.assertIn("equippedWeaponSymbol", session)
         self.assertIn("SwapEquippedWeapon", session)
+        self.assertIn("EquipInventoryWeapon", session)
+        self.assertIn("_playerProfile.Inventory.EquippedRangedSymbol", session)
+        self.assertIn("_playerProfile.Inventory.EquippedMeleeSymbol", session)
+        self.assertIn("equippedWeaponSymbol = EquippedWeaponSymbol", session)
+        self.assertIn('root.TryGetProperty("equippedWeaponSymbol"', session)
+        self.assertEqual(session.count("ApplyOwnedPlayerLighting("), 2)
+        self.assertEqual(session.count("ApplyOwnedWeaponLighting("), 3)
+        self.assertEqual(session.count("CountStandardLitMaterials("), 2)
+        self.assertIn("RuntimeMaterialLoader.ApplyRetailActorLighting(", session)
+        self.assertIn(
+            "RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(", session
+        )
+        self.assertIn("atmosphere.AmbientEnergy", session)
+        self.assertEqual(
+            session.count(
+                "_runtimeProfile.Camera.Tactical.FarClipMeters / unitsToMeters"
+            ),
+            2,
+        )
+        self.assertNotIn(
+            "atmosphere.VolumetricFogLengthMeters / unitsToMeters", session
+        )
+        self.assertEqual(session.count("BindOwnedPlayerMaterialTextures("), 2)
+        self.assertIn('shader.SetShaderParameter("base_map"', session)
+        self.assertIn('shader.SetShaderParameter("normal_map"', session)
+        self.assertIn("shader.GetShaderParameter(parameter).AsGodotObject()", session)
+        self.assertIn("readback.GetRid() != expected.GetRid()", session)
+        self.assertIn("SHA256.HashData(image.GetData())", session)
+        self.assertIn("OPENNV_FO1_OWNED_ACTOR_TEXTURE_BINDING_PASS", session)
+        self.assertIn("VerifiedGltfLoader.VerifyHash(path", session)
+        self.assertIn("litMaterials = _ownedPlayerLitMaterials", session)
+        self.assertIn("equipmentChangedCount = EquipmentChangedCount", inventory)
+        self.assertIn('gameplayMutation = "source-symbol-equipment-only"', inventory)
+        self.assertNotIn('ItemInventory("PID_10MM_PISTOL")', inventory)
+        self.assertNotIn('ItemInventory("PID_KNIFE")', inventory)
         self.assertIn("WeaponInventoryBySymbol", hud + contract)
         self.assertNotIn('_images["weaponInventory"]', hud)
         self.assertIn("UpdateCreatorNumbers", creator)
@@ -99,6 +137,40 @@ class Fo1RuntimeProfileTest(unittest.TestCase):
             '"homeSizeMeters": 22.0',
         ):
             self.assertNotIn(forbidden, generator)
+
+    def test_cutaway_uses_only_source_labelled_visibility(self) -> None:
+        cutaway = (RUNTIME / "Fo1CaveCutaway.cs").read_text(encoding="utf-8")
+        cave = (RUNTIME / "Fo1OwnedCaveKit.cs").read_text(encoding="utf-8")
+
+        self.assertIn('"fo1_source_tactical_visibility"', cutaway)
+        self.assertIn('"hide-roof-envelope"', cutaway)
+        self.assertIn('Name = "Fo1SourceRoofAndDitheredShellCutaway"', cutaway)
+        self.assertIn(
+            "internal int MeltMaterials => _cutawayMaterials.Length;",
+            cutaway,
+        )
+        self.assertIn("screen_dither(FRAGCOORD.xy)", cutaway)
+        self.assertIn("_camera.UnprojectPosition(", cutaway)
+        self.assertIn('"hide-boundary-envelope" or "hide-wall-volume"', cutaway)
+        self.assertNotIn("BuildMeltShader", cutaway)
+        self.assertIn("BuildCaveEnvelopeMeshes", cave)
+        self.assertIn("CAVE_terrain-envelope-source-roof", cave)
+        self.assertIn("CAVE_terrain-envelope-source-boundary", cave)
+        self.assertIn('"hide-boundary-envelope"', cave)
+        self.assertIn('"hide-wall-volume"', cave)
+        self.assertIn('"hide-vault-portal"', cave)
+
+    def test_owned_player_and_continuous_cave_surface_use_source_bound_floor_contracts(self) -> None:
+        session = (RUNTIME / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        loader = (RUNTIME / "Fo1HexSceneLoader.cs").read_text(encoding="utf-8")
+        cave = (RUNTIME / "Fo1OwnedCaveKit.cs").read_text(encoding="utf-8")
+
+        self.assertIn("ownedCave.GroundingFloorHeightMeters", loader)
+        self.assertIn("_ownedPlayerFloorHeightMeters", session)
+        self.assertIn("sourceBoundFloorHeightMeters", session)
+        self.assertGreaterEqual(cave.count("TextureRepeat = true"), 3)
+        self.assertIn("ApplyRetailAmbientDirectionalLighting(", loader)
+        self.assertIn("ownedCave = ownedCave with { LitMaterials = litMaterials }", loader)
 
     def test_runtime_consumers_have_one_profile_owner(self) -> None:
         owners = {

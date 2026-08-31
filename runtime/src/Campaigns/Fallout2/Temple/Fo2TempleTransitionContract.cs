@@ -265,6 +265,55 @@ internal sealed class Fo2TempleTransitionCatalog
             resources.Count);
     }
 
+    internal static Fo2TempleTransitionCatalog LoadFromPresentationOutput(
+        Fo2TemplePresentationCatalog presentation)
+    {
+        var cacheBytes = File.ReadAllBytes(presentation.ManifestPath);
+        using var cacheDocument = JsonDocument.Parse(cacheBytes);
+        var descriptor = cacheDocument.RootElement
+            .GetProperty("outputs")
+            .GetProperty("templeTransitions");
+        var cacheRoot = Path.GetDirectoryName(presentation.ManifestPath) ??
+            throw new InvalidOperationException("Fallout 2 Temple cache has no parent directory.");
+        var relativeFile = RequiredString(descriptor, "file");
+        if (Path.IsPathRooted(relativeFile))
+            throw new InvalidOperationException(
+                "Fallout 2 Temple transition output must be relative to its cache.");
+        var transitionPath = Path.GetFullPath(Path.Combine(cacheRoot, relativeFile));
+        var relative = Path.GetRelativePath(cacheRoot, transitionPath);
+        if (relative == ".." || relative.StartsWith($"..{Path.DirectorySeparatorChar}"))
+            throw new InvalidOperationException(
+                "Fallout 2 Temple transition output escapes its cache root.");
+        var descriptorHash = RequiredHash(descriptor, "sha256");
+        var descriptorSourceHash = RequiredHash(descriptor, "sourceManifestSha256");
+        var descriptorProfileHash = RequiredHash(descriptor, "sourceProfileSha256");
+        var descriptorProfileId = RequiredString(descriptor, "sourceProfileId");
+        if (descriptorSourceHash != presentation.SourceManifestSha256 ||
+            descriptorProfileHash != presentation.SourceProfileSha256 ||
+            descriptorProfileId != presentation.SourceProfileId)
+            throw new InvalidOperationException(
+                "Fallout 2 Temple transition descriptor does not join the cache source/profile.");
+        var transitionBytes = Fo2TemplePresentationCatalog.VerifyFile(
+            transitionPath,
+            descriptorHash,
+            expectedBytes: null,
+            "Fallout 2 Temple transition output");
+        using var transitionDocument = JsonDocument.Parse(transitionBytes);
+        var transition = transitionDocument.RootElement;
+        var source = transition.GetProperty("sourceManifest");
+        var profile = transition.GetProperty("sourceProfile");
+        if (RequiredString(transition, "schema") != TransitionSchema ||
+            RequiredString(transition, "status") != "compiled-owned-transition-records" ||
+            Path.GetFullPath(RequiredString(source, "file")) != presentation.SourceManifestPath ||
+            RequiredHash(source, "sha256") != presentation.SourceManifestSha256 ||
+            Path.GetFullPath(RequiredString(profile, "file")) != presentation.SourceProfilePath ||
+            RequiredHash(profile, "sha256") != presentation.SourceProfileSha256 ||
+            RequiredString(profile, "sourceProfileId") != presentation.SourceProfileId)
+            throw new InvalidOperationException(
+                "Fallout 2 Temple transition output does not bind the cache source/profile.");
+        return Load(transitionPath, presentation);
+    }
+
     private static Fo2TempleScriptProgram ReadProgram(JsonElement source) => new(
         source.GetProperty("scriptsListIndex").GetInt32(),
         RequiredString(source, "indexSemantics"),

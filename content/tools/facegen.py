@@ -16,8 +16,18 @@ from pyffi.formats.egm import EgmFormat  # type: ignore  # noqa: E402
 
 EGT_HEADER_BYTES = 64
 EGT_SIGNATURE_BYTES = 8
-EGT_HEADER_FIELD_COUNT = 5
-EGT_MORPH_SCALE_BYTES = 4
+EGT_HEADER_FIELD_COUNT = 3
+EGT_TEXTURE_CONTROL_BYTES = 4
+EGT_TEXTURE_FLAG_INTENSITY_MASK = 0x03
+EGT_TEXTURE_FLAG_ENABLE = 0x04
+EGT_TEXTURE_FLAG_SLOT_SHIFT = 3
+EGT_TEXTURE_FLAG_SLOT_MASK = 0x07
+EGT_TEXTURE_FLAG_MAXED = 0x40
+EGT_TEXTURE_FLAG_INVERT = 0x80
+EGT_FACE_TEXTURE_SLOT = 7
+# Owned FNV precomputed FaceGen detail textures close against the EGT packed
+# intensity ladder.  Each step increases signed-byte contribution by 4x.
+EGT_INTENSITY_SCALES = (1.0 / 128.0, 1.0 / 32.0, 1.0 / 8.0, 1.0 / 2.0)
 RGB_CHANNEL_COUNT = 3
 RGBA_CHANNEL_COUNT = 4
 BYTE_CHANNEL_MAXIMUM = 255
@@ -163,31 +173,46 @@ def facegen_geometry_control_deltas(
 def synthesize_texture_detail(egt_payload: bytes, weights: tuple[float, ...]) -> Image.Image:
     if len(egt_payload) < EGT_HEADER_BYTES or egt_payload[:EGT_SIGNATURE_BYTES] != b"FREGT003":
         raise ValueError("Unexpected FaceGen EGT signature")
-    width, height, symmetric_modes, asymmetric_modes, _basis_version = struct.unpack_from(
+    width, height, texture_modes = struct.unpack_from(
         f"<{EGT_HEADER_FIELD_COUNT}I", egt_payload, EGT_SIGNATURE_BYTES
     )
-    if width <= 0 or height <= 0 or asymmetric_modes != 0:
+    if width <= 0 or height <= 0 or texture_modes <= 0:
         raise ValueError(
             f"Unsupported FaceGen EGT dimensions/modes: {width}x{height} "
-            f"symmetric={symmetric_modes} asymmetric={asymmetric_modes}"
+            f"textures={texture_modes}"
         )
-    if len(weights) != symmetric_modes:
-        raise ValueError(f"FaceGen texture mismatch: weights={len(weights)} modes={symmetric_modes}")
+    if len(weights) != texture_modes:
+        raise ValueError(f"FaceGen texture mismatch: weights={len(weights)} modes={texture_modes}")
     pixels = width * height
-    expected = EGT_HEADER_BYTES + symmetric_modes * (
-        EGT_MORPH_SCALE_BYTES + pixels * RGB_CHANNEL_COUNT
+    expected = EGT_HEADER_BYTES + texture_modes * (
+        EGT_TEXTURE_CONTROL_BYTES + pixels * RGB_CHANNEL_COUNT
     )
     if len(egt_payload) != expected:
         raise ValueError(f"FaceGen EGT byte count mismatch: expected={expected} actual={len(egt_payload)}")
     channels = [[SIGNED_DETAIL_NEUTRAL] * pixels for _ in range(RGB_CHANNEL_COUNT)]
     offset = EGT_HEADER_BYTES
     for weight in weights:
-        scale = struct.unpack_from("<f", egt_payload, offset)[0]
-        offset += EGT_MORPH_SCALE_BYTES
+        _unknown_1, _unknown_2, _unknown_3, flags = struct.unpack_from(
+            "<4B", egt_payload, offset
+        )
+        offset += EGT_TEXTURE_CONTROL_BYTES
+        intensity = flags & EGT_TEXTURE_FLAG_INTENSITY_MASK
+        enabled = flags & EGT_TEXTURE_FLAG_ENABLE
+        slot = (flags >> EGT_TEXTURE_FLAG_SLOT_SHIFT) & EGT_TEXTURE_FLAG_SLOT_MASK
+        maxed = flags & EGT_TEXTURE_FLAG_MAXED
+        inverted = flags & EGT_TEXTURE_FLAG_INVERT
+        if slot != EGT_FACE_TEXTURE_SLOT or maxed:
+            raise ValueError(
+                "Unsupported FaceGen EGT texture flags: "
+                f"slot={slot} maxed={bool(maxed)} flags=0x{flags:02x}"
+            )
+        scale = EGT_INTENSITY_SCALES[intensity]
+        if inverted:
+            scale = -scale
         for channel in channels:
             values = struct.unpack_from(f"<{pixels}b", egt_payload, offset)
             offset += pixels
-            if weight != 0.0:
+            if enabled and weight != 0.0:
                 factor = weight * scale
                 for index, value in enumerate(values):
                     channel[index] += factor * value
@@ -199,7 +224,13 @@ def synthesize_texture_detail(egt_payload: bytes, weights: tuple[float, ...]) ->
                 min(BYTE_CHANNEL_MAXIMUM, round(channels[channel][index])),
             )
         output[index * RGBA_CHANNEL_COUNT + RGB_CHANNEL_COUNT] = BYTE_CHANNEL_MAXIMUM
-    return Image.frombytes("RGBA", (width, height), bytes(output))
+    # EGT scanlines use the opposite vertical origin from the NIF UVs and the
+    # decoded DDS/PNG texture boundary.  Retail-precomputed FaceGen details
+    # arrive in the latter orientation, so direct synthesis must normalize to
+    # that same contract before the image is hashed and emitted.
+    return Image.frombytes("RGBA", (width, height), bytes(output)).transpose(
+        Image.Transpose.FLIP_TOP_BOTTOM
+    )
 
 
 def compose_body_albedo(diffuse: Image.Image, body_mod: Image.Image) -> Image.Image:

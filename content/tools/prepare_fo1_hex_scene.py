@@ -104,6 +104,12 @@ RECIPE_SCHEMA = "opennv-fo1-hex-recipe/v1"
 RUNTIME_PROFILE_RECIPE_SCHEMA = "opennv-fo1-runtime-profile-recipe/v1"
 SCENE_SCHEMA = "opennv-fo1-hex-scene/v1"
 CACHE_SCHEMA = "opennv-fo1-hex-cache/v1"
+CLASSIC_HUMANOID_DONOR_SCHEMA = "opennv-owned-player-facegen-preview-set/v3"
+CLASSIC_HUMANOID_DONOR_STATUS = (
+    "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-targets-"
+    "all-native-geometry-controls-runtime-bound"
+)
+CLASSIC_HUMANOID_DONOR_ROLES = ("body", "left-hand", "right-hand")
 
 
 def read_json(path: Path) -> dict[str, object]:
@@ -116,6 +122,90 @@ def write_json(path: Path, document: object) -> None:
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_bytes(payload)
     os.replace(temporary, path)
+
+
+def load_classic_humanoid_donor(path: Path) -> dict[str, object]:
+    resolved_path = path.resolve()
+    donor = read_json(resolved_path)
+    if (
+        donor.get("schema") != CLASSIC_HUMANOID_DONOR_SCHEMA
+        or donor.get("status") != CLASSIC_HUMANOID_DONOR_STATUS
+        or donor.get("fullBody") is not True
+        or tuple(donor.get("bodyComponentRoles", ())) != CLASSIC_HUMANOID_DONOR_ROLES
+    ):
+        raise Fo1ProfileError("unexpected shared classic humanoid donor preview set")
+    player_form_id = str(donor.get("playerFormId", "")).lower()
+    parse_form_id(player_form_id, "shared classic humanoid donor playerFormId")
+    sources = donor.get("bodyComponentSourcesBySex")
+    previews = donor.get("previews")
+    if not isinstance(sources, dict) or not isinstance(previews, list):
+        raise Fo1ProfileError("shared classic humanoid donor has no sex-keyed module/preview join")
+    variants: list[dict[str, object]] = []
+    for sex in ("male", "female"):
+        modules = sources.get(sex)
+        preview = next(
+            (row for row in previews if isinstance(row, dict) and row.get("sex") == sex),
+            None,
+        )
+        if (
+            not isinstance(modules, list)
+            or not isinstance(preview, dict)
+            or tuple(str(row.get("role", "")) for row in modules if isinstance(row, dict))
+            != CLASSIC_HUMANOID_DONOR_ROLES
+        ):
+            raise Fo1ProfileError(f"shared classic humanoid donor is incomplete for {sex}")
+        outputs = preview.get("outputs")
+        if not isinstance(outputs, dict):
+            raise Fo1ProfileError(f"shared classic humanoid donor has no {sex} output join")
+        model_path = Path(str(outputs.get("gltf", ""))).resolve()
+        sidecar_path = Path(str(outputs.get("sidecar", ""))).resolve()
+        model_sha256 = str(outputs.get("gltfSha256", "")).lower()
+        sidecar_sha256 = str(outputs.get("sidecarSha256", "")).lower()
+        if (
+            not re.fullmatch(r"[0-9a-f]{64}", model_sha256)
+            or not re.fullmatch(r"[0-9a-f]{64}", sidecar_sha256)
+            or not model_path.is_file()
+            or not sidecar_path.is_file()
+            or sha256_path(model_path) != model_sha256
+            or sha256_path(sidecar_path) != sidecar_sha256
+        ):
+            raise Fo1ProfileError(f"shared classic humanoid donor {sex} output hash drift")
+        sidecar = read_json(sidecar_path)
+        surfaces = sidecar.get("surfaces")
+        textures = sidecar.get("textures")
+        animations = sidecar.get("animations")
+        if (
+            sidecar.get("schema") != "opennv-actor-gltf/v4"
+            or sidecar.get("status") != "skinned-animated"
+            or not isinstance(surfaces, list)
+            or not isinstance(textures, list)
+            or not isinstance(animations, list)
+        ):
+            raise Fo1ProfileError(f"shared classic humanoid donor {sex} sidecar drift")
+        expected_surfaces = sum(
+            int(row.get("retainedSurfaceCount", -1)) for row in modules
+        )
+        if len(surfaces) < expected_surfaces:
+            raise Fo1ProfileError(f"shared classic humanoid donor {sex} surface coverage drift")
+        variants.append(
+            {
+                "sex": sex,
+                "model": str(model_path),
+                "sidecar": str(sidecar_path),
+                "modelSha256": model_sha256,
+                "sidecarSha256": sidecar_sha256,
+                "surfaces": len(surfaces),
+                "textures": len(textures),
+                "animations": len(animations),
+            }
+        )
+    return {
+        "schema": "opennv-fo1-classic-humanoid-donor-join/v1",
+        "previewSet": str(resolved_path),
+        "previewSetSha256": sha256_path(resolved_path),
+        "playerFormId": player_form_id,
+        "variants": variants,
+    }
 
 
 def load_runtime_profile_recipe(
@@ -1393,6 +1483,7 @@ def prepare(
     door_proof_path: Path,
     output_root: Path,
     presentation_manifest_path: Path | None = None,
+    classic_humanoid_donor_path: Path | None = None,
 ) -> dict[str, object]:
     if output_root.exists():
         raise Fo1ProfileError(f"refusing to overwrite Fallout hex cache: {output_root}")
@@ -1417,7 +1508,15 @@ def prepare(
     if sha256_path(door_proof_path) != recipe["door"]["proofSha256"]:
         raise Fo1ProfileError("Vault door proof hash drift")
     presentation_manifest = None
+    classic_humanoid_donor = None
     if presentation_manifest_path is not None:
+        if classic_humanoid_donor_path is None:
+            raise Fo1ProfileError(
+                "Fallout 1 owned presentation requires an explicit shared classic humanoid donor"
+            )
+        classic_humanoid_donor = load_classic_humanoid_donor(
+            classic_humanoid_donor_path
+        )
         presentation_manifest = read_json(presentation_manifest_path)
         if (
             presentation_manifest.get("schema") != "opennv-fo1-3d-presentation/v1"
@@ -1635,6 +1734,14 @@ def prepare(
         or int(melee_profile["ammunitionPid"]) != -1
     ):
         raise Fo1ProfileError("Fallout starting ranged/melee/ammunition relationship drift")
+    symbols_by_pid: dict[int, str] = {}
+    for symbol, pid in pid_values.items():
+        if pid in symbols_by_pid:
+            raise Fo1ProfileError(
+                f"Fallout item PID header has duplicate PID {pid:08x}: "
+                f"{symbols_by_pid[pid]} / {symbol}"
+            )
+        symbols_by_pid[pid] = symbol
     tile_names = resolver.list_lines("art\\tiles\\tiles.lst")
     colors = palette_rgba(palette_path)
     floor_ids = [entry & PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_HEX_0FFF for entry in elevation.entries]
@@ -1854,6 +1961,87 @@ def prepare(
                 }
             )
 
+        map_inventory_hosts = []
+        for obj in top_level_objects:
+            inventory = obj["inventory"]
+            if not inventory:
+                continue
+            if obj["tile"] < 0 or int(obj["inventoryCapacity"]) <= 0:
+                raise Fo1ProfileError(
+                    f"V13ENT MAP inventory host {obj['serial']} has no on-grid capacity"
+                )
+            items = []
+            for row in inventory:
+                quantity = int(row["quantity"])
+                item = row["object"]
+                pid = int(item["pid"], PREPARE_FO1_HEX_SCENE_COMPILER_CONTRACT_INTEGER_16)
+                symbol = symbols_by_pid.get(pid)
+                if symbol is None:
+                    raise Fo1ProfileError(
+                        f"V13ENT MAP inventory item {item['serial']} PID {pid:08x} "
+                        "is absent from the source item PID header"
+                    )
+                prototype = item["prototype"]
+                if quantity <= 0 or int(prototype["object_type"]) != 0:
+                    raise Fo1ProfileError(
+                        f"V13ENT MAP inventory item {item['serial']} is not a positive item stack"
+                    )
+                filename = prototype.get("filename")
+                if not filename:
+                    raise Fo1ProfileError(
+                        f"V13ENT MAP inventory item {item['serial']} has no item PRO filename"
+                    )
+                resource = resolver.read(f"proto\\items\\{filename}")
+                profile = parse_item_pro(resource.data)
+                if (
+                    profile["pid"] != f"{pid:08x}"
+                    or resource.sha256 != prototype["sha256"]
+                ):
+                    raise Fo1ProfileError(
+                        f"V13ENT MAP inventory item {item['serial']} PRO provenance drift"
+                    )
+                items.append(
+                    {
+                        "index": int(row["index"]),
+                        "quantity": quantity,
+                        "serial": item["serial"],
+                        "objectId": item["id"],
+                        "pid": item["pid"],
+                        "fid": item["fid"],
+                        "sourceOffset": item["sourceOffset"],
+                        "symbol": symbol,
+                        "displayName": display_names.get(symbol, symbol),
+                        "prototypeFilename": filename,
+                        "prototypeSource": resource.source,
+                        "prototypeSha256": resource.sha256,
+                        "profile": profile,
+                    }
+                )
+            if not items:
+                raise Fo1ProfileError(
+                    f"V13ENT MAP inventory host {obj['serial']} has an empty decoded inventory"
+                )
+            host_prototype = obj["prototype"]
+            map_inventory_hosts.append(
+                {
+                    "schema": "opennv-fo1-map-inventory-host/v1",
+                    "serial": obj["serial"],
+                    "objectId": obj["id"],
+                    "tile": obj["tile"],
+                    "pid": obj["pid"],
+                    "fid": obj["fid"],
+                    "flags": obj["flags"],
+                    "sourceOffset": obj["sourceOffset"],
+                    "artFilename": obj["artFilename"],
+                    "inventoryPointer": obj["inventoryPointer"],
+                    "inventoryCapacity": obj["inventoryCapacity"],
+                    "prototypeFilename": host_prototype.get("filename"),
+                    "prototypeSource": host_prototype.get("source"),
+                    "prototypeSha256": host_prototype.get("sha256"),
+                    "items": items,
+                }
+            )
+
         player_resource = resolver.read("art\\critters\\hmjmpsaa.frm")
         player_decoded = decode_frm(player_resource.data, colors)
         player_frame = player_decoded["directions"][recipe["entry"]["rotation"]]["frames"][0]
@@ -2031,6 +2219,7 @@ def prepare(
                     "ownedPresentation": (
                         None if presentation_manifest is None else presentation_manifest["player"]
                     ),
+                    "sharedHumanoidDonor": classic_humanoid_donor,
                     "stats": {
                         **recipe["tacticalProof"]["player"]["stats"],
                         "actionPoints": recipe["tacticalProof"]["actionPointsPerTurn"],
@@ -2103,6 +2292,7 @@ def prepare(
                     },
                 },
                 "mobs": combat_mobs,
+                "mapInventoryHosts": map_inventory_hosts,
                 "ownedCreaturePresentation": (
                     None if presentation_manifest is None else presentation_manifest["creature"]
                 ),
@@ -2219,6 +2409,7 @@ def main() -> int:
     parser.add_argument("--door-proof", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--presentation-manifest", type=Path)
+    parser.add_argument("--classic-humanoid-donor-preview-set", type=Path)
     args = parser.parse_args()
     result = prepare(
         args.recipe.resolve(),
@@ -2230,6 +2421,11 @@ def main() -> int:
         args.door_proof.resolve(),
         args.output_root.resolve(),
         None if args.presentation_manifest is None else args.presentation_manifest.resolve(),
+        (
+            None
+            if args.classic_humanoid_donor_preview_set is None
+            else args.classic_humanoid_donor_preview_set.resolve()
+        ),
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

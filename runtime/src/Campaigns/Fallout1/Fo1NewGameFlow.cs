@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -84,22 +85,38 @@ internal static class Fo1NewGameFlow
         Node host,
         Fo1HexSceneLoader.LoadedFo1HexScene loaded,
         Fo1CharacterStartContract contract,
-        string startPresentation)
+        string startPresentation,
+        bool continueMenuProof = false,
+        string? continueProofReportPath = null,
+        bool continueFlareUseProof = false,
+        bool continueGenericDoorProof = false)
     {
         ValidateHandoff(loaded, contract);
         HideWorld(loaded);
-        ShowMainMenu(host, loaded, contract, startPresentation);
+        ShowMainMenu(host, loaded, contract, startPresentation, continueMenuProof, continueProofReportPath, continueFlareUseProof, continueGenericDoorProof);
     }
 
     private static void ShowMainMenu(
         Node host,
         Fo1HexSceneLoader.LoadedFo1HexScene loaded,
         Fo1CharacterStartContract contract,
-        string startPresentation)
+        string startPresentation,
+        bool continueMenuProof = false,
+        string? continueProofReportPath = null,
+        bool continueFlareUseProof = false,
+        bool continueGenericDoorProof = false)
     {
         var menu = new Fo1MainMenu();
-        menu.Configure(startPresentation);
+        menu.Configure(startPresentation, loaded.Session.CanContinue);
         var selected = false;
+        menu.ContinueRequested += () =>
+        {
+            if (selected)
+                return;
+            selected = true;
+            menu.QueueFree();
+            _ = ResumeInteractive(host, loaded, contract, continueProofReportPath, continueFlareUseProof, continueGenericDoorProof);
+        };
         menu.NewGameRequested += () =>
         {
             if (selected)
@@ -110,7 +127,49 @@ internal static class Fo1NewGameFlow
         };
         menu.ExitRequested += () => host.GetTree().Quit(0);
         host.AddChild(menu);
+        if (continueMenuProof)
+            _ = RunContinueMenuProof(host, menu);
         GD.Print($"OPENNV_FO1_FRONTEND_READY presentation={startPresentation}");
+    }
+
+    private static async Task ResumeInteractive(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string? continueProofReportPath,
+        bool continueFlareUseProof,
+        bool continueGenericDoorProof)
+    {
+        try
+        {
+            var profile = loaded.Session.RequireRestoredCharacterForContinue();
+            var camera = loaded.Session.RequireRestoredCameraForContinue();
+            loaded.Session.AttachPipBoy(contract, profile);
+            loaded.Session.AttachClassicInterface(contract);
+            if (loaded.Session.LoadedDestinationPresentation is { } destination)
+                await RevealRestoredDestination(
+                    host,
+                    loaded,
+                    profile,
+                    camera,
+                    destination,
+                    continueProofReportPath,
+                    continueFlareUseProof,
+                    continueGenericDoorProof);
+            else
+                await RevealRestoredWorld(host, loaded, profile, camera);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO1_CONTINUE_FAIL {exception.Message}");
+            host.GetTree().Quit(1);
+        }
+    }
+
+    private static async Task RunContinueMenuProof(Node host, Fo1MainMenu menu)
+    {
+        await WaitFrames(host, 1);
+        menu.RequestContinueForHeadlessProof();
     }
 
     private static void ShowCharacterSelection(
@@ -122,7 +181,8 @@ internal static class Fo1NewGameFlow
         var creator = new Fo1CharacterCreator();
         creator.Configure(
             contract,
-            enableHexPortraitToggle: startPresentation == "hex-tactical");
+            enableHexPortraitToggle: true,
+            loaded.PlayerDonors);
         var resolved = false;
         creator.CharacterReady += profile =>
         {
@@ -148,7 +208,9 @@ internal static class Fo1NewGameFlow
         Fo1CharacterStartContract contract,
         string reportPath,
         bool accelerateOpening,
-        bool skipOpening)
+        bool skipOpening,
+        string? captureRoot,
+        bool nativeFirstBeatHeadlessProof)
     {
         try
         {
@@ -156,10 +218,16 @@ internal static class Fo1NewGameFlow
             GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE character-creation");
             HideWorld(loaded);
             var creator = new Fo1CharacterCreator();
-            creator.Configure(contract, enableHexPortraitToggle: true);
+            creator.Configure(
+                contract,
+                enableHexPortraitToggle: true,
+                loaded.PlayerDonors);
             host.AddChild(creator);
-            var profile = await creator.RunAutomatedDemo(host);
+            var profile = captureRoot is null && !nativeFirstBeatHeadlessProof
+                ? await creator.RunAutomatedDemo(host)
+                : await creator.RunAutomatedOwnedDonorDemo(host);
             profile.Validate();
+            var premadePlayerPreview = creator.PremadePlayerPreviewReport();
             GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE overseer-opening");
             var opening = await PlayOpening(
                 host,
@@ -172,6 +240,21 @@ internal static class Fo1NewGameFlow
             loaded.Session.ApplyCharacter(profile);
             loaded.Session.AttachPipBoy(contract, profile);
             loaded.Session.AttachClassicInterface(contract);
+            if (nativeFirstBeatHeadlessProof)
+            {
+                await RunCombatShowcase(
+                    host,
+                    loaded,
+                    contract,
+                    profile,
+                    reportPath,
+                    opening,
+                    default,
+                    premadePlayerPreview,
+                    captureRoot,
+                    nativeFirstBeatHeadlessProof);
+                return;
+            }
             var landing = await RevealWorld(host, loaded, profile, opening, "first-person");
             await RunCombatShowcase(
                 host,
@@ -180,11 +263,56 @@ internal static class Fo1NewGameFlow
                 profile,
                 reportPath,
                 opening,
-                landing);
+                landing,
+                premadePlayerPreview,
+                captureRoot,
+                nativeFirstBeatHeadlessProof);
         }
         catch (Exception exception)
         {
             GD.PushError($"OPENNV_FO1_NEW_GAME_DEMO_FAIL {exception.Message}");
+            host.GetTree().Quit(1);
+        }
+    }
+
+    internal static async Task RunCharacterVideo(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        string character,
+        OpeningManifest characterReflectron)
+    {
+        try
+        {
+            ValidateHandoff(loaded, contract);
+            HideWorld(loaded);
+            var creator = new Fo1CharacterCreator();
+            creator.Configure(
+                contract,
+                enableHexPortraitToggle: true,
+                loaded.PlayerDonors,
+                characterReflectron);
+            host.AddChild(creator);
+            var profile = await creator.RunCharacterVideo(host, character);
+            profile.Validate();
+            var opening = await PlayOpening(
+                host,
+                contract,
+                creator,
+                accelerate: true,
+                forceSkip: true,
+                loaded.RuntimeProfile.Showcase);
+            loaded.Session.ApplyCharacter(profile);
+            loaded.Session.AttachPipBoy(contract, profile);
+            loaded.Session.AttachClassicInterface(contract);
+            await RevealWorld(host, loaded, profile, opening, "hex-tactical");
+            await WaitFrames(host, Fo1NewGameFlowNumericContracts.PresentationInt120);
+            GD.Print($"OPENNV_FO1_CHARACTER_VIDEO_COMPLETE character={character}");
+            host.GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError($"OPENNV_FO1_CHARACTER_VIDEO_FAIL {exception}");
             host.GetTree().Quit(1);
         }
     }
@@ -302,6 +430,9 @@ internal static class Fo1NewGameFlow
         var playbackScale = accelerate || DisplayServer.GetName() == "headless"
             ? showcase.AcceleratedOpeningScale
             : 1.0;
+        var cinematicTailFirstFrame = Math.Max(
+            0,
+            contract.OpeningFrameCount - contract.OpeningFramesPerSecond * 4);
         var skipped = false;
         for (var frame = 0; frame < Fo1NewGameFlowNumericContracts.PresentationInt10000 && video.IsMoviePlaying; frame++)
         {
@@ -311,8 +442,12 @@ internal static class Fo1NewGameFlow
                 video.SkipMovie();
                 break;
             }
+            var frameScale = playbackScale > 1.0 &&
+                video.CurrentFrameIndex >= cinematicTailFirstFrame
+                    ? 1.0
+                    : playbackScale;
             video.AdvanceMovie(
-                Math.Max(1.0 / Fo1NewGameFlowNumericContracts.PresentationDouble240Point0, host.GetProcessDeltaTime()) * playbackScale);
+                Math.Max(1.0 / Fo1NewGameFlowNumericContracts.PresentationDouble240Point0, host.GetProcessDeltaTime()) * frameScale);
             await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         }
         if (video.IsMoviePlaying || !skipped &&
@@ -429,6 +564,7 @@ internal static class Fo1NewGameFlow
                 $"position={cameraPositionSeamMeters:F6} forward={cameraForwardSeamAlignment:F6}.");
         if (startPresentation == "hex-tactical")
             loaded.Camera.SetExplorationMode(false);
+        loaded.Session.PersistCameraState();
         return new LandingPlayback(
             "owned-opening-frame-fade-to-exact-live-first-person-v13ent",
             loaded.Door.Controller.IsOpen,
@@ -443,6 +579,203 @@ internal static class Fo1NewGameFlow
             "presentation-adaptation-open-for-corridor-lookback; not claimed as retail door-state parity");
     }
 
+    private static async Task RevealRestoredWorld(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterProfile profile,
+        Fo1CameraSaveState cameraState)
+    {
+        var layer = new CanvasLayer
+        {
+            Name = "Fo1ContinueResumeHandoff",
+            Layer = Fo1NewGameFlowNumericContracts.PresentationInt115,
+        };
+        host.AddChild(layer);
+        var black = new ColorRect
+        {
+            Name = "Fo1ContinuePreparedWorldCover",
+            Color = Colors.Black,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        black.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        layer.AddChild(black);
+
+        var savedTile = loaded.Session.PlayerTile;
+        loaded.Root.Visible = true;
+        loaded.Session.Hud.Visible = true;
+        loaded.Session.ProcessMode = Node.ProcessModeEnum.Disabled;
+        loaded.Camera.Visible = true;
+        loaded.Camera.ProcessMode = Node.ProcessModeEnum.Disabled;
+        loaded.CaveCutaway.ProcessMode = Node.ProcessModeEnum.Disabled;
+        loaded.Door.Controller.SetOpenAmount(1.0f);
+        loaded.Session.SnapPlayerToHexCenter();
+        loaded.Session.SetCinematicPlayerAnimation(false, moving: false);
+
+        loaded.Camera.ApplySaveState(cameraState);
+        if (cameraState.Mode == "first-person")
+        {
+            loaded.Session.SetWorldGuidesVisible(false);
+            foreach (var mob in loaded.Session.Mobs)
+                mob.SetReadabilityMarkersVisible(false);
+            loaded.CaveCutaway.SetMeltEnabled(false);
+        }
+        else
+        {
+            loaded.Session.SetWorldGuidesVisible(true);
+            foreach (var mob in loaded.Session.Mobs)
+                mob.SetReadabilityMarkersVisible(true);
+            loaded.CaveCutaway.SetMeltEnabled(cameraState.Mode != "first-person");
+        }
+        loaded.Camera.Camera.Current = true;
+        loaded.Session.SetCameraStatus(
+            $"{profile.Name} • continued saved hex {savedTile} • " +
+            cameraState.Mode.ToUpperInvariant());
+
+        loaded.Camera.ProcessMode = Node.ProcessModeEnum.Inherit;
+        loaded.CaveCutaway.ProcessMode = Node.ProcessModeEnum.Inherit;
+        await WaitFrames(host, 1);
+        _ = loaded.Session.RequireRestoredCharacterForContinue();
+        if (loaded.Session.PlayerTile != savedTile ||
+            loaded.Session.PlayerHexCenterErrorMeters >
+                Fo1NewGameFlowNumericContracts.PresentationFloat0Point001f ||
+            loaded.Session.PipBoy is null || !loaded.Session.ClassicInterfaceAttached ||
+            loaded.Camera.CaptureSaveState() != cameraState)
+            throw new InvalidOperationException(
+                "Fallout 1 Continue failed to preserve the saved player, UI, or selected camera mode.");
+        loaded.Session.ProcessMode = Node.ProcessModeEnum.Inherit;
+        layer.QueueFree();
+        GD.Print(
+            $"OPENNV_FO1_CONTINUE_READY tile={savedTile} camera={cameraState.Mode}");
+    }
+
+    private static async Task RevealRestoredDestination(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterProfile profile,
+        Fo1CameraSaveState cameraState,
+        Fo1DestinationPresentationContract destination,
+        string? continueProofReportPath,
+        bool continueFlareUseProof,
+        bool continueGenericDoorProof)
+    {
+        var transition = loaded.Session.ExitGridTransition ?? throw new InvalidOperationException(
+            "Fallout destination Continue has no explicit exit-grid descriptor.");
+        if (loaded.Root.Visible || loaded.Session.ActivatedExitGridTile is not { } activatedTile ||
+            !transition.IsTrigger(activatedTile))
+            throw new InvalidOperationException(
+                "Fallout destination Continue did not restore from an owned V13ENT exit trigger.");
+        var savedTile = loaded.Session.PlayerTile;
+        if (!loaded.Session.CanWalk(savedTile))
+            throw new InvalidOperationException(
+                "Fallout destination Continue restored a tile outside the source walk mask.");
+        loaded.Session.Hud.Visible = true;
+        loaded.Session.ProcessMode = Node.ProcessModeEnum.Disabled;
+        loaded.Camera.Visible = false;
+        loaded.Camera.ProcessMode = Node.ProcessModeEnum.Disabled;
+        loaded.CaveCutaway.ProcessMode = Node.ProcessModeEnum.Disabled;
+        loaded.Session.SnapPlayerToHexCenter();
+        loaded.Session.SetWorldGuidesVisible(true);
+        loaded.Session.SetCinematicPlayerAnimation(false, moving: false);
+        loaded.Session.SetCameraStatus(
+            $"{profile.Name} • continued VAULT13 saved hex {savedTile} • " +
+            $"source MAP {destination.Map.SourceFile}");
+        await WaitFrames(host, 1);
+        _ = loaded.Session.RequireRestoredCharacterForContinue();
+        if (loaded.Root.Visible || loaded.Session.PlayerTile != savedTile ||
+            loaded.Session.PlayerHexCenterErrorMeters >
+                Fo1NewGameFlowNumericContracts.PresentationFloat0Point001f ||
+            loaded.Session.PipBoy is null || !loaded.Session.ClassicInterfaceAttached ||
+            cameraState.Mode.Length == 0)
+            throw new InvalidOperationException(
+                "Fallout destination Continue failed to preserve the saved player or UI state.");
+        loaded.Session.ProcessMode = Node.ProcessModeEnum.Inherit;
+        if (!string.IsNullOrWhiteSpace(continueProofReportPath))
+        {
+            object? flareUse = null;
+            if (continueFlareUseProof)
+            {
+                var flare = loaded.Session.DestinationFlareUse ?? throw new InvalidOperationException(
+                    "Fallout flare Continue proof requires an explicit flare-use descriptor.");
+                var inventory = loaded.Session.ClassicInventory ?? throw new InvalidOperationException(
+                    "Fallout flare Continue proof requires the owned inventory screen.");
+                loaded.Camera._UnhandledInput(new InputEventKey { Pressed = true, PhysicalKeycode = loaded.Session.InventoryKey });
+                inventory.SelectSourceInventorySymbolForProof(flare.Symbol);
+                inventory.UseSelectedSourceInventoryForProof();
+                loaded.Camera._UnhandledInput(new InputEventKey { Pressed = true, PhysicalKeycode = Key.Escape });
+                if (inventory.IsOpen || !loaded.Session.DestinationFlareLit)
+                    throw new InvalidOperationException("Fallout flare Continue proof did not persist source-script lit state.");
+                flareUse = new
+                {
+                    flare = flare.Report(),
+                    selectedSymbol = inventory.SelectedSymbol,
+                    lit = true,
+                    activeHand = "not-proven-by-script",
+                    expiry = "unimplemented-fail-closed"
+                };
+            }
+            object? genericDoor = null;
+            int destinationMove;
+            if (continueGenericDoorProof)
+            {
+                var door = loaded.Session.DestinationGenericDoor ?? throw new InvalidOperationException(
+                    "Fallout generic-door Continue proof requires an explicit door descriptor.");
+                var approachPath = await MoveTacticalAdjacentToSourceTile(host, loaded, door.Door.Tile);
+                var contactTile = loaded.Session.PlayerTile;
+                if (!Fo1HexMath.AreNeighbors(contactTile, door.Door.Tile) ||
+                    !loaded.Session.TryActivateAdjacentDestinationGenericDoor() ||
+                    !loaded.Session.DestinationGenericDoorOpen || !loaded.Session.CanWalk(door.Door.Tile))
+                    throw new InvalidOperationException("Fallout generic-door Continue proof did not open its authored blocker.");
+                if (loaded.Session.ActionPoints == 0)
+                    loaded.Session.EndTurn();
+                loaded.Session.SelectTile(door.Door.Tile);
+                loaded.Session.CompleteQueuedTacticalMovementForHeadlessProof();
+                if (loaded.Session.PlayerTile != door.Door.Tile)
+                    throw new InvalidOperationException("Fallout generic-door Continue proof did not move through its opened source blocker.");
+                destinationMove = door.Door.Tile;
+                genericDoor = new
+                {
+                    descriptor = door.Report(open: true),
+                    approach = new { sourceWalkMaskOnly = true, pathTiles = approachPath, contactTile },
+                    opened = true,
+                    movedThroughOpenedBlocker = true,
+                    interactionActionPoints = "not-source-backed",
+                    sound = "unsupported-fail-closed",
+                    animationTiming = "unsupported-fail-closed",
+                };
+            }
+            else
+                destinationMove = MoveOneLegalDestinationHex(loaded.Session);
+            if (loaded.Session.PlayerTile != destinationMove)
+                throw new InvalidOperationException(
+                    "Fallout destination Continue did not admit its first source-mask move.");
+            var report = new
+            {
+                schema = "opennv-fo1-launcher-continue-destination-proof/v1",
+                status = "pass-source-bound-launcher-menu-continue-vault13-headless-not-rendered",
+                launcher = new { route = "fo1-new-game", menuAction = "continue", eventContract = "Fo1MainMenu.ContinueRequested" },
+                transition = transition.Report(activatedTile, destinationSceneLoaded: true),
+                destinationPresentation = destination.Report(transition),
+                restored = new { playerTile = savedTile, sourceWalkMaskOnly = true, sourceRootVisible = loaded.Root.Visible },
+                flareUse,
+                genericDoor,
+                firstControllableDestinationMove = new { sourceWalkMaskOnly = true, destinationMove },
+                gameplay = loaded.Session.Report(),
+                rendered = false,
+                interactive = false,
+                files = Array.Empty<object>(),
+            };
+            File.WriteAllText(
+                continueProofReportPath,
+                JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) +
+                    System.Environment.NewLine);
+            GD.Print(
+                $"OPENNV_FO1_LAUNCHER_CONTINUE_VAULT13_PASS restored={savedTile} move={destinationMove}");
+            host.GetTree().Quit(0);
+            return;
+        }
+        GD.Print($"OPENNV_FO1_CONTINUE_READY tile={savedTile} destination={destination.Map.Id}");
+    }
+
     private static async Task RunCombatShowcase(
         Node host,
         Fo1HexSceneLoader.LoadedFo1HexScene loaded,
@@ -450,10 +783,22 @@ internal static class Fo1NewGameFlow
         Fo1CharacterProfile profile,
         string reportPath,
         OpeningPlayback opening,
-        LandingPlayback landing)
+        LandingPlayback landing,
+        object premadePlayerPreview,
+        string? captureRoot,
+        bool nativeFirstBeatHeadlessProof)
     {
         var showcase = loaded.RuntimeProfile.Showcase;
         var reportFullPath = Path.GetFullPath(reportPath);
+        string? captureFullPath = null;
+        if (!string.IsNullOrWhiteSpace(captureRoot))
+        {
+            captureFullPath = Path.GetFullPath(captureRoot);
+            if (Directory.Exists(captureFullPath) || File.Exists(captureFullPath))
+                throw new InvalidOperationException(
+                    $"Refusing to overwrite Fallout 1 native first-beat proof: {captureFullPath}");
+            Directory.CreateDirectory(captureFullPath);
+        }
         GD.Print("OPENNV_FO1_NEW_GAME_DEMO_PHASE complete-combat-showcase");
         Directory.CreateDirectory(Path.GetDirectoryName(reportFullPath)!);
         var stage = BuildStageBanner(host, showcase.StageBannerVisible);
@@ -461,6 +806,7 @@ internal static class Fo1NewGameFlow
         loaded.Session.SetCameraStatus(
             $"{profile.Name}  •  V13ENT  •  exact tile {loaded.EntryTile}  •  " +
             "I opens Inventory • P opens Pip-Boy 2000");
+        await WaitFrames(host, showcase.LandingHoldFrames);
         var inventoryBefore = loaded.Session.InventorySnapshot();
         var inventorySaveSha256Before = FileSha256(loaded.Session.SavePath);
         loaded.Camera._UnhandledInput(new InputEventKey
@@ -468,13 +814,38 @@ internal static class Fo1NewGameFlow
             Pressed = true,
             PhysicalKeycode = loaded.Session.InventoryKey,
         });
-        await WaitFrames(host, 1);
+        if (!nativeFirstBeatHeadlessProof)
+            await WaitFrames(host, 1);
         var inventory = loaded.Session.ClassicInventory;
         if (inventory is null || !inventory.IsOpen || inventory.OpenedCount != 1 ||
             inventory.VisibleStackCount != inventoryBefore.Count ||
             string.IsNullOrWhiteSpace(inventory.SelectedSymbol))
             throw new InvalidOperationException(
                 "Fallout classic inventory failed to open from its configured input.");
+        var rangedSymbolBeforeInventory = loaded.Session.EquippedWeaponSymbol;
+        object? inventoryCapture = null;
+        var requiresMeleeInventorySelection =
+            captureFullPath is not null || nativeFirstBeatHeadlessProof;
+        if (requiresMeleeInventorySelection)
+        {
+            var meleeButton = inventory.FindChild(
+                "OwnedInventoryMeleeHandButton",
+                true,
+                false) as Button ?? throw new InvalidOperationException(
+                    "Fallout classic inventory has no source-bound melee active-hand control.");
+            meleeButton.EmitSignal(Button.SignalName.Pressed);
+            if (!nativeFirstBeatHeadlessProof)
+                await WaitFrames(host, 2);
+            if (loaded.Session.EquippedWeaponSymbol == rangedSymbolBeforeInventory ||
+                inventory.EquipmentChangedCount != 1)
+                throw new InvalidOperationException(
+                    "Fallout classic inventory melee active-hand control did not mutate equipment state.");
+            if (captureFullPath is not null)
+                inventoryCapture = SaveNativeCapture(
+                    host,
+                    captureFullPath,
+                    "v13ent-inventory-equipped-melee.png");
+        }
         loaded.Camera._UnhandledInput(new InputEventKey
         {
             Pressed = true,
@@ -482,9 +853,16 @@ internal static class Fo1NewGameFlow
         });
         var inventoryAfter = loaded.Session.InventorySnapshot();
         var inventorySaveSha256After = FileSha256(loaded.Session.SavePath);
+        var inventoryUnchanged = inventoryBefore.SequenceEqual(inventoryAfter);
+        var saveByteStable = inventorySaveSha256Before == inventorySaveSha256After;
+        var savedEquippedSymbol = ReadSavedEquippedWeapon(loaded.Session.SavePath);
         if (inventory.IsOpen || inventory.ClosedCount != 1 ||
-            !inventoryBefore.SequenceEqual(inventoryAfter) ||
-            inventorySaveSha256Before != inventorySaveSha256After)
+            !inventoryUnchanged ||
+            !requiresMeleeInventorySelection && !saveByteStable ||
+            requiresMeleeInventorySelection &&
+                (inventory.EquipmentChangedCount != 1 ||
+                 savedEquippedSymbol == rangedSymbolBeforeInventory ||
+                 savedEquippedSymbol != loaded.Session.EquippedWeaponSymbol))
             throw new InvalidOperationException(
                 "Fallout classic inventory changed gameplay or save truth.");
         var inventoryProof = new
@@ -498,8 +876,45 @@ internal static class Fo1NewGameFlow
             inventoryAfter,
             saveSha256Before = inventorySaveSha256Before,
             saveSha256After = inventorySaveSha256After,
-            unchanged = true,
+            unchanged = inventoryUnchanged,
+            saveByteStable,
+            equipmentMutation = !requiresMeleeInventorySelection
+                ? null
+                : new
+                {
+                    equipmentChangedCount = inventory.EquipmentChangedCount,
+                    activeHandSymbol = loaded.Session.EquippedWeaponSymbol,
+                    savedEquippedSymbol,
+                    nativeCapture = inventoryCapture,
+                },
         };
+        if (captureFullPath is not null)
+        {
+            await CompleteNativeFirstBeatProof(
+                host,
+                loaded,
+                contract,
+                profile,
+                reportFullPath,
+                captureFullPath,
+                inventoryProof,
+                inventoryCapture,
+                premadePlayerPreview,
+                stage);
+            return;
+        }
+        if (nativeFirstBeatHeadlessProof)
+        {
+            await CompleteNativeFirstBeatHeadlessProof(
+                host,
+                loaded,
+                contract,
+                profile,
+                reportFullPath,
+                inventoryProof,
+                premadePlayerPreview);
+            return;
+        }
         loaded.Session.TogglePipBoy();
         await WaitFrames(host, showcase.LandingHoldFrames);
         loaded.Session.TogglePipBoy();
@@ -611,9 +1026,27 @@ internal static class Fo1NewGameFlow
         loaded.Camera.SetOrbitDegrees(Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE45Point0f, Fo1NewGameFlowNumericContracts.PresentationFloatNEgativE42Point0f);
         loaded.Camera.FrameEntryPair(loaded.Session.PlayerTile, loaded.DoorTile);
         await WaitFrames(host, showcase.FinalHoldFrames);
+        var gameplayCapture = captureFullPath is null
+            ? null
+            : SaveNativeCapture(
+                host,
+                captureFullPath,
+                "v13ent-hex-hud-equipped-knife.png");
 
         var combatPresentation = loaded.Session.CombatPresentation;
+        var playerPresentationBinding = loaded.Session.PlayerPresentationBinding;
         if (loaded.Session.Kills - killsBefore < 4 || loaded.Session.FpsKills < 2 ||
+        playerPresentationBinding is null ||
+        playerPresentationBinding.CharacterName != profile.Name ||
+        playerPresentationBinding.Sex != profile.Sex ||
+        !playerPresentationBinding.ActorRootBound ||
+        !playerPresentationBinding.AnimationBound ||
+        (playerPresentationBinding.UsesOwnedDonor &&
+            (!playerPresentationBinding.WeaponAttachmentsBound ||
+             playerPresentationBinding.WeaponVisualsSuppressed)) ||
+        (!playerPresentationBinding.UsesOwnedDonor &&
+            (playerPresentationBinding.WeaponAttachmentsBound ||
+             !playerPresentationBinding.WeaponVisualsSuppressed)) ||
         loaded.Session.CharacterProfile is null ||
         loaded.Session.PlayerHitPoints <= 0 || loaded.Session.Attacks < 2 ||
         loaded.Session.RangedHits < 2 || loaded.Session.MeleeHits < 2 ||
@@ -661,6 +1094,7 @@ internal static class Fo1NewGameFlow
             sequence = new[]
             {
                 "owned-original-character-picker-max-stone-natalia-albert-custom",
+                "true-3d-premade-player-preview-owned-fnv-donor-plus-first-party-adaptation",
                 "owned-original-custom-character-creation",
                 opening.Skipped ? "owned-original-overseer-mve-skipped" : "owned-original-overseer-mve",
                 "owned-frame-fade-to-exact-live-first-person-v13ent",
@@ -679,6 +1113,7 @@ internal static class Fo1NewGameFlow
                 "wide-tactical-map-pan-orbit-zoom",
             },
             characterStart = contract.Report(),
+            premadePlayerPreview,
             character = profile.Report(),
             inventory = inventoryProof,
             handoff = new
@@ -733,6 +1168,14 @@ internal static class Fo1NewGameFlow
                 weaponActionPointCost = loaded.Session.WeaponActionPointCost,
             },
             finalSession = loaded.Session.Report(),
+            nativeCaptures = captureFullPath is null
+                ? null
+                : new
+                {
+                    root = captureFullPath,
+                    inventory = inventoryCapture,
+                    gameplay = gameplayCapture,
+                },
             windowsAppControlUsed = false,
             foregroundActivationUsed = false,
             foregroundInputInjected = false,
@@ -748,8 +1191,1017 @@ internal static class Fo1NewGameFlow
         host.GetTree().Quit(0);
     }
 
+    private static async Task CompleteNativeFirstBeatProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        Fo1CharacterProfile profile,
+        string reportPath,
+        string captureRoot,
+        object inventoryProof,
+        object? inventoryCapture,
+        object premadePlayerPreview,
+        Label stage)
+    {
+        var binding = loaded.Session.PlayerPresentationBinding;
+        if (binding is null || !binding.UsesOwnedDonor ||
+            !binding.ActorRootBound || !binding.AnimationBound ||
+            !binding.WeaponAttachmentsBound || binding.WeaponVisualsSuppressed ||
+            loaded.Session.OwnedPlayer?.Root.Visible != true ||
+            loaded.Session.OwnedPlayerWeapon?.Root.Visible != false ||
+            loaded.Session.OwnedPlayerMeleeWeapon?.Root.Visible != true)
+            throw new InvalidOperationException(
+                "Fallout 1 native first-beat proof requires owned animated donor geometry " +
+                "with the selected held weapon attached.");
+        loaded.Camera.SetFirstPersonMode(false);
+        loaded.Camera.SetExplorationMode(false);
+        if (!loaded.Session.GridVisible)
+            loaded.Session.ToggleGrid();
+        loaded.Session.SetWorldGuidesVisible(true);
+        foreach (var mob in loaded.Session.Mobs)
+            mob.SetReadabilityMarkersVisible(true);
+        var adjacentRatEngagement = await RunNativeFirstBeatAdjacentRatEngagement(
+            host,
+            loaded);
+        loaded.Camera.SetOrbitDegrees(
+            Fo1HexCaptureNumericContracts.AcceptanceFloat135Point0f,
+            Fo1HexCaptureNumericContracts.AcceptanceFloatNEgativE26Point0f);
+        loaded.Camera.FocusTileAtHeight(
+            loaded.Session.PlayerTile,
+            3.0f,
+            Fo1HexCaptureNumericContracts.AcceptanceFloat0Point86f);
+        stage.Text =
+            "FIRST PLAYABLE BEAT  •  OWNED 3D DWELLER  •  KNIFE EQUIPPED FROM INVENTORY";
+        await WaitFrames(host, Fo1NewGameFlowNumericContracts.PresentationInt5);
+        var gameplayCapture = SaveNativeCapture(
+            host,
+            captureRoot,
+            "v13ent-hex-hud-equipped-knife.png");
+        var report = new
+        {
+            schema = "opennv-fo1-native-first-beat/v1",
+            status = "pass",
+            scene = loaded.ScenePath,
+            sceneSha256 = loaded.SceneSha256,
+            characterStart = contract.Report(),
+            character = profile.Report(),
+            premadePlayerPreview,
+            entryTile = loaded.EntryTile,
+            doorTile = loaded.DoorTile,
+            inventory = inventoryProof,
+            playerPresentation = binding.Report(),
+            adjacentRatEngagement,
+            gameplay = loaded.Session.Report(),
+            files = new[] { inventoryCapture, gameplayCapture },
+            windowsAppControlUsed = false,
+            foregroundActivationUsed = false,
+            foregroundInputInjected = false,
+        };
+        File.WriteAllText(
+            reportPath,
+            JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) +
+                System.Environment.NewLine);
+        GD.Print(
+            $"OPENNV_FO1_NATIVE_FIRST_BEAT_PASS character={profile.Name} " +
+            $"entry={loaded.EntryTile} equipped={loaded.Session.EquippedWeaponSymbol}");
+        host.GetTree().Quit(0);
+    }
+
+    private static async Task CompleteNativeFirstBeatHeadlessProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1CharacterStartContract contract,
+        Fo1CharacterProfile profile,
+        string reportPath,
+        object inventoryProof,
+        object premadePlayerPreview)
+    {
+        var binding = loaded.Session.PlayerPresentationBinding;
+        if (binding is null || !binding.UsesOwnedDonor ||
+            !binding.ActorRootBound || !binding.AnimationBound ||
+            !binding.WeaponAttachmentsBound || binding.WeaponVisualsSuppressed ||
+            loaded.Session.OwnedPlayer?.Root.Visible != true ||
+            loaded.Session.OwnedPlayerWeapon?.Root.Visible != false ||
+            loaded.Session.OwnedPlayerMeleeWeapon?.Root.Visible != true)
+            throw new InvalidOperationException(
+                "Fallout 1 native first-beat proof requires owned animated donor geometry " +
+                "with the selected held weapon attached.");
+        var mapInventoryPickup = await RunNativeFirstBeatMapInventoryPickup(
+            host,
+            loaded);
+        var classicInventoryHud = RunNativeFirstBeatClassicInventoryHudProof(
+            loaded,
+            mapInventoryPickup);
+        var adjacentRatEngagement = await RunNativeFirstBeatAdjacentRatEngagement(
+            host,
+            loaded);
+        var caveExitGridTransition = loaded.Session.ExitGridTransition is null
+            ? null
+            : await RunNativeFirstBeatCaveExitGridTransition(host, loaded);
+        var report = new
+        {
+            schema = "opennv-fo1-native-first-beat-headless-proof/v1",
+            status = "pass-source-bound-pickup-equip-use-combat-save-restore-headless-not-rendered",
+            scene = loaded.ScenePath,
+            sceneSha256 = loaded.SceneSha256,
+            characterStart = contract.Report(),
+            character = profile.Report(),
+            premadePlayerPreview,
+            entryTile = loaded.EntryTile,
+            doorTile = loaded.DoorTile,
+            inventory = inventoryProof,
+            playerPresentation = binding.Report(),
+            mapInventoryPickup = new
+            {
+                mapInventoryPickup.HostSerial,
+                mapInventoryPickup.HostPid,
+                mapInventoryPickup.WeaponSymbol,
+                mapInventoryPickup.WeaponPid,
+                pickup = mapInventoryPickup.Report,
+                use = adjacentRatEngagement,
+            },
+            classicInventoryHud,
+            adjacentRatEngagement,
+            caveExitGridTransition,
+            gameplay = loaded.Session.Report(),
+            files = Array.Empty<object>(),
+            rendered = false,
+            interactive = false,
+            windowsAppControlUsed = false,
+            foregroundActivationUsed = false,
+            foregroundInputInjected = false,
+        };
+        File.WriteAllText(
+            reportPath,
+            JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) +
+                System.Environment.NewLine);
+        GD.Print(
+            $"OPENNV_FO1_NATIVE_FIRST_BEAT_HEADLESS_PASS character={profile.Name} " +
+            $"entry={loaded.EntryTile} equipped={loaded.Session.EquippedWeaponSymbol}");
+        host.GetTree().Quit(0);
+    }
+
+    internal static async Task RunDestinationColdRestoreProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        string reportPath)
+    {
+        await WaitFrames(host, 1);
+        var session = loaded.Session;
+        var transition = session.ExitGridTransition ?? throw new InvalidOperationException(
+            "Fallout destination cold restore has no explicit exit-grid descriptor.");
+        var destination = session.LoadedDestinationPresentation ?? throw new InvalidOperationException(
+            "Fallout destination cold restore did not load the saved presentation identity.");
+        if (loaded.Root.Visible || session.ActivatedExitGridTile is not { } activatedTile ||
+            !transition.IsTrigger(activatedTile))
+            throw new InvalidOperationException(
+                "Fallout destination cold restore did not leave V13ENT at an owned exit trigger.");
+        var restoredTile = session.PlayerTile;
+        if (!session.CanWalk(restoredTile))
+            throw new InvalidOperationException(
+                "Fallout destination cold restore player tile is not admitted by the source walk mask.");
+        var genericDoor = session.DestinationGenericDoor;
+        if (genericDoor is not null &&
+            (!session.DestinationGenericDoorOpen || !session.CanWalk(genericDoor.Door.Tile)))
+            throw new InvalidOperationException(
+                "Fallout destination cold restore lost the opened generic MAP door passability state.");
+        var destinationMove = MoveOneLegalDestinationHex(session);
+        if (session.PlayerTile != destinationMove)
+            throw new InvalidOperationException(
+                "Fallout destination cold restore did not admit its first source-mask move.");
+        var report = new
+        {
+            schema = "opennv-fo1-destination-cold-restore-proof/v1",
+            status = "pass-source-bound-vault13-cold-restore-headless-not-rendered",
+            coldProcess = true,
+            sourceScene = new { path = loaded.ScenePath, sha256 = loaded.SceneSha256, visible = loaded.Root.Visible },
+            transition = transition.Report(activatedTile, destinationSceneLoaded: true),
+            destinationPresentation = destination.Report(transition),
+            restored = new { playerTile = restoredTile, sourceWalkMaskOnly = true },
+            genericDoor = genericDoor is null ? null : genericDoor.Report(open: session.DestinationGenericDoorOpen),
+            firstControllableDestinationMove = new { sourceWalkMaskOnly = true, destinationMove },
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
+        };
+        File.WriteAllText(
+            reportPath,
+            JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) +
+                System.Environment.NewLine);
+        GD.Print(
+            $"OPENNV_FO1_VAULT13_COLD_RESTORE_PASS restored={restoredTile} move={destinationMove}");
+        host.GetTree().Quit(0);
+    }
+
+    internal static async Task RunDestinationInventoryInteractionProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        string reportPath)
+    {
+        await WaitFrames(host, 1);
+        var session = loaded.Session;
+        var destination = session.LoadedDestinationPresentation ?? throw new InvalidOperationException(
+            "Fallout destination interaction requires a committed destination presentation.");
+        var interaction = session.DestinationInventoryInteraction ?? throw new InvalidOperationException(
+            "Fallout destination interaction requires an explicit hash-bound inventory descriptor.");
+        var inventoryHost = interaction.Host;
+        var approachPath = await MoveTacticalAdjacentToMapInventoryHost(host, loaded, inventoryHost);
+        if (!Fo1HexMath.AreNeighbors(session.PlayerTile, inventoryHost.Tile))
+            throw new InvalidOperationException("Fallout destination interaction route is not source-adjacent to its MAP container.");
+        var contactTile = session.PlayerTile;
+        var before = session.InventorySnapshot();
+        var pickup = session.PickupAdjacentMapInventoryHost(inventoryHost.Serial);
+        if (!session.IsMapInventoryHostLooted(inventoryHost.Serial) ||
+            inventoryHost.Items.Any(item => pickup.Inventory.GetValueOrDefault(item.Symbol) !=
+                before.GetValueOrDefault(item.Symbol) + item.Objects))
+            throw new InvalidOperationException("Fallout destination source container pickup did not preserve exact MAP item stacks.");
+        var nextMove = MoveOneLegalDestinationHex(session);
+        var report = new
+        {
+            schema = "opennv-fo1-destination-inventory-interaction-proof/v1",
+            status = "pass-source-bound-vault13-container-pickup-headless-not-rendered",
+            destinationPresentation = destination.Report(session.ExitGridTransition!),
+            interaction = interaction.Report(),
+            approach = new { sourceWalkMaskOnly = true, pathTiles = approachPath, contactTile, hostTile = inventoryHost.Tile, contactIsAdjacent = true },
+            pickup = new { hostSerial = inventoryHost.Serial, items = inventoryHost.Items, looted = session.IsMapInventoryHostLooted(inventoryHost.Serial) },
+            nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
+        };
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+        GD.Print($"OPENNV_FO1_VAULT13_INTERACTION_PASS host={inventoryHost.Serial} move={nextMove}");
+        host.GetTree().Quit(0);
+    }
+
+    internal static async Task RunDestinationInventoryInteractionColdRestoreProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        string reportPath)
+    {
+        await WaitFrames(host, 1);
+        var session = loaded.Session;
+        var interaction = session.DestinationInventoryInteraction ?? throw new InvalidOperationException(
+            "Fallout destination interaction cold restore requires its explicit descriptor.");
+        if (!session.IsMapInventoryHostLooted(interaction.Host.Serial))
+            throw new InvalidOperationException("Fallout destination interaction cold restore lost its MAP container state.");
+        var flareUse = session.DestinationFlareUse;
+        if (flareUse is not null && !session.DestinationFlareLit)
+            throw new InvalidOperationException("Fallout destination interaction cold restore lost its source-script flare state.");
+        var nextMove = MoveOneLegalDestinationHex(session);
+        var report = new
+        {
+            schema = "opennv-fo1-destination-inventory-interaction-cold-restore-proof/v1",
+            status = "pass-source-bound-vault13-container-cold-restore-headless-not-rendered",
+            coldProcess = true,
+            interaction = interaction.Report(),
+            flareUse = flareUse is null ? null : new { descriptor = flareUse.Report(), lit = session.DestinationFlareLit },
+            restored = new { hostSerial = interaction.Host.Serial, looted = true, sourceWalkMaskOnly = true },
+            nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
+        };
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+        GD.Print($"OPENNV_FO1_VAULT13_INTERACTION_COLD_PASS host={interaction.Host.Serial} move={nextMove}");
+        host.GetTree().Quit(0);
+    }
+
+    internal static async Task RunDestinationMedicLookProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        string reportPath)
+    {
+        await WaitFrames(host, 1);
+        var session = loaded.Session;
+        var destination = session.LoadedDestinationPresentation ?? throw new InvalidOperationException(
+            "Fallout Medic look requires a committed destination presentation.");
+        var door = session.DestinationGenericDoor ?? throw new InvalidOperationException(
+            "Fallout Medic look requires the opened generic-door prerequisite.");
+        var medic = session.DestinationMedicLook ?? throw new InvalidOperationException(
+            "Fallout Medic look requires an explicit source script/message descriptor.");
+        if (!session.DestinationGenericDoorOpen || !session.CanWalk(door.Door.Tile))
+            throw new InvalidOperationException("Fallout Medic look requires a persisted opened generic-door tile.");
+        var approachPath = await MoveTacticalAdjacentToSourceTile(host, loaded, medic.Tile);
+        var contactTile = session.PlayerTile;
+        if (!Fo1HexMath.AreNeighbors(contactTile, medic.Tile) || !session.TryLookAtAdjacentDestinationMedic() ||
+            !session.DestinationMedicLookViewed || session.Status != medic.MessageText)
+            throw new InvalidOperationException("Fallout Medic look did not emit its exact source message from an adjacent hex.");
+        var sourceMessage = session.Status;
+        var nextMove = MoveOneLegalDestinationHex(session);
+        var report = new
+        {
+            schema = "opennv-fo1-destination-medic-look-proof/v1",
+            status = "pass-source-bound-vault13-medic-look-headless-not-rendered",
+            destinationPresentation = destination.Report(session.ExitGridTransition!),
+            genericDoor = door.Report(open: session.DestinationGenericDoorOpen),
+            medicLook = medic.Report(viewed: session.DestinationMedicLookViewed),
+            approach = new
+            {
+                sourceWalkMaskOnly = true,
+                pathTiles = approachPath,
+                contactTile,
+                actorTile = medic.Tile,
+                contactIsAdjacent = true
+            },
+            interaction = new
+            {
+                result = "display-message-only",
+                message = sourceMessage,
+                dialogue = "unimplemented-fail-closed",
+                combat = "not-proven-by-look-at-only",
+                actionPoints = "not-source-backed",
+                saved = true
+            },
+            nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
+        };
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+        GD.Print($"OPENNV_FO1_VAULT13_MEDIC_LOOK_PASS actor={medic.Serial} move={nextMove}");
+        host.GetTree().Quit(0);
+    }
+
+    internal static async Task RunDestinationMedicLookColdRestoreProof(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        string reportPath)
+    {
+        await WaitFrames(host, 1);
+        var session = loaded.Session;
+        var medic = session.DestinationMedicLook ?? throw new InvalidOperationException(
+            "Fallout Medic look cold restore requires its explicit descriptor.");
+        var door = session.DestinationGenericDoor ?? throw new InvalidOperationException(
+            "Fallout Medic look cold restore requires its generic-door prerequisite.");
+        if (!session.DestinationMedicLookViewed || !session.DestinationGenericDoorOpen ||
+            !session.CanWalk(door.Door.Tile))
+            throw new InvalidOperationException("Fallout Medic look cold restore lost its source interaction or opened door state.");
+        var restoredTile = session.PlayerTile;
+        if (!session.CanWalk(restoredTile))
+            throw new InvalidOperationException("Fallout Medic look cold restore tile is outside the source walk mask.");
+        var nextMove = MoveOneLegalDestinationHex(session);
+        var report = new
+        {
+            schema = "opennv-fo1-destination-medic-look-cold-restore-proof/v1",
+            status = "pass-source-bound-vault13-medic-look-cold-restore-headless-not-rendered",
+            coldProcess = true,
+            restored = new { playerTile = restoredTile, sourceWalkMaskOnly = true },
+            genericDoor = door.Report(open: true),
+            medicLook = medic.Report(viewed: true),
+            nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
+        };
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+        GD.Print($"OPENNV_FO1_VAULT13_MEDIC_LOOK_COLD_PASS actor={medic.Serial} move={nextMove}");
+        host.GetTree().Quit(0);
+    }
+
+    internal static async Task RunDestinationReturnExitProof(Node host, Fo1HexSceneLoader.LoadedFo1HexScene loaded, string reportPath)
+    {
+        var session = loaded.Session;
+        var medic = session.DestinationMedicLook ?? throw new InvalidOperationException("Fallout return exit requires the saved Medic interaction.");
+        var transition = session.DestinationReturnExitGrid ?? throw new InvalidOperationException("Fallout return exit requires an explicit exit-grid descriptor.");
+        if (!session.DestinationMedicLookViewed)
+            throw new InvalidOperationException("Fallout return exit requires the persisted Medic interaction state.");
+        var path = await MoveTacticalToTiles(host, loaded, transition.Triggers.Select(trigger => trigger.Tile));
+        if (!transition.IsTrigger(session.PlayerTile) || !session.TryActivateDestinationReturnExitGrid() ||
+            session.ActivatedDestinationReturnExitGridTile != session.PlayerTile)
+            throw new InvalidOperationException("Fallout return exit proof did not commit an exact VAULT13 MAP trigger.");
+        var activatedTile = session.PlayerTile;
+        session.EnterCommittedSourceReturn();
+        loaded.Root.Visible = true;
+        if (!session.ReturnedToSource || session.PlayerTile != transition.DestinationTile ||
+            !loaded.Root.Visible)
+            throw new InvalidOperationException(
+                "Fallout return exit proof did not restore the exact V13ENT MAP destination.");
+        var nextMove = MoveOneLegalDestinationHex(session);
+        var report = new
+        {
+            schema = "opennv-fo1-v13ent-reciprocal-return-proof/v1",
+            status = "pass-source-bound-v13ent-reciprocal-return-headless-not-rendered",
+            medicLook = medic.Report(viewed: true),
+            approach = new { sourceWalkMaskOnly = true, pathTiles = path, triggerTile = activatedTile },
+            transition = transition.Report(activatedTile, destinationSceneLoaded: true),
+            v13ent = new
+            {
+                mapIndex = transition.DestinationMapIndex,
+                mapName = transition.DestinationMapName,
+                sourceMapSha256 = transition.DestinationMapSha256,
+                elevation = transition.DestinationElevation,
+                rotation = transition.DestinationRotation,
+                arrivalTile = transition.DestinationTile,
+                sourceWalkMaskOnly = true,
+                loaded = true,
+            },
+            nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove },
+            gameplay = session.Report(),
+            rendered = false,
+            interactive = false,
+            files = Array.Empty<object>(),
+        };
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+        GD.Print($"OPENNV_FO1_V13ENT_RETURN_PASS trigger={activatedTile} arrival={transition.DestinationTile} move={nextMove}");
+        host.GetTree().Quit(0);
+    }
+
+    internal static Task RunDestinationReturnExitColdRestoreProof(Node host, Fo1HexSceneLoader.LoadedFo1HexScene loaded, string reportPath)
+    {
+        var session = loaded.Session;
+        var transition = session.DestinationReturnExitGrid ?? throw new InvalidOperationException("Fallout return exit cold restore requires its descriptor.");
+        if (!session.DestinationMedicLookViewed || session.ActivatedDestinationReturnExitGridTile is not { } tile ||
+            !transition.IsTrigger(tile) || !session.ReturnedToSource)
+            throw new InvalidOperationException("Fallout return exit cold restore lost its source-authored committed trigger.");
+        var nextMove = MoveOneLegalDestinationHex(session);
+        var report = new { schema = "opennv-fo1-v13ent-reciprocal-return-cold-restore-proof/v1", status = "pass-source-bound-v13ent-reciprocal-return-cold-restore-headless-not-rendered", coldProcess = true, restored = new { playerTile = session.PlayerTile, sourceWalkMaskOnly = true }, transition = transition.Report(tile, destinationSceneLoaded: true), v13ent = new { mapIndex = transition.DestinationMapIndex, mapName = transition.DestinationMapName, sourceMapSha256 = transition.DestinationMapSha256, elevation = transition.DestinationElevation, rotation = transition.DestinationRotation, arrivalTile = transition.DestinationTile, loaded = true }, nextLegalGameplayBeat = new { sourceWalkMaskOnly = true, move = nextMove }, gameplay = session.Report(), rendered = false, interactive = false, files = Array.Empty<object>() };
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine);
+        GD.Print($"OPENNV_FO1_V13ENT_RETURN_COLD_PASS trigger={tile} move={nextMove}");
+        host.GetTree().Quit(0);
+        return Task.CompletedTask;
+    }
+
+    private static async Task<IReadOnlyList<int>> MoveTacticalToTiles(Node host, Fo1HexSceneLoader.LoadedFo1HexScene loaded, IEnumerable<int> targetTiles)
+    {
+        var goals = targetTiles.ToHashSet(); var path = new List<int> { loaded.Session.PlayerTile };
+        for (var turn = 0; turn < Fo1HexMath.Width + Fo1HexMath.Height; turn++)
+        {
+            if (goals.Contains(loaded.Session.PlayerTile)) return path;
+            if (loaded.Session.ActionPoints == 0) loaded.Session.EndTurn();
+            var sourcePath = FindWalkablePathToAny(loaded.Session, goals).ToList();
+            loaded.Session.SelectTile(sourcePath[^1]);
+            if (DisplayServer.GetName() == "headless") loaded.Session.CompleteQueuedTacticalMovementForHeadlessProof();
+            else while (loaded.Session.QueuedMovementSteps > 0) await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var index = sourcePath.IndexOf(loaded.Session.PlayerTile);
+            if (index < 0) throw new InvalidOperationException("Fallout return exit approach left its source walk mask.");
+            path.AddRange(sourcePath.Skip(1).Take(index));
+        }
+        throw new InvalidOperationException("Fallout return exit has no finite source-walkable route.");
+    }
+
+    private static async Task<object> RunNativeFirstBeatCaveExitGridTransition(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded)
+    {
+        var session = loaded.Session;
+        var contract = session.ExitGridTransition ?? throw new InvalidOperationException(
+            "Fallout cave exit proof requires an explicit exit-grid descriptor.");
+        var doorApproach = await MoveTacticalAdjacentToSourceTile(host, loaded, session.DoorTile);
+        if (!session.TryActivateAdjacentSourceDoor())
+            throw new InvalidOperationException("Fallout cave exit proof could not activate its adjacent MAP door.");
+        loaded.Door.Controller.SetOpenAmount(1.0f);
+        if (!loaded.Door.Controller.IsOpen || !session.SourceDoorOpen)
+            throw new InvalidOperationException("Fallout MAP door visual and tactical states did not open together.");
+        var path = await MoveTacticalToExitGrid(host, loaded, contract.Triggers.Select(trigger => trigger.Tile));
+        if (session.ActivatedExitGridTile is not { } activatedTile || !contract.IsTrigger(activatedTile))
+            throw new InvalidOperationException("Fallout cave exit proof did not activate an owned MAP exit grid.");
+        session.RestoreSaveForProof();
+        if (session.ActivatedExitGridTile != activatedTile)
+            throw new InvalidOperationException("Fallout cave exit-grid activation did not persist through save restore.");
+        var destination = session.LoadCommittedDestinationPresentation();
+        loaded.Root.Visible = false;
+        var destinationViewer = new Fo1CampaignPresentationViewer();
+        host.AddChild(destinationViewer);
+        var destinationCoverage = destinationViewer.Configure(
+            destination.Catalog,
+            destination.Map.Id,
+            contract.DestinationElevation,
+            includeSourcePlayer: false);
+        destinationViewer.SetStatusVisible(false);
+        session.EnterCommittedDestination(destination);
+        var destinationMove = MoveOneLegalDestinationHex(session);
+        if (loaded.Root.Visible || session.PlayerTile != destinationMove)
+            throw new InvalidOperationException("Fallout destination first controllable move did not leave the source cave.");
+        return new
+        {
+            sourceWalkMaskOnly = true,
+            doorActivation = new { doorApproach, sourceDoor = true, doorTile = session.DoorTile },
+            pathTiles = path,
+            contract = contract.Report(activatedTile, destinationSceneLoaded: true),
+            destinationPresentation = destination.Report(contract),
+            destinationCoverage,
+            firstControllableDestinationMove = new { sourceWalkMaskOnly = true, destinationMove },
+            persistence = new { matched = true, activatedTile },
+        };
+    }
+
+    private static int MoveOneLegalDestinationHex(Fo1TacticalSession session)
+    {
+        var target = Fo1HexMath.Neighbors(session.PlayerTile)
+            .Where(session.CanWalk)
+            .OrderBy(tile => tile)
+            .FirstOrDefault(-1);
+        if (target < 0)
+            throw new InvalidOperationException("Fallout destination entry has no source-walkable first move.");
+        if (session.ActionPoints == 0)
+            session.EndTurn();
+        session.SelectTile(target);
+        session.CompleteQueuedTacticalMovementForHeadlessProof();
+        if (session.PlayerTile != target)
+            throw new InvalidOperationException("Fallout destination first move was not admitted by its source walk mask.");
+        return target;
+    }
+
+    private static object RunNativeFirstBeatClassicInventoryHudProof(
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        NativeFirstBeatMapInventoryPickup pickup)
+    {
+        var session = loaded.Session;
+        var inventory = session.ClassicInventory ?? throw new InvalidOperationException(
+            "Fallout 1 first-beat requires the owned classic inventory screen.");
+        var hud = session.ClassicHud ?? throw new InvalidOperationException(
+            "Fallout 1 first-beat requires the owned classic gameplay HUD.");
+        if (inventory.IsOpen)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat classic inventory must be closed before the loot UI proof.");
+        var rangedSymbol = session.RangedWeaponSymbol;
+        var meleeSymbol = session.MeleeWeaponSymbol;
+        var inventoryBefore = session.InventorySnapshot();
+        var equipmentChangesBefore = inventory.EquipmentChangedCount;
+        var hudArtSwitchesBefore = hud.WeaponArtSwitches;
+        loaded.Camera._UnhandledInput(new InputEventKey
+        {
+            Pressed = true,
+            PhysicalKeycode = session.InventoryKey,
+        });
+        if (!inventory.IsOpen)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat did not open the owned inventory from its configured input.");
+        inventory.SelectSourceInventorySymbolForProof(rangedSymbol);
+        inventory.EquipSourceActiveHandForProof(rangedSymbol);
+        if (session.EquippedWeaponSymbol != rangedSymbol ||
+            hud.EquippedWeaponSymbol != rangedSymbol)
+            throw new InvalidOperationException(
+                "Fallout 1 classic ranged inventory selection did not update the owned HUD hand art.");
+        inventory.SelectSourceInventorySymbolForProof(meleeSymbol);
+        inventory.EquipSourceActiveHandForProof(meleeSymbol);
+        if (session.EquippedWeaponSymbol != meleeSymbol ||
+            hud.EquippedWeaponSymbol != meleeSymbol)
+            throw new InvalidOperationException(
+                "Fallout 1 classic melee inventory selection did not update the owned HUD hand art.");
+        loaded.Camera._UnhandledInput(new InputEventKey
+        {
+            Pressed = true,
+            PhysicalKeycode = Key.Escape,
+        });
+        if (inventory.IsOpen)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat Escape did not close the owned inventory screen.");
+        var saved = ReadNativeFirstBeatClassicInventoryUiSave(
+            session.SavePath,
+            pickup.HostSerial,
+            rangedSymbol,
+            meleeSymbol);
+        if (!saved.Looted || saved.EquippedWeaponSymbol != meleeSymbol ||
+            saved.InventoryObjects.GetValueOrDefault(meleeSymbol) !=
+                inventoryBefore.GetValueOrDefault(meleeSymbol) ||
+            !saved.InventoryObjects.Keys.All(inventoryBefore.ContainsKey))
+            throw new InvalidOperationException(
+                "Fallout 1 classic inventory UI did not persist its source-backed cave inventory state.");
+        session.RestoreSaveForProof();
+        if (session.EquippedWeaponSymbol != meleeSymbol ||
+            hud.EquippedWeaponSymbol != meleeSymbol ||
+            !session.InventorySnapshot().SequenceEqual(inventoryBefore))
+            throw new InvalidOperationException(
+                "Fallout 1 classic inventory UI did not restore its selected source weapon state.");
+        if (inventory.EquipmentChangedCount != equipmentChangesBefore +
+                new[] { rangedSymbol, meleeSymbol }.Distinct().Count() ||
+            hud.WeaponArtSwitches < hudArtSwitchesBefore +
+                new[] { rangedSymbol, meleeSymbol }.Distinct().Count())
+            throw new InvalidOperationException(
+                "Fallout 1 classic inventory UI did not drive both owned active-hand HUD updates.");
+        return new
+        {
+            input = session.InventoryKey.ToString(),
+            close = Key.Escape.ToString(),
+            sourceInventory = inventory.Report(),
+            sourceHud = hud.Report(),
+            sequence = new[]
+            {
+                new { action = "open", symbol = rangedSymbol },
+                new { action = "select", symbol = rangedSymbol },
+                new { action = "equip", symbol = rangedSymbol },
+                new { action = "select", symbol = meleeSymbol },
+                new { action = "equip", symbol = meleeSymbol },
+                new { action = "close", symbol = meleeSymbol },
+            },
+            inventoryBefore,
+            saved,
+            restored = new
+            {
+                equippedWeaponSymbol = session.EquippedWeaponSymbol,
+                inventoryObjects = session.InventorySnapshot(),
+                hudEquippedWeaponSymbol = hud.EquippedWeaponSymbol,
+            },
+            matched = true,
+        };
+    }
+
+    private static async Task<NativeFirstBeatMapInventoryPickup> RunNativeFirstBeatMapInventoryPickup(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded)
+    {
+        var session = loaded.Session;
+        var weaponSymbol = session.MeleeWeaponSymbol;
+        var mapHost = session.MapInventoryHosts
+            .Where(host => host.Items.Any(item =>
+                item.Symbol == weaponSymbol && item.SubtypeName == "weapon"))
+            .SingleOrDefault();
+        if (mapHost is null)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat source scene has no MAP loot host for the admitted melee weapon.");
+        var weapon = mapHost.Items.Single(item =>
+            item.Symbol == weaponSymbol && item.SubtypeName == "weapon");
+        if (weapon.Pid != session.MeleeWeapon.Pid ||
+            weapon.PrototypeSha256 != session.MeleeWeapon.PrototypeSha256)
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot weapon differs from the admitted source melee weapon.");
+        if (session.EquippedWeaponSymbol == weapon.Symbol)
+            session.SwapEquippedWeapon();
+        if (session.EquippedWeaponSymbol == weapon.Symbol)
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot proof cannot establish a distinct source inventory equip transition.");
+        var equippedBeforePickup = session.EquippedWeaponSymbol;
+        var inventoryBefore = session.InventorySnapshot();
+        var approachPath = await MoveTacticalAdjacentToMapInventoryHost(host, loaded, mapHost);
+        if (!Fo1HexMath.AreNeighbors(session.PlayerTile, mapHost.Tile))
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot route did not finish source-adjacent to its inventory host.");
+        var pickup = session.PickupAdjacentMapInventoryHost(mapHost.Serial);
+        foreach (var item in mapHost.Items)
+        {
+            var before = inventoryBefore.GetValueOrDefault(item.Symbol);
+            if (pickup.Inventory.GetValueOrDefault(item.Symbol) != before + item.Objects)
+                throw new InvalidOperationException(
+                    "Fallout 1 MAP loot pickup inventory count differs from the source item stack.");
+        }
+        if (!session.EquipLootedMapInventoryWeaponForHeadlessProof(mapHost.Serial, weapon.Symbol) ||
+            session.EquippedWeaponSymbol != weapon.Symbol)
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot weapon did not equip from the collected source inventory.");
+        var persisted = ReadNativeFirstBeatMapInventorySave(
+            session.SavePath,
+            mapHost.Serial,
+            weapon.Symbol);
+        if (!persisted.Looted || persisted.EquippedWeaponSymbol != weapon.Symbol ||
+            persisted.InventoryObjects != pickup.Inventory.GetValueOrDefault(weapon.Symbol))
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot pickup/equip result did not persist to the save.");
+        session.RestoreSaveForProof();
+        if (session.EquippedWeaponSymbol != weapon.Symbol ||
+            session.InventorySnapshot().GetValueOrDefault(weapon.Symbol) !=
+                persisted.InventoryObjects)
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot pickup/equip result did not restore from the save.");
+        return new NativeFirstBeatMapInventoryPickup(
+            mapHost.Serial,
+            mapHost.Pid,
+            weapon.Symbol,
+            weapon.Pid,
+            new
+            {
+                sourceWalkMaskOnly = true,
+                host = new
+                {
+                    serial = mapHost.Serial,
+                    pid = mapHost.Pid,
+                    prototypeSha256 = mapHost.PrototypeSha256,
+                    tile = mapHost.Tile,
+                },
+                approach = new
+                {
+                    pathTiles = approachPath,
+                    startTile = approachPath[0],
+                    contactTile = session.PlayerTile,
+                    hostTile = mapHost.Tile,
+                    contactIsAdjacent = Fo1HexMath.AreNeighbors(session.PlayerTile, mapHost.Tile),
+                },
+                equippedBeforePickup,
+                collectedItems = mapHost.Items.Select(item => new
+                {
+                    item.Index,
+                    item.Serial,
+                    item.Symbol,
+                    item.DisplayName,
+                    item.Pid,
+                    objects = item.Objects,
+                    item.PrototypeSha256,
+                    item.SubtypeName,
+                    inventoryBefore = inventoryBefore.GetValueOrDefault(item.Symbol),
+                    inventoryAfter = pickup.Inventory.GetValueOrDefault(item.Symbol),
+                }),
+                equippedWeaponSymbol = session.EquippedWeaponSymbol,
+                persistence = new
+                {
+                    saved = persisted,
+                    restored = new
+                    {
+                        equippedWeaponSymbol = session.EquippedWeaponSymbol,
+                        inventoryObjects = session.InventorySnapshot().GetValueOrDefault(weapon.Symbol),
+                    },
+                    matched = true,
+                },
+            });
+    }
+
+    private static async Task<object> RunNativeFirstBeatAdjacentRatEngagement(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded)
+    {
+        var session = loaded.Session;
+        var target = NearestLiving(session);
+        var approachPath = await MoveTacticalAdjacentToTarget(host, loaded, target);
+        var weapon = session.MeleeWeapon;
+        if (session.ActionPoints < weapon.ActionPointCost)
+        {
+            session.EndTurn();
+            if (DisplayServer.GetName() != "headless")
+                await WaitFrames(host, loaded.RuntimeProfile.Showcase.TacticalKillHoldFrames);
+        }
+        if (!target.Alive || !Fo1HexMath.AreNeighbors(session.PlayerTile, target.Tile) ||
+            session.ActionPoints < weapon.ActionPointCost)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat source rat cannot prove one adjacent melee engagement.");
+
+        var attacksBefore = session.Attacks;
+        var meleeAttacksBefore = session.MeleeAttacks;
+        var meleeHitsBefore = session.MeleeHits;
+        var sourceAttemptLimit =
+            loaded.RuntimeProfile.Gameplay.TacticalMaximumHitChancePercent;
+        var attempts = new List<object>();
+        Fo1TacticalSession.CombatResult? successfulResult = null;
+        var successfulActionPointsBefore = 0;
+        var successfulTargetHitPointsBefore = 0;
+        for (var attempt = 0; attempt < sourceAttemptLimit; attempt++)
+        {
+            if (!target.Alive || !Fo1HexMath.AreNeighbors(session.PlayerTile, target.Tile))
+                throw new InvalidOperationException(
+                    "Fallout 1 first-beat rat lost its source-adjacent melee contact.");
+            if (session.ActionPoints < weapon.ActionPointCost)
+                session.EndTurn();
+            if (session.PlayerHitPoints <= 0 || session.ActionPoints < weapon.ActionPointCost)
+                throw new InvalidOperationException(
+                    "Fallout 1 first-beat player cannot take the next source melee attempt.");
+            var actionPointsBefore = session.ActionPoints;
+            var targetHitPointsBefore = target.HitPoints;
+            session.ActivateTile(target.Tile, attackRequested: false);
+            var attemptResult = session.AttackSelectedMelee();
+            attempts.Add(new
+            {
+                actionPointsBefore,
+                actionPointsAfter = session.ActionPoints,
+                hitPointsBefore = targetHitPointsBefore,
+                hitPointsAfter = target.HitPoints,
+                attempted = attemptResult.Attempted,
+                hit = attemptResult.Hit,
+                appliedDamage = attemptResult.Damage,
+                chancePercent = attemptResult.ChancePercent,
+                rollPercent = attemptResult.RollPercent,
+            });
+            if (!attemptResult.Hit)
+                continue;
+            successfulResult = attemptResult;
+            successfulActionPointsBefore = actionPointsBefore;
+            successfulTargetHitPointsBefore = targetHitPointsBefore;
+            break;
+        }
+        if (successfulResult is not { } result || !result.Attempted ||
+            result.Kind != "melee" || result.Mode != "tactical" || result.Damage <= 0 ||
+            target.HitPoints != successfulTargetHitPointsBefore - result.Damage ||
+            session.ActionPoints != successfulActionPointsBefore - weapon.ActionPointCost ||
+            session.Attacks != attacksBefore + attempts.Count ||
+            session.MeleeAttacks != meleeAttacksBefore + attempts.Count ||
+            session.MeleeHits != meleeHitsBefore + 1 ||
+            session.EquippedWeaponSymbol != session.MeleeWeaponSymbol)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat melee result differs from its source gameplay contract.");
+
+        var persisted = ReadNativeFirstBeatCombatSave(session.SavePath, target.Serial);
+        if (persisted.ActionPoints != session.ActionPoints ||
+            persisted.Attacks != session.Attacks ||
+            persisted.MeleeAttacks != session.MeleeAttacks ||
+            persisted.MeleeHits != session.MeleeHits ||
+            persisted.EquippedWeaponSymbol != session.EquippedWeaponSymbol ||
+            persisted.TargetHitPoints != target.HitPoints)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat melee result did not persist to its source-bound save.");
+        session.RestoreSaveForProof();
+        var restoredTarget = session.Mobs.SingleOrDefault(mob => mob.Serial == target.Serial);
+        if (restoredTarget is null ||
+            session.ActionPoints != persisted.ActionPoints ||
+            session.Attacks != persisted.Attacks ||
+            session.MeleeAttacks != persisted.MeleeAttacks ||
+            session.MeleeHits != persisted.MeleeHits ||
+            session.EquippedWeaponSymbol != persisted.EquippedWeaponSymbol ||
+            restoredTarget.HitPoints != persisted.TargetHitPoints)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat save did not restore its source-bound combat result.");
+
+        return new
+        {
+            mode = result.Mode,
+            adjacent = true,
+            playerTile = session.PlayerTile,
+            approach = new
+            {
+                sourceWalkMaskOnly = true,
+                pathTiles = approachPath,
+                startTile = approachPath[0],
+                contactTile = session.PlayerTile,
+                targetTile = target.Tile,
+                contactIsAdjacent = Fo1HexMath.AreNeighbors(session.PlayerTile, target.Tile),
+            },
+            target = new
+            {
+                serial = target.Serial,
+                name = target.DisplayName,
+                pid = target.Pid,
+                prototypeSha256 = target.PrototypeSha256,
+                tile = target.Tile,
+                hitPointsBefore = successfulTargetHitPointsBefore,
+                hitPointsAfter = target.HitPoints,
+            },
+            weapon = new
+            {
+                name = weapon.Name,
+                pid = weapon.Pid,
+                prototypeSha256 = weapon.PrototypeSha256,
+                minimumDamage = weapon.MinimumDamage,
+                maximumDamage = weapon.MaximumDamage,
+                rangeHexes = weapon.RangeHexes,
+                actionPointCost = weapon.ActionPointCost,
+                characterMeleeDamage = session.MeleeDamage,
+            },
+            sourceAttemptLimit,
+            attempts,
+            successfulAttemptIndex = attempts.Count - 1,
+            actionPointsBefore = successfulActionPointsBefore,
+            actionPointsAfter = session.ActionPoints,
+            result = new
+            {
+                attempted = result.Attempted,
+                hit = result.Hit,
+                appliedDamage = result.Damage,
+                killed = result.Killed,
+                chancePercent = result.ChancePercent,
+                rollPercent = result.RollPercent,
+            },
+            persistence = new
+            {
+                saved = persisted,
+                restored = new
+                {
+                    actionPoints = session.ActionPoints,
+                    attacks = session.Attacks,
+                    meleeAttacks = session.MeleeAttacks,
+                    meleeHits = session.MeleeHits,
+                    equippedWeaponSymbol = session.EquippedWeaponSymbol,
+                    targetHitPoints = restoredTarget.HitPoints,
+                },
+                matched = true,
+            },
+        };
+    }
+
+    private static NativeFirstBeatSavedCombat ReadNativeFirstBeatCombatSave(
+        string path,
+        int targetSerial)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement;
+        if (root.GetProperty("schema").GetString() != "opennv-fo1-hex-save/v1")
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat save has an unknown schema.");
+        var target = root.GetProperty("mobs").EnumerateArray()
+            .SingleOrDefault(row => row.GetProperty("serial").GetInt32() == targetSerial);
+        if (target.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException(
+                "Fallout 1 first-beat save has no selected source-rat state.");
+        return new NativeFirstBeatSavedCombat(
+            root.GetProperty("actionPoints").GetInt32(),
+            root.GetProperty("attacks").GetInt32(),
+            root.GetProperty("meleeAttacks").GetInt32(),
+            root.GetProperty("meleeHits").GetInt32(),
+            root.GetProperty("equippedWeaponSymbol").GetString() ?? "",
+            target.GetProperty("hitPoints").GetInt32());
+    }
+
+    private static NativeFirstBeatSavedMapInventory ReadNativeFirstBeatMapInventorySave(
+        string path,
+        int hostSerial,
+        string weaponSymbol)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement;
+        if (root.GetProperty("schema").GetString() != "opennv-fo1-hex-save/v1")
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot save has an unknown schema.");
+        var looted = root.GetProperty("lootedMapInventoryHostSerials").EnumerateArray()
+            .Select(value => value.GetInt32())
+            .ToArray();
+        if (looted.Distinct().Count() != looted.Length)
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot save has duplicate collected source hosts.");
+        var inventory = root.GetProperty("inventoryObjects");
+        if (!inventory.TryGetProperty(weaponSymbol, out var weaponObjects))
+            throw new InvalidOperationException(
+                "Fallout 1 MAP loot save has no collected source weapon stack.");
+        return new NativeFirstBeatSavedMapInventory(
+            looted.Contains(hostSerial),
+            root.GetProperty("equippedWeaponSymbol").GetString() ?? "",
+            weaponObjects.GetInt32());
+    }
+
+    private static NativeFirstBeatSavedClassicInventoryUi ReadNativeFirstBeatClassicInventoryUiSave(
+        string path,
+        int hostSerial,
+        string rangedSymbol,
+        string meleeSymbol)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement;
+        if (root.GetProperty("schema").GetString() != "opennv-fo1-hex-save/v1")
+            throw new InvalidOperationException(
+                "Fallout 1 classic inventory UI save has an unknown schema.");
+        var inventoryObjects = root.GetProperty("inventoryObjects").EnumerateObject()
+            .ToDictionary(row => row.Name, row => row.Value.GetInt32(), StringComparer.Ordinal);
+        if (!inventoryObjects.ContainsKey(rangedSymbol) || !inventoryObjects.ContainsKey(meleeSymbol))
+            throw new InvalidOperationException(
+                "Fallout 1 classic inventory UI save is missing an active-hand source stack.");
+        return new NativeFirstBeatSavedClassicInventoryUi(
+            root.GetProperty("lootedMapInventoryHostSerials").EnumerateArray()
+                .Select(value => value.GetInt32())
+                .Contains(hostSerial),
+            root.GetProperty("equippedWeaponSymbol").GetString() ?? "",
+            inventoryObjects);
+    }
+
+    private readonly record struct NativeFirstBeatSavedCombat(
+        int ActionPoints,
+        int Attacks,
+        int MeleeAttacks,
+        int MeleeHits,
+        string EquippedWeaponSymbol,
+        int TargetHitPoints);
+
+    private readonly record struct NativeFirstBeatSavedMapInventory(
+        bool Looted,
+        string EquippedWeaponSymbol,
+        int InventoryObjects);
+
+    private readonly record struct NativeFirstBeatSavedClassicInventoryUi(
+        bool Looted,
+        string EquippedWeaponSymbol,
+        IReadOnlyDictionary<string, int> InventoryObjects);
+
+    private readonly record struct NativeFirstBeatMapInventoryPickup(
+        int HostSerial,
+        string HostPid,
+        string WeaponSymbol,
+        string WeaponPid,
+        object Report);
+
+    private static object SaveNativeCapture(
+        Node host,
+        string output,
+        string filename)
+    {
+        var path = Path.Combine(output, filename);
+        var image = host.GetViewport().GetTexture().GetImage();
+        image.Convert(Image.Format.Rgba8);
+        var error = image.SavePng(path);
+        if (error != Error.Ok)
+            throw new InvalidOperationException(
+                $"Could not save Fallout 1 native first-beat capture: {error}");
+        using var stream = File.OpenRead(path);
+        return new
+        {
+            path,
+            bytes = stream.Length,
+            width = image.GetWidth(),
+            height = image.GetHeight(),
+            sha256 = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(),
+        };
+    }
+
     private static string FileSha256(string path) =>
         Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
+    private static string ReadSavedEquippedWeapon(string path)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var symbol = document.RootElement.GetProperty("equippedWeaponSymbol").GetString();
+        return string.IsNullOrWhiteSpace(symbol)
+            ? throw new InvalidOperationException(
+                "Fallout 1 save has no persisted equipped weapon symbol.")
+            : symbol;
+    }
 
     private static async Task KillRatFirstPerson(
         Node host,
@@ -1217,11 +2669,12 @@ internal static class Fo1NewGameFlow
                 "Fallout FPS melee approach did not finish adjacent to its source rat.");
     }
 
-    private static async Task MoveTacticalAdjacentToTarget(
+    private static async Task<IReadOnlyList<int>> MoveTacticalAdjacentToTarget(
         Node host,
         Fo1HexSceneLoader.LoadedFo1HexScene loaded,
         Fo1Mob target)
     {
+        var approachPath = new List<int> { loaded.Session.PlayerTile };
         var maximumTurns = Fo1HexMath.Width + Fo1HexMath.Height;
         for (var turn = 0; turn < maximumTurns; turn++)
         {
@@ -1229,40 +2682,167 @@ internal static class Fo1NewGameFlow
                 throw new InvalidOperationException(
                     "Fallout tactical melee approach target died before the knife attack.");
             if (Fo1HexMath.Distance(loaded.Session.PlayerTile, target.Tile) <= 1)
-                return;
+                return approachPath;
             if (loaded.Session.ActionPoints == 0)
             {
                 loaded.Session.EndTurn();
-                await WaitFrames(host, loaded.RuntimeProfile.Showcase.TacticalKillHoldFrames);
+                if (DisplayServer.GetName() != "headless")
+                    await WaitFrames(host, loaded.RuntimeProfile.Showcase.TacticalKillHoldFrames);
             }
-            var destination = FindWalkablePathToAdjacent(loaded.Session, target)[^1];
+            var sourcePath = FindWalkablePathToAdjacent(loaded.Session, target).ToList();
+            var destination = sourcePath[^1];
             loaded.Session.SelectTile(destination);
-            for (var frame = 0;
-                 loaded.Session.QueuedMovementSteps > 0 &&
-                 frame < Fo1HexMath.Width * Fo1HexMath.Height;
-                 frame++)
-                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (DisplayServer.GetName() == "headless")
+                loaded.Session.CompleteQueuedTacticalMovementForHeadlessProof();
+            else
+                for (var frame = 0;
+                     loaded.Session.QueuedMovementSteps > 0 &&
+                     frame < Fo1HexMath.Width * Fo1HexMath.Height;
+                     frame++)
+                    await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             if (loaded.Session.QueuedMovementSteps > 0)
                 throw new InvalidOperationException(
                     "Fallout tactical knife approach did not finish queued center-hex movement.");
+            var arrivalIndex = sourcePath.IndexOf(loaded.Session.PlayerTile);
+            if (arrivalIndex < 0)
+                throw new InvalidOperationException(
+                    "Fallout tactical knife approach left its source-walkable path.");
+            approachPath.AddRange(sourcePath.Skip(1).Take(arrivalIndex));
             if (Fo1HexMath.Distance(loaded.Session.PlayerTile, target.Tile) <= 1)
-                return;
+                return approachPath;
             loaded.Session.EndTurn();
-            await WaitFrames(host, loaded.RuntimeProfile.Showcase.TacticalKillHoldFrames);
+            if (DisplayServer.GetName() != "headless")
+                await WaitFrames(host, loaded.RuntimeProfile.Showcase.TacticalKillHoldFrames);
         }
         throw new InvalidOperationException(
             "Fallout tactical knife approach exceeded the finite source-grid turn bound.");
     }
 
+    private static async Task<IReadOnlyList<int>> MoveTacticalAdjacentToMapInventoryHost(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        Fo1TacticalSession.MapInventoryHost mapHost)
+    {
+        var approachPath = new List<int> { loaded.Session.PlayerTile };
+        var maximumTurns = Fo1HexMath.Width + Fo1HexMath.Height;
+        for (var turn = 0; turn < maximumTurns; turn++)
+        {
+            if (Fo1HexMath.AreNeighbors(loaded.Session.PlayerTile, mapHost.Tile))
+                return approachPath;
+            if (loaded.Session.ActionPoints == 0)
+            {
+                loaded.Session.EndTurn();
+                if (DisplayServer.GetName() != "headless")
+                    await WaitFrames(host, loaded.RuntimeProfile.Showcase.TacticalKillHoldFrames);
+            }
+            var sourcePath = FindWalkablePathToAdjacent(loaded.Session, mapHost.Tile).ToList();
+            var destination = sourcePath[^1];
+            loaded.Session.SelectTile(destination);
+            if (DisplayServer.GetName() == "headless")
+                loaded.Session.CompleteQueuedTacticalMovementForHeadlessProof();
+            else
+                for (var frame = 0;
+                     loaded.Session.QueuedMovementSteps > 0 &&
+                     frame < Fo1HexMath.Width * Fo1HexMath.Height;
+                     frame++)
+                    await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (loaded.Session.QueuedMovementSteps > 0)
+                throw new InvalidOperationException(
+                    "Fallout MAP loot approach did not finish queued source-grid movement.");
+            var arrivalIndex = sourcePath.IndexOf(loaded.Session.PlayerTile);
+            if (arrivalIndex < 0)
+                throw new InvalidOperationException(
+                    "Fallout MAP loot approach left its source-walkable path.");
+            approachPath.AddRange(sourcePath.Skip(1).Take(arrivalIndex));
+            if (Fo1HexMath.AreNeighbors(loaded.Session.PlayerTile, mapHost.Tile))
+                return approachPath;
+            loaded.Session.EndTurn();
+            if (DisplayServer.GetName() != "headless")
+                await WaitFrames(host, loaded.RuntimeProfile.Showcase.TacticalKillHoldFrames);
+        }
+        throw new InvalidOperationException(
+            "Fallout MAP loot approach exceeded the finite source-grid turn bound.");
+    }
+
+    private static async Task<IReadOnlyList<int>> MoveTacticalToExitGrid(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        IEnumerable<int> triggerTiles)
+    {
+        var pathTiles = new List<int> { loaded.Session.PlayerTile };
+        var goals = triggerTiles.ToHashSet();
+        var maximumTurns = Fo1HexMath.Width + Fo1HexMath.Height;
+        for (var turn = 0; turn < maximumTurns; turn++)
+        {
+            if (loaded.Session.ActivatedExitGridTile is not null)
+                return pathTiles;
+            if (loaded.Session.ActionPoints == 0)
+                loaded.Session.EndTurn();
+            var sourcePath = FindWalkablePathToAny(loaded.Session, goals).ToList();
+            loaded.Session.SelectTile(sourcePath[^1]);
+            if (DisplayServer.GetName() == "headless")
+                loaded.Session.CompleteQueuedTacticalMovementForHeadlessProof();
+            else
+                for (var frame = 0; loaded.Session.QueuedMovementSteps > 0 &&
+                     frame < Fo1HexMath.Width * Fo1HexMath.Height; frame++)
+                    await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var arrivalIndex = sourcePath.IndexOf(loaded.Session.PlayerTile);
+            if (arrivalIndex < 0)
+                throw new InvalidOperationException("Fallout cave exit approach left its source-walkable path.");
+            pathTiles.AddRange(sourcePath.Skip(1).Take(arrivalIndex));
+            if (loaded.Session.ActivatedExitGridTile is not null)
+                return pathTiles;
+            loaded.Session.EndTurn();
+        }
+        throw new InvalidOperationException("Fallout cave exit grid has no finite source-walkable approach path.");
+    }
+
+    private static async Task<IReadOnlyList<int>> MoveTacticalAdjacentToSourceTile(
+        Node host,
+        Fo1HexSceneLoader.LoadedFo1HexScene loaded,
+        int targetTile)
+    {
+        var pathTiles = new List<int> { loaded.Session.PlayerTile };
+        var maximumTurns = Fo1HexMath.Width + Fo1HexMath.Height;
+        for (var turn = 0; turn < maximumTurns; turn++)
+        {
+            if (Fo1HexMath.AreNeighbors(loaded.Session.PlayerTile, targetTile))
+                return pathTiles;
+            if (loaded.Session.ActionPoints == 0)
+                loaded.Session.EndTurn();
+            var sourcePath = FindWalkablePathToAdjacent(loaded.Session, targetTile).ToList();
+            loaded.Session.SelectTile(sourcePath[^1]);
+            if (DisplayServer.GetName() == "headless")
+                loaded.Session.CompleteQueuedTacticalMovementForHeadlessProof();
+            else
+                for (var frame = 0; loaded.Session.QueuedMovementSteps > 0 &&
+                     frame < Fo1HexMath.Width * Fo1HexMath.Height; frame++)
+                    await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var arrivalIndex = sourcePath.IndexOf(loaded.Session.PlayerTile);
+            if (arrivalIndex < 0)
+                throw new InvalidOperationException("Fallout door approach left its source-walkable path.");
+            pathTiles.AddRange(sourcePath.Skip(1).Take(arrivalIndex));
+            if (Fo1HexMath.AreNeighbors(loaded.Session.PlayerTile, targetTile))
+                return pathTiles;
+            loaded.Session.EndTurn();
+        }
+        throw new InvalidOperationException("Fallout MAP door has no source-walkable adjacent approach path.");
+    }
+
     private static IReadOnlyList<int> FindWalkablePathToAdjacent(
         Fo1TacticalSession session,
         Fo1Mob target)
+        => FindWalkablePathToAdjacent(session, target.Tile);
+
+    private static IReadOnlyList<int> FindWalkablePathToAdjacent(
+        Fo1TacticalSession session,
+        int targetTile)
     {
         var occupied = session.Mobs
             .Where(mob => mob.Alive)
             .Select(mob => mob.Tile)
             .ToHashSet();
-        var goals = Fo1HexMath.Neighbors(target.Tile)
+        var goals = Fo1HexMath.Neighbors(targetTile)
             .Where(tile => session.CanWalk(tile) && !occupied.Contains(tile))
             .ToHashSet();
         if (goals.Count == 0)
@@ -1301,6 +2881,42 @@ internal static class Fo1NewGameFlow
         }
         throw new InvalidOperationException(
             "Fallout melee target has no source-walkable approach path.");
+    }
+
+    private static IReadOnlyList<int> FindWalkablePathToAny(
+        Fo1TacticalSession session,
+        IReadOnlySet<int> goals)
+    {
+        if (goals.Contains(session.PlayerTile))
+            return new[] { session.PlayerTile };
+        var queue = new Queue<int>();
+        var previous = new Dictionary<int, int>();
+        var visited = new HashSet<int> { session.PlayerTile };
+        queue.Enqueue(session.PlayerTile);
+        while (queue.Count > 0)
+        {
+            var tile = queue.Dequeue();
+            foreach (var neighbor in Fo1HexMath.Neighbors(tile))
+            {
+                if (!session.CanWalk(neighbor) || !visited.Add(neighbor))
+                    continue;
+                previous[neighbor] = tile;
+                if (!goals.Contains(neighbor))
+                {
+                    queue.Enqueue(neighbor);
+                    continue;
+                }
+                var path = new List<int> { neighbor };
+                for (var cursor = neighbor; cursor != session.PlayerTile;)
+                {
+                    cursor = previous[cursor];
+                    path.Add(cursor);
+                }
+                path.Reverse();
+                return path;
+            }
+        }
+        throw new InvalidOperationException("Fallout cave exit has no source-walkable MAP path.");
     }
 
     private static Fo1Mob NearestLiving(Fo1TacticalSession session) =>

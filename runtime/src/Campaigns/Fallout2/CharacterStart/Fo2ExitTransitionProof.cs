@@ -87,7 +87,7 @@ internal static class Fo2ExitTransitionProof
                 saved.ArrivalTile == exit.TargetTile &&
                 saved.CurrentTile == exit.TargetTile &&
                 saved.LastTransition == exit && saved.Sha256.Length == 64 &&
-                sourceWallsVisible && camera.Size == runtime.Profile.CameraSizeMeters &&
+                sourceWallsVisible && camera.Size == player.CameraSizeMeters &&
                 File.Exists(framePath) && FileSha256(framePath).Length == 64;
             WriteReport(
                 System.IO.Path.Combine(output, "fo2-exit-transition-write-proof.json"),
@@ -136,7 +136,12 @@ internal static class Fo2ExitTransitionProof
                         sourceWallSprites = sourceWallSprites.Length,
                         sourceWallsVisible,
                         cameraSizeMeters = camera.Size,
-                        cameraProfileSizeMeters = runtime.Profile.CameraSizeMeters,
+                        cameraDerivedSizeMeters = player.CameraSizeMeters,
+                        cameraCompositionMode = runtime.Profile.CameraCompositionMode,
+                        cameraSourcePixelScale = player.CameraSourcePixelScale,
+                        cameraSourceFrameCropPixels = player.CameraSourceFrameCropPixels,
+                        cameraWorldViewportHeightPixels =
+                            player.CameraWorldViewportHeightPixels,
                         sourceFrmSpritesRetained = true,
                         hiddenSourceGeometry = false,
                     },

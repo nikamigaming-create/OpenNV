@@ -4,6 +4,7 @@
     <AssemblyName>OpenNV</AssemblyName>
     <RootNamespace>OpenNV</RootNamespace>
     <LangVersion>latest</LangVersion>
+    <AnalysisLevel>latest-default</AnalysisLevel>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>

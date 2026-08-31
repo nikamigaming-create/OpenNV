@@ -179,6 +179,45 @@ def _convex_hull_contract(
     }
 
 
+def _box_hull_contract(
+    shape: object,
+    block_index: dict[int, int],
+) -> dict[str, object] | None:
+    if not isinstance(shape, NifFormat.bhkBoxShape):
+        return None
+    dimensions = (
+        float(shape.dimensions.x) * HAVOK_TO_GAME_UNITS,
+        float(shape.dimensions.y) * HAVOK_TO_GAME_UNITS,
+        float(shape.dimensions.z) * HAVOK_TO_GAME_UNITS,
+    )
+    radius = float(shape.radius)
+    minimum_size = float(shape.minimum_size)
+    if (
+        not all(math.isfinite(value) and value > 0.0 for value in dimensions)
+        or not math.isfinite(radius)
+        or radius < 0.0
+        or not math.isfinite(minimum_size)
+        or minimum_size <= 0.0
+    ):
+        return None
+    x, y, z = dimensions
+    points = [
+        (source_x, source_z, -source_y)
+        for source_x in (-x, x)
+        for source_y in (-y, y)
+        for source_z in (-z, z)
+    ]
+    return {
+        "shapeBlock": block_index[id(shape)],
+        "radiusHavokUnits": radius,
+        "radiusGameUnits": radius * HAVOK_TO_GAME_UNITS,
+        "minimumSizeHavokUnits": minimum_size,
+        "minimumSizeGameUnits": minimum_size * HAVOK_TO_GAME_UNITS,
+        "halfExtentsGodotGameUnits": [x, z, y],
+        "pointsGodotGameUnits": points,
+    }
+
+
 def dynamic_physics_contract(
     blocks: list[object],
     block_index: dict[int, int],
@@ -200,16 +239,22 @@ def dynamic_physics_contract(
         if isinstance(root_shape, NifFormat.bhkConvexVerticesShape):
             shape_candidates = [root_shape]
             shape_type = "convex-hull"
+            hull_reader = _convex_hull_contract
+        elif isinstance(root_shape, NifFormat.bhkBoxShape):
+            shape_candidates = [root_shape]
+            shape_type = "box"
+            hull_reader = _box_hull_contract
         elif isinstance(root_shape, NifFormat.bhkListShape):
             shape_candidates = list(root_shape.sub_shapes)
             shape_type = "compound-convex-hulls"
+            hull_reader = _convex_hull_contract
         else:
             unsupported.append(f"unsupported-root-shape:{type(root_shape).__name__}")
             continue
         hulls = [
             hull
             for shape in shape_candidates
-            if (hull := _convex_hull_contract(shape, block_index)) is not None
+            if (hull := hull_reader(shape, block_index)) is not None
         ]
         if len(hulls) != len(shape_candidates) or not hulls:
             unsupported.append(f"unsupported-convex-child:{type(root_shape).__name__}")

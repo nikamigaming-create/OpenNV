@@ -77,6 +77,32 @@ internal sealed record Fo3Vault101DadActor(
     int Textures,
     int FaceGenMorphTargets);
 
+internal sealed record Fo3Vault101MomActor(
+    string ScenePath,
+    string SceneSha256,
+    string RecipeId,
+    string ReferenceFormId,
+    string BaseFormId,
+    string EnableParentReferenceFormId,
+    string Name,
+    string RaceFormId,
+    string HairFormId,
+    string EyesFormId,
+    IReadOnlyList<string> HeadPartFormIds,
+    IReadOnlyList<string> OutfitFormIds,
+    Vector3 AuthoredPositionGodotGameUnits,
+    Quaternion AuthoredRotationGodotQuaternion,
+    float Scale,
+    string StartMarkerReferenceFormId,
+    Vector3 StartMarkerPositionGodotGameUnits,
+    Quaternion StartMarkerRotationGodotQuaternion,
+    string IdleAnimationPath,
+    int Components,
+    int Skins,
+    int Surfaces,
+    int Textures,
+    int FaceGenMorphTargets);
+
 internal sealed record Fo3Vault101Cg01DadActorVariant(
     string PlayerRaceFormId,
     string PlayerSex,
@@ -125,10 +151,14 @@ internal sealed record Fo3Vault101BirthPresentationContract(
     int ResolvedUniqueTextures,
     Fo3Vault101DoctorActor DoctorActor,
     Fo3Vault101DadActor DadActor,
+    Fo3Vault101MomActor MomActor,
     IReadOnlyDictionary<string, Fo3Vault101Cg01DadActorVariant> Cg01DadActors,
     IReadOnlyDictionary<string, Fo3Vault101BirthAsset> Assets,
     IReadOnlyList<Fo3Vault101BirthReference> References)
 {
+    internal string? TtwCg00Stage10ActorSetPath { get; init; }
+    internal string? TtwCg00Stage10ActorSetSha256 { get; init; }
+
     internal const string ExpectedSchema = "opennv-fo3-vault101-birth-presentation/v9";
     private const string ExpectedStatus =
         "prepared-owned-materials-stage65-and-cg01-stage5-stage12-dialogue-idles-" +
@@ -140,11 +170,11 @@ internal sealed record Fo3Vault101BirthPresentationContract(
         "owned-NIF-surface-identity-and-owned-DDS-bindings";
     private const string ExpectedProofCameraAuthority =
         "owned-CG00-support-mesh-top-derived-proof-only-not-retail-camera";
-    private const string RequiredUnsupportedActors =
-        "Mom, player body, and all actors except Doctor Li, CG00 Dad, and CG01 Dad";
-    private const string RequiredUnsupportedActorBehavior =
-        "automatic CG00 dialogue timing, package state, and animation selection";
-    private const string RequiredUnsupportedCommands = "quest and package command execution";
+    private const string ExpectedProjectionAuthority =
+        "owned-fDefaultFOV-through-fallout3-frustum-contract";
+    private const string ExpectedGodotKeepAspect = "keep-height";
+    private const float FalloutReferenceAspectHeightOverWidth = 0.75f;
+    private const float FovDiameterToRadius = 0.5f;
     private const int Sha256HexCharacters = 64;
     private const int FormIdHexCharacters = 8;
 
@@ -240,11 +270,28 @@ internal sealed record Fo3Vault101BirthPresentationContract(
 
         var presentation = RequiredObject(root, "presentation");
         if (RequiredString(presentation, "lightingAuthority") != ExpectedLightingAuthority ||
-            RequiredString(presentation, "materialAuthority") != ExpectedMaterialAuthority)
+            RequiredString(presentation, "materialAuthority") != ExpectedMaterialAuthority ||
+            RequiredString(presentation, "projectionAuthority") !=
+                ExpectedProjectionAuthority ||
+            RequiredString(presentation, "godotKeepAspect") != ExpectedGodotKeepAspect)
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 proof-presentation authority is unsupported.");
+        var sourceHorizontalFov = RequiredPositiveSingle(
+            presentation,
+            "sourceHorizontalFovDegrees");
+        var referenceAspect = RequiredPositiveSingle(
+            presentation,
+            "referenceAspectHeightOverWidth");
         var verticalFovDegrees = RequiredPositiveSingle(presentation, "verticalFovDegrees");
-        if (verticalFovDegrees >= 180.0f)
+        var expectedVerticalFov = Mathf.RadToDeg(
+            2.0f * Mathf.Atan(
+                Mathf.Tan(Mathf.DegToRad(sourceHorizontalFov) * FovDiameterToRadius) *
+                referenceAspect));
+        if (sourceHorizontalFov >= 180.0f ||
+            !Mathf.IsEqualApprox(
+                referenceAspect,
+                FalloutReferenceAspectHeightOverWidth) ||
+            !Mathf.IsEqualApprox(verticalFovDegrees, expectedVerticalFov))
             throw new InvalidOperationException("Fallout 3 Vault 101 proof FOV is invalid.");
         var ambient = ReadColor(presentation, "proofAmbientColor");
         var ambientEnergy = RequiredPositiveSingle(presentation, "proofAmbientEnergy");
@@ -266,6 +313,13 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             RequiredObject(root, "dadActor"),
             cacheRoot,
             origin);
+        var momActor = ReadMomActor(
+            birthSlice,
+            RequiredObject(root, "momActor"),
+            cacheRoot,
+            origin,
+            dadActor.ReferenceFormId,
+            dadActor.IdleAnimationPath);
         var cg01DadActors = ReadCg01DadActors(
             birthSlice,
             cg01Transition,
@@ -345,14 +399,17 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 presentation coverage differs from its rows.");
         VerifyPromotion(RequiredObject(root, "promotion"));
-        var unsupported = RequiredArray(root, "unsupported").EnumerateArray()
-            .Select(value => value.GetString())
-            .ToHashSet(StringComparer.Ordinal);
-        if (!unsupported.Contains(RequiredUnsupportedActors) ||
-            !unsupported.Contains(RequiredUnsupportedActorBehavior) ||
-            !unsupported.Contains(RequiredUnsupportedCommands))
+        var sourceClosure = RequiredObject(root, "sourceClosure");
+        var requiredRoles = RequiredArray(sourceClosure, "requiredSceneParticipantRoles")
+            .EnumerateArray().Select(value => value.GetString()).ToArray();
+        var accountedRoles = RequiredArray(sourceClosure, "accountedSceneParticipantRoles")
+            .EnumerateArray().Select(value => value.GetString()).ToArray();
+        if (!requiredRoles.SequenceEqual(["doctor", "father", "mother"]) ||
+            !accountedRoles.SequenceEqual(requiredRoles) ||
+            RequiredArray(sourceClosure, "unaccounted").GetArrayLength() != 0 ||
+            RequiredInteger(sourceClosure, "unaccountedCount") != 0)
             throw new InvalidOperationException(
-                "Fallout 3 Vault 101 unsupported behavior boundary is incomplete.");
+                "Fallout 3 Vault 101 scene-participant source closure is incomplete.");
 
         return new Fo3Vault101BirthPresentationContract(
             path,
@@ -386,6 +443,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             textureIds.Length,
             doctorActor,
             dadActor,
+            momActor,
             cg01DadActors,
             assets,
             references);
@@ -758,6 +816,147 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             surfaces,
             textures,
             morphTargets);
+    }
+
+    private static Fo3Vault101MomActor ReadMomActor(
+        Fo3BirthSliceContract birthSlice,
+        JsonElement source,
+        string cacheRoot,
+        Vector3 origin,
+        string dadReferenceFormId,
+        string sharedIdleAnimationPath)
+    {
+        const string actorSceneSchema = "opennv-actor-scene/v5";
+        const string actorSceneStatus = "skinned-animated";
+        if (RequiredString(source, "source") !=
+                "direct-owned-CG00Mom-ACHR-enable-parent-NPC-race-and-FaceGen" ||
+            RequiredString(source, "poseAuthority") !=
+                "owned mtidle compiler input and exact stage-0 MoveTo marker; " +
+                "visibility is joined to the owned CG00 Dad enable-parent reference")
+            throw new InvalidOperationException(
+                "Fallout 3 CG00 Mom ownership or presentation authority differs.");
+
+        using var birthDocument = JsonDocument.Parse(File.ReadAllBytes(birthSlice.Path));
+        var startGraph = RequiredObject(birthDocument.RootElement, "startGraph");
+        var motherRows = RequiredArray(startGraph, "actors").EnumerateArray()
+            .Where(value => RequiredString(value, "role") == "mother")
+            .ToArray();
+        if (motherRows.Length != 1)
+            throw new InvalidOperationException(
+                "Fallout 3 CG00 Mom birth actor identity is absent or ambiguous.");
+        var mother = motherRows[0];
+        var ownedReference = RequiredObject(mother, "reference");
+        var ownedMarker = RequiredObject(mother, "startMarker");
+        var actorReferenceFormId = RequiredFormId(ownedReference, "formId");
+        var actorBaseFormId = RequiredFormId(ownedReference, "baseFormId");
+        var bases = RequiredArray(
+                RequiredObject(birthDocument.RootElement, "cellGraph"),
+                "bases")
+            .EnumerateArray()
+            .Where(value => RequiredFormId(value, "formId") == actorBaseFormId)
+            .ToArray();
+        if (bases.Length != 1)
+            throw new InvalidOperationException(
+                "Fallout 3 CG00 Mom base ownership is absent or ambiguous.");
+        var ownedBase = bases[0];
+        var recordBindings = RequiredObject(source, "sourceRecordBindings");
+        if (RequiredFormId(recordBindings, "referenceFormId") != actorReferenceFormId ||
+            RequiredFormId(recordBindings, "baseFormId") != actorBaseFormId ||
+            RequiredSha256(recordBindings, "baseRecordDataSha256") !=
+                RequiredSha256(ownedBase, "recordDataSha256") ||
+            RequiredFormId(recordBindings, "enableParentReferenceFormId") !=
+                dadReferenceFormId)
+            throw new InvalidOperationException(
+                "Fallout 3 CG00 Mom record ownership differs from the birth slice.");
+
+        var scenePath = ResolveCacheRelativeDerivative(
+            cacheRoot,
+            RequiredString(source, "scene"));
+        var sceneSha256 = RequiredSha256(source, "sha256");
+        VerifyFile(scenePath, sceneSha256);
+        var recipe = RequiredObject(source, "recipe");
+        var actorRecipeId = RequiredString(recipe, "id");
+        VerifyFile(RequiredString(recipe, "path"), RequiredSha256(recipe, "sha256"));
+        using var actorDocument = JsonDocument.Parse(File.ReadAllBytes(scenePath));
+        var actorRoot = actorDocument.RootElement;
+        if (RequiredString(actorRoot, "schema") != actorSceneSchema ||
+            RequiredString(actorRoot, "status") != actorSceneStatus ||
+            RequiredString(actorRoot, "recipe") != actorRecipeId ||
+            RequiredFormId(actorRoot, "cellFormId") != birthSlice.CellFormId)
+            throw new InvalidOperationException(
+                "Fallout 3 CG00 Mom compiled scene identity differs.");
+
+        var reference = RequiredObject(actorRoot, "reference");
+        var actor = RequiredObject(actorRoot, "actor");
+        var ownedTransform = RequiredObject(ownedReference, "transform");
+        var ownedPosition = ReadVector3(ownedTransform, "positionGameUnits");
+        var expectedLocalPosition = new Vector3(
+            ownedPosition.X - origin.X,
+            ownedPosition.Z - origin.Z,
+            -(ownedPosition.Y - origin.Y));
+        var actorLocalPosition = ReadVector3(reference, "positionGodotUnits");
+        if (RequiredFormId(reference, "formId") != actorReferenceFormId ||
+            RequiredFormId(reference, "baseFormId") != actorBaseFormId ||
+            RequiredFormId(reference, "enableParentFormId") != dadReferenceFormId ||
+            RequiredBoolean(reference, "initiallyDisabled") ||
+            !ReadVector3(reference, "positionGameUnits").IsEqualApprox(ownedPosition) ||
+            !actorLocalPosition.IsEqualApprox(expectedLocalPosition) ||
+            !ReadVector3(reference, "rotationRadians").IsEqualApprox(
+                ReadVector3(ownedTransform, "rotationRadians")) ||
+            RequiredString(actor, "recordType") != "NPC_" ||
+            RequiredString(actor, "editorId") != RequiredString(ownedBase, "editorId") ||
+            !RequiredBoolean(actor, "female"))
+            throw new InvalidOperationException(
+                "Fallout 3 CG00 Mom actor identity or authored transform differs.");
+
+        var marker = RequiredObject(source, "startMarker");
+        var ownedMarkerTransform = RequiredObject(ownedMarker, "transform");
+        var ownedMarkerPosition = ReadVector3(ownedMarkerTransform, "positionGameUnits");
+        var expectedMarkerLocalPosition = new Vector3(
+            ownedMarkerPosition.X - origin.X,
+            ownedMarkerPosition.Z - origin.Z,
+            -(ownedMarkerPosition.Y - origin.Y));
+        var markerLocalPosition = ReadVector3(marker, "positionGodotGameUnits");
+        if (RequiredFormId(marker, "referenceFormId") !=
+                RequiredFormId(ownedMarker, "formId") ||
+            !ReadVector3(marker, "positionGameUnits").IsEqualApprox(ownedMarkerPosition) ||
+            !markerLocalPosition.IsEqualApprox(expectedMarkerLocalPosition) ||
+            !ReadVector3(marker, "rotationRadians").IsEqualApprox(
+                ReadVector3(ownedMarkerTransform, "rotationRadians")))
+            throw new InvalidOperationException(
+                "Fallout 3 CG00 Mom stage-0 start marker differs from the owned slice.");
+
+        var coverage = RequiredObject(actorRoot, "coverage");
+        if (!RequiredBoolean(coverage, "animated") ||
+            RequiredInteger(coverage, "omittedSurfaces") != 0 ||
+            RequiredString(actorRoot, "idleAnimation") != sharedIdleAnimationPath)
+            throw new InvalidOperationException(
+                "Fallout 3 CG00 Mom compiled appearance coverage differs.");
+        return new Fo3Vault101MomActor(
+            scenePath,
+            sceneSha256,
+            actorRecipeId,
+            actorReferenceFormId,
+            actorBaseFormId,
+            dadReferenceFormId,
+            RequiredString(actor, "name"),
+            RequiredFormId(actor, "raceFormId"),
+            RequiredFormId(actor, "hairFormId"),
+            RequiredFormId(actor, "eyesFormId"),
+            ReadFormIdArray(actor, "headPartFormIds"),
+            ReadFormIdArray(actor, "outfitFormIds"),
+            actorLocalPosition,
+            ReadQuaternion(reference, "rotationGodotQuaternion"),
+            RequiredPositiveSingle(reference, "scale"),
+            RequiredFormId(marker, "referenceFormId"),
+            markerLocalPosition,
+            ReadQuaternion(marker, "rotationGodotQuaternion"),
+            sharedIdleAnimationPath,
+            RequiredPositiveInteger(coverage, "components"),
+            RequiredPositiveInteger(coverage, "skins"),
+            RequiredPositiveInteger(coverage, "surfaces"),
+            RequiredPositiveInteger(coverage, "textures"),
+            RequiredPositiveInteger(coverage, "faceGenMorphTargets"));
     }
 
     private static IReadOnlyDictionary<string, Fo3Vault101Cg01DadActorVariant>
@@ -1191,6 +1390,7 @@ internal sealed record Fo3Vault101BirthPresentationContract(
             !RequiredBoolean(promotion, "texturesPrepared") ||
             !RequiredBoolean(promotion, "doctorActorPrepared") ||
             !RequiredBoolean(promotion, "dadActorPrepared") ||
+            !RequiredBoolean(promotion, "momActorPrepared") ||
             !RequiredBoolean(promotion, "cg01DadActorPrepared") ||
             !RequiredBoolean(promotion, "cg01DadStage65AppearanceCompiled") ||
             !RequiredBoolean(promotion, "cg01DadDialogueAnimationsCompiled") ||

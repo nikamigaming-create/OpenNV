@@ -5,6 +5,7 @@ import {
   CAMPAIGNS,
   createOfflineState,
   createRuntimeArguments,
+  createTtwOpeningProofArguments,
   mergeRuntimeState,
   validateLaunchRequest
 } from "../src/contract.mjs";
@@ -38,6 +39,7 @@ test("the launcher has four top-level games while TTW remains an edition", () =>
 test("the compact renderer starts with one readable four-card row and two columns when narrow", () => {
   const html = readFileSync(new URL("../src/renderer/index.html", import.meta.url), "utf8");
   const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+  const renderer = readFileSync(new URL("../src/renderer/app.mjs", import.meta.url), "utf8");
   assert.equal((html.match(/class="campaign-card /gu) || []).length, 4);
   for (const title of ["Fallout 1", "Fallout 2", "New Vegas", "Fallout 3"]) {
     assert.match(html, new RegExp(`card-title">${title.replace(" ", "\\s")}`));
@@ -45,6 +47,10 @@ test("the compact renderer starts with one readable four-card row and two column
   assert.doesNotMatch(html, /card-title">TTW/);
   assert.match(styles, /grid-template-columns:\s*repeat\(4,/u);
   assert.match(styles, /@media \(max-width: 760px\)[\s\S]*grid-template-columns:\s*repeat\(2,/u);
+  assert.match(renderer, /value="ttw-fnv"/u);
+  assert.match(renderer, /value="ttw-fo3"/u);
+  assert.match(renderer, /campaign:\s*selectedRouteId\(\)/u);
+  assert.doesNotMatch(renderer, /campaign:\s*selectedCampaign\(\)\.id/u);
 });
 
 test("New Vegas uses an explicit immutable cache registration", () => {
@@ -238,41 +244,78 @@ test("TTW and JAM remain disabled until both registered profiles report portable
   assert.equal(withProfiles.campaigns.find((campaign) => campaign.id === "ttw").jamReady, true);
 });
 
-test("TTW launch arguments preserve the isolated opening, cache, and save identities", () => {
+test("TTW opening routes remain distinct and interactive Play cannot invoke proof-and-quit", () => {
   const ttwProfile = {
-    ready: true,
-    openingValidated: true,
+    validated: true,
     path: "D:\\profiles\\ttw-profile.json",
     sourceNamespacePath: "D:\\profiles\\ttw-effective-source.json",
-    openingProfilePath: "D:\\profiles\\ttw-fo3-opening-profile.json",
     cacheCompatibilityId: `ttw-fo3-opening:${"a".repeat(64)}`,
     cacheRoot: `D:\\cache\\ttw\\${"b".repeat(64)}\\${"a".repeat(64)}`,
     saveCompatibilityId: `ttw:${"b".repeat(64)}`,
-    savePath: "D:\\profiles\\ttw\\courier-v1.json"
+    savePath: "D:\\profiles\\ttw\\courier-v1.json",
+    openings: {
+      "ttw-fo3": {
+        proofValidated: true,
+        proofProfilePath: "D:\\profiles\\ttw-fo3-opening-profile.json",
+        interactiveReady: false,
+        blocker: "Vault 101 world runtime is not connected."
+      },
+      "ttw-fnv": {
+        proofValidated: false,
+        proofProfilePath: null,
+        interactiveReady: false,
+        blocker: "Doc Mitchell TTW opening is not compiled."
+      }
+    }
   };
   const jamProfile = { ready: true, path: "D:\\profiles\\jam-profile.json" };
-  const request = validateLaunchRequest({ campaign: "ttw", enableJam: true });
-  assert.deepEqual(createRuntimeArguments(request, { ttwProfile, jamProfile }), [
-    "--xr-mode", "off", "--",
-    "--campaign", "TTW",
-    "--ttw-profile", ttwProfile.path,
-    "--ttw-source-namespace", ttwProfile.sourceNamespacePath,
-    "--ttw-fo3-opening-profile", ttwProfile.openingProfilePath,
-    "--ttw-cache-compatibility-id", ttwProfile.cacheCompatibilityId,
-    "--ttw-cache-root", ttwProfile.cacheRoot,
-    "--save-compatibility-id", ttwProfile.saveCompatibilityId,
-    "--save-path", ttwProfile.savePath,
-    "--enable-jam", "--jam-profile", jamProfile.path
-  ]);
+  const fo3 = validateLaunchRequest({ campaign: "ttw-fo3", enableJam: true });
+  const fnv = validateLaunchRequest({ campaign: "ttw-fnv" });
+  assert.equal(fo3.ttwOpening, "ttw-fo3");
+  assert.equal(fnv.ttwOpening, "ttw-fnv");
+  assert.throws(() => validateLaunchRequest({ campaign: "ttw" }), /Choose Fallout 3 via TTW/);
   assert.throws(
-    () => createRuntimeArguments(request, { ttwProfile }),
-    /JAM profile/
+    () => createRuntimeArguments(fo3, { ttwProfile, jamProfile }),
+    /Vault 101 world runtime/
   );
   assert.throws(
-    () => createRuntimeArguments(
-      validateLaunchRequest({ campaign: "ttw" }),
-      { ttwProfile: { ...ttwProfile, openingValidated: false } }),
-    /TTW profile/
+    () => createRuntimeArguments(fnv, { ttwProfile }),
+    /Doc Mitchell TTW opening/
+  );
+  assert.deepEqual(createTtwOpeningProofArguments("ttw-fo3", ttwProfile, {
+    mode: "apply",
+    reportPath: "D:\\proofs\\ttw-fo3-apply.json"
+  }), [
+    "--xr-mode", "off", "--",
+    "--ttw-fo3-opening-profile", ttwProfile.openings["ttw-fo3"].proofProfilePath,
+    "--ttw-fo3-opening-proof", "apply",
+    "--save-path", ttwProfile.savePath,
+    "--report", "D:\\proofs\\ttw-fo3-apply.json"
+  ]);
+  assert.throws(
+    () => createTtwOpeningProofArguments("ttw-fnv", ttwProfile, {
+      mode: "apply",
+      reportPath: "D:\\proofs\\ttw-fnv-apply.json"
+    }),
+    /no bounded Doc Mitchell proof profile/i
+  );
+});
+
+test("standalone, TTW, and optional JAM selections form a fail-closed scenario matrix", () => {
+  assert.equal(validateLaunchRequest({ campaign: "newvegas" }).routeId, "newvegas");
+  assert.equal(validateLaunchRequest({ campaign: "newvegas", enableJam: true }).enableJam, true);
+  assert.equal(validateLaunchRequest({ campaign: "fallout3" }).routeId, "fallout3");
+  assert.throws(
+    () => validateLaunchRequest({ campaign: "fallout3", enableJam: true }),
+    /New Vegas and TTW/
+  );
+  assert.deepEqual(
+    ["ttw-fo3", "ttw-fnv"].map((campaign) => {
+      const plain = validateLaunchRequest({ campaign });
+      const jam = validateLaunchRequest({ campaign, enableJam: true });
+      return [plain.ttwOpening, plain.enableJam, jam.enableJam];
+    }),
+    [["ttw-fo3", false, true], ["ttw-fnv", false, true]]
   );
 });
 

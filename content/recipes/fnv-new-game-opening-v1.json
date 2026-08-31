@@ -279,7 +279,7 @@
             "orientation": 3141,
             "animationType": 1,
             "actorPlacementOffsetGameSettings": {
-              "semantics": "replace-marker-offset-for-actor-placement",
+              "semantics": "nif-marker-minus-gmst-target-offset-for-actor-placement",
               "x": {
                 "formId": "00003f10",
                 "editorId": "fFurnitureMarker14DeltaX",
@@ -306,6 +306,15 @@
               "valueRadians": 3.1415998935699463
             }
           }
+        },
+        "patientBed": {
+          "referenceFormId": "00103e5b",
+          "referenceRecordSha256": "634a415dd741804d5a13ea8ed60fee7362068b6c1d98f27a359f411bd47b3b37",
+          "baseFormId": "00106a6a",
+          "editorId": "NVbedtwin01",
+          "recordSha256": "2e239593556c1d76cf030921ab6f140c9454de2b81dcfe8324e43bf5a2d8f130",
+          "modelLogicalPath": "meshes\\furniture\\nv_bedtwin01.nif",
+          "modelSha256": "51b0f74cf82871e237fe64d440fbbaa77be82d1e4c530fb165acb68afbe9e33d"
         },
         "seatedLoop": {
           "formId": "00003bcb",
@@ -374,7 +383,62 @@
       },
       "appearance": {
         "document": "menus\\chargen\\race_sex_menu.xml",
-        "layoutTile": "RSM_Background"
+        "layoutTile": "RSM_Background",
+        "semanticLayoutTiles": {
+          "faceGrab": "RSM_Face_Grab",
+          "sliderOption": "RSM_slider_option"
+        },
+        "renderedDevice": {
+          "framingContract": "content\\contracts\\fnv-racesex-rendered-device-framing-v1.json",
+          "previewCameraContract": "content\\contracts\\fnv-racesex-preview-camera-v1.json",
+          "modelAsset": "meshes\\terminals\\nv_reflectron_ui.nif",
+          "screenSurface": "Screen:0",
+          "surfaceRoles": {
+            "sexButton": "SexBtn:0",
+            "raceButton": "RaceBtn:0",
+            "faceButton": "FaceBtn:0",
+            "hairButton": "BodyBtn:0",
+            "sexGlow": "SexGlow:0",
+            "raceGlow": "RaceGlow:0",
+            "faceGlow": "FaceGlow:0",
+            "hairGlow": "BodyGlow:0",
+            "deviceShell0": "NV_Reflectron:0",
+            "deviceShell1": "NV_Reflectron:1",
+            "deviceShell2": "NV_Reflectron:2"
+          },
+          "exportStrict": false,
+          "textureAliases": {},
+          "iniSettings": {
+            "section": "RenderedTerminal",
+            "values": {
+              "enabled": { "key": "bUseRenderedTerminals", "type": "bool" },
+              "terminalFov": { "key": "fRenderedTerminalFOV", "type": "float" },
+              "terminalZoom": { "key": "fRenderedTerminalZoom", "type": "float" },
+              "scanlines": { "key": "bDoRenderedTerminalScanlines", "type": "bool" },
+              "scanlineScale": { "key": "fRenderedTerminalScanlineScale", "type": "float" },
+              "terminalHorizontalPosition": { "key": "fRenderedTerminalHPos", "type": "float" },
+              "terminalVerticalPosition": { "key": "fRenderedTerminalVPos", "type": "float" },
+              "screenLightBaseIntensity": { "key": "fScreenLightBaseIntensity", "type": "float" },
+              "screenLightRadius": { "key": "fScreenLightRadius", "type": "float" },
+              "screenLightColorRed": { "key": "fScreenLightColorR", "type": "float" },
+              "screenLightColorGreen": { "key": "fScreenLightColorG", "type": "float" },
+              "screenLightColorBlue": { "key": "fScreenLightColorB", "type": "float" },
+              "raceSexHorizontalPosition": { "key": "fRaceSexMenuHPos", "type": "float" },
+              "raceSexVerticalPosition": { "key": "fRaceSexMenuVPos", "type": "float" },
+              "raceSexZoom": { "key": "fRaceSexMenuZoom", "type": "float" },
+              "raceSexScale": { "key": "fRaceSexMenuScale", "type": "float" },
+              "menuPlayerLightDiffuseRed": { "section": "Interface", "key": "fMenuPlayerLightDiffuseRed", "type": "float" },
+              "menuPlayerLightDiffuseGreen": { "section": "Interface", "key": "fMenuPlayerLightDiffuseGreen", "type": "float" },
+              "menuPlayerLightDiffuseBlue": { "section": "Interface", "key": "fMenuPlayerLightDiffuseBlue", "type": "float" },
+              "menuPlayerLightAmbientRed": { "section": "Interface", "key": "fMenuPlayerLightAmbientRed", "type": "float" },
+              "menuPlayerLightAmbientGreen": { "section": "Interface", "key": "fMenuPlayerLightAmbientGreen", "type": "float" },
+              "menuPlayerLightAmbientBlue": { "section": "Interface", "key": "fMenuPlayerLightAmbientBlue", "type": "float" },
+              "defaultFovDegrees": { "section": "Display", "key": "fDefaultFOV", "type": "float" },
+              "nearDistanceGameUnits": { "section": "Display", "key": "fNearDistance", "type": "float" },
+              "farDistanceGameUnits": { "section": "Display", "key": "fFarDistance", "type": "float" }
+            }
+          }
+        }
       },
       "special": {
         "document": "menus\\chargen\\love_tester_menu.xml",
@@ -395,6 +459,10 @@
       "namePrompt": "-sEnterName",
       "ok": "-sOk"
     },
+    "raceSexNavigationStringEntities": {
+      "back": "-sBack",
+      "next": "-sNext"
+    },
     "messageEditorIds": {
       "sex": "VCG01ChooseSexMessage"
     },
@@ -408,6 +476,34 @@
       "GSDocMitchellExitTriggerScript": "exitDoor"
     },
     "characterRules": {
+      "appearancePreviewOutfitFormId": "00104184",
+      "raceSexList": {
+        "activeList": "sex",
+        "header": {
+          "ordinal": 1,
+          "settingEntity": "sRSMSex",
+          "value": "Sex"
+        },
+        "choices": [
+          {
+            "engineValue": "male",
+            "settingEntity": "sMale",
+            "value": "Male"
+          },
+          {
+            "engineValue": "female",
+            "settingEntity": "sFemale",
+            "value": "Female"
+          }
+        ],
+        "source": {
+          "classification": "implementation-neutral-owned-engine-setting-and-live-retail-menu-contract",
+          "engineBuild": "1.4.0.525",
+          "sourceExecutableSha256": "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57",
+          "observedMenuClass": "RaceSexMenu",
+          "observedRenderedMenuClass": "FORenderedMenuRaceSex"
+        }
+      },
       "faceGenControlSpace": {
         "memberLogicalPath": "facegen\\si.ctl",
         "memberSha256": "4f3f63d3e0dde33247613753c386c0aaa987affc44f65578336d22e621939964",
@@ -441,18 +537,43 @@
         },
         "runtimePreviewControl": {
           "controlIndex": 0,
-          "minimum": -1.0,
-          "maximum": 1.0,
-          "step": 0.05,
+          "minimum": -50.0,
+          "maximum": 50.0,
+          "step": 1.0,
+          "jump": 25.0,
+          "morphWeightScale": 0.1,
           "resetValue": 0.0,
-          "acceptanceValue": 0.5,
-          "presentation": {
-            "viewportWidthFraction": 0.5,
-            "viewportHeightFraction": 0.35,
-            "verticalFovHalfAngleFactor": 0.5,
-            "depthExtentFraction": 0.5
+          "acceptanceValue": 25.0,
+          "sliderSemanticsEvidence": {
+            "classification": "independent-sibling-gamebryo-racesexmenu-static-contract",
+            "engineBuild": "1.7.0.4",
+            "sourceExecutableSha256Parts": [
+              "c3f97c2255fa041a851c17cf372d69aa",
+              "add8694e2dc4230ba556001bbfbd2f3e"
+            ],
+            "sourceMinimum": -5.0,
+            "sourceMaximum": 5.0,
+            "uiScale": 10.0,
+            "uiMinimum": -50.0,
+            "uiMaximum": 50.0,
+            "ordinaryIncrement": 1.0,
+            "jump": 25.0,
+            "morphWeightScale": 0.1,
+            "lowGlobalAddress": "0x1115438",
+            "highGlobalAddress": "0x1115444",
+            "incrementTrait": "user6",
+            "incrementDefaultThreshold": 1.0
           },
-          "semantics": "first-party-normalized-ctl-axis-preview-not-retail-slider-range"
+          "presentation": {
+            "fullInVerticalOffsetGameUnits": -4.699999809265137,
+            "fullInDistanceGameUnits": 55.0,
+            "fullInYawRadians": -0.8399999737739563,
+            "fullOutVerticalOffsetGameUnits": -11.399999618530273,
+            "fullOutDistanceGameUnits": 135.0,
+            "fullOutYawRadians": -0.800000011920929,
+            "startingZoomFraction": 0.699999988079071
+          },
+          "semantics": "sibling-gamebryo-racesexmenu-ui-units-with-ctl-egm-weight-scale"
         }
       },
       "special": {

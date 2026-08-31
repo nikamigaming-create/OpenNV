@@ -16,6 +16,8 @@
 /runtime/obj/
 /runtime/dist/
 /runtime/tmp/
+/contract-tests/**/bin/
+/contract-tests/**/obj/
 /tmp/
 /runtime/tests/fixtures/*.gltf.import
 /content/.pytest_cache/

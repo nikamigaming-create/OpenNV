@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -39,6 +40,7 @@ internal static class Fo1TacticalSessionNumericContracts
     internal const float PresentationFloat0Point95f = 0.95f;
     internal const float PresentationFloat0Point96f = 0.96f;
     internal const float PresentationFloat0Point98f = 0.98f;
+    internal const float PresentationFloat1Point0f = 1.0f;
     internal const float PresentationFloat1Point28f = 1.28f;
     internal const uint PresentationUint100U = 100U;
     internal const float PresentationFloat102Point0f = 102.0f;
@@ -83,28 +85,151 @@ internal static class Fo1TacticalSessionNumericContracts
     internal const float PresentationFloat910Point0f = 910.0f;
 }
 
+internal sealed record Fo1PlayerPresentationIdentity(
+    string CharacterId,
+    string CharacterName,
+    string Sex,
+    string IdentityMode,
+    string OwnedGcdSha256,
+    string OwnedBiographySha256,
+    string OwnedPortraitFrmSha256)
+{
+    internal static Fo1PlayerPresentationIdentity FromProfile(
+        Fo1CharacterProfile profile)
+    {
+        profile.Identity.Validate(profile);
+        var result = new Fo1PlayerPresentationIdentity(
+            profile.Identity.CharacterId,
+            profile.Name,
+            profile.Sex,
+            profile.Identity.Mode,
+            profile.Identity.OwnedGcdSha256,
+            profile.Identity.OwnedBiographySha256,
+            profile.Identity.OwnedPortraitFrmSha256);
+        result.Validate(profile);
+        return result;
+    }
+
+    internal void Validate(Fo1CharacterProfile profile)
+    {
+        profile.Identity.Validate(profile);
+        if (CharacterName != profile.Name || Sex != profile.Sex ||
+            CharacterId != profile.Identity.CharacterId ||
+            IdentityMode != profile.Identity.Mode ||
+            OwnedGcdSha256 != profile.Identity.OwnedGcdSha256 ||
+            OwnedBiographySha256 != profile.Identity.OwnedBiographySha256 ||
+            OwnedPortraitFrmSha256 != profile.Identity.OwnedPortraitFrmSha256)
+            throw new InvalidOperationException(
+                "Fallout 1 saved player presentation identity differs from its character.");
+    }
+}
+
+internal sealed record Fo1PlayerPresentationBinding(
+    string CharacterId,
+    string CharacterName,
+    string Sex,
+    string IdentityMode,
+    string PresentationMode,
+    string OwnedGcdSha256,
+    string OwnedBiographySha256,
+    string OwnedPortraitFrmSha256,
+    string DonorActorFormId,
+    bool UsesOwnedDonor,
+    bool ActorRootBound,
+    bool AnimationBound,
+    bool WeaponAttachmentsBound,
+    bool WeaponVisualsSuppressed,
+    string Limitation)
+{
+    internal Fo1PlayerPresentationIdentity Identity => new(
+        CharacterId,
+        CharacterName,
+        Sex,
+        IdentityMode,
+        OwnedGcdSha256,
+        OwnedBiographySha256,
+        OwnedPortraitFrmSha256);
+
+    internal object Report() => new
+    {
+        CharacterId,
+        CharacterName,
+        Sex,
+        IdentityMode,
+        PresentationMode,
+        OwnedGcdSha256,
+        OwnedBiographySha256,
+        OwnedPortraitFrmSha256,
+        DonorActorFormId,
+        UsesOwnedDonor,
+        ActorRootBound,
+        AnimationBound,
+        WeaponAttachmentsBound,
+        WeaponVisualsSuppressed,
+        Limitation,
+        visualParity = false,
+    };
+}
+
 internal partial class Fo1TacticalSession : Node
 {
     private const string SaveSchema = "opennv-fo1-hex-save/v1";
+    private const string ActiveMapSchema = "opennv-fo1-active-map/v1";
     private readonly Queue<int> _movement = new();
     private bool[] _walkable = [];
     private int[] _floorIds = [];
     private IReadOnlyDictionary<int, string> _floorNames = new Dictionary<int, string>();
+    private bool[] _sourceWalkable = [];
+    private int[] _sourceFloorIds = [];
+    private IReadOnlyDictionary<int, string> _sourceFloorNames = new Dictionary<int, string>();
+    private IReadOnlyList<Fo1Mob> _sourceMobs = [];
+    private IReadOnlyList<MapInventoryHost> _sourceMapInventoryHosts = [];
     private string _sceneSha256 = "";
+    private string _sourceMapSha256 = "";
     private string _savePath = "";
     private int _maximumActionPoints;
     private int _doorTile;
+    private SourceDoorContract? _sourceDoor;
+    private bool _sourceDoorOpen;
     private int _entryTile;
     private int _hoveredTile = -1;
     private int _selectedTile = -1;
     private int _turn = 1;
     private int _actionPoints;
     private int _playerTile;
+    private Fo1ExitGridTransitionContract? _exitGridTransition;
+    private int? _activatedExitGridTile;
+    private string? _destinationPresentationPath;
+    private Fo1DestinationPresentationContract? _loadedDestinationPresentation;
+    private string? _destinationInventoryInteractionPath;
+    private Fo1DestinationInventoryInteractionContract? _destinationInventoryInteraction;
+    private string? _destinationFlareUsePath;
+    private Fo1DestinationFlareUseContract? _destinationFlareUse;
+    private bool _destinationFlareLit;
+    private string? _destinationGenericDoorPath;
+    private Fo1DestinationGenericDoorContract? _destinationGenericDoor;
+    private bool _destinationGenericDoorOpen;
+    private string? _destinationMedicLookPath;
+    private Fo1DestinationMedicLookContract? _destinationMedicLook;
+    private bool _destinationMedicLookViewed;
+    private string? _destinationReturnExitGridPath;
+    private Fo1ExitGridTransitionContract? _destinationReturnExitGrid;
+    private int? _activatedDestinationReturnExitGridTile;
+    private bool _returnedToSource;
+    private readonly HashSet<int> _returnInactiveDestinationHostSerials = [];
     private Node3D _playerToken = null!;
     private Sprite3D _playerSourceSprite = null!;
     private ActorModelSlice.LoadedActor? _ownedPlayer;
+    private Fo1HexSceneLoader.PlayerPresentationSource? _ownedPlayerSource;
+    private readonly Dictionary<string, Fo1HexSceneLoader.PlayerPresentationSource>
+        _ownedPlayerDonorsBySex = new(StringComparer.OrdinalIgnoreCase);
+    private Fo1PlayerPresentationBinding? _playerPresentationBinding;
+    private Fo1PlayerPresentationIdentity? _pendingSavedPlayerPresentation;
+    private bool _restoredCharacterFromSave;
     private Fo1ThirdPersonWeapon.LoadedWeapon? _ownedPlayerWeapon;
     private Fo1ThirdPersonWeapon.LoadedWeapon? _ownedPlayerMeleeWeapon;
+    private JsonElement? _ownedPlayerWeaponSource;
+    private JsonElement? _ownedPlayerMeleeWeaponSource;
     private AnimationPlayer? _playerAnimationPlayer;
     private string _playerIdleAnimation = "";
     private string _playerMoveAnimation = "";
@@ -126,6 +251,8 @@ internal partial class Fo1TacticalSession : Node
     private Label _targetReticleLabel = null!;
     private Control _fpsCrosshair = null!;
     private Camera3D? _camera;
+    private Fo1TacticalCamera? _cameraRig;
+    private Fo1CameraSaveState? _restoredCameraState;
     private string _status = "Select a highlighted floor hex to move";
     private PlayerProfile _playerProfile;
     private Fo1CharacterProfile? _characterProfile;
@@ -158,22 +285,34 @@ internal partial class Fo1TacticalSession : Node
     private int _reserveRounds;
     private bool _tagInventoryApplied;
     private readonly Dictionary<string, int> _inventoryObjects = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, MapInventoryHost> _mapInventoryHosts = [];
+    private readonly HashSet<int> _lootedMapInventoryHostSerials = [];
+    private readonly HashSet<int> _inactiveMapInventoryHostSerials = [];
     private Fo1PipBoy2000? _pipBoy;
     private Fo1CombatPresentation? _combatPresentation;
     private Fo1RuntimeProfile _runtimeProfile = null!;
+    private float? _ownedPlayerFloorHeightMeters;
+    private float _ownedPlayerGroundErrorMeters;
+    private int _ownedPlayerLitMaterials;
+    private int _ownedRangedWeaponLitMaterials;
+    private int _ownedMeleeWeaponLitMaterials;
 
     internal int PlayerTile => _playerTile;
     internal int DoorTile => _doorTile;
+    internal bool SourceDoorOpen => _sourceDoorOpen;
     internal int HoveredTile => _hoveredTile;
     internal int ActionPoints => _actionPoints;
     internal int Turn => _turn;
     internal Node3D PlayerToken => _playerToken;
     internal Sprite3D PlayerSourceSprite => _playerSourceSprite;
     internal ActorModelSlice.LoadedActor? OwnedPlayer => _ownedPlayer;
+    internal Fo1PlayerPresentationBinding? PlayerPresentationBinding =>
+        _playerPresentationBinding;
     internal Fo1ThirdPersonWeapon.LoadedWeapon? OwnedPlayerWeapon => _ownedPlayerWeapon;
     internal Fo1ThirdPersonWeapon.LoadedWeapon? OwnedPlayerMeleeWeapon => _ownedPlayerMeleeWeapon;
     internal CanvasLayer Hud { get; private set; } = null!;
     internal bool CanWalk(int tile) => tile >= 0 && tile < _walkable.Length && _walkable[tile];
+    internal bool ReturnedToSource => _returnedToSource;
     internal IReadOnlyList<Fo1Mob> Mobs => _mobs;
     internal Fo1Mob? SelectedMob => _selectedMob;
     internal int PlayerHitPoints => _playerHitPoints;
@@ -181,6 +320,11 @@ internal partial class Fo1TacticalSession : Node
     internal int Kills => _kills;
     internal int WeaponActionPointCost => _playerProfile.WeaponActionPointCost;
     internal int MeleeActionPointCost => _playerProfile.MeleeWeapon.ActionPointCost;
+    internal WeaponProfile RangedWeapon => _playerProfile.RangedWeapon;
+    internal WeaponProfile MeleeWeapon => _playerProfile.MeleeWeapon;
+    internal int MeleeDamage => _playerProfile.MeleeDamage;
+    internal string RangedWeaponSymbol => _playerProfile.Inventory.EquippedRangedSymbol;
+    internal string MeleeWeaponSymbol => _playerProfile.Inventory.EquippedMeleeSymbol;
     internal string EquippedWeaponSymbol => _meleeWeaponEquipped
         ? _playerProfile.Inventory.EquippedMeleeSymbol
         : _playerProfile.Inventory.EquippedRangedSymbol;
@@ -198,6 +342,8 @@ internal partial class Fo1TacticalSession : Node
     internal int MeleeAttacks => _meleeAttacks;
     internal int MeleeHits => _meleeHits;
     internal int Reloads => _reloads;
+    internal IReadOnlyCollection<MapInventoryHost> MapInventoryHosts => _mapInventoryHosts.Values;
+    internal bool IsMapInventoryHostLooted(int serial) => _lootedMapInventoryHostSerials.Contains(serial);
     internal double FirstPersonMeleeCooldownSeconds => _fpsMeleeCooldownSeconds;
     internal string Status => _status;
     internal float FirstPersonMaximumRangeMeters => MathF.Max(
@@ -225,13 +371,57 @@ internal partial class Fo1TacticalSession : Node
     internal Fo1PipBoy2000? PipBoy => _pipBoy;
     internal bool ClassicInterfaceAttached => _classicHud is not null;
     internal Fo1ClassicInventoryScreen? ClassicInventory => _classicInventory;
+    internal Fo1ClassicHud? ClassicHud => _classicHud;
     internal bool InventoryOpen => _classicInventory?.IsOpen == true;
     internal Key InventoryKey => _classicInventory?.PhysicalKey ?? Key.None;
     internal Fo1CombatPresentation? CombatPresentation => _combatPresentation;
     internal string SavePath => _savePath;
+    internal Fo1ExitGridTransitionContract? ExitGridTransition => _exitGridTransition;
+    internal int? ActivatedExitGridTile => _activatedExitGridTile;
+    internal Fo1DestinationPresentationContract? LoadedDestinationPresentation => _loadedDestinationPresentation;
+    internal Fo1DestinationInventoryInteractionContract? DestinationInventoryInteraction => _destinationInventoryInteraction;
+    internal Fo1DestinationFlareUseContract? DestinationFlareUse => _destinationFlareUse;
+    internal bool DestinationFlareLit => _destinationFlareLit;
+    internal Fo1DestinationGenericDoorContract? DestinationGenericDoor => _destinationGenericDoor;
+    internal bool DestinationGenericDoorOpen => _destinationGenericDoorOpen;
+    internal Fo1DestinationMedicLookContract? DestinationMedicLook => _destinationMedicLook;
+    internal bool DestinationMedicLookViewed => _destinationMedicLookViewed;
+    internal Fo1ExitGridTransitionContract? DestinationReturnExitGrid => _destinationReturnExitGrid;
+    internal int? ActivatedDestinationReturnExitGridTile => _activatedDestinationReturnExitGridTile;
+
+    internal sealed record SourceDoorContract(
+        int Serial, int Tile, string Pid, string Fid, string PrototypeSha256, bool InitiallyBlocked)
+    {
+        internal void Validate()
+        {
+            if (Serial < 0 || Tile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height ||
+                string.IsNullOrWhiteSpace(Pid) || string.IsNullOrWhiteSpace(Fid) ||
+                PrototypeSha256.Length != 64 || !PrototypeSha256.All(Uri.IsHexDigit) || !InitiallyBlocked)
+                throw new InvalidOperationException("Fallout MAP source door activation contract is incomplete.");
+        }
+
+        internal object Report(bool open) => new { Serial, Tile, Pid, Fid, PrototypeSha256, InitiallyBlocked, open };
+    }
+    internal bool CanContinue
+    {
+        get
+        {
+            try
+            {
+                _ = RequireRestoredCharacterForContinue();
+                _ = RequireRestoredCameraForContinue();
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+    }
 
     internal void Configure(
         string sceneSha256,
+        string sourceMapSha256,
         bool[] walkable,
         int[] floorIds,
         IReadOnlyDictionary<int, string> floorNames,
@@ -241,8 +431,18 @@ internal partial class Fo1TacticalSession : Node
         int ratActivationDistanceHexes,
         PlayerProfile playerProfile,
         IReadOnlyList<Fo1Mob> mobs,
+        IReadOnlyList<MapInventoryHost> mapInventoryHosts,
         string? savePath,
-        Fo1RuntimeProfile runtimeProfile)
+        Fo1RuntimeProfile runtimeProfile,
+        float? ownedPlayerFloorHeightMeters,
+        Fo1ExitGridTransitionContract? exitGridTransition,
+        SourceDoorContract sourceDoor,
+        string? destinationPresentationPath,
+        string? destinationInventoryInteractionPath,
+        string? destinationFlareUsePath,
+        string? destinationGenericDoorPath,
+        string? destinationMedicLookPath,
+        string? destinationReturnExitGridPath)
     {
         if (walkable.Length != Fo1HexMath.Width * Fo1HexMath.Height ||
             floorIds.Length != Fo1HexMath.FloorWidth * Fo1HexMath.FloorHeight)
@@ -252,11 +452,47 @@ internal partial class Fo1TacticalSession : Node
         if (ratActivationDistanceHexes is < 1 or > Fo1TacticalSessionNumericContracts.PresentationInt25)
             throw new InvalidOperationException(
                 $"Fallout rat activation distance is invalid: {ratActivationDistanceHexes}");
+        if (sourceMapSha256.Length != Fo1TacticalSessionNumericContracts.PresentationInt64 ||
+            !sourceMapSha256.All(Uri.IsHexDigit))
+            throw new ArgumentException("Fallout tactical session received an invalid source MAP hash.");
         _sceneSha256 = sceneSha256;
+        _sourceMapSha256 = sourceMapSha256;
         _runtimeProfile = runtimeProfile;
-        _walkable = walkable;
-        _floorIds = floorIds;
-        _floorNames = floorNames;
+        if (ownedPlayerFloorHeightMeters is not null &&
+            (!float.IsFinite(ownedPlayerFloorHeightMeters.Value) ||
+             ownedPlayerFloorHeightMeters.Value > 0.0f))
+            throw new ArgumentException(
+                "Fallout owned player floor height must be a finite source-bound floor elevation.");
+        _ownedPlayerFloorHeightMeters = ownedPlayerFloorHeightMeters;
+        _exitGridTransition = exitGridTransition;
+        _destinationPresentationPath = destinationPresentationPath is null ? null : VerifiedGltfLoader.ResolvePath(destinationPresentationPath);
+        _destinationInventoryInteractionPath = destinationInventoryInteractionPath is null
+            ? null
+            : VerifiedGltfLoader.ResolvePath(destinationInventoryInteractionPath);
+        _destinationFlareUsePath = destinationFlareUsePath is null
+            ? null
+            : VerifiedGltfLoader.ResolvePath(destinationFlareUsePath);
+        _destinationGenericDoorPath = destinationGenericDoorPath is null
+            ? null
+            : VerifiedGltfLoader.ResolvePath(destinationGenericDoorPath);
+        _destinationMedicLookPath = destinationMedicLookPath is null
+            ? null
+            : VerifiedGltfLoader.ResolvePath(destinationMedicLookPath);
+        _destinationReturnExitGridPath = destinationReturnExitGridPath is null
+            ? null
+            : VerifiedGltfLoader.ResolvePath(destinationReturnExitGridPath);
+        sourceDoor.Validate();
+        if (sourceDoor.Tile != doorTile)
+            throw new InvalidOperationException("Fallout MAP door contract does not match the tactical door tile.");
+        _sourceDoor = sourceDoor;
+        _sourceWalkable = walkable.ToArray();
+        _sourceFloorIds = floorIds.ToArray();
+        _sourceFloorNames = new Dictionary<int, string>(floorNames);
+        _sourceMobs = mobs;
+        _sourceMapInventoryHosts = mapInventoryHosts;
+        _walkable = _sourceWalkable.ToArray();
+        _floorIds = _sourceFloorIds.ToArray();
+        _floorNames = _sourceFloorNames;
         _playerTile = entryTile;
         _entryTile = entryTile;
         _doorTile = doorTile;
@@ -271,13 +507,234 @@ internal partial class Fo1TacticalSession : Node
             AddInventoryObjects(row.Symbol, row.Objects);
         _reserveRounds = InventoryObjects(playerProfile.Inventory.AmmunitionSymbol) *
             playerProfile.Inventory.AmmunitionRoundsPerObject;
-        _mobs = mobs;
+        _mobs = _sourceMobs;
+        foreach (var host in mapInventoryHosts)
+        {
+            host.Validate();
+            if (!_mapInventoryHosts.TryAdd(host.Serial, host))
+                throw new InvalidOperationException(
+                    $"Fallout MAP inventory contract has duplicate host serial: {host.Serial}");
+        }
         foreach (var mob in mobs.Where(mob => mob.Alive))
             _mobsByTile.Add(mob.Tile, mob);
         _savePath = ResolvePath(savePath ?? "user://saves/fo1-v13ent-hex-v1.json");
         Name = "Fo1TacticalSession";
         Load();
         BuildWorldMarkers();
+    }
+
+    internal bool TryActivateAdjacentSourceDoor()
+    {
+        var door = _sourceDoor ?? throw new InvalidOperationException(
+            "Fallout tactical session has no source door activation contract.");
+        if (_sourceDoorOpen || !Fo1HexMath.AreNeighbors(_playerTile, door.Tile))
+            return false;
+        if (_walkable[door.Tile])
+            throw new InvalidOperationException("Fallout source door opened without its authored blocker.");
+        _sourceDoorOpen = true;
+        _walkable[door.Tile] = true;
+        _status = "MAP door activated and opened from its adjacent source hex.";
+        RefreshHud();
+        Save();
+        return true;
+    }
+
+    internal bool TryActivateAdjacentDestinationGenericDoor()
+    {
+        var door = _destinationGenericDoor ?? throw new InvalidOperationException(
+            "Fallout destination has no explicit generic-door activation contract.");
+        if (_destinationGenericDoorOpen || !Fo1HexMath.AreNeighbors(_playerTile, door.Door.Tile))
+            return false;
+        if (_walkable[door.Door.Tile])
+            throw new InvalidOperationException("Fallout destination generic door opened without its authored MAP blocker.");
+        _destinationGenericDoorOpen = true;
+        _walkable[door.Door.Tile] = true;
+        _status = "Unscripted MAP door activated; its owned blocked hex is now passable.";
+        RefreshHud();
+        Save();
+        return true;
+    }
+
+    internal bool TryLookAtAdjacentDestinationMedic()
+    {
+        var medic = _destinationMedicLook ?? throw new InvalidOperationException(
+            "Fallout destination has no explicit Medic look-at contract.");
+        if (!Fo1HexMath.AreNeighbors(_playerTile, medic.Tile))
+            return false;
+        _destinationMedicLookViewed = true;
+        _status = medic.MessageText;
+        RefreshHud();
+        Save();
+        return true;
+    }
+
+    internal bool TryActivateDestinationReturnExitGrid()
+    {
+        var transition = _destinationReturnExitGrid ?? throw new InvalidOperationException(
+            "Fallout destination has no explicit return exit-grid contract.");
+        if (!transition.IsTrigger(_playerTile))
+            return false;
+        _activatedDestinationReturnExitGridTile = _playerTile;
+        _status = "VAULT13 source exit grid committed; V13ENT MAP return is ready from its explicit contract.";
+        RefreshHud();
+        Save();
+        return true;
+    }
+
+    internal void EnterCommittedSourceReturn()
+    {
+        var forward = _exitGridTransition ?? throw new InvalidOperationException(
+            "Fallout source return requires the original explicit exit-grid contract.");
+        var reverse = _destinationReturnExitGrid ?? throw new InvalidOperationException(
+            "Fallout source return requires an explicit reciprocal exit-grid contract.");
+        if (_activatedDestinationReturnExitGridTile is not { } activatedTile || !reverse.IsTrigger(activatedTile))
+            throw new InvalidOperationException(
+                "Fallout source return requires a committed source-authored VAULT13 trigger.");
+        if (reverse.SourceMapIndex != forward.DestinationMapIndex ||
+            reverse.SourceMapName != forward.DestinationMapName ||
+            !string.Equals(reverse.SourceMapSha256, forward.DestinationMapSha256, StringComparison.OrdinalIgnoreCase) ||
+            reverse.DestinationMapIndex != forward.SourceMapIndex ||
+            reverse.DestinationMapName != forward.SourceMapName ||
+            !string.Equals(reverse.DestinationMapSha256, forward.SourceMapSha256, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(reverse.DestinationMapSha256, _sourceMapSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout reciprocal exit-grid contract does not return to this loaded V13ENT MAP.");
+        RestoreSourceTacticalState(reverse.DestinationTile);
+        _returnedToSource = true;
+        _status = "V13ENT MAP restored at the reciprocal owned exit-grid destination.";
+        RefreshHud();
+        Save();
+    }
+
+    internal Fo1DestinationPresentationContract LoadCommittedDestinationPresentation()
+    {
+        if (_activatedExitGridTile is null || _exitGridTransition is null ||
+            string.IsNullOrWhiteSpace(_destinationPresentationPath))
+            throw new InvalidOperationException("Fallout destination presentation requires a committed exit-grid and explicit cache path.");
+        _loadedDestinationPresentation ??= Fo1DestinationPresentationContract.Load(
+            _destinationPresentationPath,
+            _exitGridTransition);
+        return _loadedDestinationPresentation;
+    }
+
+    internal void EnterCommittedDestination(Fo1DestinationPresentationContract destination)
+    {
+        if (_exitGridTransition is null || _activatedExitGridTile is null)
+            throw new InvalidOperationException("Fallout cannot enter a destination before its exit grid is committed.");
+        ApplyDestinationTacticalState(destination, _exitGridTransition.DestinationTile);
+        Save();
+    }
+
+    private void ApplyDestinationTacticalState(
+        Fo1DestinationPresentationContract destination,
+        int playerTile)
+    {
+        _returnedToSource = false;
+        var transition = _exitGridTransition ?? throw new InvalidOperationException(
+            "Fallout destination state has no exit-grid transition contract.");
+        destination.Validate(transition);
+        var elevation = destination.Map.Elevations.Single(row => row.Elevation == transition.DestinationElevation);
+        _floorIds = elevation.FloorIds.ToArray();
+        _floorNames = destination.Catalog.TileArtifacts.ToDictionary(row => row.Key, row => row.Value.Filename);
+        var blockers = elevation.Blockers.Select(blocker => blocker.Tile).ToHashSet();
+        _walkable = Enumerable.Range(0, Fo1HexMath.Width * Fo1HexMath.Height)
+            .Select(tile => _floorIds[Fo1HexMath.FloorIndex(tile)] != destination.DefaultTileId && !blockers.Contains(tile))
+            .ToArray();
+        if (_loadedDestinationPresentation is null)
+            _inactiveMapInventoryHostSerials.UnionWith(_lootedMapInventoryHostSerials);
+        _mobs = [];
+        _mobsByTile.Clear();
+        _mapInventoryHosts.Clear();
+        _destinationInventoryInteraction = string.IsNullOrWhiteSpace(_destinationInventoryInteractionPath)
+            ? null
+            : Fo1DestinationInventoryInteractionContract.Load(
+                _destinationInventoryInteractionPath,
+                destination,
+                transition);
+        _destinationFlareUse = string.IsNullOrWhiteSpace(_destinationFlareUsePath)
+            ? null
+            : _destinationInventoryInteraction is null
+                ? throw new InvalidOperationException("Fallout flare use requires an explicit MAP inventory interaction.")
+                : Fo1DestinationFlareUseContract.Load(_destinationFlareUsePath, _destinationInventoryInteraction);
+        _destinationGenericDoor = string.IsNullOrWhiteSpace(_destinationGenericDoorPath)
+            ? null
+            : Fo1DestinationGenericDoorContract.Load(_destinationGenericDoorPath, destination, transition);
+        if (_destinationGenericDoor is not null)
+        {
+            if (_walkable[_destinationGenericDoor.Door.Tile])
+                throw new InvalidOperationException("Fallout destination generic door is not an authored presentation blocker.");
+            if (_destinationGenericDoorOpen)
+                _walkable[_destinationGenericDoor.Door.Tile] = true;
+        }
+        _destinationMedicLook = string.IsNullOrWhiteSpace(_destinationMedicLookPath)
+            ? null
+            : _destinationGenericDoor is null
+                ? throw new InvalidOperationException("Fallout Medic look requires an explicit generic-door prerequisite.")
+                : Fo1DestinationMedicLookContract.Load(
+                    _destinationMedicLookPath, destination, transition, _destinationGenericDoor);
+        _destinationReturnExitGrid = string.IsNullOrWhiteSpace(_destinationReturnExitGridPath)
+            ? null
+            : Fo1ExitGridTransitionContract.Load(_destinationReturnExitGridPath);
+        if (_destinationReturnExitGrid is not null)
+            _destinationReturnExitGrid.ValidateAgainstScene(destination.SourceMapSha256);
+        if (playerTile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height || !_walkable[playerTile])
+            throw new InvalidOperationException("Fallout destination save tile is not walkable in its source MAP.");
+        if (_destinationInventoryInteraction is not null &&
+            !_mapInventoryHosts.TryAdd(
+                _destinationInventoryInteraction.Host.Serial,
+                _destinationInventoryInteraction.Host))
+            throw new InvalidOperationException("Fallout destination inventory host serial is duplicated.");
+        _playerTile = playerTile;
+        _entryTile = transition.DestinationTile;
+        if (_playerToken is not null)
+            _playerToken.Position = Fo1HexMath.Center(_playerTile) + Vector3.Up * _runtimeProfile.Scene.SourceSprites.GroundAnchorMeters;
+        _movement.Clear();
+        _status = "VAULT13 source MAP loaded from the committed exit-grid destination.";
+        RefreshHud();
+    }
+
+    private void RestoreSourceTacticalState(int playerTile)
+    {
+        if (playerTile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height ||
+            !_sourceWalkable[playerTile])
+            throw new InvalidOperationException(
+                "Fallout reciprocal exit-grid destination is not walkable in the owned V13ENT MAP.");
+        _walkable = _sourceWalkable.ToArray();
+        _floorIds = _sourceFloorIds.ToArray();
+        _floorNames = _sourceFloorNames;
+        if (_sourceDoorOpen)
+        {
+            var door = _sourceDoor ?? throw new InvalidOperationException(
+                "Fallout reciprocal return has no source door contract.");
+            _walkable[door.Tile] = true;
+        }
+        _mobs = _sourceMobs;
+        _mobsByTile.Clear();
+        foreach (var mob in _mobs.Where(mob => mob.Alive))
+            _mobsByTile.Add(mob.Tile, mob);
+        _mapInventoryHosts.Clear();
+        foreach (var host in _sourceMapInventoryHosts)
+        {
+            host.Validate();
+            if (!_mapInventoryHosts.TryAdd(host.Serial, host))
+                throw new InvalidOperationException(
+                    $"Fallout source MAP inventory contract has duplicate host serial: {host.Serial}");
+        }
+        _inactiveMapInventoryHostSerials.UnionWith(_lootedMapInventoryHostSerials);
+        _lootedMapInventoryHostSerials.Clear();
+        foreach (var serial in _sourceMapInventoryHosts.Select(host => host.Serial)
+                     .Where(_inactiveMapInventoryHostSerials.Contains).ToArray())
+        {
+            _inactiveMapInventoryHostSerials.Remove(serial);
+            _lootedMapInventoryHostSerials.Add(serial);
+        }
+        _loadedDestinationPresentation = null;
+        _playerTile = playerTile;
+        _entryTile = playerTile;
+        if (_playerToken is not null)
+            _playerToken.Position = Fo1HexMath.Center(_playerTile) +
+                Vector3.Up * _runtimeProfile.Scene.SourceSprites.GroundAnchorMeters;
+        _movement.Clear();
     }
 
     public override void _Ready()
@@ -309,16 +766,41 @@ internal partial class Fo1TacticalSession : Node
             _runtimeProfile.Gameplay.TacticalArrivalToleranceMeters)
             return;
         _playerToken.Position = target;
+        CommitQueuedTacticalMovementStep(targetTile);
+    }
+
+    internal void CompleteQueuedTacticalMovementForHeadlessProof()
+    {
+        while (_movement.Count > 0)
+        {
+            var targetTile = _movement.Peek();
+            _playerToken.Position = Fo1HexMath.Center(targetTile) +
+                Vector3.Up * _runtimeProfile.Scene.SourceSprites.GroundAnchorMeters;
+            CommitQueuedTacticalMovementStep(targetTile);
+        }
+    }
+
+    private void CommitQueuedTacticalMovementStep(int targetTile)
+    {
+        if (_movement.Count == 0 || _movement.Peek() != targetTile)
+            throw new InvalidOperationException(
+                "Fallout tactical movement commit diverged from its selected source path.");
         _movement.Dequeue();
         _playerTile = targetTile;
+        if (_exitGridTransition?.IsTrigger(_playerTile) == true)
+        {
+            _movement.Clear();
+            _activatedExitGridTile = _playerTile;
+            _status = "Source exit grid activated; destination map is hash-bound and not synthesized.";
+        }
         if (_movement.Count == 0)
             PlayPlayerAnimation(_playerIdleAnimation);
         _actionPoints = Math.Max(
             0,
             _actionPoints - _runtimeProfile.Gameplay.TacticalMoveActionPointCost);
-        _status = _movement.Count == 0
+        _status = _activatedExitGridTile is null && _movement.Count == 0
             ? $"Arrived at hex {_playerTile}"
-            : $"Moving: {_movement.Count} step(s) queued";
+            : _activatedExitGridTile is null ? $"Moving: {_movement.Count} step(s) queued" : _status;
         RefreshPathMarkers();
         RefreshHud();
         Save();
@@ -344,6 +826,15 @@ internal partial class Fo1TacticalSession : Node
 
     internal void SelectTile(int tile)
     {
+        // The committed exit closes V13ENT movement, but the explicitly loaded
+        // destination remains a separate source-bound tactical map.
+        if (_activatedExitGridTile is not null && _loadedDestinationPresentation is null &&
+            !_returnedToSource)
+        {
+            _status = "Exit-grid transition already activated; source movement is closed.";
+            RefreshHud();
+            return;
+        }
         if (tile < 0 || tile >= _walkable.Length)
             return;
         _selectedTile = tile;
@@ -660,7 +1151,9 @@ internal partial class Fo1TacticalSession : Node
                 throw new InvalidOperationException(
                     "Fallout save already belongs to a different created character.");
             _status = $"Resumed {_characterProfile.Name} with the saved combat inventory";
+            BindCharacterPresentation(profile);
             RefreshHud();
+            Save();
             return;
         }
         if (_turn != 1 || _attacks != 0 || _kills != 0 || _playerTile != _entryTile)
@@ -671,8 +1164,48 @@ internal partial class Fo1TacticalSession : Node
         _actionPoints = profile.ActionPoints;
         _playerHitPoints = profile.HitPoints;
         _status = $"{profile.Name} left Vault 13 • selected SPECIAL now drives live combat";
+        BindCharacterPresentation(profile);
         RefreshHud();
         Save();
+    }
+
+    internal Fo1CharacterProfile RequireRestoredCharacterForContinue()
+    {
+        var profile = _characterProfile;
+        var binding = _playerPresentationBinding;
+        if (!_restoredCharacterFromSave || profile is null || binding is null ||
+            _pendingSavedPlayerPresentation is not null)
+            throw new InvalidOperationException(
+                "Fallout 1 Continue requires a fully restored character and player presentation identity.");
+        profile.Validate();
+        binding.Identity.Validate(profile);
+        if (!binding.ActorRootBound || !binding.AnimationBound)
+            throw new InvalidOperationException(
+                "Fallout 1 Continue requires a bound gameplay actor and animation presentation.");
+        if (binding.UsesOwnedDonor)
+        {
+            if (_ownedPlayer is null || _ownedPlayerSource is null ||
+                _ownedPlayerWeapon is null || _ownedPlayerMeleeWeapon is null ||
+                !binding.WeaponAttachmentsBound || binding.WeaponVisualsSuppressed ||
+                !_ownedPlayer.Value.Root.IsAncestorOf(_ownedPlayerWeapon.Value.Root) ||
+                !_ownedPlayer.Value.Root.IsAncestorOf(_ownedPlayerMeleeWeapon.Value.Root))
+                throw new InvalidOperationException(
+                    "Fallout 1 Continue donor presentation is missing its actor or weapon attachment chain.");
+        }
+        else
+            throw new InvalidOperationException(
+                "Fallout 1 Continue has no compatible owned humanoid donor.");
+        return profile;
+    }
+
+    internal Fo1CameraSaveState RequireRestoredCameraForContinue()
+    {
+        _ = RequireRestoredCharacterForContinue();
+        if (_restoredCameraState is null || _cameraRig is null)
+            throw new InvalidOperationException(
+                "Fallout 1 Continue requires a complete saved camera state.");
+        _cameraRig.ValidateSaveState(_restoredCameraState.Value);
+        return _restoredCameraState.Value;
     }
 
     private void ApplyCharacterStats(Fo1CharacterProfile profile)
@@ -699,6 +1232,77 @@ internal partial class Fo1TacticalSession : Node
         _maximumActionPoints = profile.ActionPoints;
     }
 
+    private void BindCharacterPresentation(Fo1CharacterProfile profile) => BindCharacterPresentation(
+        profile,
+        Fo1PlayerPresentationIdentity.FromProfile(profile));
+
+    private void BindCharacterPresentation(
+        Fo1CharacterProfile profile,
+        Fo1PlayerPresentationIdentity identity)
+    {
+        identity.Validate(profile);
+        if (_ownedPlayerDonorsBySex.Count > 0)
+            SelectOwnedPlayerDonor(identity.CharacterId, profile.Sex);
+        var source = _ownedPlayerSource;
+        var actor = _ownedPlayer;
+        if (source is not null && actor is null || source is null && actor is not null)
+            throw new InvalidOperationException(
+                "Fallout 1 owned actor and its source contract must be present together.");
+        var useOwnedDonor = source is not null && actor is not null &&
+            source.Value.SourceActorFemale == (profile.Sex == "Female");
+        if (!useOwnedDonor)
+            throw new InvalidOperationException(
+                "Fallout 1 selected identity has no compatible hash-bound owned humanoid donor.");
+        if (actor is not null)
+            actor.Value.Root.Visible = useOwnedDonor;
+
+        var animationBound = useOwnedDonor && actor is not null &&
+            actor.Value.LoadedAnimations.Count > 0 &&
+            actor.Value.Root.IsAncestorOf(actor.Value.AnimationPlayer);
+        var weaponAttachmentsBound = useOwnedDonor && actor is not null &&
+            _ownedPlayerWeapon is not null && _ownedPlayerMeleeWeapon is not null &&
+            actor.Value.Root.IsAncestorOf(_ownedPlayerWeapon.Value.Root) &&
+            actor.Value.Root.IsAncestorOf(_ownedPlayerMeleeWeapon.Value.Root);
+        if (useOwnedDonor && (!animationBound || !weaponAttachmentsBound))
+            throw new InvalidOperationException(
+                "Fallout 1 compatible owned donor is missing its animation or weapon attachment chain.");
+        var binding = new Fo1PlayerPresentationBinding(
+            identity.CharacterId,
+            profile.Name,
+            profile.Sex,
+            identity.IdentityMode,
+            "owned-fnv-full-body-presentation-donor-non-parity",
+            identity.OwnedGcdSha256,
+            identity.OwnedBiographySha256,
+            identity.OwnedPortraitFrmSha256,
+            source?.SourceActorBaseFormId ?? "none",
+            useOwnedDonor,
+            useOwnedDonor,
+            animationBound,
+            weaponAttachmentsBound,
+            false,
+            "owned FNV actor is presentation-only and does not claim Fallout 1 character-model parity");
+        _playerPresentationBinding = binding;
+        foreach (var node in new Node?[]
+                 {
+                     _playerToken,
+                     actor?.Root,
+                     actor?.AnimationPlayer,
+                     _ownedPlayerWeapon?.Root,
+                     _ownedPlayerMeleeWeapon?.Root,
+                 }.Where(node => node is not null).Cast<Node>())
+        {
+            node.SetMeta("fo1_character_id", identity.CharacterId);
+            node.SetMeta("fo1_character_name", profile.Name);
+            node.SetMeta("fo1_character_sex", profile.Sex);
+            node.SetMeta("fo1_identity_mode", identity.IdentityMode);
+            node.SetMeta("fo1_presentation_mode", binding.PresentationMode);
+            node.SetMeta("fo1_visual_parity", false);
+        }
+        _playerSourceSprite.Visible = false;
+        ApplyEquippedWeaponVisibility();
+    }
+
     private void ApplyTagInventory(Fo1CharacterProfile profile)
     {
         if (!_tagInventoryApplied)
@@ -718,7 +1322,7 @@ internal partial class Fo1TacticalSession : Node
         }
     }
 
-    private static bool SameCharacter(Fo1CharacterProfile first, Fo1CharacterProfile second) =>
+    internal static bool SameCharacter(Fo1CharacterProfile first, Fo1CharacterProfile second) =>
         first.Name == second.Name && first.Age == second.Age && first.Sex == second.Sex &&
         first.Strength == second.Strength && first.Perception == second.Perception &&
         first.Endurance == second.Endurance && first.Charisma == second.Charisma &&
@@ -726,6 +1330,7 @@ internal partial class Fo1TacticalSession : Node
         first.Luck == second.Luck &&
         first.TaggedSkills.SequenceEqual(second.TaggedSkills, StringComparer.Ordinal) &&
         first.Traits.SequenceEqual(second.Traits, StringComparer.Ordinal) &&
+        Equals(first.Identity, second.Identity) &&
         Equals(first.Appearance, second.Appearance);
 
     internal void SetWorldGuidesVisible(bool visible)
@@ -742,6 +1347,14 @@ internal partial class Fo1TacticalSession : Node
             Vector3.Up * _runtimeProfile.Scene.SourceSprites.GroundAnchorMeters;
         PlayPlayerAnimation(_playerIdleAnimation);
         RefreshPathMarkers();
+    }
+
+    internal void RestoreSaveForProof()
+    {
+        Load();
+        SnapPlayerToHexCenter();
+        RestoreSavedPlayerPresentationIfReady();
+        RefreshHud();
     }
 
     internal void SetFirstPersonModeActive(bool active)
@@ -1131,21 +1744,53 @@ internal partial class Fo1TacticalSession : Node
         _inventoryObjects.OrderBy(row => row.Key, StringComparer.Ordinal)
             .ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
 
+    internal MapInventoryPickup PickupAdjacentMapInventoryHost(int serial)
+    {
+        if (!_mapInventoryHosts.TryGetValue(serial, out var host))
+            throw new InvalidOperationException(
+                $"Fallout MAP inventory host is absent from this source scene: {serial}");
+        if (_lootedMapInventoryHostSerials.Contains(serial))
+            throw new InvalidOperationException(
+                $"Fallout MAP inventory host was already collected: {serial}");
+        if (!Fo1HexMath.AreNeighbors(_playerTile, host.Tile))
+            throw new InvalidOperationException(
+                $"Fallout MAP inventory host requires a source-adjacent player hex: {serial}");
+        foreach (var item in host.Items)
+            AddInventoryObjects(item.Symbol, item.Objects);
+        _lootedMapInventoryHostSerials.Add(serial);
+        _status = $"Collected source MAP inventory host {serial}";
+        RefreshHud();
+        Save();
+        return new MapInventoryPickup(host, InventorySnapshot());
+    }
+
+    internal bool EquipLootedMapInventoryWeaponForHeadlessProof(int hostSerial, string symbol)
+    {
+        if (!_mapInventoryHosts.TryGetValue(hostSerial, out var host) ||
+            !_lootedMapInventoryHostSerials.Contains(hostSerial) ||
+            !host.Items.Any(item => item.Symbol == symbol && item.SubtypeName == "weapon"))
+            throw new InvalidOperationException(
+                "Fallout headless proof cannot equip a weapon that was not collected from the source MAP host.");
+        return EquipInventoryWeaponCore(symbol);
+    }
+
     internal void SetCinematicPlayerAnimation(bool active, bool moving)
     {
-        if (_playerAnimationPlayer is null)
-            return;
-        _playerAnimationPlayer.ProcessMode = active
-            ? Node.ProcessModeEnum.Always
-            : Node.ProcessModeEnum.Inherit;
+        if (_playerAnimationPlayer is not null)
+            _playerAnimationPlayer.ProcessMode = active
+                ? Node.ProcessModeEnum.Always
+                : Node.ProcessModeEnum.Inherit;
         PlayPlayerAnimation(moving ? _playerMoveAnimation : _playerIdleAnimation);
     }
 
-    internal void AttachCamera(Camera3D camera)
+    internal void AttachCamera(Fo1TacticalCamera camera)
     {
-        _camera = camera;
+        _cameraRig = camera;
+        _camera = camera.Camera;
         RefreshTargetReticle();
     }
+
+    internal void PersistCameraState() => Save();
 
     internal Fo1PipBoy2000 AttachPipBoy(
         Fo1CharacterStartContract contract,
@@ -1191,6 +1836,10 @@ internal partial class Fo1TacticalSession : Node
             _playerProfile.Inventory.DisplayNames,
             InventorySnapshot,
             () => EquippedWeaponSymbol,
+            _playerProfile.Inventory.EquippedRangedSymbol,
+            _playerProfile.Inventory.EquippedMeleeSymbol,
+            EquipInventoryWeapon,
+            UseInventoryScriptedItem,
             () => { CloseInventory(); });
         Hud.AddChild(classicInventory);
         _classicInventory = classicInventory;
@@ -1241,14 +1890,40 @@ internal partial class Fo1TacticalSession : Node
     internal bool CloseInventory() => _classicInventory?.Close() == true;
 
     internal ActorModelSlice.LoadedActor AttachOwnedPlayer(
-        string modelPath,
-        string sidecarPath)
+        Fo1HexSceneLoader.PlayerPresentationSource source)
     {
         if (_ownedPlayer is not null)
             throw new InvalidOperationException("Fallout tactical player already has an owned 3D presentation.");
-        var actor = ActorModelSlice.Load(modelPath, sidecarPath, _playerToken);
+        VerifiedGltfLoader.VerifyHash(source.Model, source.ModelSha256);
+        VerifiedGltfLoader.VerifyHash(source.Sidecar, source.SidecarSha256);
+        var actor = ActorModelSlice.Load(source.Model, source.Sidecar, _playerToken);
+        if (source.BodyProfile is { } bodyProfile)
+        {
+            var skeleton = actor.Root.FindChildren("*", "Skeleton3D", true, false)
+                .OfType<Skeleton3D>()
+                .Single();
+            CharacterBodyRig.Apply(
+                actor.Root,
+                skeleton,
+                bodyProfile,
+                this,
+                $"fallout1-gameplay-{source.DonorKey}");
+            actor = actor with { Bounds = ActorModelSlice.PosedWorldBounds(actor) };
+        }
+        BindOwnedPlayerMaterialTextures(actor, source.Sidecar);
+        _ownedPlayerLitMaterials = ApplyOwnedPlayerLighting(
+            actor.Root,
+            source.UnitsToMeters);
+        if (actor.FormId != source.SourceActorBaseFormId ||
+            actor.AuthoredSurfaces != source.Surfaces ||
+            actor.AuthoredTextures != source.Textures ||
+            actor.Animations < source.Animations)
+            throw new InvalidOperationException(
+                "Fallout owned player runtime coverage differs from its scene contract.");
         actor.Root.Name = "OwnedVaultDweller";
-        var groundDelta = _playerToken.GlobalPosition.Y - actor.Bounds.Position.Y;
+        var groundHeight = _ownedPlayerFloorHeightMeters ??
+            _playerToken.GlobalPosition.Y;
+        var groundDelta = groundHeight - actor.Bounds.Position.Y;
         actor.Root.Position += Vector3.Up * groundDelta;
         _playerToken.LookAt(Fo1HexMath.Center(_doorTile), Vector3.Up);
         var grounded = actor with
@@ -1257,7 +1932,10 @@ internal partial class Fo1TacticalSession : Node
                 actor.Bounds.Position + Vector3.Up * groundDelta,
                 actor.Bounds.Size),
         };
+        _ownedPlayerGroundErrorMeters = MathF.Abs(
+            grounded.Bounds.Position.Y - groundHeight);
         _ownedPlayer = grounded;
+        _ownedPlayerSource = source;
         _playerAnimationPlayer = grounded.AnimationPlayer;
         _playerIdleAnimation = grounded.PlayingAnimation;
         _playerMoveAnimation = grounded.AnimationPlayer.GetAnimationList()
@@ -1280,7 +1958,50 @@ internal partial class Fo1TacticalSession : Node
         _playerReloadAnimation = animationNames.FirstOrDefault(
             name => name.Contains("ReloadA", StringComparison.OrdinalIgnoreCase)) ?? "";
         _playerSourceSprite.Visible = false;
+        actor.Root.SetMeta("presentation_role", source.Role);
+        actor.Root.SetMeta("source_actor_female", source.SourceActorFemale);
+        actor.Root.SetMeta("source_model_sha256", source.ModelSha256);
+        actor.Root.SetMeta("source_sidecar_sha256", source.SidecarSha256);
+        actor.Root.SetMeta("source_donor_key", source.DonorKey);
+        actor.Root.SetMeta(
+            "source_body_profile",
+            source.BodyProfile?.Id ?? "sex-default");
+        actor.Root.SetMeta("selection_state", "unbound-until-character-selection");
         return grounded;
+    }
+
+    internal void RegisterOwnedPlayerDonor(Fo1HexSceneLoader.PlayerPresentationSource source)
+    {
+        if (!_ownedPlayerDonorsBySex.TryAdd(source.DonorKey, source))
+            throw new InvalidOperationException(
+                $"Fallout 1 has duplicate owned humanoid donor identity: {source.DonorKey}.");
+    }
+
+    private void SelectOwnedPlayerDonor(string characterId, string sex)
+    {
+        var donorKey = _ownedPlayerDonorsBySex.ContainsKey(characterId)
+            ? characterId
+            : sex;
+        if (!_ownedPlayerDonorsBySex.TryGetValue(donorKey, out var source))
+            throw new InvalidOperationException(
+                $"Fallout 1 selected identity has no registered owned donor for {characterId}/{sex}.");
+        if (_ownedPlayerSource is { } current && current == source)
+            return;
+        if (_ownedPlayerWeaponSource is not { } ranged ||
+            _ownedPlayerMeleeWeaponSource is not { } melee)
+            throw new InvalidOperationException(
+                "Fallout 1 donor selection has no source-bound weapon/socket contracts.");
+        _ownedPlayerWeapon?.Root.QueueFree();
+        _ownedPlayerMeleeWeapon?.Root.QueueFree();
+        _ownedPlayer?.Root.QueueFree();
+        _ownedPlayerWeapon = null;
+        _ownedPlayerMeleeWeapon = null;
+        _ownedPlayer = null;
+        _ownedPlayerSource = null;
+        _playerAnimationPlayer = null;
+        _ = AttachOwnedPlayer(source);
+        _ = AttachOwnedPlayerWeapon(ranged);
+        _ = AttachOwnedPlayerMeleeWeapon(melee);
     }
 
     internal Fo1ThirdPersonWeapon.LoadedWeapon AttachOwnedPlayerWeapon(JsonElement source)
@@ -1292,6 +2013,10 @@ internal partial class Fo1TacticalSession : Node
             throw new InvalidOperationException(
                 "Fallout tactical player already has an owned third-person weapon.");
         _ownedPlayerWeapon = Fo1ThirdPersonWeapon.Attach(source, _ownedPlayer.Value);
+        _ownedPlayerWeaponSource = source.Clone();
+        _ownedRangedWeaponLitMaterials = ApplyOwnedWeaponLighting(
+            _ownedPlayerWeapon.Value.Root,
+            source.GetProperty("unitsToMeters").GetSingle());
         ApplyEquippedWeaponVisibility();
         return _ownedPlayerWeapon.Value;
     }
@@ -1305,8 +2030,23 @@ internal partial class Fo1TacticalSession : Node
             throw new InvalidOperationException(
                 "Fallout tactical player already has an owned third-person melee weapon.");
         _ownedPlayerMeleeWeapon = Fo1ThirdPersonWeapon.Attach(source, _ownedPlayer.Value);
+        _ownedPlayerMeleeWeaponSource = source.Clone();
+        _ownedMeleeWeaponLitMaterials = ApplyOwnedWeaponLighting(
+            _ownedPlayerMeleeWeapon.Value.Root,
+            source.GetProperty("unitsToMeters").GetSingle());
         ApplyEquippedWeaponVisibility();
+        RestoreSavedPlayerPresentationIfReady();
         return _ownedPlayerMeleeWeapon.Value;
+    }
+
+    private void RestoreSavedPlayerPresentationIfReady()
+    {
+        if (_pendingSavedPlayerPresentation is null || _characterProfile is null ||
+            _ownedPlayer is null || _ownedPlayerWeapon is null ||
+            _ownedPlayerMeleeWeapon is null)
+            return;
+        BindCharacterPresentation(_characterProfile, _pendingSavedPlayerPresentation);
+        _pendingSavedPlayerPresentation = null;
     }
 
     internal void SwapEquippedWeapon()
@@ -1315,6 +2055,50 @@ internal partial class Fo1TacticalSession : Node
         _status = $"Equipped {EquippedWeaponName} • {EquippedWeaponActionPointCost} AP";
         RefreshHud();
         Save();
+    }
+
+    internal bool EquipInventoryWeapon(string symbol)
+    {
+        if (_classicInventory?.IsOpen != true)
+            throw new InvalidOperationException(
+                "Fallout inventory equipment changes require the owned inventory screen.");
+        return EquipInventoryWeaponCore(symbol);
+    }
+
+    internal bool UseInventoryScriptedItem(string symbol)
+    {
+        if (_classicInventory?.IsOpen != true)
+            throw new InvalidOperationException(
+                "Fallout inventory use requires the owned inventory screen.");
+        var flare = _destinationFlareUse;
+        if (flare is null || symbol != flare.Symbol || InventoryObjects(symbol) <= 0 ||
+            _destinationInventoryInteraction is null || !_lootedMapInventoryHostSerials.Contains(flare.HostSerial))
+            return false;
+        _destinationFlareLit = true;
+        _status = $"Used {symbol} through its source script; time-based expiry remains fail-closed.";
+        RefreshHud();
+        Save();
+        return true;
+    }
+
+    private bool EquipInventoryWeaponCore(string symbol)
+    {
+        bool melee;
+        if (symbol == _playerProfile.Inventory.EquippedRangedSymbol)
+            melee = false;
+        else if (symbol == _playerProfile.Inventory.EquippedMeleeSymbol)
+            melee = true;
+        else
+            throw new InvalidOperationException(
+                $"Fallout inventory item is not an active-hand weapon: {symbol}.");
+        if (_meleeWeaponEquipped == melee)
+            return false;
+        SetEquippedWeapon(melee);
+        _status = $"Equipped {EquippedWeaponName} from inventory • " +
+            $"{EquippedWeaponActionPointCost} AP";
+        RefreshHud();
+        Save();
+        return true;
     }
 
     private void SetEquippedWeapon(bool melee)
@@ -1331,10 +2115,14 @@ internal partial class Fo1TacticalSession : Node
 
     private void ApplyEquippedWeaponVisibility()
     {
+        var actorSupportsWeapons = _playerPresentationBinding is null ||
+            _playerPresentationBinding.UsesOwnedDonor;
         if (_ownedPlayerWeapon is not null)
-            _ownedPlayerWeapon.Value.Root.Visible = !_meleeWeaponEquipped;
+            _ownedPlayerWeapon.Value.Root.Visible =
+                actorSupportsWeapons && !_meleeWeaponEquipped;
         if (_ownedPlayerMeleeWeapon is not null)
-            _ownedPlayerMeleeWeapon.Value.Root.Visible = _meleeWeaponEquipped;
+            _ownedPlayerMeleeWeapon.Value.Root.Visible =
+                actorSupportsWeapons && _meleeWeaponEquipped;
     }
 
     private void PlayPlayerCombatAnimation(string name)
@@ -1348,6 +2136,7 @@ internal partial class Fo1TacticalSession : Node
 
     private void PlayPlayerAnimation(string name)
     {
+        var moving = name == _playerMoveAnimation;
         if (_playerAnimationPlayer is null || string.IsNullOrEmpty(name) ||
             _playerAnimationPlayer.CurrentAnimation.ToString() == name)
             return;
@@ -1363,6 +2152,11 @@ internal partial class Fo1TacticalSession : Node
         playerTile = _playerTile,
         playerHex = new[] { _playerTile % Fo1TacticalSessionNumericContracts.PresentationInt200, _playerTile / Fo1TacticalSessionNumericContracts.PresentationInt200 },
         doorTile = _doorTile,
+        sourceDoor = _sourceDoor?.Report(_sourceDoorOpen),
+        exitGridTransition = _exitGridTransition?.Report(
+            _activatedExitGridTile,
+            destinationSceneLoaded: _loadedDestinationPresentation is not null),
+        destinationPresentation = _loadedDestinationPresentation?.Report(_exitGridTransition!),
         turn = _turn,
         actionPoints = _actionPoints,
         maximumActionPoints = _maximumActionPoints,
@@ -1444,9 +2238,16 @@ internal partial class Fo1TacticalSession : Node
         playerPresentation = new
         {
             owned3d = _ownedPlayer is not null,
+            ground = new
+            {
+                sourceBoundFloorHeightMeters = _ownedPlayerFloorHeightMeters,
+                errorMeters = _ownedPlayerGroundErrorMeters,
+            },
+            selection = _playerPresentationBinding?.Report(),
             formId = _ownedPlayer?.FormId,
             meshes = _ownedPlayer?.Meshes ?? 0,
             importedAnimations = _ownedPlayer?.Animations ?? 0,
+            litMaterials = _ownedPlayerLitMaterials,
             idleAnimation = _playerIdleAnimation,
             moveAnimation = _playerMoveAnimation,
             rangedAttackAnimation = _playerRangedAttackAnimation,
@@ -1469,6 +2270,7 @@ internal partial class Fo1TacticalSession : Node
                     surfaces = _ownedPlayerWeapon.Value.Surfaces,
                     materialBindings = _ownedPlayerWeapon.Value.MaterialBindings,
                     materialTextures = _ownedPlayerWeapon.Value.MaterialTextures,
+                    litMaterials = _ownedRangedWeaponLitMaterials,
                     tacticalAndThirdPersonOnly = true,
                     visible = _ownedPlayerWeapon.Value.Root.IsVisibleInTree(),
                 },
@@ -1486,11 +2288,236 @@ internal partial class Fo1TacticalSession : Node
                     surfaces = _ownedPlayerMeleeWeapon.Value.Surfaces,
                     materialBindings = _ownedPlayerMeleeWeapon.Value.MaterialBindings,
                     materialTextures = _ownedPlayerMeleeWeapon.Value.MaterialTextures,
+                    litMaterials = _ownedMeleeWeaponLitMaterials,
                     tacticalAndThirdPersonOnly = true,
                     visible = _ownedPlayerMeleeWeapon.Value.Root.IsVisibleInTree(),
                 },
         },
     };
+
+    private int ApplyOwnedPlayerLighting(
+        Node root,
+        float unitsToMeters)
+    {
+        if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0.0f)
+            throw new InvalidOperationException(
+                "Fallout owned player lighting requires a finite source unit scale.");
+        var atmosphere = _runtimeProfile.Scene.Atmosphere;
+        var ambient = new Color(
+            atmosphere.AmbientColor.R * atmosphere.AmbientEnergy,
+            atmosphere.AmbientColor.G * atmosphere.AmbientEnergy,
+            atmosphere.AmbientColor.B * atmosphere.AmbientEnergy,
+            atmosphere.AmbientColor.A);
+        var fogFar = _runtimeProfile.Camera.Tactical.FarClipMeters / unitsToMeters;
+        var configured = RuntimeMaterialLoader.ApplyRetailActorLighting(
+            root,
+            ambient,
+            atmosphere.FogColor,
+            0.0f,
+            fogFar,
+            Fo1TacticalSessionNumericContracts.PresentationFloat1Point0f,
+            unitsToMeters);
+        if (configured < 1)
+            throw new InvalidOperationException(
+                "Fallout owned player geometry has no compatible retail-lit material.");
+        return configured;
+    }
+
+    private static void BindOwnedPlayerMaterialTextures(
+        ActorModelSlice.LoadedActor actor,
+        string sidecarPath)
+    {
+        var resolvedSidecar = VerifiedGltfLoader.ResolvePath(sidecarPath);
+        using var document = JsonDocument.Parse(File.ReadAllText(resolvedSidecar));
+        var root = document.RootElement;
+        var textureRows = root.GetProperty("textures").EnumerateArray().ToArray();
+        var surfaceRows = root.GetProperty("surfaces").EnumerateArray()
+            .ToDictionary(
+                row => row.GetProperty("runtimeNodeName").GetString()!,
+                StringComparer.Ordinal);
+        var rebound = 0;
+        var faceGenSurfaces = 0;
+        foreach (var surface in actor.Surfaces)
+        {
+            if (!surfaceRows.TryGetValue(surface.RuntimeNodeName, out var row))
+                throw new InvalidOperationException(
+                    $"Fallout owned player surface is absent from its sidecar: {surface.RuntimeNodeName}.");
+            var material = row.GetProperty("material");
+            if (material.TryGetProperty("faceGen", out var faceGen) &&
+                faceGen.ValueKind != JsonValueKind.Null)
+            {
+                faceGenSurfaces++;
+                continue;
+            }
+            if (surface.Mesh.GetSurfaceOverrideMaterial(0) is not ShaderMaterial shader ||
+                shader.ResourceName != RuntimeMaterialLoader.RetailActorMaterialResourceName)
+                throw new InvalidOperationException(
+                    $"Fallout owned player surface has no retail actor material: {surface.RuntimeNodeName}.");
+            var generatedDiffuse = material.TryGetProperty(
+                    "generatedDiffuseSha256",
+                    out var generatedDiffuseProperty) &&
+                generatedDiffuseProperty.ValueKind == JsonValueKind.String
+                    ? generatedDiffuseProperty.GetString()
+                    : null;
+            var diffuse = generatedDiffuse is null
+                ? SingleTextureRow(
+                    textureRows,
+                    "identity",
+                    material.GetProperty("resolvedDiffuse").GetString()!,
+                    resolvedSidecar)
+                : SingleTextureRow(
+                    textureRows,
+                    "identity",
+                    $"generated:{surface.Role}:{generatedDiffuse}",
+                    resolvedSidecar);
+            var normal = SingleTextureRow(
+                textureRows,
+                "identity",
+                material.GetProperty("resolvedNormal").GetString()!,
+                resolvedSidecar);
+            var diffuseTexture = LoadOwnedPlayerTexture(diffuse, resolvedSidecar);
+            var normalTexture = LoadOwnedPlayerTexture(normal, resolvedSidecar);
+            shader.SetShaderParameter("base_map", diffuseTexture);
+            shader.SetShaderParameter("normal_map", normalTexture);
+            shader.SetShaderParameter("use_base_map", true);
+            shader.SetShaderParameter("use_normal_map", true);
+            VerifyOwnedPlayerTextureReadback(
+                shader,
+                "base_map",
+                diffuseTexture,
+                surface.RuntimeNodeName);
+            VerifyOwnedPlayerTextureReadback(
+                shader,
+                "normal_map",
+                normalTexture,
+                surface.RuntimeNodeName);
+            rebound++;
+        }
+        if (rebound + faceGenSurfaces != actor.AuthoredSurfaces)
+            throw new InvalidOperationException(
+                $"Fallout owned player texture coverage drifted: rebound={rebound} " +
+                $"surfaces={actor.AuthoredSurfaces}.");
+        GD.Print(
+            $"OPENNV_FO1_OWNED_ACTOR_TEXTURE_BINDING_PASS surfaces={rebound} " +
+            $"faceGenSurfaces={faceGenSurfaces} shaderReadback=rid-and-pixel-sha256");
+    }
+
+    private static JsonElement SingleTextureRow(
+        IReadOnlyList<JsonElement> rows,
+        string property,
+        string expected,
+        string sidecarPath)
+    {
+        var matches = rows.Where(row =>
+                row.GetProperty(property).GetString()?.Equals(
+                    expected,
+                    StringComparison.OrdinalIgnoreCase) == true)
+            .ToArray();
+        if (matches.Length != 1)
+            throw new InvalidOperationException(
+                $"Fallout owned player texture identity is missing or ambiguous in {sidecarPath}: " +
+                $"{property}={expected}.");
+        return matches[0];
+    }
+
+    private static Texture2D LoadOwnedPlayerTexture(JsonElement row, string sidecarPath)
+    {
+        var root = Path.GetDirectoryName(sidecarPath)
+            ?? throw new InvalidOperationException(
+                $"Fallout owned player sidecar has no directory: {sidecarPath}.");
+        var path = Path.GetFullPath(Path.Combine(root, row.GetProperty("png").GetString()!));
+        var relative = Path.GetRelativePath(root, path);
+        if (Path.IsPathRooted(relative) ||
+            relative.Equals("..", StringComparison.Ordinal) ||
+            relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"Fallout owned player texture escapes its actor artifact: {path}.");
+        VerifiedGltfLoader.VerifyHash(path, row.GetProperty("pngSha256").GetString()!);
+        var image = Image.LoadFromFile(path);
+        if (image is null || image.IsEmpty() ||
+            image.GetWidth() != row.GetProperty("width").GetInt32() ||
+            image.GetHeight() != row.GetProperty("height").GetInt32())
+            throw new InvalidOperationException(
+                $"Fallout owned player texture is invalid: {path}.");
+        if (!image.HasMipmaps() && image.GetWidth() > 1 && image.GetHeight() > 1)
+            image.GenerateMipmaps();
+        var pixelSha256 = Convert.ToHexString(SHA256.HashData(image.GetData())).ToLowerInvariant();
+        var texture = ImageTexture.CreateFromImage(image);
+        texture.SetMeta("opennv_source_pixel_sha256", pixelSha256);
+        if (!texture.GetRid().IsValid)
+            throw new InvalidOperationException(
+                $"Fallout owned player texture has no rendering RID: {path}.");
+        return texture;
+    }
+
+    private static void VerifyOwnedPlayerTextureReadback(
+        ShaderMaterial shader,
+        string parameter,
+        Texture2D expected,
+        string surface)
+    {
+        if (shader.GetShaderParameter(parameter).AsGodotObject() is not Texture2D readback ||
+            !readback.GetRid().IsValid ||
+            readback.GetRid() != expected.GetRid())
+            throw new InvalidOperationException(
+                $"Fallout owned player shader texture RID did not read back: {surface}/{parameter}.");
+        var image = readback.GetImage();
+        var pixelSha256 = image is null || image.IsEmpty()
+            ? ""
+            : Convert.ToHexString(SHA256.HashData(image.GetData())).ToLowerInvariant();
+        if (!expected.HasMeta("opennv_source_pixel_sha256") ||
+            pixelSha256 != expected.GetMeta("opennv_source_pixel_sha256").AsString())
+            throw new InvalidOperationException(
+                $"Fallout owned player shader pixel source did not read back: {surface}/{parameter}.");
+    }
+
+    private int ApplyOwnedWeaponLighting(Node root, float unitsToMeters)
+    {
+        if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0.0f)
+            throw new InvalidOperationException(
+                "Fallout owned weapon lighting requires a finite source unit scale.");
+        var atmosphere = _runtimeProfile.Scene.Atmosphere;
+        var ambient = new Color(
+            atmosphere.AmbientColor.R * atmosphere.AmbientEnergy,
+            atmosphere.AmbientColor.G * atmosphere.AmbientEnergy,
+            atmosphere.AmbientColor.B * atmosphere.AmbientEnergy,
+            atmosphere.AmbientColor.A);
+        var fogFar = _runtimeProfile.Camera.Tactical.FarClipMeters / unitsToMeters;
+        var configured = RuntimeMaterialLoader.ApplyRetailAmbientDirectionalLighting(
+            root,
+            ambient,
+            atmosphere.FogColor,
+            0.0f,
+            fogFar,
+            Fo1TacticalSessionNumericContracts.PresentationFloat1Point0f,
+            unitsToMeters) + CountStandardLitMaterials(root);
+        if (configured < 1)
+            throw new InvalidOperationException(
+                "Fallout held weapon has no compatible light-responsive material.");
+        return configured;
+    }
+
+    private static int CountStandardLitMaterials(Node root)
+    {
+        return Descendants(root).OfType<MeshInstance3D>()
+            .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh?.GetSurfaceCount() ?? 0)
+                .Select(mesh.GetActiveMaterial))
+            .OfType<BaseMaterial3D>()
+            .Count(material => material.ShadingMode != BaseMaterial3D.ShadingModeEnum.Unshaded);
+    }
+
+    private static IEnumerable<Node> Descendants(Node root)
+    {
+        var pending = new Stack<Node>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            yield return current;
+            foreach (var child in current.GetChildren())
+                pending.Push(child);
+        }
+    }
 
     private List<int> FindPath(int start, int target)
     {
@@ -1858,6 +2885,10 @@ internal partial class Fo1TacticalSession : Node
     private void Save()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_savePath)!);
+        var cameraState = _cameraRig?.CaptureSaveState();
+        if (_characterProfile is not null && cameraState is null)
+            throw new InvalidOperationException(
+                "Fallout 1 character save requires an attached camera state.");
         var document = new
         {
             schema = SaveSchema,
@@ -1882,7 +2913,37 @@ internal partial class Fo1TacticalSession : Node
             equippedWeaponSymbol = EquippedWeaponSymbol,
             tagInventoryApplied = _tagInventoryApplied,
             inventoryObjects = _inventoryObjects,
+            destinationFlare = _destinationFlareUse is null ? null : new
+            {
+                descriptorSha256 = _destinationFlareUse.Sha256,
+                lit = _destinationFlareLit,
+            },
+            destinationGenericDoor = _destinationGenericDoor is null ? null : new
+            {
+                descriptorSha256 = _destinationGenericDoor.Sha256,
+                open = _destinationGenericDoorOpen,
+            },
+            destinationMedicLook = _destinationMedicLook is null ? null : new
+            {
+                descriptorSha256 = _destinationMedicLook.Sha256,
+                viewed = _destinationMedicLookViewed,
+            },
+            destinationReturnExitGrid = _destinationReturnExitGrid is null ? null : new
+            {
+                descriptorSha256 = _destinationReturnExitGrid.Sha256,
+                activatedTile = _activatedDestinationReturnExitGridTile,
+            },
+            lootedMapInventoryHostSerials = _inactiveMapInventoryHostSerials
+                .Concat(_lootedMapInventoryHostSerials).Distinct().Order().ToArray(),
+            exitGridTransition = _exitGridTransition is null ? null : new
+            {
+                descriptorSha256 = _exitGridTransition.Sha256,
+                activatedTile = _activatedExitGridTile,
+            },
+            activeMap = SaveActiveMap(),
+            sourceDoor = _sourceDoor?.Report(_sourceDoorOpen),
             character = _characterProfile?.Report(),
+            camera = cameraState?.SaveState(),
             mobs = _mobs.Select(mob => mob.Report()).ToArray(),
         };
         var temporary = _savePath + ".tmp";
@@ -1902,13 +2963,79 @@ internal partial class Fo1TacticalSession : Node
         if (root.GetProperty("schema").GetString() != SaveSchema ||
             root.GetProperty("sceneSha256").GetString() != _sceneSha256)
             throw new InvalidOperationException($"Fallout hex save does not match this scene: {_savePath}");
+        var savedActiveMap = root.TryGetProperty("activeMap", out var activeMap) &&
+            activeMap.ValueKind != JsonValueKind.Null
+            ? activeMap.Clone()
+            : (JsonElement?)null;
         var tile = root.GetProperty("playerTile").GetInt32();
-        if (tile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height || !_walkable[tile])
+        if (tile is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height ||
+            (savedActiveMap is null && !_walkable[tile]))
             throw new InvalidOperationException($"Fallout hex save contains an invalid player tile: {tile}");
         _playerTile = tile;
+        if (root.TryGetProperty("sourceDoor", out var sourceDoor) &&
+            sourceDoor.ValueKind != JsonValueKind.Null)
+        {
+            var configured = _sourceDoor ?? throw new InvalidOperationException(
+                "Fallout save has a source door state but no door contract is configured.");
+            if (sourceDoor.GetProperty("Serial").GetInt32() != configured.Serial ||
+                sourceDoor.GetProperty("Tile").GetInt32() != configured.Tile ||
+                sourceDoor.GetProperty("PrototypeSha256").GetString() != configured.PrototypeSha256 ||
+                sourceDoor.GetProperty("InitiallyBlocked").GetBoolean() != configured.InitiallyBlocked)
+                throw new InvalidOperationException("Fallout save source door differs from its MAP contract.");
+            _sourceDoorOpen = sourceDoor.GetProperty("open").GetBoolean();
+            if (_sourceDoorOpen)
+                _walkable[configured.Tile] = true;
+        }
+        if (root.TryGetProperty("exitGridTransition", out var exitGridTransition) &&
+            exitGridTransition.ValueKind != JsonValueKind.Null)
+        {
+            if (_exitGridTransition is null ||
+                exitGridTransition.GetProperty("descriptorSha256").GetString() != _exitGridTransition.Sha256)
+                throw new InvalidOperationException("Fallout save exit-grid transition does not match its descriptor.");
+            if (exitGridTransition.TryGetProperty("activatedTile", out var activated) &&
+                activated.ValueKind != JsonValueKind.Null)
+            {
+                var activatedTile = activated.GetInt32();
+                if (!_exitGridTransition.IsTrigger(activatedTile) ||
+                    (savedActiveMap is null && activatedTile != _playerTile))
+                    throw new InvalidOperationException("Fallout save exit-grid activation is not a source trigger.");
+                _activatedExitGridTile = activatedTile;
+            }
+        }
+        Fo1DestinationPresentationContract? savedDestination = null;
+        if (savedActiveMap is not null)
+        {
+            var activeKind = savedActiveMap.Value.GetProperty("kind").GetString();
+            if (activeKind == "destination")
+                savedDestination = LoadSavedDestination(savedActiveMap.Value);
+            else if (activeKind == "source-return")
+                LoadSavedSourceReturn(savedActiveMap.Value, tile);
+            else
+                throw new InvalidOperationException("Fallout save has an unknown active MAP kind.");
+        }
         if (root.TryGetProperty("character", out var character) &&
             character.ValueKind == JsonValueKind.Object)
-            ApplyCharacterStats(ParseSavedCharacter(character));
+        {
+            JsonElement? legacyPresentationIdentity =
+                root.TryGetProperty("playerPresentationIdentity", out var presentationIdentity) &&
+                presentationIdentity.ValueKind == JsonValueKind.Object
+                    ? presentationIdentity.Clone()
+                    : null;
+            ApplyCharacterStats(ParseSavedCharacter(character, legacyPresentationIdentity));
+            _pendingSavedPlayerPresentation = Fo1PlayerPresentationIdentity.FromProfile(
+                _characterProfile!);
+            _restoredCameraState = root.TryGetProperty("camera", out var camera) &&
+                camera.ValueKind == JsonValueKind.Object
+                ? Fo1CameraSaveState.Load(camera)
+                : null;
+            _restoredCharacterFromSave = true;
+        }
+        else if (root.TryGetProperty(
+                     "playerPresentationIdentity",
+                     out var orphanedPresentationIdentity) &&
+                 orphanedPresentationIdentity.ValueKind == JsonValueKind.Object)
+            throw new InvalidOperationException(
+                "Fallout 1 save has a player presentation identity without a character.");
         _turn = Math.Max(1, root.GetProperty("turn").GetInt32());
         _actionPoints = Math.Clamp(root.GetProperty("actionPoints").GetInt32(), 0, _maximumActionPoints);
         _playerHitPoints = root.GetProperty("playerHitPoints").GetInt32();
@@ -1975,31 +3102,386 @@ internal partial class Fo1TacticalSession : Node
                 _inventoryObjects[row.Name] = objects;
             }
         }
+        if (root.TryGetProperty("destinationFlare", out var destinationFlare) &&
+            destinationFlare.ValueKind != JsonValueKind.Null)
+        {
+            if (_destinationFlareUse is null ||
+                destinationFlare.GetProperty("descriptorSha256").GetString() != _destinationFlareUse.Sha256)
+                throw new InvalidOperationException("Fallout save flare state does not match its descriptor.");
+            _destinationFlareLit = destinationFlare.GetProperty("lit").GetBoolean();
+        }
+        if (root.TryGetProperty("destinationGenericDoor", out var destinationGenericDoor) &&
+            destinationGenericDoor.ValueKind != JsonValueKind.Null)
+        {
+            if (_destinationGenericDoor is null ||
+                destinationGenericDoor.GetProperty("descriptorSha256").GetString() != _destinationGenericDoor.Sha256)
+                throw new InvalidOperationException("Fallout save generic-door state does not match its descriptor.");
+            _destinationGenericDoorOpen = destinationGenericDoor.GetProperty("open").GetBoolean();
+            if (_destinationGenericDoorOpen)
+                _walkable[_destinationGenericDoor.Door.Tile] = true;
+        }
+        if (root.TryGetProperty("destinationMedicLook", out var destinationMedicLook) &&
+            destinationMedicLook.ValueKind != JsonValueKind.Null)
+        {
+            if (_destinationMedicLook is null ||
+                destinationMedicLook.GetProperty("descriptorSha256").GetString() != _destinationMedicLook.Sha256)
+                throw new InvalidOperationException("Fallout save Medic look state does not match its descriptor.");
+            _destinationMedicLookViewed = destinationMedicLook.GetProperty("viewed").GetBoolean();
+        }
+        if (root.TryGetProperty("destinationReturnExitGrid", out var destinationReturnExitGrid) &&
+            destinationReturnExitGrid.ValueKind != JsonValueKind.Null)
+        {
+            if (_destinationReturnExitGrid is null ||
+                destinationReturnExitGrid.GetProperty("descriptorSha256").GetString() != _destinationReturnExitGrid.Sha256)
+                throw new InvalidOperationException("Fallout save return exit-grid state does not match its descriptor.");
+            if (destinationReturnExitGrid.TryGetProperty("activatedTile", out var activated) &&
+                activated.ValueKind != JsonValueKind.Null)
+            {
+                var activatedReturnTile = activated.GetInt32();
+                if (!_destinationReturnExitGrid.IsTrigger(activatedReturnTile))
+                    throw new InvalidOperationException("Fallout save return exit-grid activation is not source-authored.");
+                _activatedDestinationReturnExitGridTile = activatedReturnTile;
+            }
+        }
+        var savedLootedHostSerials = root.TryGetProperty("lootedMapInventoryHostSerials", out var lootedHosts)
+            ? lootedHosts.EnumerateArray().Select(value => value.GetInt32()).ToArray()
+            : Array.Empty<int>();
+        var duplicateLootedHostSerials = savedLootedHostSerials
+            .GroupBy(serial => serial)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicateLootedHostSerials.Any(serial =>
+                !_returnedToSource || !_returnInactiveDestinationHostSerials.Contains(serial)))
+            throw new InvalidOperationException(
+                "Fallout save contains a duplicate MAP inventory host outside the explicit returned-map boundary.");
+        savedLootedHostSerials = savedLootedHostSerials.Distinct().ToArray();
         if (_characterProfile is not null && !_tagInventoryApplied)
             ApplyTagInventory(_characterProfile);
-        var mobRows = root.GetProperty("mobs").EnumerateArray().ToDictionary(
-            row => row.GetProperty("serial").GetInt32());
-        _mobsByTile.Clear();
-        foreach (var mob in _mobs)
-            _walkable[mob.Tile] = true;
-        foreach (var mob in _mobs)
+        if (savedDestination is null)
         {
-            var row = mobRows[mob.Serial];
-            mob.SetTile(row.GetProperty("tile").GetInt32());
-            if (row.TryGetProperty("alerted", out var alerted) && alerted.GetBoolean())
-                mob.Alert();
-            var targetHp = row.GetProperty("hitPoints").GetInt32();
-            if (targetHp < mob.HitPoints)
-                mob.TakeDamage(mob.HitPoints - targetHp);
-            if (mob.Alive)
-                _mobsByTile[mob.Tile] = mob;
-            else
+            var mobRows = root.GetProperty("mobs").EnumerateArray().ToDictionary(
+                row => row.GetProperty("serial").GetInt32());
+            _mobsByTile.Clear();
+            foreach (var mob in _mobs)
                 _walkable[mob.Tile] = true;
+            foreach (var mob in _mobs)
+            {
+                var row = mobRows[mob.Serial];
+                mob.SetTile(row.GetProperty("tile").GetInt32());
+                if (row.TryGetProperty("alerted", out var alerted) && alerted.GetBoolean())
+                    mob.Alert();
+                var targetHp = row.GetProperty("hitPoints").GetInt32();
+                if (targetHp < mob.HitPoints)
+                    mob.TakeDamage(mob.HitPoints - targetHp);
+                if (mob.Alive)
+                    _mobsByTile[mob.Tile] = mob;
+                else
+                    _walkable[mob.Tile] = true;
+            }
+        }
+        var sourceHostSerials = _mapInventoryHosts.Keys.ToHashSet();
+        if (savedDestination is not null)
+            ApplyDestinationTacticalState(savedDestination, tile);
+        _lootedMapInventoryHostSerials.Clear();
+        _inactiveMapInventoryHostSerials.Clear();
+        foreach (var serial in savedLootedHostSerials)
+        {
+            if (_mapInventoryHosts.ContainsKey(serial))
+            {
+                if (!_lootedMapInventoryHostSerials.Add(serial))
+                    throw new InvalidOperationException(
+                        $"Fallout save contains a duplicate MAP inventory host: {serial}");
+            }
+            else if ((savedDestination is not null && sourceHostSerials.Contains(serial)) ||
+                     (_returnedToSource && _returnInactiveDestinationHostSerials.Contains(serial)))
+            {
+                if (!_inactiveMapInventoryHostSerials.Add(serial))
+                    throw new InvalidOperationException(
+                        $"Fallout save contains a duplicate inactive MAP inventory host: {serial}");
+            }
+            else
+                throw new InvalidOperationException(
+                    $"Fallout save contains an unknown MAP inventory host: {serial}");
         }
         ApplyEquippedWeaponVisibility();
     }
 
-    private static Fo1CharacterProfile ParseSavedCharacter(JsonElement source)
+    private object? SaveActiveMap()
+    {
+        if (_returnedToSource)
+            return SaveReturnedSourceMap();
+        if (_loadedDestinationPresentation is null)
+            return null;
+        var transition = _exitGridTransition ?? throw new InvalidOperationException(
+            "Fallout active destination has no exit-grid contract.");
+        if (string.IsNullOrWhiteSpace(_destinationPresentationPath))
+            throw new InvalidOperationException("Fallout active destination has no explicit presentation path.");
+        var destination = _loadedDestinationPresentation;
+        return new
+        {
+            schema = ActiveMapSchema,
+            kind = "destination",
+            mapId = destination.Map.Id,
+            sourceFile = destination.Map.SourceFile,
+            sourceMapSha256 = destination.SourceMapSha256,
+            elevation = transition.DestinationElevation,
+            presentation = new
+            {
+                path = _destinationPresentationPath,
+                sha256 = destination.Catalog.CampaignSha256,
+            },
+            inventoryInteraction = _destinationInventoryInteraction is null ? null : new
+            {
+                path = _destinationInventoryInteraction.Path,
+                sha256 = _destinationInventoryInteraction.Sha256,
+            },
+            flareUse = _destinationFlareUse is null ? null : new
+            {
+                path = _destinationFlareUse.Path,
+                sha256 = _destinationFlareUse.Sha256,
+            },
+            genericDoor = _destinationGenericDoor is null ? null : new
+            {
+                path = _destinationGenericDoor.Path,
+                sha256 = _destinationGenericDoor.Sha256,
+            },
+            medicLook = _destinationMedicLook is null ? null : new
+            {
+                path = _destinationMedicLook.Path,
+                sha256 = _destinationMedicLook.Sha256,
+            },
+            returnExitGrid = _destinationReturnExitGrid is null ? null : new
+            {
+                path = _destinationReturnExitGrid.Path,
+                sha256 = _destinationReturnExitGrid.Sha256,
+            },
+        };
+    }
+
+    private object SaveReturnedSourceMap()
+    {
+        var forward = _exitGridTransition ?? throw new InvalidOperationException(
+            "Fallout returned source save has no original exit-grid contract.");
+        var reverse = _destinationReturnExitGrid ?? throw new InvalidOperationException(
+            "Fallout returned source save has no reciprocal exit-grid contract.");
+        if (_activatedDestinationReturnExitGridTile is null ||
+            reverse.DestinationMapIndex != forward.SourceMapIndex ||
+            reverse.DestinationMapName != forward.SourceMapName ||
+            !string.Equals(reverse.DestinationMapSha256, _sourceMapSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout returned source save has an incomplete reciprocal MAP join.");
+        var inactiveDestinationInventoryHost = _destinationInventoryInteraction is null
+            ? null
+            : new
+            {
+                presentation = new
+                {
+                    path = _destinationPresentationPath ?? throw new InvalidOperationException(
+                        "Fallout returned source save has no explicit destination presentation path."),
+                    sha256 = Fo1DestinationPresentationContract.Load(
+                        _destinationPresentationPath!, forward).Catalog.CampaignSha256,
+                },
+                interaction = new
+                {
+                    path = _destinationInventoryInteraction.Path,
+                    sha256 = _destinationInventoryInteraction.Sha256,
+                    hostSerial = _destinationInventoryInteraction.Host.Serial,
+                },
+            };
+        return new
+        {
+            schema = ActiveMapSchema,
+            kind = "source-return",
+            mapIndex = reverse.DestinationMapIndex,
+            mapName = reverse.DestinationMapName,
+            sourceMapSha256 = reverse.DestinationMapSha256,
+            elevation = reverse.DestinationElevation,
+            rotation = reverse.DestinationRotation,
+            arrivalTile = reverse.DestinationTile,
+            sourceSceneSha256 = _sceneSha256,
+            returnExitGrid = new { path = reverse.Path, sha256 = reverse.Sha256 },
+            inactiveDestinationInventoryHost,
+        };
+    }
+
+    private void LoadSavedSourceReturn(JsonElement activeMap, int playerTile)
+    {
+        var forward = _exitGridTransition ?? throw new InvalidOperationException(
+            "Fallout returned source save has no original exit-grid contract.");
+        if (activeMap.GetProperty("schema").GetString() != ActiveMapSchema ||
+            activeMap.GetProperty("kind").GetString() != "source-return" ||
+            activeMap.GetProperty("mapIndex").GetInt32() != forward.SourceMapIndex ||
+            activeMap.GetProperty("mapName").GetString() != forward.SourceMapName ||
+            activeMap.GetProperty("sourceMapSha256").GetString() != _sourceMapSha256 ||
+            activeMap.GetProperty("elevation").GetInt32() < 0 ||
+            activeMap.GetProperty("rotation").GetInt32() is < 0 or >= Fo1HexMath.DirectionCount ||
+            activeMap.GetProperty("arrivalTile").GetInt32() is < 0 or >= Fo1HexMath.Width * Fo1HexMath.Height ||
+            activeMap.GetProperty("sourceSceneSha256").GetString() != _sceneSha256)
+            throw new InvalidOperationException("Fallout returned source save differs from its V13ENT MAP contract.");
+        if (string.IsNullOrWhiteSpace(_destinationReturnExitGridPath))
+            throw new InvalidOperationException(
+                "Fallout returned source restore requires the explicit reciprocal exit-grid descriptor.");
+        var savedReverse = activeMap.GetProperty("returnExitGrid");
+        if (savedReverse.GetProperty("path").GetString() != _destinationReturnExitGridPath)
+            throw new InvalidOperationException(
+                "Fallout returned source reciprocal exit-grid path differs from launch input.");
+        var reverse = Fo1ExitGridTransitionContract.Load(_destinationReturnExitGridPath);
+        if (savedReverse.GetProperty("sha256").GetString() != reverse.Sha256 ||
+            reverse.SourceMapIndex != forward.DestinationMapIndex ||
+            reverse.SourceMapName != forward.DestinationMapName ||
+            !string.Equals(reverse.SourceMapSha256, forward.DestinationMapSha256, StringComparison.OrdinalIgnoreCase) ||
+            reverse.DestinationMapIndex != forward.SourceMapIndex ||
+            reverse.DestinationMapName != forward.SourceMapName ||
+            !string.Equals(reverse.DestinationMapSha256, _sourceMapSha256, StringComparison.OrdinalIgnoreCase) ||
+            reverse.DestinationTile != activeMap.GetProperty("arrivalTile").GetInt32() ||
+            reverse.DestinationElevation != activeMap.GetProperty("elevation").GetInt32() ||
+            reverse.DestinationRotation != activeMap.GetProperty("rotation").GetInt32() ||
+            !_sourceWalkable[playerTile])
+            throw new InvalidOperationException("Fallout returned source MAP join drifted or saved an invalid player tile.");
+        _destinationReturnExitGrid = reverse;
+        _returnInactiveDestinationHostSerials.Clear();
+        if (activeMap.TryGetProperty("inactiveDestinationInventoryHost", out var inactiveHost) &&
+            inactiveHost.ValueKind != JsonValueKind.Null)
+        {
+            if (string.IsNullOrWhiteSpace(_destinationPresentationPath) ||
+                string.IsNullOrWhiteSpace(_destinationInventoryInteractionPath))
+                throw new InvalidOperationException(
+                    "Fallout returned source restore requires explicit destination inventory provenance.");
+            var presentation = inactiveHost.GetProperty("presentation");
+            if (presentation.GetProperty("path").GetString() != _destinationPresentationPath)
+                throw new InvalidOperationException(
+                    "Fallout returned source destination presentation path differs from launch input.");
+            var destination = Fo1DestinationPresentationContract.Load(_destinationPresentationPath, forward);
+            if (presentation.GetProperty("sha256").GetString() != destination.Catalog.CampaignSha256)
+                throw new InvalidOperationException(
+                    "Fallout returned source destination presentation hash drifted.");
+            var interaction = inactiveHost.GetProperty("interaction");
+            if (interaction.GetProperty("path").GetString() != _destinationInventoryInteractionPath)
+                throw new InvalidOperationException(
+                    "Fallout returned source destination inventory path differs from launch input.");
+            var loadedInteraction = Fo1DestinationInventoryInteractionContract.Load(
+                _destinationInventoryInteractionPath, destination, forward);
+            if (interaction.GetProperty("sha256").GetString() != loadedInteraction.Sha256 ||
+                interaction.GetProperty("hostSerial").GetInt32() != loadedInteraction.Host.Serial)
+                throw new InvalidOperationException(
+                    "Fallout returned source destination inventory hash drifted.");
+            _destinationInventoryInteraction = loadedInteraction;
+            _destinationFlareUse = string.IsNullOrWhiteSpace(_destinationFlareUsePath)
+                ? null
+                : Fo1DestinationFlareUseContract.Load(
+                    _destinationFlareUsePath, loadedInteraction);
+            _destinationGenericDoor = string.IsNullOrWhiteSpace(_destinationGenericDoorPath)
+                ? null
+                : Fo1DestinationGenericDoorContract.Load(
+                    _destinationGenericDoorPath, destination, forward);
+            _destinationMedicLook = string.IsNullOrWhiteSpace(_destinationMedicLookPath)
+                ? null
+                : _destinationGenericDoor is null
+                    ? throw new InvalidOperationException(
+                        "Fallout returned source restore requires its explicit generic-door prerequisite.")
+                    : Fo1DestinationMedicLookContract.Load(
+                        _destinationMedicLookPath, destination, forward, _destinationGenericDoor);
+            _returnInactiveDestinationHostSerials.Add(loadedInteraction.Host.Serial);
+        }
+        _loadedDestinationPresentation = null;
+        _returnedToSource = true;
+    }
+
+    private Fo1DestinationPresentationContract LoadSavedDestination(JsonElement activeMap)
+    {
+        var transition = _exitGridTransition ?? throw new InvalidOperationException(
+            "Fallout active destination save has no exit-grid contract.");
+        if (_activatedExitGridTile is null)
+            throw new InvalidOperationException("Fallout active destination save has no committed exit-grid.");
+        if (activeMap.GetProperty("schema").GetString() != ActiveMapSchema ||
+            activeMap.GetProperty("kind").GetString() != "destination" ||
+            activeMap.GetProperty("mapId").GetString() !=
+                Path.GetFileNameWithoutExtension(transition.DestinationMapName).ToLowerInvariant() ||
+            activeMap.GetProperty("sourceFile").GetString() != transition.DestinationMapName ||
+            activeMap.GetProperty("sourceMapSha256").GetString() != transition.DestinationMapSha256 ||
+            activeMap.GetProperty("elevation").GetInt32() != transition.DestinationElevation)
+            throw new InvalidOperationException("Fallout active destination save differs from its exit-grid contract.");
+        if (string.IsNullOrWhiteSpace(_destinationPresentationPath))
+            throw new InvalidOperationException(
+                "Fallout active destination restore requires an explicit presentation cache path.");
+        var presentation = activeMap.GetProperty("presentation");
+        if (presentation.GetProperty("path").GetString() != _destinationPresentationPath)
+            throw new InvalidOperationException("Fallout active destination save presentation path differs from launch input.");
+        var destination = Fo1DestinationPresentationContract.Load(_destinationPresentationPath, transition);
+        if (presentation.GetProperty("sha256").GetString() != destination.Catalog.CampaignSha256)
+            throw new InvalidOperationException("Fallout active destination save presentation hash drifted.");
+        if (activeMap.TryGetProperty("inventoryInteraction", out var interaction) &&
+            interaction.ValueKind != JsonValueKind.Null)
+        {
+            if (string.IsNullOrWhiteSpace(_destinationInventoryInteractionPath) ||
+                interaction.GetProperty("path").GetString() != _destinationInventoryInteractionPath)
+                throw new InvalidOperationException("Fallout active destination inventory interaction path differs from launch input.");
+            var loadedInteraction = Fo1DestinationInventoryInteractionContract.Load(
+                _destinationInventoryInteractionPath,
+                destination,
+                transition);
+            if (interaction.GetProperty("sha256").GetString() != loadedInteraction.Sha256)
+                throw new InvalidOperationException("Fallout active destination inventory interaction hash drifted.");
+            _destinationInventoryInteraction = loadedInteraction;
+        }
+        if (activeMap.TryGetProperty("flareUse", out var flareUse) &&
+            flareUse.ValueKind != JsonValueKind.Null)
+        {
+            if (string.IsNullOrWhiteSpace(_destinationFlareUsePath) ||
+                flareUse.GetProperty("path").GetString() != _destinationFlareUsePath ||
+                _destinationInventoryInteraction is null)
+                throw new InvalidOperationException("Fallout active destination flare use path differs from launch input.");
+            var loadedFlareUse = Fo1DestinationFlareUseContract.Load(
+                _destinationFlareUsePath, _destinationInventoryInteraction);
+            if (flareUse.GetProperty("sha256").GetString() != loadedFlareUse.Sha256)
+                throw new InvalidOperationException("Fallout active destination flare use hash drifted.");
+            _destinationFlareUse = loadedFlareUse;
+        }
+        if (activeMap.TryGetProperty("genericDoor", out var genericDoor) &&
+            genericDoor.ValueKind != JsonValueKind.Null)
+        {
+            if (string.IsNullOrWhiteSpace(_destinationGenericDoorPath) ||
+                genericDoor.GetProperty("path").GetString() != _destinationGenericDoorPath)
+                throw new InvalidOperationException("Fallout active destination generic-door path differs from launch input.");
+            var loadedGenericDoor = Fo1DestinationGenericDoorContract.Load(
+                _destinationGenericDoorPath, destination, transition);
+            if (genericDoor.GetProperty("sha256").GetString() != loadedGenericDoor.Sha256)
+                throw new InvalidOperationException("Fallout active destination generic-door hash drifted.");
+            _destinationGenericDoor = loadedGenericDoor;
+        }
+        if (activeMap.TryGetProperty("medicLook", out var medicLook) &&
+            medicLook.ValueKind != JsonValueKind.Null)
+        {
+            if (string.IsNullOrWhiteSpace(_destinationMedicLookPath) ||
+                medicLook.GetProperty("path").GetString() != _destinationMedicLookPath ||
+                _destinationGenericDoor is null)
+                throw new InvalidOperationException("Fallout active destination Medic look path differs from launch input.");
+            var loadedMedicLook = Fo1DestinationMedicLookContract.Load(
+                _destinationMedicLookPath, destination, transition, _destinationGenericDoor);
+            if (medicLook.GetProperty("sha256").GetString() != loadedMedicLook.Sha256)
+                throw new InvalidOperationException("Fallout active destination Medic look hash drifted.");
+            _destinationMedicLook = loadedMedicLook;
+        }
+        if (activeMap.TryGetProperty("returnExitGrid", out var returnExitGrid) &&
+            returnExitGrid.ValueKind != JsonValueKind.Null)
+        {
+            if (string.IsNullOrWhiteSpace(_destinationReturnExitGridPath) ||
+                returnExitGrid.GetProperty("path").GetString() != _destinationReturnExitGridPath)
+                throw new InvalidOperationException("Fallout active destination return exit-grid path differs from launch input.");
+            var loadedReturnExit = Fo1ExitGridTransitionContract.Load(_destinationReturnExitGridPath);
+            loadedReturnExit.ValidateAgainstScene(destination.SourceMapSha256);
+            if (returnExitGrid.GetProperty("sha256").GetString() != loadedReturnExit.Sha256)
+                throw new InvalidOperationException("Fallout active destination return exit-grid hash drifted.");
+            _destinationReturnExitGrid = loadedReturnExit;
+        }
+        _loadedDestinationPresentation = destination;
+        return destination;
+    }
+
+    private static Fo1CharacterProfile ParseSavedCharacter(
+        JsonElement source,
+        JsonElement? legacyPresentationIdentity)
     {
         var schema = source.GetProperty("schema").GetString();
         if (!string.Equals(
@@ -2009,6 +3491,10 @@ internal partial class Fo1TacticalSession : Node
             !string.Equals(
                 schema,
                 "opennv-fo1-character/v2",
+                StringComparison.Ordinal) &&
+            !string.Equals(
+                schema,
+                "opennv-fo1-character/v3",
                 StringComparison.Ordinal))
             throw new InvalidOperationException(
                 $"Fallout save contains an unknown character schema: {schema}");
@@ -2030,11 +3516,11 @@ internal partial class Fo1TacticalSession : Node
             source.GetProperty("traits").EnumerateArray()
                 .Select(row => row.GetString()!)
                 .ToArray());
-        if (schema == "opennv-fo1-character/v2")
+        if ((schema is "opennv-fo1-character/v2" or "opennv-fo1-character/v3") &&
+            source.TryGetProperty("appearance", out var appearance) &&
+            appearance.ValueKind == JsonValueKind.Object)
         {
-            var appearance = source.GetProperty("appearance");
-            if (appearance.ValueKind != JsonValueKind.Object ||
-                appearance.GetProperty("schema").GetString() !=
+            if (appearance.GetProperty("schema").GetString() !=
                     Fo1CharacterAppearance.ExpectedSchema ||
                 appearance.GetProperty("mode").GetString() !=
                     "hex-local-procedural-custom")
@@ -2057,8 +3543,62 @@ internal partial class Fo1TacticalSession : Node
                     appearance.GetProperty("portraitHeight").GetInt32()),
             };
         }
+        profile = profile with
+        {
+            Identity = schema == "opennv-fo1-character/v3"
+                ? ParseSavedCharacterIdentity(source.GetProperty("identity"))
+                : ParseLegacyCharacterIdentity(
+                    legacyPresentationIdentity ?? throw new InvalidOperationException(
+                        "Legacy Fallout 1 character save has no presentation identity."),
+                    profile),
+        };
         profile.Validate();
         return profile;
+    }
+
+    private static Fo1CharacterIdentity ParseSavedCharacterIdentity(JsonElement source)
+    {
+        if (source.ValueKind != JsonValueKind.Object ||
+            source.GetProperty("schema").GetString() != Fo1CharacterIdentity.ExpectedSchema)
+            throw new InvalidOperationException(
+                "Fallout 1 saved character identity schema is unknown.");
+        return new Fo1CharacterIdentity(
+            source.GetProperty("characterId").GetString()!,
+            source.GetProperty("role").GetString()!,
+            source.GetProperty("mode").GetString()!,
+            source.GetProperty("editingLocked").GetBoolean(),
+            source.GetProperty("ownedGcdSha256").GetString()!,
+            source.GetProperty("ownedBiographySha256").GetString()!,
+            source.GetProperty("ownedPortraitFrmSha256").GetString()!);
+    }
+
+    private static Fo1CharacterIdentity ParseLegacyCharacterIdentity(
+        JsonElement source,
+        Fo1CharacterProfile profile)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo1-player-presentation-identity/v1" ||
+            source.GetProperty("characterName").GetString() != profile.Name ||
+            source.GetProperty("sex").GetString() != profile.Sex)
+            throw new InvalidOperationException(
+                "Legacy Fallout 1 saved presentation identity is invalid.");
+        var characterId = source.GetProperty("characterId").GetString()!;
+        if (characterId == "custom")
+            return Fo1CharacterIdentity.Custom;
+        var role = characterId switch
+        {
+            "max-stone" => "combat",
+            "natalia" => "stealth",
+            "albert" => "diplomat",
+            _ => throw new InvalidOperationException(
+                $"Legacy Fallout 1 character identity is unknown: {characterId}"),
+        };
+        return Fo1CharacterIdentity.Premade(
+            characterId,
+            role,
+            source.GetProperty("ownedGcdSha256").GetString()!,
+            Fo1CharacterIdentity.LegacyBiographyHash,
+            source.GetProperty("ownedPortraitFrmSha256").GetString()!);
     }
 
     private static string ResolvePath(string path) =>
@@ -2163,6 +3703,46 @@ internal partial class Fo1TacticalSession : Node
     }
 
     internal readonly record struct InventoryStack(string Symbol, string Pid, int Objects);
+
+    internal sealed record MapInventoryHost(
+        int Serial,
+        int Tile,
+        string Pid,
+        string PrototypeSha256,
+        IReadOnlyList<MapInventoryItem> Items)
+    {
+        internal void Validate()
+        {
+            if (Serial < 0 || Tile < 0 || Tile >= Fo1HexMath.Width * Fo1HexMath.Height ||
+                string.IsNullOrWhiteSpace(Pid) || PrototypeSha256.Length !=
+                Fo1TacticalSessionNumericContracts.PresentationInt64 || Items.Count == 0 ||
+                Items.Select(item => item.Index).Distinct().Count() != Items.Count ||
+                Items.Any(item => !item.IsValid))
+                throw new InvalidOperationException("Fallout MAP inventory-host contract is invalid.");
+        }
+    }
+
+    internal readonly record struct MapInventoryItem(
+        int Index,
+        int Serial,
+        string Symbol,
+        string DisplayName,
+        string Pid,
+        int Objects,
+        string PrototypeSha256,
+        string SubtypeName)
+    {
+        internal bool IsValid => Index >= 0 && Serial >= 0 &&
+            !string.IsNullOrWhiteSpace(Symbol) && !string.IsNullOrWhiteSpace(DisplayName) &&
+            !string.IsNullOrWhiteSpace(Pid) &&
+            Objects > 0 && PrototypeSha256.Length ==
+            Fo1TacticalSessionNumericContracts.PresentationInt64 &&
+            !string.IsNullOrWhiteSpace(SubtypeName);
+    }
+
+    internal readonly record struct MapInventoryPickup(
+        MapInventoryHost Host,
+        IReadOnlyDictionary<string, int> Inventory);
 
     internal readonly record struct InventoryTagBonus(
         string Skill,

@@ -22,6 +22,19 @@ internal static class RetailFaceGenMaterial
         uniform vec3 tone_multiplier;
         uniform float roughness;
         uniform float metallic;
+        uniform float transfer_encoded_cutoff;
+        uniform float transfer_linear_scale;
+        uniform float transfer_offset;
+        uniform float transfer_normalization;
+        uniform float transfer_exponent;
+        uniform bool use_complexion_target;
+        uniform vec3 complexion_target;
+        uniform float complexion_source_mean;
+        uniform bool use_neck_complexion_target;
+        uniform vec3 neck_complexion_target;
+        uniform float neck_complexion_source_mean;
+        uniform vec4 neck_complexion_uv_bounds;
+        uniform float neck_complexion_softness;
         uniform vec3 retail_ambient_color;
         uniform vec3 retail_fog_color;
         uniform float retail_fog_near_game_units;
@@ -30,6 +43,18 @@ internal static class RetailFaceGenMaterial
         uniform float retail_game_units_per_meter;
 
         varying float retail_fog_factor;
+
+        vec3 encoded_to_linear(vec3 encoded_color) {
+            vec3 linear_segment = encoded_color / transfer_linear_scale;
+            vec3 power_segment = pow(
+                (encoded_color + vec3(transfer_offset)) /
+                    transfer_normalization,
+                vec3(transfer_exponent));
+            return mix(
+                power_segment,
+                linear_segment,
+                lessThanEqual(encoded_color, vec3(transfer_encoded_cutoff)));
+        }
 
         void vertex() {
             vec4 retail_view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
@@ -48,8 +73,42 @@ internal static class RetailFaceGenMaterial
             vec3 encoded_albedo = (
                 base.rgb + signed_detail_scale *
                 (detail - vec3(signed_detail_neutral))) * tone_multiplier;
-            ALBEDO = encoded_albedo;
-            EMISSION = encoded_albedo * retail_ambient_color;
+            if (use_complexion_target) {
+                float local_mean =
+                    (encoded_albedo.r + encoded_albedo.g + encoded_albedo.b) / 3.0;
+                encoded_albedo = complexion_target *
+                    local_mean / max(complexion_source_mean, 0.0001);
+            }
+            if (use_neck_complexion_target) {
+                float lower_u = smoothstep(
+                    neck_complexion_uv_bounds.x - neck_complexion_softness,
+                    neck_complexion_uv_bounds.x + neck_complexion_softness,
+                    UV.x);
+                float upper_u = 1.0 - smoothstep(
+                    neck_complexion_uv_bounds.z - neck_complexion_softness,
+                    neck_complexion_uv_bounds.z + neck_complexion_softness,
+                    UV.x);
+                float lower_v = smoothstep(
+                    neck_complexion_uv_bounds.y - neck_complexion_softness,
+                    neck_complexion_uv_bounds.y + neck_complexion_softness,
+                    UV.y);
+                float upper_v = 1.0 - smoothstep(
+                    neck_complexion_uv_bounds.w - neck_complexion_softness,
+                    neck_complexion_uv_bounds.w + neck_complexion_softness,
+                    UV.y);
+                float neck_mask = lower_u * upper_u * lower_v * upper_v;
+                float local_mean =
+                    (encoded_albedo.r + encoded_albedo.g + encoded_albedo.b) / 3.0;
+                vec3 joined_neck = neck_complexion_target *
+                    local_mean / max(neck_complexion_source_mean, 0.0001);
+                encoded_albedo = mix(encoded_albedo, joined_neck, neck_mask);
+            }
+            vec3 linear_albedo = encoded_to_linear(clamp(
+                encoded_albedo,
+                vec3(0.0),
+                vec3(1.0)));
+            ALBEDO = linear_albedo;
+            EMISSION = linear_albedo * retail_ambient_color;
             NORMAL_MAP = texture(normal_map, UV).rgb;
             ROUGHNESS = roughness;
             METALLIC = metallic;
@@ -117,6 +176,28 @@ internal static class RetailFaceGenMaterial
             "signed_detail_scale",
             configuration.SignedDetailScale);
         shaderMaterial.SetShaderParameter("tone_multiplier", toneMultiplier);
+        shaderMaterial.SetShaderParameter("use_complexion_target", false);
+        shaderMaterial.SetShaderParameter("complexion_target", Vector3.One);
+        shaderMaterial.SetShaderParameter("complexion_source_mean", 1.0f);
+        shaderMaterial.SetShaderParameter("use_neck_complexion_target", false);
+        shaderMaterial.SetShaderParameter("neck_complexion_target", Vector3.One);
+        shaderMaterial.SetShaderParameter("neck_complexion_source_mean", 1.0f);
+        shaderMaterial.SetShaderParameter(
+            "neck_complexion_uv_bounds",
+            new Vector4(0.18f, 0.78f, 0.82f, 0.98f));
+        shaderMaterial.SetShaderParameter("neck_complexion_softness", 0.0125f);
+        var transfer = configuration.RuntimeAlbedoTransfer;
+        shaderMaterial.SetShaderParameter(
+            "transfer_encoded_cutoff",
+            transfer.EncodedCutoff);
+        shaderMaterial.SetShaderParameter(
+            "transfer_linear_scale",
+            transfer.LinearScale);
+        shaderMaterial.SetShaderParameter("transfer_offset", transfer.Offset);
+        shaderMaterial.SetShaderParameter(
+            "transfer_normalization",
+            transfer.Normalization);
+        shaderMaterial.SetShaderParameter("transfer_exponent", transfer.Exponent);
         shaderMaterial.SetShaderParameter("retail_ambient_color", Vector3.Zero);
         shaderMaterial.SetShaderParameter(
             "roughness",

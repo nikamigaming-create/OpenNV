@@ -275,10 +275,11 @@
       "diffusePath": "textures\\dungeons\\caves\\cavesmoothfloor01.dds",
       "normalPath": "textures\\dungeons\\caves\\cavesmoothfloor01_n.dds",
       "heightMeters": -0.018,
-      "textureRepeatMeters": 3.2,
-      "albedoColor": [0.78, 0.74, 0.66, 1.0],
-      "roughness": 0.94,
-      "normalScale": 0.62
+      "textureRepeatMeters": 2.2,
+    "albedoColor": [0.72, 0.68, 0.61, 1.0],
+    "roughness": 0.94,
+    "normalScale": 0.62,
+    "emissionEnergy": 0.02
     },
     "grounding": {
       "schema": "opennv-fo1-owned-cave-grounding/v1",
@@ -490,22 +491,23 @@
       },
       "surfaceDressing": {
         "schema": "opennv-fo1-owned-cave-wall-dressing/v1",
+        "enabled": true,
         "source": "verified owned CaveRoomWall01 instances sampled over the exact connected Fallout wall contours; the generated contour shell remains the closure and topology authority",
         "profiles": [
           "cave"
         ],
         "assetRole": "wall",
-        "spacingMeters": 3.00,
-        "minimumInstancesPerContour": 2,
+        "spacingMeters": 5.50,
+        "minimumInstancesPerContour": 1,
         "minimumContourPerimeterMeters": 1.2,
-        "maximumInstances": 400,
+        "maximumInstances": 180,
         "scale": [
-          0.70,
-          0.82,
-          0.62
+          0.58,
+          0.72,
+          0.52
         ],
-        "embedBehindContourMeters": 1.75,
-        "groundSinkMeters": 0.10,
+        "embedBehindContourMeters": 2.05,
+        "groundSinkMeters": 0.16,
         "yawOffsetDegrees": 0.0,
         "yawJitterDegrees": 1.5,
         "uniformScaleJitterFraction": 0.04,

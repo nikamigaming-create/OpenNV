@@ -44,6 +44,8 @@ internal static class Fo1HexCapture
     {
         try
         {
+            DisplayServer.WindowSetTitle(
+                "OpenNV • Fallout 1 • Vault 13 Cave • bounded proof");
             var output = Path.GetFullPath(captureRoot);
             if (Directory.Exists(output) || File.Exists(output))
                 throw new InvalidOperationException($"Refusing to overwrite Fallout hex capture: {output}");
@@ -67,7 +69,6 @@ internal static class Fo1HexCapture
             loaded.Session.ToggleGrid();
             loaded.Session.SetWorldGuidesVisible(false);
             loaded.Session.Hud.Visible = false;
-            loaded.Session.ToggleGrid();
             loaded.Camera.SetOrbitDegrees(Fo1HexCaptureNumericContracts.AcceptanceFloatNEgativE45Point0f, Fo1HexCaptureNumericContracts.AcceptanceFloatNEgativE26Point0f);
             loaded.Camera.FrameCombatPair(loaded.Session.PlayerTile, combatTarget.Tile);
             await WaitForFrames(host, Fo1HexCaptureNumericContracts.AcceptanceInt5);
@@ -92,7 +93,6 @@ internal static class Fo1HexCapture
                 Fo1HexCaptureNumericContracts.AcceptanceDouble0Point025,
                 Fo1HexCaptureNumericContracts.AcceptanceDouble0Point08);
             loaded.Camera.SetExplorationMode(false);
-            loaded.Session.ToggleGrid();
             var combatCutawayHidden = loaded.CaveCutaway.HiddenInstances;
             foreach (var mob in loaded.Session.Mobs)
                 mob.SetReadabilityMarkersVisible(false);
@@ -160,12 +160,17 @@ internal static class Fo1HexCapture
                     ownedMeshInstances = loaded.OwnedCave.MeshInstances,
                     ownedSurfaceInstances = loaded.OwnedCave.SurfaceInstances,
                     ownedMaterialBindings = loaded.OwnedCave.MaterialBindings,
+                    ownedLitMaterials = loaded.OwnedCave.LitMaterials,
+                    unifiedCaveMaterialSurfaces = loaded.OwnedCave.UnifiedCaveMaterialSurfaces,
                     ownedRoles = loaded.OwnedCave.Roles,
                     continuousFloorHexes = loaded.OwnedCave.ContinuousFloorHexes,
                     continuousFloorTriangles = loaded.OwnedCave.ContinuousFloorTriangles,
                     continuousFloorMeshInstances = loaded.OwnedCave.ContinuousFloorMeshInstances,
                     cutawayCandidates = loaded.CaveCutaway.Candidates,
                     combatCutawayHidden,
+                    cutawayShaderDriven = loaded.CaveCutaway.ShaderDriven,
+                    cutawayMaterials = loaded.CaveCutaway.MeltMaterials,
+                    cutawayFadedInstances = loaded.CaveCutaway.FadedInstances,
                     atmosphere = new
                     {
                         schema = loaded.Atmosphere.Schema,
@@ -240,7 +245,7 @@ internal static class Fo1HexCapture
     private static async Task WaitForFrames(Node host, int count)
     {
         for (var index = 0; index < count; index++)
-            await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
     private static CaptureResult SaveViewport(

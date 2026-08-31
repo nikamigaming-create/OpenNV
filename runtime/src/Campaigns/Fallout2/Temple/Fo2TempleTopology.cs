@@ -17,8 +17,6 @@ internal sealed record Fo2TempleTopologyCoverage(
     string WalkMaskSha256,
     int WalkableHexes,
     int EntryReachableHexes,
-    int WalkOverlayInstances,
-    bool WalkOverlayVisible,
     int WallSourceObjects,
     int WallHexes,
     int WallComponents,
@@ -80,9 +78,6 @@ internal static class Fo2TempleTopology
             Shape = floorShape,
         });
         physicsRoot.AddChild(floorBody);
-
-        var overlay = BuildWalkOverlay(walkable, profile.WalkMask);
-        root.AddChild(overlay);
 
         var wallPlacements = catalog.ObjectPlacements
             .Where(row => row.ObjectType == profile.Wall.SourceObjectType)
@@ -169,8 +164,6 @@ internal static class Fo2TempleTopology
             walkMaskSha256,
             walkable.Count(value => value),
             entryReachableHexes,
-            walkable.Count(value => value),
-            overlay.Visible,
             wallPlacements.Length,
             wallTiles.Count,
             components.Count,
@@ -207,45 +200,6 @@ internal static class Fo2TempleTopology
             builder.AddTriangle(first, third, fourth);
         }
         return builder.Commit("Fallout 2 Temple floor support");
-    }
-
-    private static MultiMeshInstance3D BuildWalkOverlay(
-        IReadOnlyList<bool> walkable,
-        Fo2TempleWalkMaskProfile profile)
-    {
-        var tiles = Enumerable.Range(0, walkable.Count).Where(tile => walkable[tile]).ToArray();
-        var material = new StandardMaterial3D
-        {
-            AlbedoColor = profile.OverlayColor,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        };
-        var multiMesh = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            Mesh = new CylinderMesh
-            {
-                TopRadius = Fo1HexMath.CircumradiusMeters * profile.OverlayRadiusScale,
-                BottomRadius = Fo1HexMath.CircumradiusMeters * profile.OverlayRadiusScale,
-                Height = 0.006f,
-                RadialSegments = Fo1HexMath.DirectionCount,
-                Material = material,
-            },
-            InstanceCount = tiles.Length,
-        };
-        for (var index = 0; index < tiles.Length; index++)
-            multiMesh.SetInstanceTransform(
-                index,
-                new Transform3D(
-                    Basis.Identity,
-                    Fo1HexMath.Center(tiles[index]) + Vector3.Up * profile.OverlayHeightMeters));
-        return new MultiMeshInstance3D
-        {
-            Name = "EXACT_SOURCE_WALK_MASK_OVERLAY_OFF_BY_DEFAULT",
-            Multimesh = multiMesh,
-            Visible = profile.OverlayVisibleByDefault,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
     }
 
     private static (ArrayMesh Mesh, int BoundaryEdges, int Triangles) BuildWallMesh(

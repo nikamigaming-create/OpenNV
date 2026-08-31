@@ -24,7 +24,9 @@ internal sealed record Fo2ArroyoPlayerProfile(
     float FloorSnapLengthMeters,
     float SafeMarginMeters,
     float MaximumFloorAngleRadians,
-    float CameraSizeMeters,
+    string CameraCompositionMode,
+    Vector2I CameraSourceFramePixels,
+    int CameraSourceHudCropHeightPixels,
     Vector3 CameraOffsetMeters,
     float CameraLookHeightMeters,
     float CameraNearMeters,
@@ -50,6 +52,8 @@ internal sealed record Fo2ArroyoPlayerProfile(
         "res://config/fo2-arroyo-player-runtime-v1.json";
     private const float MaximumCapsuleRadiusMeters = 0.5f;
     private const int FidHexCharacters = 8;
+    private const string ExpectedCameraCompositionMode =
+        "owned-640x480-width-fit-source-pixel-scale-hud-crop-v1";
 
     internal static Fo2ArroyoPlayerProfile Load(Fo2ArroyoCavesPresentationCatalog catalog)
     {
@@ -90,7 +94,7 @@ internal sealed record Fo2ArroyoPlayerProfile(
             RequiredString(semantics, "multihexCoverage") !=
                 "central-source-hex-only-unresolved" ||
             RequiredString(presentation, "mode") !=
-                "owned-critter-frm-idle-and-ab-walk" ||
+                Fo2ArroyoPlayerPresentation.OwnedFrmReliefMode ||
             RequiredString(presentation, "recipeId") !=
                 Fo2ArroyoPlayerPresentationCatalog.ExpectedRecipeId ||
             RequiredString(presentation, "fid") !=
@@ -108,13 +112,16 @@ internal sealed record Fo2ArroyoPlayerProfile(
                 Fo2ArroyoPlayerPresentationCatalog.WalkFramesPerSecond ||
             RequiredString(presentation, "directionMode") !=
                 "nearest-source-hex-direction-from-input" ||
-            RequiredString(presentation, "billboard") != "fixed-y" ||
+            RequiredString(presentation, "billboard") !=
+                "fixed-y-camera-facing-molded-owned-critter-composite" ||
             !presentation.GetProperty("animationPlayback").GetBoolean() ||
             RequiredString(camera, "projection") != "orthographic-follow" ||
+            RequiredString(camera, "compositionMode") != ExpectedCameraCompositionMode ||
             promotion.GetProperty("runtimeReady").GetBoolean() ||
             promotion.GetProperty("persistentInteraction").GetBoolean() ||
             !promotion.GetProperty("playerStatePersistent").GetBoolean() ||
             !promotion.GetProperty("playerArtLoaded").GetBoolean() ||
+            !promotion.GetProperty("ownedClassicHudSourcePixels").GetBoolean() ||
             promotion.GetProperty("playableCampaign").GetBoolean() ||
             promotion.GetProperty("collisionParity").GetBoolean() ||
             promotion.GetProperty("walkabilityParity").GetBoolean())
@@ -139,7 +146,9 @@ internal sealed record Fo2ArroyoPlayerProfile(
             Finite(player, "floorSnapLengthMeters"),
             Finite(player, "safeMarginMeters"),
             Mathf.DegToRad(Finite(player, "maximumFloorAngleDegrees")),
-            Finite(camera, "sizeMeters"),
+            RequiredString(camera, "compositionMode"),
+            ReadVector2I(camera.GetProperty("sourceFramePixels")),
+            camera.GetProperty("sourceHudCropHeightPixels").GetInt32(),
             ReadVector(camera.GetProperty("offsetMeters")),
             Finite(camera, "lookHeightMeters"),
             Finite(camera, "nearMeters"),
@@ -183,7 +192,9 @@ internal sealed record Fo2ArroyoPlayerProfile(
             profile.SafeMarginMeters <= 0.0f ||
             profile.SafeMarginMeters > profile.FloorSnapLengthMeters ||
             profile.MaximumFloorAngleRadians is <= 0.0f or >= Mathf.Pi / 2.0f ||
-            profile.CameraSizeMeters <= 0.0f ||
+            profile.CameraSourceFramePixels.X != catalog.ClassicHud.Width ||
+            profile.CameraSourceFramePixels.Y <= profile.CameraSourceHudCropHeightPixels ||
+            profile.CameraSourceHudCropHeightPixels != catalog.ClassicHud.Height ||
             profile.CameraOffsetMeters.Y <= 0.0f ||
             profile.CameraLookHeightMeters < 0.0f ||
             profile.CameraNearMeters <= 0.0f ||
@@ -261,5 +272,14 @@ internal sealed record Fo2ArroyoPlayerProfile(
             throw new InvalidOperationException(
                 "Fallout 2 Arroyo player runtime vector is invalid.");
         return new Vector3(values[0], values[1], values[2]);
+    }
+
+    private static Vector2I ReadVector2I(JsonElement source)
+    {
+        var values = source.EnumerateArray().Select(row => row.GetInt32()).ToArray();
+        if (values.Length != 2 || values.Any(value => value <= 0))
+            throw new InvalidOperationException(
+                "Fallout 2 Arroyo player profile pixel dimensions are invalid.");
+        return new Vector2I(values[0], values[1]);
     }
 }

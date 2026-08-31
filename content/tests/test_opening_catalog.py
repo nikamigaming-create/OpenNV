@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import struct
 import sys
 import tempfile
@@ -24,11 +26,19 @@ from opening_catalog import (  # noqa: E402
     _compile_guide_package,
     _compile_player_package,
     _compile_player_appearance,
+    emit_player_facegen_preview_set,
+    _flow_menu_contract,
+    _parse_texture_atlas_entry,
     _resolve_command_record_identities,
     _resolve_actor_animation_commands,
     _script_commands,
+    parse_tile_document,
 )
 from bsa_archive import ExtractedMember  # noqa: E402
+from player_facegen_preview import (  # noqa: E402
+    PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
+    PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+)
 from plugin_records import Record  # noqa: E402
 
 
@@ -71,6 +81,241 @@ def subrecord(signature: str, data: bytes = b"") -> bytes:
 
 
 class OpeningCatalogTest(unittest.TestCase):
+    def test_full_body_preview_set_is_emitted_verbatim_with_hash_bound_path(self):
+        preview_set = {
+            "schema": PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
+            "status": PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+            "fullBody": True,
+            "bodyComponentRoles": ["body", "left-hand", "right-hand"],
+            "previews": [{"sex": "male", "outputs": {"gltf": "owned"}}],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            emitted = emit_player_facegen_preview_set(Path(temporary), preview_set)
+            output = Path(emitted["path"])
+
+            expected_output = (
+                Path(temporary)
+                / "generated"
+                / "opening"
+                / "player-facegen-preview"
+                / "player-facegen-preview-set.json"
+            )
+            self.assertTrue(os.path.samefile(output, expected_output), emitted["path"])
+            self.assertEqual(
+                json.loads(output.read_text(encoding="utf-8")),
+                preview_set,
+            )
+            self.assertEqual(
+                emitted["sha256"],
+                hashlib.sha256(output.read_bytes()).hexdigest(),
+            )
+
+        with self.assertRaisesRegex(ValueError, "preview-set contract"):
+            emit_player_facegen_preview_set(
+                Path(temporary),
+                {"schema": PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA},
+            )
+
+    def test_texture_atlas_entry_resolves_exact_owned_sprite_region(self):
+        entry = _parse_texture_atlas_entry(
+            b"""
+            # synthetic atlas
+            square_filled.dds InterfaceShared0.dds, 0, 2D, 0.531738, 0.812988, 0.000000, 0.030273, 0.030273
+            """,
+            "square_filled.dds",
+        )
+
+        self.assertEqual(entry["atlasFileName"], "InterfaceShared0.dds")
+        self.assertEqual(entry["atlasIndex"], 0)
+        self.assertEqual(entry["atlasType"], "2D")
+        self.assertEqual(
+            entry["uvRect"], [0.531738, 0.812988, 0.030273, 0.030273]
+        )
+
+    def test_flow_menu_contract_emits_owned_semantic_rectangles(self):
+        document = "menus\\chargen\\race_sex_menu.xml"
+        tree = parse_tile_document(
+            b"""
+            <menu name="RaceSexMenu">
+              <class>&RaceSexMenu;</class>
+              <rect name="canvas"><width>1600</width><height>1200</height></rect>
+              <rect name="RSM_Background">
+                <filename>Interface\Shared\Background\pipboy.dds</filename>
+                <x>930</x><y>550</y><width>340</width><height>500</height>
+                <brightness>90</brightness><depth>1</depth>
+                <_top_bound>80</_top_bound><_bot_bound>336</_bot_bound>
+                <hotrect name="RSM_scroll_up_target">
+                  <id>2</id><y>62</y><brightness>128</brightness>
+                  <alpha><copy>255</copy><onlyif><copy src="me()" trait="mouseover"/><eq>1</eq></onlyif></alpha>
+                  <clicksound>UIPipboyScroll</clicksound>
+                  <image name="RSM_scroll_up">
+                    <filename>Interface\Shared\Scrollbar\arrow_up.dds</filename>
+                  </image>
+                </hotrect>
+                <hotrect name="RSM_scroll_down_target">
+                  <id>3</id>
+                  <y><copy src="parent()" trait="_bot_bound"/><add>4</add></y>
+                  <brightness>128</brightness>
+                  <alpha><copy>255</copy><onlyif><copy src="me()" trait="mouseover"/><eq>1</eq></onlyif></alpha>
+                  <clicksound>UIPipboyScroll</clicksound>
+                  <image name="RSM_scroll_down">
+                    <filename>Interface\Shared\Scrollbar\arrow_down.dds</filename>
+                  </image>
+                </hotrect>
+                <hotrect name="RSM_back_button">
+                  <id>4</id><font>5</font><brightness>64</brightness>
+                  <alpha><copy>255</copy><onlyif><copy src="me()" trait="mouseover"/><eq>1</eq></onlyif></alpha>
+                  <clicksound>UIPipBoyMode</clicksound>
+                  <_indent>40</_indent>
+                  <_x><copy src="me()" trait="_indent"/></_x>
+                  <_y><copy src="sibling(RSM_scroll_down_target)" trait="y"/></_y>
+                  <_box_visible>&false;</_box_visible>
+                  <_InheritBrightness>&false;</_InheritBrightness>
+                  <_horbuf>10</_horbuf><_verbuf>5</_verbuf><_text_y_adjust>-3</_text_y_adjust>
+                </hotrect>
+                <hotrect name="RSM_next_button">
+                  <id>5</id><font>5</font><brightness>64</brightness>
+                  <justify>&right;</justify>
+                  <alpha><copy>255</copy><onlyif><copy src="me()" trait="mouseover"/><eq>1</eq></onlyif></alpha>
+                  <clicksound>UIPipBoyMode</clicksound>
+                  <_x><copy src="parent()" trait="width"/><sub src="sibling(RSM_back_button)" trait="_indent"/></_x>
+                  <_y><copy src="sibling(RSM_back_button)" trait="_y"/></_y>
+                  <_box_visible>&false;</_box_visible>
+                  <_InheritBrightness>&false;</_InheritBrightness>
+                  <_horbuf><copy src="sibling(RSM_back_button)" trait="_horbuf"/></_horbuf>
+                  <_verbuf><copy src="sibling(RSM_back_button)" trait="_verbuf"/></_verbuf>
+                  <_text_y_adjust><copy src="sibling(RSM_back_button)" trait="_text_y_adjust"/></_text_y_adjust>
+                </hotrect>
+              </rect>
+              <hotrect name="RSM_Face_Grab">
+                <id>1</id><x>150</x><y>50</y><width>680</width><height>620</height><depth>100</depth>
+              </hotrect>
+              <hotrect name="RSM_list_item">
+                <id>&generic;</id><x>10</x><y>20</y><width>320</width><height>36</height>
+                <brightness>64</brightness><clicksound>UIMenuOK</clicksound><mouseoversound>UIMenuFocus</mouseoversound>
+                <image name="RSM_selection_indicator">
+                  <filename>square_filled.dds</filename><texatlas>Interface\InterfaceShared.tai</texatlas>
+                  <x>8</x><y>12</y><width>20</width><height>20</height>
+                </image>
+                <text name="RSM_list_item_text">
+                  <font>5</font><y>9</y>
+                  <x><copy src="sibling(RSM_selection_indicator)" trait="x"/><add><copy src="sibling(RSM_selection_indicator)" trait="width"/><add>10</add></add></x>
+                </text>
+              </hotrect>
+              <hotrect name="RSM_slider_option">
+                <id>&generic;</id><x>10</x><width>320</width><height>64</height>
+                <brightness>64</brightness><clicksound>nosound</clicksound><mouseoversound>UIMenuFocus</mouseoversound>
+                <text name="RSM_slider_label"><font>5</font><x>10</x><y>9</y></text>
+                <text name="RSM_slider_value"><font>5</font><x><copy src="sibling(RSM_slider_label)" trait="x"/><add src="sibling(RSM_slider_label)" trait="width"/><add>10</add></x><y>9</y></text>
+                <hotrect name="RSM_slider_arrow_left"><id>100</id><y><copy src="sibling(RSM_slider_bar)" trait="y"/><sub>11</sub></y><height>28</height><clicksound>UIMenuPrevNext</clicksound><text name="RSM_SAL_text"><string><copy src="io()" trait="user1"/></string><justify>&right;</justify></text></hotrect>
+                <image name="RSM_slider_bar"><y>49</y><_length><copy src="parent()" trait="width"/><div>2</div></_length></image>
+                <hotrect name="RSM_slider_arrow_right"><id>104</id><height><copy src="sibling(RSM_slider_arrow_left)" trait="height"/></height><clicksound>UIMenuPrevNext</clicksound><text name="RSM_SAR_text"><string><copy src="io()" trait="user2"/></string></text></hotrect>
+                <hotrect name="RSM_slider_marker"><id>105</id><y><copy src="sibling(RSM_slider_arrow_left)" trait="y"/></y><width>16</width><height><copy src="sibling(RSM_slider_arrow_left)" trait="height"/></height><text name="RSM_SM_text"><string>|</string><x><copy src="parent()" trait="width"/><sub src="me()" trait="width"/><mul>0.48</mul></x><y>4</y></text></hotrect>
+              </hotrect>
+              <text name="source_back"><string>&-sBack;</string></text>
+              <text name="source_next"><string>&-sNext;</string></text>
+            </menu>
+            """
+        )
+        text_box_document = "menus\\prefabs\\text_box.xml"
+        text_box = parse_tile_document(
+            b"""
+            <justify>&left;</justify>
+            <text name="button_text">
+              <y>
+                <copy src="sibling(box)" trait="height"/>
+                <sub src="me()" trait="height"/>
+                <div>2</div>
+                <add>
+                  <copy>7</copy>
+                  <add><copy>3</copy><onlyifnot src="parent()" trait="_glow"/></add>
+                  <add src="parent()" trait="_text_y_adjust"/>
+                </add>
+              </y>
+            </text>
+            """
+        )
+        rows, closure, canvas, strings = _flow_menu_contract(
+            {
+                "menus": {
+                    "appearance": {
+                        "document": document,
+                        "canvasTile": "canvas",
+                        "layoutTile": "RSM_Background",
+                        "semanticLayoutTiles": {
+                            "faceGrab": "RSM_Face_Grab",
+                            "sliderOption": "RSM_slider_option",
+                        },
+                    }
+                },
+                "engineStringEntities": {},
+                "raceSexNavigationStringEntities": {
+                    "back": "-sBack",
+                    "next": "-sNext",
+                },
+            },
+            {document: tree, text_box_document: text_box},
+            {
+                document: {
+                    "path": document,
+                    "source": "synthetic.xml",
+                    "sha256": "synthetic-sha256",
+                    "menuName": "RaceSexMenu",
+                }
+            },
+            {document: []},
+        )
+
+        self.assertEqual(canvas, [1600.0, 1200.0])
+        self.assertEqual(closure, frozenset({document}))
+        self.assertEqual(strings, {"back": "Back", "next": "Next"})
+        self.assertEqual(rows[0]["rect"], [930.0, 550.0, 340.0, 500.0])
+        self.assertEqual(
+            rows[0]["semanticRects"],
+            {
+                "faceGrab": {
+                    "tile": "RSM_Face_Grab",
+                    "rect": [150.0, 50.0, 680.0, 620.0],
+                },
+                "sliderOption": {
+                    "tile": "RSM_slider_option",
+                    "rect": [10.0, 0.0, 320.0, 64.0],
+                },
+            },
+        )
+        tiles = rows[0]["raceSexMenuTiles"]
+        self.assertEqual(tiles["schema"], "opennv-owned-racesex-menu-tiles/v1")
+        self.assertEqual(tiles["fontId"], 5)
+        self.assertEqual(tiles["background"]["rect"], [930.0, 550.0, 340.0, 500.0])
+        self.assertEqual(tiles["faceGrab"]["rect"], [150.0, 50.0, 680.0, 620.0])
+        self.assertEqual(tiles["navigation"]["back"]["id"], 4)
+        self.assertEqual(tiles["navigation"]["next"]["id"], 5)
+        self.assertEqual(tiles["navigation"]["back"]["justify"], "left")
+        self.assertEqual(tiles["navigation"]["next"]["justify"], "right")
+        self.assertEqual(tiles["navigation"]["back"]["brightness"], 64.0)
+        self.assertEqual(tiles["navigation"]["back"]["horizontalBuffer"], 10.0)
+        self.assertEqual(tiles["navigation"]["back"]["verticalBuffer"], 5.0)
+        self.assertEqual(tiles["navigation"]["back"]["textYAdjust"], -3.0)
+        self.assertEqual(tiles["navigation"]["back"]["baseTextYOffset"], 10.0)
+        self.assertEqual(tiles["scroll"]["up"]["brightness"], 128.0)
+        self.assertEqual(tiles["scroll"]["up"]["alphaPolicy"], "hover-only-255")
+        self.assertEqual(tiles["sliderTemplate"]["rect"], [10.0, 0.0, 320.0, 64.0])
+        self.assertEqual(tiles["sliderTemplate"]["leftArrow"]["justify"], "right")
+        self.assertEqual(
+            tiles["sliderTemplate"]["rightArrow"]["stringSource"],
+            {"menuTrait": "user2"},
+        )
+        self.assertEqual(tiles["sliderTemplate"]["marker"]["glyph"], "|")
+        self.assertEqual(tiles["sliderTemplate"]["marker"]["glyphXMultiplier"], 0.48)
+        self.assertEqual(tiles["sliderTemplate"]["marker"]["glyphY"], 4.0)
+        self.assertEqual(
+            tiles["listItemTemplate"]["selectionIndicator"]["texture"],
+            {
+                "atlas": "interface\interfaceshared.tai",
+                "fileName": "square_filled.dds",
+            },
+        )
+
     def test_player_appearance_joins_playable_race_sex_hair_eye_and_facegen(self):
         race_form = 0x19
         hair_male_form = 0x20
@@ -471,7 +716,9 @@ class OpeningCatalogTest(unittest.TestCase):
     def test_guide_animation_object_joins_idle_anio_nif_and_attachment(self):
         animation_object_form = 0x35
         payload = b"owned-animation-object"
+        idle_payload = b"owned-idle-animation"
         logical_path = "meshes\\animobjects\\owned.nif"
+        idle_path = "meshes\\synthetic-idle.kf"
         sources = FlowSourceCatalog(
             actor_values=[],
             traits=[],
@@ -481,7 +728,7 @@ class OpeningCatalogTest(unittest.TestCase):
                 SYNTHETIC_IDLE_BEGIN_FORM: IdleAnimationSource(
                     SYNTHETIC_IDLE_BEGIN_FORM,
                     "SyntheticIdle",
-                    "meshes\\synthetic-idle.kf",
+                    idle_path,
                 )
             },
             packages_by_editor={},
@@ -503,11 +750,26 @@ class OpeningCatalogTest(unittest.TestCase):
                 )
             },
         )
-        archives = SyntheticAudioArchives({logical_path: payload})
+        archives = SyntheticAudioArchives(
+            {logical_path: payload, idle_path: idle_payload}
+        )
 
         with patch(
             "opening_catalog.authored_rigid_attachment_node",
             return_value="Bip01 R Hand",
+        ), patch(
+            "opening_catalog.animation_sequence_manifest",
+            return_value={
+                "sequenceName": "SyntheticPackageIdle",
+                "startSeconds": 0.0,
+                "stopSeconds": 8.0,
+                "cycleType": 2,
+                "controlledBlocks": 3,
+                "transformPrioritiesByNode": {
+                    "Bip01": 20,
+                    "Bip01 R Hand": 50,
+                },
+            },
         ):
             result = _compile_guide_animation_objects(
                 [SYNTHETIC_IDLE_BEGIN_FORM],
@@ -524,6 +786,15 @@ class OpeningCatalogTest(unittest.TestCase):
         self.assertEqual(result[0]["modelLogicalPath"], logical_path)
         self.assertEqual(result[0]["sha256"], hashlib.sha256(payload).hexdigest())
         self.assertEqual(result[0]["attachmentNode"], "Bip01 R Hand")
+        self.assertEqual(
+            result[0]["idleAnimationSha256"],
+            hashlib.sha256(idle_payload).hexdigest(),
+        )
+        self.assertEqual(result[0]["idleAnimationSequenceName"], "SyntheticPackageIdle")
+        self.assertEqual(
+            result[0]["idleAnimationTransformPrioritiesByNode"]["Bip01 R Hand"],
+            50,
+        )
 
     def test_guide_furniture_occupancy_admits_strict_loop_and_exit(self):
         seated_payload = b"owned-seated-loop"
@@ -548,12 +819,24 @@ class OpeningCatalogTest(unittest.TestCase):
         }
         furniture_path = "meshes\\furniture\\synthetic-chair.nif"
         furniture_payload = b"owned-furniture-nif"
+        patient_bed_reference = 0x4B
+        patient_bed_base = 0x4C
+        patient_bed_path = "meshes\\furniture\\synthetic-patient-bed.nif"
+        patient_bed_payload = b"owned-patient-bed-nif"
         furniture_record = Record(
             "FURN",
             furniture_base,
             0,
             subrecord("EDID", b"SyntheticChair\0")
             + subrecord("MODL", b"furniture\\synthetic-chair.nif\0"),
+            (),
+        )
+        patient_bed_record = Record(
+            "FURN",
+            patient_bed_base,
+            0,
+            subrecord("EDID", b"SyntheticPatientBed\0")
+            + subrecord("MODL", b"furniture\\synthetic-patient-bed.nif\0"),
             (),
         )
         heading_delta_record = Record(
@@ -607,7 +890,16 @@ class OpeningCatalogTest(unittest.TestCase):
                     (0.0, 0.0, 0.0),
                     furniture_base,
                     "furniture-reference-record-sha256",
-                )
+                ),
+                patient_bed_reference: ReferenceTransformSource(
+                    patient_bed_reference,
+                    "SyntheticPatientBedRef",
+                    "REFR",
+                    (4.0, 5.0, 6.0),
+                    (0.0, 0.0, 0.0),
+                    patient_bed_base,
+                    "patient-bed-reference-record-sha256",
+                ),
             },
             image_space_modifiers_by_editor={},
             needed={},
@@ -618,7 +910,10 @@ class OpeningCatalogTest(unittest.TestCase):
                     for axis, (_form_id, editor_id, _value) in placement_settings.items()
                 },
             },
-            furniture_by_form={furniture_base: furniture_record},
+            furniture_by_form={
+                furniture_base: furniture_record,
+                patient_bed_base: patient_bed_record,
+            },
         )
         packages = [
             {
@@ -665,7 +960,9 @@ class OpeningCatalogTest(unittest.TestCase):
                         "orientation": 3141,
                         "animationType": 1,
                         "actorPlacementOffsetGameSettings": {
-                            "semantics": "replace-marker-offset-for-actor-placement",
+                            "semantics": (
+                                "nif-marker-minus-gmst-target-offset-for-actor-placement"
+                            ),
                             **{
                                 axis: {
                                     "formId": f"{form_id:08x}",
@@ -687,6 +984,21 @@ class OpeningCatalogTest(unittest.TestCase):
                             "valueRadians": heading_delta_value,
                         },
                     },
+                },
+                "patientBed": {
+                    "referenceFormId": f"{patient_bed_reference:08x}",
+                    "referenceRecordSha256": (
+                        "patient-bed-reference-record-sha256"
+                    ),
+                    "baseFormId": f"{patient_bed_base:08x}",
+                    "editorId": "SyntheticPatientBed",
+                    "recordSha256": hashlib.sha256(
+                        patient_bed_record.data
+                    ).hexdigest(),
+                    "modelLogicalPath": patient_bed_path,
+                    "modelSha256": hashlib.sha256(
+                        patient_bed_payload
+                    ).hexdigest(),
                 },
                 "seatedLoop": {
                     "formId": f"{seated_form:08x}",
@@ -713,6 +1025,7 @@ class OpeningCatalogTest(unittest.TestCase):
                 seated_path: seated_payload,
                 exit_path: exit_payload,
                 furniture_path: furniture_payload,
+                patient_bed_path: patient_bed_payload,
             }
         )
 
@@ -772,11 +1085,34 @@ class OpeningCatalogTest(unittest.TestCase):
 
         self.assertEqual(
             result["markerDisposition"],
-            "compose-owned-furniture-reference-gmst-replacement-offset-and-heading-delta",
+            "compose-owned-furniture-reference-nif-marker-minus-gmst-target-"
+            "offset-and-heading-delta",
         )
         self.assertEqual(
             result["furniture"]["marker"]["offsetGodotGameUnits"],
             [-0.25, -25.0, -50.0],
+        )
+        self.assertEqual(
+            result["schema"],
+            "opennv-owned-guide-furniture-occupancy/v4",
+        )
+        self.assertEqual(
+            result["patientBed"],
+            {
+                "referenceFormId": f"{patient_bed_reference:08x}",
+                "referenceRecordSha256": "patient-bed-reference-record-sha256",
+                "baseFormId": f"{patient_bed_base:08x}",
+                "editorId": "SyntheticPatientBed",
+                "recordType": "FURN",
+                "recordSha256": hashlib.sha256(
+                    patient_bed_record.data
+                ).hexdigest(),
+                "modelLogicalPath": patient_bed_path,
+                "modelBytes": len(patient_bed_payload),
+                "modelSha256": hashlib.sha256(patient_bed_payload).hexdigest(),
+                "sourceArchive": "Synthetic Voices.bsa",
+                "sourceArchiveSha256": "synthetic-archive-sha256",
+            },
         )
         heading_delta = result["furniture"]["marker"][
             "actorForwardHeadingDeltaGameSetting"
@@ -790,7 +1126,7 @@ class OpeningCatalogTest(unittest.TestCase):
         ]
         self.assertEqual(
             placement["semantics"],
-            "replace-marker-offset-for-actor-placement",
+            "nif-marker-minus-gmst-target-offset-for-actor-placement",
         )
         self.assertEqual(placement["offsetNifGameUnits"], [2.5, 57.0, -29.0])
         self.assertEqual(placement["offsetGodotGameUnits"], [2.5, -29.0, -57.0])
@@ -804,6 +1140,21 @@ class OpeningCatalogTest(unittest.TestCase):
         self.assertEqual(result["exit"]["cycleType"], 2)
         self.assertEqual(result["exit"]["rootMotion"], exit_root_motion)
         self.assertEqual(paths, (seated_path, exit_path))
+
+        contract["furnitureOccupancy"]["patientBed"]["modelSha256"] = "0" * 64
+        with self.assertRaisesRegex(
+            ValueError,
+            "opening patient bed NIF hash differs",
+        ):
+            _compile_guide_furniture_occupancy(
+                contract,
+                packages,
+                sources,
+                archives,  # type: ignore[arg-type]
+                quest_form,
+                "Bip01",
+                30.0,
+            )
 
     def test_play_idle_runtime_binding_carries_source_idle_form_id(self):
         command = {

@@ -1,0 +1,176 @@
+{
+  "schema": "opennv-classic-premade-analog-cast/v1",
+  "id": "classic-premade-analog-cast-v1",
+  "status": "selected-owned-fnv-analog-bindings-non-parity",
+  "characters": [
+    {
+      "campaign": "fallout1",
+      "characterId": "max-stone",
+      "characterName": "Max Stone",
+      "sex": "male",
+      "recipe": "classic-analog-fo1-max-stone-v1",
+      "sourceActorFormId": "00148a27",
+      "sourceActorName": "Mercenary",
+      "outfitFormId": "0003307f",
+      "outfitName": "Metal Armor",
+      "bodyProfile": {
+        "id": "fo1-max-stone-heavy-power-v1",
+        "height": 1.05,
+        "chest": 1.19,
+        "shoulders": 1.22,
+        "waist": 1.08,
+        "arms": 1.14,
+        "thighs": 1.05,
+        "calves": 1.08
+      },
+      "selectionRationale": "ordinary background mercenary with a broad face, heavy silhouette, and battered metal combat wardrobe"
+    },
+    {
+      "campaign": "fallout1",
+      "characterId": "natalia",
+      "characterName": "Natalia",
+      "sex": "female",
+      "recipe": "classic-analog-fo1-natalia-v1",
+      "sourceActorFormId": "000a59e4",
+      "sourceActorName": "Primm Resident",
+      "outfitFormId": "0001ba00",
+      "outfitName": "Wasteland Wanderer Outfit",
+      "bodyProfile": {
+        "id": "fo1-natalia-compact-agile-v1",
+        "height": 0.98,
+        "chest": 0.96,
+        "shoulders": 0.94,
+        "waist": 0.88,
+        "arms": 0.96,
+        "thighs": 1.02,
+        "calves": 0.94
+      },
+      "selectionRationale": "ordinary background resident with a compact silhouette, dark hair, and practical wanderer wardrobe"
+    },
+    {
+      "campaign": "fallout1",
+      "characterId": "albert",
+      "characterName": "Albert Cole",
+      "sex": "male",
+      "recipe": "classic-analog-fo1-albert-v1",
+      "sourceActorFormId": "00128586",
+      "sourceActorName": "Chairman Greeter",
+      "outfitFormId": "0005c682",
+      "outfitName": "Dirty Pre-War Businesswear",
+      "bodyProfile": {
+        "id": "fo1-albert-lean-diplomat-v1",
+        "height": 1.03,
+        "chest": 0.96,
+        "shoulders": 0.98,
+        "waist": 0.9,
+        "arms": 0.97,
+        "thighs": 1.03,
+        "calves": 0.96
+      },
+      "selectionRationale": "anonymous background casino greeter with dark swept hair, a lean frame, and formal businesswear, without borrowing a story character"
+    },
+    {
+      "campaign": "fallout2",
+      "characterId": "combat",
+      "characterName": "Narg",
+      "sex": "male",
+      "recipe": "classic-analog-fo2-narg-v1",
+      "sourceActorFormId": "0013fe7b",
+      "sourceActorName": "Prospector",
+      "outfitFormId": "001264fe",
+      "outfitName": "Leather Armor, Reinforced",
+      "bodyProfile": {
+        "id": "fo2-narg-power-fighter-v1",
+        "height": 1.04,
+        "chest": 1.18,
+        "shoulders": 1.2,
+        "waist": 1.02,
+        "arms": 1.15,
+        "thighs": 1.08,
+        "calves": 1.08
+      },
+      "appearance": {
+        "faceShapeId": "oval",
+        "hairStyleId": "cropped",
+        "skinToneId": "deep",
+        "hairColorId": "black",
+        "eyeColorId": "hazel",
+        "browStyleId": "straight",
+        "noseStyleId": "standard",
+        "mouthStyleId": "neutral"
+      },
+      "selectionRationale": "ordinary background prospector recast with a deep complexion, power build, and reinforced leather rather than a faction uniform"
+    },
+    {
+      "campaign": "fallout2",
+      "characterId": "stealth",
+      "characterName": "Mingan",
+      "sex": "male",
+      "recipe": "classic-analog-fo2-mingan-v1",
+      "sourceActorFormId": "0011839a",
+      "sourceActorName": "Van Graff Thug",
+      "outfitFormId": "0010d8dc",
+      "outfitName": "Black Combat Armor",
+      "bodyProfile": {
+        "id": "fo2-mingan-lean-stealth-v1",
+        "height": 1.0,
+        "chest": 0.96,
+        "shoulders": 0.99,
+        "waist": 0.88,
+        "arms": 0.98,
+        "thighs": 1.06,
+        "calves": 0.96
+      },
+      "appearance": {
+        "faceShapeId": "oval",
+        "hairStyleId": "cropped",
+        "skinToneId": "medium",
+        "hairColorId": "black",
+        "eyeColorId": "hazel",
+        "browStyleId": "straight",
+        "noseStyleId": "standard",
+        "mouthStyleId": "neutral"
+      },
+      "selectionRationale": "ordinary background guard with a close-cut severe face, lean silhouette, and dark low-profile combat armor"
+    },
+    {
+      "campaign": "fallout2",
+      "characterId": "diplomat",
+      "characterName": "Chitsa",
+      "sex": "female",
+      "recipe": "classic-analog-fo2-chitsa-v1",
+      "sourceActorFormId": "000fe89c",
+      "sourceActorName": "Refugee",
+      "outfitFormId": "0001cbdb",
+      "outfitName": "Wasteland Settler Outfit",
+      "bodyProfile": {
+        "id": "fo2-chitsa-tall-diplomat-v1",
+        "height": 1.03,
+        "chest": 0.98,
+        "shoulders": 0.94,
+        "waist": 0.9,
+        "arms": 0.98,
+        "thighs": 1.05,
+        "calves": 0.95
+      },
+      "appearance": {
+        "faceShapeId": "oval",
+        "hairStyleId": "long",
+        "skinToneId": "deep",
+        "hairColorId": "black",
+        "eyeColorId": "green",
+        "browStyleId": "straight",
+        "noseStyleId": "standard",
+        "mouthStyleId": "neutral"
+      },
+      "selectionRationale": "ordinary background refugee with a distinct female face, deep joined complexion, tall silhouette, and civilian wasteland clothing"
+    }
+  ],
+  "boundaries": [
+    "Fallout 1 and Fallout 2 source portraits remain authoritative and unmodified",
+    "owned Fallout New Vegas actors and outfits are presentation donors only",
+    "retail classic character-model parity is not claimed",
+    "no named main-quest or companion actor is used",
+    "the six analogs use six distinct wardrobe identities rather than one faction or tribe"
+  ]
+}

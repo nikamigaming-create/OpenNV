@@ -22,15 +22,18 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
     private float _targetPitch;
     private bool _orbitDragging;
     private bool _panDragging;
+    private bool _includeSourcePlayer = true;
     private Fo1CampaignMapViewCoverage _coverage = null!;
 
     internal Fo1CampaignMapViewCoverage Configure(
         Fo1CampaignPresentationCatalog catalog,
         string? requestedMap,
-        int? requestedElevation)
+        int? requestedElevation,
+        bool includeSourcePlayer = true)
     {
         _catalog = catalog;
         _cameraProfile = catalog.RuntimeProfile.Camera;
+        _includeSourcePlayer = includeSourcePlayer;
         Name = "Fo1CampaignPresentationViewer";
         _mapIndex = requestedMap is null
             ? Math.Max(0, catalog.Maps.ToList().FindIndex(
@@ -65,6 +68,8 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
     }
 
     internal void SetStatusVisible(bool visible) => _statusLayer.Visible = visible;
+
+    internal void ActivateCamera() => _camera.Current = true;
 
     internal void SetCaptureSize(float sizeMeters)
     {
@@ -226,7 +231,8 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
         var mobSerials = elevation.Mobs.Select(row => row.Serial).ToHashSet();
         foreach (var placement in elevation.Placements)
             BuildSprite(_spriteRoot, placement, mobSerials.Contains(placement.Serial));
-        BuildPlayer(_spriteRoot, map.Entry, elevation.Elevation == map.Entry.Elevation);
+        if (_includeSourcePlayer)
+            BuildPlayer(_spriteRoot, map.Entry, elevation.Elevation == map.Entry.Elevation);
         _coverage = new Fo1CampaignMapViewCoverage(
             map.Id,
             map.SourceFile,

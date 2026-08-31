@@ -1,0 +1,246 @@
+{
+  "schema": "opennv.fo3-retail-cg00-stage10-camera-contract/v1",
+  "classification": "synthetic-parser-test-only-not-retail-evidence",
+  "captured_utc": "2026-08-29T12:00:00.0000000Z",
+  "target": {
+    "path": "synthetic://Fallout3.exe",
+    "version": "1.7.0.4",
+    "sha256": "c3f97c2255fa041a851c17cf372d69aaadd8694e2dc4230ba556001bbfbd2f3e"
+  },
+  "observer": {
+    "path": "synthetic://ghidrust.exe",
+    "sha256": "10070829e620ae2e1e26d338a38bc4dcb21d8c855f1fa3d846e03f71b812cc41",
+    "required_tool_surface": 8,
+    "required_mode": "observe"
+  },
+  "stage_identity": {
+    "quest": "CG00",
+    "stage": 10,
+    "proof": "Synthetic parser fixture with exact role identities; never retail evidence.",
+    "owned_package_idle_joins": {
+      "player": {
+        "package_form_id": "00038ea3",
+        "idle_form_id": "00069ef9",
+        "sequence_name": "SpecialIdle_CG00PlayerSection01",
+        "activation_stage": null
+      },
+      "father": {
+        "package_form_id": "0006b245",
+        "idle_form_id": "00068ab0",
+        "sequence_name": "SpecialIdle_CG00DadSection01",
+        "activation_stage": 10
+      },
+      "doctor": {
+        "package_form_id": "0006a813",
+        "idle_form_id": "00068ab1",
+        "sequence_name": "SpecialIdle_CG00DrLiSection01",
+        "activation_stage": 10
+      },
+      "mother": {
+        "package_form_id": "0006b244",
+        "idle_form_id": "00069ef4",
+        "sequence_name": "SpecialIdle_CG00MomSection01",
+        "activation_stage": 10
+      }
+    }
+  },
+  "active_camera": {
+    "bs_scene_graph_address": 4096,
+    "camera_address": 8192,
+    "vtable": 12288,
+    "world_transform": {
+      "rotation_row_major": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+      "translation_game_units": [0, 0, 0],
+      "scale": 1
+    },
+    "frustum": {
+      "left": -5,
+      "right": 5,
+      "top": 3,
+      "bottom": -3,
+      "near_game_units": 5,
+      "far_game_units": 1000,
+      "orthographic": false,
+      "horizontal_fov_degrees": 90,
+      "vertical_fov_degrees": 61.927513
+    },
+    "viewport_normalized": [0, 1, 1, 0],
+    "derived_world_to_clip_row_major": [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+  },
+  "camera1st": {
+    "address": 16384,
+    "vtable": 20480,
+    "name_address": 24576,
+    "name": "Camera1st",
+    "parent": 28672,
+    "controller": 32768,
+    "flags": 0,
+    "app_culled": false,
+    "visible": true,
+    "local_transform": {
+      "rotation_row_major": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+      "translation_game_units": [0, 0, 0],
+      "scale": 1
+    },
+    "world_transform": {
+      "rotation_row_major": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+      "translation_game_units": [0, 0, 0],
+      "scale": 1
+    }
+  },
+  "participants": {
+    "player": {
+      "reference_form_id": "00000014",
+      "live_reference_address": 65536,
+      "rendered_node_address": 69632,
+      "visible": true,
+      "app_culled": false,
+      "rendered_world_transform": {
+        "rotation_row_major": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+        "translation_game_units": [20, 0, 0],
+        "scale": 1
+      },
+      "section01_sequence": {
+        "address": 73728,
+        "name": "SpecialIdle_CG00PlayerSection01",
+        "name_address": 77824,
+        "cycle_type": 2,
+        "frequency": 1,
+        "begin_time_seconds": 0,
+        "end_time_seconds": 10,
+        "last_time_seconds": 1,
+        "last_scaled_time_seconds": 1,
+        "state": 3,
+        "accumulation_root": 81920,
+        "actor_node_ancestry_join": null
+      },
+      "camera_space": {
+        "rendered_root_game_units": [20, 0, 0],
+        "camera_local_game_units": [20, 0, 0],
+        "forward_axis": "local-positive-X",
+        "rendered_root_depth_game_units": 20,
+        "rendered_root_near_plane_separation_game_units": 15,
+        "limitation": "Synthetic root-only join; posed-mesh coverage is tested independently."
+      }
+    },
+    "father": {
+      "reference_form_id": "000290a7",
+      "live_reference_address": 86016,
+      "rendered_node_address": 90112,
+      "visible": true,
+      "app_culled": false,
+      "rendered_world_transform": {
+        "rotation_row_major": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+        "translation_game_units": [25, 0, 0],
+        "scale": 1
+      },
+      "section01_sequence": {
+        "address": 94208,
+        "name": "SpecialIdle_CG00DadSection01",
+        "name_address": 98304,
+        "cycle_type": 2,
+        "frequency": 1,
+        "begin_time_seconds": 0,
+        "end_time_seconds": 10,
+        "last_time_seconds": 1,
+        "last_scaled_time_seconds": 1,
+        "state": 3,
+        "accumulation_root": 102400,
+        "actor_node_ancestry_join": null
+      },
+      "camera_space": {
+        "rendered_root_game_units": [25, 0, 0],
+        "camera_local_game_units": [25, 0, 0],
+        "forward_axis": "local-positive-X",
+        "rendered_root_depth_game_units": 25,
+        "rendered_root_near_plane_separation_game_units": 20,
+        "limitation": "Synthetic root-only join; posed-mesh coverage is tested independently."
+      }
+    },
+    "doctor": {
+      "reference_form_id": "000290a5",
+      "live_reference_address": 106496,
+      "rendered_node_address": 110592,
+      "visible": true,
+      "app_culled": false,
+      "rendered_world_transform": {
+        "rotation_row_major": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+        "translation_game_units": [30, 0, 0],
+        "scale": 1
+      },
+      "section01_sequence": {
+        "address": 114688,
+        "name": "SpecialIdle_CG00DrLiSection01",
+        "name_address": 118784,
+        "cycle_type": 2,
+        "frequency": 1,
+        "begin_time_seconds": 0,
+        "end_time_seconds": 10,
+        "last_time_seconds": 1,
+        "last_scaled_time_seconds": 1,
+        "state": 3,
+        "accumulation_root": 122880,
+        "actor_node_ancestry_join": null
+      },
+      "camera_space": {
+        "rendered_root_game_units": [30, 0, 0],
+        "camera_local_game_units": [30, 0, 0],
+        "forward_axis": "local-positive-X",
+        "rendered_root_depth_game_units": 30,
+        "rendered_root_near_plane_separation_game_units": 25,
+        "limitation": "Synthetic root-only join; posed-mesh coverage is tested independently."
+      }
+    },
+    "mother": {
+      "reference_form_id": "0005ede0",
+      "live_reference_address": 126976,
+      "rendered_node_address": 131072,
+      "visible": true,
+      "app_culled": false,
+      "rendered_world_transform": {
+        "rotation_row_major": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+        "translation_game_units": [35, 0, 0],
+        "scale": 1
+      },
+      "section01_sequence": {
+        "address": 135168,
+        "name": "SpecialIdle_CG00MomSection01",
+        "name_address": 139264,
+        "cycle_type": 2,
+        "frequency": 1,
+        "begin_time_seconds": 0,
+        "end_time_seconds": 10,
+        "last_time_seconds": 1,
+        "last_scaled_time_seconds": 1,
+        "state": 3,
+        "accumulation_root": 143360,
+        "actor_node_ancestry_join": null
+      },
+      "camera_space": {
+        "rendered_root_game_units": [35, 0, 0],
+        "camera_local_game_units": [35, 0, 0],
+        "forward_axis": "local-positive-X",
+        "rendered_root_depth_game_units": 35,
+        "rendered_root_near_plane_separation_game_units": 30,
+        "limitation": "Synthetic root-only join; posed-mesh coverage is tested independently."
+      }
+    }
+  },
+  "coordinate_contract": {
+    "source_units": "Gamebryo game units",
+    "matrix_storage": "row-major-3x3",
+    "world_to_local": "transpose(worldRotation)*(worldPoint-worldTranslation)/worldScale",
+    "camera_forward_axis": "local-positive-X",
+    "evidence": "Synthetic identity matrix validates the strict parser and root camera-space join."
+  },
+  "unimplemented_boundary": "Synthetic fixture is never production authority or parity evidence.",
+  "raw_observation": {
+    "path": "synthetic://fo3-cg00-raw-observation.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

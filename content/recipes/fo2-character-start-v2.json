@@ -43,6 +43,7 @@
       "frameRateDenominator": 8341,
       "sourceFrameCount": 1145,
       "sourceFrameNumbersOneBased": true,
+      "playbackStartFrame": 1,
       "tailStartFrame": 1118
     },
     "audio": {
@@ -63,7 +64,7 @@
       "elevation": 0,
       "arrivalTile": 28707,
       "arrivalRotation": 0,
-      "presentation": "owned-elder-tail-through-source-black-then-prepared-live-arroyo",
+      "presentation": "owned-elder-decoded-frame-zero-through-source-black-then-prepared-live-arroyo",
       "parityStatus": "source-timed-adaptation-not-pixel-matched"
     }
   },
@@ -145,7 +146,39 @@
     "walkAnimationCode": "AB",
     "walkLogicalPath": "art\\critters\\hfprimab.frm",
     "walkFrames": [0, 1, 2, 3, 4, 5, 6, 7],
-    "walkFps": 10
+    "walkFps": 10,
+    "equippedWeapon": {
+      "itemFid": "0000002a",
+      "itemPid": "00000007",
+      "weaponAnimationCode": 4,
+      "weaponArtSuffix": "g",
+      "idleAnimationCode": "GA",
+      "idleLogicalPath": "art\\critters\\hfprimga.frm",
+      "idleFrame": 0,
+      "walkAnimationCode": "GB",
+      "walkLogicalPath": "art\\critters\\hfprimgb.frm",
+      "walkFrames": [0, 1, 2, 3, 4, 5, 6, 7],
+      "walkFps": 10,
+      "geometryDisposition": "owned-critter-frm-composites-player-and-spear-no-separable-3d-weapon-transform"
+    },
+    "relief3d": {
+      "schema": "opennv-fo2-frm-alpha-relief/v3",
+      "mode": "exact-frm-alpha-island-molded-relief-v2",
+      "normalBlurRadiusPixels": 1.2,
+      "normalLumaWeight": 0.45,
+      "normalSilhouetteWeight": 0.55,
+      "normalStrength": 2.1,
+      "depthField": {
+        "mode": "owned-alpha-distance-and-luma-normalized-v1",
+        "maximumInteriorDistancePixels": 6,
+        "silhouetteWeight": 0.82,
+        "lumaWeight": 0.18,
+        "backDepthFraction": 0.12
+      },
+      "depthMeters": 0.12,
+      "sideRoughness": 0.86,
+      "policy": "exact opaque FRM cells and alpha islands define all front/back/perimeter faces; alpha-distance/luma define normalized relief; only the tightly capped body thickness is reconstructed"
+    }
   },
   "presentation": {
     "viewport": [640, 480],

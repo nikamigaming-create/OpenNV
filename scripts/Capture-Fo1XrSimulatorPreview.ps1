@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory = $true)][string]$VideoPath,
     [Parameter(Mandatory = $true)][string]$StereoImagePath,
     [Parameter(Mandatory = $true)][string]$SingleEyeImagePath,
+    [Parameter(Mandatory = $true)][string]$ClassicHumanoidInstallManifest,
     [int]$FrameCount = 0,
     [int]$CaptureFps = 0
 )
@@ -76,6 +77,8 @@ if ($CaptureFps -lt $MinimumCaptureFps -or $CaptureFps -gt $MaximumCaptureFps) {
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtime = Join-Path $repository "runtime"
+$classicHumanoidPreflight = Join-Path $PSScriptRoot 'Assert-ClassicHumanoidDonorPreviewSet.ps1'
+$classicHumanoidResolver = Join-Path $PSScriptRoot 'Resolve-ClassicHumanoidDonorPreviewSet.ps1'
 $paths = @(
     $Godot,
     $Scene,
@@ -87,6 +90,10 @@ foreach ($path in $paths) {
         throw "Missing Fallout OpenXR preview input: $path"
     }
 }
+$classicHumanoidDonorPreviewSet = & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid install-manifest resolution failed.' }
+& $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
+if ($LASTEXITCODE -ne 0) { throw 'Classic humanoid donor preflight failed.' }
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     throw "ffmpeg is required to assemble the phone-ready proof."
 }
@@ -315,6 +322,7 @@ try {
         "--xr-mode", "on",
         "--",
         "--fo1-hex-scene", ([IO.Path]::GetFullPath($Scene)),
+        "--classic-humanoid-donor-preview-set", ([IO.Path]::GetFullPath($classicHumanoidDonorPreviewSet)),
         "--vr",
         "--fo1-xr-simulator-preview",
         "--report", $engineReportPath

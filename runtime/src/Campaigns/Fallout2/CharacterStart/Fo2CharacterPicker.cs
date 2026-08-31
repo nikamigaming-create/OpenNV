@@ -1,4 +1,6 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.Fallout2.Temple;
+using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
@@ -11,23 +13,32 @@ internal sealed partial class Fo2CharacterPicker : Control
     private const float PortraitBoundaryWidth = 255.0f;
     private const float PortraitBoundaryHeight = 25.0f;
     private const int PortraitBoundaryFontSize = 7;
-    private const float PortraitToggleX = 400.0f;
+    private const float PortraitPreviewY = 20.0f;
+    private const float PortraitPreviewWidth = 255.0f;
+    private const float PortraitPreviewHeight = 225.0f;
+    private const float PortraitToggleX = 84.0f;
     private const float PortraitToggleY = 279.0f;
-    private const float PortraitToggleWidth = 112.0f;
+    private const float PortraitToggleWidth = 144.0f;
     private const float PortraitToggleHeight = 22.0f;
     private readonly Fo2CharacterStartCatalog _catalog;
+    private readonly OpeningManifest? _characterReflectron;
     private readonly Control _canvas;
     private readonly TextureRect _panel;
-    private readonly Fo2OwnedPortraitRelief _portraitRelief;
+    private readonly Fo2PremadeHumanoidPreview _humanoidPreview;
     private readonly Label _portraitBoundary;
     private readonly Button _portraitToggle;
     private readonly Label _details;
     private readonly Label _selection;
+    private readonly Button _createCharacterButton;
     private int _index;
 
-    internal Fo2CharacterPicker(Fo2CharacterStartCatalog catalog)
+    internal Fo2CharacterPicker(
+        Fo2CharacterStartCatalog catalog,
+        Fo2HumanoidDonorContract humanoidDonor,
+        OpeningManifest? characterReflectron)
     {
         _catalog = catalog;
+        _characterReflectron = characterReflectron;
         Name = "FALLOUT_2_OWNED_PREMADE_CHARACTER_START";
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
@@ -67,12 +78,18 @@ internal sealed partial class Fo2CharacterPicker : Control
             MouseFilter = MouseFilterEnum.Ignore,
         };
         _canvas.AddChild(_panel);
-        _portraitRelief = new Fo2OwnedPortraitRelief(catalog.Characters[0])
+        _humanoidPreview = new Fo2PremadeHumanoidPreview(
+            catalog.Characters[0],
+            catalog,
+            humanoidDonor)
         {
-            Position = _panel.Position,
-            Size = _panel.Size,
+            Position = new Vector2(PortraitBoundaryX, PortraitPreviewY),
+            Size = new Vector2(PortraitPreviewWidth, PortraitPreviewHeight),
         };
-        _canvas.AddChild(_portraitRelief);
+        _canvas.AddChild(_humanoidPreview);
+        _humanoidPreview.SetPreviewState(
+            portraitFraming: true,
+            projectionEnabled: true);
         _details = new Label
         {
             Name = "OwnedPremadeGcdState",
@@ -105,10 +122,10 @@ internal sealed partial class Fo2CharacterPicker : Control
         _canvas.AddChild(_selection);
         _portraitBoundary = new Label
         {
-            Name = "OwnedPortraitReliefBoundary",
+            Name = "HumanoidPreviewBoundary",
             Position = new Vector2(PortraitBoundaryX, PortraitBoundaryY),
             Size = new Vector2(PortraitBoundaryWidth, PortraitBoundaryHeight),
-            Text = "OWNED PANEL RELIEF • HEAD GEOMETRY NOT REBUILT",
+            Text = "HASH-BOUND OWNED FULL-BODY DONOR",
             Visible = false,
             MouseFilter = MouseFilterEnum.Ignore,
         };
@@ -118,22 +135,27 @@ internal sealed partial class Fo2CharacterPicker : Control
         _portraitBoundary.AddThemeFontSizeOverride("font_size", PortraitBoundaryFontSize);
         _canvas.AddChild(_portraitBoundary);
         _portraitToggle = AddButton(
-            "LIVE 3D",
+            "VIEW: PORTRAIT",
             PortraitToggleX,
             PortraitToggleY,
             PortraitToggleWidth,
             PortraitToggleHeight,
             TogglePortraitMode);
+        _portraitToggle.ToggleMode = true;
+        _portraitToggle.ButtonPressed = false;
         _portraitToggle.TooltipText =
-            "Toggle the exact owned premade panel on a live curved 3D surface";
+            "Toggle this locked character's exact source panel and front-facing green 3D portrait";
         AddButton("◀", 270.0f, 303.0f, 35.0f, 35.0f, () => Select(_index - 1));
         AddButton("▶", 335.0f, 303.0f, 35.0f, 35.0f, () => Select(_index + 1));
         AddButton("", 65.0f, 301.0f, 181.0f, 79.0f, ChooseCurrent)
             .TooltipText = "Take this owned Fallout 2 premade";
-        AddButton("", 443.0f, 301.0f, 153.0f, 79.0f, () => OpenCustom(true))
-            .TooltipText = "Modify this owned Fallout 2 premade";
-        AddButton("", 65.0f, 397.0f, 181.0f, 63.0f, () => OpenCustom(false))
-            .TooltipText = "Create a custom Chosen One from the owned rules";
+        AddButton("", 443.0f, 301.0f, 153.0f, 79.0f, TogglePortraitMode)
+            .TooltipText =
+                "View this immutable Fallout 2 premade in source 2D or owned-donor 3D";
+        _createCharacterButton = AddButton(
+            "", 65.0f, 397.0f, 181.0f, 63.0f, () => OpenCustom());
+        _createCharacterButton.TooltipText =
+            "Create a custom Chosen One from the owned rules";
         AddButton("", 443.0f, 397.0f, 153.0f, 63.0f, () => BackRequested?.Invoke())
             .TooltipText = "Back";
         Select(0);
@@ -144,6 +166,34 @@ internal sealed partial class Fo2CharacterPicker : Control
     internal int SelectedIndex => _index;
     internal Fo2PremadeCharacter Selected => _catalog.Characters[_index];
     internal Fo2CustomCharacterEditor? CustomEditor { get; private set; }
+
+    internal void FocusCreateCharacterControl()
+    {
+        _createCharacterButton.FocusMode = FocusModeEnum.All;
+        _createCharacterButton.AddThemeStyleboxOverride(
+            "focus",
+            new StyleBoxFlat
+            {
+                BgColor = new Color(0.47f, 0.91f, 0.51f, 0.10f),
+                BorderColor = new Color("78e781"),
+                BorderWidthLeft = 2,
+                BorderWidthTop = 2,
+                BorderWidthRight = 2,
+                BorderWidthBottom = 2,
+                CornerRadiusTopLeft = 3,
+                CornerRadiusTopRight = 3,
+                CornerRadiusBottomLeft = 3,
+                CornerRadiusBottomRight = 3,
+            });
+        _createCharacterButton.GrabFocus();
+    }
+
+    internal Fo2CustomCharacterEditor PressCreateCharacterControl()
+    {
+        _createCharacterButton.EmitSignal(BaseButton.SignalName.Pressed);
+        return CustomEditor ?? throw new InvalidOperationException(
+            "Fallout 2 CREATE CHARACTER control did not open the custom editor.");
+    }
 
     public override void _Ready() => FitCanvas();
 
@@ -192,7 +242,7 @@ internal sealed partial class Fo2CharacterPicker : Control
         var character = Selected;
         var profile = character.Profile;
         _panel.Texture = character.Panel.Load();
-        _portraitRelief.SetCharacter(character);
+        _humanoidPreview.SetCharacter(character);
         _selection.Text =
             $"{profile.Name.ToUpperInvariant()}  {_index + 1}/{_catalog.Characters.Count}";
         var biography = string.Join(
@@ -217,17 +267,26 @@ internal sealed partial class Fo2CharacterPicker : Control
         SetMeta("selected_panel_source_sha256", character.Panel.SourceSha256);
     }
 
-    internal bool Live3DVisible => _portraitRelief.Visible;
-    internal Fo2OwnedPortraitRelief PortraitRelief => _portraitRelief;
+    internal bool Live3DVisible => _humanoidPreview.Visible;
+    internal Fo2PremadeHumanoidPreview HumanoidPreview => _humanoidPreview;
 
     internal void TogglePortraitMode()
     {
-        _portraitRelief.Visible = !_portraitRelief.Visible;
-        _panel.Visible = !_portraitRelief.Visible;
-        _portraitBoundary.Visible = _portraitRelief.Visible;
-        _portraitToggle.Text = _portraitRelief.Visible ? "PORTRAIT" : "LIVE 3D";
-        SetMeta("portrait_view_mode", _portraitRelief.Visible
-            ? Fo2CharacterAppearanceContract.OwnedReliefPreview
+        SetPremadeView(!_humanoidPreview.Visible);
+    }
+
+    private void SetPremadeView(bool showThreeDimensional)
+    {
+        _humanoidPreview.Visible = showThreeDimensional;
+        _panel.Visible = true;
+        _portraitBoundary.Visible = showThreeDimensional;
+        _portraitBoundary.Text = _humanoidPreview.PresentationLabel;
+        _portraitToggle.ButtonPressed = showThreeDimensional;
+        _portraitToggle.Text = showThreeDimensional
+            ? "VIEW: 3D"
+            : "VIEW: PORTRAIT";
+        SetMeta("portrait_view_mode", showThreeDimensional
+            ? _humanoidPreview.PresentationMode
             : "owned-source-panel");
     }
 
@@ -237,14 +296,19 @@ internal sealed partial class Fo2CharacterPicker : Control
         CharacterChosen?.Invoke(Fo2CharacterSelection.FromPremade(Selected));
     }
 
-    internal Fo2CustomCharacterEditor OpenCustom(bool modify)
+    internal Fo2CustomCharacterEditor OpenCustom()
     {
         if (CustomEditor is not null)
             throw new InvalidOperationException(
                 "Fallout 2 custom character editor is already open.");
         SetProcessInput(false);
         _canvas.Visible = false;
-        var editor = new Fo2CustomCharacterEditor(_catalog, Selected, modify);
+        var editor = new Fo2CustomCharacterEditor(
+            _catalog,
+            Selected,
+            _humanoidPreview.DonorContract,
+            _characterReflectron ?? throw new InvalidOperationException(
+                "Fallout 2 custom characters require the locally exported Reflectron source layer."));
         editor.Confirmed += selection =>
         {
             selection.Validate(_catalog);

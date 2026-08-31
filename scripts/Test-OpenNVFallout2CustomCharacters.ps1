@@ -6,22 +6,41 @@ param(
     [string]$ArroyoCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-caves-v1\fo2-arroyo-caves-presentation-cache.json",
     [string]$PlayerCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\arroyo-player-v1\fo2-arroyo-player-presentation-cache.json",
     [string]$CharacterStartCache = "$env:LOCALAPPDATA\OpenNV\cache\fallout2\character-start-v1\fo2-character-start-cache.json",
-    [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\custom-character-v1"
+    [Parameter(Mandatory = $true)]
+    [string]$ReflectronOpeningManifest,
+    [string]$Output = "$env:LOCALAPPDATA\OpenNV\proofs\fallout2\custom-character-v1",
+    [string]$ClassicHumanoidInstallManifest,
+    [string]$PresentationDonorPreviewSet
 )
 
 $ErrorActionPreference = 'Stop'
 $runtime = Join-Path (Split-Path -Parent $PSScriptRoot) 'runtime'
+$classicHumanoidPreflight = Join-Path $PSScriptRoot 'Assert-ClassicHumanoidDonorPreviewSet.ps1'
+$classicHumanoidResolver = Join-Path $PSScriptRoot 'Resolve-ClassicHumanoidDonorPreviewSet.ps1'
 foreach ($inputPath in @(
         $Godot,
         $TempleCache,
         $TempleTransitions,
         $ArroyoCache,
         $PlayerCache,
-        $CharacterStartCache)) {
+        $CharacterStartCache,
+        $ReflectronOpeningManifest)) {
     if (-not (Test-Path -LiteralPath $inputPath -PathType Leaf)) {
         throw "Required Fallout 2 custom-character input is missing: $inputPath"
     }
 }
+$classicHumanoidDonorPreviewSet = if (
+    -not [string]::IsNullOrWhiteSpace($PresentationDonorPreviewSet)) {
+    [IO.Path]::GetFullPath($PresentationDonorPreviewSet)
+} else {
+    if ([string]::IsNullOrWhiteSpace($ClassicHumanoidInstallManifest)) {
+        throw 'Fallout 2 custom-character proof requires an owned donor preview set or install manifest.'
+    }
+    & $classicHumanoidResolver -InstallManifest $ClassicHumanoidInstallManifest
+    if (-not $?) { throw 'Classic humanoid install-manifest resolution failed.' }
+}
+& $classicHumanoidPreflight -PreviewSet $classicHumanoidDonorPreviewSet
+if (-not $?) { throw 'Classic humanoid donor preflight failed.' }
 if (Test-Path -LiteralPath $Output) {
     throw "Refusing to overwrite Fallout 2 custom-character proof: $Output"
 }
@@ -35,7 +54,9 @@ $commonArguments = @(
     '--fo2-temple-transitions', $TempleTransitions,
     '--fo2-arroyo-cache', $ArroyoCache,
     '--fo2-player-cache', $PlayerCache,
-    '--fo2-character-start-cache', $CharacterStartCache
+    '--fo2-character-start-cache', $CharacterStartCache,
+    '--character-reflectron-opening-manifest', $ReflectronOpeningManifest,
+    '--classic-humanoid-donor-preview-set', $classicHumanoidDonorPreviewSet
 )
 
 foreach ($sex in @('Male', 'Female')) {
@@ -71,16 +92,13 @@ foreach ($sex in @('Male', 'Female')) {
     $write = Get-Content -LiteralPath $writePath -Raw | ConvertFrom-Json
     $restore = Get-Content -LiteralPath $restorePath -Raw | ConvertFrom-Json
     $saved = Get-Content -LiteralPath $save -Raw | ConvertFrom-Json
-    $expectedMode = if ($sex -eq 'Male') {
-        'modified-owned-premade'
-    } else {
-        'custom-created-from-owned-rules'
-    }
+    $expectedMode = 'custom-created-from-owned-rules'
     if ($write.schema -ne 'opennv-fo2-custom-character-write-proof/v1' -or
         $write.status -ne "pass-$expectedMode-map3-atomic-save" -or
         $restore.schema -ne 'opennv-fo2-custom-character-restore-proof/v1' -or
         $restore.status -ne "pass-$expectedMode-map3-cold-restore" -or
-        $saved.schema -ne 'opennv-fo2-character-arroyo-save/v9' -or
+        $saved.schema -ne 'opennv-fo2-character-arroyo-save/v14' -or
+        $null -eq $saved.character.appearance.BodyProportions -or
         $saved.character.Mode -ne $expectedMode -or
         $saved.character.Sex -ne $sex -or
         ($saved.character.special | Measure-Object -Sum).Sum -ne 40 -or
@@ -88,21 +106,91 @@ foreach ($sex in @('Male', 'Female')) {
         $saved.world.elevation -ne 0 -or
         $saved.world.arrivalTile -ne 28707 -or
         -not $write.cancelPathPreservedState -or
+        -not $write.viewer.reflectronFaceControlPassed -or
+        -not $write.viewer.reflectronBodyControlPassed -or
+        -not $write.viewer.sourceSectionControlsPassed -or
+        -not $write.viewer.sourceSectionControls.sex -or
+        -not $write.viewer.sourceSectionControls.race -or
+        -not $write.viewer.sourceSectionControls.face -or
+        -not $write.viewer.sourceSectionControls.hair -or
+        -not $write.viewer.publicRulesControlPassed -or
         -not $restore.restore.coldProcess -or
         -not $restore.restore.exactInitialPosition -or
         -not $restore.restore.exactInitialTile -or
         -not $restore.restore.exactInitialRotation -or
         -not $restore.restore.grounded -or
-        -not $restore.restore.visibleSexCorrectOwnedFrm -or
+        -not $restore.restore.visibleOwned3DHumanoid -or
+        -not $restore.restore.sourceFrmReliefHidden -or
         $write.save.sha256 -ne $restore.save.sha256) {
         throw "Fallout 2 $sex custom-character proof failed its bounded contract."
     }
-    if (($sex -eq 'Male' -and $write.tagsAndTraits -ne 'source-unchanged') -or
-        ($sex -eq 'Female' -and
-            ($write.tagsAndTraits -ne 'unselected' -or
-             $saved.character.taggedSkills.Count -ne 0 -or
-             $saved.character.traits.Count -ne 0))) {
+    $expectedTags = if ($sex -eq 'Male') {
+        @('Small Guns', 'Melee Weapons', 'Speech')
+    } else {
+        @('Sneak', 'First Aid', 'Speech')
+    }
+    $expectedTraits = if ($sex -eq 'Male') {
+        @('Fast Shot')
+    } else {
+        @('Gifted', 'Good Natured')
+    }
+    if ($write.tagsAndTraits -ne 'player-selected-source-rules' -or
+        (@($saved.character.taggedSkills) -join ',') -ne ($expectedTags -join ',') -or
+        (@($saved.character.traits) -join ',') -ne ($expectedTraits -join ',')) {
         throw "Fallout 2 $sex custom-character tag/trait policy drifted."
+    }
+    $expectedBody = if ($sex -eq 'Male') {
+        @{
+            Height = 1.08; Chest = 1.20; Shoulders = 1.10; Waist = 0.90
+            Arms = 1.03; Thighs = 0.94; Calves = 0.92
+        }
+    } else {
+        @{
+            Height = 0.94; Chest = 1.00; Shoulders = 0.92; Waist = 1.00
+            Arms = 1.00; Thighs = 1.08; Calves = 1.00
+        }
+    }
+    foreach ($role in $expectedBody.Keys) {
+        $expected = [double]$expectedBody[$role]
+        $savedValue = [double]$saved.character.appearance.BodyProportions.$role
+        $writeValue = [double]$write.selected.appearance.BodyProportions.$role
+        $restoreValue = [double]$restore.selected.appearance.BodyProportions.$role
+        if ([Math]::Abs($savedValue - $expected) -gt 0.0001 -or
+            [Math]::Abs($writeValue - $expected) -gt 0.0001 -or
+            [Math]::Abs($restoreValue - $expected) -gt 0.0001) {
+            throw "Fallout 2 $sex custom-character $role did not survive its gameplay save/restore join."
+        }
+    }
+    $expectedAppearance = if ($sex -eq 'Male') {
+        @{
+            FaceShapeId = 'angular'; HairStyleId = 'swept'; SkinToneId = 'light'
+            HairColorId = 'auburn'; EyeColorId = 'blue'; BrowStyleId = 'heavy'
+            NoseStyleId = 'broad'; MouthStyleId = 'wide'
+        }
+    } else {
+        @{
+            FaceShapeId = 'round'; HairStyleId = 'long'; SkinToneId = 'deep'
+            HairColorId = 'black'; EyeColorId = 'green'; BrowStyleId = 'arched'
+            NoseStyleId = 'narrow'; MouthStyleId = 'small'
+        }
+    }
+    $expectedFaceControls = if ($sex -eq 'Male') { 8 } else { 7 }
+    foreach ($field in $expectedAppearance.Keys) {
+        $expected = $expectedAppearance[$field]
+        foreach ($actual in @(
+                $saved.character.appearance.$field,
+                $write.selected.appearance.$field,
+                $restore.selected.appearance.$field,
+                $write.presentation.appearance.$field,
+                $restore.restore.appearance.$field)) {
+            if ($actual -ne $expected) {
+                throw "Fallout 2 $sex custom-character $field did not survive its creator/gameplay/save join."
+            }
+        }
+    }
+    if ($write.presentation.nativeFaceGenControls -ne $expectedFaceControls -or
+        $restore.restore.nativeFaceGenControls -ne $expectedFaceControls) {
+        throw "Fallout 2 $sex custom-character native FaceGen controls did not survive cold restore."
     }
     Write-Output (
         "OPENNV_FO2_CUSTOM_CHARACTER_PASS sex={0} mode={1} name={2} saveSha256={3}" -f

@@ -1,26 +1,61 @@
 # OpenNV architecture and code accountability
 
-Status: **launcher-routed bounded Fallout 1 V13ENT, Fallout 2 character-to-Temple
-Hex, and New Vegas opening/Goodsprings slices, plus a non-playable Fallout 3
+Status: **launcher-routed bounded Fallout 1 V13ENT, Fallout 2 character-to-ARVILLAG
+or Temple-combat Hex branches, and New Vegas opening/Goodsprings slices, plus a non-playable Fallout 3
 CG00 development frontend; no full campaign**.
 
-The compact launcher exposes four core game cards. Fallout 1 has a bounded
+The compact launcher exposes Fallout 1, Fallout 2, New Vegas, and Fallout 3 as
+four core game cards. Each card uses the same visible FPS/Hex/VR selector, with
+unfinished routes disabled; TTW-FO3 and TTW-FNV are editions under their
+corresponding game cards rather than additional cards. Fallout 1 has a bounded
 Godot Vault 13/V13ENT opening slice in Hex and FPS; its OpenXR adapter is
-simulator-only and launcher-disabled. Fallout 2 admits the owned Map 126 and Map 3
+simulator-only and launcher-disabled. One version-3 character record now owns
+the selected premade/custom identity, rules, appearance, and exact owned
+GCD/BIO/portrait provenance; gameplay and its presentation binding derive from
+that record through cold restore. Version-1/2 character saves migrate only
+through their explicit legacy presentation identity. Max Stone, Natalia, and
+Albert are immutable completed profiles whose exact source portraits remain
+available beside an inspectable 3D view. GCD/FRM data remains identity/gameplay
+authority. Max and Albert may use a verified owned FNV full-body donor as
+presentation only; Natalia/custom procedural geometry is explicitly
+first-party and non-parity. Unique bespoke 3D likenesses and a fresh
+producer/native acceptance still remain. Fallout 2 admits the owned Map 126 and Map 3
 MAP/PRO/FRM source graphs and renders Arroyo Caves in Godot's 3D hex space. Its
-bounded character-start surface selects Narg, Mingan, or Chitsa from owned
-GCD/BIO/panel data or uses the same source surface to Modify/Create name, sex,
-age, and exact SPECIAL allocation. Modify preserves source tags/traits; Create
-leaves them unselected. Take applies sex-correct HMWARR/HFPRIM presentation and
-hands the state to the grounded Map 3 tile 28707 player. Its atomic version-4
-save cold-restores character source/custom state, current transform/mode, and
+bounded character-start surface selects immutable Narg, Mingan, or Chitsa from
+owned GCD/BIO/panel data or uses the public Create surface to edit name, sex,
+age, exact SPECIAL allocation, exactly three tagged skills, up to two traits,
+face, and body. The physical Reflectron exposes FACE, BODY, and classic
+projection controls over the same in-memory character. Its owned top-row
+SEX/RACE/FACE/HAIR meshes are live section controls rather than indicator-only
+decoration: FO2 maps them to identity/sex, the supported human
+race/complexion, facial details, and hair details. The lower BODY control shows
+the authoritative live 3D character and proportion controls; lower FACE shows
+the custom actor-derived stylized portrait. Locked premades retain their exact
+owned source panels instead of regenerating them. Take applies
+sex-correct HMWARR/HFPRIM state and hands
+it to the grounded Map 3 tile 28707 player. Each exact premade panel remains
+available while its Live 3D toggle uses the same true 3D gameplay-actor path: a
+verified owned FNV full-body donor when admitted. Missing or incompatible donor
+input fails closed; there is no procedural, FRM-player, silhouette, or standee
+fallback. The donor is non-parity presentation over authoritative classic
+identity. The 22 admitted torch anchors use exact owned
+opaque FRM emitter pixels/centroid joined to source MAP light placement; the
+admitted emitter is a static frame, not a transported flame animation or smoke
+system. The Elder movie's natural end and Skip converge on the same terminal
+source frame/fade, black handoff, prepared live camera, reveal, and control
+release. Its live presentation is still human-review/unaccepted. Its atomic
+version-14 save embeds appearance/body state inside the one character object
+and cold-restores character source/custom state, current transform/mode, and
 the bounded Temple confrontation state.
 Ordinary grounded movement follows the exact owned exit path into ARTEMPLE Map
 126 tile 16486; the non-source opaque wall proxy is gone while its collision and
 all 45 owned wall FRMs remain. One exact MAP/PRO/MSG-bound Villager can be
 defeated with a visible player-AP melee adapter and yields its exact nested
-Spear to visible inventory state. Target AI/turns, INT execution, dialogue,
-retail combat parity, tag/trait editing, campaign-wide persistence, remaining
+Spear to visible inventory state. A separate exact tagged-Speech Cameron route
+keeps Klint alive and reaches live ARVILLAG input/save. The branches are
+alternatives and do not invent a dead-guardian village shortcut; their canonical
+asset-free evidence is the [Fallout 2 branch ledger](evidence/fo2-first-slice-branch-ledger.md).
+Target AI/turns, general INT execution, retail combat parity, campaign-wide persistence, remaining
 exits, FPS/OpenXR, and parity remain absent.
 New Vegas owns its menu, skippable intro, Doc Mitchell house/state, a
 hash-verified gameplay-UI contract rooted in the retail HUD/STATS/ITEMS/DATA
@@ -66,31 +101,41 @@ translucent panel. A fresh ordinary stage-10 capture at
 `D:\Builds\OpenNV-fnv-doc-opening-20260829-r3-owned-menu-nav\stage10-owned-menu-nav.png`
 has SHA-256
 `5096233bbcf0293191c83dd4fbdaf0ce5f5d3aed16ba380eb31f1c3d7e744c28`.
-Doc's startup transform no longer receives the raw chair-reference elevation.
-The separate native proof at
-`D:\Builds\OpenNV-fnv-furniture-occupancy-proof-20260829-r1` preserves the
-authored ACHR transform while Doc occupies FURN reference `001059b0`, releases
-that occupancy for the stage-40 bedside package, and reaches the stage-55
-checkpoint. Exact seated-loop, furniture-entry, and furniture-exit visuals are
-still unsupported. The source `ANIO 00083519` cigarette is now default-hidden
-and follows its exact `IDLE 00071ee3` start/exit identity; the native lifecycle
-proof is `D:\Builds\OpenNV-fnv-cigarette-proof-20260829-r2`. The admitted NIF is
-mesh-only, and no source-backed smoke particle, effect shader, animation event,
-or engine-special-case owner was found, so visible smoke is not implemented.
+The retained native checkpoint composes chair FURN reference `001059b0` from
+the hash-bound NIF marker and exact marker-14 GMST position/heading contract.
+The current compiler/runtime additionally binds the patient bed fail-closed to
+`REFR 00103e5b`, base `FURN 00106a6a` / `NVbedtwin01`, and its owned NIF hash;
+the earlier checkpoint predates that exact bed-identity correction, so a fresh
+native/retail differential remains required. The owned `ANIO 00083519`
+cigarette attaches to `Bip01 R Hand`. Its model contains cigarette geometry but
+no controller, particle, emitter, or effect child, and the admitted smoking KF
+contains sound/text timing but no effect-spawn contract. Visible puffs are
+therefore explicitly an OpenNV first-party, tip-anchored non-parity adaptation,
+not transported retail smoke. Stage 36 accepts visible name input and all
+43 admitted CTL/EGM controls on the older owned default-male FaceGen preview.
+The compiler/runtime contract now admits separate hash-bound, full-body male
+and female artifacts for the exact default race/hair/eyes identities and selects
+them by that full identity; any other combination still fails closed to owned
+source-texture tiles. These new artifacts have not received a cache regeneration
+or native acceptance run. The same earlier run transfers
+the exact owned chair-exit root at stage 40 and reaches the stage-55 autosave.
+It did not execute cold resume or produce accepted media. The report is
+`D:\Builds\OpenNV-fnv-headless-exact-creator-20260829-r1\checkpoint-marker-v3-scoped2-report.json`,
+SHA-256
+`894598ee8644cb2ac3869fd645c420882f9980c722d96277d46f1d09f35e645b`.
 Fallout 3 owns its menu, persistent CG00 selection, and bounded Vault 101 birth-
-room progression through stage 100. The ordinary route plays the exact stage-65
-Dad cue, applies stage-80/85 results and stage-90 INFO `0001f379`, presents the
-owned white fade/sound, then applies seven of the eight exact stage-100 commands
-through `SetPCYoung 1` and cold-restores that state without replaying the cue.
-The profile producer compiles the exact four-command CG01 stage-0 result, its
-synchronously nested thirteen-command stage-5 result, and the sex-specific
-two-line Dad-speech transition into stage 10 with source-bound references,
-transforms, script variables, controls, objectives, audio/LIP, and movie
-operands. The bounded stage-10 runtime/save adapter is implemented, and a fresh
-portable native apply and cold restore now pass. The state stops explicitly at
-`fo3-cg01-post-stage-10-toddler-world-interaction-not-implemented`; there is no
-freely playable Vault 101 route or general package/dialogue runtime.
-TTW runtime support is bounded and not launch-ready. Flattened installer outputs
+room/CG01 state. The early-birth runtime starts admitted participants from exact
+source `PACK` sections, selects their hash-bound KF sequences, and chains
+admitted idle transitions. It publishes the source player-camera package and
+composes the sampled `Camera1st` skeleton node through the exact animated parent
+chain using the normal Gamebryo-to-Godot conversion. `Camera1st` is not treated
+as a `NiCamera`, so no extra camera-axis flip is authored. These are bounded
+source-backed corrections, not retail scene acceptance. The toddler acceptance
+path still uses an internal auto-steered target rather than ordinary configured
+user input; physical trigger entry, actor/camera timing, and a matched
+retail/native differential remain fail-closed. Fallout 3 stays launcher-disabled
+and is not a freely playable Vault 101 or general package/dialogue runtime.
+TTW support is bounded and launcher-disabled. Flattened installer outputs
 can derive a strict
 all-active plugin order from unique increasing plugin modification times, and
 the registered base-plus-generated profile emits a neutral effective top-level
@@ -99,10 +144,14 @@ CG00→CG01-stage-5 record/command/movie closure and the launcher revalidates th
 contract with dedicated TTW cache and save identities. Its isolated executor
 applies and cold-restores 38 source commands across `CG00:0/60/100` and
 `CG01:0/5`; the matching state hash proves the dedicated save boundary, not a
-native world. `runtimeReady` remains false until Vault 101 cell-resource
-compilation, reference-transform/world application, owned-movie
-transcode/playback, CG01 stage 10 and later gameplay, and xNVSE/JAM native-plugin
-semantics exist. JAM remains dependency- and portable-semantic-gated. These
+native world. The consumed effective-source adapter is records-only: the
+archive/loose-member resolver exists as a compiler component but is not wired
+into either playable TTW world. The launcher exposes TTW-FO3 under Fallout 3
+and TTW-FNV under New Vegas; TTW-FNV has no effective-stack Doc profile/runtime.
+Both remain disabled. JAM remains dependency- and portable-semantic-gated;
+native DLL loading and portable xNVSE/JIP/JohnnyGuitar/kNVSE/Stewie/UIO/JAM
+script, event, UI, AP, animation, audio, and cosave semantics are unsupported.
+These
 routes consume the shared authoritative state in
 `runtime/src/Gameplay/State`; presentation does not fork inventory, quests,
 objectives, opening completion, or save identity.
@@ -164,7 +213,8 @@ flowchart TD
     Player --> Capsule[Capsule collision]
     Player --> Camera[Camera3D]
     Player -->|E ray| Door
-    Player -->|E ray| Pickup[PickupInstance]
+    Player -->|E collect ray| Pickup[PickupInstance]
+    Player -->|Z or XR primary hold ray| Pickup
     Player -->|E ray| Container[ContainerInstance]
     Player -->|fire ray| Collision
     Pickup --> Session[GameplaySession]
@@ -189,10 +239,24 @@ flowchart TD
 Prepared New Vegas caches admit four compiler families: `static`, `cell`,
 `opening`, and `actor`. Each generated family embeds its own source-and-recipe
 SHA-256 identity, and `install-manifest.json` records the same complete set.
-The actor identity deliberately includes the opening graph because its runtime
-animation membership comes from that graph. Static and CELL identities exclude
-opening/UI sources, so an opening-only edit cannot invalidate unchanged world
-output.
+The actor identity no longer includes the entire CELL recipe or opening graph.
+It binds the exact ordered one-level actor route selected by
+`prepare_legal_assets`: ordered actor recipe IDs plus each recipe's SHA-256.
+Adding, removing, reordering, or editing an admitted actor recipe invalidates
+the actor family; a non-actor CELL presentation edit does not. Static, CELL,
+opening, and actor outputs therefore invalidate only for their exact inputs and
+true dependency edges.
+
+Actor artifacts bind only the configuration they consume: the complete
+`actorCompiler` section plus `contentCompiler.animationSamplesPerSecond`,
+`assetIdHexCharacters`, `defaultMaterialGlossiness`,
+`minimumMaterialRoughness`, `pngCompressionLevel`, and
+`zeroSpecularEpsilon`. The family manifest, not a copied documentation hash, is
+the identity authority. Unrelated pickup, player-input, XR policy, or non-actor
+CELL-presentation changes therefore do not invalidate actor scenes. Legacy
+actor manifests that bind the full runtime configuration
+remain fail-closed; reuse requires a metadata migration proving the old and new
+configuration have the same scoped identity.
 
 Runtime restore is read-only and rejects legacy single-identity caches, missing
 families, owned-input or output hash drift, and embedded-family mismatches. An
@@ -352,14 +416,24 @@ room-scale collision, controller actions/haptics, identical route/save results,
 and stereo-safe materials. Gameplay outcomes remain mode-independent; only
 input translation and presentation differ.
 
-The Saloon practice table follows this boundary. `PoolTableInstance` owns the
-four recipe-pinned balls, authored reset state, pocket state, cue presentation,
-and the single strike operation. `PoolBallInstance` is one hash-verified NIF
-convex rigid body. Desktop look/power and tracked OpenXR cue-tip sweeps call the
-same strike operation; `GameplaySession` serializes the resulting transforms,
-velocities, and pocket state. The software gate requires an actual ball-to-ball
-contact in both adapters. Physical headset pose, grip comfort, and haptics still
-require a headset session.
+Movable clutter follows the same source boundary. `PickupInstance` is the
+authoritative rigid body only when its verified NIF sidecar contains one unique
+dynamic convex or box body. The normal E/right-grip collect operation remains
+separate from Z/right-primary hold, move, and drop. `GameplaySession` saves the
+dropped transform and velocity; missing or ambiguous owned dynamic bodies fail
+closed for grabbing without disabling ordinary collection.
+
+The Saloon practice-table experiment follows this boundary but is not presently
+supported. `PoolTableInstance` owns the four recipe-pinned balls, authored reset
+state, pocket state, cue presentation, and the single strike operation.
+`PoolBallInstance` is one hash-verified NIF convex rigid body. Desktop look/power
+and tracked OpenXR cue-tip sweeps call the same strike operation;
+`GameplaySession` serializes the resulting transforms, velocities, and pocket
+state. The fail-closed software gate requires an actual ball-to-ball contact,
+pocket detection, authored reset, and cold save restoration. It currently
+fails before contact because the ball references around the ruined retail table
+do not form a supported layout on the intact replacement table. OpenXR layout
+and physical-headset pose, grip comfort, and haptics remain unverified.
 
 ## Performance observation
 
@@ -453,11 +527,12 @@ retail data, or promotion verdict.
 | `test_fo1_campaign_inventory.py` | Synthetic all-map inventory, identity, and monotonic-promotion regressions | Retail bytes or campaign-readiness claims |
 | `OpenNV.Content.spec` | One-file helper inputs and packaged recipe/data files | Content semantics |
 | `LegalAssetPreparer.cs` | Packaged-helper process and cache/compiler validation | Record parsing |
-| `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, versioned flow contract, hash-bound HUD/STATS/ITEMS/DATA XML/font/texture contract, source menu-background bindings, and IDLE→ANIO ownership | Runtime state, Gamebryo tile execution, Godot UI, or unowned smoke behavior |
+| `opening_catalog.py` | Owned opening QUST/INFO/script graph, exact command identities, versioned flow contract, hash-bound HUD/STATS/ITEMS/DATA XML/font/texture contract, source menu-background bindings, IDLE→ANIO ownership, source furniture/animation joins, and the admitted FaceGen control surface | Runtime state, Gamebryo tile execution, Godot UI, non-default identity rendering, or unowned smoke behavior |
 | `runtime/src/Campaigns/NewVegas/Opening/NewVegasOpeningNamespaceBridge.cs` | Compile-time namespace join between the New Vegas opening campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs` | Flow/configuration/command-contract parsing and fail-closed runtime validation | Command execution or save state |
 | `runtime/src/Campaigns/NewVegas/Opening/OpeningManifest.cs` | Owned New Vegas front-end manifest identity, hash verification, and typed menu/media/gameplay-UI contract loading | Menu rendering, command execution, or source compilation |
-| `runtime/src/Campaigns/NewVegas/Opening/OpeningQuestRuntime.cs` | Data-driven opening command interpreter, owned TextEdit/RaceSex presentation, authored UI/dialogue/AI progression, source-FURN occupancy/release, IDLE-bound animation-object lifecycle, checkpoint capture, and completion handoff | ESM/BSA parsing, complete furniture animation, smoke effects, or guessed content identities |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningQuestRuntime.cs` | Data-driven opening command interpreter, owned TextEdit/RaceSex presentation, exact selection-keyed default male/female full-body FaceGen previews and controls, authored UI/dialogue/AI progression, source-FURN layered occupancy/release, IDLE-bound animation-object lifecycle, checkpoint capture, and completion handoff | ESM/BSA parsing, non-default race/hair/eye live 3D previews, general gameplay-player construction, source smoke transport, or guessed content identities |
+| `runtime/src/Campaigns/NewVegas/Opening/OpeningCigaretteSmokePresentation.cs` | Explicit first-party smoke presentation anchored to the verified owned cigarette tip while the lit smoking phase is active | Source smoke ownership, package timing, ANIO identity, or retail-effect parity |
 | `runtime/src/Gameplay/State/OpeningCampaignState.cs` | Shared versioned opening character/quest/objective/inventory snapshot validation and transform serialization | Flow progression or file I/O |
 | `runtime/src/Presentation/Ui/OwnedUiContracts.cs` | Campaign-neutral owned texture, bitmap-font, style, role, and gameplay-presentation value contracts | Parsing, extraction, state mutation, or UI nodes |
 | `runtime/src/Presentation/Ui/OwnedUiTheme.cs` | Owned bitmap-font, texture, and UI-style construction shared by opening and gameplay presentation | Manifest parsing, progression, or UI state |
@@ -477,14 +552,14 @@ retail data, or promotion verdict.
 | `EnvironmentCapture.cs` | Native cell/actor frames, application of validated retail shot state, normalized telemetry, hashes, and visual-quality gates | Gameplay or desktop control |
 | `actor_parity.py` | Retail/Godot identity, camera, pixel metrics, and labelled differential sheets | Rendering or automatic human approval |
 | `DoorInstance.cs` | One door's closed/open transform state | Input or global registry |
-| `PickupInstance.cs` | One authored pickup's identity and weapon profile | Inventory ownership |
+| `PickupInstance.cs` | One authored pickup's identity, owned dynamic rigid body, and held/dropped transform | Inventory ownership or input polling |
 | `ContainerInstance.cs` | One authored container's resolved content contract | Session persistence |
 | `PoolBallInstance.cs` | One authored dynamic convex body and its persisted motion/pocket state | Table rules or input |
 | `PoolTableInstance.cs` | One table assembly, cue presentation, shared strike/reset/pocket behavior, and ball ownership | Input polling or asset parsing |
 | `runtime/src/Gameplay/State/GameplayStateNamespaceBridge.cs` | Compile-time namespace join between shared authoritative state and its campaign, world, and presentation consumers | Runtime behavior or gameplay abstractions |
-| `runtime/src/Gameplay/State/GameplaySession.cs` | Shared authoritative inventory/world delta, active-CELL identity, objective state, opening-completion envelope, pool snapshots, and atomic save/reload | Asset parsing, portal geometry, or opening progression |
+| `runtime/src/Gameplay/State/GameplaySession.cs` | Shared authoritative inventory/world delta, active-CELL identity, objective state, opening-completion envelope, movable-pickup and pool snapshots, and atomic save/reload | Asset parsing, portal geometry, or opening progression |
 | `runtime/src/Gameplay/Containers/` | Source-named two-column container view plus authoritative per-reference remaining counts and transfer operations | Player-to-container deposits, barter, or retail-pixel parity |
-| `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
+| `CellPlayer.cs` | Shared collision body plus flat/OpenXR view, movement, activation, pickup-hold, firing, and pool-input adapters | Asset preparation or gameplay outcomes |
 | `runtime/src/World/Portals/CellPortalTravel.cs` | Production reciprocal-XTEL activation, owned arrival transform, active collision layer, and authoritative CELL transition | Input synthesis, save serialization, or content parsing |
 | `runtime/src/World/Streaming/CellActiveSet.cs` | Authoritative-current-CELL visibility, processing, collision, rigid-body, and light lifecycle for an eagerly preloaded source-portal route | CELL compilation, demand loading/unloading, portal clipping, environment switching, or adjacency invention |
 | `runtime/src/World/Actors/GameplayActorGrounding.cs` | One-time source-actor support alignment against the active CELL's authored collision, plus package-path preservation of that source-derived offset | Actor admission, AI/package selection, navmesh placement invention, or retail parity |
@@ -526,8 +601,10 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleTransitionRuntime.cs` | Fail-closed nonvisual exit-grid destination-state application after exact component movement | Destination loading, doors, script execution, actors, or save state |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleScene.cs` | Exact admitted floor patches, top-level object FRM planes, MAP-header entry marker, and topology composition in Godot's 3D hex coordinate space | Scripts, character creation, interaction, or playability |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleBuildProof.cs` | Headless source-reference construction plus exact floor/wall physics-ray report | Rendered-frame, interaction, parity, or launcher claims |
-| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; premade or custom name/sex/age/exact-SPECIAL selection; sex-correct PRO/FID Take handoff; version-4 bounded Map 3/Temple save with legacy reads and cold restore | Tag/trait editing, scripts, campaign-wide progression/save state, FPS/OpenXR, parity, or full-campaign readiness |
-| `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs` | Grounded source-walk-gated Map 3 arrival body with selected sex-correct owned AA idle and 6-direction/8-frame AB walk playback plus validated transform/facing restore and persistence-boundary publication | AP/combat, animations beyond admitted AA/AB, scripts, inventory, campaign-wide persistence, full campaign, or parity |
+| `runtime/src/Campaigns/Fallout2/CharacterStart/` | Fail-closed owned picker/panel validation; immutable premades; public custom name/sex/age/exact-SPECIAL/tagged-skill/trait selection; physical Reflectron FACE/BODY/classic-projection controls; Live 3D full-body donor/procedural preview; exact Elder terminal-frame/fade convergence for normal end and Skip; one-record bounded appearance/Map 3/Temple save with legacy reads and cold restore | Classic-body visual parity, bespoke premade likenesses, complete hair/iris/outfit binding, scripts, campaign-wide progression, FPS/OpenXR, or full-campaign readiness |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2HumanoidPresentation.cs` | Fail-closed true 3D full-body presentation selection from the admitted sex/body/outfit/socket-matched owned FNV donor over authoritative GCD/FRM identity | Procedural/FRM-player/silhouette/standee fallbacks, classic visual authority, retail parity, or new gameplay identity |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesPlayerRuntime.cs` | Grounded source-walk-gated Map 3 gameplay actor with the selected non-parity full-body presentation, validated transform/facing restore, and persistence-boundary publication | General animation/script/AI coverage, campaign-wide persistence, full campaign, or parity |
+| `runtime/src/Campaigns/Fallout2/Temple/Fo2ArroyoCavesMoldedPresentation.cs` | Full wall relief plus exact owned opaque FRM torch-emitter pixels/centroid joined to source MAP light placement | Source flame animation, smoke, guessed billboard proxies, or visual parity |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationContract.cs` | Strict join of one owned MAP critter/inventory pair to hash-bound PRO/MSG identities and stats | General actor admission, INT execution, AI, or retail combat behavior |
 | `runtime/src/Campaigns/Fallout2/Temple/Fo2TempleConfrontationRuntime.cs` | Visible player HP/AP, adjacent deterministic melee, exact target defeat/Spear loot, inventory state, and save publication for that one contract | Target turns/AI, dialogue, general inventory, retail formulas, general combat, or parity |
 | `runtime/src/Compatibility/Jam/JamNamespaceBridge.cs` | Compile-time namespace import for settled JAM contracts consumed by shared runtime composition | Runtime behavior, compatibility dispatch, or abstractions |
@@ -536,8 +613,10 @@ retail data, or promotion verdict.
 | `runtime/src/Compatibility/Jam/JamJbtBulletTimeContract.cs` | Hash-bound transport of JAM 4.6 JBT toggle and authored world-time multiplier | AP/effect/audio/UI/event semantics or complete JBT/JAM compatibility |
 | `prepare_fo3_profile.py` / `prepare_fo3_opening_slice.py` | Read-only Fallout 3 GOTY profile, CG00/Vault 101 source graph, playable race and sex-aware hair/eye inventory, Player-plus-RACE FaceGen defaults, and hash-bound local manifest generation | Godot nodes, runtime progression, 3D FaceGen rendering, or full-opening claims |
 | `runtime/src/Campaigns/Fallout3/Fallout3NamespaceBridge.cs` | Compile-time namespace join between the Fallout 3 campaign and shared runtime composition | Runtime behavior, routing, or campaign abstractions |
-| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified intro playback/skip, CG00 sex/name/appearance UI, stage-100 flow, and bounded CG01 stage-5 Dad-dialogue dispatch/save wiring | General dialogue/KF/package AI, portable presentation-cache publication, full Vault 101 play, or parity |
+| `runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs` | Bounded owned-profile menu, verified intro playback/skip, CG00 sex/name/appearance UI, stage-100 flow, CG01 Dad-dialogue dispatch, and stage-12 acceptance save/restore wiring | General dialogue/KF/package AI, toddler world locomotion/trigger entry, portable presentation-cache publication, full Vault 101 play, or parity |
+| `runtime/src/Campaigns/Fallout3/Fo3Cg00EarlyBirthRuntime.cs` | Exact source `PACK`-selected KF publication and `Camera1st` skeleton-node/animated-parent composition without a guessed `NiCamera` axis flip | Retail/native timing or pixels, ordinary user-input proof, general package AI, or route promotion |
 | `runtime/src/Campaigns/Fallout3/Fo3Cg01Stage10Transition.cs` | Fail-closed sex-specific two-INFO Dad dialogue and exact stage-10 objective/timer/control/autosave state plus cold-restore contract | LIP animation, toddler interaction, general dialogue/package AI, or world play |
+| `runtime/src/Campaigns/Fallout3/Fo3Cg01Stage12Transition.cs` | Fail-closed `Walk to Dad.` objective, exact source trigger identity/primitive, stage-12 objective/control/Dad-variable effects, and atomic save/cold-restore state | Toddler locomotion, physical world trigger entry, CG01 Dad response/presentation, general trigger/script execution, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage65AppearanceTransition.cs` | Fail-closed validation/application contract for all owned stage-65 MatchRace and MatchFaceGeometry commands across the exact race/sex matrix | Ordinary-flow trigger execution, persistence, face rendering, animation, or Vault 101 play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage80Transition.cs` | Exact sex-conditional INFO result plus stage-80 package, variable, EVP, and enable-reference contract | Ordinary-flow trigger execution/persistence, dialogue/KF playback, package AI, actors, or world play |
 | `runtime/src/Campaigns/Fallout3/Fo3Stage85Transition.cs` | Exact post-stage-80 INFO trigger and zero-command stage-85 result contract | Ordinary-flow trigger execution/persistence, dialogue playback, later CG00 interpretation, actors, or world play |
@@ -546,8 +625,9 @@ retail data, or promotion verdict.
 | `runtime/src/Campaigns/Fallout3/Fo3PlayerPackageTransition.cs` | Source-bound `CG00PlayerSection4` package, marker, idle/event animation identities, activation, and fail-closed stage-65 boundary | KF playback, package AI, `MatchRace`, `MatchFaceGeometry`, or stage advancement |
 | `ttw_profile.py` | Read-only layered profile identity, explicit flattened-output mtime order derivation, immutable load-order snapshot, master closure, plugin hashes, archive-name inventory, and save boundary | Archive members, loose-file precedence, records, scripts, or runtime-compatibility promotion |
 | `ttw_source_namespace.py` | Registered-plugin revalidation plus effective top-level loose-file, BSA-v104-header, and zero-byte override-marker winner inventory | BSA member resolution, nested loose files, override-member semantics, records, scripts, or runtime behavior |
+| `ttw_effective_source.py` | Fail-closed effective FormKey winner resolver and optional archive/loose-member resolver; current FO3 profile producer consumes the records-only entry point | Connected TTW world resources, scripts, runtime behavior, TTW-FNV Doc profile, or playable-route claims |
 | `runtime/src/Campaigns/TTW/TtwNamespaceBridge.cs` | Compile-time namespace join between the isolated TTW campaign adapter and shared runtime composition | Runtime behavior, profile reuse, routing, or campaign abstractions |
-| `runtime/src/Campaigns/TTW/TtwFo3OpeningRuntime.cs` | Fail-closed TTW profile/namespace/cache/save identity validation plus exact 38-command `CG00:0/60/100` → `CG01:0/5` state application, atomic save, cold restore, and proof report | Vault 101 resources/presentation, movie playback, CG01 stage 10+, xNVSE/JAM execution, or runtime-ready claims |
+| `runtime/src/Campaigns/TTW/TtwFo3OpeningRuntime.cs` | Fail-closed TTW profile/namespace/cache/save identity validation plus exact 38-command `CG00:0/60/100` → `CG01:0/5` state application, atomic save, cold restore, and proof report | Vault 101 resources/presentation, movie playback, CG01 stage 10+, xNVSE/JAM execution, or playable-route promotion |
 | `jam_profile.py` | Read-only JAM dependency identity, plugin/master closure, hashes, save boundary, bounded portable-capability transport, and explicit unsupported-semantics inventory | Downloading mods, loading native DLLs, or complete runtime-compatibility promotion |
 | `main.tscn` | One composition root bound to the coordinator | Dynamic entity data |
 | `runtime-manifest.json` | Launcher-visible capabilities and executable contract | Promotion claims beyond gates |
@@ -569,21 +649,41 @@ and exercise first-run plus cache-reuse routes when legal data is supplied.
 ## Current truth and deliberate gaps
 
 The bounded Fallout 2 launcher Hex route renders the owned picker and combat,
-stealth, and diplomat panels. Take selects a premade; Modify and Create expose
-name, sex, age 16–35, and seven SPECIAL values bounded 1–10 and totaling 40.
-Modify retains the source GCD's tags/traits unchanged, while Create records both
-as unselected. Confirm applies the matching male or female PRO-linked idle and
+stealth, and diplomat panels. Take selects an immutable premade; the public
+Create route exposes name, sex, age 16–35, seven SPECIAL values bounded 1–10
+and totaling 40, exactly three tagged skills, and up to two traits. Its physical
+Reflectron top row opens sex/identity, supported-human complexion, facial-detail,
+and hair-detail sections. Lower BODY opens the live 3D actor and proportion
+controls; lower FACE shows the stylized portrait projection of that same custom
+actor. The unlabelled green control remains a projection-mode shortcut. Locked
+premades show their exact source panel rather than a regenerated portrait.
+Confirm applies the matching male or female PRO-linked idle and
 AB walk FRMs at Map 3,
-elevation 0, tile 28707. The atomic version-4 save binds the source basis and
-custom state plus Map 3/Temple elevation/tile/facing, transform, runtime modes,
-and bounded confrontation state; it also reads earlier bounded save schemas.
-Separate male and female
-process pairs prove two movement directions, idle resumption, and exact cold
-restore. Inside Temple, the strict source-bound Villager/Spear adapter exposes
-player HP/AP, adjacent deterministic melee, defeat, loot, and cold restore.
-Target AI/turns, INT execution, retail combat parity, tag/trait editing, other
-animations, campaign-wide persistence, Temple scripts, complete
+elevation 0, tile 28707. The exact three owned premade panels remain distinct
+and toggle between the original panel and the true 3D humanoid path used by the
+gameplay actor. That path requires an admitted owned FNV full-body donor and
+fails closed without one; no procedural, FRM-player, silhouette, or standee
+fallback is admitted. The donor is neither classic identity nor a parity claim.
+The atomic version-14 save embeds the explicit appearance/body/portrait state
+inside the character object and binds that character plus Map 3/Temple
+elevation/tile/facing, transform, runtime modes, and bounded confrontation
+state; version 13 and earlier bounded schemas remain explicit legacy reads.
+Separate male and female public-Create process pairs prove creator state and
+exact cold restore. Inside Temple, the strict source-bound Villager/Spear adapter exposes
+player HP/AP, adjacent deterministic melee, defeat, loot, and cold restore. The
+alternative tagged-Speech Cameron branch reaches live ARVILLAG and cold-restores
+its first input-driven hex action. Those mutually exclusive checkpoints are
+tracked in the [canonical branch ledger](evidence/fo2-first-slice-branch-ledger.md).
+Target AI/turns, general INT execution, retail combat parity, bespoke premade
+3D likenesses, complete hair/iris/outfit binding, accepted skin seams in Arroyo,
+other animations, campaign-wide persistence, Temple scripts, complete
 campaign, FPS/OpenXR, and parity remain absent.
+The Elder movie's natural end and Skip both apply the exact terminal source
+frame/fade and converge through black, the same prepared live camera, reveal,
+and control release. That state convergence is implemented; the live
+presentation is still human-review/unaccepted. The 22 admitted torch anchors
+present exact owned opaque FRM emitter pixels/centroid joined to source MAP
+light placement. No source flame animation or smoke is transported.
 
 Implemented in the independently playable saloon/exterior component: direct owned
 ESM/BSA/NIF/DDS/LAND path, XTEL-derived spawn, 504

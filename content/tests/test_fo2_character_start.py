@@ -41,9 +41,16 @@ class Fo2CharacterStartTest(unittest.TestCase):
     def test_transports_three_premades_and_female_idle_without_source_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            female_relief = json.loads(
+                (TOOLS.parent / "recipes" / "fo2-character-start-v1.json").read_text(
+                    encoding="utf-8"
+                )
+            )["femalePresentation"]["relief3d"]
             install = root / "Fallout 2"
             install.mkdir()
-            frm = synthetic_frm()
+            opaque_frm = bytearray(synthetic_frm())
+            opaque_frm[-1] = 1
+            frm = bytes(opaque_frm)
             walk_frm = synthetic_walk_frm()
             palette = bytearray(768)
             palette[3:6] = bytes((12, 24, 36))
@@ -86,6 +93,8 @@ class Fo2CharacterStartTest(unittest.TestCase):
                         ),
                         ("art\\critters\\hfprimaa.frm", frm, True),
                         ("art\\critters\\hfprimab.frm", walk_frm, True),
+                        ("art\\critters\\hfprimga.frm", frm, True),
+                        ("art\\critters\\hfprimgb.frm", walk_frm, True),
                     ]
                 )
             )
@@ -174,6 +183,24 @@ class Fo2CharacterStartTest(unittest.TestCase):
                             "walkLogicalPath": "art\\critters\\hfprimab.frm",
                             "walkFrames": list(range(8)),
                             "walkFps": 10,
+                            "equippedWeapon": {
+                                "itemFid": "0000002a",
+                                "itemPid": "00000007",
+                                "weaponAnimationCode": 4,
+                                "weaponArtSuffix": "g",
+                                "idleAnimationCode": "GA",
+                                "idleLogicalPath": "art\\critters\\hfprimga.frm",
+                                "idleFrame": 0,
+                                "walkAnimationCode": "GB",
+                                "walkLogicalPath": "art\\critters\\hfprimgb.frm",
+                                "walkFrames": list(range(8)),
+                                "walkFps": 10,
+                                "geometryDisposition": (
+                                    "owned-critter-frm-composites-player-and-spear-"
+                                    "no-separable-3d-weapon-transform"
+                                ),
+                            },
+                            "relief3d": female_relief,
                         },
                         "presentation": {
                             "viewport": [640, 480],
@@ -209,6 +236,12 @@ class Fo2CharacterStartTest(unittest.TestCase):
             self.assertEqual(first["femalePresentation"]["prototype"]["fid"], "0100003d")
             self.assertEqual(first["femalePresentation"]["walkArt"]["fps"], 10)
             self.assertEqual(first["femalePresentation"]["walkArt"]["framesPerDirection"], 8)
+            equipped = first["femalePresentation"]["equippedWeaponArt"]
+            self.assertEqual(equipped["itemPid"], "00000007")
+            self.assertEqual(equipped["idle"]["animationCode"], "GA")
+            self.assertEqual(equipped["walk"]["animationCode"], "GB")
+            self.assertEqual(len(equipped["idle"]["directions"]), 6)
+            self.assertEqual(len(equipped["walk"]["directions"]), 48)
             self.assertEqual(first["inventory"]["logicalPath"], "art\\intrface\\invbox.frm")
             self.assertEqual(first["counts"]["uiPngs"], 5)
             self.assertEqual(

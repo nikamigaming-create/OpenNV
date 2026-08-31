@@ -10,7 +10,8 @@ player-facing identity.
 
 The launcher has exactly four top-level game choices. TTW is an edition under
 New Vegas and Fallout 3, because it is a combined profile rather than a fifth
-game button. Those choices resolve to five isolated character/save paths:
+game button. The four choices and two TTW edition routes resolve to five
+isolated character/save boundaries:
 
 | ID | Path | Save boundary |
 | --- | --- | --- |
@@ -18,9 +19,10 @@ game button. Those choices resolve to five isolated character/save paths:
 | `fallout2` | Fallout 2 | One bounded premade, modified, or custom Chosen One save cold-restores source/custom state and current Map 3 transform/mode; future FPS/OpenXR adapters must consume that same authority |
 | `newvegas` | Standalone New Vegas | Mojave-only character |
 | `fallout3` | Standalone Fallout 3 | Capital Wasteland-only character |
-| `ttw` | Combined TTW edition | One Capital Wasteland-to-Mojave character |
+| `ttw-fo3` | TTW · Fallout 3 opening edition | One combined-world character/save boundary; bounded records-only FO3 opening contract, launcher-disabled |
+| `ttw-fnv` | TTW · New Vegas opening edition | The same combined-world character/save boundary; no effective-stack Doc profile/runtime, launcher-disabled |
 
-JAM is a profile layer for `newvegas` and `ttw`, not another game choice. It can
+JAM is a profile layer for `newvegas` and the TTW editions, not another game choice. It can
 be added later, but the launcher warns that a save using it must continue to use
 it.
 
@@ -65,15 +67,20 @@ graph can be admitted. Its bounded Hex route selects the owned
 Narg, Mingan, or Chitsa premade, applies source stats/biography/portrait and
 also exposes source-backed Modify/Create for name, sex, age, and exact SPECIAL.
 Modify retains source tags/traits; Create leaves them unselected. Each exact
-Narg/Mingan/Chitsa panel has one Portrait/Live 3D toggle; Live 3D is
-an owned-reference curved panel surface, not reconstructed head geometry.
-Confirm applies
-sex-correct idle FRM presentation and hands the state to the grounded Map 3
-player at tile 28707. An atomic version-5 save cold-restores the character mode,
+Narg/Mingan/Chitsa panel has one Portrait/Live 3D toggle. Live 3D uses the same
+true 3D humanoid path as the Map 3 gameplay actor: an admitted owned FNV
+full-body donor over authoritative GCD/FRM identity. Missing or incompatible
+donor input fails closed; no procedural, FRM-player, silhouette, or standee
+fallback is admitted, and the donor is not a parity claim. Confirm hands the selected
+state to the grounded Map 3 player at tile 28707. An atomic version-12 save cold-restores the character mode,
 source basis, custom state, tile, facing, transform, bounded modes, and the exact
 Map 3 exit-to-ARTEMPLE Map 126 arrival plus the bounded source-identified
 Villager HP/AP/defeat and exact nested-Spear loot state. The Temple HUD exposes
-player HP/AP, deterministic adjacent melee, and the bounded inventory. The
+player HP/AP, deterministic adjacent melee, and the bounded inventory. An
+alternative exact tagged-Speech Cameron route keeps Klint alive and reaches live
+ARVILLAG input/save. The routes do not merge or infer a dead-guardian shortcut;
+their retained hashes and boundaries are in the
+[canonical FO2 branch ledger](evidence/fo2-first-slice-branch-ledger.md). The
 launcher enables Hex
 only after all five local slice artifacts match the registered profile; FPS and
 VR remain disabled. The non-source opaque Temple wall proxy is removed while
@@ -97,12 +104,16 @@ under GL. GL reports unsupported volumetric-fog features, so this is a
 functional bounded-route recovery path, not a claim that the supplied video's
 visually consistent high-fidelity cave is renderer-matched.
 The Fallout 1 OpenXR adapter has simulator coverage but remains
-launcher-disabled and has no physical-headset acceptance. Fallout 3's owned
-frontend now enters the bounded birth room and persists exact stages 65, 80,
-85, and 90, including the stage-90 fade/sound result, but all three presentation
-buttons remain disabled because no freely playable Vault 101 route or general
-package/dialogue interpreter is present. TTW runtime support is absent, JAM remains dependency- and
-portable-semantic-gated, and every full-campaign readiness claim stays false.
+launcher-disabled and has no physical-headset acceptance. Fallout 3's current
+early-birth implementation selects hash-bound KFs from exact source `PACK`
+sections and composes the sampled `Camera1st` skeleton node through its parent
+chain without a guessed `NiCamera` axis flip. All three presentation buttons
+remain disabled because the current toddler proof auto-steers and lacks
+ordinary configured-input/retail differential evidence. TTW-FO3 has a bounded
+records-only compiler/executor, while TTW-FNV lacks an effective-stack Doc
+profile/runtime; both editions remain disabled. JAM remains dependency- and
+portable-semantic-gated, native DLLs are never loaded, and every full-campaign
+readiness claim stays false.
 The New Vegas UI shell binds the installed HUD/STATS/ITEMS/DATA XML graph,
 selected owned bitmap fonts and textures, and the authoritative campaign
 snapshot. Flat HUD, ITEMS, and DATA use selected source rectangles; STATS uses
@@ -133,10 +144,10 @@ The bounded TTW Fallout 3 opening contract is separately auto-detected as
 `ttw-fo3-opening-profile.json` beside the registered TTW profile, with
 `OPENNV_TTW_FO3_OPENING_PROFILE` as a development override. The launcher
 revalidates its exact effective-source namespace, plugin/save identity, intro
-movies, and dedicated cache identity. It also reserves distinct TTW cache and
-FO3-opening save paths for the future runtime handoff. This validation does not
-enable TTW: the checked-in runtime manifest keeps every TTW presentation false
-until the CG00-to-CG01 interpreter and Vault 101 world transition execute.
+movies, and dedicated cache identity. The current FO3 producer consumes the
+records-only effective-source entry point; archive/loose-member winners are not
+connected to a world. The New Vegas edition has no equivalent effective-stack
+Doc profile/runtime. Validation therefore enables neither TTW edition.
 
 Packaged builds prefer the executable declared by `runtime-manifest.json`.
 Source development can set `OPENNV_GODOT` to a local Godot 4.7.2 executable and
@@ -163,8 +174,8 @@ state; its VR choice remains disabled. Fallout 2 enables only Hex for its
 bounded premade-to-Arroyo slice; FPS and VR remain disabled. New Vegas enables FPS and its experimental software-gated
 VR route while Hex remains disabled; OpenXR is not physical-headset accepted.
 Fallout 3 keeps FPS, Hex, and VR disabled; its bounded menu/CG00 frontend is not
-misrepresented as a first-person world. TTW's separate combined-world
-profile can be registered but cannot launch.
+misrepresented as a first-person world. TTW-FO3 and TTW-FNV can share one
+registered combined-world profile but neither edition can launch.
 
 Presentation is selected independently from campaign and mod profile. Flat mode
 launches Godot with `--xr-mode off`; experimental OpenXR mode launches with

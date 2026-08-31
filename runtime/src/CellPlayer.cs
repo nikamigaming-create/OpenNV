@@ -45,6 +45,7 @@ internal partial class CellPlayer : CharacterBody3D
     private readonly PlayerControlTelemetry _controlTelemetry = new();
     private Node3D? _weaponMount;
     private PoolTableInstance? _activePool;
+    private PickupInstance? _heldPickup;
     private Node3D? _poolCueMount;
     private Marker3D? _poolCueTip;
     private MeshInstance3D? _muzzleFlash;
@@ -59,6 +60,7 @@ internal partial class CellPlayer : CharacterBody3D
     private float _dioramaHomeSizeMeters = DioramaInitialSizeMeters;
     private Aabb? _dioramaFramingBounds;
     private bool _xrActivatePressed;
+    private bool _xrGrabPressed;
     private bool _xrFirePressed;
     private bool _xrSavePressed;
     private bool _xrReloadPressed;
@@ -100,6 +102,7 @@ internal partial class CellPlayer : CharacterBody3D
     internal bool HasHeldWeapon => _weaponMount?.FindChild("HeldWeapon", true, false) is Node3D;
     internal bool HasMuzzleFeedback => _muzzleFlash is not null && _muzzleLight is not null;
     internal bool HasHeldPoolCue => _poolCueMount is not null && _poolCueTip is not null;
+    internal PickupInstance? HeldPickup => _heldPickup;
     internal float DesiredEyeHeightMeters => _configuration.Xr.DesiredEyeHeightMeters;
     internal PlayerControlTelemetry.Snapshot ControlTelemetry => _controlTelemetry.Report();
     internal IReadOnlyList<CellPortalTravel.Transition> PortalTransitions =>
@@ -125,6 +128,8 @@ internal partial class CellPlayer : CharacterBody3D
         _activationEnabled = activation;
         _combatEnabled = combat;
         _saveEnabled = save;
+        if (!activation && _heldPickup is not null)
+            DropHeldPickup();
         if (!movement)
             Velocity = new Vector3(0.0f, Velocity.Y, 0.0f);
     }
@@ -339,6 +344,11 @@ internal partial class CellPlayer : CharacterBody3D
 
     public override void _ExitTree()
     {
+        if (_heldPickup is not null)
+        {
+            _heldPickup.Drop();
+            _heldPickup = null;
+        }
         if (_jamBulletTimeActive)
             SetJamBulletTime(false);
     }
@@ -624,6 +634,16 @@ internal partial class CellPlayer : CharacterBody3D
 
     private bool Activate(Node3D aimSource)
     {
+        if (_heldPickup is not null)
+        {
+            var held = _heldPickup;
+            _heldPickup = null;
+            held.Drop();
+            if (held is ScriptedActivatorInstance heldActivator)
+                return heldActivator.Activate();
+            _session!.Collect(held);
+            return true;
+        }
         var collider = Cast(aimSource, _configuration.Player.ActivationDistanceMeters);
         LastActivationCollider = collider?.GetPath().ToString() ?? "none";
         LastActivationDoorFormId = Ancestor<DoorInstance>(collider)?.ReferenceFormId ?? "none";
@@ -641,6 +661,9 @@ internal partial class CellPlayer : CharacterBody3D
             EnterPool(pool);
             return true;
         }
+        var scriptedActivator = Ancestor<ScriptedActivatorInstance>(collider);
+        if (scriptedActivator is not null)
+            return scriptedActivator.Activate();
         var pickup = Ancestor<PickupInstance>(collider);
         if (pickup is not null)
         {
@@ -931,7 +954,17 @@ internal partial class CellPlayer : CharacterBody3D
     {
         var input = _configuration.Player.DesktopInput;
         if (_session!.IsPipBoyOpen)
+        {
+            DropHeldPickup();
             return;
+        }
+        if (_activationEnabled && _activePool is null &&
+            Input.IsActionJustPressed(input.Grab.Action))
+            _ = TryGrabPickup(_camera);
+        if (_heldPickup is not null && Input.IsActionPressed(input.Grab.Action))
+            UpdateHeldPickup(_camera);
+        if (_heldPickup is not null && Input.IsActionJustReleased(input.Grab.Action))
+            DropHeldPickup();
         if (_activationEnabled && Input.IsActionJustPressed(input.Activate.Action))
         {
             bool accepted;
@@ -1013,6 +1046,16 @@ internal partial class CellPlayer : CharacterBody3D
             GD.Print($"OPENNV_XR_ACTION action=activate accepted={accepted}");
         }
         _xrActivatePressed = activate;
+
+        var grab = _activationEnabled && _activePool is null &&
+            _rightGrip!.IsButtonPressed("grab");
+        if (grab && !_xrGrabPressed)
+            _ = TryGrabPickup(_rightAim!);
+        if (grab && _heldPickup is not null)
+            UpdateHeldPickup(_rightAim!);
+        if (!grab && _xrGrabPressed)
+            DropHeldPickup();
+        _xrGrabPressed = grab;
 
         var fire = _combatEnabled &&
             _rightGrip!.GetFloat("fire") >= _configuration.Xr.ActionThreshold;
@@ -1144,6 +1187,7 @@ internal partial class CellPlayer : CharacterBody3D
             return;
         if (_activePool is not null)
             ExitPool();
+        DropHeldPickup();
         _activePool = table;
         table.SetPlayActive(true);
         if (_weaponMount is not null)
@@ -1175,6 +1219,19 @@ internal partial class CellPlayer : CharacterBody3D
 
     internal void ExitPoolForProof() => ExitPool();
 
+    internal bool BeginPickupHoldForProof(PickupInstance pickup)
+    {
+        if (_heldPickup is not null || !pickup.BeginHold())
+            return false;
+        _heldPickup = pickup;
+        return true;
+    }
+
+    internal void MoveHeldPickupForProof(Vector3 targetGlobalPosition) =>
+        _heldPickup?.MoveHeld(targetGlobalPosition);
+
+    internal void DropHeldPickupForProof() => DropHeldPickup();
+
     private void ExitPool()
     {
         if (_activePool is null)
@@ -1195,6 +1252,41 @@ internal partial class CellPlayer : CharacterBody3D
             return;
         if (_activePool.UpdateTrackedCue(_poolCueTip.GlobalPosition, _xrFirePressed, delta))
             TriggerHaptic(_configuration.Pool.StrikeHaptic);
+    }
+
+    private bool TryGrabPickup(Node3D aimSource)
+    {
+        if (_heldPickup is not null)
+            return true;
+        var collider = Cast(aimSource, _configuration.Player.ActivationDistanceMeters);
+        var pickup = Ancestor<PickupInstance>(collider);
+        if (pickup is null || !pickup.BeginHold())
+            return false;
+        _heldPickup = pickup;
+        UpdateHeldPickup(aimSource);
+        _session!.Notify(
+            pickup is ScriptedActivatorInstance
+                ? $"Holding {pickup.DisplayName ?? pickup.EditorId} • release to drop"
+                : $"Holding {pickup.DisplayName ?? pickup.EditorId} • release to drop • E to take");
+        return true;
+    }
+
+    private void UpdateHeldPickup(Node3D aimSource)
+    {
+        _heldPickup?.MoveHeld(
+            aimSource.GlobalPosition -
+            aimSource.GlobalBasis.Z * _configuration.Pickup.HoldDistanceMeters);
+    }
+
+    private void DropHeldPickup()
+    {
+        if (_heldPickup is null)
+            return;
+        var dropped = _heldPickup;
+        _heldPickup = null;
+        dropped.Drop();
+        if (dropped is not ScriptedActivatorInstance)
+            _session!.PickupMoved(dropped);
     }
 
     private void TriggerHaptic(HapticConfiguration haptic)

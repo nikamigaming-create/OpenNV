@@ -8,6 +8,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ExpectedFloorPatches = 4595
+$ExpectedTopLevelObjects = 1842
+$ExpectedWallObjects = 1145
+$ExpectedWallTiles = 1112
+$ExpectedWallComponents = 13
+$ExpectedCaveShellComponents = 3
+$ExpectedStonePostInstances = 10
+$ExpectedVisibleProps = 1028
+$ExpectedHiddenSourceMarkers = 24
+$ExpectedFloorBoundaryEdges = 316
+$ExpectedWallMaterialArtifacts = 102
+$ExpectedOpaqueWallMaterialArtifacts = 101
+$ExpectedFloorMaterialArtifacts = 20
+$ExpectedSourceTorchProps = 22
+$ExpectedSourceMapLights = 33
+$ExpectedSha256Characters = 64
 $runtime = Join-Path (Split-Path -Parent $PSScriptRoot) 'runtime'
 $inputs = @($Godot, $TempleCache, $TempleTransitions, $ArroyoCache)
 foreach ($inputPath in $inputs) {
@@ -38,23 +54,64 @@ if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
     throw "Fallout 2 Arroyo Caves native render report is missing: $reportPath"
 }
 $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
-if ($report.schema -ne 'opennv-fo2-arroyo-caves-native-render-proof/v1' -or
-    $report.status -ne 'pass-rendered-owned-map-presentation-no-player-or-gameplay' -or
+if ($report.schema -ne 'opennv-fo2-arroyo-caves-native-render-proof/v3' -or
+    $report.status -ne 'pass-source-bound-molded-3d-construction-frame-presentation-unaccepted' -or
     $report.arrival.mapIndex -ne 3 -or
     $report.arrival.elevation -ne 0 -or
     $report.arrival.tile -ne 28707 -or
     $report.arrival.rotation -ne 0 -or
-    -not $report.promotion.rendered -or
+    -not $report.promotion.constructionFrameRendered -or
+    $report.promotion.presentationAccepted -or
     $report.promotion.interactive -or
     $report.promotion.playerSpawned -or
-    $report.promotion.launcherPlayable) {
+    $report.promotion.launcherPlayable -or
+    $report.promotion.pairReady -or
+    $report.promotion.fo1QualityParity -or
+    $report.source.exactElevationZeroCoverage.nonDefaultFloorPatches -ne $ExpectedFloorPatches -or
+    $report.source.exactElevationZeroCoverage.floorBoundaryEdges -ne $ExpectedFloorBoundaryEdges -or
+    $report.source.exactElevationZeroCoverage.topLevelObjects -ne $ExpectedTopLevelObjects -or
+    $report.source.exactElevationZeroCoverage.wallObjects -ne $ExpectedWallObjects -or
+    $report.source.exactElevationZeroCoverage.uniqueWallTiles -ne $ExpectedWallTiles -or
+    $report.source.exactElevationZeroCoverage.wallComponents -ne $ExpectedWallComponents -or
+    $report.construction.moldedFloorPatches -ne $ExpectedFloorPatches -or
+    $report.construction.sourceWallComponents -ne $ExpectedWallComponents -or
+    $report.construction.fusedCaveShellComponents -ne $ExpectedCaveShellComponents -or
+    $report.construction.fusedWallMeshInstances -ne $ExpectedCaveShellComponents -or
+    $report.construction.sourceFrmStonePostInstances -ne $ExpectedStonePostInstances -or
+    $report.construction.hiddenWallSpriteCards -ne $ExpectedWallObjects -or
+    $report.construction.hiddenSourceMarkerCards -ne $ExpectedHiddenSourceMarkers -or
+    $report.construction.visibleSourceProps -ne $ExpectedVisibleProps -or
+    $report.construction.groundedSourceProps -ne $ExpectedVisibleProps -or
+    $report.construction.visibleSourceTorchProps -ne $ExpectedSourceTorchProps -or
+    $report.construction.sourceMapLightRecords -ne $ExpectedSourceMapLights -or
+    $report.construction.sourceMapLights -ne $ExpectedSourceMapLights -or
+    $report.construction.sourceTorchMotivatedMapLights -ne $ExpectedSourceTorchProps -or
+    -not $report.construction.ceilingClosure -or
+    -not $report.construction.sourceWalkMaskUnchanged -or
+    $report.presentation.generatedAssetLane.used -or
+    $report.presentation.generatedAssetLane.ownedOrGeneratedMeshesPackaged -or
+    $report.presentation.ownedFrmSurfaces.sourceWallArtifacts -ne $ExpectedWallMaterialArtifacts -or
+    $report.presentation.ownedFrmSurfaces.opaqueSourceWallArtifacts -ne $ExpectedOpaqueWallMaterialArtifacts -or
+    $report.presentation.ownedFrmSurfaces.sourceFloorArtifacts -ne $ExpectedFloorMaterialArtifacts -or
+    $report.presentation.ownedFrmSurfaces.normalTextureSha256.Length -ne
+        $ExpectedSha256Characters -or
+    $report.presentation.ownedFrmSurfaces.floorNormalTextureSha256.Length -ne
+        $ExpectedSha256Characters -or
+    $report.presentation.ownedFrmSurfaces.distributionAllowed -or
+    -not $report.frame.frameIntegrityGatePassed -or
+    $report.frame.presentationVisualGatePassed -or
+    -not $report.frame.presentationVisualBlockers -or
+    $report.cinematicHandoff.reviewed) {
     throw "Fallout 2 Arroyo Caves native render report failed its honest promotion contract."
 }
 Write-Output (
-    "OPENNV_FO2_ARROYO_RENDER_PROOF_PASS map={0} elevation={1} arrival={2} floors={3} objects={4} frame={5}" -f
+    "OPENNV_FO2_ARROYO_RENDER_PROOF_PASS map={0} elevation={1} arrival={2} floors={3} objects={4} wallShells={5} props={6} pairReady={7} frame={8}" -f
     $report.arrival.mapIndex,
     $report.arrival.elevation,
     $report.arrival.tile,
     $report.construction.floorPatches,
     $report.construction.topLevelObjects,
+    $report.construction.fusedWallMeshInstances,
+    $report.construction.groundedSourceProps,
+    $report.promotion.pairReady,
     $report.frame.sha256)

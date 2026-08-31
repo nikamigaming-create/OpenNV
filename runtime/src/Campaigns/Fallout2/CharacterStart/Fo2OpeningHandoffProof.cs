@@ -42,6 +42,10 @@ internal static class Fo2OpeningHandoffProof
                 "Fallout 2 opening handoff task is unavailable."));
             var runtime = host.Runtime ?? throw new InvalidOperationException(
                 "Fallout 2 opening handoff did not prepare Arroyo.");
+            var worldAudit = handoff.World3DAudit ?? throw new InvalidOperationException(
+                "Fallout 2 opening handoff did not run its global/frustum 3D audit.");
+            var sourceClosure = handoff.SourceClosure ?? throw new InvalidOperationException(
+                "Fallout 2 opening handoff did not run its source-closure ledger.");
             var player = runtime.Player;
             for (var frame = 0;
                  frame < Fo2OpeningHandoffProofNumericContracts.GroundingFrames &&
@@ -76,10 +80,8 @@ internal static class Fo2OpeningHandoffProof
             pressedAction = null;
 
             var expectedFrames = Enumerable.Range(
-                contract.TailStartFrame,
-                contract.TerminalFrame - contract.TailStartFrame + 1).ToArray();
-            var expectedFinalFadeStep =
-                contract.TerminalFrame - contract.FadeStartFrame + 1;
+                contract.PlaybackStartFrame,
+                contract.TerminalFrame - contract.PlaybackStartFrame + 1).ToArray();
             var exactSourceSequence = handoff.PresentedSourceFrames.SequenceEqual(expectedFrames);
             var exactCameraSeam = handoff.PreparedCameraTransform.IsEqualApprox(
                 handoff.RevealedCameraTransform);
@@ -93,13 +95,18 @@ internal static class Fo2OpeningHandoffProof
                 Evidence("adapted-live-arroyo-before-control", handoff.LiveRevealFramePath),
                 Evidence("live-arroyo-first-action", firstActionFrame),
             };
-            var passed = handoff.Completed && handoff.TerminalBlackPresented &&
+            var passed = handoff.Completed && !handoff.SkipRequested &&
+                !handoff.SkipTerminalStateApplied && handoff.TerminalBlackPresented &&
                 handoff.ControlReleased && exactSourceSequence && exactCameraSeam &&
                 handoff.FinalPresentedSourceFrame == contract.TerminalFrame &&
                 Mathf.IsEqualApprox(
                     handoff.FinalSourceFadeFraction,
-                    expectedFinalFadeStep / (float)contract.FadeSteps) &&
+                    contract.TerminalFadeFraction) &&
                 player.IsOnFloor() && firstActionPassed &&
+                worldAudit.VisibleSpriteCards == 0 &&
+                worldAudit.InFrustumSpriteCards == 0 &&
+                sourceClosure.UnaccountedSourceObjects == 0 &&
+                sourceClosure.FirstBeatRuntimeClosurePassed &&
                 evidence.All(row =>
                     row.Sha256.Length == Fo2OpeningHandoffProofNumericContracts.Sha256HexLength &&
                     row.Bytes > 0);
@@ -108,7 +115,7 @@ internal static class Fo2OpeningHandoffProof
             {
                 schema = "opennv-fo2-opening-handoff-proof/v1",
                 status = passed
-                    ? "pass-owned-elder-tail-source-schedule-black-adapted-live-action"
+                    ? "pass-owned-elder-full-source-sequence-black-adapted-live-action"
                     : "fail-fo2-opening-handoff",
                 source = new
                 {
@@ -118,6 +125,7 @@ internal static class Fo2OpeningHandoffProof
                     contract.FadeConfigLogicalPath,
                     contract.FadeConfigSha256,
                     contract.FadeConfigBytes,
+                    contract.PlaybackStartFrame,
                     contract.TailStartFrame,
                     contract.TerminalFrame,
                     contract.TerminalFrameRepeatedFrom,
@@ -127,7 +135,7 @@ internal static class Fo2OpeningHandoffProof
                         numerator = contract.FrameRateNumerator,
                         denominator = contract.FrameRateDenominator,
                     },
-                    nominalTailDuration = new
+                    nominalMovieDuration = new
                     {
                         numerator = contract.AudioDurationNumerator,
                         denominator = contract.AudioDurationDenominator,
@@ -137,7 +145,7 @@ internal static class Fo2OpeningHandoffProof
                         contract.FadeStartFrame,
                         contract.FadeEndFrame,
                         contract.FadeSteps,
-                        finalPresentedStep = expectedFinalFadeStep,
+                        finalPresentedStep = contract.TerminalFadeStep,
                         finalPresentedFraction = handoff.FinalSourceFadeFraction,
                         contract.MovieEndForcesBlack,
                     },
@@ -157,7 +165,7 @@ internal static class Fo2OpeningHandoffProof
                 {
                     contract.HandoffPresentation,
                     contract.ParityStatus,
-                    authoredMovieTail = true,
+                    authoredMovieFromFirstFrame = true,
                     authoredFadeSchedule = true,
                     authoredMovieEndBlack = true,
                     liveRevealAdapted = true,
@@ -175,6 +183,24 @@ internal static class Fo2OpeningHandoffProof
                     arrivalRotation = contract.HandoffArrivalRotation,
                     controlReleased = player.ControlsEnabled,
                     grounded = player.IsOnFloor(),
+                    cameraComposition = new
+                    {
+                        runtime.Profile.CameraCompositionMode,
+                        sourceFramePixels = new[]
+                        {
+                            runtime.Profile.CameraSourceFramePixels.X,
+                            runtime.Profile.CameraSourceFramePixels.Y,
+                        },
+                        sourceHudCropHeightPixels =
+                            runtime.Profile.CameraSourceHudCropHeightPixels,
+                        player.CameraSourcePixelScale,
+                        player.CameraVisibleSourceFrameHeightPixels,
+                        player.CameraSourceFrameCropPixels,
+                        player.CameraWorldViewportHeightPixels,
+                        player.CameraSizeMeters,
+                        authority =
+                            "owned classic frame/HUD crop plus source floor/FRM pixel projection",
+                    },
                     firstAction = new
                     {
                         movement.Binding.Action,
@@ -184,6 +210,72 @@ internal static class Fo2OpeningHandoffProof
                         movementFrames,
                         passed = firstActionPassed,
                     },
+                    classicHud = new
+                    {
+                        runtime.Hud.Mode,
+                        runtime.Hud.OwnedFallout2ClassicInterface,
+                        runtime.Hud.SourcePixelLayout,
+                        runtime.Hud.FirstMovementBeatStateComplete,
+                        runtime.Hud.State.CharacterId,
+                        runtime.Hud.State.HitPoints,
+                        runtime.Hud.State.MaximumHitPoints,
+                        runtime.Hud.State.ArmorClass,
+                        runtime.Hud.State.ActionPoints,
+                        runtime.Hud.State.MaximumActionPoints,
+                        runtime.Hud.State.Authority,
+                        runtime.Hud.RetailBehaviorParity,
+                    },
+                },
+                world3dAudit = new
+                {
+                    scope = "entire-live-scene-and-active-gameplay-camera-frustum",
+                    worldAudit.SourceSpriteNodes,
+                    worldAudit.VisibleSpriteCards,
+                    worldAudit.InFrustumSpriteCards,
+                    worldAudit.ClosedReliefSourceObjects,
+                    worldAudit.Critters3D,
+                    worldAudit.Doors3D,
+                    worldAudit.Torches3D,
+                    worldAudit.OtherPropsAndStonePosts3D,
+                    worldAudit.SourceTorchAssemblies,
+                    worldAudit.SourceTorchFrmPixelProps,
+                    worldAudit.SourceMapLightRecords,
+                    worldAudit.SourceMapLights,
+                    worldAudit.SourceTorchMotivatedMapLights,
+                    worldAudit.SourceTorchPostLayeredAssemblies,
+                    worldAudit.InFrustumTorchAssemblies,
+                    worldAudit.InFrustumTorchFrmPixelProps,
+                    worldAudit.InFrustumTorchAssembliesWithMissingSourcePixels,
+                    worldAudit.InvalidSourceMapLights,
+                    passed = worldAudit.VisibleSpriteCards == 0 &&
+                        worldAudit.InFrustumSpriteCards == 0 &&
+                        worldAudit.SourceTorchPostLayeredAssemblies > 0 &&
+                        worldAudit.InFrustumTorchAssembliesWithMissingSourcePixels == 0 &&
+                        worldAudit.InvalidSourceMapLights == 0,
+                },
+                sourceClosure = new
+                {
+                    sourceClosure.SourceTopLevelObjects,
+                    sourceClosure.CaveShell3DSourceObjects,
+                    sourceClosure.ClosedRelief3DSourceObjects,
+                    sourceClosure.ConvertedTo3DSourceObjects,
+                    sourceClosure.IntentionallyHiddenSourceNonvisualBlocks,
+                    sourceClosure.IntentionallyHiddenSourceExitMarkers,
+                    sourceClosure.IntentionallyHiddenBySourceState,
+                    sourceClosure.ClassifiedSourceObjects,
+                    sourceClosure.UnaccountedSourceObjects,
+                    sourceClosure.ScriptBackedSourceObjects,
+                    sourceClosure.ImplementedSourceScripts,
+                    sourceClosure.BehaviorIncompleteSourceObjects,
+                    sourceClosure.AdmittedFirstActionTiles,
+                    sourceClosure.AdmittedScriptBackedSourceObjects,
+                    sourceClosure.AdmittedExitMarkerSourceObjects,
+                    sourceClosure.AdmittedInactiveExitMarkers,
+                    sourceClosure.OutOfBeatSourceBoundaryExitMarkerInactive,
+                    sourceClosure.AdmittedBehaviorIncompleteSourceObjects,
+                    sourceClosure.OutOfBeatDeferredBehaviorSourceObjects,
+                    sourceClosure.FirstBeatRuntimeClosurePassed,
+                    unaccounted = sourceClosure.UnaccountedSourceObjects,
                 },
                 evidence,
                 windowsAppControlUsed = false,

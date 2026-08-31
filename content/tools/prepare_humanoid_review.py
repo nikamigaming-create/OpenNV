@@ -357,6 +357,10 @@ def prepare_humanoid_review(
         traits.face_asymmetric_geometry,
         race_face_asymmetric_geometry,
     )
+    symmetric_texture = compose_facegen_coordinates(
+        traits.face_symmetric_texture,
+        race_face_symmetric_texture,
+    )
     if hair.model_path is None or eyes.texture_path is None:
         raise ValueError("NPC_ review has incomplete hair or eye assets")
 
@@ -396,7 +400,7 @@ def prepare_humanoid_review(
         face_detail_path = None
         generated_face_detail = synthesize_texture_detail(
             head_egt.data,
-            traits.face_symmetric_texture,
+            symmetric_texture,
         )
         face_detail_source = "direct-egt-synthesis"
     head_diffuse_path = texture_member(head_texture)

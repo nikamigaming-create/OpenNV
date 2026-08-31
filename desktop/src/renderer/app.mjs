@@ -32,9 +32,14 @@ const jamProfileButton = document.querySelector("#choose-jam-profile");
 const launchButton = document.querySelector("#launch");
 const toast = document.querySelector("#toast");
 
+function selectedRouteId() {
+  if (edition.value === "ttw-fo3" || edition.value === "ttw-fnv") return edition.value;
+  return selectedGameId;
+}
+
 function selectedCampaign() {
-  const routeId = edition.value === "ttw" ? "ttw" : selectedGameId;
-  return state.campaigns.find((campaign) => campaign.id === routeId) ?? state.campaigns[0];
+  const campaignId = selectedRouteId().startsWith("ttw-") ? "ttw" : selectedGameId;
+  return state.campaigns.find((campaign) => campaign.id === campaignId) ?? state.campaigns[0];
 }
 
 function selectedGame() {
@@ -117,19 +122,18 @@ function render() {
   const editionEligible = selectedGameId === "newvegas" || selectedGameId === "fallout3";
   if (editionEligible && edition.options.length === 0) {
     const ttw = state.profiles?.ttw;
-    const ttwRoute = state.campaigns.find((candidate) => candidate.id === "ttw");
+    const ttwOpeningId = selectedGameId === "fallout3" ? "ttw-fo3" : "ttw-fnv";
+    const ttwOpening = ttw?.openings?.[ttwOpeningId];
     const ttwStatus = !ttw?.manifestDetected
       ? "setup needed"
       : !ttw.validated
         ? "profile changed"
-        : !ttw.runtimeReady
+        : !ttwOpening?.interactiveReady
           ? "runtime pending"
-          : ttwRoute?.ready
-            ? "ready"
-            : "runtime update needed";
+          : "ready";
     edition.innerHTML = selectedGameId === "newvegas"
-      ? `<option value="newvegas">Original New Vegas</option><option value="ttw">TTW · ${ttwStatus}</option>`
-      : `<option value="fallout3">Original Fallout 3</option><option value="ttw">TTW · ${ttwStatus}</option>`;
+      ? `<option value="newvegas">Original New Vegas</option><option value="ttw-fnv">TTW · New Vegas opening · ${ttwStatus}</option>`
+      : `<option value="fallout3">Original Fallout 3</option><option value="ttw-fo3">TTW · Fallout 3 opening · ${ttwStatus}</option>`;
   }
   if (!editionEligible) edition.innerHTML = "";
   editionRow.classList.toggle("hidden", !editionEligible);
@@ -137,7 +141,10 @@ function render() {
   statusElement.textContent = statusLabel(state.runtime);
   statusElement.dataset.status = state.runtime.status;
   selectionTitle.textContent = campaign.id === "ttw" ? `${game.title} — TTW` : game.title;
-  selectionDetail.textContent = campaign.ready
+  const selectedTtwOpening = state.profiles?.ttw?.openings?.[selectedRouteId()];
+  selectionDetail.textContent = campaign.id === "ttw" && !selectedTtwOpening?.interactiveReady
+    ? selectedTtwOpening?.blocker || campaign.readiness
+    : campaign.ready
     ? campaign.launcherDetail
     : `${campaign.launcherDetail} · ${campaign.readiness}`;
   jamRow.classList.toggle("hidden", !campaign.jam);
@@ -195,7 +202,8 @@ function render() {
   jamProfileButton.textContent = modProfileLabel("jam");
   jamProfileButton.title = state.profiles?.jam?.message || "Choose a local JAM profile manifest.";
   const routeLaunchable = Boolean(
-    state.runtime.canLaunch && campaign.ready && available.has(selectedPresentation));
+    state.runtime.canLaunch && campaign.ready && available.has(selectedPresentation) &&
+    (campaign.id !== "ttw" || selectedTtwOpening?.interactiveReady));
   launchButton.disabled = !routeLaunchable;
   launchButton.textContent = routeLaunchable ? `Play ${campaign.title}` : "Not ready";
   launchButton.title = routeLaunchable ? "Launch this path" : (campaign.readiness || state.runtime.label);
@@ -206,7 +214,7 @@ function render() {
 
 launchButton.addEventListener("click", async () => {
   const result = await api.launch({
-    campaign: selectedCampaign().id,
+    campaign: selectedRouteId(),
     enableJam: jamToggle.checked,
     enableVr: selectedPresentation === "openxr",
     presentation: selectedPresentation

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
@@ -25,10 +26,13 @@ internal static class Fo1ThirdPersonWeapon
             RequiredString(source, "visibility") != VisibilityContract)
             throw new InvalidOperationException("Unexpected Fallout third-person weapon contract.");
         var unitsToMeters = source.GetProperty("unitsToMeters").GetSingle();
+        var heightProportion = actor.Root.Scale.Y / unitsToMeters;
         if (unitsToMeters <= 0.0f ||
             MathF.Abs(actor.Root.Scale.X - unitsToMeters) > Fo1ThirdPersonWeaponNumericContracts.PresentationFloat0Point000001f ||
-            !Mathf.IsEqualApprox(actor.Root.Scale.X, actor.Root.Scale.Y) ||
-            !Mathf.IsEqualApprox(actor.Root.Scale.X, actor.Root.Scale.Z))
+            MathF.Abs(actor.Root.Scale.Z - unitsToMeters) > Fo1ThirdPersonWeaponNumericContracts.PresentationFloat0Point000001f ||
+            !float.IsFinite(heightProportion) ||
+            heightProportion is < CharacterBodyProportions.Minimum or
+                > CharacterBodyProportions.Maximum)
             throw new InvalidOperationException(
                 "Fallout actor and held weapon do not share one authored Gamebryo unit frame.");
 

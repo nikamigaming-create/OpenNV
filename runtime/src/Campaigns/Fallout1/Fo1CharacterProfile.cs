@@ -1,5 +1,87 @@
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
+internal sealed record Fo1CharacterIdentity(
+    string CharacterId,
+    string Role,
+    string Mode,
+    bool EditingLocked,
+    string OwnedGcdSha256,
+    string OwnedBiographySha256,
+    string OwnedPortraitFrmSha256)
+{
+    internal const string ExpectedSchema = "opennv-fo1-character-identity/v1";
+    internal const string CustomMode = "custom-profile";
+    internal const string PremadeMode = "owned-premade-gcd-bio-frm";
+    internal const string LegacyBiographyHash = "legacy-unrecorded";
+
+    internal static Fo1CharacterIdentity Custom { get; } = new(
+        "custom",
+        "custom",
+        CustomMode,
+        false,
+        "none",
+        "none",
+        "none");
+
+    internal static Fo1CharacterIdentity Premade(
+        string characterId,
+        string role,
+        string gcdSha256,
+        string biographySha256,
+        string portraitFrmSha256) => new(
+            characterId,
+            role,
+            PremadeMode,
+            true,
+            gcdSha256,
+            biographySha256,
+            portraitFrmSha256);
+
+    internal void Validate(Fo1CharacterProfile profile)
+    {
+        if (CharacterId == "custom")
+        {
+            if (Role != "custom" || Mode != CustomMode || EditingLocked ||
+                OwnedGcdSha256 != "none" || OwnedBiographySha256 != "none" ||
+                OwnedPortraitFrmSha256 != "none")
+                throw new InvalidOperationException(
+                    "Fallout 1 custom character identity provenance is invalid.");
+            return;
+        }
+
+        var expected = CharacterId switch
+        {
+            "max-stone" => (Name: "Max Stone", Sex: "Male", Role: "combat"),
+            "natalia" => (Name: "Natalia", Sex: "Female", Role: "stealth"),
+            "albert" => (Name: "Albert", Sex: "Male", Role: "diplomat"),
+            _ => throw new InvalidOperationException(
+                $"Fallout 1 character identity is unknown: {CharacterId}"),
+        };
+        if (Mode != PremadeMode || !EditingLocked || Role != expected.Role ||
+            profile.Name != expected.Name || profile.Sex != expected.Sex ||
+            !Hash(OwnedGcdSha256) ||
+            OwnedBiographySha256 != LegacyBiographyHash && !Hash(OwnedBiographySha256) ||
+            !Hash(OwnedPortraitFrmSha256))
+            throw new InvalidOperationException(
+                "Fallout 1 immutable premade identity provenance is invalid.");
+    }
+
+    internal object Report() => new
+    {
+        schema = ExpectedSchema,
+        characterId = CharacterId,
+        role = Role,
+        mode = Mode,
+        editingLocked = EditingLocked,
+        ownedGcdSha256 = OwnedGcdSha256,
+        ownedBiographySha256 = OwnedBiographySha256,
+        ownedPortraitFrmSha256 = OwnedPortraitFrmSha256,
+    };
+
+    private static bool Hash(string value) =>
+        value.Length == 64 && value.All(character => Uri.IsHexDigit(character) && !char.IsUpper(character));
+}
+
 internal static class Fo1CharacterProfileNumericContracts
 {
     // Immutable format, source-art, geometry, and acceptance contracts.
@@ -33,6 +115,7 @@ internal sealed record Fo1CharacterProfile(
     IReadOnlyList<string> TaggedSkills,
     IReadOnlyList<string> Traits)
 {
+    internal Fo1CharacterIdentity Identity { get; init; } = Fo1CharacterIdentity.Custom;
     internal Fo1CharacterAppearance? Appearance { get; init; }
 
     internal static readonly string[] SkillNames =
@@ -107,6 +190,7 @@ internal sealed record Fo1CharacterProfile(
         if (Traits.Count > 2 || Traits.Distinct(StringComparer.Ordinal).Count() != Traits.Count ||
             Traits.Any(trait => !TraitNames.Contains(trait, StringComparer.Ordinal)))
             throw new InvalidOperationException("Fallout character creation allows no more than two distinct traits.");
+        Identity.Validate(this);
         Appearance?.Validate(Sex);
     }
 
@@ -154,9 +238,7 @@ internal sealed record Fo1CharacterProfile(
 
     internal object Report() => new
     {
-        schema = Appearance is null
-            ? "opennv-fo1-character/v1"
-            : "opennv-fo1-character/v2",
+        schema = "opennv-fo1-character/v3",
         name = Name,
         age = Age,
         sex = Sex,
@@ -183,6 +265,7 @@ internal sealed record Fo1CharacterProfile(
         },
         taggedSkills = TaggedSkills,
         traits = Traits,
+        identity = Identity.Report(),
         appearance = Appearance?.Report(),
         derived = new
         {

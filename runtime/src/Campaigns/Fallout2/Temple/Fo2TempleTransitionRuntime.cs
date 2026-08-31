@@ -70,18 +70,43 @@ internal sealed class Fo2TempleTransitionRuntime
     }
 
     internal bool TryApplyAtCurrentTile()
+        => TryApplyAtSourceTile(_movement.CurrentTile, null);
+
+    internal bool TryApplyPostTrial(Fo2TrialVillageTransition expected)
+    {
+        if (expected.Path.Sha256.Length != 64 ||
+            expected.Path.Steps[^1].Tile != expected.SourceTile)
+            throw new InvalidOperationException(
+                "Fallout 2 post-trial transition lacks its exact admitted source route.");
+        var source = _catalog.Exits.SingleOrDefault(row => row.Serial == expected.ExitSerial);
+        if (source is null || source.Tile != expected.SourceTile ||
+            source.TargetMapIndex != expected.TargetMapIndex ||
+            source.TargetTile != expected.TargetTile ||
+            source.TargetElevation != expected.TargetElevation ||
+            source.TargetRotation != expected.TargetRotation ||
+            !_catalog.DestinationMaps.TryGetValue(expected.TargetMapIndex, out var map) ||
+            map.Sha256 != expected.TargetMapSha256 || map.MapName != expected.TargetMapName)
+            throw new InvalidOperationException(
+                "Fallout 2 post-trial transition differs from the owned exit catalog.");
+        return TryApplyAtSourceTile(expected.SourceTile, expected.Path.Sha256);
+    }
+
+    private bool TryApplyAtSourceTile(int sourceTile, string? admittedRouteSha256)
     {
         if (Applied is not null)
             throw new InvalidOperationException(
                 "Fallout 2 Temple nonvisual transition was already applied.");
-        var matches = _catalog.Exits.Where(row => row.Tile == _movement.CurrentTile).ToArray();
+        var matches = _catalog.Exits.Where(row => row.Tile == sourceTile).ToArray();
         if (matches.Length == 0)
             return false;
         if (matches.Length != 1)
             throw new InvalidOperationException(
                 "Fallout 2 Temple current tile has ambiguous exit-grid records.");
         var exit = matches[0];
-        if (exit.SourceBlocking || !_movement.CanReachFromEntry(exit.Tile) ||
+        var sourceRouteAdmitted = admittedRouteSha256 is { Length: 64 } &&
+            admittedRouteSha256.All(Uri.IsHexDigit);
+        if (exit.SourceBlocking ||
+            (!sourceRouteAdmitted && !_movement.CanReachFromEntry(exit.Tile)) ||
             !_catalog.DestinationMaps.TryGetValue(exit.TargetMapIndex, out var destination) ||
             !destination.PresentElevations.Contains(exit.TargetElevation))
             throw new InvalidOperationException(
@@ -100,11 +125,28 @@ internal sealed class Fo2TempleTransitionRuntime
         _stateNode.SetMeta("transition_applied", true);
         _stateNode.SetMeta("exit_serial", exit.Serial);
         _stateNode.SetMeta("source_tile", exit.Tile);
+        _stateNode.SetMeta("admitted_source_route_sha256", admittedRouteSha256 ?? "");
         _stateNode.SetMeta("target_map_index", exit.TargetMapIndex);
         _stateNode.SetMeta("target_map_sha256", destination.Sha256);
         _stateNode.SetMeta("target_tile", exit.TargetTile);
         _stateNode.SetMeta("target_elevation", exit.TargetElevation);
         _stateNode.SetMeta("target_rotation", exit.TargetRotation);
         return true;
+    }
+
+    internal void RestoreApplied(Fo2TempleAppliedTransition expected)
+    {
+        if (!TryApplyAtSourceTile(expected.SourceTile, null) || Applied != expected)
+            throw new InvalidOperationException(
+                "Fallout 2 saved Temple exit differs from the exact owned exit-grid record.");
+    }
+
+    internal void RestorePostTrialApplied(
+        Fo2TempleAppliedTransition expected,
+        Fo2TrialVillageTransition source)
+    {
+        if (!TryApplyPostTrial(source) || Applied != expected)
+            throw new InvalidOperationException(
+                "Fallout 2 saved post-trial exit differs from the exact owned route/exit join.");
     }
 }

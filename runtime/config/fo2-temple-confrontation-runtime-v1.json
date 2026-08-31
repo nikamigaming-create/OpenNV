@@ -11,15 +11,18 @@
     "lootPid": "00000007"
   },
   "adapter": {
-    "identity": "bounded-player-turn-melee-no-target-ai-v1",
+    "identity": "source-acklint-dialogue-path-ap-player-turn-melee-no-target-ai-v3",
     "interactionRangeHexes": 1,
+    "movementActionPointCost": 1,
+    "movementResolution": "exact-adjacent-source-walk-mask-hex-v1",
     "playerActionPointFormula": "5 + effectiveAgility / 2 - bruiserPenalty",
     "playerHitPointFormula": "15 + 2 * effectiveEndurance + effectiveStrength",
     "playerMeleeDamageFormula": "1 + max(1, effectiveStrength - 5) + heavyHandedBonus",
     "attackActionPointCost": 4,
     "hitResolution": "deterministic-hit-no-roll",
     "targetTurns": false,
-    "generalIntScripts": false
+    "generalIntScripts": false,
+    "boundedGuardianDialogue": true
   },
   "input": {
     "combat": { "action": "fo2_temple_combat", "physicalKey": "C", "joyButton": "X" },
@@ -30,7 +33,7 @@
   },
   "ui": {
     "title": "TEMPLE CONFRONTATION",
-    "boundary": "Bounded combat adapter — guardian AI/dialogue/INT script not executed",
+    "boundary": "Owned ACKlint dialogue nodes + source-path AP combat — engine AI/rolls remain unsupported",
     "offsetPixels": [20, 20],
     "widthPixels": 520,
     "fontSizePixels": 18

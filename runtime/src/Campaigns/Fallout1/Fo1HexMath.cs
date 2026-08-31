@@ -102,6 +102,9 @@ internal static class Fo1HexMath
             .ToArray();
     }
 
+    internal static bool AreNeighbors(int firstTile, int secondTile) =>
+        Neighbors(firstTile).Contains(secondTile);
+
     internal static int NeighborAcrossEdge(int tile, int edge)
     {
         if (edge is < 0 or >= DirectionCount)

@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opennv.example/contracts/fnv-racesex-preview-camera-v1.schema.json",
+  "title": "OpenNV FNV RaceSex preview camera contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema",
+    "engineBuild",
+    "status",
+    "parityReady",
+    "cameraContractReady",
+    "ownedUi",
+    "camera",
+    "evidence"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "fnv-racesex-preview-camera-v1.schema.json"
+    },
+    "schema": {
+      "const": "opennv-fnv-racesex-preview-camera/v1"
+    },
+    "engineBuild": {
+      "const": "1.4.0.525"
+    },
+    "status": {
+      "enum": ["blocked-static-evidence-incomplete", "observed-live-unique"]
+    },
+    "parityReady": {
+      "const": false
+    },
+    "cameraContractReady": {
+      "type": "boolean"
+    },
+    "ownedUi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logicalPath",
+        "memberSha256",
+        "menuClass",
+        "renderedMenuClass",
+        "faceGrab",
+        "onMenuOpenTraits"
+      ],
+      "properties": {
+        "logicalPath": { "type": "string", "minLength": 1 },
+        "memberSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "menuClass": { "const": "RaceSexMenu" },
+        "renderedMenuClass": { "const": "FORenderedMenuRaceSex" },
+        "faceGrab": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tile", "id", "x", "y", "width", "height", "tileDepth", "aspect"],
+          "properties": {
+            "tile": { "const": "RSM_Face_Grab" },
+            "id": { "const": 1 },
+            "x": { "const": 150 },
+            "y": { "const": 50 },
+            "width": { "const": 680 },
+            "height": { "const": 620 },
+            "tileDepth": { "const": 100 },
+            "aspect": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["numerator", "denominator"],
+              "properties": {
+                "numerator": { "const": 34 },
+                "denominator": { "const": 31 }
+              }
+            }
+          }
+        },
+        "onMenuOpenTraits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fullIn", "fullOut", "startingZoomPercent", "runtimeValuesStatus"],
+          "properties": {
+            "fullIn": {
+              "const": ["user10", "user11", "user12"]
+            },
+            "fullOut": {
+              "const": ["user13", "user14", "user15"]
+            },
+            "startingZoomPercent": { "const": "user16" },
+            "runtimeValuesStatus": { "enum": ["unresolved", "observed"] }
+          }
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projection", "target", "distance", "frustum", "aspectBehavior"],
+      "properties": {
+        "projection": { "$ref": "#/$defs/evidenceField" },
+        "target": { "$ref": "#/$defs/evidenceField" },
+        "distance": { "$ref": "#/$defs/evidenceField" },
+        "frustum": { "$ref": "#/$defs/evidenceField" },
+        "aspectBehavior": { "$ref": "#/$defs/evidenceField" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "retailProcessLaunched", "liveAttachUsed", "staticClassRoute", "staticCodeBody"],
+      "properties": {
+        "classification": {
+          "enum": [
+            "private-clean-room-static-analysis",
+            "private-clean-room-observe-only-analysis"
+          ]
+        },
+        "retailProcessLaunched": { "const": false },
+        "liveAttachUsed": { "type": "boolean" },
+        "staticClassRoute": { "const": "confirmed" },
+        "staticCodeBody": { "const": "unavailable-encrypted-at-rest" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "blocked-static-evidence-incomplete" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "cameraContractReady": { "const": false },
+          "ownedUi": {
+            "properties": {
+              "onMenuOpenTraits": {
+                "properties": { "runtimeValuesStatus": { "const": "unresolved" } }
+              }
+            }
+          },
+          "camera": {
+            "properties": {
+              "projection": { "$ref": "#/$defs/unresolved" },
+              "target": { "$ref": "#/$defs/unresolved" },
+              "distance": { "$ref": "#/$defs/unresolved" },
+              "frustum": { "$ref": "#/$defs/unresolved" },
+              "aspectBehavior": { "$ref": "#/$defs/unresolved" }
+            }
+          },
+          "evidence": {
+            "properties": {
+              "classification": { "const": "private-clean-room-static-analysis" },
+              "liveAttachUsed": { "const": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "observed-live-unique" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "cameraContractReady": { "const": true },
+          "ownedUi": {
+            "properties": {
+              "onMenuOpenTraits": {
+                "properties": { "runtimeValuesStatus": { "const": "observed" } }
+              }
+            }
+          },
+          "camera": {
+            "properties": {
+              "projection": { "$ref": "#/$defs/observed" },
+              "target": { "$ref": "#/$defs/observed" },
+              "distance": { "$ref": "#/$defs/observed" },
+              "frustum": { "$ref": "#/$defs/observed" },
+              "aspectBehavior": { "$ref": "#/$defs/observed" }
+            }
+          },
+          "evidence": {
+            "properties": {
+              "classification": { "const": "private-clean-room-observe-only-analysis" },
+              "liveAttachUsed": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "evidenceField": {
+      "oneOf": [
+        { "$ref": "#/$defs/unresolved" },
+        { "$ref": "#/$defs/observed" }
+      ]
+    },
+    "unresolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "value", "blocker"],
+      "properties": {
+        "status": { "const": "unresolved" },
+        "value": { "type": "null" },
+        "blocker": { "type": "string", "minLength": 1 }
+      }
+    },
+    "observed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "value", "blocker"],
+      "properties": {
+        "status": { "const": "observed" },
+        "value": { "not": { "type": "null" } },
+        "blocker": { "const": "" }
+      }
+    }
+  }
+}

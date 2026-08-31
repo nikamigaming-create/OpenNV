@@ -1,0 +1,210 @@
+{
+  "schema": "opennv-fo2-arroyo-caves-3d-runtime/v1",
+  "id": "fo2-arroyo-caves-source-molded-3d-v1",
+  "campaign": "Fallout2",
+  "map": {
+    "index": 3,
+    "name": "ARCAVES.MAP",
+    "sha256": "ba35474b8ea67aec50b6a962a1bc767a87366449d4b631fd1b4ce241847b5bfe",
+    "elevation": 0
+  },
+  "sourceCoverage": {
+    "nonDefaultFloorPatches": 4595,
+    "floorBoundaryEdges": 316,
+    "topLevelObjects": 1842,
+    "objectTypes": {
+      "0": 2,
+      "1": 10,
+      "2": 157,
+      "3": 1145,
+      "5": 528
+    },
+    "wallObjects": 1145,
+    "uniqueWallTiles": 1112,
+    "wallComponents": 13,
+    "largestWallComponentTiles": 607,
+    "wallBoundaryEdges": 3130,
+    "hiddenNonWallBlockCards": 601,
+    "hiddenSourceMarkerCards": 24,
+    "visibleGroundedSourceProps": 72,
+    "sourceTorchProps": 22,
+    "sourceMapLights": 33
+  },
+  "authority": {
+    "floor": "non-default floor tile entries at Map 3 elevation 0",
+    "walls": "top-level MAP objects whose exact prototype object type is 3",
+    "wallGrouping": "edge-connected source wall hexes",
+    "props": "exact MAP serial, tile, rotation, frame, pixel offset, FID, PID, and FRM",
+    "lighting": "exact nonzero MAP object lightDistance and lightIntensity at source tiles",
+    "collisionAndWalkability": "existing source floor plus blocking-object walk mask; presentation geometry does not alter it",
+    "hiddenCardLogicalPaths": [
+      "art\\misc\\block.frm",
+      "art\\scenery\\block.frm",
+      "art\\walls\\block.frm"
+    ],
+    "hiddenSourceMarkerLogicalPaths": [
+      "art\\misc\\exitgrd7.frm"
+    ],
+    "torchLogicalPaths": [
+      "art\\scenery\\atorch3.frm",
+      "art\\scenery\\atorch4.frm",
+      "art\\scenery\\atorch5.frm"
+    ]
+  },
+  "floorGeometry": {
+    "mode": "source-floor-patch-fused-relief-v1",
+    "surfaceMeters": 0.02,
+    "reliefMeters": 0.04,
+    "reliefFrequency": 0.52,
+    "subdivisionsPerAxis": 4,
+    "boundaryClosureHeightMeters": 3.15,
+    "boundaryClosureOverhangMeters": 0.42
+  },
+  "wallGeometry": {
+    "mode": "edge-connected-source-wall-graph-sdf-closed-shell-v2",
+    "sourceObjectType": 3,
+    "heightMeters": 2.85,
+    "heightVariationMeters": 0.46,
+    "heightFrequency": 0.27,
+    "heightPhase": 1.37,
+    "groundSinkMeters": 0.28,
+    "sdfSampleMeters": 0.34,
+    "sdfRadiusMeters": 0.86,
+    "ceilingOverhangMeters": 0.18,
+    "sideShoulderHeightFraction": 0.52,
+    "sideBulgeMeters": 0.24,
+    "sideNoiseMeters": 0.11,
+    "ceilingClosure": true,
+    "componentMeshMode": "one-indexed-sdf-shell-per-connected-component",
+    "roles": {
+      "mode": "source-component-and-frm-identity-role-map-v1",
+      "caveShellMinimumConnectedTiles": 2,
+      "expectedCaveShellComponents": 3,
+      "expectedStonePostInstances": 10,
+      "stonePostLogicalPaths": [
+        "art\\walls\\temple32.frm",
+        "art\\walls\\temple96.frm",
+        "art\\walls\\temple97.frm",
+        "art\\walls\\temple98.frm"
+      ],
+      "stonePostGeometryMode": "exact-frm-alpha-island-molded-relief-v2",
+      "stonePostDepthMeters": 0.18
+    }
+  },
+  "materials": {
+    "shaderContract": "opennv-world-space-owned-frm-multiscale-triplanar-albedo-normal-rock/v4",
+    "worldScale": 1.0,
+    "normalStrength": 1.15,
+    "sourceDetailWorldScale": 0.56,
+    "sourceDetailMix": 0.34,
+    "macroDetailWorldScale": 0.18,
+    "macroDetailMix": 0.24,
+    "wall": {
+      "dark": [0.22, 0.12, 0.06, 1.0],
+      "light": [0.62, 0.37, 0.17, 1.0],
+      "roughness": 0.91,
+      "ambientLift": 0.18
+    },
+    "floor": {
+      "dark": [0.18, 0.11, 0.055, 1.0],
+      "light": [0.54, 0.34, 0.16, 1.0],
+      "roughness": 0.96,
+      "ambientLift": 0.22
+    }
+  },
+  "sourceProps": {
+    "geometryMode": "exact-frm-alpha-island-molded-relief-v2",
+    "groundingMode": "runtime-aabb-seat-to-molded-source-floor-v1",
+    "coLocatedLayerMode": "same-tile-source-serial-front-order-v1",
+    "coLocatedLayerGapMeters": 0.008,
+    "maximumGroundErrorMeters": 0.0001,
+    "shaded": true,
+    "doubleSided": true
+  },
+  "villageMoldedSurface": {
+    "mode": "owned-map-floor-shared-height-and-frm-relief-v1",
+    "floorHeightScale": 12.0,
+    "floorHeightNeighborhoodRadius": 2,
+    "floorNormalScale": 1.6,
+    "floorSourceDetailMix": 0.22,
+    "floorAlbedoScale": 0.58,
+    "floorColorNeighborhoodRadius": 2,
+    "objectDepthScale": 3.0,
+    "objectNormalScale": 1.4,
+    "objectTwoSidedLightingMode": "owned-frm-average-color-normalized-backlight-with-owned-normal-v1",
+    "objectBacklightStrength": 0.72,
+    "arrivalFramingMode": "exact-route-plus-nearest-visible-source-object-aabb-v1",
+    "arrivalNearestVisibleObjectCount": 1,
+    "arrivalMaximumObjectHexDistance": 8,
+    "arrivalBoundsPaddingFraction": 0.04,
+    "ambientEnergyScale": 0.18,
+    "tonemapExposureScale": 0.58,
+    "directionalEnergyScale": 0.95,
+    "policy": "owned MAP floor adjacency and FRM alpha, luminance, normals, placement, and pixels remain authoritative; these bounded multipliers expose their otherwise sub-pixel relief under the classic orthographic camera"
+  },
+  "atmosphere": {
+    "backgroundColor": [0.014, 0.01, 0.006, 1.0],
+    "ambientColor": [0.34, 0.31, 0.27, 1.0],
+    "ambientEnergy": 0.9,
+    "tonemapExposure": 1.35,
+    "fogColor": [0.08, 0.06, 0.04, 1.0],
+    "fogLightEnergy": 0.48,
+    "fogDensity": 0.022,
+    "fogAerialPerspective": 0.72,
+    "fogSkyAffect": 1.0,
+    "volumetricFogDensity": 0.006,
+    "volumetricFogAlbedo": [0.28, 0.21, 0.13, 1.0],
+    "volumetricFogEmission": [0.005, 0.003, 0.0015, 1.0],
+    "volumetricFogEmissionEnergy": 0.12,
+    "volumetricFogLengthMeters": 28.0,
+    "volumetricFogDetailSpread": 1.15,
+    "volumetricFogAmbientInject": 0.28,
+    "volumetricFogSkyAffect": 0.82,
+    "directionalLight": {
+      "rotationDegrees": [-52.0, -28.0, 0.0],
+      "color": [0.9, 0.79, 0.64, 1.0],
+      "energy": 0.95,
+      "shadowEnabled": true
+    },
+    "sourceMapLights": {
+      "mode": "exact-map-object-light-distance-intensity-v1",
+      "logicalPath": "art\\scenery\\block.frm",
+      "fid": "02000015",
+      "objectType": 2,
+      "expectedRecords": 33,
+      "expectedDistance": 3,
+      "expectedIntensity": 65536,
+      "intensityFixedPointOne": 65536,
+      "verticalProjectionMode": "source-tile-center-one-hex-circumradius-height-v1"
+    }
+  },
+  "staticCapture": {
+    "projection": "perspective",
+    "positionOffsetMeters": [-10.5, 17.0, 11.0],
+    "focusOffsetMeters": [0.0, 0.85, 0.0],
+    "fovDegrees": 45.0,
+    "nearClipMeters": 0.1,
+    "farClipMeters": 120.0,
+    "minimumLuminanceDeviation": 0.035,
+    "minimumNonBackgroundPixels": 420000,
+    "maximumBackgroundPixelFraction": 0.16
+  },
+  "generatedAssetLane": {
+    "used": false,
+    "trellisCandidatesAdmitted": 0,
+    "ownedOrGeneratedMeshesPackaged": false,
+    "reason": "This bounded improvement uses verified disposable locally derived owned FRM surfaces plus runtime MAP-bound geometry; no generated or Trellis asset is admitted or packaged."
+  },
+  "promotion": {
+    "boundedStaticVisualGateOnly": true,
+    "pairReady": false,
+    "retailParity": false,
+    "fo1QualityParity": false,
+    "cinematicHandoffReviewed": false,
+    "presentationBlockers": [
+      "Human final-eye review has not accepted the molded Map 3 presentation.",
+      "The player-plus-owned-IFACE gameplay frame exists, but final-eye presentation quality has not been accepted.",
+      "Fallout 1 presentation quality and retail parity remain unproven."
+    ]
+  }
+}
