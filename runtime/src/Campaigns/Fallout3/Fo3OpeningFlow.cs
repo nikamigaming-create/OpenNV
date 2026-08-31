@@ -55,7 +55,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Action? _activeAppearanceShowFace;
     private HSlider? _activeFaceControlSlider;
     private Fo3AppearanceSelection? _activeAppearanceSelection;
-    private OpeningPlayerFaceGenPreviewHost? _activeFacePreview;
+    private OwnedGamebryoFaceGenPreviewHost? _activeFacePreview;
     private bool _introCompleted;
     private Fo3OwnedVideoMode _ownedVideoMode;
     private Fo3Cg01Stage0State? _activeCg01MovieState;

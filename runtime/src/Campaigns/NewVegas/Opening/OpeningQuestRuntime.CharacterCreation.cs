@@ -115,7 +115,7 @@ internal partial class OpeningQuestRuntime
         _raceSexMenuHost.FaceGrabHost();
         var preview = _raceSexRenderedDeviceHost.CreateFacePresentationHost();
         var previewControls = FaceGenPreviewControls(faceGen);
-        OpeningPlayerFaceGenPreviewHost? previewHost = null;
+        OwnedGamebryoFaceGenPreviewHost? previewHost = null;
         OpeningPlayerFaceGenPreview? selectedPreviewState = null;
 
         void RefreshPreview() => previewHost?.SetPreviewState(
@@ -176,7 +176,7 @@ internal partial class OpeningQuestRuntime
                     $"sex={engineSex} race={_raceFormId} hair={_hairFormId} " +
                     $"eyes={_eyesFormId}.");
             selectedPreviewState = selectedPreview;
-            previewHost = OpeningPlayerFaceGenPreviewHost.Load(
+            previewHost = OwnedGamebryoFaceGenPreviewHost.Load(
                 selectedPreview,
                 previewControls,
                 previewPolicy,
@@ -185,7 +185,7 @@ internal partial class OpeningQuestRuntime
                 _loaded.MainContent.Lighting,
                 _loaded.UnitsToMeters,
                 source.FaceGrab.Rect.Size,
-                renderedDevice);
+                renderedDevice.FaceGenPreviewDevice);
             foreach (var control in previewControls)
                 previewHost.Apply(
                     control.SettingEntity,

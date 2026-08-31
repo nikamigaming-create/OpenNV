@@ -4,6 +4,7 @@ using Godot;
 
 
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Presentation.CharacterCreation;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 

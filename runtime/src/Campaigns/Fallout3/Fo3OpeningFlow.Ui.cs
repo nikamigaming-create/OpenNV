@@ -56,45 +56,6 @@ internal partial class Fo3OpeningFlow
             selectedFormId));
     }
 
-    private void RenderAppearancePreview(
-        HBoxContainer preview,
-        Fo3AppearanceAsset head,
-        Fo3AppearanceAsset hair,
-        Fo3AppearanceAsset eyes,
-        Fo3FaceGenDefaults faceGen)
-    {
-        foreach (var child in preview.GetChildren())
-        {
-            preview.RemoveChild(child);
-            child.QueueFree();
-        }
-        preview.AddChild(AppearancePreviewTile("MENU", _profile.Appearance.Ui.BackgroundTexture));
-        preview.AddChild(AppearancePreviewTile("HEAD", head));
-        preview.AddChild(AppearancePreviewTile("HAIR", hair));
-        preview.AddChild(AppearancePreviewTile("EYES", eyes));
-        preview.TooltipText =
-            $"FaceGen defaults: {faceGen.SymmetricGeometrySha256} / " +
-            $"{faceGen.AsymmetricGeometrySha256} / {faceGen.SymmetricTextureSha256}";
-    }
-
-    private VBoxContainer AppearancePreviewTile(string title, Fo3AppearanceAsset asset)
-    {
-        var image = LoadAppearanceImage(asset);
-        var tile = new VBoxContainer();
-        tile.AddChild(Label(title, Fo3OpeningFlowNumericContracts.BodyFontPixels));
-        tile.AddChild(new TextureRect
-        {
-            Texture = ImageTexture.CreateFromImage(image),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            CustomMinimumSize = new Vector2(
-                Fo3OpeningFlowNumericContracts.AppearancePreviewTexturePixels,
-                Fo3OpeningFlowNumericContracts.AppearancePreviewTexturePixels),
-            TooltipText = $"source={asset.SourceSha256} preview={asset.PreviewSha256}",
-        });
-        return tile;
-    }
-
     private static Image LoadAppearanceImage(Fo3AppearanceAsset asset)
     {
         var image = Image.LoadFromFile(asset.PreviewPath);

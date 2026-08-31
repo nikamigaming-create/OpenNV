@@ -715,7 +715,7 @@ internal partial class Fo3OpeningFlow
             sex.EngineSex);
         var control = _profile.Appearance.FaceControl;
         var activeControl = control;
-        _activeFacePreview = OpeningPlayerFaceGenPreviewHost.Load(
+        _activeFacePreview = OwnedGamebryoFaceGenPreviewHost.Load(
             previewSource,
             _profile.Appearance.FaceControls.Select(value =>
                 new OpeningNativeFaceGenGeometryControl(
@@ -770,7 +770,7 @@ internal partial class Fo3OpeningFlow
             creatorLighting,
             _birthPresentation.UnitsToMeters,
             faceFrame.Size,
-            renderedDevice);
+            renderedDevice.FaceGenPreviewDevice);
         var previewProportions =
             CharacterBodyProportions.Neutral("fo3-custom-live-v1");
         var faceFraming = true;

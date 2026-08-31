@@ -32,7 +32,6 @@ internal static class Fo3OpeningFlowNumericContracts
     internal const float SkipButtonOffsetXPixels = -220.0f;
     internal const float SkipButtonOffsetYPixels = 24.0f;
     internal const float SkipButtonWidthPixels = 190.0f;
-    internal const float AppearancePreviewTexturePixels = 150.0f;
     internal const float VaultPreviewMarginPixels = 24.0f;
     internal const float VaultPreviewPanelWidthPixels = 560.0f;
     internal const float BoundaryHorizontalInsetPixels = 120.0f;

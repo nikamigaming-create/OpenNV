@@ -150,7 +150,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private bool _openingQuestCompleted;
     private bool _autoDisplayObjectives;
     private AcceptanceAppearancePhase _acceptanceAppearancePhase;
-    private OpeningPlayerFaceGenPreviewHost? _appearancePreviewHost;
+    private OwnedGamebryoFaceGenPreviewHost? _appearancePreviewHost;
     private OpeningRaceSexMenuHost? _raceSexMenuHost;
     private OpeningRaceSexRenderedDeviceHost? _raceSexRenderedDeviceHost;
     private Action? _raceSexShowSex;

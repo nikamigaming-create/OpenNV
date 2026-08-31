@@ -9,15 +9,19 @@ using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
-namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
+namespace OpenNV.Runtime.Presentation.CharacterCreation;
 
-internal sealed class OpeningPlayerFaceGenPreviewHost
+internal sealed class OwnedGamebryoFaceGenPreviewHost
 {
     private const float PreviewMinimumDimensionPixels = 160.0f;
     private const float LegacyAspectFitFrameMargin = 1.15f;
     private const float LegacyPreviewNearPlaneMeters = 0.01f;
     private const float LegacyPreviewFarPlaneMeters = 100.0f;
     private const float PreviewEnvironmentAmbientEnergy = 0.0f;
+    private const float PreviewHalfExtentFactor = 0.5f;
+    private const float PreviewMaximumFieldOfViewDegrees = 180.0f;
+    private const float PreviewFaceFrameMargin = 1.035f;
+    private const float PreviewBodyFrameMargin = 1.18f;
     private const string PreviewHeadRole = "head";
     private const string PreviewLeftEyeRole = "eye-left";
     private const string PreviewRightEyeRole = "eye-right";
@@ -41,7 +45,7 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
     private readonly float _morphWeightScale;
     private readonly float _unitsToMeters;
 
-    private OpeningPlayerFaceGenPreviewHost(
+    private OwnedGamebryoFaceGenPreviewHost(
         SubViewportContainer control,
         SubViewport viewport,
         Node3D actorRoot,
@@ -81,7 +85,7 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
     internal string FramingDisposition { get; }
     internal string LightingDisposition => PreviewLightingDisposition;
 
-    internal static OpeningPlayerFaceGenPreviewHost Load(
+    internal static OwnedGamebryoFaceGenPreviewHost Load(
         OpeningPlayerFaceGenPreview source,
         IReadOnlyList<OpeningNativeFaceGenGeometryControl> controls,
         OpeningFaceGenPreviewControl policy,
@@ -90,7 +94,7 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
         CellContentLoader.LightingContract lighting,
         float unitsToMeters,
         Vector2 availableSize,
-        OpeningRaceSexRenderedDevice? renderedDevice = null)
+        OwnedGamebryoFaceGenDeviceContract? renderedDevice = null)
     {
         VerifyHash(source.GltfPath, source.GltfSha256);
         VerifyHash(source.SidecarPath, source.SidecarSha256);
@@ -144,16 +148,10 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
                 : ActorModelSlice.BoundsContract.AnyActor);
         var menuDiffuse = renderedDevice is null
             ? lighting.DirectionalColor
-            : new Color(
-                renderedDevice.Float("menuPlayerLightDiffuseRed"),
-                renderedDevice.Float("menuPlayerLightDiffuseGreen"),
-                renderedDevice.Float("menuPlayerLightDiffuseBlue"));
+            : renderedDevice.PlayerDiffuse;
         var menuAmbient = renderedDevice is null
             ? lighting.AmbientColor
-            : new Color(
-                renderedDevice.Float("menuPlayerLightAmbientRed"),
-                renderedDevice.Float("menuPlayerLightAmbientGreen"),
-                renderedDevice.Float("menuPlayerLightAmbientBlue"));
+            : renderedDevice.PlayerAmbient;
         var litMaterials = RuntimeMaterialLoader.ApplyRetailActorLighting(
             actor.Root,
             menuAmbient,
@@ -221,8 +219,7 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
         var yawRadians = float.NaN;
         if (renderedDevice is not null)
         {
-            if (renderedDevice.PreviewCameraContract.CameraContractReady ||
-                renderedDevice.PreviewCameraContract.ParityReady)
+            if (renderedDevice.CameraContractReady || renderedDevice.ParityReady)
                 throw new InvalidOperationException(
                     "Ready FNV RaceSex preview-camera data requires an implemented exact contract join.");
             var zoom = presentation.StartingZoomFraction;
@@ -238,9 +235,9 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
                 presentation.FullOutYawRadians,
                 presentation.FullInYawRadians,
                 zoom);
-            var nearMeters = renderedDevice.Float("nearDistanceGameUnits") * unitsToMeters;
-            var farMeters = renderedDevice.Float("farDistanceGameUnits") * unitsToMeters;
-            var fovHalfTangent = renderedDevice.Float("terminalFov");
+            var nearMeters = renderedDevice.NearDistanceGameUnits * unitsToMeters;
+            var farMeters = renderedDevice.FarDistanceGameUnits * unitsToMeters;
+            var fovHalfTangent = renderedDevice.FovHalfTangent;
             var fovDegrees = Mathf.RadToDeg(2.0f * Mathf.Atan(fovHalfTangent));
             if (!float.IsFinite(verticalOffsetGameUnits) ||
                 !float.IsFinite(distanceGameUnits) || distanceGameUnits <= 0.0f ||
@@ -248,7 +245,8 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
                 !float.IsFinite(nearMeters) || nearMeters <= 0.0f ||
                 !float.IsFinite(farMeters) || farMeters <= nearMeters ||
                 !float.IsFinite(fovHalfTangent) || fovHalfTangent <= 0.0f ||
-                !float.IsFinite(fovDegrees) || fovDegrees <= 0.0f || fovDegrees >= 180.0f)
+                !float.IsFinite(fovDegrees) || fovDegrees <= 0.0f ||
+                fovDegrees >= PreviewMaximumFieldOfViewDegrees)
                 throw new InvalidOperationException(
                     "Observed RaceSex camera or owned display frustum is invalid.");
             camera.Fov = fovDegrees;
@@ -326,9 +324,9 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
             $"cameraDistanceGameUnits={distanceGameUnits:R} " +
             $"cameraVerticalOffsetGameUnits={verticalOffsetGameUnits:R} " +
             $"cameraYawRadians={yawRadians:R} cameraFovDegrees={camera.Fov:R} " +
-            $"cameraContractStatus={renderedDevice?.PreviewCameraContract.Status ?? "not-applicable"} " +
-            $"cameraContractReady={renderedDevice?.PreviewCameraContract.CameraContractReady ?? false} " +
-            $"parityReady={renderedDevice?.PreviewCameraContract.ParityReady ?? false} " +
+            $"cameraContractStatus={renderedDevice?.CameraContractStatus ?? "not-applicable"} " +
+            $"cameraContractReady={renderedDevice?.CameraContractReady ?? false} " +
+            $"parityReady={renderedDevice?.ParityReady ?? false} " +
             $"lighting={PreviewLightingDisposition} menuDiffuse={menuDiffuse} " +
             $"menuAmbient={menuAmbient}");
 
@@ -400,7 +398,7 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
             $"fullBody={source.FullBody} bodyRoles={bodyRoles.Count} " +
             $"bodySurfaces={bodySurfaceCount} morphSurfaces={morphSurfaces.Length} " +
             $"controls={bindings.Count} actorBounds={actor.Bounds}");
-        return new OpeningPlayerFaceGenPreviewHost(
+        return new OwnedGamebryoFaceGenPreviewHost(
             viewportContainer,
             viewport,
             actor.Root,
@@ -466,7 +464,7 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
         FrameBounds(
             faceFraming ? _faceBounds : _fullActorBounds,
             proportions.Height,
-            faceFraming ? 1.035f : 1.18f,
+            faceFraming ? PreviewFaceFrameMargin : PreviewBodyFrameMargin,
             faceFraming ? "frontal classic portrait" : "frontal full-body");
         _viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         var mode = (greenProjection, faceFraming) switch
@@ -494,18 +492,19 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
         var size = bounds.Size;
         size.Y *= heightScale;
         var aspect = _viewport.Size.X / (float)_viewport.Size.Y;
-        var halfFov = Mathf.DegToRad(_camera.Fov) * 0.5f;
+        var halfFov = Mathf.DegToRad(_camera.Fov) * PreviewHalfExtentFactor;
         var tangent = MathF.Tan(halfFov);
         var distance = MathF.Max(
-            size.Y * 0.5f / tangent,
-            size.X * 0.5f / (tangent * aspect)) * margin;
+            size.Y * PreviewHalfExtentFactor / tangent,
+            size.X * PreviewHalfExtentFactor / (tangent * aspect)) * margin;
         if (!target.IsFinite() || !size.IsFinite() ||
             !float.IsFinite(distance) || distance <= 0.0f)
             throw new InvalidOperationException(
                 $"Reflectron {label} preview framing is invalid.");
         // Imported Gamebryo actors face the preview camera on Godot's forward axis.
         // The device's decorative yaw must never turn a character portrait.
-        _camera.Position = target + Vector3.Forward * (distance + size.Z * 0.5f);
+        _camera.Position = target + Vector3.Forward *
+            (distance + size.Z * PreviewHalfExtentFactor);
         _camera.LookAt(target, Vector3.Up);
     }
 
