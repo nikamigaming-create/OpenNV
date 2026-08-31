@@ -56,7 +56,11 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
                 "SCPT",
                 "0010a1f0",
                 "VCG02SCRIPT",
-                source="scn VCG02SCRIPT",
+                source=(
+                    "scn VCG02SCRIPT\n"
+                    "short nTargetCount\n"
+                    "short bShootingTutorialActive"
+                ),
             ),
             record(
                 "SCPT",
@@ -74,6 +78,13 @@ class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
         self.assertEqual("0010a1f0", quest["scriptFormId"])
         self.assertEqual("VCG02SCRIPT", quest["scriptEditorId"])
         self.assertEqual(5, quest["entryStage"])
+        self.assertEqual(
+            [
+                {"index": 1, "name": "nTargetCount"},
+                {"index": 2, "name": "bShootingTutorialActive"},
+            ],
+            quest["variables"],
+        )
         command = quest["stages"][0]["commands"][0]
         self.assertEqual("objective", command["kind"])
         self.assertEqual("0010a214", command["questFormId"])

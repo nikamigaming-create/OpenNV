@@ -98,6 +98,85 @@ if (!Rejects(() => GamebryoPackageSelector.SelectFirst(
     throw new InvalidOperationException(
         "Actor-reference package target admitted an invented placement.");
 
+var objectiveState = state with
+{
+    CompletedObjectives = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        GamebryoPackageSelector.ObjectiveKey(quest, 70),
+    },
+};
+var objectiveSelected = GamebryoPackageSelector.SelectFirst(
+    [new GamebryoPackageCandidate<string>(
+        "00000063",
+        [new GamebryoPackageCondition(
+            "getObjectiveCompleted",
+            GamebryoPackageComparison.Equal,
+            1.0,
+            quest,
+            70,
+            0,
+            "")],
+        GamebryoPackageTarget.None,
+        null,
+        "completed")],
+    objectiveState,
+    requireMatch: true);
+if (objectiveSelected?.Value != "completed")
+    throw new InvalidOperationException(
+        "Source package objective-completion condition differs.");
+
+var tutorialState = new GamebryoPackageState(
+    new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [quest] = 10 },
+    new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+    new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+    {
+        [GamebryoPackageSelector.VariableKey(quest, 4)] = 1.0,
+    });
+var tutorialPackage = GamebryoPackageSelector.SelectFirst(
+    [
+        new GamebryoPackageCandidate<string>(
+            "00000064",
+            [new GamebryoPackageCondition(
+                "getQuestVariable",
+                GamebryoPackageComparison.Equal,
+                0.0,
+                quest,
+                4,
+                0,
+                "")],
+            GamebryoPackageTarget.None,
+            null,
+            "meet"),
+        new GamebryoPackageCandidate<string>(
+            "00000065",
+            [
+                new GamebryoPackageCondition(
+                    "getObjectiveCompleted",
+                    GamebryoPackageComparison.Equal,
+                    0.0,
+                    quest,
+                    70,
+                    0,
+                    ""),
+                new GamebryoPackageCondition(
+                    "getStage",
+                    GamebryoPackageComparison.Equal,
+                    10.0,
+                    quest,
+                    0,
+                    0,
+                    ""),
+            ],
+            GamebryoPackageTarget.None,
+            null,
+            "travel"),
+    ],
+    tutorialState,
+    requireMatch: true);
+if (tutorialPackage?.Value != "travel")
+    throw new InvalidOperationException(
+        "Source tutorial package did not supersede the meet package.");
+
 if (!Rejects(() => GamebryoPackageSelector.SelectFirst(
         [new GamebryoPackageCandidate<string>(
             "00000070",

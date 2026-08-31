@@ -935,6 +935,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         if (_openingQuestCompleted)
         {
             UpdateDialogueVoice();
+            UpdateOrdinaryActorTravel(delta);
             return;
         }
         UpdatePlayerAnimation(delta);

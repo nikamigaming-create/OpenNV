@@ -577,6 +577,13 @@ internal partial class OpeningQuestRuntime
         OpeningTransformState.Capture(_guideActor.Placement))
     {
         GuidePackage = CaptureGuidePackageState(),
+        OrdinaryActorTransforms = _flow.OrdinaryActors.ToDictionary(
+            value => value.ReferenceFormId,
+            value => OpeningTransformState.Capture(
+                _loaded.Actors.Single(actor => actor.ReferenceFormId.Equals(
+                    value.ReferenceFormId,
+                    StringComparison.OrdinalIgnoreCase)).Placement),
+            StringComparer.OrdinalIgnoreCase),
     };
 
     internal static bool MatchesFlow(
@@ -662,6 +669,12 @@ internal partial class OpeningQuestRuntime
             state.PlayerControls.Count != PlayerControlCount)
             throw new InvalidOperationException(
                 "Saved opening state does not match the owned New Game flow.");
+        if (state.OrdinaryActorTransforms.Count != 0 &&
+            !state.OrdinaryActorTransforms.Keys.ToHashSet(
+                    StringComparer.OrdinalIgnoreCase).SetEquals(
+                    flow.OrdinaryActors.Select(value => value.ReferenceFormId)))
+            throw new InvalidOperationException(
+                "Saved ordinary actor transforms do not match the owned flow.");
         if (state.Completed)
             ValidateCompletedState(flow, state);
     }
@@ -898,6 +911,16 @@ internal partial class OpeningQuestRuntime
             _playerControls[index] = state.PlayerControls[index] == EnabledControlValue;
         state.PlayerTransform.Apply(_loaded.Player);
         state.GuideTransform.Apply(_guideActor.Placement);
+        foreach (var transform in state.OrdinaryActorTransforms)
+        {
+            var actor = _loaded.Actors.SingleOrDefault(value =>
+                value.ReferenceFormId.Equals(
+                    transform.Key, StringComparison.OrdinalIgnoreCase));
+            if (actor == default)
+                throw new InvalidOperationException(
+                    "Saved ordinary actor transform target is absent.");
+            transform.Value.Apply(actor.Placement);
+        }
         _restoredGuidePackageState = state.GuidePackage;
         foreach (var reference in _referenceEnabledStates)
             SetReferenceVisibility(reference.Key, reference.Value, false);

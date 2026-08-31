@@ -73,7 +73,16 @@ internal sealed partial record OpeningNewGameFlow
                 actor.PackagePriority.Count == 0 ||
                 actor.PackagePriority.Any(formId => !actor.Packages.ContainsKey(formId)) ||
                 !actor.Topics.ContainsKey(actor.ActivationTopicFormId) ||
-                !actor.Voice.SpeakerRole.Equals(actor.Role, StringComparison.OrdinalIgnoreCase))
+                !actor.Voice.SpeakerRole.Equals(actor.Role, StringComparison.OrdinalIgnoreCase) ||
+                actor.ArrivalTransitions.Any(value =>
+                    !actor.Packages.ContainsKey(value.PackageFormId) ||
+                    !value.ActorReferenceFormId.Equals(
+                        actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase) ||
+                    !flow.OrdinaryQuests.TryGetValue(
+                        value.QuestFormId, out var arrivalQuest) ||
+                    !arrivalQuest.Stages.ContainsKey(value.FromStage) ||
+                    !arrivalQuest.Stages.ContainsKey(value.ToStage) ||
+                    string.IsNullOrWhiteSpace(value.ScriptEditorId)))
                 throw new InvalidOperationException(
                     "Owned ordinary actor dialogue handoff is incomplete.");
             ValidateCommandContract(actor.CommandContract, actorCommands);

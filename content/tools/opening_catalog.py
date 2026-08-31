@@ -6594,6 +6594,18 @@ def _compile_ordinary_quests(
         ordinary_programs, _, _ = _stage_programs(
             ordinary_quest, ordinary_sources[0]
         )
+        variable_names = [
+            match
+            for match in re.findall(
+                r"^\s*(?:short|long|float|ref)\s+([A-Za-z_]\w*)\b",
+                ordinary_sources[0],
+                re.IGNORECASE | re.MULTILINE,
+            )
+        ]
+        if len(variable_names) != len(set(value.casefold() for value in variable_names)):
+            raise ValueError(
+                f"Owned ordinary quest variables are ambiguous: {ordinary_editor_id}"
+            )
         entry_stages = []
         for record in records:
             for source in _record_text_values(record, "SCTX"):
@@ -6631,6 +6643,10 @@ def _compile_ordinary_quests(
                 "scriptFormId": ordinary_script["formId"],
                 "scriptEditorId": _record_editor_id_from_manifest(ordinary_script),
                 "entryStage": entry_stages[0],
+                "variables": [
+                    {"index": index, "name": name}
+                    for index, name in enumerate(variable_names, start=1)
+                ],
                 "objectives": ordinary_quest["questObjectives"],
                 "stages": ordinary_programs,
                 "commandContract": _resolve_command_record_identities(
@@ -6913,6 +6929,72 @@ def compile_new_game_flow(
             for info in topic["infos"]
             for command in info["commands"]
         ]
+        arrivals = []
+        packages_by_editor = {
+            str(package["editorId"]).casefold(): package for package in packages
+        }
+        for transition_source in actor_contract.get("arrivalTransitions", []):
+            transition = dict(transition_source)
+            package_editor_id = str(transition["packageEditorId"])
+            package = packages_by_editor.get(package_editor_id.casefold())
+            if package is None:
+                raise ValueError(
+                    f"Owned ordinary arrival package is absent: {package_editor_id}"
+                )
+            script_editor_id = str(transition["scriptEditorId"])
+            script = _unique_manifest_record(records, script_editor_id, "SCPT")
+            sources_text = _record_text_values(script, "SCTX")
+            if len(sources_text) != 1:
+                raise ValueError(
+                    f"Owned ordinary arrival script is ambiguous: {script_editor_id}"
+                )
+            source_text = sources_text[0]
+            actor_editor_id = str(role["editorId"])
+            if not re.search(
+                rf"BEGIN\s+OnTrigger\s+{re.escape(actor_editor_id)}\b",
+                source_text,
+                re.IGNORECASE,
+            ):
+                raise ValueError(
+                    f"Owned ordinary arrival actor differs: {script_editor_id}"
+                )
+            from_stages = {
+                int(value)
+                for value in re.findall(
+                    rf"GetStage\s+{re.escape(ordinary_quest_editor_id)}\s*==\s*(\d+)",
+                    source_text,
+                    re.IGNORECASE,
+                )
+            }
+            to_stages = {
+                int(value)
+                for value in re.findall(
+                    rf"SetStage\s+{re.escape(ordinary_quest_editor_id)}\s+(\d+)",
+                    source_text,
+                    re.IGNORECASE,
+                )
+            }
+            ordinary_quest = next(
+                value
+                for value in ordinary_quests
+                if str(value["editorId"]).casefold()
+                == ordinary_quest_editor_id.casefold()
+            )
+            if len(from_stages) != 1 or len(to_stages) != 1:
+                raise ValueError(
+                    f"Owned ordinary arrival stages are ambiguous: {script_editor_id}"
+                )
+            arrivals.append(
+                {
+                    "packageFormId": package["formId"],
+                    "scriptFormId": script["formId"],
+                    "scriptEditorId": script_editor_id,
+                    "actorReferenceFormId": role["referenceFormId"],
+                    "questFormId": ordinary_quest["formId"],
+                    "fromStage": next(iter(from_stages)),
+                    "toStage": next(iter(to_stages)),
+                }
+            )
         ordinary_actors.append(
             {
                 "role": role_name,
@@ -6923,6 +7005,7 @@ def compile_new_game_flow(
                 "activationTopicFormId": activation_topic_form_id,
                 "topics": topics,
                 "voice": voice,
+                "arrivalTransitions": arrivals,
                 "commandContract": _resolve_command_record_identities(
                     commands, records
                 ),

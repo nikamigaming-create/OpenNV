@@ -323,6 +323,7 @@ internal sealed record OpeningOrdinaryQuest(
     string ScriptFormId,
     string ScriptEditorId,
     int EntryStage,
+    IReadOnlyDictionary<uint, string> Variables,
     IReadOnlyDictionary<int, string> Objectives,
     IReadOnlyDictionary<int, OpeningStageProgram> Stages,
     OpeningCommandContract CommandContract);
@@ -336,7 +337,17 @@ internal sealed record OpeningOrdinaryActor(
     string ActivationTopicFormId,
     IReadOnlyDictionary<string, OpeningDialogueTopic> Topics,
     OpeningDialogueVoice Voice,
+    IReadOnlyList<OpeningOrdinaryPackageArrival> ArrivalTransitions,
     OpeningCommandContract CommandContract);
+
+internal sealed record OpeningOrdinaryPackageArrival(
+    string PackageFormId,
+    string ScriptFormId,
+    string ScriptEditorId,
+    string ActorReferenceFormId,
+    string QuestFormId,
+    int FromStage,
+    int ToStage);
 
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
 

@@ -29,7 +29,11 @@ internal sealed record GamebryoPackageCandidate<T>(
 internal sealed record GamebryoPackageState(
     IReadOnlyDictionary<string, int> QuestStages,
     IReadOnlySet<string> CompletedQuests,
-    IReadOnlyDictionary<string, double> QuestVariables);
+    IReadOnlyDictionary<string, double> QuestVariables)
+{
+    internal IReadOnlySet<string> CompletedObjectives { get; init; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+}
 
 internal static class GamebryoPackageSelector
 {
@@ -76,6 +80,10 @@ internal static class GamebryoPackageSelector
                 : 0.0,
             "getquestvariable" => state.QuestVariables.GetValueOrDefault(
                 VariableKey(condition.QuestFormId, condition.VariableIndex)),
+            "getobjectivecompleted" => state.CompletedObjectives.Contains(
+                ObjectiveKey(condition.QuestFormId, condition.VariableIndex))
+                ? 1.0
+                : 0.0,
             _ => throw new InvalidOperationException(
                 $"Source package condition function is unsupported: " +
                 $"{condition.FunctionName}"),
@@ -92,7 +100,8 @@ internal static class GamebryoPackageSelector
                 "Source package condition has an unsupported run-on target.");
         if (string.IsNullOrWhiteSpace(condition.QuestFormId) ||
             condition.FunctionName.ToLowerInvariant() is not
-                ("getstage" or "getquestcompleted" or "getquestvariable"))
+                ("getstage" or "getquestcompleted" or "getquestvariable" or
+                 "getobjectivecompleted"))
             throw new InvalidOperationException(
                 $"Source package condition function is unsupported: " +
                 $"{condition.FunctionName}");
@@ -162,6 +171,9 @@ internal static class GamebryoPackageSelector
 
     internal static string VariableKey(string questFormId, uint variableIndex) =>
         $"{questFormId}.{variableIndex}";
+
+    internal static string ObjectiveKey(string questFormId, uint objectiveIndex) =>
+        $"{questFormId}.{objectiveIndex}";
 }
 
 internal enum GamebryoPackageComparison

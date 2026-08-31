@@ -39,6 +39,9 @@ internal sealed record OpeningCampaignState(
 
     internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
     internal OpeningGuidePackageState? GuidePackage { get; init; }
+    internal IReadOnlyDictionary<string, OpeningTransformState> OrdinaryActorTransforms
+    { get; init; } = new Dictionary<string, OpeningTransformState>(
+            StringComparer.OrdinalIgnoreCase);
 
     internal static OpeningCampaignState Parse(JsonElement source)
     {
@@ -89,6 +92,14 @@ internal sealed record OpeningCampaignState(
                 : null,
             GuidePackage = OpeningGuidePackageState.Parse(
                 source.GetProperty(nameof(GuidePackage))),
+            OrdinaryActorTransforms = source.TryGetProperty(
+                    nameof(OrdinaryActorTransforms), out var ordinaryTransforms)
+                ? ordinaryTransforms.EnumerateObject().ToDictionary(
+                    value => value.Name,
+                    value => OpeningTransformState.Parse(value.Value),
+                    StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, OpeningTransformState>(
+                    StringComparer.OrdinalIgnoreCase),
         };
         result.Validate();
         return result;
@@ -135,6 +146,12 @@ internal sealed record OpeningCampaignState(
             item.Validate();
         EquippedWeapon?.Validate();
         GuidePackage?.Validate();
+        if (OrdinaryActorTransforms.Keys.Any(value =>
+                FalloutFormId.Normalize(value) != value))
+            throw new InvalidOperationException(
+                "Saved ordinary actor transform identity is invalid.");
+        foreach (var transform in OrdinaryActorTransforms.Values)
+            transform.Validate();
         if (EquippedWeapon is { } weapon &&
             (!EquippedItemFormIds.Contains(weapon.WeaponFormId, StringComparer.OrdinalIgnoreCase) ||
              !Inventory.Any(item =>

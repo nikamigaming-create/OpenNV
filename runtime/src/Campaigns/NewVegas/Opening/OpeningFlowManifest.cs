@@ -269,6 +269,10 @@ internal sealed partial record OpeningNewGameFlow(
             source.GetProperty("scriptFormId").GetString()!,
             source.GetProperty("scriptEditorId").GetString()!,
             source.GetProperty("entryStage").GetInt32(),
+            source.GetProperty("variables").EnumerateArray()
+                .ToDictionary(
+                    value => value.GetProperty("index").GetUInt32(),
+                    value => value.GetProperty("name").GetString()!),
             objectives,
             source.GetProperty("stages").EnumerateArray()
                 .Select(ParseStage)
@@ -294,6 +298,16 @@ internal sealed partial record OpeningNewGameFlow(
             source.GetProperty("activationTopicFormId").GetString()!,
             topics.ToDictionary(value => value.FormId, StringComparer.OrdinalIgnoreCase),
             ParseDialogueVoice(source.GetProperty("voice")),
+            source.GetProperty("arrivalTransitions").EnumerateArray()
+                .Select(value => new OpeningOrdinaryPackageArrival(
+                    value.GetProperty("packageFormId").GetString()!,
+                    value.GetProperty("scriptFormId").GetString()!,
+                    value.GetProperty("scriptEditorId").GetString()!,
+                    value.GetProperty("actorReferenceFormId").GetString()!,
+                    value.GetProperty("questFormId").GetString()!,
+                    value.GetProperty("fromStage").GetInt32(),
+                    value.GetProperty("toStage").GetInt32()))
+                .ToArray(),
             ParseCommandContract(source.GetProperty("commandContract")));
     }
 
