@@ -211,6 +211,7 @@ internal partial class Fo1TacticalSession : Node
     private string? _destinationFlareUsePath;
     private Fo1DestinationFlareUseContract? _destinationFlareUse;
     private ClassicScriptState _destinationFlareScriptState = new();
+    private bool _destinationFlareExpired;
     private int _classicScriptGameTime;
     private string? _destinationGenericDoorPath;
     private Fo1DestinationGenericDoorContract? _destinationGenericDoor;
@@ -389,7 +390,9 @@ internal partial class Fo1TacticalSession : Node
     internal Fo1DestinationPresentationContract? LoadedDestinationPresentation => _loadedDestinationPresentation;
     internal Fo1DestinationInventoryInteractionContract? DestinationInventoryInteraction => _destinationInventoryInteraction;
     internal Fo1DestinationFlareUseContract? DestinationFlareUse => _destinationFlareUse;
-    internal bool DestinationFlareLit => _destinationFlareScriptState.Flag("lit");
+    internal bool DestinationFlareLit =>
+        _destinationFlareScriptState.Flag("lit") && !_destinationFlareExpired;
+    internal bool DestinationFlareExpired => _destinationFlareExpired;
     internal Fo1DestinationGenericDoorContract? DestinationGenericDoor => _destinationGenericDoor;
     internal bool DestinationGenericDoorOpen => _destinationGenericDoorOpen;
     internal Fo1DestinationMedicLookContract? DestinationMedicLook => _destinationMedicLook;
@@ -660,6 +663,7 @@ internal partial class Fo1TacticalSession : Node
             _classicScriptGameTime = checked(
                 _classicScriptGameTime +
                 healing.GameTimeAdvanceMinutes * medic.GameTimeTicksPerMinute);
+            ProcessClassicTimedWorldActions();
             _destinationMedicDialogueProcedure = healing.NextProcedure;
             _status = medic.HealingMessageText;
             RefreshHud();

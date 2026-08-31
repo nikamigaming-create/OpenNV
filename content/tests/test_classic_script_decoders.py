@@ -33,8 +33,10 @@ begin
     end
   end
   if (script_action == start_proc) then begin
-    if (((game_time - local_var(3)) > (2 * 60 * 60 * 10))) then begin
-      destroy_object(self_obj);
+    if (local_var(3) != 0) then begin
+      if (((game_time - local_var(3)) > (2 * 60 * 60 * 10))) then begin
+        destroy_object(self_obj);
+      end
     end
   end
 end
@@ -98,9 +100,23 @@ class ClassicScriptDecoderTest(unittest.TestCase):
         self.assertEqual(effect["index"], 3)
         self.assertEqual(effect["valueFrom"], "game-time")
         self.assertEqual(program["events"]["use_proc"][1]["all"], [])
+        self.assertEqual(
+            program["events"]["start_proc"][0],
+            {
+                "all": [{
+                    "operation": "flag-set",
+                    "flag": "lit",
+                }, {
+                    "operation": "elapsed-game-time-greater-than",
+                    "index": 3,
+                    "value": 72000,
+                }],
+                "then": [{"operation": "destroy-self"}],
+            },
+        )
         self.assertEqual(expiry["localIndex"], 3)
         self.assertEqual(expiry["durationGameTicks"], 72000)
-        self.assertEqual(expiry["runtime"], "unimplemented-fail-closed")
+        self.assertEqual(expiry["runtime"], "decoded-destroy-self")
 
     def test_ssl_parser_rejects_non_source_duration_or_effect(self) -> None:
         with self.assertRaises(ClassicSslParseError):

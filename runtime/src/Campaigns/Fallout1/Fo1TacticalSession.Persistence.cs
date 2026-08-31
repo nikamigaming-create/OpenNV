@@ -53,7 +53,8 @@ internal partial class Fo1TacticalSession
                 gameTime = _classicScriptGameTime,
                 expiryLocalIndex = _destinationFlareUse.ExpiryLocalIndex,
                 expiryDurationGameTicks = _destinationFlareUse.ExpiryDurationGameTicks,
-                expiry = "unimplemented-fail-closed",
+                expired = _destinationFlareExpired,
+                expiry = "decoded-destroy-self",
             },
             destinationGenericDoor = _destinationGenericDoor is null ? null : new
             {
@@ -262,15 +263,23 @@ internal partial class Fo1TacticalSession
                 throw new InvalidOperationException(
                     "Fallout saved flare game time conflicts with shared classic time.");
             _classicScriptGameTime = savedFlareGameTime;
-            if (!_destinationFlareScriptState.Flag("lit") ||
-                destinationFlare.GetProperty("expiryLocalIndex").GetInt32() !=
+            if (destinationFlare.GetProperty("expiryLocalIndex").GetInt32() !=
                     _destinationFlareUse.ExpiryLocalIndex ||
                 destinationFlare.GetProperty("expiryDurationGameTicks").GetInt32() !=
                     _destinationFlareUse.ExpiryDurationGameTicks ||
                 destinationFlare.GetProperty("expiry").GetString() !=
-                    "unimplemented-fail-closed")
+                    "decoded-destroy-self")
                 throw new InvalidOperationException(
                     "Fallout saved flare script state is invalid.");
+            _destinationFlareExpired = destinationFlare.GetProperty("expired").GetBoolean();
+            var savedExpiry = _destinationFlareUse.Program.ExecuteWithActions(
+                "start_proc",
+                _destinationFlareScriptState,
+                new ClassicScriptContext(false, false, _classicScriptGameTime));
+            if (_destinationFlareExpired != savedExpiry.DestroySelf ||
+                _destinationFlareExpired && !_destinationFlareScriptState.Flag("lit"))
+                throw new InvalidOperationException(
+                    "Fallout saved flare destruction state is invalid.");
         }
         if (root.TryGetProperty("destinationGenericDoor", out var destinationGenericDoor) &&
             destinationGenericDoor.ValueKind != JsonValueKind.Null)

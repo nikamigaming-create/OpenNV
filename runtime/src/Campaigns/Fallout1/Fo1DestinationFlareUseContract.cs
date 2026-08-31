@@ -46,7 +46,7 @@ internal sealed record Fo1DestinationFlareUseContract(
             !semantics.GetProperty("storesGameTime").GetBoolean() ||
             Required(expiry, "operation") != "elapsed-game-time-greater-than" ||
             Required(expiry, "result") != "destroy-self" ||
-            Required(expiry, "runtime") != "unimplemented-fail-closed" ||
+            Required(expiry, "runtime") != "decoded-destroy-self" ||
             expiry.GetProperty("localIndex").GetInt32() < 0 ||
             expiry.GetProperty("durationGameTicks").GetInt32() <= 0)
             throw new InvalidOperationException("Fallout flare use descriptor semantics are not bounded.");
@@ -54,11 +54,37 @@ internal sealed record Fo1DestinationFlareUseContract(
         if (!Hash(scriptSha256))
             throw new InvalidOperationException("Fallout flare use descriptor script hash is invalid.");
         var program = ClassicScriptProgram.Parse(root.GetProperty("effectProgram"));
+        var expiryLocalIndex = expiry.GetProperty("localIndex").GetInt32();
+        var expiryDurationGameTicks = expiry.GetProperty("durationGameTicks").GetInt32();
+        var validationState = new ClassicScriptState();
+        if (!program.Execute(
+                "use_proc",
+                validationState,
+                new ClassicScriptContext(true, false, expiryDurationGameTicks)) ||
+            validationState.Local(expiryLocalIndex) != expiryDurationGameTicks)
+            throw new InvalidOperationException(
+                "Fallout flare use event does not store source game time.");
+        var exactBoundary = checked(expiryDurationGameTicks + expiryDurationGameTicks);
+        var atBoundary = program.ExecuteWithActions(
+            "start_proc",
+            validationState,
+            new ClassicScriptContext(false, false, exactBoundary));
+        var afterBoundary = program.ExecuteWithActions(
+            "start_proc",
+            validationState,
+            new ClassicScriptContext(
+                false,
+                false,
+                checked(exactBoundary + Math.Sign(expiryDurationGameTicks))));
+        if (atBoundary.Executed || atBoundary.DestroySelf ||
+            !afterBoundary.Executed || !afterBoundary.DestroySelf)
+            throw new InvalidOperationException(
+                "Fallout flare expiry does not preserve its strict source boundary.");
         return new Fo1DestinationFlareUseContract(
             resolved, sha256, hostSerial, symbol, pid, prototypeSha256, scriptSha256,
             program,
-            expiry.GetProperty("localIndex").GetInt32(),
-            expiry.GetProperty("durationGameTicks").GetInt32());
+            expiryLocalIndex,
+            expiryDurationGameTicks);
     }
 
     internal object Report() => new
@@ -77,7 +103,7 @@ internal sealed record Fo1DestinationFlareUseContract(
             result = "lit-state",
             expiryLocalIndex = ExpiryLocalIndex,
             expiryDurationGameTicks = ExpiryDurationGameTicks,
-            expiry = "unimplemented-fail-closed",
+            expiry = "decoded-destroy-self",
         },
     };
 

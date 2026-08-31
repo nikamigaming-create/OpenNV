@@ -167,6 +167,7 @@ internal sealed record ClassicScriptExecution(
     int GameTimeAdvanceMinutes,
     IReadOnlySet<string> ClearedPlayerInjuries,
     string? NextProcedure,
+    bool DestroySelf,
     IReadOnlyList<ClassicDialogueReplySegment> DialogueReply,
     IReadOnlyList<ClassicDialogueOption> DialogueOptions);
 
@@ -206,7 +207,7 @@ internal sealed class ClassicScriptProgram
         if (!_events.TryGetValue(eventName, out var rules))
             return new ClassicScriptExecution(
                 false, false, [], null, false, 0, 0, 0,
-                new HashSet<string>(StringComparer.Ordinal), null, [], []);
+                new HashSet<string>(StringComparer.Ordinal), null, false, [], []);
         var matched = rules.Where(rule => rule.Conditions.All(condition =>
             Matches(condition, state, context))).ToArray();
         var scriptOverrides = false;
@@ -218,6 +219,7 @@ internal sealed class ClassicScriptProgram
         var gameTimeAdvanceMinutes = 0;
         var clearedPlayerInjuries = new HashSet<string>(StringComparer.Ordinal);
         string? nextProcedure = null;
+        var destroySelf = false;
         var dialogueReply = new List<ClassicDialogueReplySegment>();
         var dialogueOptions = new List<ClassicDialogueOption>();
         foreach (var rule in matched)
@@ -228,6 +230,7 @@ internal sealed class ClassicScriptProgram
                     ref openDialogueNode, ref dialogueEnded, ref playerHealing,
                     ref playerPoisonRemoved, ref gameTimeAdvanceMinutes,
                     clearedPlayerInjuries, ref nextProcedure,
+                    ref destroySelf,
                     dialogueReply, dialogueOptions);
         }
         if (dialogueEnded &&
@@ -245,6 +248,7 @@ internal sealed class ClassicScriptProgram
             gameTimeAdvanceMinutes,
             clearedPlayerInjuries,
             nextProcedure,
+            destroySelf,
             dialogueReply,
             dialogueOptions);
     }
@@ -257,14 +261,15 @@ internal sealed class ClassicScriptProgram
             .Select(ParseOperation).ToArray();
         if (conditions.Any(row => row.Name is not
                 ("source-is-player" or "can-see-player" or "local-equals" or
-                 "local-not-equals" or "player-art-fid-in")) ||
+                 "local-not-equals" or "player-art-fid-in" or
+                 "elapsed-game-time-greater-than" or "flag-set")) ||
             effects.Length == 0 || effects.Any(row => row.Name is not
                 ("set-local" or "set-flag" or "script-overrides" or "display-message" or
                  "open-dialogue" or "dialogue-reply-message" or
                  "dialogue-reply-player-name" or "dialogue-option" or "dialogue-end" or
                  "heal-player-to-maximum" or "clear-player-poison" or
                  "advance-game-time-by-player-poison" or "clear-player-injuries" or
-                 "call-procedure-if-player-radiation-positive")))
+                 "call-procedure-if-player-radiation-positive" or "destroy-self")))
             throw new InvalidOperationException(
                 "Classic script rule mixes conditions and effects.");
         return new Rule(conditions, effects);
@@ -280,7 +285,8 @@ internal sealed class ClassicScriptProgram
             "dialogue-option" or "dialogue-end" or "heal-player-to-maximum" or
             "clear-player-poison" or "advance-game-time-by-player-poison" or
             "clear-player-injuries" or
-            "call-procedure-if-player-radiation-positive"))
+            "call-procedure-if-player-radiation-positive" or
+            "elapsed-game-time-greater-than" or "flag-set" or "destroy-self"))
             throw new InvalidOperationException($"Unsupported classic script operation: {operation}");
         int? index = source.TryGetProperty("index", out var indexValue)
             ? indexValue.GetInt32()
@@ -323,9 +329,12 @@ internal sealed class ClassicScriptProgram
         if (index is < 0 ||
             operation is ("local-equals" or "local-not-equals") &&
                 (index is null || value is null) ||
+            operation is "elapsed-game-time-greater-than" &&
+                (index is null || value is null or <= 0) ||
             operation is "set-local" && (index is null || (value is null) == (valueFrom is null)) ||
             valueFrom is not null && valueFrom != "game-time" ||
             operation is "set-flag" && string.IsNullOrWhiteSpace(flag) ||
+            operation is "flag-set" && string.IsNullOrWhiteSpace(flag) ||
             operation is ("display-message" or "dialogue-reply-message") &&
                 (messageId is null or < 0 || messageListId is < 0) ||
             operation is "player-art-fid-in" &&
@@ -356,6 +365,10 @@ internal sealed class ClassicScriptProgram
             "can-see-player" => context.CanSeePlayer,
             "local-equals" => state.Local(operation.Index!.Value) == operation.Value,
             "local-not-equals" => state.Local(operation.Index!.Value) != operation.Value,
+            "flag-set" => state.Flag(operation.Flag!),
+            "elapsed-game-time-greater-than" =>
+                context.GameTime >= state.Local(operation.Index!.Value) &&
+                context.GameTime - state.Local(operation.Index!.Value) > operation.Value,
             "player-art-fid-in" => operation.Values!.Contains(
                 context.PlayerArtFid ?? "", StringComparer.OrdinalIgnoreCase),
             _ => throw new InvalidOperationException(
@@ -375,6 +388,7 @@ internal sealed class ClassicScriptProgram
         ref int gameTimeAdvanceMinutes,
         ISet<string> clearedPlayerInjuries,
         ref string? nextProcedure,
+        ref bool destroySelf,
         ICollection<ClassicDialogueReplySegment> dialogueReply,
         ICollection<ClassicDialogueOption> dialogueOptions)
     {
@@ -429,6 +443,12 @@ internal sealed class ClassicScriptProgram
                         "Classic script player radiation context is invalid.");
                 if (context.PlayerRadiation > 0)
                     nextProcedure = operation.Target;
+                break;
+            case "destroy-self":
+                if (destroySelf)
+                    throw new InvalidOperationException(
+                        "Classic script requested duplicate world-object destruction.");
+                destroySelf = true;
                 break;
             case "open-dialogue":
                 if (openDialogueNode is not null || dialogueEnded)

@@ -176,12 +176,14 @@ def decode_flare_effects(source: str) -> tuple[dict[str, Any], dict[str, Any]]:
         "if", "(", "script_action", "==", "start_proc", ")", "then", "begin"
     )
     destroy_pattern = ("destroy_object", "(", "self_obj", ")", ";")
+    armed_pattern = ("local_var", "(", str(local), ")", "!=", "0")
     expiry_blocks = [
         block
         for block in (
             _block(tokens, index + len(start_header) - 1)
             for index in _find_all(tokens, start_header)
         )
+        if len(_find_all(block, armed_pattern)) == 1
         if len(_find_all(block, expiry_pattern)) == 1
         and len(_find_all(block, destroy_pattern)) == 1
     ]
@@ -208,6 +210,22 @@ def decode_flare_effects(source: str) -> tuple[dict[str, Any], dict[str, Any]]:
                     "then": [{"operation": "set-flag", "flag": "lit"}],
                 },
             ],
+            "start_proc": [{
+                "all": [{
+                    "operation": "flag-set",
+                    "flag": "lit",
+                }, {
+                    "operation": "elapsed-game-time-greater-than",
+                    "index": local,
+                    "value": (
+                        CLASSIC_SSL_SOURCE_CONTRACT_HOURS
+                        * CLASSIC_SSL_SOURCE_CONTRACT_MINUTES_PER_HOUR
+                        * CLASSIC_SSL_SOURCE_CONTRACT_SECONDS_PER_MINUTE
+                        * CLASSIC_SSL_SOURCE_CONTRACT_TICKS_PER_SECOND
+                    ),
+                }],
+                "then": [{"operation": "destroy-self"}],
+            }],
         },
     }
     expiry = {
@@ -220,7 +238,7 @@ def decode_flare_effects(source: str) -> tuple[dict[str, Any], dict[str, Any]]:
             * CLASSIC_SSL_SOURCE_CONTRACT_TICKS_PER_SECOND
         ),
         "result": "destroy-self",
-        "runtime": "unimplemented-fail-closed",
+        "runtime": "decoded-destroy-self",
     }
     return program, expiry
 

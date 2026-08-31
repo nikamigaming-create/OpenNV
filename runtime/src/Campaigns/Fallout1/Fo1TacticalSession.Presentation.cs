@@ -296,6 +296,7 @@ internal partial class Fo1TacticalSession
                 "Fallout inventory use requires the owned inventory screen.");
         var flare = _destinationFlareUse;
         if (flare is null || symbol != flare.Symbol || InventoryObjects(symbol) <= 0 ||
+            _destinationFlareExpired || _destinationFlareScriptState.Flag("lit") ||
             _destinationInventoryInteraction is null || !_lootedMapInventoryHostSerials.Contains(flare.HostSerial))
             return false;
         if (!flare.Program.Execute(
@@ -308,9 +309,33 @@ internal partial class Fo1TacticalSession
             !_destinationFlareScriptState.Flag("lit"))
             throw new InvalidOperationException(
                 "Fallout flare source-script use did not publish its lit state.");
-        _status = $"Used {symbol} through its source script; time-based expiry remains fail-closed.";
+        _status = $"Used {symbol} through its source script; its decoded expiry is active.";
         RefreshHud();
         Save();
+        return true;
+    }
+
+    private bool ProcessClassicTimedWorldActions()
+    {
+        var flare = _destinationFlareUse;
+        if (flare is null || _destinationFlareExpired ||
+            !_destinationFlareScriptState.Flag("lit"))
+            return false;
+        var execution = flare.Program.ExecuteWithActions(
+            "start_proc",
+            _destinationFlareScriptState,
+            new ClassicScriptContext(
+                SourceIsPlayer: false,
+                CanSeePlayer: false,
+                GameTime: _classicScriptGameTime));
+        if (!execution.Executed)
+            return false;
+        if (!execution.DestroySelf || InventoryObjects(flare.Symbol) <= 0)
+            throw new InvalidOperationException(
+                "Fallout flare expiry did not execute its decoded destruction.");
+        _inventoryObjects[flare.Symbol] = InventoryObjects(flare.Symbol) - 1;
+        _destinationFlareExpired = true;
+        _status = $"{flare.Symbol} expired and was removed by its source script.";
         return true;
     }
 
