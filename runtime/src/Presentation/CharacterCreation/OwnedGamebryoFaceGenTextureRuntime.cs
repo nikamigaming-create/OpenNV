@@ -6,6 +6,7 @@ namespace OpenNV.Runtime.Presentation.CharacterCreation;
 
 internal sealed class OwnedGamebryoFaceGenTextureRuntime
 {
+    private static ReadOnlySpan<byte> EgtSignature => "FREGT003"u8;
     private const int HeaderBytes = 64;
     private const int ControlBytes = 4;
     private const int Channels = 3;
@@ -72,6 +73,10 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
     }
 
     internal IReadOnlyDictionary<string, float> Values => _values;
+
+    internal static bool HasSupportedSignature(ReadOnlySpan<byte> payload) =>
+        payload.Length >= EgtSignature.Length &&
+        payload[..EgtSignature.Length].SequenceEqual(EgtSignature);
 
     internal static string CoordinateSha256(
         IReadOnlyList<float> baseline,
@@ -157,16 +162,15 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
 
     private Image Decode(IReadOnlyList<float> weights)
     {
-        ReadOnlySpan<byte> signature = "FREGT003"u8;
-        if (_egt.Length < HeaderBytes ||
-            !_egt.AsSpan(0, signature.Length).SequenceEqual(signature))
+        var signatureBytes = EgtSignature.Length;
+        if (_egt.Length < HeaderBytes || !HasSupportedSignature(_egt))
             throw new InvalidOperationException("Owned FaceGen EGT signature is invalid.");
         var width = BinaryPrimitives.ReadInt32LittleEndian(
-            _egt.AsSpan(signature.Length, sizeof(int)));
+            _egt.AsSpan(signatureBytes, sizeof(int)));
         var height = BinaryPrimitives.ReadInt32LittleEndian(
-            _egt.AsSpan(signature.Length + sizeof(int), sizeof(int)));
+            _egt.AsSpan(signatureBytes + sizeof(int), sizeof(int)));
         var modes = BinaryPrimitives.ReadInt32LittleEndian(
-            _egt.AsSpan(signature.Length + sizeof(int) * 2, sizeof(int)));
+            _egt.AsSpan(signatureBytes + sizeof(int) * 2, sizeof(int)));
         var pixels = checked(width * height);
         var expected = checked(HeaderBytes + modes * (ControlBytes + pixels * Channels));
         if (width <= 0 || height <= 0 || modes != weights.Count ||

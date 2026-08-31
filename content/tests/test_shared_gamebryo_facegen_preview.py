@@ -108,7 +108,7 @@ class SharedGamebryoFaceGenPreviewTest(unittest.TestCase):
 
         self.assertIn("OwnedGamebryoFaceGenTextureRuntime", host)
         self.assertIn("internal void ApplyTexture(", host)
-        self.assertIn('SequenceEqual("FREGT003"u8)', texture_runtime)
+        self.assertIn("HasSupportedSignature", texture_runtime)
         self.assertIn("SHA256.HashData(_egt)", texture_runtime)
         self.assertIn("source.TextureControls", host)
         self.assertIn("OpeningNativeFaceGenTextureControl", contracts)

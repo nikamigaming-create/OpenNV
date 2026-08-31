@@ -68,6 +68,11 @@ Require(OwnedGamebryoFaceGenAgeRuntime.InitialRawValue(
     "FaceGen age did not invert the native raw slider mapping.");
 RequireThrows(() => OwnedGamebryoFaceGenAgeRuntime.Evaluate(
     ageControl, [0.0f, 0.0f], [0.0f, 0.0f], 11.0f));
+Require(OwnedGamebryoFaceGenTextureRuntime.HasSupportedSignature("FREGT003"u8),
+    "FaceGen EGT signature contract rejected its exact source signature.");
+Require(!OwnedGamebryoFaceGenTextureRuntime.HasSupportedSignature("FREGT002"u8) &&
+        !OwnedGamebryoFaceGenTextureRuntime.HasSupportedSignature("FREGT"u8),
+    "FaceGen EGT signature contract admitted an unsupported payload.");
 
 if (args.Length == 2 && args[0] == "--owned-opening")
     RunOwnedOpening(args[1]);
