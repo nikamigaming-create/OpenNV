@@ -234,8 +234,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
     def test_cg00_actor_packages_switch_by_stage_condition_not_idle_stop(self) -> None:
         source = FO3_CG00_EARLY_RUNTIME.read_text(encoding="utf-8")
 
-        self.assertIn("value.ActivationCondition?.Stage == stage", source)
-        self.assertIn("selected.AnimationStartSeconds", source)
+        self.assertIn("GamebryoPackageSelector.SelectFirst", source)
+        self.assertIn("GamebryoPackageComparison.Equal", source)
+        self.assertIn("selected.Value.AnimationStartSeconds", source)
         self.assertNotIn("section == 0 && _cg00ActorPackages.Count == 0", source)
         self.assertNotIn(
             "while (playback.ElapsedSeconds >= playback.Contract.AnimationStopSeconds)",

@@ -125,6 +125,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private CellActorLoader.PlacedActor _guideActor;
     private bool _guideActorResolved;
     private OpeningGuidePackage? _activeGuidePackage;
+    private SourceActorAnimation? _activeGuidePackageAnimation;
     private OpeningGuideLocomotionClip? _activeGuideLocomotion;
     private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
     private ActorModelSlice.LoadedAnimation? _activeGuideIdleAnimation;

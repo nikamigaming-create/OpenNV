@@ -384,14 +384,51 @@ internal partial class Fo3OpeningFlow
                 "Fallout 3 early CG00 participant package evaluation set differs.");
         foreach (var role in sequence.SceneParticipants.Keys)
         {
-            var selected = sequence.PackageSections[role].SingleOrDefault(value =>
-                value.ActivationCondition?.Stage == stage);
+            var candidates = sequence.PackageSections[role]
+                .Select(package => new GamebryoPackageCandidate<Fo3Cg00PackageSection>(
+                    package.PackageFormId,
+                    package.ActivationCondition is { } condition
+                        ? [new GamebryoPackageCondition(
+                            "getStage",
+                            GamebryoPackageComparison.Equal,
+                            condition.Stage,
+                            condition.QuestFormId,
+                            0,
+                            (uint)condition.RunOn,
+                            "")]
+                        : [],
+                    GamebryoPackageTarget.None,
+                    new SourceActorAnimation(
+                        package.AnimationLogicalPath,
+                        package.AnimationSha256,
+                        package.AnimationSequenceName,
+                        (float)package.AnimationStartSeconds,
+                        (float)package.AnimationStopSeconds,
+                        package.AnimationCycleType,
+                        "owned-world-root-authoritative-zero-local-translation"),
+                    package))
+                .ToArray();
+            var selected = GamebryoPackageSelector.SelectFirst(
+                candidates,
+                new GamebryoPackageState(
+                    new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [sequence.QuestFormId] = stage,
+                    },
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)),
+                requireMatch: false);
             if (selected is null)
                 continue;
             if (_cg00ActorPackages.TryGetValue(role, out var current) &&
-                current.Contract.PackageFormId == selected.PackageFormId)
+                current.Contract.PackageFormId == selected.Value.PackageFormId)
                 continue;
-            StartCg00ActorPackage(role, selected, selected.AnimationStartSeconds);
+            StartCg00ActorPackage(
+                role,
+                selected.Value,
+                selected.Animation ?? throw new InvalidOperationException(
+                    "Fallout 3 selected actor package has no source animation."),
+                selected.Value.AnimationStartSeconds);
         }
     }
 
@@ -429,6 +466,7 @@ internal partial class Fo3OpeningFlow
     private void StartCg00ActorPackage(
         string role,
         Fo3Cg00PackageSection contract,
+        SourceActorAnimation animation,
         double elapsedSeconds)
     {
         if (elapsedSeconds < contract.AnimationStartSeconds ||
@@ -438,14 +476,7 @@ internal partial class Fo3OpeningFlow
         var actor = ActorForCg00Role(role);
         var playback = ActorAnimationPlayback.Start(
             actor.Actor,
-            new SourceActorAnimation(
-                contract.AnimationLogicalPath,
-                contract.AnimationSha256,
-                contract.AnimationSequenceName,
-                (float)contract.AnimationStartSeconds,
-                (float)contract.AnimationStopSeconds,
-                contract.AnimationCycleType,
-                "owned-world-root-authoritative-zero-local-translation"),
+            animation,
             elapsedSeconds);
         _cg00ActorPackages[role] = new Fo3Cg00ActorPackagePlayback(
             contract,

@@ -113,16 +113,52 @@ internal partial class OpeningQuestRuntime
     {
         if (!_guideActorResolved)
             return;
-        var package = _flow.GuideActorAi.PackagePriority
+        var furniture = _flow.GuideActorAi.FurnitureOccupancy;
+        var candidates = _flow.GuideActorAi.PackagePriority
             .Select(formId => _flow.GuideActorAi.Packages[formId])
-            .FirstOrDefault(value => value.Conditions.All(EvaluateGuideCondition))
-            ?? throw new InvalidOperationException(
-                "Owned opening guide has no eligible AI package.");
+            .Select(package => new GamebryoPackageCandidate<OpeningGuidePackage>(
+                package.FormId,
+                package.Conditions.Select(PackageCondition).ToArray(),
+                PackageTarget(package),
+                package.FormId.Equals(
+                    furniture.InitialPackageFormId,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? SourceAnimation(
+                        furniture.SeatedLoop,
+                        ZeroedAccumulationRootTranslation)
+                    : package.FormId.Equals(
+                        furniture.ReleasePackageFormId,
+                        StringComparison.OrdinalIgnoreCase)
+                        ? SourceAnimation(
+                            furniture.Exit,
+                            RetainedAccumulationRootTranslation)
+                        : null,
+                package))
+            .ToArray();
+        var selected = GamebryoPackageSelector.SelectFirst(
+            candidates,
+            new GamebryoPackageState(
+                new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [_flow.GuideActorAi.QuestFormId] = _stage,
+                },
+                _openingQuestCompleted
+                    ? new HashSet<string>(
+                        [_flow.GuideActorAi.QuestFormId],
+                        StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                _questVariables.ToDictionary(
+                    value => value.Key,
+                    value => (double)value.Value,
+                    StringComparer.OrdinalIgnoreCase)),
+            requireMatch: true)!;
+        var package = selected.Value;
         if (!force && _activeGuidePackage?.FormId.Equals(
                 package.FormId,
                 StringComparison.OrdinalIgnoreCase) == true)
             return;
         _activeGuidePackage = package;
+        _activeGuidePackageAnimation = selected.Animation;
         _guideLookAtPlayer = false;
         BeginGuidePackage(package);
         GD.Print(
@@ -131,44 +167,40 @@ internal partial class OpeningQuestRuntime
             $"alwaysRun={package.AlwaysRun}");
     }
 
-    private bool EvaluateGuideCondition(OpeningGuideCondition condition)
+    private static GamebryoPackageCondition PackageCondition(
+        OpeningGuideCondition condition) => new(
+        condition.FunctionName,
+        PackageComparison(condition.OperatorFlags),
+        condition.ComparisonValue,
+        condition.Parameter1,
+        condition.Parameter2,
+        condition.RunOn,
+        condition.Reference);
+
+    private static GamebryoPackageComparison PackageComparison(int operatorFlags) =>
+        (operatorFlags & ConditionOperatorMask) switch
+        {
+            ConditionEqual => GamebryoPackageComparison.Equal,
+            ConditionNotEqual => GamebryoPackageComparison.NotEqual,
+            ConditionGreater => GamebryoPackageComparison.Greater,
+            ConditionGreaterOrEqual => GamebryoPackageComparison.GreaterOrEqual,
+            ConditionLess => GamebryoPackageComparison.Less,
+            ConditionLessOrEqual => GamebryoPackageComparison.LessOrEqual,
+            _ => throw new InvalidOperationException(
+                $"Owned package comparison is unsupported: {operatorFlags}"),
+        };
+
+    private static GamebryoPackageTarget PackageTarget(OpeningGuidePackage package)
     {
-        float actual;
-        if (condition.FunctionName.Equals("getStage", StringComparison.OrdinalIgnoreCase))
-        {
-            actual = condition.Parameter1.Equals(
-                _flow.GuideActorAi.QuestFormId,
-                StringComparison.OrdinalIgnoreCase)
-                ? _stage
-                : 0.0f;
-        }
-        else if (condition.FunctionName.Equals(
-            "getQuestCompleted",
-            StringComparison.OrdinalIgnoreCase))
-        {
-            actual = condition.Parameter1.Equals(
-                    _flow.GuideActorAi.QuestFormId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                _openingQuestCompleted
-                    ? 1.0f
-                    : 0.0f;
-        }
-        else if (condition.FunctionName.Equals(
-            "getQuestVariable",
-            StringComparison.OrdinalIgnoreCase))
-        {
-            actual = _questVariables.GetValueOrDefault(
-                $"{condition.Parameter1}.{condition.Parameter2}");
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Owned guide condition function is unsupported: {condition.FunctionName}");
-        }
-        return CompareCondition(
-            condition.OperatorFlags,
-            actual,
-            condition.ComparisonValue);
+        if (package.Target is not null)
+            return new GamebryoPackageTarget(
+                $"packageTarget:{package.Target.TypeName}",
+                package.Target.FormId);
+        if (package.Location is null)
+            return GamebryoPackageTarget.None;
+        return new GamebryoPackageTarget(
+            package.Location.TypeName,
+            package.Location.Reference?.FormId);
     }
 
     private void BeginGuidePackage(OpeningGuidePackage package)
@@ -345,9 +377,12 @@ internal partial class OpeningQuestRuntime
             value.IdleAnimationFormId.Equals(
                 furniture.AnimationObjectIdleFormId,
                 StringComparison.OrdinalIgnoreCase));
+        var seatedSource = _activeGuidePackageAnimation ??
+            throw new InvalidOperationException(
+                "Owned seated package has no selected source animation.");
         var seated = ActorAnimationPlayback.Resolve(
             _guideActor.Actor,
-            SourceAnimation(furniture.SeatedLoop, ZeroedAccumulationRootTranslation));
+            seatedSource);
         var smoking = ActorAnimationPlayback.Resolve(
             _guideActor.Actor,
             new SourceActorAnimation(
@@ -407,7 +442,8 @@ internal partial class OpeningQuestRuntime
         _activeGuideLocomotion = null;
         _guideFurnitureExitPlayback = ActorAnimationPlayback.Start(
             _guideActor.Actor,
-            SourceAnimation(furniture.Exit, RetainedAccumulationRootTranslation));
+            _activeGuidePackageAnimation ?? throw new InvalidOperationException(
+                "Owned furniture-exit package has no selected source animation."));
         _activeGuideIdleAnimation = null;
         SetGuideAnimationObjects(furniture.AnimationObjectIdleFormId);
         _activeGuideAnimation = _guideFurnitureExitPlayback.Animation;
