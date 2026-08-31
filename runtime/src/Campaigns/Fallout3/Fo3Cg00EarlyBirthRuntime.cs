@@ -51,10 +51,11 @@ internal partial class Fo3OpeningFlow
 
     private sealed class Fo3Cg00ActorPackagePlayback(
         Fo3Cg00PackageSection contract,
-        double elapsedSeconds)
+        ActorAnimationPlayback animation)
     {
         internal Fo3Cg00PackageSection Contract { get; set; } = contract;
-        internal double ElapsedSeconds { get; set; } = elapsedSeconds;
+        internal ActorAnimationPlayback Animation { get; } = animation;
+        internal double ElapsedSeconds => Animation.PositionSeconds;
     }
 
     private void StartCg00EarlyBirthSequence()
@@ -421,9 +422,7 @@ internal partial class Fo3OpeningFlow
         foreach (var role in _cg00ActorPackages.Keys.ToArray())
         {
             var playback = _cg00ActorPackages[role];
-            playback.ElapsedSeconds = Math.Min(
-                playback.Contract.AnimationStopSeconds,
-                playback.ElapsedSeconds + delta);
+            playback.Animation.Advance(delta);
         }
     }
 
@@ -437,21 +436,20 @@ internal partial class Fo3OpeningFlow
             throw new InvalidOperationException(
                 "Fallout 3 early CG00 package start clock differs.");
         var actor = ActorForCg00Role(role);
-        var animation = actor.Actor.LoadedAnimations.Single(value =>
-            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
-                ActorModelSlice.NormalizeAnimationPath(contract.AnimationLogicalPath),
-                StringComparison.OrdinalIgnoreCase) &&
-            value.SourceSha256.Equals(contract.AnimationSha256, StringComparison.OrdinalIgnoreCase));
-        foreach (var player in actor.Actor.LoadedAnimations.Select(value => value.Player).Distinct())
-            player.Stop();
-        animation.Player.Play(animation.RuntimeName);
-        animation.Player.Advance(elapsedSeconds);
-        if (animation.Player.CurrentAnimation.ToString() != animation.RuntimeName)
-            throw new InvalidOperationException(
-                "Fallout 3 early CG00 package animation was not published.");
+        var playback = ActorAnimationPlayback.Start(
+            actor.Actor,
+            new SourceActorAnimation(
+                contract.AnimationLogicalPath,
+                contract.AnimationSha256,
+                contract.AnimationSequenceName,
+                (float)contract.AnimationStartSeconds,
+                (float)contract.AnimationStopSeconds,
+                contract.AnimationCycleType,
+                "owned-world-root-authoritative-zero-local-translation"),
+            elapsedSeconds);
         _cg00ActorPackages[role] = new Fo3Cg00ActorPackagePlayback(
             contract,
-            elapsedSeconds);
+            playback);
         GD.Print(
             $"OPENNV_FO3_CG00_PACKAGE_PUBLISHED stage={_cg00EarlyStage} role={role} " +
             $"section={contract.Section} package={contract.PackageFormId} " +
@@ -1028,7 +1026,8 @@ internal partial class Fo3OpeningFlow
         {
             _cg00Stage10Projection[value.Key] = value.Value;
             if (_cg00ActorPackages.TryGetValue(value.Key, out var playback))
-                playback.ElapsedSeconds = value.Value.ObservedControllerPhaseSeconds;
+                playback.Animation.PublishPhase(
+                    value.Value.ObservedControllerPhaseSeconds);
         }
         _cg00RetailStage10Telemetry = joined;
         if (_ttwCg00Stage10SurfaceContract is null && !joined.FullNearPlaneSeparation)

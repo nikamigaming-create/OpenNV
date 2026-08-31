@@ -128,6 +128,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private OpeningGuideLocomotionClip? _activeGuideLocomotion;
     private ActorModelSlice.LoadedAnimation? _activeGuideAnimation;
     private ActorModelSlice.LoadedAnimation? _activeGuideIdleAnimation;
+    private ActorAnimationPlayback? _guideFurnitureExitPlayback;
     private OpeningGuidePriorityAnimation.LayeredPlayback?
         _guideFurnitureLayeredSeatedAnimation;
     private string? _guideAnimationObjectIdleFormId;

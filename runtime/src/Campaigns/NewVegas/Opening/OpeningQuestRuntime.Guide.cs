@@ -345,14 +345,19 @@ internal partial class OpeningQuestRuntime
             value.IdleAnimationFormId.Equals(
                 furniture.AnimationObjectIdleFormId,
                 StringComparison.OrdinalIgnoreCase));
-        var seated = ResolveGuideAnimation(
-            furniture.SeatedLoop.LogicalPath,
-            furniture.SeatedLoop.Sha256,
-            ZeroedAccumulationRootTranslation);
-        var smoking = ResolveGuideAnimation(
-            animationObject.IdleAnimationLogicalPath,
-            animationObject.IdleAnimationSha256,
-            ZeroedAccumulationRootTranslation);
+        var seated = ActorAnimationPlayback.Resolve(
+            _guideActor.Actor,
+            SourceAnimation(furniture.SeatedLoop, ZeroedAccumulationRootTranslation));
+        var smoking = ActorAnimationPlayback.Resolve(
+            _guideActor.Actor,
+            new SourceActorAnimation(
+                animationObject.IdleAnimationLogicalPath,
+                animationObject.IdleAnimationSha256,
+                animationObject.IdleAnimationSequenceName,
+                animationObject.IdleAnimationStartSeconds,
+                animationObject.IdleAnimationStopSeconds,
+                animationObject.IdleAnimationCycleType,
+                ZeroedAccumulationRootTranslation));
         if (smoking.SequenceName != animationObject.IdleAnimationSequenceName ||
             smoking.StartSeconds != animationObject.IdleAnimationStartSeconds ||
             smoking.StopSeconds != animationObject.IdleAnimationStopSeconds ||
@@ -400,14 +405,12 @@ internal partial class OpeningQuestRuntime
         _guidePathCellUnits = Array.Empty<Vector3>();
         _guidePathIndex = 0;
         _activeGuideLocomotion = null;
-        PlayGuideAnimation(
-            furniture.Exit.LogicalPath,
-            furniture.Exit.Sha256,
-            restart: true,
-            idleAnimationFormId: furniture.AnimationObjectIdleFormId,
-            loopMode: Animation.LoopModeEnum.None,
-            expectedAccumulationRootDisposition:
-                RetainedAccumulationRootTranslation);
+        _guideFurnitureExitPlayback = ActorAnimationPlayback.Start(
+            _guideActor.Actor,
+            SourceAnimation(furniture.Exit, RetainedAccumulationRootTranslation));
+        _activeGuideIdleAnimation = null;
+        SetGuideAnimationObjects(furniture.AnimationObjectIdleFormId);
+        _activeGuideAnimation = _guideFurnitureExitPlayback.Animation;
         GD.Print(
             $"OPENNV_NEW_GAME_GUIDE_FURNITURE_EXIT_BEGIN " +
             $"reference={_guideFurnitureReferenceFormId} " +
@@ -449,6 +452,7 @@ internal partial class OpeningQuestRuntime
         _guideFurnitureExiting = false;
         _guideFurnitureReferenceFormId = null;
         _guideFurnitureExitPackage = null;
+        _guideFurnitureExitPlayback = null;
         _activeGuideAnimation = null;
         ContinueGuidePackage(package);
     }
@@ -459,18 +463,18 @@ internal partial class OpeningQuestRuntime
             return;
         if (_guideFurnitureExiting)
         {
-            if (_activeGuideAnimation is not { } exit)
+            if (_guideFurnitureExitPlayback is not { } exit)
                 throw new InvalidOperationException(
                     "Owned guide furniture exit has no active animation.");
-            if (exit.Player.IsPlaying() && exit.Player.CurrentAnimation.ToString().Equals(
-                    exit.RuntimeName,
-                    StringComparison.Ordinal))
+            exit.Advance(delta);
+            if (!exit.Terminal)
                 return;
             FinishGuideFurnitureExit();
             return;
         }
         if (_guideFurnitureOccupied)
         {
+            _guideFurnitureLayeredSeatedAnimation?.Advance(delta);
             if (_activeGuideAnimation is not { } seatedAnimation ||
                 !seatedAnimation.Player.IsPlaying() ||
                 !seatedAnimation.Player.CurrentAnimation.ToString().Equals(
@@ -519,6 +523,17 @@ internal partial class OpeningQuestRuntime
             FaceGuideTowardCellPosition(_guideDestinationCellUnits);
         }
     }
+
+    private static SourceActorAnimation SourceAnimation(
+        OpeningGuideFurnitureAnimation source,
+        string rootDisposition) => new(
+        source.LogicalPath,
+        source.Sha256,
+        source.SequenceName,
+        source.StartSeconds,
+        source.StopSeconds,
+        source.CycleType,
+        rootDisposition);
 
     private void FinishGuideTravel()
     {

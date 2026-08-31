@@ -16,8 +16,6 @@ internal static class OpeningGuidePriorityAnimation
     private const string PackagePlayerName = "OpenNvGuidePackagePriorityPlayer";
     private const string ActorAccumulationRootNode = "Bip01";
     private const string SourceNonAccumulationRootNode = "Bip01 NonAccum";
-    private const int OwnedLoopCycleType = 0;
-    private const int OwnedClampCycleType = 2;
 
     internal static LayeredPlayback Compose(
         ActorModelSlice.LoadedAnimation furniture,
@@ -163,14 +161,7 @@ internal static class OpeningGuidePriorityAnimation
         var filtered = new Animation
         {
             Length = source.Length,
-            LoopMode = animation.CycleType switch
-            {
-                OwnedLoopCycleType => Animation.LoopModeEnum.Linear,
-                OwnedClampCycleType => Animation.LoopModeEnum.None,
-                _ => throw new InvalidOperationException(
-                    $"Owned guide animation cycle type is unsupported: " +
-                    $"{animation.SequenceName}/{animation.CycleType}"),
-            },
+            LoopMode = ActorAnimationPlayback.LoopModeForCycleType(animation.CycleType),
         };
         foreach (var track in tracks)
             CopyTrack(track.Source.Resource, track.Index, filtered);
@@ -272,10 +263,23 @@ internal static class OpeningGuidePriorityAnimation
 
         internal void Play()
         {
+            furniturePlayer.CallbackModeProcess =
+                AnimationMixer.AnimationCallbackModeProcess.Manual;
+            packagePlayer.CallbackModeProcess =
+                AnimationMixer.AnimationCallbackModeProcess.Manual;
             furniturePlayer.Play(furnitureRuntimeName);
             packagePlayer.Play(packageRuntimeName);
             furniturePlayer.Advance(0.0);
             packagePlayer.Advance(0.0);
+        }
+
+        internal void Advance(double deltaSeconds)
+        {
+            if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0.0)
+                throw new InvalidOperationException(
+                    "Owned layered animation delta is invalid.");
+            furniturePlayer.Advance(deltaSeconds);
+            packagePlayer.Advance(deltaSeconds);
         }
 
         internal void Stop()
