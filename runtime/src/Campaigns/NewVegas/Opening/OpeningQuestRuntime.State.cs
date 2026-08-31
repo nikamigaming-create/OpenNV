@@ -7,6 +7,7 @@ using OpenNV.Runtime.Presentation.CharacterCreation;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -98,12 +99,15 @@ internal partial class OpeningQuestRuntime
                 ApplyQuestTimer(command);
                 break;
             case "setStage":
-                if (command.QuestFormId?.Equals(
+                var stageResult = GamebryoDialoguePlayback.RequireStageResult(
+                    command.Kind,
+                    command.QuestFormId,
+                    command.Stage);
+                if (stageResult.QuestFormId.Equals(
                     _flow.QuestFormId,
-                    StringComparison.OrdinalIgnoreCase) == true &&
-                    command.Stage is { } nextStage)
+                    StringComparison.OrdinalIgnoreCase))
                 {
-                    SetStage(nextStage);
+                    SetStage(stageResult.Stage);
                     return;
                 }
                 ApplyQuestStage(command);

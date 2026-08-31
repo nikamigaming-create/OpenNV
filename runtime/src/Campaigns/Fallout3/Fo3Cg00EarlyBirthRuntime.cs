@@ -11,6 +11,11 @@ namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal partial class Fo3OpeningFlow
 {
+    private const int GetIsVoiceTypeConditionFunction = 427;
+    private const int EqualConditionOperator = 0;
+    private const int SubjectConditionRunOn = 0;
+    private const int NullConditionParameter = 0;
+    private const float ConditionTrue = 1.0f;
     private Fo3Cg00EarlyBirthSequence? _cg00EarlySequence;
     private int? _cg00EarlyStage;
     private double _cg00EarlyTimerSeconds;
@@ -18,8 +23,7 @@ internal partial class Fo3OpeningFlow
     private readonly List<Fo3Cg00ImageSpaceLayer> _cg00EarlyImageSpaceLayers = [];
     private Label? _cg00EarlySubtitle;
     private AudioStreamPlayer? _cg00EarlyVoice;
-    private FaceGenLipAnimation? _cg00EarlyLip;
-    private FaceGenMorphController? _cg00EarlyFace;
+    private GamebryoDialoguePlayback? _cg00EarlyDialogue;
     private string? _cg00EarlyInfoFormId;
     private string? _cg00EarlyPlayerName;
     private bool _cg00EarlySexMenuActive;
@@ -58,6 +62,10 @@ internal partial class Fo3OpeningFlow
         internal double ElapsedSeconds => Animation.PositionSeconds;
     }
 
+    private sealed record Fo3Cg00EvaluatedDialogueCondition(
+        string VoiceTypeFormId,
+        Fo3Cg00DialogueCondition Source);
+
     private void StartCg00EarlyBirthSequence()
     {
         if (_birthPresentation is null)
@@ -73,6 +81,11 @@ internal partial class Fo3OpeningFlow
         _cg00ActorPackages.Clear();
         _cg00Stage10Projection.Clear();
         _cg00RetailStage10Telemetry = null;
+        _cg00EarlyVoice = new AudioStreamPlayer { Name = "FO3_CG00_EARLY_VOICE" };
+        AddChild(_cg00EarlyVoice);
+        _cg00EarlyDialogue = new GamebryoDialoguePlayback(
+            _cg00EarlyVoice,
+            _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
         EnsureCg00EarlyWorld();
         ApplyCg00EarlyStage(_cg00EarlySequence.Stages.Keys.Min());
     }
@@ -123,15 +136,7 @@ internal partial class Fo3OpeningFlow
         UpdateCg00ActorPackages(delta);
         UpdateCg00PlayerCamera(delta);
         UpdateCg00ImageSpace(delta);
-        if (_cg00EarlyVoice is not null && _cg00EarlyVoice.Playing &&
-            _cg00EarlyLip is not null && _cg00EarlyFace is not null)
-        {
-            if (_cg00EarlyVoice.GetMeta("opennv_info_form_id").AsString() !=
-                _cg00EarlyInfoFormId)
-                throw new InvalidOperationException(
-                    "Fallout 3 early CG00 voice and LIP INFO clocks diverged.");
-            _cg00EarlyFace.Apply(_cg00EarlyLip, _cg00EarlyVoice.GetPlaybackPosition());
-        }
+        _cg00EarlyDialogue?.Update();
         if (_cg00EarlyTimerTargetStage is null)
             return;
         _cg00EarlyTimerSeconds = Math.Max(0.0, _cg00EarlyTimerSeconds - delta);
@@ -302,46 +307,52 @@ internal partial class Fo3OpeningFlow
 
     private void PlayCg00Dialogue(IReadOnlyList<Fo3Cg00DialogueCue> cues, int index)
     {
-        if (index < 0 || index >= cues.Count)
+        var selection = GamebryoDialoguePlayback.SelectFirstInfo(
+            cues.Select((cue, sourceOrder) =>
+                new SourceDialogueInfoCandidate<
+                    Fo3Cg00DialogueCue,
+                    Fo3Cg00EvaluatedDialogueCondition>(
+                    cue.InfoFormId,
+                    sourceOrder,
+                    cue.SayOnce,
+                    cue.Conditions.Select(condition =>
+                        new Fo3Cg00EvaluatedDialogueCondition(
+                            cue.VoiceTypeFormId,
+                            condition)).ToArray(),
+                    cue)).ToArray(),
+            index,
+            _cg00EarlyInfoHistory,
+            EvaluateCg00DialogueCondition);
+        if (selection is null)
             throw new InvalidOperationException("Fallout 3 early CG00 dialogue cursor differs.");
-        var cue = cues[index];
-        if (!_cg00EarlyInfoHistory.Add(cue.InfoFormId))
-            throw new InvalidOperationException("Fallout 3 early CG00 INFO replayed.");
-        _cg00EarlyVoice?.Stop();
-        _cg00EarlyVoice?.QueueFree();
-        _cg00EarlyFace?.Clear();
-        _cg00EarlyLip = FaceGenLipAnimation.Load(
-            cue.Lip.SourcePath,
-            _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
+        var cue = selection.Value;
+        _cg00EarlyInfoHistory.Add(cue.InfoFormId);
         _cg00EarlyInfoFormId = cue.InfoFormId;
         var actor = ActorForCg00Role(cue.SpeakerRole);
-        _cg00EarlyFace = new FaceGenMorphController(
+        var face = new FaceGenMorphController(
             actor.Actor,
             _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
-        var stream = AudioStreamOggVorbis.LoadFromFile(cue.Voice.SourcePath)
-            ?? throw new InvalidOperationException("Fallout 3 early CG00 voice could not be decoded.");
-        _cg00EarlyVoice = new AudioStreamPlayer
+        var dialogue = _cg00EarlyDialogue ?? throw new InvalidOperationException(
+            "Fallout 3 early CG00 dialogue playback is absent.");
+        dialogue.Start(
+            new SourceDialogueLine(
+                cue.InfoFormId,
+                1,
+                cue.SpeakerRole,
+                cue.Text,
+                new SourceDialogueAsset(cue.Voice.LogicalPath, cue.Voice.SourcePath, cue.Voice.Sha256),
+                new SourceDialogueAsset(cue.Lip.LogicalPath, cue.Lip.SourcePath, cue.Lip.Sha256)),
+            face,
+            () =>
         {
-            Name = $"FO3_CG00_{cue.InfoFormId}_VOICE",
-            Stream = stream,
-        };
-        _cg00EarlyVoice.SetMeta("opennv_info_form_id", cue.InfoFormId);
-        _cg00EarlyVoice.SetMeta("opennv_speaker_role", cue.SpeakerRole);
-        _cg00EarlyVoice.Finished += () =>
-        {
-            _cg00EarlyFace?.Clear();
-            _cg00EarlyLip = null;
             _cg00EarlyInfoFormId = null;
-            _cg00EarlyVoice?.QueueFree();
-            _cg00EarlyVoice = null;
-            if (index + 1 < cues.Count)
+            if (selection.NextCursor < cues.Count)
             {
-                PlayCg00Dialogue(cues, index + 1);
+                PlayCg00Dialogue(cues, selection.NextCursor);
                 return;
             }
             CompleteCg00Dialogue(cues[^1]);
-        };
-        AddChild(_cg00EarlyVoice);
+        });
         _cg00EarlySubtitle ??= AddVaultDialogueOverlay("FO3_CG00_EARLY_DIALOGUE");
         _cg00EarlySubtitle.Text = $"{actor.Actor.Name.ToUpperInvariant()}: {cue.Text}";
         _cg00EarlySubtitle.Visible = true;
@@ -350,7 +361,6 @@ internal partial class Fo3OpeningFlow
                 layer.Surface.GetIndex() >= _vaultPreviewOverlay?.GetIndex()))
             throw new InvalidOperationException(
                 "Fallout 3 early CG00 subtitle is below the image-space layer.");
-        _cg00EarlyVoice.Play();
         GD.Print(
             $"OPENNV_FO3_CG00_INFO_STARTED stage={_cg00EarlyStage} info={cue.InfoFormId} " +
             $"speaker={cue.SpeakerRole} voice={cue.Voice.Sha256} lip={cue.Lip.Sha256}");
@@ -358,12 +368,28 @@ internal partial class Fo3OpeningFlow
 
     private void CompleteCg00Dialogue(Fo3Cg00DialogueCue cue)
     {
-        var stageCommand = cue.ResultCommands.LastOrDefault(value =>
-            value.StartsWith("setstage CG00 ", StringComparison.OrdinalIgnoreCase));
-        if (stageCommand is null)
-            throw new InvalidOperationException("Fallout 3 early CG00 dialogue has no stage result.");
-        var target = int.Parse(stageCommand.Split(' ', StringSplitOptions.RemoveEmptyEntries)[2]);
-        ApplyCg00EarlyStage(target);
+        var result = GamebryoDialoguePlayback.RequireStageResult(cue.ResultCommands);
+        if (!result.QuestEditorId.Equals("CG00", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Fallout 3 early CG00 dialogue targets another quest.");
+        ApplyCg00EarlyStage(result.Stage);
+    }
+
+    private static bool EvaluateCg00DialogueCondition(
+        Fo3Cg00EvaluatedDialogueCondition condition)
+    {
+        var source = condition.Source;
+        if (source.Function != GetIsVoiceTypeConditionFunction ||
+            source.OperatorFlags != EqualConditionOperator ||
+            !Mathf.IsEqualApprox(source.ComparisonValue, ConditionTrue) ||
+            source.Parameter2 != NullConditionParameter ||
+            source.RunOn != SubjectConditionRunOn ||
+            source.Reference != NullConditionParameter)
+            throw new InvalidOperationException(
+                "Fallout 3 early CG00 dialogue condition semantics are unsupported.");
+        return source.Parameter1.ToString("x8").Equals(
+            condition.VoiceTypeFormId,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private void EvaluateCg00ParticipantPackages(

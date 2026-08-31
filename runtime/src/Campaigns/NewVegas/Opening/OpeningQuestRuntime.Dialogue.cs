@@ -27,24 +27,25 @@ internal partial class OpeningQuestRuntime
     private void PlayTopic(OpeningDialogueTopic topic, Action completed, int generation)
     {
         var cursor = _topicCursors.GetValueOrDefault(topic.FormId);
-        OpeningDialogueInfo? selected = null;
-        while (cursor < topic.Infos.Count)
-        {
-            var candidate = topic.Infos[cursor++];
-            if (candidate.SayOnce && _saidOnce.Contains(candidate.FormId))
-                continue;
-            if (!candidate.Conditions.All(EvaluateCondition))
-                continue;
-            selected = candidate;
-            break;
-        }
-        _topicCursors[topic.FormId] = cursor;
-        if (selected is null)
+        var selection = GamebryoDialoguePlayback.SelectFirstInfo(
+            topic.Infos.Select(info =>
+                new SourceDialogueInfoCandidate<OpeningDialogueInfo, OpeningDialogueCondition>(
+                    info.FormId,
+                    info.SourceOrder,
+                    info.SayOnce,
+                    info.Conditions,
+                    info)).ToArray(),
+            cursor,
+            _saidOnce,
+            EvaluateCondition);
+        _topicCursors[topic.FormId] = selection?.NextCursor ?? topic.Infos.Count;
+        if (selection is null)
         {
             CloseModal();
             completed();
             return;
         }
+        var selected = selection.Value;
         if (selected.SayOnce)
             _saidOnce.Add(selected.FormId);
         PlayInfo(selected, topic, completed, generation);
@@ -59,6 +60,9 @@ internal partial class OpeningQuestRuntime
     {
         if (generation != _generation)
             return;
+        if (lineIndex == 0)
+            GamebryoDialoguePlayback.ValidateOrderedLines(
+                info.Responses.Select(response => SourceLine(info.FormId, response)).ToArray());
         if (lineIndex >= info.Responses.Count)
         {
             ExecuteInfoCommands(info, topic, completed, generation, 0);
@@ -95,77 +99,52 @@ internal partial class OpeningQuestRuntime
         int flowGeneration,
         Action completed)
     {
-        StopDialogueVoice();
-        var stream = AudioStreamOggVorbis.LoadFromFile(response.Voice.SourcePath)
-            ?? throw new InvalidOperationException(
-                $"Owned dialogue voice could not be decoded: {response.Voice.LogicalPath}");
-        var durationSeconds = stream.GetLength();
-        if (!double.IsFinite(durationSeconds) || durationSeconds <= 0.0)
-            throw new InvalidOperationException(
-                $"Owned dialogue voice has no duration: {response.Voice.LogicalPath}");
-        var lip = FaceGenLipAnimation.Load(
-            response.Lip.SourcePath,
-            _configuration.ActorCompiler.FaceGenAnimation.Lip);
-        var playbackGeneration = ++_dialoguePlaybackGeneration;
-        _dialogueVoice.Stream = stream;
-        _activeDialogueLip = lip;
         _activeDialogueInfoFormId = infoFormId;
         _activeDialogueResponseIndex = response.Index;
-        _dialogueLipSampleLogged = false;
-        _dialogueVoiceCompletion = () =>
-        {
-            if (playbackGeneration != _dialoguePlaybackGeneration ||
-                flowGeneration != _generation)
-                return;
-            StopDialogueVoice();
-            completed();
-        };
-        _dialogueVoice.Play();
-        GD.Print(
-            $"OPENNV_NEW_GAME_DIALOGUE_VOICE info={infoFormId} " +
-            $"line={response.Index} duration={durationSeconds:F3} " +
-            $"voice={response.Voice.LogicalPath} lip={response.Lip.LogicalPath}");
-        GD.Print(
-            $"OPENNV_NEW_GAME_DIALOGUE_LIP_LOADED info={infoFormId} " +
-            $"line={response.Index} frames={lip.FrameCount} startFrame={lip.StartFrame} " +
-            $"metadata=0x{lip.MetadataWord:x8}");
+        _dialoguePlayback.Start(
+            SourceLine(infoFormId, response),
+            _dialogueFace,
+            () =>
+            {
+                if (flowGeneration != _generation)
+                    return;
+                _activeDialogueInfoFormId = null;
+                _activeDialogueResponseIndex = 0;
+                completed();
+            });
     }
+
+    private SourceDialogueLine SourceLine(
+        string infoFormId,
+        OpeningDialogueResponse response) =>
+        new(
+            infoFormId,
+            response.Index,
+            _flow.DialogueVoice.VoiceTypeFormId,
+            response.Text,
+            new SourceDialogueAsset(
+                response.Voice.LogicalPath,
+                response.Voice.SourcePath,
+                response.Voice.Sha256),
+            new SourceDialogueAsset(
+                response.Lip.LogicalPath,
+                response.Lip.SourcePath,
+                response.Lip.Sha256));
 
     private void UpdateDialogueVoice()
     {
-        if (_dialogueVoiceCompletion is null ||
-            _activeDialogueLip is null ||
-            !_dialogueVoice.Playing)
-            return;
-        var seconds = _dialogueVoice.GetPlaybackPosition();
-        var dominant = _dialogueFace.Apply(_activeDialogueLip, seconds);
-        if (!_dialogueLipSampleLogged && dominant.Value != 0.0f)
-        {
-            _dialogueLipSampleLogged = true;
-            GD.Print(
-                $"OPENNV_NEW_GAME_DIALOGUE_LIP_SAMPLE info={_activeDialogueInfoFormId} " +
-                $"line={_activeDialogueResponseIndex} seconds={seconds:F3} " +
-                $"target={dominant.Target} value={dominant.Value:F6}");
-        }
+        _dialoguePlayback.Update();
     }
 
     private void CompleteDialogueVoice()
     {
-        var completed = _dialogueVoiceCompletion;
-        _dialogueVoiceCompletion = null;
-        completed?.Invoke();
+        _dialoguePlayback.Complete();
     }
 
     private void StopDialogueVoice()
     {
-        _dialogueVoiceCompletion = null;
-        _dialogueFace?.Clear();
-        _activeDialogueLip = null;
+        _dialoguePlayback?.Stop();
         _activeDialogueInfoFormId = null;
         _activeDialogueResponseIndex = 0;
-        _dialogueLipSampleLogged = false;
-        _dialoguePlaybackGeneration++;
-        if (_dialogueVoice is not null && _dialogueVoice.Playing)
-            _dialogueVoice.Stop();
     }
 }

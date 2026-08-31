@@ -94,13 +94,10 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private Label _objective = null!;
     private ColorRect _imageSpaceFade = null!;
     private AudioStreamPlayer _dialogueVoice = null!;
-    private Action? _dialogueVoiceCompletion;
     private FaceGenMorphController _dialogueFace = null!;
-    private FaceGenLipAnimation? _activeDialogueLip;
+    private GamebryoDialoguePlayback _dialoguePlayback = null!;
     private string? _activeDialogueInfoFormId;
     private int _activeDialogueResponseIndex;
-    private bool _dialogueLipSampleLogged;
-    private int _dialoguePlaybackGeneration;
     private int _stage;
     private int _generation;
     private int? _timerTargetStage;
@@ -832,7 +829,6 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         Name = "OwnedNewGameFlow";
 
         _dialogueVoice = new AudioStreamPlayer { Name = "OwnedDialogueVoice" };
-        _dialogueVoice.Finished += CompleteDialogueVoice;
         AddChild(_dialogueVoice);
 
         foreach (var value in _flow.Character.SpecialValues)
@@ -842,6 +838,9 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         ResolveGuideAnimationObjects();
         _dialogueFace = new FaceGenMorphController(
             _guideActor.Actor,
+            configuration.ActorCompiler.FaceGenAnimation.Lip);
+        _dialoguePlayback = new GamebryoDialoguePlayback(
+            _dialogueVoice,
             configuration.ActorCompiler.FaceGenAnimation.Lip);
         _loaded.Player.SetExternalActivationHandler(HandleExternalActivation);
         foreach (var activator in _loaded.MainContent.PlacedReferences
