@@ -1195,7 +1195,7 @@ internal partial class GameplayUiController : CanvasLayer
             : string.Join(
                 "\n",
                 snapshot.Inventory.Select(item =>
-                    $"{(item.Equipped ? ">" : " ")} {DisplayEditorId(item.EditorId)}  ({item.Count})")),
+                    $"{(item.Equipped ? ">" : " ")} {item.DisplayName}  ({item.Count})")),
         GameplayUiPanel.Data => FormatOwnedData(snapshot),
         GameplayUiPanel.Map => FormatOwnedData(snapshot),
         GameplayUiPanel.Controls => FormatControls(snapshot),
@@ -1213,21 +1213,6 @@ internal partial class GameplayUiController : CanvasLayer
         return objectives.Length == 0
             ? "QUESTS\nNO ACTIVE QUESTS"
             : "QUESTS\n" + string.Join("\n", objectives.Select(text => $"> {text}"));
-    }
-
-    private static string DisplayEditorId(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return "ITEM";
-        var result = new System.Text.StringBuilder(value.Length + 8);
-        for (var index = 0; index < value.Length; index++)
-        {
-            var current = value[index];
-            if (index > 0 && char.IsUpper(current) && !char.IsUpper(value[index - 1]))
-                result.Append(' ');
-            result.Append(index == 0 ? char.ToUpperInvariant(current) : current);
-        }
-        return result.ToString();
     }
 
     private static string DisplayObjective(string value)
@@ -1256,7 +1241,7 @@ internal partial class GameplayUiController : CanvasLayer
         return string.Join(
             "\n",
             snapshot.Inventory.Select(item =>
-                $"{(item.Equipped ? ">" : " ")} {item.EditorId} x{item.Count}  " +
+                $"{(item.Equipped ? ">" : " ")} {item.DisplayName} x{item.Count}  " +
                 $"[{item.RecordType}]  {item.FormId}"));
     }
 
@@ -1302,7 +1287,7 @@ internal partial class GameplayUiController : CanvasLayer
             ? _configuration.Hud.Copy.EmptyInventory
             : string.Join(
                 " • ",
-                snapshot.Inventory.Select(item => $"{item.EditorId} x{item.Count}")));
+                snapshot.Inventory.Select(item => $"{item.DisplayName} x{item.Count}")));
 
     private string FormatStatusLine(GameplayUiSnapshot snapshot)
     {

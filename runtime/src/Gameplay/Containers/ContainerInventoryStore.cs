@@ -20,6 +20,22 @@ internal sealed class ContainerInventoryStore
 
     internal ContainerInventorySnapshot Register(
         ContainerInstance container,
+        bool legacyEmptied) => Register(
+            new ContainerInventoryDefinition(
+                container.ReferenceFormId,
+                container.EditorId,
+                container.DisplayName,
+                container.Items.Select(item => new ContainerInventoryDefinitionItem(
+                    item.ItemFormId,
+                    item.EditorId,
+                    item.DisplayName,
+                    item.RecordType,
+                    item.Count,
+                    item.Resolved)).ToArray()),
+            legacyEmptied);
+
+    internal ContainerInventorySnapshot Register(
+        ContainerInventoryDefinition container,
         bool legacyEmptied)
     {
         var referenceFormId = FalloutFormId.Normalize(container.ReferenceFormId);
@@ -55,6 +71,34 @@ internal sealed class ContainerInventoryStore
     {
         var state = RequiredState(referenceFormId);
         return state.TakeAll();
+    }
+
+    internal void Put(string referenceFormId, ContainerTransfer transfer)
+    {
+        if (transfer.Count <= 0 || string.IsNullOrWhiteSpace(transfer.EditorId) ||
+            string.IsNullOrWhiteSpace(transfer.DisplayName) ||
+            string.IsNullOrWhiteSpace(transfer.RecordType))
+            throw new InvalidOperationException("Container deposit item identity is invalid.");
+        var state = RequiredState(referenceFormId);
+        var itemFormId = FalloutFormId.Normalize(transfer.ItemFormId);
+        if (state.Items.TryGetValue(itemFormId, out var current))
+        {
+            if (!current.EditorId.Equals(transfer.EditorId, StringComparison.OrdinalIgnoreCase) ||
+                !current.DisplayName.Equals(transfer.DisplayName, StringComparison.Ordinal) ||
+                !current.RecordType.Equals(transfer.RecordType, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Container deposit item identity is ambiguous: {state.ReferenceFormId}/{itemFormId}");
+            current.RemainingCount = checked(current.RemainingCount + transfer.Count);
+            return;
+        }
+        state.Items.Add(
+            itemFormId,
+            new MutableContainerItem(
+                itemFormId,
+                transfer.EditorId,
+                transfer.DisplayName,
+                transfer.RecordType,
+                transfer.Count));
     }
 
     internal ContainerInventorySnapshot Snapshot(string referenceFormId) =>
@@ -127,7 +171,7 @@ internal sealed class ContainerInventoryStore
     }
 
     private static ContainerState BuildAuthoredState(
-        ContainerInstance container,
+        ContainerInventoryDefinition container,
         string referenceFormId)
     {
         if (string.IsNullOrWhiteSpace(container.EditorId))
@@ -157,8 +201,7 @@ internal sealed class ContainerInventoryStore
                     !current.RecordType.Equals(entry.RecordType, StringComparison.Ordinal))
                     throw new InvalidOperationException(
                         $"Container item identity is ambiguous: {referenceFormId}/{itemFormId}");
-                current.InitialCount = checked(current.InitialCount + entry.Count);
-                current.RemainingCount = current.InitialCount;
+                current.RemainingCount = checked(current.RemainingCount + entry.Count);
             }
             else
             {
@@ -169,7 +212,6 @@ internal sealed class ContainerInventoryStore
                         entry.EditorId,
                         entry.DisplayName,
                         entry.RecordType,
-                        entry.Count,
                         entry.Count));
             }
         }
@@ -205,21 +247,40 @@ internal sealed class ContainerInventoryStore
         internal void Apply(SavedContainerState saved)
         {
             if (!EditorId.Equals(saved.EditorId, StringComparison.OrdinalIgnoreCase) ||
-                !DisplayName.Equals(saved.DisplayName, StringComparison.Ordinal) ||
-                saved.Items.Count != Items.Count)
+                !DisplayName.Equals(saved.DisplayName, StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"Saved container identity differs from compiled contents: {ReferenceFormId}");
+            var savedByFormId = saved.Items.ToDictionary(
+                item => item.ItemFormId,
+                StringComparer.OrdinalIgnoreCase);
+            if (Items.Keys.Any(itemFormId => !savedByFormId.ContainsKey(itemFormId)))
+                throw new InvalidOperationException(
+                    $"Saved container omits compiled contents: {ReferenceFormId}");
             foreach (var savedItem in saved.Items)
             {
-                if (!Items.TryGetValue(savedItem.ItemFormId, out var authored) ||
-                    !authored.EditorId.Equals(savedItem.EditorId, StringComparison.OrdinalIgnoreCase) ||
-                    !authored.DisplayName.Equals(savedItem.DisplayName, StringComparison.Ordinal) ||
-                    !authored.RecordType.Equals(savedItem.RecordType, StringComparison.Ordinal) ||
-                    savedItem.RemainingCount > authored.InitialCount)
-                    throw new InvalidOperationException(
-                        $"Saved container item differs from compiled contents: " +
-                        $"{ReferenceFormId}/{savedItem.ItemFormId}");
-                authored.RemainingCount = savedItem.RemainingCount;
+                if (Items.TryGetValue(savedItem.ItemFormId, out var authored))
+                {
+                    if (!authored.EditorId.Equals(
+                            savedItem.EditorId,
+                            StringComparison.OrdinalIgnoreCase) ||
+                        !authored.DisplayName.Equals(savedItem.DisplayName, StringComparison.Ordinal) ||
+                        !authored.RecordType.Equals(savedItem.RecordType, StringComparison.Ordinal))
+                        throw new InvalidOperationException(
+                            $"Saved container item differs from compiled contents: " +
+                            $"{ReferenceFormId}/{savedItem.ItemFormId}");
+                    authored.RemainingCount = savedItem.RemainingCount;
+                }
+                else
+                {
+                    Items.Add(
+                        savedItem.ItemFormId,
+                        new MutableContainerItem(
+                            savedItem.ItemFormId,
+                            savedItem.EditorId,
+                            savedItem.DisplayName,
+                            savedItem.RecordType,
+                            savedItem.RemainingCount));
+                }
             }
         }
 
@@ -276,14 +337,12 @@ internal sealed class ContainerInventoryStore
         string editorId,
         string displayName,
         string recordType,
-        int initialCount,
         int remainingCount)
     {
         internal string ItemFormId { get; } = itemFormId;
         internal string EditorId { get; } = editorId;
         internal string DisplayName { get; } = displayName;
         internal string RecordType { get; } = recordType;
-        internal int InitialCount { get; set; } = initialCount;
         internal int RemainingCount { get; set; } = remainingCount;
     }
 }
@@ -326,3 +385,17 @@ internal sealed record SavedContainerItem(
     string DisplayName,
     string RecordType,
     int RemainingCount);
+
+internal sealed record ContainerInventoryDefinition(
+    string ReferenceFormId,
+    string EditorId,
+    string DisplayName,
+    IReadOnlyList<ContainerInventoryDefinitionItem> Items);
+
+internal sealed record ContainerInventoryDefinitionItem(
+    string ItemFormId,
+    string EditorId,
+    string DisplayName,
+    string RecordType,
+    int Count,
+    bool Resolved);

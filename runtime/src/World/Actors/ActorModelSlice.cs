@@ -73,7 +73,8 @@ internal static class ActorModelSlice
             .Where(mesh => mesh.Mesh is not null)
             .ToArray();
         var surfaces = LoadSurfaces(root, importedMeshes, resolvedSidecar, configuration);
-        ActorComplexionJoin.Apply(scene, surfaces);
+        if (boundsContract != BoundsContract.FirstPersonHand)
+            ActorComplexionJoin.Apply(scene, surfaces);
         var omittedSurfaces = LoadOmittedSurfaces(root, resolvedSidecar);
         var skeletons = NodeTraversal.Descendants<Skeleton3D>(scene).ToArray();
         var players = NodeTraversal.Descendants<AnimationPlayer>(scene).ToArray();
