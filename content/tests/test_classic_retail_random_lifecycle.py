@@ -28,7 +28,10 @@ class ClassicRetailRandomLifecycleTests(unittest.TestCase):
         self.assertLess(reset, boundary)
         self.assertLess(boundary, scene)
         self.assertIn('"arroyo-map-load"', host)
-        self.assertIn('"engine-map-object-script-initialization"', host)
+        self.assertIn(
+            '"exact-build-rng-dispatch-for-source-ordered-map-object-script-initialization"',
+            host,
+        )
         self.assertIn("ClassicRetailRandomLifecycle.ResetForLoad", host)
 
     def test_retail_random_state_is_not_serialized(self) -> None:

@@ -307,7 +307,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             _retailRandomLifecycle,
             _retailRandomContract,
             "arroyo-map-load",
-            "engine-map-object-script-initialization");
+            "exact-build-rng-dispatch-for-source-ordered-map-object-script-initialization");
         Scene = Fo2ArroyoCavesScene.Build(_arroyo, this);
         Runtime = Fo2ArroyoCavesPlayerRuntime.Build(
             _arroyo,

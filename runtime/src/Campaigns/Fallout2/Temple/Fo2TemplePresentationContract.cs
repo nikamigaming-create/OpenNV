@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
@@ -95,6 +96,7 @@ internal sealed class Fo2TemplePresentationCatalog
         IReadOnlyDictionary<string, Fo2MapArtifact> artifacts,
         IReadOnlyDictionary<int, Fo2MapTileBinding> tileBindings,
         IReadOnlyList<Fo2MapObjectPlacement> objectPlacements,
+        ClassicMapInitialization initialization,
         Fo2TempleConfrontationContract confrontation,
         int inventoryObjects,
         int verifiedResources)
@@ -114,6 +116,7 @@ internal sealed class Fo2TemplePresentationCatalog
         Artifacts = artifacts;
         TileBindings = tileBindings;
         ObjectPlacements = objectPlacements;
+        Initialization = initialization;
         Confrontation = confrontation;
         InventoryObjects = inventoryObjects;
         VerifiedResources = verifiedResources;
@@ -135,6 +138,7 @@ internal sealed class Fo2TemplePresentationCatalog
     internal IReadOnlyDictionary<string, Fo2MapArtifact> Artifacts { get; }
     internal IReadOnlyDictionary<int, Fo2MapTileBinding> TileBindings { get; }
     internal IReadOnlyList<Fo2MapObjectPlacement> ObjectPlacements { get; }
+    internal ClassicMapInitialization Initialization { get; }
     internal Fo2TempleConfrontationContract Confrontation { get; }
     internal int InventoryObjects { get; }
     internal int VerifiedResources { get; }
@@ -263,6 +267,7 @@ internal sealed class Fo2TemplePresentationCatalog
         VerifyTileBindings(
             new Dictionary<int, IReadOnlyList<uint>> { [0] = tileEntries },
             tileBindings);
+        var initialization = ClassicMapInitializationOwner.Parse(map);
         var objectRows = FlattenObjects(map.GetProperty("objects"));
         var objectPlacements = LoadObjectPlacements(
             cache.GetProperty("objectBindings"),
@@ -304,6 +309,7 @@ internal sealed class Fo2TemplePresentationCatalog
             artifacts,
             tileBindings,
             objectPlacements,
+            initialization,
             confrontation,
             objectRows.Values.Count(row => !row.TopLevel),
             resources.Length);
