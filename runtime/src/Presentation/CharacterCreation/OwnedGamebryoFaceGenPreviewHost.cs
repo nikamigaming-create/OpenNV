@@ -465,6 +465,23 @@ internal sealed class OwnedGamebryoFaceGenPreviewHost
             _textureRuntime.Apply(settingEntity, uiValue));
     }
 
+    internal void ApplyAge(
+        string settingEntity,
+        float geometryAxisCoefficient,
+        IReadOnlyList<float> textureAxis,
+        float textureAxisCoefficient)
+    {
+        if (!float.IsFinite(geometryAxisCoefficient) ||
+            !_bindings.TryGetValue(settingEntity, out var bindings))
+            throw new InvalidOperationException(
+                "Owned FaceGen age preview binding is unavailable.");
+        foreach (var binding in bindings)
+            binding.Mesh.SetBlendShapeValue(binding.Index, geometryAxisCoefficient);
+        _headMaterial.SetShaderParameter(
+            "facegen_map0",
+            _textureRuntime.ApplyAge(textureAxis, textureAxisCoefficient));
+    }
+
     internal void ApplyBodyProportions(CharacterBodyProportions proportions)
     {
         CharacterBodyRig.Apply(

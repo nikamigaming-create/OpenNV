@@ -88,6 +88,24 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
             !float.IsFinite(morphWeightScale) || morphWeightScale <= 0.0f)
             throw new InvalidOperationException(
                 "Owned Gamebryo FaceGen texture coordinates are invalid.");
+        return FloatSha256(Coordinates(baseline, controls, values, morphWeightScale));
+    }
+
+    internal static IReadOnlyList<float> Coordinates(
+        IReadOnlyList<float> baseline,
+        IReadOnlyList<OpeningNativeFaceGenTextureControl> controls,
+        IReadOnlyDictionary<string, float> values,
+        float morphWeightScale)
+    {
+        if (baseline.Count == 0 || controls.Count == 0 ||
+            controls.Count != values.Count ||
+            controls.Any(control =>
+                control.Axis.Count != baseline.Count ||
+                !values.TryGetValue(control.SettingEntity, out var value) ||
+                !float.IsFinite(value)) ||
+            !float.IsFinite(morphWeightScale) || morphWeightScale <= 0.0f)
+            throw new InvalidOperationException(
+                "Owned Gamebryo FaceGen texture coordinates are invalid.");
         var coordinates = baseline.ToArray();
         foreach (var control in controls)
         {
@@ -95,7 +113,7 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
             for (var index = 0; index < coordinates.Length; index++)
                 coordinates[index] += value * control.Axis[index];
         }
-        return FloatSha256(coordinates);
+        return coordinates;
     }
 
     private static string FloatSha256(IReadOnlyList<float> values)
@@ -122,6 +140,18 @@ internal sealed class OwnedGamebryoFaceGenTextureRuntime
             for (var index = 0; index < weights.Length; index++)
                 weights[index] += pair.Value * _morphWeightScale * axis[index];
         }
+        return ImageTexture.CreateFromImage(Decode(weights));
+    }
+
+    internal ImageTexture ApplyAge(
+        IReadOnlyList<float> axis,
+        float coefficient)
+    {
+        if (axis.Count != _baseline.Count || axis.Any(value => !float.IsFinite(value)) ||
+            !float.IsFinite(coefficient))
+            throw new InvalidOperationException("Owned FaceGen age texture axis is invalid.");
+        var weights = Coordinates(_baseline, _controls.Values.ToArray(), _values, _morphWeightScale)
+            .Zip(axis, (value, weight) => value + coefficient * weight).ToArray();
         return ImageTexture.CreateFromImage(Decode(weights));
     }
 

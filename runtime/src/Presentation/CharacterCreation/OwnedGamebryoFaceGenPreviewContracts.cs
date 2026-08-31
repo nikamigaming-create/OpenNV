@@ -25,6 +25,24 @@ internal sealed record OpeningNativeFaceGenTextureControl(
     string AxisSha256,
     IReadOnlyList<float> Axis);
 
+internal sealed record OpeningNativeFaceGenAgeControl(
+    string SettingEntity,
+    string SourceLabel,
+    float RawMinimum,
+    float RawMaximum,
+    float RawStep,
+    float MappedMinimumYears,
+    float MappedMaximumYears,
+    float MappedMultiplier,
+    float MappedAddend,
+    string GeometryAxisSha256,
+    IReadOnlyList<float> GeometryAxis,
+    float GeometryOffset,
+    string TextureAxisSha256,
+    IReadOnlyList<float> TextureAxis,
+    float TextureOffset,
+    string Semantics);
+
 internal sealed record OpeningFaceGenPreviewControl(
     int ControlIndex,
     string SettingEntity,
@@ -114,7 +132,8 @@ internal sealed record OpeningPlayerFaceGenPreview(
     bool FullBody = false,
     IReadOnlyList<string>? BodyComponentRoles = null,
     IReadOnlyDictionary<string, IReadOnlyList<OpeningPlayerBodyComponentSource>>?
-        BodyComponentSourcesBySex = null);
+        BodyComponentSourcesBySex = null,
+    OpeningNativeFaceGenAgeControl? AgeControl = null);
 
 internal sealed record OwnedGamebryoFaceGenSelectionDomain(
     string Sex,

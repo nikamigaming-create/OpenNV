@@ -554,6 +554,28 @@
             19, 20, 21, 23, 24, 25, 26, 29, 30, 31
           ]
         },
+        "nativeAgeExposure": {
+          "classification": "implementation-neutral-observe-only-racesexmenu-and-published-facegen-ctl-contract",
+          "engineBuild": "1.4.0.525",
+          "sourceExecutableSha256": "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57",
+          "settingEntity": "sRSMAge",
+          "sourceLabel": "Age",
+          "sourceRace": "all",
+          "rawMinimum": 1,
+          "rawMaximum": 10,
+          "rawStep": 1,
+          "mappedMinimumYears": 15.0,
+          "mappedMaximumYears": 65.0,
+          "mappedMultiplier": 5.550000190734863,
+          "mappedAddend": 9.449999809265137,
+          "sliderTileId": "0x1a",
+          "handlerAddress": "0x7b4dd7",
+          "multiplierAddress": "0x1075ba0",
+          "addendAddress": "0x1075b98",
+          "minimumAddress": "0x1015a38",
+          "maximumAddress": "0x1075b90",
+          "semantics": "round-linear-raw-slider-years-then-shape-age-and-color-age-with-baseline-delta-preserved"
+        },
         "runtimePreviewControl": {
           "controlIndex": 0,
           "minimum": -50.0,

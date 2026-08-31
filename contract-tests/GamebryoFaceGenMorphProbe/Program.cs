@@ -51,6 +51,24 @@ RequireThrows(() => OwnedGamebryoFaceGenMorphRuntime.Advance(
     revised.SymmetricGeometry, controls, revised.ControlValues,
     "shape-a", 6.0f, -5.0f, 5.0f, 0.1f));
 
+var ageControl = new OpeningNativeFaceGenAgeControl(
+    "sRSMAge", "Age", 1.0f, 10.0f, 1.0f, 15.0f, 65.0f,
+    5.550000190734863f, 9.449999809265137f,
+    Hash([1.0f, 0.0f]), [1.0f, 0.0f], 20.0f,
+    Hash([0.0f, 2.0f]), [0.0f, 2.0f], 22.0f,
+    "round-linear-and-preserve-color-shape-delta");
+var aged = OwnedGamebryoFaceGenAgeRuntime.Evaluate(
+    ageControl, [0.0f, 0.0f], [0.0f, 0.0f], 10.0f);
+Require(aged.Years == 65.0f &&
+        aged.SymmetricGeometry.SequenceEqual([45.0f, 0.0f]) &&
+        aged.SymmetricTexture.SequenceEqual([0.0f, 21.5f]),
+    "FaceGen age did not preserve the native shape/color age delta and clamps.");
+Require(OwnedGamebryoFaceGenAgeRuntime.InitialRawValue(
+        ageControl, [0.0f, 0.0f]) == 2.0f,
+    "FaceGen age did not invert the native raw slider mapping.");
+RequireThrows(() => OwnedGamebryoFaceGenAgeRuntime.Evaluate(
+    ageControl, [0.0f, 0.0f], [0.0f, 0.0f], 11.0f));
+
 if (args.Length == 2 && args[0] == "--owned-opening")
     RunOwnedOpening(args[1]);
 else if (args.Length != 0)
@@ -150,6 +168,23 @@ static void RunOwnedOpening(string path)
         .ToLowerInvariant();
     Require(egtSha256 == outputs.GetProperty("egtSha256").GetString(),
         "Owned preview EGT identity differs.");
+    if (isNewVegas)
+    {
+        var age = controlSpace.GetProperty("nativeAgeExposure");
+        var previewAge = preview.GetProperty("ageControl");
+        Require(age.GetProperty("settingEntity").GetString() == "sRSMAge" &&
+                previewAge.GetProperty("geometryAxisSha256").GetString() ==
+                    age.GetProperty("geometryAxisSha256").GetString() &&
+                previewAge.GetProperty("textureAxisSha256").GetString() ==
+                    age.GetProperty("textureAxisSha256").GetString(),
+            "Owned FNV preview age axes differ from CTL/native exposure.");
+        var ageTargetSurfaces = sidecar.RootElement.GetProperty("surfaces")
+            .EnumerateArray().Count(surface => surface.GetProperty("faceGenMorphs")
+                .GetProperty("geometryControls").GetProperty("targetNames")
+                .EnumerateArray().Any(value => value.GetString() == "sRSMAge"));
+        Require(ageTargetSurfaces > 0,
+            "Owned FNV preview artifact does not bind the age geometry axis.");
+    }
     Console.WriteLine(
         $"OPENNV_GAMEBRYO_FACEGEN_OWNED_MORPH_OK control={first.SettingEntity} " +
         $"value={acceptance:R} geometrySha256={result.SymmetricGeometrySha256} " +

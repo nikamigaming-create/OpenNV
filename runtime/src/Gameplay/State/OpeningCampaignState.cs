@@ -213,6 +213,7 @@ internal sealed record OpeningCharacterAppearanceState(
     string FaceSymmetricTextureSha256,
     IReadOnlyDictionary<string, float> FaceGeometryControlValues,
     IReadOnlyDictionary<string, float> FaceTextureControlValues,
+    float? FaceAgeRawValue,
     CharacterBodyProportions BodyProportions,
     string PreviewMode)
 {
@@ -245,6 +246,10 @@ internal sealed record OpeningCharacterAppearanceState(
                     value => value.Value.GetSingle(),
                     StringComparer.Ordinal)
                 : new Dictionary<string, float>(StringComparer.Ordinal),
+            source.TryGetProperty(nameof(FaceAgeRawValue), out var ageValue) &&
+                ageValue.ValueKind != JsonValueKind.Null
+                    ? ageValue.GetSingle()
+                    : null,
             proportions,
             previewMode);
     }
@@ -262,6 +267,7 @@ internal sealed record OpeningCharacterAppearanceState(
             FaceGeometryControlValues.Values.Any(value => !float.IsFinite(value)) ||
             FaceTextureControlValues.Keys.Any(string.IsNullOrWhiteSpace) ||
             FaceTextureControlValues.Values.Any(value => !float.IsFinite(value)) ||
+            FaceAgeRawValue is { } age && !float.IsFinite(age) ||
             PreviewMode is not ("3d" or "2d"))
             throw new InvalidOperationException(
                 "Saved opening character appearance state is invalid.");

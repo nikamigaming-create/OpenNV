@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
@@ -474,6 +476,7 @@ internal partial class OpeningQuestRuntime
                     value => value.Key,
                     value => value.Value,
                     StringComparer.Ordinal),
+            _faceAgeRawValue,
             _bodyProportions,
             _appearancePreviewMode),
         _docReaction,
@@ -611,6 +614,14 @@ internal partial class OpeningQuestRuntime
                 flow.Character.Appearance.SexEngineValues[sexIndex],
                 out var sex))
             return false;
+        var age = flow.Character.Appearance.FaceGen.ControlSpace.NativeAgeControl;
+        if (state.FaceAgeRawValue is { } rawAge &&
+            (!float.IsFinite(rawAge) || rawAge < age.RawMinimum ||
+             rawAge > age.RawMaximum ||
+             !Mathf.IsEqualApprox(
+                 (rawAge - age.RawMinimum) / age.RawStep,
+                 MathF.Round((rawAge - age.RawMinimum) / age.RawStep))))
+            return false;
         return sex.HairOptions.Any(value => value.FormId.Equals(
                 state.HairFormId,
                 StringComparison.OrdinalIgnoreCase)) &&
@@ -620,7 +631,9 @@ internal partial class OpeningQuestRuntime
             state.FaceSymmetricGeometrySha256.Equals(
                 FaceSymmetricGeometrySha256(
                     flow.Character.Appearance.FaceGen,
-                    state.FaceGeometryControlValues),
+                    state.FaceGeometryControlValues,
+                    state.FaceTextureControlValues,
+                    state.FaceAgeRawValue),
                 StringComparison.OrdinalIgnoreCase) &&
             state.FaceAsymmetricGeometrySha256.Equals(
                 flow.Character.Appearance.FaceGen.AsymmetricGeometrySha256,
@@ -628,23 +641,31 @@ internal partial class OpeningQuestRuntime
             state.FaceSymmetricTextureSha256.Equals(
                 FaceSymmetricTextureSha256(
                     flow.Character.Appearance.FaceGen,
-                    state.FaceTextureControlValues),
+                    state.FaceGeometryControlValues,
+                    state.FaceTextureControlValues,
+                    state.FaceAgeRawValue),
                 StringComparison.OrdinalIgnoreCase);
     }
 
     private string CurrentFaceSymmetricGeometrySha256() =>
         FaceSymmetricGeometrySha256(
             _flow.Character.Appearance.FaceGen,
-            _faceGeometryControlValues);
+            _faceGeometryControlValues,
+            _faceTextureControlValues,
+            _faceAgeRawValue);
 
     private string CurrentFaceSymmetricTextureSha256() =>
         FaceSymmetricTextureSha256(
             _flow.Character.Appearance.FaceGen,
-            _faceTextureControlValues);
+            _faceGeometryControlValues,
+            _faceTextureControlValues,
+            _faceAgeRawValue);
 
     private static string FaceSymmetricTextureSha256(
         OpeningAppearanceFaceGen faceGen,
-        IReadOnlyDictionary<string, float> values)
+        IReadOnlyDictionary<string, float> geometryValues,
+        IReadOnlyDictionary<string, float> values,
+        float? ageRawValue)
     {
         var controls = faceGen.PreviewHead.Previews[0].TextureControls;
         if (values.Count == 0)
@@ -655,11 +676,17 @@ internal partial class OpeningQuestRuntime
                 value < policy.Minimum || value > policy.Maximum))
             throw new InvalidOperationException(
                 "Saved RaceSexMenu FaceGen tone coordinates are invalid.");
-        return OwnedGamebryoFaceGenTextureRuntime.CoordinateSha256(
-            faceGen.SymmetricTextureValues,
-            controls,
-            values,
-            policy.MorphWeightScale);
+        var texture = OwnedGamebryoFaceGenTextureRuntime.Coordinates(
+            faceGen.SymmetricTextureValues, controls, values, policy.MorphWeightScale);
+        if (ageRawValue is null)
+            return OwnedGamebryoFaceGenTextureRuntime.CoordinateSha256(
+                faceGen.SymmetricTextureValues, controls, values, policy.MorphWeightScale);
+        var geometry = FaceSymmetricGeometryCoordinates(faceGen, geometryValues);
+        return OwnedGamebryoFaceGenAgeRuntime.Evaluate(
+            faceGen.ControlSpace.NativeAgeControl,
+            geometry,
+            texture,
+            ageRawValue.Value).SymmetricTextureSha256;
     }
 
     private string FaceGenControlValuesText(
@@ -703,6 +730,28 @@ internal partial class OpeningQuestRuntime
 
     private static string FaceSymmetricGeometrySha256(
         OpeningAppearanceFaceGen faceGen,
+        IReadOnlyDictionary<string, float> values,
+        IReadOnlyDictionary<string, float> textureValues,
+        float? ageRawValue)
+    {
+        var geometry = FaceSymmetricGeometryCoordinates(faceGen, values);
+        if (ageRawValue is null)
+            return FloatCoordinatesSha256(geometry);
+        var policy = faceGen.ControlSpace.PreviewControl;
+        var texture = OwnedGamebryoFaceGenTextureRuntime.Coordinates(
+            faceGen.SymmetricTextureValues,
+            faceGen.PreviewHead.Previews[0].TextureControls,
+            textureValues,
+            policy.MorphWeightScale);
+        return OwnedGamebryoFaceGenAgeRuntime.Evaluate(
+            faceGen.ControlSpace.NativeAgeControl,
+            geometry,
+            texture,
+            ageRawValue.Value).SymmetricGeometrySha256;
+    }
+
+    private static IReadOnlyList<float> FaceSymmetricGeometryCoordinates(
+        OpeningAppearanceFaceGen faceGen,
         IReadOnlyDictionary<string, float> values)
     {
         var policy = faceGen.ControlSpace.PreviewControl;
@@ -731,7 +780,16 @@ internal partial class OpeningQuestRuntime
             policy.Minimum,
             policy.Maximum,
             policy.MorphWeightScale,
-            policy.ResetValue).SymmetricGeometrySha256;
+            policy.ResetValue).SymmetricGeometry;
+    }
+
+    private static string FloatCoordinatesSha256(IReadOnlyList<float> values)
+    {
+        var payload = new byte[values.Count * sizeof(float)];
+        for (var index = 0; index < values.Count; index++)
+            BinaryPrimitives.WriteSingleLittleEndian(
+                payload.AsSpan(index * sizeof(float), sizeof(float)), values[index]);
+        return Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
     }
 
     private void RestoreState(OpeningCampaignState state)
@@ -752,6 +810,7 @@ internal partial class OpeningQuestRuntime
             Replace(
                 _faceTextureControlValues,
                 state.Appearance.FaceTextureControlValues);
+        _faceAgeRawValue = state.Appearance.FaceAgeRawValue;
         _docReaction = state.DocReaction;
         Replace(_specialValues, state.SpecialValues);
         Replace(_tagSkills, state.TagSkillFormIds);

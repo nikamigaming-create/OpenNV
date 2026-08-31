@@ -422,6 +422,13 @@ internal sealed partial record OpeningNewGameFlow
                 StringComparer.Ordinal) &&
             preview.TextureControls.All(value =>
                 value.Axis.Count == preview.SymmetricTexture.Count) &&
+            preview.AgeControl is { } previewAge &&
+            previewAge.SettingEntity ==
+                appearance.FaceGen.ControlSpace.NativeAgeControl.SettingEntity &&
+            previewAge.GeometryAxis.SequenceEqual(
+                appearance.FaceGen.ControlSpace.NativeAgeControl.GeometryAxis) &&
+            previewAge.TextureAxis.SequenceEqual(
+                appearance.FaceGen.ControlSpace.NativeAgeControl.TextureAxis) &&
             preview.FullBody == previewSet.FullBody &&
             preview.BodyComponentRoles is not null &&
             preview.BodyComponentRoles.SequenceEqual(
@@ -496,6 +503,19 @@ internal sealed partial record OpeningNewGameFlow
             source.AsymmetricTextureControlCount != FaceGenAsymmetricTextureControlCount ||
             source.SymmetricGeometryControls.Count != FaceGenSymmetricGeometryControlCount ||
             source.NativeGeometryControls.Count != FaceGenNativeGeometryControlCount)
+            return false;
+
+        var age = source.NativeAgeControl;
+        if (string.IsNullOrWhiteSpace(age.SettingEntity) ||
+            string.IsNullOrWhiteSpace(age.SourceLabel) ||
+            string.IsNullOrWhiteSpace(age.Semantics) ||
+            age.GeometryAxis.Count != FaceGenSymmetricGeometryCount ||
+            age.TextureAxis.Count != FaceGenSymmetricTextureCount ||
+            age.GeometryAxis.Any(value => !float.IsFinite(value)) ||
+            age.TextureAxis.Any(value => !float.IsFinite(value)) ||
+            age.RawMinimum >= age.RawMaximum || age.RawStep <= 0.0f ||
+            age.MappedMinimumYears >= age.MappedMaximumYears ||
+            age.MappedMultiplier <= 0.0f)
             return false;
 
         var controls = source.SymmetricGeometryControls;

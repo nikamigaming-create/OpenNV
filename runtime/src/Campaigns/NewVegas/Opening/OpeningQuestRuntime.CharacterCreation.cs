@@ -115,6 +115,13 @@ internal partial class OpeningQuestRuntime
         _raceSexMenuHost.FaceGrabHost();
         var preview = _raceSexRenderedDeviceHost.CreateFacePresentationHost();
         var previewControls = FaceGenPreviewControls(faceGen);
+        var ageControl = faceGen.ControlSpace.NativeAgeControl;
+        var previewBindings = previewControls.Append(
+            new OpeningNativeFaceGenGeometryControl(
+                -1,
+                ageControl.SettingEntity,
+                ageControl.SourceLabel,
+                ageControl.GeometryAxisSha256)).ToArray();
         var textureControls = faceGen.PreviewHead.Previews[0].TextureControls;
         OwnedGamebryoFaceGenPreviewHost? previewHost = null;
         OpeningPlayerFaceGenPreview? selectedPreviewState = null;
@@ -123,6 +130,31 @@ internal partial class OpeningQuestRuntime
             _bodyProportions,
             _appearancePreviewFaceFraming,
             greenProjection: _appearancePreviewMode == "2d");
+
+        OwnedGamebryoFaceGenAgeState CurrentAgeState(float rawValue)
+        {
+            var geometry = FaceSymmetricGeometryCoordinates(
+                faceGen, _faceGeometryControlValues);
+            var texture = OwnedGamebryoFaceGenTextureRuntime.Coordinates(
+                faceGen.SymmetricTextureValues,
+                textureControls,
+                _faceTextureControlValues,
+                previewPolicy.MorphWeightScale);
+            return OwnedGamebryoFaceGenAgeRuntime.Evaluate(
+                ageControl, geometry, texture, rawValue);
+        }
+
+        void ApplyAge()
+        {
+            if (_faceAgeRawValue is not { } rawValue || previewHost is null)
+                return;
+            var state = CurrentAgeState(rawValue);
+            previewHost.ApplyAge(
+                ageControl.SettingEntity,
+                state.GeometryAxisCoefficient,
+                ageControl.TextureAxis,
+                state.TextureAxisCoefficient);
+        }
 
         void UpdateControlValue(
             OpeningNativeFaceGenGeometryControl control,
@@ -144,6 +176,7 @@ internal partial class OpeningQuestRuntime
                 previewHost,
                 control.SettingEntity,
                 uiValue);
+            ApplyAge();
             RefreshPreview();
             GD.Print(
                 $"OPENNV_NEW_GAME_FACEGEN_CONTROL name={control.SettingEntity} " +
@@ -162,7 +195,21 @@ internal partial class OpeningQuestRuntime
                     "FaceGen RaceSexMenu tone value is invalid.");
             _faceTextureControlValues[control.SettingEntity] = value;
             previewHost?.ApplyTexture(control.SettingEntity, value);
+            ApplyAge();
             RefreshPreview();
+        }
+
+        void UpdateAgeValue(float value)
+        {
+            var state = CurrentAgeState(value);
+            _faceAgeRawValue = value;
+            ApplyAge();
+            RefreshPreview();
+            GD.Print(
+                $"OPENNV_NEW_GAME_FACEGEN_AGE setting={ageControl.SettingEntity} " +
+                $"rawValue={value:R} years={state.Years:R} " +
+                $"geometry={state.SymmetricGeometrySha256} " +
+                $"texture={state.SymmetricTextureSha256} semantics={ageControl.Semantics}");
         }
 
         void RenderPreview(OpeningAppearanceSex sex)
@@ -191,7 +238,7 @@ internal partial class OpeningQuestRuntime
             selectedPreviewState = selectedPreview;
             previewHost = OwnedGamebryoFaceGenPreviewHost.Load(
                 selectedPreview,
-                previewControls,
+                previewBindings,
                 previewPolicy,
                 preview,
                 _configuration,
@@ -208,6 +255,7 @@ internal partial class OpeningQuestRuntime
                 previewHost.ApplyTexture(
                     control.SettingEntity,
                     _faceTextureControlValues[control.SettingEntity]);
+            ApplyAge();
             RefreshPreview();
             _appearancePreviewHost = previewHost;
             GD.Print(
@@ -403,6 +451,25 @@ internal partial class OpeningQuestRuntime
                             UpdateTextureValue(control, value);
                             showFace();
                         })))
+                .Append(new OpeningRaceSexSliderEntry(
+                    ageControl.SourceLabel,
+                    ageControl.SettingEntity,
+                    _faceAgeRawValue ?? OwnedGamebryoFaceGenAgeRuntime.InitialRawValue(
+                        ageControl,
+                        FaceSymmetricGeometryCoordinates(
+                            faceGen, _faceGeometryControlValues)),
+                    ageControl.RawMinimum,
+                    ageControl.RawMaximum,
+                    ageControl.RawStep,
+                    ageControl.RawStep,
+                    value => CurrentAgeState(value).Years.ToString(
+                        "0",
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    value =>
+                    {
+                        UpdateAgeValue(value);
+                        showFace();
+                    }))
                 .ToArray(),
                 showEyes,
                 Accept);

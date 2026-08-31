@@ -77,6 +77,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _faceTextureControlValues =
         new(StringComparer.Ordinal);
+    private float? _faceAgeRawValue;
     private readonly HashSet<int> _achievements = [];
     private readonly bool[] _playerControls =
         Enumerable.Repeat(true, PlayerControlCount).ToArray();

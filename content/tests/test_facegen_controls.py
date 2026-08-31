@@ -44,7 +44,7 @@ SYMMETRIC_GEOMETRY_BASIS_COUNT = 2
 ASYMMETRIC_GEOMETRY_BASIS_COUNT = 1
 SYMMETRIC_TEXTURE_BASIS_COUNT = 2
 ASYMMETRIC_TEXTURE_BASIS_COUNT = 0
-OPAQUE_TAIL = b"demographic-tail"
+OPAQUE_TAIL = b"distribution-tail"
 SYNTHETIC_ARCHIVE_SHA256 = "a" * 64
 SYNTHETIC_EXECUTABLE_SHA256 = "b" * 64
 
@@ -60,6 +60,13 @@ def _controls(rows: list[tuple[tuple[float, ...], str]]) -> bytes:
 
 
 def synthetic_ctl() -> bytes:
+    demographic = bytearray()
+    for _race in range(5):
+        for geometry, geometry_offset, texture, texture_offset in (
+            ((0.25, -0.5), 20.0, (0.75, 0.5), 21.0),
+            ((-0.25, 0.5), 0.0, (0.5, -0.75), 0.0),
+        ):
+            demographic.extend(struct.pack("<2ff2ff", *geometry, geometry_offset, *texture, texture_offset))
     return b"".join(
         (
             struct.pack(
@@ -76,6 +83,7 @@ def synthetic_ctl() -> bytes:
             _controls([((0.5,), "Twist")]),
             _controls([((0.0, 1.0), "Tint")]),
             _controls([]),
+            bytes(demographic),
             OPAQUE_TAIL,
         )
     )
@@ -115,6 +123,27 @@ def synthetic_policy(payload: bytes) -> dict[str, object]:
             "sourceExecutableSha256": SYNTHETIC_EXECUTABLE_SHA256,
             "settingEntityTemplate": "sTone{oneBasedOrdinal:02d}",
             "controlIndices": [0],
+        },
+        "nativeAgeExposure": {
+            "classification": "synthetic-observe-only-contract",
+            "engineBuild": "synthetic-build",
+            "sourceExecutableSha256": SYNTHETIC_EXECUTABLE_SHA256,
+            "settingEntity": "sRSMAge",
+            "sourceRace": "all",
+            "rawMinimum": 1,
+            "rawMaximum": 10,
+            "rawStep": 1,
+            "mappedMinimumYears": 15.0,
+            "mappedMaximumYears": 65.0,
+            "mappedMultiplier": 5.55,
+            "mappedAddend": 9.45,
+            "sliderTileId": "0x1a",
+            "handlerAddress": "0x1000",
+            "multiplierAddress": "0x2000",
+            "addendAddress": "0x2008",
+            "minimumAddress": "0x3000",
+            "maximumAddress": "0x3008",
+            "semantics": "synthetic-round-and-preserve",
         },
         "runtimePreviewControl": {
             "controlIndex": 1,
@@ -192,6 +221,8 @@ class FaceGenControlsTest(unittest.TestCase):
         self.assertEqual(result.symmetric_geometry[1].axis, (0.0, -1.0))
         self.assertEqual(result.asymmetric_geometry[0].axis, (0.5,))
         self.assertEqual(result.asymmetric_texture, ())
+        self.assertEqual(result.demographic_age_by_race[0].geometry_axis, (0.25, -0.5))
+        self.assertEqual(result.demographic_age_by_race[0].texture_offset, 21.0)
         self.assertEqual(result.opaque_tail_bytes, len(OPAQUE_TAIL))
         self.assertEqual(
             result.opaque_tail_sha256,
@@ -259,6 +290,9 @@ class FaceGenControlsTest(unittest.TestCase):
             ],
         )
         self.assertEqual(result["runtimePreviewControl"]["settingEntity"], "sShape02")
+        self.assertEqual(result["nativeAgeExposure"]["settingEntity"], "sRSMAge")
+        self.assertEqual(result["nativeAgeExposure"]["geometryOffset"], 20.0)
+        self.assertEqual(result["nativeAgeExposure"]["textureOffset"], 21.0)
         self.assertEqual(
             result["runtimePreviewControl"]["acceptanceValue"],
             FACEGEN_SLIDER_JUMP,

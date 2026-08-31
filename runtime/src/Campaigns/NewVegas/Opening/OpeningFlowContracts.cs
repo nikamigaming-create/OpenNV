@@ -765,6 +765,7 @@ internal sealed record OpeningFaceGenControlSpace(
     string EngineBuild,
     string SourceExecutableSha256,
     IReadOnlyList<OpeningNativeFaceGenGeometryControl> NativeGeometryControls,
+    OpeningNativeFaceGenAgeControl NativeAgeControl,
     OpeningFaceGenPreviewControl PreviewControl,
     string RuntimeDisposition);
 

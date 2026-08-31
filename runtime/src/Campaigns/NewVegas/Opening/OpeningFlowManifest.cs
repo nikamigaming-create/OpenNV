@@ -1709,6 +1709,7 @@ internal sealed partial record OpeningNewGameFlow(
             exposure.GetProperty("sourceExecutableSha256").GetString()!,
             exposure.GetProperty("controls").EnumerateArray()
                 .Select(ParseNativeFaceGenGeometryControl).ToArray(),
+            ParseNativeFaceGenAgeControl(source.GetProperty("nativeAgeExposure")),
             ParseFaceGenPreviewControl(source.GetProperty("runtimePreviewControl")),
             source.GetProperty("runtimeDisposition").GetString()!);
     }
@@ -1850,7 +1851,8 @@ internal sealed partial record OpeningNewGameFlow(
                     runtimeDisposition,
                     fullBody,
                     bodyComponentRoles,
-                    bodyComponentSourcesBySex);
+                    bodyComponentSourcesBySex,
+                    ParseNativeFaceGenAgeControl(value.GetProperty("ageControl")));
             })
             .ToArray();
         return new OpeningPlayerFaceGenPreviewSet(

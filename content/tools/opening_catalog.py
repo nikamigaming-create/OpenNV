@@ -4401,6 +4401,37 @@ def _compile_facegen_control_space(
         }
         for ordinal, index in enumerate(texture_indices)
     ]
+    age_exposure = dict(policy.get("nativeAgeExposure", {}))
+    native_age_control: dict[str, object] | None = None
+    if age_exposure:
+        ages = control_space.demographic_age_by_race
+        if (
+            len(ages) != 5
+            or any(value != ages[0] for value in ages[1:])
+            or str(age_exposure.get("sourceRace")) != "all"
+            or str(age_exposure.get("sourceExecutableSha256", "")).casefold()
+            != str(exposure["sourceExecutableSha256"]).casefold()
+        ):
+            raise ValueError("Native FaceGen age demographic contract differs")
+        numeric_keys = (
+            "rawMinimum", "rawMaximum", "rawStep", "mappedMinimumYears",
+            "mappedMaximumYears", "mappedMultiplier", "mappedAddend",
+        )
+        numeric = {key: float(age_exposure[key]) for key in numeric_keys}
+        if (
+            not all(math.isfinite(value) for value in numeric.values())
+            or numeric["rawMinimum"] >= numeric["rawMaximum"]
+            or numeric["rawStep"] <= 0.0
+            or numeric["mappedMinimumYears"] >= numeric["mappedMaximumYears"]
+            or not str(age_exposure.get("settingEntity", ""))
+            or not str(age_exposure.get("semantics", ""))
+        ):
+            raise ValueError("Native FaceGen age slider contract is invalid")
+        native_age_control = {
+            **age_exposure,
+            **numeric,
+            **ages[0].manifest(),
+        }
     preview_policy = dict(policy["runtimePreviewControl"])
     preview_index = int(preview_policy["controlIndex"])
     preview_matches = [
@@ -4560,6 +4591,11 @@ def _compile_facegen_control_space(
                 }
             }
             if texture_exposure
+            else {}
+        ),
+        **(
+            {"nativeAgeExposure": native_age_control}
+            if native_age_control is not None
             else {}
         ),
         "runtimePreviewControl": runtime_preview_control,
