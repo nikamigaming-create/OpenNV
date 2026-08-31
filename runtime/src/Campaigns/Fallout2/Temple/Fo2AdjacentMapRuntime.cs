@@ -135,6 +135,12 @@ internal sealed class Fo2AdjacentMapSession
 
     internal string JoinCatalogSha256 => _joins.Sha256;
     internal string DestinationCacheSha256 => _destination.CacheSha256;
+    internal int DestinationMapIndex => _destination.MapIndex;
+
+    internal bool CanActivate(ClassicMapEndpoint endpoint) =>
+        endpoint.MapIndex == _destination.MapIndex &&
+        endpoint.MapSha256.Equals(
+            _destination.MapSha256, StringComparison.OrdinalIgnoreCase);
 
     internal ClassicMapJoinState? TryCommit(Fo2ArroyoCavesPlayerBody player) =>
         _joins.TryCommitAt(

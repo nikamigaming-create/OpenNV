@@ -23,7 +23,9 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     private string? _villageArrivalCaptureRoot;
     private string _savePath = "";
     private bool _persistenceEnabled;
-    private Fo2AdjacentMapSession? _adjacentSession;
+    private IReadOnlyList<Fo2AdjacentMapSession> _adjacentSessions =
+        Array.Empty<Fo2AdjacentMapSession>();
+    private Fo2AdjacentMapSession? _activeAdjacentSession;
 
     internal Fo2CharacterPicker Picker { get; private set; } = null!;
     internal Fo2CharacterSelection? SelectedCharacter { get; private set; }
@@ -101,16 +103,28 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 : null;
             var hasAdjacentJoins = options.TryGetValue(
                 "classic-adjacent-map-catalog", out var joinsPath);
-            var hasAdjacentCache = options.TryGetValue(
-                "fo2-adjacent-map-cache", out var adjacentCachePath);
+            var adjacentCachePaths = new List<string>();
+            if (options.TryGetValue("fo2-adjacent-map-cache", out var adjacentCachePath))
+                adjacentCachePaths.Add(adjacentCachePath);
+            if (options.TryGetValue("fo2-adjacent-map-caches", out var adjacentCacheList))
+                adjacentCachePaths.AddRange(adjacentCacheList.Split(
+                    Path.PathSeparator,
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            var hasAdjacentCache = adjacentCachePaths.Count > 0;
             if (hasAdjacentJoins || hasAdjacentCache)
             {
                 if (!hasAdjacentJoins || !hasAdjacentCache)
                     throw new InvalidOperationException(
                         "Fallout 2 adjacent play requires its join catalog and map cache.");
-                _adjacentSession = new Fo2AdjacentMapSession(
-                    ClassicAdjacentMapCatalog.Load(joinsPath!),
-                    Fo2AdjacentMapPresentation.Load(adjacentCachePath!));
+                var joins = ClassicAdjacentMapCatalog.Load(joinsPath!);
+                _adjacentSessions = adjacentCachePaths
+                    .Select(path => new Fo2AdjacentMapSession(
+                        joins, Fo2AdjacentMapPresentation.Load(path)))
+                    .ToArray();
+                if (_adjacentSessions.Select(row => row.DestinationMapIndex)
+                    .Distinct().Count() != _adjacentSessions.Count)
+                    throw new InvalidOperationException(
+                        "Fallout 2 adjacent cache set duplicates a destination MAP.");
             }
             _persistenceEnabled =
                 options.ContainsKey("fo2-save") ||
@@ -328,7 +342,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 restoredState.CurrentTile,
                 restoredState.Position,
                 restoredState.Rotation);
-            if (_adjacentSession is not null && File.Exists(AdjacentSavePath))
+            if (_adjacentSessions.Count > 0 && File.Exists(AdjacentSavePath))
                 RestoreAdjacentState(player);
             if (restoredState.MapIndex != 4 &&
                 restoredState.TempleExitTransition is not null)
@@ -422,14 +436,18 @@ public sealed partial class Fo2CharacterStartHost : Node3D
         if (player.CurrentMapIndex == Fo2ArroyoCavesPresentationCatalog.MapIndex &&
             player.CurrentTile == _arroyo.LiveExit.SourceTile)
             EnterTemple(_arroyo.LiveExit, null);
-        if (_adjacentSession is not null && AdjacentScene is null &&
-            player.CurrentMapIndex == 4)
+        if (_adjacentSessions.Count > 0 && AdjacentScene is null &&
+            player.CurrentMapIndex == Fo2ArvillagPresentationCatalog.MapIndex)
         {
-            var committed = _adjacentSession.TryCommit(player);
+            var committed = _adjacentSessions[0].TryCommit(player);
             if (committed is not null)
             {
+                _activeAdjacentSession = _adjacentSessions.SingleOrDefault(
+                    row => row.CanActivate(committed.Join.Destination)) ??
+                    throw new InvalidOperationException(
+                        "Fallout 2 adjacent destination has no decoded cache.");
                 PersistCurrentState();
-                AdjacentScene = _adjacentSession.Activate(
+                AdjacentScene = _activeAdjacentSession.Activate(
                     this, player, committed.Join.Destination);
                 if (VillageScene is not null)
                     VillageScene.Root.Visible = false;
@@ -437,10 +455,11 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 return;
             }
         }
-        if (_adjacentSession is not null && AdjacentScene is not null)
+        if (_activeAdjacentSession is not null && AdjacentScene is not null)
         {
-            var committed = _adjacentSession.TryCommit(player);
-            if (committed is not null && committed.Join.Destination.MapIndex == 4)
+            var committed = _activeAdjacentSession.TryCommit(player);
+            if (committed is not null && committed.Join.Destination.MapIndex ==
+                    Fo2ArvillagPresentationCatalog.MapIndex)
             {
                 var village = VillageScene ?? throw new InvalidOperationException(
                     "Fallout 2 adjacent return has no ARVILLAG presentation.");
@@ -454,6 +473,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
                 village.Root.Visible = true;
                 AdjacentScene.Root.QueueFree();
                 AdjacentScene = null;
+                _activeAdjacentSession = null;
                 if (File.Exists(AdjacentSavePath))
                     File.Delete(AdjacentSavePath);
                 PersistCurrentState();
@@ -496,7 +516,7 @@ public sealed partial class Fo2CharacterStartHost : Node3D
     {
         var player = Runtime?.Player ?? throw new InvalidOperationException(
             "Fallout 2 adjacent save has no player.");
-        var session = _adjacentSession ?? throw new InvalidOperationException(
+        var session = _activeAdjacentSession ?? throw new InvalidOperationException(
             "Fallout 2 adjacent save has no session.");
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -516,13 +536,9 @@ public sealed partial class Fo2CharacterStartHost : Node3D
 
     private void RestoreAdjacentState(Fo2ArroyoCavesPlayerBody player)
     {
-        var session = _adjacentSession!;
         using var document = JsonDocument.Parse(File.ReadAllBytes(AdjacentSavePath));
         var state = document.RootElement;
-        if (state.GetProperty("schema").GetString() != "opennv-fo2-adjacent-map-save/v1" ||
-            state.GetProperty("joinCatalogSha256").GetString() != session.JoinCatalogSha256 ||
-            state.GetProperty("destinationCacheSha256").GetString() !=
-                session.DestinationCacheSha256)
+        if (state.GetProperty("schema").GetString() != "opennv-fo2-adjacent-map-save/v1")
             throw new InvalidOperationException("Fallout 2 adjacent save provenance drifted.");
         var endpoint = new ClassicMapEndpoint(
             state.GetProperty("mapIndex").GetInt32(),
@@ -531,7 +547,13 @@ public sealed partial class Fo2CharacterStartHost : Node3D
             state.GetProperty("tile").GetInt32(),
             state.GetProperty("elevation").GetInt32(),
             state.GetProperty("rotation").GetInt32());
-        AdjacentScene = session.Activate(this, player, endpoint);
+        _activeAdjacentSession = _adjacentSessions.SingleOrDefault(row =>
+            row.CanActivate(endpoint) &&
+            state.GetProperty("joinCatalogSha256").GetString() == row.JoinCatalogSha256 &&
+            state.GetProperty("destinationCacheSha256").GetString() ==
+                row.DestinationCacheSha256) ?? throw new InvalidOperationException(
+                    "Fallout 2 adjacent save provenance drifted.");
+        AdjacentScene = _activeAdjacentSession.Activate(this, player, endpoint);
         player.Restore(
             endpoint.Tile,
             Fo1HexMath.Center(endpoint.Tile) +

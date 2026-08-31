@@ -71,9 +71,13 @@ class ClassicAdjacentMapCompilerTest(unittest.TestCase):
         self.assertIn('source_slice="AdjacentMaps"', preparer)
         self.assertIn("Fo2MapSceneBuilder.Build(", runtime)
         self.assertIn("player.EnterAdjacentMap(", runtime)
-        self.assertIn("_adjacentSession.Activate(", host)
+        self.assertIn("_activeAdjacentSession.Activate(", host)
+        self.assertIn('"fo2-adjacent-map-caches"', host)
+        self.assertIn("Distinct().Count() != _adjacentSessions.Count", host)
         self.assertIn("RestoreAdjacentState(player)", host)
-        self.assertIn("committed.Join.Destination.MapIndex == 4", host)
+        self.assertIn(
+            "Fo2ArvillagPresentationCatalog.MapIndex", host
+        )
 
 
 if __name__ == "__main__":
