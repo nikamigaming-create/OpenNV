@@ -92,8 +92,8 @@ internal sealed class OpeningRaceSexMenuHost
         _content.AddChild(_scrollUp);
         _content.AddChild(_scrollDown);
 
-        _back = NewNavigationButton(source.Navigation.Back);
-        _next = NewNavigationButton(source.Navigation.Next);
+        _back = NewNavigationButton(source.SharedControls.Back);
+        _next = NewNavigationButton(source.SharedControls.Next);
         _back.Pressed += () => _backAction?.Invoke();
         _next.Pressed += () => _nextAction?.Invoke();
         _content.AddChild(_back);
@@ -195,12 +195,12 @@ internal sealed class OpeningRaceSexMenuHost
     private int VisibleCapacity()
     {
         var rowHeight = _listEntries.Count > 0
-            ? _source.ListItem.Rect.Size.Y
-            : _source.Slider.Rect.Size.Y;
+            ? _source.SharedControls.List.Rect.Size.Y
+            : _source.SharedControls.Slider.Rect.Size.Y;
         return Math.Max(
             1,
             Mathf.FloorToInt(
-                (_source.Background.BottomBound - _source.Background.TopBound) /
+                (_source.SharedControls.BottomBound - _source.SharedControls.TopBound) /
                 rowHeight));
     }
 
@@ -241,9 +241,10 @@ internal sealed class OpeningRaceSexMenuHost
             var entry = _listEntries[_scrollOffset + slot];
             var row = NewRowButton(
                 $"OwnedRaceSexList_{entry.Key}",
-                template.Rect.Position.X,
-                _source.Background.TopBound + slot * template.Rect.Size.Y,
-                template.Rect.Size);
+                    _source.SharedControls.List.Rect.Position.X,
+                    _source.SharedControls.TopBound +
+                        slot * _source.SharedControls.List.Rect.Size.Y,
+                    _source.SharedControls.List.Rect.Size);
             if (entry.Selectable)
                 row.Pressed += entry.Activate;
             else
@@ -286,9 +287,10 @@ internal sealed class OpeningRaceSexMenuHost
             {
                 Name = $"OwnedRaceSexSlider_{entry.Key}",
                 Position = new Vector2(
-                    template.Rect.Position.X,
-                    _source.Background.TopBound + slot * template.Rect.Size.Y),
-                Size = template.Rect.Size,
+                    _source.SharedControls.Slider.Rect.Position.X,
+                    _source.SharedControls.TopBound +
+                        slot * _source.SharedControls.Slider.Rect.Size.Y),
+                Size = _source.SharedControls.Slider.Rect.Size,
                 MouseFilter = Control.MouseFilterEnum.Pass,
             };
             _content.AddChild(row);
@@ -380,23 +382,20 @@ internal sealed class OpeningRaceSexMenuHost
         return button;
     }
 
-    private Button NewNavigationButton(OpeningRaceSexNavigationButton source)
+    private Button NewNavigationButton(OwnedGamebryoRaceSexNavigation source)
     {
-        var size = TextSize(source.Label);
-        var boxSize = size + new Vector2(
-            source.HorizontalBuffer,
-            source.VerticalBuffer);
-        var rightAligned = source.Justify == "right";
+        var size = TextSize(source.Text.Text);
+        var rect = OwnedGamebryoTileRuntime.NavigationRect(source, size);
         var button = NewRowButton(
             source.Tile,
-            rightAligned ? source.X - boxSize.X : source.X,
-            source.Y,
-            boxSize);
+            rect.Position.X,
+            rect.Position.Y,
+            rect.Size);
         OwnedGamebryoTileRuntime.ApplyAbsolute(
             button,
             Layout(
                 source.Tile,
-                new Rect2(button.Position, button.Size)));
+                rect));
         button.Text = "";
         var empty = new StyleBoxEmpty();
         button.AddThemeStyleboxOverride("normal", empty);
@@ -407,16 +406,10 @@ internal sealed class OpeningRaceSexMenuHost
         var label = NewText(
             "",
             source.Brightness);
-        OwnedGamebryoTileRuntime.BindText(
-            label,
-            new OwnedGamebryoTextBinding(
-                source.Tile,
-                source.StringEntity,
-                source.Label,
-                source.StringSourceDocuments.Select(document => document.Sha256).ToArray()));
+        OwnedGamebryoTileRuntime.BindText(label, source.Text);
         label.Position = new Vector2(
-            source.HorizontalBuffer * OwnedUiTheme.CenteringFactor,
-            (boxSize.Y - size.Y) / source.VerticalCenterDivisor +
+            source.Buffer.X * OwnedUiTheme.CenteringFactor,
+            (rect.Size.Y - size.Y) / source.VerticalCenterDivisor +
                 source.BaseTextYOffset + source.TextYAdjust);
         label.Size = size;
         button.AddChild(label);

@@ -97,6 +97,7 @@ internal sealed record OpeningRaceSexMenuTiles(
     string SliderRightLabelTrait,
     int FontId,
     OwnedBitmapFont Font,
+    OwnedGamebryoRaceSexControls SharedControls,
     OpeningRaceSexBackground Background,
     OpeningRaceSexFaceGrab FaceGrab,
     OpeningRaceSexScroll Scroll,

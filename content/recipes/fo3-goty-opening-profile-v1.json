@@ -71,6 +71,9 @@
       "menus\\message_menu.xml",
       "menus\\dialog\\texteditmenu.xml",
       "menus\\chargen\\race_sex_menu.xml",
+      "menus\\prefabs\\text_box.xml",
+      "menus\\levelup_menu.xml",
+      "menus\\tutorial_menu.xml",
       "menus\\chargen\\specialbookmenu.xml"
     ],
     "requiredTextureMembers": [
@@ -275,6 +278,8 @@
       "nameInputTile": "textedit_text",
       "nameAcceptTile": "textedit_button_ok",
       "nameAcceptEntity": "-sOk",
+      "appearanceBackEntity": "-sBack",
+      "appearanceNextEntity": "-sNext",
       "namePanelWidth": 720,
       "namePanelHeight": 180,
       "nameBackgroundTexture": "textures\\interface\\shared\\background\\solid_black.dds"

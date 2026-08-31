@@ -66,6 +66,8 @@ class Fo3OwnedUiTileContractTest(unittest.TestCase):
             "nameInputTile": "textedit_text",
             "nameAcceptTile": "textedit_button_ok",
             "nameAcceptEntity": "-sOk",
+            "appearanceBackEntity": "-sBack",
+            "appearanceNextEntity": "-sNext",
             "namePanelWidth": 720,
             "namePanelHeight": 180,
             "nameBackgroundTexture": "textures\\interface\\shared\\background\\solid_black.dds",
@@ -77,10 +79,28 @@ class Fo3OwnedUiTileContractTest(unittest.TestCase):
             "menus\\dialog\\texteditmenu.xml": SimpleNamespace(
                 data=name_xml, sha256="b" * 64
             ),
+            "menus\\prefabs\\text_box.xml": SimpleNamespace(
+                data=b"<rect></rect>", sha256="c" * 64
+            ),
+            "menus\\levelup_menu.xml": SimpleNamespace(
+                data=b"<string>&-sBack;</string>", sha256="e" * 64
+            ),
+            "menus\\tutorial_menu.xml": SimpleNamespace(
+                data=b"<string>&-sNext;</string>", sha256="f" * 64
+            ),
+        }
+        race_sex_tiles = {
+            "navigation": {
+                "back": {"tile": "RSM_back_button"},
+                "next": {"tile": "RSM_next_button"},
+            }
         }
         with tempfile.TemporaryDirectory() as temporary, patch(
             "prepare_fo3_profile._extract_profile_texture",
             return_value={"sourceSha256": "d" * 64},
+        ), patch(
+            "prepare_fo3_profile._race_sex_menu_tile_contract",
+            return_value=race_sex_tiles,
         ):
             result = _appearance_ui_contract(
                 {"opening": {"appearanceUi": definition}},
@@ -103,6 +123,13 @@ class Fo3OwnedUiTileContractTest(unittest.TestCase):
         self.assertEqual(tiles["accept"]["text"], "Ok")
         self.assertEqual(tiles["accept"]["x"]["constant"], -16.0)
         self.assertEqual(tiles["accept"]["sourceSha256"], "b" * 64)
+        navigation = result["raceSexMenuTiles"]["navigation"]
+        self.assertEqual(navigation["back"]["label"], "Back")
+        self.assertEqual(navigation["next"]["label"], "Next")
+        self.assertEqual(
+            navigation["back"]["stringSourceDocuments"][0]["sha256"],
+            "e" * 64,
+        )
 
 
 if __name__ == "__main__":

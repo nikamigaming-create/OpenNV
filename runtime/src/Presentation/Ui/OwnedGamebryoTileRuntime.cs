@@ -55,6 +55,35 @@ internal sealed record OwnedGamebryoTextEditMenu(
     float InputWrapWidth,
     OwnedGamebryoPositionedText Accept);
 
+internal sealed record OwnedGamebryoRaceSexNavigation(
+    string Tile,
+    Vector2 Anchor,
+    Vector2 Buffer,
+    float Brightness,
+    float TextYAdjust,
+    float VerticalCenterDivisor,
+    float BaseTextYOffset,
+    OwnedGamebryoHorizontalJustification Justification,
+    OwnedGamebryoTextBinding Text);
+
+internal sealed record OwnedGamebryoRaceSexTemplate(
+    string Tile,
+    Rect2 Rect,
+    string TextTile,
+    Vector2 TextPosition);
+
+internal sealed record OwnedGamebryoRaceSexControls(
+    string Document,
+    string DocumentSha256,
+    Rect2 BackgroundRect,
+    float TopBound,
+    float BottomBound,
+    Rect2 FaceGrabRect,
+    OwnedGamebryoRaceSexNavigation Back,
+    OwnedGamebryoRaceSexNavigation Next,
+    OwnedGamebryoRaceSexTemplate List,
+    OwnedGamebryoRaceSexTemplate Slider);
+
 internal static class OwnedGamebryoTileRuntime
 {
     private const int Sha256HexCharacters = 64;
@@ -186,6 +215,67 @@ internal static class OwnedGamebryoTileRuntime
         return result;
     }
 
+    internal static OwnedGamebryoRaceSexControls ParseRaceSexControls(
+        JsonElement source)
+    {
+        const string schema = "opennv-owned-racesex-menu-tiles/v1";
+        if (source.GetProperty("schema").GetString() != schema ||
+            source.GetProperty("menuName").GetString() != "RaceSexMenu")
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu control contract identity differs.");
+        var document = source.GetProperty("document").GetString()!;
+        var sha256 = source.GetProperty("documentSha256").GetString()!;
+        var background = source.GetProperty("background");
+        var face = source.GetProperty("faceGrab");
+        var navigation = source.GetProperty("navigation");
+        var list = source.GetProperty("listItemTemplate");
+        var listText = list.GetProperty("text");
+        var slider = source.GetProperty("sliderTemplate");
+        var sliderText = slider.GetProperty("label");
+        var result = new OwnedGamebryoRaceSexControls(
+            document,
+            sha256,
+            ReadRect(background.GetProperty("rect")),
+            background.GetProperty("topBound").GetSingle(),
+            background.GetProperty("bottomBound").GetSingle(),
+            ReadRect(face.GetProperty("rect")),
+            RaceSexNavigation(navigation.GetProperty("back"), document, sha256),
+            RaceSexNavigation(navigation.GetProperty("next"), document, sha256),
+            new OwnedGamebryoRaceSexTemplate(
+                list.GetProperty("tile").GetString()!,
+                ReadRect(list.GetProperty("rect")),
+                listText.GetProperty("tile").GetString()!,
+                new Vector2(
+                    listText.GetProperty("notSelectableX").GetSingle(),
+                    listText.GetProperty("y").GetSingle())),
+            new OwnedGamebryoRaceSexTemplate(
+                slider.GetProperty("tile").GetString()!,
+                ReadRect(slider.GetProperty("rect")),
+                sliderText.GetProperty("tile").GetString()!,
+                new Vector2(
+                    sliderText.GetProperty("x").GetSingle(),
+                    sliderText.GetProperty("y").GetSingle())));
+        ValidateRaceSexControls(result);
+        return result;
+    }
+
+    internal static Rect2 NavigationRect(
+        OwnedGamebryoRaceSexNavigation source,
+        Vector2 textSize)
+    {
+        Validate(source.Text);
+        if (!textSize.IsFinite() || textSize.X <= 0.0f || textSize.Y <= 0.0f ||
+            !source.Anchor.IsFinite() || !source.Buffer.IsFinite() ||
+            source.Buffer.X < 0.0f || source.Buffer.Y < 0.0f)
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu navigation geometry is invalid.");
+        var size = textSize + source.Buffer;
+        var x = source.Justification == OwnedGamebryoHorizontalJustification.Right
+            ? source.Anchor.X - size.X
+            : source.Anchor.X;
+        return new Rect2(x, source.Anchor.Y, size.X, size.Y);
+    }
+
     internal static void Validate(OwnedGamebryoTileLayout source)
     {
         if (string.IsNullOrWhiteSpace(source.Document) ||
@@ -288,6 +378,67 @@ internal static class OwnedGamebryoTileRuntime
         float parent,
         float self) =>
         source.ParentFactor * parent + source.SelfFactor * self + source.Constant;
+
+    private static OwnedGamebryoRaceSexNavigation RaceSexNavigation(
+        JsonElement source,
+        string document,
+        string documentSha256)
+    {
+        var sourceHashes = source.GetProperty("stringSourceDocuments")
+            .EnumerateArray()
+            .Select(value => value.GetProperty("sha256").GetString()!)
+            .ToArray();
+        return new OwnedGamebryoRaceSexNavigation(
+            source.GetProperty("tile").GetString()!,
+            new Vector2(
+                source.GetProperty("x").GetSingle(),
+                source.GetProperty("y").GetSingle()),
+            new Vector2(
+                source.GetProperty("horizontalBuffer").GetSingle(),
+                source.GetProperty("verticalBuffer").GetSingle()),
+            source.GetProperty("brightness").GetSingle(),
+            source.GetProperty("textYAdjust").GetSingle(),
+            source.GetProperty("verticalCenterDivisor").GetSingle(),
+            source.GetProperty("baseTextYOffset").GetSingle(),
+            source.GetProperty("justify").GetString() switch
+            {
+                "left" => OwnedGamebryoHorizontalJustification.Left,
+                "right" => OwnedGamebryoHorizontalJustification.Right,
+                _ => throw new InvalidOperationException(
+                    "Owned RaceSexMenu navigation justification differs."),
+            },
+            new OwnedGamebryoTextBinding(
+                source.GetProperty("tile").GetString()!,
+                source.GetProperty("stringEntity").GetString()!,
+                source.GetProperty("label").GetString()!,
+                sourceHashes));
+    }
+
+    private static void ValidateRaceSexControls(OwnedGamebryoRaceSexControls source)
+    {
+        Validate(new OwnedGamebryoTileLayout(
+            source.Document,
+            source.DocumentSha256,
+            "RaceSexMenu",
+            source.BackgroundRect,
+            OwnedGamebryoTileVisibility.Inherited));
+        Validate(source.Back.Text);
+        Validate(source.Next.Text);
+        if (!source.FaceGrabRect.Position.IsFinite() ||
+            !source.FaceGrabRect.Size.IsFinite() ||
+            source.FaceGrabRect.Size.X <= 0.0f || source.FaceGrabRect.Size.Y <= 0.0f ||
+            !float.IsFinite(source.TopBound) || !float.IsFinite(source.BottomBound) ||
+            source.TopBound < 0.0f || source.BottomBound <= source.TopBound ||
+            source.BottomBound > source.BackgroundRect.Size.Y ||
+            source.List.Rect.Size.X <= 0.0f || source.List.Rect.Size.Y <= 0.0f ||
+            source.Slider.Rect.Size.X <= 0.0f || source.Slider.Rect.Size.Y <= 0.0f ||
+            !float.IsFinite(source.Back.Brightness) || source.Back.Brightness <= 0.0f ||
+            !float.IsFinite(source.Next.Brightness) || source.Next.Brightness <= 0.0f ||
+            source.Back.VerticalCenterDivisor <= 0.0f ||
+            source.Next.VerticalCenterDivisor <= 0.0f)
+            throw new InvalidOperationException(
+                "Owned RaceSexMenu shared control contract is incomplete.");
+    }
 
     private static void ApplyVisibility(
         CanvasItem control,

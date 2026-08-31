@@ -745,6 +745,7 @@ internal sealed partial record OpeningNewGameFlow(
             source.GetProperty("sliderRightLabelTrait").GetString()!,
             fontId,
             OpeningManifest.ParseFont(font),
+            OwnedGamebryoTileRuntime.ParseRaceSexControls(source),
             new OpeningRaceSexBackground(
                 background.GetProperty("tile").GetString()!,
                 OpeningManifest.ReadRect(background.GetProperty("rect")),
@@ -1051,6 +1052,16 @@ internal sealed partial record OpeningNewGameFlow(
             source.ListItem.Rect.Size.Y <= 0.0f ||
             source.Slider.Rect.Size.X <= 0.0f ||
             source.Slider.Rect.Size.Y <= 0.0f ||
+            source.SharedControls.Document != source.Document ||
+            source.SharedControls.DocumentSha256 != source.DocumentSha256 ||
+            source.SharedControls.BackgroundRect != source.Background.Rect ||
+            source.SharedControls.FaceGrabRect != source.FaceGrab.Rect ||
+            source.SharedControls.TopBound != source.Background.TopBound ||
+            source.SharedControls.BottomBound != source.Background.BottomBound ||
+            source.SharedControls.List.Rect != source.ListItem.Rect ||
+            source.SharedControls.Slider.Rect != source.Slider.Rect ||
+            source.SharedControls.Back.Text.Text != source.Navigation.Back.Label ||
+            source.SharedControls.Next.Text.Text != source.Navigation.Next.Label ||
             source.ListItem.ActiveListTrait != source.ActiveListTrait ||
             source.Slider.ActiveListTrait != source.ActiveListTrait ||
             source.Navigation.Back.LabelRole != "back" ||

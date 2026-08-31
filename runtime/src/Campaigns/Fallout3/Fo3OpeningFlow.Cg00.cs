@@ -628,6 +628,7 @@ internal partial class Fo3OpeningFlow
     {
         ClearContent();
         var ui = _profile.Appearance.Ui;
+        var sourceControls = ui.RaceSexControls;
         var characterReflectron = _characterReflectron ??
             throw new InvalidOperationException(
                 "Fallout 3 character creation requires the shared owned Reflectron manifest.");
@@ -673,7 +674,7 @@ internal partial class Fo3OpeningFlow
             creatorLighting,
             _birthPresentation.UnitsToMeters);
         var panel = _reflectron.CreateMenuPresentationHost(
-            new Rect2(0.0f, 0.0f, 340.0f, 500.0f));
+            sourceControls.BackgroundRect);
         var content = CreatorColumn(
             panel,
             Fo3OpeningFlowNumericContracts.CreatorPanelMarginPixels);
@@ -684,10 +685,10 @@ internal partial class Fo3OpeningFlow
             $"{playerName}{System.Environment.NewLine}{sex.Label.ToUpperInvariant()}",
             Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels));
 
-        var scaledListItemHeight = ui.ListItemHeight;
         var categorySelect = new OptionButton
         {
-            CustomMinimumSize = new Vector2(0.0f, scaledListItemHeight),
+            Name = sourceControls.List.Tile,
+            CustomMinimumSize = sourceControls.List.Rect.Size,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
         foreach (var category in new[] { "RACE", "HAIR", "EYES", "FACE" })
@@ -806,15 +807,12 @@ internal partial class Fo3OpeningFlow
         content.AddChild(faceControlSelect);
         var slider = new HSlider
         {
-            Name = "FO3_RaceSexMenu_RSM_slider_option",
+            Name = sourceControls.Slider.Tile,
             MinValue = control.Minimum,
             MaxValue = control.Maximum,
             Step = control.Step,
             Value = control.ResetValue,
-            CustomMinimumSize = new Vector2(
-                0.0f,
-                ui.SliderHeight * GetViewport().GetVisibleRect().Size.Y /
-                    Fo3OpeningFlowNumericContracts.SourceUiCanvasHeightPixels),
+            CustomMinimumSize = sourceControls.Slider.Rect.Size,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
         content.AddChild(slider);
@@ -936,10 +934,54 @@ internal partial class Fo3OpeningFlow
             });
         RefreshProjection();
 
-        var accept = Button("ACCEPT APPEARANCE");
-        accept.CustomMinimumSize = new Vector2(0.0f, scaledListItemHeight);
-        accept.Pressed += () => AcceptAppearance(playerName, sex);
-        content.AddChild(accept);
+        Button NavigationButton(
+            OwnedGamebryoRaceSexNavigation navigation,
+            Action action)
+        {
+            var button = Button("");
+            button.Name = navigation.Tile;
+            var label = Label("", Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
+            OwnedGamebryoTileRuntime.BindText(label, navigation.Text);
+            var textSize = label.GetCombinedMinimumSize();
+            var rect = OwnedGamebryoTileRuntime.NavigationRect(
+                navigation,
+                textSize);
+            button.Position = rect.Position;
+            button.Size = rect.Size;
+            button.Text = "";
+            var empty = new StyleBoxEmpty();
+            foreach (var state in new[] { "normal", "disabled", "hover", "pressed", "focus" })
+                button.AddThemeStyleboxOverride(state, empty);
+            label.Position = new Vector2(
+                navigation.Buffer.X * OwnedUiTheme.CenteringFactor,
+                (rect.Size.Y - textSize.Y) / navigation.VerticalCenterDivisor +
+                    navigation.BaseTextYOffset + navigation.TextYAdjust);
+            label.Size = textSize;
+            button.AddChild(label);
+            button.Pressed += action;
+            panel.AddChild(button);
+            return button;
+        }
+        NavigationButton(
+            sourceControls.Back,
+            () =>
+            {
+                var index = categorySelect.Selected;
+                if (index <= 0)
+                    ShowNameSelection(sex);
+                else
+                    SelectCategory(index - 1);
+            });
+        NavigationButton(
+            sourceControls.Next,
+            () =>
+            {
+                var index = categorySelect.Selected;
+                if (index < categorySelect.ItemCount - 1)
+                    SelectCategory(index + 1);
+                else
+                    AcceptAppearance(playerName, sex);
+            });
         Callable.From(raceSelect.GrabFocus).CallDeferred();
         GD.Print(
             $"OPENNV_FO3_CG00_APPEARANCE_READY profile={_profile.ProfileId} " +

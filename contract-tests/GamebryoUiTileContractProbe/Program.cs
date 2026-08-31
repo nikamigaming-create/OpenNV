@@ -30,6 +30,22 @@ var evaluated = OwnedGamebryoTileRuntime.EvaluateTraitPosition(
 if (evaluated != new Vector2(604.0f, 124.0f))
     throw new InvalidOperationException(
         $"Gamebryo UI affine placement differs: {evaluated}");
+var navigation = new OwnedGamebryoRaceSexNavigation(
+    "RSM_next_button",
+    new Vector2(300.0f, 340.0f),
+    new Vector2(10.0f, 5.0f),
+    64.0f,
+    0.0f,
+    2.0f,
+    0.0f,
+    OwnedGamebryoHorizontalJustification.Right,
+    new OwnedGamebryoTextBinding("RSM_next_button", "-sNext", "Next", [hash]));
+var navigationRect = OwnedGamebryoTileRuntime.NavigationRect(
+    navigation,
+    new Vector2(40.0f, 20.0f));
+if (navigationRect != new Rect2(250.0f, 340.0f, 50.0f, 25.0f))
+    throw new InvalidOperationException(
+        $"Gamebryo UI navigation placement differs: {navigationRect}");
 
 ExpectLayoutFailure(layout with { Rect = new Rect2(0.0f, 0.0f, 0.0f, 180.0f) });
 ExpectLayoutFailure(layout with { DocumentSha256 = "unbound" });
@@ -41,7 +57,7 @@ ExpectPlacementFailure(placement with
 });
 
 Console.WriteLine(
-    "OPENNV_GAMEBRYO_UI_TILE_CONTRACT_PASS layout=1 text=1 affine=1 failClosed=5");
+    "OPENNV_GAMEBRYO_UI_TILE_CONTRACT_PASS layout=1 text=1 affine=1 navigation=1 failClosed=5");
 
 static void ExpectLayoutFailure(OwnedGamebryoTileLayout source)
 {

@@ -23,8 +23,11 @@ from environment_catalog import parse_image_space_modifier
 from facegen import compose_facegen_coordinates
 from opening_catalog import (
     _compile_facegen_control_space,
+    _display_entity,
     _prepare_runtime_video,
+    _race_sex_menu_tile_contract,
     _text_edit_menu_tile_contract,
+    _document_index,
     parse_tile_document,
 )
 from owned_archive_stack import OwnedArchive, OwnedArchiveStack
@@ -1472,6 +1475,39 @@ def _appearance_ui_contract(
                 f"Fallout 3 appearance menu {key} differs: "
                 f"expected={definition[key]} actual={value}"
             )
+    text_box_path = canonical_member_path("menus\\prefabs\\text_box.xml")
+    text_box_member = menu_members.get(text_box_path)
+    if text_box_member is None:
+        raise ValueError("Fallout 3 RaceSex text-box prefab was not admitted")
+    document, race_tree = _document_index(document_path, member.data)
+    _, text_box_tree = _document_index(text_box_path, text_box_member.data)
+    document["sha256"] = member.sha256
+    race_sex_tiles = _race_sex_menu_tile_contract(
+        race_tree,
+        document,
+        {
+            "width": float(definition["sourceCanvasWidth"]),
+            "height": float(definition["sourceCanvasHeight"]),
+        },
+        {document_path: race_tree, text_box_path: text_box_tree},
+    )
+    navigation = dict(race_sex_tiles["navigation"])
+    for role, entity_key, source_path in (
+        ("back", "appearanceBackEntity", "menus\\levelup_menu.xml"),
+        ("next", "appearanceNextEntity", "menus\\tutorial_menu.xml"),
+    ):
+        entity = str(definition[entity_key])
+        source_member = menu_members.get(canonical_member_path(source_path))
+        if source_member is None or f"&{entity};" not in source_member.data.decode("cp1252"):
+            raise ValueError(f"Fallout 3 RaceSex {role} string source differs")
+        button = dict(navigation[role])
+        button["stringEntity"] = entity
+        button["label"] = _display_entity(f"&{entity};")
+        button["stringSourceDocuments"] = [
+            {"path": source_path, "sha256": source_member.sha256}
+        ]
+        navigation[role] = button
+    race_sex_tiles["navigation"] = navigation
     background_path = canonical_member_path(str(definition["backgroundTexture"]))
     if background_path.removeprefix("textures\\") not in text.casefold():
         raise ValueError("Fallout 3 appearance menu background identity differs")
@@ -1530,6 +1566,7 @@ def _appearance_ui_contract(
         "menuName": menu_name,
         "panelName": panel_name,
         "panelVisibility": visibility(panel.group("body")),
+        "raceSexMenuTiles": race_sex_tiles,
         **observed,
         "backgroundTexture": _extract_profile_texture(
             texture_archive,

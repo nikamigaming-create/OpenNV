@@ -163,6 +163,7 @@ internal sealed record Fo3AppearanceUi(
     int SliderWidth,
     int SliderHeight,
     Fo3AppearanceAsset BackgroundTexture,
+    OwnedGamebryoRaceSexControls RaceSexControls,
     Fo3AppearanceNameUi Name);
 
 internal sealed record Fo3AppearanceSelection(
@@ -228,6 +229,26 @@ internal sealed record Fo3AppearanceContract(
         var nameHeight = PositiveInteger(nameSource, "panelHeight");
         var textEditMenu = OwnedGamebryoTileRuntime.ParseTextEditMenu(
             RequiredObject(nameSource, "textEditMenuTiles"));
+        var raceSexControls = OwnedGamebryoTileRuntime.ParseRaceSexControls(
+            RequiredObject(uiSource, "raceSexMenuTiles"));
+        if (raceSexControls.BackgroundRect != new Rect2(
+                PositiveInteger(uiSource, "panelX"),
+                PositiveInteger(uiSource, "panelY"),
+                PositiveInteger(uiSource, "panelWidth"),
+                PositiveInteger(uiSource, "panelHeight")) ||
+            raceSexControls.FaceGrabRect != new Rect2(
+                PositiveInteger(uiSource, "faceGrabX"),
+                PositiveInteger(uiSource, "faceGrabY"),
+                PositiveInteger(uiSource, "faceGrabWidth"),
+                PositiveInteger(uiSource, "faceGrabHeight")) ||
+            raceSexControls.List.Rect.Size != new Vector2(
+                PositiveInteger(uiSource, "listItemWidth"),
+                PositiveInteger(uiSource, "listItemHeight")) ||
+            raceSexControls.Slider.Rect.Size != new Vector2(
+                PositiveInteger(uiSource, "sliderWidth"),
+                PositiveInteger(uiSource, "sliderHeight")))
+            throw new InvalidOperationException(
+                "Fallout 3 RaceSex shared tile geometry differs.");
         if (textEditMenu.Panel.Rect.Size != new Vector2(nameWidth, nameHeight))
             throw new InvalidOperationException(
                 "Fallout 3 TextEditMenu panel dimensions differ.");
@@ -245,6 +266,7 @@ internal sealed record Fo3AppearanceContract(
             PositiveInteger(uiSource, "sliderWidth"),
             PositiveInteger(uiSource, "sliderHeight"),
             LoadAsset(RequiredObject(uiSource, "backgroundTexture")),
+            raceSexControls,
             new Fo3AppearanceNameUi(
                 nameWidth,
                 nameHeight,

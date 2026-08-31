@@ -103,7 +103,7 @@ internal partial class OpeningQuestRuntime
             _loaded.MainContent.Lighting,
             _loaded.UnitsToMeters);
         var root = _raceSexRenderedDeviceHost.CreateMenuPresentationHost(
-            source.Background.Rect);
+            source.SharedControls.BackgroundRect);
         _raceSexMenuHost = new OpeningRaceSexMenuHost(
             source,
             _opening.MainMenuColor,
