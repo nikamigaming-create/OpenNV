@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class CellContentLoader
@@ -461,7 +463,7 @@ internal static class CellContentLoader
                     if (poolManifest is null ||
                         poolManifest.TableGameplayCollisionSource != "presentation-render-triangles")
                         throw new InvalidOperationException("Unsupported pool table gameplay collision source.");
-                    foreach (var mesh in Descendants<MeshInstance3D>(instance))
+                    foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(instance))
                     {
                         CreateDoubleSidedTrimeshCollision(mesh, renderLayer);
                         collisionMeshes++;
@@ -490,7 +492,7 @@ internal static class CellContentLoader
                         renderLayer);
                     if (buildCollision)
                     {
-                        foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionInstance))
+                        foreach (var collisionMesh in NodeTraversal.Descendants<MeshInstance3D>(collisionInstance))
                         {
                             collisionMesh.Visible = false;
                             CreateDoubleSidedTrimeshCollision(collisionMesh, renderLayer);
@@ -525,7 +527,7 @@ internal static class CellContentLoader
                             renderLayer);
                     else
                     {
-                        foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionInstance))
+                        foreach (var collisionMesh in NodeTraversal.Descendants<MeshInstance3D>(collisionInstance))
                         {
                             collisionMesh.Visible = false;
                             CreateDoubleSidedTrimeshCollision(collisionMesh, renderLayer);
@@ -538,7 +540,7 @@ internal static class CellContentLoader
                         interactionType is not null and not "pool-table" and not "pool-component") &&
                     placement is not PickupInstance { CanGrab: true })
                 {
-                    foreach (var mesh in Descendants<MeshInstance3D>(instance))
+                    foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(instance))
                     {
                         if (landscapeCollisionAssets.Contains(assetId))
                             landscapeCollisionMeshes.Add(mesh);
@@ -1180,7 +1182,7 @@ internal static class CellContentLoader
         Transform3D expectedTransform,
         string role)
     {
-        var matches = Descendants<Node3D>(root)
+        var matches = NodeTraversal.Descendants<Node3D>(root)
             .Where(node => node.Name == name)
             .ToArray();
         if (matches.Length != 1 || !TransformsMatch(matches[0].Transform, expectedTransform))
@@ -1213,14 +1215,14 @@ internal static class CellContentLoader
         Node3D? verifiedAuthoredCollision,
         bool buildCollision)
     {
-        if (Descendants<MeshInstance3D>(visual).Count() != 1)
+        if (NodeTraversal.Descendants<MeshInstance3D>(visual).Count() != 1)
             throw new InvalidOperationException(
                 $"Non-controller door is not a single-piece visual/collision pair: {referenceFormId}");
         if (!buildCollision)
             return;
 
-        var generatedBodies = Descendants<StaticBody3D>(visual).ToArray();
-        var generatedShapes = Descendants<CollisionShape3D>(visual).ToArray();
+        var generatedBodies = NodeTraversal.Descendants<StaticBody3D>(visual).ToArray();
+        var generatedShapes = NodeTraversal.Descendants<CollisionShape3D>(visual).ToArray();
         var hasGeneratedCollision =
             generatedBodies.Length == 1 &&
             generatedShapes.Length == 1 &&
@@ -1229,13 +1231,13 @@ internal static class CellContentLoader
 
         var authoredMeshes = verifiedAuthoredCollision is null
             ? Array.Empty<MeshInstance3D>()
-            : Descendants<MeshInstance3D>(verifiedAuthoredCollision).ToArray();
+            : NodeTraversal.Descendants<MeshInstance3D>(verifiedAuthoredCollision).ToArray();
         var authoredBodies = verifiedAuthoredCollision is null
             ? Array.Empty<StaticBody3D>()
-            : Descendants<StaticBody3D>(verifiedAuthoredCollision).ToArray();
+            : NodeTraversal.Descendants<StaticBody3D>(verifiedAuthoredCollision).ToArray();
         var authoredShapes = verifiedAuthoredCollision is null
             ? Array.Empty<CollisionShape3D>()
-            : Descendants<CollisionShape3D>(verifiedAuthoredCollision).ToArray();
+            : NodeTraversal.Descendants<CollisionShape3D>(verifiedAuthoredCollision).ToArray();
         var hasAuthoredCollision =
             authoredMeshes.Length == 1 &&
             authoredBodies.Length == 1 &&
@@ -1362,7 +1364,7 @@ internal static class CellContentLoader
         ref int vertices,
         ref int triangles)
     {
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             if (mesh.Mesh is null)
                 continue;
@@ -1509,8 +1511,8 @@ internal static class CellContentLoader
         uint collisionLayer)
     {
         mesh.CreateTrimeshCollision();
-        var bodies = Descendants<StaticBody3D>(mesh).ToArray();
-        var shapes = Descendants<CollisionShape3D>(mesh)
+        var bodies = NodeTraversal.Descendants<StaticBody3D>(mesh).ToArray();
+        var shapes = NodeTraversal.Descendants<CollisionShape3D>(mesh)
             .Select(value => value.Shape)
             .OfType<ConcavePolygonShape3D>()
             .ToArray();
@@ -1531,7 +1533,7 @@ internal static class CellContentLoader
         var surface = new SurfaceTool();
         surface.Begin(Mesh.PrimitiveType.Triangles);
         var triangles = 0;
-        foreach (var collisionMesh in Descendants<MeshInstance3D>(collisionRoot))
+        foreach (var collisionMesh in NodeTraversal.Descendants<MeshInstance3D>(collisionRoot))
         {
             collisionMesh.Visible = false;
             if (collisionMesh.Mesh is null)
@@ -1583,7 +1585,7 @@ internal static class CellContentLoader
 
     private static void SetRenderLayer(Node root, uint layer)
     {
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
             mesh.Layers = layer;
     }
 
@@ -1591,20 +1593,8 @@ internal static class CellContentLoader
         Node root,
         GeometryInstance3D.ShadowCastingSetting setting)
     {
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
             mesh.CastShadow = setting;
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     internal readonly record struct LoadedContent(

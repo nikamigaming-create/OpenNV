@@ -3,6 +3,8 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.Ui;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class OpeningQuestRuntime
@@ -145,7 +147,7 @@ internal partial class OpeningQuestRuntime
 
             var lineEdit = host._activeModal is null
                 ? null
-                : Descendants<LineEdit>(host._activeModal).SingleOrDefault();
+                : NodeTraversal.Descendants<LineEdit>(host._activeModal).SingleOrDefault();
             if (lineEdit is not null && !_captured.Contains("name-entry"))
                 lineEdit.Text = _playerName;
             if (await CaptureWhenStable(
@@ -162,8 +164,8 @@ internal partial class OpeningQuestRuntime
                 host._raceSexMenuHost is { ActiveEntryCount: > 0 } raceSexMenu &&
                 raceSexMenu.ActiveList is "faceGeometry" or "sex" &&
                 host._appearancePreviewHost is not null &&
-                Descendants<OptionButton>(host._activeModal).Count() == 0 &&
-                Descendants<HSlider>(host._activeModal).Count() == 0;
+                NodeTraversal.Descendants<OptionButton>(host._activeModal).Count() == 0 &&
+                NodeTraversal.Descendants<HSlider>(host._activeModal).Count() == 0;
             if (await CaptureWhenStable(
                     host,
                     "creator-default",
@@ -868,7 +870,7 @@ internal partial class OpeningQuestRuntime
                     .Select(surface =>
                         $"{surface.Role}/{surface.Shape}:{surface.Bounds}")
                     .ToArray();
-                var bedFaces = Descendants<MeshInstance3D>(collisionRoot)
+                var bedFaces = NodeTraversal.Descendants<MeshInstance3D>(collisionRoot)
                     .Where(mesh => mesh.Mesh is not null)
                     .SelectMany(mesh => mesh.Mesh!.GetFaces()
                         .Select(vertex => mesh.ToGlobal(vertex)))

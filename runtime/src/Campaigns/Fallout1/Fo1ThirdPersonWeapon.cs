@@ -2,6 +2,8 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1ThirdPersonWeaponNumericContracts
@@ -46,7 +48,7 @@ internal static class Fo1ThirdPersonWeapon
             throw new InvalidOperationException("Fallout held-weapon source hash drifted.");
         var textures = RuntimeMaterialLoader.LoadTextures(source);
         var materialBindings = RuntimeMaterialLoader.Apply(loaded.Scene, asset, textures);
-        var meshes = Descendants<MeshInstance3D>(loaded.Scene)
+        var meshes = NodeTraversal.Descendants<MeshInstance3D>(loaded.Scene)
             .Where(mesh => mesh.Mesh is not null)
             .ToArray();
         var surfaces = meshes.Sum(mesh => mesh.Mesh?.GetSurfaceCount() ?? 0);
@@ -61,12 +63,12 @@ internal static class Fo1ThirdPersonWeapon
         var attachment = source.GetProperty("attachment");
         var role = RequiredString(source, "role");
         var boneName = RequiredString(attachment, "skeletonBone");
-        var skeletons = Descendants<Skeleton3D>(actor.Root)
+        var skeletons = NodeTraversal.Descendants<Skeleton3D>(actor.Root)
             .Where(skeleton => skeleton.FindBone(boneName) >= 0)
             .ToArray();
         if (skeletons.Length != 1)
         {
-            var available = Descendants<Skeleton3D>(actor.Root)
+            var available = NodeTraversal.Descendants<Skeleton3D>(actor.Root)
                 .SelectMany(skeleton => Enumerable.Range(0, skeleton.GetBoneCount())
                     .Select(skeleton.GetBoneName))
                 .OrderBy(name => name.ToString(), StringComparer.Ordinal)
@@ -153,18 +155,6 @@ internal static class Fo1ThirdPersonWeapon
         if (result.LengthSquared() < Fo1ThirdPersonWeaponNumericContracts.PresentationFloat0Point999f || result.LengthSquared() > Fo1ThirdPersonWeaponNumericContracts.PresentationFloat1Point001f)
             throw new InvalidOperationException("Fallout held-weapon quaternion is not normalized.");
         return result;
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     internal readonly record struct LoadedWeapon(

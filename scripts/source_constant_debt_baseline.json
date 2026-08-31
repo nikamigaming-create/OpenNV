@@ -13,7 +13,7 @@
     "unsupported-source": 6
   },
   "schema": "opennv-source-constant-debt-baseline/v1",
-  "sourceRevision": "d3d53bfc654fe5f7407eaeb3aac8915e2333ad85",
+  "sourceRevision": "3353ca1cb03734d71fb079ed0e27711ab8da304f",
   "total": 1279,
   "violations": [
     {
@@ -3355,6 +3355,48 @@
     {
       "category": "csharp",
       "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.Cg00.cs",
+      "value": "0.5f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.Cg00.cs",
+      "value": "340.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.Cg00.cs",
+      "value": "500.0f"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.Persistence.cs",
+      "value": "7"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.Proofs.cs",
+      "value": "180"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.Proofs.cs",
+      "value": "40"
+    },
+    {
+      "category": "csharp",
+      "count": 8,
+      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.Proofs.cs",
+      "value": "55"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
       "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
       "value": "-150.0f"
     },
@@ -3374,12 +3416,6 @@
       "category": "csharp",
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "0.5f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
       "value": "0.84f"
     },
     {
@@ -3387,42 +3423,6 @@
       "count": 1,
       "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
       "value": "150.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "180"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "340.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "40"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "500.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 8,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "55"
-    },
-    {
-      "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/Fallout3/Fo3OpeningFlow.cs",
-      "value": "7"
     },
     {
       "category": "csharp",
@@ -3751,8 +3751,20 @@
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowContracts.cs",
       "value": "0.000001"
+    },
+    {
+      "category": "csharp",
+      "count": 1,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowContracts.cs",
+      "value": "200d"
+    },
+    {
+      "category": "csharp",
+      "count": 3,
+      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowContracts.cs",
+      "value": "64"
     },
     {
       "category": "csharp",
@@ -3786,21 +3798,9 @@
     },
     {
       "category": "csharp",
-      "count": 1,
-      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
-      "value": "200d"
-    },
-    {
-      "category": "csharp",
       "count": 4,
       "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
       "value": "255.0f"
-    },
-    {
-      "category": "csharp",
-      "count": 3,
-      "path": "runtime/src/Campaigns/NewVegas/Opening/OpeningFlowManifest.cs",
-      "value": "64"
     },
     {
       "category": "csharp",
@@ -4375,19 +4375,19 @@
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/RuntimeCoordinator.cs",
+      "path": "runtime/src/RuntimeCoordinator.Acceptance.cs",
       "value": "45"
     },
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/RuntimeCoordinator.cs",
+      "path": "runtime/src/RuntimeCoordinator.Acceptance.cs",
       "value": "600.0"
     },
     {
       "category": "csharp",
       "count": 1,
-      "path": "runtime/src/RuntimeCoordinator.cs",
+      "path": "runtime/src/RuntimeCoordinator.Acceptance.cs",
       "value": "90"
     },
     {

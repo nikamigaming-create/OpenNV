@@ -1,5 +1,7 @@
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2ArvillagArrivalFraming(
@@ -115,7 +117,7 @@ internal static class Fo2ArvillagScene
             "roof_cutaway_boundary",
             "owned-map-frm-source-without-accepted-3d-height-contract");
 
-        var sourceSprites = Descendants<Sprite3D>(source.Root).ToArray();
+        var sourceSprites = NodeTraversal.Descendants<Sprite3D>(source.Root).ToArray();
         if (sourceSprites.Length != catalog.ObjectPlacements.Count)
             throw new InvalidOperationException(
                 "Fallout 2 ARVILLAG source sprite placement coverage drifted.");
@@ -471,7 +473,7 @@ internal static class Fo2ArvillagScene
         var floorIds = catalog.TileEntries
             .Select(entry => (int)(entry & 0x0fff))
             .ToArray();
-        var floorMeshes = Descendants<MultiMeshInstance3D>(root)
+        var floorMeshes = NodeTraversal.Descendants<MultiMeshInstance3D>(root)
             .Where(row => row.HasMeta("source_floor_tile_id"))
             .OrderBy(row => row.GetMeta("source_floor_tile_id").AsInt32())
             .ToArray();
@@ -963,14 +965,4 @@ internal static class Fo2ArvillagScene
         root.AddChild(directional);
     }
 
-    private static IEnumerable<T> Descendants<T>(Node root) where T : Node
-    {
-        foreach (var child in root.GetChildren())
-        {
-            if (child is T typed)
-                yield return typed;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
 }

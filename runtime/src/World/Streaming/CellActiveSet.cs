@@ -1,5 +1,7 @@
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.World.Streaming;
 
 internal sealed class CellActiveSet
@@ -139,11 +141,11 @@ internal sealed class CellActiveSet
                     root,
                     root.Visible,
                     root.ProcessMode)).ToArray(),
-                roots.SelectMany(SelfAndDescendants<CollisionObject3D>)
+                roots.SelectMany(NodeTraversal.SelfAndDescendants<CollisionObject3D>)
                     .Distinct()
                     .Select(collision => new CollisionState(collision, collision.CollisionLayer))
                     .ToArray(),
-                roots.SelectMany(SelfAndDescendants<RigidBody3D>)
+                roots.SelectMany(NodeTraversal.SelfAndDescendants<RigidBody3D>)
                     .Distinct()
                     .Select(body => new RigidBodyState(body, body.Freeze))
                     .ToArray(),
@@ -188,15 +190,6 @@ internal sealed class CellActiveSet
             _lights.Count(light => light.Visible),
             _lights.Count(light => light.Node.Visible));
 
-        private static IEnumerable<T> SelfAndDescendants<T>(Node node)
-            where T : Node
-        {
-            if (node is T self)
-                yield return self;
-            foreach (var child in node.GetChildren())
-                foreach (var descendant in SelfAndDescendants<T>(child))
-                    yield return descendant;
-        }
     }
 
     private readonly record struct NodeState(

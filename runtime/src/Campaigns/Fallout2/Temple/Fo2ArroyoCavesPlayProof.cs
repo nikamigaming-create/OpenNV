@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal static class Fo2ArroyoCavesPlayProof
@@ -588,9 +590,9 @@ internal static class Fo2ArroyoCavesPlayProof
         Fo2ArroyoCavesPlayerRuntimeCoverage runtime,
         Camera3D camera)
     {
-        var sprites = Descendants<Sprite3D>(host).ToArray();
+        var sprites = NodeTraversal.Descendants<Sprite3D>(host).ToArray();
         var visibleSprites = sprites.Where(sprite => sprite.Visible).ToArray();
-        var reliefNodes = Descendants<Node3D>(host)
+        var reliefNodes = NodeTraversal.Descendants<Node3D>(host)
             .Where(node => node.HasMeta("fo2_map_serial") &&
                 node.HasMeta("fo2_geometry_mode") &&
                 node.GetMeta("fo2_geometry_mode").AsString() == catalog.ObjectRelief.Mode)
@@ -640,7 +642,7 @@ internal static class Fo2ArroyoCavesPlayProof
             .Where(row => row.Elevation == Fo2ArroyoCavesPresentationCatalog.Elevation &&
                 (row.LightDistance != 0 || row.LightIntensity != 0))
             .ToDictionary(row => row.Serial);
-        var sourceLightAnchors = Descendants<Node3D>(host)
+        var sourceLightAnchors = NodeTraversal.Descendants<Node3D>(host)
             .Where(node => node.Name.ToString().StartsWith(
                 SourceMapLightAnchorPrefix,
                 StringComparison.Ordinal) &&
@@ -780,17 +782,6 @@ internal static class Fo2ArroyoCavesPlayProof
             globalIncomplete,
             unaccounted == 0 && admittedIncomplete == 0 &&
                 runtime.Hud.FirstMovementBeatStateComplete);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node parent) where T : Node
-    {
-        foreach (var child in parent.GetChildren())
-        {
-            if (child is T typed)
-                yield return typed;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private sealed record FrameEvidence(

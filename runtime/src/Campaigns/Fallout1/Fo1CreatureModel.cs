@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1CreatureModelNumericContracts
@@ -47,12 +49,12 @@ internal static class Fo1CreatureModel
             ?? throw new InvalidOperationException($"Godot generated no Fallout creature scene: {modelPath}");
         prototype.Name = $"CREATURE_{source.GetProperty("formId").GetString()}_{source.GetProperty("editorId").GetString()}";
         prototype.Scale = Vector3.One * source.GetProperty("unitsToMeters").GetSingle();
-        var prototypeMeshes = Descendants<MeshInstance3D>(prototype)
+        var prototypeMeshes = NodeTraversal.Descendants<MeshInstance3D>(prototype)
             .Where(mesh => mesh.Mesh is not null)
             .ToArray();
         var meshes = prototypeMeshes.Length;
-        var skeletons = Descendants<Skeleton3D>(prototype).Count();
-        var players = Descendants<AnimationPlayer>(prototype).ToArray();
+        var skeletons = NodeTraversal.Descendants<Skeleton3D>(prototype).Count();
+        var players = NodeTraversal.Descendants<AnimationPlayer>(prototype).ToArray();
         if (meshes != sidecar.GetProperty("coverage").GetProperty("surfaces").GetInt32() ||
             skeletons < 1 || players.Length != 1)
             throw new InvalidOperationException(
@@ -132,7 +134,7 @@ internal static class Fo1CreatureModel
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         var count = 0;
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             var bounds = mesh.GetAabb();
             foreach (var x in new[] { bounds.Position.X, bounds.End.X })
@@ -150,18 +152,6 @@ internal static class Fo1CreatureModel
         return new Aabb(minimum, maximum - minimum);
     }
 
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
-
     internal sealed record Template(
         Node3D Prototype,
         string FormId,
@@ -177,7 +167,7 @@ internal static class Fo1CreatureModel
         {
             var root = Prototype.Duplicate() as Node3D
                 ?? throw new InvalidOperationException("Could not duplicate Fallout creature presentation.");
-            var players = Descendants<AnimationPlayer>(root).ToArray();
+            var players = NodeTraversal.Descendants<AnimationPlayer>(root).ToArray();
             if (players.Length != 1)
                 throw new InvalidOperationException("Duplicated Fallout creature lost its AnimationPlayer.");
             return new Instance(

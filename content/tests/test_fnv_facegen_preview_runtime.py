@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,7 +34,7 @@ class FnvFaceGenPreviewRuntimeTest(unittest.TestCase):
         self.assertIn("SetBlendShapeValue(binding.Index, morphWeight)", apply_method)
         self.assertNotIn("SetBlendShapeValue(binding.Index, uiValue)", apply_method)
 
-        flow = (OPENING / "OpeningQuestRuntime.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((OPENING / "OpeningQuestRuntime.cs"))
         self.assertNotIn(
             "value * previewPolicy.MorphWeightScale);",
             flow,

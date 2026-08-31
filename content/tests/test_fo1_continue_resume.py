@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,8 +12,8 @@ FO1 = ROOT / "runtime" / "src" / "Campaigns" / "Fallout1"
 class Fo1ContinueResumeTest(unittest.TestCase):
     def test_continue_is_exposed_only_by_the_restored_session_gate(self) -> None:
         menu = (FO1 / "Fo1MainMenu.cs").read_text(encoding="utf-8")
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
 
         self.assertIn("internal event Action? ContinueRequested;", menu)
         self.assertIn("if (_continueAvailable)", menu)
@@ -28,7 +29,7 @@ class Fo1ContinueResumeTest(unittest.TestCase):
         self.assertIn("_pendingSavedPlayerPresentation is not null", session)
 
     def test_continue_bypasses_new_game_and_preserves_saved_tile(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         resume_start = flow.index("private static async Task ResumeInteractive(")
         resume_end = flow.index("private static void ShowCharacterSelection(", resume_start)
         resume = flow[resume_start:resume_end]
@@ -51,7 +52,7 @@ class Fo1ContinueResumeTest(unittest.TestCase):
         )
 
     def test_identity_migrates_explicitly_and_weapon_policy_fails_closed(self) -> None:
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
         self.assertIn(
             '"Legacy Fallout 1 character save has no presentation identity."',
             session,
@@ -68,8 +69,8 @@ class Fo1ContinueResumeTest(unittest.TestCase):
 
     def test_camera_state_is_finite_required_and_applied_before_controls(self) -> None:
         camera = (FO1 / "Fo1TacticalCamera.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
 
         self.assertIn('Schema = "opennv-fo1-camera-state/v1"', camera)
         self.assertIn(
@@ -101,7 +102,7 @@ class Fo1ContinueResumeTest(unittest.TestCase):
         self.assertLess(release_camera, release_controls)
 
     def test_new_game_persists_camera_after_selected_mode_is_initialized(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         reveal_start = flow.index("private static async Task<LandingPlayback> RevealWorld(")
         reveal_end = flow.index("private static async Task RevealRestoredWorld(", reveal_start)
         reveal = flow[reveal_start:reveal_end]
@@ -110,9 +111,9 @@ class Fo1ContinueResumeTest(unittest.TestCase):
         self.assertLess(mode, persist)
 
     def test_continue_routes_saved_destination_through_the_menu_event(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         menu = (FO1 / "Fo1MainMenu.cs").read_text(encoding="utf-8")
-        coordinator = (ROOT / "runtime" / "src" / "RuntimeCoordinator.cs").read_text(encoding="utf-8")
+        coordinator = read_csharp_source_module((ROOT / "runtime" / "src" / "RuntimeCoordinator.cs"))
         wrapper = (ROOT / "scripts" / "Test-OpenNVFallout1ContinueVault13.ps1").read_text(encoding="utf-8")
         self.assertIn("RequestContinueForHeadlessProof", menu)
         self.assertIn("ContinueRequested?.Invoke()", menu)

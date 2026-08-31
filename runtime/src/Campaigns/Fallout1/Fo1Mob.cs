@@ -1,5 +1,7 @@
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1MobNumericContracts
@@ -66,7 +68,7 @@ internal partial class Fo1Mob : Node3D
     internal bool CorpseVisible =>
         !Alive && (_creatureRoot is null
             ? _sprite.Visible
-            : Descendants<MeshInstance3D>(_creatureRoot).Any(mesh => mesh.Visible));
+            : NodeTraversal.Descendants<MeshInstance3D>(_creatureRoot).Any(mesh => mesh.Visible));
     internal float CorpseGroundErrorMeters
     {
         get
@@ -480,7 +482,7 @@ internal partial class Fo1Mob : Node3D
 
     private void PrepareCreatureMaterials(Node3D creatureRoot)
     {
-        foreach (var mesh in Descendants<MeshInstance3D>(creatureRoot))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(creatureRoot))
         {
             for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
             {
@@ -507,7 +509,7 @@ internal partial class Fo1Mob : Node3D
         IReadOnlyDictionary<string, string> sourceShapesByRuntimeNodeName)
     {
         var hidden = 0;
-        foreach (var mesh in Descendants<MeshInstance3D>(creatureRoot))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(creatureRoot))
         {
             var runtimeName = mesh.Name.ToString();
             if (!sourceShapesByRuntimeNodeName.TryGetValue(runtimeName, out var name))
@@ -547,24 +549,12 @@ internal partial class Fo1Mob : Node3D
         _creatureRoot.Position = Vector3.Up * (_creatureGroundOffset * multiplier);
     }
 
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
-
     private static Aabb WorldBounds(Node3D root)
     {
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         var count = 0;
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             if (!mesh.Visible || mesh.Mesh is null)
                 continue;

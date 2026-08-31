@@ -8,7 +8,7 @@ namespace OpenNV.Runtime.SceneGraph;
 /// </summary>
 internal static class NodeTraversal
 {
-    internal static IEnumerable<T> Descendants<T>(Node root)
+    internal static IEnumerable<T> Descendants<T>(Node root, Node? excludedRoot = null)
         where T : Node
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -20,6 +20,9 @@ internal static class NodeTraversal
 
         while (pending.TryPop(out var node))
         {
+            if (ReferenceEquals(node, excludedRoot))
+                continue;
+
             if (node is T match)
                 yield return match;
 
@@ -27,5 +30,16 @@ internal static class NodeTraversal
             for (var index = children.Count - 1; index >= 0; index--)
                 pending.Push(children[index]);
         }
+    }
+
+    internal static IEnumerable<T> SelfAndDescendants<T>(Node root)
+        where T : Node
+    {
+        ArgumentNullException.ThrowIfNull(root);
+
+        if (root is T match)
+            yield return match;
+        foreach (var descendant in Descendants<T>(root))
+            yield return descendant;
     }
 }

@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal sealed class OpeningPlayerFaceGenPreviewHost
@@ -401,7 +403,7 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
             camera,
             headFramedBounds,
             actor.Bounds,
-            Descendants<MeshInstance3D>(actor.Root).ToArray(),
+            NodeTraversal.Descendants<MeshInstance3D>(actor.Root).ToArray(),
             bindings,
             bodySurfaceCount,
             framingDisposition,
@@ -582,18 +584,6 @@ internal sealed class OpeningPlayerFaceGenPreviewHost
             throw new InvalidOperationException(
                 $"Player FaceGen preview has {matches.Length} surfaces for role {role}.");
         return matches[0];
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private readonly record struct MorphBinding(MeshInstance3D Mesh, int Index);

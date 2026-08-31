@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -10,7 +11,7 @@ FO1 = ROOT / "runtime" / "src" / "Campaigns" / "Fallout1"
 
 class Fo1NativeFirstBeatCombatContractTest(unittest.TestCase):
     def test_first_beat_uses_admitted_adjacent_rat_and_melee_provenance(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         start = flow.index("private static async Task<object> RunNativeFirstBeatAdjacentRatEngagement(")
         end = flow.index("private static NativeFirstBeatSavedCombat", start)
         engagement = flow[start:end]
@@ -45,8 +46,8 @@ class Fo1NativeFirstBeatCombatContractTest(unittest.TestCase):
         self.assertNotIn("Giant Rat", engagement)
 
     def test_combat_save_is_checked_against_the_live_source_bound_result(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
 
         proof_start = flow.index("private static async Task CompleteNativeFirstBeatProof(")
         proof_end = flow.index("private static async Task<object> RunNativeFirstBeatAdjacentRatEngagement(")
@@ -72,8 +73,8 @@ class Fo1NativeFirstBeatCombatContractTest(unittest.TestCase):
         self.assertIn("CommitQueuedTacticalMovementStep(targetTile);", session)
 
     def test_map_inventory_pickup_equip_use_is_source_bound_and_persistent(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
         loader = (FO1 / "Fo1HexSceneLoader.cs").read_text(encoding="utf-8")
         generator = (ROOT / "content" / "tools" / "prepare_fo1_hex_scene.py").read_text(
             encoding="utf-8"
@@ -117,8 +118,8 @@ class Fo1NativeFirstBeatCombatContractTest(unittest.TestCase):
         self.assertIn("$pickup.use.weapon.pid -ne $pickup.WeaponPid", wrapper)
 
     def test_headless_proof_is_explicit_and_never_requests_capture_output(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
-        runtime = (ROOT / "runtime" / "src" / "RuntimeCoordinator.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
+        runtime = read_csharp_source_module((ROOT / "runtime" / "src" / "RuntimeCoordinator.cs"))
         wrapper = (ROOT / "scripts" / "Test-OpenNVFallout1NativeFirstBeat.ps1").read_text(
             encoding="utf-8"
         )
@@ -169,9 +170,9 @@ class Fo1NativeFirstBeatCombatContractTest(unittest.TestCase):
         self.assertIn("prototypeSha256 = PrototypeSha256,", mob)
 
     def test_cave_loot_uses_the_existing_owned_inventory_and_hud_controls(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         screen = (FO1 / "Fo1ClassicInventoryScreen.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
         loader = (FO1 / "Fo1HexSceneLoader.cs").read_text(encoding="utf-8")
         recipe = (ROOT / "content" / "recipes" / "fo1-character-start-v1.json").read_text(
             encoding="utf-8"

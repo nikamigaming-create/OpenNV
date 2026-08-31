@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class StaticModelSliceNumericContracts
@@ -37,7 +39,7 @@ internal static class StaticModelSlice
         model.Name = "RetailStaticModel";
         parent.AddChild(model);
 
-        var meshes = Descendants<MeshInstance3D>(model).ToArray();
+        var meshes = NodeTraversal.Descendants<MeshInstance3D>(model).ToArray();
         if (meshes.Length == 0)
             throw new InvalidOperationException("Imported glTF contains no MeshInstance3D nodes.");
         var surfaces = meshes.Sum(mesh => mesh.Mesh?.GetSurfaceCount() ?? 0);
@@ -161,7 +163,7 @@ internal static class StaticModelSlice
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         var count = 0;
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             var bounds = mesh.GetAabb();
             foreach (var x in new[] { bounds.Position.X, bounds.End.X })
@@ -177,18 +179,6 @@ internal static class StaticModelSlice
         if (count == 0)
             throw new InvalidOperationException("Static model contains no bounds.");
         return new Aabb(minimum, maximum - minimum);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private readonly record struct ReferenceView(string Projection, Aabb Bounds);

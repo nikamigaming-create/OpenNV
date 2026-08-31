@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,9 +24,9 @@ class Fo1ExitGridTransitionContractTest(unittest.TestCase):
 
     def test_runtime_requires_descriptor_to_match_scene_and_persists_only_a_real_trigger(self) -> None:
         contract = (FO1 / "Fo1ExitGridTransitionContract.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
         loader = (FO1 / "Fo1HexSceneLoader.cs").read_text(encoding="utf-8")
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         wrapper = (ROOT / "scripts" / "Test-OpenNVFallout1NativeFirstBeat.ps1").read_text(encoding="utf-8")
         self.assertIn("ValidateAgainstScene", contract)
         self.assertIn("bool destinationSceneLoaded = false", contract)
@@ -56,7 +57,7 @@ class Fo1ExitGridTransitionContractTest(unittest.TestCase):
         self.assertIn("refusing to overwrite", proof)
 
     def test_destination_is_loaded_only_after_transition_without_frm_player_fallback(self) -> None:
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         destination = (FO1 / "Fo1DestinationPresentationContract.cs").read_text(encoding="utf-8")
         viewer = (FO1 / "Fo1CampaignPresentationViewer.cs").read_text(encoding="utf-8")
         self.assertIn("LoadCommittedDestinationPresentation", flow)
@@ -67,9 +68,9 @@ class Fo1ExitGridTransitionContractTest(unittest.TestCase):
         self.assertIn("bool includeSourcePlayer = true", viewer)
 
     def test_destination_cold_restore_requires_explicit_saved_path_and_hash_join(self) -> None:
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
         loader = (FO1 / "Fo1HexSceneLoader.cs").read_text(encoding="utf-8")
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         wrapper = (ROOT / "scripts" / "Test-OpenNVFallout1NativeFirstBeat.ps1").read_text(encoding="utf-8")
         self.assertIn('ActiveMapSchema = "opennv-fo1-active-map/v1"', session)
         self.assertIn("activeMap = SaveActiveMap()", session)

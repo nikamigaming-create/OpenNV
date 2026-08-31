@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,9 +22,9 @@ class Fo1DestinationInventoryInteractionTest(unittest.TestCase):
 
     def test_runtime_requires_explicit_descriptor_and_restores_looted_destination_host(self) -> None:
         contract = (FO1 / "Fo1DestinationInventoryInteractionContract.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
-        coordinator = (ROOT / "runtime" / "src" / "RuntimeCoordinator.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
+        coordinator = read_csharp_source_module((ROOT / "runtime" / "src" / "RuntimeCoordinator.cs"))
         self.assertIn("presentation join drifted", contract)
         self.assertIn("MAP join drifted", contract)
         self.assertIn("route is not source-adjacent", contract)

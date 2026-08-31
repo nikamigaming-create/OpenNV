@@ -3,6 +3,8 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Presentation.Ui;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal sealed class OpeningRaceSexRenderedDeviceHost
@@ -169,7 +171,7 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             textures,
             configuration.Renderer,
             configuration.ContentCompiler.RetailGrass);
-        var surfaces = Descendants<MeshInstance3D>(model)
+        var surfaces = NodeTraversal.Descendants<MeshInstance3D>(model)
             .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh?.GetSurfaceCount() ?? 0)
                 .Select(surface => (Mesh: mesh, Surface: surface)))
             .ToArray();
@@ -1152,7 +1154,7 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             throw new InvalidOperationException(
                 "Owned RaceSex rendered-device frame cannot be derived.");
         var right = uAxis.Normalized();
-        var points = Descendants<MeshInstance3D>(model)
+        var points = NodeTraversal.Descendants<MeshInstance3D>(model)
             .SelectMany(value =>
             {
                 var bounds = value.GetAabb();
@@ -1222,18 +1224,6 @@ internal sealed class OpeningRaceSexRenderedDeviceHost
             : throw new InvalidOperationException(
                 $"Owned RaceSex rendered-device surface is ambiguous: " +
                 $"{role}={identity} matches={matches.Length}");
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private readonly record struct RenderedDeviceFrame(

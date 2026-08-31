@@ -3,6 +3,8 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2TempleConfrontationInput(
@@ -363,7 +365,7 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
                 "Fallout 2 Temple confrontation requires the active owned Temple map.");
         var profile = Fo2TempleConfrontationProfile.Load(catalog.Confrontation);
         profile.ConfigureInput();
-        var targets = Descendants<Sprite3D>(scene.Root)
+        var targets = NodeTraversal.Descendants<Sprite3D>(scene.Root)
             .Where(sprite => sprite.HasMeta("map_serial") &&
                 sprite.GetMeta("map_serial").AsInt32() == catalog.Confrontation.Critter.Serial)
             .ToArray();
@@ -708,14 +710,4 @@ internal sealed partial class Fo2TempleConfrontationRuntime : CanvasLayer
         return Math.Clamp(value, 1, MaximumSpecialValue);
     }
 
-    private static IEnumerable<T> Descendants<T>(Node root) where T : Node
-    {
-        foreach (var child in root.GetChildren())
-        {
-            if (child is T typed)
-                yield return typed;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
 }

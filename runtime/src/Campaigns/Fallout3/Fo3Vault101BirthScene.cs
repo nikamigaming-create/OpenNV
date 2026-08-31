@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal sealed record Fo3Vault101BirthSceneCoverage(
@@ -85,7 +87,7 @@ internal static class Fo3Vault101BirthScene
                         StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
                         $"Fallout 3 Vault 101 source hash differs: {asset.Id}");
-                var observedSurfaces = Descendants<MeshInstance3D>(loaded.Scene)
+                var observedSurfaces = NodeTraversal.Descendants<MeshInstance3D>(loaded.Scene)
                     .Where(mesh => mesh.Mesh is not null)
                     .Sum(mesh => mesh.Mesh!.GetSurfaceCount());
                 if (observedSurfaces != asset.Surfaces)
@@ -132,7 +134,7 @@ internal static class Fo3Vault101BirthScene
                     ?? throw new InvalidOperationException(
                         $"Could not duplicate Fallout 3 Vault 101 asset: {reference.AssetId}");
                 placement.AddChild(visual);
-                foreach (var mesh in Descendants<MeshInstance3D>(visual))
+                foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(visual))
                 {
                     if (mesh.Mesh is null)
                         continue;
@@ -163,12 +165,12 @@ internal static class Fo3Vault101BirthScene
                             reference.AssetId);
                     collision.Name = $"AUTHORED_COLLISION_{reference.AssetId}";
                     placement.AddChild(collision);
-                    foreach (var mesh in Descendants<MeshInstance3D>(collision))
+                    foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(collision))
                     {
                         mesh.Visible = false;
                         mesh.CreateTrimeshCollision();
-                        var bodies = Descendants<StaticBody3D>(mesh).ToArray();
-                        var shapes = Descendants<CollisionShape3D>(mesh)
+                        var bodies = NodeTraversal.Descendants<StaticBody3D>(mesh).ToArray();
+                        var shapes = NodeTraversal.Descendants<CollisionShape3D>(mesh)
                             .Select(value => value.Shape)
                             .OfType<ConcavePolygonShape3D>()
                             .ToArray();
@@ -658,18 +660,6 @@ internal static class Fo3Vault101BirthScene
             local.X <= asset.BoundsMaxGodotGameUnits.X &&
             local.Z >= asset.BoundsMinGodotGameUnits.Z &&
             local.Z <= asset.BoundsMaxGodotGameUnits.Z;
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node root)
-        where T : Node
-    {
-        foreach (var child in root.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private static string NodeIdentifier(string value) => new(

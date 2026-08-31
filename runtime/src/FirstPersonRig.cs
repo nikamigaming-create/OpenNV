@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class FirstPersonRig
@@ -53,7 +55,7 @@ internal static class FirstPersonRig
             ActorModelSlice.BoundsContract.FirstPersonHand);
         loaded.AnimationPlayer.Seek(0.0, true);
         loaded.AnimationPlayer.Pause();
-        var skeletons = Descendants<Skeleton3D>(loaded.Root).ToArray();
+        var skeletons = NodeTraversal.Descendants<Skeleton3D>(loaded.Root).ToArray();
         if (skeletons.Length != 1)
             throw new InvalidOperationException(
                 $"First-person hand must contain exactly one skeleton, found {skeletons.Length}.");
@@ -73,7 +75,7 @@ internal static class FirstPersonRig
             throw new InvalidOperationException(
                 $"First-person hand alignment failed: bone={alignmentBone} " +
                 $"position={positionError:F6} rotation={rotationError:F6}");
-        var visibleMeshes = Descendants<MeshInstance3D>(loaded.Root)
+        var visibleMeshes = NodeTraversal.Descendants<MeshInstance3D>(loaded.Root)
             .Count(mesh => mesh.Mesh is not null && mesh.Visible);
         if (visibleMeshes < 1)
             throw new InvalidOperationException($"First-person hand has no visible geometry: {alignmentBone}");
@@ -85,7 +87,7 @@ internal static class FirstPersonRig
         var index = skeleton.FindBone(frameName);
         if (index >= 0)
             return skeleton.GlobalTransform * skeleton.GetBoneGlobalPose(index);
-        var authoredFrames = Descendants<Node3D>(root)
+        var authoredFrames = NodeTraversal.Descendants<Node3D>(root)
             .Where(node => node.Name.ToString().Equals(frameName, StringComparison.Ordinal))
             .ToArray();
         if (authoredFrames.Length != 1)
@@ -101,18 +103,6 @@ internal static class FirstPersonRig
         var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
         if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"First-person rig hash mismatch: {resolved}");
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     internal sealed record Contract(

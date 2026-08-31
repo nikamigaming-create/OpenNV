@@ -6,6 +6,8 @@ using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Portals;
 using OpenNV.Runtime.World.Streaming;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class CellSceneLoaderNumericContracts
@@ -429,7 +431,7 @@ internal static class CellSceneLoader
         var meshCount = 0;
         foreach (var root in roots)
         {
-            foreach (var mesh in Descendants<MeshInstance3D>(root))
+            foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
             {
                 var bounds = mesh.GetAabb();
                 if (bounds.Size.LengthSquared() <= 0.0f)
@@ -547,7 +549,7 @@ internal static class CellSceneLoader
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         var meshCount = 0;
-        foreach (var mesh in Descendants<MeshInstance3D>(door))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(door))
         {
             var bounds = mesh.GetAabb();
             foreach (var x in new[] { bounds.Position.X, bounds.End.X })
@@ -635,18 +637,6 @@ internal static class CellSceneLoader
             hit["normal"].AsVector3(),
             collider?.GetPath().ToString() ?? "unknown",
             collider);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     internal readonly record struct LoadedCell(

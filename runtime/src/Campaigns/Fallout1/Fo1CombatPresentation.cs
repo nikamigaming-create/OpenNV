@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1CombatPresentationNumericContracts
@@ -61,7 +63,7 @@ internal partial class Fo1CombatPresentation : Node3D
             throw new InvalidOperationException("Fallout casing source hash drifted.");
         var textures = RuntimeMaterialLoader.LoadTextures(casing);
         var bindings = RuntimeMaterialLoader.Apply(loaded.Scene, asset, textures);
-        var surfaces = Descendants<MeshInstance3D>(loaded.Scene)
+        var surfaces = NodeTraversal.Descendants<MeshInstance3D>(loaded.Scene)
             .Sum(mesh => mesh.Mesh?.GetSurfaceCount() ?? 0);
         if (surfaces < 1 || bindings != surfaces)
             throw new InvalidOperationException("Fallout casing material coverage drifted.");
@@ -194,7 +196,7 @@ internal partial class Fo1CombatPresentation : Node3D
                 row.Node.QueueFree();
         }
         _timedNodes.Clear();
-        foreach (var player in Descendants<AudioStreamPlayer3D>(this))
+        foreach (var player in NodeTraversal.Descendants<AudioStreamPlayer3D>(this))
         {
             if (!player.IsQueuedForDeletion())
                 player.QueueFree();
@@ -360,18 +362,6 @@ internal partial class Fo1CombatPresentation : Node3D
         if (string.IsNullOrWhiteSpace(value))
             throw new InvalidOperationException($"Fallout combat presentation requires {name}.");
         return value;
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private readonly record struct TimedNode(Node Node, double RemainingSeconds);

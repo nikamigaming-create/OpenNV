@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 from types import SimpleNamespace
 
 
@@ -166,7 +167,7 @@ def selection() -> dict[str, object]:
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
     def test_capture_creates_fresh_output_directory_before_png_write(self) -> None:
-        source = FO3_OPENING_FLOW.read_text(encoding="utf-8")
+        source = read_csharp_source_module(FO3_OPENING_FLOW)
         capture = source[source.index("private async Task<Fo3AppearanceProofCapture>") :]
 
         self.assertLess(

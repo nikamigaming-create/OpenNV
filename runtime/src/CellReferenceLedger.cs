@@ -1,5 +1,7 @@
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class CellReferenceLedger
@@ -168,7 +170,7 @@ internal static class CellReferenceLedger
         var triangles = 0;
         var renderLayerVisible = false;
         var points = new List<Vector3>();
-        foreach (var mesh in Descendants<MeshInstance3D>(visual))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(visual))
         {
             if (mesh.Mesh is null)
                 continue;
@@ -265,18 +267,6 @@ internal static class CellReferenceLedger
             aabb,
             depth,
             projectedBounds);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     internal static bool ProjectedBoundsIntersectsViewport(
