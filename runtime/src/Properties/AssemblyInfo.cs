@@ -5,3 +5,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("OpenNV.TtwFo3Cg00Stage10WorldAdapterProbe")]
 [assembly: InternalsVisibleTo("OpenNV.ContainerInventoryContractProbe")]
 [assembly: InternalsVisibleTo("OpenNV.ActorAnimationPlaybackProbe")]
+[assembly: InternalsVisibleTo("OpenNV.ActorComplexionContractProbe")]
