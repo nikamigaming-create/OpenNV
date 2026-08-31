@@ -22,6 +22,7 @@ FACEGEN_CTL_HEADER = struct.Struct(
 FACEGEN_CTL_COUNT = struct.Struct("<I")
 FACEGEN_CTL_FLOAT_BYTES = struct.calcsize("<f")
 FACEGEN_CTL_TEXT_ENCODING = "utf-8"
+FACEGEN_DEMOGRAPHIC_RACE_ORDER = ("all", "afro", "asia", "eind", "euro")
 
 
 @dataclass(frozen=True)
@@ -120,7 +121,7 @@ class FaceGenControlSpace:
                 ],
             },
             "demographicControls": {
-                "raceOrder": ["all", "afro", "asia", "eind", "euro"],
+                "raceOrder": list(FACEGEN_DEMOGRAPHIC_RACE_ORDER),
                 "ageByRace": [
                     control.manifest() for control in self.demographic_age_by_race
                 ],
@@ -265,7 +266,7 @@ def decode_facegen_control_space(payload: bytes) -> FaceGenControlSpace:
     )
     ages = []
     genders = []
-    for race in ("all", "afro", "asia", "eind", "euro"):
+    for race in FACEGEN_DEMOGRAPHIC_RACE_ORDER:
         ages.append(_decode_offset_linear_control(
             cursor, symmetric_geometry_basis_count,
             symmetric_texture_basis_count, f"{race} age control"))

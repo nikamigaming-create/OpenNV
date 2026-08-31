@@ -27,7 +27,7 @@ from bsa_archive import BsaArchive, ExtractedMember, canonical_member_path
 from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from export_static_nif_gltf import export_static_nif
-from facegen_controls import decode_facegen_control_space
+from facegen_controls import FACEGEN_DEMOGRAPHIC_RACE_ORDER, decode_facegen_control_space
 from material_contract import material_bindings, texture_binding_requests
 from owned_archive_stack import OwnedArchiveStack
 from player_facegen_preview import (
@@ -4406,7 +4406,7 @@ def _compile_facegen_control_space(
     if age_exposure:
         ages = control_space.demographic_age_by_race
         if (
-            len(ages) != 5
+            len(ages) != len(FACEGEN_DEMOGRAPHIC_RACE_ORDER)
             or any(value != ages[0] for value in ages[1:])
             or str(age_exposure.get("sourceRace")) != "all"
             or str(age_exposure.get("sourceExecutableSha256", "")).casefold()
