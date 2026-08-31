@@ -27,6 +27,19 @@ internal static class GamebryoStageCommandExecutor
             Apply(command, applyAndPersist);
     }
 
+    internal static void ExecutePrefix<T>(
+        IReadOnlyList<SourceGamebryoStageCommand<T>> orderedCommands,
+        int appliedCommandCount,
+        Func<SourceGamebryoStageCommand<T>, bool> applyAndPersist)
+    {
+        Validate(orderedCommands);
+        if (appliedCommandCount < 0 || appliedCommandCount > orderedCommands.Count)
+            throw new InvalidOperationException(
+                "Source stage applied-command count is invalid.");
+        for (var index = 0; index < appliedCommandCount; index++)
+            Apply(orderedCommands[index], applyAndPersist);
+    }
+
     private static void Validate<T>(
         IReadOnlyList<SourceGamebryoStageCommand<T>> orderedCommands)
     {
@@ -62,6 +75,7 @@ internal enum GamebryoStageCommandKind
     AddScriptPackage,
     RemoveScriptPackage,
     ImageSpaceModifier,
+    RemoveImageSpaceModifier,
     PlaySound,
     AddItem,
     RemoveItem,

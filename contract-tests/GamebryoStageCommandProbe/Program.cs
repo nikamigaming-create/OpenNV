@@ -28,6 +28,15 @@ GamebryoStageCommandExecutor.ExecuteOne(commands, 2, command =>
 if (selected != "package")
     throw new InvalidOperationException("Stage cursor execution differs.");
 
+var prefix = new List<string>();
+GamebryoStageCommandExecutor.ExecutePrefix(commands, commands.Length - 1, command =>
+{
+    prefix.Add(command.Value);
+    return true;
+});
+if (!prefix.SequenceEqual(commands.Take(commands.Length - 1).Select(command => command.Value)))
+    throw new InvalidOperationException("Stage applied-command prefix differs.");
+
 if (!Rejects(() => GamebryoStageCommandExecutor.ExecuteAll(
         [Command(1, GamebryoStageCommandKind.SetStage, "stage")],
         _ => true)) ||
@@ -36,7 +45,11 @@ if (!Rejects(() => GamebryoStageCommandExecutor.ExecuteAll(
         _ => true)) ||
     !Rejects(() => GamebryoStageCommandExecutor.ExecuteAll(
         [Command(0, GamebryoStageCommandKind.SetStage, "stage")],
-        _ => false)))
+        _ => false)) ||
+    !Rejects(() => GamebryoStageCommandExecutor.ExecutePrefix(
+        commands,
+        commands.Length + 1,
+        _ => true)))
     throw new InvalidOperationException("Invalid stage execution did not fail closed.");
 
 Console.WriteLine("Gamebryo stage command probe passed.");
