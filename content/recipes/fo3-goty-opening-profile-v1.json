@@ -234,6 +234,15 @@
           "fo3-vault101-cg02-paul-hannon-actor-v1",
           "fo3-vault101-cg02-security04-actor-v1"
         ],
+        "cg02DadSpeech": {
+          "dadReferenceFormId": "000300ef",
+          "dadBaseFormId": "0002fdcf",
+          "dadScriptFormId": "000304da",
+          "topicEditorId": "CG02DadSpeech",
+          "topicFormId": "0001f574",
+          "infoFormIds": ["0001f954", "0001f953", "00031629"],
+          "targetStage": 7
+        },
         "questEditorId": "CG01",
         "questFormId": "00014e83",
         "entryStage": 0,

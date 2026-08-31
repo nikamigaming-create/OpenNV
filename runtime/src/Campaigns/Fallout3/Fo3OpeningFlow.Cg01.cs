@@ -460,6 +460,97 @@ internal partial class Fo3OpeningFlow
         }
     }
 
+    private void StartCg02DadSpeechRuntime(
+        Fo3Cg02DadSpeechRuntime speech,
+        Fo3Cg01ToddlerPlayer player,
+        IReadOnlyCollection<string> appliedInfoFormIds,
+        Action<string> cueCompleted,
+        Action completed)
+    {
+        if (!_cg02IntroActors.TryGetValue(speech.DadReferenceFormId, out var dad))
+            throw new InvalidOperationException("Fallout 3 CG02 Dad actor is absent.");
+        var sex = (_selectedSex ?? throw new InvalidOperationException(
+            "Fallout 3 CG02 player sex is absent.")).EngineSex;
+        var cues = speech.Cues
+            .Where(value => value.EngineSex is null || value.EngineSex == sex)
+            .OrderBy(value => value.Sequence)
+            .ToArray();
+        if (cues.Length != 2 || cues[0].Sequence != 0 || cues[1].Sequence != 1)
+            throw new InvalidOperationException("Fallout 3 CG02 Dad cue selection differs.");
+        var next = Array.FindIndex(cues, value => !appliedInfoFormIds.Contains(
+            value.InfoFormId, StringComparer.OrdinalIgnoreCase));
+        Play(next < 0 ? cues.Length : next);
+
+        void Play(int index)
+        {
+            if (index == cues.Length)
+            {
+                player.SetMeta("opennv_cg02_stage", speech.TargetStage);
+                foreach (var command in speech.Stage7Commands)
+                {
+                    var placement = _cg02IntroActors.TryGetValue(
+                        command.ReferenceFormId, out var actor)
+                        ? actor.Placement
+                        : Cg01WorldReference(command.ReferenceFormId);
+                    if (command.Kind == "evaluatePackage")
+                    {
+                        placement.SetMeta("opennv_evaluate_package", 1);
+                        continue;
+                    }
+                    placement.SetMeta(
+                        $"opennv_{command.Variable.ToLowerInvariant()}",
+                        command.Value);
+                }
+                completed();
+                return;
+            }
+            var cue = cues[index];
+            var animation = dad.Actor.LoadedAnimations.Single(value =>
+                ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
+                    ActorModelSlice.NormalizeAnimationPath(cue.SpeakerIdleLogicalPath),
+                    StringComparison.OrdinalIgnoreCase) &&
+                value.SourceSha256.Equals(
+                    cue.SpeakerIdleSourceSha256,
+                    StringComparison.OrdinalIgnoreCase));
+            _cg02IntroAnimations[speech.DadReferenceFormId] =
+                ActorAnimationPlayback.Start(dad.Actor, animation);
+            var voice = new AudioStreamPlayer
+            {
+                Name = $"Fallout3Cg02DadVoice{cue.Sequence}",
+            };
+            AddChild(voice);
+            var dialogue = new GamebryoDialoguePlayback(
+                voice,
+                _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
+            _cg02IntroDialogue.Add(dialogue);
+            dialogue.Start(
+                new SourceDialogueLine(
+                    cue.InfoFormId,
+                    cue.Response.Index,
+                    speech.DadReferenceFormId,
+                    cue.Response.Text,
+                    new SourceDialogueAsset(
+                        cue.Response.Voice.LogicalPath,
+                        cue.Response.Voice.SourcePath,
+                        cue.Response.Voice.Sha256),
+                    new SourceDialogueAsset(
+                        cue.Response.Lip.LogicalPath,
+                        cue.Response.Lip.SourcePath,
+                        cue.Response.Lip.Sha256)),
+                new FaceGenMorphController(
+                    dad.Actor,
+                    _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
+                () =>
+                {
+                    cueCompleted(cue.InfoFormId);
+                    if (cue.TargetStage is not null && cue.TargetStage != speech.TargetStage)
+                        throw new InvalidOperationException(
+                            "Fallout 3 CG02 Dad result stage differs.");
+                    Play(index + 1);
+                });
+        }
+    }
+
     private void BeginCg01DadDialogue(
         Fo3Cg01Stage0State stage5,
         Fo3Cg01RuntimeContext context,
@@ -1990,17 +2081,48 @@ internal partial class Fo3OpeningFlow
                             world.Player,
                             () =>
                             {
+                                var intro = completion.Cg02Stage0.IntroRuntime!;
                                 current = current with
                                 {
-                                    ActiveStage = completion.Cg02Stage0.IntroRuntime!.TargetStage,
+                                    ActiveStage = intro.TargetStage,
                                     TimerRemainingSeconds = 0.0,
                                     TimerAdvancing = false,
                                     AccountedCommandCount = current.AccountedCommandCount +
-                                        completion.Cg02Stage0.IntroRuntime.FinalCommandCount,
+                                        intro.FinalCommandCount,
                                     AppliedCommandCount = current.AppliedCommandCount +
-                                        completion.Cg02Stage0.IntroRuntime.FinalCommandCount,
+                                        intro.FinalCommandCount,
                                 };
                                 Persist();
+                                var speech = intro.DadSpeechRuntime ??
+                                    throw new InvalidOperationException(
+                                        "Fallout 3 CG02 Dad speech contract is absent.");
+                                StartCg02DadSpeechRuntime(
+                                    speech,
+                                    world.Player,
+                                    current.AppliedInfoFormIds,
+                                    infoFormId =>
+                                    {
+                                        current = current with
+                                        {
+                                            AppliedInfoFormIds = current.AppliedInfoFormIds
+                                                .Append(infoFormId).ToArray(),
+                                        };
+                                        Persist();
+                                    },
+                                    () =>
+                                    {
+                                        current = current with
+                                        {
+                                            ActiveStage = speech.TargetStage,
+                                            AccountedCommandCount = current.AccountedCommandCount +
+                                                speech.FinalCommandCount,
+                                            AppliedCommandCount = current.AppliedCommandCount +
+                                                speech.FinalCommandCount,
+                                            NextBoundary = new Fo3Cg01Stage12Boundary(
+                                                false, speech.NextBoundaryBlocker),
+                                        };
+                                        Persist();
+                                    });
                             },
                             current.TimerRemainingSeconds);
                         Persist();
@@ -2011,7 +2133,9 @@ internal partial class Fo3OpeningFlow
         if (current.ActiveQuestFormId.Equals(
                 restoredCompletion.NextQuestFormId, StringComparison.OrdinalIgnoreCase) &&
             (current.ActiveStage == restoredCompletion.Cg02Stage0.TargetStage ||
-             current.ActiveStage == restoredCompletion.Cg02Stage0.IntroRuntime?.TargetStage))
+             current.ActiveStage == restoredCompletion.Cg02Stage0.IntroRuntime?.TargetStage ||
+             current.ActiveStage == restoredCompletion.Cg02Stage0.IntroRuntime?
+                 .DadSpeechRuntime?.TargetStage))
         {
             (_cg01ToddlerWorld ?? throw new InvalidOperationException(
                 "Fallout 3 CG01 restored completion player is absent."))
@@ -2052,19 +2176,84 @@ internal partial class Fo3OpeningFlow
                     restoredPlayer,
                     () =>
                     {
+                        var intro = restoredCompletion.Cg02Stage0.IntroRuntime!;
                         current = current with
                         {
-                            ActiveStage = restoredCompletion.Cg02Stage0.IntroRuntime!.TargetStage,
+                            ActiveStage = intro.TargetStage,
                             TimerRemainingSeconds = 0.0,
                             TimerAdvancing = false,
                             AccountedCommandCount = current.AccountedCommandCount +
-                                restoredCompletion.Cg02Stage0.IntroRuntime.FinalCommandCount,
+                                intro.FinalCommandCount,
                             AppliedCommandCount = current.AppliedCommandCount +
-                                restoredCompletion.Cg02Stage0.IntroRuntime.FinalCommandCount,
+                                intro.FinalCommandCount,
+                        };
+                        Persist();
+                        var speech = intro.DadSpeechRuntime ??
+                            throw new InvalidOperationException(
+                                "Fallout 3 restored CG02 Dad speech is absent.");
+                        StartCg02DadSpeechRuntime(
+                            speech,
+                            restoredPlayer,
+                            current.AppliedInfoFormIds,
+                            infoFormId =>
+                            {
+                                current = current with
+                                {
+                                    AppliedInfoFormIds = current.AppliedInfoFormIds
+                                        .Append(infoFormId).ToArray(),
+                                };
+                                Persist();
+                            },
+                            () =>
+                            {
+                                current = current with
+                                {
+                                    ActiveStage = speech.TargetStage,
+                                    AccountedCommandCount = current.AccountedCommandCount +
+                                        speech.FinalCommandCount,
+                                    AppliedCommandCount = current.AppliedCommandCount +
+                                        speech.FinalCommandCount,
+                                    NextBoundary = new Fo3Cg01Stage12Boundary(
+                                        false, speech.NextBoundaryBlocker),
+                                };
+                                Persist();
+                            });
+                    },
+                    current.TimerRemainingSeconds);
+            }
+            else if (current.ActiveStage ==
+                restoredCompletion.Cg02Stage0.IntroRuntime?.TargetStage)
+            {
+                var speech = restoredCompletion.Cg02Stage0.IntroRuntime.DadSpeechRuntime ??
+                    throw new InvalidOperationException(
+                        "Fallout 3 restored CG02 Dad speech is absent.");
+                StartCg02DadSpeechRuntime(
+                    speech,
+                    restoredPlayer,
+                    current.AppliedInfoFormIds,
+                    infoFormId =>
+                    {
+                        current = current with
+                        {
+                            AppliedInfoFormIds = current.AppliedInfoFormIds
+                                .Append(infoFormId).ToArray(),
                         };
                         Persist();
                     },
-                    current.TimerRemainingSeconds);
+                    () =>
+                    {
+                        current = current with
+                        {
+                            ActiveStage = speech.TargetStage,
+                            AccountedCommandCount = current.AccountedCommandCount +
+                                speech.FinalCommandCount,
+                            AppliedCommandCount = current.AppliedCommandCount +
+                                speech.FinalCommandCount,
+                            NextBoundary = new Fo3Cg01Stage12Boundary(
+                                false, speech.NextBoundaryBlocker),
+                        };
+                        Persist();
+                    });
             }
         }
         if (current.ActiveStage == interaction.BookStage && !current.SpecialBookAccepted)

@@ -22,6 +22,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _cg00_package_playback_contract,
     _cg00_package_stage_condition,
     _compile_cg01_stage0_transition,
+    _compile_cg02_dad_speech_runtime,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
     _compile_post_stage80_dialogue,
@@ -167,6 +168,102 @@ def selection() -> dict[str, object]:
 
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
+    def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
+        quest = Record(
+            "QUST", 0x00014E84, 0, subrecord("EDID", b"CG02\0"), ())
+        topic = Record(
+            "DIAL", 0x0001F574, 0,
+            subrecord("EDID", b"CG02DadSpeech\0"), ())
+        voice = Record(
+            "VTYP", 0x00019FDF, 0, subrecord("EDID", b"VoiceDad\0"), ())
+        script_source = """scn CG02DadSCRIPT
+begin gamemode
+if doTalk == 1 && talking == 0
+if timer > 0
+set timer to timer - GetSecondsPassed
+else
+SayTo player CG02DadSpeech 1
+set talking to 1
+endif
+endif
+end
+begin SayToDone CG02DadSpeech
+set talking to 0
+end"""
+        script = Record(
+            "SCPT", 0x000304DA, 0,
+            subrecord("EDID", b"CG02DadSCRIPT\0")
+            + subrecord("SCTX", script_source.encode("cp1252") + b"\0"), ())
+        dad = Record(
+            "NPC_", 0x0002FDCF, 0,
+            subrecord("EDID", b"CG02Dad\0")
+            + subrecord("VTCK", struct.pack("<I", voice.form_id))
+            + subrecord("SCRI", struct.pack("<I", script.form_id)), ())
+        dad_ref = Record(
+            "ACHR", 0x000300EF, 0,
+            subrecord("EDID", b"CG02DadREF\0")
+            + subrecord("NAME", struct.pack("<I", dad.form_id)), ())
+        overseer_ref = Record(
+            "ACHR", 0x000300F1, 0,
+            subrecord("EDID", b"CG02OverseerREF\0")
+            + subrecord("NAME", struct.pack("<I", 0x000300F0)), ())
+        idles = (
+            idle(0x00059447, "TalkHappy", r"Characters\_Male\happy.kf"),
+            idle(0x00059446, "TalkSad", r"Characters\_Male\sad.kf"),
+        )
+
+        def info(form_id: int, text: str, idle_id: int, sex: int | None,
+                 result: str | None) -> Record:
+            payload = subrecord("DATA", bytes.fromhex("01000400"))
+            payload += subrecord("NAM1", text.encode("cp1252") + b"\0")
+            payload += subrecord("SNAM", struct.pack("<I", idle_id))
+            payload += subrecord("CTDA", condition(72, dad.form_id))
+            if sex is not None:
+                payload += subrecord("CTDA", condition(131, sex))
+            if result is not None:
+                payload += subrecord("SCTX", result.encode("cp1252") + b"\0")
+            return Record(
+                "INFO", form_id, 0, payload,
+                (GroupContext(struct.pack("<I", topic.form_id), 7),))
+
+        records = (
+            quest, topic, voice, script, dad, dad_ref, overseer_ref, *idles,
+            info(0x0001F954, "Happy birthday, pal!", idles[0].form_id, 0, None),
+            info(0x0001F953, "Happy birthday, honey!", idles[0].form_id, 1, None),
+            info(0x00031629, "If only your mother....", idles[1].form_id,
+                 None, "setstage CG02 7"),
+        )
+        definition = {
+            "cg02DadSpeech": {
+                "dadReferenceFormId": "000300ef",
+                "dadBaseFormId": "0002fdcf",
+                "dadScriptFormId": "000304da",
+                "topicEditorId": "CG02DadSpeech",
+                "topicFormId": "0001f574",
+                "infoFormIds": ["0001f954", "0001f953", "00031629"],
+                "targetStage": 7,
+            }
+        }
+        stage_sources = {7: [
+            "set CG02DadREF.doTalk to 0\nCG02OverseerREF.evp\n"
+            "set CG02OverseerREF.doTalk to 1\n"
+            "set CG02OverseerREF.timer to .25"
+        ]}
+        result = _compile_cg02_dad_speech_runtime(
+            records, quest, stage_sources, definition)
+
+        self.assertEqual(
+            ["male", "female", None],
+            [row["engineSex"] for row in result["dialogue"]["branches"]])
+        self.assertEqual(
+            ["setActorVariable", "evaluatePackage", "setActorVariable",
+             "setActorVariable"],
+            [row["kind"] for row in result["stageResult"]["commands"]])
+        self.assertEqual(0.25, result["stageResult"]["commands"][3]["value"])
+        self.assertEqual(
+            "fo3-cg02-stage-7-overseer-speech-runtime-not-implemented",
+            result["nextBoundary"]["blocker"])
+
     def test_compiles_owned_special_book_menu_tile_hierarchy(self) -> None:
         bindings = "".join(
             f'<{action}><ref src="{tile}" trait="clicked"/></{action}>'

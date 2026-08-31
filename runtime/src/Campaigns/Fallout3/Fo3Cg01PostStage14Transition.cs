@@ -126,6 +126,32 @@ internal sealed record Fo3Cg02Stage6Command(
     string? Variable,
     int Value);
 
+internal sealed record Fo3Cg02DadSpeechCue(
+    int Sequence,
+    string? EngineSex,
+    string InfoFormId,
+    string SpeakerIdleFormId,
+    string SpeakerIdleLogicalPath,
+    string SpeakerIdleSourceSha256,
+    Fo3OwnedDialogueResponse Response,
+    int? TargetStage);
+
+internal sealed record Fo3Cg02DadStage7Command(
+    int Index,
+    string Kind,
+    string ReferenceFormId,
+    string Variable,
+    double Value);
+
+internal sealed record Fo3Cg02DadSpeechRuntime(
+    int SourceStage,
+    int TargetStage,
+    string DadReferenceFormId,
+    IReadOnlyList<Fo3Cg02DadSpeechCue> Cues,
+    IReadOnlyList<Fo3Cg02DadStage7Command> Stage7Commands,
+    int FinalCommandCount,
+    string NextBoundaryBlocker);
+
 internal sealed record Fo3Cg02IntroRuntime(
     int SourceStage,
     int TargetStage,
@@ -134,6 +160,7 @@ internal sealed record Fo3Cg02IntroRuntime(
     IReadOnlyList<Fo3Cg02IntroSound> Sounds,
     IReadOnlyList<Fo3Cg02Stage6Command> Stage6Commands,
     int FinalCommandCount,
+    Fo3Cg02DadSpeechRuntime? DadSpeechRuntime,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg02Stage0Transition(
@@ -674,8 +701,11 @@ internal sealed record Fo3Cg01Stage50Timer(
         if (stage6Commands.Length == 0)
             throw new InvalidOperationException("Fallout 3 CG02 stage-6 result is absent.");
         var boundary = source.GetProperty("nextBoundary");
-        if (boundary.GetProperty("applied").GetBoolean())
-            throw new InvalidOperationException("Fallout 3 CG02 intro boundary differs.");
+        var boundaryApplied = boundary.GetProperty("applied").GetBoolean();
+        var dadSpeech = boundaryApplied
+            ? LoadCg02DadSpeech(source.GetProperty("dadSpeechRuntime"),
+                source.GetProperty("targetStage").GetInt32())
+            : null;
         return new Fo3Cg02IntroRuntime(
             sourceStage,
             source.GetProperty("targetStage").GetInt32(),
@@ -684,6 +714,102 @@ internal sealed record Fo3Cg01Stage50Timer(
             sounds,
             stage6Commands,
             finalCommands.Length + stage6Commands.Length,
+            dadSpeech,
+            boundaryApplied
+                ? dadSpeech!.NextBoundaryBlocker
+                : boundary.GetProperty("blocker").GetString()!);
+    }
+
+    private static Fo3Cg02DadSpeechRuntime LoadCg02DadSpeech(
+        JsonElement source,
+        int expectedSourceStage)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg02-stage-6-dad-speech-runtime/v1" ||
+            source.GetProperty("sourceStage").GetInt32() != expectedSourceStage)
+            throw new InvalidOperationException("Fallout 3 CG02 Dad speech identity differs.");
+        var scriptSha256 = source.GetProperty("dadScriptSourceSha256").GetString()!;
+        if (scriptSha256.Length != Fo3OpeningFlowNumericContracts.Sha256HexCharacters ||
+            !scriptSha256.All(Uri.IsHexDigit))
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Dad script hash differs.");
+        var targetStage = source.GetProperty("targetStage").GetInt32();
+        var dialogue = source.GetProperty("dialogue");
+        if (!dialogue.GetProperty("dialoguePlaybackPrepared").GetBoolean() ||
+            !dialogue.GetProperty("dialoguePlaybackImplemented").GetBoolean())
+            throw new InvalidOperationException("Fallout 3 CG02 Dad speech assets differ.");
+        var cues = dialogue.GetProperty("branches").EnumerateArray()
+            .Select(row =>
+            {
+                var sequence = row.GetProperty("sequence").GetInt32();
+                var sex = row.TryGetProperty("engineSex", out var rawSex) &&
+                    rawSex.ValueKind != JsonValueKind.Null ? rawSex.GetString() : null;
+                var response = row.GetProperty("response");
+                var responseIndex = response.GetProperty("index").GetInt32();
+                var infoFormId = row.GetProperty("infoFormId").GetString()!;
+                var text = response.GetProperty("text").GetString()!;
+                if (!row.GetProperty("sayOnce").GetBoolean() ||
+                    Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))
+                        .ToLowerInvariant() != response.GetProperty("textSha256").GetString())
+                    throw new InvalidOperationException(
+                        "Fallout 3 CG02 Dad speech response differs.");
+                var idle = row.GetProperty("speakerIdle");
+                var effects = row.GetProperty("effects").EnumerateArray().ToArray();
+                int? effectStage = effects.Length == 0 ? null :
+                    effects.Single().GetProperty("stage").GetInt32();
+                return new Fo3Cg02DadSpeechCue(
+                    sequence,
+                    sex,
+                    infoFormId,
+                    idle.GetProperty("formId").GetString()!,
+                    idle.GetProperty("modelPath").GetString()!,
+                    idle.GetProperty("sourceSha256").GetString()!,
+                    new Fo3OwnedDialogueResponse(
+                        responseIndex,
+                        text,
+                        Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                            response.GetProperty("voice"),
+                            $"_{infoFormId}_{responseIndex}.ogg"),
+                        Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                            response.GetProperty("lip"),
+                            $"_{infoFormId}_{responseIndex}.lip")),
+                    effectStage);
+            }).ToArray();
+        if (cues.Length != 3 ||
+            !cues.Select(value => value.Sequence).SequenceEqual([0, 0, 1]) ||
+            !cues.Take(2).Select(value => value.EngineSex)
+                .ToHashSet(StringComparer.Ordinal).SetEquals(["male", "female"]) ||
+            cues[2].EngineSex is not null || cues[2].TargetStage != targetStage)
+            throw new InvalidOperationException("Fallout 3 CG02 Dad speech order differs.");
+        var commands = source.GetProperty("stageResult").GetProperty("commands")
+            .EnumerateArray().Select((row, index) =>
+            {
+                if (row.GetProperty("index").GetInt32() != index)
+                    throw new InvalidOperationException(
+                        "Fallout 3 CG02 stage-7 command order differs.");
+                return new Fo3Cg02DadStage7Command(
+                    index,
+                    row.GetProperty("kind").GetString()!,
+                    row.GetProperty("referenceFormId").GetString()!,
+                    row.TryGetProperty("variable", out var variable)
+                        ? variable.GetString()! : "",
+                    row.TryGetProperty("value", out var value)
+                        ? value.GetDouble() : 0.0);
+            }).ToArray();
+        if (!commands.Select(value => value.Kind).SequenceEqual([
+                "setActorVariable", "evaluatePackage",
+                "setActorVariable", "setActorVariable"]))
+            throw new InvalidOperationException("Fallout 3 CG02 stage-7 result differs.");
+        var boundary = source.GetProperty("nextBoundary");
+        if (boundary.GetProperty("applied").GetBoolean())
+            throw new InvalidOperationException("Fallout 3 CG02 Dad boundary differs.");
+        return new Fo3Cg02DadSpeechRuntime(
+            expectedSourceStage,
+            targetStage,
+            source.GetProperty("dadReferenceFormId").GetString()!,
+            cues,
+            commands,
+            commands.Length + 1,
             boundary.GetProperty("blocker").GetString()!);
     }
 
@@ -1112,8 +1238,12 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var stage = RequiredInteger(active, "stage");
         var dadLead = Stage20Interaction.TimerTransition.DadLead;
         var completion = dadLead.Completion;
-        var cg02IntroComplete = completion.Cg02Stage0.IntroRuntime is not null &&
-            stage == completion.Cg02Stage0.IntroRuntime.TargetStage;
+        var cg02Intro = completion.Cg02Stage0.IntroRuntime;
+        var cg02DadSpeech = cg02Intro?.DadSpeechRuntime;
+        var cg02IntroComplete = cg02Intro is not null &&
+            (stage == cg02Intro.TargetStage || stage == cg02DadSpeech?.TargetStage);
+        var cg02DadComplete = cg02DadSpeech is not null &&
+            stage == cg02DadSpeech.TargetStage;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
             RequiredString(active, "editorId") == completion.NextQuestEditorId &&
             (stage == completion.Cg02Stage0.TargetStage || cg02IntroComplete);
@@ -1180,7 +1310,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 completion.Cg02Stage0.Stage5CommandCount +
                 completion.Cg02Stage0.Stage0CommandCount;
         if (cg02IntroComplete)
-            interactionCommandCount += completion.Cg02Stage0.IntroRuntime!.FinalCommandCount;
+            interactionCommandCount += cg02Intro!.FinalCommandCount;
+        if (cg02DadComplete)
+            interactionCommandCount += cg02DadSpeech!.FinalCommandCount;
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
         var expectedPackages = baseline.AppliedPackageFormIds.AsEnumerable();
         if (progressStage >= Stage20Interaction.TimerTransition.CompletionStage)
@@ -1211,11 +1343,32 @@ internal sealed record Fo3Cg01PostStage14Transition(
                  !soundStarted) ||
             !reachedNextQuest && (imageSpaceElapsed != 0.0 || soundStarted))
             throw new InvalidOperationException("Saved Fallout 3 CG01 timer state differs.");
+        var savedInfoFormIds = RequiredArray(source, "appliedInfoFormIds")
+            .EnumerateArray().Select(value => value.GetString() ?? "").ToArray();
+        var baselineInfoCount = baseline.AppliedInfoFormIds.Count;
+        var savedDadInfoFormIds = savedInfoFormIds.Skip(baselineInfoCount).ToArray();
+        var validDadPrefixes = cg02DadSpeech is null
+            ? Array.Empty<string[]>()
+            : cg02DadSpeech.Cues.Where(value => value.EngineSex is not null)
+                .Select(sexCue => new[]
+                {
+                    sexCue.InfoFormId,
+                    cg02DadSpeech.Cues.Single(value => value.EngineSex is null).InfoFormId,
+                })
+                .SelectMany(sequence => Enumerable.Range(0, sequence.Length + 1)
+                    .Select(length => sequence.Take(length).ToArray()))
+                .ToArray();
+        var dadInfoStateValid =
+            savedInfoFormIds.Take(baselineInfoCount)
+                .SequenceEqual(baseline.AppliedInfoFormIds) &&
+            (savedDadInfoFormIds.Length == 0 || validDadPrefixes.Any(prefix =>
+                prefix.SequenceEqual(savedDadInfoFormIds,
+                    StringComparer.OrdinalIgnoreCase))) &&
+            (!cg02DadComplete || savedDadInfoFormIds.Length == 2);
         if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
             (!reachedNextQuest && RequiredFormId(active, "formId") != baseline.ActiveQuestFormId) ||
             (!reachedNextQuest && RequiredString(active, "editorId") != baseline.ActiveQuestEditorId) ||
-            !RequiredArray(source, "appliedInfoFormIds").EnumerateArray()
-                .Select(value => value.GetString()).SequenceEqual(baseline.AppliedInfoFormIds) ||
+            !dadInfoStateValid ||
             !RequiredArray(source, "appliedPackageFormIds").EnumerateArray()
                 .Select(value => value.GetString()).SequenceEqual(expectedPackageArray) ||
             RequiredFormId(gate, "referenceFormId") != baseline.PlaypenGateReferenceFormId ||
@@ -1244,6 +1397,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
             DisplayedObjectiveIndex = objective,
             AccountedCommandCount = expectedCommandCount,
             AppliedCommandCount = expectedCommandCount,
+            AppliedInfoFormIds = savedInfoFormIds,
             AppliedPackageFormIds = expectedPackageArray,
             PlayroomDoorOpen = progressStage >= Stage20Interaction.TimerTransition.CompletionStage,
             PlayroomDoorLockLevel = progressStage >= Stage20Interaction.TimerTransition.CompletionStage
