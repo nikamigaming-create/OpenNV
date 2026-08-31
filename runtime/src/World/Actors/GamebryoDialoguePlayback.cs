@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using Godot;
 
 namespace OpenNV.Runtime.World.Actors;
@@ -27,6 +28,8 @@ internal sealed record SourceDialogueInfoSelection<TInfo>(TInfo Value, int NextC
 
 internal sealed class GamebryoDialoguePlayback
 {
+    private static readonly int Sha256HexLength =
+        Convert.ToHexString(SHA256.HashData([])).Length;
     private readonly AudioStreamPlayer _voice;
     private readonly FaceGenLipConfiguration _lipConfiguration;
     private FaceGenLipAnimation? _lip;
@@ -212,7 +215,7 @@ internal sealed class GamebryoDialoguePlayback
     {
         if (string.IsNullOrWhiteSpace(asset.LogicalPath) ||
             string.IsNullOrWhiteSpace(asset.SourcePath) ||
-            asset.Sha256.Length != 64 ||
+            asset.Sha256.Length != Sha256HexLength ||
             asset.Sha256.Any(character => !Uri.IsHexDigit(character)) ||
             !File.Exists(asset.SourcePath))
             throw new InvalidOperationException(
