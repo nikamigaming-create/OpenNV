@@ -79,6 +79,38 @@ internal sealed record Fo3Cg01DadLeadTrigger(
     int SourceStage,
     int TargetStage);
 
+internal sealed record Fo3Cg02Stage5Actor(
+    string ReferenceFormId,
+    string EditorId,
+    bool Enabled,
+    bool LooksAtPlayer,
+    bool IgnoresCrime);
+
+internal sealed record Fo3Cg02Stage5Item(
+    string FormId,
+    string EditorId,
+    int AddedCount,
+    bool Equipped);
+
+internal sealed record Fo3Cg02Stage0Transition(
+    int SourceStage,
+    int TargetStage,
+    int Stage0CommandCount,
+    int Stage5CommandCount,
+    Fo3Cg01Transform PlayerMoveTransform,
+    string PlayerMoveReferenceFormId,
+    IReadOnlyList<int> DisabledPlayerControls,
+    IReadOnlyDictionary<string, double> GameTime,
+    bool PlayerYoung,
+    int AgeRaceYears,
+    IReadOnlyList<Fo3Cg02Stage5Item> Inventory,
+    IReadOnlyList<Fo3Cg02Stage5Actor> Actors,
+    double TimerInitialSeconds,
+    int RunTimerValue,
+    int IntroValue,
+    Fo3Cg01OwnedMovie TransitionMovie,
+    string NextBoundaryBlocker);
+
 internal sealed record Fo3Cg01Stage90Completion(
     int SourceStage,
     int TargetStage,
@@ -94,6 +126,7 @@ internal sealed record Fo3Cg01Stage90Completion(
     string NextQuestFormId,
     string NextQuestEditorId,
     int NextQuestStage,
+    Fo3Cg02Stage0Transition Cg02Stage0,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg01DadLeadSequence(
@@ -355,6 +388,10 @@ internal sealed record Fo3Cg01Stage50Timer(
             nextStage.GetProperty("stage").GetInt32() != next.GetProperty("stage").GetInt32() ||
             !double.IsFinite(scale) || scale <= 0.0 || toddler is not 0)
             throw new InvalidOperationException("Fallout 3 CG01 stage-100 completion differs.");
+        var cg02 = LoadCg02Stage0(
+            source.GetProperty("cg02Stage0"),
+            next.GetProperty("questFormId").GetString()!,
+            next.GetProperty("stage").GetInt32());
         return new Fo3Cg01Stage90Completion(
             expectedSourceStage,
             targetStage,
@@ -370,7 +407,104 @@ internal sealed record Fo3Cg01Stage50Timer(
             next.GetProperty("questFormId").GetString()!,
             next.GetProperty("questEditorId").GetString()!,
             next.GetProperty("stage").GetInt32(),
-            next.GetProperty("blocker").GetString()!);
+            cg02,
+            cg02.NextBoundaryBlocker);
+    }
+
+    private static Fo3Cg02Stage0Transition LoadCg02Stage0(
+        JsonElement source,
+        string expectedQuestFormId,
+        int expectedSourceStage)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg02-stage-0-to-5-runtime/v1" ||
+            source.GetProperty("questFormId").GetString() != expectedQuestFormId ||
+            source.GetProperty("sourceStage").GetInt32() != expectedSourceStage)
+            throw new InvalidOperationException("Fallout 3 CG02 stage-0 identity differs.");
+        var targetStage = source.GetProperty("targetStage").GetInt32();
+        if (targetStage <= expectedSourceStage)
+            throw new InvalidOperationException("Fallout 3 CG02 stage-5 target differs.");
+        var commands = source.GetProperty("stage5Commands").EnumerateArray().ToArray();
+        var supportedKinds = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "setLocationSpecificLoadScreensOnly", "setInCharGen", "setGameTime",
+            "disablePlayerControls", "setPlayerYoung", "ageRace", "removeAllItems",
+            "addItem", "equipItem", "enable", "setQuestVariable", "playBink",
+            "lookAt", "ignoreCrime",
+        };
+        if (commands.Length == 0 || commands.Where((row, index) =>
+                row.GetProperty("index").GetInt32() != index).Any())
+            throw new InvalidOperationException("Fallout 3 CG02 stage-5 command order differs.");
+        if (commands.Any(row => !supportedKinds.Contains(
+                row.GetProperty("kind").GetString()!)))
+            throw new InvalidOperationException("Fallout 3 CG02 stage-5 command differs.");
+        var controls = commands.Single(row =>
+            row.GetProperty("kind").GetString() == "disablePlayerControls")
+            .GetProperty("arguments").EnumerateArray().Select(value => value.GetInt32()).ToArray();
+        var gameTime = commands.Where(row => row.GetProperty("kind").GetString() == "setGameTime")
+            .ToDictionary(
+                row => row.GetProperty("variable").GetString()!,
+                row => row.GetProperty("value").GetDouble(),
+                StringComparer.OrdinalIgnoreCase);
+        if (!gameTime.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(
+                ["gameyear", "gamemonth", "gameday", "gamehour"]))
+            throw new InvalidOperationException("Fallout 3 CG02 stage-5 game time differs.");
+        var itemRows = commands.Where(row => row.GetProperty("kind").GetString() is "addItem" or "equipItem")
+            .GroupBy(row => row.GetProperty("itemFormId").GetString()!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new Fo3Cg02Stage5Item(
+                group.Key,
+                group.First().GetProperty("itemEditorId").GetString()!,
+                group.Where(row => row.GetProperty("kind").GetString() == "addItem")
+                    .Sum(row => row.GetProperty("count").GetInt32()),
+                group.Any(row => row.GetProperty("kind").GetString() == "equipItem")))
+            .ToArray();
+        var actors = commands.Where(row => row.GetProperty("kind").GetString() is "enable" or "lookAt" or "ignoreCrime")
+            .GroupBy(row => row.GetProperty("referenceFormId").GetString()!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new Fo3Cg02Stage5Actor(
+                group.Key,
+                group.First().GetProperty("subject").GetString()!,
+                group.Any(row => row.GetProperty("kind").GetString() == "enable"),
+                group.Any(row => row.GetProperty("kind").GetString() == "lookAt"),
+                group.Any(row => row.GetProperty("kind").GetString() == "ignoreCrime")))
+            .ToArray();
+        var variables = commands.Where(row => row.GetProperty("kind").GetString() == "setQuestVariable")
+            .ToDictionary(row => row.GetProperty("variable").GetString()!, StringComparer.OrdinalIgnoreCase);
+        if (!variables.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(
+                ["timer", "runTimer", "intro"]))
+            throw new InvalidOperationException("Fallout 3 CG02 stage-5 variables differ.");
+        var movieCommand = commands.Single(row => row.GetProperty("kind").GetString() == "playBink");
+        var movie = Fo3Cg01Stage0Transition.LoadOwnedMovie(
+            movieCommand.GetProperty("video"),
+            movieCommand.GetProperty("logicalPath").GetString()!,
+            movieCommand.GetProperty("arguments").EnumerateArray().Select(value => value.GetInt32()).ToArray());
+        var move = source.GetProperty("playerMove");
+        var boundary = source.GetProperty("nextBoundary");
+        var stage0CommandCount = source.GetProperty("stage0CommandCount").GetInt32();
+        if (stage0CommandCount <= 0 ||
+            move.GetProperty("index").GetInt32() != stage0CommandCount - 1 ||
+            move.GetProperty("kind").GetString() != "moveToReference" ||
+            boundary.GetProperty("applied").GetBoolean())
+            throw new InvalidOperationException("Fallout 3 CG02 stage-0 move boundary differs.");
+        return new Fo3Cg02Stage0Transition(
+            expectedSourceStage,
+            targetStage,
+            stage0CommandCount,
+            commands.Length,
+            Fo3Cg01Stage12Transition.LoadTransform(move.GetProperty("sourceTransform")),
+            move.GetProperty("referenceFormId").GetString()!,
+            controls,
+            gameTime,
+            commands.Single(row => row.GetProperty("kind").GetString() == "setPlayerYoung")
+                .GetProperty("value").GetInt32() != 0,
+            commands.Single(row => row.GetProperty("kind").GetString() == "ageRace")
+                .GetProperty("value").GetInt32(),
+            itemRows,
+            actors,
+            variables["timer"].GetProperty("value").GetDouble(),
+            variables["runTimer"].GetProperty("value").GetInt32(),
+            variables["intro"].GetProperty("value").GetInt32(),
+            movie,
+            boundary.GetProperty("blocker").GetString()!);
     }
 
     private static Fo3Cg01DadTravelPackage LoadTravelPackage(
@@ -603,7 +737,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
 {
     internal const string ExpectedSchema = "opennv-fo3-cg01-stage-14-to-20-runtime/v1";
     internal const string ExpectedSavedStateSchema =
-        "opennv-fo3-cg01-stage-14-to-cg02-runtime-state/v4";
+        "opennv-fo3-cg01-stage-14-to-cg02-stage-5-runtime-state/v5";
 
     private const string ExpectedStatus = "source-backed-package-dialogue-runtime-ready";
     private const int GetPcIsSexFunction = 131;
@@ -800,7 +934,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var completion = dadLead.Completion;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
             RequiredString(active, "editorId") == completion.NextQuestEditorId &&
-            stage == completion.NextQuestStage;
+            stage == completion.Cg02Stage0.TargetStage;
         var progressStage = reachedNextQuest ? completion.TargetStage : stage;
         var values = RequiredArray(source, "specialValues").EnumerateArray()
             .Select(value => value.GetInt32()).ToArray();
@@ -860,7 +994,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
             interactionCommandCount++;
         if (reachedNextQuest)
             interactionCommandCount += completion.Stage90CommandCount +
-                completion.Stage100CommandCount;
+                completion.Stage100CommandCount +
+                completion.Cg02Stage0.Stage5CommandCount +
+                completion.Cg02Stage0.Stage0CommandCount;
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
         var expectedPackages = baseline.AppliedPackageFormIds.AsEnumerable();
         if (progressStage >= Stage20Interaction.TimerTransition.CompletionStage)

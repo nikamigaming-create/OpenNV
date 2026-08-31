@@ -677,6 +677,21 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
         SetMeta("opennv_source_player_scale", sourceScale);
     }
 
+    internal void MoveToSourceTransform(
+        Fo3Cg01Transform source,
+        Fo3Vault101BirthPresentationContract scene)
+    {
+        var local = GamebryoCoordinate.ConvertVector(
+            new Vector3(
+                (float)source.PositionGameUnits.X,
+                (float)source.PositionGameUnits.Y,
+                (float)source.PositionGameUnits.Z) - scene.EntryPositionGameUnits);
+        GlobalPosition = scene.UnitsToMeters * local +
+            Vector3.Up * _contract.SpawnCenterHeightMeters;
+        Rotation = new Vector3(0.0f, -(float)source.RotationRadians.Z, 0.0f);
+        Velocity = Vector3.Zero;
+    }
+
     public override void _Ready()
     {
         if (DisplayServer.GetName() != "headless")

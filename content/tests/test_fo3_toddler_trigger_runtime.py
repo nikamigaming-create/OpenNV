@@ -79,6 +79,22 @@ class Fo3ToddlerTriggerRuntimeTest(unittest.TestCase):
             "fo3-cg01-stage-90-timer-runtime-not-implemented", contract
         )
 
+    def test_cg02_nested_stage5_executes_before_source_moveto(self) -> None:
+        flow = (FO3 / "Fo3OpeningFlow.Cg01.cs").read_text(encoding="utf-8")
+        compiler = (ROOT / "content" / "tools" / "prepare_fo3_profile.py").read_text(
+            encoding="utf-8"
+        )
+
+        stage5 = flow.index("ApplyCg02Stage5State(world.Player")
+        move = flow.index("world.Player.MoveToSourceTransform(", stage5)
+        persist = flow.index("Persist();", move)
+        self.assertLess(stage5, move)
+        self.assertLess(move, persist)
+        self.assertIn('"kind": "moveToReference"', compiler)
+        self.assertNotIn(
+            "fo3-cg02-stage-0-result-runtime-not-implemented", compiler
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

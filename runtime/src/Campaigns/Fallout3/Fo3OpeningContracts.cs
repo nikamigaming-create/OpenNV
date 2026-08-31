@@ -1264,4 +1264,5 @@ internal enum Fo3OwnedVideoMode
     None,
     Intro,
     Cg01Transition,
+    Cg02Transition,
 }

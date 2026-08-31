@@ -870,6 +870,30 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             0x00000C00,
             (1815.2443, -10371.58, 7552.0, 0.0, 0.0, 0.2124003),
         )
+        cg02_player_marker = placed_reference(
+            "REFR", 0x00030768, "CG02PlayerStartMarker", marker_base.form_id, 0,
+            (1680.0, -10240.0, 7552.0, 0.0, 0.0, 0.2),
+        )
+        cg02_actor_names = (
+            "CG02AmataREF", "CG02ButchREF", "CG02OldLadyPalmerREF",
+            "CG02OverseerREF", "CG02PaulHannonREF", "CG02Vault101Security04REF",
+            "CG02WallyMackREF", "CG02JonasREF", "CG02StanleyREF",
+            "CG02AndyREF", "CG02Vault101Security02REF",
+        )
+        cg02_actor_refs = tuple(
+            placed_reference(
+                "ACRE" if name == "CG02AndyREF" else "ACHR",
+                0x00100000 + index,
+                name,
+                0x00200000 + index,
+                0,
+                (1700.0 + index, -10240.0, 7552.0, 0.0, 0.0, 0.0),
+            )
+            for index, name in enumerate(cg02_actor_names)
+        )
+        kid_suit = Record(
+            "ARMO", 0x000340ED, 0, subrecord("EDID", b"KIDVaultSuitChild101\0"), ())
+        pipboy = Record("ARMO", 0x00015038, 0, subrecord("EDID", b"pipboy\0"), ())
         baby_babble = Record(
             "SOUN",
             0x00089B4C,
@@ -1339,9 +1363,44 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("SNDD", bytes(36)),
             (),
         )
+        cg02_script = Record(
+            "SCPT", 0x000304D9, 0,
+            subrecord("EDID", b"CG02SCRIPT\0")
+            + subrecord("SCTX", b"float timer\nshort runTimer\nshort intro\n\0"),
+            (),
+        )
+        cg02_stage0_source = "setstage CG02 5\nplayer.moveto CG02PlayerStartMarker"
+        cg02_stage5_sources = (
+            "\n".join((
+                "SetLocationSpecificLoadScreensOnly 1", "SetInCharGen 1",
+                "set gameyear to 2268", "set gamemonth to 6", "set gameday to 13",
+                "set gamehour to 16", "DisablePlayerControls 1 1 1 1 0 1",
+                "SetPCYoung 1", "player.AgeRace -1", "player.removeallitems",
+                "player.additem KIDVaultSuitChild101 1 1",
+                "player.equipitem KIDVaultSuitChild101 0 1",
+                "player.equipitem pipboy 0 1", "CG02DadRef.enable",
+                "set CG02.timer to 1", "set CG02.runTimer to 1", "set CG02.intro to 1",
+                'playBink "9 years later.bik" 0 0 1 0')),
+            "\n".join(f"{name}.look player" for name in (
+                "CG02AmataREF", "CG02ButchREF", "CG02DadREF",
+                "CG02OldLadyPalmerREF", "CG02OverseerREF", "CG02PaulHannonREF",
+                "CG02Vault101Security04REF", "CG02WallyMackREF")),
+            "\n".join(f"{name}.IgnoreCrime 1" for name in (
+                "CG02DadREF", "CG02JonasREF", "CG02AmataREF", "CG02StanleyREF",
+                "CG02AndyREF", "CG02OverseerREF", "CG02OldLadyPalmerREF",
+                "CG02Vault101Security02REF", "CG02Vault101Security04REF",
+                "CG02ButchREF", "CG02PaulHannonREF", "CG02WallyMackREF")),
+        )
         cg02 = Record(
             "QUST", 0x00014E84, 0,
-            subrecord("EDID", b"CG02\0"),
+            subrecord("EDID", b"CG02\0")
+            + subrecord("SCRI", struct.pack("<I", cg02_script.form_id))
+            + subrecord("INDX", struct.pack("<H", 0))
+            + subrecord("SCTX", cg02_stage0_source.encode("cp1252") + b"\0")
+            + b"".join(
+                subrecord("INDX", struct.pack("<H", 5))
+                + subrecord("SCTX", source.encode("cp1252") + b"\0")
+                for source in cg02_stage5_sources),
             (),
         )
         stage100_source = "\n".join(
@@ -1491,7 +1550,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             modifier,
             cg01_fade,
             cg01_fade_sound,
+            cg02_script,
             cg02,
+            cg02_player_marker,
+            *cg02_actor_refs,
+            kid_suit,
+            pipboy,
         )
         contract = _compile_stage100_transition(
             records,
@@ -1699,9 +1763,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             [command["kind"] for command in completion["stage100Result"]["commands"]],
         )
         self.assertEqual(
-            "fo3-cg02-stage-0-result-runtime-not-implemented",
+            "fo3-cg02-stage-5-intro-timer-dialogue-runtime-not-implemented",
             completion["nextBoundary"]["blocker"],
         )
+        cg02_stage0 = completion["cg02Stage0"]
+        self.assertEqual((0, 5), (
+            cg02_stage0["sourceStage"], cg02_stage0["targetStage"]))
+        self.assertEqual("00030768", cg02_stage0["playerMove"]["referenceFormId"])
+        self.assertEqual(38, len(cg02_stage0["stage5Commands"]))
         self.assertEqual(
             [
                 "setObjectiveDisplayed",

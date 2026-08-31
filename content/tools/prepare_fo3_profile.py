@@ -66,6 +66,7 @@ PACKAGE_RECORD = "PACK"
 IDLE_RECORD = "IDLE"
 GLOBAL_RECORD = "GLOB"
 ACTOR_REFERENCE_RECORD = "ACHR"
+CREATURE_REFERENCE_RECORD = "ACRE"
 PLACED_REFERENCE_RECORD = "REFR"
 ACTIVATOR_RECORD = "ACTI"
 DOOR_RECORD = "DOOR"
@@ -201,6 +202,35 @@ SET_NO_ACTIVATION_SOUND_PATTERN = re.compile(
     re.IGNORECASE,
 )
 SET_PC_TODDLER_PATTERN = re.compile(r"^SetPCToddler\s+(?P<value>\d+)$", re.IGNORECASE)
+SET_GAME_TIME_PATTERN = re.compile(
+    r"^set\s+(?P<variable>gameyear|gamemonth|gameday|gamehour)\s+to\s+"
+    r"(?P<value>-?\d+(?:\.\d+)?)$",
+    re.IGNORECASE,
+)
+AGE_RACE_PATTERN = re.compile(
+    r"^(?P<subject>player)\.AgeRace\s+(?P<value>-?\d+)$", re.IGNORECASE
+)
+REMOVE_ALL_ITEMS_PATTERN = re.compile(
+    r"^(?P<subject>player)\.removeallitems$", re.IGNORECASE
+)
+ADD_ITEM_PATTERN = re.compile(
+    r"^(?P<subject>player)\.additem\s+(?P<item>[A-Za-z_][A-Za-z0-9_]*)\s+"
+    r"(?P<count>\d+)\s+(?P<silent>\d+)$",
+    re.IGNORECASE,
+)
+EQUIP_ITEM_PATTERN = re.compile(
+    r"^(?P<subject>player)\.equipitem\s+(?P<item>[A-Za-z_][A-Za-z0-9_]*)\s+"
+    r"(?P<prevent>\d+)\s+(?P<silent>\d+)$",
+    re.IGNORECASE,
+)
+LOOK_AT_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.look\s+(?P<target>player)$",
+    re.IGNORECASE,
+)
+IGNORE_CRIME_PATTERN = re.compile(
+    r"^(?P<subject>[A-Za-z_][A-Za-z0-9_]*)\.IgnoreCrime\s+(?P<value>\d+)$",
+    re.IGNORECASE,
+)
 PLAY_BINK_COMMAND_PATTERN = re.compile(
     r'^playBink\s+"(?P<path>[^"]+\.bik)"\s+'
     r"(?P<arguments>\d+(?:\s+\d+){3})$",
@@ -1727,6 +1757,7 @@ def _appearance_inventory(
                     "EYES",
                     GLOBAL_RECORD,
                     ACTOR_REFERENCE_RECORD,
+                    CREATURE_REFERENCE_RECORD,
                     ACTOR_BASE_RECORD,
                     SCRIPT_RECORD,
                     PACKAGE_RECORD,
@@ -2252,6 +2283,46 @@ def _parse_cg01_stage100_commands(source: str) -> list[dict[str, object]]:
     ]
     if [str(command["kind"]) for command in commands] != expected:
         raise ValueError("Fallout 3 CG01 stage 100 command order differs")
+    return commands
+
+
+def _parse_cg02_stage5_commands(sources: list[str]) -> list[dict[str, object]]:
+    commands = []
+    for text in (command for source in sources for command in _source_commands(source)):
+        if match := SET_LOCATION_LOAD_SCREENS_PATTERN.fullmatch(text):
+            commands.append({"kind": "setLocationSpecificLoadScreensOnly", "value": int(match.group("value"))})
+        elif match := SET_IN_CHAR_GEN_PATTERN.fullmatch(text):
+            commands.append({"kind": "setInCharGen", "value": int(match.group("value"))})
+        elif match := SET_GAME_TIME_PATTERN.fullmatch(text):
+            value = match.group("value")
+            commands.append({"kind": "setGameTime", "variable": match.group("variable"), "value": float(value) if "." in value else int(value)})
+        elif match := PLAYER_CONTROLS_PATTERN.fullmatch(text):
+            commands.append({"kind": "disablePlayerControls", "arguments": [int(value) for value in match.group("arguments").split()]})
+        elif match := SET_PC_YOUNG_PATTERN.fullmatch(text):
+            commands.append({"kind": "setPlayerYoung", "value": int(match.group("value"))})
+        elif match := AGE_RACE_PATTERN.fullmatch(text):
+            commands.append({"kind": "ageRace", "subject": match.group("subject"), "value": int(match.group("value"))})
+        elif match := REMOVE_ALL_ITEMS_PATTERN.fullmatch(text):
+            commands.append({"kind": "removeAllItems", "subject": match.group("subject")})
+        elif match := ADD_ITEM_PATTERN.fullmatch(text):
+            commands.append({"kind": "addItem", "subject": match.group("subject"), "itemEditorId": match.group("item"), "count": int(match.group("count")), "silent": int(match.group("silent"))})
+        elif match := EQUIP_ITEM_PATTERN.fullmatch(text):
+            commands.append({"kind": "equipItem", "subject": match.group("subject"), "itemEditorId": match.group("item"), "preventUnequip": int(match.group("prevent")), "silent": int(match.group("silent"))})
+        elif match := REFERENCE_COMMAND_PATTERN.fullmatch(text):
+            if match.group("command").casefold() != "enable":
+                raise ValueError(f"Fallout 3 CG02 stage 5 uses an unsupported command: {text}")
+            commands.append({"kind": "enable", "subject": match.group("subject")})
+        elif match := SET_REFERENCE_VARIABLE_PATTERN.fullmatch(text):
+            raw = match.group("value")
+            commands.append({"kind": "setQuestVariable", "subject": match.group("subject"), "variable": match.group("variable"), "value": float(raw) if "." in raw else int(raw)})
+        elif match := PLAY_BINK_COMMAND_PATTERN.fullmatch(text):
+            commands.append({"kind": "playBink", "logicalPath": match.group("path"), "arguments": [int(value) for value in match.group("arguments").split()]})
+        elif match := LOOK_AT_PATTERN.fullmatch(text):
+            commands.append({"kind": "lookAt", "subject": match.group("subject"), "target": match.group("target")})
+        elif match := IGNORE_CRIME_PATTERN.fullmatch(text):
+            commands.append({"kind": "ignoreCrime", "subject": match.group("subject"), "value": int(match.group("value"))})
+        else:
+            raise ValueError(f"Fallout 3 CG02 stage 5 uses an unsupported command: {text}")
     return commands
 
 
@@ -3862,6 +3933,124 @@ def _compile_cg01_post_stage14_transition(
         resolved_stage100.append(resolved)
     if next_quest is None:
         raise ValueError("Fallout 3 CG01 completion has no next quest")
+    next_subrecords = tuple(iter_subrecords(next_quest))
+    next_stage_sources: dict[int, list[str]] = {}
+    next_stage = None
+    for row in next_subrecords:
+        if row.signature == "INDX":
+            next_stage = int.from_bytes(row.data, "little")
+        elif row.signature == "SCTX" and next_stage is not None:
+            next_stage_sources.setdefault(next_stage, []).append(zstring(row.data))
+    next_entry_stage = int(stage100_commands[-1]["stage"])
+    entry_sources = next_stage_sources.get(next_entry_stage, [])
+    if len(entry_sources) != 1:
+        raise ValueError("Fallout 3 CG02 stage 0 result source is ambiguous")
+    entry_commands = _source_commands(entry_sources[0])
+    if len(entry_commands) != 2:
+        raise ValueError("Fallout 3 CG02 stage 0 command count differs")
+    nested_stage_match = SET_STAGE_PATTERN.fullmatch(entry_commands[0])
+    move_match = MOVE_TO_REFERENCE_PATTERN.fullmatch(entry_commands[1])
+    if (
+        nested_stage_match is None
+        or nested_stage_match.group("quest").casefold() != (_editor_id(next_quest) or "").casefold()
+        or move_match is None
+        or move_match.group("subject").casefold() != "player"
+    ):
+        raise ValueError("Fallout 3 CG02 stage 0 command order differs")
+    nested_stage = int(nested_stage_match.group("stage"))
+    nested_sources = next_stage_sources.get(nested_stage, [])
+    if not nested_sources:
+        raise ValueError("Fallout 3 CG02 stage 5 result is absent")
+    nested_commands = _parse_cg02_stage5_commands(nested_sources)
+    marker_matches = [
+        record
+        for record in by_editor.get(move_match.group("target").casefold(), [])
+        if record.signature == PLACED_REFERENCE_RECORD
+    ]
+    if len(marker_matches) != 1:
+        raise ValueError("Fallout 3 CG02 player marker differs")
+    next_marker = marker_matches[0]
+    next_script_id = struct.unpack("<I", _single_subrecord(next_quest, "SCRI"))[0]
+    next_script = by_form.get(next_script_id)
+    if next_script is None or next_script.signature != SCRIPT_RECORD:
+        raise ValueError("Fallout 3 CG02 quest script differs")
+    next_script_source = _script_source(next_script)
+    resolved_nested = []
+    for index, command in enumerate(nested_commands):
+        resolved = {"index": index, **command}
+        kind = str(command["kind"])
+        if kind in {"enable", "lookAt", "ignoreCrime"}:
+            matches = [
+                record
+                for record in by_editor.get(str(command["subject"]).casefold(), [])
+                if record.signature in {ACTOR_REFERENCE_RECORD, CREATURE_REFERENCE_RECORD}
+            ]
+            if len(matches) != 1:
+                raise ValueError(f"Fallout 3 CG02 stage 5 actor differs: {command['subject']}")
+            resolved.update(
+                {
+                    "referenceFormId": _form_id(matches[0].form_id),
+                    "referenceRecordSha256": hashlib.sha256(matches[0].data).hexdigest(),
+                }
+            )
+        elif kind in {"addItem", "equipItem"}:
+            matches = by_editor.get(str(command["itemEditorId"]).casefold(), [])
+            if len(matches) != 1:
+                raise ValueError(f"Fallout 3 CG02 stage 5 item differs: {command['itemEditorId']}")
+            resolved.update(
+                {
+                    "itemFormId": _form_id(matches[0].form_id),
+                    "itemRecordType": matches[0].signature,
+                    "itemRecordSha256": hashlib.sha256(matches[0].data).hexdigest(),
+                }
+            )
+        elif kind == "setQuestVariable":
+            variable = str(command["variable"])
+            declarations = [
+                match.group("type").casefold()
+                for match in re.finditer(
+                    rf"^\s*(?P<type>short|float)\s+{re.escape(variable)}\b",
+                    next_script_source,
+                    re.IGNORECASE | re.MULTILINE,
+                )
+            ]
+            if str(command["subject"]).casefold() != (_editor_id(next_quest) or "").casefold() or len(declarations) != 1:
+                raise ValueError("Fallout 3 CG02 stage 5 quest variable differs")
+            resolved.update(
+                {
+                    "questFormId": _form_id(next_quest.form_id),
+                    "questEditorId": _editor_id(next_quest),
+                    "variableType": declarations[0],
+                }
+            )
+        resolved_nested.append(resolved)
+    cg02_stage0 = {
+        "schema": "opennv-fo3-cg02-stage-0-to-5-runtime/v1",
+        "questFormId": _form_id(next_quest.form_id),
+        "questEditorId": _editor_id(next_quest),
+        "questRecordSha256": hashlib.sha256(next_quest.data).hexdigest(),
+        "questScriptFormId": _form_id(next_script.form_id),
+        "questScriptEditorId": _editor_id(next_script),
+        "questScriptSourceSha256": hashlib.sha256(next_script_source.encode("cp1252")).hexdigest(),
+        "sourceStage": next_entry_stage,
+        "targetStage": nested_stage,
+        "stage0CommandCount": len(entry_commands),
+        "stage0SourceSha256": hashlib.sha256(entry_sources[0].encode("cp1252")).hexdigest(),
+        "stage5SourceSha256": hashlib.sha256("\n".join(nested_sources).encode("cp1252")).hexdigest(),
+        "stage5Commands": resolved_nested,
+        "playerMove": {
+            "index": 1,
+            "kind": "moveToReference",
+            "referenceFormId": _form_id(next_marker.form_id),
+            "referenceEditorId": _editor_id(next_marker),
+            "referenceRecordSha256": hashlib.sha256(next_marker.data).hexdigest(),
+            "sourceTransform": _reference_transform_contract(next_marker),
+        },
+        "nextBoundary": {
+            "applied": False,
+            "blocker": "fo3-cg02-stage-5-intro-timer-dialogue-runtime-not-implemented",
+        },
+    }
     lead_contract["completion"] = {
         "schema": "opennv-fo3-cg01-stage-90-to-cg02-runtime/v1",
         "sourceStage": end_stage,
@@ -3880,12 +4069,13 @@ def _compile_cg01_post_stage14_transition(
             "sourceSha256": hashlib.sha256(stage100_source.encode("cp1252")).hexdigest(),
             "commands": resolved_stage100,
         },
+        "cg02Stage0": cg02_stage0,
         "nextBoundary": {
             "applied": True,
             "questFormId": _form_id(next_quest.form_id),
             "questEditorId": _editor_id(next_quest),
             "stage": int(stage100_commands[-1]["stage"]),
-            "blocker": "fo3-cg02-stage-0-result-runtime-not-implemented",
+            "blocker": cg02_stage0["nextBoundary"]["blocker"],
         },
     }
     navmeshes = [
@@ -6629,6 +6819,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     IMAGE_SPACE_MODIFIER_RECORD,
                     SOUND_RECORD,
                     ACTOR_REFERENCE_RECORD,
+                    CREATURE_REFERENCE_RECORD,
                     PLACED_REFERENCE_RECORD,
                     ACTIVATOR_RECORD,
                     DOOR_RECORD,
@@ -6636,6 +6827,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     NPC_RECORD,
                     ACTOR_BASE_RECORD,
                     STATIC_RECORD,
+                    "ARMO",
                     "NAVM",
                 }
             ),
@@ -7319,8 +7511,51 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         "runtime": runtime_transition_video,
     }
     _bind_cg01_transition_video(character_selection, prepared_transition_video)
+    cg01_transition = dict(character_selection["cg01Stage0Transition"])
+    post_stage5 = dict(cg01_transition["postStage5Transition"])
+    post_stage14 = dict(post_stage5["postStage14Transition"])
+    interaction = dict(post_stage14["stage20Interaction"])
+    timer = dict(interaction["timerTransition"])
+    dad_return = dict(timer["dadReturn"])
+    dad_lead = dict(dad_return["dadLead"])
+    completion = dict(dad_lead["completion"])
+    cg02 = dict(completion["cg02Stage0"])
+    cg02_commands = [dict(command) for command in cg02["stage5Commands"]]
+    cg02_movies = [command for command in cg02_commands if command["kind"] == "playBink"]
+    if len(cg02_movies) != 1:
+        raise ValueError("Fallout 3 CG02 stage 5 movie command is ambiguous")
+    cg02_movie = cg02_movies[0]
+    cg02_sources = [
+        row for row in videos[1:]
+        if str(row["file"]).casefold() == str(cg02_movie["logicalPath"]).casefold()
+    ]
+    if len(cg02_sources) != 1:
+        raise ValueError("Fallout 3 CG02 owned transition movie is ambiguous")
+    cg02_source = cg02_sources[0]
+    prepared_cg02_video = {
+        **cg02_source,
+        "runtime": _prepare_runtime_video(
+            Path(str(cg02_source["source"])),
+            profile_root,
+            configuration,
+            video_import_policy,
+        ),
+    }
+    cg02_movie["video"] = prepared_cg02_video
+    cg02["stage5Commands"] = cg02_commands
+    completion["cg02Stage0"] = cg02
+    dad_lead["completion"] = completion
+    dad_return["dadLead"] = dad_lead
+    timer["dadReturn"] = dad_return
+    interaction["timerTransition"] = timer
+    post_stage14["stage20Interaction"] = interaction
+    post_stage5["postStage14Transition"] = post_stage14
+    cg01_transition["postStage5Transition"] = post_stage5
+    character_selection["cg01Stage0Transition"] = cg01_transition
     transition_videos = [
-        prepared_transition_video if row is transition_source else row
+        prepared_transition_video if row is transition_source
+        else prepared_cg02_video if row is cg02_source
+        else row
         for row in videos[1:]
     ]
 

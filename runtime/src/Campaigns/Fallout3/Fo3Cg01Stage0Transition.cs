@@ -643,7 +643,7 @@ internal sealed record Fo3Cg01Stage0Transition(
         return sound;
     }
 
-    private static Fo3Cg01OwnedMovie LoadOwnedMovie(
+    internal static Fo3Cg01OwnedMovie LoadOwnedMovie(
         JsonElement source,
         string logicalPath,
         IReadOnlyList<int> arguments)

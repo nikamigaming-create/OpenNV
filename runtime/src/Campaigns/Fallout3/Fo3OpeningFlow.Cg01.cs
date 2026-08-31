@@ -229,6 +229,54 @@ internal partial class Fo3OpeningFlow
             $"nextApplied=0 blocker={state.NextBoundary.Blocker}");
     }
 
+    private void StartCg02TransitionMovie(Fo3Cg01OwnedMovie movie)
+    {
+        if (_video is not null || _ownedVideoMode != Fo3OwnedVideoMode.None)
+            throw new InvalidOperationException("Fallout 3 CG02 transition movie is already active.");
+        _ownedVideoMode = Fo3OwnedVideoMode.Cg02Transition;
+        _introLayer = new Control { Name = "Fallout3OwnedCg02Transition" };
+        _introLayer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_introLayer);
+        var black = new ColorRect { Color = Colors.Black };
+        black.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _introLayer.AddChild(black);
+        _video = new VideoStreamPlayer
+        {
+            Name = "Fallout3OwnedCg02TransitionVideo",
+            Stream = new VideoStreamTheora { File = movie.RuntimeOutput },
+            Expand = true,
+            Loop = false,
+            Visible = false,
+        };
+        _video.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _video.Finished += () => CompleteOwnedVideo(false);
+        _introLayer.AddChild(_video);
+        var skip = Button("SKIP  •  ESC");
+        skip.Name = "SkipFallout3OwnedCg02Transition";
+        skip.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+        skip.Position = new Vector2(
+            Fo3OpeningFlowNumericContracts.SkipButtonOffsetXPixels,
+            Fo3OpeningFlowNumericContracts.SkipButtonOffsetYPixels);
+        skip.Size = new Vector2(
+            Fo3OpeningFlowNumericContracts.SkipButtonWidthPixels,
+            Fo3OpeningFlowNumericContracts.ButtonMinimumHeightPixels);
+        skip.Pressed += () => CompleteOwnedVideo(true);
+        _introLayer.AddChild(skip);
+        BeginOwnedVideoSurfaceGate();
+        _video.Play();
+    }
+
+    private void CompleteCg02TransitionMovie(bool skipped)
+    {
+        if (_ownedVideoMode != Fo3OwnedVideoMode.Cg02Transition)
+            return;
+        ClearOwnedVideo();
+        GD.Print(
+            $"OPENNV_FO3_CG02_TRANSITION_MOVIE_COMPLETE " +
+            $"mode={(skipped ? "skipped" : "watched")} " +
+            $"blocker={_profile.Cg01PostStage14Transition.Stage20Interaction.TimerTransition.DadLead.Completion.Cg02Stage0.NextBoundaryBlocker}");
+    }
+
     private void BeginCg01DadDialogue(
         Fo3Cg01Stage0State stage5,
         Fo3Cg01RuntimeContext context,
@@ -1712,22 +1760,32 @@ internal partial class Fo3OpeningFlow
                         {
                             ActiveQuestFormId = completion.NextQuestFormId,
                             ActiveQuestEditorId = completion.NextQuestEditorId,
-                            ActiveStage = completion.NextQuestStage,
+                            ActiveStage = completion.Cg02Stage0.TargetStage,
                             TimerAdvancing = false,
                             ImageSpaceElapsedSeconds = Math.Min(
                                 completion.ImageSpaceModifier.DurationSeconds,
                                 _stage90ImageSpaceElapsedSeconds + delta),
                             Stage90SoundStarted = true,
                             AccountedCommandCount = current.AccountedCommandCount +
-                                completion.Stage100CommandCount,
+                                completion.Stage100CommandCount +
+                                completion.Cg02Stage0.Stage5CommandCount +
+                                completion.Cg02Stage0.Stage0CommandCount,
                             AppliedCommandCount = current.AppliedCommandCount +
-                                completion.Stage100CommandCount,
+                                completion.Stage100CommandCount +
+                                completion.Cg02Stage0.Stage5CommandCount +
+                                completion.Cg02Stage0.Stage0CommandCount,
                             NextBoundary = new Fo3Cg01Stage12Boundary(
                                 false, completion.NextBoundaryBlocker),
                         };
                         var world = _cg01ToddlerWorld ?? throw new InvalidOperationException(
                             "Fallout 3 CG01 completion player is absent.");
                         world.Player.ApplySourceScale(completion.PlayerScale);
+                        ApplyCg02Stage5State(world.Player, completion.Cg02Stage0);
+                        world.Player.StopAtAuthoredTrigger();
+                        world.Player.MoveToSourceTransform(
+                            completion.Cg02Stage0.PlayerMoveTransform,
+                            (_vaultBirthCoverage ?? throw new InvalidOperationException(
+                                "Fallout 3 CG02 player move scene is absent.")).Contract);
                         world.Player.SetMeta("opennv_player_toddler", completion.PlayerToddler);
                         world.Player.SetMeta("opennv_no_activation_sound", false);
                         var dad = _vaultBirthCoverage?.Cg01DadActor.Placement ??
@@ -1742,12 +1800,13 @@ internal partial class Fo3OpeningFlow
                         dad.ProcessMode = ProcessModeEnum.Disabled;
                         dad.SetMeta("opennv_enabled", 0);
                         Persist();
+                        StartCg02TransitionMovie(completion.Cg02Stage0.TransitionMovie);
                     };
                 });
         var restoredCompletion = interaction.TimerTransition.DadLead.Completion;
         if (current.ActiveQuestFormId.Equals(
                 restoredCompletion.NextQuestFormId, StringComparison.OrdinalIgnoreCase) &&
-            current.ActiveStage == restoredCompletion.NextQuestStage)
+            current.ActiveStage == restoredCompletion.Cg02Stage0.TargetStage)
         {
             (_cg01ToddlerWorld ?? throw new InvalidOperationException(
                 "Fallout 3 CG01 restored completion player is absent."))
@@ -1758,6 +1817,12 @@ internal partial class Fo3OpeningFlow
             restoredPlayer.SetMeta("opennv_objectives_completed", true);
             restoredPlayer.SetMeta("opennv_auto_display_objectives", false);
             restoredPlayer.SetMeta("opennv_quest_updates_enabled", false);
+            ApplyCg02Stage5State(restoredPlayer, restoredCompletion.Cg02Stage0);
+            restoredPlayer.StopAtAuthoredTrigger();
+            restoredPlayer.MoveToSourceTransform(
+                restoredCompletion.Cg02Stage0.PlayerMoveTransform,
+                (_vaultBirthCoverage ?? throw new InvalidOperationException(
+                    "Fallout 3 restored CG02 player move scene is absent.")).Contract);
             if (current.ImageSpaceElapsedSeconds <
                 restoredCompletion.ImageSpaceModifier.DurationSeconds)
             {
@@ -1775,6 +1840,25 @@ internal partial class Fo3OpeningFlow
             Book();
         else if (current.TimerAdvancing)
             StartStage50Timer();
+    }
+
+    private static void ApplyCg02Stage5State(
+        Fo3Cg01ToddlerPlayer player,
+        Fo3Cg02Stage0Transition transition)
+    {
+        player.SetMeta("opennv_cg02_stage", transition.TargetStage);
+        player.SetMeta("opennv_cg02_player_marker", transition.PlayerMoveReferenceFormId);
+        player.SetMeta("opennv_cg02_game_time", JsonSerializer.Serialize(transition.GameTime));
+        player.SetMeta("opennv_cg02_player_young", transition.PlayerYoung);
+        player.SetMeta("opennv_cg02_age_race_years", transition.AgeRaceYears);
+        player.SetMeta("opennv_cg02_inventory", JsonSerializer.Serialize(transition.Inventory));
+        player.SetMeta("opennv_cg02_actor_state", JsonSerializer.Serialize(transition.Actors));
+        player.SetMeta("opennv_cg02_timer", transition.TimerInitialSeconds);
+        player.SetMeta("opennv_cg02_run_timer", transition.RunTimerValue);
+        player.SetMeta("opennv_cg02_intro", transition.IntroValue);
+        player.SetMeta(
+            "opennv_cg02_disabled_controls",
+            JsonSerializer.Serialize(transition.DisabledPlayerControls));
     }
 
     private Node3D Cg01WorldReference(string formId) =>
