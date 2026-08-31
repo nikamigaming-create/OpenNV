@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from fo1_profile import Fo1ProfileError, sha256_path
+from classic_ssl_effects import decode_flare_effects
 
 
 SCHEMA = "opennv-fo1-destination-flare-use/v1"
@@ -46,13 +47,7 @@ def build(interaction_path: Path, item_header: Path, scripts_header: Path,
     require_define(item_header.read_text(encoding="cp1252"), "PID_FLARE", int(flare["pid"], 16))
     require_define(scripts_header.read_text(encoding="cp1252"), "SCRIPT_FLARE", 223)
     script = flare_script.read_text(encoding="cp1252")
-    local_time = re.search(
-        r"set_local_var\s*\(\s*(\d+)\s*,\s*game_time\s*\)", script, re.IGNORECASE)
-    if not re.search(r"script_action\s*==\s*use_proc", script, re.IGNORECASE) or \
-            not re.search(r"lit\s*:=\s*1", script, re.IGNORECASE) or local_time is None:
-        raise Fo1ProfileError("SCRIPT_FLARE use_proc does not provide the bounded lit-state behavior")
-    if not re.search(r"game_time\s*-\s*local_var\s*\(\s*0\s*\)", script, re.IGNORECASE):
-        raise Fo1ProfileError("SCRIPT_FLARE does not retain an explicit game-time expiry guard")
+    effect_program, expiry = decode_flare_effects(script)
     document = {
         "schema": SCHEMA,
         "status": "compiled-owned-scripted-flare-use",
@@ -63,19 +58,8 @@ def build(interaction_path: Path, item_header: Path, scripts_header: Path,
         "inputs": {"itemPidHeader": {"path": str(item_header.resolve()), "sha256": sha256_path(item_header)},
                    "scriptsHeader": {"path": str(scripts_header.resolve()), "sha256": sha256_path(scripts_header)}},
         "semantics": {"action": "use_proc", "result": "lit-state", "storesGameTime": True,
-                      "expiry": "unimplemented-fail-closed", "activeHand": "not-proven-by-script", "renderedLight": False},
-        "effectProgram": {
-            "schema": "opennv-classic-script-effects/v1",
-            "events": {
-                "use_proc": [{
-                    "all": [{"operation": "source-is-player"}],
-                    "then": [
-                        {"operation": "set-local", "index": int(local_time.group(1)), "valueFrom": "game-time"},
-                        {"operation": "set-flag", "flag": "lit"},
-                    ],
-                }],
-            },
-        },
+                      "expiry": expiry, "activeHand": "not-proven-by-script", "renderedLight": False},
+        "effectProgram": effect_program,
         "rendered": False, "interactive": False, "retailOrDerivedAssetsPackaged": False,
     }
     encoded = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8")

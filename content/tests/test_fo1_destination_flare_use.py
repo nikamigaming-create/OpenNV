@@ -12,14 +12,16 @@ FO1 = ROOT / "runtime" / "src" / "Campaigns" / "Fallout1"
 class Fo1DestinationFlareUseTest(unittest.TestCase):
     def test_compiler_requires_source_item_script_and_expiry_evidence(self) -> None:
         tool = (ROOT / "content" / "tools" / "prepare_fo1_destination_flare_use.py").read_text(encoding="utf-8")
+        parser = (ROOT / "content" / "tools" / "classic_ssl_effects.py").read_text(encoding="utf-8")
         self.assertIn("PID_FLARE", tool)
         self.assertIn("SCRIPT_FLARE", tool)
-        self.assertIn("use_proc", tool)
-        self.assertIn("set_local_var", tool)
-        self.assertIn("game_time", tool)
-        self.assertIn("opennv-classic-script-effects/v1", tool)
-        self.assertIn('"valueFrom": "game-time"', tool)
-        self.assertIn("unimplemented-fail-closed", tool)
+        self.assertIn("decode_flare_effects", tool)
+        self.assertIn("use_proc", parser)
+        self.assertIn("set_local_var", parser)
+        self.assertIn("game_time", parser)
+        self.assertIn("opennv-classic-script-effects/v1", parser)
+        self.assertIn('"valueFrom": "game-time"', parser)
+        self.assertIn("unimplemented-fail-closed", parser)
         self.assertIn("refusing to overwrite flare use descriptor", tool)
 
     def test_runtime_keeps_flare_out_of_weapon_attachment_and_persists_only_bound_state(self) -> None:

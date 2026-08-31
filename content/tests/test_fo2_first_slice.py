@@ -120,6 +120,58 @@ def synthetic_weapon_pro() -> bytes:
     return bytes(result)
 
 
+def synthetic_acklint_int() -> bytes:
+    push = lambda value: struct.pack(">Hi", 0xC001, value)
+    opcode = lambda value: struct.pack(">H", value)
+    epilogue = b"".join([
+        push(0), opcode(0x800D), opcode(0x8019), opcode(0x802A),
+        opcode(0x8029), opcode(0x800C), opcode(0x801C), opcode(0x802A),
+        opcode(0x8029), opcode(0x801C),
+    ])
+    names = ["main", "critter_p_proc", "pickup_p_proc"]
+    identifiers = bytearray()
+    name_offsets = []
+    for name in names:
+        name_offsets.append(4 + len(identifiers))
+        identifiers.extend(name.encode("ascii") + b"\0")
+    body_start = 42 + 4 + len(names) * 24 + 4 + len(identifiers)
+    main = opcode(0x8000)
+    critter_start = body_start + len(main)
+    critter_prefix_length = 2 + 6 + 6 + 2 + 6 + 2 + 2 + 2 + 2 + 2 + 2
+    critter_effect_length = 6 + 6 + 2 + 2 + 7 * 6 + 2
+    critter_epilogue = critter_start + critter_prefix_length + critter_effect_length
+    critter = b"".join([
+        opcode(0x802B), push(critter_epilogue), push(5), opcode(0x80C1),
+        push(2), opcode(0x8033), opcode(0x80BC), opcode(0x80BF),
+        opcode(0x80DC), opcode(0x803E), opcode(0x802F), push(5), push(1),
+        opcode(0x80C2), opcode(0x80BF),
+        *(push(value) for value in [0, 1, 0, 0, 30000, 0, 0]),
+        opcode(0x80D0), epilogue,
+    ])
+    pickup_start = critter_start + len(critter)
+    pickup_epilogue = pickup_start + 2 + 6 + 2 + 2 + 2 + 2 + 6 + 6 + 2
+    pickup = b"".join([
+        opcode(0x802B), push(pickup_epilogue), opcode(0x80BD), opcode(0x80BF),
+        opcode(0x8033), opcode(0x802F), push(5), push(2), opcode(0x80C2),
+        epilogue,
+    ])
+    bodies = [body_start, critter_start, pickup_start]
+    table = b"".join(
+        struct.pack(">6I", name_offsets[index], 0, 0, 0, bodies[index], 0)
+        for index in range(len(names))
+    )
+    return (
+        bytes(42)
+        + struct.pack(">I", len(names))
+        + table
+        + struct.pack(">I", len(identifiers))
+        + identifiers
+        + main
+        + critter
+        + pickup
+    )
+
+
 def synthetic_confrontation_map() -> bytes:
     data = synthetic_map()
     header_and_tiles_and_scripts = data[: 0xEC + 10000 * 4 + 20]
@@ -198,7 +250,7 @@ class Fo2FirstSliceTest(unittest.TestCase):
             item_list = b"unused.pro\r\n" * 6 + b"00000013.pro\r\n"
             critter_art_list = b"unused.frm\r\n" * 64 + b"nmwarr,11,1\r\n"
             item_art_list = b"unused.frm\r\n" * 42 + b"spear.frm\r\n"
-            guardian_script = b"synthetic hash-bound ACKlint INT bytecode"
+            guardian_script = synthetic_acklint_int()
             guardian_messages = b"".join(
                 f"{{{message_id}}}{{}}{{guardian {message_id}}}\r\n".encode("ascii")
                 for message_id in range(103, 121)
@@ -369,20 +421,6 @@ class Fo2FirstSliceTest(unittest.TestCase):
                                         ],
                                     },
                                 ],
-                                "hostilityTrigger": {
-                                    "pickupProcedure": {
-                                        "requiresSourcePlayer": True,
-                                        "localVariable": 5,
-                                        "setValue": 2,
-                                    },
-                                    "critterProcedure": {
-                                        "localVariable": 5,
-                                        "requiredValue": 2,
-                                        "requiresCanSeePlayer": True,
-                                        "setValueBeforeAttack": 1,
-                                        "attackPlayer": True,
-                                    },
-                                },
                             },
                         },
                         "declaredRole": "synthetic Temple source slice",

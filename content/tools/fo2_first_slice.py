@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from classic_int_effects import decode_acklint_effects
 from corpus_io import atomic_json
 from fo1_frm import decode_frm
 from fo1_map_objects import (
@@ -255,24 +256,10 @@ def _compile_guardian_script(
     if referenced_messages != set(range(103, 121)):
         raise Fo1ProfileError("Fallout 2 guardian dialogue message coverage drifted")
 
-    hostility = dict(configured["hostilityTrigger"])
-    pickup = dict(hostility["pickupProcedure"])
-    critter = dict(hostility["critterProcedure"])
-    if (
-        pickup != {"requiresSourcePlayer": True, "localVariable": 5, "setValue": 2}
-        or critter
-        != {
-            "localVariable": 5,
-            "requiredValue": 2,
-            "requiresCanSeePlayer": True,
-            "setValueBeforeAttack": 1,
-            "attackPlayer": True,
-        }
-    ):
-        raise Fo1ProfileError("Fallout 2 guardian hostility trigger drifted")
+    effect_program = decode_acklint_effects(program.data)
     result = {
         "schema": "opennv-fo2-acklint-guardian-script/v1",
-        "authority": "hash-bound owned ACKlint.int control-flow audit plus owned ACKlint.msg rows",
+        "authority": "decoded hash-bound owned ACKlint.int procedures plus owned ACKlint.msg rows",
         "program": {
             "scriptsListIndex": program_index,
             "scriptsListLogicalPath": scripts_list.logical_path,
@@ -293,38 +280,7 @@ def _compile_guardian_script(
         "initialNode": "Node001",
         "terminalNode": terminal,
         "nodes": emitted_nodes,
-        "hostilityTrigger": hostility,
-        "effectProgram": {
-            "schema": "opennv-classic-script-effects/v1",
-            "events": {
-                "pickup_proc": [{
-                    "all": [{"operation": "source-is-player"}],
-                    "then": [{
-                        "operation": "set-local",
-                        "index": int(pickup["localVariable"]),
-                        "value": int(pickup["setValue"]),
-                    }],
-                }],
-                "critter_proc": [{
-                    "all": [
-                        {
-                            "operation": "local-equals",
-                            "index": int(critter["localVariable"]),
-                            "value": int(critter["requiredValue"]),
-                        },
-                        {"operation": "can-see-player"},
-                    ],
-                    "then": [
-                        {
-                            "operation": "set-local",
-                            "index": int(critter["localVariable"]),
-                            "value": int(critter["setValueBeforeAttack"]),
-                        },
-                        {"operation": "set-flag", "flag": "attack-player-requested"},
-                    ],
-                }],
-            },
-        },
+        "effectProgram": effect_program,
         "implementedBoundary": {
             "dialogueNodes": True,
             "pickupToAttackTransition": True,

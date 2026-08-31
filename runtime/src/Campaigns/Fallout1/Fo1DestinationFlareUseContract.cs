@@ -10,7 +10,8 @@ namespace OpenNV.Runtime.Campaigns.Fallout1;
 /// <summary>One explicit source-script use contract for the VAULT13 MAP flare stack.</summary>
 internal sealed record Fo1DestinationFlareUseContract(
     string Path, string Sha256, int HostSerial, string Symbol, string Pid,
-    string PrototypeSha256, string ScriptSha256, ClassicScriptProgram Program)
+    string PrototypeSha256, string ScriptSha256, ClassicScriptProgram Program,
+    int ExpiryLocalIndex, int ExpiryDurationGameTicks)
 {
     private const string Schema = "opennv-fo1-destination-flare-use/v1";
 
@@ -39,10 +40,15 @@ internal sealed record Fo1DestinationFlareUseContract(
             Required(item.GetProperty("profile"), "subtypeName") != "weapon")
             throw new InvalidOperationException("Fallout flare use descriptor item is not the admitted MAP stack.");
         var semantics = root.GetProperty("semantics");
+        var expiry = semantics.GetProperty("expiry");
         if (Required(semantics, "action") != "use_proc" ||
             Required(semantics, "result") != "lit-state" ||
             !semantics.GetProperty("storesGameTime").GetBoolean() ||
-            Required(semantics, "expiry") != "unimplemented-fail-closed")
+            Required(expiry, "operation") != "elapsed-game-time-greater-than" ||
+            Required(expiry, "result") != "destroy-self" ||
+            Required(expiry, "runtime") != "unimplemented-fail-closed" ||
+            expiry.GetProperty("localIndex").GetInt32() < 0 ||
+            expiry.GetProperty("durationGameTicks").GetInt32() <= 0)
             throw new InvalidOperationException("Fallout flare use descriptor semantics are not bounded.");
         var scriptSha256 = Required(root.GetProperty("script"), "sha256");
         if (!Hash(scriptSha256))
@@ -50,7 +56,9 @@ internal sealed record Fo1DestinationFlareUseContract(
         var program = ClassicScriptProgram.Parse(root.GetProperty("effectProgram"));
         return new Fo1DestinationFlareUseContract(
             resolved, sha256, hostSerial, symbol, pid, prototypeSha256, scriptSha256,
-            program);
+            program,
+            expiry.GetProperty("localIndex").GetInt32(),
+            expiry.GetProperty("durationGameTicks").GetInt32());
     }
 
     internal object Report() => new
@@ -63,7 +71,14 @@ internal sealed record Fo1DestinationFlareUseContract(
         Pid,
         PrototypeSha256,
         ScriptSha256,
-        semantics = new { action = "use_proc", result = "lit-state", expiry = "unimplemented-fail-closed" },
+        semantics = new
+        {
+            action = "use_proc",
+            result = "lit-state",
+            expiryLocalIndex = ExpiryLocalIndex,
+            expiryDurationGameTicks = ExpiryDurationGameTicks,
+            expiry = "unimplemented-fail-closed",
+        },
     };
 
     private static string Required(JsonElement source, string name) =>

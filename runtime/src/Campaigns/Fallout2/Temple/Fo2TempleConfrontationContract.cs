@@ -47,15 +47,6 @@ internal sealed record Fo2TempleGuardianDialogueNode(
     IReadOnlyList<Fo2TempleGuardianDialogueSegment> Reply,
     IReadOnlyList<Fo2TempleGuardianDialogueOption> Options);
 
-internal sealed record Fo2TempleGuardianHostilityTrigger(
-    int LocalVariable,
-    int PickupSetValue,
-    int CritterRequiredValue,
-    int CritterSetValueBeforeAttack,
-    bool PickupRequiresSourcePlayer,
-    bool CritterRequiresCanSeePlayer,
-    bool CritterAttacksPlayer);
-
 internal sealed record Fo2TempleGuardianScript(
     string Schema,
     string Authority,
@@ -71,7 +62,6 @@ internal sealed record Fo2TempleGuardianScript(
     string InitialNode,
     string TerminalNode,
     IReadOnlyDictionary<string, Fo2TempleGuardianDialogueNode> Nodes,
-    Fo2TempleGuardianHostilityTrigger Hostility,
     ClassicScriptProgram EffectProgram,
     string ContractSha256);
 
@@ -252,9 +242,6 @@ internal sealed record Fo2TempleConfrontationContract(
         var nodes = source.GetProperty("nodes").EnumerateArray()
             .Select(ReadGuardianNode)
             .ToDictionary(row => row.Id, StringComparer.Ordinal);
-        var hostility = source.GetProperty("hostilityTrigger");
-        var pickup = hostility.GetProperty("pickupProcedure");
-        var critter = hostility.GetProperty("critterProcedure");
         var result = new Fo2TempleGuardianScript(
             Fo2TemplePresentationCatalog.RequiredString(source, "schema"),
             Fo2TemplePresentationCatalog.RequiredString(source, "authority"),
@@ -272,14 +259,6 @@ internal sealed record Fo2TempleConfrontationContract(
             Fo2TemplePresentationCatalog.RequiredString(source, "initialNode"),
             Fo2TemplePresentationCatalog.RequiredString(source, "terminalNode"),
             nodes,
-            new Fo2TempleGuardianHostilityTrigger(
-                pickup.GetProperty("localVariable").GetInt32(),
-                pickup.GetProperty("setValue").GetInt32(),
-                critter.GetProperty("requiredValue").GetInt32(),
-                critter.GetProperty("setValueBeforeAttack").GetInt32(),
-                pickup.GetProperty("requiresSourcePlayer").GetBoolean(),
-                critter.GetProperty("requiresCanSeePlayer").GetBoolean(),
-                critter.GetProperty("attackPlayer").GetBoolean()),
             ClassicScriptProgram.Parse(source.GetProperty("effectProgram")),
             Fo2TemplePresentationCatalog.RequiredHash(source, "contractSha256"));
         if (result.Schema != "opennv-fo2-acklint-guardian-script/v1" ||
@@ -295,7 +274,6 @@ internal sealed record Fo2TempleConfrontationContract(
             result.TerminalNode != "Node999" || result.Nodes.Count != 5 ||
             !result.Nodes.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
                 new[] { "Node001", "Node002", "Node003", "Node004", "Node005" }) ||
-            result.Hostility != new Fo2TempleGuardianHostilityTrigger(5, 2, 2, 1, true, true, true) ||
             !boundary.GetProperty("dialogueNodes").GetBoolean() ||
             !boundary.GetProperty("pickupToAttackTransition").GetBoolean() ||
             boundary.GetProperty("generalIntExecution").GetBoolean())

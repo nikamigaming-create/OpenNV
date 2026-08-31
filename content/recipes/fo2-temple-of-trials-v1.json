@@ -119,21 +119,7 @@
             { "messageId": 120, "target": "Node999", "minimumIntelligence": 4, "reaction": 50 }
           ]
         }
-      ],
-      "hostilityTrigger": {
-        "pickupProcedure": {
-          "requiresSourcePlayer": true,
-          "localVariable": 5,
-          "setValue": 2
-        },
-        "critterProcedure": {
-          "localVariable": 5,
-          "requiredValue": 2,
-          "requiresCanSeePlayer": true,
-          "setValueBeforeAttack": 1,
-          "attackPlayer": true
-        }
-      }
+      ]
     }
   },
   "declaredRole": "new-game Temple of Trials source slice",

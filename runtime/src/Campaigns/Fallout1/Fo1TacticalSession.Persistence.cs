@@ -46,6 +46,8 @@ internal partial class Fo1TacticalSession
                 descriptorSha256 = _destinationFlareUse.Sha256,
                 scriptState = _destinationFlareScriptState.Save(),
                 gameTime = _classicScriptGameTime,
+                expiryLocalIndex = _destinationFlareUse.ExpiryLocalIndex,
+                expiryDurationGameTicks = _destinationFlareUse.ExpiryDurationGameTicks,
                 expiry = "unimplemented-fail-closed",
             },
             destinationGenericDoor = _destinationGenericDoor is null ? null : new
@@ -242,6 +244,10 @@ internal partial class Fo1TacticalSession
                 destinationFlare.GetProperty("scriptState"));
             _classicScriptGameTime = destinationFlare.GetProperty("gameTime").GetInt32();
             if (!_destinationFlareScriptState.Flag("lit") ||
+                destinationFlare.GetProperty("expiryLocalIndex").GetInt32() !=
+                    _destinationFlareUse.ExpiryLocalIndex ||
+                destinationFlare.GetProperty("expiryDurationGameTicks").GetInt32() !=
+                    _destinationFlareUse.ExpiryDurationGameTicks ||
                 destinationFlare.GetProperty("expiry").GetString() !=
                     "unimplemented-fail-closed")
                 throw new InvalidOperationException(
