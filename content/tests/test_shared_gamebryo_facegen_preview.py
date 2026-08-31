@@ -13,6 +13,14 @@ HOST = (
     / "CharacterCreation"
     / "OwnedGamebryoFaceGenPreviewHost.cs"
 )
+CONTRACTS = (
+    ROOT
+    / "runtime"
+    / "src"
+    / "Presentation"
+    / "CharacterCreation"
+    / "OwnedGamebryoFaceGenPreviewContracts.cs"
+)
 ACTOR_LOADER = (
     ROOT / "runtime" / "src" / "World" / "Actors" / "ActorModelSlice.cs"
 )
@@ -36,6 +44,19 @@ class SharedGamebryoFaceGenPreviewTest(unittest.TestCase):
         self.assertIn("ActorComplexionJoin.Apply(scene, surfaces)", actor_loader)
         self.assertIn("OwnedGamebryoFaceGenPreviewHost.Load(", fnv)
         self.assertIn("OwnedGamebryoFaceGenPreviewHost.Load(", fo3)
+
+    def test_both_gamebryo_creators_use_shared_exact_selection_inventory(self) -> None:
+        contracts = CONTRACTS.read_text(encoding="utf-8")
+        fnv = (FNV / "OpeningQuestRuntime.CharacterCreation.cs").read_text(
+            encoding="utf-8"
+        )
+        fo3 = (FO3 / "Fo3OpeningContracts.cs").read_text(encoding="utf-8")
+
+        self.assertIn("class OwnedGamebryoFaceGenSelectionInventory", contracts)
+        self.assertIn("internal static bool IsComplete(", contracts)
+        self.assertIn("internal static OpeningPlayerFaceGenPreview Require(", contracts)
+        self.assertIn("OwnedGamebryoFaceGenSelectionInventory.Require(", fnv)
+        self.assertIn("OwnedGamebryoFaceGenSelectionInventory.Require(", fo3)
 
     def test_fo3_has_no_texture_tile_facegen_fallback(self) -> None:
         ui = (FO3 / "Fo3OpeningFlow.Ui.cs").read_text(encoding="utf-8")

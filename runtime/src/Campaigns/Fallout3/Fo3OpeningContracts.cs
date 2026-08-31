@@ -439,27 +439,13 @@ internal sealed record Fo3AppearanceContract(
 
     internal OpeningPlayerFaceGenPreview PreviewFor(
         Fo3AppearanceSelection selection,
-        string engineSex)
-    {
-        var matches = PreviewSet.Previews.Where(preview =>
-                preview.Sex == engineSex &&
-                preview.RaceFormId.Equals(
-                    selection.Race.FormId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                preview.HairFormId.Equals(
-                    selection.Hair.FormId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                preview.EyesFormId.Equals(
-                    selection.Eyes.FormId,
-                    StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (matches.Length != 1)
-            throw new InvalidOperationException(
-                "Fallout 3 owned FaceGen preview cache identity is unavailable: " +
-                $"sex={engineSex} race={selection.Race.FormId} " +
-                $"hair={selection.Hair.FormId} eyes={selection.Eyes.FormId}.");
-        return matches[0];
-    }
+        string engineSex) =>
+        OwnedGamebryoFaceGenSelectionInventory.Require(
+            PreviewSet,
+            engineSex,
+            selection.Race.FormId,
+            selection.Hair.FormId,
+            selection.Eyes.FormId);
 
     private static OpeningPlayerFaceGenPreviewSet LoadPreviewSet(
         JsonElement source,
@@ -522,12 +508,12 @@ internal sealed record Fo3AppearanceContract(
             geometryControlNames,
             geometryControlCount,
             runtimeDisposition,
+            selectionScope,
+            unsupportedSelectionScope,
             fullBody,
             bodyRoles,
             bodySources,
             previews);
-        var previewIdentities = previews.Select(preview =>
-            (preview.Sex, preview.RaceFormId, preview.HairFormId, preview.EyesFormId)).ToArray();
         if (schema != ExpectedPreviewSchema ||
             status != ExpectedPreviewStatus ||
             runtimeDisposition != ExpectedPreviewRuntimeDisposition ||
@@ -542,9 +528,14 @@ internal sealed record Fo3AppearanceContract(
             !fullBody ||
             !bodyRoles.SequenceEqual(ExpectedBodyRoles, StringComparer.Ordinal) ||
             !bodySources.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedPreviewSexes) ||
-            previews.Length != races.Sum(race => race.Sex.Values.Sum(sex =>
-                sex.HairOptions.Count * sex.EyeOptions.Count)) ||
-            previewIdentities.Distinct().Count() != previewIdentities.Length ||
+            !OwnedGamebryoFaceGenSelectionInventory.IsComplete(
+                previewSet,
+                races.SelectMany(race => race.Sex.Select(pair =>
+                    new OwnedGamebryoFaceGenSelectionDomain(
+                        pair.Key,
+                        race.FormId,
+                        pair.Value.HairOptions.Select(value => value.FormId).ToArray(),
+                        pair.Value.EyeOptions.Select(value => value.FormId).ToArray())))) ||
             previews.Any(preview =>
             {
                 var race = races.SingleOrDefault(value => value.FormId == preview.RaceFormId);
@@ -563,13 +554,6 @@ internal sealed record Fo3AppearanceContract(
                     StringComparer.Ordinal) ||
                 !ReferenceEquals(preview.BodyComponentSourcesBySex, bodySources);
             }) ||
-            races.Any(race => race.Sex.Any(pair =>
-            {
-                var expected = pair.Value.HairOptions.SelectMany(hair =>
-                    pair.Value.EyeOptions.Select(eyes =>
-                        (pair.Key, race.FormId, hair.FormId, eyes.FormId)));
-                return expected.Any(identity => !previewIdentities.Contains(identity));
-            })) ||
             bodySources.Values.Any(rows =>
                 !rows.Select(value => value.Role).SequenceEqual(
                     ExpectedBodyRoles,

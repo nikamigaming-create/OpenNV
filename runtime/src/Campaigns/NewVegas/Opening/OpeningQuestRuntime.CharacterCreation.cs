@@ -165,16 +165,12 @@ internal partial class OpeningQuestRuntime
             previewHost = null;
             _appearancePreviewHost = null;
             var engineSex = appearance.SexEngineValues[_sexIndex];
-            var selectedPreview = faceGen.PreviewHead.Previews.SingleOrDefault(value =>
-                engineSex == value.Sex &&
-                _raceFormId.Equals(value.RaceFormId, StringComparison.OrdinalIgnoreCase) &&
-                _hairFormId.Equals(value.HairFormId, StringComparison.OrdinalIgnoreCase) &&
-                _eyesFormId.Equals(value.EyesFormId, StringComparison.OrdinalIgnoreCase));
-            if (selectedPreview is null)
-                throw new InvalidOperationException(
-                    "Owned RaceSexMenu has no exact full-body preview artifact for " +
-                    $"sex={engineSex} race={_raceFormId} hair={_hairFormId} " +
-                    $"eyes={_eyesFormId}.");
+            var selectedPreview = OwnedGamebryoFaceGenSelectionInventory.Require(
+                faceGen.PreviewHead,
+                engineSex,
+                _raceFormId,
+                _hairFormId,
+                _eyesFormId);
             selectedPreviewState = selectedPreview;
             previewHost = OwnedGamebryoFaceGenPreviewHost.Load(
                 selectedPreview,

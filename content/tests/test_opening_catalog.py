@@ -37,8 +37,8 @@ from opening_catalog import (  # noqa: E402
 )
 from bsa_archive import ExtractedMember  # noqa: E402
 from player_facegen_preview import (  # noqa: E402
-    PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
-    PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+    PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
+    PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
 )
 from plugin_records import Record  # noqa: E402
 
@@ -124,8 +124,8 @@ class OpeningCatalogTest(unittest.TestCase):
 
     def test_full_body_preview_set_is_emitted_verbatim_with_hash_bound_path(self):
         preview_set = {
-            "schema": PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
-            "status": PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+            "schema": PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
+            "status": PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
             "fullBody": True,
             "bodyComponentRoles": ["body", "left-hand", "right-hand"],
             "previews": [{"sex": "male", "outputs": {"gltf": "owned"}}],
@@ -154,7 +154,7 @@ class OpeningCatalogTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "preview-set contract"):
             emit_player_facegen_preview_set(
                 Path(temporary),
-                {"schema": PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA},
+                {"schema": PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA},
             )
 
     def test_texture_atlas_entry_resolves_exact_owned_sprite_region(self):

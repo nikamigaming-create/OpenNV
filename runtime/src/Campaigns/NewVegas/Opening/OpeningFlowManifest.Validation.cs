@@ -364,6 +364,9 @@ internal sealed partial record OpeningNewGameFlow
             previewSet.Status != ExpectedPlayerFaceGenPreviewStatus ||
             previewSet.RuntimeDisposition !=
                 ExpectedPlayerFaceGenPreviewRuntimeDisposition ||
+            previewSet.SelectionScope != ExpectedPlayerFaceGenPreviewSelectionScope ||
+            previewSet.UnsupportedSelectionScope !=
+                ExpectedPlayerFaceGenUnsupportedSelectionScope ||
             !previewSet.PlayerFormId.Equals(
                 appearance.PlayerFormId,
                 StringComparison.OrdinalIgnoreCase) ||
@@ -377,31 +380,33 @@ internal sealed partial record OpeningNewGameFlow
                 ExpectedPlayerFaceGenBodyComponentRoles,
                 StringComparer.Ordinal) ||
             !ValidPlayerBodySourcesBySex(previewSet.BodyComponentSourcesBySex) ||
-            previewSet.Previews.Count != 2 ||
-            !previewSet.Previews.Select(value => value.Sex)
-                .ToHashSet(StringComparer.Ordinal).SetEquals(["male", "female"]) ||
-            previewSet.Previews.Select(value =>
-                    $"{value.Sex}:{value.RaceFormId}:{value.HairFormId}:{value.EyesFormId}")
-                .Distinct(StringComparer.OrdinalIgnoreCase).Count() != 2)
+            !OwnedGamebryoFaceGenSelectionInventory.IsComplete(
+                previewSet,
+                appearance.Races.SelectMany(value => value.Sex.Select(pair =>
+                    new OwnedGamebryoFaceGenSelectionDomain(
+                        pair.Key,
+                        value.FormId,
+                        pair.Value.HairOptions.Select(option => option.FormId).ToArray(),
+                        pair.Value.EyeOptions.Select(option => option.FormId).ToArray())))))
             return false;
 
         return previewSet.Previews.All(preview =>
-            race.Sex.TryGetValue(preview.Sex, out var sex) &&
+            appearance.Races.SingleOrDefault(value => value.FormId.Equals(
+                preview.RaceFormId,
+                StringComparison.OrdinalIgnoreCase)) is { } previewRace &&
+            previewRace.Sex.TryGetValue(preview.Sex, out var sex) &&
             preview.Schema == previewSet.Schema &&
             preview.Status == previewSet.Status &&
             preview.RuntimeDisposition == previewSet.RuntimeDisposition &&
             preview.PlayerFormId.Equals(
                 previewSet.PlayerFormId,
                 StringComparison.OrdinalIgnoreCase) &&
-            preview.RaceFormId.Equals(
-                race.FormId,
-                StringComparison.OrdinalIgnoreCase) &&
-            preview.HairFormId.Equals(
-                sex.DefaultHairFormId,
-                StringComparison.OrdinalIgnoreCase) &&
-            preview.EyesFormId.Equals(
-                sex.DefaultEyesFormId,
-                StringComparison.OrdinalIgnoreCase) &&
+            sex.HairOptions.Any(value => value.FormId.Equals(
+                preview.HairFormId,
+                StringComparison.OrdinalIgnoreCase)) &&
+            sex.EyeOptions.Any(value => value.FormId.Equals(
+                preview.EyesFormId,
+                StringComparison.OrdinalIgnoreCase)) &&
             preview.GeometryControlCount == previewSet.GeometryControlCount &&
             preview.GeometryControlNames.SequenceEqual(
                 previewSet.GeometryControlNames,

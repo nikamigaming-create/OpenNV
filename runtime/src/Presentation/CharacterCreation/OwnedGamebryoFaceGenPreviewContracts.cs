@@ -71,6 +71,8 @@ internal sealed record OpeningPlayerFaceGenPreviewSet(
     IReadOnlyList<string> GeometryControlNames,
     int GeometryControlCount,
     string RuntimeDisposition,
+    string SelectionScope,
+    string UnsupportedSelectionScope,
     bool FullBody,
     IReadOnlyList<string>? BodyComponentRoles,
     IReadOnlyDictionary<string, IReadOnlyList<OpeningPlayerBodyComponentSource>>?
@@ -98,6 +100,67 @@ internal sealed record OpeningPlayerFaceGenPreview(
     IReadOnlyList<string>? BodyComponentRoles = null,
     IReadOnlyDictionary<string, IReadOnlyList<OpeningPlayerBodyComponentSource>>?
         BodyComponentSourcesBySex = null);
+
+internal sealed record OwnedGamebryoFaceGenSelectionDomain(
+    string Sex,
+    string RaceFormId,
+    IReadOnlyList<string> HairFormIds,
+    IReadOnlyList<string> EyesFormIds);
+
+internal static class OwnedGamebryoFaceGenSelectionInventory
+{
+    internal static bool IsComplete(
+        OpeningPlayerFaceGenPreviewSet previewSet,
+        IEnumerable<OwnedGamebryoFaceGenSelectionDomain> domains)
+    {
+        var expected = domains.SelectMany(domain =>
+                domain.HairFormIds.SelectMany(hairFormId =>
+                    domain.EyesFormIds.Select(eyesFormId => Identity(
+                        domain.Sex,
+                        domain.RaceFormId,
+                        hairFormId,
+                        eyesFormId))))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var actual = previewSet.Previews.Select(preview => Identity(
+                preview.Sex,
+                preview.RaceFormId,
+                preview.HairFormId,
+                preview.EyesFormId))
+            .ToArray();
+        return expected.Count > 0 &&
+            actual.Length == expected.Count &&
+            actual.Distinct(StringComparer.OrdinalIgnoreCase).Count() == actual.Length &&
+            actual.All(expected.Contains);
+    }
+
+    internal static OpeningPlayerFaceGenPreview Require(
+        OpeningPlayerFaceGenPreviewSet previewSet,
+        string sex,
+        string raceFormId,
+        string hairFormId,
+        string eyesFormId)
+    {
+        var identity = Identity(sex, raceFormId, hairFormId, eyesFormId);
+        var matches = previewSet.Previews.Where(preview => Identity(
+                preview.Sex,
+                preview.RaceFormId,
+                preview.HairFormId,
+                preview.EyesFormId).Equals(identity, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (matches.Length != 1)
+            throw new InvalidOperationException(
+                "Owned Gamebryo FaceGen preview identity is unavailable: " +
+                $"sex={sex} race={raceFormId} hair={hairFormId} eyes={eyesFormId}.");
+        return matches[0];
+    }
+
+    private static string Identity(
+        string sex,
+        string raceFormId,
+        string hairFormId,
+        string eyesFormId) =>
+        $"{sex}:{raceFormId}:{hairFormId}:{eyesFormId}";
+}
 
 internal sealed record OpeningPlayerBodyComponentSource(
     string Role,

@@ -31,8 +31,8 @@ from facegen_controls import decode_facegen_control_space
 from material_contract import material_bindings, texture_binding_requests
 from owned_archive_stack import OwnedArchiveStack
 from player_facegen_preview import (
-    PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA,
-    PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS,
+    PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA,
+    PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS,
     prepare_default_player_facegen_preview,
 )
 from plugin_records import Record, iter_plugin_records, iter_subrecords, zstring
@@ -375,8 +375,8 @@ def emit_player_facegen_preview_set(
 ) -> dict[str, str]:
     """Emit the compiled full-body preview contract for strict sibling consumers."""
     if (
-        preview_set.get("schema") != PLAYER_FACEGEN_FULL_BODY_PREVIEW_SCHEMA
-        or preview_set.get("status") != PLAYER_FACEGEN_FULL_BODY_PREVIEW_STATUS
+        preview_set.get("schema") != PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_SCHEMA
+        or preview_set.get("status") != PLAYER_FACEGEN_PLAYABLE_RACE_PREVIEW_STATUS
     ):
         raise ValueError("Owned player FaceGen preview-set contract is malformed")
     output = (
@@ -6642,6 +6642,11 @@ def compile_new_game_flow(
             str(character_rules["appearancePreviewOutfitFormId"]),
             16,
         ),
+        include_all_playable_race_selections=True,
+    )
+    appearance["preview"] = (
+        "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-"
+        "previews-all-native-geometry-controls"
     )
     tag_menu_commands = [
         command
@@ -7296,21 +7301,38 @@ def _first_slice_source_closure(
     required_videos = [video for video in videos if video["requiredAtEntry"]]
     if len(required_videos) != 1 or required_videos[0]["runtime"] is None:
         unaccounted.append({"reason": "owned-entry-video-runtime"})
-    if {str(row["sex"]) for row in preview_rows} != {"male", "female"}:
-        unaccounted.append({"reason": "creator-default-sex-preview-closure"})
-    unsupported = ["non-default-race-hair-eye-live-3d-face-preview"]
+    preview_identities = {
+        (
+            str(row["sex"]),
+            str(row["raceFormId"]).casefold(),
+            str(row["hairFormId"]).casefold(),
+            str(row["eyesFormId"]).casefold(),
+        )
+        for row in preview_rows
+    }
+    expected_preview_identities = {
+        (
+            str(engine_sex),
+            str(race["formId"]).casefold(),
+            str(hair["formId"]).casefold(),
+            str(eyes["formId"]).casefold(),
+        )
+        for race in appearance["races"]
+        for engine_sex, sex in dict(race["sex"]).items()
+        for hair in dict(sex)["hairOptions"]
+        for eyes in dict(sex)["eyeOptions"]
+    }
+    if preview_identities != expected_preview_identities:
+        unaccounted.append({"reason": "creator-valid-selection-preview-closure"})
+    unsupported = []
     if unaccounted or omitted:
         closure_status = "incomplete"
-    elif unsupported:
-        closure_status = (
-            "source-accounted-playable-claim-blocked-by-explicit-capability-gap"
-        )
     else:
         closure_status = "source-accounted-native-runtime-and-visual-promotion-pending"
     return {
         "schema": "opennv-fnv-first-slice-source-closure/v1",
         "status": closure_status,
-        "playableClaimReady": not unaccounted and not omitted and not unsupported,
+        "playableClaimReady": not unaccounted and not omitted,
         "admittedBeatOrder": [
             "owned-entry-video-tail",
             "owned-imad-dialogue-transition",

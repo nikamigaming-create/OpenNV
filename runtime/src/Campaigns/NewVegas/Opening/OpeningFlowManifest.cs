@@ -79,14 +79,18 @@ internal sealed partial record OpeningNewGameFlow(
         "controls-runtime-bound-sibling-gamebryo-slider-semantics-corroborated";
     private const string ExpectedFaceGenEngineBuild = "1.4.0.525";
     private const string ExpectedPlayerFaceGenPreviewSchema =
-        "opennv-owned-player-facegen-preview-set/v3";
+        "opennv-owned-player-facegen-preview-set/v5";
     private const string ExpectedPlayerFaceGenPreviewStatus =
-        "compiled-default-male-and-female-full-body-live-previews-with-ctl-egm-" +
-        "targets-all-native-geometry-controls-runtime-bound";
+        "compiled-playable-race-male-and-female-valid-hair-eye-full-body-live-previews-" +
+        "with-ctl-egm-targets-all-native-geometry-controls-runtime-bound";
     private const string ExpectedPlayerFaceGenPreviewRuntimeDisposition =
-        "owned-default-male-and-female-selection-preview-hosts-and-all-native-" +
-        "geometry-controls-bound-other-identities-fail-closed-sibling-gamebryo-" +
-        "slider-semantics-corroborated";
+        "owned-playable-race-male-and-female-valid-hair-eye-identity-preview-hosts-" +
+        "and-all-native-geometry-controls-bound-invalid-source-tuples-fail-closed-" +
+        "sibling-gamebryo-slider-semantics-corroborated";
+    private const string ExpectedPlayerFaceGenPreviewSelectionScope =
+        "all-playable-race-sex-valid-hair-eyes-cartesian-product";
+    private const string ExpectedPlayerFaceGenUnsupportedSelectionScope =
+        "invalid-race-sex-hair-eyes-source-tuple";
     private static readonly string[] ExpectedPlayerFaceGenBodyComponentRoles =
         ["body", "left-hand", "right-hand"];
     private const string ExpectedFaceGenPreviewControlSemantics =
@@ -1791,6 +1795,9 @@ internal sealed partial record OpeningNewGameFlow(
             .EnumerateArray().Select(value => value.GetString()!).ToArray();
         var geometryControlCount = source.GetProperty("geometryControlCount").GetInt32();
         var runtimeDisposition = source.GetProperty("runtimeDisposition").GetString()!;
+        var selectionScope = source.GetProperty("selectionScope").GetString()!;
+        var unsupportedSelectionScope = source.GetProperty("unsupportedSelectionScope")
+            .GetString()!;
         var fullBody = source.GetProperty("fullBody").GetBoolean();
         var bodyComponentRoles = source.GetProperty("bodyComponentRoles")
             .EnumerateArray().Select(value => value.GetString()!).ToArray();
@@ -1837,6 +1844,8 @@ internal sealed partial record OpeningNewGameFlow(
             geometryControlNames,
             geometryControlCount,
             runtimeDisposition,
+            selectionScope,
+            unsupportedSelectionScope,
             fullBody,
             bodyComponentRoles,
             bodyComponentSourcesBySex,
