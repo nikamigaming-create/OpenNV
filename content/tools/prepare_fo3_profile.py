@@ -68,6 +68,7 @@ GLOBAL_RECORD = "GLOB"
 ACTOR_REFERENCE_RECORD = "ACHR"
 PLACED_REFERENCE_RECORD = "REFR"
 ACTIVATOR_RECORD = "ACTI"
+DOOR_RECORD = "DOOR"
 ACTOR_BASE_RECORD = "NPC_"
 STATIC_RECORD = "STAT"
 DIALOGUE_TOPIC_RECORD = "DIAL"
@@ -173,6 +174,7 @@ SET_OBJECTIVE_COMPLETED_PATTERN = re.compile(
     r"(?P<index>\d+)\s+(?P<value>\d+)$",
     re.IGNORECASE,
 )
+SPECIAL_BOOK_MENU_PATTERN = re.compile(r"^ssbmp\s+(?P<points>\d+)$", re.IGNORECASE)
 SET_NO_ACTIVATION_SOUND_PATTERN = re.compile(
     r"^SetNoActivationSound\s+(?P<sound>[A-Za-z_][A-Za-z0-9_]*)$",
     re.IGNORECASE,
@@ -3006,6 +3008,110 @@ def _compile_cg01_post_stage14_transition(
             },
         })
 
+    interaction_stages = [
+        int(config["stage30"]),
+        int(config["stage40"]),
+        int(config["stage50"]),
+    ]
+    if interaction_stages != sorted(set(interaction_stages)) or interaction_stages[0] <= stages[-1]:
+        raise ValueError("Fallout 3 CG01 playpen stage order differs")
+
+    def scripted_reference(config_key: str, expected_script_editor: str) -> tuple[object, object, object]:
+        placed = exact(config[config_key], PLACED_REFERENCE_RECORD, config_key)
+        base_ids = [
+            struct.unpack("<I", row.data)[0]
+            for row in iter_subrecords(placed)
+            if row.signature == "NAME" and len(row.data) == FORM_ID_BYTES
+        ]
+        if len(base_ids) != 1:
+            raise ValueError(f"Fallout 3 CG01 {config_key} base differs")
+        base = by_form.get(base_ids[0])
+        if base is None or base.signature not in {ACTIVATOR_RECORD, DOOR_RECORD}:
+            raise ValueError(f"Fallout 3 CG01 {config_key} base is absent")
+        script_ids = [
+            struct.unpack("<I", row.data)[0]
+            for row in iter_subrecords(base)
+            if row.signature == "SCRI" and len(row.data) == FORM_ID_BYTES
+        ]
+        if len(script_ids) != 1:
+            raise ValueError(f"Fallout 3 CG01 {config_key} script differs")
+        script = by_form.get(script_ids[0])
+        if script is None or script.signature != SCRIPT_RECORD or _editor_id(script) != expected_script_editor:
+            raise ValueError(f"Fallout 3 CG01 {config_key} script identity differs")
+        return placed, base, script
+
+    gate_ref, gate_base, gate_script = scripted_reference(
+        "playpenGateReferenceFormId", "CG01PlaypenGateSCRIPT")
+    exit_ref, exit_base, exit_script = scripted_reference(
+        "exitCribTriggerReferenceFormId", "CG01ExitCribTriggerSCRIPT")
+    book_ref, book_base, book_script = scripted_reference(
+        "specialBookReferenceFormId", "CG01SpecialBookSCRIPT")
+    gate_commands = _source_commands(_script_source(gate_script))
+    exit_commands = _source_commands(_script_source(exit_script))
+    book_commands = _source_commands(_script_source(book_script))
+    if not any(SET_STAGE_PATTERN.fullmatch(row) and int(SET_STAGE_PATTERN.fullmatch(row).group("stage")) == interaction_stages[0] for row in gate_commands):
+        raise ValueError("Fallout 3 CG01 playpen gate result differs")
+    if not any(SET_STAGE_PATTERN.fullmatch(row) and int(SET_STAGE_PATTERN.fullmatch(row).group("stage")) == interaction_stages[1] for row in exit_commands):
+        raise ValueError("Fallout 3 CG01 crib-exit result differs")
+    if not any(SET_STAGE_PATTERN.fullmatch(row) and int(SET_STAGE_PATTERN.fullmatch(row).group("stage")) == interaction_stages[2] for row in book_commands):
+        raise ValueError("Fallout 3 CG01 SPECIAL-book result differs")
+    menu_rows = [SPECIAL_BOOK_MENU_PATTERN.fullmatch(row) for row in book_commands]
+    menu_rows = [row for row in menu_rows if row is not None]
+    if len(menu_rows) != 1:
+        raise ValueError("Fallout 3 CG01 SPECIAL-book menu command differs")
+    primitive_data = _single_subrecord(exit_ref, "XPRM")
+    if len(primitive_data) != TRIGGER_PRIMITIVE_BYTES:
+        raise ValueError("Fallout 3 CG01 crib-exit primitive layout differs")
+    primitive = struct.unpack(f"<{TRIGGER_PRIMITIVE_FLOATS}fI", primitive_data)
+    if not all(math.isfinite(value) and value > 0 for value in primitive[:3]):
+        raise ValueError("Fallout 3 CG01 crib-exit primitive dimensions differ")
+
+    def interaction_identity(placed: object, base: object, script: object) -> dict[str, object]:
+        models = _text_values(base, "MODL")
+        names = _text_values(base, "FULL")
+        return {
+            "referenceFormId": _form_id(placed.form_id),
+            "referenceRecordSha256": hashlib.sha256(placed.data).hexdigest(),
+            "baseFormId": _form_id(base.form_id),
+            "baseEditorId": _editor_id(base),
+            "baseRecordSha256": hashlib.sha256(base.data).hexdigest(),
+            "scriptFormId": _form_id(script.form_id),
+            "scriptEditorId": _editor_id(script),
+            "scriptSourceSha256": hashlib.sha256(_script_source(script).encode("cp1252")).hexdigest(),
+            "sourceTransform": _reference_transform_contract(placed),
+            "modelPath": models[0] if len(models) == 1 else None,
+            "displayName": names[0] if len(names) == 1 else None,
+        }
+
+    result_contracts = []
+    for stage in interaction_stages:
+        commands = stage_commands(stage)
+        result_contracts.append({
+            "stage": stage,
+            "sourceSha256": hashlib.sha256(stage_sources[stage][0].encode("cp1252")).hexdigest(),
+            "commands": commands,
+        })
+    stage20_interaction = {
+        "schema": "opennv-fo3-cg01-stage-20-special-runtime/v1",
+        "status": "source-backed-physical-interaction-runtime-ready",
+        "sourceStage": stages[-1],
+        "gate": {**interaction_identity(gate_ref, gate_base, gate_script), "targetStage": interaction_stages[0]},
+        "exitTrigger": {
+            **interaction_identity(exit_ref, exit_base, exit_script),
+            "targetStage": interaction_stages[1],
+            "dimensionsGameUnits": list(primitive[:3]),
+            "primitiveType": int(primitive[TRIGGER_PRIMITIVE_TYPE_INDEX]),
+        },
+        "specialBook": {
+            **interaction_identity(book_ref, book_base, book_script),
+            "targetStage": interaction_stages[2],
+            "menuPoints": int(menu_rows[0].group("points")),
+            "menuDocument": "menus\\chargen\\specialbookmenu.xml",
+        },
+        "stageResults": result_contracts,
+        "nextBoundary": {"applied": False, "blocker": "fo3-cg01-special-book-menu-runtime-not-implemented"},
+    }
+
     return {
         "schema": "opennv-fo3-cg01-stage-14-to-20-runtime/v1",
         "status": "source-backed-package-dialogue-runtime-ready",
@@ -3041,9 +3147,10 @@ def _compile_cg01_post_stage14_transition(
             "sourceSha256": hashlib.sha256(stage_sources[stages[3]][0].encode("cp1252")).hexdigest(),
             "commands": [compile_command(text, index) for index, text in enumerate(stage20_commands)],
         },
+        "stage20Interaction": stage20_interaction,
         "nextBoundary": {
-            "applied": False,
-            "blocker": "fo3-cg01-stage-20-playpen-special-runtime-not-implemented",
+            "applied": True,
+            "blocker": None,
         },
     }
 
@@ -5703,6 +5810,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     ACTOR_REFERENCE_RECORD,
                     PLACED_REFERENCE_RECORD,
                     ACTIVATOR_RECORD,
+                    DOOR_RECORD,
                     ACTOR_BASE_RECORD,
                     STATIC_RECORD,
                 }

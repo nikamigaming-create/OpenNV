@@ -36,6 +36,83 @@ internal sealed record Fo3Cg01Stage20State(
     int AppliedCommandCount,
     Fo3Cg01Stage12Boundary NextBoundary);
 
+internal sealed record Fo3Cg01Stage20Interaction(
+    int SourceStage,
+    int GateStage,
+    int ExitStage,
+    int BookStage,
+    string GateReferenceFormId,
+    string ExitTriggerReferenceFormId,
+    Fo3Cg01Transform ExitTriggerTransform,
+    Fo3Cg01Vector3 ExitTriggerDimensionsGameUnits,
+    string BookReferenceFormId,
+    string BookDisplayName,
+    int MenuPoints,
+    string MenuDocument,
+    string NextBoundaryBlocker)
+{
+    internal const string ExpectedSchema = "opennv-fo3-cg01-stage-20-special-runtime/v1";
+
+    internal static Fo3Cg01Stage20Interaction Load(JsonElement source, int expectedSourceStage)
+    {
+        if (RequiredString(source, "schema") != ExpectedSchema ||
+            RequiredString(source, "status") != "source-backed-physical-interaction-runtime-ready" ||
+            RequiredInteger(source, "sourceStage") != expectedSourceStage)
+            throw new InvalidOperationException("Fallout 3 CG01 stage-20 interaction identity differs.");
+        var gate = RequiredObject(source, "gate");
+        var exit = RequiredObject(source, "exitTrigger");
+        var book = RequiredObject(source, "specialBook");
+        var gateStage = RequiredInteger(gate, "targetStage");
+        var exitStage = RequiredInteger(exit, "targetStage");
+        var bookStage = RequiredInteger(book, "targetStage");
+        if (!(expectedSourceStage < gateStage && gateStage < exitStage && exitStage < bookStage) ||
+            RequiredInteger(book, "menuPoints") <= 0 ||
+            RequiredInteger(exit, "primitiveType") != 1)
+            throw new InvalidOperationException("Fallout 3 CG01 stage-20 interaction sequence differs.");
+        var dimensions = RequiredArray(exit, "dimensionsGameUnits").EnumerateArray()
+            .Select(value => value.GetDouble()).ToArray();
+        if (dimensions.Length != 3 || dimensions.Any(value => !double.IsFinite(value) || value <= 0))
+            throw new InvalidOperationException("Fallout 3 CG01 crib-exit dimensions differ.");
+        var transformSource = RequiredObject(exit, "sourceTransform");
+        var position = RequiredArray(transformSource, "positionGameUnits").EnumerateArray().Select(v => v.GetDouble()).ToArray();
+        var rotation = RequiredArray(transformSource, "rotationRadians").EnumerateArray().Select(v => v.GetDouble()).ToArray();
+        if (position.Length != 3 || rotation.Length != 3)
+            throw new InvalidOperationException("Fallout 3 CG01 crib-exit transform differs.");
+        var boundary = RequiredObject(source, "nextBoundary");
+        if (RequiredBoolean(boundary, "applied"))
+            throw new InvalidOperationException("Fallout 3 CG01 stage-50 boundary differs.");
+        return new Fo3Cg01Stage20Interaction(
+            expectedSourceStage, gateStage, exitStage, bookStage,
+            RequiredFormId(gate, "referenceFormId"), RequiredFormId(exit, "referenceFormId"),
+            new Fo3Cg01Transform(new Fo3Cg01Vector3(position[0], position[1], position[2]),
+                new Fo3Cg01Vector3(rotation[0], rotation[1], rotation[2]),
+                RequiredDouble(transformSource, "scale")),
+            new Fo3Cg01Vector3(dimensions[0], dimensions[1], dimensions[2]),
+            RequiredFormId(book, "referenceFormId"), RequiredString(book, "displayName"),
+            RequiredInteger(book, "menuPoints"), RequiredString(book, "menuDocument"),
+            RequiredString(boundary, "blocker"));
+    }
+
+    private static double RequiredDouble(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) && value.TryGetDouble(out var result) && double.IsFinite(result)
+            ? result : throw new InvalidOperationException($"Fallout 3 CG01 interaction field {name} differs.");
+    private static int RequiredInteger(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) && value.TryGetInt32(out var result) ? result : throw new InvalidOperationException($"Fallout 3 CG01 interaction field {name} differs.");
+    private static bool RequiredBoolean(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : throw new InvalidOperationException($"Fallout 3 CG01 interaction field {name} differs.");
+    private static string RequiredString(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()) ? value.GetString()! : throw new InvalidOperationException($"Fallout 3 CG01 interaction field {name} differs.");
+    private static string RequiredFormId(JsonElement parent, string name)
+    {
+        var value = RequiredString(parent, name);
+        return value.Length == 8 && value.All(Uri.IsHexDigit) ? value : throw new InvalidOperationException($"Fallout 3 CG01 interaction FormID {name} differs.");
+    }
+    private static JsonElement RequiredObject(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object ? value : throw new InvalidOperationException($"Fallout 3 CG01 interaction field {name} differs.");
+    private static JsonElement RequiredArray(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array ? value : throw new InvalidOperationException($"Fallout 3 CG01 interaction field {name} differs.");
+}
+
 internal sealed record Fo3Cg01PostStage14Transition(
     int SourceStage,
     int Stage16,
@@ -52,6 +129,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
     int ObjectiveIndex,
     IReadOnlyList<Fo3Cg01PostStage14Cue> Cues,
     int AccountedCommandCount,
+    Fo3Cg01Stage20Interaction Stage20Interaction,
     string NextBoundaryBlocker)
 {
     internal const string ExpectedSchema = "opennv-fo3-cg01-stage-14-to-20-runtime/v1";
@@ -59,8 +137,6 @@ internal sealed record Fo3Cg01PostStage14Transition(
         "opennv-fo3-cg01-stage-14-to-20-runtime-state/v1";
 
     private const string ExpectedStatus = "source-backed-package-dialogue-runtime-ready";
-    private const string ExpectedBoundaryBlocker =
-        "fo3-cg01-stage-20-playpen-special-runtime-not-implemented";
     private const int GetPcIsSexFunction = 131;
     private const int GetIsIdFunction = 72;
     private const int ExpectedCueRows = 3;
@@ -140,10 +216,12 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 "Fallout 3 CG01 stage-16 Dad sex selection differs.");
 
         var boundary = RequiredObject(source, "nextBoundary");
-        if (RequiredBoolean(boundary, "applied") ||
-            RequiredString(boundary, "blocker") != ExpectedBoundaryBlocker)
+        if (!RequiredBoolean(boundary, "applied") ||
+            boundary.GetProperty("blocker").ValueKind != JsonValueKind.Null)
             throw new InvalidOperationException(
                 "Fallout 3 CG01 post-stage-20 boundary differs.");
+        var interaction = Fo3Cg01Stage20Interaction.Load(
+            RequiredObject(source, "stage20Interaction"), targetStage);
         return new Fo3Cg01PostStage14Transition(
             sourceStage,
             stage16,
@@ -160,7 +238,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
             objective,
             cues,
             allCommands.Length + ExpectedPackageCount,
-            ExpectedBoundaryBlocker);
+            interaction,
+            interaction.NextBoundaryBlocker);
     }
 
     internal IReadOnlyList<Fo3Cg01PostStage14Cue> SelectCues(string engineSex)
@@ -213,11 +292,11 @@ internal sealed record Fo3Cg01PostStage14Transition(
         },
         appliedInfoFormIds = state.AppliedInfoFormIds,
         appliedPackageFormIds = state.AppliedPackageFormIds,
-        playpenGate = new { referenceFormId = state.PlaypenGateReferenceFormId, open = false },
+        playpenGate = new { referenceFormId = state.PlaypenGateReferenceFormId, open = state.PlaypenGateOpen },
         playroomDoor = new
         {
             referenceFormId = state.PlayroomDoorReferenceFormId,
-            open = false,
+            open = state.PlayroomDoorOpen,
             lockLevel = state.PlayroomDoorLockLevel,
         },
         playerMovementEnabled = state.PlayerMovementEnabled,
@@ -241,9 +320,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
             !RequiredArray(source, "appliedPackageFormIds").EnumerateArray()
                 .Select(value => value.GetString()).SequenceEqual(expected.AppliedPackageFormIds) ||
             RequiredFormId(gate, "referenceFormId") != expected.PlaypenGateReferenceFormId ||
-            RequiredBoolean(gate, "open") ||
+            RequiredBoolean(gate, "open") != expected.PlaypenGateOpen ||
             RequiredFormId(door, "referenceFormId") != expected.PlayroomDoorReferenceFormId ||
-            RequiredBoolean(door, "open") ||
+            RequiredBoolean(door, "open") != expected.PlayroomDoorOpen ||
             RequiredInteger(door, "lockLevel") != expected.PlayroomDoorLockLevel ||
             !RequiredBoolean(source, "playerMovementEnabled") ||
             RequiredInteger(source, "displayedObjectiveIndex") != expected.DisplayedObjectiveIndex ||

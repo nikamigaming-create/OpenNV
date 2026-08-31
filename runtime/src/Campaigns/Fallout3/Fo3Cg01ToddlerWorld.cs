@@ -28,6 +28,8 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
     string MoveRightAction,
     string MoveForwardAction,
     string MoveBackwardAction,
+    string ActivateAction,
+    float ActivationDistanceMeters,
     string TriggerReferenceFormId,
     int TargetStage)
 {
@@ -127,6 +129,8 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
             configuration.Player.DesktopInput.MoveRight.Action,
             configuration.Player.DesktopInput.MoveForward.Action,
             configuration.Player.DesktopInput.MoveBackward.Action,
+            configuration.Player.DesktopInput.Activate.Action,
+            configuration.Player.ActivationDistanceMeters,
             stage12.Trigger.ReferenceFormId,
             stage12.TargetStage);
     }
@@ -152,7 +156,6 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
             RequiredFormId(source, "playerStartMarkerFormId") != PlayerStartMarkerFormId ||
             RequiredFormId(source, "triggerReferenceFormId") != TriggerReferenceFormId ||
             !RequiredBoolean(source, "triggerEntered") ||
-            RequiredBoolean(source, "movementEnabled") ||
             RequiredBoolean(source, "visualBodyPrepared"))
             throw new InvalidOperationException(
                 "Saved Fallout 3 CG01 toddler world differs.");
@@ -163,7 +166,7 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
             ReadQuaternion(source, "playerRotation"),
             TriggerReferenceFormId,
             true,
-            false,
+            RequiredBoolean(source, "movementEnabled"),
             RequiredPositiveInteger(source, "authoredCollisionBodies"));
         return state;
     }
@@ -210,6 +213,7 @@ internal sealed record Fo3Cg01ToddlerWorldContract(
         VerifyInput(input, "moveRight", player.DesktopInput.MoveRight);
         VerifyInput(input, "moveForward", player.DesktopInput.MoveForward);
         VerifyInput(input, "moveBackward", player.DesktopInput.MoveBackward);
+        VerifyInput(input, "activate", player.DesktopInput.Activate);
     }
 
     private static void VerifyInput(
@@ -460,6 +464,48 @@ internal sealed record Fo3Cg01ToddlerWorldRuntime(
         Player.MovementEnabled,
         AuthoredCollisionBodies);
 
+    internal Area3D InstallStage20Interactions(
+        Fo3Vault101BirthSceneCoverage scene,
+        Fo3Cg01Stage20Interaction interaction,
+        Action gateActivated,
+        Action exitEntered,
+        Action bookActivated)
+    {
+        Player.ConfigureSourceActivation(interaction, gateActivated, bookActivated);
+        var source = interaction.ExitTriggerTransform;
+        var trigger = new Area3D
+        {
+            Name = $"REFR_{interaction.ExitTriggerReferenceFormId}_CG01_EXIT_CRIB_TRIGGER",
+            Position = SourceLocalPosition(source.PositionGameUnits, scene.Contract.EntryPositionGameUnits),
+            Rotation = new Vector3(0, -(float)source.RotationRadians.Z, 0),
+            CollisionLayer = 0,
+            CollisionMask = Contract.CollisionLayer,
+            Monitoring = true,
+            Monitorable = false,
+        };
+        trigger.SetMeta("opennv_source_form_id", interaction.ExitTriggerReferenceFormId);
+        trigger.AddChild(new CollisionShape3D
+        {
+            Name = "OWNED_XPRM_BOX",
+            Shape = new BoxShape3D
+            {
+                Size = new Vector3(
+                (float)interaction.ExitTriggerDimensionsGameUnits.X,
+                (float)interaction.ExitTriggerDimensionsGameUnits.Z,
+                (float)interaction.ExitTriggerDimensionsGameUnits.Y)
+            },
+        });
+        trigger.BodyEntered += body =>
+        {
+            if (body != Player || !trigger.Monitoring)
+                return;
+            trigger.Monitoring = false;
+            exitEntered();
+        };
+        scene.CellRoot.AddChild(trigger);
+        return trigger;
+    }
+
     private const float MinimumValue = 0.0f;
 
     private static Vector3 SourceLocalPosition(
@@ -479,6 +525,9 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
     private float _pitch;
     private bool _acceptanceTracking;
     private bool _acceptanceInputPressed;
+    private Fo3Cg01Stage20Interaction? _interaction;
+    private Action? _gateActivated;
+    private Action? _bookActivated;
 
     internal bool MovementEnabled { get; private set; } = true;
     internal int AcceptancePhysicsFrames { get; private set; }
@@ -588,7 +637,33 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
-        if (inputEvent is not InputEventMouseMotion motion || !MovementEnabled)
+        if (!MovementEnabled)
+            return;
+        if (_interaction is not null && inputEvent.IsActionPressed(_contract.ActivateAction))
+        {
+            var query = PhysicsRayQueryParameters3D.Create(
+                _camera.GlobalPosition,
+                _camera.GlobalPosition + -_camera.GlobalBasis.Z * _contract.ActivationDistanceMeters,
+                _contract.CollisionMask);
+            query.Exclude = [GetRid()];
+            var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+            if (hit.TryGetValue("collider", out var value) && value.AsGodotObject() is Node node)
+            {
+                for (Node? current = node; current is not null; current = current.GetParent())
+                {
+                    if (!current.HasMeta("opennv_source_form_id"))
+                        continue;
+                    var formId = current.GetMeta("opennv_source_form_id").AsString();
+                    if (formId.Equals(_interaction.GateReferenceFormId, StringComparison.OrdinalIgnoreCase))
+                        _gateActivated?.Invoke();
+                    else if (formId.Equals(_interaction.BookReferenceFormId, StringComparison.OrdinalIgnoreCase))
+                        _bookActivated?.Invoke();
+                    break;
+                }
+            }
+            return;
+        }
+        if (inputEvent is not InputEventMouseMotion motion)
             return;
         Rotation = new Vector3(
             MinimumValue,
@@ -599,6 +674,16 @@ internal sealed partial class Fo3Cg01ToddlerPlayer : CharacterBody3D
             -_contract.VerticalLookLimitRadians,
             _contract.VerticalLookLimitRadians);
         _camera.Rotation = new Vector3(_pitch, MinimumValue, MinimumValue);
+    }
+
+    internal void ConfigureSourceActivation(
+        Fo3Cg01Stage20Interaction interaction,
+        Action gateActivated,
+        Action bookActivated)
+    {
+        _interaction = interaction;
+        _gateActivated = gateActivated;
+        _bookActivated = bookActivated;
     }
 
     public override void _PhysicsProcess(double delta)

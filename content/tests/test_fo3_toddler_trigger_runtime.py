@@ -57,9 +57,9 @@ class Fo3ToddlerTriggerRuntimeTest(unittest.TestCase):
         self.assertIn("EnableMovementAtSourceStage", flow)
         self.assertIn("source-backed-package-dialogue-runtime-ready", contract)
         self.assertIn("cg01PostStage14Transition", persistence)
-        self.assertIn(
-            "fo3-cg01-stage-20-playpen-special-runtime-not-implemented", contract
-        )
+        self.assertIn("Fo3Cg01Stage20Interaction", contract)
+        self.assertIn("NextBoundaryBlocker", contract)
+        self.assertIn("InstallStage20Interactions", (FO3 / "Fo3Cg01ToddlerWorld.cs").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

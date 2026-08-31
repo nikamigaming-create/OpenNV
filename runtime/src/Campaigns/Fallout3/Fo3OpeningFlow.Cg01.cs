@@ -1254,6 +1254,8 @@ internal partial class Fo3OpeningFlow
             "Fallout 3 CG01 stage-20 world is absent."))
             .Player.EnableMovementAtSourceStage();
         var stage20World = _cg01ToddlerWorld.State(triggerEntered: true);
+        InstallCg01Stage20Interactions(
+            context, stage5, stage10, stage12, stage20World, stage14, state);
         PersistCg01Stage20Transition(
             context,
             stage5,
@@ -1326,6 +1328,63 @@ internal partial class Fo3OpeningFlow
             $"stage={state.ActiveStage} packages={string.Join(',', state.AppliedPackageFormIds)} " +
             "dialogueReplayed=0 packageTravelReplayed=0 movement=1 " +
             $"blocker={state.NextBoundary.Blocker}");
+    }
+
+    private void InstallCg01Stage20Interactions(
+        Fo3Cg01RuntimeContext context,
+        Fo3Cg01Stage0State stage5,
+        Fo3Cg01Stage10State stage10,
+        Fo3Cg01Stage12State stage12,
+        Fo3Cg01ToddlerWorldState toddlerWorld,
+        Fo3Cg01Stage14State stage14,
+        Fo3Cg01Stage20State initial)
+    {
+        var current = initial;
+        var interaction = _profile.Cg01PostStage14Transition.Stage20Interaction;
+        void Persist() => PersistCg01Stage20Transition(
+            context, stage5, stage10, stage12,
+            (_cg01ToddlerWorld ?? throw new InvalidOperationException(
+                "Fallout 3 CG01 interaction world is absent.")).State(triggerEntered: true),
+            stage14, current);
+        void Gate()
+        {
+            if (current.ActiveStage != interaction.SourceStage)
+                return;
+            SetCg01WorldReferenceOpen(interaction.GateReferenceFormId, true);
+            current = current with
+            {
+                ActiveStage = interaction.GateStage,
+                PlaypenGateOpen = true,
+                DisplayedObjectiveIndex = interaction.GateStage
+            };
+            Persist();
+        }
+        void Exit()
+        {
+            if (current.ActiveStage != interaction.GateStage)
+                return;
+            current = current with
+            {
+                ActiveStage = interaction.ExitStage,
+                DisplayedObjectiveIndex = interaction.ExitStage
+            };
+            Persist();
+        }
+        void Book()
+        {
+            if (current.ActiveStage < interaction.GateStage || current.ActiveStage >= interaction.BookStage)
+                return;
+            current = current with { ActiveStage = interaction.BookStage };
+            Cg01WorldReference(interaction.BookReferenceFormId)
+                .SetMeta("opennv_special_book_menu_points", interaction.MenuPoints);
+            Persist();
+        }
+        (_cg01ToddlerWorld ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 interaction world is absent."))
+            .InstallStage20Interactions(
+                _vaultBirthCoverage ?? throw new InvalidOperationException(
+                    "Fallout 3 CG01 interaction scene is absent."),
+                interaction, Gate, Exit, Book);
     }
 
     private Node3D Cg01WorldReference(string formId) =>

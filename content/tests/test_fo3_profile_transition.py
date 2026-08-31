@@ -865,6 +865,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 "setObjectiveDisplayed CG01 20 1",
             )
         )
+        cg01_stage30_source = "\n".join((
+            "setObjectiveCompleted CG01 20 1", "setObjectiveDisplayed CG01 30 1",
+            "CG01PlayroomDoor.setOpenState 0", "CG01PlayroomDoor.Lock 100"))
+        cg01_stage40_source = "\n".join((
+            "setObjectiveCompleted CG01 30 1", "setObjectiveDisplayed CG01 40 1",
+            "CG01PlayroomDoor.setOpenState 0", "CG01PlayroomDoor.Lock 100"))
+        cg01_stage50_source = "\n".join((
+            "setObjectiveCompleted CG01 40 1", "set CG01.timer to 10", "set CG01.runTimer to 1"))
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -887,6 +895,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("SCTX", cg01_stage18_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", 20))
             + subrecord("SCTX", cg01_stage20_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 30))
+            + subrecord("SCTX", cg01_stage30_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 40))
+            + subrecord("SCTX", cg01_stage40_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 50))
+            + subrecord("SCTX", cg01_stage50_source.encode("cp1252") + b"\0")
             + subrecord("QOBJ", struct.pack("<I", CG01_WALK_OBJECTIVE_INDEX))
             + subrecord("NNAM", b"Walk to Dad.\0"),
             (),
@@ -943,6 +957,43 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             ),
             cell_groups,
         )
+        def scripted_interaction(script_form, script_editor, source, base_form, base_editor,
+                                 ref_form, signature="ACTI", full=None, model=b"Triggers\\TrigPlayerWall01.NIF\0",
+                                 primitive=None):
+            script = Record("SCPT", script_form, 0,
+                subrecord("EDID", script_editor.encode() + b"\0") +
+                subrecord("SCTX", source.encode("cp1252") + b"\0"), ())
+            base_data = subrecord("EDID", base_editor.encode() + b"\0")
+            if full is not None:
+                base_data += subrecord("FULL", full.encode("cp1252") + b"\0")
+            base_data += subrecord("MODL", model) + subrecord("SCRI", struct.pack("<I", script_form))
+            base = Record(signature, base_form, 0, base_data, ())
+            reference_editor = {
+                0x00047803: "CG01PlaypenGateREF",
+                0x0002EA53: "CG01ExitCribTriggerREF",
+                0x0002ECC0: "CG01SpecialBookREF",
+            }[ref_form]
+            ref_data = subrecord("EDID", reference_editor.encode() + b"\0") + subrecord("NAME", struct.pack("<I", base_form))
+            if primitive is not None:
+                ref_data += subrecord("XPRM", struct.pack("<7fI", *primitive, 1))
+            ref_data += subrecord("DATA", struct.pack("<6f", *CG01_TRIGGER_TRANSFORM))
+            return script, base, Record("REFR", ref_form, 0, ref_data, cell_groups)
+
+        playpen_records = scripted_interaction(
+            0x0002EA3C, "CG01PlaypenGateSCRIPT",
+            "begin OnActivate\nif IsActionRef player == 1 && getStage CG01 == 20\nsetstage CG01 30\nendif\nActivate\nend",
+            0x000479D3, "CG01PlayPenGateNew", 0x00047803, "DOOR", "Gate Door",
+            b"Dungeons\\Vault\\Accessories\\VPlaypenDoor01.NIF\0")
+        exit_records = scripted_interaction(
+            0x0002ECBA, "CG01ExitCribTriggerSCRIPT",
+            "begin onTriggerEnter\nif IsActionRef player == 1 && getStage CG01 == 30\nsetstage CG01 40\nendif\nEnd",
+            0x0002EA40, "CG01ExitCribTrigger", 0x0002EA53,
+            primitive=(241.0, 24.0, 111.0, 0.8, 0.3, 0.2, 0.15))
+        book_records = scripted_interaction(
+            0x0002ECB9, "CG01SpecialBookSCRIPT",
+            "begin OnActivate\nif getStage CG01 >= 30 && getStageDone CG01 50 == 0\nsetstage CG01 50\nssbmp 40\nendif\nend",
+            0x00061215, "BabyBookActivator", 0x0002ECC0, full="You're SPECIAL!",
+            model=b"Clutter\\BabyBookSmall01.NIF\0")
         tutorial = Record(
             "QUST",
             0x00059C85,
@@ -1151,6 +1202,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                     "closeDoorTargetFormId": "000457c0",
                     "leaveRoomTargetFormId": "0002ea4b",
                     "dadResponseInfoFormIds": ["0001f3de", "0001f3dd", "0001f3dc"],
+                    "playpenGateReferenceFormId": "00047803",
+                    "exitCribTriggerReferenceFormId": "0002ea53",
+                    "specialBookReferenceFormId": "0002ecc0",
+                    "stage30": 30,
+                    "stage40": 40,
+                    "stage50": 50,
                 },
                 "tutorialQuestEditorId": "CGTutorial",
                 "tutorialQuestFormId": "00059c85",
@@ -1173,6 +1230,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg01_dad_trigger_script,
             cg01_dad_trigger_base,
             cg01_dad_trigger_reference,
+            *playpen_records,
+            *exit_records,
+            *book_records,
             cg01_dad_script,
             cg01_dad_base,
             voice,
@@ -1208,7 +1268,6 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg01_close_gate_target,
             cg01_close_door_target,
             cg01_leave_room_target,
-            cg01_playpen_gate,
             cg01_playroom_door,
             cg01_close_gate_package,
             cg01_close_door_package,
@@ -1359,9 +1418,16 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             ["0001f3de", "0001f3dd", "0001f3dc"],
             [row["infoFormId"] for row in post_stage14["dialogue"]["branches"]],
         )
+        self.assertTrue(post_stage14["nextBoundary"]["applied"])
+        interaction = post_stage14["stage20Interaction"]
+        self.assertEqual([30, 40, 50], [row["stage"] for row in interaction["stageResults"]])
+        self.assertEqual("00047803", interaction["gate"]["referenceFormId"])
+        self.assertEqual("0002ea53", interaction["exitTrigger"]["referenceFormId"])
+        self.assertEqual("0002ecc0", interaction["specialBook"]["referenceFormId"])
+        self.assertEqual(40, interaction["specialBook"]["menuPoints"])
         self.assertEqual(
-            "fo3-cg01-stage-20-playpen-special-runtime-not-implemented",
-            post_stage14["nextBoundary"]["blocker"],
+            "fo3-cg01-special-book-menu-runtime-not-implemented",
+            interaction["nextBoundary"]["blocker"],
         )
         self.assertEqual(
             [

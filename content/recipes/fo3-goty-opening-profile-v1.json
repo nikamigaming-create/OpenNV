@@ -253,7 +253,13 @@
           "closeGateTargetFormId": "000457c2",
           "closeDoorTargetFormId": "000457c0",
           "leaveRoomTargetFormId": "0002ea4b",
-          "dadResponseInfoFormIds": ["0001f3de", "0001f3dd", "0001f3dc"]
+          "dadResponseInfoFormIds": ["0001f3de", "0001f3dd", "0001f3dc"],
+          "playpenGateReferenceFormId": "00047803",
+          "exitCribTriggerReferenceFormId": "0002ea53",
+          "specialBookReferenceFormId": "0002ecc0",
+          "stage30": 30,
+          "stage40": 40,
+          "stage50": 50
         },
         "tutorialQuestEditorId": "CGTutorial",
         "tutorialQuestFormId": "00059c85",
