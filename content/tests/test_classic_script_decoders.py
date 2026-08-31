@@ -170,9 +170,19 @@ class ClassicScriptDecoderTest(unittest.TestCase):
         """
         program, boundary = decode_medic_heal_player(source)
         effects = program["events"]["MedicHealPlayer"][0]["then"]
-        self.assertEqual(effects[0]["operation"], "heal-player-to-maximum")
-        self.assertEqual(effects[1]["messageId"], 131)
+        self.assertEqual(effects[0]["operation"], "clear-player-poison")
+        self.assertEqual(
+            effects[1],
+            {"operation": "advance-game-time-by-player-poison", "value": 3},
+        )
+        self.assertEqual(effects[2]["operation"], "heal-player-to-maximum")
+        self.assertEqual(effects[3]["operation"], "clear-player-injuries")
+        self.assertEqual(effects[4]["messageId"], 131)
+        self.assertEqual(
+            effects[5]["target"], "MedicRediationCheck"
+        )
         self.assertEqual(boundary["healAmount"], "dude_max_hp-minus-dude_cur_hp")
+        self.assertEqual(boundary["gameTicksPerMinute"], 600)
         self.assertEqual(
             boundary["damageTimeAdvance"],
             "reevaluated-player-damage-after-heal-zero",

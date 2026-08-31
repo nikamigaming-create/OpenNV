@@ -219,6 +219,7 @@ internal partial class Fo1TacticalSession : Node
     private Fo1DestinationMedicLookContract? _destinationMedicLook;
     private bool _destinationMedicLookViewed;
     private string? _destinationMedicDialogueProcedure;
+    private ClassicPlayerStatusState _classicPlayerStatus = new();
     private string? _destinationReturnExitGridPath;
     private Fo1ExitGridTransitionContract? _destinationReturnExitGrid;
     private int? _activatedDestinationReturnExitGridTile;
@@ -394,6 +395,9 @@ internal partial class Fo1TacticalSession : Node
     internal Fo1DestinationMedicLookContract? DestinationMedicLook => _destinationMedicLook;
     internal bool DestinationMedicLookViewed => _destinationMedicLookViewed;
     internal string? DestinationMedicDialogueProcedure => _destinationMedicDialogueProcedure;
+    internal int PlayerPoison => _classicPlayerStatus.Poison;
+    internal int PlayerRadiation => _classicPlayerStatus.Radiation;
+    internal IReadOnlySet<string> PlayerInjuries => _classicPlayerStatus.Injuries;
     internal Fo1ExitGridTransitionContract? DestinationReturnExitGrid => _destinationReturnExitGrid;
     internal int? ActivatedDestinationReturnExitGridTile => _activatedDestinationReturnExitGridTile;
 
@@ -639,15 +643,24 @@ internal partial class Fo1TacticalSession : Node
                     false,
                     _classicScriptGameTime,
                     PlayerCurrentHitPoints: _playerHitPoints,
-                    PlayerMaximumHitPoints: _playerProfile.HitPoints));
+                    PlayerMaximumHitPoints: _playerProfile.HitPoints,
+                    PlayerPoison: _classicPlayerStatus.Poison,
+                    PlayerRadiation: _classicPlayerStatus.Radiation,
+                    PlayerInjuries: _classicPlayerStatus.Injuries));
             if (!healing.Executed || healing.PlayerHealing < 0 ||
                 _playerHitPoints + healing.PlayerHealing != _playerProfile.HitPoints ||
+                healing.NextProcedure is not null &&
+                    healing.NextProcedure != medic.RadiationFollowupProcedure ||
                 healing.DisplayMessages.Count != 1 ||
                 healing.DisplayMessages[0].MessageId != medic.HealingMessageId)
                 throw new InvalidOperationException(
                     $"Fallout Medic healing result did not execute: {options[0].Target}");
             _playerHitPoints += healing.PlayerHealing;
-            _destinationMedicDialogueProcedure = null;
+            _classicPlayerStatus.Apply(healing);
+            _classicScriptGameTime = checked(
+                _classicScriptGameTime +
+                healing.GameTimeAdvanceMinutes * medic.GameTimeTicksPerMinute);
+            _destinationMedicDialogueProcedure = healing.NextProcedure;
             _status = medic.HealingMessageText;
             RefreshHud();
             Save();

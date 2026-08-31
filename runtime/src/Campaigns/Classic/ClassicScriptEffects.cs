@@ -78,6 +78,60 @@ internal sealed class ClassicScriptState : IEquatable<ClassicScriptState>
     }
 }
 
+internal sealed class ClassicPlayerStatusState
+{
+    private readonly HashSet<string> _injuries;
+
+    internal ClassicPlayerStatusState(
+        int poison = 0,
+        int radiation = 0,
+        IEnumerable<string>? injuries = null)
+    {
+        if (poison < 0 || radiation < 0)
+            throw new InvalidOperationException("Classic player status values are invalid.");
+        Poison = poison;
+        Radiation = radiation;
+        _injuries = new HashSet<string>(injuries ?? [], StringComparer.Ordinal);
+        if (_injuries.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException("Classic player injury identity is invalid.");
+    }
+
+    internal int Poison { get; private set; }
+    internal int Radiation { get; private set; }
+    internal IReadOnlySet<string> Injuries => _injuries;
+
+    internal void Apply(ClassicScriptExecution execution)
+    {
+        if (execution.PlayerPoisonRemoved != Poison ||
+            execution.ClearedPlayerInjuries.Any(injury => !_injuries.Contains(injury)))
+            throw new InvalidOperationException(
+                "Classic script status result does not match authoritative player state.");
+        Poison -= execution.PlayerPoisonRemoved;
+        _injuries.ExceptWith(execution.ClearedPlayerInjuries);
+    }
+
+    internal object Save() => new
+    {
+        poison = Poison,
+        radiation = Radiation,
+        injuries = _injuries.Order(StringComparer.Ordinal).ToArray(),
+    };
+
+    internal static ClassicPlayerStatusState Restore(JsonElement source)
+    {
+        var injuries = source.GetProperty("injuries").EnumerateArray()
+            .Select(injury => injury.GetString() ?? "").ToArray();
+        if (injuries.Any(string.IsNullOrWhiteSpace) ||
+            injuries.Distinct(StringComparer.Ordinal).Count() != injuries.Length)
+            throw new InvalidOperationException(
+                "Classic saved player injuries are invalid.");
+        return new ClassicPlayerStatusState(
+            source.GetProperty("poison").GetInt32(),
+            source.GetProperty("radiation").GetInt32(),
+            injuries);
+    }
+}
+
 internal readonly record struct ClassicScriptContext(
     bool SourceIsPlayer,
     bool CanSeePlayer,
@@ -87,7 +141,7 @@ internal readonly record struct ClassicScriptContext(
     int PlayerMaximumHitPoints = 0,
     int PlayerPoison = 0,
     int PlayerRadiation = 0,
-    int PlayerInjuryFlags = 0);
+    IReadOnlySet<string>? PlayerInjuries = null);
 
 internal readonly record struct ClassicScriptMessage(int? MessageListId, int MessageId);
 
@@ -109,6 +163,10 @@ internal sealed record ClassicScriptExecution(
     string? OpenDialogueNode,
     bool DialogueEnded,
     int PlayerHealing,
+    int PlayerPoisonRemoved,
+    int GameTimeAdvanceMinutes,
+    IReadOnlySet<string> ClearedPlayerInjuries,
+    string? NextProcedure,
     IReadOnlyList<ClassicDialogueReplySegment> DialogueReply,
     IReadOnlyList<ClassicDialogueOption> DialogueOptions);
 
@@ -146,7 +204,9 @@ internal sealed class ClassicScriptProgram
         ClassicScriptContext context)
     {
         if (!_events.TryGetValue(eventName, out var rules))
-            return new ClassicScriptExecution(false, false, [], null, false, 0, [], []);
+            return new ClassicScriptExecution(
+                false, false, [], null, false, 0, 0, 0,
+                new HashSet<string>(StringComparer.Ordinal), null, [], []);
         var matched = rules.Where(rule => rule.Conditions.All(condition =>
             Matches(condition, state, context))).ToArray();
         var scriptOverrides = false;
@@ -154,6 +214,10 @@ internal sealed class ClassicScriptProgram
         string? openDialogueNode = null;
         var dialogueEnded = false;
         var playerHealing = 0;
+        var playerPoisonRemoved = 0;
+        var gameTimeAdvanceMinutes = 0;
+        var clearedPlayerInjuries = new HashSet<string>(StringComparer.Ordinal);
+        string? nextProcedure = null;
         var dialogueReply = new List<ClassicDialogueReplySegment>();
         var dialogueOptions = new List<ClassicDialogueOption>();
         foreach (var rule in matched)
@@ -162,6 +226,8 @@ internal sealed class ClassicScriptProgram
                 Apply(
                     effect, state, context, ref scriptOverrides, messages,
                     ref openDialogueNode, ref dialogueEnded, ref playerHealing,
+                    ref playerPoisonRemoved, ref gameTimeAdvanceMinutes,
+                    clearedPlayerInjuries, ref nextProcedure,
                     dialogueReply, dialogueOptions);
         }
         if (dialogueEnded &&
@@ -175,6 +241,10 @@ internal sealed class ClassicScriptProgram
             openDialogueNode,
             dialogueEnded,
             playerHealing,
+            playerPoisonRemoved,
+            gameTimeAdvanceMinutes,
+            clearedPlayerInjuries,
+            nextProcedure,
             dialogueReply,
             dialogueOptions);
     }
@@ -187,14 +257,14 @@ internal sealed class ClassicScriptProgram
             .Select(ParseOperation).ToArray();
         if (conditions.Any(row => row.Name is not
                 ("source-is-player" or "can-see-player" or "local-equals" or
-                 "local-not-equals" or "player-art-fid-in" or
-                 "player-poison-equals" or "player-radiation-equals" or
-                 "player-injuries-equals")) ||
+                 "local-not-equals" or "player-art-fid-in")) ||
             effects.Length == 0 || effects.Any(row => row.Name is not
                 ("set-local" or "set-flag" or "script-overrides" or "display-message" or
                  "open-dialogue" or "dialogue-reply-message" or
                  "dialogue-reply-player-name" or "dialogue-option" or "dialogue-end" or
-                 "heal-player-to-maximum")))
+                 "heal-player-to-maximum" or "clear-player-poison" or
+                 "advance-game-time-by-player-poison" or "clear-player-injuries" or
+                 "call-procedure-if-player-radiation-positive")))
             throw new InvalidOperationException(
                 "Classic script rule mixes conditions and effects.");
         return new Rule(conditions, effects);
@@ -207,9 +277,10 @@ internal sealed class ClassicScriptProgram
             "local-not-equals" or "set-local" or "set-flag" or "script-overrides" or
             "display-message" or "player-art-fid-in" or "open-dialogue" or
             "dialogue-reply-message" or "dialogue-reply-player-name" or
-            "dialogue-option" or "dialogue-end" or "player-poison-equals" or
-            "player-radiation-equals" or "player-injuries-equals" or
-            "heal-player-to-maximum"))
+            "dialogue-option" or "dialogue-end" or "heal-player-to-maximum" or
+            "clear-player-poison" or "advance-game-time-by-player-poison" or
+            "clear-player-injuries" or
+            "call-procedure-if-player-radiation-positive"))
             throw new InvalidOperationException($"Unsupported classic script operation: {operation}");
         int? index = source.TryGetProperty("index", out var indexValue)
             ? indexValue.GetInt32()
@@ -252,8 +323,6 @@ internal sealed class ClassicScriptProgram
         if (index is < 0 ||
             operation is ("local-equals" or "local-not-equals") &&
                 (index is null || value is null) ||
-            operation is ("player-poison-equals" or "player-radiation-equals" or
-                "player-injuries-equals") && value is null ||
             operation is "set-local" && (index is null || (value is null) == (valueFrom is null)) ||
             valueFrom is not null && valueFrom != "game-time" ||
             operation is "set-flag" && string.IsNullOrWhiteSpace(flag) ||
@@ -261,6 +330,12 @@ internal sealed class ClassicScriptProgram
                 (messageId is null or < 0 || messageListId is < 0) ||
             operation is "player-art-fid-in" &&
                 (values is null || values.Length == 0 || values.Any(string.IsNullOrWhiteSpace)) ||
+            operation is "advance-game-time-by-player-poison" && value is null or <= 0 ||
+            operation is "clear-player-injuries" &&
+                (values is null || values.Length == 0 || values.Any(string.IsNullOrWhiteSpace) ||
+                 values.Distinct(StringComparer.Ordinal).Count() != values.Length) ||
+            operation is "call-procedure-if-player-radiation-positive" &&
+                string.IsNullOrWhiteSpace(target) ||
             operation is "open-dialogue" && string.IsNullOrWhiteSpace(node) ||
             operation is "dialogue-option" &&
                 (messageId is null or < 0 || messageListId is < 0 ||
@@ -283,9 +358,6 @@ internal sealed class ClassicScriptProgram
             "local-not-equals" => state.Local(operation.Index!.Value) != operation.Value,
             "player-art-fid-in" => operation.Values!.Contains(
                 context.PlayerArtFid ?? "", StringComparer.OrdinalIgnoreCase),
-            "player-poison-equals" => context.PlayerPoison == operation.Value,
-            "player-radiation-equals" => context.PlayerRadiation == operation.Value,
-            "player-injuries-equals" => context.PlayerInjuryFlags == operation.Value,
             _ => throw new InvalidOperationException(
                 $"Classic script effect used as a condition: {operation.Name}"),
         };
@@ -299,6 +371,10 @@ internal sealed class ClassicScriptProgram
         ref string? openDialogueNode,
         ref bool dialogueEnded,
         ref int playerHealing,
+        ref int playerPoisonRemoved,
+        ref int gameTimeAdvanceMinutes,
+        ISet<string> clearedPlayerInjuries,
+        ref string? nextProcedure,
         ICollection<ClassicDialogueReplySegment> dialogueReply,
         ICollection<ClassicDialogueOption> dialogueOptions)
     {
@@ -326,6 +402,33 @@ internal sealed class ClassicScriptProgram
                     throw new InvalidOperationException(
                         "Classic script player healing context is invalid.");
                 playerHealing = context.PlayerMaximumHitPoints - context.PlayerCurrentHitPoints;
+                break;
+            case "clear-player-poison":
+                if (context.PlayerPoison < 0 || playerPoisonRemoved != 0)
+                    throw new InvalidOperationException(
+                        "Classic script player poison context is invalid.");
+                playerPoisonRemoved = context.PlayerPoison;
+                break;
+            case "advance-game-time-by-player-poison":
+                if (context.PlayerPoison < 0)
+                    throw new InvalidOperationException(
+                        "Classic script player poison context is invalid.");
+                gameTimeAdvanceMinutes = checked(
+                    gameTimeAdvanceMinutes + context.PlayerPoison * operation.Value!.Value);
+                break;
+            case "clear-player-injuries":
+                foreach (var injury in context.PlayerInjuries ?? new HashSet<string>())
+                {
+                    if (operation.Values!.Contains(injury, StringComparer.Ordinal))
+                        clearedPlayerInjuries.Add(injury);
+                }
+                break;
+            case "call-procedure-if-player-radiation-positive":
+                if (context.PlayerRadiation < 0 || nextProcedure is not null)
+                    throw new InvalidOperationException(
+                        "Classic script player radiation context is invalid.");
+                if (context.PlayerRadiation > 0)
+                    nextProcedure = operation.Target;
                 break;
             case "open-dialogue":
                 if (openDialogueNode is not null || dialogueEnded)

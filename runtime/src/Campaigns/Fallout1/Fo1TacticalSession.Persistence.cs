@@ -41,6 +41,11 @@ internal partial class Fo1TacticalSession
             equippedWeaponSymbol = EquippedWeaponSymbol,
             tagInventoryApplied = _tagInventoryApplied,
             inventoryObjects = _inventoryObjects,
+            classicPlayerStatus = new
+            {
+                state = _classicPlayerStatus.Save(),
+                gameTime = _classicScriptGameTime,
+            },
             destinationFlare = _destinationFlareUse is null ? null : new
             {
                 descriptorSha256 = _destinationFlareUse.Sha256,
@@ -235,6 +240,15 @@ internal partial class Fo1TacticalSession
                 _inventoryObjects[row.Name] = objects;
             }
         }
+        if (root.TryGetProperty("classicPlayerStatus", out var classicPlayerStatus))
+        {
+            _classicPlayerStatus = ClassicPlayerStatusState.Restore(
+                classicPlayerStatus.GetProperty("state"));
+            _classicScriptGameTime = classicPlayerStatus.GetProperty("gameTime").GetInt32();
+            if (_classicScriptGameTime < 0)
+                throw new InvalidOperationException(
+                    "Fallout save classic player status state is invalid.");
+        }
         if (root.TryGetProperty("destinationFlare", out var destinationFlare) &&
             destinationFlare.ValueKind != JsonValueKind.Null)
         {
@@ -243,7 +257,11 @@ internal partial class Fo1TacticalSession
                 throw new InvalidOperationException("Fallout save flare state does not match its descriptor.");
             _destinationFlareScriptState = ClassicScriptState.Restore(
                 destinationFlare.GetProperty("scriptState"));
-            _classicScriptGameTime = destinationFlare.GetProperty("gameTime").GetInt32();
+            var savedFlareGameTime = destinationFlare.GetProperty("gameTime").GetInt32();
+            if (_classicScriptGameTime != 0 && _classicScriptGameTime != savedFlareGameTime)
+                throw new InvalidOperationException(
+                    "Fallout saved flare game time conflicts with shared classic time.");
+            _classicScriptGameTime = savedFlareGameTime;
             if (!_destinationFlareScriptState.Flag("lit") ||
                 destinationFlare.GetProperty("expiryLocalIndex").GetInt32() !=
                     _destinationFlareUse.ExpiryLocalIndex ||
@@ -275,7 +293,8 @@ internal partial class Fo1TacticalSession
                 procedure.ValueKind != JsonValueKind.Null)
             {
                 var savedProcedure = procedure.GetString() ?? "";
-                if (!_destinationMedicLook.DialogueNodes.ContainsKey(savedProcedure))
+                if (!_destinationMedicLook.DialogueNodes.ContainsKey(savedProcedure) &&
+                    savedProcedure != _destinationMedicLook.RadiationFollowupProcedure)
                     throw new InvalidOperationException(
                         "Fallout save Medic dialogue procedure is not decoded by its descriptor.");
                 _destinationMedicDialogueProcedure = savedProcedure;

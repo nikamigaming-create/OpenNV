@@ -26,6 +26,8 @@ internal sealed record Fo1DestinationMedicLookContract(
     string HealingProcedure,
     int HealingMessageId,
     string HealingMessageText,
+    int GameTimeTicksPerMinute,
+    string RadiationFollowupProcedure,
     IReadOnlySet<string> UnsupportedDialogueTargets)
 {
     private const string Schema = "opennv-fo1-destination-medic-look/v1";
@@ -118,6 +120,8 @@ internal sealed record Fo1DestinationMedicLookContract(
         var healingProcedure = Required(healing, "procedure");
         var healingMessageId = healing.GetProperty("messageId").GetInt32();
         var healingMessageText = Required(healing, "messageText");
+        var gameTimeTicksPerMinute = healing.GetProperty("gameTicksPerMinute").GetInt32();
+        var radiationFollowupProcedure = Required(healing, "radiationFollowupProcedure");
         var healingExecution = program.ExecuteWithActions(
             healingProcedure,
             new ClassicScriptState(),
@@ -144,12 +148,18 @@ internal sealed record Fo1DestinationMedicLookContract(
             effectDialogueTargets.Count != 1 ||
             !effectDialogueTargets.SetEquals([healingProcedure]) ||
             !healingExecution.Executed || healingExecution.PlayerHealing != 0 ||
+            healingExecution.PlayerPoisonRemoved != 0 ||
+            healingExecution.GameTimeAdvanceMinutes != 0 ||
+            healingExecution.ClearedPlayerInjuries.Count != 0 ||
+            healingExecution.NextProcedure is not null ||
             healingExecution.DisplayMessages.Count != 1 ||
             healingExecution.DisplayMessages[0] !=
                 new ClassicScriptMessage(null, healingMessageId) ||
             Required(healing, "healAmount") != "dude_max_hp-minus-dude_cur_hp" ||
             Required(healing, "damageTimeAdvance") !=
                 "reevaluated-player-damage-after-heal-zero" ||
+            gameTimeTicksPerMinute <= 0 ||
+            string.IsNullOrWhiteSpace(radiationFollowupProcedure) ||
             dialogueNodes.Values.Any(node =>
                 !dialogueNodes.ContainsKey(node.OptionTarget) &&
                 !effectDialogueTargets.Contains(node.OptionTarget) &&
@@ -177,6 +187,8 @@ internal sealed record Fo1DestinationMedicLookContract(
             healingProcedure,
             healingMessageId,
             healingMessageText,
+            gameTimeTicksPerMinute,
+            radiationFollowupProcedure,
             unsupportedDialogueTargets);
     }
 
@@ -210,6 +222,8 @@ internal sealed record Fo1DestinationMedicLookContract(
             messageId = HealingMessageId,
             messageText = HealingMessageText,
             healAmount = "dude_max_hp-minus-dude_cur_hp",
+            gameTimeTicksPerMinute = GameTimeTicksPerMinute,
+            radiationFollowupProcedure = RadiationFollowupProcedure,
         },
         sourceWalkMaskRoute = SourceWalkMaskRoute,
         viewed,
