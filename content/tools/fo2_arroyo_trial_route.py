@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from corpus_io import atomic_json
-from classic_door import decode_classic_door
+from classic_door import decode_classic_door, materialize_classic_door_assets
 from fo1_map_objects import Fo1ResourceResolver, parse_map_objects, parse_script_section
 from fo1_profile import Fo1ProfileError, parse_map_layout
 from fo2_first_slice import _archive_paths, _load_json
@@ -270,11 +270,14 @@ def compile_fo2_arroyo_trial_route(
     arroyo_source_path: Path,
     transition_path: Path,
     recipe_path: Path,
+    output_path: Path,
+    ffmpeg: str = "ffmpeg",
 ) -> dict[str, Any]:
     profile_path = profile_path.resolve()
     arroyo_source_path = arroyo_source_path.resolve()
     transition_path = transition_path.resolve()
     recipe_path = recipe_path.resolve()
+    output_path = output_path.resolve()
     profile = _load_json(profile_path)
     source = _load_json(arroyo_source_path)
     transitions = _load_json(transition_path)
@@ -316,6 +319,13 @@ def compile_fo2_arroyo_trial_route(
             resolver,
             int(door["pid"], PID_RADIX),
             str(door["artFilename"]),
+        )
+        door_presentation["runtimeAssets"] = materialize_classic_door_assets(
+            resolver,
+            door_presentation,
+            int(door["rotation"]),
+            output_path.parent / f"{output_path.stem}-door-assets",
+            ffmpeg,
         )
         global_resource = resolver.read(trial["globalCatalog"]["logicalPath"])
         global_text = global_resource.data.decode("cp1252")
@@ -616,15 +626,22 @@ def main() -> int:
         / "fo2-arroyo-trial-route-v1.json",
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--ffmpeg", default="ffmpeg")
     args = parser.parse_args()
     try:
+        output = args.output.resolve()
+        if output.exists():
+            raise Fo1ProfileError(
+                f"refusing to overwrite Fallout 2 trial route: {output}"
+            )
         document = compile_fo2_arroyo_trial_route(
             args.profile,
             args.arroyo_source,
             args.temple_transitions,
             args.recipe,
+            args.output,
+            args.ffmpeg,
         )
-        output = args.output.resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
         atomic_json(output, document)
     except Exception as error:

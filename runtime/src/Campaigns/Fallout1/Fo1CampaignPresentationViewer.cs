@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
@@ -71,6 +72,21 @@ internal partial class Fo1CampaignPresentationViewer : Node3D
     internal void SetStatusVisible(bool visible) => _statusLayer.Visible = visible;
 
     internal void ActivateCamera() => _camera.Current = true;
+
+    internal ClassicDoorPlayback BindDoorPlayback(
+        Fo1DestinationGenericDoorContract contract,
+        ClassicDoorSession session,
+        Action<ClassicDoorState> stateChanged)
+    {
+        var prefix = $"Object_{contract.Door.Serial}_";
+        var sprite = _spriteRoot.GetChildren().OfType<Sprite3D>().SingleOrDefault(row =>
+            row.Name.ToString().StartsWith(prefix, StringComparison.Ordinal)) ??
+            throw new InvalidOperationException(
+                "Fallout destination generic-door sprite is absent from its owned presentation.");
+        var playback = new ClassicDoorPlayback(session, sprite, stateChanged);
+        sprite.AddChild(playback);
+        return playback;
+    }
 
     internal void SetCaptureSize(float sizeMeters)
     {

@@ -342,6 +342,13 @@ internal static partial class Fo1NewGameFlow
             includeSourcePlayer: false);
         destinationViewer.SetStatusVisible(false);
         session.EnterCommittedDestination(destination);
+        if (session.DestinationGenericDoor is { } destinationDoor &&
+            session.DestinationGenericDoorSession is { } doorSession)
+            session.AttachDestinationGenericDoorPlayback(
+                destinationViewer.BindDoorPlayback(
+                    destinationDoor,
+                    doorSession,
+                    state => session.ApplyDestinationDoorPlaybackState(state)));
         var destinationMove = MoveOneLegalDestinationHex(session);
         if (loaded.Root.Visible || session.PlayerTile != destinationMove)
             throw new InvalidOperationException("Fallout destination first controllable move did not leave the source cave.");

@@ -15,7 +15,7 @@ from typing import Any
 from fo1_map_objects import Fo1ResourceResolver
 from fo1_profile import Fo1ProfileError, sha256_path
 from fo1_frm import decode_frm
-from classic_door import decode_classic_door
+from classic_door import decode_classic_door, materialize_classic_door_assets
 
 
 SCHEMA = "opennv-fo1-destination-generic-door/v1"
@@ -98,7 +98,8 @@ def frm_summary(data: bytes) -> dict[str, Any]:
 
 
 def build(transport_path: Path, presentation_path: Path, transition_path: Path,
-          fallout2_master: Path, fallout2_critter: Path | None, output_path: Path) -> dict[str, Any]:
+          fallout2_master: Path, fallout2_critter: Path | None, output_path: Path,
+          ffmpeg: str = "ffmpeg") -> dict[str, Any]:
     if output_path.exists():
         raise Fo1ProfileError(f"refusing to overwrite destination generic-door descriptor: {output_path}")
     transport, presentation, transition = (
@@ -154,6 +155,13 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path,
     door_presentation = decode_classic_door(
         resolver, int(door["pid"], PID_RADIX), door["artFilename"]
     )
+    door_presentation["runtimeAssets"] = materialize_classic_door_assets(
+        resolver,
+        door_presentation,
+        int(door["rotation"]),
+        output_path.parent / f"{output_path.stem}-assets",
+        ffmpeg,
+    )
     document = {
         "schema": SCHEMA,
         "status": "compiled-owned-map-unscripted-generic-door-open-passability",
@@ -201,11 +209,12 @@ def main() -> int:
     parser.add_argument("--fallout2-master", type=Path, required=True)
     parser.add_argument("--fallout2-critter", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--ffmpeg", default="ffmpeg")
     args = parser.parse_args()
     try:
         result = build(args.transport.resolve(), args.presentation.resolve(), args.exit_grid_transition.resolve(),
                        args.fallout2_master.resolve(), args.fallout2_critter.resolve() if args.fallout2_critter else None,
-                       args.output.resolve())
+                       args.output.resolve(), args.ffmpeg)
     except Exception as error:
         print(f"OPENNV_FO1_DESTINATION_GENERIC_DOOR_ERROR {error}")
         return 2

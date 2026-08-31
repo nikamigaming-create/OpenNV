@@ -289,29 +289,20 @@ internal partial class Fo1TacticalSession
                 destinationGenericDoor.GetProperty("descriptorSha256").GetString() != _destinationGenericDoor.Sha256)
                 throw new InvalidOperationException("Fallout save generic-door state does not match its descriptor.");
             _destinationGenericDoorOpen = destinationGenericDoor.GetProperty("open").GetBoolean();
+            var restoredDoorState = destinationGenericDoor.TryGetProperty(
+                    "sourcePresentationState", out var sourcePresentationState) &&
+                sourcePresentationState.ValueKind == JsonValueKind.Object
+                    ? ClassicDoorState.Restore(sourcePresentationState)
+                    : _destinationGenericDoorOpen
+                        ? ClassicDoorSession.OpenTerminal(_destinationGenericDoor.Presentation)
+                        : ClassicDoorSession.Closed(_destinationGenericDoor.Presentation);
             _destinationGenericDoorSession = new ClassicDoorSession(
                 _destinationGenericDoor.Presentation,
-                _destinationGenericDoorOpen
-                    ? ClassicDoorSession.OpenTerminal(_destinationGenericDoor.Presentation)
-                    : ClassicDoorSession.Closed(_destinationGenericDoor.Presentation));
-            if (destinationGenericDoor.TryGetProperty(
-                    "sourcePresentationState", out var sourcePresentationState) &&
-                sourcePresentationState.ValueKind == JsonValueKind.Object &&
-                (sourcePresentationState.GetProperty("Open").GetBoolean() !=
-                    _destinationGenericDoorSession.State.Open ||
-                 sourcePresentationState.GetProperty("Blocked").GetBoolean() !=
-                    _destinationGenericDoorSession.State.Blocked ||
-                 sourcePresentationState.GetProperty("Frame").GetInt32() !=
-                    _destinationGenericDoorSession.State.Frame ||
-                 (sourcePresentationState.GetProperty("LastSoundLogicalPath").ValueKind ==
-                        JsonValueKind.Null
-                    ? null
-                    : sourcePresentationState.GetProperty("LastSoundLogicalPath").GetString()) !=
-                    _destinationGenericDoorSession.State.LastSoundLogicalPath))
+                restoredDoorState);
+            if (_destinationGenericDoorOpen != restoredDoorState.Open)
                 throw new InvalidOperationException(
                     "Fallout save generic-door source presentation state drifted.");
-            if (_destinationGenericDoorOpen)
-                _walkable[_destinationGenericDoor.Door.Tile] = true;
+            _walkable[_destinationGenericDoor.Door.Tile] = !restoredDoorState.Blocked;
         }
         if (root.TryGetProperty("destinationMedicLook", out var destinationMedicLook) &&
             destinationMedicLook.ValueKind != JsonValueKind.Null)

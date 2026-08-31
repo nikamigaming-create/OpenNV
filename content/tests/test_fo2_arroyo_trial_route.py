@@ -57,6 +57,7 @@ class Fo2ArroyoTrialRouteTest(unittest.TestCase):
         self.assertIn("parse_map_objects", compiler)
         self.assertIn("firstLegalAction", compiler)
         self.assertIn("decode_classic_door", compiler)
+        self.assertIn("materialize_classic_door_assets", compiler)
         self.assertNotIn("guardian death", compiler.casefold())
 
         contract = (
@@ -77,6 +78,8 @@ class Fo2ArroyoTrialRouteTest(unittest.TestCase):
         self.assertIn("ApplyVillageFirstLegalAction", runtime)
         self.assertIn("VillageFirstActionStage", runtime)
         self.assertIn("ClassicDoorSession", runtime)
+        self.assertIn("ClassicDoorPlayback", runtime)
+        self.assertIn("CameronDoorPlaybackState", runtime)
         self.assertIn('SetMeta("source_door_frame"', runtime)
         self.assertIn('"source_door_sound"', runtime)
         self.assertIn('GetProperty("doorPresentation")', contract)

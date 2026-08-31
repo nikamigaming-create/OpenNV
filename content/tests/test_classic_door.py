@@ -3,15 +3,18 @@ from __future__ import annotations
 import hashlib
 import struct
 import sys
+import tempfile
 import unittest
+import wave
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "content/tools"))
 
-from classic_door import decode_classic_door  # noqa: E402
+from classic_door import decode_classic_door, materialize_classic_door_assets  # noqa: E402
 from fo1_profile import Fo1ProfileError  # noqa: E402
 
 
@@ -42,6 +45,7 @@ class Resolver:
             ),
             "sound\\sfx\\SODOORSS.ACM": b"open",
             "sound\\sfx\\SCDOORSS.ACM": b"close",
+            "color.pal": bytes(768),
         }
 
     def prototype(self, _pid: int):
@@ -88,6 +92,34 @@ class ClassicDoorTest(unittest.TestCase):
         del resolver.resources["sound\\sfx\\SCDOORSS.ACM"]
         with self.assertRaises(KeyError):
             decode_classic_door(resolver, 0x02000001, "door.frm")
+
+    def test_frames_and_pcm_wav_are_written_only_to_disposable_output(self) -> None:
+        resolver = Resolver()
+        source = decode_classic_door(resolver, 0x02000001, "door.frm")
+
+        def fake_ffmpeg(command, check, capture_output, text):
+            self.assertFalse(check)
+            self.assertTrue(capture_output)
+            self.assertTrue(text)
+            with wave.open(command[-1], "wb") as stream:
+                stream.setnchannels(1)
+                stream.setsampwidth(2)
+                stream.setframerate(22050)
+                stream.writeframes(b"\x00\x00")
+            return SimpleNamespace(returncode=0)
+
+        with tempfile.TemporaryDirectory() as raw_directory, patch(
+            "classic_door.subprocess.run", side_effect=fake_ffmpeg
+        ):
+            output = Path(raw_directory) / "door-assets"
+            runtime = materialize_classic_door_assets(
+                resolver, source, 0, output, "ffmpeg"
+            )
+            self.assertEqual(len(runtime["frames"]), 3)
+            self.assertTrue(all(Path(row["path"]).is_file() for row in runtime["frames"]))
+            self.assertTrue(Path(runtime["sounds"]["open"]["wav"]).is_file())
+            self.assertTrue(Path(runtime["sounds"]["close"]["wav"]).is_file())
+            self.assertFalse(any(output.glob("*.acm")))
 
 
 if __name__ == "__main__":

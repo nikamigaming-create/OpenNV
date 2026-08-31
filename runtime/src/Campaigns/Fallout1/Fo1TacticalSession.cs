@@ -216,6 +216,7 @@ internal partial class Fo1TacticalSession : Node
     private string? _destinationGenericDoorPath;
     private Fo1DestinationGenericDoorContract? _destinationGenericDoor;
     private ClassicDoorSession? _destinationGenericDoorSession;
+    private ClassicDoorPlayback? _destinationGenericDoorPlayback;
     private bool _destinationGenericDoorOpen;
     private string? _destinationMedicLookPath;
     private Fo1DestinationMedicLookContract? _destinationMedicLook;
@@ -398,6 +399,17 @@ internal partial class Fo1TacticalSession : Node
     internal bool DestinationGenericDoorOpen => _destinationGenericDoorOpen;
     internal ClassicDoorState? DestinationGenericDoorState =>
         _destinationGenericDoorSession?.State;
+    internal ClassicDoorSession? DestinationGenericDoorSession =>
+        _destinationGenericDoorSession;
+
+    internal void AttachDestinationGenericDoorPlayback(ClassicDoorPlayback playback)
+    {
+        if (_destinationGenericDoorSession is null)
+            throw new InvalidOperationException(
+                "Fallout destination door playback attached before its source session.");
+        _destinationGenericDoorPlayback = playback;
+        ApplyDestinationDoorState(_destinationGenericDoorSession.State);
+    }
     internal Fo1DestinationMedicLookContract? DestinationMedicLook => _destinationMedicLook;
     internal bool DestinationMedicLookViewed => _destinationMedicLookViewed;
     internal string? DestinationMedicDialogueProcedure => _destinationMedicDialogueProcedure;
@@ -565,17 +577,31 @@ internal partial class Fo1TacticalSession : Node
             return false;
         if (_walkable[door.Door.Tile])
             throw new InvalidOperationException("Fallout destination generic door opened without its authored MAP blocker.");
-        var state = (_destinationGenericDoorSession ?? throw new InvalidOperationException(
-            "Fallout destination generic door has no source presentation session."))
-            .OpenToSourceTerminal();
-        _destinationGenericDoorOpen = state.Open;
-        _walkable[door.Door.Tile] = !state.Blocked;
-        _status = $"Unscripted MAP door opened to source frame {state.Frame}; " +
+        var state = (_destinationGenericDoorPlayback ?? throw new InvalidOperationException(
+            "Fallout destination generic door has no live source playback binding."))
+            .BeginOpening();
+        _status = $"Unscripted MAP door opening from source frame {state.Frame}; " +
             $"sound {state.LastSoundLogicalPath}.";
         RefreshHud();
         Save();
         return true;
     }
+
+    internal void CompleteDestinationDoorPlaybackForHeadlessProof() =>
+        (_destinationGenericDoorPlayback ?? throw new InvalidOperationException(
+            "Fallout destination generic door has no live source playback binding."))
+        .CompleteForHeadless();
+
+    private void ApplyDestinationDoorState(ClassicDoorState state)
+    {
+        var door = _destinationGenericDoor ?? throw new InvalidOperationException(
+            "Fallout destination door state changed without its source contract.");
+        _destinationGenericDoorOpen = state.Open;
+        _walkable[door.Door.Tile] = !state.Blocked;
+    }
+
+    internal void ApplyDestinationDoorPlaybackState(ClassicDoorState state) =>
+        ApplyDestinationDoorState(state);
 
     internal bool TryLookAtAdjacentDestinationMedic()
     {

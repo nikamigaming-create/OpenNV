@@ -273,6 +273,7 @@ internal sealed record Fo2CharacterStartSaveState(
                     TrialProgress.CameronVisible,
                     TrialProgress.CameronDoorOpened,
                     TrialProgress.CameronDoorUnlocked,
+                    CameronDoorPlaybackState = TrialProgress.CameronDoorPlaybackState.Save(),
                     TrialProgress.KlintGateTile,
                     TrialProgress.KlintAlive,
                     TrialProgress.VillageRouteCompleted,
@@ -570,6 +571,11 @@ internal sealed record Fo2CharacterStartSaveState(
             value.GetProperty("CameronVisible").GetBoolean(),
             value.GetProperty("CameronDoorOpened").GetBoolean(),
             value.GetProperty("CameronDoorUnlocked").GetBoolean(),
+            value.TryGetProperty("CameronDoorPlaybackState", out var doorPlayback)
+                ? ClassicDoorState.Restore(doorPlayback)
+                : value.GetProperty("CameronDoorOpened").GetBoolean()
+                    ? ClassicDoorSession.OpenTerminal(contract.Cameron.ReleaseDoorPresentation)
+                    : ClassicDoorSession.Closed(contract.Cameron.ReleaseDoorPresentation),
             value.GetProperty("KlintGateTile").GetInt32(),
             value.GetProperty("KlintAlive").GetBoolean(),
             value.GetProperty("VillageRouteCompleted").GetBoolean(),

@@ -724,8 +724,12 @@ internal static partial class Fo1NewGameFlow
                 var contactTile = loaded.Session.PlayerTile;
                 if (!Fo1HexMath.AreNeighbors(contactTile, door.Door.Tile) ||
                     !loaded.Session.TryActivateAdjacentDestinationGenericDoor() ||
-                    !loaded.Session.DestinationGenericDoorOpen || !loaded.Session.CanWalk(door.Door.Tile))
+                    !loaded.Session.DestinationGenericDoorOpen)
                     throw new InvalidOperationException("Fallout generic-door Continue proof did not open its authored blocker.");
+                loaded.Session.CompleteDestinationDoorPlaybackForHeadlessProof();
+                if (!loaded.Session.CanWalk(door.Door.Tile))
+                    throw new InvalidOperationException(
+                        "Fallout generic-door source playback did not release its authored blocker.");
                 if (loaded.Session.ActionPoints == 0)
                     loaded.Session.EndTurn();
                 loaded.Session.SelectTile(door.Door.Tile);
