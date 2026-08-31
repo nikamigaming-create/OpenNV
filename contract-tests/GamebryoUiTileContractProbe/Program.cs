@@ -46,6 +46,17 @@ var navigationRect = OwnedGamebryoTileRuntime.NavigationRect(
 if (navigationRect != new Rect2(250.0f, 340.0f, 50.0f, 25.0f))
     throw new InvalidOperationException(
         $"Gamebryo UI navigation placement differs: {navigationRect}");
+var options = new[]
+{
+    new SourceOption("000001", "Caucasian"),
+    new SourceOption("000002", "Hispanic"),
+};
+if (OwnedGamebryoTileRuntime.RequireSourceSelection(
+        options,
+        option => option.FormId,
+        "000002") != 1)
+    throw new InvalidOperationException(
+        "Gamebryo UI source selection differs.");
 
 ExpectLayoutFailure(layout with { Rect = new Rect2(0.0f, 0.0f, 0.0f, 180.0f) });
 ExpectLayoutFailure(layout with { DocumentSha256 = "unbound" });
@@ -55,9 +66,32 @@ ExpectPlacementFailure(placement with
 {
     X = new OwnedGamebryoAxisExpression(float.NaN, 0.0f, 0.0f),
 });
+ExpectSelectionFailure(options, "missing");
+ExpectSelectionFailure(
+    [new SourceOption("duplicate", "One"), new SourceOption("duplicate", "Two")],
+    "duplicate");
 
 Console.WriteLine(
-    "OPENNV_GAMEBRYO_UI_TILE_CONTRACT_PASS layout=1 text=1 affine=1 navigation=1 failClosed=5");
+    "OPENNV_GAMEBRYO_UI_TILE_CONTRACT_PASS layout=1 text=1 affine=1 navigation=1 selection=1 failClosed=7");
+
+static void ExpectSelectionFailure(
+    IReadOnlyList<SourceOption> options,
+    string selectedFormId)
+{
+    try
+    {
+        OwnedGamebryoTileRuntime.RequireSourceSelection(
+            options,
+            option => option.FormId,
+            selectedFormId);
+    }
+    catch (InvalidOperationException)
+    {
+        return;
+    }
+    throw new InvalidOperationException(
+        "Gamebryo UI source selection did not fail closed.");
+}
 
 static void ExpectLayoutFailure(OwnedGamebryoTileLayout source)
 {
@@ -97,3 +131,5 @@ static void ExpectPlacementFailure(OwnedGamebryoTilePlacement source)
     }
     throw new InvalidOperationException("Gamebryo UI placement did not fail closed.");
 }
+
+internal sealed record SourceOption(string FormId, string Label);

@@ -128,6 +128,27 @@ internal static class OwnedGamebryoTileRuntime
         button.Text = source.Text;
     }
 
+    internal static int RequireSourceSelection<T>(
+        IReadOnlyList<T> options,
+        Func<T, string> sourceIdentity,
+        string selectedSourceIdentity)
+    {
+        var selected = -1;
+        for (var index = 0; index < options.Count; index++)
+        {
+            if (sourceIdentity(options[index]) != selectedSourceIdentity)
+                continue;
+            if (selected >= 0)
+                throw new InvalidOperationException(
+                    $"Owned Gamebryo UI source selection is ambiguous: {selectedSourceIdentity}");
+            selected = index;
+        }
+        if (selected < 0)
+            throw new InvalidOperationException(
+                $"Owned Gamebryo UI source selection is unavailable: {selectedSourceIdentity}");
+        return selected;
+    }
+
     internal static void ApplyTraitPosition(
         Control control,
         OwnedGamebryoTilePlacement source,

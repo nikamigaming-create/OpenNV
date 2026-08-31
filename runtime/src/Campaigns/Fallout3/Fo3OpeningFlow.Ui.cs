@@ -12,10 +12,9 @@ internal partial class Fo3OpeningFlow
 {
     private void AddSelector(GridContainer grid, string title, OptionButton selector)
     {
-        selector.Name = $"FO3_RaceSexMenu_{title}";
-        selector.CustomMinimumSize = new Vector2(
-            0.0f,
-            _profile.Appearance.Ui.ListItemHeight);
+        var source = _profile.Appearance.Ui.RaceSexControls.List;
+        selector.Name = $"{source.Tile}_{title}";
+        selector.CustomMinimumSize = source.Rect.Size;
         selector.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         selector.AddThemeFontSizeOverride(
             "font_size",
@@ -26,33 +25,35 @@ internal partial class Fo3OpeningFlow
     private static void FillOptions(
         OptionButton selector,
         IReadOnlyList<Fo3AppearanceRace> options,
-        string selectedFormId,
-        string prefix)
+        string selectedFormId)
     {
         selector.Clear();
         for (var index = 0; index < options.Count; index++)
         {
-            selector.AddItem($"{prefix}  •  {options[index].Label}");
+            selector.AddItem(options[index].Label);
             selector.SetItemMetadata(index, options[index].FormId);
-            if (options[index].FormId == selectedFormId)
-                selector.Select(index);
         }
+        selector.Select(OwnedGamebryoTileRuntime.RequireSourceSelection(
+            options,
+            option => option.FormId,
+            selectedFormId));
     }
 
     private static void FillOptions(
         OptionButton selector,
         IReadOnlyList<Fo3AppearanceOption> options,
-        string selectedFormId,
-        string prefix)
+        string selectedFormId)
     {
         selector.Clear();
         for (var index = 0; index < options.Count; index++)
         {
-            selector.AddItem($"{prefix}  •  {options[index].Label}");
+            selector.AddItem(options[index].Label);
             selector.SetItemMetadata(index, options[index].FormId);
-            if (options[index].FormId == selectedFormId)
-                selector.Select(index);
         }
+        selector.Select(OwnedGamebryoTileRuntime.RequireSourceSelection(
+            options,
+            option => option.FormId,
+            selectedFormId));
     }
 
     private void RenderAppearancePreview(
@@ -162,7 +163,7 @@ internal partial class Fo3OpeningFlow
             _creatorLayer = null;
         }
         _activeNameInput = null;
-        _activeAppearanceCategory = null;
+        _activeAppearanceShowFace = null;
         _activeFaceControlSlider = null;
         _activeAppearanceSelection = null;
         _activeFacePreview = null;

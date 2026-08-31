@@ -13,6 +13,14 @@ namespace OpenNV.Runtime.Campaigns.Fallout3;
 
 internal partial class Fo3OpeningFlow
 {
+    private enum AppearanceCategory
+    {
+        Race,
+        Hair,
+        Eyes,
+        Face,
+    }
+
     private void BuildShell()
     {
         _background = new ColorRect { Color = Colors.Black };
@@ -257,15 +265,14 @@ internal partial class Fo3OpeningFlow
     private void ShowSexSelection()
     {
         ClearContent();
-        if (_cg00EarlySequence is null)
-            _content.AddChild(Label(
-                "FALLOUT 3  •  CG00",
-                Fo3OpeningFlowNumericContracts.TitleFontPixels));
         _content.AddChild(Label(_profile.SexTitle, Fo3OpeningFlowNumericContracts.BodyFontPixels));
         foreach (var choice in _profile.SexChoices)
         {
             var captured = choice;
             var button = Button(choice.Label);
+            var source = _profile.Appearance.Ui.RaceSexControls.List;
+            button.Name = $"{source.Tile}_sex_{choice.EngineSex}";
+            button.CustomMinimumSize = source.Rect.Size;
             button.Pressed += () =>
             {
                 if (_cg00EarlySequence is null)
@@ -685,19 +692,6 @@ internal partial class Fo3OpeningFlow
             $"{playerName}{System.Environment.NewLine}{sex.Label.ToUpperInvariant()}",
             Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels));
 
-        var categorySelect = new OptionButton
-        {
-            Name = sourceControls.List.Tile,
-            CustomMinimumSize = sourceControls.List.Rect.Size,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-        };
-        foreach (var category in new[] { "RACE", "HAIR", "EYES", "FACE" })
-            categorySelect.AddItem(category);
-        categorySelect.AddThemeFontSizeOverride(
-            "font_size",
-            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
-        content.AddChild(categorySelect);
-        _activeAppearanceCategory = categorySelect;
         var selectors = new GridContainer { Columns = 1 };
         selectors.AddThemeConstantOverride(
             "h_separation",
@@ -714,7 +708,7 @@ internal partial class Fo3OpeningFlow
         content.AddChild(selectors);
 
         var defaultSelection = _profile.Appearance.DefaultSelection(sex.EngineSex);
-        FillOptions(raceSelect, _profile.Appearance.Races, defaultSelection.Race.FormId, "RACE");
+        FillOptions(raceSelect, _profile.Appearance.Races, defaultSelection.Race.FormId);
         var faceFrame = _reflectron.CreateFacePresentationHost();
         var previewSource = _profile.Appearance.PreviewFor(
             defaultSelection,
@@ -794,11 +788,11 @@ internal partial class Fo3OpeningFlow
                 faceEnabled: faceFraming);
         }
         RefreshProjection();
-        var liveStatus = Label(
-            "SCULPT FACE",
-            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
-        content.AddChild(liveStatus);
-        var faceControlSelect = new OptionButton();
+        var faceControlSelect = new OptionButton
+        {
+            Name = $"{sourceControls.List.Tile}_face",
+            CustomMinimumSize = sourceControls.List.Rect.Size,
+        };
         foreach (var faceControl in _profile.Appearance.FaceControls)
             faceControlSelect.AddItem(faceControl.SourceLabel);
         faceControlSelect.Select(Array.IndexOf(
@@ -821,8 +815,8 @@ internal partial class Fo3OpeningFlow
         void SelectRaceDefaults(Fo3AppearanceRace race)
         {
             var raceSex = race.Sex[sex.EngineSex];
-            FillOptions(hairSelect, raceSex.HairOptions, raceSex.DefaultHairFormId, "HAIR");
-            FillOptions(eyesSelect, raceSex.EyeOptions, raceSex.DefaultEyesFormId, "EYES");
+            FillOptions(hairSelect, raceSex.HairOptions, raceSex.DefaultHairFormId);
+            FillOptions(eyesSelect, raceSex.EyeOptions, raceSex.DefaultEyesFormId);
             SelectCurrent();
         }
 
@@ -843,7 +837,10 @@ internal partial class Fo3OpeningFlow
                 selection.Race.FormId == previewSource.RaceFormId &&
                 selection.Hair.FormId == previewSource.HairFormId &&
                 selection.Eyes.FormId == previewSource.EyesFormId;
-            slider.Editable = previewSupported;
+            if (!previewSupported)
+                throw new InvalidOperationException(
+                    "Fallout 3 RaceSex selection has no owned full-body preview.");
+            slider.Editable = true;
             foreach (var faceControl in _profile.Appearance.FaceControls)
                 _activeFacePreview.Apply(faceControl.SettingEntity, faceControl.ResetValue);
             activeControl = control;
@@ -851,10 +848,7 @@ internal partial class Fo3OpeningFlow
                 _profile.Appearance.FaceControls.ToArray(),
                 control));
             slider.Value = activeControl.ResetValue;
-            _activeFacePreview.Control.Visible = previewSupported;
-            liveStatus.Text = previewSupported
-                ? "SCULPT FACE"
-                : "3D PREVIEW NOT AVAILABLE FOR THIS SELECTION";
+            _activeFacePreview.Control.Visible = true;
             _activeAppearanceSelection = selection;
         }
 
@@ -872,9 +866,6 @@ internal partial class Fo3OpeningFlow
                 _activeAppearanceSelection,
                 activeControl,
                 (float)value);
-            liveStatus.Text =
-                $"{activeControl.SourceLabel}{System.Environment.NewLine}" +
-                $"{(float)value:+0.00;-0.00;0.00}";
         };
         faceControlSelect.ItemSelected += index =>
         {
@@ -884,42 +875,43 @@ internal partial class Fo3OpeningFlow
             slider.Step = activeControl.Step;
             slider.Value = _activeAppearanceSelection?.FaceControlValue(
                 activeControl.SettingEntity) ?? activeControl.ResetValue;
-            liveStatus.Text = activeControl.SourceLabel;
         };
         SelectRaceDefaults(defaultSelection.Race);
-        void ShowCategory(long index)
+        void ShowCategory(AppearanceCategory category)
         {
-            raceSelect.Visible = index == 0;
-            hairSelect.Visible = index == 1;
-            eyesSelect.Visible = index == 2;
-            slider.Visible = index == 3;
-            faceControlSelect.Visible = index == 3;
-            liveStatus.Visible = index == 3;
-            _reflectron.SetActiveList(index switch
+            raceSelect.Visible = category == AppearanceCategory.Race;
+            hairSelect.Visible = category == AppearanceCategory.Hair;
+            eyesSelect.Visible = category == AppearanceCategory.Eyes;
+            slider.Visible = category == AppearanceCategory.Face;
+            faceControlSelect.Visible = category == AppearanceCategory.Face;
+            _reflectron.SetActiveList(category switch
             {
-                0 => "race",
-                1 => "hair",
-                2 => "eyes",
-                _ => "face",
+                AppearanceCategory.Race => "race",
+                AppearanceCategory.Hair => "hair",
+                AppearanceCategory.Eyes => "eyes",
+                AppearanceCategory.Face => "face",
+                _ => throw new InvalidOperationException(
+                    $"Fallout 3 RaceSex category is unsupported: {category}"),
             });
         }
-        categorySelect.ItemSelected += ShowCategory;
-        ShowCategory(0);
-        void SelectCategory(int index)
+        var activeCategory = AppearanceCategory.Race;
+        ShowCategory(activeCategory);
+        void SelectCategory(AppearanceCategory category)
         {
-            categorySelect.Select(index);
-            ShowCategory(index);
+            activeCategory = category;
+            ShowCategory(category);
         }
+        _activeAppearanceShowFace = () => SelectCategory(AppearanceCategory.Face);
         _reflectron.ConfigureCharacterControls(
             characterReflectron.Font,
             () => { },
-            () => SelectCategory(0),
-            () => SelectCategory(3),
-            () => SelectCategory(1),
+            () => SelectCategory(AppearanceCategory.Race),
+            () => SelectCategory(AppearanceCategory.Face),
+            () => SelectCategory(AppearanceCategory.Hair),
             () =>
             {
                 faceFraming = true;
-                SelectCategory(3);
+                SelectCategory(AppearanceCategory.Face);
                 RefreshProjection();
             },
             () =>
@@ -966,21 +958,47 @@ internal partial class Fo3OpeningFlow
             sourceControls.Back,
             () =>
             {
-                var index = categorySelect.Selected;
-                if (index <= 0)
-                    ShowNameSelection(sex);
-                else
-                    SelectCategory(index - 1);
+                switch (activeCategory)
+                {
+                    case AppearanceCategory.Race:
+                        ShowNameSelection(sex);
+                        break;
+                    case AppearanceCategory.Hair:
+                        SelectCategory(AppearanceCategory.Race);
+                        break;
+                    case AppearanceCategory.Eyes:
+                        SelectCategory(AppearanceCategory.Hair);
+                        break;
+                    case AppearanceCategory.Face:
+                        SelectCategory(AppearanceCategory.Eyes);
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"Fallout 3 RaceSex category is unsupported: {activeCategory}");
+                }
             });
         NavigationButton(
             sourceControls.Next,
             () =>
             {
-                var index = categorySelect.Selected;
-                if (index < categorySelect.ItemCount - 1)
-                    SelectCategory(index + 1);
-                else
-                    AcceptAppearance(playerName, sex);
+                switch (activeCategory)
+                {
+                    case AppearanceCategory.Race:
+                        SelectCategory(AppearanceCategory.Hair);
+                        break;
+                    case AppearanceCategory.Hair:
+                        SelectCategory(AppearanceCategory.Eyes);
+                        break;
+                    case AppearanceCategory.Eyes:
+                        SelectCategory(AppearanceCategory.Face);
+                        break;
+                    case AppearanceCategory.Face:
+                        AcceptAppearance(playerName, sex);
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"Fallout 3 RaceSex category is unsupported: {activeCategory}");
+                }
             });
         Callable.From(raceSelect.GrabFocus).CallDeferred();
         GD.Print(

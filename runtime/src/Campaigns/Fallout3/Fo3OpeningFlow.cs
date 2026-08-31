@@ -52,7 +52,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private bool _characterVideo;
     private Control? _creatorLayer;
     private LineEdit? _activeNameInput;
-    private OptionButton? _activeAppearanceCategory;
+    private Action? _activeAppearanceShowFace;
     private HSlider? _activeFaceControlSlider;
     private Fo3AppearanceSelection? _activeAppearanceSelection;
     private OpeningPlayerFaceGenPreviewHost? _activeFacePreview;
