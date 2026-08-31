@@ -1794,6 +1794,9 @@ internal sealed partial record OpeningNewGameFlow(
         var geometryControlNames = source.GetProperty("geometryControlNames")
             .EnumerateArray().Select(value => value.GetString()!).ToArray();
         var geometryControlCount = source.GetProperty("geometryControlCount").GetInt32();
+        var textureControlNames = source.GetProperty("textureControlNames")
+            .EnumerateArray().Select(value => value.GetString()!).ToArray();
+        var textureControlCount = source.GetProperty("textureControlCount").GetInt32();
         var runtimeDisposition = source.GetProperty("runtimeDisposition").GetString()!;
         var selectionScope = source.GetProperty("selectionScope").GetString()!;
         var unsupportedSelectionScope = source.GetProperty("unsupportedSelectionScope")
@@ -1826,11 +1829,24 @@ internal sealed partial record OpeningNewGameFlow(
                         .Select(part => part.GetString()!).ToArray(),
                     geometryControlNames,
                     geometryControlCount,
+                    textureControlNames,
+                    textureControlCount,
                     outputs.GetProperty("gltf").GetString()!,
                     outputs.GetProperty("gltfSha256").GetString()!,
                     outputs.GetProperty("sidecar").GetString()!,
                     outputs.GetProperty("sidecarSha256").GetString()!,
                     outputs.GetProperty("bufferSha256").GetString()!,
+                    outputs.GetProperty("egt").GetString()!,
+                    outputs.GetProperty("egtSha256").GetString()!,
+                    ParseFloatArray(value.GetProperty("symmetricTexture")),
+                    value.GetProperty("textureControls").EnumerateArray()
+                        .Select(control => new OpeningNativeFaceGenTextureControl(
+                            control.GetProperty("controlIndex").GetInt32(),
+                            control.GetProperty("settingEntity").GetString()!,
+                            control.GetProperty("sourceLabel").GetString()!,
+                            control.GetProperty("axisSha256").GetString()!,
+                            ParseFloatArray(control.GetProperty("axis"))))
+                        .ToArray(),
                     runtimeDisposition,
                     fullBody,
                     bodyComponentRoles,
@@ -1843,6 +1859,8 @@ internal sealed partial record OpeningNewGameFlow(
             playerFormId,
             geometryControlNames,
             geometryControlCount,
+            textureControlNames,
+            textureControlCount,
             runtimeDisposition,
             selectionScope,
             unsupportedSelectionScope,

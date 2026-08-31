@@ -123,10 +123,37 @@ static void RunOwnedOpening(string path)
             .EnumerateArray().Any(value => value.GetString() == first.SettingEntity));
     Require(boundSurfaces > 0,
         "Owned preview artifact does not bind the selected FaceGen control.");
+    var textureExposure = controlSpace.GetProperty("nativeTextureExposure")
+        .GetProperty("controls").EnumerateArray().ToArray();
+    var textureAxes = controlSpace.GetProperty("format").GetProperty("controls")
+        .GetProperty("symmetricTexture").EnumerateArray()
+        .ToDictionary(value => value.GetProperty("index").GetInt32());
+    Require(textureExposure.Length > 0,
+        "Owned FaceGen tone exposure is absent.");
+    foreach (var tone in textureExposure)
+    {
+        var axis = textureAxes[tone.GetProperty("controlIndex").GetInt32()];
+        Require(axis.GetProperty("axisSha256").GetString() ==
+            tone.GetProperty("axisSha256").GetString(),
+            "Owned FaceGen tone control and CTL texture axis differ.");
+    }
+    var previewTextureControls = preview.GetProperty("textureControls")
+        .EnumerateArray().ToArray();
+    Require(previewTextureControls.Select(value =>
+            value.GetProperty("settingEntity").GetString())
+        .SequenceEqual(textureExposure.Select(value =>
+            value.GetProperty("settingEntity").GetString())),
+        "Owned preview tone control order differs from native exposure.");
+    var outputs = preview.GetProperty("outputs");
+    var egtPath = outputs.GetProperty("egt").GetString()!;
+    var egtSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(egtPath)))
+        .ToLowerInvariant();
+    Require(egtSha256 == outputs.GetProperty("egtSha256").GetString(),
+        "Owned preview EGT identity differs.");
     Console.WriteLine(
         $"OPENNV_GAMEBRYO_FACEGEN_OWNED_MORPH_OK control={first.SettingEntity} " +
         $"value={acceptance:R} geometrySha256={result.SymmetricGeometrySha256} " +
-        $"boundSurfaces={boundSurfaces}");
+        $"boundSurfaces={boundSurfaces} toneControls={textureExposure.Length}");
 }
 
 static string Hash(IReadOnlyList<float> values)

@@ -4372,6 +4372,35 @@ def _compile_facegen_control_space(
         }
         for index in indices
     ]
+    texture_exposure = dict(policy.get("nativeTextureExposure", {}))
+    texture_indices = [
+        int(value) for value in texture_exposure.get("controlIndices", [])
+    ]
+    symmetric_texture = control_space.symmetric_texture
+    if (
+        texture_exposure
+        and (
+            not texture_indices
+            or len(texture_indices) != len(set(texture_indices))
+            or min(texture_indices) < 0
+            or max(texture_indices) >= len(symmetric_texture)
+            or str(texture_exposure.get("sourceExecutableSha256", "")).casefold()
+            != str(exposure["sourceExecutableSha256"]).casefold()
+        )
+    ):
+        raise ValueError("Native FaceGen texture control exposure is invalid")
+    texture_setting_template = str(texture_exposure.get("settingEntityTemplate", ""))
+    native_texture_controls = [
+        {
+            "controlIndex": index,
+            "settingEntity": texture_setting_template.format(
+                oneBasedOrdinal=ordinal + 1
+            ),
+            "sourceLabel": symmetric_texture[index].label,
+            "axisSha256": symmetric_texture[index].axis_sha256,
+        }
+        for ordinal, index in enumerate(texture_indices)
+    ]
     preview_policy = dict(policy["runtimePreviewControl"])
     preview_index = int(preview_policy["controlIndex"])
     preview_matches = [
@@ -4516,6 +4545,23 @@ def _compile_facegen_control_space(
                 set(range(len(symmetric_geometry))) - set(indices)
             ),
         },
+        **(
+            {
+                "nativeTextureExposure": {
+                    "classification": texture_exposure["classification"],
+                    "engineBuild": texture_exposure["engineBuild"],
+                    "sourceExecutableSha256": str(
+                        texture_exposure["sourceExecutableSha256"]
+                    ).casefold(),
+                    "controls": native_texture_controls,
+                    "unexposedControlIndices": sorted(
+                        set(range(len(symmetric_texture))) - set(texture_indices)
+                    ),
+                }
+            }
+            if texture_exposure
+            else {}
+        ),
         "runtimePreviewControl": runtime_preview_control,
         "runtimeDisposition": (
             "control-axes-and-default-preview-egm-targets-compiled-all-native-"
@@ -6589,13 +6635,14 @@ def compile_new_game_flow(
         raise ValueError(
             f"Owned opening sex message has an unexpected choice count: {len(sex_choices)}"
         )
+    facegen_control_space = _compile_facegen_control_space(
+        ui_archive_path,
+        dict(character_rules["faceGenControlSpace"]),
+    )
     appearance, appearance_texture_paths = _compile_player_appearance(
         sources,
         quest_script_sources[0],
-        _compile_facegen_control_space(
-            ui_archive_path,
-            dict(character_rules["faceGenControlSpace"]),
-        ),
+        facegen_control_space,
     )
     race_sex_list = dict(character_rules["raceSexList"])
     race_sex_header = dict(race_sex_list["header"])
@@ -6621,6 +6668,16 @@ def compile_new_game_flow(
         != str(race_sex_source.get("sourceExecutableSha256", "")).casefold()
     ):
         raise ValueError("Owned RaceSexMenu creator-list contract differs")
+    texture_exposure = dict(facegen_control_space["nativeTextureExposure"])
+    executable_payload = source_executable.read_bytes()
+    if any(
+        executable_payload.count(
+            str(dict(control)["settingEntity"]).encode("ascii")
+        )
+        != 1
+        for control in texture_exposure["controls"]
+    ):
+        raise ValueError("Owned RaceSexMenu tone-control exposure differs")
     race_sex_creator_title = (
         f'{int(race_sex_header["ordinal"])}. {race_sex_header["value"]}'
     )

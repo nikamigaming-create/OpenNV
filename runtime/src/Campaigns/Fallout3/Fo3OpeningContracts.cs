@@ -170,7 +170,8 @@ internal sealed record Fo3AppearanceSelection(
     Fo3AppearanceSex Sex,
     Fo3AppearanceOption Hair,
     Fo3AppearanceOption Eyes,
-    IReadOnlyDictionary<string, float> FaceControlValues)
+    IReadOnlyDictionary<string, float> FaceControlValues,
+    IReadOnlyDictionary<string, float> TextureControlValues)
 {
     internal float FaceControlValue(string settingEntity) => FaceControlValues[settingEntity];
 }
@@ -374,7 +375,8 @@ internal sealed record Fo3AppearanceContract(
             FaceControls.ToDictionary(
                 value => value.SettingEntity,
                 value => value.ResetValue,
-                StringComparer.Ordinal));
+                StringComparer.Ordinal),
+            TextureDefaults());
     }
 
     internal Fo3AppearanceSelection ResolveSelection(
@@ -395,8 +397,15 @@ internal sealed record Fo3AppearanceContract(
             FaceControls.ToDictionary(
                 value => value.SettingEntity,
                 value => value.ResetValue,
-                StringComparer.Ordinal));
+                StringComparer.Ordinal),
+            TextureDefaults());
     }
+
+    private IReadOnlyDictionary<string, float> TextureDefaults() =>
+        PreviewSet.Previews[0].TextureControls.ToDictionary(
+            value => value.SettingEntity,
+            _ => FaceControl.ResetValue,
+            StringComparer.Ordinal);
 
     internal Fo3AppearanceSelection ApplyFaceControl(
         Fo3AppearanceSelection selection,
@@ -461,6 +470,9 @@ internal sealed record Fo3AppearanceContract(
         var geometryControlNames = RequiredArray(source, "geometryControlNames")
             .EnumerateArray().Select(value => value.GetString()!).ToArray();
         var geometryControlCount = RequiredInteger(source, "geometryControlCount");
+        var textureControlNames = RequiredArray(source, "textureControlNames")
+            .EnumerateArray().Select(value => value.GetString()!).ToArray();
+        var textureControlCount = RequiredInteger(source, "textureControlCount");
         var runtimeDisposition = RequiredString(source, "runtimeDisposition");
         var selectionScope = RequiredString(source, "selectionScope");
         var unsupportedSelectionScope = RequiredString(
@@ -492,11 +504,26 @@ internal sealed record Fo3AppearanceContract(
                         .Select(part => part.GetString()!).ToArray(),
                     geometryControlNames,
                     geometryControlCount,
+                    textureControlNames,
+                    textureControlCount,
                     VerifiedPath(outputs, "gltf", "gltfSha256"),
                     RequiredString(outputs, "gltfSha256"),
                     VerifiedPath(outputs, "sidecar", "sidecarSha256"),
                     RequiredString(outputs, "sidecarSha256"),
                     RequiredString(outputs, "bufferSha256"),
+                    VerifiedPath(outputs, "egt", "egtSha256"),
+                    RequiredString(outputs, "egtSha256"),
+                    RequiredArray(value, "symmetricTexture").EnumerateArray()
+                        .Select(item => item.GetSingle()).ToArray(),
+                    RequiredArray(value, "textureControls").EnumerateArray()
+                        .Select(control => new OpeningNativeFaceGenTextureControl(
+                            RequiredInteger(control, "controlIndex"),
+                            RequiredString(control, "settingEntity"),
+                            RequiredString(control, "sourceLabel"),
+                            RequiredString(control, "axisSha256"),
+                            RequiredArray(control, "axis").EnumerateArray()
+                                .Select(item => item.GetSingle()).ToArray()))
+                        .ToArray(),
                     runtimeDisposition,
                     fullBody,
                     bodyRoles,
@@ -508,6 +535,8 @@ internal sealed record Fo3AppearanceContract(
             previewPlayerFormId,
             geometryControlNames,
             geometryControlCount,
+            textureControlNames,
+            textureControlCount,
             runtimeDisposition,
             selectionScope,
             unsupportedSelectionScope,
@@ -526,6 +555,8 @@ internal sealed record Fo3AppearanceContract(
             !geometryControlNames.SequenceEqual(
                 faceControls.Select(value => value.SettingEntity),
                 StringComparer.Ordinal) ||
+            textureControlCount <= 0 ||
+            textureControlCount != textureControlNames.Length ||
             !fullBody ||
             !bodyRoles.SequenceEqual(ExpectedBodyRoles, StringComparer.Ordinal) ||
             !bodySources.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedPreviewSexes) ||
@@ -548,6 +579,15 @@ internal sealed record Fo3AppearanceContract(
                 !preview.GeometryControlNames.SequenceEqual(
                     geometryControlNames,
                     StringComparer.Ordinal) ||
+                preview.TextureControlCount != textureControlCount ||
+                !preview.TextureControlNames.SequenceEqual(
+                    textureControlNames,
+                    StringComparer.Ordinal) ||
+                !preview.TextureControls.Select(value => value.SettingEntity).SequenceEqual(
+                    textureControlNames,
+                    StringComparer.Ordinal) ||
+                preview.TextureControls.Any(value =>
+                    value.Axis.Count != preview.SymmetricTexture.Count) ||
                 !preview.FullBody ||
                 preview.BodyComponentRoles is null ||
                 !preview.BodyComponentRoles.SequenceEqual(

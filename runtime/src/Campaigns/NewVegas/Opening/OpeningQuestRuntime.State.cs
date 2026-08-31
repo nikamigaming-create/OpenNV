@@ -461,8 +461,14 @@ internal partial class OpeningQuestRuntime
             _eyesFormId,
             CurrentFaceSymmetricGeometrySha256(),
             _flow.Character.Appearance.FaceGen.AsymmetricGeometrySha256,
-            _flow.Character.Appearance.FaceGen.SymmetricTextureSha256,
+            CurrentFaceSymmetricTextureSha256(),
             _faceGeometryControlValues
+                .OrderBy(value => value.Key, StringComparer.Ordinal)
+                .ToDictionary(
+                    value => value.Key,
+                    value => value.Value,
+                    StringComparer.Ordinal),
+            _faceTextureControlValues
                 .OrderBy(value => value.Key, StringComparer.Ordinal)
                 .ToDictionary(
                     value => value.Key,
@@ -620,7 +626,9 @@ internal partial class OpeningQuestRuntime
                 flow.Character.Appearance.FaceGen.AsymmetricGeometrySha256,
                 StringComparison.OrdinalIgnoreCase) &&
             state.FaceSymmetricTextureSha256.Equals(
-                flow.Character.Appearance.FaceGen.SymmetricTextureSha256,
+                FaceSymmetricTextureSha256(
+                    flow.Character.Appearance.FaceGen,
+                    state.FaceTextureControlValues),
                 StringComparison.OrdinalIgnoreCase);
     }
 
@@ -628,6 +636,31 @@ internal partial class OpeningQuestRuntime
         FaceSymmetricGeometrySha256(
             _flow.Character.Appearance.FaceGen,
             _faceGeometryControlValues);
+
+    private string CurrentFaceSymmetricTextureSha256() =>
+        FaceSymmetricTextureSha256(
+            _flow.Character.Appearance.FaceGen,
+            _faceTextureControlValues);
+
+    private static string FaceSymmetricTextureSha256(
+        OpeningAppearanceFaceGen faceGen,
+        IReadOnlyDictionary<string, float> values)
+    {
+        var controls = faceGen.PreviewHead.Previews[0].TextureControls;
+        if (values.Count == 0)
+            return faceGen.SymmetricTextureSha256;
+        var policy = faceGen.ControlSpace.PreviewControl;
+        if (values.Count != controls.Count || values.Values.Any(value =>
+                !float.IsFinite(value) ||
+                value < policy.Minimum || value > policy.Maximum))
+            throw new InvalidOperationException(
+                "Saved RaceSexMenu FaceGen tone coordinates are invalid.");
+        return OwnedGamebryoFaceGenTextureRuntime.CoordinateSha256(
+            faceGen.SymmetricTextureValues,
+            controls,
+            values,
+            policy.MorphWeightScale);
+    }
 
     private string FaceGenControlValuesText(
         IReadOnlyList<OpeningNativeFaceGenGeometryControl> controls) =>
@@ -715,6 +748,10 @@ internal partial class OpeningQuestRuntime
         Replace(
             _faceGeometryControlValues,
             state.Appearance.FaceGeometryControlValues);
+        if (state.Appearance.FaceTextureControlValues.Count > 0)
+            Replace(
+                _faceTextureControlValues,
+                state.Appearance.FaceTextureControlValues);
         _docReaction = state.DocReaction;
         Replace(_specialValues, state.SpecialValues);
         Replace(_tagSkills, state.TagSkillFormIds);

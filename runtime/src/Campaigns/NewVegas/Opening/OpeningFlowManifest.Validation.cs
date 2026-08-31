@@ -374,6 +374,8 @@ internal sealed partial record OpeningNewGameFlow
             !previewSet.GeometryControlNames.SequenceEqual(
                 controls.Select(value => value.SettingEntity),
                 StringComparer.Ordinal) ||
+            previewSet.TextureControlCount <= 0 ||
+            previewSet.TextureControlCount != previewSet.TextureControlNames.Count ||
             !previewSet.FullBody ||
             previewSet.BodyComponentRoles is null ||
             !previewSet.BodyComponentRoles.SequenceEqual(
@@ -411,6 +413,15 @@ internal sealed partial record OpeningNewGameFlow
             preview.GeometryControlNames.SequenceEqual(
                 previewSet.GeometryControlNames,
                 StringComparer.Ordinal) &&
+            preview.TextureControlCount == previewSet.TextureControlCount &&
+            preview.TextureControlNames.SequenceEqual(
+                previewSet.TextureControlNames,
+                StringComparer.Ordinal) &&
+            preview.TextureControls.Select(value => value.SettingEntity).SequenceEqual(
+                previewSet.TextureControlNames,
+                StringComparer.Ordinal) &&
+            preview.TextureControls.All(value =>
+                value.Axis.Count == preview.SymmetricTexture.Count) &&
             preview.FullBody == previewSet.FullBody &&
             preview.BodyComponentRoles is not null &&
             preview.BodyComponentRoles.SequenceEqual(
@@ -423,7 +434,9 @@ internal sealed partial record OpeningNewGameFlow
             !string.IsNullOrWhiteSpace(preview.GltfSha256) &&
             !string.IsNullOrWhiteSpace(preview.SidecarPath) &&
             !string.IsNullOrWhiteSpace(preview.SidecarSha256) &&
-            !string.IsNullOrWhiteSpace(preview.BufferSha256));
+            !string.IsNullOrWhiteSpace(preview.BufferSha256) &&
+            !string.IsNullOrWhiteSpace(preview.EgtPath) &&
+            !string.IsNullOrWhiteSpace(preview.EgtSha256));
     }
 
     private static bool ValidPlayerBodySourcesBySex(

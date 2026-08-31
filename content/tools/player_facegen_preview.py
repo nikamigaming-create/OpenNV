@@ -395,6 +395,30 @@ def prepare_default_player_facegen_preview(
         or any(len(axis) != FACEGEN_CONTROL_AXIS_FLOATS for axis in control_axes)
     ):
         raise ValueError("Owned player preview FaceGen controls are incomplete")
+    source_texture_controls = {
+        int(row["index"]): dict(row)
+        for row in dict(control_space["format"])["controls"]["symmetricTexture"]
+    }
+    exposed_texture = [
+        dict(row)
+        for row in dict(control_space["nativeTextureExposure"])["controls"]
+    ]
+    texture_control_names = tuple(
+        str(row["settingEntity"]) for row in exposed_texture
+    )
+    texture_control_axes = tuple(
+        tuple(
+            float(value)
+            for value in source_texture_controls[int(row["controlIndex"])]["axis"]
+        )
+        for row in exposed_texture
+    )
+    if (
+        not texture_control_names
+        or len(texture_control_names) != len(set(texture_control_names))
+        or any(len(axis) != FACEGEN_CONTROL_AXIS_FLOATS for axis in texture_control_axes)
+    ):
+        raise ValueError("Owned player preview FaceGen texture controls are incomplete")
 
     extracted: dict[str, ExtractedMember] = {}
 
@@ -654,6 +678,9 @@ def prepare_default_player_facegen_preview(
         output_name = "player-full-body" if include_full_body else "player-head"
         gltf_path = output_root / f"{output_name}.gltf"
         sidecar_path = output_root / f"{output_name}.opennv.json"
+        egt_path = output_root / "player-head.egt"
+        egt_path.parent.mkdir(parents=True, exist_ok=True)
+        egt_path.write_bytes(head_egt.data)
         locomotion_animations: tuple[ActorAnimation, ...] = ()
         if include_full_body and include_locomotion_animation:
             locomotion = mesh(
@@ -704,7 +731,20 @@ def prepare_default_player_facegen_preview(
                         sidecar_path.read_bytes()
                     ).hexdigest(),
                     "bufferSha256": sidecar["outputs"]["buffer"]["sha256"],
+                    "egt": str(egt_path.resolve()),
+                    "egtSha256": head_egt.sha256,
                 },
+                "symmetricTexture": list(symmetric_texture),
+                "textureControls": [
+                    {
+                        "controlIndex": int(row["controlIndex"]),
+                        "settingEntity": str(row["settingEntity"]),
+                        "sourceLabel": str(row["sourceLabel"]),
+                        "axisSha256": str(row["axisSha256"]),
+                        "axis": list(axis),
+                    }
+                    for row, axis in zip(exposed_texture, texture_control_axes)
+                ],
             }
         )
 
@@ -712,6 +752,8 @@ def prepare_default_player_facegen_preview(
         "playerFormId": f"{player.form_id:08x}",
         "geometryControlNames": list(control_names),
         "geometryControlCount": len(control_names),
+        "textureControlNames": list(texture_control_names),
+        "textureControlCount": len(texture_control_names),
         "fullBody": include_full_body,
         "presentationOutfitFormId": (
             f"{presentation_outfit_form_id:08x}"

@@ -29,6 +29,14 @@ MORPH_RUNTIME = (
     / "CharacterCreation"
     / "OwnedGamebryoFaceGenMorphRuntime.cs"
 )
+TEXTURE_RUNTIME = (
+    ROOT
+    / "runtime"
+    / "src"
+    / "Presentation"
+    / "CharacterCreation"
+    / "OwnedGamebryoFaceGenTextureRuntime.cs"
+)
 ACTOR_LOADER = (
     ROOT / "runtime" / "src" / "World" / "Actors" / "ActorModelSlice.cs"
 )
@@ -92,6 +100,28 @@ class SharedGamebryoFaceGenPreviewTest(unittest.TestCase):
             "(float)value * activeControl.MorphWeightScale",
             fo3_ui,
         )
+
+    def test_shared_preview_owns_exact_egt_texture_recomposition(self) -> None:
+        host = HOST.read_text(encoding="utf-8")
+        texture_runtime = TEXTURE_RUNTIME.read_text(encoding="utf-8")
+        contracts = CONTRACTS.read_text(encoding="utf-8")
+
+        self.assertIn("OwnedGamebryoFaceGenTextureRuntime", host)
+        self.assertIn("internal void ApplyTexture(", host)
+        self.assertIn('SequenceEqual("FREGT003"u8)', texture_runtime)
+        self.assertIn("SHA256.HashData(_egt)", texture_runtime)
+        self.assertIn("source.TextureControls", host)
+        self.assertIn("OpeningNativeFaceGenTextureControl", contracts)
+        fnv = (FNV / "OpeningQuestRuntime.CharacterCreation.cs").read_text(
+            encoding="utf-8"
+        )
+        fo3 = (FO3 / "Fo3OpeningFlow.Cg00.cs").read_text(encoding="utf-8")
+        fo3_save = (FO3 / "Fo3OpeningFlow.Persistence.cs").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("previewHost.ApplyTexture(", fnv)
+        self.assertIn("_activeFacePreview.ApplyTexture(", fo3)
+        self.assertIn("textureControls = SavedTextureControls(selection)", fo3_save)
 
 
 if __name__ == "__main__":

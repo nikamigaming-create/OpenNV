@@ -1902,6 +1902,18 @@ def _appearance_inventory(
         ).encode("ascii")
         for index in dict(control_policy["nativeGeometryExposure"])["controlIndices"]
     ]
+    texture_exposure = dict(control_policy["nativeTextureExposure"])
+    if (
+        str(texture_exposure["sourceExecutableSha256"]).casefold()
+        != expected_executable_sha256
+    ):
+        raise ValueError("Owned Fallout 3 FaceGen tone executable identity differs")
+    expected_settings.extend(
+        str(texture_exposure["settingEntityTemplate"]).format(
+            oneBasedOrdinal=ordinal + 1
+        ).encode("ascii")
+        for ordinal, _index in enumerate(texture_exposure["controlIndices"])
+    )
     if any(executable_payload.count(setting) != 1 for setting in expected_settings):
         raise ValueError("Owned Fallout 3 FaceGen setting exposure differs")
     result = {

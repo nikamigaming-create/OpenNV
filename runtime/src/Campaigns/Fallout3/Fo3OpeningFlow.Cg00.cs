@@ -793,6 +793,10 @@ internal partial class Fo3OpeningFlow
                 faceFrame.Size,
                 renderedDevice.FaceGenPreviewDevice);
         _activeFacePreview = LoadPreview(previewSource);
+        foreach (var tone in previewSource.TextureControls)
+            _activeFacePreview.ApplyTexture(
+                tone.SettingEntity,
+                defaultSelection.TextureControlValues[tone.SettingEntity]);
         var previewProportions =
             CharacterBodyProportions.Neutral("fo3-custom-live-v1");
         var faceFraming = true;
@@ -817,6 +821,8 @@ internal partial class Fo3OpeningFlow
         };
         foreach (var faceControl in _profile.Appearance.FaceControls)
             faceControlSelect.AddItem(faceControl.SourceLabel);
+        foreach (var tone in previewSource.TextureControls)
+            faceControlSelect.AddItem(tone.SourceLabel);
         faceControlSelect.Select(Array.IndexOf(
             _profile.Appearance.FaceControls.ToArray(),
             control));
@@ -854,6 +860,10 @@ internal partial class Fo3OpeningFlow
                 _profile.Appearance.FaceControls.ToDictionary(
                     value => value.SettingEntity,
                     value => value.ResetValue,
+                    StringComparer.Ordinal),
+                previewSource.TextureControls.ToDictionary(
+                    value => value.SettingEntity,
+                    _ => control.ResetValue,
                     StringComparer.Ordinal));
             var selectedPreview = _profile.Appearance.PreviewFor(selection, sex.EngineSex);
             if (selectedPreview.GltfSha256 != previewSource.GltfSha256 ||
@@ -870,6 +880,8 @@ internal partial class Fo3OpeningFlow
                     _activeFacePreview,
                     faceControl.SettingEntity,
                     faceControl.ResetValue);
+            foreach (var tone in selectedPreview.TextureControls)
+                _activeFacePreview.ApplyTexture(tone.SettingEntity, control.ResetValue);
             activeControl = control;
             faceControlSelect.Select(Array.IndexOf(
                 _profile.Appearance.FaceControls.ToArray(),
@@ -886,6 +898,34 @@ internal partial class Fo3OpeningFlow
         {
             if (!slider.Editable || _activeAppearanceSelection is null)
                 return;
+            if (faceControlSelect.Selected >= _profile.Appearance.FaceControls.Count)
+            {
+                var tone = previewSource.TextureControls[
+                    faceControlSelect.Selected - _profile.Appearance.FaceControls.Count];
+                _activeFacePreview.ApplyTexture(tone.SettingEntity, (float)value);
+                var values = _activeAppearanceSelection.TextureControlValues.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
+                    StringComparer.Ordinal);
+                values[tone.SettingEntity] = (float)value;
+                var textureSha256 = OwnedGamebryoFaceGenTextureRuntime.CoordinateSha256(
+                    previewSource.SymmetricTexture,
+                    previewSource.TextureControls,
+                    values,
+                    control.MorphWeightScale);
+                _activeAppearanceSelection = _activeAppearanceSelection with
+                {
+                    Sex = _activeAppearanceSelection.Sex with
+                    {
+                        FaceGen = _activeAppearanceSelection.Sex.FaceGen with
+                        {
+                            SymmetricTextureSha256 = textureSha256,
+                        },
+                    },
+                    TextureControlValues = values,
+                };
+                return;
+            }
             OwnedGamebryoFaceGenMorphRuntime.Publish(
                 _activeFacePreview,
                 activeControl.SettingEntity,
@@ -897,12 +937,23 @@ internal partial class Fo3OpeningFlow
         };
         faceControlSelect.ItemSelected += index =>
         {
-            activeControl = _profile.Appearance.FaceControls[(int)index];
-            slider.MinValue = activeControl.Minimum;
-            slider.MaxValue = activeControl.Maximum;
-            slider.Step = activeControl.Step;
-            slider.Value = _activeAppearanceSelection?.FaceControlValue(
-                activeControl.SettingEntity) ?? activeControl.ResetValue;
+            var controlIndex = (int)index;
+            if (controlIndex < _profile.Appearance.FaceControls.Count)
+            {
+                activeControl = _profile.Appearance.FaceControls[controlIndex];
+                slider.Value = _activeAppearanceSelection?.FaceControlValue(
+                    activeControl.SettingEntity) ?? activeControl.ResetValue;
+            }
+            else
+            {
+                var tone = previewSource.TextureControls[
+                    controlIndex - _profile.Appearance.FaceControls.Count];
+                slider.Value = _activeAppearanceSelection?.TextureControlValues[
+                    tone.SettingEntity] ?? control.ResetValue;
+            }
+            slider.MinValue = control.Minimum;
+            slider.MaxValue = control.Maximum;
+            slider.Step = control.Step;
         };
         SelectRaceDefaults(defaultSelection.Race);
         void ShowCategory(AppearanceCategory category)
@@ -1055,7 +1106,9 @@ internal partial class Fo3OpeningFlow
         if (_birthPresentation is null)
             ShowAppearanceAccepted(playerName, sex, selection);
         else if (_profile.Appearance.FaceControls.Any(control =>
-                     selection.FaceControlValue(control.SettingEntity) != control.ResetValue))
+                     selection.FaceControlValue(control.SettingEntity) != control.ResetValue) ||
+                 selection.TextureControlValues.Values.Any(value =>
+                     value != _profile.Appearance.FaceControl.ResetValue))
             ShowVault101BirthRoomBeforeStage65(
                 playerName,
                 sex,

@@ -18,6 +18,13 @@ internal sealed record OpeningNativeFaceGenGeometryControl(
     string SourceLabel,
     string AxisSha256);
 
+internal sealed record OpeningNativeFaceGenTextureControl(
+    int ControlIndex,
+    string SettingEntity,
+    string SourceLabel,
+    string AxisSha256,
+    IReadOnlyList<float> Axis);
+
 internal sealed record OpeningFaceGenPreviewControl(
     int ControlIndex,
     string SettingEntity,
@@ -70,6 +77,8 @@ internal sealed record OpeningPlayerFaceGenPreviewSet(
     string PlayerFormId,
     IReadOnlyList<string> GeometryControlNames,
     int GeometryControlCount,
+    IReadOnlyList<string> TextureControlNames,
+    int TextureControlCount,
     string RuntimeDisposition,
     string SelectionScope,
     string UnsupportedSelectionScope,
@@ -90,11 +99,17 @@ internal sealed record OpeningPlayerFaceGenPreview(
     IReadOnlyList<string> HeadPartFormIds,
     IReadOnlyList<string> GeometryControlNames,
     int GeometryControlCount,
+    IReadOnlyList<string> TextureControlNames,
+    int TextureControlCount,
     string GltfPath,
     string GltfSha256,
     string SidecarPath,
     string SidecarSha256,
     string BufferSha256,
+    string EgtPath,
+    string EgtSha256,
+    IReadOnlyList<float> SymmetricTexture,
+    IReadOnlyList<OpeningNativeFaceGenTextureControl> TextureControls,
     string RuntimeDisposition,
     bool FullBody = false,
     IReadOnlyList<string>? BodyComponentRoles = null,

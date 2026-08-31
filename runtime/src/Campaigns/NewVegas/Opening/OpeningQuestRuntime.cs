@@ -75,6 +75,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> _faceGeometryControlValues =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _faceTextureControlValues =
+        new(StringComparer.Ordinal);
     private readonly HashSet<int> _achievements = [];
     private readonly bool[] _playerControls =
         Enumerable.Repeat(true, PlayerControlCount).ToArray();
@@ -813,6 +815,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         var previewPolicy = faceGen.ControlSpace.PreviewControl;
         foreach (var control in FaceGenPreviewControls(faceGen))
             _faceGeometryControlValues[control.SettingEntity] = previewPolicy.ResetValue;
+        foreach (var settingEntity in faceGen.PreviewHead.TextureControlNames)
+            _faceTextureControlValues[settingEntity] = previewPolicy.ResetValue;
         if (!CurrentFaceSymmetricGeometrySha256().Equals(
                 _flow.Character.Appearance.FaceGen.SymmetricGeometrySha256,
                 StringComparison.OrdinalIgnoreCase))

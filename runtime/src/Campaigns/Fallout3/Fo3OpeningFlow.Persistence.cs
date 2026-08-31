@@ -227,6 +227,20 @@ internal partial class Fo3OpeningFlow
             value = selection.FaceControlValue(control.SettingEntity),
         }).ToArray();
 
+    private object SavedTextureControls(Fo3AppearanceSelection selection)
+    {
+        var controls = _profile.Appearance.PreviewFor(
+            selection,
+            selection.Race.Sex.Single(value => value.Value == selection.Sex).Key)
+            .TextureControls;
+        return controls.Select(control => new
+        {
+            settingEntity = control.SettingEntity,
+            axisSha256 = control.AxisSha256,
+            value = selection.TextureControlValues[control.SettingEntity],
+        }).ToArray();
+    }
+
     private Fo3AppearanceSelection LoadSavedFaceControls(
         JsonElement faceGen,
         Fo3AppearanceSelection selection)
@@ -246,6 +260,53 @@ internal partial class Fo3OpeningFlow
                 selection,
                 control,
                 RequiredSaveSingle(row, "value"));
+        }
+        if (faceGen.TryGetProperty("textureControls", out var textureRows))
+        {
+            var controls = _profile.Appearance.PreviewFor(
+                selection,
+                selection.Race.Sex.Single(value => value.Value == selection.Sex).Key)
+                .TextureControls;
+            var rows = textureRows.EnumerateArray().ToArray();
+            if (rows.Length != controls.Count)
+                throw new InvalidOperationException(
+                    "Saved Fallout 3 FaceGen tone count differs from the profile.");
+            var values = selection.TextureControlValues.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.Ordinal);
+            foreach (var control in controls)
+            {
+                var row = rows.Single(value =>
+                    RequiredSaveString(value, "settingEntity") == control.SettingEntity);
+                if (RequiredSaveString(row, "axisSha256") != control.AxisSha256)
+                    throw new InvalidOperationException(
+                        "Saved Fallout 3 FaceGen tone identity differs from the profile.");
+                values[control.SettingEntity] = RequiredSaveSingle(row, "value");
+                if (values[control.SettingEntity] < _profile.Appearance.FaceControl.Minimum ||
+                    values[control.SettingEntity] > _profile.Appearance.FaceControl.Maximum)
+                    throw new InvalidOperationException(
+                        "Saved Fallout 3 FaceGen tone value is outside the profile.");
+            }
+            var preview = _profile.Appearance.PreviewFor(
+                selection,
+                selection.Race.Sex.Single(value => value.Value == selection.Sex).Key);
+            var textureSha256 = OwnedGamebryoFaceGenTextureRuntime.CoordinateSha256(
+                preview.SymmetricTexture,
+                controls,
+                values,
+                _profile.Appearance.FaceControl.MorphWeightScale);
+            selection = selection with
+            {
+                Sex = selection.Sex with
+                {
+                    FaceGen = selection.Sex.FaceGen with
+                    {
+                        SymmetricTextureSha256 = textureSha256,
+                    },
+                },
+                TextureControlValues = values,
+            };
         }
         return selection;
     }
@@ -278,6 +339,7 @@ internal partial class Fo3OpeningFlow
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
                     geometryControls = SavedFaceControls(selection),
+                    textureControls = SavedTextureControls(selection),
                 },
             },
             nextCommand = _profile.Appearance.AcceptedStageCommand,
@@ -315,6 +377,7 @@ internal partial class Fo3OpeningFlow
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
                     geometryControls = SavedFaceControls(selection),
+                    textureControls = SavedTextureControls(selection),
                 },
             },
             playerPackage = new
@@ -365,6 +428,7 @@ internal partial class Fo3OpeningFlow
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
                     geometryControls = SavedFaceControls(selection),
+                    textureControls = SavedTextureControls(selection),
                 },
             },
             playerPackage = new
@@ -460,6 +524,7 @@ internal partial class Fo3OpeningFlow
                     asymmetricGeometrySha256 = selection.Sex.FaceGen.AsymmetricGeometrySha256,
                     symmetricTextureSha256 = selection.Sex.FaceGen.SymmetricTextureSha256,
                     geometryControls = SavedFaceControls(selection),
+                    textureControls = SavedTextureControls(selection),
                 },
             },
             playerPackage = new

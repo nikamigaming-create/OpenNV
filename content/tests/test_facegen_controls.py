@@ -109,6 +109,13 @@ def synthetic_policy(payload: bytes) -> dict[str, object]:
             "settingEntityTemplate": "sShape{oneBasedIndex:02d}",
             "controlIndices": [1],
         },
+        "nativeTextureExposure": {
+            "classification": "synthetic-static-contract",
+            "engineBuild": "synthetic-build",
+            "sourceExecutableSha256": SYNTHETIC_EXECUTABLE_SHA256,
+            "settingEntityTemplate": "sTone{oneBasedOrdinal:02d}",
+            "controlIndices": [0],
+        },
         "runtimePreviewControl": {
             "controlIndex": 1,
             "minimum": FACEGEN_SLIDER_UI_MINIMUM,
@@ -237,6 +244,19 @@ class FaceGenControlsTest(unittest.TestCase):
         self.assertEqual(
             result["nativeGeometryExposure"]["unexposedControlIndices"],
             [0],
+        )
+        self.assertEqual(
+            result["nativeTextureExposure"]["controls"],
+            [
+                {
+                    "controlIndex": 0,
+                    "settingEntity": "sTone01",
+                    "sourceLabel": "Tint",
+                    "axisSha256": hashlib.sha256(
+                        struct.pack("<2f", 0.0, 1.0)
+                    ).hexdigest(),
+                }
+            ],
         )
         self.assertEqual(result["runtimePreviewControl"]["settingEntity"], "sShape02")
         self.assertEqual(

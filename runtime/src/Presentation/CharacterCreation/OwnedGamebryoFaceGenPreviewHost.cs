@@ -44,6 +44,8 @@ internal sealed class OwnedGamebryoFaceGenPreviewHost
     private readonly int _bodySurfaceCount;
     private readonly float _morphWeightScale;
     private readonly float _unitsToMeters;
+    private readonly OwnedGamebryoFaceGenTextureRuntime _textureRuntime;
+    private readonly ShaderMaterial _headMaterial;
 
     private OwnedGamebryoFaceGenPreviewHost(
         SubViewportContainer control,
@@ -58,7 +60,9 @@ internal sealed class OwnedGamebryoFaceGenPreviewHost
         int bodySurfaceCount,
         string framingDisposition,
         float morphWeightScale,
-        float unitsToMeters)
+        float unitsToMeters,
+        OwnedGamebryoFaceGenTextureRuntime textureRuntime,
+        ShaderMaterial headMaterial)
     {
         Control = control;
         _viewport = viewport;
@@ -72,6 +76,8 @@ internal sealed class OwnedGamebryoFaceGenPreviewHost
         _bodySurfaceCount = bodySurfaceCount;
         _morphWeightScale = morphWeightScale;
         _unitsToMeters = unitsToMeters;
+        _textureRuntime = textureRuntime;
+        _headMaterial = headMaterial;
         FramingDisposition = framingDisposition;
     }
 
@@ -164,6 +170,27 @@ internal sealed class OwnedGamebryoFaceGenPreviewHost
             throw new InvalidOperationException(
                 "Player FaceGen preview has no source-lit actor materials.");
         var head = UniqueSurface(actor, PreviewHeadRole);
+        var headMaterials = Enumerable.Range(
+                0,
+                head.Mesh.Mesh?.GetSurfaceCount() ?? 0)
+            .Select(head.Mesh.GetSurfaceOverrideMaterial)
+            .OfType<ShaderMaterial>()
+            .Where(material => material.Shader?.Code.Contains(
+                "uniform sampler2D facegen_map0",
+                StringComparison.Ordinal) == true)
+            .ToArray();
+        if (headMaterials.Length != 1)
+            throw new InvalidOperationException(
+                "Owned player preview has no unique FaceGen head material.");
+        var textureRuntime = new OwnedGamebryoFaceGenTextureRuntime(
+            source.EgtPath,
+            source.EgtSha256,
+            source.SymmetricTexture,
+            source.TextureControls,
+            policy.Minimum,
+            policy.Maximum,
+            policy.MorphWeightScale,
+            policy.ResetValue);
         var leftEye = UniqueSurface(actor, PreviewLeftEyeRole);
         var rightEye = UniqueSurface(actor, PreviewRightEyeRole);
         var hair = UniqueSurface(actor, PreviewHairRole);
@@ -411,7 +438,9 @@ internal sealed class OwnedGamebryoFaceGenPreviewHost
             bodySurfaceCount,
             framingDisposition,
             policy.MorphWeightScale,
-            unitsToMeters);
+            unitsToMeters,
+            textureRuntime,
+            headMaterials[0]);
     }
 
     private static bool BoundsOverlap(Aabb left, Aabb right) =>
@@ -427,6 +456,13 @@ internal sealed class OwnedGamebryoFaceGenPreviewHost
             throw new ArgumentOutOfRangeException(nameof(uiValue));
         foreach (var binding in bindings)
             binding.Mesh.SetBlendShapeValue(binding.Index, morphWeight);
+    }
+
+    internal void ApplyTexture(string settingEntity, float uiValue)
+    {
+        _headMaterial.SetShaderParameter(
+            "facegen_map0",
+            _textureRuntime.Apply(settingEntity, uiValue));
     }
 
     internal void ApplyBodyProportions(CharacterBodyProportions proportions)

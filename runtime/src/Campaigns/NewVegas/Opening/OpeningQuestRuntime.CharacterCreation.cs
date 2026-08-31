@@ -115,6 +115,7 @@ internal partial class OpeningQuestRuntime
         _raceSexMenuHost.FaceGrabHost();
         var preview = _raceSexRenderedDeviceHost.CreateFacePresentationHost();
         var previewControls = FaceGenPreviewControls(faceGen);
+        var textureControls = faceGen.PreviewHead.Previews[0].TextureControls;
         OwnedGamebryoFaceGenPreviewHost? previewHost = null;
         OpeningPlayerFaceGenPreview? selectedPreviewState = null;
 
@@ -149,6 +150,19 @@ internal partial class OpeningQuestRuntime
                 $"axisSha256={control.AxisSha256} uiValue={uiValue:R} " +
                 $"morphWeight={morphWeight:R} " +
                 $"semantics={previewPolicy.Semantics}");
+        }
+
+        void UpdateTextureValue(
+            OpeningNativeFaceGenTextureControl control,
+            float value)
+        {
+            if (!float.IsFinite(value) ||
+                value < previewPolicy.Minimum || value > previewPolicy.Maximum)
+                throw new InvalidOperationException(
+                    "FaceGen RaceSexMenu tone value is invalid.");
+            _faceTextureControlValues[control.SettingEntity] = value;
+            previewHost?.ApplyTexture(control.SettingEntity, value);
+            RefreshPreview();
         }
 
         void RenderPreview(OpeningAppearanceSex sex)
@@ -190,6 +204,10 @@ internal partial class OpeningQuestRuntime
                     previewHost,
                     control.SettingEntity,
                     _faceGeometryControlValues[control.SettingEntity]);
+            foreach (var control in selectedPreview.TextureControls)
+                previewHost.ApplyTexture(
+                    control.SettingEntity,
+                    _faceTextureControlValues[control.SettingEntity]);
             RefreshPreview();
             _appearancePreviewHost = previewHost;
             GD.Print(
@@ -352,9 +370,7 @@ internal partial class OpeningQuestRuntime
             _raceSexMenuHost!.ShowSliders(
                 "faceGeometry",
                 previewControls.Select(control =>
-                {
-                    var selectedControl = control;
-                    return new OpeningRaceSexSliderEntry(
+                    new OpeningRaceSexSliderEntry(
                         control.SettingEntity,
                         control.SourceLabel,
                         _faceGeometryControlValues[control.SettingEntity],
@@ -367,10 +383,27 @@ internal partial class OpeningQuestRuntime
                             System.Globalization.CultureInfo.InvariantCulture),
                         value =>
                         {
-                            UpdateControlValue(selectedControl, value);
+                            UpdateControlValue(control, value);
                             showFace();
-                        });
-                }).ToArray(),
+                        }))
+                .Concat(textureControls.Select(control =>
+                    new OpeningRaceSexSliderEntry(
+                        control.SettingEntity,
+                        control.SourceLabel,
+                        _faceTextureControlValues[control.SettingEntity],
+                        previewPolicy.Minimum,
+                        previewPolicy.Maximum,
+                        previewPolicy.Step,
+                        previewPolicy.Jump,
+                        value => value.ToString(
+                            "+0;-0;0",
+                            System.Globalization.CultureInfo.InvariantCulture),
+                        value =>
+                        {
+                            UpdateTextureValue(control, value);
+                            showFace();
+                        })))
+                .ToArray(),
                 showEyes,
                 Accept);
         };

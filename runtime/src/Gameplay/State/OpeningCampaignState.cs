@@ -212,6 +212,7 @@ internal sealed record OpeningCharacterAppearanceState(
     string FaceAsymmetricGeometrySha256,
     string FaceSymmetricTextureSha256,
     IReadOnlyDictionary<string, float> FaceGeometryControlValues,
+    IReadOnlyDictionary<string, float> FaceTextureControlValues,
     CharacterBodyProportions BodyProportions,
     string PreviewMode)
 {
@@ -238,6 +239,12 @@ internal sealed record OpeningCharacterAppearanceState(
                     value => value.Name,
                     value => value.Value.GetSingle(),
                     StringComparer.Ordinal),
+            source.TryGetProperty(nameof(FaceTextureControlValues), out var textureValues)
+                ? textureValues.EnumerateObject().ToDictionary(
+                    value => value.Name,
+                    value => value.Value.GetSingle(),
+                    StringComparer.Ordinal)
+                : new Dictionary<string, float>(StringComparer.Ordinal),
             proportions,
             previewMode);
     }
@@ -253,6 +260,8 @@ internal sealed record OpeningCharacterAppearanceState(
             FaceGeometryControlValues.Count == 0 ||
             FaceGeometryControlValues.Keys.Any(string.IsNullOrWhiteSpace) ||
             FaceGeometryControlValues.Values.Any(value => !float.IsFinite(value)) ||
+            FaceTextureControlValues.Keys.Any(string.IsNullOrWhiteSpace) ||
+            FaceTextureControlValues.Values.Any(value => !float.IsFinite(value)) ||
             PreviewMode is not ("3d" or "2d"))
             throw new InvalidOperationException(
                 "Saved opening character appearance state is invalid.");
