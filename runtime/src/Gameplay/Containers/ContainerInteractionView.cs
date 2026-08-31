@@ -74,7 +74,7 @@ internal partial class ContainerInteractionView : CanvasLayer
             var button = new Button
             {
                 Name = $"PlayerItem_{item.ItemFormId}",
-                Text = ItemText(item.DisplayName, item.Count),
+                Text = ItemText(item.DisplayName, item.Count, item.Value, item.Weight),
                 Alignment = HorizontalAlignment.Left,
                 FocusMode = Control.FocusModeEnum.All,
                 Disabled = !item.CanStore,
@@ -102,7 +102,11 @@ internal partial class ContainerInteractionView : CanvasLayer
                 var button = new Button
                 {
                     Name = $"ContainerItem_{item.ItemFormId}",
-                    Text = ItemText(item.DisplayName, item.RemainingCount),
+                    Text = ItemText(
+                        item.DisplayName,
+                        item.RemainingCount,
+                        item.Definition.Value,
+                        item.Definition.Weight),
                     Alignment = HorizontalAlignment.Left,
                     FocusMode = Control.FocusModeEnum.All,
                 };
@@ -273,8 +277,20 @@ internal partial class ContainerInteractionView : CanvasLayer
         HorizontalAlignment = HorizontalAlignment.Center,
     };
 
-    private static string ItemText(string displayName, int count) =>
-        count == 1 ? displayName : $"{displayName}  ({count})";
+    private static string ItemText(
+        string displayName,
+        int count,
+        int? value = null,
+        float? weight = null)
+    {
+        var countText = count == 1 ? displayName : $"{displayName}  ({count})";
+        var economics = new List<string>(2);
+        if (value is not null)
+            economics.Add($"VAL {value}");
+        if (weight is not null)
+            economics.Add($"WG {weight:0.##}");
+        return economics.Count == 0 ? countText : $"{countText}  {string.Join("  ", economics)}";
+    }
 }
 
 internal sealed record PlayerContainerInventorySnapshot(
@@ -285,6 +301,8 @@ internal sealed record PlayerContainerInventoryItem(
     string EditorId,
     string DisplayName,
     string RecordType,
+    int? Value,
+    float? Weight,
     int Count,
     bool Equipped,
     bool CanStore);

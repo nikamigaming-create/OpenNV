@@ -1195,7 +1195,8 @@ internal partial class GameplayUiController : CanvasLayer
             : string.Join(
                 "\n",
                 snapshot.Inventory.Select(item =>
-                    $"{(item.Equipped ? ">" : " ")} {item.DisplayName}  ({item.Count})")),
+                    $"{(item.Equipped ? ">" : " ")} {item.DisplayName}  ({item.Count})" +
+                    ItemEconomics(item))),
         GameplayUiPanel.Data => FormatOwnedData(snapshot),
         GameplayUiPanel.Map => FormatOwnedData(snapshot),
         GameplayUiPanel.Controls => FormatControls(snapshot),
@@ -1242,7 +1243,17 @@ internal partial class GameplayUiController : CanvasLayer
             "\n",
             snapshot.Inventory.Select(item =>
                 $"{(item.Equipped ? ">" : " ")} {item.DisplayName} x{item.Count}  " +
-                $"[{item.RecordType}]  {item.FormId}"));
+                $"[{item.RecordType}]  {item.FormId}" + ItemEconomics(item)));
+    }
+
+    private static string ItemEconomics(GameplayUiInventoryItem item)
+    {
+        var fields = new List<string>(2);
+        if (item.Value is not null)
+            fields.Add($"VAL {item.Value}");
+        if (item.Weight is not null)
+            fields.Add($"WG {item.Weight:0.##}");
+        return fields.Count == 0 ? "" : $"  {string.Join("  ", fields)}";
     }
 
     private string FormatData(GameplayUiSnapshot snapshot)

@@ -17,6 +17,8 @@ internal sealed record GameplayUiInventoryItem(
     string EditorId,
     string DisplayName,
     string RecordType,
+    int? Value,
+    float? Weight,
     int Count,
     bool Equipped);
 

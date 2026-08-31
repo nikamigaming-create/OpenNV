@@ -11,6 +11,7 @@ using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.Presentation.OpenXR;
 using OpenNV.Runtime.World.Interactions;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.Gameplay.Items;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -342,12 +343,7 @@ internal static class CellContentLoader
                     var pickup = new PickupInstance();
                     pickup.Configure(
                         referenceFormId,
-                        interaction.GetProperty("itemFormId").GetString()!,
-                        interaction.GetProperty("itemEditorId").GetString()!,
-                        interaction.TryGetProperty("itemDisplayName", out var pickupDisplayName)
-                            ? pickupDisplayName.GetString()
-                            : null,
-                        interaction.GetProperty("itemRecordType").GetString()!,
+                        ReadItemDefinition(interaction),
                         interaction.GetProperty("count").GetInt32(),
                         weapon);
                     var dynamicBodies = prototypes[assetId].DynamicPhysicsBodies;
@@ -383,12 +379,7 @@ internal static class CellContentLoader
                     var entries = interaction.GetProperty("items")
                         .EnumerateArray()
                         .Select(item => new ContainerInstance.Entry(
-                            item.GetProperty("itemFormId").GetString()!,
-                            item.GetProperty("itemEditorId").GetString()!,
-                            item.TryGetProperty("itemDisplayName", out var itemDisplayName)
-                                ? itemDisplayName.GetString() ?? ""
-                                : "",
-                            item.GetProperty("itemRecordType").GetString()!,
+                            ReadItemDefinition(item),
                             item.GetProperty("count").GetInt32(),
                             item.GetProperty("resolved").GetBoolean()))
                         .ToArray();
@@ -725,6 +716,20 @@ internal static class CellContentLoader
             }
         }
     }
+
+    private static ItemDefinition ReadItemDefinition(JsonElement source) => new(
+        source.GetProperty("itemFormId").GetString()!,
+        source.GetProperty("itemEditorId").GetString()!,
+        source.TryGetProperty("itemDisplayName", out var displayName)
+            ? displayName.GetString()
+            : null,
+        source.GetProperty("itemRecordType").GetString()!,
+        source.TryGetProperty("itemValue", out var value) && value.ValueKind == JsonValueKind.Number
+            ? value.GetInt32()
+            : null,
+        source.TryGetProperty("itemWeight", out var weight) && weight.ValueKind == JsonValueKind.Number
+            ? weight.GetSingle()
+            : null);
 
     private static SourceReference ReadSourceReference(JsonElement reference) => new(
         reference.GetProperty("formId").GetString()!,
