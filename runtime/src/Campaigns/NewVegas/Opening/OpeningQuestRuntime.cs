@@ -1024,135 +1024,174 @@ internal partial class OpeningQuestRuntime : CanvasLayer
             return;
         }
 
-        var command = program.Commands[index];
         void Next(float? updatedTimer = null) => ExecuteStageCommand(
             program,
             index + 1,
             generation,
             updatedTimer ?? timerSeconds);
-        switch (command.Kind)
+        var commands = program.Commands.Select((command, sourceIndex) =>
+            new SourceGamebryoStageCommand<OpeningFlowCommand>(
+                sourceIndex,
+                StageCommandKind(command.Kind),
+                command)).ToArray();
+        GamebryoStageCommandExecutor.ExecuteOne(commands, index, sourceCommand =>
         {
-            case "setTimer":
-                ApplyQuestTimer(command);
-                Next(command.Seconds);
-                return;
-            case "setQuestVariable":
-                ApplyQuestVariable(command);
-                Next();
-                return;
-            case "setStage":
-                if (command.QuestFormId?.Equals(
-                        _flow.QuestFormId,
-                        StringComparison.OrdinalIgnoreCase) == true &&
-                    command.Stage is { } nextStage)
-                    SetStage(nextStage);
-                else
-                {
-                    ApplyQuestStage(command);
+            var command = sourceCommand.Value;
+            switch (command.Kind)
+            {
+                case "setTimer":
+                    ApplyQuestTimer(command);
+                    Next(command.Seconds);
+                    return true;
+                case "setQuestVariable":
+                    ApplyQuestVariable(command);
                     Next();
-                }
-                return;
-            case "sayTo":
-                if (command.TopicEditorId is null)
-                    throw new InvalidOperationException("Owned SayTo command has no topic.");
-                if (IsGuideSpeaker(command))
-                    RunWhenGuideReady(
-                        () => PlayTopicEditor(command.TopicEditorId, () => { }, generation),
-                        generation);
-                else
-                    PlayTopicEditor(command.TopicEditorId, () => { }, generation);
-                Next();
-                return;
-            case "showMenu":
-                ShowMenu(command, () =>
-                {
-                    if (generation != _generation)
-                        return;
-                    if (command.Role == "appearance" &&
-                        _flow.MenuCloseTransitions.TryGetValue(_stage, out var nextStage))
+                    return true;
+                case "setStage":
+                    if (command.QuestFormId?.Equals(
+                            _flow.QuestFormId,
+                            StringComparison.OrdinalIgnoreCase) == true &&
+                        command.Stage is { } nextStage)
                         SetStage(nextStage);
                     else
+                    {
+                        ApplyQuestStage(command);
                         Next();
-                });
-                return;
-            case "objective":
-                ApplyObjective(command);
-                Next();
-                return;
-            case "setDestroyed":
-                ApplyDestroyed(command);
-                Next();
-                return;
-            case "playIdle":
-                ApplyIdle(command);
-                Next();
-                return;
-            case "playerControls":
-                ApplyPlayerControls(command);
-                Next();
-                return;
-            case "addScriptPackage":
-            case "removeScriptPackage":
-                ApplyScriptPackage(command);
-                Next();
-                return;
-            case "imageSpaceModifier":
-                ApplyImageSpaceModifier(command);
-                Next();
-                return;
-            case "additem":
-            case "removeitem":
-            case "equipitem":
-                ApplyInventoryCommand(command);
-                Next();
-                return;
-            case "referenceEnabled":
-                ApplyReferenceEnabled(command);
-                Next();
-                return;
-            case "actorIntent":
-                ApplyActorIntent(command);
-                Next();
-                return;
-            case "actorValueDelta":
-                ApplyActorValueDelta(command);
-                Next();
-                return;
-            case "startQuest":
-            case "stopQuest":
-                ApplyQuestLifecycle(command);
-                Next();
-                return;
-            case "setGlobal":
-                ApplyGlobal(command);
-                Next();
-                return;
-            case "autoDisplayObjectives":
-                ApplyAutoDisplayObjectives(command);
-                Next();
-                return;
-            case "achievement":
-                ApplyAchievement(command);
-                Next();
-                return;
-            case "autosave":
-                StoreOpeningCheckpoint();
-                Next();
-                return;
-            case "deferredStage":
-                if (command.Stage is { } deferred && command.Seconds is { } deferredSeconds)
-                {
-                    _timerTargetStage = deferred;
-                    _timerRemainingSeconds = deferredSeconds;
-                    return;
-                }
-                throw new InvalidOperationException(
-                    "Owned deferred-stage command is incomplete.");
-            default:
-                throw new InvalidOperationException(
-                    $"Owned opening stage command is unsupported: {command.Kind}");
-        }
+                    }
+                    return true;
+                case "sayTo":
+                    if (command.TopicEditorId is null)
+                        throw new InvalidOperationException("Owned SayTo command has no topic.");
+                    if (IsGuideSpeaker(command))
+                        RunWhenGuideReady(
+                            () => PlayTopicEditor(command.TopicEditorId, () => { }, generation),
+                            generation);
+                    else
+                        PlayTopicEditor(command.TopicEditorId, () => { }, generation);
+                    Next();
+                    return true;
+                case "showMenu":
+                    ShowMenu(command, () =>
+                    {
+                        if (generation != _generation)
+                            return;
+                        if (command.Role == "appearance" &&
+                            _flow.MenuCloseTransitions.TryGetValue(_stage, out var nextStage))
+                            SetStage(nextStage);
+                        else
+                            Next();
+                    });
+                    return true;
+                case "objective":
+                    ApplyObjective(command);
+                    Next();
+                    return true;
+                case "setDestroyed":
+                    ApplyDestroyed(command);
+                    Next();
+                    return true;
+                case "playIdle":
+                    ApplyIdle(command);
+                    Next();
+                    return true;
+                case "playerControls":
+                    ApplyPlayerControls(command);
+                    Next();
+                    return true;
+                case "addScriptPackage":
+                case "removeScriptPackage":
+                    ApplyScriptPackage(command);
+                    Next();
+                    return true;
+                case "imageSpaceModifier":
+                    ApplyImageSpaceModifier(command);
+                    Next();
+                    return true;
+                case "additem":
+                case "removeitem":
+                case "equipitem":
+                    ApplyInventoryCommand(command);
+                    Next();
+                    return true;
+                case "referenceEnabled":
+                    ApplyReferenceEnabled(command);
+                    Next();
+                    return true;
+                case "actorIntent":
+                    ApplyActorIntent(command);
+                    Next();
+                    return true;
+                case "actorValueDelta":
+                    ApplyActorValueDelta(command);
+                    Next();
+                    return true;
+                case "startQuest":
+                case "stopQuest":
+                    ApplyQuestLifecycle(command);
+                    Next();
+                    return true;
+                case "setGlobal":
+                    ApplyGlobal(command);
+                    Next();
+                    return true;
+                case "autoDisplayObjectives":
+                    ApplyAutoDisplayObjectives(command);
+                    Next();
+                    return true;
+                case "achievement":
+                    ApplyAchievement(command);
+                    Next();
+                    return true;
+                case "autosave":
+                    StoreOpeningCheckpoint();
+                    Next();
+                    return true;
+                case "deferredStage":
+                    if (command.Stage is { } deferred && command.Seconds is { } deferredSeconds)
+                    {
+                        _timerTargetStage = deferred;
+                        _timerRemainingSeconds = deferredSeconds;
+                        return true;
+                    }
+                    throw new InvalidOperationException(
+                        "Owned deferred-stage command is incomplete.");
+                default:
+                    throw new InvalidOperationException(
+                        $"Owned opening stage command is unsupported: {command.Kind}");
+            }
+        });
     }
+
+    private static GamebryoStageCommandKind StageCommandKind(string kind) => kind switch
+    {
+        "setTimer" => GamebryoStageCommandKind.SetTimer,
+        "setQuestVariable" => GamebryoStageCommandKind.SetQuestVariable,
+        "setStage" => GamebryoStageCommandKind.SetStage,
+        "sayTo" => GamebryoStageCommandKind.Dialogue,
+        "showMenu" => GamebryoStageCommandKind.ShowMenu,
+        "objective" => GamebryoStageCommandKind.Objective,
+        "setDestroyed" => GamebryoStageCommandKind.SetDestroyed,
+        "playIdle" => GamebryoStageCommandKind.PlayIdle,
+        "playerControls" => GamebryoStageCommandKind.PlayerControls,
+        "addScriptPackage" => GamebryoStageCommandKind.AddScriptPackage,
+        "removeScriptPackage" => GamebryoStageCommandKind.RemoveScriptPackage,
+        "imageSpaceModifier" => GamebryoStageCommandKind.ImageSpaceModifier,
+        "additem" => GamebryoStageCommandKind.AddItem,
+        "removeitem" => GamebryoStageCommandKind.RemoveItem,
+        "equipitem" => GamebryoStageCommandKind.EquipItem,
+        "referenceEnabled" => GamebryoStageCommandKind.ReferenceEnabled,
+        "actorIntent" => GamebryoStageCommandKind.ActorIntent,
+        "actorValueDelta" => GamebryoStageCommandKind.ActorValueDelta,
+        "startQuest" => GamebryoStageCommandKind.StartQuest,
+        "stopQuest" => GamebryoStageCommandKind.StopQuest,
+        "setGlobal" => GamebryoStageCommandKind.SetGlobal,
+        "autoDisplayObjectives" => GamebryoStageCommandKind.AutoDisplayObjectives,
+        "achievement" => GamebryoStageCommandKind.Achievement,
+        "autosave" => GamebryoStageCommandKind.Autosave,
+        "deferredStage" => GamebryoStageCommandKind.DeferredStage,
+        _ => throw new InvalidOperationException(
+            $"Owned opening stage command is unsupported: {kind}"),
+    };
 
     private void ShowMenu(OpeningFlowCommand command, Action completed)
     {

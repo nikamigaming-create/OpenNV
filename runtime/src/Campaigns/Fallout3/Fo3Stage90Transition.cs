@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -189,16 +190,52 @@ internal sealed record Fo3Stage90Transition(
     {
         if (stage85.Stage != SourceStage)
             throw new InvalidOperationException("Fallout 3 stage-90 source state differs.");
+        var variables = new List<Fo3Stage90Variable>();
+        Fo3Stage90ImageSpaceModifier? modifier = null;
+        Fo3Stage90Sound? sound = null;
+        var commands = QuestVariables
+            .Select((variable, sourceIndex) => new SourceGamebryoStageCommand<object>(
+                sourceIndex,
+                GamebryoStageCommandKind.SetQuestVariable,
+                variable))
+            .Append(new SourceGamebryoStageCommand<object>(
+                QuestVariables.Count,
+                GamebryoStageCommandKind.ImageSpaceModifier,
+                ImageSpaceModifier))
+            .Append(new SourceGamebryoStageCommand<object>(
+                QuestVariables.Count + 1,
+                GamebryoStageCommandKind.PlaySound,
+                Sound))
+            .ToArray();
+        GamebryoStageCommandExecutor.ExecuteAll(commands, command =>
+        {
+            switch (command.Kind)
+            {
+                case GamebryoStageCommandKind.SetQuestVariable:
+                    variables.Add((Fo3Stage90Variable)command.Value);
+                    return true;
+                case GamebryoStageCommandKind.ImageSpaceModifier:
+                    modifier = (Fo3Stage90ImageSpaceModifier)command.Value;
+                    return true;
+                case GamebryoStageCommandKind.PlaySound:
+                    sound = (Fo3Stage90Sound)command.Value;
+                    return true;
+                default:
+                    return false;
+            }
+        });
         return new Fo3Stage90State(
             Stage,
             Dialogue.InfoFormId,
-            AccountedCommandCount,
-            QuestVariables,
-            ImageSpaceModifier,
-            Sound,
-            true,
+            commands.Length,
+            variables,
+            modifier ?? throw new InvalidOperationException(
+                "Fallout 3 stage-90 image-space mutation was not persisted."),
+            sound ?? throw new InvalidOperationException(
+                "Fallout 3 stage-90 sound mutation was not persisted."),
+            modifier is not null,
             false,
-            true,
+            sound is not null,
             true,
             NextBoundary);
     }
