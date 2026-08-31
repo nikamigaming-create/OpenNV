@@ -5,6 +5,8 @@ using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 using OpenNV.Runtime.Presentation.Actors;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2HumanoidDonorVariant(
@@ -1073,7 +1075,7 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         if (_variant is null)
             throw new InvalidOperationException(
                 "Fallout 2 humanoid donor variant is unavailable for socket resolution.");
-        var matching = Descendants<Skeleton3D>(donor.Root)
+        var matching = NodeTraversal.Descendants<Skeleton3D>(donor.Root)
             .Where(skeleton => skeleton.FindBone(_variant.EquipmentSocketNode) >= 0)
             .ToArray();
         if (matching.Length != 1)
@@ -1092,18 +1094,6 @@ internal sealed partial class Fo2HumanoidVisual : Node3D
         matching[0].AddChild(_equipmentSocket);
         SetMeta("equipment_socket", _variant.EquipmentSocketNode);
         SetMeta("equipment_socket_resolved", true);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
 }

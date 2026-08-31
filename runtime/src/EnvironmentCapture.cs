@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class EnvironmentCaptureNumericContracts
@@ -446,7 +448,7 @@ internal static class EnvironmentCapture
         actor.Actor.AnimationPlayer.Play(actor.Actor.PlayingAnimation);
         actor.Actor.AnimationPlayer.Seek(animationPhaseSeconds, true);
         actor.Actor.AnimationPlayer.Pause();
-        var skeleton = Descendants<Skeleton3D>(actor.Actor.Root).Single();
+        var skeleton = NodeTraversal.Descendants<Skeleton3D>(actor.Actor.Root).Single();
         foreach (var bone in poseBones)
         {
             var index = skeleton.FindBone(bone.Name);
@@ -466,7 +468,7 @@ internal static class EnvironmentCapture
         CellActorLoader.PlacedActor actor,
         IReadOnlyList<string> names)
     {
-        var skeleton = Descendants<Skeleton3D>(actor.Actor.Root).Single();
+        var skeleton = NodeTraversal.Descendants<Skeleton3D>(actor.Actor.Root).Single();
         return names.Select(name =>
         {
             var index = skeleton.FindBone(name);
@@ -506,18 +508,6 @@ internal static class EnvironmentCapture
     }
 
     private static float[] Vector(Vector3 value) => new[] { value.X, value.Y, value.Z };
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
 
     private static void WriteReport(string reportPath, object report)
     {

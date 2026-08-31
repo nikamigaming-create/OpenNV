@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal sealed class ActorPoseContract
@@ -158,7 +160,7 @@ internal sealed class ActorPoseContract
         if (facingName is not null)
         {
             var boneMatches = FindBoneMatches(skeletons, facingName);
-            var nodeMatches = Descendants<Node3D>(actorRoot)
+            var nodeMatches = NodeTraversal.Descendants<Node3D>(actorRoot)
                 .Where(node => node is not Skeleton3D &&
                     node.Name.ToString().Equals(facingName, StringComparison.Ordinal))
                 .ToArray();
@@ -182,7 +184,7 @@ internal sealed class ActorPoseContract
         }
 
         var headBoneMatches = FindBoneMatches(skeletons, headName);
-        var headNodeMatches = Descendants<Node3D>(actorRoot)
+        var headNodeMatches = NodeTraversal.Descendants<Node3D>(actorRoot)
             .Where(node => node is not Skeleton3D &&
                 node.Name.ToString().Equals(headName, StringComparison.Ordinal))
             .ToArray();
@@ -302,18 +304,6 @@ internal sealed class ActorPoseContract
         if (index < 0 || index >= nodeCount)
             throw new InvalidOperationException(
                 $"Owned actor glTF node index {index} is outside {nodeCount} nodes: {path}");
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     internal readonly record struct Pose(

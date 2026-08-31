@@ -11,6 +11,15 @@ PROJECT = ROOT / "runtime" / "OpenNV.csproj"
 
 
 class CSharpArchitectureTest(unittest.TestCase):
+    def test_runtime_files_stay_bounded_by_responsibility(self) -> None:
+        maximum_lines = 2_000
+        oversized = {}
+        for path in SOURCE_ROOT.rglob("*.cs"):
+            lines = len(path.read_text(encoding="utf-8").splitlines())
+            if lines > maximum_lines:
+                oversized[str(path.relative_to(ROOT))] = lines
+        self.assertEqual({}, oversized)
+
     def test_namespaces_follow_the_source_hierarchy(self) -> None:
         exceptions = {"AssemblyInfo.cs"}
         for path in SOURCE_ROOT.rglob("*.cs"):
@@ -44,6 +53,19 @@ class CSharpArchitectureTest(unittest.TestCase):
         self.assertNotIn("Descendants<T>(child)", traversal)
         self.assertIn("NodeTraversal.Descendants", actor_loader)
         self.assertIn("NodeTraversal.Descendants", body_rig)
+
+        local_traversals = {}
+        for path in SOURCE_ROOT.rglob("*.cs"):
+            if path == SOURCE_ROOT / "SceneGraph" / "NodeTraversal.cs":
+                continue
+            source = path.read_text(encoding="utf-8")
+            if re.search(
+                r"(?:private|internal|public)\s+static\s+IEnumerable.*"
+                r"(?:Descendants|SelfAndDescendants)",
+                source,
+            ):
+                local_traversals[str(path.relative_to(ROOT))] = "local traversal"
+        self.assertEqual({}, local_traversals)
 
     def test_character_shader_has_no_speculative_vats_contract(self) -> None:
         shader = (

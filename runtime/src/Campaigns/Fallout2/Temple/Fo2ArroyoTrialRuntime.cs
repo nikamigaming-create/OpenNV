@@ -1,6 +1,8 @@
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
 internal sealed record Fo2ArroyoTrialProgressState(
@@ -221,7 +223,7 @@ internal sealed class Fo2ArroyoTrialRuntime
             State.Stage != Fo2ArroyoTrialProgressState.VillageFirstActionStage)
             throw new InvalidOperationException(
                 "Fallout 2 ACKlint map_enter ran before Cameron completed the trial.");
-        var gate = Descendants<Sprite3D>(scene.Root).SingleOrDefault(row =>
+        var gate = NodeTraversal.Descendants<Sprite3D>(scene.Root).SingleOrDefault(row =>
             row.HasMeta("map_serial") &&
             row.GetMeta("map_serial").AsInt32() == _contract.KlintGate.GateSerial) ??
             throw new InvalidOperationException("Fallout 2 Klint gate sprite is absent.");
@@ -232,7 +234,7 @@ internal sealed class Fo2ArroyoTrialRuntime
         gate.SetMeta("map_tile", _contract.KlintGate.DestinationTile);
         gate.SetMeta("acklint_map_enter_applied", true);
         gate.SetMeta("required_global_10", _contract.KlintGate.RequiredGlobalVariable10);
-        var klint = Descendants<Sprite3D>(scene.Root).SingleOrDefault(row =>
+        var klint = NodeTraversal.Descendants<Sprite3D>(scene.Root).SingleOrDefault(row =>
             row.HasMeta("map_serial") &&
             row.GetMeta("map_serial").AsInt32() == _contract.KlintGate.ActorSerial) ??
             throw new InvalidOperationException("Fallout 2 Klint actor is absent.");
@@ -379,11 +381,11 @@ internal sealed class Fo2ArroyoTrialRuntime
     {
         var branch = _contract.Cameron.TaggedSpeechBranch;
         var root = ElevationRoot(_contract.Cameron.Elevation, _contract.Cameron.Tile, 0);
-        var actor = Descendants<Sprite3D>(root).SingleOrDefault(row =>
+        var actor = NodeTraversal.Descendants<Sprite3D>(root).SingleOrDefault(row =>
             row.HasMeta("map_serial") &&
             row.GetMeta("map_serial").AsInt32() == _contract.Cameron.Serial) ??
             throw new InvalidOperationException("Fallout 2 Cameron sprite is absent.");
-        var door = Descendants<Sprite3D>(root).SingleOrDefault(row =>
+        var door = NodeTraversal.Descendants<Sprite3D>(root).SingleOrDefault(row =>
             row.HasMeta("map_serial") &&
             row.GetMeta("map_serial").AsInt32() == _contract.Cameron.ReleaseDoorSerial) ??
             throw new InvalidOperationException("Fallout 2 Cameron door sprite is absent.");
@@ -420,14 +422,4 @@ internal sealed class Fo2ArroyoTrialRuntime
                 $"Fallout 2 trial stage {State.Stage} cannot perform {expected}.");
     }
 
-    private static IEnumerable<T> Descendants<T>(Node root) where T : Node
-    {
-        foreach (var child in root.GetChildren())
-        {
-            if (child is T typed)
-                yield return typed;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
 }

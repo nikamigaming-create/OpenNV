@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +30,7 @@ CLASSIC_ANALOG_PROOF = ROOT / "runtime" / "src" / "Campaigns" / "Classic" / "Cla
 class ClassicHumanoidRuntimeSourceTest(unittest.TestCase):
     def test_fo1_has_no_procedural_humanoid_route(self) -> None:
         preview = FO1_PREVIEW.read_text(encoding="utf-8")
-        session = FO1_SESSION.read_text(encoding="utf-8")
+        session = read_csharp_source_module(FO1_SESSION)
 
         self.assertIn("owned-humanoid-donor-unavailable-fail-closed", preview)
         self.assertIn("no-substitute-humanoid-rendered-donor-selection-mismatch", preview)

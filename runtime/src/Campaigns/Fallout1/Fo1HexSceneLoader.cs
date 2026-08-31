@@ -4,6 +4,8 @@ using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.Temple;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1HexSceneLoaderNumericContracts
@@ -1015,7 +1017,7 @@ internal static class Fo1HexSceneLoader
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         var count = 0;
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             var bounds = mesh.GetAabb();
             foreach (var x in new[] { bounds.Position.X, bounds.End.X })
@@ -1031,18 +1033,6 @@ internal static class Fo1HexSceneLoader
         if (count == 0)
             throw new InvalidOperationException("Fallout mapped door has no renderable bounds.");
         return new Aabb(minimum, maximum - minimum);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private static Vector3 ReadVector(JsonElement source)

@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class RuntimeMaterialLoader
@@ -319,7 +321,7 @@ internal static class RuntimeMaterialLoader
         RendererConfiguration configuration,
         RetailGrassCompilerConfiguration retailGrass)
     {
-        var surfaces = Descendants<MeshInstance3D>(scene)
+        var surfaces = NodeTraversal.Descendants<MeshInstance3D>(scene)
             .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh?.GetSurfaceCount() ?? 0)
                 .Select(index =>
                 {
@@ -561,7 +563,7 @@ internal static class RuntimeMaterialLoader
         Color ambient)
     {
         var configured = new HashSet<ulong>();
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
             {
@@ -639,7 +641,7 @@ internal static class RuntimeMaterialLoader
         if (gameUnitsToMeters <= 0.0f)
             throw new InvalidOperationException("Retail grass unit scale is invalid.");
         var configured = new HashSet<ulong>();
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
             {
@@ -675,7 +677,7 @@ internal static class RuntimeMaterialLoader
             gameUnitsToMeters <= 0.0f)
             throw new InvalidOperationException("Retail SLS fog inputs are invalid.");
         var configured = new HashSet<ulong>();
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             for (var surface = 0; surface < (mesh.Mesh?.GetSurfaceCount() ?? 0); surface++)
             {
@@ -1345,18 +1347,6 @@ internal static class RuntimeMaterialLoader
     }
 
     private static Vector3 Rgb(Color color) => new(color.R, color.G, color.B);
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
 
     internal readonly record struct LoadedTextures(
         IReadOnlyDictionary<string, Texture2D> TwoDimensional,

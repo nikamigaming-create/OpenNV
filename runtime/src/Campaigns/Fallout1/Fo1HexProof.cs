@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 internal static class Fo1HexProofNumericContracts
@@ -295,7 +297,7 @@ internal static class Fo1HexProof
                     $"background={backgroundLuminance:F3} practical={loaded.Atmosphere.PracticalLights} " +
                     $"localFog={loaded.Atmosphere.LocalFogVolumes} " +
                     $"envelopeCut={loaded.RuntimeProfile.Cutaway.TacticalEnvelopeCutHeightMeters:F2}.");
-            var sourceSprites = Descendants<Sprite3D>(host).ToArray();
+            var sourceSprites = NodeTraversal.Descendants<Sprite3D>(host).ToArray();
             var sourceOverlay = host.FindChild("FO1_SOURCE_STATIC_SPRITE_OVERLAY", true, false) as Node3D;
             var caveMeshes = new[]
             {
@@ -307,11 +309,11 @@ internal static class Fo1HexProof
                 sprite.Name == "SourceCritterSprite" || sprite.Name == "VaultDwellerSourceSprite").ToArray();
             var staticSprites = sourceSprites.Where(sprite =>
                 sprite.Name.ToString().StartsWith("FO1_OBJ_", StringComparison.Ordinal)).ToArray();
-            var creatureRoots = Descendants<Node3D>(host)
+            var creatureRoots = NodeTraversal.Descendants<Node3D>(host)
                 .Where(node => node.Name == "OwnedNVCrGiantRat")
                 .ToArray();
-            var creatureSkeletons = creatureRoots.Sum(root => Descendants<Skeleton3D>(root).Count());
-            var creaturePlayers = creatureRoots.Sum(root => Descendants<AnimationPlayer>(root).Count());
+            var creatureSkeletons = creatureRoots.Sum(root => NodeTraversal.Descendants<Skeleton3D>(root).Count());
+            var creaturePlayers = creatureRoots.Sum(root => NodeTraversal.Descendants<AnimationPlayer>(root).Count());
             var hiddenGoreMeshes = loaded.Session.Mobs.Sum(mob => mob.CreatureHiddenGoreMeshes);
             var ownedCreaturePresentation = loaded.CreatureAnimations > 0;
             var ownedPlayerPresentation = loaded.PlayerActor is not null;
@@ -322,10 +324,10 @@ internal static class Fo1HexProof
                 false) as Sprite3D;
             var playerSkeletons = playerRoot is null
                 ? 0
-                : Descendants<Skeleton3D>(playerRoot).Count();
+                : NodeTraversal.Descendants<Skeleton3D>(playerRoot).Count();
             var playerAnimationPlayers = playerRoot is null
                 ? 0
-                : Descendants<AnimationPlayer>(playerRoot).Count();
+                : NodeTraversal.Descendants<AnimationPlayer>(playerRoot).Count();
             var ownedCaveContainer = host.FindChild("FO1_OWNED_CAVE_COMPOSITION", true, false) as Node3D;
             var ownedCavePresentation = loaded.OwnedCave.Instances > 0;
             var expectedGroundedRockInstances =
@@ -445,9 +447,9 @@ internal static class Fo1HexProof
                     $"Fallout center-to-center one-AP movement proof failed: " +
                     $"tile={loaded.Session.PlayerTile} AP={loaded.Session.ActionPoints} " +
                     $"centerError={loaded.Session.PlayerHexCenterErrorMeters:F6}.");
-            var hostileMarkers = Descendants<MeshInstance3D>(host)
+            var hostileMarkers = NodeTraversal.Descendants<MeshInstance3D>(host)
                 .Count(node => node.Name == "HostileHexMarker");
-            var hostileLabels = Descendants<Label3D>(host)
+            var hostileLabels = NodeTraversal.Descendants<Label3D>(host)
                 .Count(node => node.Name == "HostileHealthLabel");
             var combatTarget = loaded.Session.CycleTarget()
                 ?? throw new InvalidOperationException("Fallout target cycling found no source mob.");
@@ -1001,18 +1003,6 @@ internal static class Fo1HexProof
         await host.ToSignal(
             host.GetTree().CreateTimer(loaded.RuntimeProfile.Mob.Animation.MoveSeconds),
             SceneTreeTimer.SignalName.Timeout);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
 }

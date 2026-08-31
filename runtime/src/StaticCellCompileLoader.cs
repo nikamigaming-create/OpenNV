@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class StaticCellCompileLoader
@@ -191,21 +193,21 @@ internal static class StaticCellCompileLoader
                                 $"Could not duplicate authored collision: {assetId}");
                         collision.Name = $"AUTHORED_COLLISION_{assetId}";
                         placementNode.AddChild(collision);
-                        foreach (var mesh in Descendants<MeshInstance3D>(collision))
+                        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(collision))
                         {
                             mesh.Visible = false;
                             mesh.CreateTrimeshCollision();
-                            foreach (var body in Descendants<StaticBody3D>(mesh))
+                            foreach (var body in NodeTraversal.Descendants<StaticBody3D>(mesh))
                                 body.CollisionLayer = DefaultRenderLayer;
                             collisionMeshes++;
                         }
                     }
                     else if (buildCollision && prototype.LandscapeCollision)
                     {
-                        foreach (var mesh in Descendants<MeshInstance3D>(instance))
+                        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(instance))
                         {
                             mesh.CreateTrimeshCollision();
-                            var bodies = Descendants<StaticBody3D>(mesh).ToArray();
+                            var bodies = NodeTraversal.Descendants<StaticBody3D>(mesh).ToArray();
                             if (bodies.Length != SingleLandscapeCollisionBody)
                                 throw new InvalidOperationException(
                                     $"Static CELL landscape collision body differs: {assetId}");
@@ -391,7 +393,7 @@ internal static class StaticCellCompileLoader
 
     private static void CountGeometry(Node root, ref int surfaces, ref int vertices)
     {
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             if (mesh.Mesh is null)
                 continue;
@@ -404,20 +406,8 @@ internal static class StaticCellCompileLoader
 
     private static void SetRenderLayer(Node root, uint layer)
     {
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
             mesh.Layers = layer;
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private static string SafeNodeName(string value) =>

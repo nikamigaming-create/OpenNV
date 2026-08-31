@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal static class Fo2ExitTransitionProof
@@ -57,7 +59,7 @@ internal static class Fo2ExitTransitionProof
             var temple = host.TempleScene;
             var descendants = temple is null
                 ? Array.Empty<Node>()
-                : Descendants(temple.Root).ToArray();
+                : NodeTraversal.Descendants<Node>(temple.Root).ToArray();
             var wallProxyMeshes = descendants
                 .OfType<MeshInstance3D>()
                 .Count(node => node.Name == "MOLDED_SOURCE_WALL_SHELL");
@@ -262,16 +264,6 @@ internal static class Fo2ExitTransitionProof
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-    }
-
-    private static IEnumerable<Node> Descendants(Node root)
-    {
-        foreach (var child in root.GetChildren())
-        {
-            yield return child;
-            foreach (var descendant in Descendants(child))
-                yield return descendant;
-        }
     }
 
     private static void WriteReport(string path, object report) => File.WriteAllText(

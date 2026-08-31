@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class ActorReviewCapture
@@ -47,7 +49,7 @@ internal static class ActorReviewCapture
 
             actor.AnimationPlayer.Stop();
             actor.AnimationPlayer.Active = false;
-            var skeleton = Descendants<Skeleton3D>(actor.Root).Single();
+            var skeleton = NodeTraversal.Descendants<Skeleton3D>(actor.Root).Single();
             var mappings = BuildNodeMappings(
                 skeleton,
                 samples[0],
@@ -979,18 +981,6 @@ internal static class ActorReviewCapture
         value.X.Y, value.Y.Y, value.Z.Y,
         value.X.Z, value.Y.Z, value.Z.Z,
     };
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
-    }
 
     private readonly record struct NodeMapping(
         int BoneIndex,

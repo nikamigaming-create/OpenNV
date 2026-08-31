@@ -1,5 +1,7 @@
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal partial class PoolTableInstance : Node3D
@@ -208,7 +210,7 @@ internal partial class PoolTableInstance : Node3D
     {
         var hasBounds = false;
         var bounds = new Aabb();
-        foreach (var mesh in Descendants<MeshInstance3D>(root))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(root))
         {
             var meshBounds = mesh.GetAabb();
             foreach (var x in new[] { meshBounds.Position.X, meshBounds.End.X })
@@ -221,18 +223,6 @@ internal partial class PoolTableInstance : Node3D
                     }
         }
         return bounds;
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     internal readonly record struct CuePresentation(Node3D Visual, Vector3 TipGodotUnits);

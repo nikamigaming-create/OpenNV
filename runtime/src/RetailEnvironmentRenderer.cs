@@ -1,5 +1,7 @@
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal static class RetailEnvironmentRenderer
@@ -275,7 +277,7 @@ internal static class RetailEnvironmentRenderer
     {
         var evidence = environment.SkyModels["atmosphere"];
         var loaded = VerifiedGltfLoader.Load(evidence.ModelPath, evidence.SidecarPath);
-        var meshes = Descendants<MeshInstance3D>(loaded.Scene).ToArray();
+        var meshes = NodeTraversal.Descendants<MeshInstance3D>(loaded.Scene).ToArray();
         if (meshes.Length != 1 || meshes[0].Mesh is null ||
             meshes[0].Mesh!.GetSurfaceCount() != evidence.Surfaces.Count)
             throw new InvalidOperationException(
@@ -309,7 +311,7 @@ internal static class RetailEnvironmentRenderer
     {
         var evidence = environment.SkyModels["clouds"];
         var loaded = VerifiedGltfLoader.Load(evidence.ModelPath, evidence.SidecarPath);
-        var meshes = Descendants<MeshInstance3D>(loaded.Scene).ToArray();
+        var meshes = NodeTraversal.Descendants<MeshInstance3D>(loaded.Scene).ToArray();
         if (meshes.Length != 1 || meshes[0].Mesh is null ||
             meshes[0].Mesh!.GetSurfaceCount() != evidence.Surfaces.Count)
             throw new InvalidOperationException(
@@ -410,17 +412,6 @@ internal static class RetailEnvironmentRenderer
     }
 
     private static Vector3 Rgb(Color color) => new(color.R, color.G, color.B);
-
-    private static IEnumerable<T> Descendants<T>(Node root) where T : Node
-    {
-        foreach (Node child in root.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var nested in Descendants<T>(child))
-                yield return nested;
-        }
-    }
 
     internal readonly record struct Application(
         RetailExteriorEnvironment.ResolvedEnvironment Environment,

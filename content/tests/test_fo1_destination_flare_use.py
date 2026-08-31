@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,9 +22,9 @@ class Fo1DestinationFlareUseTest(unittest.TestCase):
 
     def test_runtime_keeps_flare_out_of_weapon_attachment_and_persists_only_bound_state(self) -> None:
         contract = (FO1 / "Fo1DestinationFlareUseContract.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
         inventory = (FO1 / "Fo1ClassicInventoryScreen.cs").read_text(encoding="utf-8")
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
         self.assertIn("interaction join drifted", contract)
         self.assertIn("UseInventoryScriptedItem", session)
         self.assertIn("_destinationFlareLit", session)

@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 import unittest
 
 
@@ -52,7 +53,7 @@ class Fo1RuntimeProfileTest(unittest.TestCase):
         self._assert_finite(profile)
 
     def test_equipment_and_hud_are_source_symbol_driven(self) -> None:
-        session = (RUNTIME / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((RUNTIME / "Fo1TacticalSession.cs"))
         hud = (RUNTIME / "Fo1ClassicHud.cs").read_text(encoding="utf-8")
         inventory = (RUNTIME / "Fo1ClassicInventoryScreen.cs").read_text(
             encoding="utf-8"
@@ -107,7 +108,7 @@ class Fo1RuntimeProfileTest(unittest.TestCase):
 
     def test_adaptation_values_do_not_return_to_core_consumers(self) -> None:
         camera = (RUNTIME / "Fo1TacticalCamera.cs").read_text(encoding="utf-8")
-        session = (RUNTIME / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((RUNTIME / "Fo1TacticalSession.cs"))
         cutaway = (RUNTIME / "Fo1CaveCutaway.cs").read_text(encoding="utf-8")
         mob = (RUNTIME / "Fo1Mob.cs").read_text(encoding="utf-8")
         loader = (RUNTIME / "Fo1HexSceneLoader.cs").read_text(encoding="utf-8")
@@ -140,7 +141,7 @@ class Fo1RuntimeProfileTest(unittest.TestCase):
 
     def test_cutaway_uses_only_source_labelled_visibility(self) -> None:
         cutaway = (RUNTIME / "Fo1CaveCutaway.cs").read_text(encoding="utf-8")
-        cave = (RUNTIME / "Fo1OwnedCaveKit.cs").read_text(encoding="utf-8")
+        cave = read_csharp_source_module((RUNTIME / "Fo1OwnedCaveKit.cs"))
 
         self.assertIn('"fo1_source_tactical_visibility"', cutaway)
         self.assertIn('"hide-roof-envelope"', cutaway)
@@ -161,9 +162,9 @@ class Fo1RuntimeProfileTest(unittest.TestCase):
         self.assertIn('"hide-vault-portal"', cave)
 
     def test_owned_player_and_continuous_cave_surface_use_source_bound_floor_contracts(self) -> None:
-        session = (RUNTIME / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((RUNTIME / "Fo1TacticalSession.cs"))
         loader = (RUNTIME / "Fo1HexSceneLoader.cs").read_text(encoding="utf-8")
-        cave = (RUNTIME / "Fo1OwnedCaveKit.cs").read_text(encoding="utf-8")
+        cave = read_csharp_source_module((RUNTIME / "Fo1OwnedCaveKit.cs"))
 
         self.assertIn("ownedCave.GroundingFloorHeightMeters", loader)
         self.assertIn("_ownedPlayerFloorHeightMeters", session)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,7 +19,7 @@ class ClassicHumanoidNoPlaceholderRuntimeTest(unittest.TestCase):
         fo1_creator = (FO1 / "Fo1CharacterCreator.cs").read_text(encoding="utf-8")
         fo1_custom = (FO1 / "Fo1CustomAppearanceEditor.cs").read_text(encoding="utf-8")
         fo1_portrait = (FO1 / "Fo1CustomPortraitPreview.cs").read_text(encoding="utf-8")
-        coordinator = RUNTIME_COORDINATOR.read_text(encoding="utf-8")
+        coordinator = read_csharp_source_module(RUNTIME_COORDINATOR)
         fo2_picker = (FO2 / "Fo2CharacterPicker.cs").read_text(encoding="utf-8")
         fo2_preview = (FO2 / "Fo2PremadeHumanoidPreview.cs").read_text(encoding="utf-8")
         fo2_custom = (FO2 / "Fo2CustomCharacterEditor.cs").read_text(encoding="utf-8")
@@ -67,13 +68,13 @@ class ClassicHumanoidNoPlaceholderRuntimeTest(unittest.TestCase):
         )
 
         for route in creator_routes:
-            source = route.read_text(encoding="utf-8")
+            source = read_csharp_source_module(route)
             self.assertIn("new OpeningRaceSexRenderedDeviceHost(", source, route.name)
             self.assertIn("ConfigureCharacterControls(", source, route.name)
             self.assertIn("SetCreatorModeState(", source, route.name)
 
     def test_new_vegas_movie_stays_on_the_authored_creator_boundary(self) -> None:
-        coordinator = RUNTIME_COORDINATOR.read_text(encoding="utf-8")
+        coordinator = read_csharp_source_module(RUNTIME_COORDINATOR)
         character_video = coordinator.split(
             "private async Task RunOpeningCharacterVideo", 1
         )[1].split("private async Task RunPoolProof", 1)[0]

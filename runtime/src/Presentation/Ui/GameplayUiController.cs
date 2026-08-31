@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Presentation.Ui;
 
 internal partial class GameplayUiController : CanvasLayer
@@ -488,7 +490,7 @@ internal partial class GameplayUiController : CanvasLayer
             textures,
             _configuration.Renderer,
             _configuration.ContentCompiler.RetailGrass);
-        var surfaces = Descendants<MeshInstance3D>(model)
+        var surfaces = NodeTraversal.Descendants<MeshInstance3D>(model)
             .SelectMany(mesh => Enumerable.Range(0, mesh.Mesh?.GetSurfaceCount() ?? 0)
                 .Select(surface => (Mesh: mesh, Surface: surface)))
             .ToArray();
@@ -794,7 +796,7 @@ internal partial class GameplayUiController : CanvasLayer
         var viewDirection = -normal;
         var up = right.Cross(viewDirection).Normalized();
 
-        var points = Descendants<MeshInstance3D>(model)
+        var points = NodeTraversal.Descendants<MeshInstance3D>(model)
             .SelectMany(value =>
             {
                 var bounds = value.GetAabb();
@@ -834,18 +836,6 @@ internal partial class GameplayUiController : CanvasLayer
             orthographicHeight,
             MathF.Max(0.01f, orthographicHeight * 0.01f),
             MathF.Max(1.0f, cameraDistance + depth + orthographicHeight));
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private readonly record struct PipBoyReferenceFrame(

@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 
 internal static class Fo2ArroyoTrialRouteProof
@@ -63,10 +65,10 @@ internal static class Fo2ArroyoTrialRouteProof
             host.EnterTempleAfterTrial();
             var temple = host.TempleScene ?? throw new InvalidOperationException(
                 "Fallout 2 trial route did not enter ARTEMPLE.");
-            var klint = Descendants<Sprite3D>(temple.Root).Single(row =>
+            var klint = NodeTraversal.Descendants<Sprite3D>(temple.Root).Single(row =>
                 row.HasMeta("map_serial") && row.GetMeta("map_serial").AsInt32() ==
                     host.TrialRoute.KlintGate.ActorSerial);
-            var gate = Descendants<Sprite3D>(temple.Root).Single(row =>
+            var gate = NodeTraversal.Descendants<Sprite3D>(temple.Root).Single(row =>
                 row.HasMeta("map_serial") && row.GetMeta("map_serial").AsInt32() ==
                     host.TrialRoute.KlintGate.GateSerial);
             runtime.TraverseVillageRoute();
@@ -395,11 +397,11 @@ internal static class Fo2ArroyoTrialRouteProof
                 "Fallout 2 restored trial runtime is absent.");
             var save = host.CurrentSave ?? throw new InvalidOperationException(
                 "Fallout 2 restored trial save is absent.");
-            var gate = Descendants<Sprite3D>(host.TempleScene?.Root ??
+            var gate = NodeTraversal.Descendants<Sprite3D>(host.TempleScene?.Root ??
                 throw new InvalidOperationException("Fallout 2 restored Temple scene is absent."))
                 .Single(row => row.HasMeta("map_serial") &&
                     row.GetMeta("map_serial").AsInt32() == host.TrialRoute.KlintGate.GateSerial);
-            var klint = Descendants<Sprite3D>(host.TempleScene!.Root)
+            var klint = NodeTraversal.Descendants<Sprite3D>(host.TempleScene!.Root)
                 .Single(row => row.HasMeta("map_serial") &&
                     row.GetMeta("map_serial").AsInt32() == host.TrialRoute.KlintGate.ActorSerial);
             var restoredPlayer = host.Runtime?.Player ??
@@ -706,17 +708,6 @@ internal static class Fo2ArroyoTrialRouteProof
             path + ".sha256",
             Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant() +
                 System.Environment.NewLine);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node root) where T : Node
-    {
-        foreach (var child in root.GetChildren())
-        {
-            if (child is T typed)
-                yield return typed;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private sealed record PairedGateFrameEvidence(

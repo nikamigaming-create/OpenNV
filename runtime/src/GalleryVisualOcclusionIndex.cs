@@ -1,5 +1,7 @@
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime;
 
 internal sealed class GalleryVisualOcclusionIndex
@@ -14,7 +16,7 @@ internal sealed class GalleryVisualOcclusionIndex
         Node excludedRoot)
     {
         var surfaces = new List<Surface>();
-        foreach (var mesh in Descendants<MeshInstance3D>(sceneRoot, excludedRoot))
+        foreach (var mesh in NodeTraversal.Descendants<MeshInstance3D>(sceneRoot, excludedRoot))
         {
             if (!mesh.IsVisibleInTree() || mesh.Mesh is null)
                 continue;
@@ -75,22 +77,6 @@ internal sealed class GalleryVisualOcclusionIndex
             }
         }
         return new Hit(false, Vector3.Zero, "");
-    }
-
-    private static IEnumerable<T> Descendants<T>(
-        Node root,
-        Node excludedRoot)
-        where T : Node
-    {
-        foreach (var child in root.GetChildren())
-        {
-            if (ReferenceEquals(child, excludedRoot))
-                continue;
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child, excludedRoot))
-                yield return descendant;
-        }
     }
 
     private readonly record struct Surface(

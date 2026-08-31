@@ -1,5 +1,7 @@
 using Godot;
 
+using OpenNV.Runtime.SceneGraph;
+
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
 // The roof remains a source-topology cut. Camera-facing cave shells use an
@@ -123,7 +125,7 @@ internal partial class Fo1CaveCutaway : Node
         _session = session;
         _camera = camera;
         _profile = profile;
-        _sourceTacticalHidden = Descendants<Node3D>(container)
+        _sourceTacticalHidden = NodeTraversal.Descendants<Node3D>(container)
             .Where(surface => SourceVisibility(surface) == "hide-roof-envelope")
             .ToArray();
         if (_sourceTacticalHidden.Length != 1)
@@ -132,7 +134,7 @@ internal partial class Fo1CaveCutaway : Node
 
         // Only rock matter participates. Vault hardware is a destination landmark
         // and remains opaque behind the source-shaped rock portal.
-        _tacticalOccluders = Descendants<Node3D>(container)
+        _tacticalOccluders = NodeTraversal.Descendants<Node3D>(container)
             .Where(surface => SourceVisibility(surface) is
                 "hide-boundary-envelope" or "hide-wall-volume" or "hide-vault-portal")
             .Select(BuildOccluder)
@@ -233,8 +235,8 @@ internal partial class Fo1CaveCutaway : Node
     private static Occluder BuildOccluder(Node3D root)
     {
         var instances = root is GeometryInstance3D rootGeometry
-            ? Descendants<GeometryInstance3D>(root).Prepend(rootGeometry)
-            : Descendants<GeometryInstance3D>(root);
+            ? NodeTraversal.Descendants<GeometryInstance3D>(root).Prepend(rootGeometry)
+            : NodeTraversal.Descendants<GeometryInstance3D>(root);
         var geometry = instances
             .Where(instance => instance.Visible)
             .Select(BuildCutawayGeometry)
@@ -319,8 +321,8 @@ internal partial class Fo1CaveCutaway : Node
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         var meshes = root is MeshInstance3D rootMesh
-            ? Descendants<MeshInstance3D>(root).Prepend(rootMesh)
-            : Descendants<MeshInstance3D>(root);
+            ? NodeTraversal.Descendants<MeshInstance3D>(root).Prepend(rootMesh)
+            : NodeTraversal.Descendants<MeshInstance3D>(root);
         var count = 0;
         foreach (var mesh in meshes)
         {
@@ -339,18 +341,6 @@ internal partial class Fo1CaveCutaway : Node
             throw new InvalidOperationException(
                 $"Fallout cave occluder has no meshes: {root.Name}");
         return new Aabb(minimum, maximum - minimum);
-    }
-
-    private static IEnumerable<T> Descendants<T>(Node node)
-        where T : Node
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in Descendants<T>(child))
-                yield return descendant;
-        }
     }
 
     private sealed record CutawayGeometry(

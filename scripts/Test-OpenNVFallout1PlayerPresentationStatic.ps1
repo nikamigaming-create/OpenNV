@@ -64,10 +64,20 @@ if (($policy -join ',') -ne
     throw 'Fallout 1 premade gameplay presentation policy changed.'
 }
 
-$flow = Get-Content -LiteralPath (
-    Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1NewGameFlow.cs') -Raw
-$session = Get-Content -LiteralPath (
-    Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1TacticalSession.cs') -Raw
+function Get-CSharpSourceModule([string] $entrypoint) {
+    $entry = Get-Item -LiteralPath $entrypoint
+    $sources = Get-ChildItem -LiteralPath $entry.DirectoryName -Filter (
+        '{0}*.cs' -f $entry.BaseName) | Sort-Object -Property FullName
+    if ($sources.FullName -notcontains $entry.FullName) {
+        throw "C# source module entrypoint is missing: $entrypoint"
+    }
+    return ($sources | Get-Content -Raw) -join "`n"
+}
+
+$flow = Get-CSharpSourceModule (
+    Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1NewGameFlow.cs')
+$session = Get-CSharpSourceModule (
+    Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1TacticalSession.cs')
 $preview = Get-Content -LiteralPath (
     Join-Path $repository 'runtime\src\Campaigns\Fallout1\Fo1PremadePlayerPreview.cs') -Raw
 $profile = Get-Content -LiteralPath (

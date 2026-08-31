@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from content.tests.csharp_source_module import read_csharp_source_module
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,9 +22,9 @@ class Fo1DestinationMedicLookTest(unittest.TestCase):
 
     def test_runtime_keeps_dialogue_combat_and_ap_fail_closed_while_persisting_look_ledger(self) -> None:
         contract = (FO1 / "Fo1DestinationMedicLookContract.cs").read_text(encoding="utf-8")
-        session = (FO1 / "Fo1TacticalSession.cs").read_text(encoding="utf-8")
-        flow = (FO1 / "Fo1NewGameFlow.cs").read_text(encoding="utf-8")
-        coordinator = (ROOT / "runtime" / "src" / "RuntimeCoordinator.cs").read_text(encoding="utf-8")
+        session = read_csharp_source_module((FO1 / "Fo1TacticalSession.cs"))
+        flow = read_csharp_source_module((FO1 / "Fo1NewGameFlow.cs"))
+        coordinator = read_csharp_source_module((ROOT / "runtime" / "src" / "RuntimeCoordinator.cs"))
         self.assertIn("prerequisite join drifted", contract)
         self.assertIn("dialogue\") != \"unimplemented-fail-closed", contract)
         self.assertIn("TryLookAtAdjacentDestinationMedic", session)
