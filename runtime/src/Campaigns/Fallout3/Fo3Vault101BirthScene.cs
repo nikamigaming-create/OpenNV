@@ -360,7 +360,7 @@ internal static class Fo3Vault101BirthScene
                     .Select(value => ActorModelSlice.NormalizeAnimationPath(
                         value.SpeakerIdle.ModelPath))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count() + 1 ||
+                    .Count() + 2 ||
                 primaryAnimations.Length != 1 ||
                 expectedDialogueAnimations.Concat(expectedStage12DialogueAnimations).Any(expected =>
                     loadedAnimations.Count(value =>

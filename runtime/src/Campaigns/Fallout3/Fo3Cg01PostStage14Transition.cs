@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Campaigns.Fallout3;
 
@@ -62,6 +63,35 @@ internal sealed record Fo3Cg01DadReturnCue(
     string? TargetQuestFormId,
     int? TargetStage);
 
+internal sealed record Fo3Cg01DadTravelPackage(
+    Fo3Cg01PostStage14Package Package,
+    IReadOnlyList<SourceGamebryoStageCommand<string>> StageCommands,
+    int SourceStage,
+    int? CompletionStage,
+    IReadOnlyList<SourceGamebryoStageCommand<string>> CompletionCommands);
+
+internal sealed record Fo3Cg01DadLeadTrigger(
+    string ReferenceFormId,
+    Fo3Cg01Transform SourceTransform,
+    Fo3Cg01Vector3 DimensionsGameUnits,
+    int SourceStage,
+    int TargetStage);
+
+internal sealed record Fo3Cg01DadLeadSequence(
+    Fo3Cg01DadTravelPackage BibleTravel,
+    Fo3Cg01DadTravelPackage LeadTravel,
+    int SayToDoneStage,
+    IReadOnlyList<SourceGamebryoStageCommand<string>> SayToDoneCommands,
+    string UnlockedDoorReferenceFormId,
+    int DisplayedObjectiveIndex,
+    string EscortTargetFormId,
+    CellNavigationGraph Navigation,
+    string LocomotionLogicalPath,
+    string LocomotionSha256,
+    float LocomotionSpeedGameUnitsPerSecond,
+    Fo3Cg01DadLeadTrigger EndTrigger,
+    string NextBoundaryBlocker);
+
 internal sealed record Fo3Cg01Stage50Timer(
     int SourceStage,
     int TargetStage,
@@ -73,6 +103,7 @@ internal sealed record Fo3Cg01Stage50Timer(
     double DialogueDelaySeconds,
     IReadOnlyList<Fo3Cg01DadReturnCue> DialogueCues,
     int DialogueTargetStage,
+    Fo3Cg01DadLeadSequence DadLead,
     string MainDoorReferenceFormId,
     int MainDoorLockLevel,
     bool MainDoorOpen,
@@ -146,17 +177,108 @@ internal sealed record Fo3Cg01Stage50Timer(
                     ? null : row.GetProperty("targetStage").GetInt32());
         }).ToArray();
         var boundary = dadReturn.GetProperty("nextBoundary");
+        if (!boundary.GetProperty("applied").GetBoolean() ||
+            boundary.GetProperty("blocker").ValueKind != JsonValueKind.Null)
+            throw new InvalidOperationException("Fallout 3 CG01 Dad lead boundary differs.");
+        var bible = dadReturn.GetProperty("bibleTravel");
+        var lead = dadReturn.GetProperty("dadLead");
+        var biblePackage = LoadTravelPackage(
+            bible,
+            completionStage: bible.GetProperty("completionStage").GetInt32(),
+            sourceStage: (int)bible.GetProperty("condition").GetProperty("comparisonValue").GetDouble());
+        var leadStage = dadReturn.GetProperty("targetStage").GetInt32();
+        var leadPackage = LoadTravelPackage(lead, completionStage: null, leadStage);
+        var navigationSource = lead.GetProperty("navigation");
+        var navigationCells = navigationSource.GetProperty("navmeshes").EnumerateArray()
+            .Select(row => row.GetProperty("cellFormId").GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (navigationCells.Count != 1)
+            throw new InvalidOperationException("Fallout 3 CG01 Dad lead navigation differs.");
+        var locomotion = lead.GetProperty("locomotion");
+        var rootMotion = locomotion.GetProperty("rootMotion");
+        var speed = rootMotion.GetProperty("speedGameUnitsPerSecond").GetSingle();
+        if (!float.IsFinite(speed) || speed <= 0.0f)
+            throw new InvalidOperationException("Fallout 3 CG01 Dad lead locomotion differs.");
+        var endTrigger = lead.GetProperty("endTrigger");
+        var leadResultRows = lead.GetProperty("stageResult").GetProperty("commands")
+            .EnumerateArray().ToArray();
+        var unlockDoor = leadResultRows.Single(row =>
+            row.GetProperty("kind").GetString() == "unlock");
+        var sayToDoneRows = lead.GetProperty("sayToDoneResult").GetProperty("commands")
+            .EnumerateArray().ToArray();
+        var displayedObjective = sayToDoneRows.Single(row =>
+            row.GetProperty("kind").GetString() == "setObjectiveDisplayed");
+        var dimensions = endTrigger.GetProperty("dimensionsGameUnits").EnumerateArray()
+            .Select(value => value.GetDouble()).ToArray();
+        if (dimensions.Length != 3 || dimensions.Any(value => !double.IsFinite(value) || value <= 0.0))
+            throw new InvalidOperationException("Fallout 3 CG01 end trigger dimensions differ.");
+        var dadLead = new Fo3Cg01DadLeadSequence(
+            biblePackage,
+            leadPackage,
+            lead.GetProperty("sayToDoneStage").GetInt32(),
+            ReadCommands(lead.GetProperty("sayToDoneResult"), new Dictionary<string, GamebryoStageCommandKind>(StringComparer.Ordinal)
+            {
+                ["setObjectiveDisplayed"] = GamebryoStageCommandKind.Objective,
+                ["evaluatePackage"] = GamebryoStageCommandKind.ActorIntent,
+            }),
+            unlockDoor.GetProperty("referenceFormId").GetString()!,
+            displayedObjective.GetProperty("objectiveIndex").GetInt32(),
+            lead.GetProperty("escortTarget").GetProperty("formId").GetString()!,
+            CellNavigationGraph.Load(navigationSource, navigationCells),
+            locomotion.GetProperty("logicalPath").GetString()!,
+            locomotion.GetProperty("sha256").GetString()!,
+            speed,
+            new Fo3Cg01DadLeadTrigger(
+                endTrigger.GetProperty("referenceFormId").GetString()!,
+                Fo3Cg01Stage12Transition.LoadTransform(endTrigger.GetProperty("sourceTransform")),
+                new Fo3Cg01Vector3(dimensions[0], dimensions[1], dimensions[2]),
+                endTrigger.GetProperty("sourceStage").GetInt32(),
+                endTrigger.GetProperty("targetStage").GetInt32()),
+            lead.GetProperty("nextBoundary").GetProperty("blocker").GetString()!);
         return new Fo3Cg01Stage50Timer(expectedSourceStage, targetStage,
             timer.GetProperty("initialSeconds").GetDouble(), commands,
             new Fo3Cg01PostStage14Package(package.GetProperty("formId").GetString()!,
                 package.GetProperty("editorId").GetString()!, target.GetProperty("formId").GetString()!,
                 transform, target.GetProperty("radiusGameUnits").GetInt32(), completionStage),
             completionStage, completionCommands, dadReturn.GetProperty("dialogueDelaySeconds").GetDouble(),
-            cues, dadReturn.GetProperty("targetStage").GetInt32(),
+            cues, dadReturn.GetProperty("targetStage").GetInt32(), dadLead,
             mainDoorLock.GetProperty("referenceFormId").GetString()!,
             mainDoorLock.GetProperty("value").GetInt32(),
             mainDoorOpen.GetProperty("value").GetInt32() != 0,
-            boundary.GetProperty("blocker").GetString()!);
+            dadLead.NextBoundaryBlocker);
+    }
+
+    private static Fo3Cg01DadTravelPackage LoadTravelPackage(
+        JsonElement source,
+        int? completionStage,
+        int? sourceStage = null)
+    {
+        var target = source.GetProperty("target");
+        var package = new Fo3Cg01PostStage14Package(
+            source.GetProperty("formId").GetString()!,
+            source.GetProperty("editorId").GetString()!,
+            target.GetProperty("formId").GetString()!,
+            Fo3Cg01Stage12Transition.LoadTransform(target.GetProperty("sourceTransform")),
+            target.GetProperty("radiusGameUnits").GetInt32(),
+            completionStage);
+        var stageCommands = sourceStage is null
+            ? Array.Empty<SourceGamebryoStageCommand<string>>()
+            : ReadCommands(source.GetProperty("stageResult"), new Dictionary<string, GamebryoStageCommandKind>(StringComparer.Ordinal)
+            {
+                ["setScriptVariable"] = GamebryoStageCommandKind.SetScriptVariable,
+                ["unlock"] = GamebryoStageCommandKind.ActorIntent,
+                ["evaluatePackage"] = GamebryoStageCommandKind.ActorIntent,
+            });
+        var completionCommands = completionStage is null
+            ? Array.Empty<SourceGamebryoStageCommand<string>>()
+            : source.GetProperty("completionCommands").EnumerateArray().Select((row, index) =>
+            {
+                if (row.GetProperty("index").GetInt32() != index || row.GetProperty("kind").GetString() != "setScriptVariable")
+                    throw new InvalidOperationException("Fallout 3 CG01 Bible completion differs.");
+                return new SourceGamebryoStageCommand<string>(index, GamebryoStageCommandKind.SetScriptVariable, "setScriptVariable");
+            }).ToArray();
+        return new Fo3Cg01DadTravelPackage(package, stageCommands,
+            sourceStage ?? (int)source.GetProperty("condition").GetProperty("comparisonValue").GetDouble(),
+            completionStage, completionCommands);
     }
 
     private static IReadOnlyList<SourceGamebryoStageCommand<string>> ReadCommands(
@@ -355,7 +477,7 @@ internal sealed record Fo3Cg01PostStage14Transition(
 {
     internal const string ExpectedSchema = "opennv-fo3-cg01-stage-14-to-20-runtime/v1";
     internal const string ExpectedSavedStateSchema =
-        "opennv-fo3-cg01-stage-14-to-70-runtime-state/v2";
+        "opennv-fo3-cg01-stage-14-to-90-runtime-state/v3";
 
     private const string ExpectedStatus = "source-backed-package-dialogue-runtime-ready";
     private const int GetPcIsSexFunction = 131;
@@ -556,6 +678,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
                 Stage20Interaction.TimerTransition.TargetStage,
                 Stage20Interaction.TimerTransition.CompletionStage,
                 Stage20Interaction.TimerTransition.DialogueTargetStage,
+                Stage20Interaction.TimerTransition.DadLead.SayToDoneStage,
+                Stage20Interaction.TimerTransition.DadLead.EndTrigger.TargetStage,
         };
         supportedStages.UnionWith(Stage20Interaction.TimerTransition.DialogueCues
             .Where(cue => cue.TargetStage is not null).Select(cue => cue.TargetStage!.Value));
@@ -576,6 +700,8 @@ internal sealed record Fo3Cg01PostStage14Transition(
         {
             var value when value == TargetStage => TargetStage,
             var value when value == Stage20Interaction.GateStage => Stage20Interaction.GateStage,
+            var value when value >= Stage20Interaction.TimerTransition.DadLead.SayToDoneStage =>
+                Stage20Interaction.TimerTransition.DadLead.DisplayedObjectiveIndex,
             _ => Stage20Interaction.ExitStage,
         };
         var interactionCommandCount = Stage20Interaction.StageResults
@@ -586,11 +712,25 @@ internal sealed record Fo3Cg01PostStage14Transition(
         else if (stage >= Stage20Interaction.TimerTransition.CompletionStage)
             interactionCommandCount += Stage20Interaction.TimerTransition.TargetCommands.Count +
                 Stage20Interaction.TimerTransition.CompletionCommands.Count;
+        var dadLead = Stage20Interaction.TimerTransition.DadLead;
+        if (stage >= dadLead.BibleTravel.CompletionStage!.Value)
+            interactionCommandCount += dadLead.BibleTravel.StageCommands.Count +
+                dadLead.BibleTravel.CompletionCommands.Count;
+        if (stage >= dadLead.SayToDoneStage)
+            interactionCommandCount += dadLead.LeadTravel.StageCommands.Count +
+                dadLead.SayToDoneCommands.Count;
+        if (stage >= dadLead.EndTrigger.TargetStage)
+            interactionCommandCount++;
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
-        var expectedPackages = stage >= Stage20Interaction.TimerTransition.CompletionStage
-            ? baseline.AppliedPackageFormIds
-                .Append(Stage20Interaction.TimerTransition.DadReturnPackage.FormId).ToArray()
-            : baseline.AppliedPackageFormIds;
+        var expectedPackages = baseline.AppliedPackageFormIds.AsEnumerable();
+        if (stage >= Stage20Interaction.TimerTransition.CompletionStage)
+            expectedPackages = expectedPackages.Append(
+                Stage20Interaction.TimerTransition.DadReturnPackage.FormId);
+        if (stage >= dadLead.BibleTravel.CompletionStage!.Value)
+            expectedPackages = expectedPackages.Append(dadLead.BibleTravel.Package.FormId);
+        if (stage >= dadLead.SayToDoneStage)
+            expectedPackages = expectedPackages.Append(dadLead.LeadTravel.Package.FormId);
+        var expectedPackageArray = expectedPackages.ToArray();
         var timerRemaining = source.GetProperty("timerRemainingSeconds").GetDouble();
         var timerAdvancing = RequiredBoolean(source, "timerAdvancing");
         if (!double.IsFinite(timerRemaining) || timerRemaining < 0.0 ||
@@ -603,12 +743,16 @@ internal sealed record Fo3Cg01PostStage14Transition(
             !RequiredArray(source, "appliedInfoFormIds").EnumerateArray()
                 .Select(value => value.GetString()).SequenceEqual(baseline.AppliedInfoFormIds) ||
             !RequiredArray(source, "appliedPackageFormIds").EnumerateArray()
-                .Select(value => value.GetString()).SequenceEqual(expectedPackages) ||
+                .Select(value => value.GetString()).SequenceEqual(expectedPackageArray) ||
             RequiredFormId(gate, "referenceFormId") != baseline.PlaypenGateReferenceFormId ||
             gateOpen != expectedGateOpen ||
             RequiredFormId(door, "referenceFormId") != baseline.PlayroomDoorReferenceFormId ||
-            RequiredBoolean(door, "open") != baseline.PlayroomDoorOpen ||
-            RequiredInteger(door, "lockLevel") != baseline.PlayroomDoorLockLevel ||
+            RequiredBoolean(door, "open") !=
+                (stage >= Stage20Interaction.TimerTransition.CompletionStage) ||
+            RequiredInteger(door, "lockLevel") !=
+                (stage >= Stage20Interaction.TimerTransition.CompletionStage
+                    ? 0
+                    : baseline.PlayroomDoorLockLevel) ||
             !RequiredBoolean(source, "playerMovementEnabled") ||
             objective != expectedObjective ||
             RequiredInteger(source, "accountedCommandCount") != expectedCommandCount ||
@@ -624,7 +768,11 @@ internal sealed record Fo3Cg01PostStage14Transition(
             DisplayedObjectiveIndex = objective,
             AccountedCommandCount = expectedCommandCount,
             AppliedCommandCount = expectedCommandCount,
-            AppliedPackageFormIds = expectedPackages,
+            AppliedPackageFormIds = expectedPackageArray,
+            PlayroomDoorOpen = stage >= Stage20Interaction.TimerTransition.CompletionStage,
+            PlayroomDoorLockLevel = stage >= Stage20Interaction.TimerTransition.CompletionStage
+                ? 0
+                : baseline.PlayroomDoorLockLevel,
             SpecialValues = values,
             SpecialBookAccepted = accepted,
             TimerRemainingSeconds = timerRemaining,

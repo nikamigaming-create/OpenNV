@@ -1251,11 +1251,12 @@ internal partial class Fo3OpeningFlow
         SetCg01WorldReferenceOpen(state.PlayroomDoorReferenceFormId, false);
         SetCg01WorldReferenceLock(state.PlayroomDoorReferenceFormId, state.PlayroomDoorLockLevel);
         SetCg01WorldReferenceOpen(state.PlaypenGateReferenceFormId, false);
+        var timer = _profile.Cg01PostStage14Transition.Stage20Interaction.TimerTransition;
         ApplyCg01DadPackage(
-            state.ActiveStage >= _profile.Cg01PostStage14Transition.Stage20Interaction
-                .TimerTransition.TargetStage
-                ? _profile.Cg01PostStage14Transition.Stage20Interaction
-                    .TimerTransition.DadReturnPackage
+            state.ActiveStage >= timer.DadLead.SayToDoneStage
+                ? timer.DadLead.LeadTravel.Package
+                : state.ActiveStage >= timer.CompletionStage
+                    ? timer.DadReturnPackage
                 : _profile.Cg01PostStage14Transition.LeaveRoomPackage,
             stage5);
         (_cg01ToddlerWorld ?? throw new InvalidOperationException(
@@ -1285,6 +1286,20 @@ internal partial class Fo3OpeningFlow
     {
         var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
             "Fallout 3 CG01 Dad package has no owned world.");
+        var placement = Cg01DadPackagePlacement(package, stage5, coverage);
+        var travel = GamebryoPackageTravel.ArriveAtSourceTarget(
+            package.FormId,
+            placement,
+            coverage.Cg01DadActor.Placement.Transform,
+            GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
+        travel.Publish(coverage.Cg01DadActor.Placement);
+    }
+
+    private static SourcePackagePlacement Cg01DadPackagePlacement(
+        Fo3Cg01PostStage14Package package,
+        Fo3Cg01Stage0State stage5,
+        Fo3Vault101BirthSceneCoverage coverage)
+    {
         var source = package.TargetTransform;
         var placement = GamebryoPackagePlacement.FromPlanarGameReferenceMarker(
             package.TargetFormId,
@@ -1304,12 +1319,63 @@ internal partial class Fo3OpeningFlow
                 placement.SourceTransform,
                 coverage.Cg01DadGrounding.VerticalCorrectionGodotGameUnits),
         };
-        var travel = GamebryoPackageTravel.ArriveAtSourceTarget(
-            package.FormId,
-            placement,
+        return placement;
+    }
+
+    private void StartCg01DadSourceTravel(
+        Fo3Cg01DadLeadSequence sequence,
+        Fo3Cg01DadTravelPackage source,
+        Fo3Cg01Transform start,
+        Fo3Cg01Stage0State stage5,
+        Action arrived)
+    {
+        if (_cg01DadPackageTravelTick is not null)
+            throw new InvalidOperationException("Fallout 3 CG01 Dad travel is already active.");
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 Dad travel has no owned world.");
+        var target = Cg01DadPackagePlacement(source.Package, stage5, coverage);
+        var path = sequence.Navigation.FindPath(
+                new Vector3((float)start.PositionGameUnits.X, (float)start.PositionGameUnits.Y,
+                    (float)start.PositionGameUnits.Z),
+                new Vector3((float)source.Package.TargetTransform.PositionGameUnits.X,
+                    (float)source.Package.TargetTransform.PositionGameUnits.Y,
+                    (float)source.Package.TargetTransform.PositionGameUnits.Z))
+            .Select(position => GamebryoCoordinate.ConvertVector(
+                position - coverage.Contract.EntryPositionGameUnits) +
+                Vector3.Up * coverage.Cg01DadGrounding.VerticalCorrectionGodotGameUnits)
+            .ToArray();
+        var travel = GamebryoPackageTravel.Start(
+            source.Package.FormId,
+            target,
             coverage.Cg01DadActor.Placement.Transform,
+            path,
+            sequence.LocomotionSpeedGameUnitsPerSecond,
             GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
+        var animation = coverage.Cg01DadActor.Actor.LoadedAnimations.Single(value =>
+            ActorModelSlice.NormalizeAnimationPath(value.LogicalPath).Equals(
+                ActorModelSlice.NormalizeAnimationPath(sequence.LocomotionLogicalPath),
+                StringComparison.OrdinalIgnoreCase) &&
+            value.SourceSha256.Equals(sequence.LocomotionSha256,
+                StringComparison.OrdinalIgnoreCase));
+        animation.Player.Play(animation.RuntimeName);
+        animation.Player.Advance(0.0);
         travel.Publish(coverage.Cg01DadActor.Placement);
+        if (travel.Arrived)
+        {
+            RestoreCg01DadPrimaryIdle();
+            arrived();
+            return;
+        }
+        _cg01DadPackageTravelTick = delta =>
+        {
+            var completed = travel.Advance(delta);
+            travel.Publish(coverage.Cg01DadActor.Placement);
+            if (!completed)
+                return;
+            _cg01DadPackageTravelTick = null;
+            RestoreCg01DadPrimaryIdle();
+            arrived();
+        };
     }
 
     private void RestoreCg01Stage20World(
@@ -1321,7 +1387,14 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage14State stage14,
         Fo3Cg01Stage20State state)
     {
-        ApplyCg01DadPackage(_profile.Cg01PostStage14Transition.LeaveRoomPackage, stage5);
+        var timer = _profile.Cg01PostStage14Transition.Stage20Interaction.TimerTransition;
+        ApplyCg01DadPackage(
+            state.ActiveStage >= timer.DadLead.SayToDoneStage
+                ? timer.DadLead.LeadTravel.Package
+                : state.ActiveStage >= timer.CompletionStage
+                    ? timer.DadReturnPackage
+                    : _profile.Cg01PostStage14Transition.LeaveRoomPackage,
+            stage5);
         SetCg01WorldReferenceOpen(state.PlayroomDoorReferenceFormId, state.PlayroomDoorOpen);
         SetCg01WorldReferenceLock(
             state.PlayroomDoorReferenceFormId,
@@ -1332,8 +1405,11 @@ internal partial class Fo3OpeningFlow
         if (state.ActiveStage >= _profile.Cg01PostStage14Transition.Stage20Interaction
                 .TimerTransition.CompletionStage)
         {
-            var timer = _profile.Cg01PostStage14Transition.Stage20Interaction.TimerTransition;
-            SetCg01WorldReferenceLock(timer.MainDoorReferenceFormId, timer.MainDoorLockLevel);
+            SetCg01WorldReferenceLock(
+                timer.MainDoorReferenceFormId,
+                state.ActiveStage >= timer.DadLead.SayToDoneStage
+                    ? 0
+                    : timer.MainDoorLockLevel);
             SetCg01WorldReferenceOpen(timer.MainDoorReferenceFormId, timer.MainDoorOpen);
         }
         var world = _cg01ToddlerWorld ?? throw new InvalidOperationException(
@@ -1423,10 +1499,82 @@ internal partial class Fo3OpeningFlow
                     0,
                     targetStage =>
                     {
-                        if (targetStage is not null)
-                            current = current with { ActiveStage = targetStage.Value };
-                        if (targetStage == interaction.TimerTransition.DialogueTargetStage)
-                            Persist();
+                        if (targetStage is null)
+                            return true;
+                        var sequence = interaction.TimerTransition.DadLead;
+                        current = current with { ActiveStage = targetStage.Value };
+                        if (targetStage == sequence.BibleTravel.SourceStage)
+                        {
+                            var applied = ExecuteSourceCommands(
+                                sequence.BibleTravel.StageCommands);
+                            current = current with
+                            {
+                                AccountedCommandCount = current.AccountedCommandCount + applied,
+                                AppliedCommandCount = current.AppliedCommandCount + applied,
+                            };
+                            StartCg01DadSourceTravel(
+                                sequence,
+                                sequence.BibleTravel,
+                                interaction.TimerTransition.DadReturnPackage.TargetTransform,
+                                stage5,
+                                () =>
+                                {
+                                    var completionApplied = ExecuteSourceCommands(
+                                        sequence.BibleTravel.CompletionCommands);
+                                    current = current with
+                                    {
+                                        ActiveStage = sequence.BibleTravel.CompletionStage!.Value,
+                                        AppliedPackageFormIds = current.AppliedPackageFormIds
+                                            .Append(sequence.BibleTravel.Package.FormId).ToArray(),
+                                        AccountedCommandCount = current.AccountedCommandCount + completionApplied,
+                                        AppliedCommandCount = current.AppliedCommandCount + completionApplied,
+                                    };
+                                    PlayCg01DadReturnCue(
+                                        interaction.TimerTransition.DialogueCues,
+                                        1,
+                                        HandleDadReturnStage);
+                                });
+                            return false;
+                        }
+                        return HandleDadReturnStage(targetStage);
+
+                        bool HandleDadReturnStage(int? stage)
+                        {
+                            if (stage is null)
+                                return true;
+                            current = current with { ActiveStage = stage.Value };
+                            if (stage != interaction.TimerTransition.DialogueTargetStage)
+                                return true;
+                            var leadApplied = ExecuteSourceCommands(sequence.LeadTravel.StageCommands);
+                            SetCg01WorldReferenceLock(
+                                sequence.UnlockedDoorReferenceFormId, 0);
+                            current = current with
+                            {
+                                AccountedCommandCount = current.AccountedCommandCount + leadApplied,
+                                AppliedCommandCount = current.AppliedCommandCount + leadApplied,
+                            };
+                            StartCg01DadSourceTravel(
+                                sequence,
+                                sequence.LeadTravel,
+                                sequence.BibleTravel.Package.TargetTransform,
+                                stage5,
+                                () =>
+                                {
+                                    if (current.ActiveStage == sequence.SayToDoneStage)
+                                        Persist();
+                                });
+                            var sayDoneApplied = ExecuteSourceCommands(sequence.SayToDoneCommands);
+                            current = current with
+                            {
+                                ActiveStage = sequence.SayToDoneStage,
+                                DisplayedObjectiveIndex = sequence.DisplayedObjectiveIndex,
+                                AppliedPackageFormIds = current.AppliedPackageFormIds
+                                    .Append(sequence.LeadTravel.Package.FormId).ToArray(),
+                                AccountedCommandCount = current.AccountedCommandCount + sayDoneApplied,
+                                AppliedCommandCount = current.AppliedCommandCount + sayDoneApplied,
+                            };
+                            return false;
+                        }
                     });
             };
         }
@@ -1516,6 +1664,25 @@ internal partial class Fo3OpeningFlow
                 _vaultBirthCoverage ?? throw new InvalidOperationException(
                     "Fallout 3 CG01 interaction scene is absent."),
                 interaction, Gate, Exit, Book);
+        (_cg01ToddlerWorld ?? throw new InvalidOperationException(
+            "Fallout 3 CG01 Dad-lead world is absent."))
+            .InstallDadLeadEndTrigger(
+                _vaultBirthCoverage ?? throw new InvalidOperationException(
+                    "Fallout 3 CG01 Dad-lead scene is absent."),
+                interaction.TimerTransition.DadLead.EndTrigger,
+                () =>
+                {
+                    var trigger = interaction.TimerTransition.DadLead.EndTrigger;
+                    if (current.ActiveStage != trigger.SourceStage)
+                        return;
+                    current = current with
+                    {
+                        ActiveStage = trigger.TargetStage,
+                        AccountedCommandCount = current.AccountedCommandCount + 1,
+                        AppliedCommandCount = current.AppliedCommandCount + 1,
+                    };
+                    Persist();
+                });
         if (current.ActiveStage == interaction.BookStage && !current.SpecialBookAccepted)
             Book();
         else if (current.TimerAdvancing)
@@ -1534,7 +1701,7 @@ internal partial class Fo3OpeningFlow
     private void PlayCg01DadReturnCue(
         IReadOnlyList<Fo3Cg01DadReturnCue> cues,
         int index,
-        Action<int?> completed)
+        Func<int?, bool> completed)
     {
         var cue = cues[index];
         var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
@@ -1566,16 +1733,29 @@ internal partial class Fo3OpeningFlow
             {
                 var result = GamebryoDialoguePlayback.RequireStageResult(
                     "setStage", cue.TargetQuestFormId, cue.TargetStage);
-                completed(result.Stage);
+                if (!completed(result.Stage))
+                    return;
             }
-            else
-                completed(null);
+            else if (!completed(null))
+                return;
             if (index + 1 < cues.Count)
                 Callable.From(() => PlayCg01DadReturnCue(
                     cues, index + 1, completed)).CallDeferred();
         };
         AddChild(_vaultDialogueVoice);
         _vaultDialogueVoice.Play();
+    }
+
+    private static int ExecuteSourceCommands(
+        IReadOnlyList<SourceGamebryoStageCommand<string>> commands)
+    {
+        var applied = 0;
+        GamebryoStageCommandExecutor.ExecuteAll(commands, command =>
+        {
+            applied++;
+            return applied == command.SourceIndex + 1;
+        });
+        return applied;
     }
 
     private void SetCg01WorldReferenceOpen(string formId, bool open)

@@ -718,7 +718,9 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("PKID", struct.pack("<I", 0x0002EAAF))
             + subrecord("PKID", struct.pack("<I", 0x000457C4))
             + subrecord("PKID", struct.pack("<I", 0x000C6DE4))
-            + subrecord("PKID", struct.pack("<I", 0x0002ECC3)),
+            + subrecord("PKID", struct.pack("<I", 0x0002ECC3))
+            + subrecord("PKID", struct.pack("<I", 0x0003A181))
+            + subrecord("PKID", struct.pack("<I", 0x0002ECC4)),
             (),
         )
         cg02_dad_base = Record(
@@ -787,6 +789,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "REFR", 0x000401BA, "CG01DadReturnMarker", marker_base.form_id, 0,
             (-2700.0, -5800.0, 7424.0, 0.0, 0.0, 0.3),
         )
+        cg01_bible_target = placed_reference(
+            "REFR", 0x0003A180, "CG01DadBibleVerseMarker", marker_base.form_id, 0,
+            (-2550.0, -5816.0, 7424.0, 0.0, 0.0, 0.1),
+        )
+        cg01_lead_target = placed_reference(
+            "REFR", 0x0002ECC1, "CG01DadFollowMeMarker", marker_base.form_id, 0,
+            (-3168.0, -5664.0, 7424.0, 0.0, 0.0, 3.15),
+        )
 
         def cg01_package(
             form_id: int,
@@ -794,6 +804,8 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             stage: int,
             target_form_id: int,
             end_source: str | None = None,
+            package_type: int = 0,
+            escort_target: int | None = None,
         ) -> Record:
             events = subrecord("POBA") + subrecord("POEA")
             if end_source is not None:
@@ -804,8 +816,10 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 form_id,
                 0,
                 subrecord("EDID", editor_id.encode("ascii") + b"\0")
-                + subrecord("PKDT", bytes(12))
+                + subrecord("PKDT", bytes(4) + bytes([package_type]) + bytes(7))
                 + subrecord("PLDT", struct.pack("<iIi", 0, target_form_id, 0))
+                + (b"" if escort_target is None else subrecord(
+                    "PTDT", struct.pack("<IIII", 0, escort_target, 0, 0)))
                 + subrecord(
                     "CTDA",
                     condition(
@@ -840,6 +854,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         )
         cg01_return_package = cg01_package(
             0x0002ECC3, "CG01DadReturn", 70, cg01_return_target.form_id)
+        cg01_bible_package = cg01_package(
+            0x0003A181, "CG01DadShowBibleVerse", 73,
+            cg01_bible_target.form_id, "setstage CG01 74", package_type=6)
+        cg01_lead_package = cg01_package(
+            0x0002ECC4, "CG01DadLeaveRoom2", 75,
+            cg01_lead_target.form_id, package_type=2, escort_target=0x14)
         cg02_dad_ref = placed_reference(
             "ACHR",
             0x000300EF,
@@ -931,6 +951,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             "set CG01DadREF.timer to 1", "set CG01DadREF.doTalk to 1",
             "CG01PlayroomDoor.Unlock", "CG01PlayroomDoor.setOpenState 1",
             "CG01MainDoor.Lock 100", "CG01MainDoor.setOpenState 0"))
+        cg01_stage73_source = "CG01DadREF.evp"
+        cg01_stage74_source = "set CG01DadREF.doTalk to 1"
+        cg01_stage75_source = "\n".join((
+            "set CG01DadREF.doTalk to 0", "CG01MainDoor.Unlock"))
+        cg01_stage80_source = "\n".join((
+            "setObjectiveDisplayed CG01 80 1", "CG01DadREF.evp"))
         cg01 = Record(
             "QUST",
             0x00014E83,
@@ -963,6 +989,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             + subrecord("SCTX", cg01_stage70_source.encode("cp1252") + b"\0")
             + subrecord("INDX", struct.pack("<H", 72))
             + subrecord("SCTX", cg01_stage72_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 73))
+            + subrecord("SCTX", cg01_stage73_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 74))
+            + subrecord("SCTX", cg01_stage74_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 75))
+            + subrecord("SCTX", cg01_stage75_source.encode("cp1252") + b"\0")
+            + subrecord("INDX", struct.pack("<H", 80))
+            + subrecord("SCTX", cg01_stage80_source.encode("cp1252") + b"\0")
             + subrecord("QOBJ", struct.pack("<I", CG01_WALK_OBJECTIVE_INDEX))
             + subrecord("NNAM", b"Walk to Dad.\0"),
             (),
@@ -1235,6 +1269,39 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                 subrecord("SCTX", b"setstage CG01 75\0"),
                 (GroupContext(struct.pack("<I", cg01_dad_topic.form_id), 7),)),
         )
+        end_trigger_script = Record(
+            "SCPT", 0x0002ECBB, 0,
+            subrecord("EDID", b"CG01EndQuestTriggerSCRIPT\0")
+            + subrecord("SCTX", b"begin OnTrigger\nif getStage CG01 == 80\nsetstage CG01 90\nendif\nend\0"),
+            (),
+        )
+        end_trigger_base = Record(
+            "ACTI", 0x0002ECBC, 0,
+            subrecord("EDID", b"CG01EndQuestTrigger\0")
+            + subrecord("SCRI", struct.pack("<I", end_trigger_script.form_id)),
+            (),
+        )
+        end_trigger_ref = Record(
+            "REFR", 0x0002ECC2, 0,
+            subrecord("NAME", struct.pack("<I", end_trigger_base.form_id))
+            + subrecord("XPRM", struct.pack("<7fI", 100.0, 100.0, 100.0, 0.8, 0.3, 0.2, 0.15, 1))
+            + subrecord("DATA", struct.pack("<6f", -3212.0, -5770.0, 7520.0, 0.0, 0.0, 0.0)),
+            cell_groups,
+        )
+        navmesh = Record(
+            "NAVM", 0x00056A9A, 0,
+            subrecord("NVER", struct.pack("<I", 11))
+            + subrecord("DATA", struct.pack("<6I", 0x00028138, 4, 2, 0, 0, 0))
+            + subrecord("NVVX", b"".join(struct.pack("<3f", *value) for value in (
+                (-2700.0, -5800.0, 7424.0), (-2500.0, -5800.0, 7424.0),
+                (-2500.0, -5600.0, 7424.0), (-3300.0, -5600.0, 7424.0))))
+            + subrecord("NVTR", struct.pack("<3H3hI", 0, 1, 2, -1, -1, 1, 0)
+                + struct.pack("<3H3hI", 0, 2, 3, 0, -1, -1, 0))
+            + subrecord("NVGD", struct.pack(
+                "<I8f3H", 1, 800.0, 200.0, -3300.0, -5800.0,
+                7424.0, -2500.0, -5600.0, 7424.0, 2, 0, 1)),
+            cell_groups,
+        )
         modifier = Record(
             "IMAD",
             0x00035A20,
@@ -1300,6 +1367,12 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
                     "stage30": 30,
                     "stage40": 40,
                     "stage50": 50,
+                    "dadLeadLocomotion": {
+                        "rootNode": "Bip01",
+                        "walkLogicalPath": r"meshes\characters\_male\locomotion\male\mtforward.kf",
+                        "playerReferenceFormId": "00000014",
+                        "playerBaseFormId": "00000007",
+                    },
                 },
                 "tutorialQuestEditorId": "CGTutorial",
                 "tutorialQuestFormId": "00059c85",
@@ -1335,6 +1408,10 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             *cg01_stage12_dad_infos,
             *cg01_stage16_dad_infos,
             *cg01_return_infos,
+            end_trigger_script,
+            end_trigger_base,
+            end_trigger_ref,
+            navmesh,
             idle(
                 CG01_DAD_TALK_IDLE_FORM,
                 "ttnpcNTRLHandsDownTalkA",
@@ -1366,10 +1443,14 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
             cg01_playroom_door,
             cg01_main_door,
             cg01_return_target,
+            cg01_bible_target,
+            cg01_lead_target,
             cg01_close_gate_package,
             cg01_close_door_package,
             cg01_leave_room_package,
             cg01_return_package,
+            cg01_bible_package,
+            cg01_lead_package,
             cg02_dad_ref,
             baby_babble,
             modifier,
@@ -1550,9 +1631,18 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
         self.assertEqual("000401ba", dad_return["package"]["target"]["formId"])
         self.assertEqual(72, dad_return["package"]["completionStage"])
         self.assertEqual(75, dad_return["targetStage"])
+        self.assertTrue(dad_return["nextBoundary"]["applied"])
+        self.assertIsNone(dad_return["nextBoundary"]["blocker"])
+        self.assertEqual("0003a181", dad_return["bibleTravel"]["formId"])
+        self.assertEqual(74, dad_return["bibleTravel"]["completionStage"])
+        dad_lead = dad_return["dadLead"]
+        self.assertEqual("0002ecc4", dad_lead["formId"])
+        self.assertEqual("00000014", dad_lead["escortTarget"]["formId"])
+        self.assertEqual((75, 80), (dad_return["targetStage"], dad_lead["sayToDoneStage"]))
+        self.assertEqual(90, dad_lead["endTrigger"]["targetStage"])
         self.assertEqual(
-            "fo3-cg01-stage-75-dad-lead-package-runtime-not-implemented",
-            dad_return["nextBoundary"]["blocker"],
+            "fo3-cg01-stage-90-timer-runtime-not-implemented",
+            dad_lead["nextBoundary"]["blocker"],
         )
         self.assertEqual(
             [

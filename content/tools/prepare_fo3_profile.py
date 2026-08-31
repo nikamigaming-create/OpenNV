@@ -17,8 +17,8 @@ from pathlib import Path
 from actor_catalog import scan_actor_catalog
 from actor_gltf import animation_sequence_manifest, sample_transform_animation
 from bsa_archive import BsaArchive, canonical_member_path
-from cell_catalog import cell_parent_form_id
-from cell_scene import godot_rotation_quaternion
+from cell_catalog import cell_parent_form_id, parse_navmesh
+from cell_scene import godot_rotation_quaternion, navmesh_manifest
 from environment_catalog import parse_image_space_modifier
 from facegen import compose_facegen_coordinates
 from opening_catalog import (
@@ -3399,6 +3399,250 @@ def _compile_cg01_post_stage14_transition(
                 for source_text in _text_values(info, "SCTX") for command in _source_commands(source_text)) else None,
             "response": {"index": 1, "text": responses[0], "textSha256": hashlib.sha256(responses[0].encode("utf-8")).hexdigest()},
         })
+
+    def dad_package_for_stage(stage: int) -> tuple[object, dict[str, object]]:
+        matches = []
+        for package_id in dad_package_ids:
+            package = by_form.get(package_id)
+            if package is None or package.signature != PACKAGE_RECORD:
+                continue
+            conditions = [
+                _dialogue_condition(row.data)
+                for row in iter_subrecords(package)
+                if row.signature == "CTDA"
+            ]
+            if (
+                len(conditions) == 1
+                and conditions[0]["operatorFlags"] == CONDITION_EQUAL_OPERATOR_FLAGS
+                and conditions[0]["function"] == GET_STAGE_FUNCTION
+                and conditions[0]["parameter1"] == quest.form_id
+                and conditions[0]["comparisonValue"] == float(stage)
+            ):
+                matches.append((package, conditions[0]))
+        if len(matches) != 1:
+            raise ValueError(f"Fallout 3 CG01 Dad stage-{stage} package differs")
+        return matches[0]
+
+    def travel_package_contract(
+        package: object,
+        condition: dict[str, object],
+        expected_type: int,
+    ) -> dict[str, object]:
+        package_data = _single_subrecord(package, "PKDT")
+        location_data = _single_subrecord(package, "PLDT")
+        if len(package_data) != PACKAGE_DATA_BYTES or len(location_data) != PACKAGE_LOCATION_BYTES:
+            raise ValueError("Fallout 3 CG01 Dad travel package layout differs")
+        package_type = package_data[4]
+        location_type, target_id, radius = struct.unpack("<III", location_data)
+        target = by_form.get(target_id)
+        if (
+            package_type != expected_type
+            or location_type != 0
+            or target is None
+            or target.signature != PLACED_REFERENCE_RECORD
+        ):
+            raise ValueError("Fallout 3 CG01 Dad travel package target differs")
+        return {
+            "formId": _form_id(package.form_id),
+            "editorId": _editor_id(package),
+            "recordSha256": hashlib.sha256(package.data).hexdigest(),
+            "packageFlags": struct.unpack_from("<I", package_data)[0],
+            "packageType": package_type,
+            "condition": {
+                **condition,
+                "parameter1": _form_id(int(condition["parameter1"])),
+                "reference": _form_id(int(condition["reference"])),
+            },
+            "target": {
+                "formId": _form_id(target.form_id),
+                "editorId": _editor_id(target),
+                "recordSha256": hashlib.sha256(target.data).hexdigest(),
+                "sourceTransform": _reference_transform_contract(target),
+                "radiusGameUnits": radius,
+            },
+        }
+
+    bible_package, bible_condition = dad_package_for_stage(completion_target + 1)
+    bible_contract = travel_package_contract(bible_package, bible_condition, 6)
+    bible_contract["stageResult"] = {
+        "sourceSha256": hashlib.sha256(
+            stage_sources[completion_target + 1][0].encode("cp1252")
+        ).hexdigest(),
+        "commands": [
+            compile_command(text, index)
+            for index, text in enumerate(stage_commands(completion_target + 1))
+        ],
+    }
+    pending_event = None
+    bible_end_sources = []
+    for row in iter_subrecords(bible_package):
+        if row.signature in PACKAGE_EVENT_NAMES:
+            pending_event = PACKAGE_EVENT_NAMES[row.signature]
+        elif row.signature == "SCTX" and pending_event == "end":
+            bible_end_sources.append(zstring(row.data))
+    bible_end_commands = [
+        command for source in bible_end_sources for command in _source_commands(source)
+    ]
+    if (
+        len(bible_end_commands) != 1
+        or not (bible_stage_match := SET_STAGE_PATTERN.fullmatch(bible_end_commands[0]))
+    ):
+        raise ValueError("Fallout 3 CG01 Dad Bible package completion differs")
+    bible_completion_stage = int(bible_stage_match.group("stage"))
+    bible_contract["completionStage"] = bible_completion_stage
+    bible_contract["completionCommands"] = [
+        compile_command(text, index)
+        for index, text in enumerate(stage_commands(bible_completion_stage))
+    ]
+
+    lead_package, lead_condition = dad_package_for_stage(dialogue_target)
+    lead_contract = travel_package_contract(lead_package, lead_condition, 2)
+    target_data = _single_subrecord(lead_package, "PTDT")
+    if len(target_data) != 16:
+        raise ValueError("Fallout 3 CG01 Dad lead target layout differs")
+    target_type, target_form_id, target_count, target_unknown = struct.unpack(
+        "<IIII", target_data
+    )
+    locomotion = dict(config["dadLeadLocomotion"])
+    player_reference_form_id = int(str(locomotion["playerReferenceFormId"]), FORM_ID_RADIX)
+    player_base_form_id = int(str(locomotion["playerBaseFormId"]), FORM_ID_RADIX)
+    player = by_form.get(player_base_form_id)
+    if (
+        target_type != 0
+        or target_form_id != player_reference_form_id
+        or player is None
+        or player.signature != NPC_RECORD
+        or _editor_id(player) != "Player"
+    ):
+        raise ValueError("Fallout 3 CG01 Dad lead target is not Player")
+    lead_contract["escortTarget"] = {
+        "type": target_type,
+        "formId": _form_id(target_form_id),
+        "editorId": _editor_id(player),
+        "count": target_count,
+        "unknown": target_unknown,
+    }
+    lead_contract["stageResult"] = {
+        "sourceSha256": hashlib.sha256(stage_sources[dialogue_target][0].encode("cp1252")).hexdigest(),
+        "commands": [
+            compile_command(text, index)
+            for index, text in enumerate(stage_commands(dialogue_target))
+        ],
+    }
+    say_done = re.search(
+        rf"begin\s+SayToDone\s+{re.escape(_editor_id(topic) or '')}\s*"
+        r"(?P<body>.*?)\bend\b",
+        _script_source(dad_script),
+        re.IGNORECASE | re.DOTALL,
+    )
+    say_done_commands = _source_commands(say_done.group("body")) if say_done else []
+    say_done_stage = next(
+        (
+            int(match.group("stage"))
+            for command in say_done_commands
+            if (match := SET_STAGE_PATTERN.search(command))
+        ),
+        None,
+    )
+    if say_done_stage is None:
+        raise ValueError("Fallout 3 CG01 Dad lead SayToDone result differs")
+    lead_contract["sayToDoneStage"] = say_done_stage
+    lead_contract["sayToDoneResult"] = {
+        "sourceSha256": hashlib.sha256(stage_sources[say_done_stage][0].encode("cp1252")).hexdigest(),
+        "commands": [
+            compile_command(text, index)
+            for index, text in enumerate(stage_commands(say_done_stage))
+        ],
+    }
+
+    end_scripts = [
+        record
+        for record in records
+        if record.signature == SCRIPT_RECORD and _editor_id(record) == "CG01EndQuestTriggerSCRIPT"
+    ]
+    if len(end_scripts) != 1:
+        raise ValueError("Fallout 3 CG01 end trigger script differs")
+    end_script = end_scripts[0]
+    end_bases = [
+        record
+        for record in records
+        if record.signature == ACTIVATOR_RECORD
+        and any(
+            row.signature == "SCRI"
+            and len(row.data) == FORM_ID_BYTES
+            and struct.unpack("<I", row.data)[0] == end_script.form_id
+            for row in iter_subrecords(record)
+        )
+    ]
+    if len(end_bases) != 1:
+        raise ValueError("Fallout 3 CG01 end trigger base differs")
+    end_base = end_bases[0]
+    end_refs = [
+        record
+        for record in records
+        if record.signature == PLACED_REFERENCE_RECORD
+        and any(
+            row.signature == "NAME"
+            and len(row.data) == FORM_ID_BYTES
+            and struct.unpack("<I", row.data)[0] == end_base.form_id
+            for row in iter_subrecords(record)
+        )
+    ]
+    if len(end_refs) != 1:
+        raise ValueError("Fallout 3 CG01 end trigger reference differs")
+    end_ref = end_refs[0]
+    primitive_data = _single_subrecord(end_ref, "XPRM")
+    if len(primitive_data) != TRIGGER_PRIMITIVE_BYTES:
+        raise ValueError("Fallout 3 CG01 end trigger primitive differs")
+    primitive = struct.unpack(f"<{TRIGGER_PRIMITIVE_FLOATS}fI", primitive_data)
+    end_source = _script_source(end_script)
+    end_stage_match = re.search(
+        rf"getStage\s+{re.escape(_editor_id(quest) or '')}\s*==\s*{say_done_stage}.*?"
+        rf"setstage\s+{re.escape(_editor_id(quest) or '')}\s+(?P<stage>\d+)",
+        end_source,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if end_stage_match is None:
+        raise ValueError("Fallout 3 CG01 end trigger stage result differs")
+    end_stage = int(end_stage_match.group("stage"))
+    lead_contract["endTrigger"] = {
+        "referenceFormId": _form_id(end_ref.form_id),
+        "referenceRecordSha256": hashlib.sha256(end_ref.data).hexdigest(),
+        "baseFormId": _form_id(end_base.form_id),
+        "baseEditorId": _editor_id(end_base),
+        "baseRecordSha256": hashlib.sha256(end_base.data).hexdigest(),
+        "scriptFormId": _form_id(end_script.form_id),
+        "scriptEditorId": _editor_id(end_script),
+        "scriptSourceSha256": hashlib.sha256(end_source.encode("cp1252")).hexdigest(),
+        "sourceTransform": _reference_transform_contract(end_ref),
+        "dimensionsGameUnits": list(primitive[:3]),
+        "primitiveType": int(primitive[TRIGGER_PRIMITIVE_TYPE_INDEX]),
+        "sourceStage": say_done_stage,
+        "targetStage": end_stage,
+    }
+    navmeshes = [
+        parse_navmesh(record)
+        for record in records
+        if record.signature == "NAVM"
+    ]
+    navmeshes = [value for value in navmeshes if value.cell_form_id == int(definition["cellFormId"], FORM_ID_RADIX)]
+    if not navmeshes or len({value.form_id for value in navmeshes}) != len(navmeshes):
+        raise ValueError("Fallout 3 CG01 Dad lead NAVM differs")
+    lead_contract["navigation"] = {
+        "schema": "opennv-owned-cell-navigation/v1",
+        "navmeshes": [
+            navmesh_manifest(value)
+            for value in sorted(navmeshes, key=lambda item: item.form_id)
+        ],
+    }
+    lead_contract["locomotion"] = {
+        "rootNode": str(locomotion["rootNode"]),
+        "logicalPath": canonical_member_path(str(locomotion["walkLogicalPath"])),
+    }
+    lead_contract["nextBoundary"] = {
+        "applied": False,
+        "blocker": "fo3-cg01-stage-90-timer-runtime-not-implemented",
+    }
     timer_contract = dict(stage20_interaction["timerTransition"])
     timer_contract["dadReturn"] = {
         "package": {
@@ -3415,7 +3659,9 @@ def _compile_cg01_post_stage14_transition(
         "dialogue": {"topicFormId": _form_id(topic.form_id), "topicEditorId": _editor_id(topic), "branches": return_cues,
             "dialoguePlaybackPrepared": False, "dialoguePlaybackImplemented": False},
         "targetStage": dialogue_target,
-        "nextBoundary": {"applied": False, "blocker": "fo3-cg01-stage-75-dad-lead-package-runtime-not-implemented"},
+        "bibleTravel": bible_contract,
+        "dadLead": lead_contract,
+        "nextBoundary": {"applied": True, "blocker": None},
     }
     stage20_interaction["timerTransition"] = timer_contract
 
@@ -6122,6 +6368,7 @@ def _quest_inventory(master: Path, opening: dict[str, object]) -> tuple[list[dic
                     NPC_RECORD,
                     ACTOR_BASE_RECORD,
                     STATIC_RECORD,
+                    "NAVM",
                 }
             ),
         )
@@ -6661,6 +6908,30 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         profile_root,
     )
     dad_return["dialogue"] = dad_return_dialogue
+    dad_lead = dict(dad_return["dadLead"])
+    locomotion = dict(dad_lead["locomotion"])
+    locomotion_member = meshes_archive.extract(str(locomotion["logicalPath"]))
+    locomotion_playback = animation_sequence_manifest(locomotion_member.data)
+    locomotion_root = sample_root_motion(
+        locomotion_member.data,
+        str(locomotion["rootNode"]),
+        configuration.content_compiler.animation_samples_per_second,
+    ).manifest()
+    if any(
+        locomotion_root[key] != locomotion_playback[key]
+        for key in ("sequenceName", "startSeconds", "stopSeconds", "cycleType")
+    ):
+        raise ValueError("Fallout 3 CG01 Dad lead locomotion playback differs")
+    dad_lead["locomotion"] = {
+        **locomotion,
+        "bytes": len(locomotion_member.data),
+        "sha256": locomotion_member.sha256,
+        "sourceArchive": meshes_archive_path.name,
+        "sourceArchiveSha256": meshes_archive_sha256,
+        **locomotion_playback,
+        "rootMotion": locomotion_root,
+    }
+    dad_return["dadLead"] = dad_lead
     timer_transition["dadReturn"] = dad_return
     stage20_interaction["timerTransition"] = timer_transition
     post_stage14_transition["stage20Interaction"] = stage20_interaction

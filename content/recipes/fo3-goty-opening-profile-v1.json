@@ -259,7 +259,13 @@
           "specialBookReferenceFormId": "0002ecc0",
           "stage30": 30,
           "stage40": 40,
-          "stage50": 50
+          "stage50": 50,
+          "dadLeadLocomotion": {
+            "rootNode": "Bip01",
+            "walkLogicalPath": "meshes\\characters\\_male\\locomotion\\male\\mtforward.kf",
+            "playerReferenceFormId": "00000014",
+            "playerBaseFormId": "00000007"
+          }
         },
         "tutorialQuestEditorId": "CGTutorial",
         "tutorialQuestFormId": "00059c85",

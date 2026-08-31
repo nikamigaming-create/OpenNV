@@ -506,6 +506,44 @@ internal sealed record Fo3Cg01ToddlerWorldRuntime(
         return trigger;
     }
 
+    internal Area3D InstallDadLeadEndTrigger(
+        Fo3Vault101BirthSceneCoverage scene,
+        Fo3Cg01DadLeadTrigger contract,
+        Action entered)
+    {
+        var source = contract.SourceTransform;
+        var trigger = new Area3D
+        {
+            Name = $"REFR_{contract.ReferenceFormId}_CG01_END_QUEST_TRIGGER",
+            Position = SourceLocalPosition(source.PositionGameUnits, scene.Contract.EntryPositionGameUnits),
+            Rotation = new Vector3(0, -(float)source.RotationRadians.Z, 0),
+            CollisionLayer = 0,
+            CollisionMask = Contract.CollisionLayer,
+            Monitoring = true,
+            Monitorable = false,
+        };
+        trigger.SetMeta("opennv_source_form_id", contract.ReferenceFormId);
+        trigger.AddChild(new CollisionShape3D
+        {
+            Name = "OWNED_XPRM_BOX",
+            Shape = new BoxShape3D
+            {
+                Size = new Vector3(
+                    (float)contract.DimensionsGameUnits.X,
+                    (float)contract.DimensionsGameUnits.Z,
+                    (float)contract.DimensionsGameUnits.Y),
+            },
+        });
+        trigger.BodyEntered += body =>
+        {
+            if (body != Player || !trigger.Monitoring)
+                return;
+            entered();
+        };
+        scene.CellRoot.AddChild(trigger);
+        return trigger;
+    }
+
     private const float MinimumValue = 0.0f;
 
     private static Vector3 SourceLocalPosition(

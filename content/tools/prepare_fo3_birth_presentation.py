@@ -675,6 +675,20 @@ def prepare(
     ):
         raise ValueError("Fallout 3 CG01 stage-12 Dad response assets are not prepared")
     stage12_dialogue_branches = _required_list(stage12_dialogue, "branches")
+    dad_return = _required_object(
+        _required_object(
+            _required_object(
+                _required_object(cg01_post_stage5, "postStage14Transition"),
+                "stage20Interaction",
+            ),
+            "timerTransition",
+        ),
+        "dadReturn",
+    )
+    dad_lead_locomotion = _required_object(
+        _required_object(dad_return, "dadLead"), "locomotion")
+    dad_lead_locomotion_path = canonical_member_path(
+        _required_string(dad_lead_locomotion, "logicalPath"))
     stage0_result = _required_object(cg01_transition, "stage0Result")
     stage0_commands = _required_list(stage0_result, "commands")
     cg01_move_commands = [
@@ -789,6 +803,17 @@ def prepare(
         )
 
     archive = BsaArchive(meshes_path)
+    dad_lead_locomotion_member = archive.extract(dad_lead_locomotion_path)
+    if (
+        dad_lead_locomotion.get("sourceArchive") != meshes_path.name
+        or _required_sha256(dad_lead_locomotion, "sourceArchiveSha256")
+        != _required_sha256(meshes_row, "sha256")
+        or dad_lead_locomotion_member.sha256
+        != _required_sha256(dad_lead_locomotion, "sha256")
+        or float(_required_object(dad_lead_locomotion, "rootMotion").get(
+            "speedGameUnitsPerSecond", 0.0)) <= 0.0
+    ):
+        raise ValueError("Fallout 3 CG01 Dad lead locomotion ownership differs")
     configuration = load_runtime_configuration()
     presentation = _required_object(recipe, "presentation")
     if (
@@ -1263,6 +1288,7 @@ def prepare(
             )
         if [row["sequence"] for row in stage12_dialogue_animations] != [0, 1]:
             raise ValueError("Fallout 3 CG01 stage-12 Dad animation sequence differs")
+        runtime_animation_paths.append(dad_lead_locomotion_path)
         facegen = _required_object(parent, "faceGen")
         symmetric, symmetric_sha256 = _facegen_values(
             _required_object(facegen, "symmetricGeometry"),
@@ -1302,7 +1328,8 @@ def prepare(
             f"{player_race_form_id}-{player_sex}-"
             f"{symmetric_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}-"
             f"cg01speech-{dialogue_animation_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}-"
-            f"walked-{stage12_dialogue_animation_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}"
+            f"walked-{stage12_dialogue_animation_sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}-"
+            f"lead-{dad_lead_locomotion_member.sha256[:VARIANT_HASH_PREFIX_CHARACTERS]}"
         )
         appearance_override = ActorAppearanceOverride(
             variant_id=variant_id,
@@ -1400,6 +1427,14 @@ def prepare(
                 != "owned-world-root-authoritative-zero-local-translation"
             ):
                 raise ValueError("Compiled CG01 Dad speaker idle differs")
+        compiled_locomotion = compiled_animations.get(dad_lead_locomotion_path)
+        if (
+            compiled_locomotion is None
+            or _required_sha256(compiled_locomotion, "sha256")
+            != dad_lead_locomotion_member.sha256
+            or int(compiled_locomotion.get("channels", 0)) <= 0
+        ):
+            raise ValueError("Compiled CG01 Dad lead locomotion differs")
         cg01_dad_variants.append(
             {
                 "playerRaceFormId": player_race_form_id,

@@ -64,6 +64,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Fo3Cg01ToddlerWorldRuntime? _cg01ToddlerWorld;
     private Fo3SpecialBookMenuRuntime? _cg01SpecialBookMenu;
     private Action<double>? _cg01Stage50TimerTick;
+    private Action<double>? _cg01DadPackageTravelTick;
     private string? _cg01ProofMode;
     private string? _cg01ProofReportPath;
     private string? _cg01ProofCapturePath;
@@ -206,6 +207,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         UpdateCg00EarlyProof();
         UpdateCg01DadLip();
         _cg01Stage50TimerTick?.Invoke(delta);
+        _cg01DadPackageTravelTick?.Invoke(delta);
         if (_vaultStage90Fade is not null && _activeStage90ImageSpaceModifier is not null)
         {
             _stage90ImageSpaceElapsedSeconds += delta;
