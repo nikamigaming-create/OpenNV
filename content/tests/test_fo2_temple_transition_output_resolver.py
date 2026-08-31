@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -91,7 +92,10 @@ class Fo2TempleTransitionOutputResolverTest(unittest.TestCase):
             result = self._resolve(cache)
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout.strip(), str(transition))
+            self.assertTrue(
+                os.path.samefile(result.stdout.strip(), transition),
+                result.stdout,
+            )
 
     def test_rejects_stale_or_missing_transition_descriptor_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

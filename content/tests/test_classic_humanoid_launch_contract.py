@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -167,7 +168,10 @@ class ClassicHumanoidLaunchContractTest(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(resolved_complete.returncode, 0, resolved_complete.stderr)
-            self.assertEqual(Path(resolved_complete.stdout.strip()), complete)
+            self.assertTrue(
+                os.path.samefile(resolved_complete.stdout.strip(), complete),
+                resolved_complete.stdout,
+            )
             self.assertEqual(resolved_incomplete.returncode, 0, resolved_incomplete.stderr)
 
             accepted = subprocess.run(

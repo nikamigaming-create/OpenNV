@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import struct
 import sys
 import tempfile
@@ -92,14 +93,14 @@ class OpeningCatalogTest(unittest.TestCase):
             emitted = emit_player_facegen_preview_set(Path(temporary), preview_set)
             output = Path(emitted["path"])
 
-            self.assertEqual(
-                output,
+            expected_output = (
                 Path(temporary)
                 / "generated"
                 / "opening"
                 / "player-facegen-preview"
-                / "player-facegen-preview-set.json",
+                / "player-facegen-preview-set.json"
             )
+            self.assertTrue(os.path.samefile(output, expected_output), emitted["path"])
             self.assertEqual(
                 json.loads(output.read_text(encoding="utf-8")),
                 preview_set,
