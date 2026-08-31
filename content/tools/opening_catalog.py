@@ -150,7 +150,10 @@ TEXT_SUBRECORDS = frozenset(
     }
 )
 MANIFEST_FORM_LINK_SUBRECORDS = frozenset(
-    {"SCRO", "SCRI", "NAME", "QSTI", "PKID", "TCLT", "TCLF"}
+    {
+        "SCRO", "SCRI", "NAME", "QSTI", "PKID", "TCLT", "TCLF", "XESP",
+        "NAM0", "LNAM",
+    }
 )
 CONDITION_BYTES = 28
 DIALOGUE_DATA_BYTES = 4
@@ -563,6 +566,15 @@ def record_graph_closure(
     selected.update(dialogue_children)
     add_links(dialogue_children)
 
+    enable_parent_children = {
+        source
+        for root in root_forms
+        for source in reverse_links.get(("XESP", root), ())
+        if source in by_form and by_form[source].signature in {"REFR", "ACHR", "ACRE"}
+    }
+    selected.update(enable_parent_children)
+    add_links(enable_parent_children)
+
     for current in tuple(selected | root_dependencies):
         row = by_form.get(current)
         if row is None:
@@ -623,6 +635,9 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
         links: list[dict[str, str]] = []
         conditions: list[dict[str, object]] = []
         dialogue_data = None
+        primitive = None
+        leveled_entries: list[dict[str, object]] = []
+        weapon = None
         inventory: list[dict[str, object]] = []
         for subrecord in iter_subrecords(record):
             inventory.append(
@@ -648,6 +663,52 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                         )
             if subrecord.signature == "CTDA":
                 conditions.append(_condition_manifest(subrecord.data))
+            if subrecord.signature == "XPRM":
+                if len(subrecord.data) != 32 or primitive is not None:
+                    raise ValueError(
+                        f"Owned reference primitive differs: {form_id_text(record.form_id)}"
+                    )
+                primitive_values = struct.unpack("<7fI", subrecord.data)
+                primitive = {
+                    "boundsGameUnits": list(primitive_values[:3]),
+                    "colorRgba": list(primitive_values[3:7]),
+                    "type": primitive_values[7],
+                }
+            if record.signature == "LVLI" and subrecord.signature == "LVLO":
+                if len(subrecord.data) != 12:
+                    raise ValueError(
+                        f"Owned leveled item entry differs: {form_id_text(record.form_id)}"
+                    )
+                level, _, item_form_id, count, _ = struct.unpack(
+                    "<HHIHH", subrecord.data
+                )
+                leveled_entries.append(
+                    {
+                        "level": level,
+                        "itemFormId": form_id_text(item_form_id),
+                        "count": count,
+                    }
+                )
+            if record.signature == "WEAP" and subrecord.signature == "DATA":
+                if len(subrecord.data) != 15:
+                    continue
+                if weapon is not None and weapon.get("damage") is not None:
+                    raise ValueError(
+                        f"Owned weapon DATA is duplicated: {form_id_text(record.form_id)}"
+                    )
+                weapon = {
+                    "damage": struct.unpack_from("<H", subrecord.data, 12)[0],
+                    "clipSize": subrecord.data[14],
+                    "ammoFormId": None if weapon is None else weapon["ammoFormId"],
+                }
+            if record.signature == "WEAP" and subrecord.signature == "NAM0":
+                if len(subrecord.data) != FORM_ID_BYTES:
+                    raise ValueError(
+                        f"Owned weapon ammo differs: {form_id_text(record.form_id)}"
+                    )
+                if weapon is None:
+                    weapon = {"damage": None, "clipSize": None, "ammoFormId": None}
+                weapon["ammoFormId"] = form_id_text(struct.unpack("<I", subrecord.data)[0])
             if (
                 record.signature == "INFO"
                 and subrecord.signature == "DATA"
@@ -682,6 +743,9 @@ def selected_record_manifest(master_path: Path, selected: frozenset[int]) -> lis
                 "links": links,
                 "conditions": conditions,
                 "dialogueData": dialogue_data,
+                "primitive": primitive,
+                "leveledEntries": leveled_entries,
+                "weapon": weapon,
                 "questStageScripts": stage_scripts,
                 "questObjectives": quest_objectives,
                 "subrecords": inventory,
@@ -3551,7 +3615,7 @@ def _script_code_lines(source: str) -> list[str]:
     return lines
 
 
-def _script_commands(source: str) -> list[dict[str, object]]:
+def _script_commands_unconditional(source: str) -> list[dict[str, object]]:
     commands: list[dict[str, object]] = []
     for line in _script_code_lines(source):
         match = re.fullmatch(r"SetStage\s+(\w+)\s+(\d+)", line, re.IGNORECASE)
@@ -3808,6 +3872,51 @@ def _script_commands(source: str) -> list[dict[str, object]]:
         match = re.fullmatch(r"AddAchievement\s+(\d+)", line, re.IGNORECASE)
         if match:
             commands.append({"kind": "achievement", "index": int(match[1])})
+    return commands
+
+
+def _script_commands(source: str) -> list[dict[str, object]]:
+    commands: list[dict[str, object]] = []
+    guards: list[dict[str, object] | None] = []
+    for line in _script_code_lines(source):
+        item_guard = re.fullmatch(
+            r"if\s*\(?\s*Player\.GetItemCount\s+(\w+)\s*==\s*0\s*\)?",
+            line,
+            re.IGNORECASE,
+        )
+        if item_guard:
+            guards.append(
+                {"kind": "playerItemCountZero", "itemEditorId": item_guard[1]}
+            )
+            continue
+        stage_guard = re.fullmatch(
+            r"if\s*\(?\s*GetStage\s+(\w+)\s*<\s*(\d+)\s*\)?",
+            line,
+            re.IGNORECASE,
+        )
+        if stage_guard:
+            guards.append(
+                {
+                    "kind": "questStageLessThan",
+                    "questEditorId": stage_guard[1],
+                    "stage": int(stage_guard[2]),
+                }
+            )
+            continue
+        if re.fullmatch(r"if\b.*", line, re.IGNORECASE):
+            guards.append(None)
+            continue
+        if re.fullmatch(r"end(?:if)?", line, re.IGNORECASE):
+            if guards:
+                guards.pop()
+            continue
+        parsed = _script_commands_unconditional(line)
+        if parsed and guards and all(guard is not None for guard in guards):
+            if len(guards) != 1:
+                raise ValueError(f"Owned result command guards are nested: {line}")
+            for command in parsed:
+                command["guard"] = guards[0]
+        commands.extend(parsed)
     return commands
 
 
@@ -5425,7 +5534,9 @@ def _resolve_command_record_identities(
     records: Iterable[dict[str, object]],
 ) -> dict[str, object]:
     records_by_editor: dict[str, list[dict[str, object]]] = defaultdict(list)
+    records_by_form: dict[str, dict[str, object]] = {}
     for record in records:
+        records_by_form[str(record["formId"]).casefold()] = record
         editor_id = _record_editor_id_from_manifest(record)
         if editor_id:
             records_by_editor[editor_id.casefold()].append(record)
@@ -5459,6 +5570,89 @@ def _resolve_command_record_identities(
             command[form_field] = record["formId"]
             command[type_field] = record["recordType"]
             resolved_counts[editor_field] += 1
+            if editor_field == "referenceEditorId" and kind == "referenceEnabled":
+                child_form_ids = sorted(
+                    str(value["formId"])
+                    for value in records_by_form.values()
+                    if any(
+                        link["signature"] == "XESP" and
+                        str(link["formId"]).casefold() ==
+                        str(record["formId"]).casefold()
+                        for link in value.get("links", [])
+                    )
+                )
+                if child_form_ids:
+                    command["enableParentChildFormIds"] = child_form_ids
+            if editor_field == "itemEditorId" and kind == "equipitem" and \
+                    record["recordType"] == "WEAP":
+                weapon = record.get("weapon")
+                if not isinstance(weapon, dict) or weapon.get("damage") is None or \
+                        weapon.get("clipSize") is None or weapon.get("ammoFormId") is None:
+                    raise ValueError(f"Owned equipped weapon contract is absent: {editor_id}")
+                ammo = records_by_form.get(str(weapon["ammoFormId"]).casefold())
+                if ammo is not None and ammo["recordType"] == "FLST":
+                    ammo_forms = {
+                        str(link["formId"]).casefold()
+                        for link in ammo.get("links", [])
+                        if link["signature"] == "LNAM"
+                    }
+                    ammo_rows = [
+                        records_by_form[value]
+                        for value in ammo_forms
+                        if value in records_by_form and
+                        records_by_form[value]["recordType"] == "AMMO"
+                    ]
+                    if len(ammo_rows) == 1:
+                        ammo = ammo_rows[0]
+                if ammo is None or ammo["recordType"] != "AMMO":
+                    raise ValueError(f"Owned equipped weapon ammo is absent: {editor_id}")
+                command["weapon"] = {
+                    "damage": weapon["damage"],
+                    "clipSize": weapon["clipSize"],
+                    "ammoFormId": ammo["formId"],
+                    "ammoEditorId": _record_editor_id_from_manifest(ammo),
+                }
+            if editor_field == "itemEditorId" and record["recordType"] == "LVLI":
+                entries = record.get("leveledEntries", [])
+                concrete_form_ids = {str(entry["itemFormId"]) for entry in entries}
+                if kind != "additem" or not entries or len(concrete_form_ids) != 1:
+                    raise ValueError(
+                        f"Owned leveled inventory command is unsupported: {editor_id}"
+                    )
+                concrete_form_id = next(iter(concrete_form_ids))
+                concrete_matches = [
+                    value
+                    for values in records_by_editor.values()
+                    for value in values
+                    if str(value["formId"]).casefold() == concrete_form_id.casefold()
+                ]
+                if len(concrete_matches) != 1:
+                    raise ValueError(
+                        f"Owned leveled inventory item is absent: {concrete_form_id}"
+                    )
+                concrete = concrete_matches[0]
+                command["resolvedItemFormId"] = concrete["formId"]
+                command["resolvedItemEditorId"] = _record_editor_id_from_manifest(concrete)
+                command["resolvedItemRecordType"] = concrete["recordType"]
+        guard = command.get("guard")
+        if isinstance(guard, dict):
+            for editor_field, form_field, type_field, allowed_types in COMMAND_RECORD_FIELDS:
+                editor_id = guard.get(editor_field)
+                if editor_id is None:
+                    continue
+                matches = records_by_editor.get(str(editor_id).casefold(), [])
+                if allowed_types is not None:
+                    matches = [
+                        record
+                        for record in matches
+                        if str(record["recordType"]) in allowed_types
+                    ]
+                if len(matches) != 1:
+                    raise ValueError(
+                        f"Owned command guard record is ambiguous: {editor_id}"
+                    )
+                guard[form_field] = matches[0]["formId"]
+                guard[type_field] = matches[0]["recordType"]
 
     return {
         "schema": OPENING_COMMAND_CONTRACT_SCHEMA,
@@ -6909,12 +7103,29 @@ def compile_new_game_flow(
             raise ValueError(
                 f"Owned ordinary actor quest is absent: {ordinary_quest_editor_id}"
             )
-        topics, activation_topic_form_id = _compile_topic_closure(
-            records,
-            str(actor_contract["activationTopicEditorId"]),
-            sources.scripts,
-            ordinary_quest_editor_id,
+        activation_topic_editor_id = str(actor_contract["activationTopicEditorId"])
+        topics_by_form = {}
+        topic_roots = {}
+        for topic_editor_id in [
+            activation_topic_editor_id,
+            *actor_contract.get("automaticTopicEditorIds", []),
+        ]:
+            topic_rows, topic_root_form_id = _compile_topic_closure(
+                records,
+                str(topic_editor_id),
+                sources.scripts,
+                ordinary_quest_editor_id,
+            )
+            topic_roots[str(topic_editor_id).casefold()] = topic_root_form_id
+            for topic in topic_rows:
+                topics_by_form[str(topic["formId"])] = topic
+        topics = sorted(
+            topics_by_form.values(),
+            key=lambda value: int(str(value["formId"]), FORM_ID_RADIX),
         )
+        activation_topic_form_id = topic_roots[
+            activation_topic_editor_id.casefold()
+        ]
         voice = _compile_actor_dialogue_voice(
             topics,
             role,
@@ -6995,6 +7206,82 @@ def compile_new_game_flow(
                     "toStage": next(iter(to_stages)),
                 }
             )
+        automatic_triggers = []
+        for trigger_source in actor_contract.get("automaticDialogueTriggers", []):
+            trigger = dict(trigger_source)
+            script_editor_id = str(trigger["scriptEditorId"])
+            script = _unique_manifest_record(records, script_editor_id, "SCPT")
+            script_sources = _record_text_values(script, "SCTX")
+            if len(script_sources) != 1:
+                raise ValueError(
+                    f"Owned ordinary trigger script is ambiguous: {script_editor_id}"
+                )
+            script_source = script_sources[0]
+            if not re.search(
+                r"BEGIN\s+OnTriggerEnter\s+player\b",
+                script_source,
+                re.IGNORECASE,
+            ):
+                raise ValueError(
+                    f"Owned ordinary player trigger differs: {script_editor_id}"
+                )
+            objective_matches = re.findall(
+                rf"GetObjectiveDisplayed\s+{re.escape(ordinary_quest_editor_id)}\s+"
+                r"(\d+)\s*==\s*0",
+                script_source,
+                re.IGNORECASE,
+            )
+            topic_editor_id = str(trigger["topicEditorId"])
+            say_matches = re.findall(
+                rf"{re.escape(str(role['editorId']))}\.SayTo\s+Player\s+(\w+)",
+                script_source,
+                re.IGNORECASE,
+            )
+            if (
+                len(objective_matches) != 1
+                or {value.casefold() for value in say_matches}
+                != {topic_editor_id.casefold()}
+            ):
+                raise ValueError(
+                    f"Owned ordinary trigger result differs: {script_editor_id}"
+                )
+            trigger_reference = _unique_manifest_record(
+                records,
+                str(trigger["triggerReferenceEditorId"]),
+                "REFR",
+            )
+            primitive = trigger_reference["primitive"]
+            source_reference = sources.references_by_form.get(
+                int(str(trigger_reference["formId"]), FORM_ID_RADIX)
+            )
+            if not isinstance(primitive, dict) or source_reference is None:
+                raise ValueError(
+                    f"Owned ordinary trigger volume is absent: {script_editor_id}"
+                )
+            ordinary_quest = next(
+                value
+                for value in ordinary_quests
+                if str(value["editorId"]).casefold()
+                == ordinary_quest_editor_id.casefold()
+            )
+            automatic_triggers.append(
+                {
+                    "scriptFormId": script["formId"],
+                    "scriptEditorId": script_editor_id,
+                    "triggerReferenceFormId": trigger_reference["formId"],
+                    "triggerReferenceEditorId": str(
+                        trigger["triggerReferenceEditorId"]
+                    ),
+                    "positionGameUnits": list(source_reference.position_game_units),
+                    "rotationGodotQuaternion": godot_rotation_quaternion(
+                        source_reference.rotation_radians
+                    ),
+                    "boundsGameUnits": primitive["boundsGameUnits"],
+                    "questFormId": ordinary_quest["formId"],
+                    "objectiveIndex": int(objective_matches[0]),
+                    "topicFormId": topic_roots[topic_editor_id.casefold()],
+                }
+            )
         ordinary_actors.append(
             {
                 "role": role_name,
@@ -7006,6 +7293,7 @@ def compile_new_game_flow(
                 "topics": topics,
                 "voice": voice,
                 "arrivalTransitions": arrivals,
+                "automaticDialogueTriggers": automatic_triggers,
                 "commandContract": _resolve_command_record_identities(
                     commands, records
                 ),

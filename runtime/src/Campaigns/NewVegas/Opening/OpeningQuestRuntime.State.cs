@@ -65,6 +65,8 @@ internal partial class OpeningQuestRuntime
         Action completed,
         int generation)
     {
+        if (!ResultCommandGuardPasses(command.Guard))
+            return true;
         switch (command.Kind)
         {
             case "actorValueDelta":
@@ -158,6 +160,22 @@ internal partial class OpeningQuestRuntime
                     $"Owned opening dialogue command is unsupported: {command.Kind}");
         }
         return true;
+    }
+
+    private bool ResultCommandGuardPasses(OpeningCommandGuard? guard)
+    {
+        if (guard is null)
+            return true;
+        return guard.Kind switch
+        {
+            "playerItemCountZero" when guard.ItemFormId is not null =>
+                !_inventory.ContainsKey(guard.ItemFormId),
+            "questStageLessThan" when guard.QuestFormId is not null &&
+                guard.Stage is not null && _quests.TryGetValue(
+                    guard.QuestFormId, out var quest) => quest.Stage < guard.Stage.Value,
+            _ => throw new InvalidOperationException(
+                $"Owned result command guard is unsupported: {guard.Kind}"),
+        };
     }
 
     private bool ResultCommandIsTerminal(OpeningFlowCommand command) =>
@@ -577,6 +595,7 @@ internal partial class OpeningQuestRuntime
         OpeningTransformState.Capture(_guideActor.Placement))
     {
         GuidePackage = CaptureGuidePackageState(),
+        EquippedWeapon = _equippedWeaponState,
         OrdinaryActorTransforms = _flow.OrdinaryActors.ToDictionary(
             value => value.ReferenceFormId,
             value => OpeningTransformState.Capture(
@@ -903,6 +922,7 @@ internal partial class OpeningQuestRuntime
         Replace(_achievements, state.Achievements);
         Replace(_inventory, state.Inventory, value => value.FormId);
         Replace(_equippedItemFormIds, state.EquippedItemFormIds);
+        _equippedWeaponState = state.EquippedWeapon;
         Replace(_destroyedReferences, state.DestroyedReferenceFormIds);
         Replace(_referenceEnabledStates, state.ReferenceEnabledStates);
         _autoDisplayObjectives = state.AutoDisplayObjectives;

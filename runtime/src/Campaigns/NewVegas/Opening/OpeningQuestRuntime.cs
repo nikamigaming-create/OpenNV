@@ -65,6 +65,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _equippedItemFormIds =
         new(StringComparer.OrdinalIgnoreCase);
+    private OpeningEquippedWeaponState? _equippedWeaponState;
     private readonly Dictionary<string, OpeningQuestState> _quests =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, OpeningGlobalState> _globals =
@@ -936,6 +937,7 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         {
             UpdateDialogueVoice();
             UpdateOrdinaryActorTravel(delta);
+            EvaluateOrdinaryDialogueTriggers();
             return;
         }
         UpdatePlayerAnimation(delta);
@@ -1320,7 +1322,15 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         var loadedNodes = SetReferenceVisibility(
             command.ReferenceFormId,
             command.Enabled.Value,
-            command.Enabled.Value);
+            command.Enabled.Value && command.EnableParentChildFormIds.Count == 0);
+        foreach (var childFormId in command.EnableParentChildFormIds)
+        {
+            _referenceEnabledStates[childFormId] = command.Enabled.Value;
+            loadedNodes += SetReferenceVisibility(
+                childFormId,
+                command.Enabled.Value,
+                false);
+        }
         GD.Print(
             $"OPENNV_NEW_GAME_REFERENCE reference={command.ReferenceFormId} " +
             $"enabled={command.Enabled.Value} loadedNodes={loadedNodes}");
@@ -1756,6 +1766,19 @@ internal partial class OpeningQuestRuntime : CanvasLayer
                 throw new InvalidOperationException(
                     $"Owned opening equip item is absent from inventory: {command.ItemFormId}");
             _equippedItemFormIds.Add(command.ItemFormId);
+            if (command.ItemRecordType == "WEAP")
+            {
+                if (command.Weapon is null || command.Weapon.Damage <= 0 ||
+                    command.Weapon.ClipSize <= 0)
+                    throw new InvalidOperationException(
+                        "Owned equipped weapon source contract is incomplete.");
+                _equippedWeaponState = new OpeningEquippedWeaponState(
+                    command.ItemFormId,
+                    command.Weapon.AmmoFormId,
+                    command.Weapon.Damage,
+                    command.Weapon.ClipSize,
+                    command.Weapon.ClipSize);
+            }
             return;
         }
         throw new InvalidOperationException(

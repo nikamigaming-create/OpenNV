@@ -10,7 +10,12 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "content" / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from opening_catalog import _compile_ordinary_quests, _compile_topic_closure
+from opening_catalog import (
+    _compile_ordinary_quests,
+    _compile_topic_closure,
+    _resolve_command_record_identities,
+    _script_commands,
+)
 
 
 def record(
@@ -37,6 +42,45 @@ def record(
 
 
 class FnvOrdinaryQuestHandoffTest(unittest.TestCase):
+    def test_preserves_source_result_guards_and_resolves_leveled_grant(self) -> None:
+        commands = _script_commands(
+            """
+            if (GetStage VCG02 < 20)
+              SetStage VCG02 20
+            endif
+            if (Player.GetItemCount WeapNVVarmintRifle == 0)
+              player.additem CondNVVarmintRifleLoot 1
+            endif
+            Player.AddItem Ammo556mm 30
+            player.equipitem WeapNVVarmintRifle
+            """
+        )
+        records = [
+            record("QUST", "0010a214", "VCG02"),
+            record("WEAP", "0007ea24", "WeapNVVarmintRifle"),
+            record("AMMO", "00004240", "Ammo556mm"),
+            record("LVLI", "00096c06", "CondNVVarmintRifleLoot"),
+        ]
+        records[-1]["leveledEntries"] = [
+            {"level": level, "itemFormId": "0007ea24", "count": 1}
+            for level in range(1, 8)
+        ]
+        records[1]["weapon"] = {
+            "damage": 18,
+            "clipSize": 5,
+            "ammoFormId": "00004240",
+        }
+
+        contract = _resolve_command_record_identities(commands, records)
+
+        self.assertEqual("questStageLessThan", commands[0]["guard"]["kind"])
+        self.assertEqual("0010a214", commands[0]["guard"]["questFormId"])
+        self.assertEqual("playerItemCountZero", commands[1]["guard"]["kind"])
+        self.assertEqual("0007ea24", commands[1]["guard"]["itemFormId"])
+        self.assertEqual("0007ea24", commands[1]["resolvedItemFormId"])
+        self.assertEqual("WEAP", commands[1]["resolvedItemRecordType"])
+        self.assertEqual(4, contract["commandCount"])
+
     def test_compiles_authored_entry_objective_from_quest_and_timer_identity(self) -> None:
         records = [
             record(

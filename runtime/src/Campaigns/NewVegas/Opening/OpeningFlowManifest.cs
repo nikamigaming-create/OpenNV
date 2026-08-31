@@ -308,6 +308,19 @@ internal sealed partial record OpeningNewGameFlow(
                     value.GetProperty("fromStage").GetInt32(),
                     value.GetProperty("toStage").GetInt32()))
                 .ToArray(),
+            source.GetProperty("automaticDialogueTriggers").EnumerateArray()
+                .Select(value => new OpeningOrdinaryDialogueTrigger(
+                    value.GetProperty("scriptFormId").GetString()!,
+                    value.GetProperty("scriptEditorId").GetString()!,
+                    value.GetProperty("triggerReferenceFormId").GetString()!,
+                    value.GetProperty("triggerReferenceEditorId").GetString()!,
+                    ReadVector3(value.GetProperty("positionGameUnits")),
+                    ReadQuaternion(value.GetProperty("rotationGodotQuaternion")),
+                    ReadVector3(value.GetProperty("boundsGameUnits")),
+                    value.GetProperty("questFormId").GetString()!,
+                    value.GetProperty("objectiveIndex").GetInt32(),
+                    value.GetProperty("topicFormId").GetString()!))
+                .ToArray(),
             ParseCommandContract(source.GetProperty("commandContract")));
     }
 
@@ -1291,7 +1304,7 @@ internal sealed partial record OpeningNewGameFlow(
         OptionalString(value, "topicEditorId"),
         OptionalString(value, "speakerEditorId"),
         OptionalString(value, "referenceEditorId"),
-        OptionalString(value, "itemEditorId"),
+        OptionalString(value, "resolvedItemEditorId") ?? OptionalString(value, "itemEditorId"),
         OptionalString(value, "packageEditorId"),
         OptionalString(value, "modifierEditorId"),
         OptionalString(value, "operation"),
@@ -1318,8 +1331,8 @@ internal sealed partial record OpeningNewGameFlow(
         controls.ValueKind == JsonValueKind.Array
             ? controls.EnumerateArray().Select(control => control.GetInt32()).ToArray()
             : Array.Empty<int>(),
-        OptionalString(value, "itemFormId"),
-        OptionalString(value, "itemRecordType"),
+        OptionalString(value, "resolvedItemFormId") ?? OptionalString(value, "itemFormId"),
+        OptionalString(value, "resolvedItemRecordType") ?? OptionalString(value, "itemRecordType"),
         OptionalString(value, "questFormId"),
         OptionalString(value, "questRecordType"),
         OptionalString(value, "globalFormId"),
@@ -1328,7 +1341,24 @@ internal sealed partial record OpeningNewGameFlow(
         OptionalString(value, "ownerFormId"),
         OptionalString(value, "ownerRecordType"),
         OptionalString(value, "referenceFormId"),
-        OptionalString(value, "referenceRecordType"));
+        OptionalString(value, "referenceRecordType"),
+        value.TryGetProperty("guard", out var guard)
+            ? new OpeningCommandGuard(
+                guard.GetProperty("kind").GetString()!,
+                OptionalString(guard, "itemFormId"),
+                OptionalString(guard, "questFormId"),
+                OptionalInt(guard, "stage"))
+            : null,
+        value.TryGetProperty("weapon", out var weapon)
+            ? new OpeningCommandWeapon(
+                weapon.GetProperty("ammoFormId").GetString()!,
+                weapon.GetProperty("ammoEditorId").GetString()!,
+                weapon.GetProperty("damage").GetInt32(),
+                weapon.GetProperty("clipSize").GetInt32())
+            : null,
+        value.TryGetProperty("enableParentChildFormIds", out var enableChildren)
+            ? enableChildren.EnumerateArray().Select(child => child.GetString()!).ToArray()
+            : Array.Empty<string>());
 
     private static OpeningGuideActorAi ParseGuideActorAi(JsonElement source)
     {

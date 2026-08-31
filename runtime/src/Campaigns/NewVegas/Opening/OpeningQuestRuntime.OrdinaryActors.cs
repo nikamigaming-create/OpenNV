@@ -12,6 +12,7 @@ internal partial class OpeningQuestRuntime
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ActorAnimationPlayback> _ordinaryActorLocomotion =
         new(StringComparer.OrdinalIgnoreCase);
+    private bool _ordinaryAutomaticDialogueActive;
 
     private void EvaluateOrdinaryActorPackages()
     {
@@ -233,6 +234,60 @@ internal partial class OpeningQuestRuntime
             return true;
         }
         return false;
+    }
+
+    private void EvaluateOrdinaryDialogueTriggers()
+    {
+        if (_ordinaryAutomaticDialogueActive || _activeModal is not null ||
+            _dialogueVoice.Playing)
+            return;
+        foreach (var actor in _flow.OrdinaryActors)
+            foreach (var trigger in actor.AutomaticDialogueTriggers)
+            {
+                if (!_quests.TryGetValue(trigger.QuestFormId, out var quest) ||
+                    quest.Stopped ||
+                    _objectives.TryGetValue(
+                        ObjectiveKey(trigger.QuestFormId, trigger.ObjectiveIndex),
+                        out var objective) && objective.Enabled ||
+                    _ordinaryActorTravel.ContainsKey(actor.ReferenceFormId) ||
+                    !_ordinaryActorPackages.ContainsKey(actor.ReferenceFormId))
+                    continue;
+                var placed = _loaded.Actors.Single(value => value.ReferenceFormId.Equals(
+                    actor.ReferenceFormId, StringComparison.OrdinalIgnoreCase));
+                var sourceTransform = new Transform3D(
+                    new Basis(trigger.RotationGodot),
+                    _loaded.GameToCellUnits(trigger.PositionGameUnits));
+                var playerLocal = sourceTransform.AffineInverse() *
+                    _loaded.Root.ToLocal(_loaded.Player.GlobalPosition);
+                var actorLocal = sourceTransform.AffineInverse() *
+                    _loaded.Root.ToLocal(placed.Placement.GlobalPosition);
+                var halfBounds = new Vector3(
+                    trigger.BoundsGameUnits.X,
+                    trigger.BoundsGameUnits.Z,
+                    trigger.BoundsGameUnits.Y) * 0.5f;
+                if (Mathf.Abs(playerLocal.X) > halfBounds.X ||
+                    Mathf.Abs(playerLocal.Y) > halfBounds.Y ||
+                    Mathf.Abs(playerLocal.Z) > halfBounds.Z ||
+                    Mathf.Abs(actorLocal.X) > halfBounds.X ||
+                    Mathf.Abs(actorLocal.Y) > halfBounds.Y ||
+                    Mathf.Abs(actorLocal.Z) > halfBounds.Z)
+                    continue;
+                _ordinaryAutomaticDialogueActive = true;
+                _generation++;
+                var generation = _generation;
+                PlayTopicForm(
+                    trigger.TopicFormId,
+                    () =>
+                    {
+                        if (generation != _generation)
+                            return;
+                        _ordinaryAutomaticDialogueActive = false;
+                        _loaded.Session.StoreOpeningState(CaptureState(true));
+                        EvaluateOrdinaryActorPackages();
+                    },
+                    generation);
+                return;
+            }
     }
 
     private void ApplyOrdinaryActorIntent(OpeningFlowCommand command)

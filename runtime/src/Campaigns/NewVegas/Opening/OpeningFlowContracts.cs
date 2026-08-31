@@ -338,6 +338,7 @@ internal sealed record OpeningOrdinaryActor(
     IReadOnlyDictionary<string, OpeningDialogueTopic> Topics,
     OpeningDialogueVoice Voice,
     IReadOnlyList<OpeningOrdinaryPackageArrival> ArrivalTransitions,
+    IReadOnlyList<OpeningOrdinaryDialogueTrigger> AutomaticDialogueTriggers,
     OpeningCommandContract CommandContract);
 
 internal sealed record OpeningOrdinaryPackageArrival(
@@ -348,6 +349,18 @@ internal sealed record OpeningOrdinaryPackageArrival(
     string QuestFormId,
     int FromStage,
     int ToStage);
+
+internal sealed record OpeningOrdinaryDialogueTrigger(
+    string ScriptFormId,
+    string ScriptEditorId,
+    string TriggerReferenceFormId,
+    string TriggerReferenceEditorId,
+    Vector3 PositionGameUnits,
+    Quaternion RotationGodot,
+    Vector3 BoundsGameUnits,
+    string QuestFormId,
+    int ObjectiveIndex,
+    string TopicFormId);
 
 internal sealed record OpeningTimerTransition(int FromStage, int ToStage);
 
@@ -472,7 +485,22 @@ internal sealed record OpeningFlowCommand(
     string? OwnerFormId,
     string? OwnerRecordType,
     string? ReferenceFormId,
-    string? ReferenceRecordType);
+    string? ReferenceRecordType,
+    OpeningCommandGuard? Guard,
+    OpeningCommandWeapon? Weapon,
+    IReadOnlyList<string> EnableParentChildFormIds);
+
+internal sealed record OpeningCommandGuard(
+    string Kind,
+    string? ItemFormId,
+    string? QuestFormId,
+    int? Stage);
+
+internal sealed record OpeningCommandWeapon(
+    string AmmoFormId,
+    string AmmoEditorId,
+    int Damage,
+    int ClipSize);
 
 internal sealed record OpeningGuideActorAi(
     string Role,

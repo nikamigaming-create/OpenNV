@@ -16,6 +16,13 @@
     "SunnyRef",
     "VCG02SunnyTravelOutside",
     "VCG02SunnyPatrolTriggerSCRIPT",
+    "VCG02SunnyPatrolTriggerREF",
+    "VCG02SunnyBark",
+    "VCG02BottleMarkerREF",
+    "VCG02TargetSCRIPT",
+    "CondNVVarmintRifleLoot",
+    "WeapNVVarmintRifle",
+    "Ammo556mm",
     "SunnyMeetPlayerDialoguePackage",
     "VFreeformGoodspringsGSSunnySmilesTopic019"
   ],
@@ -60,10 +67,12 @@
       "FURN": ["SCRI"],
       "MISC": ["SCRI"],
       "TERM": ["SCRI"],
-      "WEAP": ["SCRI"]
+      "WEAP": ["SCRI", "NAM0"],
+      "FLST": ["LNAM"]
     },
     "reverseFormLinkSubrecords": [
-      "QSTI"
+      "QSTI",
+      "XESP"
     ],
     "parentGroupTypes": [
       1,
@@ -397,6 +406,14 @@
           {
             "packageEditorId": "VCG02SunnyTravelOutside",
             "scriptEditorId": "VCG02SunnyPatrolTriggerSCRIPT"
+          }
+        ],
+        "automaticTopicEditorIds": ["VCG02SunnyBark"],
+        "automaticDialogueTriggers": [
+          {
+            "scriptEditorId": "VCG02SunnyPatrolTriggerSCRIPT",
+            "triggerReferenceEditorId": "VCG02SunnyPatrolTriggerREF",
+            "topicEditorId": "VCG02SunnyBark"
           }
         ],
         "activationTopicEditorId": "VFreeformGoodspringsGSSunnySmilesTopic019"
