@@ -1852,7 +1852,7 @@ def _appearance_inventory(
         ),
         "races": races,
         "preview": (
-            "owned-playable-race-male-and-female-source-default-full-body-live-previews-"
+            "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-previews-"
             "all-native-geometry-controls"
         ),
     }
@@ -1863,7 +1863,7 @@ def _appearance_inventory(
         result,
         configuration,
         include_full_body=True,
-        include_all_playable_race_defaults=True,
+        include_all_playable_race_selections=True,
     )
     return result
 

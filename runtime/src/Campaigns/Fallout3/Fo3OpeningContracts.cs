@@ -193,21 +193,21 @@ internal sealed record Fo3AppearanceContract(
     private const string ExpectedStatus =
         "source-backed-native-creator-all-native-geometry-controls";
     private const string ExpectedPreview =
-        "owned-playable-race-male-and-female-source-default-full-body-live-previews-" +
+        "owned-playable-race-male-and-female-valid-hair-eye-full-body-live-previews-" +
         "all-native-geometry-controls";
     private const string ExpectedPreviewSchema =
-        "opennv-owned-player-facegen-preview-set/v4";
+        "opennv-owned-player-facegen-preview-set/v5";
     private const string ExpectedPreviewStatus =
-        "compiled-playable-race-male-and-female-source-default-full-body-live-previews-" +
+        "compiled-playable-race-male-and-female-valid-hair-eye-full-body-live-previews-" +
         "with-ctl-egm-targets-all-native-geometry-controls-runtime-bound";
     private const string ExpectedPreviewRuntimeDisposition =
-        "owned-playable-race-male-and-female-source-default-identity-preview-hosts-" +
-        "and-all-native-geometry-controls-bound-nondefault-hair-eye-cache-artifacts-" +
-        "absent-and-fail-closed-sibling-gamebryo-slider-semantics-corroborated";
+        "owned-playable-race-male-and-female-valid-hair-eye-identity-preview-hosts-" +
+        "and-all-native-geometry-controls-bound-invalid-source-tuples-fail-closed-" +
+        "sibling-gamebryo-slider-semantics-corroborated";
     private const string ExpectedPreviewSelectionScope =
-        "all-playable-race-sex-source-order-default-hair-eyes";
+        "all-playable-race-sex-valid-hair-eyes-cartesian-product";
     private const string ExpectedUnsupportedPreviewSelectionScope =
-        "nondefault-hair-or-eyes-cache-artifact-absent";
+        "invalid-race-sex-hair-eyes-source-tuple";
     private static readonly string[] ExpectedBodyRoles = ["body", "left-hand", "right-hand"];
     private static readonly string[] ExpectedPreviewSexes = ["male", "female"];
 
@@ -542,15 +542,16 @@ internal sealed record Fo3AppearanceContract(
             !fullBody ||
             !bodyRoles.SequenceEqual(ExpectedBodyRoles, StringComparer.Ordinal) ||
             !bodySources.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedPreviewSexes) ||
-            previews.Length != races.Count * ExpectedPreviewSexes.Length ||
+            previews.Length != races.Sum(race => race.Sex.Values.Sum(sex =>
+                sex.HairOptions.Count * sex.EyeOptions.Count)) ||
             previewIdentities.Distinct().Count() != previewIdentities.Length ||
             previews.Any(preview =>
             {
                 var race = races.SingleOrDefault(value => value.FormId == preview.RaceFormId);
                 return race is null ||
                 !race.Sex.TryGetValue(preview.Sex, out var sex) ||
-                preview.HairFormId != sex.DefaultHairFormId ||
-                preview.EyesFormId != sex.DefaultEyesFormId ||
+                sex.HairOptions.All(value => value.FormId != preview.HairFormId) ||
+                sex.EyeOptions.All(value => value.FormId != preview.EyesFormId) ||
                 preview.GeometryControlCount != geometryControlCount ||
                 !preview.GeometryControlNames.SequenceEqual(
                     geometryControlNames,
@@ -562,6 +563,13 @@ internal sealed record Fo3AppearanceContract(
                     StringComparer.Ordinal) ||
                 !ReferenceEquals(preview.BodyComponentSourcesBySex, bodySources);
             }) ||
+            races.Any(race => race.Sex.Any(pair =>
+            {
+                var expected = pair.Value.HairOptions.SelectMany(hair =>
+                    pair.Value.EyeOptions.Select(eyes =>
+                        (pair.Key, race.FormId, hair.FormId, eyes.FormId)));
+                return expected.Any(identity => !previewIdentities.Contains(identity));
+            })) ||
             bodySources.Values.Any(rows =>
                 !rows.Select(value => value.Role).SequenceEqual(
                     ExpectedBodyRoles,
