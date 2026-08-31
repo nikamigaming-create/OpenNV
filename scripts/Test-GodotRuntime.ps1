@@ -141,7 +141,7 @@ if ($LASTEXITCODE -ne 0) { throw "OpenNV Godot Release build failed." }
 if ($LASTEXITCODE -ne 0) { throw "OpenNV C# format/analyzer gate failed." }
 & dotnet build (Join-Path $runtimeRoot "OpenNV.csproj") --configuration Debug --nologo
 if ($LASTEXITCODE -ne 0) { throw "OpenNV Godot Debug build failed." }
-& dotnet run --project $containerInventoryProbe --configuration Release --no-restore
+& dotnet run --project $containerInventoryProbe --configuration Release
 if ($LASTEXITCODE -ne 0) { throw "Container inventory contract probe failed." }
 
 $startupOutput = & $Godot --headless --xr-mode off --path $runtimeRoot 2>&1
