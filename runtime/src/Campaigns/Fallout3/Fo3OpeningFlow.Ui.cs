@@ -13,12 +13,16 @@ internal partial class Fo3OpeningFlow
     private void AddSelector(GridContainer grid, string title, OptionButton selector)
     {
         var source = _profile.Appearance.Ui.RaceSexControls.List;
+        var fontId = _profile.Appearance.Ui.RaceSexControls.FontId;
+        if (!_profile.UiFonts.TryGetValue(fontId, out var sourceFont))
+            throw new InvalidOperationException(
+                $"Fallout 3 RaceSexMenu owned bitmap font is absent: {fontId}");
+        var font = OwnedUiTheme.BuildFont(sourceFont);
         selector.Name = $"{source.Tile}_{title}";
         selector.CustomMinimumSize = source.Rect.Size;
         selector.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        selector.AddThemeFontSizeOverride(
-            "font_size",
-            Fo3OpeningFlowNumericContracts.CreatorStatusFontPixels);
+        selector.AddThemeFontOverride("font", font);
+        selector.AddThemeFontSizeOverride("font_size", font.FixedSize);
         grid.AddChild(selector);
     }
 

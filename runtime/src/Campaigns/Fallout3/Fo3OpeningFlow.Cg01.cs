@@ -1173,7 +1173,7 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage14State stage14,
         IReadOnlyList<Fo3Cg01PostStage14Cue> cues,
         int index,
-        Label subtitle)
+        Button subtitle)
     {
         var cue = cues[index];
         var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
@@ -1226,8 +1226,7 @@ internal partial class Fo3OpeningFlow
                 subtitle);
         };
         AddChild(_vaultDialogueVoice);
-        subtitle.Text = $"DAD: {cue.Response.Text}";
-        subtitle.Visible = true;
+        ShowVaultDialogue(subtitle, coverage.Cg01DadActor.Actor.Name, cue.Response.Text);
         _vaultDialogueVoice.Play();
     }
 
@@ -1238,9 +1237,10 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage12State stage12,
         Fo3Cg01ToddlerWorldState toddlerState,
         Fo3Cg01Stage14State stage14,
-        Label subtitle)
+        Button subtitle)
     {
-        subtitle.QueueFree();
+        HideVaultDialogue(subtitle);
+        _vaultPreviewOverlay?.QueueFree();
         _vaultPreviewOverlay = null;
         var state = _profile.Cg01PostStage14Transition.Apply(
             stage14,

@@ -75,6 +75,7 @@ internal sealed record OwnedGamebryoRaceSexTemplate(
 internal sealed record OwnedGamebryoRaceSexControls(
     string Document,
     string DocumentSha256,
+    int FontId,
     Rect2 BackgroundRect,
     float TopBound,
     float BottomBound,
@@ -118,6 +119,10 @@ internal sealed record OwnedGamebryoDialogueMenu(
     float TopicTextY,
     float TopicWrapInset,
     float TopicVerticalSpacing);
+
+internal sealed record OwnedGamebryoDialogueFonts(
+    OwnedBitmapFont SpeakerName,
+    OwnedBitmapFont Body);
 
 internal static class OwnedGamebryoTileRuntime
 {
@@ -291,6 +296,7 @@ internal static class OwnedGamebryoTileRuntime
         var result = new OwnedGamebryoRaceSexControls(
             document,
             sha256,
+            source.GetProperty("fontId").GetInt32(),
             ReadRect(background.GetProperty("rect")),
             background.GetProperty("topBound").GetSingle(),
             background.GetProperty("bottomBound").GetSingle(),
@@ -386,11 +392,25 @@ internal static class OwnedGamebryoTileRuntime
             numbers.Any(value => !float.IsFinite(value) || value <= 0.0f) ||
             result.CenterHeightFactor > 1.0f ||
             result.BackgroundBrightness > byte.MaxValue ||
+            result.TopicWrapInset <= result.TopicTextX ||
+            result.TopicVerticalSpacing <= result.TopicTextY ||
             result.SpeakerNameFont <= 0 || result.SpeakerTextFont <= 0 ||
             result.TopicFont <= 0)
             throw new InvalidOperationException(
                 "Owned DialogueMenu runtime contract is incomplete.");
         return result;
+    }
+
+    internal static OwnedGamebryoDialogueFonts RequireDialogueFonts(
+        OwnedGamebryoDialogueMenu menu,
+        IReadOnlyDictionary<int, OwnedBitmapFont> fonts)
+    {
+        if (menu.TopicFont != menu.SpeakerTextFont ||
+            !fonts.TryGetValue(menu.SpeakerNameFont, out var speakerName) ||
+            !fonts.TryGetValue(menu.SpeakerTextFont, out var body))
+            throw new InvalidOperationException(
+                "Owned DialogueMenu bitmap fonts are incomplete.");
+        return new OwnedGamebryoDialogueFonts(speakerName, body);
     }
 
     internal static Rect2 NavigationRect(
@@ -569,7 +589,7 @@ internal static class OwnedGamebryoTileRuntime
             !float.IsFinite(source.Back.Brightness) || source.Back.Brightness <= 0.0f ||
             !float.IsFinite(source.Next.Brightness) || source.Next.Brightness <= 0.0f ||
             source.Back.VerticalCenterDivisor <= 0.0f ||
-            source.Next.VerticalCenterDivisor <= 0.0f)
+            source.Next.VerticalCenterDivisor <= 0.0f || source.FontId <= 0)
             throw new InvalidOperationException(
                 "Owned RaceSexMenu shared control contract is incomplete.");
     }

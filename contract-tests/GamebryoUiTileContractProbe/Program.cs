@@ -99,10 +99,44 @@ var dialogue = OwnedGamebryoTileRuntime.ParseDialogueMenu(dialogueDocument.RootE
 if (dialogue.SpeakerTextFont != dialogue.TopicFont ||
     dialogue.BackgroundWidth != 1080.0f || dialogue.TopicMinimumHeight != 110.0f)
     throw new InvalidOperationException("Gamebryo DialogueMenu traits differ.");
+var ownedFont = new OwnedBitmapFont(
+    "textures\\fonts\\probe.fnt",
+    32.0f,
+    24.0f,
+    8.0f,
+    new OwnedUiTexture("probe.png", new Vector2I(1, 1)),
+    [new OwnedUiGlyph(32, new Rect2(0, 0, 1, 1), Vector2.One, 0, 1, 1)]);
+var dialogueFonts = OwnedGamebryoTileRuntime.RequireDialogueFonts(
+    dialogue,
+    new Dictionary<int, OwnedBitmapFont>
+    {
+        [dialogue.SpeakerNameFont] = ownedFont,
+        [dialogue.SpeakerTextFont] = ownedFont,
+    });
+if (!ReferenceEquals(dialogueFonts.SpeakerName, ownedFont) ||
+    !ReferenceEquals(dialogueFonts.Body, ownedFont))
+    throw new InvalidOperationException("Gamebryo DialogueMenu font binding differs.");
+ExpectDialogueFontFailure(dialogue, new Dictionary<int, OwnedBitmapFont>());
 ExpectDialogueFailure(dialogueDocument.RootElement, "unsupported-dialogue-menu/v1");
 
 Console.WriteLine(
-    "OPENNV_GAMEBRYO_UI_TILE_CONTRACT_PASS layout=1 text=1 affine=1 navigation=1 selection=1 dialogue=1 failClosed=8");
+    "OPENNV_GAMEBRYO_UI_TILE_CONTRACT_PASS layout=1 text=1 affine=1 navigation=1 selection=1 dialogue=1 fonts=1 failClosed=9");
+
+static void ExpectDialogueFontFailure(
+    OwnedGamebryoDialogueMenu menu,
+    IReadOnlyDictionary<int, OwnedBitmapFont> fonts)
+{
+    try
+    {
+        OwnedGamebryoTileRuntime.RequireDialogueFonts(menu, fonts);
+    }
+    catch (InvalidOperationException)
+    {
+        return;
+    }
+    throw new InvalidOperationException(
+        "Gamebryo DialogueMenu font binding did not fail closed.");
+}
 
 static void ExpectDialogueFailure(JsonElement source, string schema)
 {

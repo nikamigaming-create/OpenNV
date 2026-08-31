@@ -601,10 +601,15 @@ internal partial class Fo3OpeningFlow : CanvasLayer
     private Button AddVaultDialogueOverlay(
         string nodeName = "FO3_STAGE65_VAULT101_DIALOGUE")
     {
+        var fonts = OwnedGamebryoTileRuntime.RequireDialogueFonts(
+            _profile.DialogueMenu,
+            _profile.UiFonts);
         var overlay = new OwnedGamebryoDialogueMenuRuntime(
             _profile.DialogueMenu,
             _profile.InterfaceColor,
-            _profile.MenuBackgroundAlpha)
+            _profile.MenuBackgroundAlpha,
+            OwnedUiTheme.BuildFont(fonts.SpeakerName),
+            OwnedUiTheme.BuildFont(fonts.Body))
         {
             Name = nodeName,
         };

@@ -10,10 +10,43 @@ from unittest.mock import patch
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from prepare_fo3_profile import _appearance_ui_contract  # noqa: E402
+from prepare_fo3_profile import (  # noqa: E402
+    _appearance_ui_contract,
+    _compile_fo3_ui_fonts,
+)
 
 
 class Fo3OwnedUiTileContractTest(unittest.TestCase):
+    def test_dialogue_and_shared_creator_font_ids_compile_once(self) -> None:
+        dialogue = {
+            "speakerName": {"font": 7},
+            "speakerText": {"font": 6},
+            "topics": {"template": {"font": 6}},
+        }
+        appearance = {"ui": {"raceSexMenuTiles": {"fontId": 7}}}
+        compiled = []
+
+        def compile_font(font_id, *_args):
+            compiled.append(font_id)
+            return ({"schema": "opennv-owned-gamebryo-bitmap-font/v1"}, {})
+
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "prepare_fo3_profile._compile_gamebryo_font",
+            side_effect=compile_font,
+        ):
+            result = _compile_fo3_ui_fonts(
+                dialogue,
+                appearance,
+                {},
+                {"section": "Fonts", "keyTemplate": "sFontFile_{id}"},
+                object(),
+                Path(temporary),
+                object(),
+            )
+
+        self.assertEqual(compiled, [6, 7])
+        self.assertEqual([row["fontId"] for row in result], [6, 7])
+
     def test_name_panel_and_prompt_remain_owned_xml_entity_bound(self) -> None:
         appearance_xml = br"""
             <menu name="RaceSexMenu"><x>930</x><y>550</y>

@@ -83,6 +83,7 @@
       "textures\\interface\\main\\main_background.dds"
     ],
     "musicSetting": { "section": "General", "key": "SMainMenuMusicTrack" },
+    "fonts": { "section": "Fonts", "keyTemplate": "sFontFile_{id}" },
     "musicDirectoryName": "Music",
     "iniSettings": [
       { "section": "General", "key": "SMainMenuMusicTrack" },

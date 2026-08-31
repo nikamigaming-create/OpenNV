@@ -12,6 +12,8 @@ internal sealed partial class OwnedGamebryoDialogueMenuRuntime : Control
     private readonly VBoxContainer _topics;
     private readonly Color _systemColor;
     private readonly float _backgroundAlpha;
+    private readonly FontFile _speakerNameFont;
+    private readonly FontFile _bodyFont;
     private Action? _advance;
 
     internal Button SpeakerTextControl => _speakerText;
@@ -20,8 +22,8 @@ internal sealed partial class OwnedGamebryoDialogueMenuRuntime : Control
         OwnedGamebryoDialogueMenu source,
         Color systemColor,
         float backgroundAlpha,
-        Font? speakerNameFont = null,
-        Font? bodyFont = null)
+        FontFile speakerNameFont,
+        FontFile bodyFont)
     {
         if (!float.IsFinite(backgroundAlpha) || backgroundAlpha < 0.0f ||
             backgroundAlpha > 1.0f)
@@ -30,6 +32,10 @@ internal sealed partial class OwnedGamebryoDialogueMenuRuntime : Control
         _source = source;
         _systemColor = systemColor;
         _backgroundAlpha = backgroundAlpha;
+        _speakerNameFont = speakerNameFont ?? throw new InvalidOperationException(
+            "Owned DialogueMenu speaker-name font is unavailable.");
+        _bodyFont = bodyFont ?? throw new InvalidOperationException(
+            "Owned DialogueMenu body font is unavailable.");
         Name = "DialogMenu";
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
@@ -58,8 +64,8 @@ internal sealed partial class OwnedGamebryoDialogueMenuRuntime : Control
             HorizontalAlignment = HorizontalAlignment.Right,
             MouseFilter = MouseFilterEnum.Ignore,
         };
-        if (speakerNameFont is not null)
-            _speakerName.AddThemeFontOverride("font", speakerNameFont);
+        _speakerName.AddThemeFontOverride("font", _speakerNameFont);
+        _speakerName.AddThemeColorOverride("font_color", systemColor);
         AddChild(_speakerName);
 
         _speakerText = new Button
@@ -69,8 +75,11 @@ internal sealed partial class OwnedGamebryoDialogueMenuRuntime : Control
             Alignment = HorizontalAlignment.Left,
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
-        if (bodyFont is not null)
-            _speakerText.AddThemeFontOverride("font", bodyFont);
+        _speakerText.AddThemeFontOverride("font", _bodyFont);
+        _speakerText.AddThemeColorOverride("font_color", systemColor);
+        _speakerText.AddThemeColorOverride("font_hover_color", systemColor);
+        _speakerText.AddThemeColorOverride("font_focus_color", systemColor);
+        _speakerText.AddThemeColorOverride("font_pressed_color", systemColor);
         _speakerText.Pressed += Advance;
         AddChild(_speakerText);
 
@@ -121,11 +130,12 @@ internal sealed partial class OwnedGamebryoDialogueMenuRuntime : Control
                 Flat = true,
                 Alignment = HorizontalAlignment.Left,
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                CustomMinimumSize = new Vector2(
-                    0.0f,
-                    _source.TopicVerticalSpacing),
             };
             button.AddThemeColorOverride("font_color", _systemColor);
+            button.AddThemeColorOverride("font_hover_color", _systemColor);
+            button.AddThemeColorOverride("font_focus_color", _systemColor);
+            button.AddThemeColorOverride("font_pressed_color", _systemColor);
+            button.AddThemeFontOverride("font", _bodyFont);
             button.AddThemeConstantOverride("outline_size", 0);
             button.Pressed += topic.Selected;
             _topics.AddChild(button);
@@ -155,6 +165,32 @@ internal sealed partial class OwnedGamebryoDialogueMenuRuntime : Control
             Size.Y / _source.CanvasSize.Y);
         var width = Mathf.Min(_source.BackgroundWidth * scale, Size.X);
         var x = (Size.X - width) / 2.0f;
+        _speakerName.AddThemeFontSizeOverride(
+            "font_size",
+            Mathf.Max(1, Mathf.RoundToInt(_speakerNameFont.FixedSize * scale)));
+        _speakerText.AddThemeFontSizeOverride(
+            "font_size",
+            Mathf.Max(1, Mathf.RoundToInt(_bodyFont.FixedSize * scale)));
+        foreach (var child in _topics.GetChildren().OfType<Button>())
+        {
+            child.AddThemeFontSizeOverride(
+                "font_size",
+                Mathf.Max(1, Mathf.RoundToInt(_bodyFont.FixedSize * scale)));
+            child.CustomMinimumSize = new Vector2(
+                0.0f,
+                (_bodyFont.FixedSize + _source.TopicVerticalSpacing) * scale);
+            var topicMargins = new StyleBoxEmpty
+            {
+                ContentMarginLeft = _source.TopicTextX * scale,
+                ContentMarginTop = _source.TopicTextY * scale,
+                ContentMarginRight =
+                    (_source.TopicWrapInset - _source.TopicTextX) * scale,
+                ContentMarginBottom =
+                    (_source.TopicVerticalSpacing - _source.TopicTextY) * scale,
+            };
+            foreach (var state in new[] { "normal", "hover", "focus", "pressed" })
+                child.AddThemeStyleboxOverride(state, topicMargins);
+        }
         _speakerName.Position = new Vector2(0.0f, _source.SpeakerNameTopInset * scale);
         _speakerName.Size = new Vector2(
             Size.X - _source.SpeakerNameRightInset * scale,

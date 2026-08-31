@@ -94,14 +94,15 @@ internal partial class OpeningQuestRuntime
             throw new InvalidOperationException(
                 "Owned DialogueMenu tile contract is unavailable.");
         var root = OpenModalRoot("dialogue");
+        var fonts = OwnedGamebryoTileRuntime.RequireDialogueFonts(
+            source.DialogueMenu,
+            _opening.GameplayUi.Fonts);
         var menu = new OwnedGamebryoDialogueMenuRuntime(
             source.DialogueMenu,
             _opening.MainMenuColor,
             _opening.Style.BackgroundFillAlpha,
-            OwnedUiTheme.BuildFont(
-                _opening.GameplayUi.Font(source.DialogueMenu.SpeakerNameFont)),
-            OwnedUiTheme.BuildFont(
-                _opening.GameplayUi.Font(source.DialogueMenu.SpeakerTextFont)));
+            OwnedUiTheme.BuildFont(fonts.SpeakerName),
+            OwnedUiTheme.BuildFont(fonts.Body));
         menu.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         root.AddChild(menu);
         return menu;

@@ -22,8 +22,10 @@ from cell_scene import godot_rotation_quaternion
 from environment_catalog import parse_image_space_modifier
 from facegen import compose_facegen_coordinates
 from opening_catalog import (
+    _compile_gamebryo_font,
     _compile_facegen_control_space,
     _display_entity,
+    _ini_index,
     dialogue_menu_tile_contract,
     _prepare_runtime_video,
     _race_sex_menu_tile_contract,
@@ -40,7 +42,7 @@ from prepare_fo3_opening_slice import (
     default_recipe_path as default_opening_slice_recipe_path,
 )
 from runtime_configuration import load_runtime_configuration
-from texture_pipeline import decode_dds
+from texture_pipeline import OwnedTexturePipeline, decode_dds
 from ttw_effective_source import load_ttw_effective_record_source
 from ttw_fo3_opening import DEFAULT_RECIPE as DEFAULT_TTW_FO3_OPENING_RECIPE
 from ttw_profile import DEFAULT_REQUIREMENTS_PATH as DEFAULT_TTW_PROFILE_RECIPE
@@ -1862,6 +1864,39 @@ def _appearance_inventory(
         include_all_playable_race_defaults=True,
     )
     return result
+
+
+def _compile_fo3_ui_fonts(
+    dialogue_menu_tiles: dict[str, object],
+    appearance_contract: dict[str, object],
+    ini: dict[str, dict[str, str]],
+    font_settings: dict[str, object],
+    owned_archives: OwnedArchiveStack,
+    profile_root: Path,
+    font_pipeline: OwnedTexturePipeline,
+) -> list[dict[str, object]]:
+    font_ids = {
+        int(dialogue_menu_tiles["speakerName"]["font"]),
+        int(dialogue_menu_tiles["speakerText"]["font"]),
+        int(dialogue_menu_tiles["topics"]["template"]["font"]),
+        int(
+            dict(dict(appearance_contract["ui"])["raceSexMenuTiles"])[
+                "fontId"
+            ]
+        ),
+    }
+    rows = []
+    for font_id in sorted(font_ids):
+        font, _ = _compile_gamebryo_font(
+            font_id,
+            ini,
+            font_settings,
+            owned_archives,
+            profile_root,
+            font_pipeline,
+        )
+        rows.append({"fontId": font_id, **font})
+    return rows
 
 
 def _script_source(record: object) -> str:
@@ -6192,6 +6227,18 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         default_ini,
         configuration,
     )
+    owned_archive_stack = OwnedArchiveStack(
+        tuple(
+            OwnedArchive(
+                path.name,
+                path,
+                file_sha256(path),
+                path.stat().st_size,
+                BsaArchive(path),
+            )
+            for path in archive_by_role.values()
+        )
+    )
     appearance_contract = _appearance_inventory(
         master,
         recipe,
@@ -6205,18 +6252,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         ),
         profile_root,
         archive_by_role[str(menu["uiArchiveRole"])],
-        OwnedArchiveStack(
-            tuple(
-                OwnedArchive(
-                    path.name,
-                    path,
-                    file_sha256(path),
-                    path.stat().st_size,
-                    BsaArchive(path),
-                )
-                for path in archive_by_role.values()
-            )
-        ),
+        owned_archive_stack,
         configuration,
     )
     character_selection["appearance"] = appearance_contract
@@ -6317,6 +6353,24 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         default_opening_slice_recipe_path(),
     )
     opening_slice = opening_slice_result["manifest"]
+    font_pipeline = OwnedTexturePipeline(
+        owned_archive_stack,
+        profile_root,
+        {},
+        configuration.content_compiler,
+    )
+    font_settings = dict(menu["fonts"])
+    ini = _ini_index(default_ini)
+    ui_fonts = _compile_fo3_ui_fonts(
+        dialogue_menu_tiles,
+        appearance_contract,
+        ini,
+        font_settings,
+        owned_archive_stack,
+        profile_root,
+        font_pipeline,
+    )
+
     manifest = {
         "schema": PROFILE_SCHEMA,
         "status": PROFILE_STATUS,
@@ -6349,6 +6403,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         "mainMenu": {
             "members": menu_members,
             "dialogueMenuTiles": dialogue_menu_tiles,
+            "fonts": ui_fonts,
             "textures": menu_textures,
             "music": main_menu_music,
             "iniSettings": ini_rows,

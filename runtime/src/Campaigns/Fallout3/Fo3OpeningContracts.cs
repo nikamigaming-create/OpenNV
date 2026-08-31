@@ -886,7 +886,8 @@ internal sealed record Fo3OwnedProfile(
     string IntroVideoPath,
     Color InterfaceColor,
     float MenuBackgroundAlpha,
-    OwnedGamebryoDialogueMenu DialogueMenu)
+    OwnedGamebryoDialogueMenu DialogueMenu,
+    IReadOnlyDictionary<int, OwnedBitmapFont> UiFonts)
 {
     private const string ExpectedSchema = "opennv-owned-game-profile/v1";
     private const string ExpectedCampaign = "Fallout3";
@@ -1046,6 +1047,12 @@ internal sealed record Fo3OwnedProfile(
                 "Fallout 3 menu background opacity is invalid.");
         var dialogueMenu = OwnedGamebryoTileRuntime.ParseDialogueMenu(
             RequiredObject(menu, "dialogueMenuTiles"));
+        var uiFonts = RequiredArray(menu, "fonts")
+            .EnumerateArray()
+            .ToDictionary(
+                value => RequiredInteger(value, "fontId"),
+                OpeningManifest.ParseFont);
+        OwnedGamebryoTileRuntime.RequireDialogueFonts(dialogueMenu, uiFonts);
         var profileSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         var questFormId = RequiredString(quest, "formId");
         if (!ValidHex(questFormId, Fo3OpeningFlowNumericContracts.FormIdHexCharacters))
@@ -1086,7 +1093,8 @@ internal sealed record Fo3OwnedProfile(
             RequiredString(runtimeIntroVideo, "output"),
             interfaceColor,
             menuBackgroundAlpha,
-            dialogueMenu);
+            dialogueMenu,
+            uiFonts);
     }
 
     private static void VerifyOwnedVideo(JsonElement runtimeVideo, JsonElement sourceVideo)
