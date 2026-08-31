@@ -328,7 +328,30 @@
             "requiredCakeStage": 16,
             "sceneDoneStage": 30,
             "aggregateStage": 34,
-            "intercomStage": 35
+            "intercomStage": 35,
+            "postIntercom": {
+              "dadReferenceFormId": "000300ef",
+              "dadBaseFormId": "0002fdcf",
+              "playerReferenceFormId": "00000014",
+              "jonasReferenceFormId": "000300e8",
+              "jonasBaseFormId": "000300e7",
+              "jonasActorRecipeId": "fo3-vault101-cg02-jonas-actor-v1",
+              "intercomReferenceFormId": "00031d48",
+              "intercomMarkerFormId": "000309a0",
+              "dadToIntercomPackageFormId": "00071f90",
+              "dadTalkToJonasPackageFormId": "00031d49",
+              "dadToPlayerPackageFormId": "000319bf",
+              "conversationTopicFormId": "00031d3b",
+              "dadCallInfoFormId": "00031d3c",
+              "jonasReplyInfoFormId": "00031d3d",
+              "maleGoodbyeInfoFormId": "00031d43",
+              "femaleGoodbyeInfoFormId": "00063aa4",
+              "dadGreetingInfoFormId": "000319b7",
+              "sourceStage": 35,
+              "answerStage": 36,
+              "goodbyeStage": 38,
+              "targetStage": 40
+            }
           }
         },
         "questEditorId": "CG01",

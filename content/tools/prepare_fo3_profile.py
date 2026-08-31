@@ -4266,7 +4266,7 @@ def _compile_cg02_butch_runtime(
                                      "value": int(match.group("value"))})
         else:
             raise ValueError(f"Fallout 3 CG02 intercom command differs: {command}")
-    return {
+    result = {
         "schema": "opennv-fo3-cg02-stage-20-butch-runtime/v1",
         "sourceStage": int(config["sourceStage"]),
         "requiredCakeStage": int(config["requiredCakeStage"]),
@@ -4288,6 +4288,143 @@ def _compile_cg02_butch_runtime(
         "nextBoundary": {"applied": False,
                          "blocker": "fo3-cg02-butch-combat-runtime-not-implemented"},
     }
+    if "postIntercom" in config:
+        result["postIntercomRuntime"] = _compile_cg02_post_intercom_runtime(
+            records, quest, stage_sources, dict(config["postIntercom"]))
+    return result
+
+
+def _compile_cg02_post_intercom_runtime(
+    records: tuple[object, ...], quest: object,
+    stage_sources: dict[int, list[str]], config: dict[str, object],
+) -> dict[str, object]:
+    by_form = {record.form_id: record for record in records}
+    by_editor = {(_editor_id(record) or "").casefold(): record for record in records
+                 if _editor_id(record)}
+    def exact(name: str, signature: str) -> object:
+        record = by_form.get(int(str(config[name]), FORM_ID_RADIX))
+        if record is None or record.signature != signature:
+            raise ValueError(f"Fallout 3 CG02 post-intercom {name} differs")
+        return record
+    dad_ref, dad_base = exact("dadReferenceFormId", ACTOR_REFERENCE_RECORD), exact("dadBaseFormId", NPC_RECORD)
+    jonas_ref, jonas_base = exact("jonasReferenceFormId", ACTOR_REFERENCE_RECORD), exact("jonasBaseFormId", NPC_RECORD)
+    intercom, marker = exact("intercomReferenceFormId", PLACED_REFERENCE_RECORD), exact("intercomMarkerFormId", PLACED_REFERENCE_RECORD)
+    exact("conversationTopicFormId", DIALOGUE_TOPIC_RECORD)
+    if (struct.unpack("<I", _single_subrecord(dad_ref, "NAME"))[0] != dad_base.form_id or
+        struct.unpack("<I", _single_subrecord(jonas_ref, "NAME"))[0] != jonas_base.form_id):
+        raise ValueError("Fallout 3 CG02 post-intercom actor join differs")
+    parents = [struct.unpack("<I", row.data[:4])[0] for row in iter_subrecords(jonas_ref)
+               if row.signature == "XESP" and len(row.data) == FORM_ID_BYTES * 2]
+    if parents != [dad_ref.form_id]:
+        raise ValueError("Fallout 3 CG02 Jonas enable-parent differs")
+    package_ids = {struct.unpack("<I", row.data)[0] for row in iter_subrecords(dad_base)
+                   if row.signature == "PKID" and len(row.data) == FORM_ID_BYTES}
+    def package(name: str, target: object, target_kind: str) -> dict[str, object]:
+        record = exact(name, PACKAGE_RECORD)
+        targets = [(row.signature, row.data) for row in iter_subrecords(record)
+                   if row.signature in {"PTDT", "PLDT"}]
+        if record.form_id not in package_ids or len(targets) != 1:
+            raise ValueError("Fallout 3 CG02 post-intercom package differs")
+        signature, payload = targets[0]
+        if signature == "PTDT" and len(payload) == struct.calcsize("<IiII"):
+            kind, target_id, radius, count = struct.unpack("<IiII", payload)
+        elif signature == "PLDT" and len(payload) == struct.calcsize("<IiI"):
+            kind, target_id, radius = struct.unpack("<IiI", payload)
+            count = 0
+        else:
+            raise ValueError("Fallout 3 CG02 post-intercom package target layout differs")
+        expected_id = int(target) if target_kind == "player" else target.form_id
+        if kind != 0 or target_id != expected_id or count != 0 or radius < 0:
+            raise ValueError("Fallout 3 CG02 post-intercom package target differs")
+        result = {"formId": _form_id(record.form_id), "editorId": _editor_id(record),
+                  "targetKind": target_kind, "targetFormId": _form_id(expected_id),
+                  "radiusGameUnits": radius, "recordSha256": hashlib.sha256(record.data).hexdigest()}
+        if target_kind == "reference":
+            result["targetTransform"] = _reference_transform_contract(target)
+        return result
+    packages = {
+        "toIntercom": package("dadToIntercomPackageFormId", marker, "reference"),
+        "talkToJonas": package("dadTalkToJonasPackageFormId", intercom, "reference"),
+        "toPlayer": package("dadToPlayerPackageFormId",
+                            int(str(config["playerReferenceFormId"]), FORM_ID_RADIX),
+                            "player"),
+    }
+    voice_by_base = {}
+    for base in (dad_base, jonas_base):
+        voice_id = struct.unpack("<I", _single_subrecord(base, "VTCK"))[0]
+        voice = by_form.get(voice_id)
+        if voice is None or voice.signature != VOICE_TYPE_RECORD:
+            raise ValueError("Fallout 3 CG02 post-intercom voice differs")
+        voice_by_base[base.form_id] = voice
+    def cue(name: str, speaker: object, target_stage: int | None,
+            sex: str | None = None) -> dict[str, object]:
+        info = exact(name, DIALOGUE_INFO_RECORD)
+        responses = [value for value in _text_values(info, "NAM1") if value]
+        conditions = [_dialogue_condition(row.data) for row in iter_subrecords(info) if row.signature == "CTDA"]
+        commands = [command for source in _text_values(info, "SCTX") for command in _source_commands(source)]
+        if not responses or not any(int(row["function"]) == GET_IS_ID_FUNCTION and int(row["parameter1"]) == speaker.form_id for row in conditions):
+            raise ValueError("Fallout 3 CG02 post-intercom INFO differs")
+        if target_stage is None:
+            if commands: raise ValueError("Fallout 3 CG02 Jonas reply result differs")
+        else:
+            match = SET_STAGE_PATTERN.fullmatch(commands[0]) if len(commands) == 1 else None
+            if match is None or int(match.group("stage")) != target_stage:
+                raise ValueError("Fallout 3 CG02 post-intercom INFO stage differs")
+        voice = voice_by_base[speaker.form_id]
+        return {"infoFormId": _form_id(info.form_id), "engineSex": sex,
+                "speakerBaseFormId": _form_id(speaker.form_id),
+                "voiceType": {"formId": _form_id(voice.form_id), "editorId": _editor_id(voice)},
+                "responses": [{"index": index + 1, "text": text,
+                               "textSha256": hashlib.sha256(text.encode()).hexdigest()}
+                              for index, text in enumerate(responses)],
+                "targetStage": target_stage}
+    answer, goodbye, target = (int(config[name]) for name in ("answerStage", "goodbyeStage", "targetStage"))
+    cues = [cue("dadCallInfoFormId", dad_base, answer),
+            cue("jonasReplyInfoFormId", jonas_base, None),
+            cue("maleGoodbyeInfoFormId", dad_base, goodbye, "male"),
+            cue("femaleGoodbyeInfoFormId", dad_base, goodbye, "female"),
+            cue("dadGreetingInfoFormId", dad_base, target)]
+    def commands(stage: int) -> list[dict[str, object]]:
+        resolved = []
+        source_commands = [command for source in stage_sources.get(stage, [])
+                           for command in _source_commands(source)]
+        for index, command in enumerate(source_commands):
+            if match := re.fullmatch(r"set\s+CG02\.(?P<variable>\w+)\s+to\s+(?P<value>\d+)", command, re.IGNORECASE):
+                row = {"index": index, "kind": "setQuestVariable", "variable": match.group("variable"), "value": int(match.group("value"))}
+            elif match := re.fullmatch(r"(?P<subject>\w+)\.evp", command, re.IGNORECASE):
+                row = {"index": index, "kind": "evaluatePackage", "referenceFormId": _form_id(by_editor[match.group("subject").casefold()].form_id)}
+            elif match := re.fullmatch(r"(?P<subject>\w+)\.setTalkingActivatorActor", command, re.IGNORECASE):
+                row = {"index": index, "kind": "clearTalkingActivatorActor", "referenceFormId": _form_id(by_editor[match.group("subject").casefold()].form_id)}
+            elif match := re.fullmatch(r"(?P<subject>\w+)\.enable", command, re.IGNORECASE):
+                row = {"index": index, "kind": "enable", "referenceFormId": _form_id(by_editor[match.group("subject").casefold()].form_id)}
+            elif match := re.fullmatch(r"(?P<subject>\w+)\.IgnoreCrime\s+(?P<value>\d+)", command, re.IGNORECASE):
+                row = {"index": index, "kind": "ignoreCrime", "referenceFormId": _form_id(by_editor[match.group("subject").casefold()].form_id), "value": int(match.group("value"))}
+            elif match := SET_OBJECTIVE_DISPLAYED_PATTERN.fullmatch(command):
+                row = {"index": index, "kind": "setObjectiveDisplayed", "objectiveIndex": int(match.group("index")), "value": int(match.group("value"))}
+            elif match := re.fullmatch(r"setObjectiveCompleted\s+CG02\s+(?P<index>\d+)\s+(?P<value>\d+)", command, re.IGNORECASE):
+                row = {"index": index, "kind": "setObjectiveCompleted", "objectiveIndex": int(match.group("index")), "value": int(match.group("value"))}
+            elif match := SET_STAGE_PATTERN.fullmatch(command):
+                target_quest = by_editor.get(match.group("quest").casefold())
+                if target_quest is None or target_quest.signature != QUEST_RECORD:
+                    raise ValueError("Fallout 3 CG02 post-intercom tutorial differs")
+                row = {"index": index, "kind": "setStage", "questFormId": _form_id(target_quest.form_id), "stage": int(match.group("stage"))}
+            else:
+                raise ValueError(f"Fallout 3 CG02 post-intercom stage result differs: {command}")
+            resolved.append(row)
+        return resolved
+    recipe = actor_preparation.load_recipe(str(config["jonasActorRecipeId"]))
+    if str(recipe["proofActorReferenceFormId"]).casefold() != _form_id(jonas_ref.form_id):
+        raise ValueError("Fallout 3 CG02 Jonas recipe differs")
+    return {"schema": "opennv-fo3-cg02-stage-35-post-intercom-runtime/v1",
+            "sourceStage": int(config["sourceStage"]), "answerStage": answer,
+            "goodbyeStage": goodbye, "targetStage": target,
+            "dadReferenceFormId": _form_id(dad_ref.form_id), "dadBaseFormId": _form_id(dad_base.form_id),
+            "jonasReferenceFormId": _form_id(jonas_ref.form_id), "jonasBaseFormId": _form_id(jonas_base.form_id),
+            "jonasActorRecipeId": str(recipe["id"]), "intercomReferenceFormId": _form_id(intercom.form_id),
+            "packages": packages, "dialogue": {"cues": cues, "dialoguePlaybackPrepared": False,
+                "dialoguePlaybackImplemented": False},
+            "stageResults": {str(stage): {"commands": commands(stage)} for stage in (answer, goodbye, target)},
+            "nextBoundary": {"applied": False, "blocker": "fo3-cg02-stage-40-reactor-gift-runtime-not-implemented"}}
 
 
 def _compile_cg02_cake_runtime(
@@ -7792,6 +7929,10 @@ def _bind_cg02_intro_assets(
                     str(dict(dict(cake["package"])["locomotion"])["logicalPath"]),
                     str(dict(cake["package"])["idle"]["modelPath"]),
                 )
+            butch = dict(birthday.get("butchRuntime", {}))
+            post_intercom = dict(butch.get("postIntercomRuntime", {}))
+            if post_intercom:
+                actor_recipe_ids.append(str(post_intercom["jonasActorRecipeId"]))
     actor_set = actor_preparation.prepare_actor_set(
         data_root,
         profile_root,
@@ -7912,6 +8053,16 @@ def _bind_cg02_intro_assets(
                 package["locomotion"] = locomotion
                 cake["package"] = package
                 birthday["cakeRuntime"] = cake
+            butch = dict(birthday.get("butchRuntime", {}))
+            post_intercom = dict(butch.get("postIntercomRuntime", {}))
+            if post_intercom:
+                jonas_scene = scenes.get(
+                    str(post_intercom["jonasReferenceFormId"]).casefold())
+                if jonas_scene is None:
+                    raise ValueError("Fallout 3 CG02 Jonas actor scene is absent")
+                post_intercom["jonasActorScene"] = jonas_scene
+                butch["postIntercomRuntime"] = post_intercom
+                birthday["butchRuntime"] = butch
             party["birthdayInteractionsRuntime"] = birthday
             overseer["dadPartyRuntime"] = party
             dad_speech["overseerSpeechRuntime"] = overseer
@@ -9168,6 +9319,31 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
                         cake_dialogue["dialoguePlaybackImplemented"] = True
                         cake["dialogue"] = cake_dialogue
                         birthday["cakeRuntime"] = cake
+                    if "butchRuntime" in birthday:
+                        butch = dict(birthday["butchRuntime"])
+                        if "postIntercomRuntime" in butch:
+                            post_intercom = dict(butch["postIntercomRuntime"])
+                            post_dialogue = dict(post_intercom["dialogue"])
+                            prepared_cues = []
+                            for raw_cue in post_dialogue["cues"]:
+                                cue = dict(raw_cue)
+                                branches = [{"infoFormId": cue["infoFormId"],
+                                             "response": dict(response)}
+                                            for response in cue["responses"]]
+                                cue_dialogue = {"voiceType": dict(cue["voiceType"]),
+                                                "branches": branches}
+                                _bind_owned_dad_dialogue_audio(
+                                    cue_dialogue, voices_archive,
+                                    voices_archive_sha256, profile_root)
+                                cue["responses"] = [dict(row)["response"]
+                                                    for row in cue_dialogue["branches"]]
+                                prepared_cues.append(cue)
+                            post_dialogue["cues"] = prepared_cues
+                            post_dialogue["dialoguePlaybackPrepared"] = True
+                            post_dialogue["dialoguePlaybackImplemented"] = True
+                            post_intercom["dialogue"] = post_dialogue
+                            butch["postIntercomRuntime"] = post_intercom
+                        birthday["butchRuntime"] = butch
                     party["birthdayInteractionsRuntime"] = birthday
                 overseer["dadPartyRuntime"] = party
             dad_speech["overseerSpeechRuntime"] = overseer

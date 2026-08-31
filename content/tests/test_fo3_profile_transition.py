@@ -70,6 +70,9 @@ FO3_OPENING_FLOW = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
 FO3_CG00_EARLY_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
     "Campaigns/Fallout3/Fo3Cg00EarlyBirthRuntime.cs"
 )
+FO3_CG01_RUNTIME = Path(__file__).resolve().parents[2] / "runtime" / "src" / (
+    "Campaigns/Fallout3/Fo3OpeningFlow.Cg01.cs"
+)
 
 
 def subrecord(signature: str, data: bytes = b"") -> bytes:
@@ -508,6 +511,22 @@ class Fo3ProfileTransitionTest(unittest.TestCase):
              "aggregateStage": 34, "intercomStage": 35})
         self.assertEqual(150, result["findPlayerPackage"]["radiusGameUnits"])
         self.assertEqual(6, len(result["stage35"]["commands"]))
+
+    def test_post_intercom_runtime_is_source_configured_and_fail_closed(self) -> None:
+        recipe = json.loads(FO3_RECIPE.read_text(encoding="utf-8"))
+        post = recipe["opening"]["characterSelection"]["cg01Stage0Transition"][
+            "cg02BirthdayInteractions"]["butch"]["postIntercom"]
+        self.assertEqual(
+            [35, 36, 38, 40],
+            [post[key] for key in (
+                "sourceStage", "answerStage", "goodbyeStage", "targetStage")],
+        )
+        self.assertEqual("000300e8", post["jonasReferenceFormId"])
+        self.assertEqual("00031d48", post["intercomReferenceFormId"])
+        source = read_csharp_source_module(FO3_CG01_RUNTIME)
+        self.assertIn("postIntercom.StageResults[stage]", source)
+        self.assertIn("ConfigureSourceFormActivations(activations)", source)
+        self.assertNotIn('InfoFormId.Equals("00031d3c"', source)
 
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(

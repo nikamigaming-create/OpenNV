@@ -2369,6 +2369,9 @@ internal partial class Fo3OpeningFlow
                 "Fallout 3 CG02 cake runtime is absent.");
             var butch = birthday.ButchRuntime ?? throw new InvalidOperationException(
                 "Fallout 3 CG02 Butch runtime is absent.");
+            var postIntercom = butch.PostIntercomRuntime ??
+                throw new InvalidOperationException(
+                    "Fallout 3 CG02 post-intercom runtime is absent.");
             bool InfoAppliedAtStage(int stage) => birthday.Participants
                 .SelectMany(value => value.Nodes.Values)
                 .Where(node => current.AppliedInfoFormIds.Contains(
@@ -2385,6 +2388,239 @@ internal partial class Fo3OpeningFlow
             var sweetrollCount = InfoAppliedAtStage(butch.SourceStage) &&
                 !InfoRemovedItem(butch.SweetrollFormId) ? 1 : 0;
             player.SetMeta($"opennv_cg02_item_{butch.SweetrollFormId}", sweetrollCount);
+
+            void StartDadToIntercomTravel()
+            {
+                var target = postIntercom.DadToIntercomPackage.TargetTransform ??
+                    throw new InvalidOperationException(
+                        "Fallout 3 CG02 intercom package target is absent.");
+                var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+                    "Fallout 3 CG02 intercom travel world is absent.");
+                var local = coverage.Cg01DadActor.Placement.Transform.Origin -
+                    Vector3.Up * coverage.Cg01DadGrounding.VerticalCorrectionGodotGameUnits;
+                var sourceStart = coverage.Contract.EntryPositionGameUnits +
+                    new Vector3(local.X, -local.Z, local.Y);
+                var start = target with
+                {
+                    PositionGameUnits = new Fo3Cg01Vector3(
+                        sourceStart.X, sourceStart.Y, sourceStart.Z),
+                };
+                var package = new Fo3Cg01DadTravelPackage(
+                    new Fo3Cg01PostStage14Package(
+                        postIntercom.DadToIntercomPackage.FormId,
+                        postIntercom.DadToIntercomPackage.FormId,
+                        postIntercom.DadToIntercomPackage.TargetFormId,
+                        target,
+                        postIntercom.DadToIntercomPackage.RadiusGameUnits,
+                        null),
+                    [], postIntercom.SourceStage, null, []);
+                StartCg01DadSourceTravel(
+                    interaction.TimerTransition.DadLead, package, start, stage5,
+                    () => coverage.Cg01DadActor.Placement.SetMeta(
+                        "opennv_active_package_form_id",
+                        postIntercom.DadTalkToJonasPackage.FormId));
+            }
+
+            CellActorLoader.PlacedActor EnsureJonas()
+            {
+                if (_cg02IntroActors.TryGetValue(
+                        postIntercom.JonasReferenceFormId, out var existing))
+                    return existing;
+                using var stream = File.OpenRead(postIntercom.JonasActorScenePath);
+                var hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+                if (!hash.Equals(postIntercom.JonasActorSceneSha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Fallout 3 CG02 Jonas actor scene hash differs.");
+                var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+                    "Fallout 3 CG02 Jonas world is absent.");
+                var actor = CellActorLoader.Load(
+                        postIntercom.JonasActorScenePath,
+                        new HashSet<string>([coverage.Contract.CellFormId],
+                            StringComparer.OrdinalIgnoreCase), coverage.CellRoot,
+                        coverage.Contract.EntryPositionGameUnits,
+                        _runtimeConfiguration, proofEnableInitiallyDisabled: false,
+                        materializeInitiallyDisabled: true)
+                    ?? throw new InvalidOperationException(
+                        "Fallout 3 CG02 Jonas actor is absent.");
+                if (actor.ReferenceFormId != postIntercom.JonasReferenceFormId ||
+                    actor.BaseFormId != postIntercom.JonasBaseFormId)
+                    throw new InvalidOperationException(
+                        "Fallout 3 CG02 Jonas actor identity differs.");
+                _cg02IntroActors.Add(actor.ReferenceFormId, actor);
+                return actor;
+            }
+
+            void ApplyPostIntercomStage(int stage)
+            {
+                var commands = postIntercom.StageResults[stage];
+                foreach (var command in commands)
+                {
+                    var target = string.IsNullOrEmpty(command.ReferenceFormId)
+                        ? null
+                        : _cg02IntroActors.TryGetValue(command.ReferenceFormId,
+                            out var actor) ? actor.Placement
+                        : Cg01WorldReference(command.ReferenceFormId);
+                    switch (command.Kind)
+                    {
+                        case "setQuestVariable":
+                            player.SetMeta($"opennv_cg02_{command.Variable.ToLowerInvariant()}",
+                                command.Value);
+                            break;
+                        case "evaluatePackage":
+                            target!.SetMeta("opennv_evaluate_package", 1);
+                            break;
+                        case "clearTalkingActivatorActor":
+                            target!.SetMeta("opennv_talking_activator_actor", "");
+                            break;
+                        case "enable":
+                            target!.Visible = true;
+                            target.ProcessMode = ProcessModeEnum.Inherit;
+                            target.SetMeta("opennv_enabled", 1);
+                            break;
+                        case "ignoreCrime":
+                            target!.SetMeta("opennv_ignore_crime", command.Value);
+                            break;
+                        case "setObjectiveDisplayed":
+                            player.SetMeta("opennv_cg02_objective_displayed",
+                                command.ObjectiveIndex);
+                            break;
+                        case "setObjectiveCompleted":
+                            player.SetMeta("opennv_cg02_objective_completed",
+                                command.ObjectiveIndex);
+                            break;
+                        case "setStage":
+                            player.SetMeta("opennv_tutorial_quest_form_id",
+                                command.QuestFormId);
+                            player.SetMeta("opennv_tutorial_stage", command.Stage);
+                            break;
+                        default:
+                            throw new InvalidOperationException(
+                                $"Fallout 3 CG02 post-intercom command is unsupported: {command.Kind}");
+                    }
+                }
+                current = current with
+                {
+                    ActiveStage = stage,
+                    DisplayedObjectiveIndex = commands
+                        .Where(value => value.Kind == "setObjectiveDisplayed" &&
+                            value.Value != 0)
+                        .Select(value => value.ObjectiveIndex)
+                        .DefaultIfEmpty(current.DisplayedObjectiveIndex).Last(),
+                    AccountedCommandCount = current.AccountedCommandCount + commands.Count,
+                    AppliedCommandCount = current.AppliedCommandCount + commands.Count,
+                    NextBoundary = new Fo3Cg01Stage12Boundary(false,
+                        stage == postIntercom.TargetStage
+                            ? postIntercom.NextBoundaryBlocker
+                            : birthday.NextBoundaryBlocker),
+                };
+                player.SetMeta("opennv_cg02_stage", stage);
+                Persist();
+            }
+
+            void PlayPostIntercomCue(Fo3Cg02PostIntercomCue cue, Action completed)
+            {
+                if (current.AppliedInfoFormIds.Contains(
+                        cue.InfoFormId, StringComparer.OrdinalIgnoreCase))
+                {
+                    completed();
+                    return;
+                }
+                var speaker = cue.SpeakerBaseFormId.Equals(
+                        postIntercom.JonasBaseFormId, StringComparison.OrdinalIgnoreCase)
+                    ? EnsureJonas()
+                    : _vaultBirthCoverage!.Cg01DadActor;
+                GamebryoDialoguePlayback.ValidateOrderedLines(cue.Responses.Select(
+                    response => new SourceDialogueLine(cue.InfoFormId, response.Index,
+                        cue.SpeakerBaseFormId, response.Text,
+                        new SourceDialogueAsset(response.Voice.LogicalPath,
+                            response.Voice.SourcePath, response.Voice.Sha256),
+                        new SourceDialogueAsset(response.Lip.LogicalPath,
+                            response.Lip.SourcePath, response.Lip.Sha256))).ToArray());
+                PlayLine(0);
+                void PlayLine(int index)
+                {
+                    if (index == cue.Responses.Count)
+                    {
+                        current = current with
+                        {
+                            AppliedInfoFormIds =
+                            current.AppliedInfoFormIds.Append(cue.InfoFormId).ToArray()
+                        };
+                        if (cue.TargetStage is { } targetStage)
+                            ApplyPostIntercomStage(targetStage);
+                        else
+                            Persist();
+                        completed();
+                        return;
+                    }
+                    var response = cue.Responses[index];
+                    var voice = new AudioStreamPlayer
+                    {
+                        Name = $"Fallout3Cg02PostIntercomVoice{cue.InfoFormId}_{response.Index}",
+                    };
+                    AddChild(voice);
+                    var dialogue = new GamebryoDialoguePlayback(
+                        voice, _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip);
+                    _cg02IntroDialogue.Add(dialogue);
+                    dialogue.Start(new SourceDialogueLine(cue.InfoFormId, response.Index,
+                            cue.SpeakerBaseFormId, response.Text,
+                            new SourceDialogueAsset(response.Voice.LogicalPath,
+                                response.Voice.SourcePath, response.Voice.Sha256),
+                            new SourceDialogueAsset(response.Lip.LogicalPath,
+                                response.Lip.SourcePath, response.Lip.Sha256)),
+                        new FaceGenMorphController(speaker.Actor,
+                            _runtimeConfiguration.ActorCompiler.FaceGenAnimation.Lip),
+                        () => PlayLine(index + 1));
+                }
+            }
+
+            void ActivateIntercom()
+            {
+                if (current.ActiveStage != postIntercom.SourceStage)
+                    return;
+                var sex = (_selectedSex ?? throw new InvalidOperationException(
+                    "Fallout 3 CG02 post-intercom player sex is absent.")).EngineSex;
+                current = current with
+                {
+                    AppliedPackageFormIds =
+                    current.AppliedPackageFormIds.Contains(
+                        postIntercom.DadTalkToJonasPackage.FormId,
+                        StringComparer.OrdinalIgnoreCase)
+                        ? current.AppliedPackageFormIds
+                        : current.AppliedPackageFormIds.Append(
+                            postIntercom.DadTalkToJonasPackage.FormId).ToArray()
+                };
+                var dadCall = postIntercom.Cues.Single(value =>
+                    value.TargetStage == postIntercom.AnswerStage);
+                var jonasReply = postIntercom.Cues.Single(value =>
+                    value.SpeakerBaseFormId.Equals(postIntercom.JonasBaseFormId,
+                        StringComparison.OrdinalIgnoreCase));
+                var goodbye = postIntercom.Cues.Single(value => value.EngineSex == sex);
+                PlayPostIntercomCue(dadCall, () => PlayPostIntercomCue(jonasReply,
+                    () => PlayPostIntercomCue(goodbye, () =>
+                    {
+                        var dad = _vaultBirthCoverage!.Cg01DadActor.Placement;
+                        dad.SetMeta("opennv_active_package_form_id",
+                            postIntercom.DadToPlayerPackage.FormId);
+                        current = current with
+                        {
+                            AppliedPackageFormIds =
+                            current.AppliedPackageFormIds.Append(
+                                postIntercom.DadToPlayerPackage.FormId).ToArray()
+                        };
+                        Persist();
+                    })));
+            }
+
+            void ActivateDadPostIntercom()
+            {
+                if (current.ActiveStage != postIntercom.GoodbyeStage)
+                    return;
+                var greeting = postIntercom.Cues.Single(value =>
+                    value.TargetStage == postIntercom.TargetStage);
+                PlayPostIntercomCue(greeting, () => { });
+            }
 
             void ApplyStage35()
             {
@@ -2417,10 +2653,17 @@ internal partial class Fo3OpeningFlow
                         butch.Stage35Commands.Count,
                     AppliedCommandCount = current.AppliedCommandCount +
                         butch.Stage35Commands.Count,
+                    AppliedPackageFormIds = current.AppliedPackageFormIds.Append(
+                        postIntercom.DadToIntercomPackage.FormId).ToArray(),
                 };
                 player.SetMeta("opennv_cg02_stage", butch.IntercomStage);
                 _cg02ButchTimerTick = null;
                 Persist();
+                EnsureJonas();
+                var dad = _vaultBirthCoverage!.Cg01DadActor.Placement;
+                dad.SetMeta("opennv_active_package_form_id",
+                    postIntercom.DadToIntercomPackage.FormId);
+                StartDadToIntercomTravel();
             }
             void StartIntercomTimer(double remainingSeconds)
             {
@@ -2696,7 +2939,23 @@ internal partial class Fo3OpeningFlow
                         StartButchPackageIfEligible();
                     })),
                 StringComparer.OrdinalIgnoreCase);
+            activations[postIntercom.IntercomReferenceFormId] = ActivateIntercom;
+            activations[postIntercom.DadReferenceFormId] = ActivateDadPostIntercom;
             player.ConfigureSourceFormActivations(activations);
+            if (current.ActiveStage >= postIntercom.SourceStage)
+            {
+                EnsureJonas();
+                var activePackage = current.ActiveStage >= postIntercom.GoodbyeStage
+                    ? postIntercom.DadToPlayerPackage.FormId
+                    : current.ActiveStage >= postIntercom.AnswerStage
+                        ? postIntercom.DadTalkToJonasPackage.FormId
+                        : postIntercom.DadToIntercomPackage.FormId;
+                _vaultBirthCoverage!.Cg01DadActor.Placement.SetMeta(
+                    "opennv_active_package_form_id", activePackage);
+                if (current.ActiveStage == postIntercom.SourceStage &&
+                    _cg01DadPackageTravelTick is null)
+                    StartDadToIntercomTravel();
+            }
             StartButchPackageIfEligible();
             if ((current.ActiveStage == butch.AggregateStage ||
                  current.ActiveStage == butch.SceneDoneStage) &&

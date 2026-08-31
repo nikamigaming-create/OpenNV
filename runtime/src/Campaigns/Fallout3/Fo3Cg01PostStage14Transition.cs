@@ -275,6 +275,48 @@ internal sealed record Fo3Cg02ButchStage35Command(
     string Variable,
     int Value);
 
+internal sealed record Fo3Cg02PostIntercomPackage(
+    string FormId,
+    string TargetKind,
+    string TargetFormId,
+    Fo3Cg01Transform? TargetTransform,
+    int RadiusGameUnits);
+
+internal sealed record Fo3Cg02PostIntercomCue(
+    string InfoFormId,
+    string? EngineSex,
+    string SpeakerBaseFormId,
+    IReadOnlyList<Fo3OwnedDialogueResponse> Responses,
+    int? TargetStage);
+
+internal sealed record Fo3Cg02PostIntercomCommand(
+    string Kind,
+    string ReferenceFormId,
+    string Variable,
+    int Value,
+    int ObjectiveIndex,
+    string QuestFormId,
+    int Stage);
+
+internal sealed record Fo3Cg02PostIntercomRuntime(
+    int SourceStage,
+    int AnswerStage,
+    int GoodbyeStage,
+    int TargetStage,
+    string DadReferenceFormId,
+    string DadBaseFormId,
+    string JonasReferenceFormId,
+    string JonasBaseFormId,
+    string JonasActorScenePath,
+    string JonasActorSceneSha256,
+    string IntercomReferenceFormId,
+    Fo3Cg02PostIntercomPackage DadToIntercomPackage,
+    Fo3Cg02PostIntercomPackage DadTalkToJonasPackage,
+    Fo3Cg02PostIntercomPackage DadToPlayerPackage,
+    IReadOnlyList<Fo3Cg02PostIntercomCue> Cues,
+    IReadOnlyDictionary<int, IReadOnlyList<Fo3Cg02PostIntercomCommand>> StageResults,
+    string NextBoundaryBlocker);
+
 internal sealed record Fo3Cg02ButchRuntime(
     int SourceStage,
     int RequiredCakeStage,
@@ -289,6 +331,7 @@ internal sealed record Fo3Cg02ButchRuntime(
     int FindPlayerResultCommandCount,
     double AggregateTimerSeconds,
     IReadOnlyList<Fo3Cg02ButchStage35Command> Stage35Commands,
+    Fo3Cg02PostIntercomRuntime? PostIntercomRuntime,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg02CakeCue(
@@ -1322,6 +1365,88 @@ internal sealed record Fo3Cg01Stage50Timer(
             package.GetProperty("resultCommands").GetArrayLength(),
             source.GetProperty("stage34").GetProperty("timerSeconds").GetDouble(),
             stage35,
+            source.TryGetProperty("postIntercomRuntime", out var postIntercom)
+                ? LoadCg02PostIntercom(postIntercom)
+                : null,
+            source.GetProperty("nextBoundary").GetProperty("blocker").GetString()!);
+    }
+
+    private static Fo3Cg02PostIntercomRuntime LoadCg02PostIntercom(JsonElement source)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg02-stage-35-post-intercom-runtime/v1")
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 post-intercom runtime identity differs.");
+        var dialogue = source.GetProperty("dialogue");
+        if (!dialogue.GetProperty("dialoguePlaybackPrepared").GetBoolean() ||
+            !dialogue.GetProperty("dialoguePlaybackImplemented").GetBoolean())
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 post-intercom dialogue is not prepared.");
+        var cues = dialogue.GetProperty("cues").EnumerateArray().Select(row =>
+        {
+            var info = row.GetProperty("infoFormId").GetString()!;
+            return new Fo3Cg02PostIntercomCue(
+                info,
+                row.GetProperty("engineSex").ValueKind == JsonValueKind.Null
+                    ? null : row.GetProperty("engineSex").GetString(),
+                row.GetProperty("speakerBaseFormId").GetString()!,
+                row.GetProperty("responses").EnumerateArray().Select(response =>
+                {
+                    var index = response.GetProperty("index").GetInt32();
+                    return new Fo3OwnedDialogueResponse(
+                        index, response.GetProperty("text").GetString()!,
+                        Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                            response.GetProperty("voice"), $"_{info}_{index}.ogg"),
+                        Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                            response.GetProperty("lip"), $"_{info}_{index}.lip"));
+                }).ToArray(),
+                row.GetProperty("targetStage").ValueKind == JsonValueKind.Null
+                    ? null : row.GetProperty("targetStage").GetInt32());
+        }).ToArray();
+        var packages = source.GetProperty("packages");
+        Fo3Cg02PostIntercomPackage LoadPackage(JsonElement row) => new(
+            row.GetProperty("formId").GetString()!,
+            row.GetProperty("targetKind").GetString()!,
+            row.GetProperty("targetFormId").GetString()!,
+            row.TryGetProperty("targetTransform", out var transform)
+                ? Fo3Cg01Stage12Transition.LoadTransform(transform) : null,
+            row.GetProperty("radiusGameUnits").GetInt32());
+        var stageResults = source.GetProperty("stageResults").EnumerateObject()
+            .ToDictionary(property => int.Parse(property.Name,
+                    System.Globalization.CultureInfo.InvariantCulture),
+                property => (IReadOnlyList<Fo3Cg02PostIntercomCommand>)property.Value
+                    .GetProperty("commands").EnumerateArray().Select(row =>
+                        new Fo3Cg02PostIntercomCommand(
+                            row.GetProperty("kind").GetString()!,
+                            row.TryGetProperty("referenceFormId", out var reference)
+                                ? reference.GetString()! : "",
+                            row.TryGetProperty("variable", out var variable)
+                                ? variable.GetString()! : "",
+                            row.TryGetProperty("value", out var value)
+                                ? value.GetInt32() : 0,
+                            row.TryGetProperty("objectiveIndex", out var objective)
+                                ? objective.GetInt32() : 0,
+                            row.TryGetProperty("questFormId", out var quest)
+                                ? quest.GetString()! : "",
+                            row.TryGetProperty("stage", out var stage)
+                                ? stage.GetInt32() : 0)).ToArray());
+        var actorScene = source.GetProperty("jonasActorScene");
+        return new Fo3Cg02PostIntercomRuntime(
+            source.GetProperty("sourceStage").GetInt32(),
+            source.GetProperty("answerStage").GetInt32(),
+            source.GetProperty("goodbyeStage").GetInt32(),
+            source.GetProperty("targetStage").GetInt32(),
+            source.GetProperty("dadReferenceFormId").GetString()!,
+            source.GetProperty("dadBaseFormId").GetString()!,
+            source.GetProperty("jonasReferenceFormId").GetString()!,
+            source.GetProperty("jonasBaseFormId").GetString()!,
+            actorScene.GetProperty("scene").GetString()!,
+            actorScene.GetProperty("sha256").GetString()!,
+            source.GetProperty("intercomReferenceFormId").GetString()!,
+            LoadPackage(packages.GetProperty("toIntercom")),
+            LoadPackage(packages.GetProperty("talkToJonas")),
+            LoadPackage(packages.GetProperty("toPlayer")),
+            cues, stageResults,
             source.GetProperty("nextBoundary").GetProperty("blocker").GetString()!);
     }
 
@@ -1862,6 +1987,9 @@ internal sealed record Fo3Cg01PostStage14Transition(
         if (cg02Birthday?.CakeRuntime is { } cakeRuntime)
             birthdayInfoFormIds.UnionWith(
                 cakeRuntime.Cues.Select(value => value.InfoFormId));
+        if (cg02Butch?.PostIntercomRuntime is { } postIntercom)
+            birthdayInfoFormIds.UnionWith(
+                postIntercom.Cues.Select(value => value.InfoFormId));
         var matchingCg02Sequence = validCg02Sequences.SingleOrDefault(sequence =>
             sequence.Take(Math.Min(savedCg02InfoFormIds.Length, sequence.Length))
                 .SequenceEqual(savedCg02InfoFormIds.Take(sequence.Length),
@@ -1882,7 +2010,10 @@ internal sealed record Fo3Cg01PostStage14Transition(
         cg02IntroComplete = cg02IntroComplete || cg02Butch is not null &&
             (stage == cg02Butch.SceneDoneStage ||
              stage == cg02Butch.AggregateStage ||
-             stage == cg02Butch.IntercomStage);
+             stage == cg02Butch.IntercomStage ||
+             cg02Butch.PostIntercomRuntime is { } post &&
+                (stage == post.AnswerStage || stage == post.GoodbyeStage ||
+                 stage == post.TargetStage));
         var cg02DadComplete = cg02DadSpeech is not null &&
             savedCg02InfoFormIds.Length >= 2;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
@@ -1920,7 +2051,12 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var expectedGateOpen = progressStage != TargetStage;
         var objective = RequiredInteger(source, "displayedObjectiveIndex");
         var expectedObjective = reachedNextQuest
-            ? dadLead.DisplayedObjectiveIndex
+            ? cg02Butch?.PostIntercomRuntime is { } objectivePost &&
+                stage == objectivePost.TargetStage
+                ? objectivePost.StageResults[objectivePost.TargetStage]
+                    .Where(value => value.Kind == "setObjectiveDisplayed" && value.Value != 0)
+                    .Select(value => value.ObjectiveIndex).Single()
+                : dadLead.DisplayedObjectiveIndex
             : stage switch
             {
                 var value when value == TargetStage => TargetStage,
@@ -2014,8 +2150,19 @@ internal sealed record Fo3Cg01PostStage14Transition(
                         StringComparison.OrdinalIgnoreCase));
                 if (butchPackageOccurrences > 1)
                     interactionCommandCount += cg02Butch.FindPlayerResultCommandCount;
-                if (stage == cg02Butch.IntercomStage)
+                if (stage >= cg02Butch.IntercomStage)
                     interactionCommandCount += cg02Butch.Stage35Commands.Count;
+                if (cg02Butch.PostIntercomRuntime is { } commandPost)
+                {
+                    foreach (var cue in commandPost.Cues.Where(cue =>
+                        savedCg02InfoFormIds.Contains(cue.InfoFormId,
+                            StringComparer.OrdinalIgnoreCase)))
+                    {
+                        if (cue.TargetStage is { } cueStage)
+                            interactionCommandCount += 1 +
+                                commandPost.StageResults[cueStage].Count;
+                    }
+                }
             }
         }
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
@@ -2042,6 +2189,18 @@ internal sealed record Fo3Cg01PostStage14Transition(
             for (var index = 0; index < butchPackageOccurrences; index++)
                 expectedPackages = expectedPackages.Append(
                     cg02Butch.FindPlayerPackageFormId);
+            if (cg02Butch.PostIntercomRuntime is { } expectedPost &&
+                stage >= expectedPost.SourceStage)
+                expectedPackages = expectedPackages.Append(
+                    expectedPost.DadToIntercomPackage.FormId);
+            if (cg02Butch.PostIntercomRuntime is { } talkPost &&
+                stage >= talkPost.AnswerStage)
+                expectedPackages = expectedPackages.Append(
+                    talkPost.DadTalkToJonasPackage.FormId);
+            if (cg02Butch.PostIntercomRuntime is { } playerPost &&
+                stage >= playerPost.GoodbyeStage)
+                expectedPackages = expectedPackages.Append(
+                    playerPost.DadToPlayerPackage.FormId);
         }
         var expectedPackageArray = expectedPackages.ToArray();
         var timerRemaining = source.GetProperty("timerRemainingSeconds").GetDouble();
@@ -2063,7 +2222,10 @@ internal sealed record Fo3Cg01PostStage14Transition(
             reachedNextQuest && (cg02Butch is null ||
                 stage != cg02Butch.AggregateStage &&
                 stage != cg02Butch.SceneDoneStage &&
-                stage != cg02Butch.IntercomStage) &&
+                stage != cg02Butch.IntercomStage &&
+                (cg02Butch.PostIntercomRuntime is not { } timerPost ||
+                 stage != timerPost.AnswerStage && stage != timerPost.GoodbyeStage &&
+                 stage != timerPost.TargetStage)) &&
                 (completion.Cg02Stage0.IntroRuntime is null
                 ? timerAdvancing || timerRemaining != 0.0
                 : timerRemaining > completion.Cg02Stage0.IntroRuntime.InitialSeconds ||
@@ -2108,7 +2270,11 @@ internal sealed record Fo3Cg01PostStage14Transition(
             RequiredInteger(source, "accountedCommandCount") != expectedCommandCount ||
             RequiredInteger(source, "appliedCommandCount") != expectedCommandCount ||
             RequiredBoolean(boundary, "applied") ||
-            RequiredString(boundary, "blocker") != baseline.NextBoundary.Blocker)
+            RequiredString(boundary, "blocker") !=
+                (cg02Butch?.PostIntercomRuntime is { } boundaryPost &&
+                 stage == boundaryPost.TargetStage
+                    ? boundaryPost.NextBoundaryBlocker
+                    : baseline.NextBoundary.Blocker))
             throw new InvalidOperationException(
                 "Saved Fallout 3 CG01 stage-20 state differs.");
         return baseline with
