@@ -21,11 +21,51 @@ internal sealed record ClassicIntProgram(
 
 internal sealed record ClassicIntDoorObjectState(bool Open, bool Locked);
 
+internal sealed record ClassicIntObjectCreation(
+    int Pid,
+    int Tile,
+    int Elevation,
+    int ScriptId);
+
+internal sealed record ClassicIntCreatedObject(
+    int ObjectHandle,
+    ClassicIntObjectCreation Source);
+
+internal sealed record ClassicIntInventoryEntry(
+    int OwnerHandle,
+    int ObjectHandle,
+    int Quantity);
+
+internal sealed record ClassicIntMapStartOverride(
+    int TileX,
+    int TileY,
+    int Elevation,
+    int Rotation);
+
+internal interface IClassicIntObjectFactory
+{
+    int Create(ClassicIntObjectCreation source);
+}
+
+internal sealed record ClassicIntObjectHandleTable(
+    IReadOnlyDictionary<ClassicIntObjectCreation, int> Handles) :
+    IClassicIntObjectFactory
+{
+    public int Create(ClassicIntObjectCreation source) =>
+        Handles.TryGetValue(source, out var handle)
+            ? handle
+            : throw new InvalidOperationException(
+                $"Classic INT object creation is not admitted: {source}.");
+}
+
 internal interface IClassicIntWorldObjectState
 {
     bool ScriptOverrides { get; }
     IReadOnlyDictionary<int, ClassicIntDoorObjectState> Doors { get; }
     int? LightLevel { get; }
+    IReadOnlyDictionary<int, ClassicIntCreatedObject> CreatedObjects { get; }
+    IReadOnlyList<ClassicIntInventoryEntry> Inventory { get; }
+    ClassicIntMapStartOverride? MapStartOverride { get; }
 }
 
 internal sealed record ClassicIntWorldObjectState(
@@ -34,6 +74,14 @@ internal sealed record ClassicIntWorldObjectState(
     int? LightLevel = null) :
     IClassicIntWorldObjectState
 {
+    public IReadOnlyDictionary<int, ClassicIntCreatedObject> CreatedObjects
+    { get; init; } = new Dictionary<int, ClassicIntCreatedObject>();
+
+    public IReadOnlyList<ClassicIntInventoryEntry> Inventory
+    { get; init; } = [];
+
+    public ClassicIntMapStartOverride? MapStartOverride { get; init; }
+
     internal static ClassicIntWorldObjectState Empty { get; } = new(
         false, new Dictionary<int, ClassicIntDoorObjectState>());
 
@@ -47,19 +95,63 @@ internal sealed record ClassicIntWorldObjectState(
             row.Value.Locked,
         }).ToArray(),
         LightLevel,
+        CreatedObjects = CreatedObjects.OrderBy(row => row.Key).Select(row => new
+        {
+            row.Value.ObjectHandle,
+            row.Value.Source.Pid,
+            row.Value.Source.Tile,
+            row.Value.Source.Elevation,
+            row.Value.Source.ScriptId,
+        }).ToArray(),
+        Inventory = Inventory.OrderBy(row => row.OwnerHandle)
+            .ThenBy(row => row.ObjectHandle).ToArray(),
+        MapStartOverride,
     };
 
-    internal static ClassicIntWorldObjectState Restore(JsonElement source) => new(
-        source.GetProperty("ScriptOverrides").GetBoolean(),
-        source.GetProperty("Doors").EnumerateArray().ToDictionary(
+    internal static ClassicIntWorldObjectState Restore(JsonElement source)
+    {
+        var result = new ClassicIntWorldObjectState(
+            source.GetProperty("ScriptOverrides").GetBoolean(),
+            source.GetProperty("Doors").EnumerateArray().ToDictionary(
             row => row.GetProperty("ObjectHandle").GetInt32(),
             row => new ClassicIntDoorObjectState(
                 row.GetProperty("Open").GetBoolean(),
                 row.GetProperty("Locked").GetBoolean())),
-        source.TryGetProperty("LightLevel", out var lightLevel) &&
-        lightLevel.ValueKind != JsonValueKind.Null
-            ? lightLevel.GetInt32()
-            : null);
+            source.TryGetProperty("LightLevel", out var lightLevel) &&
+            lightLevel.ValueKind != JsonValueKind.Null
+                ? lightLevel.GetInt32()
+                : null);
+        return result with
+        {
+            CreatedObjects = source.TryGetProperty("CreatedObjects", out var objects)
+                ? objects.EnumerateArray().ToDictionary(
+                    row => row.GetProperty("ObjectHandle").GetInt32(),
+                    row => new ClassicIntCreatedObject(
+                        row.GetProperty("ObjectHandle").GetInt32(),
+                        new ClassicIntObjectCreation(
+                            row.GetProperty("Pid").GetInt32(),
+                            row.GetProperty("Tile").GetInt32(),
+                            row.GetProperty("Elevation").GetInt32(),
+                            row.GetProperty("ScriptId").GetInt32())))
+                : new Dictionary<int, ClassicIntCreatedObject>(),
+            Inventory = source.TryGetProperty("Inventory", out var inventory)
+                ? inventory.EnumerateArray().Select(row =>
+                    new ClassicIntInventoryEntry(
+                        row.GetProperty("OwnerHandle").GetInt32(),
+                        row.GetProperty("ObjectHandle").GetInt32(),
+                        row.GetProperty("Quantity").GetInt32())).ToArray()
+                : [],
+            MapStartOverride = source.TryGetProperty(
+                    "MapStartOverride", out var mapStart) &&
+                mapStart.ValueKind != JsonValueKind.Null
+                    ? new ClassicIntMapStartOverride(
+                        mapStart.GetProperty("TileX").GetInt32(),
+                        mapStart.GetProperty("TileY").GetInt32(),
+                        mapStart.GetProperty("Elevation").GetInt32(),
+                        mapStart.GetProperty("Rotation").GetInt32())
+                    : null,
+        };
+    }
 }
 
 internal sealed record ClassicIntProcedureState(
@@ -120,6 +212,8 @@ internal static class ClassicIntProcedureVm
     private const ushort Not = 0x8045;
     private const ushort Negate = 0x8046;
     private const ushort Random = 0x80B4;
+    private const ushort CreateObject = 0x80B7;
+    private const ushort OverrideMapStart = 0x80A9;
     private const ushort DisplayMessage = 0x80B8;
     private const ushort ScriptOverrides = 0x80B9;
     private const ushort SelfObject = 0x80BC;
@@ -133,10 +227,13 @@ internal static class ClassicIntProcedureVm
     private const ushort CritterStat = 0x80CA;
     private const ushort Metarule = 0x810B;
     private const ushort MessageString = 0x8105;
+    private const ushort AddMultipleToInventory = 0x8116;
+    private const ushort GetMonth = 0x8118;
     private const ushort FloatMessage = 0x810A;
     private const ushort PlaySound = 0x80A3;
     private const ushort SetLightLevel = 0x80E9;
     private const ushort GameTime = 0x80EA;
+    private const ushort GameTimeHour = 0x80F6;
     private const ushort DoorLock = 0x812E;
     private const ushort DoorUnlock = 0x812F;
     private const ushort DoorIsOpen = 0x8130;
@@ -233,6 +330,10 @@ internal static class ClassicIntProcedureVm
             sourceWorldObjects.Doors);
         var scriptOverrides = sourceWorldObjects.ScriptOverrides;
         var lightLevel = sourceWorldObjects.LightLevel;
+        var createdObjects = new Dictionary<int, ClassicIntCreatedObject>(
+            sourceWorldObjects.CreatedObjects);
+        var inventory = sourceWorldObjects.Inventory.ToList();
+        var mapStartOverride = sourceWorldObjects.MapStartOverride;
         var returnValue = 0;
         var current = entry;
         var offset = entry.BodyOffset;
@@ -399,6 +500,23 @@ internal static class ClassicIntProcedureVm
                         stack.Add(result.Value);
                         break;
                     }
+                case CreateObject:
+                    {
+                        var scriptId = Pop(stack, program, procedure, offset);
+                        var elevation = Pop(stack, program, procedure, offset);
+                        var tile = Pop(stack, program, procedure, offset);
+                        var pid = Pop(stack, program, procedure, offset);
+                        var creation = new ClassicIntObjectCreation(
+                            pid, tile, elevation, scriptId);
+                        var handle = game.ObjectFactory.Create(creation);
+                        if (createdObjects.ContainsKey(handle))
+                            throw Failure(program, procedure, offset,
+                                "duplicate-created-object-handle");
+                        createdObjects.Add(handle,
+                            new ClassicIntCreatedObject(handle, creation));
+                        stack.Add(handle);
+                        break;
+                    }
                 case ScriptOverrides:
                     scriptOverrides = true;
                     break;
@@ -412,9 +530,25 @@ internal static class ClassicIntProcedureVm
                 case GameTime:
                     stack.Add(game.GameTime);
                     break;
+                case GameTimeHour:
+                    stack.Add(game.GameTimeHour);
+                    break;
+                case GetMonth:
+                    stack.Add(game.Month);
+                    break;
                 case SetLightLevel:
                     lightLevel = Pop(stack, program, procedure, offset);
                     break;
+                case OverrideMapStart:
+                    {
+                        var rotation = Pop(stack, program, procedure, offset);
+                        var elevation = Pop(stack, program, procedure, offset);
+                        var tileY = Pop(stack, program, procedure, offset);
+                        var tileX = Pop(stack, program, procedure, offset);
+                        mapStartOverride = new ClassicIntMapStartOverride(
+                            tileX, tileY, elevation, rotation);
+                        break;
+                    }
                 case MessageString:
                     {
                         var messageId = Pop(stack, program, procedure, offset);
@@ -452,6 +586,19 @@ internal static class ClassicIntProcedureVm
                         var objectHandle = Pop(stack, program, procedure, offset);
                         messageEffects.Add(MessageEffect(
                             handle, objectHandle, color));
+                        break;
+                    }
+                case AddMultipleToInventory:
+                    {
+                        var quantity = Pop(stack, program, procedure, offset);
+                        var objectHandle = Pop(stack, program, procedure, offset);
+                        var ownerHandle = Pop(stack, program, procedure, offset);
+                        if (quantity <= 0 || !createdObjects.ContainsKey(objectHandle) ||
+                            inventory.Any(row => row.ObjectHandle == objectHandle))
+                            throw Failure(program, procedure, offset,
+                                "inventory-transfer");
+                        inventory.Add(new ClassicIntInventoryEntry(
+                            ownerHandle, objectHandle, quantity));
                         break;
                     }
                 case Jump:
@@ -508,7 +655,12 @@ internal static class ClassicIntProcedureVm
             returnValue,
             messageEffects,
             soundEffects,
-            new ClassicIntWorldObjectState(scriptOverrides, doors, lightLevel));
+            new ClassicIntWorldObjectState(scriptOverrides, doors, lightLevel)
+            {
+                CreatedObjects = createdObjects,
+                Inventory = inventory,
+                MapStartOverride = mapStartOverride,
+            });
 
         ClassicIntDoorObjectState Door(int objectHandle) =>
             doors.TryGetValue(objectHandle, out var door)

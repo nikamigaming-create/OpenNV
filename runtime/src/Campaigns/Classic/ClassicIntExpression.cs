@@ -21,7 +21,10 @@ internal sealed record ClassicIntExpressionContext(
     IReadOnlyDictionary<int, int> SfallArrayLengths,
     IReadOnlyDictionary<(int MessageList, int MessageId), int> MessageHandles,
     IReadOnlyDictionary<string, int> ExternalVariables,
-    int GameTime);
+    int GameTime,
+    int GameTimeHour,
+    int Month,
+    IClassicIntObjectFactory ObjectFactory);
 
 internal sealed record ClassicIntExpressionValue(
     ClassicRetailRandomLifecycleState RandomState,

@@ -227,7 +227,11 @@ var gameContext = new ClassicIntExpressionContext(
         new Dictionary<int, int>(),
         messageHandles,
         new Dictionary<string, int>(),
-        0);
+        0,
+        0,
+        0,
+        new ClassicIntObjectHandleTable(
+            new Dictionary<ClassicIntObjectCreation, int>()));
 var expressionResult = ClassicIntExpressionOwner.EvaluateRandomSite(
     intInitialization.RandomSites[1],
     gameContext,
@@ -417,6 +421,101 @@ foreach (var path in args)
                 Console.WriteLine(
                     $"{Path.GetFileName(path)}|{header.Program}|map_enter_p_proc|" +
                     $"{entered.ExecutedInstructions}");
+            }
+            if (parsedInitialization.HeaderProgram is { } templeHeader &&
+                string.Equals(templeHeader.Program, "ARTemple.int",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var creation = new ClassicIntObjectCreation(7, 0, 0, -1);
+                const int createdObjectHandle = 7000;
+                var initialInventoryContext = gameContext with
+                {
+                    ObjectFactory = new ClassicIntObjectHandleTable(
+                        new Dictionary<ClassicIntObjectCreation, int>
+                        {
+                            [creation] = createdObjectHandle,
+                        }),
+                };
+                var initialInventoryState = new ClassicIntProcedureState(
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), new Dictionary<int, int>(),
+                    new Dictionary<int, int>(), [], randomState);
+                var instructionBudget = templeHeader.ExecutableProgram
+                    .Procedures["Initial_Inven"].Instructions.Count;
+                var inventoryResult = ClassicIntEventDispatcher.Execute(
+                    templeHeader, "Initial_Inven", initialInventoryState,
+                    initialInventoryContext, ClassicIntWorldObjectState.Empty,
+                    randomContract, instructionBudget);
+                if (inventoryResult.ExecutedInstructions != instructionBudget ||
+                    inventoryResult.State.LocalVariables[0] != createdObjectHandle ||
+                    inventoryResult.WorldObjects.CreatedObjects[createdObjectHandle]
+                        .Source != creation ||
+                    inventoryResult.WorldObjects.Inventory is not
+                        [{ OwnerHandle: 100, ObjectHandle: createdObjectHandle, Quantity: 1 }])
+                    throw new InvalidOperationException(
+                        "Owned Temple initial inventory effects drifted.");
+                var restoredInventory = ClassicIntWorldObjectState.Restore(
+                    JsonSerializer.SerializeToElement(
+                        inventoryResult.WorldObjects.Save()));
+                if (restoredInventory.CreatedObjects[createdObjectHandle]
+                        .Source != creation ||
+                    restoredInventory.Inventory is not
+                        [{ OwnerHandle: 100, ObjectHandle: createdObjectHandle, Quantity: 1 }])
+                    throw new InvalidOperationException(
+                        "Owned Temple initial inventory save state drifted.");
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{templeHeader.Program}|Initial_Inven|" +
+                    $"{inventoryResult.ExecutedInstructions}");
+
+                var mapEnterContext = initialInventoryContext with
+                {
+                    MetaruleValues = new Dictionary<(int, int), int>
+                    {
+                        [(14, 0)] = 1,
+                    },
+                    GameTimeHour = 1200,
+                    Month = 1,
+                };
+                var mapEnterState = initialInventoryState with
+                {
+                    GlobalVariables = new Dictionary<int, int> { [27] = 99 },
+                };
+                var mapEnterBudget = templeHeader.ExecutableProgram
+                    .Procedures["map_enter_p_proc"].Instructions.Count +
+                    instructionBudget;
+                var mapEntered = ClassicIntEventDispatcher.Execute(
+                    templeHeader, "map_enter_p_proc", mapEnterState,
+                    mapEnterContext, ClassicIntWorldObjectState.Empty,
+                    randomContract, mapEnterBudget);
+                if (mapEntered.State.GlobalVariables[27] != 0 ||
+                    mapEntered.WorldObjects.LightLevel != 100 ||
+                    mapEntered.WorldObjects.MapStartOverride is not
+                    { TileX: 88, TileY: 87, Elevation: 0, Rotation: 5 } ||
+                    mapEntered.WorldObjects.Inventory is not
+                        [{ OwnerHandle: 100, ObjectHandle: createdObjectHandle, Quantity: 1 }])
+                    throw new InvalidOperationException(
+                        "Owned Temple map-enter procedure chain drifted: " +
+                        JsonSerializer.Serialize(mapEntered.WorldObjects.Save()));
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{templeHeader.Program}|map_enter_p_proc|" +
+                    $"{mapEntered.ExecutedInstructions}");
+
+                var updateBudget = templeHeader.ExecutableProgram
+                    .Procedures["map_update_p_proc"].Instructions.Count;
+                var mapUpdated = ClassicIntEventDispatcher.Execute(
+                    templeHeader, "map_update_p_proc", mapEntered.State,
+                    mapEnterContext, mapEntered.WorldObjects,
+                    randomContract, updateBudget);
+                if (mapUpdated.WorldObjects.LightLevel != 100 ||
+                    !mapUpdated.WorldObjects.Inventory.SequenceEqual(
+                        mapEntered.WorldObjects.Inventory) ||
+                    mapUpdated.WorldObjects.MapStartOverride !=
+                        mapEntered.WorldObjects.MapStartOverride)
+                    throw new InvalidOperationException(
+                        "Owned Temple map-update procedure drifted.");
+                Console.WriteLine(
+                    $"{Path.GetFileName(path)}|{templeHeader.Program}|map_update_p_proc|" +
+                    $"{mapUpdated.ExecutedInstructions}");
             }
         }
         var jasmine = programs.FirstOrDefault(row => string.Equals(
