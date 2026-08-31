@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Campaigns.Fallout2.CharacterStart;
 using OpenNV.Runtime.Campaigns.Fallout1;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -489,6 +490,27 @@ internal sealed partial class Fo2ArroyoCavesPlayerBody : CharacterBody3D
             destination.Topology.WalkMaskSha256.Length != 64)
             throw new InvalidOperationException(
                 "Fallout 2 source exit cannot enter the admitted Temple destination.");
+        _ = ClassicMapJoinOwner.Commit(
+            new ClassicMapJoin(
+                transition.ExitSerial,
+                new ClassicMapEndpoint(
+                    transition.SourceMapIndex,
+                    null,
+                    transition.SourceMapSha256,
+                    transition.SourceTile,
+                    transition.SourceElevation,
+                    null),
+                new ClassicMapEndpoint(
+                    transition.TargetMapIndex,
+                    Path.GetFileName(transition.TargetLogicalPath),
+                    transition.TargetMapSha256,
+                    transition.TargetTile,
+                    transition.TargetElevation,
+                    transition.TargetRotation)),
+            CurrentMapIndex,
+            CurrentMapSha256,
+            CurrentTile,
+            CurrentElevation);
         Reparent(destination.Root, keepGlobalTransform: false);
         _arrivalComponent = destination.Topology.Movement.ReachableTiles.ToHashSet();
         CurrentMapIndex = transition.TargetMapIndex;

@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Campaigns.Classic;
 
 namespace OpenNV.Runtime.Campaigns.Fallout2.Temple;
 
@@ -111,6 +112,28 @@ internal sealed class Fo2TempleTransitionRuntime
             !destination.PresentElevations.Contains(exit.TargetElevation))
             throw new InvalidOperationException(
                 "Fallout 2 Temple exit-grid transition failed its source boundary.");
+        var join = new ClassicMapJoin(
+            exit.Serial,
+            new ClassicMapEndpoint(
+                Fo2TemplePresentationCatalog.MapIndex,
+                _catalog.SourceMapName,
+                _movement.MapSha256,
+                exit.Tile,
+                exit.Elevation,
+                null),
+            new ClassicMapEndpoint(
+                exit.TargetMapIndex,
+                destination.MapName,
+                destination.Sha256,
+                exit.TargetTile,
+                exit.TargetElevation,
+                exit.TargetRotation));
+        _ = ClassicMapJoinOwner.Commit(
+            join,
+            Fo2TemplePresentationCatalog.MapIndex,
+            _movement.MapSha256,
+            sourceTile,
+            exit.Elevation);
         Applied = new Fo2TempleAppliedTransition(
             exit.Serial,
             Fo2TemplePresentationCatalog.MapIndex,

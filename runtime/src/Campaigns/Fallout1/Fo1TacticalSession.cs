@@ -754,13 +754,13 @@ internal partial class Fo1TacticalSession : Node
         if (_activatedDestinationReturnExitGridTile is not { } activatedTile || !reverse.IsTrigger(activatedTile))
             throw new InvalidOperationException(
                 "Fallout source return requires a committed source-authored VAULT13 trigger.");
-        if (reverse.SourceMapIndex != forward.DestinationMapIndex ||
-            reverse.SourceMapName != forward.DestinationMapName ||
-            !string.Equals(reverse.SourceMapSha256, forward.DestinationMapSha256, StringComparison.OrdinalIgnoreCase) ||
-            reverse.DestinationMapIndex != forward.SourceMapIndex ||
-            reverse.DestinationMapName != forward.SourceMapName ||
-            !string.Equals(reverse.DestinationMapSha256, forward.SourceMapSha256, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(reverse.DestinationMapSha256, _sourceMapSha256, StringComparison.OrdinalIgnoreCase))
+        ClassicMapJoinOwner.ValidateReciprocal(
+            forward.JoinForTrigger(_activatedExitGridTile!.Value),
+            reverse.JoinForTrigger(activatedTile));
+        if (!string.Equals(
+                reverse.DestinationMapSha256,
+                _sourceMapSha256,
+                StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "Fallout reciprocal exit-grid contract does not return to this loaded V13ENT MAP.");
         RestoreSourceTacticalState(reverse.DestinationTile);
