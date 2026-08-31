@@ -263,8 +263,12 @@ def build_campaign_transport(
         random_procedures: dict[str, int] = {}
         random_ranges: dict[str, int] = {}
         random_operand_kinds: dict[str, int] = {}
+        random_expression_statuses: dict[str, int] = {}
+        random_unsupported: dict[str, int] = {}
         branch_kinds: dict[str, int] = {}
         branch_target_kinds: dict[str, int] = {}
+        branch_expression_statuses: dict[str, int] = {}
+        branch_unsupported: dict[str, int] = {}
         source_expression_random_sites = 0
         for document in map_documents:
             initialization = document["initializationScripts"]
@@ -283,6 +287,13 @@ def build_campaign_transport(
                 random_operand_kinds[operand_kind] = (
                     random_operand_kinds.get(operand_kind, 0) + 1
                 )
+                expression_status = site["expressionStatus"]
+                random_expression_statuses[expression_status] = (
+                    random_expression_statuses.get(expression_status, 0) + 1
+                )
+                if site["unsupported"] is not None:
+                    key = site["unsupported"].split(" at ", 1)[0]
+                    random_unsupported[key] = random_unsupported.get(key, 0) + 1
                 if site["operandKind"] == "literal-inclusive-range":
                     key = f"{site['minimum']}..{site['maximum']}"
                     random_ranges[key] = random_ranges.get(key, 0) + 1
@@ -298,6 +309,13 @@ def build_campaign_transport(
                     branch_target_kinds[target_kind] = (
                         branch_target_kinds.get(target_kind, 0) + 1
                     )
+                    expression_status = branch["expressionStatus"]
+                    branch_expression_statuses[expression_status] = (
+                        branch_expression_statuses.get(expression_status, 0) + 1
+                    )
+                    if branch["unsupported"] is not None:
+                        key = branch["unsupported"].split(" at ", 1)[0]
+                        branch_unsupported[key] = branch_unsupported.get(key, 0) + 1
         campaign = {
             "schema": CAMPAIGN_SCHEMA,
             "status": "transported-not-rendered",
@@ -338,12 +356,20 @@ def build_campaign_transport(
                 "randomOperandKindHistogram": dict(
                     sorted(random_operand_kinds.items())
                 ),
+                "randomExpressionStatusHistogram": dict(
+                    sorted(random_expression_statuses.items())
+                ),
+                "randomUnsupportedHistogram": dict(sorted(random_unsupported.items())),
                 "randomProcedureHistogram": dict(sorted(random_procedures.items())),
                 "randomRangeHistogram": dict(sorted(random_ranges.items())),
                 "branchKindHistogram": dict(sorted(branch_kinds.items())),
                 "branchTargetKindHistogram": dict(
                     sorted(branch_target_kinds.items())
                 ),
+                "branchExpressionStatusHistogram": dict(
+                    sorted(branch_expression_statuses.items())
+                ),
+                "branchUnsupportedHistogram": dict(sorted(branch_unsupported.items())),
                 "exitGrids": sum(row["exitGrids"] for row in map_rows),
                 "reciprocalMapJoins": len(map_joins),
                 "uniqueResources": len(resources),

@@ -27,7 +27,15 @@ internal sealed record ClassicMapIntRandomSite(
     int Offset,
     string OperandKind,
     int? Minimum,
-    int? Maximum);
+    int? Maximum,
+    string ExpressionStatus,
+    string? Unsupported,
+    ClassicIntExpression? MinimumExpression,
+    ClassicIntExpression? MaximumExpression)
+{
+    internal string SourceIdentity => $"{Owner}:{Sid ?? "map-header"}:" +
+        $"{Program}:{Procedure}:0x{Offset:x}";
+}
 
 internal sealed record ClassicMapIntInitialization(
     ClassicMapIntProgram? HeaderProgram,
@@ -38,7 +46,7 @@ internal sealed record ClassicMapIntInitialization(
 internal static class ClassicMapIntInitializationOwner
 {
     private const string Schema = "opennv-classic-map-int-initialization/v1";
-    private const string InventorySchema = "opennv-classic-int-initialization-inventory/v1";
+    private const string InventorySchema = "opennv-classic-int-initialization-inventory/v2";
     private const string RandomOpcode = "80b4";
     private const int Sha256HexCharacterCount = 64;
 
@@ -112,6 +120,24 @@ internal static class ClassicMapIntInitializationOwner
                         "literal-inclusive-range" or "source-stack-expression"))
                     throw new InvalidOperationException(
                         "Classic MAP INT RANDOM operand contract drifted.");
+                var expressionStatus = RequiredString(row, "expressionStatus");
+                var unsupportedElement = row.GetProperty("unsupported");
+                var unsupported = unsupportedElement.ValueKind == JsonValueKind.Null
+                    ? null
+                    : RequiredString(row, "unsupported");
+                var minimumExpression = OptionalExpression(
+                    row.GetProperty("minimumExpression"));
+                var maximumExpression = OptionalExpression(
+                    row.GetProperty("maximumExpression"));
+                if (expressionStatus == "executable" &&
+                    (unsupported is not null || minimumExpression is null ||
+                        maximumExpression is null) ||
+                    expressionStatus == "unsupported" &&
+                    (unsupported is null || minimumExpression is not null &&
+                        maximumExpression is not null) ||
+                    expressionStatus is not ("executable" or "unsupported"))
+                    throw new InvalidOperationException(
+                        "Classic MAP INT expression status drifted.");
                 var owner = RequiredString(row, "owner");
                 var sid = row.GetProperty("sid").ValueKind == JsonValueKind.Null
                     ? null
@@ -129,7 +155,11 @@ internal static class ClassicMapIntInitializationOwner
                     row.GetProperty("offset").GetInt32(),
                     operandKind,
                     minimum,
-                    maximum);
+                    maximum,
+                    expressionStatus,
+                    unsupported,
+                    minimumExpression,
+                    maximumExpression);
             })
             .ToArray();
         var expectedRandomSites = (headerProgram?.RandomSiteCount ?? 0) +
@@ -174,6 +204,27 @@ internal static class ClassicMapIntInitializationOwner
             throw new InvalidOperationException(
                 $"Classic MAP INT string is empty: {property}.");
         return value;
+    }
+
+    private static ClassicIntExpression? OptionalExpression(JsonElement source)
+    {
+        if (source.ValueKind == JsonValueKind.Null)
+            return null;
+        var kind = RequiredString(source, "kind");
+        var offset = source.GetProperty("offset").GetInt32();
+        var valueElement = source.GetProperty("value");
+        int? value = valueElement.ValueKind == JsonValueKind.Null
+            ? null
+            : valueElement.GetInt32();
+        var arguments = source.GetProperty("arguments").EnumerateArray()
+            .Select(row => OptionalExpression(row) ?? throw new InvalidOperationException(
+                "Classic INT expression argument is null."))
+            .ToArray();
+        if (kind == "literal" && (value is null || arguments.Length != 0) ||
+            kind != "literal" && value is not null)
+            throw new InvalidOperationException(
+                "Classic INT expression value contract drifted.");
+        return new ClassicIntExpression(kind, offset, value, arguments);
     }
 
     private static string RequiredHash(JsonElement source, string property)

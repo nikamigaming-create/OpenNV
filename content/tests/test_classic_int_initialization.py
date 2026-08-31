@@ -37,22 +37,38 @@ def synthetic_source_expression_random_int() -> bytes:
     )
 
 
+def synthetic_expression_branch_int() -> bytes:
+    push = lambda value: struct.pack(">Hi", 0xC001, value)
+    opcode = lambda value: struct.pack(">H", value)
+    name = b"map_enter_p_proc\0"
+    body_offset = 42 + 4 + 24 + 4 + len(name)
+    body = b"".join(
+        [
+            opcode(0x802B),
+            push(42),
+            push(1),
+            push(2),
+            opcode(0x8039),
+            opcode(0x802F),
+            opcode(0x801C),
+        ]
+    )
+    return b"\0" * 42 + struct.pack(">I6I", 1, 4, 0, 0, 0, body_offset, 0) + (
+        struct.pack(">I", len(name)) + name + body
+    )
+
+
 class ClassicIntInitializationTests(unittest.TestCase):
     def test_int_inventory_decodes_literal_random_and_branch_free_start(self) -> None:
         inventory = inventory_int_program(synthetic_random_int())
         self.assertEqual(inventory["randomOpcode"], "80b4")
-        self.assertEqual(
-            inventory["randomSites"],
-            [
-                {
-                    "procedure": "start",
-                    "offset": inventory["randomSites"][0]["offset"],
-                    "operandKind": "literal-inclusive-range",
-                    "minimum": 1,
-                    "maximum": 4,
-                }
-            ],
-        )
+        site = inventory["randomSites"][0]
+        self.assertEqual(site["procedure"], "start")
+        self.assertEqual(site["operandKind"], "literal-inclusive-range")
+        self.assertEqual((site["minimum"], site["maximum"]), (1, 4))
+        self.assertEqual(site["expressionStatus"], "executable")
+        self.assertEqual(site["minimumExpression"]["value"], 1)
+        self.assertEqual(site["maximumExpression"]["value"], 4)
         self.assertEqual(inventory["procedures"][0]["eventKind"], "program-start")
         self.assertEqual(inventory["procedures"][0]["branches"], [])
 
@@ -63,7 +79,20 @@ class ClassicIntInitializationTests(unittest.TestCase):
         self.assertEqual(site["operandKind"], "source-stack-expression")
         self.assertIsNone(site["minimum"])
         self.assertIsNone(site["maximum"])
+        self.assertEqual(site["expressionStatus"], "unsupported")
+        self.assertIn("opcode 0x80bf", site["unsupported"])
         self.assertEqual(inventory["procedures"][0]["eventKind"], "map-enter")
+
+    def test_int_inventory_decodes_expression_branch_stack_order(self) -> None:
+        inventory = inventory_int_program(synthetic_expression_branch_int())
+        branch = inventory["procedures"][0]["branches"][0]
+        self.assertEqual(branch["expressionStatus"], "executable")
+        self.assertEqual(branch["target"]["value"], 42)
+        self.assertEqual(branch["condition"]["kind"], "add")
+        self.assertEqual(
+            [argument["value"] for argument in branch["condition"]["arguments"]],
+            [1, 2],
+        )
 
     def test_map_script_records_decode_type_specific_program_indices(self) -> None:
         data = bytearray()

@@ -27,6 +27,8 @@ SELF_OBJ = 0x80BC
 DUDE_OBJ = 0x80BF
 LOCAL_VAR = 0x80C1
 SET_LOCAL_VAR = 0x80C2
+MAP_VAR = 0x80C3
+GLOBAL_VAR = 0x80C5
 EQUAL = 0x8033
 AND = 0x803E
 IF = 0x802F
@@ -38,6 +40,16 @@ SCRIPT_OVERRIDES = 0x80B9
 MESSAGE_STR = 0x8105
 ADD = 0x8039
 NEGATE = 0x8046
+FETCH_PROGRAM_VARIABLE = 0x8012
+FETCH_LOCAL_VARIABLE = 0x8032
+NOT_EQUAL = 0x8034
+GREATER_THAN_OR_EQUAL = 0x8036
+LESS_THAN = 0x8037
+SUBTRACT = 0x803A
+MULTIPLY = 0x803B
+DIVIDE = 0x803C
+MODULO = 0x803D
+NOT = 0x8045
 OR = 0x803F
 DUDE_NAME = 0x80A4
 GSAY_REPLY = 0x811E
@@ -81,6 +93,75 @@ class Instruction:
     offset: int
     opcode: int
     operand: int | None = None
+
+
+_EXPRESSION_OPERATIONS = {
+    FETCH_PROGRAM_VARIABLE: ("program-variable", 1),
+    FETCH_LOCAL_VARIABLE: ("local-variable", 1),
+    LOCAL_VAR: ("script-local-variable", 1),
+    MAP_VAR: ("map-variable", 1),
+    GLOBAL_VAR: ("global-variable", 1),
+    EQUAL: ("equal", 2),
+    NOT_EQUAL: ("not-equal", 2),
+    GREATER_THAN_OR_EQUAL: ("greater-than-or-equal", 2),
+    LESS_THAN: ("less-than", 2),
+    ADD: ("add", 2),
+    SUBTRACT: ("subtract", 2),
+    MULTIPLY: ("multiply", 2),
+    DIVIDE: ("divide", 2),
+    MODULO: ("modulo", 2),
+    AND: ("and", 2),
+    OR: ("or", 2),
+    NOT: ("not", 1),
+    NEGATE: ("negate", 1),
+    RANDOM: ("random-inclusive", 2),
+}
+
+
+def _source_expression(
+    instructions: list[Instruction],
+    end: int,
+) -> tuple[dict[str, Any], int]:
+    if end < 0:
+        raise ClassicIntDecodeError("INT expression exhausted the procedure stack")
+    instruction = instructions[end]
+    if instruction.opcode == PUSH_INT:
+        return {
+            "kind": "literal",
+            "offset": instruction.offset,
+            "value": instruction.operand,
+            "arguments": [],
+        }, end
+    operation = _EXPRESSION_OPERATIONS.get(instruction.opcode)
+    if operation is None:
+        raise ClassicIntDecodeError(
+            f"unsupported INT expression opcode 0x{instruction.opcode:04x} "
+            f"at 0x{instruction.offset:x}"
+        )
+    kind, arity = operation
+    arguments = []
+    start = end
+    for _ in range(arity):
+        argument, start = _source_expression(instructions, start - 1)
+        arguments.append(argument)
+    arguments.reverse()
+    return {
+        "kind": kind,
+        "offset": instruction.offset,
+        "value": None,
+        "arguments": arguments,
+    }, start
+
+
+def _bounded_expression(
+    instructions: list[Instruction],
+    end: int,
+) -> tuple[dict[str, Any] | None, int | None, str | None]:
+    try:
+        expression, start = _source_expression(instructions, end)
+        return expression, start, None
+    except ClassicIntDecodeError as error:
+        return None, None, str(error)
 
 
 def _u32(data: bytes, offset: int, label: str) -> int:
@@ -181,21 +262,33 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
         for index, instruction in enumerate(instructions):
             if instruction.opcode not in {IF, JUMP}:
                 continue
-            target = instructions[index - 1] if index >= 1 else None
+            condition = None
+            condition_start = index
+            condition_error = None
+            if instruction.opcode == IF:
+                condition, condition_start, condition_error = _bounded_expression(
+                    instructions, index - 1
+                )
+            if condition_start is None:
+                target = None
+                target_error = "INT branch target follows an unsupported condition"
+            else:
+                target, _, target_error = _bounded_expression(
+                    instructions, condition_start - 1
+                )
             branches.append(
                 {
                     "offset": instruction.offset,
                     "kind": "conditional" if instruction.opcode == IF else "jump",
-                    "targetKind": (
-                        "literal-immediate"
-                        if target is not None and target.opcode == PUSH_INT
-                        else "source-stack-expression"
+                    "targetKind": "source-expression",
+                    "target": target,
+                    "condition": condition,
+                    "expressionStatus": (
+                        "executable"
+                        if target_error is None and condition_error is None
+                        else "unsupported"
                     ),
-                    "target": (
-                        target.operand
-                        if target is not None and target.opcode == PUSH_INT
-                        else None
-                    ),
+                    "unsupported": target_error or condition_error,
                 }
             )
         sites: list[dict[str, Any]] = []
@@ -210,6 +303,15 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
                 and lower.opcode == PUSH_INT
                 and upper.opcode == PUSH_INT
             )
+            maximum_expression, maximum_start, maximum_error = _bounded_expression(
+                instructions, index - 1
+            )
+            minimum_expression = None
+            minimum_error = None
+            if maximum_start is not None:
+                minimum_expression, _, minimum_error = _bounded_expression(
+                    instructions, maximum_start - 1
+                )
             site = {
                 "procedure": name,
                 "offset": instruction.offset,
@@ -220,6 +322,14 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
                 ),
                 "minimum": lower.operand if literal else None,
                 "maximum": upper.operand if literal else None,
+                "minimumExpression": minimum_expression,
+                "maximumExpression": maximum_expression,
+                "expressionStatus": (
+                    "executable"
+                    if maximum_error is None and minimum_error is None
+                    else "unsupported"
+                ),
+                "unsupported": maximum_error or minimum_error,
             }
             sites.append(site)
             random_sites.append(site)
@@ -247,7 +357,7 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
             }
         )
     return {
-        "schema": "opennv-classic-int-initialization-inventory/v1",
+        "schema": "opennv-classic-int-initialization-inventory/v2",
         "procedures": rows,
         "randomSites": random_sites,
         "randomOpcode": f"{RANDOM:04x}",

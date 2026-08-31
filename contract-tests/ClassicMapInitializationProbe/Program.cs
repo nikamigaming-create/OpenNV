@@ -92,7 +92,7 @@ using var intDocument = JsonDocument.Parse("""
           "logicalPath": "scripts\\acklint.int",
           "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
           "inventory": {
-            "schema": "opennv-classic-int-initialization-inventory/v1",
+            "schema": "opennv-classic-int-initialization-inventory/v2",
             "randomOpcode": "80b4",
             "procedures": [{
               "name": "map_enter_p_proc",
@@ -104,13 +104,32 @@ using var intDocument = JsonDocument.Parse("""
               "offset": 212,
               "operandKind": "literal-inclusive-range",
               "minimum": 1,
-              "maximum": 5
+              "maximum": 5,
+              "expressionStatus": "executable",
+              "unsupported": null,
+              "minimumExpression": {
+                "kind": "literal", "offset": 200, "value": 1, "arguments": []
+              },
+              "maximumExpression": {
+                "kind": "literal", "offset": 206, "value": 5, "arguments": []
+              }
             }, {
               "procedure": "map_enter_p_proc",
               "offset": 224,
               "operandKind": "source-stack-expression",
               "minimum": null,
-              "maximum": null
+              "maximum": null,
+              "expressionStatus": "executable",
+              "unsupported": null,
+              "minimumExpression": {
+                "kind": "literal", "offset": 212, "value": 1, "arguments": []
+              },
+              "maximumExpression": {
+                "kind": "program-variable", "offset": 218, "value": null,
+                "arguments": [{
+                  "kind": "literal", "offset": 214, "value": 7, "arguments": []
+                }]
+              }
             }]
           }
         }
@@ -123,7 +142,15 @@ using var intDocument = JsonDocument.Parse("""
         "offset": 212,
         "operandKind": "literal-inclusive-range",
         "minimum": 1,
-        "maximum": 5
+        "maximum": 5,
+        "expressionStatus": "executable",
+        "unsupported": null,
+        "minimumExpression": {
+          "kind": "literal", "offset": 200, "value": 1, "arguments": []
+        },
+        "maximumExpression": {
+          "kind": "literal", "offset": 206, "value": 5, "arguments": []
+        }
       }, {
         "owner": "live-map-script-slot",
         "sid": "04000001",
@@ -132,7 +159,18 @@ using var intDocument = JsonDocument.Parse("""
         "offset": 224,
         "operandKind": "source-stack-expression",
         "minimum": null,
-        "maximum": null
+        "maximum": null,
+        "expressionStatus": "executable",
+        "unsupported": null,
+        "minimumExpression": {
+          "kind": "literal", "offset": 212, "value": 1, "arguments": []
+        },
+        "maximumExpression": {
+          "kind": "program-variable", "offset": 218, "value": null,
+          "arguments": [{
+            "kind": "literal", "offset": 214, "value": 7, "arguments": []
+          }]
+        }
       }]
     }
     """);
@@ -150,6 +188,25 @@ if (intInitialization.EngineInterleavingTransported ||
     intInitialization.RandomSites[1].Maximum is not null)
     throw new InvalidOperationException(
         "Classic MAP INT initialization contract drifted.");
+
+using var randomDocument = JsonDocument.Parse(File.ReadAllBytes(
+    Path.Combine("runtime", "config", "classic-retail-random-fo2-1.02-v1.json")));
+var randomContract = ClassicRetailRandomContract.Parse(randomDocument.RootElement);
+var randomState = ClassicRetailRandomLifecycle.Initialize(1, randomContract);
+var expressionResult = ClassicIntExpressionOwner.EvaluateRandomSite(
+    intInitialization.RandomSites[1],
+    new ClassicIntExpressionContext(
+        new Dictionary<int, int> { [7] = 3 },
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>()),
+    randomState,
+    randomContract);
+if (expressionResult.Value is < 1 or > 3 ||
+    expressionResult.RandomState.Events.Count != randomState.Events.Count + 1)
+    throw new InvalidOperationException(
+        "Classic INT source expression evaluation or RANDOM consumption drifted.");
 
 using var missingScript = JsonDocument.Parse("""
     {
