@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Godot;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Presentation.CharacterCreation;
 
 
@@ -303,11 +304,17 @@ internal partial class OpeningQuestRuntime
             : _flow.GuideActorAi.Locomotion.Walk;
         if (_guideActor.Placement.Position == groundedTarget.Origin)
         {
-            _guidePackageTravel = GamebryoPackageTravel.ArriveAtSourceTarget(
-                package.FormId,
-                groundedPlacement,
-                _guideActor.Placement.Transform,
-                GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
+            _guidePackageTravel = _restoringGuidePackage
+                ? GamebryoPackageTravel.RestoreSettledAtSourceTarget(
+                    package.FormId,
+                    groundedPlacement,
+                    _guideActor.Placement.Transform,
+                    GamebryoPackageTravel.ExactArrivalToleranceCellUnits)
+                : GamebryoPackageTravel.ArriveAtSourceTarget(
+                    package.FormId,
+                    groundedPlacement,
+                    _guideActor.Placement.Transform,
+                    GamebryoPackageTravel.ExactArrivalToleranceCellUnits);
             _guidePackageTravel.Publish(_guideActor.Placement);
             _guideMoving = false;
             FinishGuideTravel();
@@ -342,6 +349,7 @@ internal partial class OpeningQuestRuntime
             _activeGuideLocomotion.LogicalPath,
             _activeGuideLocomotion.Sha256,
             restart: true);
+        RestoreGuideLocomotionAnimation(package);
     }
 
     private bool TryPreserveInitialFurnitureOccupancy(OpeningGuidePackage package)
@@ -643,6 +651,64 @@ internal partial class OpeningQuestRuntime
             idleAnimationFormId: idleFormId);
         _activeGuideIdleAnimation = _activeGuideAnimation;
         _activeGuideAnimation = null;
+        RestoreGuidePackageAnimation(package);
+    }
+
+    private OpeningGuidePackageState? CaptureGuidePackageState()
+    {
+        var animation = _activeGuideIdleAnimation ?? _activeGuideAnimation;
+        if (_activeGuidePackage is null || animation is null)
+            return null;
+        var active = animation.Value;
+        var state = new OpeningGuidePackageState(
+            _activeGuidePackage.FormId,
+            active.LogicalPath,
+            active.Player.CurrentAnimationPosition,
+            _guidePackageTravel?.Arrived ?? !_guideMoving);
+        state.Validate();
+        return state;
+    }
+
+    private void RestoreGuidePackageAnimation(OpeningGuidePackage package)
+    {
+        if (!_restoringGuidePackage)
+            return;
+        var state = _restoredGuidePackageState ?? throw new InvalidOperationException(
+            "Saved opening checkpoint has no guide package state.");
+        var animation = _activeGuideIdleAnimation ?? throw new InvalidOperationException(
+            "Saved opening guide package has no resolved animation.");
+        if (!state.Arrived ||
+            !state.PackageFormId.Equals(package.FormId, StringComparison.OrdinalIgnoreCase) ||
+            !ActorModelSlice.NormalizeAnimationPath(state.AnimationLogicalPath).Equals(
+                ActorModelSlice.NormalizeAnimationPath(animation.LogicalPath),
+                StringComparison.OrdinalIgnoreCase) ||
+            state.AnimationPositionSeconds < animation.StartSeconds ||
+            state.AnimationPositionSeconds > animation.StopSeconds)
+            throw new InvalidOperationException(
+                "Saved opening guide package state differs from its owned package.");
+        animation.Player.Seek(state.AnimationPositionSeconds, update: true);
+        _restoredGuidePackageState = null;
+    }
+
+    private void RestoreGuideLocomotionAnimation(OpeningGuidePackage package)
+    {
+        if (!_restoringGuidePackage)
+            return;
+        var state = _restoredGuidePackageState ?? throw new InvalidOperationException(
+            "Saved opening checkpoint has no guide package state.");
+        var animation = _activeGuideAnimation ?? throw new InvalidOperationException(
+            "Saved opening guide travel has no resolved animation.");
+        if (state.Arrived ||
+            !state.PackageFormId.Equals(package.FormId, StringComparison.OrdinalIgnoreCase) ||
+            !ActorModelSlice.NormalizeAnimationPath(state.AnimationLogicalPath).Equals(
+                ActorModelSlice.NormalizeAnimationPath(animation.LogicalPath),
+                StringComparison.OrdinalIgnoreCase) ||
+            state.AnimationPositionSeconds < animation.StartSeconds ||
+            state.AnimationPositionSeconds > animation.StopSeconds)
+            throw new InvalidOperationException(
+                "Saved opening guide travel state differs from its owned package.");
+        animation.Player.Seek(state.AnimationPositionSeconds, update: true);
+        _restoredGuidePackageState = null;
     }
 
     private void PlayGuideAnimation(

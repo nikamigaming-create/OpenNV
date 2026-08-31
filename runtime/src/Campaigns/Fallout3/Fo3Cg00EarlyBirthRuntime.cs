@@ -64,6 +64,11 @@ internal partial class Fo3OpeningFlow
         internal double ElapsedSeconds => Animation.PositionSeconds;
     }
 
+    private sealed record Fo3Cg00ActorPackageState(
+        string PackageFormId,
+        double AnimationPositionSeconds,
+        GamebryoPackageTravelState? Travel);
+
     private sealed record Fo3Cg00EvaluatedDialogueCondition(
         string VoiceTypeFormId,
         Fo3Cg00DialogueCondition Source);
@@ -437,25 +442,8 @@ internal partial class Fo3OpeningFlow
                             (uint)condition.RunOn,
                             "")]
                         : [],
-                    package.Section == 0
-                        ? new GamebryoPackageTarget(
-                            "referenceMarker",
-                            participant.StartMarkerFormId,
-                            GamebryoPackagePlacement.FromPlanarGameReferenceMarker(
-                                participant.StartMarkerFormId,
-                                participant.StartMarkerTransform.PositionGameUnits,
-                                participant.StartMarkerTransform.RotationRadians,
-                                participant.ReferenceTransform.Scale,
-                                coverage.Contract.EntryPositionGameUnits))
-                        : GamebryoPackageTarget.None,
-                    new SourceActorAnimation(
-                        package.AnimationLogicalPath,
-                        package.AnimationSha256,
-                        package.AnimationSequenceName,
-                        (float)package.AnimationStartSeconds,
-                        (float)package.AnimationStopSeconds,
-                        package.AnimationCycleType,
-                        "owned-world-root-authoritative-zero-local-translation"),
+                    Cg00PackageTarget(package, participant, coverage),
+                    Cg00PackageAnimation(package),
                     package))
                 .ToArray();
             var selected = GamebryoPackageSelector.SelectFirst(
@@ -500,6 +488,77 @@ internal partial class Fo3OpeningFlow
                 selected.Animation ?? throw new InvalidOperationException(
                     "Fallout 3 selected actor package has no source animation."),
                 selected.Value.AnimationStartSeconds,
+                travel);
+        }
+    }
+
+    private static GamebryoPackageTarget Cg00PackageTarget(
+        Fo3Cg00PackageSection package,
+        Fo3Cg00SceneParticipant participant,
+        Fo3Vault101BirthSceneCoverage coverage) => package.Section == 0
+        ? new GamebryoPackageTarget(
+            "referenceMarker",
+            participant.StartMarkerFormId,
+            GamebryoPackagePlacement.FromPlanarGameReferenceMarker(
+                participant.StartMarkerFormId,
+                participant.StartMarkerTransform.PositionGameUnits,
+                participant.StartMarkerTransform.RotationRadians,
+                participant.ReferenceTransform.Scale,
+                coverage.Contract.EntryPositionGameUnits))
+        : GamebryoPackageTarget.None;
+
+    private static SourceActorAnimation Cg00PackageAnimation(
+        Fo3Cg00PackageSection package) => new(
+        package.AnimationLogicalPath,
+        package.AnimationSha256,
+        package.AnimationSequenceName,
+        (float)package.AnimationStartSeconds,
+        (float)package.AnimationStopSeconds,
+        package.AnimationCycleType,
+        "owned-world-root-authoritative-zero-local-translation");
+
+    private IReadOnlyDictionary<string, Fo3Cg00ActorPackageState>
+        CaptureCg00ActorPackageStates() => _cg00ActorPackages.ToDictionary(
+            value => value.Key,
+            value => new Fo3Cg00ActorPackageState(
+                value.Value.Contract.PackageFormId,
+                value.Value.Animation.PositionSeconds,
+                value.Value.Travel?.CaptureState()),
+            StringComparer.Ordinal);
+
+    private void RestoreCg00ActorPackageStates(
+        IReadOnlyDictionary<string, Fo3Cg00ActorPackageState> states)
+    {
+        if (states.Count == 0)
+            return;
+        var sequence = _profile.EarlyBirthSequence;
+        var coverage = _vaultBirthCoverage ?? throw new InvalidOperationException(
+            "Fallout 3 package restore has no Vault world.");
+        _cg00ActorPackages.Clear();
+        foreach (var (role, state) in states.OrderBy(value => value.Key, StringComparer.Ordinal))
+        {
+            if (!sequence.SceneParticipants.TryGetValue(role, out var participant) ||
+                !sequence.PackageSections.TryGetValue(role, out var packages))
+                throw new InvalidOperationException(
+                    $"Saved Fallout 3 package role is absent: {role}");
+            var contract = packages.SingleOrDefault(value => value.PackageFormId.Equals(
+                state.PackageFormId,
+                StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidOperationException(
+                    $"Saved Fallout 3 package is absent for {role}: {state.PackageFormId}");
+            var target = Cg00PackageTarget(contract, participant, coverage);
+            GamebryoPackageTravel? travel = null;
+            if (state.Travel is not null)
+            {
+                var placement = target.Placement ?? throw new InvalidOperationException(
+                    $"Saved Fallout 3 package travel target is absent for {role}.");
+                travel = GamebryoPackageTravel.Restore(state.Travel, placement);
+                travel.Publish(ActorForCg00Role(role).Placement);
+            }
+            StartCg00ActorPackage(
+                role,
+                contract,
+                Cg00PackageAnimation(contract),
+                state.AnimationPositionSeconds,
                 travel);
         }
     }

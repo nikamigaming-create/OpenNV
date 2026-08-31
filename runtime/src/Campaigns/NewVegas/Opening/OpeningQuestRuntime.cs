@@ -134,6 +134,8 @@ internal partial class OpeningQuestRuntime : CanvasLayer
     private string? _guideAnimationObjectIdleFormId;
     private OpeningCigaretteSmokePresentation? _guideCigaretteSmokePresentation;
     private GamebryoPackageTravel? _guidePackageTravel;
+    private bool _restoringGuidePackage;
+    private OpeningGuidePackageState? _restoredGuidePackageState;
     private OpeningGuideReference? _guideDestinationReference;
     private bool _guideMoving;
     private bool _guidePackageBegan;
@@ -970,7 +972,21 @@ internal partial class OpeningQuestRuntime : CanvasLayer
         _guideArrivalContinuation = null;
         CloseModal(false);
         ApplyStageControlPolicy();
-        EvaluateGuidePackage();
+        _restoringGuidePackage = true;
+        try
+        {
+            if (_restoredGuidePackageState is null)
+                throw new InvalidOperationException(
+                    "Saved opening checkpoint has no guide package continuation state.");
+            EvaluateGuidePackage();
+            if (_restoredGuidePackageState is not null)
+                throw new InvalidOperationException(
+                    "Saved opening guide package continuation was not consumed.");
+        }
+        finally
+        {
+            _restoringGuidePackage = false;
+        }
         var resumeCommandIndex = autosaveIndices[0] + 1;
         GD.Print(
             $"OPENNV_NEW_GAME_CHECKPOINT_RESUME quest={_flow.QuestEditorId} " +

@@ -4,8 +4,12 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed record GamebryoPackageTravelState(
     string PackageFormId,
+    string TargetKind,
     string TargetFormId,
+    IReadOnlyList<Vector3> Waypoints,
     int WaypointIndex,
+    float SpeedCellUnitsPerSecond,
+    float ArrivalToleranceCellUnits,
     Transform3D Transform,
     bool Arrived);
 
@@ -90,6 +94,65 @@ internal sealed class GamebryoPackageTravel
             true);
     }
 
+    internal static GamebryoPackageTravel Restore(
+        GamebryoPackageTravelState state,
+        SourcePackagePlacement target)
+    {
+        Validate(
+            state.PackageFormId,
+            target,
+            state.Transform,
+            state.ArrivalToleranceCellUnits);
+        if (!state.TargetKind.Equals(target.Kind, StringComparison.Ordinal) ||
+            !state.TargetFormId.Equals(
+                target.TargetFormId,
+                StringComparison.OrdinalIgnoreCase) ||
+            state.Waypoints.Any(waypoint => !waypoint.IsFinite()) ||
+            !float.IsFinite(state.SpeedCellUnitsPerSecond) ||
+            state.SpeedCellUnitsPerSecond < 0.0f ||
+            state.WaypointIndex < 0 ||
+            state.WaypointIndex > state.Waypoints.Count ||
+            state.Arrived != (state.WaypointIndex == state.Waypoints.Count) ||
+            state.Arrived && state.Transform.Origin.DistanceTo(
+                target.SourceTransform.Origin) > state.ArrivalToleranceCellUnits ||
+            !state.Arrived && state.SpeedCellUnitsPerSecond <= 0.0f)
+            throw new InvalidOperationException(
+                "Saved source package travel state differs from its owned target.");
+        var restored = new GamebryoPackageTravel(
+            state.PackageFormId,
+            target,
+            state.Waypoints.ToArray(),
+            state.SpeedCellUnitsPerSecond,
+            state.ArrivalToleranceCellUnits,
+            state.Transform,
+            state.Arrived)
+        {
+            _waypointIndex = state.WaypointIndex,
+        };
+        return restored;
+    }
+
+    internal static GamebryoPackageTravel RestoreSettledAtSourceTarget(
+        string packageFormId,
+        SourcePackagePlacement target,
+        Transform3D savedTransform,
+        float arrivalToleranceCellUnits)
+    {
+        Validate(packageFormId, target, savedTransform, arrivalToleranceCellUnits);
+        if (savedTransform.Origin.DistanceTo(target.SourceTransform.Origin) >
+            arrivalToleranceCellUnits)
+            throw new InvalidOperationException(
+                "Saved source package rest position differs from its owned target.");
+        return new GamebryoPackageTravel(
+            packageFormId,
+            target,
+            Array.Empty<Vector3>(),
+            0.0f,
+            arrivalToleranceCellUnits,
+            savedTransform,
+            true);
+    }
+
     internal bool Advance(double deltaSeconds)
     {
         if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0.0)
@@ -131,8 +194,12 @@ internal sealed class GamebryoPackageTravel
 
     internal GamebryoPackageTravelState CaptureState() => new(
         _packageFormId,
+        _target.Kind,
         _target.TargetFormId,
+        _waypoints.ToArray(),
         _waypointIndex,
+        _speedCellUnitsPerSecond,
+        _arrivalToleranceCellUnits,
         Transform,
         Arrived);
 

@@ -396,6 +396,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "Fallout 3 Vault 101 birth room does not join the stage-62 package location.");
+        var resumedCg00ActorPackages = CaptureCg00ActorPackageStates();
         if (_vaultPreviewHost is not null)
         {
             _vaultPreviewHost.QueueFree();
@@ -461,6 +462,7 @@ internal partial class Fo3OpeningFlow : CanvasLayer
         }
         _vaultPreviewHost = previewHost;
         _vaultBirthCoverage = coverage;
+        RestoreCg00ActorPackageStates(resumedCg00ActorPackages);
         _background.Visible = false;
         _panel.Visible = false;
 

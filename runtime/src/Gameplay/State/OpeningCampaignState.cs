@@ -35,9 +35,10 @@ internal sealed record OpeningCampaignState(
     OpeningTransformState PlayerTransform,
     OpeningTransformState GuideTransform)
 {
-    internal const string ExpectedSchema = "opennv-opening-campaign-state/v6";
+    internal const string ExpectedSchema = "opennv-opening-campaign-state/v7";
 
     internal OpeningEquippedWeaponState? EquippedWeapon { get; init; }
+    internal OpeningGuidePackageState? GuidePackage { get; init; }
 
     internal static OpeningCampaignState Parse(JsonElement source)
     {
@@ -86,6 +87,8 @@ internal sealed record OpeningCampaignState(
                 weapon.ValueKind == JsonValueKind.Object
                 ? OpeningEquippedWeaponState.Parse(weapon)
                 : null,
+            GuidePackage = OpeningGuidePackageState.Parse(
+                source.GetProperty(nameof(GuidePackage))),
         };
         result.Validate();
         return result;
@@ -131,6 +134,7 @@ internal sealed record OpeningCampaignState(
         foreach (var item in Inventory)
             item.Validate();
         EquippedWeapon?.Validate();
+        GuidePackage?.Validate();
         if (EquippedWeapon is { } weapon &&
             (!EquippedItemFormIds.Contains(weapon.WeaponFormId, StringComparer.OrdinalIgnoreCase) ||
              !Inventory.Any(item =>
@@ -169,6 +173,35 @@ internal sealed record OpeningCampaignState(
 
     private static IReadOnlyList<string> ReadStrings(JsonElement source) =>
         source.EnumerateArray().Select(value => value.GetString()!).ToArray();
+}
+
+internal sealed record OpeningGuidePackageState(
+    string PackageFormId,
+    string AnimationLogicalPath,
+    double AnimationPositionSeconds,
+    bool Arrived)
+{
+    internal static OpeningGuidePackageState? Parse(JsonElement source)
+    {
+        if (source.ValueKind == JsonValueKind.Null)
+            return null;
+        if (source.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Saved guide package state is invalid.");
+        return new OpeningGuidePackageState(
+            source.GetProperty(nameof(PackageFormId)).GetString()!,
+            source.GetProperty(nameof(AnimationLogicalPath)).GetString()!,
+            source.GetProperty(nameof(AnimationPositionSeconds)).GetDouble(),
+            source.GetProperty(nameof(Arrived)).GetBoolean());
+    }
+
+    internal void Validate()
+    {
+        if (FalloutFormId.Normalize(PackageFormId) != PackageFormId ||
+            string.IsNullOrWhiteSpace(AnimationLogicalPath) ||
+            !double.IsFinite(AnimationPositionSeconds) ||
+            AnimationPositionSeconds < 0.0)
+            throw new InvalidOperationException("Saved guide package state is invalid.");
+    }
 }
 
 internal sealed record OpeningCharacterAppearanceState(

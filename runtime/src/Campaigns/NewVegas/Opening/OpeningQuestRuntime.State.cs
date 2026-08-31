@@ -498,7 +498,10 @@ internal partial class OpeningQuestRuntime
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
         _playerControls.Select(value => value ? EnabledControlValue : DisabledControlValue).ToArray(),
         OpeningTransformState.Capture(_loaded.Player),
-        OpeningTransformState.Capture(_guideActor.Placement));
+        OpeningTransformState.Capture(_guideActor.Placement))
+    {
+        GuidePackage = CaptureGuidePackageState(),
+    };
 
     internal static bool MatchesFlow(
         OpeningNewGameFlow flow,
@@ -739,6 +742,7 @@ internal partial class OpeningQuestRuntime
             _playerControls[index] = state.PlayerControls[index] == EnabledControlValue;
         state.PlayerTransform.Apply(_loaded.Player);
         state.GuideTransform.Apply(_guideActor.Placement);
+        _restoredGuidePackageState = state.GuidePackage;
         foreach (var reference in _referenceEnabledStates)
             SetReferenceVisibility(reference.Key, reference.Value, false);
     }
