@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Presentation.Ui;
+using System.Text.Json;
 
 var hash = new string('a', 64);
 var layout = new OwnedGamebryoTileLayout(
@@ -70,9 +71,56 @@ ExpectSelectionFailure(options, "missing");
 ExpectSelectionFailure(
     [new SourceOption("duplicate", "One"), new SourceOption("duplicate", "Two")],
     "duplicate");
+using var dialogueDocument = JsonDocument.Parse($$"""
+{
+  "schema": "opennv-owned-dialogue-menu-tiles/v1",
+  "document": "menus\\dialog\\dialog_menu.xml",
+  "documentSha256": "{{hash}}",
+  "menuName": "DialogMenu",
+  "canvasSize": [1280, 720],
+  "background": {
+    "tile": "DM_TextBackground", "texture": "textures\\interface\\shared\\background\\solid_black.dds",
+    "width": 1080, "brightness": 128, "topInset": 5, "verticalInset": 50, "heightPadding": 80
+  },
+  "clickTile": "DM_ClickRect",
+  "speakerName": { "tile": "DM_SpeakerNameLabel", "font": 7, "rightInset": 50, "topInset": 170 },
+  "speakerText": {
+    "tile": "DM_SpeakerText", "font": 6, "wrapInset": 120, "leftInset": 60,
+    "centerHeightFactor": 0.8, "safeBottomInset": 40
+  },
+  "topics": {
+    "tile": "DM_TopicList", "minimumHeight": 110, "widthInset": 70, "leftInset": 20,
+    "backgroundHeightPadding": 60,
+    "template": { "tile": "DM_Topic", "textTile": "ListItemText", "font": 6, "textX": 25, "textY": 15, "wrapInset": 40, "verticalSpacing": 20 }
+  }
+}
+""");
+var dialogue = OwnedGamebryoTileRuntime.ParseDialogueMenu(dialogueDocument.RootElement);
+if (dialogue.SpeakerTextFont != dialogue.TopicFont ||
+    dialogue.BackgroundWidth != 1080.0f || dialogue.TopicMinimumHeight != 110.0f)
+    throw new InvalidOperationException("Gamebryo DialogueMenu traits differ.");
+ExpectDialogueFailure(dialogueDocument.RootElement, "unsupported-dialogue-menu/v1");
 
 Console.WriteLine(
-    "OPENNV_GAMEBRYO_UI_TILE_CONTRACT_PASS layout=1 text=1 affine=1 navigation=1 selection=1 failClosed=7");
+    "OPENNV_GAMEBRYO_UI_TILE_CONTRACT_PASS layout=1 text=1 affine=1 navigation=1 selection=1 dialogue=1 failClosed=8");
+
+static void ExpectDialogueFailure(JsonElement source, string schema)
+{
+    var json = source.GetRawText().Replace(
+        "opennv-owned-dialogue-menu-tiles/v1",
+        schema,
+        StringComparison.Ordinal);
+    using var document = JsonDocument.Parse(json);
+    try
+    {
+        OwnedGamebryoTileRuntime.ParseDialogueMenu(document.RootElement);
+    }
+    catch (InvalidOperationException)
+    {
+        return;
+    }
+    throw new InvalidOperationException("Gamebryo DialogueMenu did not fail closed.");
+}
 
 static void ExpectSelectionFailure(
     IReadOnlyList<SourceOption> options,

@@ -21,7 +21,7 @@ internal partial class Fo3OpeningFlow
     private double _cg00EarlyTimerSeconds;
     private int? _cg00EarlyTimerTargetStage;
     private readonly List<Fo3Cg00ImageSpaceLayer> _cg00EarlyImageSpaceLayers = [];
-    private Label? _cg00EarlySubtitle;
+    private Button? _cg00EarlySubtitle;
     private AudioStreamPlayer? _cg00EarlyVoice;
     private GamebryoDialoguePlayback? _cg00EarlyDialogue;
     private string? _cg00EarlyInfoFormId;
@@ -361,8 +361,10 @@ internal partial class Fo3OpeningFlow
             CompleteCg00Dialogue(cues[^1]);
         });
         _cg00EarlySubtitle ??= AddVaultDialogueOverlay("FO3_CG00_EARLY_DIALOGUE");
-        _cg00EarlySubtitle.Text = $"{actor.Actor.Name.ToUpperInvariant()}: {cue.Text}";
-        _cg00EarlySubtitle.Visible = true;
+        ShowVaultDialogue(
+            _cg00EarlySubtitle,
+            actor.Actor.Name.ToUpperInvariant(),
+            cue.Text);
         _vaultPreviewOverlay?.MoveToFront();
         if (_cg00EarlyImageSpaceLayers.Any(layer =>
                 layer.Surface.GetIndex() >= _vaultPreviewOverlay?.GetIndex()))

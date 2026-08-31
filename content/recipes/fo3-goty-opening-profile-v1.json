@@ -70,6 +70,8 @@
       "menus\\options\\main_menu.xml",
       "menus\\message_menu.xml",
       "menus\\dialog\\texteditmenu.xml",
+      "menus\\dialog\\dialog_menu.xml",
+      "menus\\prefabs\\list_box_template.xml",
       "menus\\chargen\\race_sex_menu.xml",
       "menus\\prefabs\\text_box.xml",
       "menus\\levelup_menu.xml",
@@ -87,7 +89,8 @@
       { "section": "Loading", "key": "sMainMenuBackground" },
       { "section": "Interface", "key": "iSystemColorMainMenuRed" },
       { "section": "Interface", "key": "iSystemColorMainMenuGreen" },
-      { "section": "Interface", "key": "iSystemColorMainMenuBlue" }
+      { "section": "Interface", "key": "iSystemColorMainMenuBlue" },
+      { "section": "Interface", "key": "fMenuBackgroundOpacity" }
     ]
   },
   "opening": {

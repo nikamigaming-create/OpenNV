@@ -84,6 +84,41 @@ internal sealed record OwnedGamebryoRaceSexControls(
     OwnedGamebryoRaceSexTemplate List,
     OwnedGamebryoRaceSexTemplate Slider);
 
+internal sealed record OwnedGamebryoDialogueMenu(
+    Vector2 CanvasSize,
+    string Document,
+    string DocumentSha256,
+    string BackgroundTile,
+    string BackgroundTexture,
+    float BackgroundWidth,
+    float BackgroundBrightness,
+    string ClickTile,
+    string SpeakerNameTile,
+    int SpeakerNameFont,
+    float SpeakerNameRightInset,
+    float SpeakerNameTopInset,
+    string SpeakerTextTile,
+    int SpeakerTextFont,
+    float SpeakerWrapInset,
+    float SpeakerLeftInset,
+    float CenterHeightFactor,
+    float SafeBottomInset,
+    float BackgroundTopInset,
+    float BackgroundVerticalInset,
+    float BackgroundHeightPadding,
+    string TopicListTile,
+    float TopicMinimumHeight,
+    float TopicWidthInset,
+    float TopicLeftInset,
+    float TopicBackgroundHeightPadding,
+    string TopicTile,
+    string TopicTextTile,
+    int TopicFont,
+    float TopicTextX,
+    float TopicTextY,
+    float TopicWrapInset,
+    float TopicVerticalSpacing);
+
 internal static class OwnedGamebryoTileRuntime
 {
     private const int Sha256HexCharacters = 64;
@@ -277,6 +312,84 @@ internal static class OwnedGamebryoTileRuntime
                     sliderText.GetProperty("x").GetSingle(),
                     sliderText.GetProperty("y").GetSingle())));
         ValidateRaceSexControls(result);
+        return result;
+    }
+
+    internal static OwnedGamebryoDialogueMenu ParseDialogueMenu(JsonElement source)
+    {
+        const string schema = "opennv-owned-dialogue-menu-tiles/v1";
+        if (source.GetProperty("schema").GetString() != schema ||
+            source.GetProperty("menuName").GetString() != "DialogMenu")
+            throw new InvalidOperationException(
+                "Owned DialogueMenu tile contract identity differs.");
+        var background = source.GetProperty("background");
+        var speakerName = source.GetProperty("speakerName");
+        var speakerText = source.GetProperty("speakerText");
+        var topics = source.GetProperty("topics");
+        var template = topics.GetProperty("template");
+        var result = new OwnedGamebryoDialogueMenu(
+            ReadVector(source.GetProperty("canvasSize")),
+            source.GetProperty("document").GetString()!,
+            source.GetProperty("documentSha256").GetString()!,
+            background.GetProperty("tile").GetString()!,
+            background.GetProperty("texture").GetString()!,
+            background.GetProperty("width").GetSingle(),
+            background.GetProperty("brightness").GetSingle(),
+            source.GetProperty("clickTile").GetString()!,
+            speakerName.GetProperty("tile").GetString()!,
+            speakerName.GetProperty("font").GetInt32(),
+            speakerName.GetProperty("rightInset").GetSingle(),
+            speakerName.GetProperty("topInset").GetSingle(),
+            speakerText.GetProperty("tile").GetString()!,
+            speakerText.GetProperty("font").GetInt32(),
+            speakerText.GetProperty("wrapInset").GetSingle(),
+            speakerText.GetProperty("leftInset").GetSingle(),
+            speakerText.GetProperty("centerHeightFactor").GetSingle(),
+            speakerText.GetProperty("safeBottomInset").GetSingle(),
+            background.GetProperty("topInset").GetSingle(),
+            background.GetProperty("verticalInset").GetSingle(),
+            background.GetProperty("heightPadding").GetSingle(),
+            topics.GetProperty("tile").GetString()!,
+            topics.GetProperty("minimumHeight").GetSingle(),
+            topics.GetProperty("widthInset").GetSingle(),
+            topics.GetProperty("leftInset").GetSingle(),
+            topics.GetProperty("backgroundHeightPadding").GetSingle(),
+            template.GetProperty("tile").GetString()!,
+            template.GetProperty("textTile").GetString()!,
+            template.GetProperty("font").GetInt32(),
+            template.GetProperty("textX").GetSingle(),
+            template.GetProperty("textY").GetSingle(),
+            template.GetProperty("wrapInset").GetSingle(),
+            template.GetProperty("verticalSpacing").GetSingle());
+        var numbers = new[]
+        {
+            result.CanvasSize.X, result.CanvasSize.Y, result.BackgroundWidth,
+            result.BackgroundBrightness, result.SpeakerNameRightInset,
+            result.SpeakerNameTopInset, result.SpeakerWrapInset,
+            result.SpeakerLeftInset, result.CenterHeightFactor,
+            result.SafeBottomInset, result.BackgroundTopInset,
+            result.BackgroundVerticalInset, result.BackgroundHeightPadding,
+            result.TopicMinimumHeight, result.TopicWidthInset,
+            result.TopicLeftInset, result.TopicBackgroundHeightPadding,
+            result.TopicTextX, result.TopicTextY,
+            result.TopicWrapInset, result.TopicVerticalSpacing,
+        };
+        var identities = new[]
+        {
+            result.Document, result.BackgroundTile, result.BackgroundTexture,
+            result.ClickTile, result.SpeakerNameTile, result.SpeakerTextTile,
+            result.TopicListTile, result.TopicTile, result.TopicTextTile,
+        };
+        if (result.DocumentSha256.Length != Sha256HexCharacters ||
+            result.DocumentSha256.Any(value => !Uri.IsHexDigit(value)) ||
+            identities.Any(string.IsNullOrWhiteSpace) ||
+            numbers.Any(value => !float.IsFinite(value) || value <= 0.0f) ||
+            result.CenterHeightFactor > 1.0f ||
+            result.BackgroundBrightness > byte.MaxValue ||
+            result.SpeakerNameFont <= 0 || result.SpeakerTextFont <= 0 ||
+            result.TopicFont <= 0)
+            throw new InvalidOperationException(
+                "Owned DialogueMenu runtime contract is incomplete.");
         return result;
     }
 

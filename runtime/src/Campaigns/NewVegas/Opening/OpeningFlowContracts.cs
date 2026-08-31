@@ -17,6 +17,7 @@ internal sealed record OpeningFlowMenu(
     Rect2? Rect,
     IReadOnlyDictionary<string, OpeningFlowSemanticRect> SemanticRects,
     OwnedUiTexture? Background,
+    OwnedGamebryoDialogueMenu? DialogueMenu,
     OwnedGamebryoTextEditMenu? TextEditMenu,
     OpeningRaceSexMenuTiles? RaceSexMenuTiles,
     OpeningRaceSexRenderedDevice? RenderedDevice);

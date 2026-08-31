@@ -884,7 +884,9 @@ internal sealed record Fo3OwnedProfile(
     Fo3Cg01ToddlerWorldContract Cg01ToddlerWorld,
     string MainMenuMusicPath,
     string IntroVideoPath,
-    Color InterfaceColor)
+    Color InterfaceColor,
+    float MenuBackgroundAlpha,
+    OwnedGamebryoDialogueMenu DialogueMenu)
 {
     private const string ExpectedSchema = "opennv-owned-game-profile/v1";
     private const string ExpectedCampaign = "Fallout3";
@@ -1038,6 +1040,12 @@ internal sealed record Fo3OwnedProfile(
             SettingByte(settings, "iSystemColorMainMenuRed") / (float)byte.MaxValue,
             SettingByte(settings, "iSystemColorMainMenuGreen") / (float)byte.MaxValue,
             SettingByte(settings, "iSystemColorMainMenuBlue") / (float)byte.MaxValue);
+        var menuBackgroundAlpha = SettingSingle(settings, "fMenuBackgroundOpacity");
+        if (menuBackgroundAlpha < 0.0f || menuBackgroundAlpha > 1.0f)
+            throw new InvalidOperationException(
+                "Fallout 3 menu background opacity is invalid.");
+        var dialogueMenu = OwnedGamebryoTileRuntime.ParseDialogueMenu(
+            RequiredObject(menu, "dialogueMenuTiles"));
         var profileSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         var questFormId = RequiredString(quest, "formId");
         if (!ValidHex(questFormId, Fo3OpeningFlowNumericContracts.FormIdHexCharacters))
@@ -1076,7 +1084,9 @@ internal sealed record Fo3OwnedProfile(
             cg01ToddlerWorld,
             RequiredString(mainMenuMusic, "source"),
             RequiredString(runtimeIntroVideo, "output"),
-            interfaceColor);
+            interfaceColor,
+            menuBackgroundAlpha,
+            dialogueMenu);
     }
 
     private static void VerifyOwnedVideo(JsonElement runtimeVideo, JsonElement sourceVideo)
@@ -1133,6 +1143,18 @@ internal sealed record Fo3OwnedProfile(
     {
         var row = settings.Single(value => RequiredString(value, "key") == key);
         return byte.Parse(RequiredString(row, "value"), CultureInfo.InvariantCulture);
+    }
+
+    private static float SettingSingle(IEnumerable<JsonElement> settings, string key)
+    {
+        var row = settings.Single(value => RequiredString(value, "key") == key);
+        var result = float.Parse(
+            RequiredString(row, "value"),
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture);
+        if (!float.IsFinite(result))
+            throw new InvalidOperationException($"Fallout 3 setting {key} is invalid.");
+        return result;
     }
 
     private static JsonElement RequiredObject(JsonElement parent, string name)

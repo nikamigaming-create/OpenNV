@@ -250,7 +250,7 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01RuntimeContext context,
         IReadOnlyList<Fo3Cg01DadSpeechCue> cues,
         int index,
-        Label subtitle)
+        Button subtitle)
     {
         if (index < 0 || index >= cues.Count)
             throw new InvalidOperationException("Fallout 3 CG01 Dad dialogue cursor differs.");
@@ -309,8 +309,11 @@ internal partial class Fo3OpeningFlow
             CompleteCg01DadDialogue(stage5, context, cues, subtitle);
         };
         AddChild(_vaultDialogueVoice);
-        subtitle.Text = $"DAD: {cue.Response.Text}";
-        subtitle.Visible = true;
+        ShowVaultDialogue(
+            subtitle,
+            _vaultBirthCoverage?.Cg01DadActor.Actor.Name ??
+                throw new InvalidOperationException("Fallout 3 CG01 Dad actor is unavailable."),
+            cue.Response.Text);
         _vaultDialogueVoice.Play();
         if (_vaultDialogueVoice.GetMeta("opennv_info_form_id").AsString() !=
                 _activeCg01DadInfoFormId ||
@@ -339,7 +342,7 @@ internal partial class Fo3OpeningFlow
     private async void CaptureCg01DadCue(
         Fo3Cg01DadSpeechCue cue,
         ActorModelSlice.LoadedAnimation publishedSpeakerIdle,
-        Label subtitle)
+        Button subtitle)
     {
         try
         {
@@ -534,10 +537,10 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage0State stage5,
         Fo3Cg01RuntimeContext context,
         IReadOnlyList<Fo3Cg01DadSpeechCue> cues,
-        Label subtitle)
+        Button subtitle)
     {
         RestoreCg01DadPrimaryIdle();
-        subtitle.Visible = false;
+        HideVaultDialogue(subtitle);
         _vaultPreviewOverlay?.QueueFree();
         _vaultPreviewOverlay = null;
         var state = _profile.Cg01Stage10Transition.Apply(stage5, context.Sex.EngineSex);
@@ -848,7 +851,7 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01ToddlerWorldState toddlerState,
         IReadOnlyList<Fo3Cg01Stage12DadResponseCue> cues,
         int index,
-        Label subtitle,
+        Button subtitle,
         bool acceptanceProof)
     {
         if (index < 0 || index >= cues.Count)
@@ -922,8 +925,11 @@ internal partial class Fo3OpeningFlow
                 acceptanceProof);
         };
         AddChild(_vaultDialogueVoice);
-        subtitle.Text = $"DAD: {cue.Response.Text}";
-        subtitle.Visible = true;
+        ShowVaultDialogue(
+            subtitle,
+            _vaultBirthCoverage?.Cg01DadActor.Actor.Name ??
+                throw new InvalidOperationException("Fallout 3 CG01 Dad actor is unavailable."),
+            cue.Response.Text);
         _vaultDialogueVoice.Play();
         if (_vaultDialogueVoice.GetMeta("opennv_info_form_id").AsString() !=
                 _activeCg01DadInfoFormId ||
@@ -949,11 +955,11 @@ internal partial class Fo3OpeningFlow
         Fo3Cg01Stage12State stage12,
         Fo3Cg01ToddlerWorldState toddlerState,
         IReadOnlyList<Fo3Cg01Stage12DadResponseCue> cues,
-        Label subtitle,
+        Button subtitle,
         bool acceptanceProof)
     {
         RestoreCg01DadPrimaryIdle();
-        subtitle.Visible = false;
+        HideVaultDialogue(subtitle);
         _vaultPreviewOverlay?.QueueFree();
         _vaultPreviewOverlay = null;
         var stage14 = _profile.Cg01Stage12DadResponse.Apply(stage12);

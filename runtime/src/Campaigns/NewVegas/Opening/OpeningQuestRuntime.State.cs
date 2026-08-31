@@ -200,17 +200,19 @@ internal partial class OpeningQuestRuntime
         Action completed,
         int generation)
     {
-        var content = OpenPanel(MenuRect("tagSkills"));
+        var choices = new List<(string Identity, string Text, Action Selected)>();
         foreach (var formId in topicFormIds)
         {
             if (!_flow.TopicsByFormId.TryGetValue(formId, out var topic))
                 throw new InvalidOperationException($"Owned dialogue choice is absent: {formId}");
-            var button = NewButton(topic.Prompt);
-            button.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-            button.Alignment = HorizontalAlignment.Left;
-            button.Pressed += () => PlayTopic(topic, completed, generation);
-            content.AddChild(button);
+            choices.Add((
+                topic.FormId,
+                topic.Prompt,
+                () => PlayTopic(topic, completed, generation)));
         }
+        OpenDialogueMenu().ShowTopics(
+            _flow.SceneRoles[_flow.DialogueVoice.SpeakerRole].DisplayName,
+            choices);
     }
 
     private bool EvaluateCondition(OpeningDialogueCondition condition)

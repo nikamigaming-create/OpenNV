@@ -312,6 +312,9 @@ internal sealed partial record OpeningNewGameFlow(
                 : new Dictionary<string, OpeningFlowSemanticRect>(
                     StringComparer.Ordinal),
             background,
+            value.TryGetProperty("dialogueMenuTiles", out var dialogueMenuTiles)
+                ? OwnedGamebryoTileRuntime.ParseDialogueMenu(dialogueMenuTiles)
+                : null,
             value.TryGetProperty("textEditMenuTiles", out var textEditMenuTiles)
                 ? OwnedGamebryoTileRuntime.ParseTextEditMenu(textEditMenuTiles)
                 : null,

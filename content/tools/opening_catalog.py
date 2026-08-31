@@ -46,6 +46,7 @@ OPENING_MANIFEST_SCHEMA = "opennv-owned-opening-manifest/v1"
 OPENING_MANIFEST_STATUS = "compiled-owned-opening-graph"
 RACE_SEX_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-racesex-menu-tiles/v1"
 TEXT_EDIT_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-textedit-menu-tiles/v1"
+DIALOGUE_MENU_TILE_CONTRACT_SCHEMA = "opennv-owned-dialogue-menu-tiles/v1"
 GAMEPLAY_VITALS_SCHEMA = "opennv-owned-gameplay-vitals/v1"
 PLAYER_BASE_EDITOR_ID = "Player"
 PLAYER_BASE_LEVEL_OFFSET = 8
@@ -1666,6 +1667,109 @@ def _text_edit_menu_tile_contract(
     }
 
 
+def dialogue_menu_tile_contract(
+    root: TileNode,
+    document: dict[str, object],
+    screen: dict[str, float],
+    template_root: TileNode,
+) -> dict[str, object]:
+    """Compile the shared FO3/FNV DialogMenu source trait subset."""
+    menus = [node for node in root.children if node.tag == "menu"]
+    if len(menus) != 1 or menus[0].name != "DialogMenu":
+        raise ValueError("Owned DialogueMenu document identity differs")
+    menu = menus[0]
+    background = _named_tile(root, "DM_TextBackground")
+    click = _named_tile(root, "DM_ClickRect")
+    speaker_name = _named_tile(root, "DM_SpeakerNameLabel")
+    center = _named_tile(root, "DM_CenterHeight")
+    speaker_text = _named_tile(root, "DM_SpeakerText")
+    topic_list = _named_tile(root, "DM_TopicList")
+    topic = _named_tile(root, "DM_Topic")
+    topic_text = _named_tile(root, "ListItemText")
+    vertical_spacing = _required_tile_number(template_root, "_verticalspacing")
+
+    def direct_operations(node: TileNode, trait: str, operation: str) -> list[float]:
+        source = node.child(trait)
+        if source is None:
+            raise ValueError(
+                f"Owned DialogueMenu trait is absent: {node.name}.{trait}"
+            )
+        return [
+            value
+            for child in source.walk()
+            if child.tag == operation
+            for value in [_direct_number(child)]
+            if value is not None
+        ]
+
+    def one_operation(node: TileNode, trait: str, operation: str) -> float:
+        values = direct_operations(node, trait, operation)
+        if len(values) != 1:
+            raise ValueError(
+                f"Owned DialogueMenu operation is ambiguous: "
+                f"{node.name}.{trait}.{operation} matches={len(values)}"
+            )
+        return values[0]
+
+    texture = _required_tile_texture(background)
+    if set(texture) != {"logicalPath"}:
+        raise ValueError("Owned DialogueMenu background texture is not direct")
+    center_factors = direct_operations(center, "y", "mul")
+    background_y_adds = direct_operations(background, "y", "add")
+    background_y_subs = direct_operations(background, "y", "sub")
+    background_height_adds = direct_operations(background, "height", "add")
+    if (len(center_factors) != 1 or len(background_y_adds) != 2 or
+            len(background_y_subs) != 1 or len(background_height_adds) != 2):
+        raise ValueError("Owned DialogueMenu background vertical traits differ")
+    return {
+        "schema": DIALOGUE_MENU_TILE_CONTRACT_SCHEMA,
+        "document": str(document["path"]),
+        "documentSha256": str(document["sha256"]),
+        "menuName": menu.name,
+        "canvasSize": [screen["width"], screen["height"]],
+        "background": {
+            "tile": background.name,
+            "texture": texture["logicalPath"],
+            "width": _required_tile_number(background, "width"),
+            "brightness": _required_tile_number(background, "brightness"),
+            "topInset": background_y_adds[0],
+            "verticalInset": background_y_subs[0],
+            "heightPadding": background_height_adds[0],
+        },
+        "clickTile": click.name,
+        "speakerName": {
+            "tile": speaker_name.name,
+            "font": int(_required_tile_number(speaker_name, "font")),
+            "rightInset": one_operation(speaker_name, "x", "sub"),
+            "topInset": one_operation(speaker_name, "y", "add"),
+        },
+        "speakerText": {
+            "tile": speaker_text.name,
+            "font": int(_required_tile_number(speaker_text, "font")),
+            "wrapInset": one_operation(speaker_text, "wrapwidth", "sub"),
+            "leftInset": one_operation(speaker_text, "x", "add"),
+            "centerHeightFactor": center_factors[0],
+            "safeBottomInset": direct_operations(speaker_text, "y", "sub")[-1],
+        },
+        "topics": {
+            "tile": topic_list.name,
+            "minimumHeight": _required_tile_number(menu, "_minlistheight"),
+            "widthInset": one_operation(topic_list, "width", "sub"),
+            "leftInset": one_operation(topic_list, "x", "add"),
+            "backgroundHeightPadding": background_height_adds[1],
+            "template": {
+                "tile": topic.name,
+                "textTile": topic_text.name,
+                "font": int(_required_tile_number(topic_text, "font")),
+                "textX": _required_tile_number(topic_text, "x"),
+                "textY": _required_tile_number(topic_text, "y"),
+                "wrapInset": one_operation(topic_text, "wrapwidth", "sub"),
+                "verticalSpacing": vertical_spacing,
+            },
+        },
+    }
+
+
 def _required_tile_number(node: TileNode, trait_name: str) -> float:
     value = _direct_number(node.child(trait_name))
     if value is None:
@@ -2292,6 +2396,13 @@ def _flow_menu_contract(
         if documents[document]["menuName"] == "RaceSexMenu":
             row["raceSexMenuTiles"] = _race_sex_menu_tile_contract(
                 trees[document], documents[document], screen, trees
+            )
+        if documents[document]["menuName"] == "DialogMenu":
+            row["dialogueMenuTiles"] = dialogue_menu_tile_contract(
+                trees[document],
+                documents[document],
+                screen,
+                trees[canonical_ui_path("menus\\prefabs\\list_box_template.xml")],
             )
         if "textEditTiles" in definition:
             row["textEditMenuTiles"] = _text_edit_menu_tile_contract(

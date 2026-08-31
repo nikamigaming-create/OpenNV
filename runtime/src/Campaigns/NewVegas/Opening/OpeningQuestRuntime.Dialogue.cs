@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Presentation.CharacterCreation;
+using OpenNV.Runtime.Presentation.Ui;
 
 
 using OpenNV.Runtime.World.Actors;
@@ -69,17 +70,11 @@ internal partial class OpeningQuestRuntime
             return;
         }
         var response = info.Responses[lineIndex];
-        var content = OpenPanel(MenuRect("name"));
-        var guide = NewLabel(
-            _flow.SceneRoles[_flow.DialogueVoice.SpeakerRole].DisplayName);
-        guide.HorizontalAlignment = HorizontalAlignment.Right;
-        content.AddChild(guide);
-        var line = NewButton(response.Text);
-        line.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        line.Alignment = HorizontalAlignment.Left;
-        line.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        line.Pressed += CompleteDialogueVoice;
-        content.AddChild(line);
+        var menu = OpenDialogueMenu();
+        menu.ShowLine(
+            _flow.SceneRoles[_flow.DialogueVoice.SpeakerRole].DisplayName,
+            response.Text,
+            CompleteDialogueVoice);
         StartDialogueVoice(
             response,
             info.FormId,
@@ -90,7 +85,26 @@ internal partial class OpeningQuestRuntime
                 completed,
                 generation,
                 lineIndex + 1));
-        Callable.From(line.GrabFocus).CallDeferred();
+    }
+
+    private OwnedGamebryoDialogueMenuRuntime OpenDialogueMenu()
+    {
+        if (!_flow.Menus.TryGetValue("dialogue", out var source) ||
+            source.DialogueMenu is null)
+            throw new InvalidOperationException(
+                "Owned DialogueMenu tile contract is unavailable.");
+        var root = OpenModalRoot("dialogue");
+        var menu = new OwnedGamebryoDialogueMenuRuntime(
+            source.DialogueMenu,
+            _opening.MainMenuColor,
+            _opening.Style.BackgroundFillAlpha,
+            OwnedUiTheme.BuildFont(
+                _opening.GameplayUi.Font(source.DialogueMenu.SpeakerNameFont)),
+            OwnedUiTheme.BuildFont(
+                _opening.GameplayUi.Font(source.DialogueMenu.SpeakerTextFont)));
+        menu.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        root.AddChild(menu);
+        return menu;
     }
 
     private void StartDialogueVoice(

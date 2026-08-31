@@ -24,6 +24,7 @@ from facegen import compose_facegen_coordinates
 from opening_catalog import (
     _compile_facegen_control_space,
     _display_entity,
+    dialogue_menu_tile_contract,
     _prepare_runtime_video,
     _race_sex_menu_tile_contract,
     _text_edit_menu_tile_contract,
@@ -6035,6 +6036,30 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
                 "sourceArchive": archive_by_role[str(menu["uiArchiveRole"])].name,
             }
         )
+    dialogue_path = canonical_member_path("menus\\dialog\\dialog_menu.xml")
+    dialogue_member = menu_member_payloads.get(dialogue_path)
+    if dialogue_member is None:
+        raise ValueError("Fallout 3 DialogueMenu XML was not admitted")
+    dialogue_document, dialogue_tree = _document_index(
+        dialogue_path, dialogue_member.data
+    )
+    dialogue_template_path = canonical_member_path(
+        "menus\\prefabs\\list_box_template.xml"
+    )
+    dialogue_template_member = menu_member_payloads.get(dialogue_template_path)
+    if dialogue_template_member is None:
+        raise ValueError("Fallout 3 DialogueMenu topic template was not admitted")
+    dialogue_template_tree = parse_tile_document(dialogue_template_member.data)
+    appearance_ui = dict(dict(recipe["opening"])["appearanceUi"])
+    dialogue_menu_tiles = dialogue_menu_tile_contract(
+        dialogue_tree,
+        dialogue_document,
+        {
+            "width": float(appearance_ui["sourceCanvasWidth"]),
+            "height": float(appearance_ui["sourceCanvasHeight"]),
+        },
+        dialogue_template_tree,
+    )
     texture_archive = BsaArchive(archive_by_role[str(menu["textureArchiveRole"])])
     menu_textures = []
     for logical_path in menu["requiredTextureMembers"]:
@@ -6323,6 +6348,7 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
         },
         "mainMenu": {
             "members": menu_members,
+            "dialogueMenuTiles": dialogue_menu_tiles,
             "textures": menu_textures,
             "music": main_menu_music,
             "iniSettings": ini_rows,
