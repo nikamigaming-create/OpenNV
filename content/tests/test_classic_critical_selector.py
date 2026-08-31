@@ -28,6 +28,8 @@ class ClassicCriticalSelectorTests(unittest.TestCase):
         self.assertEqual(contract["playerFumbleImmunityDays"], 6)
         self.assertEqual(contract["criticalUpgradeEnabledAfterDays"], 1)
         self.assertEqual(contract["criticalUpgradeMarginDivisor"], 10)
+        self.assertEqual(contract["statCheckMinimumRoll"], 1)
+        self.assertEqual(contract["statCheckMaximumRoll"], 10)
 
     def test_admitted_effect_rows_are_exact_and_bounded(self) -> None:
         contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
@@ -52,6 +54,7 @@ class ClassicCriticalSelectorTests(unittest.TestCase):
         self.assertIn("SelectCriticalEffectRow", runtime)
         self.assertIn("ResolveFumbleEffect", runtime)
         self.assertIn("requires an explicit source stat-check result", runtime)
+        self.assertIn("RollStatCheck", runtime)
         self.assertIn("criticalUpgradeBonus", runtime)
         self.assertIn("gameTime / contract.TicksPerDay", runtime)
         self.assertNotIn("DamageApplied", runtime)
@@ -59,10 +62,12 @@ class ClassicCriticalSelectorTests(unittest.TestCase):
 
     def test_roll_owner_preserves_exact_build_rng_order(self) -> None:
         runtime = ROLL_OWNER.read_text(encoding="utf-8")
-        self.assertEqual(runtime.count("ClassicRetailRandom.Next("), 2)
+        self.assertEqual(runtime.count("ClassicRetailRandom.Next("), 4)
         self.assertIn("CriticalUpgradeEnabledAfterDays", runtime)
         self.assertIn("CriticalUpgradeMarginDivisor", runtime)
         self.assertIn("int? UpgradeRoll", runtime)
+        self.assertIn("ResolveCritical", runtime)
+        self.assertIn("RollDamage", runtime)
         self.assertNotIn("Random.Shared", runtime)
 
 

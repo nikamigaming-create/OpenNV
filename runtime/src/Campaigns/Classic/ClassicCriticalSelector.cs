@@ -9,6 +9,8 @@ internal sealed record ClassicCriticalSelectionContract(
     int MaximumPercentRoll,
     int CriticalUpgradeEnabledAfterDays,
     int CriticalUpgradeMarginDivisor,
+    int StatCheckMinimumRoll,
+    int StatCheckMaximumRoll,
     IReadOnlyList<int> CriticalScoreThresholds,
     int HitLocationCount,
     IReadOnlyList<int> FumbleScoreThresholds,
@@ -33,6 +35,8 @@ internal sealed record ClassicCriticalSelectionContract(
             source.GetProperty("maximumPercentRoll").GetInt32(),
             source.GetProperty("criticalUpgradeEnabledAfterDays").GetInt32(),
             source.GetProperty("criticalUpgradeMarginDivisor").GetInt32(),
+            source.GetProperty("statCheckMinimumRoll").GetInt32(),
+            source.GetProperty("statCheckMaximumRoll").GetInt32(),
             ReadInts(source, "criticalScoreThresholds"),
             source.GetProperty("hitLocationCount").GetInt32(),
             ReadInts(source, "fumbleScoreThresholds"),
@@ -69,6 +73,7 @@ internal sealed record ClassicCriticalSelectionContract(
         if (Schema != ExpectedSchema || string.IsNullOrWhiteSpace(ExactBuild) ||
             MinimumPercentRoll <= 0 || MaximumPercentRoll < MinimumPercentRoll ||
             CriticalUpgradeEnabledAfterDays < 0 || CriticalUpgradeMarginDivisor <= 0 ||
+            StatCheckMinimumRoll <= 0 || StatCheckMaximumRoll < StatCheckMinimumRoll ||
             HitLocationCount <= 0 || FumbleTypeCount <= 0 || LuckSpecialIndex < 0 ||
             NeutralLuck <= 0 || FumblePercentPerLuckPoint <= 0 ||
             PlayerFumbleImmunityDays < 0 || TicksPerDay <= 0 ||
@@ -144,6 +149,11 @@ internal sealed record ClassicCriticalEffect(
     IReadOnlySet<string> DamageFlags,
     int MessageId);
 internal sealed record ClassicFumbleEffect(IReadOnlySet<string> DamageFlags);
+internal sealed record ClassicCriticalStatCheckResult(
+    ClassicRetailRandomState RandomState,
+    int Roll,
+    int Margin,
+    bool Succeeded);
 
 internal static class ClassicCriticalSelector
 {
@@ -212,6 +222,32 @@ internal static class ClassicCriticalSelector
             contract.DecodeFlags(row.DamageFlags |
                 (failed ? row.FailedStatDamageFlags : 0)),
             failed ? row.FailureMessageId : row.SuccessMessageId);
+    }
+
+    internal static ClassicCriticalStatCheckResult RollStatCheck(
+        ClassicCriticalSelectionContract criticalContract,
+        ClassicRetailRandomContract randomContract,
+        ClassicRetailRandomState randomState,
+        ClassicCriticalEffectRow row,
+        int targetStat)
+    {
+        criticalContract.Validate();
+        randomContract.Validate();
+        if (criticalContract.ExactBuild != randomContract.ExactBuild ||
+            row.Stat < 0 || targetStat < 0)
+            throw new InvalidOperationException(
+                "Classic critical stat-check inputs are invalid.");
+        var result = ClassicRetailRandom.Next(
+            randomState,
+            criticalContract.StatCheckMinimumRoll,
+            criticalContract.StatCheckMaximumRoll,
+            randomContract);
+        var margin = checked(targetStat + row.StatModifier - result.Value);
+        return new ClassicCriticalStatCheckResult(
+            result.State,
+            result.Value,
+            margin,
+            margin >= 0);
     }
 
     internal static ClassicCriticalEffectRow SelectCriticalEffectRow(

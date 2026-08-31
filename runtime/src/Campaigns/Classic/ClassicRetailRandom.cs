@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using System.Numerics;
 
 namespace OpenNV.Runtime.Campaigns.Classic;
 
@@ -13,7 +15,8 @@ internal sealed record ClassicRetailRandomContract(
     int ShuffleSlots,
     int WarmupSteps,
     int ShuffleIndexMask,
-    string SavePolicy)
+    string SavePolicy,
+    ClassicRetailExternalSeedContract ExternalSeed)
 {
     internal const string ExpectedSchema = "opennv-classic-retail-random/v1";
 
@@ -30,7 +33,9 @@ internal sealed record ClassicRetailRandomContract(
             source.GetProperty("shuffleSlots").GetInt32(),
             source.GetProperty("warmupSteps").GetInt32(),
             source.GetProperty("shuffleIndexMask").GetInt32(),
-            RequiredString(source, "savePolicy"));
+            RequiredString(source, "savePolicy"),
+            ClassicRetailExternalSeedContract.Parse(
+                source.GetProperty("externalSeed")));
         result.Validate();
         return result;
     }
@@ -46,6 +51,7 @@ internal sealed record ClassicRetailRandomContract(
             SavePolicy != "reset-from-new-seed-on-load")
             throw new InvalidOperationException(
                 "Classic retail random contract is invalid.");
+        ExternalSeed.Validate();
     }
 
     private static string RequiredString(JsonElement source, string property)
@@ -55,6 +61,48 @@ internal sealed record ClassicRetailRandomContract(
             ? value
             : throw new InvalidOperationException(
                 $"Classic retail random contract string is empty: {property}");
+    }
+}
+
+internal sealed record ClassicRetailExternalSeedContract(
+    string Source,
+    uint MixerMultiplier,
+    uint MixerIncrement,
+    int OutputShift,
+    uint OutputMask,
+    int WordsPerSeed,
+    int HighWordShift,
+    uint NewGameSeedUnsigned,
+    string NewGamePolicy,
+    string LoadPolicy)
+{
+    internal const string WinmmTimeGetTime = "winmm-timeGetTime-u32";
+
+    internal static ClassicRetailExternalSeedContract Parse(JsonElement source) => new(
+        source.GetProperty("source").GetString() ?? "",
+        source.GetProperty("mixerMultiplier").GetUInt32(),
+        source.GetProperty("mixerIncrement").GetUInt32(),
+        source.GetProperty("outputShift").GetInt32(),
+        source.GetProperty("outputMask").GetUInt32(),
+        source.GetProperty("wordsPerSeed").GetInt32(),
+        source.GetProperty("highWordShift").GetInt32(),
+        source.GetProperty("newGameSeedUnsigned").GetUInt32(),
+        source.GetProperty("newGamePolicy").GetString() ?? "",
+        source.GetProperty("loadPolicy").GetString() ?? "");
+
+    internal void Validate()
+    {
+        var unsignedBitCount = BitOperations.PopCount(uint.MaxValue);
+        var signedBitCount = BitOperations.PopCount((uint)int.MaxValue);
+        if (Source != WinmmTimeGetTime || MixerMultiplier == 0 ||
+            OutputShift < 0 || OutputShift >= unsignedBitCount || OutputMask == 0 ||
+            WordsPerSeed != 2 || HighWordShift < 0 || HighWordShift >= signedBitCount ||
+            ((ulong)OutputMask << HighWordShift | OutputMask) > int.MaxValue ||
+            NewGameSeedUnsigned <= int.MaxValue ||
+            NewGamePolicy != "explicit-seed-minimum-clamp" ||
+            LoadPolicy != "next-two-mixer-words")
+            throw new InvalidOperationException(
+                "Classic retail external-seed contract is invalid.");
     }
 }
 
@@ -77,6 +125,81 @@ internal sealed record ClassicRetailRandomState(
 internal sealed record ClassicRetailRandomResult(
     ClassicRetailRandomState State,
     int Value);
+
+internal sealed record ClassicRetailSeedState(uint MixerState, int ResetCount);
+internal sealed record ClassicRetailSeededRandom(
+    ClassicRetailSeedState SeedState,
+    ClassicRetailRandomState RandomState,
+    int Seed);
+
+internal static class ClassicRetailSeedOwner
+{
+    internal static ClassicRetailSeededRandom InitializeFromExactBuildClock(
+        ClassicRetailRandomContract contract)
+    {
+        if (!OperatingSystem.IsWindows() ||
+            contract.ExternalSeed.Source != ClassicRetailExternalSeedContract.WinmmTimeGetTime)
+            throw new PlatformNotSupportedException(
+                "The FO2 exact-build seed clock is available only through WinMM.");
+        return Initialize(TimeGetTime(), contract);
+    }
+
+    internal static ClassicRetailSeededRandom Initialize(
+        uint elapsedMilliseconds,
+        ClassicRetailRandomContract contract) =>
+        NextReset(new ClassicRetailSeedState(elapsedMilliseconds, 0), contract);
+
+    internal static ClassicRetailSeededRandom ResetForLoad(
+        ClassicRetailSeedState state,
+        ClassicRetailRandomContract contract)
+    {
+        if (state.ResetCount <= 0)
+            throw new InvalidOperationException(
+                "Classic retail load reset requires initialized seed state.");
+        return NextReset(state, contract);
+    }
+
+    internal static ClassicRetailSeededRandom ResetForNewGame(
+        ClassicRetailSeedState state,
+        ClassicRetailRandomContract contract)
+    {
+        contract.Validate();
+        if (state.ResetCount <= 0)
+            throw new InvalidOperationException(
+                "Classic retail new-game reset requires initialized seed state.");
+        var seed = unchecked((int)contract.ExternalSeed.NewGameSeedUnsigned);
+        return new ClassicRetailSeededRandom(
+            state with { ResetCount = checked(state.ResetCount + 1) },
+            ClassicRetailRandom.Reset(seed, contract),
+            contract.MinimumSeed);
+    }
+
+    private static ClassicRetailSeededRandom NextReset(
+        ClassicRetailSeedState state,
+        ClassicRetailRandomContract contract)
+    {
+        contract.Validate();
+        var mixer = state.MixerState;
+        var first = NextMixerWord(ref mixer, contract.ExternalSeed);
+        var second = NextMixerWord(ref mixer, contract.ExternalSeed);
+        var seed = checked((int)((first << contract.ExternalSeed.HighWordShift) + second));
+        return new ClassicRetailSeededRandom(
+            new ClassicRetailSeedState(mixer, checked(state.ResetCount + 1)),
+            ClassicRetailRandom.Reset(seed, contract),
+            seed);
+    }
+
+    private static uint NextMixerWord(
+        ref uint state,
+        ClassicRetailExternalSeedContract contract)
+    {
+        state = unchecked(state * contract.MixerMultiplier + contract.MixerIncrement);
+        return state >> contract.OutputShift & contract.OutputMask;
+    }
+
+    [DllImport("winmm.dll", EntryPoint = "timeGetTime")]
+    private static extern uint TimeGetTime();
+}
 
 internal static class ClassicRetailRandom
 {

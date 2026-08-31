@@ -5,6 +5,8 @@
   "maximumPercentRoll": 100,
   "criticalUpgradeEnabledAfterDays": 1,
   "criticalUpgradeMarginDivisor": 10,
+  "statCheckMinimumRoll": 1,
+  "statCheckMaximumRoll": 10,
   "criticalScoreThresholds": [20, 45, 70, 90, 100],
   "hitLocationCount": 9,
   "fumbleScoreThresholds": [20, 50, 75, 95],
