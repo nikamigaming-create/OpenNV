@@ -483,6 +483,7 @@ def decode_acklint_effects(data: bytes) -> dict[str, Any]:
             ):
                 _expect_epilogue(instructions, 1)
                 terminal_nodes.add(name)
+                dialogue_nodes[name] = [{"operation": "dialogue-end"}]
                 continue
             effects = _decode_dialogue_node(data, bounds, procedure_names)
             dialogue_nodes[name] = effects

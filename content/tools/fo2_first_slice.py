@@ -207,6 +207,11 @@ def _compile_guardian_script(
             continue
         node_rules = effect_program["events"].get(node_id)
         if node_rules is None:
+            raise Fo1ProfileError(
+                f"Fallout 2 guardian dialogue target is absent: {node_id}"
+            )
+        effects = node_rules[0]["then"] if len(node_rules) == 1 else []
+        if effects == [{"operation": "dialogue-end"}]:
             terminal_nodes.add(node_id)
             continue
         node_ids.append(node_id)

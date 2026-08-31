@@ -129,6 +129,10 @@ class ClassicScriptDecoderTest(unittest.TestCase):
           Reply(105);
           NOption(164, MedicStartHealing, 1);
         end
+        procedure MedicStartHealing begin
+          Reply(130);
+          NOption(164, MedicHealPlayer, 1);
+        end
         """
         program = decode_single_reply_option_dialogue(
             source, "MedicSeriouslyWounded"
@@ -137,6 +141,11 @@ class ClassicScriptDecoderTest(unittest.TestCase):
         self.assertEqual(effects[0]["messageId"], 105)
         self.assertEqual(effects[1]["messageId"], 164)
         self.assertEqual(effects[1]["target"], "MedicStartHealing")
+        healing = decode_single_reply_option_dialogue(
+            source, "MedicStartHealing"
+        )["events"]["MedicStartHealing"][0]["then"]
+        self.assertEqual(healing[0]["messageId"], 130)
+        self.assertEqual(healing[1]["target"], "MedicHealPlayer")
         with self.assertRaises(ClassicSslParseError):
             decode_single_reply_option_dialogue(
                 source.replace("NOption", "BOption"), "MedicSeriouslyWounded"

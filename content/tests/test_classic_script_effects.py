@@ -19,6 +19,8 @@ class ClassicScriptEffectsTest(unittest.TestCase):
         self.assertIn('"local-equals"', source)
         self.assertIn('"set-local"', source)
         self.assertIn('"set-flag"', source)
+        self.assertIn('"dialogue-end"', source)
+        self.assertIn("DialogueEnded", source)
         self.assertNotIn("ACKlint", source)
         self.assertNotIn("flare", source.casefold())
         self.assertNotIn("Fallout1", source)

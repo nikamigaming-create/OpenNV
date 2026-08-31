@@ -6,14 +6,23 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Campaigns.Fallout1;
 
-/// <summary>One hash-bound SCRIPT_MEDIC look-at message; dialogue and combat stay outside this boundary.</summary>
+internal sealed record Fo1MedicDialogueNode(
+    string Procedure,
+    int ReplyMessageId,
+    string ReplyText,
+    int OptionMessageId,
+    string OptionText,
+    string OptionTarget,
+    int OptionReaction);
+
+/// <summary>One hash-bound SCRIPT_MEDIC look-at message and bounded decoded dialogue path.</summary>
 internal sealed record Fo1DestinationMedicLookContract(
     string Path, string Sha256, int Serial, int Tile, string Pid, string Fid,
     string PrototypeSha256, string ArtSha256, string MessageText, int MessageId,
     IReadOnlyList<int> SourceWalkMaskRoute, ClassicScriptProgram Program,
-    string DialogueProcedure, int DialogueReplyMessageId, string DialogueReplyText,
-    int DialogueOptionMessageId, string DialogueOptionText, string DialogueOptionTarget,
-    int DialogueOptionReaction)
+    string DialogueEntryProcedure,
+    IReadOnlyDictionary<string, Fo1MedicDialogueNode> DialogueNodes,
+    IReadOnlySet<string> UnsupportedDialogueTargets)
 {
     private const string Schema = "opennv-fo1-destination-medic-look/v1";
     private const string GenericDoorSchema = "opennv-fo1-destination-generic-door/v1";
@@ -61,7 +70,7 @@ internal sealed record Fo1DestinationMedicLookContract(
         var semantics = root.GetProperty("semantics");
         if (Required(semantics, "procedure") != LookAtProcedure ||
             Required(semantics, "result") != DisplayMessageOnly ||
-            Required(semantics, "dialogue") != "unimplemented-fail-closed" ||
+            Required(semantics, "dialogue") != "decoded-bounded-option-results" ||
             Required(semantics, "combat") != "not-proven-by-look-at-only" ||
             Required(semantics, "actionPoints") != "not-source-backed")
             throw new InvalidOperationException("Fallout Medic look descriptor has unsupported behavior.");
@@ -80,23 +89,48 @@ internal sealed record Fo1DestinationMedicLookContract(
             throw new InvalidOperationException(
                 "Fallout Medic look descriptor does not execute its source message.");
         var dialogue = root.GetProperty("dialogueResult");
-        var dialogueProcedure = Required(dialogue, "procedure");
-        var dialogueReply = dialogue.GetProperty("reply");
-        var dialogueOption = dialogue.GetProperty("option");
-        var dialogueExecution = program.ExecuteWithActions(
-            dialogueProcedure,
-            new ClassicScriptState(),
-            new ClassicScriptContext(false, false, default));
-        if (Required(dialogue, "optionSelection") != "unimplemented-fail-closed" ||
-            !dialogueExecution.Executed || dialogueExecution.DialogueReply.Count != 1 ||
-            dialogueExecution.DialogueOptions.Count != 1 ||
-            dialogueExecution.DialogueReply[0].Message!.Value.MessageId !=
-                dialogueReply.GetProperty("messageId").GetInt32() ||
-            dialogueExecution.DialogueOptions[0].Message.MessageId !=
-                dialogueOption.GetProperty("messageId").GetInt32() ||
-            dialogueExecution.DialogueOptions[0].Target != Required(dialogueOption, "target") ||
-            dialogueExecution.DialogueOptions[0].Reaction !=
-                dialogueOption.GetProperty("reaction").GetInt32())
+        var dialogueEntryProcedure = Required(dialogue, "entryProcedure");
+        var dialogueNodes = dialogue.GetProperty("nodes").EnumerateArray().Select(node =>
+        {
+            var procedure = Required(node, "procedure");
+            var reply = node.GetProperty("reply");
+            var option = node.GetProperty("option");
+            return new Fo1MedicDialogueNode(
+                procedure,
+                reply.GetProperty("messageId").GetInt32(),
+                Required(reply, "messageText"),
+                option.GetProperty("messageId").GetInt32(),
+                Required(option, "messageText"),
+                Required(option, "target"),
+                option.GetProperty("reaction").GetInt32());
+        }).ToDictionary(node => node.Procedure, StringComparer.Ordinal);
+        var unsupportedDialogueTargets = dialogue.GetProperty("unsupportedTargets")
+            .EnumerateArray().Select(target => target.GetString() ?? "")
+            .ToHashSet(StringComparer.Ordinal);
+        bool DialogueMatches(Fo1MedicDialogueNode node)
+        {
+            var dialogueExecution = program.ExecuteWithActions(
+                node.Procedure,
+                new ClassicScriptState(),
+                new ClassicScriptContext(false, false, default));
+            return dialogueExecution.Executed && dialogueExecution.DialogueReply.Count == 1 &&
+                dialogueExecution.DialogueOptions.Count == 1 &&
+                dialogueExecution.DialogueReply[0].Message!.Value.MessageId ==
+                    node.ReplyMessageId &&
+                dialogueExecution.DialogueOptions[0].Message.MessageId ==
+                    node.OptionMessageId &&
+                dialogueExecution.DialogueOptions[0].Target == node.OptionTarget &&
+                dialogueExecution.DialogueOptions[0].Reaction == node.OptionReaction;
+        }
+        if (Required(dialogue, "optionSelection") != "decoded-targets-only" ||
+            dialogueNodes.Count == 0 || !dialogueNodes.ContainsKey(dialogueEntryProcedure) ||
+            dialogueNodes.Values.Any(node => !DialogueMatches(node)) ||
+            unsupportedDialogueTargets.Count == 0 ||
+            unsupportedDialogueTargets.Any(string.IsNullOrWhiteSpace) ||
+            dialogueNodes.Values.Any(node =>
+                !dialogueNodes.ContainsKey(node.OptionTarget) &&
+                !unsupportedDialogueTargets.Contains(node.OptionTarget)) ||
+            dialogueNodes.Keys.Any(unsupportedDialogueTargets.Contains))
             throw new InvalidOperationException(
                 "Fallout Medic dialogue result does not execute its source actions.");
         var route = root.GetProperty("sourceWalkMaskRoute").GetProperty("pathTiles")
@@ -111,13 +145,9 @@ internal sealed record Fo1DestinationMedicLookContract(
             resolved, sha256, actor.GetProperty("serial").GetInt32(), tile, Required(actor, "pid"),
             Required(actor, "fid"), prototypeSha256, artSha256, messageText, messageId, route,
             program,
-            dialogueProcedure,
-            dialogueReply.GetProperty("messageId").GetInt32(),
-            Required(dialogueReply, "messageText"),
-            dialogueOption.GetProperty("messageId").GetInt32(),
-            Required(dialogueOption, "messageText"),
-            Required(dialogueOption, "target"),
-            dialogueOption.GetProperty("reaction").GetInt32());
+            dialogueEntryProcedure,
+            dialogueNodes,
+            unsupportedDialogueTargets);
     }
 
     internal object Report(bool viewed) => new
@@ -132,22 +162,16 @@ internal sealed record Fo1DestinationMedicLookContract(
             messageId = MessageId,
             messageText = MessageText,
             result = DisplayMessageOnly,
-            dialogue = "unimplemented-fail-closed",
+            dialogue = "decoded-bounded-option-results",
             combat = "not-proven-by-look-at-only",
             actionPoints = "not-source-backed"
         },
         dialogueResult = new
         {
-            procedure = DialogueProcedure,
-            reply = new { messageId = DialogueReplyMessageId, text = DialogueReplyText },
-            option = new
-            {
-                messageId = DialogueOptionMessageId,
-                text = DialogueOptionText,
-                target = DialogueOptionTarget,
-                reaction = DialogueOptionReaction,
-            },
-            optionSelection = "unimplemented-fail-closed",
+            entryProcedure = DialogueEntryProcedure,
+            nodes = DialogueNodes.Values,
+            unsupportedTargets = UnsupportedDialogueTargets.Order(StringComparer.Ordinal),
+            optionSelection = "decoded-targets-only",
         },
         sourceWalkMaskRoute = SourceWalkMaskRoute,
         viewed,

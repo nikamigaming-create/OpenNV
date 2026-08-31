@@ -302,6 +302,10 @@ internal sealed record Fo2TempleConfrontationContract(
                 execution.DialogueOptions.All(option =>
                     option.Message.MessageListId == result.MessageListId);
         }
+        var terminalExecution = effectProgram.ExecuteWithActions(
+            result.TerminalNode,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, default));
         if (result.Schema != "opennv-fo2-acklint-guardian-script/v1" ||
             string.IsNullOrWhiteSpace(result.Authority) ||
             result.ScriptsListIndex != 750 ||
@@ -316,6 +320,7 @@ internal sealed record Fo2TempleConfrontationContract(
             talkEntries.Length == 0 || talkEntries.Any(entry =>
                 !entry.Executed || entry.OpenDialogueNode != result.InitialNode) ||
             result.Nodes.Values.Any(node => !DialogueMatches(node)) ||
+            !terminalExecution.Executed || !terminalExecution.DialogueEnded ||
             !firstLook.Executed || !firstLook.ScriptOverrides ||
             firstLook.DisplayMessages.Count != 1 ||
             firstLook.DisplayMessages[0].MessageListId != result.MessageListId ||

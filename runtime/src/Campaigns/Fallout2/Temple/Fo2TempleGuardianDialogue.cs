@@ -89,6 +89,13 @@ internal sealed partial class Fo2TempleGuardianDialogue : Control
         var option = matches[0];
         if (option.Target == _script.TerminalNode)
         {
+            var execution = _script.EffectProgram.ExecuteWithActions(
+                option.Target,
+                _scriptState,
+                new ClassicScriptContext(false, false, default));
+            if (!execution.Executed || !execution.DialogueEnded)
+                throw new InvalidOperationException(
+                    $"Fallout 2 ACKlint terminal did not execute: {option.Target}");
             Visible = false;
             CurrentNodeId = "";
             _availableOptions = [];

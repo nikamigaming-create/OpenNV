@@ -60,8 +60,9 @@ def read_look_message(
             messages[int(row.group(1))] = row.group("text")
     if message_id not in messages or not messages[message_id]:
         raise Fo1ProfileError("Medic source message file does not contain the look-at message")
-    dialogue = decode_single_reply_option_dialogue(script, "MedicSeriouslyWounded")
-    effect_program["events"].update(dialogue["events"])
+    for procedure in ("MedicSeriouslyWounded", "MedicStartHealing"):
+        dialogue = decode_single_reply_option_dialogue(script, procedure)
+        effect_program["events"].update(dialogue["events"])
     return message_id, messages[message_id], effect_program, messages
 
 
@@ -130,10 +131,26 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
     message_id, message_text, effect_program, messages = read_look_message(
         medic_script, medic_message
     )
-    dialogue_actions = effect_program["events"]["MedicSeriouslyWounded"][0]["then"]
-    reply_action, option_action = dialogue_actions
-    if not messages.get(reply_action["messageId"]) or not messages.get(option_action["messageId"]):
-        raise Fo1ProfileError("Medic dialogue source messages are unavailable")
+    dialogue_procedures = ("MedicSeriouslyWounded", "MedicStartHealing")
+    dialogue_nodes = []
+    for procedure in dialogue_procedures:
+        dialogue_actions = effect_program["events"][procedure][0]["then"]
+        reply_action, option_action = dialogue_actions
+        if not messages.get(reply_action["messageId"]) or not messages.get(option_action["messageId"]):
+            raise Fo1ProfileError("Medic dialogue source messages are unavailable")
+        dialogue_nodes.append({
+            "procedure": procedure,
+            "reply": {
+                "messageId": reply_action["messageId"],
+                "messageText": messages[reply_action["messageId"]],
+            },
+            "option": {
+                "messageId": option_action["messageId"],
+                "messageText": messages[option_action["messageId"]],
+                "target": option_action["target"],
+                "reaction": option_action["reaction"],
+            },
+        })
     door = generic_door["door"]
     if not door.get("open", {}).get("walkable"):
         raise Fo1ProfileError("generic-door descriptor does not mark its opened tile walkable")
@@ -179,22 +196,17 @@ def build(transport_path: Path, presentation_path: Path, transition_path: Path, 
             "art": {"logicalPath": art_path, "source": art.source, "sha256": art.sha256, "mapArtFilename": actor["artFilename"]},
         },
         "semantics": {"procedure": "look_at_p_proc", "messageId": message_id, "messageText": message_text,
-                      "result": "display-message-only", "dialogue": "unimplemented-fail-closed",
+                      "result": "display-message-only", "dialogue": "decoded-bounded-option-results",
                       "combat": "not-proven-by-look-at-only", "actionPoints": "not-source-backed"},
         "effectProgram": effect_program,
         "dialogueResult": {
-            "procedure": "MedicSeriouslyWounded",
-            "reply": {
-                "messageId": reply_action["messageId"],
-                "messageText": messages[reply_action["messageId"]],
-            },
-            "option": {
-                "messageId": option_action["messageId"],
-                "messageText": messages[option_action["messageId"]],
-                "target": option_action["target"],
-                "reaction": option_action["reaction"],
-            },
-            "optionSelection": "unimplemented-fail-closed",
+            "entryProcedure": "MedicSeriouslyWounded",
+            "nodes": dialogue_nodes,
+            "unsupportedTargets": sorted({
+                node["option"]["target"] for node in dialogue_nodes
+                if node["option"]["target"] not in dialogue_procedures
+            }),
+            "optionSelection": "decoded-targets-only",
         },
         "sourceWalkMaskRoute": {"pathTiles": route, "contactTile": route[-1], "contactIsAdjacent": route[-1] in neighbors(actor["tile"])},
         "rendered": False, "interactive": False, "retailOrDerivedAssetsPackaged": False,

@@ -218,6 +218,7 @@ internal partial class Fo1TacticalSession : Node
     private string? _destinationMedicLookPath;
     private Fo1DestinationMedicLookContract? _destinationMedicLook;
     private bool _destinationMedicLookViewed;
+    private string? _destinationMedicDialogueProcedure;
     private string? _destinationReturnExitGridPath;
     private Fo1ExitGridTransitionContract? _destinationReturnExitGrid;
     private int? _activatedDestinationReturnExitGridTile;
@@ -392,6 +393,7 @@ internal partial class Fo1TacticalSession : Node
     internal bool DestinationGenericDoorOpen => _destinationGenericDoorOpen;
     internal Fo1DestinationMedicLookContract? DestinationMedicLook => _destinationMedicLook;
     internal bool DestinationMedicLookViewed => _destinationMedicLookViewed;
+    internal string? DestinationMedicDialogueProcedure => _destinationMedicDialogueProcedure;
     internal Fo1ExitGridTransitionContract? DestinationReturnExitGrid => _destinationReturnExitGrid;
     internal int? ActivatedDestinationReturnExitGridTile => _activatedDestinationReturnExitGridTile;
 
@@ -590,20 +592,64 @@ internal partial class Fo1TacticalSession : Node
         if (!Fo1HexMath.AreNeighbors(_playerTile, medic.Tile))
             return false;
         var execution = medic.Program.ExecuteWithActions(
-            medic.DialogueProcedure,
+            medic.DialogueEntryProcedure,
             new ClassicScriptState(),
             new ClassicScriptContext(false, false, _classicScriptGameTime));
+        var node = medic.DialogueNodes[medic.DialogueEntryProcedure];
         if (!execution.Executed || execution.DialogueReply.Count != 1 ||
             execution.DialogueOptions.Count != 1 ||
             execution.DialogueReply[0].Message!.Value.MessageId !=
-                medic.DialogueReplyMessageId ||
+                node.ReplyMessageId ||
             execution.DialogueOptions[0].Message.MessageId !=
-                medic.DialogueOptionMessageId ||
-            execution.DialogueOptions[0].Target != medic.DialogueOptionTarget ||
-            execution.DialogueOptions[0].Reaction != medic.DialogueOptionReaction)
+                node.OptionMessageId ||
+            execution.DialogueOptions[0].Target != node.OptionTarget ||
+            execution.DialogueOptions[0].Reaction != node.OptionReaction)
             throw new InvalidOperationException(
                 "Fallout Medic dialogue result did not execute its admitted actions.");
-        _status = medic.DialogueReplyText;
+        _destinationMedicDialogueProcedure = node.Procedure;
+        _status = node.ReplyText;
+        RefreshHud();
+        Save();
+        return true;
+    }
+
+    internal bool TrySelectDestinationMedicDialogueOption(int messageId)
+    {
+        var medic = _destinationMedicLook ?? throw new InvalidOperationException(
+            "Fallout destination has no explicit Medic dialogue-result contract.");
+        if (_destinationMedicDialogueProcedure is null ||
+            !medic.DialogueNodes.TryGetValue(_destinationMedicDialogueProcedure, out var current))
+            return false;
+        var execution = medic.Program.ExecuteWithActions(
+            current.Procedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, _classicScriptGameTime));
+        var options = execution.DialogueOptions
+            .Where(option => option.Message.MessageId == messageId)
+            .ToArray();
+        if (options.Length != 1 || options[0].Target != current.OptionTarget)
+            return false;
+        if (!medic.DialogueNodes.TryGetValue(options[0].Target, out var target))
+        {
+            if (!medic.UnsupportedDialogueTargets.Contains(options[0].Target))
+                throw new InvalidOperationException(
+                    $"Fallout Medic dialogue target is unclassified: {options[0].Target}");
+            return false;
+        }
+        var targetExecution = medic.Program.ExecuteWithActions(
+            target.Procedure,
+            new ClassicScriptState(),
+            new ClassicScriptContext(false, false, _classicScriptGameTime));
+        if (!targetExecution.Executed || targetExecution.DialogueReply.Count != 1 ||
+            targetExecution.DialogueOptions.Count != 1 ||
+            targetExecution.DialogueReply[0].Message!.Value.MessageId != target.ReplyMessageId ||
+            targetExecution.DialogueOptions[0].Message.MessageId != target.OptionMessageId ||
+            targetExecution.DialogueOptions[0].Target != target.OptionTarget ||
+            targetExecution.DialogueOptions[0].Reaction != target.OptionReaction)
+            throw new InvalidOperationException(
+                $"Fallout Medic dialogue target did not execute: {target.Procedure}");
+        _destinationMedicDialogueProcedure = target.Procedure;
+        _status = target.ReplyText;
         RefreshHud();
         Save();
         return true;

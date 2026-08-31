@@ -59,6 +59,7 @@ internal partial class Fo1TacticalSession
             {
                 descriptorSha256 = _destinationMedicLook.Sha256,
                 viewed = _destinationMedicLookViewed,
+                dialogueProcedure = _destinationMedicDialogueProcedure,
             },
             destinationReturnExitGrid = _destinationReturnExitGrid is null ? null : new
             {
@@ -270,6 +271,15 @@ internal partial class Fo1TacticalSession
                 destinationMedicLook.GetProperty("descriptorSha256").GetString() != _destinationMedicLook.Sha256)
                 throw new InvalidOperationException("Fallout save Medic look state does not match its descriptor.");
             _destinationMedicLookViewed = destinationMedicLook.GetProperty("viewed").GetBoolean();
+            if (destinationMedicLook.TryGetProperty("dialogueProcedure", out var procedure) &&
+                procedure.ValueKind != JsonValueKind.Null)
+            {
+                var savedProcedure = procedure.GetString() ?? "";
+                if (!_destinationMedicLook.DialogueNodes.ContainsKey(savedProcedure))
+                    throw new InvalidOperationException(
+                        "Fallout save Medic dialogue procedure is not decoded by its descriptor.");
+                _destinationMedicDialogueProcedure = savedProcedure;
+            }
         }
         if (root.TryGetProperty("destinationReturnExitGrid", out var destinationReturnExitGrid) &&
             destinationReturnExitGrid.ValueKind != JsonValueKind.Null)

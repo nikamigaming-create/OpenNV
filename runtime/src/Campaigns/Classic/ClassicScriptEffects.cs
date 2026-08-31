@@ -102,6 +102,7 @@ internal sealed record ClassicScriptExecution(
     bool ScriptOverrides,
     IReadOnlyList<ClassicScriptMessage> DisplayMessages,
     string? OpenDialogueNode,
+    bool DialogueEnded,
     IReadOnlyList<ClassicDialogueReplySegment> DialogueReply,
     IReadOnlyList<ClassicDialogueOption> DialogueOptions);
 
@@ -139,12 +140,13 @@ internal sealed class ClassicScriptProgram
         ClassicScriptContext context)
     {
         if (!_events.TryGetValue(eventName, out var rules))
-            return new ClassicScriptExecution(false, false, [], null, [], []);
+            return new ClassicScriptExecution(false, false, [], null, false, [], []);
         var matched = rules.Where(rule => rule.Conditions.All(condition =>
             Matches(condition, state, context))).ToArray();
         var scriptOverrides = false;
         var messages = new List<ClassicScriptMessage>();
         string? openDialogueNode = null;
+        var dialogueEnded = false;
         var dialogueReply = new List<ClassicDialogueReplySegment>();
         var dialogueOptions = new List<ClassicDialogueOption>();
         foreach (var rule in matched)
@@ -152,13 +154,18 @@ internal sealed class ClassicScriptProgram
             foreach (var effect in rule.Effects)
                 Apply(
                     effect, state, context, ref scriptOverrides, messages,
-                    ref openDialogueNode, dialogueReply, dialogueOptions);
+                    ref openDialogueNode, ref dialogueEnded, dialogueReply, dialogueOptions);
         }
+        if (dialogueEnded &&
+            (openDialogueNode is not null || dialogueReply.Count > 0 || dialogueOptions.Count > 0))
+            throw new InvalidOperationException(
+                "Classic script produced a contradictory dialogue result.");
         return new ClassicScriptExecution(
             matched.Length > 0,
             scriptOverrides,
             messages,
             openDialogueNode,
+            dialogueEnded,
             dialogueReply,
             dialogueOptions);
     }
@@ -175,7 +182,7 @@ internal sealed class ClassicScriptProgram
             effects.Length == 0 || effects.Any(row => row.Name is not
                 ("set-local" or "set-flag" or "script-overrides" or "display-message" or
                  "open-dialogue" or "dialogue-reply-message" or
-                 "dialogue-reply-player-name" or "dialogue-option")))
+                 "dialogue-reply-player-name" or "dialogue-option" or "dialogue-end")))
             throw new InvalidOperationException(
                 "Classic script rule mixes conditions and effects.");
         return new Rule(conditions, effects);
@@ -188,7 +195,7 @@ internal sealed class ClassicScriptProgram
             "local-not-equals" or "set-local" or "set-flag" or "script-overrides" or
             "display-message" or "player-art-fid-in" or "open-dialogue" or
             "dialogue-reply-message" or "dialogue-reply-player-name" or
-            "dialogue-option"))
+            "dialogue-option" or "dialogue-end"))
             throw new InvalidOperationException($"Unsupported classic script operation: {operation}");
         int? index = source.TryGetProperty("index", out var indexValue)
             ? indexValue.GetInt32()
@@ -271,6 +278,7 @@ internal sealed class ClassicScriptProgram
         ref bool scriptOverrides,
         ICollection<ClassicScriptMessage> messages,
         ref string? openDialogueNode,
+        ref bool dialogueEnded,
         ICollection<ClassicDialogueReplySegment> dialogueReply,
         ICollection<ClassicDialogueOption> dialogueOptions)
     {
@@ -292,10 +300,17 @@ internal sealed class ClassicScriptProgram
                     operation.MessageId!.Value));
                 break;
             case "open-dialogue":
-                if (openDialogueNode is not null)
+                if (openDialogueNode is not null || dialogueEnded)
                     throw new InvalidOperationException(
                         "Classic script requested multiple dialogue entry nodes.");
                 openDialogueNode = operation.Node;
+                break;
+            case "dialogue-end":
+                if (openDialogueNode is not null || dialogueEnded || dialogueReply.Count > 0 ||
+                    dialogueOptions.Count > 0)
+                    throw new InvalidOperationException(
+                        "Classic script requested a contradictory dialogue result.");
+                dialogueEnded = true;
                 break;
             case "dialogue-reply-message":
                 dialogueReply.Add(new ClassicDialogueReplySegment(

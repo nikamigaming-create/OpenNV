@@ -84,6 +84,12 @@ class Fo2TempleFirstEncounterTest(unittest.TestCase):
         self.assertIn("internal bool LookAtGuardian()", combat)
         self.assertIn('"look_at_p_proc"', combat)
         self.assertIn("internal bool SelectDialogueOption(int messageId)", combat)
+        dialogue = (
+            ROOT
+            / "runtime/src/Campaigns/Fallout2/Temple/Fo2TempleGuardianDialogue.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("execution.DialogueEnded", dialogue)
+        self.assertIn("option.Target", dialogue)
         self.assertIn("confrontation.SelectDialogueOption(106)", proof)
         self.assertIn("confrontation.SelectDialogueOption(116)", proof)
         self.assertIn("confrontation.SelectDialogueOption(120)", proof)

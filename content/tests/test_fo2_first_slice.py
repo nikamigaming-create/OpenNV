@@ -551,6 +551,10 @@ class Fo2FirstSliceTest(unittest.TestCase):
             effects = guardian["effectProgram"]
             self.assertEqual(effects["schema"], "opennv-classic-script-effects/v1")
             self.assertEqual(
+                effects["events"]["Node999"][0]["then"],
+                [{"operation": "dialogue-end"}],
+            )
+            self.assertEqual(
                 effects["events"]["pickup_proc"][0]["then"][0],
                 {"operation": "set-local", "index": 5, "value": 2},
             )
