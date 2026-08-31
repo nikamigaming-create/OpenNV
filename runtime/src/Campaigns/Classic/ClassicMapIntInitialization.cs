@@ -46,7 +46,7 @@ internal sealed record ClassicMapIntInitialization(
 internal static class ClassicMapIntInitializationOwner
 {
     private const string Schema = "opennv-classic-map-int-initialization/v1";
-    private const string InventorySchema = "opennv-classic-int-initialization-inventory/v2";
+    private const string InventorySchema = "opennv-classic-int-initialization-inventory/v3";
     private const string RandomOpcode = "80b4";
     private const int Sha256HexCharacterCount = 64;
 

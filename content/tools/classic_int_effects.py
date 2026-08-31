@@ -366,12 +366,32 @@ def inventory_int_program(data: bytes) -> dict[str, Any]:
                     else "helper"
                 ),
                 "instructionCount": len(instructions),
+                "canonicalEpilogueOffset": (
+                    instructions[-len(EPILOGUE)].offset
+                    if len(instructions) >= len(EPILOGUE)
+                    and all(
+                        instruction.opcode == opcode
+                        and (operand is None or instruction.operand == operand)
+                        for instruction, (opcode, operand) in zip(
+                            instructions[-len(EPILOGUE):], EPILOGUE
+                        )
+                    )
+                    else None
+                ),
+                "instructions": [
+                    {
+                        "offset": instruction.offset,
+                        "opcode": f"{instruction.opcode:04x}",
+                        "operand": instruction.operand,
+                    }
+                    for instruction in instructions
+                ],
                 "branches": branches,
                 "randomSites": sites,
             }
         )
     return {
-        "schema": "opennv-classic-int-initialization-inventory/v2",
+        "schema": "opennv-classic-int-initialization-inventory/v3",
         "procedures": rows,
         "randomSites": random_sites,
         "randomOpcode": f"{RANDOM:04x}",

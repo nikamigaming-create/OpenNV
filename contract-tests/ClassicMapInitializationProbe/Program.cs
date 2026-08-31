@@ -92,12 +92,26 @@ using var intDocument = JsonDocument.Parse("""
           "logicalPath": "scripts\\acklint.int",
           "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
           "inventory": {
-            "schema": "opennv-classic-int-initialization-inventory/v2",
+            "schema": "opennv-classic-int-initialization-inventory/v3",
             "randomOpcode": "80b4",
             "procedures": [{
               "name": "map_enter_p_proc",
               "bodyOffset": 200,
-              "bodyEndOffset": 240
+              "bodyEndOffset": 260,
+              "canonicalEpilogueOffset": null,
+              "instructions": [
+                { "offset": 200, "opcode": "802b", "operand": null },
+                { "offset": 202, "opcode": "c001", "operand": 236 },
+                { "offset": 208, "opcode": "c001", "operand": 0 },
+                { "offset": 214, "opcode": "802f", "operand": null },
+                { "offset": 216, "opcode": "c001", "operand": 99 },
+                { "offset": 222, "opcode": "c001", "operand": 3 },
+                { "offset": 228, "opcode": "8013", "operand": null },
+                { "offset": 236, "opcode": "c001", "operand": 9 },
+                { "offset": 242, "opcode": "c001", "operand": 3 },
+                { "offset": 248, "opcode": "8013", "operand": null },
+                { "offset": 250, "opcode": "801c", "operand": null }
+              ]
             }],
             "randomSites": [{
               "procedure": "map_enter_p_proc",
@@ -195,9 +209,7 @@ using var randomDocument = JsonDocument.Parse(File.ReadAllBytes(
     Path.Combine("runtime", "config", "classic-retail-random-fo2-1.02-v1.json")));
 var randomContract = ClassicRetailRandomContract.Parse(randomDocument.RootElement);
 var randomState = ClassicRetailRandomLifecycle.Initialize(1, randomContract);
-var expressionResult = ClassicIntExpressionOwner.EvaluateRandomSite(
-    intInitialization.RandomSites[1],
-    new ClassicIntExpressionContext(
+var gameContext = new ClassicIntExpressionContext(
         new Dictionary<int, int>(),
         new Dictionary<int, int>(),
         new Dictionary<int, int>(),
@@ -209,13 +221,39 @@ var expressionResult = ClassicIntExpressionOwner.EvaluateRandomSite(
         1,
         new Dictionary<(int, int), int> { [(100, 6)] = 3 },
         new Dictionary<(int, int), int>(),
-        new Dictionary<int, int>()),
+        new Dictionary<int, int>());
+var expressionResult = ClassicIntExpressionOwner.EvaluateRandomSite(
+    intInitialization.RandomSites[1],
+    gameContext,
     randomState,
     randomContract);
 if (expressionResult.Value is < 1 or > 3 ||
     expressionResult.RandomState.Events.Count != randomState.Events.Count + 1)
     throw new InvalidOperationException(
         "Classic INT source expression evaluation or RANDOM consumption drifted.");
+
+var procedureProgram = ClassicIntProcedureVm.Parse(
+    intDocument.RootElement.GetProperty("liveScriptSlots")[0]
+        .GetProperty("program").GetProperty("inventory"),
+    "ACKlint.int");
+var procedureResult = ClassicIntProcedureVm.Execute(
+    procedureProgram,
+    "map_enter_p_proc",
+    new ClassicIntProcedureState(
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        new Dictionary<int, int>(),
+        [],
+        randomState),
+    gameContext,
+    randomContract,
+    procedureProgram.Procedures["map_enter_p_proc"].Instructions.Count);
+if (procedureResult.State.ProgramVariables[3] != 9 ||
+    procedureResult.ExecutedInstructions != 8)
+    throw new InvalidOperationException(
+        "Classic INT procedure stack/store/return execution drifted.");
 
 using var missingScript = JsonDocument.Parse("""
     {
@@ -251,6 +289,41 @@ catch (InvalidOperationException exception) when (
 foreach (var path in args)
 {
     using var ownedDocument = JsonDocument.Parse(File.ReadAllBytes(path));
+    if (ownedDocument.RootElement.TryGetProperty(
+            "initializationScripts",
+            out var ownedScripts))
+    {
+        var jasmine = ownedScripts.GetProperty("liveScriptSlots").EnumerateArray()
+            .Select(row => row.GetProperty("program"))
+            .First(row => string.Equals(
+                row.GetProperty("program").GetString(),
+                "jasmine.int",
+                StringComparison.OrdinalIgnoreCase));
+        var ownedProgram = ClassicIntProcedureVm.Parse(
+            jasmine.GetProperty("inventory"),
+            jasmine.GetProperty("program").GetString()!);
+        var ownedResult = ClassicIntProcedureVm.Execute(
+            ownedProgram,
+            "map_enter_p_proc",
+            new ClassicIntProcedureState(
+                new Dictionary<int, int>(),
+                new Dictionary<int, int>(),
+                new Dictionary<int, int>(),
+                new Dictionary<int, int>(),
+                new Dictionary<int, int>(),
+                [],
+                randomState),
+            gameContext,
+            randomContract,
+            ownedProgram.Procedures["map_enter_p_proc"].Instructions.Count);
+        if (ownedResult.State.ProgramVariables[4] != 0)
+            throw new InvalidOperationException(
+                "Owned classic INT procedure mutation drifted.");
+        Console.WriteLine(
+            $"{Path.GetFileName(path)}|jasmine.int|map_enter_p_proc|" +
+            $"{ownedResult.ExecutedInstructions}");
+        continue;
+    }
     var owned = ClassicMapInitializationOwner.Parse(
         ownedDocument.RootElement.GetProperty("map"));
     Console.WriteLine(
