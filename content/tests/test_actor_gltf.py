@@ -32,6 +32,7 @@ from actor_gltf import (  # noqa: E402
     _sample_animated_parent_tracks,
     _sample_transform_interpolator,
     _source_skin_bone_inverse_bind,
+    _source_shape_name_matches,
     _unsupported_actor_geometry,
     _uses_retail_biped_head_basis,
     _visible_creature_geometry_names,
@@ -63,6 +64,10 @@ from runtime_configuration import load_runtime_configuration  # noqa: E402
 
 
 class ActorGltfTest(unittest.TestCase):
+    def test_selected_actor_shape_name_uses_gamebryo_case_insensitive_identity(self):
+        self.assertTrue(_source_shape_name_matches(b"Nohat", "NoHat"))
+        self.assertFalse(_source_shape_name_matches(b"hat", "NoHat"))
+
     def test_animation_sequence_manifest_preserves_transform_priorities(self):
         sequence = NifFormat.NiControllerSequence()
         sequence.name = "SyntheticLayeredPose"

@@ -106,6 +106,11 @@ FACEGEN_RIGID_NORMAL_ACTOR_BASIS = (
 )
 
 
+def _source_shape_name_matches(authored_name: object, selected_name: str) -> bool:
+    """Match NIF string identities with Gamebryo's case-insensitive semantics."""
+    return _text(authored_name).casefold() == selected_name.casefold()
+
+
 @dataclass(frozen=True)
 class ActorComponent:
     role: str
@@ -590,7 +595,9 @@ def export_actor_gltf(
             nonselected_shapes = [
                 shape
                 for shape in authored_shapes
-                if _text(shape.name) != component.selected_shape
+                if not _source_shape_name_matches(
+                    shape.name, component.selected_shape
+                )
             ]
             omitted_surfaces.extend(
                 _omitted_shape_row(
@@ -604,7 +611,7 @@ def export_actor_gltf(
             authored_shapes = [
                 shape
                 for shape in authored_shapes
-                if _text(shape.name) == component.selected_shape
+                if _source_shape_name_matches(shape.name, component.selected_shape)
             ]
         if component.included_shape_names:
             included = frozenset(component.included_shape_names)
