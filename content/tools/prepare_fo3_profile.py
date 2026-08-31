@@ -60,6 +60,16 @@ PROFILE_ID_HEX_CHARACTERS = 20
 FORM_ID_HEX_CHARACTERS = 8
 FORM_ID_BYTES = 4
 FORM_ID_RADIX = 16
+CG02_DIALOGUE_INFO_DATA_BYTES = 4
+CG02_DIALOGUE_INFO_RESPONSE_TYPE = 1
+CG02_DIALOGUE_INFO_SAY_ONCE_FLAG = 4
+CG02_INTRO_SAY_TO_COUNT = 6
+CG02_INTRO_ACTOR_RECIPE_COUNT = 7
+CG02_INTRO_SOURCE_STAGE = 5
+CG02_INTRO_TARGET_STAGE = 6
+CG02_INTRO_FINAL_TIMER_PHASE = 5
+CG02_STAGE10_STOP_LOOK_COUNT = 8
+CG02_STAGE10_PREFIX_COMMAND_COUNT = 3
 FALLOUT_CAMERA_REFERENCE_ASPECT_HEIGHT_OVER_WIDTH = 0.75
 PNG_MAXIMUM_COMPRESSION_LEVEL = 9
 STAGE_INDEX_BYTES = frozenset({2, 4})
@@ -3074,7 +3084,7 @@ def _compile_cg02_intro_runtime(
             sound_rows.append(sound.group("sound"))
         elif command.casefold() != "set runtimer to 0":
             raise ValueError(f"Fallout 3 CG02 intro command differs: {command}")
-    if len(say_rows) != 6 or len(sound_rows) != 2 or len({topic.casefold() for _, topic in say_rows}) != 1:
+    if len(say_rows) != CG02_INTRO_SAY_TO_COUNT or len(sound_rows) != 2 or len({topic.casefold() for _, topic in say_rows}) != 1:
         raise ValueError("Fallout 3 CG02 intro SayTo/sound chain differs")
     topic_matches = by_editor.get(say_rows[0][1].casefold(), [])
     if len(topic_matches) != 1 or topic_matches[0].signature != DIALOGUE_TOPIC_RECORD:
@@ -3092,7 +3102,7 @@ def _compile_cg02_intro_runtime(
     recipe_by_reference = {
         str(recipe["proofActorReferenceFormId"]).casefold(): recipe for recipe in recipes
     }
-    if len(recipe_by_reference) != 7:
+    if len(recipe_by_reference) != CG02_INTRO_ACTOR_RECIPE_COUNT:
         raise ValueError("Fallout 3 CG02 intro actor recipe count differs")
     participants = []
     common_info_id = None
@@ -3298,7 +3308,7 @@ def _compile_cg02_intro_runtime(
         ("CG02DadREF", "CG02IntroYell", 2, 2),
         ("CG02Vault101Security04REF", "CG02IntroYell", 2, 3),
         ("CG02StanleyREF", "CG02IntroYell", 2, 4),
-        ("CG02PaulHannonREF", "CG02IntroYell", 2, 5),
+        ("CG02PaulHannonREF", "CG02IntroYell", 2, CG02_INTRO_SAY_TO_COUNT - 1),
         ("CG02OldLadyPalmerREF", "CG02OldLadyPalmerSpeech", 3, 0, "male"),
         ("CG02OldLadyPalmerREF", "CG02OldLadyPalmerSpeech", 3, 0, "female"),
     )
@@ -3308,7 +3318,7 @@ def _compile_cg02_intro_runtime(
         0: {"intro": 2, "runTimer": 1},
         1: {"intro": 3, "runTimer": 1},
         2: {"intro": 4, "runTimer": 1},
-        3: {"intro": 5, "runTimer": 1},
+        3: {"intro": CG02_INTRO_FINAL_TIMER_PHASE, "runTimer": 1},
     }
     for phase, expected in expected_phase_effects.items():
         actual = {
@@ -3344,7 +3354,7 @@ def _compile_cg02_intro_runtime(
         sounds.append({"phase": 0, "sequence": sequence, "formId": _form_id(sound.form_id), "editorId": _editor_id(sound), "recordSha256": hashlib.sha256(sound.data).hexdigest(), "logicalPath": canonical_member_path(f"sound\\{paths[0]}")})
     clapping = next(row for row in sounds if str(row["editorId"]).casefold() == "qstpartyclapping2d")
     sounds.append({**clapping, "phase": 2, "sequence": 0})
-    stage6 = stage_sources.get(6, [])
+    stage6 = stage_sources.get(CG02_INTRO_TARGET_STAGE, [])
     if len(stage6) != 2:
         raise ValueError("Fallout 3 CG02 stage-6 result rows differ")
     stage6_commands = [
@@ -3371,8 +3381,8 @@ def _compile_cg02_intro_runtime(
             raise ValueError(f"Fallout 3 CG02 stage-6 result differs: {command}")
     return {
         "schema": "opennv-fo3-cg02-stage-5-intro-runtime/v1",
-        "sourceStage": 5,
-        "targetStage": 6,
+        "sourceStage": CG02_INTRO_SOURCE_STAGE,
+        "targetStage": CG02_INTRO_TARGET_STAGE,
         "timer": {"decrementSource": "GetSecondsPassed", "initialVariable": "timer", "runVariable": "runTimer", "requiredIntro": 1},
         "topicFormId": _form_id(topic.form_id),
         "topicEditorId": _editor_id(topic),
@@ -3381,7 +3391,7 @@ def _compile_cg02_intro_runtime(
         "stage6SourceSha256": hashlib.sha256("\n".join(stage6).encode("cp1252")).hexdigest(),
         "stage6Commands": resolved_stage6,
         "finalCommands": [
-            {"index": 0, "kind": "setStage", "questFormId": _form_id(quest.form_id), "questEditorId": _editor_id(quest), "stage": 6},
+            {"index": 0, "kind": "setStage", "questFormId": _form_id(quest.form_id), "questEditorId": _editor_id(quest), "stage": CG02_INTRO_TARGET_STAGE},
             {"index": 1, "kind": "setQuestVariable", "variable": "intro", "value": 0},
             {"index": 2, "kind": "setQuestVariable", "variable": "runTimer", "value": 0},
         ],
@@ -3460,7 +3470,11 @@ def _compile_cg02_dad_speech_runtime(
         idle = by_form.get(idle_ids[0]) if len(idle_ids) == 1 else None
         idle_models = [] if idle is None else _text_values(idle, "MODL")
         if (
-            data_rows != [bytes.fromhex("01000400")]
+            len(data_rows) != 1
+            or len(data_rows[0]) != CG02_DIALOGUE_INFO_DATA_BYTES
+            or data_rows[0][0] != CG02_DIALOGUE_INFO_RESPONSE_TYPE
+            or struct.unpack("<H", data_rows[0][2:])[0] !=
+                CG02_DIALOGUE_INFO_SAY_ONCE_FLAG
             or len(responses) != 1
             or idle is None
             or idle.signature != IDLE_RECORD
@@ -3582,7 +3596,7 @@ def _compile_cg02_dad_speech_runtime(
         raise ValueError("Fallout 3 CG02 stage-7 result order differs")
     return {
         "schema": "opennv-fo3-cg02-stage-6-dad-speech-runtime/v1",
-        "sourceStage": 6,
+        "sourceStage": CG02_INTRO_TARGET_STAGE,
         "targetStage": target_stage,
         "dadReferenceFormId": _form_id(dad_reference.form_id),
         "dadBaseFormId": _form_id(dad_base.form_id),
@@ -3611,6 +3625,202 @@ def _compile_cg02_dad_speech_runtime(
             "applied": False,
             "blocker": "fo3-cg02-stage-7-overseer-speech-runtime-not-implemented",
         },
+    }
+
+
+def _compile_cg02_overseer_speech_runtime(
+    records: tuple[object, ...],
+    quest: object,
+    stage_sources: dict[int, list[str]],
+    definition: dict[str, object],
+) -> dict[str, object]:
+    config = dict(definition["cg02OverseerSpeech"])
+    by_form = {record.form_id: record for record in records}
+    by_editor: dict[str, list[object]] = {}
+    for record in records:
+        editor_id = _editor_id(record)
+        if editor_id:
+            by_editor.setdefault(editor_id.casefold(), []).append(record)
+
+    def exact(name: str, signature: str) -> object:
+        record = by_form.get(int(str(config[name]), FORM_ID_RADIX))
+        if record is None or record.signature != signature:
+            raise ValueError(f"Fallout 3 CG02 Overseer {name} differs")
+        return record
+
+    reference = exact("overseerReferenceFormId", ACTOR_REFERENCE_RECORD)
+    base = exact("overseerBaseFormId", NPC_RECORD)
+    script = exact("overseerScriptFormId", SCRIPT_RECORD)
+    topic = exact("topicFormId", DIALOGUE_TOPIC_RECORD)
+    if (
+        struct.unpack("<I", _single_subrecord(reference, "NAME"))[0] != base.form_id
+        or struct.unpack("<I", _single_subrecord(base, "SCRI"))[0] != script.form_id
+        or _editor_id(topic).casefold() != str(config["topicEditorId"]).casefold()
+    ):
+        raise ValueError("Fallout 3 CG02 Overseer identity differs")
+    script_source = _script_source(script)
+    if not re.search(
+        r"if\s+doTalk\s*==\s*1\s*&&\s*talking\s*==\s*0.*?"
+        r"set\s+timer\s+to\s+timer\s*-\s*GetSecondsPassed.*?"
+        r"SayTo\s+player\s+CG02OverseerSpeech\s+1.*?"
+        r"begin\s+SayToDone\s+CG02OverseerSpeech\s*set\s+talking\s+to\s+0",
+        script_source,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        raise ValueError("Fallout 3 CG02 Overseer script differs")
+    voice_ids = [
+        struct.unpack("<I", row.data)[0] for row in iter_subrecords(base)
+        if row.signature == "VTCK" and len(row.data) == FORM_ID_BYTES
+    ]
+    voice = by_form.get(voice_ids[0]) if len(voice_ids) == 1 else None
+    if voice is None or voice.signature != VOICE_TYPE_RECORD:
+        raise ValueError("Fallout 3 CG02 Overseer voice differs")
+    player_reference_form_id = _form_id(
+        int(str(config["playerReferenceFormId"]), FORM_ID_RADIX)
+    )
+
+    def resolve_command(command: str, index: int) -> dict[str, object]:
+        if match := SET_STAGE_PATTERN.fullmatch(command):
+            if match.group("quest").casefold() != _editor_id(quest).casefold():
+                raise ValueError("Fallout 3 CG02 Overseer stage quest differs")
+            return {"index": index, "kind": "setStage", "stage": int(match.group("stage"))}
+        if match := re.fullmatch(
+            r"set\s+(?P<subject>\w+)\.(?P<variable>\w+)\s+to\s+"
+            r"(?P<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+))", command, re.IGNORECASE
+        ):
+            targets = by_editor.get(match.group("subject").casefold(), [])
+            if len(targets) != 1 or targets[0].signature != ACTOR_REFERENCE_RECORD:
+                raise ValueError("Fallout 3 CG02 Overseer variable target differs")
+            return {"index": index, "kind": "setActorVariable",
+                    "referenceFormId": _form_id(targets[0].form_id),
+                    "variable": match.group("variable"), "value": float(match.group("value"))}
+        if match := re.fullmatch(
+            r"(?:(?P<subject>\w+)\.)?look\s+(?P<target>\w+)",
+            command,
+            re.IGNORECASE,
+        ):
+            subject_name = match.group("subject")
+            targets = [reference] if subject_name is None else by_editor.get(subject_name.casefold(), [])
+            if len(targets) != 1 or targets[0].signature != ACTOR_REFERENCE_RECORD:
+                raise ValueError("Fallout 3 CG02 Overseer look subject differs")
+            target_name = match.group("target")
+            look_targets = [] if target_name.casefold() == "player" else by_editor.get(target_name.casefold(), [])
+            if target_name.casefold() != "player" and (
+                len(look_targets) != 1 or look_targets[0].signature != ACTOR_REFERENCE_RECORD
+            ):
+                raise ValueError("Fallout 3 CG02 Overseer look target differs")
+            return {"index": index, "kind": "lookAt",
+                    "referenceFormId": _form_id(targets[0].form_id),
+                    "targetReferenceFormId": player_reference_form_id if not look_targets else _form_id(look_targets[0].form_id)}
+        if match := re.fullmatch(r"(?P<subject>\w+)\.evp", command, re.IGNORECASE):
+            targets = by_editor.get(match.group("subject").casefold(), [])
+            if len(targets) != 1 or targets[0].signature != ACTOR_REFERENCE_RECORD:
+                raise ValueError("Fallout 3 CG02 Overseer package target differs")
+            return {"index": index, "kind": "evaluatePackage",
+                    "referenceFormId": _form_id(targets[0].form_id)}
+        add_item = re.fullmatch(
+            r"player\.additem\s+(?P<item>\w+)\s+(?P<count>\d+)", command, re.IGNORECASE)
+        if add_item is not None:
+            items = by_editor.get(add_item.group("item").casefold(), [])
+            if len(items) != 1:
+                raise ValueError("Fallout 3 CG02 Overseer item differs")
+            return {"index": index, "kind": "addItem",
+                    "itemFormId": _form_id(items[0].form_id),
+                    "itemEditorId": _editor_id(items[0]),
+                    "count": int(add_item.group("count"))}
+        if command.casefold() == "resetpipboymanager":
+            return {"index": index, "kind": "resetPipboyManager"}
+        if match := re.fullmatch(r"(?P<subject>\w+)\.stoplook", command, re.IGNORECASE):
+            targets = by_editor.get(match.group("subject").casefold(), [])
+            if len(targets) != 1 or targets[0].signature != ACTOR_REFERENCE_RECORD:
+                raise ValueError("Fallout 3 CG02 Overseer stop-look target differs")
+            return {"index": index, "kind": "stopLook",
+                    "referenceFormId": _form_id(targets[0].form_id)}
+        if match := re.fullmatch(r"addachievement\s+(?P<value>\d+)", command, re.IGNORECASE):
+            return {"index": index, "kind": "addAchievement",
+                    "value": int(match.group("value"))}
+        raise ValueError(f"Fallout 3 CG02 Overseer result differs: {command}")
+
+    source_stage = int(config["sourceStage"])
+    pipboy_stage = int(config["pipBoyStage"])
+    target_stage = int(config["targetStage"])
+    branches = []
+    for info_id in [int(str(value), FORM_ID_RADIX) for value in config["infoFormIds"]]:
+        info = by_form.get(info_id)
+        if info is None or info.signature != DIALOGUE_INFO_RECORD or not any(
+            group.group_type == DIALOGUE_CHILD_GROUP_TYPE and group.label_u32 == topic.form_id
+            for group in info.groups
+        ):
+            raise ValueError("Fallout 3 CG02 Overseer INFO differs")
+        conditions = [_dialogue_condition(row.data) for row in iter_subrecords(info) if row.signature == "CTDA"]
+        if not any(int(row["function"]) == GET_IS_ID_FUNCTION and int(row["parameter1"]) == base.form_id for row in conditions):
+            raise ValueError("Fallout 3 CG02 Overseer INFO speaker differs")
+        sex_values = [int(row["parameter1"]) for row in conditions if int(row["function"]) == GET_PC_IS_SEX_FUNCTION]
+        engine_sex = None if not sex_values else "male" if sex_values == [0] else "female" if sex_values == [1] else "unsupported"
+        if engine_sex == "unsupported":
+            raise ValueError("Fallout 3 CG02 Overseer INFO sex differs")
+        responses = [value for value in _text_values(info, "NAM1") if value]
+        idle_ids = [struct.unpack("<I", row.data)[0] for row in iter_subrecords(info) if row.signature == "SNAM" and len(row.data) == FORM_ID_BYTES]
+        if len(responses) != 1 or len(idle_ids) > 1:
+            raise ValueError("Fallout 3 CG02 Overseer response differs")
+        idle = None if not idle_ids else by_form.get(idle_ids[0])
+        idle_models = [] if idle is None else _text_values(idle, "MODL")
+        if idle is not None and (idle.signature != IDLE_RECORD or len(idle_models) != 1):
+            raise ValueError("Fallout 3 CG02 Overseer idle differs")
+        raw_commands = [command for source in _text_values(info, "SCTX") for command in _source_commands(source)]
+        effects = [resolve_command(command, index) for index, command in enumerate(raw_commands)]
+        stage_effects = [row for row in effects if row["kind"] == "setStage"]
+        stage = None if not stage_effects else int(stage_effects[0]["stage"])
+        if len(stage_effects) > 1 or stage not in (None, pipboy_stage, target_stage):
+            raise ValueError("Fallout 3 CG02 Overseer INFO stage differs")
+        branches.append({
+            "sequence": 0 if engine_sex is not None else len(branches) - 1,
+            "engineSex": engine_sex,
+            "infoFormId": _form_id(info.form_id),
+            "infoRecordSha256": hashlib.sha256(info.data).hexdigest(),
+            "sayOnce": True,
+            "response": {"index": 1, "text": responses[0],
+                         "textSha256": hashlib.sha256(responses[0].encode("utf-8")).hexdigest()},
+            "speakerIdle": None if idle is None else {
+                "formId": _form_id(idle.form_id), "editorId": _editor_id(idle),
+                "recordSha256": hashlib.sha256(idle.data).hexdigest(),
+                "modelPath": canonical_member_path(f"meshes\\{idle_models[0]}")},
+            "effects": effects,
+        })
+    if [row["sequence"] for row in branches] != [0, 0, 1, 2, 3]:
+        raise ValueError("Fallout 3 CG02 Overseer order differs")
+
+    stage_results = {}
+    for stage in (pipboy_stage, target_stage):
+        commands = [command for source in stage_sources.get(stage, []) for command in _source_commands(source)]
+        stage_results[str(stage)] = {
+            "sourceSha256": hashlib.sha256("\n".join(stage_sources.get(stage, [])).encode("cp1252")).hexdigest(),
+            "commands": [resolve_command(command, index) for index, command in enumerate(commands)],
+        }
+    target_kinds = [row["kind"] for row in stage_results[str(target_stage)]["commands"]]
+    stop_look_end = CG02_STAGE10_PREFIX_COMMAND_COUNT + CG02_STAGE10_STOP_LOOK_COUNT
+    if [row["kind"] for row in stage_results[str(pipboy_stage)]["commands"]] != ["evaluatePackage"] or target_kinds[:CG02_STAGE10_PREFIX_COMMAND_COUNT] != ["addItem", "resetPipboyManager", "evaluatePackage"] or target_kinds[CG02_STAGE10_PREFIX_COMMAND_COUNT:stop_look_end] != ["stopLook"] * CG02_STAGE10_STOP_LOOK_COUNT or target_kinds[stop_look_end:] != ["addAchievement"]:
+        raise ValueError("Fallout 3 CG02 Overseer stage results differ")
+    recipe = actor_preparation.load_recipe(str(config["actorRecipeId"]))
+    if str(recipe["proofActorReferenceFormId"]).casefold() != _form_id(reference.form_id):
+        raise ValueError("Fallout 3 CG02 Overseer actor recipe differs")
+    return {
+        "schema": "opennv-fo3-cg02-stage-7-overseer-speech-runtime/v1",
+        "sourceStage": source_stage,
+        "targetStage": target_stage,
+        "overseerReferenceFormId": _form_id(reference.form_id),
+        "overseerBaseFormId": _form_id(base.form_id),
+        "overseerScriptFormId": _form_id(script.form_id),
+        "overseerScriptSourceSha256": hashlib.sha256(script_source.encode("cp1252")).hexdigest(),
+        "playerReferenceFormId": player_reference_form_id,
+        "actorRecipeId": str(recipe["id"]),
+        "dialogue": {"voiceType": {"formId": _form_id(voice.form_id), "editorId": _editor_id(voice),
+                                      "recordSha256": hashlib.sha256(voice.data).hexdigest()},
+                     "branches": branches, "dialoguePlaybackPrepared": False,
+                     "dialoguePlaybackImplemented": False},
+        "stageResults": stage_results,
+        "nextBoundary": {"applied": False,
+                         "blocker": "fo3-cg02-stage-10-dad-party-speech-runtime-not-implemented"},
     }
 
 
@@ -4658,12 +4868,23 @@ def _compile_cg01_post_stage14_transition(
             "initialSeconds": float(intro_timer["value"]),
         }
         if "cg02DadSpeech" in definition:
-            intro_runtime["dadSpeechRuntime"] = _compile_cg02_dad_speech_runtime(
+            dad_speech = _compile_cg02_dad_speech_runtime(
                 records,
                 next_quest,
                 next_stage_sources,
                 definition,
             )
+            if "cg02OverseerSpeech" in definition:
+                dad_speech["overseerSpeechRuntime"] = (
+                    _compile_cg02_overseer_speech_runtime(
+                        records,
+                        next_quest,
+                        next_stage_sources,
+                        definition,
+                    )
+                )
+                dad_speech["nextBoundary"] = {"applied": True, "blocker": None}
+            intro_runtime["dadSpeechRuntime"] = dad_speech
             intro_runtime["nextBoundary"] = {
                 "applied": True,
                 "blocker": None,
@@ -6833,6 +7054,9 @@ def _bind_owned_dad_dialogue_animations(
     prepared = []
     for raw_branch in dialogue["branches"]:
         branch = dict(raw_branch)
+        if branch["speakerIdle"] is None:
+            prepared.append(branch)
+            continue
         speaker_idle = dict(branch["speakerIdle"])
         member = meshes_archive.extract(str(speaker_idle["modelPath"]))
         speaker_idle.update(
@@ -6908,9 +7132,23 @@ def _bind_cg02_intro_assets(
             *(str(dict(branch)["speakerIdle"]["modelPath"])
               for branch in dad_branches),
         )))
+        if "overseerSpeechRuntime" in dad_speech:
+            overseer = dict(dad_speech["overseerSpeechRuntime"])
+            overseer_reference_id = str(overseer["overseerReferenceFormId"]).casefold()
+            overseer_branches = list(dict(overseer["dialogue"])["branches"])
+            animation_paths[overseer_reference_id] = tuple(dict.fromkeys(
+                str(dict(branch)["speakerIdle"]["modelPath"])
+                for branch in overseer_branches
+                if dict(branch)["speakerIdle"] is not None
+            ))
     actor_recipe_ids = list(dict.fromkeys(
         str(row["actorRecipeId"]) for row in participants
     ))
+    if "dadSpeechRuntime" in intro:
+        dad_speech = dict(intro["dadSpeechRuntime"])
+        if "overseerSpeechRuntime" in dad_speech:
+            actor_recipe_ids.append(str(dict(
+                dad_speech["overseerSpeechRuntime"])["actorRecipeId"]))
     actor_set = actor_preparation.prepare_actor_set(
         data_root,
         profile_root,
@@ -6987,6 +7225,17 @@ def _bind_cg02_intro_assets(
         row["response"] = response
         prepared.append(row)
     intro["participants"] = prepared
+    if "dadSpeechRuntime" in intro:
+        dad_speech = dict(intro["dadSpeechRuntime"])
+        if "overseerSpeechRuntime" in dad_speech:
+            overseer = dict(dad_speech["overseerSpeechRuntime"])
+            overseer_reference_id = str(overseer["overseerReferenceFormId"]).casefold()
+            actor_scene = scenes.get(overseer_reference_id)
+            if actor_scene is None:
+                raise ValueError("Fallout 3 CG02 Overseer actor scene is absent")
+            overseer["actorScene"] = actor_scene
+            dad_speech["overseerSpeechRuntime"] = overseer
+            intro["dadSpeechRuntime"] = dad_speech
     intro["sounds"] = [
         {
             **dict(row),
@@ -8173,6 +8422,22 @@ def prepare_profile(data_root: Path, profile_root: Path, recipe_path: Path) -> d
             profile_root,
         )
         dad_speech["dialogue"] = dad_dialogue
+        if "overseerSpeechRuntime" in dad_speech:
+            overseer = dict(dad_speech["overseerSpeechRuntime"])
+            overseer_dialogue = dict(overseer["dialogue"])
+            _bind_owned_dad_dialogue_animations(
+                overseer_dialogue,
+                meshes_archive,
+                meshes_archive_sha256,
+            )
+            _bind_owned_dad_dialogue_audio(
+                overseer_dialogue,
+                voices_archive,
+                voices_archive_sha256,
+                profile_root,
+            )
+            overseer["dialogue"] = overseer_dialogue
+            dad_speech["overseerSpeechRuntime"] = overseer
         cg02_intro["dadSpeechRuntime"] = dad_speech
     cg02_stage0["introRuntime"] = cg02_intro
     completion["cg02Stage0"] = cg02_stage0

@@ -23,6 +23,7 @@ from prepare_fo3_profile import (  # noqa: E402
     _cg00_package_stage_condition,
     _compile_cg01_stage0_transition,
     _compile_cg02_dad_speech_runtime,
+    _compile_cg02_overseer_speech_runtime,
     _compile_cg00_section4_transition,
     _compile_post_stage65_dialogue,
     _compile_post_stage80_dialogue,
@@ -168,6 +169,86 @@ def selection() -> dict[str, object]:
 
 
 class Fo3ProfileTransitionTest(unittest.TestCase):
+    def test_compiles_cg02_overseer_speech_through_stage10(self) -> None:
+        quest = Record("QUST", 0x14E84, 0, subrecord("EDID", b"CG02\0"), ())
+        topic = Record("DIAL", 0x30992, 0,
+                       subrecord("EDID", b"CG02OverseerSpeech\0"), ())
+        voice = Record("VTYP", 0x61EA4, 0,
+                       subrecord("EDID", b"Vault101OverseerVoice\0"), ())
+        script_source = ("if doTalk == 1 && talking == 0\nif timer > 0\n"
+                         "set timer to timer - GetSecondsPassed\nelse\n"
+                         "SayTo player CG02OverseerSpeech 1\nset talking to 1\nendif\n"
+                         "begin SayToDone CG02OverseerSpeech\nset talking to 0")
+        script = Record("SCPT", 0x3099F, 0,
+                        subrecord("EDID", b"CG02OverseerSCRIPT\0") +
+                        subrecord("SCTX", script_source.encode() + b"\0"), ())
+        base = Record("NPC_", 0x300F0, 0,
+                      subrecord("EDID", b"CG02Overseer\0") +
+                      subrecord("VTCK", struct.pack("<I", voice.form_id)) +
+                      subrecord("SCRI", struct.pack("<I", script.form_id)), ())
+        overseer = Record("ACHR", 0x300F1, 0,
+                          subrecord("EDID", b"CG02OverseerREF\0") +
+                          subrecord("NAME", struct.pack("<I", base.form_id)), ())
+        dad = Record("ACHR", 0x300EF, 0,
+                     subrecord("EDID", b"CG02DadREF\0") +
+                     subrecord("NAME", struct.pack("<I", 0x2FDCF)), ())
+        amata = Record("ACHR", 0x2FDE0, 0,
+                       subrecord("EDID", b"CG02AmataREF\0") +
+                       subrecord("NAME", struct.pack("<I", 0x2FDDF)), ())
+        pipboy = Record("ARMO", 0x15038, 0, subrecord("EDID", b"pipboy\0"), ())
+        presentation_idle = idle(0x59444, "GivePipBoy", r"Characters\_Male\give.kf")
+
+        def info(form_id: int, text: str, sex: int | None, results: list[str],
+                 use_idle: bool = False) -> Record:
+            data = subrecord("DATA", bytes.fromhex("01000400"))
+            data += subrecord("NAM1", text.encode() + b"\0")
+            if use_idle:
+                data += subrecord("SNAM", struct.pack("<I", presentation_idle.form_id))
+            data += subrecord("CTDA", condition(72, base.form_id))
+            if sex is not None:
+                data += subrecord("CTDA", condition(131, sex))
+            data += b"".join(subrecord("SCTX", value.encode() + b"\0") for value in results)
+            return Record("INFO", form_id, 0, data,
+                          (GroupContext(struct.pack("<I", topic.form_id), 7),))
+
+        records = (
+            quest, topic, voice, script, base, overseer, dad, amata, pipboy,
+            presentation_idle,
+            info(0x30993, "Congratulations, young man!", 0,
+                 ["CG02DadREF.look CG02OverseerREF", "look player"]),
+            info(0x30994, "Congratulations, young lady!", 1,
+                 ["CG02DadREF.look CG02OverseerREF", "look player"]),
+            info(0x30995, "Your first official responsibilities.", None,
+                 ["setstage CG02 8", "look player"]),
+            info(0x30996, "Your very own Pip-Boy 3000!", None,
+                 ["CG02DadREF.look player", "look player"], True),
+            info(0x30997, "Your first work assignment tomorrow.", None,
+                 ["set CG02OverseerREF.doTalk to 0",
+                  "CG02DadREF.look CG02OverseerREF", "setstage CG02 10"]),
+        )
+        definition = {"cg02OverseerSpeech": {
+            "overseerReferenceFormId": "000300f1", "overseerBaseFormId": "000300f0",
+            "overseerScriptFormId": "0003099f",
+            "actorRecipeId": "fo3-vault101-cg02-overseer-actor-v1",
+            "playerReferenceFormId": "00000014",
+            "topicEditorId": "CG02OverseerSpeech", "topicFormId": "00030992",
+            "infoFormIds": ["00030993", "00030994", "00030995", "00030996", "00030997"],
+            "sourceStage": 7, "pipBoyStage": 8, "targetStage": 10}}
+        stop_look = "\n".join(f"{name}.stoplook" for name in (
+            "CG02AmataREF", "CG02DadREF", "CG02OverseerREF", "CG02AmataREF",
+            "CG02DadREF", "CG02OverseerREF", "CG02AmataREF", "CG02DadREF"))
+        result = _compile_cg02_overseer_speech_runtime(
+            records, quest, {8: ["CG02OverseerREF.evp"], 10: [
+                "player.additem pipboy 1\nResetPipboyManager\nCG02DadREF.evp",
+                stop_look, "addachievement 1"]}, definition)
+
+        self.assertEqual([0, 0, 1, 2, 3],
+                         [row["sequence"] for row in result["dialogue"]["branches"]])
+        self.assertEqual(["evaluatePackage"],
+                         [row["kind"] for row in result["stageResults"]["8"]["commands"]])
+        self.assertEqual("addAchievement",
+                         result["stageResults"]["10"]["commands"][-1]["kind"])
+
     def test_compiles_cg02_dad_speech_and_stage7_handoff(self) -> None:
         quest = Record(
             "QUST", 0x00014E84, 0, subrecord("EDID", b"CG02\0"), ())

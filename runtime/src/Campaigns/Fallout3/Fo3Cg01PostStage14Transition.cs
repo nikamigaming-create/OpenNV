@@ -150,6 +150,38 @@ internal sealed record Fo3Cg02DadSpeechRuntime(
     IReadOnlyList<Fo3Cg02DadSpeechCue> Cues,
     IReadOnlyList<Fo3Cg02DadStage7Command> Stage7Commands,
     int FinalCommandCount,
+    Fo3Cg02OverseerSpeechRuntime? OverseerSpeechRuntime,
+    string NextBoundaryBlocker);
+
+internal sealed record Fo3Cg02OverseerCommand(
+    int Index,
+    string Kind,
+    string ReferenceFormId,
+    string TargetReferenceFormId,
+    string Variable,
+    double Value,
+    string ItemFormId,
+    int Count);
+
+internal sealed record Fo3Cg02OverseerSpeechCue(
+    int Sequence,
+    string? EngineSex,
+    string InfoFormId,
+    string? SpeakerIdleLogicalPath,
+    string? SpeakerIdleSourceSha256,
+    Fo3OwnedDialogueResponse Response,
+    IReadOnlyList<Fo3Cg02OverseerCommand> Effects);
+
+internal sealed record Fo3Cg02OverseerSpeechRuntime(
+    int SourceStage,
+    int TargetStage,
+    string OverseerReferenceFormId,
+    string OverseerBaseFormId,
+    string PlayerReferenceFormId,
+    string ActorScenePath,
+    string ActorSceneSha256,
+    IReadOnlyList<Fo3Cg02OverseerSpeechCue> Cues,
+    IReadOnlyDictionary<int, IReadOnlyList<Fo3Cg02OverseerCommand>> StageResults,
     string NextBoundaryBlocker);
 
 internal sealed record Fo3Cg02IntroRuntime(
@@ -234,6 +266,10 @@ internal sealed record Fo3Cg01Stage50Timer(
     bool MainDoorOpen,
     string NextBoundaryBlocker)
 {
+    private const int ExpectedCg02IntroParticipantCount = 15;
+    private const int ExpectedCg02IntroEffectCarrierCount = 5;
+    private const int ExpectedCg02OverseerCueCount = 5;
+
     internal static Fo3Cg01Stage50Timer Load(JsonElement source, int expectedSourceStage)
     {
         if (source.GetProperty("schema").GetString() !=
@@ -648,8 +684,8 @@ internal sealed record Fo3Cg01Stage50Timer(
                     effects,
                     effectRows.Length);
             }).ToArray();
-        if (participants.Length != 15 || participants.Count(value =>
-                value.QuestVariableEffects.Count != 0) != 5 ||
+        if (participants.Length != ExpectedCg02IntroParticipantCount || participants.Count(value =>
+                value.QuestVariableEffects.Count != 0) != ExpectedCg02IntroEffectCarrierCount ||
             participants.Where(value => value.EngineSex is null)
                 .GroupBy(value => value.Phase).Any(group =>
                 !group.OrderBy(value => value.SequenceInPhase)
@@ -801,8 +837,11 @@ internal sealed record Fo3Cg01Stage50Timer(
                 "setActorVariable", "setActorVariable"]))
             throw new InvalidOperationException("Fallout 3 CG02 stage-7 result differs.");
         var boundary = source.GetProperty("nextBoundary");
-        if (boundary.GetProperty("applied").GetBoolean())
-            throw new InvalidOperationException("Fallout 3 CG02 Dad boundary differs.");
+        var boundaryApplied = boundary.GetProperty("applied").GetBoolean();
+        var overseer = boundaryApplied
+            ? LoadCg02OverseerSpeech(
+                source.GetProperty("overseerSpeechRuntime"), targetStage)
+            : null;
         return new Fo3Cg02DadSpeechRuntime(
             expectedSourceStage,
             targetStage,
@@ -810,6 +849,100 @@ internal sealed record Fo3Cg01Stage50Timer(
             cues,
             commands,
             commands.Length + 1,
+            overseer,
+            boundaryApplied
+                ? overseer!.NextBoundaryBlocker
+                : boundary.GetProperty("blocker").GetString()!);
+    }
+
+    private static Fo3Cg02OverseerSpeechRuntime LoadCg02OverseerSpeech(
+        JsonElement source,
+        int expectedSourceStage)
+    {
+        if (source.GetProperty("schema").GetString() !=
+                "opennv-fo3-cg02-stage-7-overseer-speech-runtime/v1" ||
+            source.GetProperty("sourceStage").GetInt32() != expectedSourceStage)
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Overseer speech identity differs.");
+        var dialogue = source.GetProperty("dialogue");
+        if (!dialogue.GetProperty("dialoguePlaybackPrepared").GetBoolean() ||
+            !dialogue.GetProperty("dialoguePlaybackImplemented").GetBoolean())
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Overseer speech assets differ.");
+        Fo3Cg02OverseerCommand LoadCommand(JsonElement row, int index)
+        {
+            if (row.GetProperty("index").GetInt32() != index)
+                throw new InvalidOperationException(
+                    "Fallout 3 CG02 Overseer command order differs.");
+            return new Fo3Cg02OverseerCommand(
+                index,
+                row.GetProperty("kind").GetString()!,
+                row.TryGetProperty("referenceFormId", out var reference)
+                    ? reference.GetString()! : "",
+                row.TryGetProperty("targetReferenceFormId", out var target)
+                    ? target.GetString()! : "",
+                row.TryGetProperty("variable", out var variable)
+                    ? variable.GetString()! : "",
+                row.TryGetProperty("value", out var value)
+                    ? value.GetDouble() : 0.0,
+                row.TryGetProperty("itemFormId", out var item)
+                    ? item.GetString()! : "",
+                row.TryGetProperty("count", out var count)
+                    ? count.GetInt32() : 0);
+        }
+        var cues = dialogue.GetProperty("branches").EnumerateArray().Select(row =>
+        {
+            var response = row.GetProperty("response");
+            var infoFormId = row.GetProperty("infoFormId").GetString()!;
+            var responseIndex = response.GetProperty("index").GetInt32();
+            var idle = row.GetProperty("speakerIdle");
+            return new Fo3Cg02OverseerSpeechCue(
+                row.GetProperty("sequence").GetInt32(),
+                row.TryGetProperty("engineSex", out var sex) &&
+                    sex.ValueKind != JsonValueKind.Null ? sex.GetString() : null,
+                infoFormId,
+                idle.ValueKind == JsonValueKind.Null ? null :
+                    idle.GetProperty("modelPath").GetString()!,
+                idle.ValueKind == JsonValueKind.Null ? null :
+                    idle.GetProperty("sourceSha256").GetString()!,
+                new Fo3OwnedDialogueResponse(
+                    responseIndex,
+                    response.GetProperty("text").GetString()!,
+                    Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                        response.GetProperty("voice"),
+                        $"_{infoFormId}_{responseIndex}.ogg"),
+                    Fo3Cg01Stage10Transition.LoadDialogueAsset(
+                        response.GetProperty("lip"),
+                        $"_{infoFormId}_{responseIndex}.lip")),
+                row.GetProperty("effects").EnumerateArray()
+                    .Select(LoadCommand).ToArray());
+        }).ToArray();
+        if (cues.Length != ExpectedCg02OverseerCueCount ||
+            !cues.Select(value => value.Sequence).SequenceEqual([0, 0, 1, 2, 3]))
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Overseer cue order differs.");
+        var stageResults = source.GetProperty("stageResults").EnumerateObject()
+            .ToDictionary(
+                property => int.Parse(property.Name,
+                    System.Globalization.CultureInfo.InvariantCulture),
+                property => (IReadOnlyList<Fo3Cg02OverseerCommand>)property.Value
+                    .GetProperty("commands").EnumerateArray()
+                    .Select(LoadCommand).ToArray());
+        var actor = source.GetProperty("actorScene");
+        var boundary = source.GetProperty("nextBoundary");
+        if (boundary.GetProperty("applied").GetBoolean())
+            throw new InvalidOperationException(
+                "Fallout 3 CG02 Overseer boundary differs.");
+        return new Fo3Cg02OverseerSpeechRuntime(
+            expectedSourceStage,
+            source.GetProperty("targetStage").GetInt32(),
+            source.GetProperty("overseerReferenceFormId").GetString()!,
+            source.GetProperty("overseerBaseFormId").GetString()!,
+            source.GetProperty("playerReferenceFormId").GetString()!,
+            actor.GetProperty("scene").GetString()!,
+            actor.GetProperty("sha256").GetString()!,
+            cues,
+            stageResults,
             boundary.GetProperty("blocker").GetString()!);
     }
 
@@ -1240,10 +1373,35 @@ internal sealed record Fo3Cg01PostStage14Transition(
         var completion = dadLead.Completion;
         var cg02Intro = completion.Cg02Stage0.IntroRuntime;
         var cg02DadSpeech = cg02Intro?.DadSpeechRuntime;
+        var cg02Overseer = cg02DadSpeech?.OverseerSpeechRuntime;
+        var savedInfoFormIds = RequiredArray(source, "appliedInfoFormIds")
+            .EnumerateArray().Select(value => value.GetString() ?? "").ToArray();
+        var baselineInfoCount = baseline.AppliedInfoFormIds.Count;
+        var savedCg02InfoFormIds = savedInfoFormIds.Skip(baselineInfoCount).ToArray();
+        var validCg02Sequences = cg02DadSpeech is null
+            ? Array.Empty<string[]>()
+            : cg02DadSpeech.Cues.Where(value => value.EngineSex is not null)
+                .Select(dadSexCue => new[]
+                {
+                    dadSexCue.InfoFormId,
+                    cg02DadSpeech.Cues.Single(value => value.EngineSex is null).InfoFormId,
+                }.Concat(cg02Overseer is null ? [] :
+                    cg02Overseer.Cues.Where(value => value.EngineSex is null ||
+                            value.EngineSex == dadSexCue.EngineSex)
+                        .OrderBy(value => value.Sequence)
+                        .Select(value => value.InfoFormId)).ToArray())
+                .ToArray();
+        var matchingCg02Sequence = validCg02Sequences.SingleOrDefault(sequence =>
+            savedCg02InfoFormIds.Length <= sequence.Length &&
+            sequence.Take(savedCg02InfoFormIds.Length).SequenceEqual(
+                savedCg02InfoFormIds, StringComparer.OrdinalIgnoreCase));
         var cg02IntroComplete = cg02Intro is not null &&
-            (stage == cg02Intro.TargetStage || stage == cg02DadSpeech?.TargetStage);
+            (stage == cg02Intro.TargetStage || stage == cg02DadSpeech?.TargetStage ||
+             cg02Overseer is not null &&
+                (stage == cg02Overseer.TargetStage ||
+                 cg02Overseer.StageResults.ContainsKey(stage)));
         var cg02DadComplete = cg02DadSpeech is not null &&
-            stage == cg02DadSpeech.TargetStage;
+            savedCg02InfoFormIds.Length >= 2;
         var reachedNextQuest = RequiredFormId(active, "formId") == completion.NextQuestFormId &&
             RequiredString(active, "editorId") == completion.NextQuestEditorId &&
             (stage == completion.Cg02Stage0.TargetStage || cg02IntroComplete);
@@ -1313,6 +1471,20 @@ internal sealed record Fo3Cg01PostStage14Transition(
             interactionCommandCount += cg02Intro!.FinalCommandCount;
         if (cg02DadComplete)
             interactionCommandCount += cg02DadSpeech!.FinalCommandCount;
+        if (cg02Overseer is not null && savedCg02InfoFormIds.Length > 2)
+        {
+            foreach (var infoFormId in savedCg02InfoFormIds.Skip(2))
+            {
+                var cue = cg02Overseer.Cues.Single(value =>
+                    value.InfoFormId.Equals(infoFormId,
+                        StringComparison.OrdinalIgnoreCase));
+                interactionCommandCount += cue.Effects.Count;
+                foreach (var stageCommand in cue.Effects.Where(value =>
+                    value.Kind == "setStage"))
+                    interactionCommandCount += cg02Overseer.StageResults[
+                        (int)stageCommand.Value].Count;
+            }
+        }
         var expectedCommandCount = baseline.AccountedCommandCount + interactionCommandCount;
         var expectedPackages = baseline.AppliedPackageFormIds.AsEnumerable();
         if (progressStage >= Stage20Interaction.TimerTransition.CompletionStage)
@@ -1343,28 +1515,14 @@ internal sealed record Fo3Cg01PostStage14Transition(
                  !soundStarted) ||
             !reachedNextQuest && (imageSpaceElapsed != 0.0 || soundStarted))
             throw new InvalidOperationException("Saved Fallout 3 CG01 timer state differs.");
-        var savedInfoFormIds = RequiredArray(source, "appliedInfoFormIds")
-            .EnumerateArray().Select(value => value.GetString() ?? "").ToArray();
-        var baselineInfoCount = baseline.AppliedInfoFormIds.Count;
-        var savedDadInfoFormIds = savedInfoFormIds.Skip(baselineInfoCount).ToArray();
-        var validDadPrefixes = cg02DadSpeech is null
-            ? Array.Empty<string[]>()
-            : cg02DadSpeech.Cues.Where(value => value.EngineSex is not null)
-                .Select(sexCue => new[]
-                {
-                    sexCue.InfoFormId,
-                    cg02DadSpeech.Cues.Single(value => value.EngineSex is null).InfoFormId,
-                })
-                .SelectMany(sequence => Enumerable.Range(0, sequence.Length + 1)
-                    .Select(length => sequence.Take(length).ToArray()))
-                .ToArray();
         var dadInfoStateValid =
             savedInfoFormIds.Take(baselineInfoCount)
                 .SequenceEqual(baseline.AppliedInfoFormIds) &&
-            (savedDadInfoFormIds.Length == 0 || validDadPrefixes.Any(prefix =>
-                prefix.SequenceEqual(savedDadInfoFormIds,
-                    StringComparer.OrdinalIgnoreCase))) &&
-            (!cg02DadComplete || savedDadInfoFormIds.Length == 2);
+            matchingCg02Sequence is not null &&
+            (stage != cg02DadSpeech?.TargetStage ||
+                savedCg02InfoFormIds.Length is >= 2 and <= 3) &&
+            (cg02Overseer is null || stage != cg02Overseer.TargetStage ||
+                savedCg02InfoFormIds.Length == matchingCg02Sequence.Length);
         if (RequiredString(source, "schema") != ExpectedSavedStateSchema ||
             (!reachedNextQuest && RequiredFormId(active, "formId") != baseline.ActiveQuestFormId) ||
             (!reachedNextQuest && RequiredString(active, "editorId") != baseline.ActiveQuestEditorId) ||

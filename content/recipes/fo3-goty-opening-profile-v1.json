@@ -229,6 +229,7 @@
           "fo3-vault101-cg02-amata-actor-v1",
           "fo3-vault101-cg02-beatrice-actor-v1",
           "fo3-vault101-cg02-dad-actor-v1",
+          "fo3-vault101-cg02-overseer-actor-v1",
           "fo3-vault101-cg02-old-lady-palmer-actor-v1",
           "fo3-vault101-cg02-stanley-actor-v1",
           "fo3-vault101-cg02-paul-hannon-actor-v1",
@@ -242,6 +243,19 @@
           "topicFormId": "0001f574",
           "infoFormIds": ["0001f954", "0001f953", "00031629"],
           "targetStage": 7
+        },
+        "cg02OverseerSpeech": {
+          "overseerReferenceFormId": "000300f1",
+          "overseerBaseFormId": "000300f0",
+          "overseerScriptFormId": "0003099f",
+          "actorRecipeId": "fo3-vault101-cg02-overseer-actor-v1",
+          "playerReferenceFormId": "00000014",
+          "topicEditorId": "CG02OverseerSpeech",
+          "topicFormId": "00030992",
+          "infoFormIds": ["00030993", "00030994", "00030995", "00030996", "00030997"],
+          "sourceStage": 7,
+          "pipBoyStage": 8,
+          "targetStage": 10
         },
         "questEditorId": "CG01",
         "questFormId": "00014e83",
